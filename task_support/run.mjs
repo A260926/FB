@@ -1,0 +1,10 @@
+import { spawnSync } from 'node:child_process';
+const groups=['transaction','shared_lifecycle','binding_shapes','skinning'];
+const run=spawnSync(process.execPath,['task_support/worker.mjs'],{encoding:'utf8',timeout:180000});
+process.stdout.write(run.stdout||'');process.stderr.write(run.stderr||'');
+if(run.error||run.status!==0)process.exit(1);
+for(const g of groups)if(!new RegExp(`^GROUP ${g} checks=[1-9][0-9]* COMPLETE$`,'m').test(run.stdout))process.exit(1);
+if(!/^TARGET_COMPLETE groups=4$/m.test(run.stdout))process.exit(1);
+const baseline=spawnSync(process.execPath,['checks/baseline.mjs'],{encoding:'utf8',timeout:30000});
+process.stdout.write(baseline.stdout||'');process.stderr.write(baseline.stderr||'');
+if(baseline.error||baseline.status!==0)process.exit(1);

@@ -1,0 +1,4579 @@
+{
+  "repo": "mrdoob/three.js",
+  "commit": "14b16067a5fb8dd7aaa1f5a1e3ad442e84dac700",
+  "source_files": [
+    {
+      "path": "LICENSE",
+      "git_blob": "8ada2a5f982916b0ba4b7a0aa7de347587e745d7",
+      "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
+      "mode": "100644"
+    },
+    {
+      "path": "package.json",
+      "git_blob": "2a7c71bfba5113e4983f26b381a270b72d4b926f",
+      "sha256": "87f2c99a8718e5fdd6f5e51427fde52c6075f2f698ddf8f7b4e162882df93940",
+      "mode": "100644"
+    },
+    {
+      "path": "src/Three.Core.js",
+      "git_blob": "458a9a84c763abf08a137ff69d316d8a202cf714",
+      "sha256": "a78116be225f10bc6e801b8e53581815be9ef08d68b3f2d73b4808a9ac5d7a5a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/Three.Legacy.js",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "100644"
+    },
+    {
+      "path": "src/Three.TSL.js",
+      "git_blob": "bc0727a27d634d81d39e04b8bad48471d4db7834",
+      "sha256": "6eb88e6f28e4954b8524e31acfb8f46d9b81c3e02f51b695f7737f705ba79f7f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/Three.WebGPU.Nodes.js",
+      "git_blob": "c03ae2d2e843df9bdf8b6435d51b6e9dd725bd80",
+      "sha256": "7f1c60d06c249383d82e839064fb684db2560cc2766b28bee62e119f75b23a0a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/Three.WebGPU.js",
+      "git_blob": "d93bd08a70c2c52509c2154098da8f8155ae59a9",
+      "sha256": "0610d100986d96526c5570330b49ee7a4f5332e1121201b7f2eb90ad82207082",
+      "mode": "100644"
+    },
+    {
+      "path": "src/Three.js",
+      "git_blob": "b74685f9a473b32733cec43ce35bdcce1ae70c02",
+      "sha256": "935f59de685cf5030b2e2052c28aa81cdb09bfb75dc8720a8a898de72d3e203d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/AnimationAction.js",
+      "git_blob": "a1a8c3c1bb39bfb40b37b188c49a20af96e5ffde",
+      "sha256": "6dce80db69677bb290f6c7b48a9c22f59c47c7a700145bc26a2548177b8b162a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/AnimationClip.js",
+      "git_blob": "e92e8d3e425e97dac4d83b52996f55a678022b36",
+      "sha256": "c78ae68398ea78e1e6a8058662bdc10668776d014647106385714aa37a59ffae",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/AnimationMixer.js",
+      "git_blob": "60272b79c8c000b9f156adea6a4274c7aeeac595",
+      "sha256": "7b05af5507aa4edfe3d6b5debcda23c8f0d9b910928debff7fc50748954d533c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/AnimationObjectGroup.js",
+      "git_blob": "a73509942154474c99b74df6332e735d471aef6f",
+      "sha256": "38867d12bf3599278d61287f93db39003fd3c0b7408cda5403e3dc91c6219684",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/AnimationUtils.js",
+      "git_blob": "a31e33914d082161fc822edc93c2667b996476fc",
+      "sha256": "a74e306d3034ec8c92410c7865913ef0424d08f6553f12058fa8a004a2488558",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/KeyframeTrack.js",
+      "git_blob": "7ae8af4f15282224ebf772d2bbeab56d11cb4741",
+      "sha256": "725dd3cd510d5d1539fbd3e2f461b52339d5c1b5dfed79cb730cd9545688dc5b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/PropertyBinding.js",
+      "git_blob": "cf4b27247a9664a86134bbadd5b0ae6bc0ebd921",
+      "sha256": "2130038f275f69a5be6e9654a44f65f239c5cceab71af1ac8e3490721733e81a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/PropertyMixer.js",
+      "git_blob": "e591f50e17e6f869b17ad1822b537b741e3bb2fd",
+      "sha256": "c76a791999a707e39d231ead8cca86492e63f230971fa7d7970b5342b06e771b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/tracks/BooleanKeyframeTrack.js",
+      "git_blob": "c0ad2d3b9d2182f0e503adfd37206d6bf9940866",
+      "sha256": "ab68a2ea9fa619f1a952010a55a1afacbae5ca6604609097eda2542cfdc53d30",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/tracks/ColorKeyframeTrack.js",
+      "git_blob": "faf63d710c4b4e6df1f8461a6a0d688558073259",
+      "sha256": "5dbd0467b36f00563cd8557fac3f02c78776ff9df88adf364c690f2a55a33161",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/tracks/NumberKeyframeTrack.js",
+      "git_blob": "21d9f9fb8f90ffc0b3fc6975dba2677a147a0a6e",
+      "sha256": "555b67d92cb1d99e740fdfe284c56d1831dc8be262a3483ee42481234bb24c1d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/tracks/QuaternionKeyframeTrack.js",
+      "git_blob": "6f574a3bae2481625f71299d0eb54a20733072a1",
+      "sha256": "206698869823d7281f9715105359b212799a85b89f17d74db3a8f3a457ed1e00",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/tracks/StringKeyframeTrack.js",
+      "git_blob": "cf84af12a7e533401c708da1bcfed370e451d0d6",
+      "sha256": "f7fc9f661df43557d382c2aee16267aacaf45a6a1bfbbe8e3fd60be984e0b81c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/animation/tracks/VectorKeyframeTrack.js",
+      "git_blob": "330e9b196e8c12f3b4167d0ffcb06770144e35f0",
+      "sha256": "03b361e13d11ae9fc7a4cf71622e29e44f5eb8979a8954f59be20835e3b528ff",
+      "mode": "100644"
+    },
+    {
+      "path": "src/audio/Audio.js",
+      "git_blob": "a5c30a1ffb361a0c02d1ccbebaf6c18038f9928b",
+      "sha256": "f71877450dff95393dc889b373a9ad9a1dc4feb44a2acc784ed67e16f17f2793",
+      "mode": "100644"
+    },
+    {
+      "path": "src/audio/AudioAnalyser.js",
+      "git_blob": "eeb4beabc97ac0d462cea7c2fb6ce5fe407c4b83",
+      "sha256": "d377f52872ca52a81c7be3952b9fe61b0454019239bf2a638032aba17df05312",
+      "mode": "100644"
+    },
+    {
+      "path": "src/audio/AudioContext.js",
+      "git_blob": "ba91e31d0dd8d3476e6dc69df76128ef0df92311",
+      "sha256": "49e14163ea6c1ef5888b153ac7f4f1e6dc70a29fa8d8700516f731cd1d558bf7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/audio/AudioListener.js",
+      "git_blob": "1d3081cf594cd1c2b4c950725075547942fe7968",
+      "sha256": "5d2026ed1b4e53cfdada64ec519f3dd5bd19e03a0c1c6ada3c8aabfaa7a9792a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/audio/PositionalAudio.js",
+      "git_blob": "366f7443fa23f16a5766b44b8f29db4d04a6cae8",
+      "sha256": "db43e0b09f1f8b35c7303ae7af90fd858372b6e81472052f7c89f74e2c6e6fd5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/cameras/ArrayCamera.js",
+      "git_blob": "1b7571d0413e6856a31dd9855412e41953dcecfe",
+      "sha256": "3767ff5c272e765486cd727562f67b34910a4e6e0504d516823c1eb5035417a2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/cameras/Camera.js",
+      "git_blob": "6a8005ece152d710fb0706f882261e15c50d0acd",
+      "sha256": "e64f3eea112454a52eb52fa4b567bb53853f2e9f8a562d263b55903e4464646d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/cameras/CubeCamera.js",
+      "git_blob": "1614203c4f194b2cdcab79ece3768a3175feca08",
+      "sha256": "0de97b1ccc4f601b4b44e38de2d1cdd0989e612d2ca9929517792d05db25f257",
+      "mode": "100644"
+    },
+    {
+      "path": "src/cameras/OrthographicCamera.js",
+      "git_blob": "267aeeb9f9cdb2fd30395aa995387354797a163d",
+      "sha256": "5525c2365774222ee96c4e4303d0257a4b16739e1e69769977c0a739b4f3fd54",
+      "mode": "100755"
+    },
+    {
+      "path": "src/cameras/PerspectiveCamera.js",
+      "git_blob": "efb12682f7954a5c0d6bb4319e638b8dee83bfda",
+      "sha256": "1cc44938885f785649a978ecb6f57c444561381ddab24de19fc59b400009b111",
+      "mode": "100644"
+    },
+    {
+      "path": "src/cameras/StereoCamera.js",
+      "git_blob": "f1c04dee25f9f95f4a4f4e8293a9c39f81a70897",
+      "sha256": "04c11c9838a3fba99fc5e4308cea288be175d4a7db0f461bdcd97daa209da68a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/constants.js",
+      "git_blob": "fd2bcda00f2726504d9d06ad52deda30b93ad728",
+      "sha256": "bec7ec290e07a7d6941d29657d3e94191f4a8b33c4269a9a0e658c04e39b9aa2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/BufferAttribute.js",
+      "git_blob": "16dcd434bca77f9610c158d80f32afa08ee8acbc",
+      "sha256": "84a8c38e730a1aed42d3c611c6fa2f0e4e4e1646999f59b97c2f7f7dbc713ac0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/BufferGeometry.js",
+      "git_blob": "1dc5446c9cd849df7eec3bbaeafb9ef10437e98f",
+      "sha256": "79cf04b239f1c2729376efc51a1d837bf3af24dc3a14d81a69f7c8ac26fa3ee5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/Clock.js",
+      "git_blob": "0a54131792708c54d3ef21530a7087a25b0895a7",
+      "sha256": "9215089398cbcb4870aa43b6c1c8cd28e7b6c9116d59ac1004df7bfbba752623",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/EventDispatcher.js",
+      "git_blob": "ac793ea9081486b1b1e834c9df2480d18fb90e0c",
+      "sha256": "bf032f809ea34e50cf0b63512d9c7e0ba9fd90ca8b0c81c9e5efe121bce1bd97",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/GLBufferAttribute.js",
+      "git_blob": "0991a00c0f28b2c88b7c0f38699d60befdae8898",
+      "sha256": "d7d240782a9a695d2499c5ce7724bd7b2bcfc06072e5219e6883c543586da524",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/InstancedBufferAttribute.js",
+      "git_blob": "f4b097bdd8c6d10e214f920a9543474f1fb07c0b",
+      "sha256": "930a65bd2867c30a692e41879ddf9c440a3bd13e25fde3542ad3052d6a8a4a5b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/InstancedBufferGeometry.js",
+      "git_blob": "cff84b6a5bb0862e173777b53a21871fb3d517fa",
+      "sha256": "a511b56184a146a830eac7b4e3809e82b7c4d05595933bc53c2b0a1b3bedecba",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/InstancedInterleavedBuffer.js",
+      "git_blob": "7dd1973f88d24abe56742c943ca162519a3718b4",
+      "sha256": "08b1be1eb24a1213fb06f185aa4f0b46a34f45fff956dc1116b4d8542569a560",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/InterleavedBuffer.js",
+      "git_blob": "641982e6476ef61d4c5bf88a7e182eb7b95175c2",
+      "sha256": "658da9a9f905bb442b4a14a1714b95aa094aa16fd0c9ea0397424fdf0773b9b4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/InterleavedBufferAttribute.js",
+      "git_blob": "a34b04be0fd3cbddeb4c1019a97a75e05d1775b8",
+      "sha256": "56f4afd0f684dd56e2c41219d087e5c98631c559c1055b3521b5e45d940621da",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/Layers.js",
+      "git_blob": "bfeffc08453586371a18c848e681f5eb2874643f",
+      "sha256": "0727a1f8f987a0da6ffe91ea55cef7e8c18822dc1a69c44fc282525127b361ea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/Object3D.js",
+      "git_blob": "c059334912c1d21f777dd4d81b604b1d1cf9b536",
+      "sha256": "62e869045d5475a4a23f7a02c7128f0bfac510edee69c6b19d3c76f322d9307b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/Raycaster.js",
+      "git_blob": "1b1d4ee5282ca9098950c1d8f71839a7f5d9fbaa",
+      "sha256": "9a05ad2d9862b1eb0f8f925497a136998b640003feec85b3f4651322cb219446",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/RenderTarget.js",
+      "git_blob": "eebffaf29cb3d5e4daa6b132ea5366e0d7bd713f",
+      "sha256": "cf64aa0ff7ef835d7151c9be6b5093942fdcc2fee9aaa24d866278b8b65013c2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/RenderTarget3D.js",
+      "git_blob": "3449d4b01395a82c82843117dc4f6125ebc713ec",
+      "sha256": "27a926687d0fbde1e677e42febbf14fea94c495d07eb145f2223a50ca723b7a9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/Timer.js",
+      "git_blob": "5c848a61f7b8ae9dea52478cfa00bfcebd480d55",
+      "sha256": "a50dcc31e34476bd5d7fed92efce26afe7141ffc038fe301ee88eb3e5dc43a53",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/Uniform.js",
+      "git_blob": "9e86807a42c9a20b4e26282727da6841c29e34ab",
+      "sha256": "06a921ad1cf3a42aed1b43882d78f4c149694bdb401967104a0566b05dfca5ea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/core/UniformsGroup.js",
+      "git_blob": "11346bafac01e39107b23086a8b8c2ce51c23d24",
+      "sha256": "96b649b78ecda9d2d10e3bf2f17d371cc476ade1a120954f33381c597ae8d018",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/Controls.js",
+      "git_blob": "4a7df226dabee592f9b4da38b690b258f3b0cd34",
+      "sha256": "9c2cf29a7c93f7401d0e6ada500aa8803f50e67807f225e1e9ad5b18c15b17e3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/DataUtils.js",
+      "git_blob": "44e34e8d912528aa9f7219390e9ba82b6c9609c6",
+      "sha256": "c13af55f853b7882c7435d06b9c66333e9d68b42b22f6c257a060d6248052d6b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/Earcut.js",
+      "git_blob": "977db4c1c079c6246acb1ba35a2dffc3955e34db",
+      "sha256": "16c3d0751246cb455d09429a3aa3efb0294564f340a8f525f1638f57d0fdbb13",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/ImageUtils.js",
+      "git_blob": "b59f6d2f52fdcfff9c2f97c1bbcf256d2d08b187",
+      "sha256": "864c388a71ff12221dbb7f88fdbfe44a49bd83597419cf8c26d5268a50fb23ad",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/PMREMGenerator.js",
+      "git_blob": "0e3b8e14999ce4e85c3720c373c5e101c3143867",
+      "sha256": "2e0a96a340cdf2da745dc25706bd0731a4086b669a3ef0496fc0f0015fe2039a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/ShapeUtils.js",
+      "git_blob": "683c0382e95945cf31b63c36f45374c335444aad",
+      "sha256": "35906703cbb1c4162f5e2b4bb22bda9c8a9ed8ed43306bf9a71b15c4bcab00fe",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/TextureUtils.js",
+      "git_blob": "c62f04a60b96ea9b7404caee89d79694b933117f",
+      "sha256": "db0b359003d59cee86574c7df5238438083364cdf6cc8c94c6f4f6a16ff0cbd6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/core/Curve.js",
+      "git_blob": "ea729246bab784ca70504b0c24725f8f19ddc683",
+      "sha256": "79e57050fbd730e9f4e52452078c4984caf1e585694d5186be734ac666ce748b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/core/CurvePath.js",
+      "git_blob": "65bdc3368225c7e79bb53e16a80693b381ab5d06",
+      "sha256": "f1800a6a87550f3b51626ae976122eec7810280089a3f9376da6997bf2b5a75b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/core/Interpolations.js",
+      "git_blob": "0d01836e40c5194b1b2bbe09d98f47a165a14751",
+      "sha256": "98f55e0ae77b69cb122124acc5adbcd53e0fc0b8009632022acddc3b404a828b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/core/Path.js",
+      "git_blob": "9ced97216e3c1cb42de20186d5bbac15f51f1f3d",
+      "sha256": "8c3d9ddbddfed2cac8499efa345a7d63c7192615de621f7d107ce7fc5cf52693",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/core/Shape.js",
+      "git_blob": "66f4e96b4d9cb8d0cb78c876ec82cc39c8df1b59",
+      "sha256": "998b7747f2c4bcbeec74ca8efb9227eb7ae8aa9028345a8b475334c80135fb73",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/core/ShapePath.js",
+      "git_blob": "dc016818114d33f061c48f07882a51eb1e1f4e44",
+      "sha256": "6e65e79c62ebe1e9d30e566d9661921150c5aac68725109f012fe56156555d9c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/ArcCurve.js",
+      "git_blob": "8ca1a7613ea1ff8e4f5f1e513b05a9ec48f3a09a",
+      "sha256": "250f67e8af9be652074dc50f7b93c1adeafc9b356567848f863a5608f219662c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/CatmullRomCurve3.js",
+      "git_blob": "a18985c3e16ee71e973dac94ac77abadaa457a2a",
+      "sha256": "768ef1d2e91fbf024bfe5d97ddeadc7c41764689a3e7a775340824d05b1c9281",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/CubicBezierCurve.js",
+      "git_blob": "97d582de4b458fc5c22f13a9505326ee2f53bbe7",
+      "sha256": "84bc4ed1ed087f671269259454440c2a143931b517b589d3ccda81469c917658",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/CubicBezierCurve3.js",
+      "git_blob": "448b2782612c379ef38993c1192533aedd59510f",
+      "sha256": "6d9d54a65e0d7d2050e1cb9c469e90b76abd721ddd3d7778f990ce51beb2284d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/Curves.js",
+      "git_blob": "c984a853942011a89bcd2add1be38392c751a639",
+      "sha256": "506c35f73bba72b6ebcb26189967fdff73b2202a96156ce0a1db4efe7d036e5c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/EllipseCurve.js",
+      "git_blob": "c0c1f64763036e3b27a9ddc2619dfc006436334e",
+      "sha256": "12b415fb8126097f037a5ca0238c82f9cdbd45eb2abed2e5cb1cbbcce814f37a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/LineCurve.js",
+      "git_blob": "2149ab1a559c4cb108ff5f5910df3af0f310b5fa",
+      "sha256": "2eb1f869556f2c78c0ab394dbfafe69995bcb24501d88c10556963c1b84c722a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/LineCurve3.js",
+      "git_blob": "7b5d2332b774f36a799101c17c57ebfb8c89c9ac",
+      "sha256": "8619575f09e94287d68597190617abb2f701eaf4ced5a75c8529b5a4c51b2f3c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/QuadraticBezierCurve.js",
+      "git_blob": "b257b49c5e03781f6305200eb7a4a78093de2a5a",
+      "sha256": "bd4ef6068773e492c7618afd2e0decd38a61aac4acc9e2fe3896b33337475fa8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/QuadraticBezierCurve3.js",
+      "git_blob": "466ea5265ad84d0a2424362b0688fd1f3bbebb22",
+      "sha256": "6e5832266f6268580df604eb984f68e606cff0d4087799e86c31ecd0f7eed2c9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/curves/SplineCurve.js",
+      "git_blob": "20a29d76249b10e93d6ec9ccb0772c799840880a",
+      "sha256": "312bd4b787d69f32ce742e019cffb35af4e977f4049da9688c30c40dd20190de",
+      "mode": "100644"
+    },
+    {
+      "path": "src/extras/lib/earcut.js",
+      "git_blob": "ac76e7d05f69f84b65fee05e073a0c72ee72962e",
+      "sha256": "1e1d25448661b04a034155fba7df43662a8f039e3ec33b1f7a1c16283d688d5a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/BoxGeometry.js",
+      "git_blob": "72f72d506fc283bae1a03c15eaf8e96ddf72fa55",
+      "sha256": "9b3799b446b031e55ac60795859f3f941cb8bd32579ea43d29f32d98cd661d7c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/CapsuleGeometry.js",
+      "git_blob": "84aeaf859c0b10e4577a6d1ca1f3327c620262f3",
+      "sha256": "ec15a52b030e91457641882bd95d236714dd564aff185cc78995c910fbb5a8a9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/CircleGeometry.js",
+      "git_blob": "4792d39ae818dd13264ea3d12fb06d0e34d11284",
+      "sha256": "8edbd82ac884294689e8e3fd2d7b2981ba1d683cae2e4ac8e51da00304453e36",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/ConeGeometry.js",
+      "git_blob": "ff1cc7b72f39548bc0359560bd08db6d38c4e631",
+      "sha256": "7a7bc9c8ffb715d9c9ffc547bded0ab590dd5aa581cc1dbe135cc0424f6febcc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/CylinderGeometry.js",
+      "git_blob": "0007e20997c2baec8109c74f1f4abf67cdf738bc",
+      "sha256": "ec4aaa60e490afaf76c6ee6e2c11a373f647381eb737d1d6f095f4cbb0c063ff",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/DodecahedronGeometry.js",
+      "git_blob": "c1f19f1b197aaf7ecd21167c7168e6c0de6e85a7",
+      "sha256": "524d37a936890ad9bbd8de858f62ff8f288ff0ab75dc119d50d0701b3f98823c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/EdgesGeometry.js",
+      "git_blob": "1ff2244c77eb5f28d84eb90ec8f1bc602f798aee",
+      "sha256": "b7d2300c96518d391e9571038980b8befd5d004f7df8c47dd7a772cf9a0ba506",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/ExtrudeGeometry.js",
+      "git_blob": "90bf710d03d753e749188ed44522bd4b0d40f867",
+      "sha256": "e9b7550aacea7dd6a68cf5dbd52975dfdb2fd5badddeabb4c8ddaa855681f723",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/Geometries.js",
+      "git_blob": "b3e327a270da34034bb73e0457853aff4bb4dfe0",
+      "sha256": "e89a1b90600c34f039283f98174d026f4b1f8e10ee1be8405f2fb3e6b0a64a5c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/IcosahedronGeometry.js",
+      "git_blob": "df62faf57e0fc543aed8bb54780f630a505dc437",
+      "sha256": "43d6dc2837507722d2a5ab0a6865ddd4c3bb2fdad9ebf90056556a46bd795ef9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/LatheGeometry.js",
+      "git_blob": "80bf315a490eecbc61a05cb178bc613787d77d2d",
+      "sha256": "1ec5f504eab419bf2f614d4171ffd5bac93be3a6bd75e2f0fa2b52011f73e52e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/OctahedronGeometry.js",
+      "git_blob": "4d1df1b25d2f2ccfe1eedab425cbf39df932c6b3",
+      "sha256": "30730533c4f0cfe5def833a454e23a45c26ce0720252fd7a6dd26fa2839c2988",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/PlaneGeometry.js",
+      "git_blob": "83af7c658bbce776cc413316417b31f9fbb989a2",
+      "sha256": "1e04283cdf4336000dc4c7244794929eabe583057a5bb3f970467b3338f3db7e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/PolyhedronGeometry.js",
+      "git_blob": "54bb50b03d463519266f2bbdc2e7986b50b6290c",
+      "sha256": "f421a0a8c3912a9184e5fc178983cdf523baef2851a52ee708d98a4beed6ec11",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/RingGeometry.js",
+      "git_blob": "22434b8bcfa83bfa39bf840c7e3062141d137925",
+      "sha256": "5681dc191f015a69e5f3d5c7038ebd9999c560141f11b27984a4a6aef9bf7602",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/ShapeGeometry.js",
+      "git_blob": "d91876cc38f1d2d431e6502249c6ca9e695da094",
+      "sha256": "0714706c29c23481a735f5d5385440559e305ff4e91a935df52e334818b495c2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/SphereGeometry.js",
+      "git_blob": "a0eeed5a540a75642a328a1c9776edcbfe24079d",
+      "sha256": "3a824a3cb7bbc16516b8ed5a40a6815857e5d6a3c9406d445e34175179bf9081",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/TetrahedronGeometry.js",
+      "git_blob": "f2cb6899667781335f0f6f21a28ec5ba9d556930",
+      "sha256": "b006bea749e5fee850678e9a931b881cad501efea997373ff9a115b93b32b182",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/TorusGeometry.js",
+      "git_blob": "4d0c7127f5863e5f19b5a36d40319984cb44d5ad",
+      "sha256": "ec67dc40be0a201e4af571a5a572ef83a2b9195398e2220228c0618c1f72fe37",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/TorusKnotGeometry.js",
+      "git_blob": "a2a9b7786536a95299120971283babe7387855da",
+      "sha256": "775c6c72fa98302716d5696b5a240859d9036ff91c5a9efce27454bd1a2733c3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/TubeGeometry.js",
+      "git_blob": "cd7e754572fb4c6af379204b5d3c8e46d77eff9b",
+      "sha256": "8b63d228b7589a1397d961c76a13e72e047d5a4e0f74fe81e123374654f9f072",
+      "mode": "100644"
+    },
+    {
+      "path": "src/geometries/WireframeGeometry.js",
+      "git_blob": "734b453ec999b17f348e865d51fb0828e5eed6be",
+      "sha256": "d03f328d637c015870a19ecd7c9a6de939ec8199b88e829915948a3089e08927",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/ArrowHelper.js",
+      "git_blob": "406b2388bc0cd2560de8b801c087ca66c164ccad",
+      "sha256": "33f6482b0e63e1f2eee8555be52066a730cc5deafd77841cc7f2a080c06decc8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/AxesHelper.js",
+      "git_blob": "0287a0f8e8e4ecc09c7c4861272d6de792524337",
+      "sha256": "05e5e7b38d147a2db5d1d0230716d0f345a4127b3709dbf8d260ded06ae092c4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/Box3Helper.js",
+      "git_blob": "7d70d9f2d3c8eb42eb052757451669bfbed60f46",
+      "sha256": "e97c2b2e89e59c1a818a1c1b0337cb48aebd3cea0799178a50b588b114092e7a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/BoxHelper.js",
+      "git_blob": "46080feb6dd6bb8212dc0dc2645ca1693a6e88df",
+      "sha256": "637684e9720bb3d29abc6487d5094e59dd0d344270938df08a84ed7eae6d4dbc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/CameraHelper.js",
+      "git_blob": "ac31e077c2fc545741ebc5627f48a4511bab2064",
+      "sha256": "33dfd2f19511a90f2d41930c8b7a4e55cb00398ff828a34bc6f9b1c8b1e1a31a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/DirectionalLightHelper.js",
+      "git_blob": "93d0ad2fb24d0b2794ec85e78d729a6be2acc1af",
+      "sha256": "3e22a178e5ab066997ee0b11cee289f81d275083b0c932d7f0d6abbaa46d6a09",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/GridHelper.js",
+      "git_blob": "b26576b455675803ba9d18b9a7b0d4055d08f249",
+      "sha256": "c86dc0421c51dd984e97a105fa23d9e3dc62f5ebe4435d8eed736f695e395aa5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/HemisphereLightHelper.js",
+      "git_blob": "119a8ea1cc088e40a4d175a4e213150bf18175a6",
+      "sha256": "315148ba7888e5527a432da8cb21c56a72f470e68f2d7929c68f43ba12869676",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/PlaneHelper.js",
+      "git_blob": "4aadd716fea2c9acc465ffce46f8958139822b20",
+      "sha256": "7db25d4d9b4ef3c121742d9dec6186e280298161c4ced15f009e4224e98ce14e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/PointLightHelper.js",
+      "git_blob": "37c0f3235f6555bf8284365e41d7a65336ec04ea",
+      "sha256": "88c901a3f4d682b060a1b0c09d19a29b2bdb4039509bc54c1b3134874f008620",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/PolarGridHelper.js",
+      "git_blob": "50071ffc9eb42adb0f9d6a12c9ea9e4103a4a4e4",
+      "sha256": "6339adcdd45a4d0f98ce177a344e06c51d6b59b506a0c16e0b634e2874feaf89",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/SkeletonHelper.js",
+      "git_blob": "05cc2ca0d003b366afed19483bd89ce5dd24873e",
+      "sha256": "4614650f129f952666deca013eda5a77af7b9875debe32da565ae3233a6ab10e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/helpers/SpotLightHelper.js",
+      "git_blob": "fa2be33037feed3ca19e6c3aa4525454042cb003",
+      "sha256": "031954316d69cae4151ffa3081c8593ba5a1b588c929502611427cdc803bfa30",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/AmbientLight.js",
+      "git_blob": "b03496a0b01931757a0762d7ba738d3a635be828",
+      "sha256": "38bf70b78fecb527e9bb63073d6123f5748810d0b0f06eb84e5c8f8b0f3e9633",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/DirectionalLight.js",
+      "git_blob": "ceb020800e938a19bec2f9a60134240f4fb9ed44",
+      "sha256": "caf07030608ea597fcc854fbac0d665f006ca9738e4f96df6ae27641992ca5da",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/DirectionalLightShadow.js",
+      "git_blob": "5c2b8243e5ac6e4c261742b43a3343064835c5d1",
+      "sha256": "f0afb02a77b310d2bc938789c870dbf3c3b3427903f059b194a2c005c6c5c8df",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/HemisphereLight.js",
+      "git_blob": "adb332b2ec1b5283ebf44989ba3670a068e9309d",
+      "sha256": "801fc56baaee3a0c60993cf601ae94298e23aacfb058384e3c1daea48330467c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/Light.js",
+      "git_blob": "f997de6ec6eacf317727f65c82a9a33c8207876d",
+      "sha256": "161ecf9a2e949029684635b1acba7673732e48e35d5be65396922dc159b74d20",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/LightProbe.js",
+      "git_blob": "332ef4a6e7c13c93ef8928233f90aa7929775b90",
+      "sha256": "243166a35c3b193867cb72f342513eb9b14d424749be956c61cc4c17af4d7553",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/LightShadow.js",
+      "git_blob": "4b88d274a876927669bf7f9764e3f85e64ea1cd9",
+      "sha256": "3bd22a94dc5d137733249d4951d0cd69d4d0dc98023fed84526b28bea6bd0c51",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/PointLight.js",
+      "git_blob": "d760abfa45f6ad53dda2ad3e390991f6c8ad599b",
+      "sha256": "1ad93ac773bd881f30d923624e663b237c1209d29aa14e9bc7ae5ea81ab4365f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/PointLightShadow.js",
+      "git_blob": "6748fc91249f13fde1b218b29c510740ecd7fc9a",
+      "sha256": "ce69df14975daa360e54e4cabcaaa0bbaca90c1e3a3813a66fdf7ff451545413",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/RectAreaLight.js",
+      "git_blob": "7eb87ceeeeb16ec2797eb8e4d15da1ed36a812f5",
+      "sha256": "553a59ce920d1b84d90253d7cbef61435cd0bba511398e793973decdfd22817e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/SpotLight.js",
+      "git_blob": "287437f654378a8e63a63d20a25723721dc1614e",
+      "sha256": "8f1af695946fd14f3f9b0e93778549fb0859a1011ca12a04a6039b6b851681e8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/SpotLightShadow.js",
+      "git_blob": "d1236f640f61e8dcfcd8ac38493512cce1c34daa",
+      "sha256": "d993c34fed699f7be8539226cdf4709516f4f869f77b7bc45be6c21e0cb7045b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/webgpu/IESSpotLight.js",
+      "git_blob": "f18632b38bc907397172203a2ca534d5514006e9",
+      "sha256": "549b0a77feb11def74dc89b6255a803866c37d29c52a22e87a9caf09d121c260",
+      "mode": "100644"
+    },
+    {
+      "path": "src/lights/webgpu/ProjectorLight.js",
+      "git_blob": "ad1580163c3c01bbdb441945a8d4c50b15b207ec",
+      "sha256": "48ebfe3fa4a3d8a45070438e8f9b28e93bcb82632f547cc918a834e36bde528f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/AnimationLoader.js",
+      "git_blob": "04c1fefe445590e5e7514198706ce9c39ab6b461",
+      "sha256": "7c7c6ec32d8d640c3a75564c9058aaf99050f9ce03e228eb698a09c3df90ebe3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/AudioLoader.js",
+      "git_blob": "326e5f8d465cbbd232a85117fc9ab5f880f5a381",
+      "sha256": "39d6504d6e61139f4c5ee895d182619af10f49b5848358a9b260d6a8ff99633f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/BufferGeometryLoader.js",
+      "git_blob": "3d4d7bc46251cc5cb652db08d154783dcfbd776d",
+      "sha256": "7e0f7527056a59f3800e1e3f16a0b98f8496ec6fe47ff959e1e53288f719ceb2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/Cache.js",
+      "git_blob": "9a8d58effbb0d5064588f116ff609119966daf26",
+      "sha256": "e07792536bda2efe6ba985ff8b0fd4c33635bfebc283fece85125218d66fa653",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/CompressedTextureLoader.js",
+      "git_blob": "a6d520b659c44594fc6e505188ad1bd9a9b47abf",
+      "sha256": "7c2c262978399c033d42a96f17cb9e9c086fbab5787e3d55577e950c7d68045f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/CubeTextureLoader.js",
+      "git_blob": "a763f1ba7223842894dc90ca60007fd3490469dd",
+      "sha256": "28ba48d704a74ba37afe9099f827223fa223e9d9295d9292f1dd880adaadd218",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/DataTextureLoader.js",
+      "git_blob": "c784f11a321a1020ae55bce212bf3d4444fcb365",
+      "sha256": "414f8f3ad18b372a481d222dd5b73d6148be07bfcaf8c646ceb1b29ae9fe92fe",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/FileLoader.js",
+      "git_blob": "329989c10ca1b2fdfb8afcd49105ddea05391999",
+      "sha256": "58cf6baa5177eb34461581561cde5f12d5d542601984a0d134dafe365321ccbc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/ImageBitmapLoader.js",
+      "git_blob": "eac3e6f603dd7895fcdddb120e440c4d6bcf4a47",
+      "sha256": "8efb8bbc44e8531a95f82afb7c66f16dc9baf7f1cda060f7baa2613ac8c596f0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/ImageLoader.js",
+      "git_blob": "b38f27eab8eac8f9f7d1625a1c2d904d785af0f9",
+      "sha256": "216fa2d2d24b3c08e16357b1c75e765cb130bd15e65a02bbea6918556467eb27",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/Loader.js",
+      "git_blob": "349acceba570f1f8c8c20a3e7f61e8435d9a9b1b",
+      "sha256": "ef2b0033f94f9b2637805aef47a32f77ddaa4471b6be859884a6b17eb0f083cd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/LoaderUtils.js",
+      "git_blob": "b14c48690cb5036a812c7266b9a27c7cf9f58162",
+      "sha256": "c5917991bc2f17edae2034996cac2d960f0288859cf1d173c049064cdac90311",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/LoadingManager.js",
+      "git_blob": "97301477fc455c9b8e02e2967b940783af716902",
+      "sha256": "c75cacaad679ab05760924951c675619b381111d5272da21e974742536938282",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/MaterialLoader.js",
+      "git_blob": "b5b926d7cdad3c5346e0279dcb2d1dc8ec8b402c",
+      "sha256": "5428e376e3f2b9f07edb6336ce5eef2171cc6a0456b98698b4eca08bd86833d1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/ObjectLoader.js",
+      "git_blob": "1bcb73fae303b0ee66368bf02ff36813536d71ed",
+      "sha256": "f7b730cc7ea10686cfcd5610cdae4cc8027a279809568bba3c8f7c31af604784",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/TextureLoader.js",
+      "git_blob": "9bac9cb522c17cecf727fdd33c670d1e4f715db1",
+      "sha256": "2698456a49f04153aeecfce53d4ab48feb69b729800f96a44e2908b107242c1d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/nodes/NodeLoader.js",
+      "git_blob": "371319aa12f21dfba13ee9a4a3bf8dc02164a929",
+      "sha256": "8df3d5558a5d950540ab74eed71add3c656bfc48741d4dcac61605b8eb62f445",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/nodes/NodeMaterialLoader.js",
+      "git_blob": "415c58cfff2428d81e3004372b4865c49674d821",
+      "sha256": "5818ed577636c3b22dbd2a456a4557c3d1e3ae030c043a32cfc49ea700e7b19e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/loaders/nodes/NodeObjectLoader.js",
+      "git_blob": "f97d9c7d54d9b5c9173f5a83a1e44dfc20676d91",
+      "sha256": "2863bb9951150defab4b70439af4fc0eef4d31119a9daf327e794616c67359b4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/LineBasicMaterial.js",
+      "git_blob": "e51dbd0f648a899fb1ef61aee0217b234c39e7f8",
+      "sha256": "fbc541d620fa64943ca967e58ac918e4543472890521db09889bcfe8caa1942b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/LineDashedMaterial.js",
+      "git_blob": "26de2d66ccef40283913da2132e06817c9246c0f",
+      "sha256": "1c90afe9b1b1bf82eb9cecd0a43672f5bb11c275e36ecec9b6f7cbd5ab52afa3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/Material.js",
+      "git_blob": "02aadabcc34476eff1acce176727cd304d7f5396",
+      "sha256": "4c1058c0bfbf1d43add69638b8249cb5b54812c027a9b84267a57da879b3ce14",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/Materials.js",
+      "git_blob": "3497fac568b1825d1a5c35b6fa60f491c849d9a0",
+      "sha256": "c6593291701abd43f3c247ed307d01d1d7ca0a5d9a11f51378ac90bcdbf9deef",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshBasicMaterial.js",
+      "git_blob": "eb11ed13b5e4139c839d9889030ded731a7f3961",
+      "sha256": "79e238375aa086b602e322a71dced8a6b0cbac37074a465da3c4b57d26c85286",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshDepthMaterial.js",
+      "git_blob": "cd89eb5d8c4426ad4bb5c1fa4e56764e7b7c29e9",
+      "sha256": "cf3c40a80f32a18bb8f5374229440d7b10941d99ffb65fe27ba59e5332ed0e9d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshDistanceMaterial.js",
+      "git_blob": "0169d54277749218bdf37b2a41c911640e918204",
+      "sha256": "95897e8e195f0032d73605821dd79d8abecfb91d311a67744e8067d2ab4c0afe",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshLambertMaterial.js",
+      "git_blob": "51f229b645e7fb9db266999693360e7bc40fc8b9",
+      "sha256": "ffa90edb61f6fd92b1db52131573876bc5e84ff2690622b415d2470490aeb297",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshMatcapMaterial.js",
+      "git_blob": "8fadc8b9317952c2d460e3d298bcbb2fe803c1b6",
+      "sha256": "b8fbab12e6a04383baeffdf53cfd96b31554d800da9f5d8eea4b0fc8087ab61c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshNormalMaterial.js",
+      "git_blob": "b070f96ec5a567d22790a9f7c0e8a4e09dd48c56",
+      "sha256": "e9aaf7ae7b7c211074946545ace6b12d2d1f0d71193b216121916c827f6d23e9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshPhongMaterial.js",
+      "git_blob": "8589c560cfce2a8ddd70f820e4c8529288428b0d",
+      "sha256": "6ea6568909331677a5bf72960c714f70a0f49bb7646774b9020f22142444e64a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshPhysicalMaterial.js",
+      "git_blob": "cf2018f4bca01689b7d39051a90438e5bed077a9",
+      "sha256": "7ea04432e41c648c60dfed9f946cd575b042abf9d3b9115a30b8892c44005484",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshStandardMaterial.js",
+      "git_blob": "c4f5adab3d6d454f8c7a616309075a2b0ed3fa08",
+      "sha256": "3c52852c8d4a7d071a0107bd92ce4b2b0b707b7130168cd736c864866725be80",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/MeshToonMaterial.js",
+      "git_blob": "9925f9769b05a22d7e7669403c074d8764cb5db1",
+      "sha256": "82fbdc0f0597d88fe85ef50fc899309421d6591597dfefa6b09ac8cc2b7e9a8c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/PointsMaterial.js",
+      "git_blob": "0852fa127eff65c8c6a5e82aade26a51ac558ade",
+      "sha256": "e0d7f5408385301d568648245ce6804f16a9715b6f6472c65f222554f3c42a7d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/RawShaderMaterial.js",
+      "git_blob": "c08e9e02a9fea81edc9b50f83ff81754e5d9989c",
+      "sha256": "b56b8d5d650541460354e86001a8c2737912bd03280ad5ebe92d92c8a6d06bde",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/ShaderMaterial.js",
+      "git_blob": "3536d49cb37dc849c38c51db8fffde51b92c69da",
+      "sha256": "771bea6c9f38e7efd54cfaf5502d8b86ec3a1a94cf0bfc5d0ab4bf24915b2959",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/ShadowMaterial.js",
+      "git_blob": "879749e30f85b6ed501f47fda608ee381a253362",
+      "sha256": "9de4022504a8da0934569c8d125e00d6309892af78d3c485dac0c02e909efc40",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/SpriteMaterial.js",
+      "git_blob": "70bd3ce0d4255644e0a3d5835c38be74af49e437",
+      "sha256": "4b977c1bb6225d9747ae8c35f317ea9d8bb65d7e712294fdd35f82a587f2a05e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/Line2NodeMaterial.js",
+      "git_blob": "b78981ef08a6018119cc47f8d6b25ad05cb0cd94",
+      "sha256": "d2cecca82dd4a846e006728627ecafb5f64c038228b7b1b348e7ff0f89a7b1e5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/LineBasicNodeMaterial.js",
+      "git_blob": "422ee502979bbbb09621cb7166300d552f16a0f9",
+      "sha256": "a4e42b7314b8eb102463928793bc2f64bba883c02faabffe2c563b90521a3ce2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/LineDashedNodeMaterial.js",
+      "git_blob": "c41dcddffc9fbbd38f5813cc82883a2187d60b42",
+      "sha256": "4719f9870ba3597093ac9c4e51b00c8627da2725879c9fc7f548b2acf2da820b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshBasicNodeMaterial.js",
+      "git_blob": "f59f46000a05b903a59575a4a2b2703eefed26fd",
+      "sha256": "752538cf4043005b558fc22627b6da4a3d9852912dd085fd2631fad3d0f8daa1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshLambertNodeMaterial.js",
+      "git_blob": "8a634dd08a4ca30c97eafd3270ba8299839c5b92",
+      "sha256": "7fa3b1c166b82ea9454ba87236ea847473e700215d0e6edf3631f96c7d1a5b99",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshMatcapNodeMaterial.js",
+      "git_blob": "258f20417a5c6a250fc29c2cefdf241a93baa0dd",
+      "sha256": "c4e193b353b5ddd0282360498aa4185073891015da687e1b041cbe1bd8aea828",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshNormalNodeMaterial.js",
+      "git_blob": "e3a01cdaecb1619fd66307d1cca83b3f4a2e2621",
+      "sha256": "110ae971d8fc671a4460cd30619270ae59fea7780904fe12067f2385d87bca6b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshPhongNodeMaterial.js",
+      "git_blob": "34a9bd3abf0bb3f970d8c1b7643d49a76f1449b6",
+      "sha256": "ce7c2b7bf27467b00613793ea9fd05291a12faa14c3e0602c314f406fc7157eb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshPhysicalNodeMaterial.js",
+      "git_blob": "f61e72003011b4e10e733ef0ba6704ebc4a60b14",
+      "sha256": "aab8bddef0d2ac298a3666783dca6c6876cc5c6409cbf2114b9297f7cdfe7ced",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshSSSNodeMaterial.js",
+      "git_blob": "38e0b8e8ea95bde60030d8de015c3298944cd3b6",
+      "sha256": "0f86c068415c834d1e734ec72f2566f015907b022c114a2d7544cbd709a738c7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshStandardNodeMaterial.js",
+      "git_blob": "7770105e0eca8ac40da5ebab7b5cab8eb13d2b47",
+      "sha256": "98030c8814d5344a10f8d890c5be57dec396080d183cc44aa96d094d9671be35",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/MeshToonNodeMaterial.js",
+      "git_blob": "77fbc2c70100241c17f8b9bd6c6b34531aded342",
+      "sha256": "64893a57f3d6966504069cd85fc76a45bea7b211cac602e545190e4780d8f7ae",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/NodeMaterial.js",
+      "git_blob": "7237435cf28d5a0c1491d0f473c25d5fc717a0fc",
+      "sha256": "b42163a96dfd7463f19f2cad3f9e506a3b05c6b78216ef96568ff4dd8a6f7448",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/NodeMaterialInstance.js",
+      "git_blob": "865709fd7b70ce1fe831e06c9a24f1ab6b9281c8",
+      "sha256": "423f088d9c1ed72a19292c79852a69fd9437e9fb9d4daea3a95b8f90e1b2cce5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/NodeMaterials.js",
+      "git_blob": "43b047e96179bbb77c3196c8d78e5c41be0dc3c9",
+      "sha256": "ebc12d8ef518399906946a0cd37f46a49488630b93b1125b0f4ef7a3c167b071",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/PointsNodeMaterial.js",
+      "git_blob": "08eb8498ab8afa7696c245dcf32976c72c7c2535",
+      "sha256": "29f7c15c622c1e8993139cbbe441883fe51a22df4d2a5cf0bc34268d097796f4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/ShadowNodeMaterial.js",
+      "git_blob": "8378566a7f4b08d3df18fcf84db6825e7379b350",
+      "sha256": "8f60ea3960c1bb7fd4976c543edbba48d65aaba71bf123fc00df5fbeb66dbeb6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/SpriteNodeMaterial.js",
+      "git_blob": "f599322ff545b3c673e5f6630f2c4b56a7594794",
+      "sha256": "142e010ab5fbe68ebc30184bea463d8f7945d7f761fa16731d3cda9048017c1c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/VolumeNodeMaterial.js",
+      "git_blob": "405ea43514df4d22f197657c539efcd539744850",
+      "sha256": "b53fa2ab764feefa95b90be3f3726a2b09b084a950b8c15de4b135f2347d87af",
+      "mode": "100644"
+    },
+    {
+      "path": "src/materials/nodes/manager/NodeMaterialObserver.js",
+      "git_blob": "ef3f6c708565ade074aaf8b0f370e003d5e264d9",
+      "sha256": "a144f0409667ad84cc264d121a1e052f1e102d737bc28fd9438fdb34265db086",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Box2.js",
+      "git_blob": "d0fb3086267bb09eda43a03b9ed3a01df0cc0572",
+      "sha256": "baaf24e705da19647786513503d796103a4f0094467f4544c2df0bcec46e5cd0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Box3.js",
+      "git_blob": "86a1b1c0628b00875396b6e9d2c8abe6afd8a549",
+      "sha256": "433fd2e46599a670b25205f1da89c247f8d75b1eac1fde78b8653dede1dd8a19",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Color.js",
+      "git_blob": "2e2f86c12df62f316ddfce39eb0824a475c1cc9a",
+      "sha256": "ca85450a15795f2c0963dc3589d8a7d9e83f2f857190771a8a993f9ceaf96d46",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/ColorManagement.js",
+      "git_blob": "b35a771d2a5b27df4cc87da293992db4780ebab7",
+      "sha256": "3b579a8c4dc7c048567aae6948246b93c317a19b392287606091103a8045f462",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Cylindrical.js",
+      "git_blob": "2fe60db2a7069c9b734d676b491c386f79bc29db",
+      "sha256": "d9f3ce4b08817687c17651717637f1d54c45f30d2619d8e0761f9fae1a8aab88",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Euler.js",
+      "git_blob": "5a19278c75a36e01454ae988d59c178a8295a14a",
+      "sha256": "33a964a95f6c87ccc65e5d049810f9133e0f1a574777a37a724c7c03b4adba22",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Frustum.js",
+      "git_blob": "177dcf1478bf44c3f5d32d38a0cac6c44932a952",
+      "sha256": "01f5cbf405d14f9e201af070c1593b9bcf40573130a1c541ae33519174de6c99",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/FrustumArray.js",
+      "git_blob": "c11ffe6de3cfb46d1062dbd8431ef12fce2444cd",
+      "sha256": "bbfd1a66465fc66cd226cb7c04819894294e959224fe0f761f2505d301b00e18",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Interpolant.js",
+      "git_blob": "4be855b6ca309ff11c58dfb06542f59fd899e89c",
+      "sha256": "a1275f81f5ad4eb0983af16aeb58c22b820c6348e44a1234865c6e7daaaf01e6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Line3.js",
+      "git_blob": "de0845810d5d627b89e44de7d8f9dfb93c04a399",
+      "sha256": "ee8302832d1552a3df344422a023e30fddc4a05b5beb98083f7f5e4e80b51874",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/MathUtils.js",
+      "git_blob": "a5b3bd6a22bb75c85ed1fd59b4307bbc4def218d",
+      "sha256": "dcb68bacb1d970686b1f19504fbebbe2388b36494380cf946e375705789c90f4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Matrix2.js",
+      "git_blob": "638914427e6e01b299084d96cce0ee9d4fe3dd79",
+      "sha256": "ae3d9ec356a60504b96ccc20b27762d1401696a502c5aea55155aaee5db0d895",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Matrix3.js",
+      "git_blob": "e3d17a3728f350860c9c444ae39ba396f387d838",
+      "sha256": "7121c75bd53d013c875fab1287a71d545df5b5fe11ce3d63de8a857a8f507f7a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Matrix4.js",
+      "git_blob": "3620aecfae3e737125b91de3383201aa81a45099",
+      "sha256": "f37121b58e71b0b9fb05a69a2a8e5d76e7d1751fd24320d650bdf1a0c6f9ae83",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Plane.js",
+      "git_blob": "f511421714b9f21abbef8d6355b12f6ebc7f453b",
+      "sha256": "2baf4937f0bd00fc093977e18fd0b5a1110bfbf28bf2c9b8f08e029132c8264b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Quaternion.js",
+      "git_blob": "c9faca31665218cee87a7110e2badc7ba868beca",
+      "sha256": "6c18e09a14f2d2fa7813e23bb257b3a9df542c5f7ad605f79ab8a99fa3bd8497",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Ray.js",
+      "git_blob": "94391ddd4482aa412dcb59ba3260e89d0cdfba62",
+      "sha256": "4c88adbbefe35fefdeef8f971ce90220d44fa1699c39fc17d1c584a0c012b648",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Sphere.js",
+      "git_blob": "28f4eec887414b8f3d64be5e073ca06024f43f12",
+      "sha256": "b242e17b2d5aa4d519c42122143c9587b3aff8df629d3a8ad6dcef1b66030ac2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Spherical.js",
+      "git_blob": "335723b68ade98fc8a206ebbaaaed2f4672492f7",
+      "sha256": "71ccc04f9f78ef85a503bc58f05ce0bc042c75c206be50cdb7d8b70988c07f14",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/SphericalHarmonics3.js",
+      "git_blob": "87da0d5ac76b265d70fdaa5782d2020e65f44261",
+      "sha256": "d5c5e747bdcabbd599115a711427dad497ded3d3acf788a240aa3032f9bebc0b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Triangle.js",
+      "git_blob": "9de28261b8f08de9b3f5b673921478f5f6444728",
+      "sha256": "f5bd7721829642839791fc9830d6e11a92e1db4a17bca0d136803d1967f6c224",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Vector2.js",
+      "git_blob": "d809ff899c74c8a6cef53cb5d181a3af2905cc68",
+      "sha256": "ce272e52c89ec0ce53054de08210fde248214938b78fcb07bb72d1b7bb3a7b48",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Vector3.js",
+      "git_blob": "cbf34895e5e5f79126d42b3369a4ec7e7a701398",
+      "sha256": "ecb0f310d3ce795b802937552356fa421c2b8d0b01386d7a7f25b5f2da1bd2ce",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/Vector4.js",
+      "git_blob": "ab5e9a2c096aad348bb998005822cf023839a731",
+      "sha256": "90dab9ed4e7b42b0ecae5b547749b6d8e4d65c6f5b7aaeea1b6ef1f6170d9d48",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/interpolants/BezierInterpolant.js",
+      "git_blob": "b14b25b527f4c4c9a8ac81b64a65c6299f936181",
+      "sha256": "1735ac27171c34cda1e033a31b66eac73db35ec299c913cc6d031f0c5b1115de",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/interpolants/CubicInterpolant.js",
+      "git_blob": "24b3096de529e13fbe0723db76fd84a7028b14e4",
+      "sha256": "71bb5bda3a58436b64778158c8501f843de7980ce8f86ce5ecd7e4457d997ca3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/interpolants/DiscreteInterpolant.js",
+      "git_blob": "87e31d5ec1a8ba6f51ae48f70f8d4001bef97f34",
+      "sha256": "709eaf1e453a89ce3393b97113c9c2c162f33be3a67491a49fa5ac7b81cf7a30",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/interpolants/LinearInterpolant.js",
+      "git_blob": "4729c13494ec171cd468ec75b10c7a598d09926a",
+      "sha256": "bb7c547eb069694e795fe360fd68b4925e2427793eca7b997e4558513bad5d49",
+      "mode": "100644"
+    },
+    {
+      "path": "src/math/interpolants/QuaternionLinearInterpolant.js",
+      "git_blob": "d6c999b30351e518d4c1be4b857592c088e9a447",
+      "sha256": "0ba036b170bf0260b0a863ba21fd3f101302bab9102583b11e6ad9d2c119d659",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/Nodes.js",
+      "git_blob": "a1d25afe06c19aa8f3f77e6fa59cd451bdb022e2",
+      "sha256": "f19001bef3278eb6d997564c9f04a34e52c4cc29e7c3c05c46ccc07a1c691c81",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/TSL.js",
+      "git_blob": "954fe343c6e70ba9d52213145ff1d136789e0184",
+      "sha256": "eca4a4e080b7c9484afe4d33f8109cb3df851acd19670141401ef3a5ca5c5d8b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/AccessorsUtils.js",
+      "git_blob": "9cd8a089d51f5d20836f975c0ef9433846bc04d3",
+      "sha256": "d7c6259e6d243804def9337577165e5eca007389a883d79e20c4a62860741d80",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Arrays.js",
+      "git_blob": "ab5799b3d34c204b190340053ccc3626c7c1be6a",
+      "sha256": "8839a9ec4b103c9deb731cbfe058f5cfc957b62f865e3cf484b3f7468ef7d026",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Batch.js",
+      "git_blob": "adb2efc017becbba72501d5cddffd31d2c584a38",
+      "sha256": "696cee03e217c665daacded4fbf813d937d4ed8b1764b01d4f1dbc5e1cffa75b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Bitangent.js",
+      "git_blob": "949dffc64126aa769e07a313b3585e8fe917e5c2",
+      "sha256": "6e18d23c4e6cc298d76882ea0e8601c7520859c5d18e10b06c4b6650a1dbdc08",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/BufferAttributeNode.js",
+      "git_blob": "85df36b18f8795289e88421c388d3d7feb4b397d",
+      "sha256": "5adf4b642902e90ac11f86589a7dd90d76d6ee95e2c0aea5699b6cf870769b71",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/BufferNode.js",
+      "git_blob": "fcf89459774d724890dd0f896c47878cc7d2dfd8",
+      "sha256": "7359672fdb68eb23b532ccecfe51cec056b04423bbe17ad4f8a0995a12968693",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/BuiltinNode.js",
+      "git_blob": "d65cbc10c9eb603d3f0344458ab6e4f1131bd7d9",
+      "sha256": "c670cad30e7628e227a4e4a3908c74b442dc3e664349130c658c3ac023bce569",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Camera.js",
+      "git_blob": "847c10b0f6b57a83f70c5319a9337194c7c88bd7",
+      "sha256": "53042b55c99aa61ec046099ade8fccfb76a9bd3aa3af29d082b94254b5c08642",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ClippingNode.js",
+      "git_blob": "8d0eaf851ade9e27450c358842ae2b84551487ef",
+      "sha256": "dd7e55be6293fd80f90ca84b4597ee1006c313bb70d311985e16b526799ab532",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/CubeTextureNode.js",
+      "git_blob": "2c0a637d276bef863cd3560c186a9f4de273e56d",
+      "sha256": "7715e00ef0a2bb40ba57e462fd3934d7ff14eab63b9d357402531d37bca25069",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Instance.js",
+      "git_blob": "8222fdae7fd66d1db2ae7934f5204e67219ad213",
+      "sha256": "f0a8926bfdbe430e2b9bc5e8075eb6f850327a8fecccb8c425f8b71cf6730305",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Lights.js",
+      "git_blob": "9f944524dd88619ecdaea7a4a5972e08c40f98fb",
+      "sha256": "1ebe4e6885c1893e2f9d37e9306e08f7cfaefb35ccb736f820457a681fc897fd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/MaterialNode.js",
+      "git_blob": "242c16b3eaee6189db7994e24c1c105385b1286e",
+      "sha256": "2b38dc0944e1eb17148762c900dfb207f3d4f4fa0e9df08e510f724ed9cd3d9c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/MaterialProperties.js",
+      "git_blob": "2f02e862258beff63e7a5320ae60e885b92acde0",
+      "sha256": "d794149478aabeb95a9e486ac539e9783e4caf05e6eb20e1c2ed62da9a80139f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/MaterialReferenceNode.js",
+      "git_blob": "3d1e521b988feddd4f1159d6c16f35493ba6d57d",
+      "sha256": "c9ea1771ddc8db6b20b95158f3dc2be8250946a9264ae956dc1b304b313848b4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ModelNode.js",
+      "git_blob": "4f27863ea80bb1be0ee7458acfad25631d3f6327",
+      "sha256": "98fdeb4ea5315a087c3e1d3d9588214a0a8d1d69294c2de89e1099da6ac6b610",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ModelViewProjectionNode.js",
+      "git_blob": "c238fa5c90e6fcc782accfbba6350c7f97165d09",
+      "sha256": "1a9e38bee43217a393ff32916cb7e7ed8b8281855d9fb9abfce5b2da58bd1f7b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Morph.js",
+      "git_blob": "ef2f41ba5c53bf953c026fe53d1d2597826acd62",
+      "sha256": "efdf2dcd4bdedee6ffe972fee68fa145a85db8fb7966c9e8879cae79a774d209",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Normal.js",
+      "git_blob": "3c02b85f9a421dc57f2facaa00056d0358b11496",
+      "sha256": "c4279c98c02ea486c78aeea6e50e3191a4373883864634f4fbb5e811c2755726",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Object3DNode.js",
+      "git_blob": "68ed0c39a238386d23c9e8ebb1d47f35ee81a99b",
+      "sha256": "9efb289e6e502430e08dc464a7ae3ba3f91ffe77c144723cc515235c98f68279",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/PointUVNode.js",
+      "git_blob": "96ea66027429c74f82d613d212b8325f9771873d",
+      "sha256": "4ee8d799e3d2aeceff5288cd81dfeafba4d7b8055bfbb7711bc6852a4779cbe4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Position.js",
+      "git_blob": "dfd8fe946fe7109ae437b70ad30ef1da997a60c1",
+      "sha256": "f042c04153c3a4da86fdc70843b7bc0c6d8358fa0202c4990d34bd87ec37b3db",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ReferenceAttributeNode.js",
+      "git_blob": "2f151df0f980c7dee1ab0a41a609607522cf883f",
+      "sha256": "b7ab578059d55c59b993a1bf197c9da9f52da04d737d88a9ca8cc3eaad9c6dd8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ReferenceBaseNode.js",
+      "git_blob": "3d735999261f663073956bd2136709d0dddd719c",
+      "sha256": "68ab0f5e6a2b2029a68e5b4280543eb7deacb2d8149f1af840b00e60d00dcf5a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ReferenceElementNode.js",
+      "git_blob": "ce3d760d3cc14f16d2584164f9c62d7ae21c6c74",
+      "sha256": "a0616ff1ee401218a2285209b17dd7565c0e8825441a199fa45e85ee9a0ec4df",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ReferenceNode.js",
+      "git_blob": "d08400a1746050d4f71c8788d7af18663f078d5c",
+      "sha256": "d648b95d996960bdedd0f646ae7d7c320d57f47959fd4904a173b578ff309307",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/ReflectVector.js",
+      "git_blob": "cc9ff03849419f035463a38b0ee232c58d0f57e3",
+      "sha256": "ff142b4d222a0710767970671162eeb94076ebeb838ce2c8c5bc5b8051d26940",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/RendererReferenceNode.js",
+      "git_blob": "7cce3901218a43aae8d359dc190341c9b962e737",
+      "sha256": "72ea922a0620ad861f83d52a79296c004b88ed6afb04f3059c24886d9b0b00f8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/SceneProperties.js",
+      "git_blob": "14e977921d8bafa99704ad73d26284446e9fa15b",
+      "sha256": "21fb31d29242b89bc28ff8ab72e48b4317f6a9a46dfafb720caf2b1787925cff",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Skinning.js",
+      "git_blob": "d33a690aed896a8c7380bfcc0b73cfd290664056",
+      "sha256": "07df658d285fd52ef5a65a699a482a552c4e60fd9eb740596078bb65172e3bcd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/StorageBufferNode.js",
+      "git_blob": "966e81c387fe3fb8bc78ea79ae3eaf0d8817ffcb",
+      "sha256": "5001d538e8d805e91d178e2261290048af043d152938cd5af8c6c0299a3a2135",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/StorageStructNode.js",
+      "git_blob": "3a197e22089d603c688604b256b85775292c4a1b",
+      "sha256": "f03b1acc7a8188ac9401149f899d7f2871d5553b411625c06ae337ebcd761bff",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/StorageTexture3DNode.js",
+      "git_blob": "f0479ce9b4c549db74bfa0dc857c107461ddc0f3",
+      "sha256": "40ba25c8eb56594cb61b0e59e25e4158be99a6257d34f27e64069b2abe9c032a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/StorageTextureNode.js",
+      "git_blob": "6a6d3caf7bc10584e4aa7ea6da8ab05d64d403e0",
+      "sha256": "8be25f26aa9bec4321a0ce6ec9ccb7acaff38577e72aa82a9c69059164e76d2a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Tangent.js",
+      "git_blob": "4e0ea57933c31abe03fc47f6c46d4c1c9da64278",
+      "sha256": "6c2029447553a114a9d09c96cf13133fe0a970de147c2e4a392dc692b6c971e5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/TangentUtils.js",
+      "git_blob": "a2bb5b766c8835ee2f2a749895dc7903c8f0ead2",
+      "sha256": "b0ae2d345cd1e2accf4fc691620383d1cd69480f8df06fb1505a628ebc4d7c04",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/Texture3DNode.js",
+      "git_blob": "556b83fc56928f18190ebfeddbf3f907fcb926fb",
+      "sha256": "f1769e2b0cb2fc5e635cf82e4f693c0a5d954128a2db28934a0f6a9132e1d921",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/TextureBicubic.js",
+      "git_blob": "eb4146866d42522c35aa6d00747a3cf8b103775e",
+      "sha256": "53492dfa794ce756d4fcf6a96dabefa6dce4bea4ae1a052bc9ce9c871fa77f6a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/TextureNode.js",
+      "git_blob": "c1464d70f0c09dd189b80b64629fb9f2d0ff6f71",
+      "sha256": "4df29145572cb0dfa86a7f1f2a5859dda24c7a3cb9f30b80fdb2f60882120c60",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/TextureSizeNode.js",
+      "git_blob": "71795bf9dd1f62d142ad20d06a657ee46cd25884",
+      "sha256": "e5492bc94cf1ad9e1556409f3afba7bdedcc8d0724e7bea53505a2ad090d0fe3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/UV.js",
+      "git_blob": "aefe5ec67eeb189de073535df4d63b8d4e9eb3b4",
+      "sha256": "ab66afd6261df9ef1a6c5ff64ab3a2381c421f3733ec372b91fb1cf5445745cc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/UniformArrayNode.js",
+      "git_blob": "713891f90ff16adbc88131a33a0cd0b855aca64d",
+      "sha256": "1d6ffbd78ea5294b8731722acd6c29a56e4f01dfc3c26f2e9907cb090614ee11",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/UserDataNode.js",
+      "git_blob": "e3668034406348ecb537679f4b6e2bb0c36b3204",
+      "sha256": "bf06956df06b127de3410ced8373ea7a3c31e8d6b5d8a16f9b34fcf92c5e474e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/VelocityNode.js",
+      "git_blob": "4e47cb26d52b34742d2a23c477ab6366b045bbc9",
+      "sha256": "cb6916490ab478bd7a52d682a86327db657cd7fee0113aa8fbbe3e1747013088",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/accessors/VertexColorNode.js",
+      "git_blob": "d8af68d34c5479cf74eb033647062dc35117c321",
+      "sha256": "cec5c59734dbd1af26d1416305a16233d1eba9f5915050816c5a19a667092a26",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/code/CodeNode.js",
+      "git_blob": "2112344b28267f51870a40f78f03083a0357c1c1",
+      "sha256": "89fc222d30c76e0295219e6bb6f15cbf8f2c9c6e65c69eb659cdf520bc0c1ab1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/code/ExpressionNode.js",
+      "git_blob": "44620ff4c94f2897e9dc4b842d4c6f0b126c3608",
+      "sha256": "1f0476ddc06368de9986d33a796737616a5934d89ee3d332469d2ffb1e4efa00",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/code/FunctionCallNode.js",
+      "git_blob": "09a2ffcb47c25215029a980a1aefa3e88edd71a9",
+      "sha256": "15458596d77f0dc42cd2f4b52199a7ff8c30956d73156dafe8babfee4be4a7b1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/code/FunctionNode.js",
+      "git_blob": "e6e226ccf9d20a7a56e359805216ca1106e84b91",
+      "sha256": "a93e31ef634ee82e359d164114a2c58278d2cc5bb41ac86efe679c4206ca2824",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/ArrayNode.js",
+      "git_blob": "474243ad9b44d25841c3f2561f06b58aad272f20",
+      "sha256": "98422959cf44a5be9c6974f3c2f8b5f8d4e9ce70b9391039d8b5fca30c66c9f0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/AssignNode.js",
+      "git_blob": "5e0ace342effe3872a614273294cc396129cad8e",
+      "sha256": "e543d99dffc74cc00b0791db4d0eee39ed3d97309887975f90d3ac353036f8a7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/AttributeNode.js",
+      "git_blob": "f8f6672f972c2dd3ca1ee7b066ed646dbd02522f",
+      "sha256": "0baeaf0a51cc6efc1fcbf1f089f53a1d877284d838ebea866418a4e89a4f4b86",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/BypassNode.js",
+      "git_blob": "666b1deab885e5a956163751a19f92324ac3e51b",
+      "sha256": "1bbd7518bd56bab0025df9e8337ef83bcce505523c04a57214c600b32372af4c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/ConstNode.js",
+      "git_blob": "cfe0854b7b48e7a578d933d5c2938261ee3cfec5",
+      "sha256": "eb79fbec6e91d9594dda902ae4bc8dcaf876b32ebff195c1143ecf354044a884",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/ContextNode.js",
+      "git_blob": "b3e69990f581f1cd2640f8572a944b39fab5d42c",
+      "sha256": "309d850e62c18f72158d3bc27e21083698cd1c82c6f80275569ac8b86be5bdea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/IndexNode.js",
+      "git_blob": "147d19dd31fff4a521f8717a898575d793fb799b",
+      "sha256": "a104e167c7798bc201605d4ce2cbdc6ebfe2daaa761851d5e0aedf62fbb2c02c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/InputNode.js",
+      "git_blob": "c49d1e4038d11367e384787e32a937af7dfdc8f2",
+      "sha256": "f34adc248447ccc2c480cd775153e98f188c0526949079ff4b32878e78c7e096",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/InspectorNode.js",
+      "git_blob": "c092504d05e0ced64051b835d5e3e4b7e6565ae1",
+      "sha256": "f20dff01c04bf4025b4b754beac59ff573b6732127768c0a1190410515708e86",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/IsolateNode.js",
+      "git_blob": "739b554f4825560ab352f5517da10bb4dbdc58fc",
+      "sha256": "b4b723ee6b35cddb90b494f6fcaf436b2a3ff0af56eb99684c90ed074590a2c1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/LightingModel.js",
+      "git_blob": "e6e75bfd3268cf04a229febcf6b92c124b790050",
+      "sha256": "5e7e400b03f37c27c58969dc5789df144d0e94a539e3cd3bbf007fd6ef2f8479",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/MRTNode.js",
+      "git_blob": "0d763e4da5e761cfeb8c729e795c06659086bb22",
+      "sha256": "ee521a52f47e1e0946191be2d95824e9b4c9ab1a6c63b7b2f86aa3b6e349fa1f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/Node.js",
+      "git_blob": "a44ca4d3b4296e47bb5390af9986f5093530a495",
+      "sha256": "2f8f5839ba9b552f545cace344deb623f6da70458d957fefea8cdbe0520bb111",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeAttribute.js",
+      "git_blob": "444572990d21e4db831d61810ee455a22b5783cd",
+      "sha256": "9b9520c1fd1cc9d684397bf7cb8f1937a868cb7ee0e9610f9522138ffe312cdb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeBuilder.js",
+      "git_blob": "76f6237c97b779878ef9bc85aa6e366aaf2b3f16",
+      "sha256": "3381bed65a75784c5c5f6d177fc4fb418dabb972ebd80c84498b01a51aa19b85",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeCache.js",
+      "git_blob": "dd43e39120b6c7514751fd8b366fc3ae2e43300b",
+      "sha256": "ea5bc07f1cfe6e7f523af43f0893c4d3752a88b38ab6c4662465274b93d4fbca",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeCode.js",
+      "git_blob": "0bbae3e7636810b9cec664c50c3c0452c7bdf08f",
+      "sha256": "a7589a497a1d80285e53ecef09f19a6cd5534d3edfc47934832294cf02890975",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeError.js",
+      "git_blob": "101e235bf5a0576a7181a8f41f8ebdbce273c3d4",
+      "sha256": "0f82d62ac73ed462c035692898c3f3a295cfc1a502587d89a4786440c34542aa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeFrame.js",
+      "git_blob": "31423851f5cd75dc658ee00bab7fc2ccdd50816a",
+      "sha256": "4048e1d55a262f3dd97370cb14b517fbc6f3d7c4bbc0d3c76f0626fea928452a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeFunction.js",
+      "git_blob": "c3f1bdb6263c4549f3bde7a3a1a4432851857a49",
+      "sha256": "d9e8d0fc46a46dac92b8219cd345c98bf7dfa4c50566e8a51ad82a0c6eeb7d7f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeFunctionInput.js",
+      "git_blob": "2d298f382976e50ad0fdbe971495e4d5a783a022",
+      "sha256": "8ba3091a5af1448261df36d2f8446fc1bb1e0adf712ed79f40bc0f2974ec02f8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeParser.js",
+      "git_blob": "bec059fd29b888e814ffc5585dde3dec9d34f5f8",
+      "sha256": "889c9cf29aeb85fd7cfc038c5e7c49042a39eb27da05e2b7fcc2da6214671e51",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeUniform.js",
+      "git_blob": "66e85c7bae52df70d1580b1272bbff246aca8e10",
+      "sha256": "22c3d82fd88140351f076c415b8a2c0c42e1d7855f8c5aeb222c7990f1ebbcc3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeUtils.js",
+      "git_blob": "7b33666af6b1447db3a64beaa19f4fdce98255c6",
+      "sha256": "02355f2e4872a5c82e44d75b703f1ebb0eb0104242c50e003c8562f3900b9e41",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeVar.js",
+      "git_blob": "d39a7adbba3359a3afa0a33666ad64b341a62487",
+      "sha256": "cd75efb7a9d954c5f2e50e4fe3422495d0b0ab9d4c178b805373e4adf7fd850a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/NodeVarying.js",
+      "git_blob": "dc4a1b63d76db658a731315e3bf73cd9927f297a",
+      "sha256": "2ecea30617b8d9f2079bd88144cdb57ee31b4f7279b3721cb34cf5fc646c0eaf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/OutputStructNode.js",
+      "git_blob": "5533df53bc5839788f422c071f096a66f7fc4dea",
+      "sha256": "0fa636628ac8a9f485b9efdc0e4c9237bd82794dacb733d91c84bf54c3c6ffb3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/OverrideContextNode.js",
+      "git_blob": "80af7426f02d4be17405e21d086bc8853269df5f",
+      "sha256": "bdbef8cfd465a7561640aad259f2f7c1bf01d4af90ba86dbe269b6304e5e75cc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/ParameterNode.js",
+      "git_blob": "798a4504986229faed75f5f58a3ca5665cbabe76",
+      "sha256": "4d59c17ce7d09451100a9055165a3e612155775dbf13fd534f2b7193b26c81b1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/PropertyNode.js",
+      "git_blob": "2a47b60cebc6ee9f0cd8174543e616869f28068e",
+      "sha256": "4745c7f52a8fb2d1d37cc5dc807846cf8e57e76f30fe0fd6076bd8ebd8f74f71",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/StackNode.js",
+      "git_blob": "709c1883486524340d8bc5161ca8ad87da621fe1",
+      "sha256": "6e1fde2df5ea6b4b0093c675ffae1b7254afa9937b040e770e2fec2ae4f229ff",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/StackTrace.js",
+      "git_blob": "8d8be8915184cee5c360f2108db2c6adf8ca190c",
+      "sha256": "22f647cde3beb2a9a696e2f14d8b019079ef1e373bce3a54b6d7ea54851d284a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/StructNode.js",
+      "git_blob": "97796f833cc6b1720fc40946f123b4d1d7686741",
+      "sha256": "b49bc6446c2e743f0033faaed0a03aa79796eca08aa9570d46c01bda06111969",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/StructType.js",
+      "git_blob": "6f3f3f2bcceb14e327bccf16fb4476603dbe666a",
+      "sha256": "2127533ec08221d3bfdc5662d070ca8f3c9731c46d1a8c7f6742699ef97cd184",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/StructTypeNode.js",
+      "git_blob": "c18b35d4e1de4e834dbaabd5e5d86602441745a5",
+      "sha256": "5fb4d86874e7cf21016cd91cb074aa85364424f6773d02cb454adbf76c0ac90f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/SubBuildNode.js",
+      "git_blob": "21928fa8012c8cc96fa69a14d9cef99e90fbd688",
+      "sha256": "61cad023fb3803d927688e77e01b3a0824d18f1e173ceae833f73e3ef29c55cf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/TempNode.js",
+      "git_blob": "b928ef0247496d4dcdfe55dca2ff78264c6ff15b",
+      "sha256": "20d8ed13fa0bb1033eace109630925a59165cb5e0fe857c680ce8a4bc6392b8d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/UniformGroupNode.js",
+      "git_blob": "8f5fe5717735e62965bdd438bda47d196cdada9b",
+      "sha256": "0cd1b714d39fb53abc736069671694959bc68c0a88d2ac61973bfe3fc0f6df1f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/UniformNode.js",
+      "git_blob": "dc779eb05be49477ab146df2de16bc643ea85edb",
+      "sha256": "76cd5f198a7392d89a39fa15adaa02e38ba334eaa1a59c7259dcd3fe45820034",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/VarNode.js",
+      "git_blob": "758b96e40b0f192b743efaf1cb888d1a62c7bd7b",
+      "sha256": "e1d90f1c45c3cd9281463e88180802b8f3d242800eb3b5b9fb86b07c4d3625cc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/VaryingNode.js",
+      "git_blob": "f5385869c57fe2126d5ecd6f282ee9cf83f70ab6",
+      "sha256": "6b0e1bd226cf80188bb38e70bdae871fd886d87d28bd41522b46bf11b7dd0fc6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/core/constants.js",
+      "git_blob": "5c3706d6dfbda02920319a611e187ad021f0e33a",
+      "sha256": "d997f7caa7fe5b1d0f0bf69f8b84695675d2379ff02a590cde558e6660c95bf4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/BlendModes.js",
+      "git_blob": "28cfde8f5b0db5a08b6b15cbcadcece0f28e8fc4",
+      "sha256": "ed7216151963dbf43f8908a7551c7b68c29ec3eb9ae9419dbd2970bb818a619b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/BumpMapNode.js",
+      "git_blob": "15e0fcc08598eda7c05bc3f144f62373e16cd24d",
+      "sha256": "24c5c22dae06ee80261cfcc3abdade262b4ecb56cb807e3f76902fdb19c16e8f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ColorAdjustment.js",
+      "git_blob": "483ac06d992177f952ec81876612b747a298df9b",
+      "sha256": "8e824740b506f6fe2068ae7dbf8f174c0de7a2d2f4234b20fad79983fe897baa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ColorSpaceFunctions.js",
+      "git_blob": "879d950c5a007a28f67a59402beb975bda2f323d",
+      "sha256": "0d7eb9847a99f9637ac1db765b7a98dcfcf7b4a142eea474192e8f90260e3d65",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ColorSpaceNode.js",
+      "git_blob": "a8f2bc80f9b06d15981a82310935ef5336b43ece",
+      "sha256": "a7db55c7f374124e35ac3babab5bdcb814e37f1ebee600dc62fa55b33c9c07b4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/FrontFacingNode.js",
+      "git_blob": "34317bc6ed70f04657b0b43c3cf6b43aad92875a",
+      "sha256": "9f8d3dec08c85832b66c1d72c37ba6731112d963d369c3dff4f4592243ff6ac7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/NormalMapNode.js",
+      "git_blob": "93813ea95fc78b2dc0a1ee3194b31215611c02e6",
+      "sha256": "6fa94712a906befc4fc180e94762d9384c35a7de0bed0a43fa11a47e79be4933",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/PassNode.js",
+      "git_blob": "a8c752937bb6936cab462f6dc7c61edad243d263",
+      "sha256": "6e02971c7891c3931c710379e40f132de87192da2c670ca8e6b3638e0d59f46e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/PremultiplyAlphaFunctions.js",
+      "git_blob": "1f502f749bdfcfc77df45434390caeac17068d04",
+      "sha256": "0a211eb51d57c10a37c7fec5247230fa98e6386cfcadefac7c36fad6dfe4d348",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/RenderOutputNode.js",
+      "git_blob": "f98305cd1931688c2cce18ee962949c3073527bb",
+      "sha256": "087c887848b586794381e8f66f678012e7cb2ba3910eff090fa6f4cd8da0e20d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ScreenNode.js",
+      "git_blob": "ea518c3d164bd52921bc026e4c7f94106f09bcf7",
+      "sha256": "73ab39dc4aeb51bfc8caa5116d60c0198b5ab7f61c7b012187d230479392b879",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ToneMappingFunctions.js",
+      "git_blob": "254c8f2346ec76da246706483e0e356a38be7cce",
+      "sha256": "9d8f565f85a5bd3ff61e90b10d0afb2b271476f950f31be79aa74be7d0c1beb5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ToneMappingNode.js",
+      "git_blob": "3490983f3175bd0fcac272ad4a9bb25317fbcc3f",
+      "sha256": "ee37526d033d3e73027208095a03edea3b7da36b6aa8261275b2b5ddbc630a9d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ToonOutlinePassNode.js",
+      "git_blob": "752ae533e0f9fd3a790e1c83bff719c6dc6b1dcc",
+      "sha256": "271947d20d749fce16daa55612b86689d1dce50ac0b93682abd4a0163ee7d141",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ViewportDepthNode.js",
+      "git_blob": "3cdd998b2391cbfaa87921f6ec0fb1bf645afd05",
+      "sha256": "447ef4f47a3689b37ad70885095e6a7de3e969bb7599a0eb2d4847870fb0072c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ViewportDepthTextureNode.js",
+      "git_blob": "c849b59eeef58ec61d1625672ff6bb3a35db8b46",
+      "sha256": "dbb9be047c22a3178d6cbaf1338f8252b2864c422a13ad529c889c0a2ff7b3cd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ViewportSharedTextureNode.js",
+      "git_blob": "4fa0d2fa7627831706479490c207f061fb6488ee",
+      "sha256": "76f472b139ac76c555ad565a20e1ea92c581acaa3f8e70ad0c3258f5cbfe50da",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/display/ViewportTextureNode.js",
+      "git_blob": "5aa2ebc9ebf1515d1fa34ee0613c809c5d1c9cc2",
+      "sha256": "81ad0e0845f9144fc42f1bdb1605c2ac537bbf15db62e30f66d15a0f5e437194",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/fog/Fog.js",
+      "git_blob": "2b202d04c681ae1f91b33fca50961fc5d3438044",
+      "sha256": "9b89b4fadef1559e8187d1bc97546744fb81ff3aeb4b49015f8f312f8c4b7b15",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/BRDF_EON.js",
+      "git_blob": "fc6cf35b6190f6f2f14ddd256fa650c89d1a3833",
+      "sha256": "7e9cd890ce540c8a32d61a55705d706da2ff261971562c9d1ef374d7370eaf6a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/BRDF_GGX.js",
+      "git_blob": "9b30d73319ca86cae9c426c6404209387476fc63",
+      "sha256": "16d4eea293d9336a347f52a6fae567dcd028c6008a31a7e7e646f551062826b9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/BRDF_Lambert.js",
+      "git_blob": "342f053318c91b7285e4c7e175bd887409765c45",
+      "sha256": "3124e5b22f8a186a1c3a494c2a3db1c30dd8c9c08cfaa5190c2508e50fecb4b8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/BRDF_Sheen.js",
+      "git_blob": "0aeaffaa70343ed09f6c97fc49f0032a91917d8e",
+      "sha256": "07a9d0cbb0f379fc64a85fc98fc2b1a3be5dde85ba8ec5df7440d39feb847310",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/DFGLUT.js",
+      "git_blob": "8983386cb94f4c0ecb9a63892d77a0da02b2bbb0",
+      "sha256": "88d19b6cf0de47a06d40b14a0375419e7e50f87a461ec3dac479b25506efeea1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/D_GGX.js",
+      "git_blob": "896ba8d4d61418f9bb5195771614415f3745228d",
+      "sha256": "5cd517ccd89d69f7956c556c2cd3a22050f3667ffca1e09cff51fec5e093047f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/D_GGX_Anisotropic.js",
+      "git_blob": "81fa10df6dcd8549f617fb83e6e3a1d95a6355db",
+      "sha256": "4b63f3f1289edb608dfa589284956642e31f68f57ccbdca5ad4c58ff85c5fc1d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/EnvironmentBRDF.js",
+      "git_blob": "f084a8f5e1acbabf2fd5e6624564ebca9dc05859",
+      "sha256": "6852ae668af2c1a37190b215c5948885f6f32da0e93160954f790d39c6407b03",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/F_Schlick.js",
+      "git_blob": "8384c6494619d68f0dee7686d9b0528dcc90fa7b",
+      "sha256": "c57e15368eb20c68b852eaad9ca13125c3c7bf748f248a81622d39832cf7f86c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/LTC.js",
+      "git_blob": "0d496fc6cd7a99fc829a117838c0dffff971d585",
+      "sha256": "73d680768e5913463e4bbd1b87736af722349413827f920184333e166e91e922",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/Schlick_to_F0.js",
+      "git_blob": "20e7b3d0ab8bf0c66ac43fe6ae57ab234c0053be",
+      "sha256": "63cd03bf33cd6136ddbfa3ca22babaa7a1b804c4fcb73710c45b7c594215867d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/V_GGX_SmithCorrelated.js",
+      "git_blob": "51fbfb6c5f680d9549c47c5fcc54c86a5aa663b5",
+      "sha256": "38140b3123770f1d3b1df11f5e9b6e0340135e08a1816e24118b98a8ccb977dd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BSDF/V_GGX_SmithCorrelated_Anisotropic.js",
+      "git_blob": "e80fa5bed24763f7d42ec4c325e0db087563656d",
+      "sha256": "56915e64a65324933af52e54cc5fb2ce77850e1bb6b166fd03450cd8219cd9eb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/BasicLightingModel.js",
+      "git_blob": "378a5382bd240a49819d99d78e8da2625cd6e7fd",
+      "sha256": "b26747c9c3d697b270d5211701e4585fa85a10432cae6cf6b28c2733e357776c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/PhongLightingModel.js",
+      "git_blob": "0e6fb994225d0f465d88c4d75210a24cbbcc2036",
+      "sha256": "ff2bbe9405c16d2ecf276f8d13269b4c8f6cc117dbac57fb6fb08889ae6de025",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/PhysicalLightingModel.js",
+      "git_blob": "364a2bcbe73b040c8490441e9290b7d69b4531d6",
+      "sha256": "789ce5e38400317301fa9d100c0c13d1f39e1207f74a3235a6b9e7afdbb3d4e7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/ShadowMaskModel.js",
+      "git_blob": "252174fcd11ba30fe9be71cff72767cac51701ac",
+      "sha256": "d8bf62b46f664ca6790ab46951bceed5fbd12c3d6d3c81dcd5efefd7322f3e15",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/ToonLightingModel.js",
+      "git_blob": "8d43e46d11aba91d30be461c07cd79c8ae4e9650",
+      "sha256": "ff169477c17546cd79442cc5d9dc76d05551d2b8600f73fdf9ec282d016152e1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/VolumetricLightingModel.js",
+      "git_blob": "d654fcf4a2ede9141fc5e4eef6184b8ac05b4f95",
+      "sha256": "e554a1c7266f049944eeabd969f86947657e8427c4daa2acb597410e0d68c2bb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/material/getAlphaHashThreshold.js",
+      "git_blob": "2716a8d8737c7489fece731bfd79f7d5d2345447",
+      "sha256": "5048f16fb6599815ac91027b2161a5de72fca215e5472eee25f8656bbc1becef",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/material/getGeometryRoughness.js",
+      "git_blob": "c7329de9ef535cdc33cb98ce50e68c84e15e7666",
+      "sha256": "919509b09ac4fbfe1bdba075c165455f4ded8c5692cb3c8236406184e7bafdfc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/material/getParallaxCorrectNormal.js",
+      "git_blob": "513177257248008352ffe9a88fd1ffe54d47da3b",
+      "sha256": "cd76c33f6b0808c00f6106f869bf790f36581e519f29f4df41c1ac496d93c001",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/material/getRoughness.js",
+      "git_blob": "a9017830056b3a3c9773f4d74217276aa304f228",
+      "sha256": "697fd5ce93fa5a0dd2461b3ed7b9c3e664604be74751404f02dbdb079a67fbc6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/functions/material/getShIrradianceAt.js",
+      "git_blob": "d1362ed2630a4ca2bd603e2b8a754d49f141370b",
+      "sha256": "29f464cb74c3d9270ee733dce15f4d2153ce11f1de49b75a375c1d5e4e303a3d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/geometry/RangeNode.js",
+      "git_blob": "a80a3c625b46f5d17c247bbb9bc60412d210261d",
+      "sha256": "e7e4660ab8706c6a0f5d2237831bfd79efe119b56e9fc8ad15fb2261ad480270",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/gpgpu/AtomicFunctionNode.js",
+      "git_blob": "5a84fd1262da02d0f9a5ba894d4c3f3fbe7b2fc4",
+      "sha256": "4963641c1cf1fa0729937bdc8f2264570bf0a92e0bcad86d519a95d61086ea21",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/gpgpu/BarrierNode.js",
+      "git_blob": "cea9e159f7f436be62a9b4a6f829f87950b281b4",
+      "sha256": "b4ad8d4333b9d0e56c5232065a15b57df9c29fc6c030e794ad2db3926d71f2e2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/gpgpu/ComputeBuiltinNode.js",
+      "git_blob": "cfe78cf6725ad45a70b3d103e8985819fad2f36e",
+      "sha256": "d24593c2971bd51f5ada6b2359323fe592019bd173d7b0545d172bcb3e8be46b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/gpgpu/ComputeNode.js",
+      "git_blob": "b9eab23623a9fc2e39103ba23a24be96f03f26e7",
+      "sha256": "2bb76339fc261f8a6b2ddd8abe96ff90b5f3b2ea5c884bf24f5b0d584a0ec0e8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/gpgpu/SubgroupFunctionNode.js",
+      "git_blob": "f12a8f53d8a461dc7b8f4b444fb2cdfd41160f03",
+      "sha256": "06ea9761efc089124614f0f31f568c9b45bb4d8f0d92896d5022ec316b84ca60",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/gpgpu/WorkgroupInfoNode.js",
+      "git_blob": "34a76265c775274e9524498066f11ea318bee80f",
+      "sha256": "fdf782ff75f2ab3e2dd546274d1fbe8cd8b8f1509d506c83ea96dc0e7d877228",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/AONode.js",
+      "git_blob": "71cbf9a265de4ec5276f4516908a0ea230bdaad0",
+      "sha256": "2f1b87fef3534de6636bcd66f2891f64b74f743af0a6166fe9c7bc00898f17ee",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/AmbientLightNode.js",
+      "git_blob": "4cd7c6abdd1be79cc5eb6c1b4a534a03aa1b69b4",
+      "sha256": "2d1518f26dce1e700951847d618b1c636534a789c084c0c13f02f5a5b63f2835",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/AnalyticLightNode.js",
+      "git_blob": "f583bd616fbf4d8ab02fa31229919cf70d912498",
+      "sha256": "397643fc5761d78eaddfa7a25141374d7ec36ee969e304521bd8ebfc9c6c4d72",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/BasicEnvironmentNode.js",
+      "git_blob": "7bb7014335d175cf6d0e65efa922f6754dc0a838",
+      "sha256": "def38819330921dc74473573acabed2a9d587cc33a61de852af0f38b818fedd3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/BasicLightMapNode.js",
+      "git_blob": "ca90795d60032b14668e6503e675fb85c94912dc",
+      "sha256": "d02851e726944dd79614f4fe40f22f83003d0fe3e89bb571222a10de36741e56",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/DirectionalLightNode.js",
+      "git_blob": "c7e5e809daf8c7b29c0e9f18d6360b893a0be3bf",
+      "sha256": "4fe5d229aab041874c9386a8403e9ca0aff573d25659855fb1f50a975a8bfa72",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/EnvironmentNode.js",
+      "git_blob": "013169f4a5af8c857cd9ddeb063d126a3d022ec6",
+      "sha256": "4142e83fb5dbc9a2123f79fb08cf1a95e391d8577c36901137cc4dd98561c083",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/HemisphereLightNode.js",
+      "git_blob": "32c782dec758aca2561936af8d6619e961bbca3c",
+      "sha256": "aabda1d588da48dcf62abd66c920c0894a03d8e7d15d21311a14f7226653f730",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/IESSpotLightNode.js",
+      "git_blob": "eae489dbdf9e2c38a02de1780e248c1d617c6eac",
+      "sha256": "af4136890aa36d0fa2505cf6378f95b59f512a5f7d85429c7a317e6c190aff33",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/IrradianceNode.js",
+      "git_blob": "760f5486ca501c727c9e0785587c6e63006a43d4",
+      "sha256": "dc9d0d55c1794905a44a05c6276ea4b94dbd0013877a7bceb240160f3ce0fc2e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/LightProbeNode.js",
+      "git_blob": "7fb5443d2a91e903045484a61bdb3401a3aedf82",
+      "sha256": "342b0266f36b3e5042cb98cff37ffc635bb0325db82465e67d23c6764a25f3af",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/LightUtils.js",
+      "git_blob": "b701cde3c113e000cdd7f251c1ec5df018bc552b",
+      "sha256": "a460824bab6797632a50613a9140839dc825f46cf7f0cc350e218f068bd63977",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/LightingContextNode.js",
+      "git_blob": "713351527c6b4c3c43d89691957e469b2920c2ab",
+      "sha256": "dd8bd577fad18310dd800d22b1cedb4b4facf23dab882b26445649a32c3a3923",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/LightingNode.js",
+      "git_blob": "ef4b8648557dbb0c126d63020333846a407c8216",
+      "sha256": "3aedff1aa32597f160062bb00361ef22591018faa346ecad9af99188bf4dae31",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/LightsNode.js",
+      "git_blob": "f6e9d1e49e0375c42b995925851313bd63bd3a49",
+      "sha256": "d215a1712954e6834845b112f0ca574e97d3c586c97d549893c470642d03d829",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/PointLightNode.js",
+      "git_blob": "b410319c0fe07124afba43c74360ea9ab28fb09e",
+      "sha256": "6d27bd3fc21b09d756e18e3e4c38d16be9a432b0367033b62e970ac2f94f8ed8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/PointShadowNode.js",
+      "git_blob": "7adc79bcf48ae56912c7597c5182d4a3a2a42421",
+      "sha256": "d4adbbb51984e9754e584236b047d5fd0f87e31afd17b97c5cb5b58ee6be2ab9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/ProjectorLightNode.js",
+      "git_blob": "c0b6e834a9d69599646e4d8aaea09919b5e1b097",
+      "sha256": "ddd83fda742e79c09d2d318482f0659aed0285ed24e68e30858f05ae4c2b3fac",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/RectAreaLightNode.js",
+      "git_blob": "5ee46b3ab4af5bd6d71f83f01ec54f1c85a09124",
+      "sha256": "3a7c2cb5e8ece53a9f0501cac757e079b4389059736c8656b627a6bba640cbe0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/ShadowBaseNode.js",
+      "git_blob": "5651b09bbb786f6af116eaccbbf40854d842ae4f",
+      "sha256": "3764ffe7f9edef0fc33be8076f06398d16dbd9585c2cc62a7b1bc2c428cb7b54",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/ShadowFilterNode.js",
+      "git_blob": "ad570dfdc60027d409cf3872700df5b58190e47a",
+      "sha256": "bd27e2f5edfddd3a3a4ddb2d9faa5e15993ea10b66df115251912250a78aee3d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/ShadowNode.js",
+      "git_blob": "197000328eca1ef53cb103ebf87ba10ed3befc90",
+      "sha256": "7e361f3c7ca1dc182b801556184cb9a79a8ea0a5fedda3f90edd4401fceffdff",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/lighting/SpotLightNode.js",
+      "git_blob": "783cdc430a91b265ef6fae1f6e2057b023368f5c",
+      "sha256": "282a7c46b7167e20347fd74d6413e5b75f9e179f68a85f77acff96751b6a3589",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/materialx/DISCLAIMER.md",
+      "git_blob": "1d619914a4359b725b4c8ede6f580d63eeb05542",
+      "sha256": "43d08307cf19b672b0ed681452d20fda51851ed93e3ea1aedb8c9a2d43180c7d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/materialx/MaterialXColor.js",
+      "git_blob": "69d2f4ba3b2ceb1e5f5f3a1df4dc8888c160a68a",
+      "sha256": "433e021c8389a3bbfeb0f90e45d44014d0d88745f937487619b1204d6ecb0cfb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/materialx/MaterialXColorTransform.js",
+      "git_blob": "3169b1947b04446c44e533bea3968749440aad84",
+      "sha256": "a12133edb5a769f19139d2627d33c006487d08fda8d49a7a204b1f97a2892852",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/materialx/MaterialXCore.js",
+      "git_blob": "d2ec1f8deb125a360158721d0d36bc70cf947a49",
+      "sha256": "1b04787c51663e9145ce159740c0c812909cf94ad534cc66b63be7dea6950051",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/materialx/MaterialXNodes.js",
+      "git_blob": "de8932cd21addc496eb9c83b35213db912e2896f",
+      "sha256": "475f9ffbf88e75e8758f619968a975a56d77cec65e6f35ff253261d75e4ae84a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/materialx/MaterialXNoise.js",
+      "git_blob": "c182a89c498273d51a4e538bd2305f63f07c9402",
+      "sha256": "753203ea52d8584cce64ed06ba45d8d6371f9ce8b18124c26f412ad72ea36523",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/BitcastNode.js",
+      "git_blob": "b1a489a63684423861960e25bfbbc8a004f67e18",
+      "sha256": "b5c3de091677c027f77f73c2b1a6e17ffb654fac7c11c7b0164b2b33070b468f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/BitcountNode.js",
+      "git_blob": "f10a403f5ecfba7c7c4a8f8e6851f66f8ac48854",
+      "sha256": "f9b5062b0054164345612a65611dad90a893d90cc45e6631684303ffdbd9f840",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/ConditionalNode.js",
+      "git_blob": "10e71dc4de58e35de068968f0fc2e0e423de548d",
+      "sha256": "7ebc3cf68e88f8b3cd33874b9b2fff0ec1245e00c52a69c6f5ab3a4a7a78bbf4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/Hash.js",
+      "git_blob": "2cf5ab4f3ee9acc8a7c79f5e48644a75c1229ef7",
+      "sha256": "f9a539c30fb88fe2f0050f61e7899ea5c23c4c7f4befe8a3b463bc25f0566c65",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/MathNode.js",
+      "git_blob": "0d58379227589bdeb8c27d1f5b689327d6566edb",
+      "sha256": "47b122120680f5c095a8b71e092e94890a577f5e41cf855723c00563e102fa86",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/MathUtils.js",
+      "git_blob": "559c1e17a670bad82447425959d735d475f6b71b",
+      "sha256": "1c8827343b9acdc0ba1fdd27ec1da299ff47340f37d2727f0042efad97ca4811",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/OperatorNode.js",
+      "git_blob": "85d4807511c4297aa4313bb996c8167076f2d147",
+      "sha256": "32efcb4a8b5e3faac97bef205c49a2091e9721d86327437ffbe3b1eb7abcaf09",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/PackFloatNode.js",
+      "git_blob": "7572d89f906fb2aa04e53c3da9a53c9b6e0d8fd8",
+      "sha256": "8f574e5b3ed1d69127f90e5ea04bc415497f7e401443ebdcaa7c03766d75432f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/Packed4x8IntegerNode.js",
+      "git_blob": "18ae160c9a0e6d4f407d38a4fe9b79379b440079",
+      "sha256": "9756bacc810d09888a01797dd3af357a82bc0f5edbdc0385d03c8cc299ad02dc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/TriNoise3D.js",
+      "git_blob": "68edf24d5846644e132362fcb02271bd1d9516e6",
+      "sha256": "137a385cd02fb91b21274459e0540e13f56dd47de190f026f27eaf55211406f7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/math/UnpackFloatNode.js",
+      "git_blob": "cdd454d700e2bdfbbf7206ddef312e30b0780c1b",
+      "sha256": "d654f09ab2d627acd1101e8cc053a0398e085f5b0e7df33acdce4bf11e8a6712",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/parsers/GLSLNodeFunction.js",
+      "git_blob": "b09fb23a5fc1e1fe3845f4cb446d2340c6c22f1b",
+      "sha256": "75b495d235e88c8e925ae022f6b7caf745b14c1466dcf1c0df1a8b7a983cf1db",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/parsers/GLSLNodeParser.js",
+      "git_blob": "9834eb68ff13ff1e23f4333c592bb0a62cf0c3e0",
+      "sha256": "e9ce71f46f374eb1581fca5619bdafe13da27ff3fd17ca8c1de541521ed2651e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/pmrem/PMREMNode.js",
+      "git_blob": "8b82efb52830b1930020a0f7fb46e6d75546918f",
+      "sha256": "9468d3626c0b9b83a0588a78aff4c9e68a7c236c021704f719deaa13cd4536d7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/pmrem/PMREMUtils.js",
+      "git_blob": "fd49fe35a30ce694642340655b0c4f06054aff39",
+      "sha256": "4b37b978eaf268d88a57580fa333a5110e84d6a9d7f277e5bbe6d0a054dad5a5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/procedural/Checker.js",
+      "git_blob": "9f605fdbb17bf03cb44b3c61efada33f0fba6afb",
+      "sha256": "383f2c2de16a6062f3d778c1e990d07f043a15c035e5f20074001cbf4d1f735f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/shapes/Shapes.js",
+      "git_blob": "e946bd2f7b5c5702f35ca21c0d6a981abf2fc70a",
+      "sha256": "a2305f92dd4cac475e1d34f1501c25910f16b64166096145e14993734b835ec1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/tsl/TSLBase.js",
+      "git_blob": "2aa121051921087804a3a6e8fbabd4d85850b74a",
+      "sha256": "7f89e7655c9fc8ecc39f26ac4eaaab7adca38525e51e6d3ac2bc5939c8d7d85a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/tsl/TSLCore.js",
+      "git_blob": "609584576b9e24d8c93dc9796a918a19f6d124c8",
+      "sha256": "682d8cc665b931956634aec15a208516a08affd53bf16c1ed46c516d44777435",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/ArrayElementNode.js",
+      "git_blob": "8b64898b1ef45cbf6c89f391bccc49497ca4e033",
+      "sha256": "9bb748607e6f13efb48b886f0e43f2862b324a6b76352f71b8fd7dd959f9dc82",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/ConvertNode.js",
+      "git_blob": "118bd5ab645d300951dcf7176b31829c2ed4a4f6",
+      "sha256": "8820eee63b53d944de5ff1e236dcc9b67dfb9777cc530ef134ed170ca36778d8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/CubeMapNode.js",
+      "git_blob": "e44d876c18c85b8d8b2162fd37c9036c5de7fda3",
+      "sha256": "6e899f633a6c8f648b86bdb6d582f42a2aca799d876f568d874224406506959d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/DebugNode.js",
+      "git_blob": "df3594f27359c3ebc7b55e7d8d302fc34ea40f54",
+      "sha256": "e0823885ff78382c833652113478f0bd027d8adecf5598973c42f28e2a0d92d4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/Discard.js",
+      "git_blob": "eec90d72aba95ba5405fb7489e5b4f66132a3392",
+      "sha256": "217a355c1de8781c989fd9ce7066b89bbf88224f21846c66e97ad1474e22d373",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/EquirectUV.js",
+      "git_blob": "266c952d930258c4b5cd620515f67f61dfd96861",
+      "sha256": "152c470206919ea79e7932dbdc442d48c313e844258c307fb5e0bb4ca89ffdc2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/EventNode.js",
+      "git_blob": "6e097442ba3092f3b27d50865cc735ccc19e157d",
+      "sha256": "6323926414825fbe9586b51859278e427c815a89c678539e1f665540f1d12d55",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/FlipNode.js",
+      "git_blob": "b8ba70465beb7fd7f499f12002080b6bc0de5d07",
+      "sha256": "f985533947dfe87242f85b74c0d88b1c2d5cead7e85cdda924e95da0455adef9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/FunctionOverloadingNode.js",
+      "git_blob": "331912df07ba1dc53603b649b52524a49058e658",
+      "sha256": "5883b1d50afc2c7cdd39562e0835064e1c3efc9770f18bca6860ec6e4604fef7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/JoinNode.js",
+      "git_blob": "69f9d5c958c753f3ee1eae168cd32f657a2af733",
+      "sha256": "5147a262cc050b6a77515f92062b101b032225a831115ff54084cddaabf4c1c0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/LoopNode.js",
+      "git_blob": "5503f40ea54b7db56da78f100b44f49987676f05",
+      "sha256": "b2fe2abcd8231d0256dbfba2b3159cf415de8b53603e107fe95ec154da910ccf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/MatcapUV.js",
+      "git_blob": "45b4b5f5b9b2fbfdd98e08e95470b6183b5715e2",
+      "sha256": "e2b4080633939eba575ea2980a219a1ac10094619b0494a24e35c3582f11e819",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/MaxMipLevelNode.js",
+      "git_blob": "61886c5e10e0ef5feb2162f7d9d8ed5f113e7c4d",
+      "sha256": "f95dc77bd2987df67f778bcc80208b4fc98679d89a6b4ec7cb9c28b23e872c20",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/MemberNode.js",
+      "git_blob": "a0c8c402c68c7c7ce5f3707aa1234b12da65ce9e",
+      "sha256": "fb3558960c89b1b2d2a8e691ec7219738a3ec2d0147537ab787d776fc0c3245a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/Oscillators.js",
+      "git_blob": "b96c22903d38476db3b019954102ce7c96b6cad8",
+      "sha256": "4752c5d8690216742b290a00e7f5ab9227fe64e4ad4944612d3df86f3a1756ba",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/Packing.js",
+      "git_blob": "2d7b73c9e133e0dee2a4cf5ebc1f39370249e9ca",
+      "sha256": "12ee5ee66c7827a8fb18b9943a3165114c687e037abadb3b9e92b2b297d6a93d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/PostProcessingUtils.js",
+      "git_blob": "0ed27070f1e8eb7a9b23692cdb1e43967ffb4ca1",
+      "sha256": "77bdba6c34788528ef332a7ceb219709348d9c04d08219cf2740ed1071c65ad0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/RTTNode.js",
+      "git_blob": "3c76afe9219301ab97cd013779aaa48f082eff05",
+      "sha256": "1ff7eb42fe10f02658ee15329ee2b2d24e034e3753abef3b3d7695cb0fc317bb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/ReflectorNode.js",
+      "git_blob": "1ba06c24e30bc58029252b51379281032632d1b6",
+      "sha256": "9d290622e0644af378e9b91dec816721bf9ed50aa907050d31c05554935903f7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/Remap.js",
+      "git_blob": "2ce85997739b2daa8e897d231efffc63a24767ed",
+      "sha256": "9fbd6d049f666b539af0bd771f7aaec9dfd75545d3124ecd9b1cbf0b0ef0830c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/RotateNode.js",
+      "git_blob": "a257457702dfd3f44c883c2590b148b6c1d2b4d5",
+      "sha256": "c314cdad95ae5d192467580c44badaba7cc6a11d02c3047be761409dd16b65a1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/SampleNode.js",
+      "git_blob": "290b24778bc0fd2166e8c3a0b5b083da4a503982",
+      "sha256": "8bee4cf65b16b534d620c973d04fe27636bec3048e9b978f2f5074ef04523c97",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/SetNode.js",
+      "git_blob": "c1ab342e1ca8c6d3896ac56f303dce8695f71010",
+      "sha256": "735f075f24d219242c02bfd529b2c175bec890e6f4a294d345b6ff38d09b5838",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/SplitNode.js",
+      "git_blob": "622814317fb86735b0f40b4ba88764da34222f84",
+      "sha256": "db9bdff02ca66c0611239788cef37dd048729df1c6430eb46ebf9d29153781d9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/SpriteSheetUV.js",
+      "git_blob": "82a978e0f56a9fa48a7406ea803feb75031bba36",
+      "sha256": "806fe69c27f18c809e024553bef0bddbd70c52f9724a8154b9ff9389a12b1c71",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/SpriteUtils.js",
+      "git_blob": "32ca4a27482ceeb1e45372f628bc976e3f00d368",
+      "sha256": "b66c3eae3f532306222094678deb50e6e93f2018543386b309faff287ffc77ea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/StorageArrayElementNode.js",
+      "git_blob": "117d77aa7406c8d2e44a6dfea4398fdaa03d60c8",
+      "sha256": "4cd65821e31284781b98c2ce75fae29eb76f7c05c553f5fa091a3c36703074b8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/Timer.js",
+      "git_blob": "d1cbb445c3c9087cf65e3a0f8eea646b57cb90dd",
+      "sha256": "331435e09aa5b544add1f41c2cbdcc4eaa4cc83ac7edc5ce0162d81e17d9a1f9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/TriplanarTextures.js",
+      "git_blob": "4808a458549344667bfccacc8a22f7243c87c375",
+      "sha256": "2515b6c6f45a3097cb122d02665425131fff1a783ee64d4b65b1de679e3a9a61",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/UVUtils.js",
+      "git_blob": "744b473cdbd60477dbb9d53caff36ab91fc057ed",
+      "sha256": "d3b8639c2f0c3151e326c1de9029a675679256bab8c2cfcc954e7dfb3a0864ac",
+      "mode": "100644"
+    },
+    {
+      "path": "src/nodes/utils/ViewportUtils.js",
+      "git_blob": "060fc9d36dd357dde039e2ae9a8ee65e1afedeb2",
+      "sha256": "d5575935c6c13d5f22d693f0984d12b6bea7606ae467bc4fe4c03efdaba65d0e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/BatchedMesh.js",
+      "git_blob": "1621e9f12c69ad5f9152ea3d81a1f5c12be29b38",
+      "sha256": "21b79cae69fb599302c042d3c5c1c3b6e9d6e2473010fdd96d0f0129ceb571d7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Bone.js",
+      "git_blob": "6078326b104657e9357e4cbeea51ab59e5d50f3d",
+      "sha256": "2af7e9223d192b917ac9109d8dddb00f435c68ebf0f6d31e812d78f6fc4c7031",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/ClippingGroup.js",
+      "git_blob": "1c1b286581efb062a157636f2f69265970ad8a71",
+      "sha256": "c4ae22ada9075cd8913bd5364214d5bc68780b431f59d489cc0344feaeff85cb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Group.js",
+      "git_blob": "5acef7bc677d6830b514a56e6a0b8bd24d3e27fd",
+      "sha256": "6ae4c6558ac82863e933f8dc649b96d1d5f7798daeab902530a3bb760949780b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/InstancedMesh.js",
+      "git_blob": "ebad98aeaed1c1472ad8bdc0d025eb608312dfad",
+      "sha256": "2da0ae90c4e964e4000db49ff502eaec8654160a5b7677c00387bc8023d1c911",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/LOD.js",
+      "git_blob": "aa21d0980944cc7987850f1ecce87c7815a65a51",
+      "sha256": "861082c43e936b4d25b7c44ea8339696c6ebf048f36d492d2a3624ded445c19b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Line.js",
+      "git_blob": "cfab7743dcf5c5c8699e46a738675efdb5fed030",
+      "sha256": "e339746e4a38a258de949c76ee64783de84decc00793a2193fb5a0b515d8d1ea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/LineLoop.js",
+      "git_blob": "d9ed8452d3c6085fe2b77abadd58a08097215f1b",
+      "sha256": "e6e6d8ae980f800feeced9ba349645376f3236745aef863fb53f6158ba221e87",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/LineSegments.js",
+      "git_blob": "527a130cb358d0ae070b3353404b99667d4edfa7",
+      "sha256": "8342ff11b7ff23949eb66a2eb1d478c354321a155c6d25c3181a681dd7791da5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Mesh.js",
+      "git_blob": "b582911d7e69ff2c6a56155111b805a25607a0c0",
+      "sha256": "3cf5342813bd1a1be55d61e4c5cfac94daa7bc42479afa142f60e0b91dbee23e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Points.js",
+      "git_blob": "aee574bcd6cfc6f096ca069237b35500eb4df695",
+      "sha256": "b716f63b9bc2dab32d682fe5a0fdb023f49e684247685617295005656d431356",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Skeleton.js",
+      "git_blob": "24f315d22faaefa00cd00c16f3069d7d287d1d30",
+      "sha256": "1dcb615609e93bb716175a1b3f9fed2af67785c9a01314c574595a220375c5aa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/SkinnedMesh.js",
+      "git_blob": "3ac204c2be2d8baa87df045ea6aca133b24bef37",
+      "sha256": "eccf1f61a657abc9c1856b59cbe870a7bb44e7e787763e2ae9b3304506d7929e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/objects/Sprite.js",
+      "git_blob": "802789026aef10f7fa04a4b3504bbba3f563b7bf",
+      "sha256": "05009e286480088c04552e0b4d13c435ed35d3cbd04ff31b166829cbc1785467",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/WebGL3DRenderTarget.js",
+      "git_blob": "619feb92dd37f3562245c9dcb0e2a036118bfa86",
+      "sha256": "778d64077ec15c489605457413347242b6e19bb225ad88a087a0d2c71428d668",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/WebGLArrayRenderTarget.js",
+      "git_blob": "d96904efbe4630c5bb82b3a89f00c22ade0a2610",
+      "sha256": "e5ab436c2cf633e6ae9b6e4111e87e0c1f73b38ed22a6192faa84afde5bee18e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/WebGLCubeRenderTarget.js",
+      "git_blob": "fe75d8e5b206cb175bbaea216559dd32cdfee8df",
+      "sha256": "1a4d500fa317badcd6e1303b1d60036a241b5448bda9d515a600a3d86e5cc17c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/WebGLRenderTarget.js",
+      "git_blob": "0353529b5d81729ba8d12dca49a74fd0d50353c1",
+      "sha256": "f7117333010f869b0e792b17230d6a0120e0f2870d200d8c9f7c382f74eedb33",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/WebGLRenderer.js",
+      "git_blob": "b8217b6f2751b826e523c94c791d1326df9de67c",
+      "sha256": "267b9453d0b555a17b63cf0243f60b24bd6a151e4035ebc9f638d7b78002b0e9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Animation.js",
+      "git_blob": "64fce4d617f89053dadd2002ec5b9e843388a4fc",
+      "sha256": "c145f1f341ca827f562ca41d361f00f5cd63fca44bbeed646dc8e203dc25f84f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Attributes.js",
+      "git_blob": "d054d0d1e855f2441be501616b89b02b69646075",
+      "sha256": "439a777d474a29de6b0ebe37126ff8abe87f8b8957bb2fbedaef3ed132164ec9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Backend.js",
+      "git_blob": "3485574269429e7a7ace22ba048f5669a62c3ae7",
+      "sha256": "86321e8314d752498f98e46aacab5dbca68f54fda1445d7c5216819af91e14b4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Background.js",
+      "git_blob": "f4c167dc733429ee65cd797b5edf862b2d785510",
+      "sha256": "2658d7f323d9d1dc62857a62e309b353bf6c9e440515ea0835e5da72ece8645a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/BindGroup.js",
+      "git_blob": "cedcf22ef58612a935f24147e6d689c4d19a02c6",
+      "sha256": "a90844ed08175c1957ae683007c59c65db9428ea7f4a0ca03a0af3221bcdc548",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Binding.js",
+      "git_blob": "3afbd105138a442c7cb2d27d34b753724c70a682",
+      "sha256": "57355484ea89a533bd38fcddfedeb5c08789935347326bec089d84332d823707",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Bindings.js",
+      "git_blob": "54665d3ce701defa5242517ab4be343888ce4956",
+      "sha256": "96e8a398f5d05216cac1ee9df8e5661c50101df90c1af15b63aeca900b6c00b3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/BlendMode.js",
+      "git_blob": "614f01decc4ec73120c25244684f61454d5aaf77",
+      "sha256": "153472070fd273cf187ce38a7cbcef78c9b6563f5c332f4efa79d5d36bbc04e8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Buffer.js",
+      "git_blob": "8f015fc3fd2d2ab7863cb74a1605dfa1e32df092",
+      "sha256": "916cc4b03b4a59f8a3c458603bd84f237f50e92fbf77ed29d6a8f3976c665419",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/BufferUtils.js",
+      "git_blob": "faeb1ade336ff24493ebd3f3129fa18d98bb6a25",
+      "sha256": "f08e2e9f31a5fb491b7ae284a025583c1329945843f1bca2ee022aea39b930c9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/BundleGroup.js",
+      "git_blob": "00608588423b8a1111a78c9340f307b1364bc25c",
+      "sha256": "28b23d1481af6e3dd508116939051e45862d823474306108582b573f4222fa94",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/CanvasTarget.js",
+      "git_blob": "20e2e9165034cd43e6d59fd80fe9e07cdee5ddb3",
+      "sha256": "86785fa70d60ff824a085254e8c38237180b553dd0114a2cd337b901c6804f30",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/ChainMap.js",
+      "git_blob": "83b62f3dcfed311d7e6451dba64fc2f570b4d194",
+      "sha256": "b3265c8a108d2a501c2550f0ac30e9a6af2b853f60b060cfbb894070899a5a9b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/ClippingContext.js",
+      "git_blob": "3c166c7a20644dc8635ff536a8468303a72dc2b5",
+      "sha256": "0ae08eb76232e528a6a9039a62bd72a8b86e92d860c3a750266fa18a091832e1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Color4.js",
+      "git_blob": "7ec67f26ab3608a41aeb4abc264d8f2f37a53965",
+      "sha256": "0557e156ae49dcb560f38ae7d08674c1681ec975ecff8692f6b0a8877d1ebd50",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/ComputePipeline.js",
+      "git_blob": "5765c6710f17c5458d4ace24266e175e9072f0be",
+      "sha256": "9911c0a9b00afd4791318a62fa0459ff6402bcc12b19a548450b2335996076fd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Constants.js",
+      "git_blob": "b552356c491edc538eaa007826ce9cc04344eb38",
+      "sha256": "91e1f49e518b610cfcba5b95f2b17ebeb69906983b359b569f55d91c1a9a8f07",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/CubeRenderTarget.js",
+      "git_blob": "b88f962490a21e68dcc034b3086de540c57a427a",
+      "sha256": "9db2979e0dce21ef42def6b0d2d5abda022e6a4e5952b0ebfee30a49202a6014",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/DataMap.js",
+      "git_blob": "e65d0e956e37f4e44cbfdddba32fdc714d814b58",
+      "sha256": "943c549f262d6f60ced6e9d5d3a1c614149166f934ed8e4f2aae3ef9be22d8de",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/DirectRenderPipeline.js",
+      "git_blob": "2389b2d374b13c2ef5bece66a53c9d0a2d0ea277",
+      "sha256": "e726619cd643655ffd061413f94debcccfc1c25d16b915ee02e19db02837c36d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/GPUTimer.js",
+      "git_blob": "82436885df8133084ffe3947be51ccb187b3583c",
+      "sha256": "89e705bb15daa6a794f48231075b252385b785bcab1072150c66d70e23751b1a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Geometries.js",
+      "git_blob": "086ab906cd5b6a91552d2afbecceb006332815e9",
+      "sha256": "6ec2aee73d876e979fef58046dec23aa6c81013f8e2de84ef0fa91a44697f236",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/IndirectStorageBufferAttribute.js",
+      "git_blob": "8c8d93dea69251612720b4392b73471b576ab820",
+      "sha256": "093de55c9d67c16de7766baeeb4ef7036db1ca103ae5ced511b1aa131e891227",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Info.js",
+      "git_blob": "b30637fb7b2e38ebb9e6669198776d0e33b51cff",
+      "sha256": "a9fd65fa3061a85b1749efc319e9a5e9f1cc835bc8e682a6377de64177f73237",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/InspectorBase.js",
+      "git_blob": "d895dc62a55faeaf54f6ce8d816cc3f02081628c",
+      "sha256": "ca2970d48f58781f57eee314475cb3edde98978efc8096128c1cb6deb8169684",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Lighting.js",
+      "git_blob": "f963e36452a550ac95f7b97698825f20f1a90f70",
+      "sha256": "a8595dd83a3b5fca1f016a43cab417e08c12253a7c67df5d0c60417b9a170141",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Pipeline.js",
+      "git_blob": "275245dda66faa7756a702966e76448d9a62de13",
+      "sha256": "c7242021caa5a1b59848a764f95feceb78ce8dd86c30698ba8cda69621d8145a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Pipelines.js",
+      "git_blob": "1d2262250ee802192614dc18895476382aa20535",
+      "sha256": "8e0211c2bb075ac3b57e6ad6194d05dc54c9ce14b7eab0f823fe6bd8218f926e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/PostProcessing.js",
+      "git_blob": "5abb9dac9512af379249ba0ce53d85726558ce9e",
+      "sha256": "dfef686ca0185e5e7c632b0746200258e58cb1a9d72eefe1228a70e266bed179",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/ProgrammableStage.js",
+      "git_blob": "4c981c48bbbdd3f61b66bcddb1859d521105d412",
+      "sha256": "b7a8e534e37e7cce5f09983df783ba3e83e167e565e4f620b9eff8a0ac6ac013",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/QuadMesh.js",
+      "git_blob": "e791fd15d2ec46413ff4fb5f1d3a78be7f504a69",
+      "sha256": "cd6795aa65769159d4f42c5626751fbb25cad15789e9fd808bc60d45b1b85100",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/ReadbackBuffer.js",
+      "git_blob": "bc54ae05980428a5f2c08faa82322e9fb7c7129b",
+      "sha256": "265685c0d440af026a359e265305934c3500b415c32de56e7103f7cc09199979",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderBundle.js",
+      "git_blob": "e774d7796e6140f3afe5fdc404230cbf46685d97",
+      "sha256": "10b30088a4e21f979bdff32b64da781df06e66e24b4b9817cc932a3fbc268b3d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderBundles.js",
+      "git_blob": "19bb629197d2d0661437223df172df49bfdcf1c0",
+      "sha256": "50a1afe2f538b941e3c56d084e0465617a0ba231199f295431446070fce1c47f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderContext.js",
+      "git_blob": "ddea58e1efda9d629c91cfbc4f46a3bb829bbe1e",
+      "sha256": "f99a3d3c1296d8a9ba443366247f288b9151d79518b56b29598ca47c01de81e1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderContexts.js",
+      "git_blob": "4b8ae890b3d9518c799113d2ecfd176cb2174635",
+      "sha256": "68d0bd1488a31a635e570e7ba8a7d9e3630b3a3c0803f50a031f6af2216a4c7c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderList.js",
+      "git_blob": "141e8afc3648dd1bbd51c14df483072567b8d656",
+      "sha256": "adcc5ece6ea07d116246ccc99565baf0411442f08cda505b38126d97ab05e7dd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderLists.js",
+      "git_blob": "618449fb161e39ea946c61014c918dcbf2a56685",
+      "sha256": "230d49f49bec9ddfbf64780072bf05fbb8fd95ca0415fa68f4001b6113185e57",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderObject.js",
+      "git_blob": "2e702acfad99f35410a0e35ec386e843692d5a28",
+      "sha256": "0c8fbf2cafa452ace08a9016fa91ce88d78485005a961f77be3bed1aa63b49c7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderObjectPipeline.js",
+      "git_blob": "780ff049c714414004cb2dd0336f8eefe9559b75",
+      "sha256": "52c5d094503997b9b4991149e1766e15a7969660688d54bb77d805812eaab716",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderObjects.js",
+      "git_blob": "882a39dcc5ab9e62236c2e02e20aa282b90ee421",
+      "sha256": "54db3ca382d92c8f48adbee5f6f0d541cd79edc7667c202297bb850fa14e6a88",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RenderPipeline.js",
+      "git_blob": "028805d8498c8366f5307f4635e32aa526424e55",
+      "sha256": "8af1a3258ab68fd33ff2619962f7a72c8dc9c560ff2ce439fce2e338b2ca5851",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Renderer.js",
+      "git_blob": "568cfca91b177c43f75de144d0c3ae7961a9f366",
+      "sha256": "57f8c118a074a4276c42e55bba81c267dd3799d60fea35019a8956bdc84d0e1c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/RendererUtils.js",
+      "git_blob": "9b517ce0079c20090ad09a5a25211447bd5fe8a6",
+      "sha256": "307db466bc5f859ef057482d7307cc1e20ded434b4dcf84eb70291179e1942d2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/SampledTexture.js",
+      "git_blob": "f33f14011310ad29967758067032a24c8e39298d",
+      "sha256": "ff78adb262b08b0c247d945169a3f754db7830fa17ab4136384d153b15b73005",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Sampler.js",
+      "git_blob": "bcd88765c6a17049f39cd2173b458cb454a223b3",
+      "sha256": "de18a7b14e6a23581320e06bdef4a9a7a2f1c484c4e45cd963a08b919028daf6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/StandardDrawingPipeline.js",
+      "git_blob": "1bf3ebf8546f024ff3b8925ac1d4b9ac7221e55c",
+      "sha256": "afd0d3790b5b2fd4bc894f6fad300a6c6f0de3164434c132d52fd2a92fe37ee2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Storage3DTexture.js",
+      "git_blob": "9aa63e98a8d80b8811b62490a645d190cb2c761c",
+      "sha256": "c143c5b94f82a14b054fbaa805f785338167c225389acbed91bcb26515467912",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/StorageArrayTexture.js",
+      "git_blob": "157906a25dfaa33134aa0ebc3f7d356cb18fa8e1",
+      "sha256": "f4dde563e0504efbdf1fbc2754a6b251c1d78e8198339691f03f535a6c732dc6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/StorageBuffer.js",
+      "git_blob": "36b01513033f552ebd3a134734ce09a68ed4559b",
+      "sha256": "d638ba50f71fb7660c804d6fed249befea084e4e00eb6439e489be865411508a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/StorageBufferAttribute.js",
+      "git_blob": "6e416e21467db466973ff46de87749557664692f",
+      "sha256": "e7bd357166d3d64f410f6a59a0a17d5c037928074e93e64f396ba690bf26214e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/StorageInstancedBufferAttribute.js",
+      "git_blob": "a4830bdadb68dd6d57e2eebf24a36f85d0e1119b",
+      "sha256": "56821ed35892306ec66aea81655fd415556c92b100a298e2f95c09fb2b259ff4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/StorageTexture.js",
+      "git_blob": "add98556dc748ae01e3903b6be688b0e3c7e3f5c",
+      "sha256": "efb8bdc9a3be436cc6a05c316931d67542f1fc4d4b0cb88bc9a3542e3bd10e2f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Textures.js",
+      "git_blob": "c79257ea5505526dc4e703f578ec24822b9ec234",
+      "sha256": "c854c28096c62d2b25546b375bc955fdcf0f7eb71b861142ceeaa2bb27c4dc02",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/TimestampQueryPool.js",
+      "git_blob": "3f09d8d694d7d6194c5d4847e849b0e88e72ffdb",
+      "sha256": "7c11475084bd8198f2de0fe170e2d0c5d455c80611050fdab621d722d8bc3da6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/Uniform.js",
+      "git_blob": "aa8c6093b2e035c4d8bfd2679b4ad3d9901b3a17",
+      "sha256": "ae9852a3e4f8b3c5a7c5dce1c81c207ade66f307273778371344e7b825a8e079",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/UniformBuffer.js",
+      "git_blob": "33aee6097b273103b3098fb857bf0030cf15cd99",
+      "sha256": "3827ff0ca7ce0518e9469d738201aa80865b84a5ae22ac71744dcec53c677c7e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/UniformsGroup.js",
+      "git_blob": "bff79ab7e0be1beb3fb1c74ef0a67ad34dada68a",
+      "sha256": "9e69efc6c8c321a0b5666929286306004b7001ae5215206b1b26a281a1476d66",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/XRManager.js",
+      "git_blob": "a14284c4296250b9ace3a75319540d6112a6692c",
+      "sha256": "1de1d6b0893e7b90ace9e210b0f0d136a4b60938ead22af4c631426ada50ab61",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/XRRenderTarget.js",
+      "git_blob": "87ab4fc99eae55294d3a1e150558d1b243b854e0",
+      "sha256": "ca91cf9e068d10a5141b3c1d30ad24adf7a0323cf400f2bbb23b2a8a5626655c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/extras/PMREMGenerator.js",
+      "git_blob": "44bc579ef34aca93ad7546bf625f3f7d1c507aaa",
+      "sha256": "89359213a174785facfd27d40f27d09fea9d16969bdbd555f7f6463ee66621aa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeBuilderState.js",
+      "git_blob": "0fc7859311fe4d77f7eb9265b4c6fa4f85d9375a",
+      "sha256": "81c047a34d080b2298dff2edbe45d298afc9f21401f0a360b17a43a4f38cd964",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeLibrary.js",
+      "git_blob": "08beec9222a44ded1fa76d22e5d950feeb1bb880",
+      "sha256": "ee06fed3e6735a9eeaef1747577c9c6c6344fadc9bb11c4f888aaaee7edde788",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeManager.js",
+      "git_blob": "e5c2d475959a85538f4235e60121541ecbde67eb",
+      "sha256": "81fd2749c5dc2c7da881535699fd24ebc2914580c941ea855cb61ba56cd7d6d0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeSampledTexture.js",
+      "git_blob": "c4cfa17cb7c6822a32d8691f7278badc99c45b6a",
+      "sha256": "bd5e605919c5244e9844e823ae4f9b81bc6d89b25160b21e5e59c5a0ca4637a0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeSampler.js",
+      "git_blob": "af2939ea809254b4687876ce9ea3dd7d974c4b3d",
+      "sha256": "59769cb9a2a5fd9b8a198d9a5894a569030238acf2d24ea14325057ddaaf2c1b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeStorageBuffer.js",
+      "git_blob": "0acc4fdad75eb3ef3c7977766d755f5d23b72f53",
+      "sha256": "2c69305dc92cb2e05a2d8fe0ea7ec376e4495d2cbcef480395dc46866f445769",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeUniform.js",
+      "git_blob": "cf200a80e4040b3e57fed769437756337777455e",
+      "sha256": "584e991648e3348e91c95f311ba6559c3e960765bbb12ea6c47c53a5b0c8a36d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeUniformBuffer.js",
+      "git_blob": "eb41fdf5792c60359a54ea934a15bceb8e6a9e35",
+      "sha256": "968f70214dd8be5e9708ae67101f77616a15f956ec65be4b5a32c4051409a984",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/common/nodes/NodeUniformsGroup.js",
+      "git_blob": "cfa27097f0dd7b07808724c9423ef459d1e4c35b",
+      "sha256": "26c194bfc51c2f0d4f8cdc280b05fc22ba009f130879d0d3378f6ea0252a3835",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/DFGLUTData.js",
+      "git_blob": "01675cd44c2534973bb6173c51c448d9de117000",
+      "sha256": "280b75b70d9d55c39d4121d5244c22ee445d27cc05ed6b134c3a5bde6b81b3da",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk.js",
+      "git_blob": "8c6279ad514bf030b51189e0f424bb1ce771818a",
+      "sha256": "b1518b36564c441ac576f4bd2f3174823dab20b6a5240a652036d80cfdca56c3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/alphahash_fragment.glsl.js",
+      "git_blob": "b0eec1537f24e55d9845cf0182fdbf932d817b8f",
+      "sha256": "db3bbf74774c9acae537f3c46d0de9c7a68ea7f013cc108ccf3d18660a96971c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/alphahash_pars_fragment.glsl.js",
+      "git_blob": "7353849d0d99f66c0bf81c7b39aa369dd7087ba3",
+      "sha256": "a75bdc8b27398e193ebb0ffbfbd1156bb1d6c164c9e98d69c391bc96a0b39df2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/alphamap_fragment.glsl.js",
+      "git_blob": "98296ae1fc0dce0ea0607d805dfef3245129fc2f",
+      "sha256": "97d97d0a89e2383cee9aa15b28901678ff5bf73b255e8d39c41348339aac8ae6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/alphamap_pars_fragment.glsl.js",
+      "git_blob": "ae6f46deaa8d8ae3363d4114172e136c9082b6d7",
+      "sha256": "0d91d29a4b063f86a42d6f871c8715c5df4217da95beb27460032dec649bdb28",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/alphatest_fragment.glsl.js",
+      "git_blob": "8c591c1abee0e3595b4d8a9741ff2c9cb2b50a67",
+      "sha256": "2c0b0884e65f318ea594375d3bfe8d2ee007fd40128abd7641bab37419d4aaed",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/alphatest_pars_fragment.glsl.js",
+      "git_blob": "90a37fb4ae98be8381b01342aad8acb6555081fb",
+      "sha256": "7262984386bddd10336ba4a5caa6f63d6637965d23d335cb7a82d249a8d67460",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/aomap_fragment.glsl.js",
+      "git_blob": "d1a5848a0d2212d0df5ea0efd05caaaa9be6ce7c",
+      "sha256": "fefcc44a84254b93317a2002f02f408915b26961228314538b49ae019ea584ca",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/aomap_pars_fragment.glsl.js",
+      "git_blob": "7c2eadc7ed8d2ae9ae19d48b20631c208ee8231d",
+      "sha256": "99605016fdf6e6e11a93ef5afec6534dd0a3c0e559a5da128833d5a2cfc96312",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/batching_pars_vertex.glsl.js",
+      "git_blob": "06cfbde52ea86f19c2ad654fabd04e7d3d284eb4",
+      "sha256": "f1010ad0951f5870cb4d12789dd0799a59eb365da814682f8e2a5f9fa585d0c9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/batching_vertex.glsl.js",
+      "git_blob": "7364c8b9042fffcb27245d15942ac46ee8bc191e",
+      "sha256": "266f63ad1197571269f6eb9363a2c916e120fccee3d897181805c831918ef34b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/begin_vertex.glsl.js",
+      "git_blob": "f9e1925024334bd72b1bfbb06f09466f9c60020c",
+      "sha256": "5ddab48ccb50c7baf958047f834496cf1c2be197e00d03d7776b30f353f39392",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/beginnormal_vertex.glsl.js",
+      "git_blob": "7286cbaa5e73327b7359e372bde7ed336160651c",
+      "sha256": "14f1aae97b9293f7fa62f6a049f755080904efbaf7ad351b60cbffec45e22aa8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/bsdfs.glsl.js",
+      "git_blob": "72b3c7ef45f51725a2101ea6b7fe5c55d104bf3e",
+      "sha256": "a9ed310493241cbbd14e58dbdc37e3fcfac42779c8a0e45f58dacd405185df51",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/bumpmap_pars_fragment.glsl.js",
+      "git_blob": "07e5c5f84bb41a7503af8b117dbe17980961dcd4",
+      "sha256": "262903707a8b271adc1882da9f1d60e919726660c082e91bb10c83b5c54bf76c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clearcoat_normal_fragment_begin.glsl.js",
+      "git_blob": "7f4b53b4341377c108eea73462f388405b77cefb",
+      "sha256": "510d06c529559cb23d6b814a0ccadcf329201ee44b469ccf686b640a75e9942e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clearcoat_normal_fragment_maps.glsl.js",
+      "git_blob": "b09a2dfc7b1e9e67fd3e98210990ded65215f48b",
+      "sha256": "4e0ac6b902d7db1aff5ec16e56c21db8e290b7adb85badd48b1920f0975cbdfe",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clearcoat_pars_fragment.glsl.js",
+      "git_blob": "0f848851c15db18c0438191a9ed99bb3c060e80f",
+      "sha256": "40ec1daa9c227ab341b032c053364fdc088e83ca7f70a28462b77d56c6043662",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clipping_planes_fragment.glsl.js",
+      "git_blob": "883576dbbcea8ebd07ec86e1c0291354ef853ee4",
+      "sha256": "bbe5c1295a292e2312642f92a65945a9708692cfcd00637e67c4260e9fd0513c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clipping_planes_pars_fragment.glsl.js",
+      "git_blob": "bf5d748cd1f206ac02f814e050c69162f1cca6a7",
+      "sha256": "8bd64633bda6d1cbabb4e768e9e302a7ce75960306a24f8d634ae8b387bdb21b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clipping_planes_pars_vertex.glsl.js",
+      "git_blob": "9670ad2826613c5644dbdaee328c8bf537f134b8",
+      "sha256": "30832c3f5e0d4691c76fe183a2e31d3b78fac6fa2b4c8ffb52ace85140919512",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/clipping_planes_vertex.glsl.js",
+      "git_blob": "2e00b593874316865e51fc5623cff4b960b53d5f",
+      "sha256": "b7fe83c2a20b5d82d1cb1d95340c1d7cf93691beb8dcd258c29e5e83a30032b6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/color_fragment.glsl.js",
+      "git_blob": "27f18cc8c659407400eaa2bcb4a489e36a3030eb",
+      "sha256": "d5cd4a0f9e962375ceb31f6cab720c12ba3d4ef90894be65fd0cbc835ed518cc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/color_pars_fragment.glsl.js",
+      "git_blob": "55ff49732c7bd31aee9187fc5596822867fc786a",
+      "sha256": "b3d0254ea2f6b6a56368c5ba8f8bba50e307e5826b1aa4744b7d68d968b023f1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/color_pars_vertex.glsl.js",
+      "git_blob": "41e1924a49e591e971ea04d833cef1dd7f494405",
+      "sha256": "dd42f0c72d95d6b181e7e80c1a2e9bb880421c335586673bcec86172bea8e61a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/color_vertex.glsl.js",
+      "git_blob": "bc96eee016b6e122fd9a55470a2d50e73512c106",
+      "sha256": "d68ccbbf5a015dad9211c49eb20e9d1ebc8b69fa1249122f776c1261cf91a56a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/colorspace_fragment.glsl.js",
+      "git_blob": "3072c76cd8a4421848878bff6a9279e6444d07f1",
+      "sha256": "a3ebaeed04d728c04c4b3f8d0dc52b83b12dd77474907450f8fe5265955ed3b0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/colorspace_pars_fragment.glsl.js",
+      "git_blob": "31e2829f6d89c9ea8905e4432b6f82e8c2dfbe1d",
+      "sha256": "609ef2ba45f73b95a8980cb91b62b61d65581d75067e7c1e45b976aaa397052a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/common.glsl.js",
+      "git_blob": "5343ed459b61510fca8175849fd9bedd3cc98091",
+      "sha256": "6525fd3046be23b6de6072e526067b0579dc1c82db41085f79bda2035d31d2b1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/default_fragment.glsl.js",
+      "git_blob": "a68ac369b71e9a89219f971b064b95b4d94ef8cc",
+      "sha256": "61771f4e12b137b05da81dc0a08c0f134b82bb4dbc8d39934fdfe0256519eb4a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/default_vertex.glsl.js",
+      "git_blob": "0ce0b03b6d8b3410af0cc3b64ff5aacea2530791",
+      "sha256": "c93ed0a4d38dcf36e520588fb3552e6528a5fa7d51377c84f2470ea818477db2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/defaultnormal_vertex.glsl.js",
+      "git_blob": "6775d60c08884ca14acb03b01fd7afcf775c635f",
+      "sha256": "a53598c95d3a03bee22c5d098c1dd0275da047b42afb449780b61af0247d565e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/displacementmap_pars_vertex.glsl.js",
+      "git_blob": "b8ac0759a92ee411c5057f2d91babd58a571c407",
+      "sha256": "2f4c3a4170c9aac018954532689b28bcb608b20b5848d2562df9c9ffd824a399",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/displacementmap_vertex.glsl.js",
+      "git_blob": "84ada47906b3b213215d1841fbd0ea79ba7968aa",
+      "sha256": "bcb7ce41aca931d9bc13bf34d5d010d07c772a27ec5c779d2d910b1c3b3589ec",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/dithering_fragment.glsl.js",
+      "git_blob": "25d801a6782a1e39c5c317d089e59b1e229efa67",
+      "sha256": "fee1f9d401244bdf6c1b4ba2383c3786e7119fe0bea6532e7de5a5d4d941dabe",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/dithering_pars_fragment.glsl.js",
+      "git_blob": "609c10358deb73d327f298ea53e6d7e001c57682",
+      "sha256": "81b09cfa9d6dbc4d04d0e42f87fb45ecf55136fec497d2c1df2554b37eb780df",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/emissivemap_fragment.glsl.js",
+      "git_blob": "76fa3e461bd9e4673a057a541b52b13e664e005f",
+      "sha256": "9e24be6269b62748a04ca97ca149278af4f02efed67925ac59efbee8f8c865f0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/emissivemap_pars_fragment.glsl.js",
+      "git_blob": "3a9b02d6127180e1e241f8627e09d490ebec883f",
+      "sha256": "cca17327f5d3aeba9903c43a234bee95bd64fbd9e62b34bfb3e90bc91cfeed74",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/envmap_common_pars_fragment.glsl.js",
+      "git_blob": "3e27771995c7eef747a8a8d8c2326c2aa503a5b7",
+      "sha256": "9a5d6bb6330017264ed74afb86d39137240305c9c1c0e2ea6412cc9bee9ed068",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/envmap_fragment.glsl.js",
+      "git_blob": "d06111180167fecece1fc7d257b317ad77d0b020",
+      "sha256": "b8e8a32447aa762657da69ce169fec11d6d7e3d4c263f7fa598ca9c903e7b727",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/envmap_pars_fragment.glsl.js",
+      "git_blob": "17ffaaf295965aaaa0a2be388442c1479c94139a",
+      "sha256": "04bd9a2675a8b258f9ec499ea3456fc8aa6ed18cbba78a288f26004ad050d00a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/envmap_pars_vertex.glsl.js",
+      "git_blob": "6d13f230976e1831ac860e1876479f0cbed60f1b",
+      "sha256": "98c79076d211b0f8abac471d10c0babcb48ac1f0b7c084c9a8180bf493de3d6b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/envmap_physical_pars_fragment.glsl.js",
+      "git_blob": "e4ea4d4efdc3d21381b97100a01de0b9a2e91ed1",
+      "sha256": "8cc1ff6bcd8a05abc365054d5d3a23d2779be39b5bf9753eaa21e04ae21eaa78",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/envmap_vertex.glsl.js",
+      "git_blob": "14a9df4d8b2f45ff14f4bac71d3d31dc4c4a8276",
+      "sha256": "7cf913de3094b8af87c15f6631365275304302a26afd9810544a4714da76a39e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/fog_fragment.glsl.js",
+      "git_blob": "2b4f28252cd6100cd915e0d2787d60be322cb88c",
+      "sha256": "611d35fe58f82cd1ba3f85da61206351b6fb7be95a100fbb7b3800018072309a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/fog_pars_fragment.glsl.js",
+      "git_blob": "faade1fe9b156b6a3246f4ccf150004b0ccdef06",
+      "sha256": "4047f5f9dbac598c27717a9a4a77447230fbab48106e6ac6780565debfea5582",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/fog_pars_vertex.glsl.js",
+      "git_blob": "3a7a1929e12ca997ef6ea09764a7657d39bdc1a2",
+      "sha256": "a5f8c0ead9ad03c34917b22ce85f3ff7ee193b5335b86f3103f0dbb03a4e0f55",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/fog_vertex.glsl.js",
+      "git_blob": "a329811730352d0911d3f0292f405cbf8675a653",
+      "sha256": "8d7433a889503ceee56f505e4642f570ce079cb187c13ba545e28fe17476a9b8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/gradientmap_pars_fragment.glsl.js",
+      "git_blob": "a2ac095c419157f1802c26a3a53f79591b0a29e2",
+      "sha256": "4cce38a33747ceeaca0c077afc0f9886ca05013b306e9aefcca907c9d4ea8b04",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/iridescence_fragment.glsl.js",
+      "git_blob": "f5bfea4e64ad7c342c59a391c5456baae629023f",
+      "sha256": "adc5c0e0075e91aaabd69feb9642a8a8f8f931b6337aeff0d8c294c981596544",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/iridescence_pars_fragment.glsl.js",
+      "git_blob": "b58bb93404ff936ccba37a503b91cd3ac6eca33a",
+      "sha256": "370beaba9b3664a83656d63f7ef00ff653e8d1a91b1bc144ca11df8edee50a2f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lightmap_pars_fragment.glsl.js",
+      "git_blob": "f5fd898d22b81d5aa8bc1194371d42aa81acd9de",
+      "sha256": "9bab85d200c0f2f525e4ebb494e5ea7272f407132a92e71d957cea7abf3cb366",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lightprobes_pars_fragment.glsl.js",
+      "git_blob": "bccdaf1ed63cb68502d4b5949f375d92d836e3bc",
+      "sha256": "451cde8a101604309d7a35b0394d3f479e9f1030782e214fac7d8682dcc5347a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_fragment_begin.glsl.js",
+      "git_blob": "4c226276b6544d1e94d6a1c83277ce8946939bb9",
+      "sha256": "2e3555f4883acc151eaf6f76c759d552ae0775983e7c5fd01904316504ceba0c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_fragment_end.glsl.js",
+      "git_blob": "f428a94ca1d824e55b9f277b096b46c36d559518",
+      "sha256": "86c8d57f48adb304f6f9b791066ecd5f79ac746c521b7f4ae441feeb661615dd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_fragment_maps.glsl.js",
+      "git_blob": "a674294b8b190615f0ce09a54faa8b1d7487a6d7",
+      "sha256": "ce29f4aded7edc8b5ca801f416f99cd73fa54b840535c367f1ebf1cd7bcc75d4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_lambert_fragment.glsl.js",
+      "git_blob": "52e3640dbc212b618e696b145a5307cf95c4a1b0",
+      "sha256": "ec5aaaa26b9ce0f98ce60035524dca729aa6606e529d04dc471b815027a5d05c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_lambert_pars_fragment.glsl.js",
+      "git_blob": "d70d7baf3649c5f1ffac254147fd94be0a509488",
+      "sha256": "4550b02e83fa8ffd5064449e33bf97457878edefc633eb4ca35034bf8c43c08d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_pars_begin.glsl.js",
+      "git_blob": "7f81748bf3fd9eb2c30cb5cbd409c774bd3066bc",
+      "sha256": "3f7e28a9bf5434b50b0e0fde992d8b4e16bb313290fd4b3a74f4e56431a3b6d8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_phong_fragment.glsl.js",
+      "git_blob": "b9cfe42148bd1a2259812162745af3ff29b78168",
+      "sha256": "a800314e97ceafdef9d52e5a8d5e8413a5ec321d105f485ec71e738cc9e89e72",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_phong_pars_fragment.glsl.js",
+      "git_blob": "ea2b2c9881c0175e6e5e7502787e809968ed34a9",
+      "sha256": "f8be7271fc207651837930583b74e08f95fca5d951af2af6a16ad1fa00ac4871",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_physical_fragment.glsl.js",
+      "git_blob": "bae17e55e80273c4abc1b9495f56d58c8f4ce7b1",
+      "sha256": "31229a1837d68e03900cd93b3934e5da9b7332e8c5cfe8f8f6cb85449856ff9d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_physical_pars_fragment.glsl.js",
+      "git_blob": "37d142ab74b36cf7be5754482f09d5898260ee69",
+      "sha256": "0d47ddc41276f938abfbfb33c3330606434ef9e897df3f5480ef666e29627ab4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_toon_fragment.glsl.js",
+      "git_blob": "023926fe74f210ba63dac4ca924176d931afaa00",
+      "sha256": "c3732624da5b10e41fb28e95f4210c9dfef4071e452360866821a74ff44d39b3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/lights_toon_pars_fragment.glsl.js",
+      "git_blob": "170694de469407445658c2f4a351aa0fb033c494",
+      "sha256": "31ef0879bd75db20937b994328ef5b880053043224d1c801a6e30bf75aa075e8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/logdepthbuf_fragment.glsl.js",
+      "git_blob": "354973eee37c2c05a3ef68734e1fa1891668482c",
+      "sha256": "86182a73cd956728caa1d9c0e757e380d3121d12b94455c4a88c429c445a9f6b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/logdepthbuf_pars_fragment.glsl.js",
+      "git_blob": "1e4ae94afb97041c843942a78da403ede7e6241b",
+      "sha256": "90cbdd01231d363236a6dad82ac11beda1da75d4b719f76a64a9c2b247451a21",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/logdepthbuf_pars_vertex.glsl.js",
+      "git_blob": "9784638e8ad0f162836d7769343a26f8472b257f",
+      "sha256": "666318e28e5b38e8318552ae2bdedae417f00bb450d82b95ad21aa2878736ad3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/logdepthbuf_vertex.glsl.js",
+      "git_blob": "8ceb306a476da90879a7da91a37b1e466f2f1895",
+      "sha256": "2be7c4abcfd70402722a4f11f987c49e33a661d9d1c99d26b1c094aa189ece73",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/map_fragment.glsl.js",
+      "git_blob": "7ed5866818478c38b5077410e9ab99de7e1b7d13",
+      "sha256": "0965b7aea34da013a1286f0a90a801c280b0fa0c516661b8e3f4f4f539431cb3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/map_pars_fragment.glsl.js",
+      "git_blob": "3410bc3c59c0d26912f46e69201a952ec4a9572a",
+      "sha256": "b3efc62fa9a1bd38d70cd0f1d2612b40e688c8ef70821d5b59733a032b72281e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/map_particle_fragment.glsl.js",
+      "git_blob": "739bf5a99c5b0b43ad6e980b7beaab396e4fb395",
+      "sha256": "8eb4b1df5c3926152648b068f6365516787703ee150e574da21bd2896b8df0fe",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/map_particle_pars_fragment.glsl.js",
+      "git_blob": "bf688193eace7d4c3449c48388aae3fcf3874d74",
+      "sha256": "fb1f05dc9665dcf96341685a5b6c9c9107029420a566e8be52d559b432e16ec7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/metalnessmap_fragment.glsl.js",
+      "git_blob": "5e8b5c45027d15a7b5c04aebf8e67c04aecc99ff",
+      "sha256": "5b1c3df1697d096c315c723103e55e9fd506d829da98f45f23d6c643cbd94c64",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/metalnessmap_pars_fragment.glsl.js",
+      "git_blob": "ac89c0b371d29eed724e38ee5a6423c493aaa71b",
+      "sha256": "df938ebb57ad229cbb17128abfe4e69d06a5cda65306801e1175b3d1a7a4665d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/morphcolor_vertex.glsl.js",
+      "git_blob": "b595e0b5f7f89d89188bde9add1044345a86124a",
+      "sha256": "08b94af58f5d86902a55f5859944dc89d55465608c421e71e268ba724b7ab2bf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/morphinstance_vertex.glsl.js",
+      "git_blob": "1e7dfb891aa29afdb8a852bbdc2a346da361d20c",
+      "sha256": "4158d4c04bf73a9be231240ad6dcbe93c6dbaca20f0ec9d8af309294877c4150",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/morphnormal_vertex.glsl.js",
+      "git_blob": "6e2f5c3a358478c0807b2e7dcf5dd3e527503097",
+      "sha256": "a5833b2d2b8ffc70a4d9ff76a9ffeda6bf5c2754374cde6a3f32bc0899a3e30c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/morphtarget_pars_vertex.glsl.js",
+      "git_blob": "0f85ca060f616ac4506047de6679566773a4cc17",
+      "sha256": "2c5aecb0d8aab6057d2791b06b92abcde363896cc95db2b0c55c9c37ef78b08a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/morphtarget_vertex.glsl.js",
+      "git_blob": "91578d7f498c70b3df8d1ba5b3226c90c199fa20",
+      "sha256": "9d1babad50bc8b1fff96e1ba9d6bff1e2126c2ce9c580b7a95365463fba84ea9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/normal_fragment_begin.glsl.js",
+      "git_blob": "fbe698922ba8fcea47a26d4dcc6ce12343f9ad59",
+      "sha256": "528bc133122cd63341c01e568b69a12034bfd6efb8ff031bb3d13e4bb09cbe2b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/normal_fragment_maps.glsl.js",
+      "git_blob": "18ae7ee7d47f524993b554eb67fd87c4bb447f59",
+      "sha256": "7e23407015f8f3dcda7ff6371cb0ab700c586aaeec48273eed5bb0e8c53ec050",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/normal_pars_fragment.glsl.js",
+      "git_blob": "65a7f84c8ebc73d65adb1cbb832a90d7bbf7689f",
+      "sha256": "e171ed98c15cb8fff0fa55c21258d3884a15841ab29d3b9318f61da8fab7f131",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/normal_pars_vertex.glsl.js",
+      "git_blob": "65a7f84c8ebc73d65adb1cbb832a90d7bbf7689f",
+      "sha256": "e171ed98c15cb8fff0fa55c21258d3884a15841ab29d3b9318f61da8fab7f131",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/normal_vertex.glsl.js",
+      "git_blob": "34bafed06db3d8af8070c1282af1fe5d10c83da0",
+      "sha256": "dc2bb76df6c6829d909b155f0936793c26b097394e0d43911eb51a3279696c9b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/normalmap_pars_fragment.glsl.js",
+      "git_blob": "9f91adb355aed561b5e886e0525ae32fb129ee67",
+      "sha256": "9eaf54e726bbc9727f61597f43fa6f9e446faa13389d96a4d025caea5fdc01de",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/opaque_fragment.glsl.js",
+      "git_blob": "07fb7207a8665b3272096a4b89fbf5502180d7ee",
+      "sha256": "324862640144661f29b44f4cb485bf407cedbcdef99abb78f058680f75868966",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/packing.glsl.js",
+      "git_blob": "af7c2066ec5eaf73fc8b01cdcc9ea2af98e8ed18",
+      "sha256": "baaf3e0633bab03dd145e32705f66db08f72a2a73ad63dfc1dc70201ac722b32",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/premultiplied_alpha_fragment.glsl.js",
+      "git_blob": "c683e189cd1d2dece9a0e7e4bfc21458b1e1a285",
+      "sha256": "0aff0335f03283bb55780658f2c05b42b474d9fd6afd1a7382e4b604243dce04",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/project_vertex.glsl.js",
+      "git_blob": "c310db1b74a57280f38eec000338bf096c88d86d",
+      "sha256": "74632caa5cc4a9812b1bb423aac7574748e648613c18898c6bf57d26b85600d3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/roughnessmap_fragment.glsl.js",
+      "git_blob": "a9c8833dceb0abed4501351f2759b83b09cb514c",
+      "sha256": "6566652068d55f54ede23f6d6f4e58009cdd3b764c9174340ebbfb64887bffaa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/roughnessmap_pars_fragment.glsl.js",
+      "git_blob": "cea3ecd812cd48f92377002418359ca55e7a0f84",
+      "sha256": "1fb30448fa3f616860cac0fcd0ebc5d71428e7ccce6a972741e95f3ee047d4ef",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/shadowmap_pars_fragment.glsl.js",
+      "git_blob": "6319169356376e0e2a333236146faeb5433d4afe",
+      "sha256": "acc292ea208f347308f89f55e7e553e9b69a96b0a2e9cb8d1423a4340e5b8b34",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/shadowmap_pars_vertex.glsl.js",
+      "git_blob": "4c3199255a3cad9b5a757727adac58d09e230f05",
+      "sha256": "c6a0c5beaba98750ee64cb7d0bfa0bb442db60127431639a8807f182098ede72",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/shadowmap_vertex.glsl.js",
+      "git_blob": "2f9e04c92e8b02159de672fd60400db9081277e7",
+      "sha256": "d70fcd5d9373f8749306df040eddb5a29addc2c73a62572e19fe98738b522315",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/shadowmask_pars_fragment.glsl.js",
+      "git_blob": "752c1a23b4bec66a5c09009c8908439df9d8bf6a",
+      "sha256": "4ab06cb582d93dd035c9180a9781375a6e6ca4423eb5b2663ccc7b5cf7c01d64",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/skinbase_vertex.glsl.js",
+      "git_blob": "17d8f40acbefeb5c3a2215670e900ab20ce51f32",
+      "sha256": "b7c3bd51471e993f8fae0463733b534529e32cb91cdabb423b4d89ed3ca7c5bf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/skinning_pars_vertex.glsl.js",
+      "git_blob": "10b4dc5222ff53a228501fda1476a62b2428edab",
+      "sha256": "6b67abcff3043a161c55a11e2994a1d0ee9c37626aa6fbe35a81f63893e7ce26",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/skinning_vertex.glsl.js",
+      "git_blob": "a07418c4798f42882771ec720eac742c8f7e841f",
+      "sha256": "4422467001348636551ce64f1e6631d8a5032b7ac2788596c2dc5269618c7602",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/skinnormal_vertex.glsl.js",
+      "git_blob": "457ee10b2db9432811f01c1a52cff43b85c2de45",
+      "sha256": "5e6f1857d196e7ca79cc4e2ee35fbd128ca74003ad8b96484723d918ca631e49",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/specularmap_fragment.glsl.js",
+      "git_blob": "a57f36b0fac9abd526ff0b9377e0a50c8e8ff5cc",
+      "sha256": "098d8ab59b11c5b06acd176c56ef71ab4749a013a51bc5cf981e4701e458930a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/specularmap_pars_fragment.glsl.js",
+      "git_blob": "bead42d2cfd5ea7b89771873243ff24fca280e79",
+      "sha256": "ac921db9035362e206a1a1a27fe6dd5808e76f02e859c4d118efef8e9068b9cc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/tonemapping_fragment.glsl.js",
+      "git_blob": "46944f4ba1bb58144984a4f294c92c070250290f",
+      "sha256": "f03f887404ceb572e1197d7a8f9a47aa23e3c5ef53ddf3b84af22ebce4954f21",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/tonemapping_pars_fragment.glsl.js",
+      "git_blob": "26b24c90a0d681d0d6fca19bc73b0819a6f56a76",
+      "sha256": "447958b93d07616c83d9273829ed810eb734d02ebbe60f12fc9bdda4f7928f44",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/transmission_fragment.glsl.js",
+      "git_blob": "e77c9f8c7577439ba45c1265df52a9a1f8b61700",
+      "sha256": "a7bf6155b8e0ae78665382f4e45d654aa198d6714e7fbed2a18fb694beb67fa4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/transmission_pars_fragment.glsl.js",
+      "git_blob": "15e48682ea408f250a70787a743f2c4c9e4e3d28",
+      "sha256": "586f774384f3442bdca1270d203b19f4cc318fd56ee522cdecc4a8b1cb9fc8fc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/uv_pars_fragment.glsl.js",
+      "git_blob": "69d1c8fe499f15f9a6fad1293e252daa31b0aa73",
+      "sha256": "cd5c407f75689f77ec9593eae52781765e541cda3cd3998dd8c81ef4d2b430da",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/uv_pars_vertex.glsl.js",
+      "git_blob": "df442817df74ac012571a4b47eca11c15ffee732",
+      "sha256": "7d8fa6a1938383e2032274215c8c611701d60289e48571898e762240df516d52",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/uv_vertex.glsl.js",
+      "git_blob": "5a0cc9962c68a47779a338150775bb116f7778db",
+      "sha256": "83a5101d9d7de8bb232ef8c7655783c49841189a97014d0c4ff1558bf8b2ae92",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderChunk/worldpos_vertex.glsl.js",
+      "git_blob": "b4eefdf802cc2c2a8d94bee41c765783a7fac570",
+      "sha256": "d291ca05988f57312c060b33fa271472b3756b6a6b737934f5a04f882bf4f17f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib.js",
+      "git_blob": "354aafb80868a48f82ee408800084ece92536eb9",
+      "sha256": "6e7bd913d92d02646e6aac913aa9069f9058de31a675e8085514128ab985e5f9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/background.glsl.js",
+      "git_blob": "774ea811c48596209ef26fda966201eb09ff5172",
+      "sha256": "0c8cfc87b295b403f46f77bf238dd464181c32e1409cb654ab0871a0c361c77b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/backgroundCube.glsl.js",
+      "git_blob": "5e3342302c93d0f6016793b5e947bef8d8631774",
+      "sha256": "c8ce3244a246414f6876d54a40740416807a1c3024f05a9fba988de26cec31ea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/cube.glsl.js",
+      "git_blob": "722d3bba1c9648c4d069e0995cc4d71e8f9a7fb7",
+      "sha256": "a63db157216812253ab882cd4777b7f165cbbc34e38df49c7b7a003f61bbc36e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/depth.glsl.js",
+      "git_blob": "efacc561631b06e0bb394ff48f850b91d9c41c97",
+      "sha256": "860fa71a028d9678198f7aea0e6a4336c9663bbb761be6f34437fbbd4c257891",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/distance.glsl.js",
+      "git_blob": "5ca5714b476352a539c72afeb45067ba616e8d35",
+      "sha256": "8c04e5dbcc88fce477b6b445425d4a4495b53f206958eff1c4fb28983cbe62a5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/equirect.glsl.js",
+      "git_blob": "bdf3dfb80f0c505a7a65065540c937617f27ecc6",
+      "sha256": "d51f0e2635714ffa6e4e04d360f27e7adb3e8563a32013eb4cd86ba312ab91e8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/linedashed.glsl.js",
+      "git_blob": "e04cfcefd396cdd3ce3e9e7cb0653a6758aacf05",
+      "sha256": "1b850ff1a6f8690c8ebe5d19f9268dac08a298d3f0eb92cfe11a52ab3b00e0d2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshbasic.glsl.js",
+      "git_blob": "c9ee73866bde740920393f74d93da1a7bcd2857c",
+      "sha256": "da0944dc1e73d0d77a5cde9b93f7d1bdc5c1e825e28e8c582ab1f06692992495",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshlambert.glsl.js",
+      "git_blob": "1d33ebac7a73d7c9227e23c054efef6e901e25a7",
+      "sha256": "bcd675100102adf610a0667432a52d552bd35dc636b3280376bcdc15c5436ef4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshmatcap.glsl.js",
+      "git_blob": "e83c141597a10aea08d57bcdacc92653ee472002",
+      "sha256": "6e0f370afd832a4802bc9aa05d9b6fb6543ea0184bfdc87c8f635de564b405d6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshnormal.glsl.js",
+      "git_blob": "f63317e5def9d1deff392e3657e8904b325c8699",
+      "sha256": "3fc3202f96d8031f29444df6d80becc0d1bea99be87be8dafcc5b6b3efd67150",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshphong.glsl.js",
+      "git_blob": "04a740e18bb7e8a84561ab4acdea228c2df08208",
+      "sha256": "99b94a2d9542266829a659879e03de3a432dcc71fb65ad32fea360992c8d139b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshphysical.glsl.js",
+      "git_blob": "470043afc3ceaf7bbbab994807f6b19e5428e869",
+      "sha256": "f562d3e6cf8b9ea69b0302a6be8af54a70afa890a6bca9a44673844df37d3777",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/meshtoon.glsl.js",
+      "git_blob": "5ea0f7b623e4d239a30cb3832c586033429e2032",
+      "sha256": "898e8e99c884c59bba06de9022a8be95a1e410c27a58e7cfa8a9bdcbbe4ffa7e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/points.glsl.js",
+      "git_blob": "51dcdf566ac47164a7fcd94f3bf50304e6fb2021",
+      "sha256": "9568f49ebbab4445979b1027f1faab0fa3d2c14a47d344b36e97323ecee67e13",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/shadow.glsl.js",
+      "git_blob": "9546a54cc9066364aa3303d40f470ecdce650b83",
+      "sha256": "20421c168192f5768477b4641d9004d85e1a50ecf2cf748f51568482fb6847a1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/sprite.glsl.js",
+      "git_blob": "ed04dda453788fb8e90a405b07a9e0d15fcf2047",
+      "sha256": "ec697ffb9101a43d40ad223f1c692dfab15329353eee7603c4f74b75023f6ef8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/ShaderLib/vsm.glsl.js",
+      "git_blob": "945662a3f9577d19db82c9020332cf00b2ed0527",
+      "sha256": "0bd3b13a03e43709aa3583bc07f57581798dc92ce5aeee30712c503e3997cdb5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/UniformsLib.js",
+      "git_blob": "a37f625c22ce922cf56bb48be61b54e141a88f46",
+      "sha256": "11300e3d2dce845f80d7c7cdb2f8470716be0c8f5f94c94dd8adf3d7773f604e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/shaders/UniformsUtils.js",
+      "git_blob": "f63ce8c791b8c30dd536a60aa41c378191b59547",
+      "sha256": "2f5bb9c21190ba37cd5d80d9eb8501e4ff06ac91e678dc7d59dcc80f6b53011e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/WebGLBackend.js",
+      "git_blob": "0bbba19758fce15c6658c2451ad05aa798bfafa9",
+      "sha256": "59c03dc1e56dc63b2efbdbc1160b8d0fbe81af1b40e8da3ba364edee3308d5a9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/WebGLBufferRenderer.js",
+      "git_blob": "2931842a897498fc4d273eb76206b03d1c3477a3",
+      "sha256": "f8276981e2903131c0abb5e5cf44c42779bb8ce7493c82752153ee598cad7d06",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js",
+      "git_blob": "fec5eedbe18e16d6f7a1e9f7093443aaecc4eb57",
+      "sha256": "3a7056c0ca72448f968697f70357b8beaf7cc0c72fc79ec14f36aa2153c18f6d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLAttributeUtils.js",
+      "git_blob": "f4501ea9cefddd9b791a20ac8059fb07500c5910",
+      "sha256": "394511e484691278004e7d2668d5d1e10700c9e85740073c095454ec6cd5cd2b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLCapabilities.js",
+      "git_blob": "e0fbbcb06218b8d5a437407782010637fda0183e",
+      "sha256": "26ca82fb8f01a8f99c9b0283e5f3c60d4ba0e4ee07559578c372f5986b70f396",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLConstants.js",
+      "git_blob": "e1e7796e648b61737573bdf169b8fc39bc37de62",
+      "sha256": "d8c6f6a18087634211a0faf21fd33edcaa769fa9f4079878deb73735787eabde",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLExtensions.js",
+      "git_blob": "924cac7ee1e252e1f9f7b8540f1a2b6e42accedf",
+      "sha256": "7376618f1a6f89a15c56abb7ecb4aed4cabcc7a518d78748dc8628594b3fd5d0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLState.js",
+      "git_blob": "58f63104f2ee1eec2d9d30fd929af8bafc0f15d5",
+      "sha256": "d852dbad55f364117f422ea6bc6ca8630caccaf690dbb8a6b15ad2b319de8f64",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLTextureUtils.js",
+      "git_blob": "b6bee71d4cccb0981bce2644fe688106df6a718c",
+      "sha256": "872a7148d0bef50648e5894d84dac99c800c98e681552221a5bb984824bb4d56",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLTimestampQueryPool.js",
+      "git_blob": "73a0fbee26e0ecaef536b8a56af635980ba4d219",
+      "sha256": "67c0c575dd3ef1e19862751d68e065ab957a00cbc6389591aa85bda5920358e0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLUtils.js",
+      "git_blob": "36798b0a20c1a808aa836841a119b8743cdebc61",
+      "sha256": "9f6415d0bb0606b2dd7846d6c65018c274c747f44897da0aab9ff6a44ab8aea4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl-fallback/utils/WebGLVertexArrayUtils.js",
+      "git_blob": "b35fb6799c29dd62079bf9971b34a85a1beaa05a",
+      "sha256": "dd05ded31f2048ae0dcca18830e905b896faf7ec8e65f0f313c2b86272997cae",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLAnimation.js",
+      "git_blob": "2d69ea64bcda73320f6158e29c77b43dee8b7983",
+      "sha256": "ad86bf7da307078fc5ea85573ff3db457b0f53a3df4196a05b2b1810a4afb5b7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLAttributes.js",
+      "git_blob": "7402f04e860663091c15ed48283bbbcfc662a728",
+      "sha256": "6e5e44b02873ad5e898c499714c72a0c2b94878a79fb41da21d3fc2c8cf570f7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLBackground.js",
+      "git_blob": "9ba11a24d563fb3250e77403b821af3d5ecfb9fb",
+      "sha256": "adcd34e8fd89913ad508ee4aab6e310f2120c7e951cf1c9b94fa61dd6dba617d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLBindingStates.js",
+      "git_blob": "4bb5a7bb0421be0756481cb29cddede7b8597258",
+      "sha256": "320c72ca9887936e718245f67595c67a81e540efd3bcc8d58512fe60dd6f7b08",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLBufferRenderer.js",
+      "git_blob": "ec2eb2af96b5015f15677b5276576acf3a970262",
+      "sha256": "ebab65ed80fa55e0afe39bf36c48228203569e6b6d07696f886347f1dcc263ad",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLCapabilities.js",
+      "git_blob": "f71b66dddda9b64bfa30c32b86069e9bb370902e",
+      "sha256": "c27f1bbd6117150e1633c6f1106eb0fcb2e185e8ec03dcde22b1787071a0018d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLClipping.js",
+      "git_blob": "9eec046d55a3a9cf1a0f078de79b8b76640985c8",
+      "sha256": "5728f4ee3f35167e7b258e1519bff7f7a43f219c53760fedb113164310639d7d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLEnvironments.js",
+      "git_blob": "ef5c50fe9715ce02813d5327708381dac8eda933",
+      "sha256": "31ac22df81905037bd21898937ff8effef7f4fafba68476cd74d87aa0d136ec9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLExtensions.js",
+      "git_blob": "bdd91c807893821dffd4b7b2a8ac028d757c22e0",
+      "sha256": "d6fa3d4570e3ed914dbe40329bc2660f4e70c30de0523683b9bc977a6ba74396",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLGeometries.js",
+      "git_blob": "eacd8fac34b457ac061ffd956f37b914dfc85704",
+      "sha256": "7fac2d1a6754c98d1c85342dfe226d0b13148275a2e00ebea0056f982934a6c3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLIndexedBufferRenderer.js",
+      "git_blob": "7b3ea3894c510c00c07109dadf2ce82f7d72533c",
+      "sha256": "8025355954db283196b21fbf158888df9c0dc60f7de070fa607a69a49e4bd4c0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLInfo.js",
+      "git_blob": "3611c021d37ca5f28df7f453287e05aa819e8e3e",
+      "sha256": "eee7c3f0f54643080d478a23acd964fe858143406fea62980f911393d995c532",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLLights.js",
+      "git_blob": "efce8b4fd48c7d3d5198299e44459b3f83cd8136",
+      "sha256": "ceb5079e0a3fd6093156d2d207641b26bf383b94de017b4db0647fa5946dd025",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLMaterials.js",
+      "git_blob": "34965dca94fb754c1d65c3f902a1564aa9c8c3f9",
+      "sha256": "149021273d1557a9dd672add990647609ec3fab5d302e752629f3f309a06daae",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLMorphtargets.js",
+      "git_blob": "934aa5eb44a2baf0fd68c7dc315ccd674cf3f4b4",
+      "sha256": "2ce90a7fbe8d817b2addec2e70047c5c240dd366ba2b5a4ffb52acf5b5758907",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLObjects.js",
+      "git_blob": "d35eda6cd0a57e5a66beda5bb087b5b5293d3a2c",
+      "sha256": "60829abba98579b02a84177ce86b3eea127a7decac487b69c70f0e3e83a1d923",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLOutput.js",
+      "git_blob": "51ac986d482530f0f806e9ddd0a24f841cf95d79",
+      "sha256": "be07e656c292841ed968eb3823f44abf80179ce2631b315385aebf36f3f68d7b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLProgram.js",
+      "git_blob": "f423137d3c0e49cafcf1ad026a6a094ccd5f2c84",
+      "sha256": "9695b99f36f850499ee1f622da5a0e86e4920bef8bc20882bf8eea31430b8890",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLPrograms.js",
+      "git_blob": "1107d6e67762a9d31d091e2c767f9835b8dbc712",
+      "sha256": "d57e49f969ebd4555395a74dc054b6c6bc44330be744d6ac9e1831c21fae998c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLProperties.js",
+      "git_blob": "09a495447525f03b1aac1e3fb8f6a69757c12a37",
+      "sha256": "fefb713d30e2df865b867e725592e8949c5735805a7d8963b98eb471c06c1589",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLRenderLists.js",
+      "git_blob": "857c49f24e8df9d05f738fcdbe9b163843b5f773",
+      "sha256": "3139dfcd01675333266c02d853a768913318f353e694de39545aa50747d2011a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLRenderStates.js",
+      "git_blob": "64e1f71fb228244cfb90cf213c32b565045c3ee4",
+      "sha256": "8c0746f72ceec4c0f27e85319684f1c5e62f6d0d2d7d73f98afb69714bce1117",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLShader.js",
+      "git_blob": "b025de29f77ad6317e1ba05d4f9ff6fa5d32c09b",
+      "sha256": "19a7dc05063c1367fd718806028eff6f30c4b4c5cabfec21eff0a11ea4459f98",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLShaderCache.js",
+      "git_blob": "01f83e287f62fd97a1903f7d2fef8d601a73cc74",
+      "sha256": "0327a8f797105550545e276545428b9600db627a61c66943e8511cc104cc9503",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLShadowMap.js",
+      "git_blob": "56a7ff96dcdde136d584d717eeb9e175576f0dd8",
+      "sha256": "b416c424d555e3c248e691db7d0b238d5660ac95df77a649695af7a89ddafc32",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLState.js",
+      "git_blob": "35be2da33628c0cd30b9516911f5c9662f72d04a",
+      "sha256": "83b920047282686fd8500c0ba9cc5333807407122c774cbc4465daa4b4c71237",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLTextures.js",
+      "git_blob": "98c3a11442788cef95933c4c756fe33af56cfe9d",
+      "sha256": "954bb7dcbc2f508f6d995a649787d1a147b5a0692bb1f0b38362b9a906fe6ab4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLUniforms.js",
+      "git_blob": "a4f0a7ee554daa5e4a0a7ca41e7710ad466dc91e",
+      "sha256": "4a718a7f029969af4edb6ea224e61341b583930c15047edb157d085136b98357",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLUniformsGroups.js",
+      "git_blob": "8c3ae0796a513040e3997b713c3a5dbb13f3f33c",
+      "sha256": "4026920c7a3aa33f99252af8b8d06c93ad33b6e14e31696b59fec0ab116bbae1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgl/WebGLUtils.js",
+      "git_blob": "7dc4d9dafad789217f08a621878385ab0babf9b1",
+      "sha256": "63b51eb813151817e52d9b2fcb9f91fee3f111f3924af71ec8337caf367ed740",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/WebGPUBackend.js",
+      "git_blob": "b1ed78fed182b8e8ccab4574d46477c1fee2a3da",
+      "sha256": "d45b77bf852ed5c7d61985a301259d29aeefc4f9503dbff91a93f0e362b43b1e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/WebGPURenderer.Nodes.js",
+      "git_blob": "e90e29aec879b2ba027747252d8908b45a4cd1fa",
+      "sha256": "5189d329c883e9d31094b72cd0ea139d9b699a194e7f2d67643698d1b7a12d0e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/WebGPURenderer.js",
+      "git_blob": "8b449af857f1514981d512545b48f844f4f3b07c",
+      "sha256": "167042c5c4384a35360ec24808500166a262f8b119038927771411bf46b78621",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUBindGroupDescriptor.js",
+      "git_blob": "2a75c24ef1df20e1d39cf7be39e844869f1c6c07",
+      "sha256": "f8efed78850ed6fad8ecab5c16bdeec277d002e31a77d6eda1ee562aa7373c18",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUBufferDescriptor.js",
+      "git_blob": "21e3ad9c3571d63dac2b639cbddf9e02dabee0c1",
+      "sha256": "7b8e70a5ffbd691ee5c9c49812267e698cf57048947ad8774f363a4910da4838",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUCommandEncoderDescriptor.js",
+      "git_blob": "0fc3a4ab5e321c0979674e1f25637e519424e92b",
+      "sha256": "25f7d69a6228c1fbac5a6568845088de9ff78bf9b1ddcfd04e6f9bc3ab9b8308",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUComputePassDescriptor.js",
+      "git_blob": "f076a2b08a4abe1a0d213bc1900a6be9bd4142ef",
+      "sha256": "57e15d0cc81ca2110697827a3a7226a65fcdc55628387a31d1e340489519ac0e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUComputePipelineDescriptor.js",
+      "git_blob": "464936ec5636c4cdb3275dec075253ead0b792a8",
+      "sha256": "b00de4261a4a9db78cf68d4388ca6a29fd117babf4fad2cd4ef3ce46eaaa8843",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUCopyExternalImageDestInfo.js",
+      "git_blob": "5198b7f41efa81a5f91230ffd90f6065ba2f62cf",
+      "sha256": "ceeda458dafefafa17c833c47c2a524a85b2869d1e4ca6009875471512874e5c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUCopyExternalImageSourceInfo.js",
+      "git_blob": "a3f3632195c9eec8d28ea6f0dd8b269fdef435ef",
+      "sha256": "72796a803ed8840179519660aa403600b09c97b608ef1b8e8c8956e10cb38dc3",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUExtent3D.js",
+      "git_blob": "aaa6d6f6eb5125f0ae17db2c1278a7c4b0b8d93c",
+      "sha256": "d435db0112c5313a3c6074149c5e77e1a200a0482212070dba9c3233eeda8b25",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js",
+      "git_blob": "0a393816444a84414489f059fe34ab12f1c416a3",
+      "sha256": "be01afed4209eab3538645cea84bc74c01d1c840f5c224fd9b1e287ae1cc491b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUQuerySetDescriptor.js",
+      "git_blob": "36ce71af2a480f51e7623e2ffaa610c8ec0d15c3",
+      "sha256": "428c1f43ddde8de605ea902af5559345375db7cce74a390172e15311035d64f9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPURenderBundleEncoderDescriptor.js",
+      "git_blob": "6866664c0e9bb6975f27d269c0da8a64709e38b5",
+      "sha256": "5e46f6472b25c50f955d778b292fad27abb8c0212af3d9259b1be3b2a7e08d1d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPURenderPassColorAttachment.js",
+      "git_blob": "376f4d37de40191cee320330d7f3b7568b6ff0bc",
+      "sha256": "577153aca87927fb5af0486ffff88819b38ece68701d2a19040f98c3b9d54355",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPURenderPassDepthStencilAttachment.js",
+      "git_blob": "fc88a20077820925d4afcc011532668563adb992",
+      "sha256": "c0364034b60507cf7e0906d19e72591e607c6e1d32455feaa21712f58f0d1424",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPURenderPassDescriptor.js",
+      "git_blob": "e0933657157c3a3838782b69153abc88e9190da7",
+      "sha256": "15318b0db14f72e683f526b8821682758eed5f59a268f4cb78abe1f4ed2f86b0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPURenderPassTimestampWrites.js",
+      "git_blob": "78d71d7816e8023000a91ce47143afe6be8d5d19",
+      "sha256": "5601bcc4a8c1f4bf9f783b32c352b75a60f89b2eb0ef3682ee304c6d48cd139b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPURenderPipelineDescriptor.js",
+      "git_blob": "543906bcc2942520921aa80be0e4d0873b4e1b4b",
+      "sha256": "d374d1cda8f6bb84914d7a30d7335f36c634ebfe18d96a853b588c333fede513",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUSamplerDescriptor.js",
+      "git_blob": "b99021d72fbe04469ca99854789308df462ee096",
+      "sha256": "cc9144a65f2c499a3d6a866b2e5e7bdf17d22ef1a70e0584488888e4f0dd7d5d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUShaderModuleDescriptor.js",
+      "git_blob": "1d7642b804cd7148c0e23c47f9b181ccbd4e1a19",
+      "sha256": "c94315696c06e4f5d82bc3d8640b7740d60a64b2b073b74884a5e589f334a6b0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUTexelCopyBufferInfo.js",
+      "git_blob": "742c5130af3f0785c7da750aa6069f377919a5d7",
+      "sha256": "67e3736f4a1f18487d9185c1614deae2fb80df43f299208cd70e7985bca1aaf1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUTexelCopyBufferLayout.js",
+      "git_blob": "80895df89d90316af1e7d87af27cf7605ff5ce20",
+      "sha256": "409d33d56b6d84e857a6390395dfffa9bf009b65cb98597082282055e6c2da68",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUTexelCopyTextureInfo.js",
+      "git_blob": "f659e3adfc0c85d7edbca10677d63cf83332387f",
+      "sha256": "0afd945517c194301b46287682fe783fe254f093d58589573344f9c57b637df7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUTextureDescriptor.js",
+      "git_blob": "b628098d3dfeeea4a6a4a77f1c471e14d4d28dbe",
+      "sha256": "11623f1e27671e0cbbb76bbc13ddf85672e0ac4ec4a654001fd7cfaab0036a15",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/descriptors/GPUTextureViewDescriptor.js",
+      "git_blob": "1824b57f2dc924dcba043b26490a3e244599f900",
+      "sha256": "15084cf9b66ed6b031b90b33d541c40e44cfd9fe7c9431745d871df94b51ffd2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/nodes/BasicNodeLibrary.js",
+      "git_blob": "39bf2e12cd779d24467101c30d594d4159eafe1e",
+      "sha256": "64c802dfb3a42922117fd34937cb8b4b08f983ea8f51c0d77b5f215971c1e422",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/nodes/StandardNodeLibrary.js",
+      "git_blob": "63b5a40ba3289e85122f4c804f27f0a7c90b40a0",
+      "sha256": "8340a63acd21e3bba72c3acb0eebfd0c32e1c096f1b7c474fa8d564a7168f589",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/nodes/WGSLNodeBuilder.js",
+      "git_blob": "152b149a43397bd820996868fcea8889cc9313d7",
+      "sha256": "767396438833cc52550baf43b9d1736b08bd302894dbd7aaff68855d16e05061",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/nodes/WGSLNodeFunction.js",
+      "git_blob": "4e97f64d25b0a6182499a98428be3d3b6c7f716a",
+      "sha256": "0952e45981f60d2a3ec904659de4ac099a4fd0e95c82e4b0dfadf8c4ae4a6f42",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/nodes/WGSLNodeParser.js",
+      "git_blob": "4d342847a00341934b292ffa84a651098017e344",
+      "sha256": "eb8c8bb893a503ce802eeaf4486d6e83dec60493c28eb90ecd57056ccae31474",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUAttributeUtils.js",
+      "git_blob": "a17b447c382d1085a3f9cdcc1fe3a58ecc113391",
+      "sha256": "301ee6bf268fcf8c5fc54ade8fc8a9a3589d226f659123d9816911082d41b0e9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUBindingUtils.js",
+      "git_blob": "cea33eac6beec53e3bedfeadfe5e4ff6600941a7",
+      "sha256": "672012285ccdc7b75883e3d34ac50902904d2f122e4af4b84f8b6e7be2de3ba0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUCapabilities.js",
+      "git_blob": "6184b68e46c1a9e3b99c78d0dc075c7f18d59eaa",
+      "sha256": "3ab09e8313fc3e39188e04e2cb244f04da8900995535bf4fa32070be92baa6c5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUConstants.js",
+      "git_blob": "91b9934d022611642d6205280b6b6a5c3f2e1ba3",
+      "sha256": "80093ba158428ad402e588819cdd51f4b6e5ee1d81e93f516d4fc7099983b269",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUPipelineUtils.js",
+      "git_blob": "8a03e533ebcf277676c9921f81e306b5cb5c15a4",
+      "sha256": "a64c1483f368ca722d78ccbc18a8573f187ef6a7eece08c95bbb27347c383454",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUTexturePassUtils.js",
+      "git_blob": "1761166fbb384b3415f8ccbe1753d04432234f3e",
+      "sha256": "42d2dbe965c7f1889fd2d2e1902f850f881bad23b9a43fd2d6daae60e087f360",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUTextureUtils.js",
+      "git_blob": "e9c49caf36456bfa6c45351d72a723b0fbd525e4",
+      "sha256": "e11288f23aede301196e9b5837c2266b7d341d029e5f2024bfde9cf1c23883a1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUTimestampQueryPool.js",
+      "git_blob": "4c417487d7ab9ed66945ebe7119770d79dd1902e",
+      "sha256": "719c23dab1783a752b5c454f2564d39a28638e191aa4078cc82cfc1b968c0dfb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webgpu/utils/WebGPUUtils.js",
+      "git_blob": "262c3958057fbb025a200b9a44594574c1297e3f",
+      "sha256": "54ee6e65519d66aa708585eb92ec1f99f494f7a06b83d2845913ae701a8e8f94",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webxr/WebXRController.js",
+      "git_blob": "4161c6a0a733e4fe39490b9d9aa1dc2c03cebc9d",
+      "sha256": "c41b3c76803227685d734f2609ed4be032cab00173023f4cba717442dc0cf575",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webxr/WebXRDepthSensing.js",
+      "git_blob": "46fbe7bba104851bf64e9a260d9574e2f261955d",
+      "sha256": "c0fd937dcef48f7667c54b9dd2fdb9285e4d2681cb094569b73a47ab0f6d482e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/renderers/webxr/WebXRManager.js",
+      "git_blob": "dc5e2ddb47544da4cc711a5e0c7793c22117c6ca",
+      "sha256": "fbe44db33cfe691da5fba4d087cf1eeead8d29a52fc7aa568454eece0f6d9d0d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/scenes/Fog.js",
+      "git_blob": "bc679889184fe5542c8148609970a468dd02bbcb",
+      "sha256": "bc0c369cc86b5b84e035bc50d2fa0dd569c6d44e9aad9c4c0342c4521cad3306",
+      "mode": "100644"
+    },
+    {
+      "path": "src/scenes/FogExp2.js",
+      "git_blob": "9ba0ad0bcae64388d40e92105ee8f1b11cb06910",
+      "sha256": "c1fbafffb04670fc17fc64ec313c5209a0bdc7191a064fd50d8a3e8ac30ff43c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/scenes/Scene.js",
+      "git_blob": "faad091e4be8156a8ba82b338f14c58c7ccdebcf",
+      "sha256": "cf09173ae8252422a496b077058b9788a73700775d41c95271b03c26141f213d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/CanvasTexture.js",
+      "git_blob": "81e9976b7384d9e03a2b138d39dfb828014d6801",
+      "sha256": "f6258ea9f08f511b79c86c530665747f7152e5345abbfe4dff7d7ea60bca634b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/CompressedArrayTexture.js",
+      "git_blob": "6a7c30e4a1ba174d260bf5aec804d43474995e97",
+      "sha256": "69a3d3d46ad939573b4ae2d642226e36a94a01a2b79a8ef26c861a4006194231",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/CompressedCubeTexture.js",
+      "git_blob": "ecafe098b6d5c02213df9989fb88754415205c62",
+      "sha256": "7a8266c421b691d3bd1fc6829b4029ed06978e77707f45ba45460bfa9b0e7cfa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/CompressedTexture.js",
+      "git_blob": "4d3cba32961319978f844126a7f8c1f165b582f5",
+      "sha256": "c99109bee7941815fc0dd78b3546039a217d5e232880388fb4b56072f0dca47c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/CubeDepthTexture.js",
+      "git_blob": "2bb0bc05aac611143432042ce50972f26425daf4",
+      "sha256": "845d2d09064eb356ad08ac9e7f56c1f47b8c233d3bc7a9237a6f44641f40282a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/CubeTexture.js",
+      "git_blob": "d6bf5b10c38a25e9f50fd6ca4054163ac39fe04a",
+      "sha256": "3d53b1529eeea457a2a48f72ad68289b7df0a2fe0745a439a36a2d0245ef5231",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/Data3DTexture.js",
+      "git_blob": "72fcd167afee0e6c33132e1fab8b1938f2abd527",
+      "sha256": "708359971a24a20f6e0a0093e7c1c8e4d63ea56b87be57af5bdcd03ec57d8cc7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/DataArrayTexture.js",
+      "git_blob": "1b17ac3a2a7daec3448c0d6091509ddbd6da9402",
+      "sha256": "b9819be0501e2b3d3130901d65729ade61df657f2f77e283e2540769df0b8ac2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/DataTexture.js",
+      "git_blob": "1f48dd07769a87aa75003ccd2153e7b85e6007e2",
+      "sha256": "2c2a008a69a4be320698f24dbea286de80e73a2aec4f5bb4ad88a4c2ecb0c9aa",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/DepthTexture.js",
+      "git_blob": "7e5160619801a5bd5534f3f3cab0d2ad9a52f9b6",
+      "sha256": "58a583a0a463d3e6733cb5dc674073e512e17b71670bcc7e2d77e36169d9c5fb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/ExternalTexture.js",
+      "git_blob": "7965e62be80f1862e471d23589c811948b9ee655",
+      "sha256": "92b649e3178eedec7dd3ee55d47a5b34268eb77c8fdceda1b912949c00c78a35",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/FramebufferTexture.js",
+      "git_blob": "7380dfdbbc8085d3edf2e64900f889e8fddcc03e",
+      "sha256": "d69a912415d7bcb1e39b184c50b159b53e4299a9cff47007181c0a8bc50d9908",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/HTMLTexture.js",
+      "git_blob": "864e9f9c94f244ef34ede58b8ff80f1c110e2acd",
+      "sha256": "5f4f57f98377e164e915db2a529f56e04096d622fe25ee5357283b8ec6df6ad9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/Texture.js",
+      "git_blob": "b3279d103167501f9268281228f9eb5ef91d7309",
+      "sha256": "701c4f37d6e63c5e41507417e272e4419dd1776731428b99b599a27c1983fc7c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/TextureSource.js",
+      "git_blob": "9bad929d9c50eb7ce0b5eb5ee47374c99143d1f4",
+      "sha256": "5e8ddf1c5b1df1378260251bd19b0a2a3cc2307fe5035da89a55ec74962cc0c5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/VideoFrameTexture.js",
+      "git_blob": "be7fc1f904a6d019f8a8dc7e1e58e971f2303048",
+      "sha256": "c4ec3a2f938fa884ef47b53aefb7686e3dbea6786d590b34e95ac17aad49d339",
+      "mode": "100644"
+    },
+    {
+      "path": "src/textures/VideoTexture.js",
+      "git_blob": "43b67926274674bd12b393415c8d031da54f3f45",
+      "sha256": "1ff70de3a313d53cb3fd57e308f3664a650fd3247899651c2942bd2c20c17e2d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/utils.js",
+      "git_blob": "b8980f2415d52b59a3e53bc4bc66f5dfc1d500c4",
+      "sha256": "a390dfe0eecc0d52a45a0a2454761204c8ff5f613c3b51e9864367bf4d9d1dfb",
+      "mode": "100644"
+    }
+  ],
+  "exclusion_manifest": "../seed-export.json"
+}
