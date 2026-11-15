@@ -13,6 +13,10 @@ type MonteCarloTracer struct {
 	lightHitable   Hitable
 	renderConfig   *RenderConfig
 	backgroundFunc BackgroundFunc
+	// portal is set when the configured world belongs to a PortalScene. When
+	// non-nil, getRayColor dispatches into the portal transport path; the
+	// ordinary path below is untouched.
+	portal *PortalScene
 }
 
 func NewMonteCarloTracer() RayTracer {
@@ -34,6 +38,11 @@ func (t *MonteCarloTracer) Configure(
 	t.lightHitable = lightHitable
 	t.renderConfig = renderConfig
 	t.backgroundFunc = backgroundFunc
+	if portalWorld, ok := world.(*portalWorld); ok {
+		t.portal = portalWorld.scene
+	} else {
+		t.portal = nil
+	}
 }
 
 func (t *MonteCarloTracer) GetPixelColor(x int, y int) ColorVector {
@@ -53,12 +62,21 @@ func (t *MonteCarloTracer) GetPixelColor(x int, y int) ColorVector {
 			v := (yfloat + rand.Float64()) / heightFloat
 			r := t.camera.GetRay(u, v)
 
-			color = color.Add(t.getRayColor(r, t.world, 0))
+			if t.portal != nil {
+				color = color.Add(t.portal.portalTracer.getRayColor(r, t.portal.root, 0, t.renderConfig.maxDepth))
+			} else {
+				color = color.Add(t.getRayColor(r, t.world, 0))
+			}
 		}
 
 		color = color.DivScalar(perPixelFloat)
 	} else {
-		color = t.getRayColor(t.camera.GetRay(xfloat/widthFloat, yfloat/heightFloat), t.world, 0)
+		r := t.camera.GetRay(xfloat/widthFloat, yfloat/heightFloat)
+		if t.portal != nil {
+			color = t.portal.portalTracer.getRayColor(r, t.portal.root, 0, t.renderConfig.maxDepth)
+		} else {
+			color = t.getRayColor(r, t.world, 0)
+		}
 	}
 
 	if color.R() > 1.0 || color.G() > 1.0 || color.B() > 1.0 {
@@ -73,30 +91,69 @@ func (t *MonteCarloTracer) GetPixelColor(x int, y int) ColorVector {
 }
 
 func (t *MonteCarloTracer) getRayColor(ray *Ray, world Hitable, depth int) ColorVector {
-	// spew.Dump(ray)
+	return shadeRayColor(ordinaryEnv{tracer: t, world: world}, ray, depth, t.renderConfig.maxDepth)
+}
 
-	hr := world.Hit(ray, 0.001, math.MaxFloat64)
-	if hr != nil {
-		// fmt.Printf("WE GOT A HIT!\n")
-		emitted := hr.Material().Emitted(ray, hr, hr.UvCoords(), hr.P())
-		// fmt.Printf("emitted: %v\n", emitted)
+// rayEnvironment is everything the shading recursion needs from the space a
+// ray is currently travelling through: nearest-surface queries, the light
+// table used for next-event estimation, and the miss color. The ordinary
+// scene supplies one fixed environment; PortalScene supplies a new one for
+// every region a hop lands in.
+type rayEnvironment interface {
+	hit(ray *Ray, tMin float64, tMax float64) (*HitRecord, rayEnvironment)
+	lights() Hitable
+	background(ray *Ray) ColorVector
+}
 
-		if depth < t.renderConfig.maxDepth {
-			scatterResult := hr.Material().Scatter(ray, hr)
+// ordinaryEnv is the rayEnvironment of a non-portal Scene.
+type ordinaryEnv struct {
+	tracer *MonteCarloTracer
+	world  Hitable
+}
+
+func (e ordinaryEnv) hit(ray *Ray, tMin float64, tMax float64) (*HitRecord, rayEnvironment) {
+	return e.world.Hit(ray, tMin, tMax), e
+}
+
+func (e ordinaryEnv) lights() Hitable {
+	return e.tracer.lightHitable
+}
+
+func (e ordinaryEnv) background(ray *Ray) ColorVector {
+	return e.tracer.backgroundFunc(ray)
+}
+
+// shadeRayColor holds the production emission, scattering and recursion logic
+// of MonteCarloTracer. Both the ordinary path and the portal path run through
+// it, so weighting, PDF clamping and depth handling can never drift apart.
+func shadeRayColor(env rayEnvironment, ray *Ray, depth int, maxDepth int) ColorVector {
+	hitRecord, hitEnv := env.hit(ray, portalHitTMin, math.MaxFloat64)
+	if hitRecord != nil {
+		emitted := hitRecord.Material().Emitted(ray, hitRecord, hitRecord.UvCoords(), hitRecord.P())
+
+		if depth < maxDepth {
+			scatterResult := hitRecord.Material().Scatter(ray, hitRecord)
 			if scatterResult.IsScattered() {
 				if scatterResult.IsSpecular() {
-
-					subcolor := t.getRayColor(scatterResult.SpecularRay(), world, depth+1)
+					subcolor := shadeRayColor(hitEnv, scatterResult.SpecularRay(), depth+1, maxDepth)
 					specularColor := scatterResult.Attenuation().Mul(subcolor)
-					// fmt.Printf("subcolor: %v  spec color: %v\n", subcolor, specularColor)
 					return specularColor
 				}
-				p0 := NewHitablePdf(t.lightHitable, hr.P())
-				p := NewMixturePdf(p0, scatterResult.Pdf())
-				scattered := NewRay(hr.P(), p.Generate())
+
+				var p Pdf
+				if lightHitable := hitEnv.lights(); lightHitable != nil {
+					p0 := NewHitablePdf(lightHitable, hitRecord.P())
+					p = NewMixturePdf(p0, scatterResult.Pdf())
+				} else {
+					// A region without lights proposes directions from the
+					// material PDF alone: no empty light component, no
+					// mixture wrapping a nil component.
+					p = scatterResult.Pdf()
+				}
+				scattered := NewRay(hitRecord.P(), p.Generate())
 				pdfValue := p.GetValue(scattered.Direction())
 
-				scatteringPdf := hr.Material().ScatteringPdf(ray, hr, scattered)
+				scatteringPdf := hitRecord.Material().ScatteringPdf(ray, hitRecord, scattered)
 				if scatteringPdf < 0.01 {
 					scatteringPdf = 0.01
 				}
@@ -104,10 +161,9 @@ func (t *MonteCarloTracer) getRayColor(ray *Ray, world Hitable, depth int) Color
 					pdfValue = 0.1
 				}
 
-				depthRayColor := t.getRayColor(scattered, world, depth+1)
+				depthRayColor := shadeRayColor(hitEnv, scattered, depth+1, maxDepth)
 				recurseColor := ((scatterResult.Attenuation().Mul(depthRayColor).MulScalar(scatteringPdf)).DivScalar(pdfValue))
 				emittedPlusRecurseColor := emitted.Add(recurseColor)
-				// fmt.Printf("depthRayColor: %v recurseColor: %v  attenuation: %v  scatteringPdf: %v  pdfValue: %v emittedPlusRecurseColor: %v\n", depthRayColor, recurseColor, scatterResult.Attenuation(), scatteringPdf, pdfValue, emittedPlusRecurseColor)
 				return emittedPlusRecurseColor
 			}
 		}
@@ -115,5 +171,5 @@ func (t *MonteCarloTracer) getRayColor(ray *Ray, world Hitable, depth int) Color
 		return emitted
 	}
 
-	return t.backgroundFunc(ray)
+	return hitEnv.background(ray)
 }
