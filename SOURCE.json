@@ -1,0 +1,8 @@
+{
+  "repo": "https://github.com/ReverseZoom2151/rednoise",
+  "commit": "91e64b29053a8bf50ed1f2ed3d2473b7ec3f3002",
+  "license": "MIT, bundled GLM and stb notices retained",
+  "gitlinks": [],
+  "gitmodules": false,
+  "scope": "All src, framework, include, cmake and vendored third-party code retained. Optional tools/app launchers, GPU kernels, tests, assets, screenshots, docs and package wrappers outside the headless CPU library are excluded with original blob IDs."
+}
