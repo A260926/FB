@@ -1,0 +1,11 @@
+{
+  "repo": "https://github.com/mcidclan/cloud-of-voxels",
+  "commit": "c3c1c25d39f5707a413fcf93d96b7f82a16c437a",
+  "excluded": [
+    "blender-script.py",
+    "psp/backthreads.c",
+    "psp/bin/.gitignore",
+    "psp/icon.png"
+  ],
+  "manifest_sha256": "b5530cdf2380ec716da80209e3137529cb857816e61f597a7b07f79fbc9a9979"
+}
