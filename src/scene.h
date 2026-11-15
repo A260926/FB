@@ -8,6 +8,40 @@
 
 #include <vector>
 
+struct CausalScene;
+struct Scene;
+
+// Indirection so the normal renderer build keeps linking even when the
+// causal translation unit is not part of the binary.  src/causal.cpp
+// installs these hooks at static initialization time.
+namespace causal_detail
+{
+	struct Hooks
+	{
+		CausalScene* (*createInvalid)(float lightSpeed);
+		void (*build)(Scene&);
+		void (*destroy)(CausalScene*);
+		Vec3 (*pathTrace)(const Scene&, const Vec3&, const Vec3&, float, int, Random&);
+	};
+
+	inline Hooks*& HookStorage()
+	{
+		static Hooks* hooks = NULL;
+		return hooks;
+	}
+
+	inline void RegisterCausalHooks(const Hooks& hooks)
+	{
+		static Hooks storage = hooks;
+		HookStorage() = &storage;
+	}
+
+	inline const Hooks* GetCausalHooks()
+	{
+		return HookStorage();
+	}
+}
+
 struct Camera
 {
 	Camera()
@@ -185,26 +219,33 @@ struct Scene
 	// contiguous buffer for the data
 	typedef std::vector<Primitive> PrimitiveArray;
 	PrimitiveArray primitives;
-	
+
 	typedef std::vector<Mesh*> MeshArray;
 	MeshArray meshes;
 
 	Sky sky;
-	Camera camera;	
+	Camera camera;
 
 	BVH bvh;
 
-	void Clear()
-	{
-		for (int i=0; i < meshes.size(); ++i)
-			delete meshes[i];
+	Scene() : causalEnabled(false), lightSpeed(0.0f), causal(NULL) {}
 
-		meshes.resize(0);
-		primitives.resize(0);
+	// Turn on finite-light-speed rendering.  c must be a finite positive
+	// number; every world-space vertex velocity has to stay below c/4.
+	// When enabled the scene only accepts triangle meshes with static
+	// invertible instance transforms, two-sided Lambert materials and
+	// constant emissive meshes; spheres, planes, moving transforms,
+	// transmission and environment lighting are rejected.  Build() runs the
+	// checks and keeps the normal renderer path untouched otherwise.
+	void EnableCausal(float c);
+	bool CausalEnabled() const { return causalEnabled; }
 
-		delete bvh.nodes;
-		bvh.nodes = NULL;
-	}
+	bool causalEnabled;
+	float lightSpeed;
+	CausalScene* causal;
+
+	// defined in scene.cpp, where CausalScene is complete
+	void Clear();
 
 	void AddPrimitive(const Primitive& p)
 	{

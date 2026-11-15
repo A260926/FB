@@ -483,7 +483,20 @@ struct CpuRenderer : public Renderer
 
 							sampler.GenerateRay(x, y, origin, dir);
 
-							Vec3 sample = PathTrace(*scene, origin, dir, time, options.maxDepth, rand);
+							Vec3 sample;
+							const causal_detail::Hooks* hooks = causal_detail::GetCausalHooks();
+							if (scene->CausalEnabled() && hooks)
+							{
+								// finite light speed: one observation time in
+								// [0,1], no shutter motion blur
+								const float observeTime = Clamp(camera.shutterStart, 0.0f, 1.0f);
+								sample = hooks->pathTrace(*scene, origin, dir, observeTime,
+								                          options.maxDepth, rand);
+							}
+							else
+							{
+								sample = PathTrace(*scene, origin, dir, time, options.maxDepth, rand);
+							}
 
 							Validate(sample);
 

@@ -9,7 +9,8 @@ struct Mesh
 {
 	~Mesh()
 	{
-		delete[] bvh.nodes; 
+		delete[] bvh.nodes;
+		delete[] causalBVH.nodes;
 	}
 
     void AddMesh(Mesh& m);
@@ -24,8 +25,15 @@ struct Mesh
 
 	void RebuildBVH();
     void RebuildCDF();
-    
+
+	// Causal mode: optional endpoint vertices with the same topology as
+	// positions.  When present the mesh interpolates linearly between the two
+	// over the scene time range [0,1]; an empty array means a static mesh.
+	// causalBVH stores conservative bounds covering the whole motion domain.
+	void RebuildCausalBVH();
+
     std::vector<Vec3> positions;
+    std::vector<Vec3> endPositions;
     std::vector<Vec3> normals;
     std::vector<int> indices;
 
@@ -33,6 +41,7 @@ struct Mesh
     float area;
 
 	BVH bvh;
+	BVH causalBVH;
 };
 
 

@@ -314,7 +314,7 @@ struct VertexKey
 void Mesh::RebuildBVH()
 {
 	const int numTris = indices.size()/3;
-	
+
 	if (numTris)
 	{
 		std::vector<Bounds> triangleBounds(numTris);
@@ -329,12 +329,50 @@ void Mesh::RebuildBVH()
 			triangleBounds[i].AddPoint(b);
 			triangleBounds[i].AddPoint(c);
 		}
-	
+
 		BVHBuilder builder;
 		bvh = builder.Build(&triangleBounds[0], numTris);
 	}
 
     RebuildCDF();
+}
+
+void Mesh::RebuildCausalBVH()
+{
+	const int numTris = indices.size()/3;
+
+	delete[] causalBVH.nodes;
+	causalBVH.nodes = NULL;
+	causalBVH.numNodes = 0;
+
+	if (!numTris)
+		return;
+
+	const bool moving = endPositions.size() == positions.size();
+
+	std::vector<Bounds> triangleBounds(numTris);
+
+	for (int i=0; i < numTris; ++i)
+	{
+		const int i0 = indices[i*3+0];
+		const int i1 = indices[i*3+1];
+		const int i2 = indices[i*3+2];
+
+		triangleBounds[i].AddPoint(positions[i0]);
+		triangleBounds[i].AddPoint(positions[i1]);
+		triangleBounds[i].AddPoint(positions[i2]);
+
+		if (moving)
+		{
+			// conservative sweep box covering the whole [0,1] motion domain
+			triangleBounds[i].AddPoint(endPositions[i0]);
+			triangleBounds[i].AddPoint(endPositions[i1]);
+			triangleBounds[i].AddPoint(endPositions[i2]);
+		}
+	}
+
+	BVHBuilder builder;
+	causalBVH = builder.Build(&triangleBounds[0], numTris);
 }
 
 void Mesh::RebuildCDF()
