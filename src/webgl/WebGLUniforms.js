@@ -8,6 +8,7 @@ import { Texture3D } from '../resources/textures/Texture3D.js';
 
 const internalUniforms = {
 	'u_Model': [1, null],
+	'u_InstanceAnchor': [1, null],
 	'u_Projection': [2, function(cameraData) { this.set(cameraData.projectionMatrix.elements) }],
 	'u_View': [2, function(cameraData) { this.set(cameraData.viewMatrix.elements) }],
 	'u_ProjectionView': [2, function(cameraData) { this.set(cameraData.projectionViewMatrix.elements) }],

@@ -61,7 +61,7 @@ class WebGLPrograms {
 		}
 	}
 
-	generateProps(material, object, lightingState, renderStates) {
+	generateProps(material, object, lightingState, renderStates, instanceBatch) {
 		const state = this._state;
 		const capabilities = this._capabilities;
 
@@ -185,6 +185,10 @@ class WebGLPrograms {
 		props.packDepthToRGBA = material.packToRGBA;
 		props.logarithmicDepthBuffer = !!logarithmicDepthBuffer;
 		props.rendererExtensionFragDepth = capabilities.version >= 2 || !!capabilities.getExtension('EXT_frag_depth');
+
+		// instance batch drawing
+
+		props.useInstanceBatch = capabilities.version >= 2 && instanceBatch === true;
 
 		// morph targets
 
@@ -393,6 +397,10 @@ function createProgram(gl, defines, props, vertex, fragment) {
 		props.flipSided ? '#define FLIP_SIDED' : '',
 		props.logarithmicDepthBuffer ? '#define USE_LOGDEPTHBUF' : '',
 		(props.logarithmicDepthBuffer && props.rendererExtensionFragDepth) ? '#define USE_LOGDEPTHBUF_EXT' : '',
+
+		// instance batch
+
+		props.useInstanceBatch ? '#define USE_INSTANCE_BATCH' : '',
 
 		// morph targets
 

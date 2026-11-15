@@ -9,10 +9,26 @@ attribute vec3 a_Normal;
 
 uniform mat4 u_Projection;
 uniform mat4 u_View;
-uniform mat4 u_Model;
 uniform mat4 u_ProjectionView;
 
 uniform vec3 u_CameraPosition;
+
+#ifdef USE_INSTANCE_BATCH
+	// Per-instance full world matrix, supplied by the renderer's instance buffer.
+	attribute mat4 a_InstanceMatrix;
+	// Converts a world matrix to anchor space when scene.anchorMatrix is used.
+	uniform mat4 u_InstanceAnchor;
+
+	mat4 getModelMatrix() {
+		return u_InstanceAnchor * a_InstanceMatrix;
+	}
+#else
+	uniform mat4 u_Model;
+
+	mat4 getModelMatrix() {
+		return u_Model;
+	}
+#endif
 
 #define EPSILON 1e-6
 

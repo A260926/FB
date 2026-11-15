@@ -129,6 +129,97 @@ function loop(count) {
 requestAnimationFrame(loop);
 ````
 
+## Scene instance batching
+
+`SceneInstanceCollector` automatically merges compatible opaque meshes into
+instanced draw batches while the render queue is collected. Meshes keep their
+own identity, parent hierarchy, geometry and material — no proxy mesh is
+created and no source geometry or material is copied, replaced or mutated.
+
+```javascript
+import { Scene, SceneInstanceCollector } from 't3d';
+
+const scene = new Scene();
+scene.collector = new SceneInstanceCollector();
+```
+
+The call order does not change:
+
+```javascript
+scene.updateMatrix();
+camera.updateMatrix();
+
+scene.updateRenderStates(camera);
+const queue = scene.updateRenderQueue(camera); // batched queue
+renderer.renderScene(scene, camera, screenRenderTarget);
+```
+
+Callers keep using native `BasicMaterial` / `PBRMaterial`; the instance
+materials in `t3d/addons/materials/InstancedMaterial.js` are not required and
+are themselves excluded from batching.
+
+### What is merged
+
+Only ordinary opaque triangle `Mesh` objects with a native `BasicMaterial` or
+`PBRMaterial` are considered. Objects with a `skeleton`, morph targets,
+pre-existing instancing, a custom `onBeforeRender` / `onAfterRender`, a
+`normalMap` or an `a_Tangent` attribute are left on their original path, as are
+transparent entries (which keep their per-object depth ordering).
+
+Two entries are merged only when they share the source `Geometry` instance, the
+source `Material` instance, the group slot (`start` / `count`), `renderLayer`,
+`renderOrder`, `receiveShadow` / `shadowType`, and the sign of the determinant
+of their world matrix. A group needs at least two members. Members are ordered
+by ascending `Mesh.id`.
+
+### The `instanceBatch` descriptor
+
+Each queue entry exposes `renderable.instanceBatch`, which is `null` for
+ordinary entries and otherwise:
+
+```javascript
+{
+  objects,        // member meshes, ordered by ascending id
+  worldMatrices,  // Float32Array, 16 column-major floats per member
+  count,          // number of members
+  frontFaceCW     // true when the captured matrices have a negative determinant
+}
+```
+
+The renderable keeps its original `geometry`, `material` and `group`; its
+`object` is the smallest-id member. World matrices are captured at collection
+time, so collecting another camera does not disturb a previous camera's queue.
+Each collection reflects the current scene state (objects added/removed,
+ancestry, visibility, geometry groups, material transparency), so no collector
+re-installation is required. Reused queue entries have any stale descriptor
+cleared.
+
+### Drawing and resource ownership
+
+`WebGLRenderer` draws a batch from the normal `renderRenderableItem` entry with
+a single `drawElementsInstanced` or `drawArraysInstanced` call (WebGL2 only;
+WebGL1 throws). The native material program gains a separate
+`USE_INSTANCE_BATCH` variant, so one material can alternate between batch and
+ordinary draws without touching the caller's `defines`, `uniforms` or shader
+text. Each batch uses its own vertex array, so leaving it restores ordinary
+attribute divisors and index bindings, and empty batches issue no draw.
+
+Batch GPU resources (instance buffers and vertex arrays) belong to the
+renderer. Two renderers can draw the same batch descriptor without sharing
+buffers, and:
+
+```javascript
+renderer.releaseSceneInstanceResources();
+```
+
+releases only this renderer's batch buffers and bindings. It is safe to call
+repeatedly; the next draw recreates them. Source geometries and materials are
+never released.
+
+See [`examples/headless-scene-batches.mjs`](./examples/headless-scene-batches.mjs)
+for a headless example and [`tests/scene-instance-batches.test.mjs`](./tests/scene-instance-batches.test.mjs)
+for the membership, submission and integration coverage.
+
 ## Extensions
 
 * [t3d-effect-composer](https://github.com/uinosoft/t3d-effect-composer) - Post Effects extension for t3d.js.

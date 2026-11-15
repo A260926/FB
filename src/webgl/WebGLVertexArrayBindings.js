@@ -52,6 +52,61 @@ export class WebGLVertexArrayBindings extends PropertyMap {
 		}
 	}
 
+	/**
+	 * Bind a vertex array object for an instance batch.
+	 *
+	 * A batch gets its own vertex array object so the instance matrix attribute,
+	 * the attribute divisors and the index buffer binding are kept separate from
+	 * the vertex array object of the source geometry. Exiting the batch by binding
+	 * another vertex array (or the default one) restores the ordinary attribute
+	 * divisors and index binding.
+	 * @param {Geometry} geometry - The source geometry.
+	 * @param {WebGLProgram} program - The program used to draw the batch.
+	 * @param {WebGLBuffer} instanceBuffer - The buffer containing the instance matrices.
+	 * @param {object} properties - The renderer-owned batch properties.
+	 */
+	setupInstanceBatch(geometry, program, instanceBuffer, properties) {
+		if (!this._isWebGL2) {
+			throw new Error('WebGLVertexArrayBindings: instance batches require WebGL2.');
+		}
+
+		let vaos = properties.vaos;
+		if (vaos === undefined) {
+			vaos = properties.vaos = {};
+		}
+
+		let vao = vaos[program.id];
+		if (!vao) {
+			vao = vaos[program.id] = { version: -1, object: this._createVAO() };
+		}
+
+		this._bindVAO(vao.object);
+
+		if (vao.version !== geometry.version) {
+			this._setupVertexAttributes(program, geometry);
+			this._setupInstanceAttribute(program, instanceBuffer);
+			vao.version = geometry.version;
+		}
+	}
+
+	/**
+	 * Release the vertex array objects owned by a batch.
+	 * @param {object} properties - The renderer-owned batch properties.
+	 */
+	releaseInstanceProperties(properties) {
+		const vaos = properties.vaos;
+		if (vaos === undefined) return;
+
+		for (const programId in vaos) {
+			const vao = vaos[programId];
+			if (vao && vao.object) {
+				this._disposeVAO(vao.object);
+			}
+		}
+
+		delete properties.vaos;
+	}
+
 	releaseByGeometry(geometry) {
 		const geometryProperties = this.get(geometry);
 
@@ -197,6 +252,26 @@ export class WebGLVertexArrayBindings extends PropertyMap {
 		if (geometry.index) {
 			const indexBufferProperties = buffers.get(geometry.index.buffer);
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBufferProperties.glBuffer);
+		}
+	}
+
+	_setupInstanceAttribute(program, instanceBuffer) {
+		const gl = this._gl;
+		const attributes = program.getAttributes();
+		const instanceAttribute = attributes['a_InstanceMatrix'];
+
+		if (!instanceAttribute) return;
+
+		for (let i = 0, l = instanceAttribute.locationSize; i < l; i++) {
+			const location = instanceAttribute.location + i;
+			gl.enableVertexAttribArray(location);
+			gl.vertexAttribDivisor(location, 1);
+		}
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+
+		for (let i = 0, l = instanceAttribute.locationSize; i < l; i++) {
+			gl.vertexAttribPointer(instanceAttribute.location + i, 4, gl.FLOAT, false, 16 * 4, i * 16);
 		}
 	}
 

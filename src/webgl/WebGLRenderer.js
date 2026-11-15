@@ -9,6 +9,7 @@ import { WebGLBuffers } from './WebGLBuffers.js';
 import { WebGLGeometries } from './WebGLGeometries.js';
 import { WebGLMaterials } from './WebGLMaterials.js';
 import { WebGLVertexArrayBindings } from './WebGLVertexArrayBindings.js';
+import { WebGLInstanceBatches } from './WebGLInstanceBatches.js';
 import { WebGLQuerySets } from './WebGLQuerySets.js';
 import { WebGLLights } from './WebGLLights.js';
 import { Vector4 } from '../math/Vector4.js';
@@ -116,6 +117,7 @@ class WebGLRenderer extends ThinRenderer {
 		this._materials = null;
 		this._state = null;
 		this._vertexArrayBindings = null;
+		this._instanceBatches = null;
 
 		if (context) {
 			this.init(context);
@@ -158,6 +160,7 @@ class WebGLRenderer extends ThinRenderer {
 		const buffers = new WebGLBuffers(prefix, context, capabilities, gpuMemory);
 		const vertexArrayBindings = new WebGLVertexArrayBindings(prefix, context, capabilities, buffers);
 		const geometries = new WebGLGeometries(prefix, context, buffers, vertexArrayBindings);
+		const instanceBatches = new WebGLInstanceBatches(prefix, context, capabilities, vertexArrayBindings, gpuMemory);
 		const lights = new WebGLLights(prefix, capabilities, textures);
 		const programs = new WebGLPrograms(context, state, capabilities, gpuMemory);
 		const materials = new WebGLMaterials(prefix, programs, vertexArrayBindings);
@@ -176,6 +179,7 @@ class WebGLRenderer extends ThinRenderer {
 		this._materials = materials;
 		this._state = state;
 		this._vertexArrayBindings = vertexArrayBindings;
+		this._instanceBatches = instanceBatches;
 		this._querySets = querySets;
 
 		return Promise.resolve(this);
@@ -302,6 +306,8 @@ class WebGLRenderer extends ThinRenderer {
 		const material = getMaterial.call(this, renderable);
 		const geometry = getGeometry.call(this, renderable);
 		const group = renderable.group;
+		const instanceBatch = renderable.instanceBatch || null;
+		const useBatch = instanceBatch !== null;
 		const fog = material.fog ? sceneData.fog : null;
 
 		const lightingGroup = getLightingGroup(renderStates.lighting, material);
@@ -346,6 +352,8 @@ class WebGLRenderer extends ThinRenderer {
 				material.needsUpdate = true;
 			} else if (capabilities.version > 1 && sceneData.disableShadowSampler !== materialProperties.disableShadowSampler) {
 				material.needsUpdate = true;
+			} else if (capabilities.version > 1 && useBatch !== materialProperties.instanceBatch) {
+				material.needsUpdate = true;
 			} else {
 				if (hasLighting !== materialProperties.hasLighting) {
 					material.needsUpdate = true;
@@ -364,11 +372,12 @@ class WebGLRenderer extends ThinRenderer {
 		// Update program if needed.
 
 		if (material.needsUpdate) {
-			this._materials.updateProgram(material, object, lightingState, renderStates, this.shaderCompileOptions);
+			this._materials.updateProgram(material, object, lightingState, renderStates, this.shaderCompileOptions, useBatch);
 
 			materialProperties.fog = fog;
 			materialProperties.envMap = _envData.map;
 			materialProperties.logarithmicDepthBuffer = sceneData.logarithmicDepthBuffer;
+			materialProperties.instanceBatch = useBatch;
 
 			materialProperties.hasLighting = hasLighting;
 			materialProperties.lightingFactors = lightingState.copyTo(materialProperties.lightingFactors);
@@ -396,7 +405,16 @@ class WebGLRenderer extends ThinRenderer {
 			this._updateMorphtargets(object, geometry, program);
 		}
 
-		vertexArrayBindings.setup(object, geometry, program);
+		let batchProperties = null;
+		if (useBatch) {
+			const groupKey = group ? (group.start + ':' + group.count + ':' + group.materialIndex) : '-';
+			const batchKey = geometry.id + '|' + material.id + '|' + groupKey;
+			batchProperties = this._instanceBatches.get(batchKey);
+			this._instanceBatches.update(batchProperties, instanceBatch.worldMatrices);
+			this._instanceBatches.setup(batchProperties, geometry, program);
+		} else {
+			vertexArrayBindings.setup(object, geometry, program);
+		}
 
 		let refreshCamera = false;
 		if (program.cameraId !== cameraData.id || program.cameraVersion !== cameraData.version) {
@@ -448,6 +466,15 @@ class WebGLRenderer extends ThinRenderer {
 
 			// u_Model: always upload this matrix
 			if (internalGroup === 1) {
+				if (useBatch) {
+					// The per-instance world matrix is read from the instance buffer,
+					// only the anchor matrix is shared by the whole batch.
+					if (key === 'u_InstanceAnchor') {
+						uniform.set(helpMatrix4.copy(sceneData.anchorMatrixInverse).elements);
+					}
+					continue;
+				}
+
 				let modelMatrix = object.worldMatrix;
 				if (sceneData.useAnchorMatrix) {
 					modelMatrix = helpMatrix4.copy(modelMatrix).premultiply(sceneData.anchorMatrixInverse);
@@ -488,7 +515,7 @@ class WebGLRenderer extends ThinRenderer {
 			}
 		}
 
-		const frontFaceCW = helpMatrix3.setFromMatrix4(object.worldMatrix).determinant() < 0;
+		const frontFaceCW = useBatch ? instanceBatch.frontFaceCW : helpMatrix3.setFromMatrix4(object.worldMatrix).determinant() < 0;
 		state.setMaterial(material, frontFaceCW);
 
 		const viewport = helpVector4.set(
@@ -503,7 +530,7 @@ class WebGLRenderer extends ThinRenderer {
 
 		state.viewport(viewport.round());
 
-		this._draw(geometry, material, group, renderInfo);
+		this._draw(geometry, material, group, renderInfo, instanceBatch);
 
 		textures.resetTextureUnits();
 
@@ -609,6 +636,21 @@ class WebGLRenderer extends ThinRenderer {
 
 	resetVertexArrayBindings(force) {
 		this._vertexArrayBindings.reset(force);
+	}
+
+	/**
+	 * Release the GPU buffers and vertex bindings owned by this renderer for
+	 * scene instance batches.
+	 *
+	 * Only the renderer's own batch resources are released. Source geometries and
+	 * materials are left untouched. Calling this method more than once is safe,
+	 * and the resources are recreated automatically on the next draw.
+	 */
+	releaseSceneInstanceResources() {
+		if (this._instanceBatches) {
+			this._instanceBatches.release();
+			this._vertexArrayBindings.reset();
+		}
 	}
 
 	resetState() {
@@ -748,16 +790,22 @@ class WebGLRenderer extends ThinRenderer {
 		program.getUniforms().set('morphTargetInfluences', morphInfluences);
 	}
 
-	_draw(geometry, material, group, renderInfo) {
+	_draw(geometry, material, group, renderInfo, instanceBatch) {
 		const gl = this.context;
 		const capabilities = this.capabilities;
 		const buffers = this._buffers;
 
+		const hasBatch = instanceBatch !== null && instanceBatch !== undefined;
+		const batchCount = hasBatch ? instanceBatch.count : 0;
 		const instanceCount = geometry.instanceCount;
 		const useInstancing = instanceCount >= 0;
 		const useGroup = !!group;
 		const useMultiDraw = useGroup && group.multiDrawCount !== undefined;
 		const useIndexBuffer = geometry.index !== null;
+
+		if (hasBatch && capabilities.version < 2) {
+			throw new Error('WebGLRenderer: renderable instance batches require WebGL2.');
+		}
 
 		let drawStart = 0;
 		let drawCount = Infinity;
@@ -777,6 +825,32 @@ class WebGLRenderer extends ThinRenderer {
 			}
 
 			if (drawCount < 0 || drawCount === Infinity) return;
+		}
+
+		if (hasBatch) {
+			// An empty batch never issues a draw call. A non-empty batch is
+			// drawn with exactly one instanced draw call.
+			if (batchCount <= 0 || useMultiDraw || drawCount === Infinity) return;
+
+			if (useIndexBuffer) {
+				const indexBufferProperties = buffers.get(geometry.index.buffer);
+				const bytesPerElement = indexBufferProperties.bytesPerElement;
+				const type = indexBufferProperties.type;
+
+				if (type === gl.UNSIGNED_INT && !capabilities.getExtension('OES_element_index_uint')) {
+					console.warn('WebGLRenderer: draw elements type not support UNSIGNED_INT!');
+				}
+
+				gl.drawElementsInstanced(material.drawMode, drawCount, type, drawStart * bytesPerElement, batchCount);
+			} else {
+				gl.drawArraysInstanced(material.drawMode, drawStart, drawCount, batchCount);
+			}
+
+			if (renderInfo) {
+				renderInfo.update(drawCount, material.drawMode, batchCount);
+			}
+
+			return;
 		}
 
 		if (useIndexBuffer) {

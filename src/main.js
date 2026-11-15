@@ -44,6 +44,8 @@ export { GPUMemoryInfo } from './render/GPUMemoryInfo.js';
 export { RenderInfo } from './render/RenderInfo.js';
 export { RenderQueue } from './render/RenderQueue.js';
 export { RenderQueueLayer } from './render/RenderQueueLayer.js';
+export { RenderCollector } from './render/RenderCollector.js';
+export { SceneInstanceCollector } from './render/SceneInstanceCollector.js';
 export { RenderStates } from './render/RenderStates.js';
 export { SceneData } from './render/SceneData.js';
 export { ThinRenderer } from './render/ThinRenderer.js';

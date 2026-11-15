@@ -1,7 +1,7 @@
 // Use worldPosition from pvm_vert
 
 #ifdef USE_SHADOW
-	vec3 shadowWorldNormal = (transposeMat4(inverseMat4(u_Model)) * vec4(objectNormal, 0.0)).xyz;
+	vec3 shadowWorldNormal = (transposeMat4(inverseMat4(getModelMatrix())) * vec4(objectNormal, 0.0)).xyz;
 	shadowWorldNormal = normalize(shadowWorldNormal);
 	#ifdef FLIP_SIDED
 		shadowWorldNormal = -shadowWorldNormal;

@@ -47,13 +47,13 @@ class WebGLMaterials extends PropertyMap {
 		return materialProperties;
 	}
 
-	updateProgram(material, object, lightingState, renderStates, shaderCompileOptions) {
+	updateProgram(material, object, lightingState, renderStates, shaderCompileOptions, instanceBatch) {
 		const programs = this._programs;
 		const vertexArrayBindings = this._vertexArrayBindings;
 
 		const materialProperties = this.get(material);
 
-		const props = programs.generateProps(material, object, lightingState, renderStates);
+		const props = programs.generateProps(material, object, lightingState, renderStates, instanceBatch);
 		const programCode = programs.generateProgramCode(props, material);
 
 		const programList = materialProperties.programList;
