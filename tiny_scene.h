@@ -85,6 +85,21 @@ THE SOFTWARE.
 // The data structure closely follows the gltf 2.0 format and supports all types
 // of animation in pure CPU code: See Scene::SetPose for details.
 //
+// Deformation (CPU, non-emissive triangle meshes with complete attributes):
+// - Scene::UpdateSceneGraph runs in two phases. Phase 1 concatenates all node
+//   transforms; phase 2 applies, per mesh node, morph targets (Node::weights) and
+//   then four-weight linear skinning (inverse(mesh world) * joint world * IBM).
+//   Because every transform is final before deformation starts, the resulting pose
+//   does not depend on root / child traversal order, and a joint may live under a
+//   different root than the skinned mesh.
+// - Nodes that deform (a skin, or a non-zero morph weight) write to their own per-node
+//   buffers and BLAS, so several nodes can share one source Mesh with different poses.
+//   Rigid nodes keep sharing the mesh's source BLAS; the source Mesh data (vertices,
+//   triangles, poses, joints, weights) is never modified.
+// - Scene::GetNodeTriangle( nodeId, triangleId ) returns the node's current local
+//   shading triangle after an update; Scene::NodeIdFromInstance( inst ) maps a TLAS
+//   hit instance back to the node that produced it. Both are intended for shading.
+//
 // The triangle data is optimized for ray tracing rather than rasterization:
 // - Triangle data is split in 'vertex only' and 'everything else' (see FatTri);
 // - A mesh can have multiple materials. However: when loaded from a gltf file,
@@ -383,6 +398,7 @@ public:
 class Skin
 {
 public:
+	Skin() = default; // also allow procedurally constructed skins
 	Skin( const ::tinygltf::Skin& gltfSkin, const ::tinygltf::Model& gltfModel, const int nodeBase );
 	void ConvertFromGLTFSkin( const ::tinygltf::Skin& gltfSkin, const ::tinygltf::Model& gltfModel, const int nodeBase );
 	::std::string name;
@@ -439,6 +455,9 @@ public:
 	void CreateOpacityMicroMaps( const int N = 32 );
 	void SetPose( const ::std::vector<float>& weights );
 	void SetPose( const Skin* skin );
+	// Return the acceleration structure currently in use for this mesh's source geometry,
+	// or nullptr if it has not been built yet. Shared by all rigid instances.
+	tinybvh::BVHBase* ActiveBLAS() const;
 	// data members
 	::std::string name = "unnamed";		// name for the mesh
 	::std::string fileName = "";		// file from which the mesh was loaded
@@ -474,6 +493,12 @@ public:
 	// methods
 	void ConvertFromGLTFNode( const ::tinygltf::Node& gltfNode, const int nodeBase, const int meshBase, const int skinBase );
 	void Update( const ts_mat4& T );	// recursively update the transform of this node and its children
+	void UpdateTransforms( const ts_mat4& T ); // phase 1: only concatenate transforms, no deformation
+	void UpdateMesh( int blasSlot );			// phase 2: deform this node's mesh (if needed), then its instance
+	bool NeedsDeformation() const;		// true if this node has a skin or a non-zero morph weight
+	bool HasDeformedGeometry() const { return hasDeformedGeometry; }
+	tinybvh::BVHBase* DeformBLAS() const { return (tinybvh::BVHBase*)deformBVH; }
+	const FatTri* NodeTriangle( const int triangleId ) const; // current local shading triangle, or 0
 	void UpdateTransformFromTRS();		// process T, R, S data to localTransform
 	void PrepareLights();				// create light trianslges from detected emissive triangles
 	void UpdateLights();				// fix light triangles when the transform changes
@@ -496,6 +521,17 @@ public:
 	::std::vector<int> childIdx;		// child nodes of this node
 protected:
 	int instanceID = -1;				// for mesh nodes: location in the instance array. For internal use only.
+	int deformSlot = -1;				// BLAS slot in Scene::blasList when this node deforms (internal).
+	friend class Scene;
+	// Per-node deformed geometry. Only allocated for nodes that actually deform; a node
+	// with a skin or a non-zero morph applies its own copy, so that several nodes can
+	// share the same source mesh without overwriting each other's pose.
+	::std::vector<ts_vec4> deformVerts;	// current local-space vertices (3 per triangle)
+	::std::vector<FatTri> deformTris;	// current local-space shading triangles
+	::std::vector<ts_vec3> deformNormals;	// current local-space vertex normals
+	tinybvh::BVH* deformBVH = 0;		// BLAS over the deformed geometry
+	bool hasDeformedGeometry = false;	// true once a pose has been applied at least once
+	bool deformActive = false;			// true if this node used deformation in the last update
 };
 
 //  +-----------------------------------------------------------------------------+
@@ -829,13 +865,23 @@ public:
 	static int AddSpotLight( const ts_vec3 pos, const ts_vec3 direction, const float inner, const float outer, const ts_vec3 radiance );
 	static int AddDirectionalLight( const ts_vec3 direction, const ts_vec3 radiance );
 	static void UpdateSceneGraph( const float deltaTime );
+	// Build / rebuild the (rigid) source BLAS for a mesh, if it is out of date.
+	static void EnsureMeshBLAS( Mesh* mesh );
+	// Access the current geometry of a node after UpdateSceneGraph. GetNodeTriangle returns the
+	// local-space shading triangle of 'nodeId', or nullptr if either argument is out of range (or
+	// the node has no mesh). The pointer is valid until the next UpdateSceneGraph call.
+	static const FatTri* GetNodeTriangle( const int nodeId, const int triangleId );
+	// Convert a TLAS hit instance index back to the stable node ID that produced it, or -1.
+	static int NodeIdFromInstance( const unsigned instanceId );
 	static void SetBVHDefault( const uint32_t t ) { defaultBVHType = t; }
 	static void CacheBVHs( bool v = true ) { bvhCaching = v; }
 	// data members
 	static inline ::std::vector<int> rootNodes;				// root node indices of loaded (or instanced) objects
 	static inline ::std::vector<Node*> nodePool;			// all scene nodes
 	static inline ::std::vector<Mesh*> meshPool;			// all scene meshes
+	static inline ::std::vector<int> instNodeId;			// node ID for each entry in instPool
 	static inline ::std::vector<tinybvh::BLASInstance> instPool; // all scene instances
+	static inline ::std::vector<tinybvh::BVHBase*> blasList;	// BLAS per mesh, plus per-node deformed BLASses
 	static inline ::std::vector<Skin*> skins;				// all scene skins
 	static inline ::std::vector<Animation*> animations;		// all scene animations
 	static inline ::std::vector<Material*> materials;		// all scene materials
@@ -1834,6 +1880,38 @@ void Mesh::SetPose( const Skin* skin )
 	}
 }
 
+//  +-----------------------------------------------------------------------------+
+//  |  Mesh::ActiveBLAS                                                           |
+//  |  Return the BLAS that is currently used for the source geometry of this     |
+//  |  mesh. For rigid nodes this is shared by all instances of the mesh.        |
+//  +-----------------------------------------------------------------------------+
+tinybvh::BVHBase* Mesh::ActiveBLAS() const
+{
+	switch (blas.bvhType)
+	{
+	case BVH_DYNAMIC: return blas.dynamicBVH;
+	case BVH_RIGID: return (tinybvh::BVHBase*)blas.rigidBVH;
+	case GPU_DYNAMIC: return blas.dynamicGPU;
+	case GPU_RIGID: return blas.rigidGPU;
+	case GPU_STATIC: return blas.staticGPU;
+	default: return 0;
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Deformation helpers                                                        |
+//  |  Combine the node's morph weights and skin into local-space geometry. The   |
+//  |  source data (Mesh::poses / Mesh::original / joints / weights) is only ever |
+//  |  read; every deforming node writes to its own output buffers.               |
+//  +-----------------------------------------------------------------------------+
+static inline void ts_normal_to_mat( ts_mat4& T, const ts_mat4& M )
+{
+	// T = transpose( inverse( M ) ); the transform for normals under M.
+	ts_invert( T = M );
+	ts_mat4 t = T;
+	for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) T.cell[i * 4 + j] = t.cell[j * 4 + i];
+}
+
 // helper function
 static FatTri TransformedFatTri( FatTri* tri, ts_mat4 T )
 {
@@ -1962,187 +2040,209 @@ void Node::UpdateTransformFromTRS()
 
 //  +-----------------------------------------------------------------------------+
 //  |  Node::Update                                                               |
-//  |  Calculates the combined transform for this node and recurses into the      |
-//  |  child nodes. If a change is detected, the light triangles are updated      |
-//  |  as well.                                                             LH2'25|
+//  |  Legacy single-pass update: concatenates transforms then deforms geometry.  |
+//  |  Scene::UpdateSceneGraph uses the dedicated two-phase path instead, so that |
+//  |  all combined transforms are final before any node deforms.                 |
 //  +-----------------------------------------------------------------------------+
 void Node::Update( const ts_mat4& T )
 {
-	if (transformed /* true if node was affected by animation channel */)
+	UpdateTransforms( T );
+	int slot = meshID;
+	if (NeedsDeformation())
 	{
-		UpdateTransformFromTRS();
+		if (deformSlot < 0) { deformSlot = (int)Scene::blasList.size(); Scene::blasList.push_back( nullptr ); }
+		slot = deformSlot;
 	}
+	UpdateMesh( slot );
+	transformed = false;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Node::UpdateTransforms                                                     |
+//  |  Phase 1 of the scene-graph update: process animated local transforms and   |
+//  |  concatenate them into combinedTransform. No mesh is touched, so the result |
+//  |  does not depend on root / child traversal order.                     LH2'25|
+//  +-----------------------------------------------------------------------------+
+void Node::UpdateTransforms( const ts_mat4& T )
+{
+	if (transformed /* true if node was affected by animation channel */) UpdateTransformFromTRS();
 	combinedTransform = T * localTransform;
-	// update the combined transforms of the children
 	for (int s = (int)childIdx.size(), i = 0; i < s; i++)
 	{
 		Node* child = Scene::nodePool[childIdx[i]];
-		child->Update( combinedTransform );
+		if (child) child->UpdateTransforms( combinedTransform );
 	}
-	// update animations
-	if (meshID > -1)
+	transformed = false;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Node::NeedsDeformation                                                     |
+//  |  A node deforms if it has a skin (joint animation) or a non-zero morph      |
+//  |  weight. Nodes that meet neither condition keep sharing the source BLAS.    |
+//  +-----------------------------------------------------------------------------+
+bool Node::NeedsDeformation() const
+{
+	if (meshID < 0 || meshID >= (int)Scene::meshPool.size()) return false;
+	Mesh* mesh = Scene::meshPool[meshID];
+	// A skin with at least one joint always deforms (the joint pose may change).
+	if (skinID > -1 && skinID < (int)Scene::skins.size() && Scene::skins[skinID]->joints.size() > 0) return true;
+	// Otherwise a non-zero morph weight deforms, provided the mesh has targets.
+	const int morphCount = (int)mesh->poses.size() - 1;
+	if (morphCount <= 0) return false;
+	for (int i = 0; i < morphCount && i < (int)weights.size(); i++) if (weights[i] != 0.0f) return true;
+	return false;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Node::NodeTriangle                                                         |
+//  |  Return the current local-space shading triangle for this node, or nullptr. |
+//  +-----------------------------------------------------------------------------+
+const FatTri* Node::NodeTriangle( const int triangleId ) const
+{
+	if (meshID < 0 || meshID >= (int)Scene::meshPool.size()) return nullptr;
+	Mesh* mesh = Scene::meshPool[meshID];
+	const int triCount = (int)mesh->triangles.size();
+	if (triangleId < 0 || triangleId >= triCount) return nullptr;
+	return deformActive ? &deformTris[triangleId] : &mesh->triangles[triangleId];
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Node::UpdateMesh                                                           |
+//  |  Phase 2: apply morph + skin to this node's own output buffers, rebuild its |
+//  |  BLAS when needed and update the instance. blasSlot identifies this node's  |
+//  |  BLAS in Scene::blasList (resolved after all transforms are known).         |
+//  +-----------------------------------------------------------------------------+
+void Node::UpdateMesh( int blasSlot )
+{
+	if (meshID < 0 || meshID >= (int)Scene::meshPool.size()) return;
+	Mesh* mesh = Scene::meshPool[meshID];
+	const bool deformed = NeedsDeformation();
+	if (deformed)
 	{
-		Mesh* mesh = Scene::meshPool[meshID];
-		if (morphed /* true if bone weights were affected by animation channel */)
+		// Each deforming node owns a copy of the geometry; the source mesh is never
+		// modified, so several nodes can share one mesh with different poses.
+		const int vertCount = (int)mesh->vertices.size();
+		const int triCount = (int)mesh->triangles.size();
+		if (!hasDeformedGeometry)
 		{
-			mesh->SetPose( weights );
-			morphed = false;
+			deformVerts.resize( vertCount );
+			deformNormals.resize( vertCount );
+			deformTris = mesh->triangles; // keeps material, uvs, tangents, ...
+			hasDeformedGeometry = true;
 		}
-		if (skinID > -1)
+		// Skin matrices: inverse( mesh world ) * joint world * inverseBindMatrix.
+		// Kept local to this node: several nodes may bind different skins (or one skin)
+		// to the same source mesh without overwriting each other's pose.
+		const bool skinned = skinID > -1 && skinID < (int)Scene::skins.size()
+			&& Scene::skins[skinID]->joints.size() > 0 && mesh->joints.size() == (size_t)vertCount;
+		ts_mat4 invTransform = combinedTransform;
+		ts_invert( invTransform );
+		Skin* skin = skinned ? Scene::skins[skinID] : 0;
+		::std::vector<ts_mat4> jointMat;
+		if (skinned)
 		{
-			ts_mat4 invTransform = combinedTransform;
-			ts_invert( invTransform );
-			Skin* skin = Scene::skins[skinID];
-			for (int s = (int)skin->joints.size(), j = 0; j < s; j++)
+			const ts_mat4 identity;
+			const int jointCount = (int)skin->joints.size();
+			jointMat.resize( jointCount, identity );
+			for (int j = 0; j < jointCount; j++)
 			{
-				Node* jointNode = Scene::nodePool[skin->joints[j]];
-				skin->jointMat[j] = invTransform * jointNode->combinedTransform * skin->inverseBindMatrices[j];
+				const int jointId = skin->joints[j];
+				Node* jointNode = (jointId >= 0 && jointId < (int)Scene::nodePool.size()) ? Scene::nodePool[jointId] : nullptr;
+				if (!jointNode)
+				{
+					jointMat[j] = identity;
+					continue;
+				}
+				const ts_mat4& ibm = j < (int)skin->inverseBindMatrices.size() ? skin->inverseBindMatrices[j] : identity;
+				jointMat[j] = invTransform * jointNode->combinedTransform * ibm;
 			}
-			mesh->SetPose( skin ); // TODO: I hope this doesn't overwrite SetPose(weights) ?
 		}
-		// update blas
-		if (mesh->geomChanged)
+		const int poseCount = (int)mesh->poses.size();
+		const int morphCount = poseCount > 0 ? poseCount - 1 : 0;
+		// Recompute every vertex from the source binding data; nothing accumulates.
+		for (int i = 0; i < vertCount; i++)
 		{
-			switch (mesh->blas.bvhType)
+			// 1. morph: base position/normal plus weighted per-target deltas.
+			ts_vec4 p = poseCount > 0 ? ts_vec4( mesh->poses[0].positions[i], 1 ) : mesh->vertices[i];
+			ts_vec3 n;
+			if (poseCount > 0) n = mesh->poses[0].normals[i];
+			else
 			{
-			case BVH_DYNAMIC:
-				if (mesh->blas.dynamicBVH == 0)
-				{
-					mesh->blas.dynamicBVH = new tinybvh::BVH();
-					if (mesh->omaps) mesh->blas.dynamicBVH->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
-				}
-				mesh->blas.dynamicBVH->Build( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
-				break;
-			case BVH_RIGID:
-				if (mesh->blas.rigidBVH == 0)
-				{
-				#if defined BVH_USEAVX2
-					mesh->blas.rigidBVH = new tinybvh::BVH8_CPU();
-				#else
-					mesh->blas.rigidBVH = new tinybvh::BVH4_CPU();
-				#endif
-					if (mesh->omaps) mesh->blas.rigidBVH->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
-				}
-				mesh->blas.rigidBVH->BuildHQ( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
-				break;
-			case GPU_DYNAMIC:
-				if (mesh->blas.dynamicGPU == 0)
-				{
-					mesh->blas.dynamicGPU = new tinybvh::BVH_GPU();
-					if (mesh->omaps) mesh->blas.dynamicGPU->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
-				}
-				mesh->blas.dynamicGPU->Build( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
-				break;
-			case GPU_RIGID:
+				const FatTri& src = mesh->triangles[i / 3];
+				n = (i % 3 == 0) ? src.vN0 : ((i % 3 == 1) ? src.vN1 : src.vN2);
+			}
+			for (int w = 0; w < morphCount && w < (int)weights.size(); w++)
 			{
-				if (mesh->blas.rigidGPU == 0)
-				{
-					mesh->blas.rigidGPU = new tinybvh::BVH_GPU();
-					if (mesh->omaps) mesh->blas.rigidGPU->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
-				}
-				// attempt to load cached BVH
-				bool loaded = false;
-				char t[265] = "./cache/", b[265] = "./cache/";
-				if (Scene::bvhCaching && mesh->triangles.size() > 50'000)
-				{
-					printf( "attempt to load cached bvh... " );
-					strcat( t, mesh->fileName.c_str() );
-					strcat( b, mesh->fileName.c_str() );
-					strcat( t, ".tri" );
-					strcat( b, ".bvh" );
-					tinybvh::BVH& bvh = mesh->blas.rigidGPU->bvh;
-					if (bvh.Load( b, (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() ))
-					{
-						printf( "done. Finalizing... " );
-						mesh->blas.rigidGPU->ConvertFrom( bvh, true );
-						loaded = true;
-						printf( "done.\n" );
-					}
-				}
-				if (!loaded)
-				{
-					mesh->blas.rigidGPU->BuildHQ( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
-					if (Scene::bvhCaching && mesh->triangles.size() > 50'000)
-					{
-						printf( "not found: building... " );
-						FILE* f = fopen( t, "wb" );
-						unsigned count = (unsigned)mesh->triangles.size();
-						fwrite( &count, 1, 4, f );
-						fwrite( mesh->vertices.data(), 16 * 3, count, f );
-						fclose( f );
-						mesh->blas.rigidGPU->bvh.Save( b );
-						printf( "done.\n" );
-					}
-				}
+				const float wt = weights[w];
+				if (wt == 0.0f) continue;
+				p += wt * ts_vec4( mesh->poses[w + 1].positions[i], 0 );
+				n += wt * mesh->poses[w + 1].normals[i];
 			}
-			break;
-			case GPU_STATIC:
+			// 2. skin: four-weight linear blend; normals use the same weighted matrix.
+			if (skinned && i < (int)mesh->weights.size())
 			{
-				if (mesh->blas.staticGPU == 0)
-				{
-					mesh->blas.staticGPU = new tinybvh::BVH8_CWBVH();
-					if (mesh->omaps) mesh->blas.staticGPU->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
-				}
-				// attempt to load cached BVH
-				bool loaded = false;
-				char t[265] = "./cache/", b[265] = "./cache/";
-				if (Scene::bvhCaching)
-				{
-					printf( "attempt to load cached bvh... " );
-					strcat( t, mesh->fileName.c_str() );
-					strcat( b, mesh->fileName.c_str() );
-					strcat( t, ".tri" );
-					strcat( b, ".bvh" );
-					tinybvh::BVH& bvh = mesh->blas.staticGPU->bvh8.bvh;
-					if (bvh.Load( b, (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() ))
-					{
-						printf( "done. Finalizing... " );
-						loaded = true;
-						bvh.SplitLeafs( 3 );
-						mesh->blas.staticGPU->bvh8.ConvertFrom( bvh, true );
-						mesh->blas.staticGPU->ConvertFrom( mesh->blas.staticGPU->bvh8, true );
-						printf( "done.\n" );
-					}
-				}
-				if (!loaded)
-				{
-					mesh->blas.staticGPU->BuildHQ( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
-					if (Scene::bvhCaching)
-					{
-						printf( "not found: building... " );
-						FILE* f = fopen( t, "wb" );
-						unsigned count = (unsigned)mesh->triangles.size();
-						fwrite( &count, 1, 4, f );
-						fwrite( mesh->vertices.data(), 16 * 3, count, f );
-						fclose( f );
-						mesh->blas.staticGPU->bvh8.bvh.Save( b );
-						printf( "done.\n" );
-					}
-				}
+				const ts_uint4 j4 = mesh->joints[i];
+				const ts_vec4 w4 = mesh->weights[i];
+				ts_mat4 skinMatrix = w4.x * jointMat[j4.x];
+				skinMatrix += w4.y * jointMat[j4.y];
+				skinMatrix += w4.z * jointMat[j4.z];
+				skinMatrix += w4.w * jointMat[j4.w];
+				p = ts_vec4( ts_transform_point( ts_vec3( p ), skinMatrix ), 1 );
+				// Normals use the inverse transpose of the same weighted matrix.
+				ts_mat4 normalMatrix;
+				ts_normal_to_mat( normalMatrix, skinMatrix );
+				n = ts_transform_vector( n, normalMatrix );
 			}
-			break;
-			default:
-				// .. invalid bvh type.
-				break;
-			}
-			mesh->geomChanged = false;
+			deformVerts[i] = p;
+			deformNormals[i] = ts_normalize( n );
 		}
-		// update instance
-		if (instanceID == -1)
+		// Shading triangles: final positions, interpolated normals, winding normal.
+		for (int i = 0; i < triCount; i++)
 		{
-			instanceID = (int)Scene::instPool.size();
-			Scene::instPool.push_back( tinybvh::BLASInstance( meshID ) );
-			transformed = true;
+			FatTri& tri = deformTris[i];
+			tri.vertex0 = ts_vec3( deformVerts[i * 3 + 0] );
+			tri.vertex1 = ts_vec3( deformVerts[i * 3 + 1] );
+			tri.vertex2 = ts_vec3( deformVerts[i * 3 + 2] );
+			tri.vN0 = deformNormals[i * 3 + 0];
+			tri.vN1 = deformNormals[i * 3 + 1];
+			tri.vN2 = deformNormals[i * 3 + 2];
+			const ts_vec3 N = ts_normalize( ts_cross( tri.vertex1 - tri.vertex0, tri.vertex2 - tri.vertex0 ) );
+			tri.Nx = N.x, tri.Ny = N.y, tri.Nz = N.z;
 		}
-		tinybvh::BLASInstance& instance = Scene::instPool[instanceID];
-		bool transformChanged = false;
-		for (int i = 0; i < 16; i++) if (instance.transform[i] != combinedTransform[i]) transformChanged = true;
-		if (transformChanged)
-		{
-			instance.transform = *(tinybvh::bvhmat4*)&combinedTransform;
-			instance.Update( mesh->blas.dynamicBVH /* type doesn't matter */ );
-		}
+		// Rebuild the per-node BLAS from this node's own vertices.
+		deformActive = true;
+		if (deformBVH == 0) deformBVH = new tinybvh::BVH();
+		deformBVH->Build( (tinybvh::bvhvec4*)deformVerts.data(), (unsigned)triCount );
+		if (blasSlot < 0) blasSlot = (int)Scene::blasList.size();
+		if (blasSlot >= (int)Scene::blasList.size()) Scene::blasList.resize( blasSlot + 1, nullptr );
+		Scene::blasList[blasSlot] = deformBVH;
 	}
+	else
+	{
+		// Rigid node: share the mesh's source BLAS.
+		deformActive = false;
+		Scene::EnsureMeshBLAS( mesh );
+		if (blasSlot < 0) blasSlot = (int)Scene::blasList.size();
+		if (blasSlot >= (int)Scene::blasList.size()) Scene::blasList.resize( blasSlot + 1, nullptr );
+		Scene::blasList[blasSlot] = mesh->ActiveBLAS();
+	}
+	// Update the instance. Its transform is always the mesh node's combined transform,
+	// regardless of whether the geometry was deformed locally.
+	if (instanceID < 0 || instanceID >= (int)Scene::instPool.size() || (int)Scene::instNodeId.size() != (int)Scene::instPool.size())
+	{
+		instanceID = -1;
+	}
+	if (instanceID == -1)
+	{
+		instanceID = (int)Scene::instPool.size();
+		Scene::instPool.push_back( tinybvh::BLASInstance( blasSlot ) );
+		Scene::instNodeId.push_back( ID );
+		transformed = true;
+	}
+	tinybvh::BLASInstance& instance = Scene::instPool[instanceID];
+	instance.blasIdx = blasSlot;
+	instance.transform = *(tinybvh::bvhmat4*)&combinedTransform;
+	instance.Update( Scene::blasList[blasSlot] );
 	transformed = false;
 }
 
@@ -3666,41 +3766,245 @@ int Scene::AddDirectionalLight( const ts_vec3 direction, const ts_vec3 radiance 
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  Scene::EnsureMeshBLAS                                                      |
+//  |  Build (or rebuild) the source BLAS for a mesh if it is out of date. This is |
+//  |  independent of image and is shared by all rigid instances of the mesh.     |
+//  +-----------------------------------------------------------------------------+
+void Scene::EnsureMeshBLAS( Mesh* mesh )
+{
+	if (!mesh || !mesh->geomChanged) return;
+	switch (mesh->blas.bvhType)
+	{
+	case BVH_DYNAMIC:
+		if (mesh->blas.dynamicBVH == 0)
+		{
+			mesh->blas.dynamicBVH = new tinybvh::BVH();
+			if (mesh->omaps) mesh->blas.dynamicBVH->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
+		}
+		mesh->blas.dynamicBVH->Build( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
+		break;
+	case BVH_RIGID:
+		if (mesh->blas.rigidBVH == 0)
+		{
+		#if defined BVH_USEAVX2
+			mesh->blas.rigidBVH = new tinybvh::BVH8_CPU();
+		#else
+			mesh->blas.rigidBVH = new tinybvh::BVH4_CPU();
+		#endif
+			if (mesh->omaps) mesh->blas.rigidBVH->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
+		}
+		mesh->blas.rigidBVH->BuildHQ( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
+		break;
+	case GPU_DYNAMIC:
+		if (mesh->blas.dynamicGPU == 0)
+		{
+			mesh->blas.dynamicGPU = new tinybvh::BVH_GPU();
+			if (mesh->omaps) mesh->blas.dynamicGPU->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
+		}
+		mesh->blas.dynamicGPU->Build( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
+		break;
+	case GPU_RIGID:
+	{
+		if (mesh->blas.rigidGPU == 0)
+		{
+			mesh->blas.rigidGPU = new tinybvh::BVH_GPU();
+			if (mesh->omaps) mesh->blas.rigidGPU->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
+		}
+		// attempt to load cached BVH
+		bool loaded = false;
+		char t[265] = "./cache/", b[265] = "./cache/";
+		if (Scene::bvhCaching && mesh->triangles.size() > 50'000)
+		{
+			printf( "attempt to load cached bvh... " );
+			strcat( t, mesh->fileName.c_str() );
+			strcat( b, mesh->fileName.c_str() );
+			strcat( t, ".tri" );
+			strcat( b, ".bvh" );
+			tinybvh::BVH& bvh = mesh->blas.rigidGPU->bvh;
+			if (bvh.Load( b, (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() ))
+			{
+				printf( "done. Finalizing... " );
+				mesh->blas.rigidGPU->ConvertFrom( bvh, true );
+				loaded = true;
+				printf( "done.\n" );
+			}
+		}
+		if (!loaded)
+		{
+			mesh->blas.rigidGPU->BuildHQ( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
+			if (Scene::bvhCaching && mesh->triangles.size() > 50'000)
+			{
+				printf( "not found: building... " );
+				FILE* f = fopen( t, "wb" );
+				unsigned count = (unsigned)mesh->triangles.size();
+				fwrite( &count, 1, 4, f );
+				fwrite( mesh->vertices.data(), 16 * 3, count, f );
+				fclose( f );
+				mesh->blas.rigidGPU->bvh.Save( b );
+				printf( "done.\n" );
+			}
+		}
+	}
+	break;
+	case GPU_STATIC:
+	{
+		if (mesh->blas.staticGPU == 0)
+		{
+			mesh->blas.staticGPU = new tinybvh::BVH8_CWBVH();
+			if (mesh->omaps) mesh->blas.staticGPU->SetOpacityMicroMaps( mesh->omaps, mesh->omapN );
+		}
+		// attempt to load cached BVH
+		bool loaded = false;
+		char t[265] = "./cache/", b[265] = "./cache/";
+		if (Scene::bvhCaching)
+		{
+			printf( "attempt to load cached bvh... " );
+			strcat( t, mesh->fileName.c_str() );
+			strcat( b, mesh->fileName.c_str() );
+			strcat( t, ".tri" );
+			strcat( b, ".bvh" );
+			tinybvh::BVH& bvh = mesh->blas.staticGPU->bvh8.bvh;
+			if (bvh.Load( b, (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() ))
+			{
+				printf( "done. Finalizing... " );
+				loaded = true;
+				bvh.SplitLeafs( 3 );
+				mesh->blas.staticGPU->bvh8.ConvertFrom( bvh, true );
+				mesh->blas.staticGPU->ConvertFrom( mesh->blas.staticGPU->bvh8, true );
+				printf( "done.\n" );
+			}
+		}
+		if (!loaded)
+		{
+			mesh->blas.staticGPU->BuildHQ( (tinybvh::bvhvec4*)mesh->vertices.data(), (unsigned)mesh->triangles.size() );
+			if (Scene::bvhCaching)
+			{
+				printf( "not found: building... " );
+				FILE* f = fopen( t, "wb" );
+				unsigned count = (unsigned)mesh->triangles.size();
+				fwrite( &count, 1, 4, f );
+				fwrite( mesh->vertices.data(), 16 * 3, count, f );
+				fclose( f );
+				mesh->blas.staticGPU->bvh8.bvh.Save( b );
+				printf( "done.\n" );
+			}
+		}
+	}
+	break;
+	default:
+		// .. invalid bvh type.
+		break;
+	}
+	mesh->geomChanged = false;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Scene::GetNodeTriangle                                                     |
+//  |  Current local-space shading triangle of a node, valid until the next       |
+//  |  UpdateSceneGraph. Returns nullptr for unknown node / triangle ids.         |
+//  +-----------------------------------------------------------------------------+
+const FatTri* Scene::GetNodeTriangle( const int nodeId, const int triangleId )
+{
+	if (nodeId < 0 || nodeId >= (int)nodePool.size() || !nodePool[nodeId]) return nullptr;
+	return nodePool[nodeId]->NodeTriangle( triangleId );
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  Scene::NodeIdFromInstance                                                  |
+//  |  Map a TLAS hit instance index back to the producing node's stable ID.      |
+//  +-----------------------------------------------------------------------------+
+int Scene::NodeIdFromInstance( const unsigned instanceId )
+{
+	if (instanceId >= instNodeId.size()) return -1;
+	return instNodeId[instanceId];
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  Scene::UpdateSceneGraph (formerly in RenderSystem)                         |
-//  |  Walk the scene graph, updating all node matrices.                    LH2'25|
+//  |  Walk the scene graph, updating all node matrices and deformed geometry.    |
+//  |  Phase 1 finalizes every combined transform; only then does phase 2 apply   |
+//  |  morph + skin, so the result does not depend on root or child order.  LH2'25|
 //  +-----------------------------------------------------------------------------+
 void Scene::UpdateSceneGraph( const float deltaTime )
 {
 	// play animations
-	for (int s = AnimationCount(), i = 0; i < s; i++)
-		UpdateAnimation( i, deltaTime );
-	// update poses, concatenate matrices, rebuild BVHs
+	for (int s = AnimationCount(), i = 0; i < s; i++) UpdateAnimation( i, deltaTime );
+	// phase 1: finalize all combined transforms (no deformation yet)
 	for (int nodeIdx : rootNodes)
 	{
 		Node* node = nodePool[nodeIdx];
-		ts_mat4 T;
-		node->Update( T /* start with an identity matrix */ );
+		if (!node) continue;
+		ts_mat4 T; // identity
+		node->UpdateTransforms( T );
+	}
+	// Reserve room in the BLAS list: one shared slot per mesh, then one slot per
+	// deforming node. Deforming nodes get their own BLAS so that instances of the
+	// same source mesh do not overwrite each other's pose.
+	const int meshSlots = (int)meshPool.size();
+	blasList.resize( meshSlots );
+	for (int i = 0; i < meshSlots; i++) blasList[i] = meshPool[i] ? meshPool[i]->ActiveBLAS() : 0;
+	// Assign deformed BLAS slots up front (stable for the duration of this call).
+	int nextSlot = meshSlots;
+	for (int s = (int)nodePool.size(), i = 0; i < s; i++)
+	{
+		Node* node = nodePool[i];
+		if (!node || node->meshID < 0) continue;
+		if (node->NeedsDeformation()) node->deformSlot = nextSlot++;
+		else node->deformSlot = -1;
+	}
+	blasList.resize( nextSlot );
+	// phase 2: deform meshes, then (re)build shared / per-node BLASses
+	for (int nodeIdx : rootNodes)
+	{
+		Node* node = nodePool[nodeIdx];
+		if (!node) continue;
+		// Iterative pre-order walk; joint nodes may live under any root, but phase 1
+		// already finalized all combined transforms.
+		::std::vector<int> stack;
+		stack.push_back( nodeIdx );
+		while (!stack.empty())
+		{
+			Node* n = nodePool[stack.back()];
+			stack.pop_back();
+			if (!n) continue;
+			if (n->meshID > -1)
+			{
+				const int slot = n->deformSlot >= 0 ? n->deformSlot : n->meshID;
+				n->UpdateMesh( slot );
+			}
+			for (int c : n->childIdx) if (nodePool[c]) stack.push_back( c );
+		}
 	}
 	// update tlas
-	static tinybvh::BVHBase** bvhList = 0;
-	static uint32_t bvhListSize = 0;
-	if (bvhListSize != meshPool.size())
+	if (instPool.empty()) return;
+	// Instances from earlier frames may still reference slots beyond the current
+	// range (e.g. a node that stopped deforming); keep the list large enough.
+	for (size_t i = 0; i < instPool.size(); i++)
 	{
-		delete bvhList;
-		bvhList = new tinybvh::BVHBase * [meshPool.size()];
-		for (int i = 0; i < meshPool.size(); i++) if (meshPool[i])
-			bvhList[i] = meshPool[i]->blas.dynamicBVH;
-		bvhListSize = (uint32_t)meshPool.size();
+		const size_t slot = (size_t)instPool[i].blasIdx;
+		if (slot >= blasList.size()) blasList.resize( slot + 1, nullptr );
+		if (!blasList[slot])
+		{
+			// Fall back to the node's own / source BLAS so the TLAS never sees a null.
+			const int nodeId = (int)i < (int)instNodeId.size() ? instNodeId[i] : -1;
+			Node* node = (nodeId >= 0 && nodeId < (int)nodePool.size()) ? nodePool[nodeId] : nullptr;
+			if (node && node->meshID >= 0 && node->meshID < (int)meshPool.size() && meshPool[node->meshID])
+			{
+				const bool deformed = node->NeedsDeformation() && node->HasDeformedGeometry();
+				blasList[slot] = deformed ? node->DeformBLAS() : meshPool[node->meshID]->ActiveBLAS();
+			}
+		}
 	}
+	const uint32_t bvhListSize = (uint32_t)blasList.size();
 	if (defaultBVHType == GPU_DYNAMIC || defaultBVHType == GPU_RIGID || defaultBVHType == GPU_STATIC)
 	{
 		if (!gpuTlas) gpuTlas = new tinybvh::BVH_GPU();
-		gpuTlas->Build( instPool.data(), (uint32_t)instPool.size(), bvhList, bvhListSize );
+		gpuTlas->Build( instPool.data(), (uint32_t)instPool.size(), blasList.data(), bvhListSize );
 	}
 	else
 	{
 		if (!tlas) tlas = new tinybvh::BVH();
-		tlas->Build( instPool.data(), (uint32_t)instPool.size(), bvhList, bvhListSize );
+		tlas->Build( instPool.data(), (uint32_t)instPool.size(), blasList.data(), bvhListSize );
 	}
 }
 

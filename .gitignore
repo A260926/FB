@@ -422,3 +422,6 @@ FodyWeavers.xsd
 
 # Mac Finder fluff
 .DS_Store
+# Task build output
+.task-build/
+tiny_scene_deform_render.ppm

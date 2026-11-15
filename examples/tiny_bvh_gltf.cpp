@@ -90,9 +90,17 @@ void GetShadingData( const Ray& ray, bvhvec3& albedo, float& alpha, bvhvec3& N, 
 {
 	const uint32_t primIdx = ray.hit.prim;
 	const uint32_t instIdx = ray.hit.inst;
+	// Resolve the TLAS hit back to the producing node, then read that node's current
+	// local-space triangle. This also covers deformed (morph / skin) instances, whose
+	// geometry no longer lives in meshPool[meshID]->triangles: basing the read on
+	// instance.blasIdx would mistake a deformation slot for a mesh id.
+	albedo = 0, alpha = 0, N = iN = bvhvec3( 0, 0, 1 );
+	const int nodeIdx = Scene::NodeIdFromInstance( instIdx );
+	const FatTri* trianglePtr = Scene::GetNodeTriangle( nodeIdx, (int)primIdx );
+	if (!trianglePtr) return;
+	const FatTri& triangle = *trianglePtr;
+	if (triangle.material >= Scene::materials.size()) return;
 	const BLASInstance& instance = scene.instPool[instIdx];
-	const uint32_t meshIdx = instance.blasIdx;
-	const FatTri& triangle = scene.meshPool[meshIdx]->triangles[primIdx];
 	const uint32_t matIdx = triangle.material;
 	const Material* material = Scene::materials[matIdx];
 	// albedo at hit point - ignoring detail textures and MIP-maps for now.
