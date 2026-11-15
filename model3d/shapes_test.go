@@ -1,0 +1,617 @@
+package model3d
+
+import (
+	"math"
+	"math/rand"
+	"sort"
+	"testing"
+)
+
+type solidSDF interface {
+	Solid
+	SDF(Coord3D) float64
+}
+
+type pointNormalSDF interface {
+	PointSDF
+	NormalSDF(Coord3D) (Coord3D, float64)
+}
+
+type solidColliderSDF interface {
+	Collider
+	SDF(Coord3D) float64
+	Contains(c Coord3D) bool
+}
+
+func TestSphereBounds(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidBounds(t, &Sphere{
+			Center: NewCoord3DRandNorm(),
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestCylinderBounds(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidBounds(t, &Cylinder{
+			P1:     NewCoord3DRandNorm(),
+			P2:     NewCoord3DRandNorm(),
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestCapsuleBounds(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidBounds(t, &Capsule{
+			P1:     NewCoord3DRandNorm(),
+			P2:     NewCoord3DRandNorm(),
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestConeBounds(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidBounds(t, &Cone{
+			Tip:    NewCoord3DRandNorm(),
+			Base:   NewCoord3DRandNorm(),
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestConeSliceBounds(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidBounds(t, &ConeSlice{
+			P1: NewCoord3DRandNorm(),
+			P2: NewCoord3DRandNorm(),
+			R1: math.Abs(rand.NormFloat64()),
+			R2: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestTorusBounds(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidBounds(t, &Torus{
+			Axis:        NewCoord3DRandNorm(),
+			Center:      NewCoord3DRandNorm(),
+			OuterRadius: math.Abs(rand.NormFloat64()),
+			InnerRadius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func testSolidBounds(t *testing.T, solid Solid) {
+	min := solid.Min()
+	max := solid.Max()
+
+	const epsilon = 1e-4
+	for i := 0; i < 10000; i++ {
+		var face, axis1, axis2 Coord3D
+		faceAxis := rand.Intn(3)
+		if rand.Intn(2) == 0 {
+			var arr [3]float64
+			arr[faceAxis] = min.Array()[faceAxis] - epsilon
+			face = NewCoord3DArray(arr)
+		} else {
+			var arr [3]float64
+			arr[faceAxis] = max.Array()[faceAxis] + epsilon
+			face = NewCoord3DArray(arr)
+		}
+		diff := max.Sub(min).Array()
+		var axis1Arr, axis2Arr [3]float64
+		axis1Arr[(faceAxis+1)%3] = diff[(faceAxis+1)%3]
+		axis2Arr[(faceAxis+2)%3] = diff[(faceAxis+2)%3]
+		axis1 = NewCoord3DArray(axis1Arr)
+		axis2 = NewCoord3DArray(axis2Arr)
+
+		coord := face.Add(axis1.Scale(rand.Float64())).Add(axis2.Scale(rand.Float64()))
+		if solid.Contains(coord) {
+			t.Error("solid contains point:", coord, "out of bounds:", min, max)
+			break
+		}
+	}
+}
+
+func TestConeContainment(t *testing.T) {
+	cone := &Cone{Tip: Z(2), Base: Z(0), Radius: 0.5}
+	testPoints := map[Coord3D]bool{
+		Z(1):             true,
+		Z(1.999):         true,
+		XZ(0.1, 1.999):   false,
+		XZ(0.2, 1):       true,
+		XZ(0.25, 1):      true,
+		XZ(0.49, 0.0001): true,
+	}
+	for c, expected := range testPoints {
+		actual := cone.Contains(c)
+		if actual != expected {
+			t.Errorf("coord %v: expected %v but got %v", c, expected, actual)
+		}
+	}
+}
+
+func TestConeSliceContainment(t *testing.T) {
+	coneSlice := &ConeSlice{P1: Z(0), P2: Z(2), R1: 0.5, R2: 0.1}
+	testPoints := map[Coord3D]bool{
+		Z(1):             true,
+		Z(1.999):         true,
+		XZ(0.12, 1.999):  false,
+		XZ(0.1, 1.999):   true,
+		XZ(0.2, 1):       true,
+		XZ(0.25, 1):      true,
+		XZ(0.49, 0.0001): true,
+	}
+	for c, expected := range testPoints {
+		actual := coneSlice.Contains(c)
+		if actual != expected {
+			t.Errorf("coord %v: expected %v but got %v", c, expected, actual)
+		}
+	}
+}
+
+func TestRectSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		c1 := NewCoord3DRandNorm()
+		c2 := NewCoord3DRandNorm()
+		r := &Rect{
+			MinVal: c1.Min(c2),
+			MaxVal: c1.Max(c2).Add(XYZ(0.1, 0.1, 0.1)),
+		}
+		testMeshSDF(t, r, NewMeshRect(r.MinVal, r.MaxVal), 1e-5)
+		testPointSDFConsistency(t, r)
+		testNormalSDFConsistency(
+			t,
+			r,
+			false,
+			r.MinVal.Mid(r.MaxVal),
+			r.MinVal.Mid(r.MaxVal).Add(X(0.01)),
+			r.MinVal.Mid(r.MaxVal).Add(X(-0.01)),
+			r.MinVal.Mid(r.MaxVal).Add(Y(0.01)),
+			r.MinVal.Mid(r.MaxVal).Add(Y(-0.01)),
+			r.MinVal.Mid(r.MaxVal).Add(Z(0.01)),
+			r.MinVal.Mid(r.MaxVal).Add(Z(-0.01)),
+			r.MinVal.Mid(r.MaxVal).Add(X(0.2)),
+			r.MinVal.Mid(r.MaxVal).Add(X(-0.2)),
+			r.MinVal.Mid(r.MaxVal).Add(Y(0.2)),
+			r.MinVal.Mid(r.MaxVal).Add(Y(-0.2)),
+			r.MinVal.Mid(r.MaxVal).Add(Z(0.2)),
+			r.MinVal.Mid(r.MaxVal).Add(Z(-0.2)),
+		)
+	}
+}
+
+func TestSphereSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		sphere := &Sphere{
+			Center: NewCoord3DRandNorm(),
+			Radius: math.Abs(rand.NormFloat64()) + 0.1,
+		}
+		testSolidSDF(t, sphere)
+		testPointSDFConsistency(t, sphere)
+		testNormalSDFConsistency(t, sphere, true)
+	}
+}
+
+func TestCylinderSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		p1 := NewCoord3DRandUnit()
+		p2 := NewCoord3DRandUnit()
+		cyl := &Cylinder{
+			P1:     p1,
+			P2:     p2,
+			Radius: math.Abs(rand.NormFloat64()) + 0.1,
+		}
+		epsilon := 0.04
+		numStops := int(math.Ceil(2 * math.Pi * cyl.Radius / epsilon))
+		mesh := NewMeshCylinder(cyl.P1, cyl.P2, cyl.Radius, numStops)
+		testMeshSDF(t, cyl, mesh, epsilon)
+		testPointSDFConsistency(t, cyl)
+
+		b1, b2 := cyl.P2.Sub(cyl.P1).OrthoBasis()
+		testNormalSDFConsistency(
+			t,
+			cyl,
+			false,
+			cyl.P1.Mid(cyl.P2),
+			cyl.P1.Mid(cyl.P2).Add(b1),
+			cyl.P1.Mid(cyl.P2).Add(b2),
+			cyl.P1.Add(cyl.P2.Sub(cyl.P1).Scale(-1)),
+			cyl.P1.Add(cyl.P2.Sub(cyl.P1).Scale(-1)).Add(b1.Scale(cyl.Radius/2)),
+			cyl.P2.Add(cyl.P1.Sub(cyl.P2).Scale(-1)),
+			cyl.P2.Add(cyl.P1.Sub(cyl.P2).Scale(-1)).Add(b1.Scale(cyl.Radius/2)),
+		)
+	}
+}
+
+func TestCapsuleSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		p1 := NewCoord3DRandUnit()
+		p2 := NewCoord3DRandUnit()
+		c := &Capsule{
+			P1:     p1,
+			P2:     p2,
+			Radius: math.Abs(rand.NormFloat64()) + 0.1,
+		}
+		epsilon := 0.2 * c.Radius
+		mesh := MarchingCubesSearch(c, epsilon/3, 8)
+		testMeshSDF(t, c, mesh, epsilon)
+		testPointSDFConsistency(t, c)
+
+		b1, b2 := c.P2.Sub(c.P1).OrthoBasis()
+		testNormalSDFConsistency(
+			t,
+			c,
+			true,
+			c.P1.Mid(c.P2),
+			c.P1.Mid(c.P2).Add(b1),
+			c.P1.Mid(c.P2).Add(b2),
+			c.P1.Add(c.P2.Sub(c.P1).Scale(-1)),
+			c.P1.Add(c.P2.Sub(c.P1).Scale(-1)).Add(b1.Scale(c.Radius/2)),
+			c.P2.Add(c.P1.Sub(c.P2).Scale(-1)),
+			c.P2.Add(c.P1.Sub(c.P2).Scale(-1)).Add(b1.Scale(c.Radius/2)),
+		)
+	}
+}
+
+func TestConeSDF(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	for i := 0; i < 10; i++ {
+		p1 := NewCoord3DRandUnit(rng)
+		p2 := NewCoord3DRandUnit(rng)
+		if p1.Dist(p2) < 0.1 {
+			i--
+			continue
+		}
+		cone := &Cone{
+			Base:   p1,
+			Tip:    p2,
+			Radius: math.Abs(rng.NormFloat64()) + 0.1,
+		}
+		epsilon := 0.04
+		numStops := int(math.Ceil(2 * math.Pi * cone.Radius / epsilon))
+		mesh := NewMeshCone(cone.Tip, cone.Base, cone.Radius, numStops)
+		testMeshSDF(t, cone, mesh, epsilon)
+		testPointSDFConsistency(t, cone, cone.Base.Add(cone.Base.Sub(cone.Tip)))
+
+		b1, b2 := cone.Tip.Sub(cone.Base).OrthoBasis()
+		testNormalSDFConsistency(
+			t,
+			cone,
+			false,
+			cone.Tip.Mid(cone.Base).Add(b1.Scale(cone.Radius*0.51)),
+			cone.Tip.Mid(cone.Base).Add(b2.Scale(cone.Radius*0.51)),
+			cone.Tip.Mid(cone.Base).Add(b1.Scale(cone.Radius*0.49)),
+			cone.Tip.Mid(cone.Base).Add(b2.Scale(cone.Radius*0.49)),
+			cone.Tip.Mid(cone.Base).Add(b1.Scale(cone.Radius*0.2)),
+			cone.Tip.Mid(cone.Base).Add(b2.Scale(cone.Radius*0.2)),
+			cone.Base.Add(cone.Base.Sub(cone.Tip)),
+		)
+	}
+}
+
+func TestConeSliceSDF(t *testing.T) {
+	rng := rand.New(rand.NewSource(0))
+	for i := 0; i < 10; i++ {
+		p1 := NewCoord3DRandUnit(rng)
+		p2 := NewCoord3DRandUnit(rng)
+		if p1.Dist(p2) < 0.1 {
+			i--
+			continue
+		}
+		cone := &ConeSlice{
+			P1: p1,
+			P2: p2,
+			R1: math.Abs(rng.NormFloat64()) + 0.1,
+			R2: math.Abs(rng.NormFloat64()) + 0.01,
+		}
+		epsilon := 0.04
+		numStops := int(math.Ceil(2 * math.Pi * math.Max(cone.R1, cone.R2) / epsilon))
+		mesh := NewMeshConeSlice(cone.P1, cone.P2, cone.R1, cone.R2, numStops)
+		testMeshSDF(t, cone, mesh, epsilon)
+		testPointSDFConsistency(
+			t,
+			cone,
+			cone.P1.Add(cone.P1.Sub(cone.P2)),
+			cone.P2.Add(cone.P2.Sub(cone.P1)),
+		)
+
+		b1, b2 := cone.P2.Sub(cone.P1).OrthoBasis()
+		midR := (cone.R1 + cone.R2) / 2
+		midPoint := cone.P2.Mid(cone.P1)
+		testNormalSDFConsistency(
+			t,
+			cone,
+			false,
+			midPoint.Add(b1.Scale(midR*0.51)),
+			midPoint.Add(b2.Scale(midR*0.51)),
+			midPoint.Add(b1.Scale(midR*0.49)),
+			midPoint.Add(b2.Scale(midR*0.49)),
+			midPoint.Add(b1.Scale(midR*0.2)),
+			midPoint.Add(b2.Scale(midR*0.2)),
+			cone.P1.Add(cone.P1.Sub(cone.P2)),
+			cone.P2.Add(cone.P2.Sub(cone.P1)),
+		)
+	}
+}
+
+func TestTorusSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		torus := randomTorus()
+		epsilon := 0.04
+		innerStops := int(math.Ceil(2 * math.Pi * torus.InnerRadius / epsilon))
+		outerStops := int(math.Ceil(2 * math.Pi * (torus.OuterRadius + torus.InnerRadius) / epsilon))
+		mesh := NewMeshTorus(torus.Center, torus.Axis, torus.InnerRadius, torus.OuterRadius,
+			innerStops, outerStops)
+		testMeshSDF(t, torus, mesh, epsilon)
+		x, y := torus.Axis.OrthoBasis()
+		outerPoint := torus.Center.Add(
+			x.Scale(math.Cos(2)).Add(y.Scale(math.Sin(2))).Scale(torus.OuterRadius),
+		)
+		checkPoints := []Coord3D{torus.Center, outerPoint, torus.Center.Add(XYZ(1e-16, -1e-16, 0))}
+		testPointSDFConsistency(t, torus, checkPoints...)
+		testNormalSDFConsistency(t, torus, true, checkPoints...)
+	}
+}
+
+func testMeshSDF(t *testing.T, s SDF, m *Mesh, epsilon float64) {
+	meshSDF := MeshToSDF(m)
+	for i := 0; i < 1000; i++ {
+		scale := s.Min().Sub(s.Max()).Scale(0.5)
+		center := s.Min().Mid(s.Max())
+		c := NewCoord3DRandNorm().Mul(scale).Add(center)
+
+		sdf1 := meshSDF.SDF(c)
+		sdf2 := s.SDF(c)
+		if math.Abs(sdf1-sdf2) > epsilon {
+			t.Errorf("mismatched SDF: expected %f but got %f (solid %v)", sdf1, sdf2,
+				s)
+		}
+	}
+}
+
+func testSolidSDF(t *testing.T, s solidSDF) {
+	delta := s.Max().Sub(s.Min()).Norm() / 100.0
+	mesh := MarchingCubesSearch(s, delta, 4)
+	meshSDF := MeshToSDF(mesh)
+
+	for i := 0; i < 1000; i++ {
+		scale := s.Min().Sub(s.Max()).Scale(0.5)
+		center := s.Min().Mid(s.Max())
+		c := NewCoord3DRandNorm().Mul(scale).Add(center)
+
+		sdf1 := meshSDF.SDF(c)
+		sdf2 := s.SDF(c)
+		if math.Abs(sdf1-sdf2) > delta*3 {
+			t.Errorf("mismatched SDF: expected %f but got %f (solid %v)", sdf1, sdf2,
+				s)
+		}
+	}
+}
+
+func testPointSDFConsistency(t *testing.T, p PointSDF, checkPoints ...Coord3D) {
+	rad := p.Min().Dist(p.Max())
+	min := p.Min().AddScalar(-rad)
+	max := p.Min().AddScalar(rad)
+	checkPoint := func(c Coord3D) {
+		point, sdf := p.PointSDF(c)
+		if math.Abs(math.Abs(sdf)-point.Dist(c)) > 1e-5 {
+			t.Errorf("mismatched SDF and point distance: %v (sdf=%f) (dist=%f)",
+				c, sdf, point.Dist(c))
+		}
+		if math.Abs(p.SDF(point)) > 1e-5 {
+			t.Errorf("nearest point %v should have 0 SDF, but got %f", point, p.SDF(point))
+		}
+	}
+	for _, c := range checkPoints {
+		checkPoint(c)
+	}
+	for i := 0; i < 100; i++ {
+		checkPoint(NewCoord3DRandBounds(min, max))
+	}
+}
+
+func testNormalSDFConsistency(t *testing.T, p pointNormalSDF, checkRandom bool, checkPoints ...Coord3D) {
+	rad := p.Min().Dist(p.Max())
+	min := p.Min().AddScalar(-rad)
+	max := p.Min().AddScalar(rad)
+	checkPoint := func(c Coord3D) {
+		point, sdf1 := p.PointSDF(c)
+		normal, sdf2 := p.NormalSDF(c)
+		if math.Abs(sdf1-sdf2) > 1e-5 {
+			t.Errorf("inconsistent SDF values: %f and %f", sdf1, sdf2)
+		}
+		delta := normal.Scale(rad * 1e-5)
+		outside := p.SDF(point.Add(delta))
+		inside := p.SDF(point.Sub(delta))
+		if outside > 0 || inside < 0 {
+			t.Errorf("unexpected SDFs when moving by normal/-normal: %f, %f", outside, inside)
+		}
+	}
+	for _, c := range checkPoints {
+		checkPoint(c)
+	}
+	if checkRandom {
+		for i := 0; i < 1000; i++ {
+			checkPoint(NewCoord3DRandBounds(min, max))
+		}
+	}
+}
+
+func TestRectCollider(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		c1 := NewCoord3DRandNorm()
+		c2 := NewCoord3DRandNorm()
+		testSolidColliderSDF(t, &Rect{
+			MinVal: c1.Min(c2),
+			MaxVal: c1.Max(c2),
+		})
+	}
+}
+
+func TestSphereCollider(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidColliderSDF(t, &Sphere{
+			Center: NewCoord3DRandNorm(),
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestCylinderColliderSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidColliderSDF(t, &Cylinder{
+			P1:     Coord3D{rand.NormFloat64(), rand.NormFloat64(), rand.NormFloat64()},
+			P2:     Coord3D{rand.NormFloat64(), rand.NormFloat64(), rand.NormFloat64()},
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestCapsuleColliderSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidColliderSDF(t, &Capsule{
+			P1:     Coord3D{rand.NormFloat64(), rand.NormFloat64(), rand.NormFloat64()},
+			P2:     Coord3D{rand.NormFloat64(), rand.NormFloat64(), rand.NormFloat64()},
+			Radius: math.Abs(rand.NormFloat64()),
+		})
+	}
+}
+
+func TestConeColliderSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		c := &Cone{
+			Tip:    Coord3D{rand.NormFloat64(), rand.NormFloat64(), rand.NormFloat64()},
+			Base:   Coord3D{rand.NormFloat64(), rand.NormFloat64(), rand.NormFloat64()},
+			Radius: math.Abs(rand.NormFloat64()),
+		}
+		testSolidColliderSDF(t, c)
+
+		b1, b2 := c.Base.Sub(c.Tip).OrthoBasis()
+		testRays := []*Ray{}
+
+		// Shoot a ray towards the center of the cone.
+		p := c.Tip.Mid(c.Base)
+		rayDir := b1.Add(b2).Normalize()
+		testRays = append(testRays, &Ray{
+			Origin:    p.Add(rayDir.Scale(c.Radius)),
+			Direction: rayDir.Scale(-1),
+		})
+
+		// Shoot a ray into the bottom of the cone.
+		testRays = append(testRays, &Ray{
+			Origin:    c.Base.Add(c.Base.Sub(c.Tip)),
+			Direction: c.Tip.Sub(c.Base),
+		})
+
+		for _, ray := range testRays {
+			rc, ok := c.FirstRayCollision(ray)
+			if !ok {
+				t.Error("back-facing ray should collide")
+				continue
+			}
+			collPoint := ray.Origin.Add(ray.Direction.Scale(rc.Scale))
+			normal, _ := c.NormalSDF(collPoint)
+			if math.Abs(normal.Dot(rc.Normal)) < 0.999 {
+				t.Errorf("expected normal %v but got %v", rc.Normal, normal)
+			}
+		}
+	}
+}
+
+func TestTorusColliderSDF(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		testSolidColliderSDF(t, randomTorus())
+	}
+}
+
+func testSolidColliderSDF(t *testing.T, sc solidColliderSDF) {
+	for i := 0; i < 1000; i++ {
+		ray := &Ray{
+			Origin:    NewCoord3DRandNorm(),
+			Direction: NewCoord3DRandNorm(),
+		}
+		testSolidColliderSDFRay(t, sc, ray)
+	}
+
+	for i := 0; i < 10000; i++ {
+		c := NewCoord3DRandNorm()
+		r := math.Abs(rand.NormFloat64())
+		sdf := sc.SDF(c)
+		if math.Abs(sdf) < 1e-8 {
+			continue
+		}
+		collides := sc.SphereCollision(c, r)
+		if collides != (math.Abs(sdf) < r) {
+			t.Errorf("collides(%f)=%v but sdf=%f", r, collides, sdf)
+		}
+	}
+}
+
+func testSolidColliderSDFRay(t *testing.T, sc solidColliderSDF, ray *Ray) {
+	ground := &SolidCollider{
+		Solid:               sc,
+		Epsilon:             0.005,
+		BisectCount:         64,
+		NormalSamples:       16,
+		NormalBisectEpsilon: 1e-5,
+	}
+
+	var actualCollisions []RayCollision
+	n := sc.RayCollisions(ray, func(rc RayCollision) {
+		actualCollisions = append(actualCollisions, rc)
+		p := ray.Origin.Add(ray.Direction.Scale(rc.Scale))
+		if math.Abs(sc.SDF(p)) > 1e-8 {
+			t.Error("ray collision not on boundary")
+		}
+	})
+	if n != len(actualCollisions) {
+		t.Errorf("reported %d collisions but returned %d", len(actualCollisions), n)
+	}
+	if n1 := sc.RayCollisions(ray, nil); n1 != n {
+		t.Errorf("reported %d collisions with no callback and %d otherwise", n1, n)
+	}
+
+	sort.Slice(actualCollisions, func(i, j int) bool {
+		return actualCollisions[i].Scale < actualCollisions[j].Scale
+	})
+	first, ok := sc.FirstRayCollision(ray)
+	if ok != (len(actualCollisions) > 0) {
+		t.Error("ray collision count mismatches FirstRayCollision")
+	}
+	if ok {
+		expFirst := actualCollisions[0]
+		if math.Abs(first.Scale-expFirst.Scale) > 1e-8 ||
+			first.Normal.Dot(expFirst.Normal) < 1-1e-8 {
+			t.Errorf("unexpected first collision: expected %v but got %v", expFirst, first)
+		}
+	}
+
+	// Make sure the collider isn't under-reporting
+	// collisions.
+	ground.RayCollisions(ray, func(rc RayCollision) {
+		for _, ac := range actualCollisions {
+			if math.Abs(ac.Scale-rc.Scale) < 1e-8 {
+				return
+			}
+		}
+		t.Error("unreported ray collision detected", rc, actualCollisions)
+	})
+}
+
+func randomTorus() *Torus {
+	outer := math.Abs(rand.NormFloat64()) + 0.1
+	inner := math.Abs(rand.NormFloat64()) + 0.1
+	if inner > outer {
+		outer, inner = inner, outer
+	}
+	return &Torus{
+		Axis:        NewCoord3DRandNorm(),
+		Center:      NewCoord3DRandNorm(),
+		OuterRadius: outer,
+		InnerRadius: inner,
+	}
+}

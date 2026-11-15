@@ -1,0 +1,12 @@
+# github.com/pkg/errors v0.9.1 => ./compat/pkgerrors
+## explicit; go 1.18
+github.com/pkg/errors
+# github.com/unixpickle/essentials v1.3.0 => ./compat/essentials
+## explicit; go 1.18
+github.com/unixpickle/essentials
+# github.com/unixpickle/splaytree v1.2.0 => ./compat/splaytree
+## explicit; go 1.18
+github.com/unixpickle/splaytree
+# github.com/pkg/errors => ./compat/pkgerrors
+# github.com/unixpickle/essentials => ./compat/essentials
+# github.com/unixpickle/splaytree => ./compat/splaytree
