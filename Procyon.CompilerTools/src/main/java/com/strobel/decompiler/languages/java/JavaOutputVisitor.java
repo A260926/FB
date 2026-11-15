@@ -61,6 +61,7 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
 
     private TypeDefinition currentType;
     private LastWritten lastWritten;
+    private String lastDelimiterToken;
 
     public JavaOutputVisitor(final ITextOutput output, final DecompilerSettings settings) {
         this.output = output;
@@ -298,6 +299,7 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
             }
             else if (tokenRole.isDelimiter()) {
                 formatter.writeDelimiter(token);
+                lastDelimiterToken = token;
                 lastWritten = "(".equals(token) ? LastWritten.LeftParenthesis : LastWritten.Delimiter;
                 return;
             }
@@ -576,6 +578,66 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
                 space();
             }
         }
+    }
+
+    /**
+     * Writes the type-use annotations attached to a type node for one nested-class segment.
+     * Unlike declaration annotations these are emitted inline (never on their own line) and use
+     * the dedicated {@link Roles#TYPE_ANNOTATION} role, so declaration annotations are excluded.
+     *
+     * @return {@code true} if at least one annotation was written.
+     */
+    boolean writeTypeUseAnnotations(final AstNode node, final int segment) {
+        boolean wrote = false;
+
+        for (final Annotation annotation : node.getChildrenByRole(Roles.TYPE_ANNOTATION)) {
+            final Integer annotationSegment = annotation.getUserData(Keys.TYPE_ANNOTATION_SEGMENT);
+            final int leafRelative = annotationSegment != null ? annotationSegment : 0;
+
+            //
+            // For non-qualified nodes the leaf-relative marker maps directly to segment 0; a
+            // qualified SimpleType is rendered through writeQualifiedMemberType instead.
+            //
+            if (leafRelative != segment) {
+                continue;
+            }
+
+            //
+            // Attach directly to a member-access '.', generic-open '<' or array '[' without a
+            // space; after any other token (including '>' / ']' / an identifier) separate it.
+            //
+            if (!wrote && !isAttachableDelimiter(lastWritten, lastDelimiterToken)) {
+                space();
+            }
+            else if (wrote) {
+                space();
+            }
+
+            annotation.acceptVisitor(this, null);
+            wrote = true;
+        }
+
+        if (wrote) {
+            space();
+        }
+
+        return wrote;
+    }
+
+    private static boolean isAttachableDelimiter(final LastWritten state, final String delimiter) {
+        if (state == LastWritten.LeftParenthesis || state == LastWritten.Whitespace) {
+            return true;
+        }
+
+        if (state != LastWritten.Delimiter || delimiter == null) {
+            return false;
+        }
+
+        return ".".equals(delimiter) || "<".equals(delimiter) || "[".equals(delimiter);
+    }
+
+    boolean writeTypeUseAnnotations(final AstNode node) {
+        return writeTypeUseAnnotations(node, 0);
     }
 
     void writePrivateImplementationType(final AstType privateImplementationType) {
@@ -1464,16 +1526,86 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
 
         final TypeReference typeReference = node.getUserData(Keys.TYPE_REFERENCE);
 
-        if (typeReference != null && typeReference.isPrimitive()) {
-            writeKeyword(typeReference.getSimpleName());
+        //
+        // Use the dotted renderer whenever the final (post-qualification) identifier contains a
+        // member/package dot, or when an annotation explicitly targets an inner segment.  This
+        // keeps leaf-relative segment markers correct after name qualification.
+        //
+        if (hasInnerSegmentAnnotations(node) || node.getIdentifier().indexOf('.') >= 0) {
+            writeQualifiedMemberType(node, typeReference);
         }
         else {
-            writeIdentifier(node.getIdentifierToken(), node.getIdentifier());
+            writeTypeUseAnnotations(node, 0);
+
+            if (typeReference != null && typeReference.isPrimitive()) {
+                writeKeyword(typeReference.getSimpleName());
+            }
+            else {
+                writeIdentifier(node.getIdentifierToken(), node.getIdentifier());
+            }
         }
 
         writeTypeArguments(node.getTypeArguments());
         endNode(node);
         return null;
+    }
+
+    private boolean hasInnerSegmentAnnotations(final SimpleType node) {
+        for (final Annotation annotation : node.getChildrenByRole(Roles.TYPE_ANNOTATION)) {
+            final Integer segment = annotation.getUserData(Keys.TYPE_ANNOTATION_SEGMENT);
+
+            if (segment != null && segment > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Renders a dotted type (for example {@code java.util.Map.Entry}) while emitting type-use
+     * annotations on the correct dotted segment.  Each annotation stores a leaf-relative segment
+     * marker (0 = leaf); it is resolved against the final, possibly name-qualified identifier.
+     */
+    private void writeQualifiedMemberType(final SimpleType node, final TypeReference typeReference) {
+        final String identifier = node.getIdentifier();
+        final String[] parts = identifier.split("\\.", -1);
+
+        for (int partIndex = 0; partIndex < parts.length; partIndex++) {
+            if (partIndex > 0) {
+                writeToken(Roles.DOT);
+            }
+
+            writeTypeUseAnnotationsForPart(node, parts.length, partIndex);
+            // writeIdentifier(String) applies the standard spacing rule after a preceding token.
+            writeIdentifier(parts[partIndex]);
+        }
+    }
+
+    /** Emits the type-use annotations whose resolved part index equals {@code partIndex}. */
+    private void writeTypeUseAnnotationsForPart(final SimpleType node, final int partCount, final int partIndex) {
+        for (final Annotation annotation : node.getChildrenByRole(Roles.TYPE_ANNOTATION)) {
+            final Integer marker = annotation.getUserData(Keys.TYPE_ANNOTATION_SEGMENT);
+            final int leafRelative = marker != null ? marker : 0;
+            final int resolved = TypeAnnotationPathResolver.resolvePartIndex(node, leafRelative);
+
+            if (resolved != partIndex) {
+                continue;
+            }
+
+            // Attach to a separating dot directly; otherwise keep a space from the prior token.
+            final boolean afterDot =
+                lastWritten == LastWritten.Delimiter && ".".equals(lastDelimiterToken);
+
+            if (!afterDot &&
+                lastWritten != LastWritten.Whitespace &&
+                lastWritten != LastWritten.LeftParenthesis) {
+                space();
+            }
+
+            annotation.acceptVisitor(this, null);
+            space();
+        }
     }
 
     @Override
@@ -1614,6 +1746,7 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
     public Void visitTypeParameterDeclaration(final TypeParameterDeclaration node, final Void ignored) {
         startNode(node);
         writeAnnotations(node.getAnnotations(), false);
+        writeTypeUseAnnotations(node);
         node.getNameToken().acceptVisitor(this, ignored);
 
         final AstType extendsBound = node.getExtendsBound();
@@ -1975,6 +2108,12 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
         int i = 0;
 
         for (final ArraySpecifier specifier : arraySpecifiers) {
+            //
+            // Annotations on an array dimension precede that dimension's bracket (or the
+            // ellipsis when this is the last dimension of a varargs parameter).
+            //
+            writeTypeUseAnnotations(specifier);
+
             if (isVarArgs && ++i == arraySpecifierCount) {
                 writeToken(Roles.VARARGS);
             }
@@ -1990,6 +2129,9 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
     @Override
     public Void visitIntersectionType(final IntersectionType node, final Void data) {
         startNode(node);
+
+        // A bound_index 0 annotation is attached to the intersection and precedes its first bound.
+        writeTypeUseAnnotations(node);
 
         final AstType baseType = node.getBaseType();
 
@@ -2553,6 +2695,10 @@ public final class JavaOutputVisitor implements IAstVisitor<Void, Void> {
     @Override
     public Void visitWildcardType(final WildcardType node, final Void ignored) {
         startNode(node);
+
+        // Annotations on the wildcard itself (e.g. List<@Ann ? extends T>) precede the '?'.
+        writeTypeUseAnnotations(node);
+
         writeToken(WildcardType.WILDCARD_TOKEN_ROLE);
 
         final AstNodeCollection<AstType> extendsBounds = node.getExtendsBounds();

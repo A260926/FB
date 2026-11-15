@@ -18,6 +18,7 @@ package com.strobel.decompiler.languages.java.ast;
 
 import com.strobel.assembler.ir.attributes.ModuleAttribute;
 import com.strobel.assembler.metadata.*;
+import com.strobel.assembler.metadata.typeannotations.TypeAnnotation;
 import com.strobel.componentmodel.Key;
 import com.strobel.core.ArrayUtilities;
 import com.strobel.core.ExceptionUtilities;
@@ -44,6 +45,38 @@ public final class Keys {
     public final static Key<Object> CONSTANT_VALUE = Key.create("ConstantValue");
     public final static Key<NameVariables> NAME_VARIABLES = Key.create("NameVariables");
 
+    /**
+     * For a type-use {@link Annotation} attached to a dotted member {@link SimpleType}, the
+     * nested-class segment it applies to ({@code 0} = outermost/root segment).  Absent for
+     * annotations on a non-dotted type.
+     */
+    public final static Key<Integer> TYPE_ANNOTATION_SEGMENT =
+        Key.create("TypeAnnotationSegment");
+
+    /**
+     * The exact raw JVMS 4.7.20 record that a renderable type-use {@link Annotation} was
+     * generated from.  The 1:1 link (plus {@link #TYPE_ANNOTATION_SEGMENT}) keeps each type
+     * usage distinguishable after import cleanup, nested-name simplification and AST cloning.
+     */
+    public final static Key<TypeAnnotation> SOURCE_TYPE_ANNOTATION =
+        Key.create("SourceTypeAnnotation");
+
+    /**
+     * Every raw type-use record (including receiver and {@code Code} targets that are not
+     * written into source) attached to a declaration node.  Provides a queryable, ordered
+     * record of the full JVMS 4.7.20 attribute contents for that declaration.
+     */
+    public final static Key<java.util.List<TypeAnnotation>> DECLARATION_TYPE_ANNOTATIONS =
+        Key.create("DeclarationTypeAnnotations");
+
+    /**
+     * Type-use records that were read and validated but whose {@code type_path} could not be
+     * represented on the reconstructed type tree (for example an outer member-segment type
+     * argument that the AST does not retain).  They are never attached to a wrong node; they
+     * are retained here so callers can report them as unanalyzed.
+     */
+    public final static Key<java.util.List<TypeAnnotation>> UNSUPPORTED_TYPE_ANNOTATIONS =
+        Key.create("UnsupportedTypeAnnotations");
     public final static List<Key<?>> ALL_KEYS;
 
     static {

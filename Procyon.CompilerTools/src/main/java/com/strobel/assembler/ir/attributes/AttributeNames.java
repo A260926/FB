@@ -39,6 +39,8 @@ public final class AttributeNames {
     public static final String RuntimeInvisibleAnnotations = "RuntimeInvisibleAnnotations";
     public static final String RuntimeVisibleParameterAnnotations = "RuntimeVisibleParameterAnnotations";
     public static final String RuntimeInvisibleParameterAnnotations = "RuntimeInvisibleParameterAnnotations";
+    public static final String RuntimeVisibleTypeAnnotations = "RuntimeVisibleTypeAnnotations";
+    public static final String RuntimeInvisibleTypeAnnotations = "RuntimeInvisibleTypeAnnotations";
     public static final String AnnotationDefault = "AnnotationDefault";
     public static final String MethodParameters = "MethodParameters";
     public static final String Record = "Record";

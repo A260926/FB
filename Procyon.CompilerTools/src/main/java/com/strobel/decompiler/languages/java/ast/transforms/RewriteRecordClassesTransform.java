@@ -171,13 +171,72 @@ public class RewriteRecordClassesTransform extends ContextTrackingVisitor<Void> 
             final RecordComponentInfo componentInfo = recordState.recordComponents.get(node.getName());
 
             if (componentInfo != null &&
-                MetadataHelper.isSameType(componentInfo.getResolvedType(), node.getReturnType().toTypeReference())) {
+                MetadataHelper.isSameType(componentInfo.getResolvedType(), node.getReturnType().toTypeReference()) &&
+                !hasAccessorSpecificReturnAnnotations(node, componentInfo)) {
 
                 recordState.removableAccessors.put(componentInfo, node);
             }
         }
 
         return null;
+    }
+
+    /**
+     * Distinguishes an explicitly written accessor from the compiler-generated one.  javac copies
+     * a record component's type-use annotations onto the generated accessor's return type, so an
+     * accessor whose return-type annotations do not match the component's own was written by hand
+     * (or annotated differently) and must be retained in the source output.
+     */
+    private boolean hasAccessorSpecificReturnAnnotations(
+        final MethodDeclaration node,
+        final RecordComponentInfo componentInfo) {
+
+        final List<String> accessorSignatures = new ArrayList<>();
+
+        collectTypeAnnotationSignatures(node.getReturnType(), accessorSignatures);
+
+        final List<String> componentSignatures = new ArrayList<>();
+
+        for (final com.strobel.assembler.metadata.typeannotations.TypeAnnotation annotation :
+                 com.strobel.assembler.metadata.typeannotations.TypeAnnotations.collect(
+                     componentInfo.getAttributes())) {
+
+            componentSignatures.add(signature(annotation));
+        }
+
+        Collections.sort(accessorSignatures);
+        Collections.sort(componentSignatures);
+
+        return !accessorSignatures.equals(componentSignatures);
+    }
+
+    private void collectTypeAnnotationSignatures(final AstNode node, final List<String> into) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+
+        if (node instanceof Annotation) {
+            final com.strobel.assembler.metadata.typeannotations.TypeAnnotation source =
+                node.getUserData(Keys.SOURCE_TYPE_ANNOTATION);
+
+            if (source != null) {
+                into.add(signature(source));
+            }
+        }
+
+        for (final AstNode child : node.getChildren()) {
+            collectTypeAnnotationSignatures(child, into);
+        }
+    }
+
+    private static String signature(
+        final com.strobel.assembler.metadata.typeannotations.TypeAnnotation annotation) {
+
+        return annotation.getVisibility() +
+               ":" +
+               annotation.getAnnotation().getAnnotationType().getFullName() +
+               ":" +
+               annotation.getPath();
     }
 
     @Override

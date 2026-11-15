@@ -16,7 +16,9 @@ public class Baseline {
         PlainTextOutput output = new PlainTextOutput();
         Decompiler.decompile(file.toString(), output, DecompilerSettings.javaDefaults());
         String text = output.toString();
-        if (!text.contains("@Deprecated") || !text.contains("List<String[]>") || !text.contains("record Plain")) {
+        if (!text.contains("@Deprecated") ||
+            !text.contains("List<@TUse(\"argument\") String @TUse(\"elementArray\") []> @TUse(\"outerArray\") []") ||
+            !text.contains("record Plain")) {
             throw new AssertionError("existing declaration/generic/record behavior: " + text);
         }
         Files.write(Paths.get(".task-build/baseline-output.java.txt"), text.getBytes(java.nio.charset.StandardCharsets.UTF_8));

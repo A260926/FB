@@ -20,6 +20,7 @@ import com.strobel.assembler.ir.attributes.*;
 import com.strobel.assembler.metadata.*;
 import com.strobel.assembler.metadata.annotations.AnnotationElement;
 import com.strobel.assembler.metadata.annotations.CustomAnnotation;
+import com.strobel.assembler.metadata.typeannotations.TypeAnnotationReader;
 import com.strobel.core.ArrayUtilities;
 import com.strobel.core.VerifyArgument;
 
@@ -245,6 +246,11 @@ public abstract class MetadataReader {
             case AttributeNames.AnnotationDefault: {
                 final AnnotationElement defaultValue = AnnotationReader.readElement(scope, buffer);
                 return new AnnotationDefaultAttribute(length, defaultValue);
+            }
+
+            case AttributeNames.RuntimeVisibleTypeAnnotations:
+            case AttributeNames.RuntimeInvisibleTypeAnnotations: {
+                return TypeAnnotationReader.read(name, length, scope, buffer);
             }
 
             case AttributeNames.Signature: {

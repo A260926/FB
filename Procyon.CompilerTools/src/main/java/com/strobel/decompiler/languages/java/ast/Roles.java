@@ -44,6 +44,12 @@ public final class Roles {
     public final static Role<Statement> EMBEDDED_STATEMENT = new Role<>("EmbeddedStatement", Statement.class, Statement.NULL);
     public final static Role<BlockStatement> BODY = new Role<>("Body", BlockStatement.class, BlockStatement.NULL);
     public final static Role<Annotation> ANNOTATION = new Role<>("Annotation", Annotation.class);
+    /**
+     * An annotation attached to a type <em>usage</em> (a {@link AstType} or
+     * {@link ArraySpecifier}) rather than to a declaration.  Kept distinct from
+     * {@link #ANNOTATION} so declaration annotations and type-use annotations never merge.
+     */
+    public final static Role<Annotation> TYPE_ANNOTATION = new Role<>("TypeAnnotation", Annotation.class);
     public final static Role<VariableInitializer> VARIABLE = new Role<>("Variable", VariableInitializer.class, VariableInitializer.NULL);
     public final static Role<EntityDeclaration> TYPE_MEMBER = new Role<>("TypeMember", EntityDeclaration.class);
     public final static Role<ModuleDeclaration> MODULE = new Role<>("Module", ModuleDeclaration.class, ModuleDeclaration.NULL);

@@ -264,6 +264,16 @@ public class SourceAttribute {
                 return new AnnotationDefaultAttribute(length, defaultValue);
             }
 
+            case AttributeNames.RuntimeVisibleTypeAnnotations:
+            case AttributeNames.RuntimeInvisibleTypeAnnotations: {
+                return com.strobel.assembler.metadata.typeannotations.TypeAnnotationReader.read(
+                    name,
+                    length,
+                    scope,
+                    buffer
+                );
+            }
+
             case AttributeNames.Signature: {
                 final int token = buffer.readUnsignedShort();
                 final String signature = scope.lookupConstant(token);
