@@ -1,0 +1,9 @@
+/*
+/*/
+!.gitignore
+!README.md
+!LICENSE
+!CMakeLists.txt
+!/source/
+!/scenes/
+!/lib/
