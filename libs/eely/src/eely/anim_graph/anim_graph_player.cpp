@@ -28,6 +28,7 @@
 #include "eely/anim_graph/anim_graph_player_node_state_machine.h"
 #include "eely/anim_graph/anim_graph_player_node_state_transition.h"
 #include "eely/anim_graph/anim_graph_player_node_sum.h"
+#include "eely/anim_graph/anim_graph_player_shared.h"
 #include "eely/base/base_utils.h"
 #include "eely/base/graph.h"
 #include "eely/clip/clip.h"
@@ -36,17 +37,32 @@
 #include "eely/project/project.h"
 #include "eely/skeleton/skeleton_pose.h"
 
+#include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace eely {
 anim_graph_player::anim_graph_player(const anim_graph& anim_graph)
+    : anim_graph_player(anim_graph, false)
+{
+}
+
+anim_graph_player::anim_graph_player(const anim_graph& anim_graph, const bool shared_pose_nodes)
     : _project{anim_graph.get_project()},
-      _job_queue{*_project.get_resource<skeleton>(anim_graph.get_skeleton_id())}
+      _job_queue{*_project.get_resource<skeleton>(anim_graph.get_skeleton_id())},
+      _shared_pose_nodes{shared_pose_nodes}
 {
   using namespace eely::internal;
+
+  if (_shared_pose_nodes) {
+    validate_shared_graph(anim_graph);
+  }
 
   // Runtime nodes are created in three steps:
   //  - constructing the nodes
@@ -109,11 +125,52 @@ anim_graph_player::anim_graph_player(const anim_graph& anim_graph)
   }
 }
 
-void anim_graph_player::play(float dt_s, const params& params, skeleton_pose& out_pose)
+void anim_graph_player::play(const float dt_s, const params& params, skeleton_pose& out_pose)
 {
   using namespace eely::internal;
 
+  if (!std::isfinite(dt_s) || dt_s < 0.0F) {
+    throw std::invalid_argument("dt_s must be finite and non-negative");
+  }
+
+  if (_shared_pose_nodes) {
+    // Plan the whole play first. If anything fails, node state is rolled back
+    // and the partially filled queue is discarded without touching `out_pose`.
+    try {
+      ++_play_counter;
+
+      _job_queue.begin_play(true);
+      _shared_runtime.begin_play();
+
+      anim_graph_player_context context{.job_queue = _job_queue,
+                                        .params = params,
+                                        .play_counter = _play_counter,
+                                        .dt_s = dt_s,
+                                        .shared_runtime = &_shared_runtime};
+
+      _root_node->compute(context);
+
+      _job_queue.execute(out_pose);
+
+      _last_play_stats = anim_graph_play_stats{
+          .evaluated_pose_nodes = _shared_runtime.count_evaluated_pose_nodes(),
+          .executed_jobs = _job_queue.get_executed_jobs_count(),
+          .cache_hits = _shared_runtime.get_cache_hits(),
+          .peak_live_poses = _job_queue.get_peak_live_poses()};
+    }
+    catch (...) {
+      _job_queue.abort_play();
+      _shared_runtime.rollback();
+      --_play_counter;
+      throw;
+    }
+
+    return;
+  }
+
   ++_play_counter;
+
+  _job_queue.begin_play(false);
 
   anim_graph_player_context context{
       .job_queue = _job_queue, .params = params, .play_counter = _play_counter, .dt_s = dt_s};
@@ -121,6 +178,17 @@ void anim_graph_player::play(float dt_s, const params& params, skeleton_pose& ou
   _root_node->compute(context);
 
   _job_queue.execute(out_pose);
+
+  _last_play_stats = anim_graph_play_stats{
+      .evaluated_pose_nodes = count_active_pose_nodes(),
+      .executed_jobs = _job_queue.get_executed_jobs_count(),
+      .cache_hits = 0,
+      .peak_live_poses = _job_queue.get_peak_live_poses()};
+}
+
+const anim_graph_play_stats& anim_graph_player::get_last_play_stats() const
+{
+  return _last_play_stats;
 }
 
 const std::vector<internal::anim_graph_player_node_uptr>& anim_graph_player::get_nodes() const
@@ -145,6 +213,174 @@ bool anim_graph_player::is_player_node_active(
     const internal::anim_graph_player_node_base& node) const
 {
   return node.get_last_play_counter() == _play_counter;
+}
+
+std::size_t anim_graph_player::count_active_pose_nodes() const
+{
+  std::size_t count{0};
+  for (const internal::anim_graph_player_node_uptr& node : _nodes) {
+    const anim_graph_node_type type{node->get_type()};
+    const bool is_pose_node{type == anim_graph_node_type::clip ||
+                            type == anim_graph_node_type::blend ||
+                            type == anim_graph_node_type::sum};
+    if (is_pose_node && node->get_last_play_counter() == _play_counter) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+void anim_graph_player::validate_shared_graph(const anim_graph& anim_graph) const
+{
+  using namespace eely::internal;
+
+  const std::vector<anim_graph_node_uptr>& nodes{anim_graph.get_nodes()};
+  if (nodes.empty()) {
+    throw std::invalid_argument("Shared pose graph must contain nodes");
+  }
+
+  // Map every id to its node and make sure ids are unique.
+
+  std::unordered_map<int, const anim_graph_node_base*> id_to_node;
+  for (const anim_graph_node_uptr& node : nodes) {
+    if (id_to_node.contains(node->get_id())) {
+      throw std::invalid_argument("Duplicated node id " + std::to_string(node->get_id()));
+    }
+    id_to_node.emplace(node->get_id(), node.get());
+  }
+
+  const int root_node_id{anim_graph.get_root_node_id()};
+  const auto root_iter{id_to_node.find(root_node_id)};
+  if (root_iter == id_to_node.end()) {
+    throw std::invalid_argument("Root node id " + std::to_string(root_node_id) + " is missing");
+  }
+
+  const auto is_pose_type = [](const anim_graph_node_type type) {
+    return type == anim_graph_node_type::clip || type == anim_graph_node_type::blend ||
+           type == anim_graph_node_type::sum;
+  };
+
+  if (!is_pose_type(root_iter->second->get_type())) {
+    throw std::invalid_argument("Root node with id " + std::to_string(root_node_id) +
+                                " must produce a pose");
+  }
+
+  const auto require_node = [&](const std::optional<int>& id, const char* edge_name) {
+    if (!id.has_value()) {
+      throw std::invalid_argument(std::string{"Unset "} + edge_name + " reference");
+    }
+    const auto iter{id_to_node.find(id.value())};
+    if (iter == id_to_node.end()) {
+      throw std::invalid_argument(std::string{"Missing node id "} + std::to_string(id.value()) +
+                                  " referenced by " + edge_name);
+    }
+    return iter->second;
+  };
+
+  // DFS from the root. Every edge is inspected, including blend candidate
+  // edges that are not active for a particular parameter value.
+  // Gray marks detect cycles; reaching a black node is a legal shared
+  // reference in an acyclic graph, not a cycle.
+
+  enum class mark { none, temporary, permanent };
+  std::unordered_map<int, mark> marks;
+
+  const std::function<void(const anim_graph_node_base*)> visit = [&](const anim_graph_node_base* node) {
+    const int node_id{node->get_id()};
+    mark& node_mark{marks[node_id]};
+
+    if (node_mark == mark::permanent) {
+      return;
+    }
+    if (node_mark == mark::temporary) {
+      throw std::invalid_argument("Cycle detected through node id " + std::to_string(node_id));
+    }
+    node_mark = mark::temporary;
+
+    switch (node->get_type()) {
+      case anim_graph_node_type::clip: {
+        const auto* node_clip{polymorphic_downcast<const anim_graph_node_clip*>(node)};
+        if (_project.get_resource<clip>(node_clip->get_clip_id()) == nullptr) {
+          throw std::invalid_argument("Clip node id " + std::to_string(node_id) +
+                                      " references missing clip resource");
+        }
+      } break;
+
+      case anim_graph_node_type::param: {
+        // Float parameter nodes are the only data nodes supported.
+      } break;
+
+      case anim_graph_node_type::blend: {
+        const auto* node_blend{polymorphic_downcast<const anim_graph_node_blend*>(node)};
+        const auto& pose_nodes_data{node_blend->get_pose_nodes()};
+
+        if (pose_nodes_data.empty()) {
+          throw std::invalid_argument("Blend node id " + std::to_string(node_id) +
+                                      " has no pose candidates");
+        }
+
+        std::optional<float> previous_factor;
+        for (const anim_graph_node_blend::pose_node_data& pose_node_data : pose_nodes_data) {
+          if (!std::isfinite(pose_node_data.factor)) {
+            throw std::invalid_argument("Blend node id " + std::to_string(node_id) +
+                                        " has a non-finite factor");
+          }
+          if (previous_factor.has_value() &&
+              !(pose_node_data.factor > previous_factor.value())) {
+            throw std::invalid_argument("Blend node id " + std::to_string(node_id) +
+                                        " has factors that are not strictly increasing");
+          }
+          previous_factor = pose_node_data.factor;
+
+          const anim_graph_node_base* child{require_node(pose_node_data.id, "blend candidate")};
+          if (!is_pose_type(child->get_type())) {
+            throw std::invalid_argument("Blend candidate id " +
+                                        std::to_string(child->get_id()) +
+                                        " is not a pose node");
+          }
+          visit(child);
+        }
+
+        const anim_graph_node_base* factor_node{
+            require_node(node_blend->get_factor_node_id(), "blend factor")};
+        if (factor_node->get_type() != anim_graph_node_type::param) {
+          throw std::invalid_argument("Blend factor node id " +
+                                      std::to_string(factor_node->get_id()) +
+                                      " must be a float param node");
+        }
+        visit(factor_node);
+      } break;
+
+      case anim_graph_node_type::sum: {
+        const auto* node_sum{polymorphic_downcast<const anim_graph_node_sum*>(node)};
+
+        const anim_graph_node_base* first{
+            require_node(node_sum->get_first_node_id(), "sum first")};
+        if (!is_pose_type(first->get_type())) {
+          throw std::invalid_argument("Sum first node id " + std::to_string(first->get_id()) +
+                                      " is not a pose node");
+        }
+        visit(first);
+
+        const anim_graph_node_base* second{
+            require_node(node_sum->get_second_node_id(), "sum second")};
+        if (!is_pose_type(second->get_type())) {
+          throw std::invalid_argument("Sum second node id " + std::to_string(second->get_id()) +
+                                      " is not a pose node");
+        }
+        visit(second);
+      } break;
+
+      default: {
+        throw std::invalid_argument("Shared pose graph does not support node id " +
+                                    std::to_string(node_id));
+      } break;
+    }
+
+    node_mark = mark::permanent;
+  };
+
+  visit(root_iter->second);
 }
 
 internal::anim_graph_player_node_uptr anim_graph_player::create_player_node(

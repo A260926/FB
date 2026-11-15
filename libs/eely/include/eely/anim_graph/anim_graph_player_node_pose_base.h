@@ -6,6 +6,8 @@
 #include "eely/base/assert.h"
 
 namespace eely::internal {
+class anim_graph_player_shared;
+
 // Base class for graph nodes that produce pose jobs.
 // Pose nodes can be seen as animations, thus they have duration and phase.
 class anim_graph_player_node_pose_base : public anim_graph_player_node_base {
@@ -17,6 +19,10 @@ public:
   // This method can be called before `compute` by parent nodes,
   // if needed.
   virtual void update_duration(const anim_graph_player_context& context);
+
+  // Shared-pose-mode counterpart of `update_duration`:
+  // the actual update runs at most once per play.
+  void update_duration_shared(const anim_graph_player_context& context);
 
   // Return this node's duration in seconds.
   [[nodiscard]] float get_duration_s() const;
@@ -51,6 +57,11 @@ protected:
 
   void compute_impl(const anim_graph_player_context& context, std::any& out_result) override;
 
+  // Shared-pose-mode counterpart of `compute`.
+  // Validates the phase request (throwing on conflicting requests),
+  // plans the phase once and caches the produced job index.
+  std::any compute_shared(const anim_graph_player_context& context) override;
+
   // Set this node's duration in seconds.
   void set_duration_s(float duration_s);
 
@@ -68,6 +79,8 @@ protected:
   void set_phase_copy_source(const anim_graph_player_node_pose_base* source);
 
 private:
+  friend class anim_graph_player_shared;
+
   float _duration_s{0.0F};
   float _phase{0.0F};
 

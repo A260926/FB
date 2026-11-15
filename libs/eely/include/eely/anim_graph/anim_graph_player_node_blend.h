@@ -53,6 +53,8 @@ public:
 protected:
   void compute_impl(const anim_graph_player_context& context, std::any& out_result) override;
 
+  std::any compute_shared(const anim_graph_player_context& context) override;
+
 private:
   // Update blended nodes based on a factor value.
   void select_blended_nodes(const anim_graph_player_context& context);
@@ -66,5 +68,7 @@ private:
   float _destination_node_weight{0.0F};
 
   job_blend _job_blend;
+
+  friend class anim_graph_player_shared;
 };
 }  // namespace eely::internal

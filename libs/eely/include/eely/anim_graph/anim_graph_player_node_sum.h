@@ -37,6 +37,8 @@ public:
 protected:
   void compute_impl(const anim_graph_player_context& context, std::any& out_result) override;
 
+  std::any compute_shared(const anim_graph_player_context& context) override;
+
 private:
   anim_graph_player_node_pose_base* _first_node{nullptr};
   anim_graph_player_node_pose_base* _second_node{nullptr};

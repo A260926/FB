@@ -6,6 +6,8 @@
 #include <optional>
 
 namespace eely::internal {
+class anim_graph_player_shared;
+
 // Context for animation graph update.
 struct anim_graph_player_context final {
   // Queue to feed jobs into by pose nodes.
@@ -31,5 +33,11 @@ struct anim_graph_player_context final {
 
   // Phase given by a parent node to be used in sync mode.
   std::optional<float> sync_phase;
+
+  // Set only when the player works in shared-pose-node mode.
+  // Nodes consult this object to evaluate each runtime node at most once
+  // and to share its result between all consuming branches.
+  // `nullptr` keeps the original tree-like evaluation behavior.
+  anim_graph_player_shared* shared_runtime{nullptr};
 };
 }  // namespace eely::internal

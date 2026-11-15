@@ -3,6 +3,7 @@
 #include "eely/anim_graph/anim_graph_player_context.h"
 #include "eely/anim_graph/anim_graph_player_node_base.h"
 #include "eely/anim_graph/anim_graph_player_node_pose_base.h"
+#include "eely/anim_graph/anim_graph_player_shared.h"
 #include "eely/base/assert.h"
 #include "eely/job/job_blend.h"
 
@@ -10,10 +11,25 @@
 
 #include <algorithm>
 #include <any>
+#include <functional>
 #include <optional>
 #include <vector>
 
 namespace eely::internal {
+namespace {
+// Plan a child's duration at most once per play in shared-pose mode.
+void update_child_duration(anim_graph_player_node_pose_base& node,
+                           const anim_graph_player_context& context)
+{
+  if (context.shared_runtime != nullptr) {
+    node.update_duration_shared(context);
+  }
+  else {
+    node.update_duration(context);
+  }
+}
+}  // namespace
+
 anim_graph_player_node_blend::anim_graph_player_node_blend(const int id)
     : anim_graph_player_node_pose_base{anim_graph_node_type::blend, id}
 {
@@ -26,12 +42,12 @@ void anim_graph_player_node_blend::update_duration(const anim_graph_player_conte
   select_blended_nodes(context);
 
   if (_sorce_node == nullptr) {
-    _destination_node->update_duration(context);
+    update_child_duration(*_destination_node, context);
     set_duration_s(_destination_node->get_duration_s());
   }
   else {
-    _sorce_node->update_duration(context);
-    _destination_node->update_duration(context);
+    update_child_duration(*_sorce_node, context);
+    update_child_duration(*_destination_node, context);
     set_duration_s(std::lerp(_sorce_node->get_duration_s(), _destination_node->get_duration_s(),
                              _destination_node_weight));
   }
@@ -122,6 +138,52 @@ void anim_graph_player_node_blend::compute_impl(const anim_graph_player_context&
   _job_blend.set_second_job_index(second_job_index);
   _job_blend.set_weight(_destination_node_weight);
   out_result = context.job_queue.add_job(_job_blend);
+}
+
+std::any anim_graph_player_node_blend::compute_shared(
+    const anim_graph_player_context& context)
+{
+  anim_graph_player_shared& shared{*context.shared_runtime};
+
+  shared.snapshot_blend_node(*this);
+  shared.begin_phase_planning(*this, context);
+
+  const gsl::index job_index{shared.evaluate_cached_pose(*this, context, [&]() {
+    // Plan this node's duration (and, recursively, its active children)
+    // before any pose job is produced.
+    update_duration_shared(context);
+
+    const float next_phase_unwrapped{get_next_phase_unwrapped(context)};
+    apply_next_phase(context);
+
+    // This node always forces synchronized phase down the hierarchy.
+    anim_graph_player_context context_pass_on{context};
+    context_pass_on.sync_enabled = true;
+    // Pass unwrapped phase on purpose, same as in non-shared mode.
+    context_pass_on.sync_phase = next_phase_unwrapped;
+
+    if (_sorce_node == nullptr) {
+      // The blend is fully on one child: forward its job without a new job.
+      return std::any_cast<gsl::index>(_destination_node->compute(context_pass_on));
+    }
+
+    const gsl::index first_job_index{
+        std::any_cast<gsl::index>(_sorce_node->compute(context_pass_on))};
+    const gsl::index second_job_index{
+        std::any_cast<gsl::index>(_destination_node->compute(context_pass_on))};
+
+    // Both child results stay alive until this blend job has consumed them,
+    // even when other branches consume the same jobs as well.
+    context.job_queue.register_consumer(first_job_index);
+    context.job_queue.register_consumer(second_job_index);
+
+    _job_blend.set_first_job_index(first_job_index);
+    _job_blend.set_second_job_index(second_job_index);
+    _job_blend.set_weight(_destination_node_weight);
+    return context.job_queue.add_job(_job_blend);
+  })};
+
+  return job_index;
 }
 
 void anim_graph_player_node_blend::select_blended_nodes(const anim_graph_player_context& context)

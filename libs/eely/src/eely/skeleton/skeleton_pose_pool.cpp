@@ -7,6 +7,7 @@
 #include <gsl/util>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -21,6 +22,9 @@ void skeleton_pose_pool::deleter::operator()(skeleton_pose* ptr)
   EXPECTS(_pool->_borrows > 0);
   --_pool->_borrows;
 #endif
+
+  EXPECTS(_pool->_live_poses > 0);
+  --_pool->_live_poses;
 
   EXPECTS(std::find_if(_pool->_poses.begin(), _pool->_poses.end(), [ptr](auto& pool_pose) {
             return pool_pose.get() == ptr;
@@ -42,6 +46,9 @@ skeleton_pose_pool::ptr skeleton_pose_pool::borrow()
   ++_borrows;
 #endif
 
+  ++_live_poses;
+  _peak_live_poses = std::max(_peak_live_poses, _live_poses);
+
   if (_poses.empty()) {
     return ptr{new skeleton_pose{_skeleton}, deleter{*this}};
   }
@@ -51,5 +58,20 @@ skeleton_pose_pool::ptr skeleton_pose_pool::borrow()
 
   ptr result{ptr_to_borrow, deleter{*this}};
   return result;
+}
+
+std::size_t skeleton_pose_pool::get_live_poses_count() const
+{
+  return _live_poses;
+}
+
+std::size_t skeleton_pose_pool::get_peak_live_poses() const
+{
+  return _peak_live_poses;
+}
+
+void skeleton_pose_pool::reset_peak_live_poses()
+{
+  _peak_live_poses = _live_poses;
 }
 }  // namespace eely::internal

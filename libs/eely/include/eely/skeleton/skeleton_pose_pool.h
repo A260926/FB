@@ -39,12 +39,28 @@ public:
 
   ptr borrow();
 
+  // Return number of poses currently borrowed from the pool.
+  [[nodiscard]] std::size_t get_live_poses_count() const;
+
+  // Return maximum number of simultaneously borrowed poses
+  // since the last call to `reset_peak_live_poses`.
+  [[nodiscard]] std::size_t get_peak_live_poses() const;
+
+  // Reset peak number of simultaneously borrowed poses.
+  void reset_peak_live_poses();
+
 private:
   // For returning back poses into the pool once unique ptr is destroyed
   friend struct deleter;
 
   const skeleton& _skeleton;
   std::vector<std::unique_ptr<skeleton_pose>> _poses;
+
+  // Number of borrowed poses that are not yet returned to the pool.
+  // Tracked unconditionally so that live/peak usage can be reported
+  // regardless of the build type.
+  std::size_t _live_poses{0};
+  std::size_t _peak_live_poses{0};
 
 #if defined(EELY_DEBUG)
   // Number of borrowed poses that are not yet returned to the pool.

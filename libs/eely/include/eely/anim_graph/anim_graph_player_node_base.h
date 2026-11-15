@@ -9,6 +9,8 @@
 #include <vector>
 
 namespace eely::internal {
+class anim_graph_player_shared;
+
 // Base class for animation graph runtime nodes.
 // These nodes produce poses or data for other nodes.
 class anim_graph_player_node_base {
@@ -41,6 +43,12 @@ public:
 protected:
   virtual void compute_impl(const anim_graph_player_context& context, std::any& out_result);
 
+  // Shared-pose-mode counterpart of `compute`.
+  // By default a node is evaluated once per play and its value is cached
+  // for every other branch that requests it.
+  // Pose nodes override this to validate phase requests and cache job indices.
+  virtual std::any compute_shared(const anim_graph_player_context& context);
+
   // Return `true` if this a first time a node is played,
   // i.e. either graph is played for the first time,
   // or after at least one graph update when this node was inactive.
@@ -48,6 +56,8 @@ protected:
   [[nodiscard]] bool is_first_play(const anim_graph_player_context& context) const;
 
 private:
+  friend class anim_graph_player_shared;
+
   // Remember this node being played on current update.
   void register_play(const anim_graph_player_context& context) const;
 

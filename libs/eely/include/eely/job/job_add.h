@@ -43,6 +43,31 @@ inline skeleton_pose_pool::ptr job_add::execute_impl(job_queue& queue)
   job_base& first_job{queue.get_job(_first.value())};
   job_base& second_job{queue.get_job(_second.value())};
 
+  if (queue.is_shared_mode()) {
+    // Same ownership rules as in `job_blend`:
+    // the first input is only reused when this is its single consuming edge.
+
+    const bool first_exclusive{queue.is_input_exclusive(_first.value())};
+
+    skeleton_pose_pool::ptr result;
+    const skeleton_pose_pool::ptr& second_pose{second_job.get_result_pose()};
+
+    if (first_exclusive) {
+      result = first_job.transfer_result_pose();
+      skeleton_pose_add(*result, *second_pose, *result);
+    }
+    else {
+      const skeleton_pose_pool::ptr& first_pose{first_job.get_result_pose()};
+      result = queue.get_pose_pool().borrow();
+      skeleton_pose_add(*first_pose, *second_pose, *result);
+    }
+
+    queue.consume_job_result(_first.value());
+    queue.consume_job_result(_second.value());
+
+    return result;
+  }
+
   // We can reuse one pose from the pool here,
   // let it be a pose from the first job.
   // Second one can be released after the addition, no longer needed.

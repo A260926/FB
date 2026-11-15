@@ -3,11 +3,13 @@
 #include "eely/anim_graph/anim_graph_player_context.h"
 #include "eely/anim_graph/anim_graph_player_node_base.h"
 #include "eely/anim_graph/anim_graph_player_node_pose_base.h"
+#include "eely/anim_graph/anim_graph_player_shared.h"
 #include "eely/job/job_add.h"
 
 #include <gsl/util>
 
 #include <any>
+#include <functional>
 #include <vector>
 
 namespace eely::internal {
@@ -23,8 +25,15 @@ void anim_graph_player_node_sum::update_duration(const anim_graph_player_context
 
   anim_graph_player_node_pose_base::update_duration(context);
 
-  _first_node->update_duration(context);
-  _second_node->update_duration(context);
+  if (context.shared_runtime != nullptr) {
+    _first_node->update_duration_shared(context);
+    _second_node->update_duration_shared(context);
+  }
+  else {
+    _first_node->update_duration(context);
+    _second_node->update_duration(context);
+  }
+
   set_duration_s(std::max(_first_node->get_duration_s(), _second_node->get_duration_s()));
 }
 
@@ -78,5 +87,36 @@ void anim_graph_player_node_sum::compute_impl(const anim_graph_player_context& c
   _job_add.set_first_job_index(first_job_index);
   _job_add.set_second_job_index(second_job_index);
   out_result = context.job_queue.add_job(_job_add);
+}
+
+std::any anim_graph_player_node_sum::compute_shared(
+    const anim_graph_player_context& context)
+{
+  anim_graph_player_shared& shared{*context.shared_runtime};
+
+  shared.snapshot_pose_node(*this);
+  shared.begin_phase_planning(*this, context);
+
+  const gsl::index job_index{shared.evaluate_cached_pose(*this, context, [&]() {
+    update_duration_shared(context);
+
+    apply_next_phase(context);
+
+    const gsl::index first_job_index{
+        std::any_cast<gsl::index>(_first_node->compute(context))};
+    const gsl::index second_job_index{
+        std::any_cast<gsl::index>(_second_node->compute(context))};
+
+    // Both inputs must outlive this add job, even if they are shared
+    // with other consumers.
+    context.job_queue.register_consumer(first_job_index);
+    context.job_queue.register_consumer(second_job_index);
+
+    _job_add.set_first_job_index(first_job_index);
+    _job_add.set_second_job_index(second_job_index);
+    return context.job_queue.add_job(_job_add);
+  })};
+
+  return job_index;
 }
 }  // namespace eely::internal
