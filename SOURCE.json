@@ -1,0 +1,37 @@
+{
+  "repo": "https://github.com/jpcy/xatlas",
+  "commit": "f700c7790aaa030e794b52ba7791a05c085faf0c",
+  "files": [
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "7af8b33238802fccddb9b24de9229d2bc95c7032",
+      "sha256": "2c16d5b1c2808277fe975b4f70f0fd9afc9b3bcf04e6c676665a82cb2d5579e3"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "0ef8dc2e94be079c95427b387bdb3f39984ada39",
+      "sha256": "74fd93da91ff30375b12cf0ab2120f736e0eb52cbebff8bf517909dc9d6028a1"
+    },
+    {
+      "path": "source/xatlas/xatlas.cpp",
+      "mode": "100644",
+      "git_blob": "5c5c57ecabbdf5fa8f95c7c5890b5b55b2911c9a",
+      "sha256": "0ed0283aad005c94738cb0cc4612dba264379d29dea5b3c9b242f2d4752d5df4"
+    },
+    {
+      "path": "source/xatlas/xatlas.h",
+      "mode": "100644",
+      "git_blob": "d66a96db21dee5f326ab4d60eb20eb8b1aac7e2d",
+      "sha256": "e7675335ad8ab1c1cc9060ad153cf6b8ba2ee914282044eb5f02c49590218fbd"
+    },
+    {
+      "path": "source/xatlas/xatlas_c.h",
+      "mode": "100644",
+      "git_blob": "b87edd41193e1d4d815e4069d7bacc0c86b1448e",
+      "sha256": "3aef0438ca395a7c4c215de9fe40460a4530d19654bd21a3f849c76775fbc972"
+    }
+  ],
+  "exclusions": "Unused viewer/test/optional third-party/model/build/CI assets."
+}
