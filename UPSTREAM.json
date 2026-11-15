@@ -1,0 +1,8 @@
+{
+  "repo": "https://github.com/RenderKit/embree",
+  "commit": "3b7e4ee746ce8ed25b206fb2f4d2709e9f8109ce",
+  "license": "Apache-2.0; bundled SIMD notices retained in third-party-programs.txt",
+  "gitlink_check": "no 160000/gitlink; .gitmodules absent",
+  "exclusion_reason": "Unused tutorial/test assets, PDF/manuals, superbuild and development metadata excluded; all common/kernels/include production source and original scripts retained. CPU options exclude external TBB/ISPC/SYCL at build only.",
+  "support_change": "CMakeLists.txt appends include(task_support/targets.cmake), no kernel/production logic modified."
+}
