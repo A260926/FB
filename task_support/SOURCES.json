@@ -1,0 +1,24 @@
+{
+  "repo": "https://github.com/cyanray/libnurbs",
+  "commit": "af3b02c50942152eba237c4f60924ef0d4c04a3b",
+  "license": "MIT",
+  "export": "git archive HEAD, all upstream tracked files and modes unchanged",
+  "tree": "7f8ce3e58fea0c3b05326994ca025df1615e5fe7",
+  "gitlinks": [],
+  "gitmodules": false,
+  "excluded": [],
+  "dependency": {
+    "path": "task_support/vendor/eigen",
+    "reuse": "Eigen headers and licensing only, provenance SHA verification",
+    "provenance_sha256": "17eeef1586afd641cc31ba0e4ec0408060012f8052090eace854164fee1bade6",
+    "verified_files": 344
+  },
+  "added_support": [
+    "task_support/Makefile",
+    "task_support/baseline.cpp",
+    "task_support/check.h",
+    "task_support/driver.c",
+    "task_support/run.sh",
+    "task_support/SOURCES.json"
+  ]
+}
