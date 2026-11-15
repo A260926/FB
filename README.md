@@ -114,3 +114,71 @@ func main() {
 ```
 
 ![Teapot](http://i.imgur.com/DaqbkLR.png)
+
+### Terrain (quadtree LOD height fields)
+
+A `Terrain` owns a finite, square height array of size `2^k+1` (k >= 3) with
+unit sample spacing and local positions `(x, height, z)`. Many
+`TerrainInstance` placements can share one `Terrain`; each frame you prepare a
+view-dependent `TerrainPlan` (quadtree selection, 2:1 seam closure, frustum
+culling) and draw it through the indexed raster path - no per-frame expansion
+into independent triangles.
+
+Call order:
+
+```go
+// 1. build the shared resource from your own finite height samples
+terrain, err := fauxgl.NewTerrain(size, heights) // size = 2^k+1, k >= 3
+
+// 2. place it any number of times; world = Origin + Scale*local
+instances := []fauxgl.TerrainInstance{
+    {Terrain: terrain, Origin: origin, Scale: scale, Visible: true},
+}
+
+// 3. select leaves for the camera (k-3 non-increasing split distances)
+matrix := fauxgl.Perspective(fovy, aspect, near, far).Mul(fauxgl.LookAt(eye, center, up))
+plan, err := fauxgl.PrepareTerrain(instances, fauxgl.TerrainView{
+    Eye: eye, Matrix: matrix, SplitDistances: splits,
+})
+for _, leaf := range plan.Leaves() { // independent leaf descriptions
+    // leaf.Instance, X, Z, Span, Depth, Stitch (bits west/east/south/north)
+}
+
+// 4. draw with any shader whose Vertex only applies view.Matrix
+context.Shader = fauxgl.NewPhongShader(matrix, lightDirection, eye)
+info, err := fauxgl.DrawTerrain(plan, context)
+_ = plan.DrawStats() // Vertices / Triangles actually submitted
+
+// 5. between frames, edit the shared source data in validated batches
+err = terrain.UpdateHeights([]fauxgl.HeightEdit{{X: x, Z: z, Height: h}})
+// old plans now fail DrawTerrain; re-run PrepareTerrain to see the new heights
+_ = terrain.Revision()       // bumps once per effective non-empty batch
+_ = terrain.LastUpdateStats() // HeightReads / NormalUpdates / BoundsUpdates
+```
+
+Selection rules: a node subdivides while the eye's shortest Euclidean distance
+to its world AABB is strictly less than the depth's split distance; closure
+then only subdivides further so neighboring leaves differ by at most 2x in
+grid spacing; finally a block is culled only when one clip half-space excludes
+all eight AABB corners. Mixed LODs are stitched with shared index templates
+(the odd boundary vertices of a fine block collapse onto the previous even
+vertex; zero-area faces are skipped) - no skirts, and topology is shared
+resource-wide instead of copied per block.
+
+`Context` also exposes the underlying indexed entry point directly:
+
+```go
+info, err := context.DrawIndexed(vertices, indices) // [][3]int into one vertex pool
+```
+
+Indices and all vertex attributes are fully validated before any shader call
+or buffer write; an empty index slice draws nothing, unreferenced vertices
+never reach `Shader.Vertex`, and each referenced vertex is shaded exactly once
+per call. The clipping, perspective interpolation, depth and fragment chain is
+the same one `DrawMesh` uses.
+
+A runnable example rendering two LODs and an edited field to PNG lives in
+[`examples/terrain/main.go`](examples/terrain/main.go):
+
+    go run examples/terrain/main.go terrain.png
+

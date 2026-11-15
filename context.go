@@ -1,6 +1,7 @@
 package fauxgl
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -173,6 +174,11 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 
 	// reciprocals
 	ra := 1 / edge(s0, s1, s2)
+	// a non-finite reciprocal means a degenerate screen-space triangle;
+	// it cannot cover any pixel, so terminate instead of looping forever
+	if math.IsNaN(ra) || math.IsInf(ra, 0) {
+		return RasterizeInfo{}
+	}
 	r0 := 1 / v0.Output.W
 	r1 := 1 / v1.Output.W
 	r2 := 1 / v2.Output.W
@@ -194,6 +200,10 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 		}
 		if w02 < 0 && d2 > d {
 			d = d2
+		}
+		if math.IsNaN(d) || math.IsInf(d, 0) {
+			// horizontal/coincident screen edges can leave d undefined
+			d = 0
 		}
 		d = float64(int(d))
 		if d < 0 {
@@ -229,8 +239,16 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 			info.TotalPixels++
 			z := b0*s0.Z + b1*s1.Z + b2*s2.Z
 			bz := z + dc.DepthBias
-			if dc.ReadDepth && bz > dc.DepthBuffer[i] { // safe w/out lock?
-				continue
+			lock := &dc.locks[(x+y)&255]
+			// check depth buffer for early abort (synchronized: worker
+			// goroutines otherwise race with the locked depth write below)
+			if dc.ReadDepth {
+				lock.Lock()
+				occluded := bz > dc.DepthBuffer[i]
+				lock.Unlock()
+				if occluded {
+					continue
+				}
 			}
 			// perspective-correct interpolation of vertex data
 			b := VectorW{b0 * r0, b1 * r1, b2 * r2, 0}
@@ -242,7 +260,6 @@ func (dc *Context) rasterize(v0, v1, v2 Vertex, s0, s1, s2 Vector) RasterizeInfo
 				continue
 			}
 			// update buffers atomically
-			lock := &dc.locks[(x+y)&255]
 			lock.Lock()
 			// check depth buffer again
 			if bz <= dc.DepthBuffer[i] || !dc.ReadDepth {
@@ -321,6 +338,12 @@ func (dc *Context) drawClippedTriangle(v0, v1, v2 Vertex) RasterizeInfo {
 
 	// back face culling
 	a := (ndc1.X-ndc0.X)*(ndc2.Y-ndc0.Y) - (ndc2.X-ndc0.X)*(ndc1.Y-ndc0.Y)
+	// degenerate screen-space triangles (zero area or non-finite, e.g. a
+	// collapsed indexed face) cannot cover pixels and would otherwise feed
+	// infinities into the rasterizer loop, so terminate here.
+	if a == 0 || math.IsNaN(a) || math.IsInf(a, 0) {
+		return RasterizeInfo{}
+	}
 	if a < 0 {
 		v0, v1, v2 = v2, v1, v0
 		ndc0, ndc1, ndc2 = ndc2, ndc1, ndc0
@@ -436,4 +459,82 @@ func (dc *Context) DrawMesh(mesh *Mesh) RasterizeInfo {
 	info1 := dc.DrawTriangles(mesh.Triangles)
 	info2 := dc.DrawLines(mesh.Lines)
 	return info1.Add(info2)
+}
+
+func isFiniteVector(v Vector) bool {
+	return !math.IsNaN(v.X) && !math.IsNaN(v.Y) && !math.IsNaN(v.Z) &&
+		!math.IsInf(v.X, 0) && !math.IsInf(v.Y, 0) && !math.IsInf(v.Z, 0)
+}
+
+func isFiniteColor(c Color) bool {
+	return !math.IsNaN(c.R) && !math.IsNaN(c.G) &&
+		!math.IsNaN(c.B) && !math.IsNaN(c.A) &&
+		!math.IsInf(c.R, 0) && !math.IsInf(c.G, 0) &&
+		!math.IsInf(c.B, 0) && !math.IsInf(c.A, 0)
+}
+
+// DrawIndexed rasterizes a shared vertex pool addressed by triangle indices.
+// The vertex Output field is ignored; every referenced vertex is transformed
+// exactly once per call by the current Shader. An empty index slice succeeds
+// without drawing anything. All indices and the Position, Normal, Texture and
+// Color of every vertex are validated before any shader call or buffer write.
+func (dc *Context) DrawIndexed(vertices []Vertex, indices [][3]int) (RasterizeInfo, error) {
+	if len(indices) == 0 {
+		return RasterizeInfo{}, nil
+	}
+	n := len(vertices)
+	for _, idx := range indices {
+		if idx[0] < 0 || idx[0] >= n || idx[1] < 0 || idx[1] >= n || idx[2] < 0 || idx[2] >= n {
+			return RasterizeInfo{}, fmt.Errorf("DrawIndexed: triangle index out of range: %v", idx)
+		}
+	}
+	for i, v := range vertices {
+		if !isFiniteVector(v.Position) || !isFiniteVector(v.Normal) ||
+			!isFiniteVector(v.Texture) || !isFiniteColor(v.Color) {
+			return RasterizeInfo{}, fmt.Errorf("DrawIndexed: vertex %d has non-finite attributes", i)
+		}
+	}
+	// run the vertex shader once for each referenced vertex
+	shaded := make([]Vertex, n)
+	referenced := make([]bool, n)
+	for _, idx := range indices {
+		for _, j := range idx {
+			if !referenced[j] {
+				referenced[j] = true
+				shaded[j] = dc.Shader.Vertex(vertices[j])
+			}
+		}
+	}
+	wn := runtime.NumCPU()
+	ch := make(chan RasterizeInfo, wn)
+	for wi := 0; wi < wn; wi++ {
+		go func(wi int) {
+			var result RasterizeInfo
+			for i, idx := range indices {
+				if i%wn != wi {
+					continue
+				}
+				result = result.Add(dc.drawIndexedTriangle(shaded[idx[0]], shaded[idx[1]], shaded[idx[2]]))
+			}
+			ch <- result
+		}(wi)
+	}
+	var result RasterizeInfo
+	for wi := 0; wi < wn; wi++ {
+		result = result.Add(<-ch)
+	}
+	return result, nil
+}
+
+func (dc *Context) drawIndexedTriangle(v1, v2, v3 Vertex) RasterizeInfo {
+	if v1.Outside() || v2.Outside() || v3.Outside() {
+		// clip to viewing volume, reusing the same path as DrawMesh
+		triangles := ClipTriangle(NewTriangle(v1, v2, v3))
+		var result RasterizeInfo
+		for _, t := range triangles {
+			result = result.Add(dc.drawClippedTriangle(t.V1, t.V2, t.V3))
+		}
+		return result
+	}
+	return dc.drawClippedTriangle(v1, v2, v3)
 }
