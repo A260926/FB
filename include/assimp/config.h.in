@@ -291,6 +291,36 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @note The default value is AI_SLM_DEFAULT_MAX_TRIANGLES
  * Property type: integer.
  */
+// ---------------------------------------------------------------------------
+/** @brief Enables T-junction resolution inside the #aiProcess_Triangulate
+ *         post processing step.
+ *
+ *  When enabled, each aiMesh is processed independently: vertices that lie
+ *  strictly inside an indexed edge of a face are inserted into that edge,
+ *  splitting it into boundary sub-segments before the polygon is
+ *  triangulated. The inserted vertices carry linearly interpolated
+ *  attribute values; existing vertices are never merged or moved.
+ *  Property type: bool. Default value: false.
+ */
+#define AI_CONFIG_PP_TRI_RESOLVE_TJUNCTIONS \
+    "PP_TRI_RESOLVE_TJUNCTIONS"
+
+// ---------------------------------------------------------------------------
+/** @brief Maximum perpendicular distance of a vertex to an edge for it to
+ *         be considered on the edge during T-junction resolution.
+ *
+ *  The value must be a finite, strictly positive floating point number,
+ *  otherwise the triangulation step rejects the setting before modifying
+ *  any data.
+ *  Property type: float. Default value: 1e-6.
+ */
+#define AI_CONFIG_PP_TRI_TJUNCTION_EPSILON \
+    "PP_TRI_TJUNCTION_EPSILON"
+
+#if (!defined AI_CONFIG_PP_TRI_TJUNCTION_EPSILON_DEFAULT)
+#   define AI_CONFIG_PP_TRI_TJUNCTION_EPSILON_DEFAULT 1e-6f
+#endif
+
 #define AI_CONFIG_PP_SLM_TRIANGLE_LIMIT \
     "PP_SLM_TRIANGLE_LIMIT"
 

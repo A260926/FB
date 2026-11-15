@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/contrib/zlib/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/code/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

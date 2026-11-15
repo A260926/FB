@@ -1,0 +1,8 @@
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/contrib/zlib/CMakeFiles/zlibstatic.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/contrib/zlib/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/contrib/zlib/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/code/CMakeFiles/assimp.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/code/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build/code/CMakeFiles/rebuild_cache.dir

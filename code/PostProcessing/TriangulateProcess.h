@@ -47,6 +47,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "Common/BaseProcess.h"
 
+#include <assimp/config.h>
+
 struct aiMesh;
 
 class TriangulateProcessTest;
@@ -81,10 +83,23 @@ public:
     void Execute( aiScene* pScene) override;
 
     // -------------------------------------------------------------------
+    /** Reads the AI_CONFIG_PP_TRI_RESOLVE_TJUNCTIONS and
+     *  AI_CONFIG_PP_TRI_TJUNCTION_EPSILON importer properties.
+     */
+    void SetupProperties(const Importer* pImp) override;
+
+    // -------------------------------------------------------------------
     /** Triangulates the given mesh.
      * @param pMesh The mesh to triangulate.
      */
     bool TriangulateMesh( aiMesh* pMesh);
+
+private:
+    //! Configuration option: resolve T-junctions while triangulating
+    bool mConfigResolveTJunctions = false;
+
+    //! Configuration option: point-on-edge epsilon
+    ai_real mTjunctionEpsilon = AI_CONFIG_PP_TRI_TJUNCTION_EPSILON_DEFAULT;
 };
 
 } // end of namespace Assimp

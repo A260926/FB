@@ -764,6 +764,8 @@ SET( PostProcessing_SRCS
   PostProcessing/TextureTransform.h
   PostProcessing/TriangulateProcess.cpp
   PostProcessing/TriangulateProcess.h
+  PostProcessing/ResolveTJunctionsProcess.cpp
+  PostProcessing/ResolveTJunctionsProcess.h
   PostProcessing/ValidateDataStructure.cpp
   PostProcessing/ValidateDataStructure.h
   PostProcessing/OptimizeGraph.cpp

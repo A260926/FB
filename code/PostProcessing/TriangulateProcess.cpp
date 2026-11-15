@@ -61,8 +61,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "PostProcessing/TriangulateProcess.h"
 #include "PostProcessing/ProcessHelper.h"
+#include "PostProcessing/ResolveTJunctionsProcess.h"
 #include "Common/PolyTools.h"
 #include "contrib/earcut-hpp/earcut.hpp"
+
+#include <assimp/Exceptional.h>
 
 #include <memory>
 #include <cstdint>
@@ -175,6 +178,15 @@ namespace {
 }
 
 // ------------------------------------------------------------------------------------------------
+// Reads the T-junction related importer properties.
+void TriangulateProcess::SetupProperties(const Importer* pImp) {
+    mConfigResolveTJunctions =
+            (0 != pImp->GetPropertyInteger(AI_CONFIG_PP_TRI_RESOLVE_TJUNCTIONS, 0));
+    mTjunctionEpsilon = pImp->GetPropertyFloat(
+            AI_CONFIG_PP_TRI_TJUNCTION_EPSILON, AI_CONFIG_PP_TRI_TJUNCTION_EPSILON_DEFAULT);
+}
+
+// ------------------------------------------------------------------------------------------------
 // Returns whether the processing step is present in the given flag field.
 bool TriangulateProcess::IsActive( unsigned int pFlags) const {
     return (pFlags & aiProcess_Triangulate) != 0;
@@ -184,6 +196,13 @@ bool TriangulateProcess::IsActive( unsigned int pFlags) const {
 // Executes the post processing step on the given imported data.
 void TriangulateProcess::Execute( aiScene* pScene) {
     ASSIMP_LOG_DEBUG("TriangulateProcess begin");
+
+    // Reject an illegal epsilon before any mesh is touched.
+    if (mConfigResolveTJunctions &&
+            !ResolveTJunctionsProcess::IsValidEpsilon(mTjunctionEpsilon)) {
+        throw DeadlyImportError(
+                "AI_CONFIG_PP_TRI_TJUNCTION_EPSILON must be a finite, positive value");
+    }
 
     bool bHas = false;
     for( unsigned int a = 0; a < pScene->mNumMeshes; a++)
@@ -204,6 +223,14 @@ void TriangulateProcess::Execute( aiScene* pScene) {
 // ------------------------------------------------------------------------------------------------
 // Triangulates the given mesh.
 bool TriangulateProcess::TriangulateMesh( aiMesh* pMesh) {
+    // Optional T-junction resolution runs on the original faces, triangles
+    // included. When it changes the mesh the output already consists of
+    // boundary-preserving triangles, so the legacy path is skipped.
+    if (mConfigResolveTJunctions &&
+            ResolveTJunctionsProcess::ResolveMesh(pMesh, mTjunctionEpsilon)) {
+        return true;
+    }
+
     // Now we have aiMesh::mPrimitiveTypes, so this is only here for test cases
     if (!pMesh->mPrimitiveTypes)    {
         bool bNeed = false;

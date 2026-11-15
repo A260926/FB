@@ -1,0 +1,12 @@
+-- Shared libraries disabled
+-- compiling zlib from sources
+-- VRML disabled
+-- tinyusdz disabled
+INFO Hunter enabled or RT-extension not found. glTF import/export will be built without Open3DGC-compression.
+-- Enabled importer formats: OBJ
+-- Disabled importer formats: AMF 3DS AC ASE ASSBIN B3D BVH COLLADA DXF CSM HMP IRRMESH IQM IRR LWO LWS MD2 MD3 MD5 MDC MDL NFF NDO OFF OGRE OPENGEX PLY MS3D COB BLEND IFC XGL FBX Q3D Q3BSP RAW SIB SMD STL TERRAGEN 3D USD X X3D GLTF 3MF MMD
+-- Enabled exporter formats: OBJ
+-- Disabled exporter formats: OPENGEX PLY 3DS ASSBIN ASSXML COLLADA FBX STL X X3D GLTF 3MF PBRT ASSJSON STEP
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FSACD9F68E5403U11601/attempts/20261115T074637920486Z/repo/.task-build
