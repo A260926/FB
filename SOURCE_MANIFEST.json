@@ -1,0 +1,987 @@
+{
+  "repo": "https://github.com/sketchpunklabs/ossos",
+  "commit": "d1325d878f4875d0eafe42f8861a853263d57081",
+  "license": "MIT",
+  "gitlinks": [],
+  "source_files": [
+    {
+      "path": "LICENSE",
+      "git_blob": "82bbc7071b18c6afe13583938f9811d561c4793c",
+      "mode": "100644",
+      "sha256": "b914495af73396708db5fc516491fe6738b4fb5921da3492f5c657bd6420e9c4"
+    },
+    {
+      "path": "README.md",
+      "git_blob": "ff954ed4bbeda0a5933761cceb62e898baa09d38",
+      "mode": "100644",
+      "sha256": "5e0b0112fbccd32cf5eb0b80e6452a456018414f9c9461910b3952889dc8d395"
+    },
+    {
+      "path": "package.json",
+      "git_blob": "b7eed3f26be3ad261b07afa69a2cc143a36fcde5",
+      "mode": "100644",
+      "sha256": "5314d7ccabf2981862f1cdced46912e2c47578e016fab6f9a64da384a508e9de"
+    },
+    {
+      "path": "src/animation/Animator.ts",
+      "git_blob": "f7e10bfdc34b1a17c6f4ba839b288d6d7024c008",
+      "mode": "100644",
+      "sha256": "c90118c56ae59ca4d6826d18af3c20fc55c61e9a77114d9a33b7115f84d6026e"
+    },
+    {
+      "path": "src/animation/Clip.ts",
+      "git_blob": "af7570dfb32561d2044c2105e0b4c7cdfaa66e97",
+      "mode": "100644",
+      "sha256": "688519e79e7206e51bc3e0546081f7cf8c2abb3922ffda5a4b12f832ec54c26a"
+    },
+    {
+      "path": "src/animation/Retarget.ts",
+      "git_blob": "f4405038f9071c1d04c656b25f4669390161b8cd",
+      "mode": "100644",
+      "sha256": "5690ff743796ea998c5d58065c88de61c353158711321d3817f5756cedc7b836"
+    },
+    {
+      "path": "src/animation/TypePool.ts",
+      "git_blob": "f4783e8f31f821acca4d87222de7bfb70a67e9ab",
+      "mode": "100644",
+      "sha256": "cc9b7520e56058d7971066145031210b89a72285768440afa637b7550ca21419"
+    },
+    {
+      "path": "src/animation/index.ts",
+      "git_blob": "bdb5b69e3e75a76f61ce5f8c99b00aac6ba89993",
+      "mode": "100644",
+      "sha256": "dd6a69717208e57bd7128719f4ec688768c2f2f2cf093c96983b06b9164961fc"
+    },
+    {
+      "path": "src/animation/tracks/QuatTrack.ts",
+      "git_blob": "3fb67d1fbe2427ae6c8853bd79c8d26258cc897c",
+      "mode": "100644",
+      "sha256": "e43c66c56adebb538ad4d148e4e86e98df97caa29117ee1801d091f7a8a6c602"
+    },
+    {
+      "path": "src/animation/tracks/Vec3Track.ts",
+      "git_blob": "f16c86e400297dbef456d133a502ccb83aa4993f",
+      "mode": "100644",
+      "sha256": "473109ba112dba8c7d01d9b817d188f1f449f3196df60e45b67c2904f2dbd65e"
+    },
+    {
+      "path": "src/animation/tracks/types.ts",
+      "git_blob": "694cad201eb7877ed7e8bc5f316c1ac4780d9078",
+      "mode": "100644",
+      "sha256": "2231078fe45a77f8f4d4d8cb872c5042bc80b2a7687129ed4f3c57be7e51c290"
+    },
+    {
+      "path": "src/armature/Armature.ts",
+      "git_blob": "a5d6b22c510fad41e78eaad886b8d1aa1b68cc53",
+      "mode": "100644",
+      "sha256": "260c687102d9d4a84d593abe2745b56cce78f3ab503b324490659392b29d747e"
+    },
+    {
+      "path": "src/armature/Bone.ts",
+      "git_blob": "ea6300246675cec937d17661892f976256a484f2",
+      "mode": "100644",
+      "sha256": "59f1974300ac7beb62e227ab50d7cde1e823b6e688ff94a58f6fcdf4bb0e1f73"
+    },
+    {
+      "path": "src/armature/BoneMap.ts",
+      "git_blob": "a7a593c47abc37b0fac75278e6e1abfc44f28a4b",
+      "mode": "100644",
+      "sha256": "07861a1c8a5eba14238e4e713f9bb1d7e48e635760330c10d7b893ecd9a0185f"
+    },
+    {
+      "path": "src/armature/BoneSlots.ts",
+      "git_blob": "c9b737049cb96cb8914b76deb4a6de0cfeb208dd",
+      "mode": "100644",
+      "sha256": "a5be613ca7b298afd735a6a213d5056bcf56fa5572640bb0ecfc1ccd2669fbc5"
+    },
+    {
+      "path": "src/armature/Pose.ts",
+      "git_blob": "55d22e54a7e94fb7037cf7d870aa7f4a2c66fb65",
+      "mode": "100644",
+      "sha256": "299e3f8c04a03981ac3db4d156805b205b2285f225b70ed3e5a3ec409b56da33"
+    },
+    {
+      "path": "src/armature/index.ts",
+      "git_blob": "7d9252c4f40b0c1acb047b06e56f2029c3bda776",
+      "mode": "100644",
+      "sha256": "4a680f788e227a99d65ae534d5b32f80ef8768412acda20406c837456537304e"
+    },
+    {
+      "path": "src/armature/skins/ISkin.ts",
+      "git_blob": "9c9ea7de0475889065d7b3793bf029c148d55f28",
+      "mode": "100644",
+      "sha256": "8267a864e2b1de6f0576dc01b86727d2278f4823d190eaf20253548346e17530"
+    },
+    {
+      "path": "src/armature/skins/SkinDQ.ts",
+      "git_blob": "d0cd511db29cf3e11e5d7fa8f5e3dd365c652cdf",
+      "mode": "100644",
+      "sha256": "f5787d9a2e865cf793f08aa281b63b7c4659a3ca25b31c3808fb8d1d97c33cc4"
+    },
+    {
+      "path": "src/armature/skins/SkinDQT.ts",
+      "git_blob": "d0c900ff5628aa5ee7858f69abb4fb9524a7a6e0",
+      "mode": "100644",
+      "sha256": "6bf6053aaafd05831e7d2b4e48fa22c01b36a5d77d0cfea22edaf6526c0a1de4"
+    },
+    {
+      "path": "src/armature/skins/SkinMTX.ts",
+      "git_blob": "223e90592483b2e3d9a20398f86b5ca75aa1b273",
+      "mode": "100644",
+      "sha256": "1a5afbf52e1a30d6ee5889f35a0f5b864684c4b02699527bdc4deac020a26a5c"
+    },
+    {
+      "path": "src/armature/skins/SkinRTS.ts",
+      "git_blob": "770ab7f2836e6b96db4f9041f607edbd2289ec0e",
+      "mode": "100644",
+      "sha256": "ae151805745a51fc04ab1a5172f694e2db1a26139a079c63ddbb1b69de28d067"
+    },
+    {
+      "path": "src/bonespring/SpringChain.ts",
+      "git_blob": "d43a1975a66f4dce69c744c8fcf80476e225ea88",
+      "mode": "100644",
+      "sha256": "d91588aa6e67d5984797bd7f4f86d0b055a2265c41968311c7371ec40486385a"
+    },
+    {
+      "path": "src/bonespring/SpringItem.ts",
+      "git_blob": "e16bc8fe53209f72a6deddc160f856db274dd06a",
+      "mode": "100644",
+      "sha256": "5165f383bfec01fa4c22e5ef010a0736c3003c96b72693d6c5c7d6159eaf3871"
+    },
+    {
+      "path": "src/bonespring/SpringPos.ts",
+      "git_blob": "82b7db514caafc37b47fcf6bebdf417410ebc843",
+      "mode": "100644",
+      "sha256": "40c45b62419c3df1e3fd87446fb8763cb0934412ed901af1aac778ac81f43ca5"
+    },
+    {
+      "path": "src/bonespring/SpringRot.ts",
+      "git_blob": "41f46404d85b985e9519db7473352281485c6970",
+      "mode": "100644",
+      "sha256": "cd6d39b96a5aebd09861360b95f4dc6c4e3bcd83011a337e7e799412770efef9"
+    },
+    {
+      "path": "src/bonespring/implicit_euler/SpringBase.ts",
+      "git_blob": "07c931558f6915a4d6137a5b4aa9e8ed79ac6c25",
+      "mode": "100644",
+      "sha256": "fa72284cfad424eb1bcfbbf6ac30a98f319cf618472c6cd6f0d4621b0a6ef87f"
+    },
+    {
+      "path": "src/bonespring/implicit_euler/SpringFloat.ts",
+      "git_blob": "a737aa5aa4a13b9114a1c32f497b693f6e421dcb",
+      "mode": "100644",
+      "sha256": "e5b52f90d2ed196079b7f59a5c44d4724706b49dc6e49a5446be490ecda61d2c"
+    },
+    {
+      "path": "src/bonespring/implicit_euler/SpringQuat.ts",
+      "git_blob": "5f147338db3e486dde43736921eeefdb8a459a46",
+      "mode": "100644",
+      "sha256": "0077df2cb0bec504e9a78ea5cfe71adc883db52dbf2f51578ee8a104c7257e8d"
+    },
+    {
+      "path": "src/bonespring/implicit_euler/SpringVec3.ts",
+      "git_blob": "74f274734e8c39ab0378df13929d096626863049",
+      "mode": "100644",
+      "sha256": "0fd3e0ed7cf12492d0adee95be96a019bb617061e40eb5cc88cc2ad406b75f00"
+    },
+    {
+      "path": "src/bonespring/index.ts",
+      "git_blob": "ae00e0a1106561f5e1fddaa76a61892f61c6e911",
+      "mode": "100644",
+      "sha256": "f778a0a68229cc2909a7905b79b1fddca6a5ac9de5500c1f5ef92fed3216027c"
+    },
+    {
+      "path": "src/ikrig/IKData.ts",
+      "git_blob": "1328e14727ef029afaeea80c5f060bcf335f424a",
+      "mode": "100644",
+      "sha256": "d6b73a237fdc4c22cd05b86987ac00716f7171b1b6e83f4bf2a5abe0ce8af56c"
+    },
+    {
+      "path": "src/ikrig/animation/BipedIKPose.ts",
+      "git_blob": "04bc3c2d9b476a028371720cc3a109cdceb48595",
+      "mode": "100644",
+      "sha256": "fd43b2dd455929d96f450c06879327aab1ee3ab21f8c2afe18bfa3dd22817b91"
+    },
+    {
+      "path": "src/ikrig/animation/additives/EffectorScale.ts",
+      "git_blob": "64b838827a99f57f3e677407f1eb308e3d396582",
+      "mode": "100644",
+      "sha256": "926f10e4efb0f827124a07efc7bfffa328d462812ad74e8b9faaba3e25eb8914"
+    },
+    {
+      "path": "src/ikrig/animation/additives/IKPoseAdditives.ts",
+      "git_blob": "02fc14f6f06985cdf971af50e526613e030c9536",
+      "mode": "100644",
+      "sha256": "523c885d7010ff178c6f66446ee79e48c19503c36d87e9fa1f645f545801a149"
+    },
+    {
+      "path": "src/ikrig/animation/additives/PositionOffset.ts",
+      "git_blob": "8448ccb72655684f213ef0758ca3d50f6fca0034",
+      "mode": "100644",
+      "sha256": "8de891d947d1801cdedd2115aa1a859b7ab8faec1305c92b440a6bbc0acad7c8"
+    },
+    {
+      "path": "src/ikrig/animation/additives/index.ts",
+      "git_blob": "a82cb2f9a4dd85e517db995516115ed6864460aa",
+      "mode": "100644",
+      "sha256": "bdffa4946e6561fe72b709a404fa24f19fbf5c5a39d93d320d411eb0df092815"
+    },
+    {
+      "path": "src/ikrig/animation/support/IIKPoseAdditive.ts",
+      "git_blob": "4655d6a739251a96f38d81242ffb5687a26fb019",
+      "mode": "100644",
+      "sha256": "bf2ff7cdcc0216775b64ba30e46c0c6d2b3537820963da7eccb6451deaf48433"
+    },
+    {
+      "path": "src/ikrig/index.ts",
+      "git_blob": "dffc08682f1ca5ce55795c746ff40a5ceca26172",
+      "mode": "100644",
+      "sha256": "ea5f36658412144adcce462bdaea5ba7b3d2fea8208cfdfb953b43fe2d363593"
+    },
+    {
+      "path": "src/ikrig/rigs/BipedRig.ts",
+      "git_blob": "d76bdcb66d80f49abcb18f48dcf0da7ea5471877",
+      "mode": "100644",
+      "sha256": "d5864bd5946a97358641c04a504f0e9b3e95f5ce8567ca2768ec649b5f0a40fd"
+    },
+    {
+      "path": "src/ikrig/rigs/IKChain.ts",
+      "git_blob": "7f91fd6942a290114110e7d5e48c978be5926ff5",
+      "mode": "100644",
+      "sha256": "90556202ef1bdb5d5a4f6ececa0e6e23c0c05b07431ef32bc861149dbd3ff587"
+    },
+    {
+      "path": "src/ikrig/rigs/IKRig.ts",
+      "git_blob": "2c23759fd586252d4da45eedf5892c046175dc31",
+      "mode": "100644",
+      "sha256": "5e61f3ab520556899f3858858003962f58c7f2fa3fe2635208951a11e1b3ec4c"
+    },
+    {
+      "path": "src/ikrig/rigs/QuadrupedRig.ts",
+      "git_blob": "c0cf5ab62518cd189f24ee07f464377b020c9f18",
+      "mode": "100644",
+      "sha256": "62f6cbb4e9cb34aeb37dfe26cbbcaf9442eced46b07da55fa0a10f7573fa7bea"
+    },
+    {
+      "path": "src/ikrig/solvers/ArcSinSolver.ts",
+      "git_blob": "45b2ec3d180626cd17171909d988f48cc876c376",
+      "mode": "100644",
+      "sha256": "63bcfb00bd9e5c6d29ba685985909f7368623905793d8db020c9c78dadb87a54"
+    },
+    {
+      "path": "src/ikrig/solvers/ArcSolver.ts",
+      "git_blob": "b9632c4e94ea9a4139d52dc066521253fbb5be49",
+      "mode": "100644",
+      "sha256": "25854016cb20fdd7dfe80516263a79c361ec39e289351953158dceeb65ca6c19"
+    },
+    {
+      "path": "src/ikrig/solvers/CatenarySolver.ts",
+      "git_blob": "e8184b30f30ef06cda7c6dbf65ad9ce0a20097fb",
+      "mode": "100644",
+      "sha256": "ea495b9e21101c0009f54330ec78089d03bd1eaf6b4602386857ba7d4ea5a78f"
+    },
+    {
+      "path": "src/ikrig/solvers/FabrikSolver.ts",
+      "git_blob": "b498f2398f3c21de45e3ee07372b0b830273f94a",
+      "mode": "100644",
+      "sha256": "2928ca6e71bbe211829fac98e43b69b8f000d897d2e3a4d48a402ee04f5c8f86"
+    },
+    {
+      "path": "src/ikrig/solvers/HipSolver.ts",
+      "git_blob": "27f1bc3d3bcb9dfb1bc452b700d2ff3841d26f69",
+      "mode": "100644",
+      "sha256": "61e993c02076983d6c9e573a5b4a095d778ede031e9cb9958b61623b8e97cb99"
+    },
+    {
+      "path": "src/ikrig/solvers/LimbSolver.ts",
+      "git_blob": "6e0b1c9d5b42c546386151111cd64c0864547e00",
+      "mode": "100644",
+      "sha256": "d6c1dfa3b69e43b7e23098318b2de6fee27872ab975cba599b52085163d797e0"
+    },
+    {
+      "path": "src/ikrig/solvers/NaturalCCDSolver.ts",
+      "git_blob": "7d58e4b7048498d15f8487f85dad41759e51db68",
+      "mode": "100644",
+      "sha256": "a7678de6f0764c3439dd28d9e1daa081bdff6a159d9e14c173aa87573c45ad95"
+    },
+    {
+      "path": "src/ikrig/solvers/PistonSolver.ts",
+      "git_blob": "d786697a997e376f371d3e54743b33dff1d493c4",
+      "mode": "100644",
+      "sha256": "f219979e0e4a34126bfcc73473473eca1fcab4810418bbc49ec5f1259cf0d927"
+    },
+    {
+      "path": "src/ikrig/solvers/SpringSolver.ts",
+      "git_blob": "194355e4e8dac0f30f87cf09e41a444b40470a60",
+      "mode": "100644",
+      "sha256": "3624978b81c5570d0f3ea41b65f3f06eaa6082a27f65f2979c79c91d8b24087c"
+    },
+    {
+      "path": "src/ikrig/solvers/SwingTwistEndsSolver.ts",
+      "git_blob": "a98d10923934294fc132f434c7a16bfa4b357739",
+      "mode": "100644",
+      "sha256": "1d67c9275c6381c036f74c5ddaa2e0b485ff9e95390bcdca10cf8d905f872318"
+    },
+    {
+      "path": "src/ikrig/solvers/SwingTwistSolver.ts",
+      "git_blob": "438d22db780373c8e72eca342635afa8f1f21f73",
+      "mode": "100644",
+      "sha256": "591f64e58e9eeaad33a6ac7664541fdda06fa40a445a76b84f7196270deae9eb"
+    },
+    {
+      "path": "src/ikrig/solvers/TrapezoidSolver.ts",
+      "git_blob": "ea86a5346d7f73cf76c0fdfb1e0e9ed949301036",
+      "mode": "100644",
+      "sha256": "ed12f19d029becf4399d2e357b0afa96c08d0bec3e37564fd22e8ed7c6069494"
+    },
+    {
+      "path": "src/ikrig/solvers/ZSolver.ts",
+      "git_blob": "d9bacb3917b5ad277f65128da36ef41385af8269",
+      "mode": "100644",
+      "sha256": "188cbe8ca761fa1f3c7ad847c1bf452315a69394b8f637e5862ac628e43381ea"
+    },
+    {
+      "path": "src/ikrig/solvers/index.ts",
+      "git_blob": "b38cbfca49779750a70d0cdc4ac02ccd39f487ca",
+      "mode": "100644",
+      "sha256": "5e89f418506f23d75fc3a38f02e9edbdb89d60cef25becd4c7e1d452f00f5bf2"
+    },
+    {
+      "path": "src/ikrig/solvers/support/ISolver.ts",
+      "git_blob": "b691fa3bc41846aef0d2cf8600af5eeda395bad7",
+      "mode": "100644",
+      "sha256": "056d40c4dc12c4ec7f9229f4349780c80351e03d409daf1e00fbc701ba3a218a"
+    },
+    {
+      "path": "src/ikrig/solvers/support/SwingTwistBase.ts",
+      "git_blob": "a5e17340bff808e554c5416695374ae59467f121",
+      "mode": "100644",
+      "sha256": "419f45a5e442a88dfb713d4a05a739f37b677a5a42a6c2c3c89d5027ec52d09e"
+    },
+    {
+      "path": "src/maths/CurveSample.ts",
+      "git_blob": "fa03851eb15eb2b448a927f40ca5a8645da7714d",
+      "mode": "100644",
+      "sha256": "c36a4480e61bcd48f9725743046b075fd7b5b48dfc7afd80dc2b1f3afa283402"
+    },
+    {
+      "path": "src/maths/DualQuatUtil.ts",
+      "git_blob": "4aa4a92f8d98a187fbf638ae9c4cceca53c9488a",
+      "mode": "100644",
+      "sha256": "628d421ae094bf1ff854ddf0f65ffad583a90b0d86e4749a92996d9f3ca080b8"
+    },
+    {
+      "path": "src/maths/Mat4Util.ts",
+      "git_blob": "203c3d997d0b10d82479adca5c26488a2521c103",
+      "mode": "100644",
+      "sha256": "1d9d034dc10982fc0774b80da0dd361d4bc8f9195284289dbf0444143118992c"
+    },
+    {
+      "path": "src/maths/Maths.ts",
+      "git_blob": "e42cd7287b573ecf2cdf5276f8a960bcfe063a2e",
+      "mode": "100644",
+      "sha256": "03f0046d63ad7b990a4ccf04c21e6267180713c8ba1ebe986d48c10957c7572a"
+    },
+    {
+      "path": "src/maths/QuatUtil.ts",
+      "git_blob": "831c5997c5b9c9b9fe068c1f65366208e2be83f2",
+      "mode": "100644",
+      "sha256": "279da40a1e72b48e9375862a83467c3654ce8457dc30c3bc8de79b27cf6f1268"
+    },
+    {
+      "path": "src/maths/Transform.ts",
+      "git_blob": "84ae6375d42c1bceed70b2404870eb5ac13530f3",
+      "mode": "100644",
+      "sha256": "d4e94106029a6df2c7c3c1e0c56d0e453f1d0c7520f3940c0a5e53957c211b77"
+    },
+    {
+      "path": "src/maths/Vec3Util.ts",
+      "git_blob": "65b5de50d1157b4afd9028d4c40b2319a500c1ee",
+      "mode": "100644",
+      "sha256": "e8f3996919c6b845659b7e371ab7740ca6faddb44ba1213c9a274674ada3212c"
+    },
+    {
+      "path": "src/maths/Vec4Util.ts",
+      "git_blob": "82e70050a6f2d67bf17f91aafebc589682a2fbb8",
+      "mode": "100644",
+      "sha256": "27cf40edc0a4f6a5fe3f5845fda2e350bd1b4f262763c96d2288ded8d1935c61"
+    },
+    {
+      "path": "src/maths/index.ts",
+      "git_blob": "0fcaa3320200a5ff36bcf71b2ed57609a65c7f05",
+      "mode": "100644",
+      "sha256": "7f088fca76869da6d4fbbcda0628b4f5345eedee3d90dde4e63f2a44613a6808"
+    },
+    {
+      "path": "src/ossos.ts",
+      "git_blob": "90a90c02da651b4aa7003c80ace48108f513391d",
+      "mode": "100644",
+      "sha256": "72d50c21e7f8d03cf87bf7909e652197ae5305033473d0b326e13b08f98d2eff"
+    },
+    {
+      "path": "src/parsers/bvh/Animation.ts",
+      "git_blob": "4c37d412a41c3be9d3e2306a3e515ab8cf615ee3",
+      "mode": "100644",
+      "sha256": "e4c8f36d01f6818484c76844385148956355e7db73219eb26ef07e7506e5c0f2"
+    },
+    {
+      "path": "src/parsers/bvh/Skin.ts",
+      "git_blob": "3cf450509e548cf1683b91ab72bb90f5adeb550a",
+      "mode": "100644",
+      "sha256": "3e601f5ca12ee0c7b5d05a2ecc46b04f60dd6a65180a8aec35d8eaee2c9b0ac8"
+    },
+    {
+      "path": "src/parsers/bvh/index.ts",
+      "git_blob": "372745ddbeb85438c05eb6a319af46f58ddfedc3",
+      "mode": "100644",
+      "sha256": "c04760dcb08df0432d9ec6a6f1d2f9313f283dbab8032dfd551c8fbc43bb29ec"
+    },
+    {
+      "path": "src/parsers/gltf2/Accessor.ts",
+      "git_blob": "a87ccae94024fbe28cf665ee79bb992e8ad76a3f",
+      "mode": "100644",
+      "sha256": "66d93548f1f4dc2d38288547dd2146062a62544d5a2cc166c95bc8f9dd57c013"
+    },
+    {
+      "path": "src/parsers/gltf2/Animation.ts",
+      "git_blob": "eb1df47d208f9bab4c50ca4149f6f70dda7a3651",
+      "mode": "100644",
+      "sha256": "4c0dbfe7bff05135f3cccdd28335efafd73014f4ce1f515a8e7b23f02a318ccf"
+    },
+    {
+      "path": "src/parsers/gltf2/Glb.ts",
+      "git_blob": "fa1cde61cb1a6b26d647c4a942060e033a8afd9f",
+      "mode": "100644",
+      "sha256": "e546c50536afedaceee18109cc3292e61dc91356d63d6b249e420b80e006b615"
+    },
+    {
+      "path": "src/parsers/gltf2/Mesh.ts",
+      "git_blob": "9bb7e7f6895e3c994496e83be9dff9bbc8586f45",
+      "mode": "100644",
+      "sha256": "bef95b058a7ec2558780862907343ca20b52413f0289a10e48327ce7b982f200"
+    },
+    {
+      "path": "src/parsers/gltf2/Pose.ts",
+      "git_blob": "04bbcaef49da27ba26e735236954da847602ab8d",
+      "mode": "100644",
+      "sha256": "8cfdf8c51f47f81f50253763f17f8714126f96cd4f5f7bde702ccb1c34eb5784"
+    },
+    {
+      "path": "src/parsers/gltf2/Skin.ts",
+      "git_blob": "c2cc5ab1f9406dd7531550b2ac63ab33f80d1b4e",
+      "mode": "100644",
+      "sha256": "9d2861e49ca4d402983e11d438b4a7e1f9523b515ff2ae3d778bc7778c217caa"
+    },
+    {
+      "path": "src/parsers/gltf2/Texture.ts",
+      "git_blob": "c25b21a53872320f8d665fcf289f2b258ba18ebb",
+      "mode": "100644",
+      "sha256": "290e966bfbc75a9be4e5356ef96bb174caf31de4031324612fd9cbd8913b3367"
+    },
+    {
+      "path": "src/parsers/gltf2/index.ts",
+      "git_blob": "3dc78efd527ac535d1412ac571c53e18993c5a50",
+      "mode": "100644",
+      "sha256": "1bcff30c87416ce350313b20ce254ce341d85895ad663003b490a49e5c8afec0"
+    },
+    {
+      "path": "src/parsers/gltf2/structs.ts",
+      "git_blob": "c4348e25511ebc729a2d048305ff5f69c1a8e991",
+      "mode": "100644",
+      "sha256": "d37a74c66b7f7d9deeb9bb940cb4a0852240c2cea4a1b5a6eaf286f8c48bdf41"
+    },
+    {
+      "path": "src/parsers/gltf2/types.ts",
+      "git_blob": "4e3f37b0b9103f0c882d301d6f389b6b4871c4e3",
+      "mode": "100644",
+      "sha256": "fe3fbf75120c55a5487f60b0ba736638f7194f05ce10dc41700a759f82016e75"
+    },
+    {
+      "path": "tsconfig.json",
+      "git_blob": "f332101129eca3d0bccea91085f7eb47981cc5c7",
+      "mode": "100644",
+      "sha256": "6cadcc1e5092c449750fd268ef89caa7c25bc5434791dd42dbd9e342e1670c60"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".eslintignore",
+      "git_blob": "76add878f8dd778c3381fb3da45c8140db7db510",
+      "mode": "100644"
+    },
+    {
+      "path": ".eslintrc",
+      "git_blob": "3793d866ee31125a62e3660a35d92540fce5ec1e",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/FUNDING.yml",
+      "git_blob": "e921007feff04cbaa61d6d7554a908c0c211ac20",
+      "mode": "100644"
+    },
+    {
+      "path": ".gitignore",
+      "git_blob": "67045665db202cf951f839a5f3e73efdcfd45021",
+      "mode": "100644"
+    },
+    {
+      "path": "_images/Epic_MegaGrants_Recipient_logo.png",
+      "git_blob": "8cd3b3c1f935703624509515991b7fd5989c133c",
+      "mode": "100644"
+    },
+    {
+      "path": "changeLog.txt",
+      "git_blob": "b08c5abbd98b31cbd5b440a0dae6c514392fd955",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/arm.html",
+      "git_blob": "04a240296ea77027f966b424dc0ae43526f58542",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/char_rig.html",
+      "git_blob": "3da8434256d748d73423d66b95001e8b6f7294f6",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/index.html",
+      "git_blob": "9a6dffa0e42d26e819a19cf93113bb10978d299f",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/lib/CharacterRig.js",
+      "git_blob": "29c4ead7a9e266cbadd673b9e08f7f46599f54a9",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/lib/IKPoseVisualizer.js",
+      "git_blob": "8f311835cb0a040c4cc903a038aad83a4d1ef48b",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/lib/MixamoIKAnimatorRig.js",
+      "git_blob": "8e8a658cf3215e4d0505c048456b74d93450af03",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/lib/Proto.js",
+      "git_blob": "9e1fe2abdd4130939b6988a46b77eed8a5c33323",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/ready_player_me.html",
+      "git_blob": "4c60dca3e8933c205f0daf2fd683a6f101d75136",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/IKRig.js",
+      "git_blob": "87a2a1fbd405545a3d272a18d4f986c7858a7c8a",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/LigerZeroRig.js",
+      "git_blob": "7d5a8ee06d4370f6c75f0c201eae0ca9f1ec2415",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/NabbaRig.js",
+      "git_blob": "d6943a91aa9c0d56c65fe9838e61ccb3170e7f45",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/ReadyPlayerRig.js",
+      "git_blob": "2ebb82e0e15c0d873a9cd5c29b7d5763fb9d5a48",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/Ronin.js",
+      "git_blob": "ab480704d4814edd2a60d653e9ea3e586fdd8234",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/TRex.js",
+      "git_blob": "2592a4b6fbd9253f9234f76aacba883781ca31c8",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/TinaRig.js",
+      "git_blob": "58aac17dadd23d4995e97d4355eb526bf95d0ac0",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/rigs/ToruRig.js",
+      "git_blob": "d998d85b31c1f00c6d0f087adb0dfa31ba3e8b6f",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_demo/tail_procedural_anim.html",
+      "git_blob": "6c54aa59452ea094afcd7c73f298c95678ed3d33",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_lib/Cycle.js",
+      "git_blob": "fc9615fb648bb73cda5e12f1913f4f18e76118a0",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_lib/propui/PropGroup.js",
+      "git_blob": "38a7578d205e4519fb27d846cb1db00f0b4b795e",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_lib/propui/PropSelect.js",
+      "git_blob": "2d6af12722783e567cf827624600b2201bacab53",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_lib/propui/PropUI.css",
+      "git_blob": "0dd23fe6efce237c78c4230492b8babe59bf3ec2",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_lib/propui/PropUtil.js",
+      "git_blob": "fdbada9019d90321382cccb307b140ddcc620b0d",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_lib/propui/index.js",
+      "git_blob": "dd0a5190f6bf707075f88a581fe11e93671fbf53",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/_res/_setup.txt",
+      "git_blob": "0daba5438f3aac8f6c71c4cebfbbdb12cdf8ef62",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/001_skin_mtx.html",
+      "git_blob": "715c42bb3f1a1a5e4ba553fa2b897a4d3aad69cf",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/002_animation.html",
+      "git_blob": "3b9c21a6e1fd6015d12f209302942ed0f8513622",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/005_ikrig.html",
+      "git_blob": "1438dfe405355729710f3adc2ce6b96e5a10662a",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/006_ik_retarget.html",
+      "git_blob": "0f245e5b65485ed6f4f8559dcc9658e5fe6c801d",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_000_debug.html",
+      "git_blob": "a5e7cec23750e1ab7ca22ee1075e66399899e139",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_000_debug_mesh.html",
+      "git_blob": "64cb83acc7cbe4c36e34d1f8dc082dff2dd79e43",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_000_template.html",
+      "git_blob": "fd5f7eb9ea7feb93524249716ce724ed7d7aa1b9",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/BoneViewMaterial.js",
+      "git_blob": "29d8b672b20ae109d4bad9b26b8671faf66827e2",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/BoneViewMesh.js",
+      "git_blob": "9eaa5e5132efbdd886c5e1273a71608b799c7553",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/DynLineMesh.js",
+      "git_blob": "17bd8bb72e96e6e827c314a33048c1ea5f799a6a",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/ShapePointsMesh.js",
+      "git_blob": "2fe3434c3f772ea81b30cf52b40e381e31b8b407",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/SkinMTXMaterial.js",
+      "git_blob": "faa58e0456e866b9fac4974d9b86a828f7d3d862",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/Starter.css",
+      "git_blob": "670f4b004acf24231d4414abb3e3513d41067dc4",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/Starter.js",
+      "git_blob": "c35656ef4e0ad5a4bb536075f4859f7ead066b96",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/Util.js",
+      "git_blob": "24fca0df5ba1057e3dbf27f79583053090452b12",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/UtilArm.js",
+      "git_blob": "a23385fb4e1ed4848fb4f03bf2344863260b1275",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/UtilGltf2.js",
+      "git_blob": "0c8dba2d0f6c1e4330d96f8941849bbde1798ca8",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/_lib/babylon.gridMaterial.min.js",
+      "git_blob": "92a62aa912b4163e1f148a578eed2714ac550875",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/babylonjs/index.html",
+      "git_blob": "f8c7ee0f40ac474ac9960e485ac9ab8ef5b00fcf",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/000_gltf2_mesh.html",
+      "git_blob": "ee8627614be6b50f24b400f417beda35a1f77806",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/001_skin_dq.html",
+      "git_blob": "07f005896e27a7a8e81b591af51abfcfe457dc09",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/001_skin_dqt.html",
+      "git_blob": "fa2b3d4004bc39e100a1c0bd1adfec8a32c99975",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/001_skin_mtx.html",
+      "git_blob": "630d3a5ba0ed50f9cfea33c5a690626161622a78",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/001_skin_rts.html",
+      "git_blob": "b74b165eae0e5fade87f8c5909741922a52e6512",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/002_animation.html",
+      "git_blob": "c2052bd7eae9563f9a4e2166b56a30c8928637d7",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/002_animation_bvh.html",
+      "git_blob": "c2a5e475e427cd0bf1d634596b6079ffc33e8819",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/003_retarget_and_springs.html",
+      "git_blob": "972662a8bb6ed932fc591c4ea6b64f5deae37cac",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/004_data_texture.html",
+      "git_blob": "dff382d23aee7eaf174fd2c364f6f269f5c976a5",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/004_data_texture_with_inst.html",
+      "git_blob": "39a8609f5b47820654ed3977e51813b749699a76",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/005_ikrig.html",
+      "git_blob": "b0269fb0f4823dea9c050c7067e70358eda96a45",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/006_ik_retarget.html",
+      "git_blob": "017783682fc45232791de3e10281de9be4ab3fd7",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/006_ik_retarget_bvh.html",
+      "git_blob": "9982e3a14c843bc4878d1073f9c81022553edb9a",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/007_ik_solvers.html",
+      "git_blob": "e5d6157732fe9fc80480d6ccfbfa176ca0eeeb17",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/007_ik_solvers_sdf.html",
+      "git_blob": "c275122a4c4b0f913696a2a9710caaac64ccb1fd",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/008_tentacle.html",
+      "git_blob": "e33445a4ea77fb56721349d1285b1607917326a3",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/999_tpose.html",
+      "git_blob": "021eb13d42669731dab60c02bff02b28a6431d82",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_000_template.html",
+      "git_blob": "60915fe017019be47cba740bbc45d73b710f593b",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/BoneDirMesh.js",
+      "git_blob": "bc1f2e4717110a348047905b8a5ce26d2a9160aa",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/BoneViewMaterial.js",
+      "git_blob": "3608eea79bae60f59208d9bd7c78f2e65c46363e",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/BoneViewMesh.js",
+      "git_blob": "d36d59f66e72b974804cb2c7c9f67a5d09f41f81",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/DynLineMesh.js",
+      "git_blob": "235931a2dfcc220e7f87e892db10028f4b436893",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/FacedCube.js",
+      "git_blob": "0f5507d2d41d4539192e03d419a4b4131b3fa5e6",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/ShapePointsMesh.js",
+      "git_blob": "8842a532d6bb1584ef5ffadaac85037b77eeee91",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/SkinDQMaterial.js",
+      "git_blob": "ed522d96adac1e68d3c84178e05bc3721dc6ce23",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/SkinDQTMaterial.js",
+      "git_blob": "d5a7f6c482dbffa560521ccf79f1d7489a5775ce",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/SkinMTXMaterial.js",
+      "git_blob": "9fba5b2ede0fb19acb9df7e41ab135d4779237c4",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/SkinRTSMaterial.js",
+      "git_blob": "6e009f200be7286bff052fe5c27b6a24dda5fcd4",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/SkinRTS_MTXMaterial.js",
+      "git_blob": "3e794459dd93a7fb37a709a0db34c8cd1f0a58ef",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/Starter.css",
+      "git_blob": "0ebf850100153690c714a47fc132380c4ffb38aa",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/Starter.js",
+      "git_blob": "119cbd628f5525f5796a3c74d574f27490784a35",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/Util.js",
+      "git_blob": "6e29a017a0bf49cd788c411f69e26d85a8a67b52",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/UtilArm.js",
+      "git_blob": "2f755ce5913522a6d94ca9c96aaae560bab60d56",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/UtilBvh.js",
+      "git_blob": "7bb04d5691f6e2bf0cfaf51725bf1f2dc3a18db7",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/_lib/UtilGltf2.js",
+      "git_blob": "c06cdeab208f51ee2a140b9253656fc9520ad40d",
+      "mode": "100644"
+    },
+    {
+      "path": "examples/threejs/index.html",
+      "git_blob": "ab54593aa146a8e457c6393f802670581ae772f3",
+      "mode": "100644"
+    },
+    {
+      "path": "index.html",
+      "git_blob": "4761a56aa8605a1d1c1cbe56abda8a6fcd147822",
+      "mode": "100644"
+    },
+    {
+      "path": "notes.txt",
+      "git_blob": "76ee9907e1df2c099614cfce8993e7f1a453f348",
+      "mode": "100644"
+    },
+    {
+      "path": "prototypes/ik_closeloop_fabrik.html",
+      "git_blob": "3097648714183f2b60de353a2005e8fed8c2b7ad",
+      "mode": "100644"
+    },
+    {
+      "path": "prototypes/ik_closeloop_fabrikBAK.html",
+      "git_blob": "1b175673086aa686bae86f1aab662e62ac1a0690",
+      "mode": "100644"
+    },
+    {
+      "path": "prototypes/ik_jacobian.html",
+      "git_blob": "f9da9e23984a95eeb38aedbf79234be24b6d1218",
+      "mode": "100644"
+    },
+    {
+      "path": "prototypes/ik_range_fabrik.html",
+      "git_blob": "dc33d4b82862f801952c8c468d2a2d3434432ed0",
+      "mode": "100644"
+    },
+    {
+      "path": "prototypes/spring.js",
+      "git_blob": "7571811c8afa19393b20d46797ddf2e771fda9f4",
+      "mode": "100644"
+    },
+    {
+      "path": "vite.config.js",
+      "git_blob": "1a11d8f2a4e08e398a1a2cc7fcb6d978a08e1156",
+      "mode": "100644"
+    }
+  ],
+  "exclusion_reason": "仅不使用的浏览器/GPU示例、网站、图片及开发配置；固定生产src全部保留。",
+  "dependencies": [
+    {
+      "name": "gl-matrix",
+      "version": "3.4.3",
+      "source": "https://registry.npmjs.org/gl-matrix/-/gl-matrix-3.4.3.tgz",
+      "sha256": "b1ec4d97dc97f9884f5f017b7f9c3555884b4d3191534cdc59b7ede27dc4ea75",
+      "sha512": "c1c0a9f2fbbc153db6067bca54f8d76bf20205646aff38c57dda1f672d564a9419a6985b96fd76fdb3902c10b5acc33b4863854bd96d56628e1e2979f8c97b80",
+      "license": "MIT",
+      "license_files": [
+        "vendor/gl-matrix/LICENSE.md"
+      ]
+    }
+  ]
+}
