@@ -1,0 +1,338 @@
+[
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Interpolation.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Interpolation.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Interpolation.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Interpolation.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/ObjLoader.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/ObjLoader.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/ObjLoader.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/ObjLoader.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Camera.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Camera.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Camera.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Camera.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Geometry.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Geometry.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Geometry.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Geometry.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Drawing.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Drawing.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Drawing.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Drawing.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Renderer.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Renderer.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Renderer.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Renderer.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Noise.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Noise.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Noise.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Noise.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/BVH.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/BVH.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/BVH.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/BVH.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Transform.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Transform.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Transform.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Transform.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Scene.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Scene.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Scene.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Scene.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Photon.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Photon.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Photon.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Photon.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Materials.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Materials.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Materials.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Materials.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Radiosity.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Radiosity.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Radiosity.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Radiosity.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/BDPT.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/BDPT.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/BDPT.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/BDPT.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Metropolis.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Metropolis.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Metropolis.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Metropolis.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Ocean.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Ocean.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Ocean.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Ocean.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Meshing.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Meshing.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Meshing.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Meshing.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Octree.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Octree.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Octree.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Octree.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/KdTree.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/KdTree.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/KdTree.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/KdTree.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Clouds.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Clouds.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Clouds.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Clouds.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Voxel.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Voxel.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Voxel.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Voxel.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Nurbs.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Nurbs.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Nurbs.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Nurbs.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/SceneGraph.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/SceneGraph.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/SceneGraph.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/SceneGraph.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/OceanFFT.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/OceanFFT.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/OceanFFT.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/OceanFFT.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/ColourUtil.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/ColourUtil.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/ColourUtil.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/ColourUtil.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Lines.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Lines.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Lines.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Lines.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Mipmap.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Mipmap.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Mipmap.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Mipmap.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/IrradianceCache.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/IrradianceCache.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/IrradianceCache.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/IrradianceCache.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Blackbody.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Blackbody.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Blackbody.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Blackbody.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/QMC.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/QMC.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/QMC.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/QMC.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Grid.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Grid.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Grid.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Grid.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Bezier.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Bezier.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Bezier.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Bezier.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Sky.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Sky.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Sky.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Sky.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Tonemap.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Tonemap.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Tonemap.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Tonemap.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Worley.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Worley.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Worley.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Worley.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Morton.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Morton.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Morton.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Morton.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Frustum.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Frustum.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Frustum.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Frustum.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Resample.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Resample.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Resample.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Resample.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Quaternion.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Quaternion.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Quaternion.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Quaternion.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/BCn.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/BCn.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/BCn.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/BCn.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Tessellator.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Tessellator.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Tessellator.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Tessellator.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/HalfEdge.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/HalfEdge.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/HalfEdge.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/HalfEdge.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Aniso.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Aniso.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Aniso.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Aniso.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Blur.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Blur.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Blur.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Blur.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Bloom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Bloom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Bloom.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Bloom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/EdgeRaster.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/EdgeRaster.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/EdgeRaster.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/EdgeRaster.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/TemporalResponse.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/TemporalResponse.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/TemporalResponse.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/TemporalResponse.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/src/Afterglow.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Afterglow.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src/Afterglow.cpp",
+  "output": "CMakeFiles/rn_engine.dir/src/Afterglow.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/Canvas.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/Canvas.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/Canvas.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/Canvas.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/CanvasPoint.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/CanvasPoint.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/CanvasPoint.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/CanvasPoint.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/CanvasTriangle.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/CanvasTriangle.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/CanvasTriangle.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/CanvasTriangle.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/Colour.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/Colour.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/Colour.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/Colour.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/ModelTriangle.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/ModelTriangle.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/ModelTriangle.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/ModelTriangle.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/TextureMap.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/TextureMap.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/TextureMap.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/TextureMap.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/TexturePoint.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/TexturePoint.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/TexturePoint.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/TexturePoint.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/third_party -O3 -DNDEBUG -std=gnu++23 -fPIC -Wall -Wextra -Wcast-align -Werror=return-type -Wno-unused-parameter -Wno-unused-variable -Wno-ignored-attributes -Wno-unknown-pragmas -o CMakeFiles/rn_engine.dir/framework/Utils.cpp.o -c /Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/Utils.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/framework/Utils.cpp",
+  "output": "CMakeFiles/rn_engine.dir/framework/Utils.cpp.o"
+}
+]

@@ -342,6 +342,73 @@ into a `Canvas` you can save as PPM or hand to your own display: `renderWirefram
 `renderRasterised`, `renderRaytraced`, `renderPathTraced`, `renderPhotonMapped`,
 `renderRadiosity`, `renderBidirectional`, and `renderMetropolis`.
 
+## Temporal afterglow path tracing
+
+The off-line path tracer can additionally resolve *when* each radiance
+contribution arrives. A diffuse triangle may carry an `afterglowTauNs`
+(`ModelTriangle`, default `0`): `0` is an instantaneous response, while a
+positive value in `[1e-6, 1e6]` ns adds one normalised exponential dwell kernel
+of mean `tau` per diffuse interaction. Every time a path crosses such a coating
+the kernels convolve, so multiple bounces produce the convolution of the whole
+chain rather than a single time attached to the final colour. Repeated equal
+lifetimes therefore give an Erlang response automatically.
+
+- `src/TemporalResponse.h` owns one immutable kernel chain. Construct it empty
+  (a unit impulse at time 0), build it with `append(tau)` (each call returns a
+  *new* response, so prefixes handed to earlier contributions can never be
+  mutated by later bounces), and query probability on a half-open interval with
+  `mass(a, b)` (endpoints may be ±infinity; `NaN` and inverted intervals throw).
+  Mass is evaluated analytically with an error-controlled matrix exponential
+  (scaling-and-squaring Padé on the phase-type subgenerator), never by sampling
+  random delays, time-grid convolution, or merging near-equal lifetimes.
+- `src/Afterglow.h` is the rendering surface: `renderAfterglow(...)` returns an
+  owned double-precision `AfterglowFilm`; `pathTraceAfterglowRay(...)` is the
+  single-ray interface that records every real contribution's RGB, its flight
+  shift and its owned response prefix, together with the binned result.
+  `pathTraceSteadyRay(...)` is the temporal-bookkeeping-free twin that shares the
+  exact same transport (same RNG draws, branches and depth limit).
+
+### Units
+
+All times are nanoseconds. Lights and emissive geometry emit instantaneously at
+time 0. The flight shift of a contribution is the geometric path length — camera
+to the real hit point, between successive hit points, and the direct segment to
+the light centre — multiplied by `metersPerUnit` and divided by the speed of
+light (`299792458 m/s`), then converted to nanoseconds:
+
+```
+t_flight_ns = length_world_units * metersPerUnit / 299792458 * 1e9
+```
+
+The self-intersection ray bias is not counted as distance and does not remove
+any: segments are measured between true surface points. Each contribution is
+placed onto the caller's finite, strictly increasing, possibly non-uniform time
+edges using its own flight shift and response prefix.
+
+### The infinite background
+
+A ray that escapes to the procedural sky never reaches a surface, so its
+radiance has no finite arrival time. Such energy is reported separately in
+`environment` (and `AfterglowContribution::environment`) and is never assigned a
+fabricated timestamp or placed in a time bin. For every pixel and every sample
+the energies reconcile exactly, independently of lifetimes or time edges:
+
+```
+steady == beforeWindow + sum(bins) + afterWindow + environment
+```
+
+### Accepted scene and outputs
+
+The temporal entry point is deliberately narrow: static triangle meshes using
+only `Diffuse`, `Mirror` and `Emissive` materials (no analytic primitives), at
+least one finite `Point` light with `radius == 0` and finite, non-negative
+colour and intensity (an intensity of 0 is allowed). A non-zero lifetime on a
+non-diffuse material, any other material/light type, or a non-positive
+attenuation denominator is rejected before rendering. `writeAfterglowCsv`
+stores the full double-precision film (`afterglow.csv`); `writeSteadyPpm`
+writes `steady.ppm`, a preview quantised by the same truncation rule as the
+classic path tracer. The runnable demo is `examples/afterglow.cpp`.
+
 ## Using it as a library (C API)
 
 The engine installs as a self-contained library with a stable C ABI

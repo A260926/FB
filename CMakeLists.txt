@@ -139,6 +139,8 @@ set(ENGINE_SOURCES
         src/Blur.cpp
         src/Bloom.cpp
         src/EdgeRaster.cpp
+        src/TemporalResponse.cpp
+        src/Afterglow.cpp
         framework/Canvas.cpp
         framework/CanvasPoint.cpp
         framework/CanvasTriangle.cpp

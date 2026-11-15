@@ -1,0 +1,3 @@
+/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream/CMakeFiles/rn_engine.dir
+/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS7E806E26FEFBU11621/attempts/20261115T161027844335Z/repo/.task-build/upstream/CMakeFiles/rebuild_cache.dir

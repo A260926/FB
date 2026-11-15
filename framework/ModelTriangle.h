@@ -32,6 +32,12 @@ struct ModelTriangle {
 	Material material = Material::Diffuse;
 	float roughness = 0.2f;              // for Material::Metal (0 = mirror, 1 = diffuse)
 	std::shared_ptr<TextureMap> texture; // null unless the material had a map_Kd
+	// Afterglow mean lifetime in nanoseconds, used only by the temporal
+	// (afterglow) path tracer and only on Material::Diffuse surfaces. 0 = an
+	// instantaneous response; a positive value adds one normalised exponential
+	// dwell kernel of mean tau per diffuse interaction. Range when positive:
+	// [1e-6, 1e6] ns. Non-diffuse materials must leave this at 0.
+	double afterglowTauNs = 0.0;
 
 	ModelTriangle();
 	ModelTriangle(const glm::vec3 &v0, const glm::vec3 &v1, const glm::vec3 &v2, Colour trigColour);
