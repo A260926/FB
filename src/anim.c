@@ -27,6 +27,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ROT_USE_SLERP
 
 static void invalidate_cache(struct anm_node *node);
+static void track_owner_changed(void *owner);
+static void wire_animation_owner(struct anm_node *node, struct anm_animation *anim);
 
 int anm_init_animation(struct anm_animation *anim)
 {
@@ -42,8 +44,9 @@ int anm_init_animation(struct anm_animation *anim)
 	for(i=0; i<ANM_NUM_TRACKS; i++) {
 		if(anm_init_track(anim->tracks + i) == -1) {
 			for(j=0; j<i; j++) {
-				anm_destroy_track(anim->tracks + i);
+				anm_destroy_track(anim->tracks + j);
 			}
+			return -1;
 		}
 		anm_set_track_default(anim->tracks + i, defaults[i]);
 	}
@@ -77,6 +80,7 @@ int anm_init_node(struct anm_node *node)
 	memset(node, 0, sizeof *node);
 
 	node->cur_anim[1] = -1;
+	node->blend_dur = -1;	/* no transition in progress */
 
 	if(!(node->animations = anm_dynarr_alloc(1, sizeof *node->animations))) {
 		return -1;
@@ -85,11 +89,17 @@ int anm_init_node(struct anm_node *node)
 		anm_dynarr_free(node->animations);
 		return -1;
 	}
+	/* the node owns the tracks of its animations: any edit to them must
+	 * invalidate this node's (and its descendants') matrix caches
+	 */
+	wire_animation_owner(node, node->animations);
 
 #ifdef ANIM_THREAD_SAFE
 	/* initialize thread-local matrix cache */
 	pthread_key_create(&node->cache_key, 0);
 	pthread_mutex_init(&node->cache_list_lock, 0);
+#else
+	node->cache.time = node->cache.inv_time = ANM_TIME_INVAL;
 #endif
 
 	return 0;
@@ -109,6 +119,7 @@ void anm_destroy_node(struct anm_node *node)
 #ifdef ANIM_THREAD_SAFE
 	/* destroy thread-specific cache */
 	pthread_key_delete(node->cache_key);
+	pthread_mutex_destroy(&node->cache_list_lock);
 
 	while(node->cache_list) {
 		struct mat_cache *tmp = node->cache_list;
@@ -225,6 +236,7 @@ void anm_set_pivot(struct anm_node *node, float x, float y, float z)
 	node->pivot[0] = x;
 	node->pivot[1] = y;
 	node->pivot[2] = z;
+	invalidate_cache(node);
 }
 
 void anm_get_pivot(struct anm_node *node, float *x, float *y, float *z)
@@ -322,7 +334,11 @@ void anm_set_node_animation_offset(struct anm_node *node, anm_time_t offs, int w
 	if(which < 0 || which >= 2) {
 		return;
 	}
+	if(node->cur_anim_offset[which] == offs) {
+		return;	/* no change, no invalidation */
+	}
 	node->cur_anim_offset[which] = offs;
+	invalidate_cache(node);
 }
 
 anm_time_t anm_get_animation_offset(const struct anm_node *node, int which)
@@ -372,9 +388,21 @@ int anm_get_animation_count(const struct anm_node *node)
 int anm_add_node_animation(struct anm_node *node)
 {
 	struct anm_animation newanim;
-	anm_init_animation(&newanim);
+	int prev_count = anm_get_animation_count(node);
+
+	if(anm_init_animation(&newanim) == -1) {
+		return -1;
+	}
 
 	node->animations = anm_dynarr_push(node->animations, &newanim);
+	if(anm_get_animation_count(node) != prev_count + 1) {
+		return -1;
+	}
+	/* the array may have been reallocated by the push; wire the new
+	 * animation's tracks to their owner (existing tracks keep theirs,
+	 * they all point to this node, not to any array element)
+	 */
+	wire_animation_owner(node, node->animations + prev_count);
 	return 0;
 }
 
@@ -423,7 +451,7 @@ int anm_remove_animation(struct anm_node *node, int idx)
 
 struct anm_animation *anm_get_animation(struct anm_node *node, int idx)
 {
-	if(idx < 0 || idx > anm_get_animation_count(node)) {
+	if(idx < 0 || idx >= anm_get_animation_count(node)) {
 		return 0;
 	}
 	return node->animations + idx;
@@ -527,6 +555,7 @@ void anm_node_transition(struct anm_node *node, int anmidx, anm_time_t start, an
 	node->cur_anim[1] = anmidx;
 	node->cur_anim_offset[1] = start;
 	node->blend_dur = dur;
+	invalidate_cache(node);
 }
 
 
@@ -862,23 +891,37 @@ void anm_eval(struct anm_node *node, anm_time_t tm)
 	}
 }
 
-float *anm_get_matrix(struct anm_node *node, float *mat, anm_time_t tm)
-{
 #ifdef ANIM_THREAD_SAFE
+/* Returns the calling thread's matrix cache for this node, creating and
+ * registering it (in the node's cache_list, so that invalidate_cache can
+ * reach the caches of all threads) on first use. Both timestamps start
+ * invalid regardless of which query function allocates the cache.
+ */
+static struct mat_cache *get_thread_cache(struct anm_node *node)
+{
 	struct mat_cache *cache = pthread_getspecific(node->cache_key);
 	if(!cache) {
 		cache = malloc(sizeof *cache);
 		assert(cache);
+
+		cache->time = ANM_TIME_INVAL;
+		cache->inv_time = ANM_TIME_INVAL;
 
 		pthread_mutex_lock(&node->cache_list_lock);
 		cache->next = node->cache_list;
 		node->cache_list = cache;
 		pthread_mutex_unlock(&node->cache_list_lock);
 
-		cache->time = ANM_TIME_INVAL;
-		cache->inv_time = ANM_TIME_INVAL;
 		pthread_setspecific(node->cache_key, cache);
 	}
+	return cache;
+}
+#endif
+
+float *anm_get_matrix(struct anm_node *node, float *mat, anm_time_t tm)
+{
+#ifdef ANIM_THREAD_SAFE
+	struct mat_cache *cache = get_thread_cache(node);
 #else
 	struct mat_cache *cache = &node->cache;
 #endif
@@ -904,20 +947,7 @@ float *anm_get_matrix(struct anm_node *node, float *mat, anm_time_t tm)
 float *anm_get_inv_matrix(struct anm_node *node, float *mat, anm_time_t tm)
 {
 #ifdef ANIM_THREAD_SAFE
-	struct mat_cache *cache = pthread_getspecific(node->cache_key);
-	if(!cache) {
-		cache = malloc(sizeof *cache);
-		assert(cache);
-
-		pthread_mutex_lock(&node->cache_list_lock);
-		cache->next = node->cache_list;
-		node->cache_list = cache;
-		pthread_mutex_unlock(&node->cache_list_lock);
-
-		cache->inv_time = ANM_TIME_INVAL;
-		cache->inv_time = ANM_TIME_INVAL;
-		pthread_setspecific(node->cache_key, cache);
-	}
+	struct mat_cache *cache = get_thread_cache(node);
 #else
 	struct mat_cache *cache = &node->cache;
 #endif
@@ -996,15 +1026,35 @@ anm_time_t anm_get_end_time(struct anm_node *node)
 	return res;
 }
 
+static void track_owner_changed(void *owner)
+{
+	invalidate_cache((struct anm_node*)owner);
+}
+
+static void wire_animation_owner(struct anm_node *node, struct anm_animation *anim)
+{
+	int i;
+	for(i=0; i<ANM_NUM_TRACKS; i++) {
+		anim->tracks[i].owner = node;
+		anim->tracks[i].owner_notify = track_owner_changed;
+	}
+}
+
 static void invalidate_cache(struct anm_node *node)
 {
 	struct anm_node *c;
 
 #ifdef ANIM_THREAD_SAFE
-	struct mat_cache *cache = pthread_getspecific(node->cache_key);
-	if(cache) {
-	   cache->time = cache->inv_time = ANM_TIME_INVAL;
+	struct mat_cache *cache;
+
+	/* invalidate every thread's cache of this node, not just ours */
+	pthread_mutex_lock(&node->cache_list_lock);
+	cache = node->cache_list;
+	while(cache) {
+		cache->time = cache->inv_time = ANM_TIME_INVAL;
+		cache = cache->next;
 	}
+	pthread_mutex_unlock(&node->cache_list_lock);
 #else
 	node->cache.time = node->cache.inv_time = ANM_TIME_INVAL;
 #endif

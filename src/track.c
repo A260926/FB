@@ -27,6 +27,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 static int keycmp(const void *a, const void *b);
 static int find_prev_key(const struct anm_keyframe *arr, int start, int end, anm_time_t tm);
 
+/* called at the end of every operation which modifies the track, to let
+ * an interested owner (e.g. the animation node which embeds this track)
+ * know that any data derived from it is now stale.
+ */
+static void notify_owner(struct anm_track *track);
+
 static float interp_step(float v0, float v1, float v2, float v3, float t);
 static float interp_linear(float v0, float v1, float v2, float v3, float t);
 static float interp_cubic(float v0, float v1, float v2, float v3, float t);
@@ -67,6 +73,7 @@ int anm_init_track(struct anm_track *track)
 
 void anm_destroy_track(struct anm_track *track)
 {
+	free(track->name);
 	anm_dynarr_free(track->keys);
 }
 
@@ -91,23 +98,46 @@ void anm_free_track(struct anm_track *track)
 
 void anm_copy_track(struct anm_track *dest, const struct anm_track *src)
 {
-	free(dest->name);
-	if(dest->keys) {
-		anm_dynarr_free(dest->keys);
+	char *newname = 0;
+	struct anm_keyframe *newkeys;
+
+	if(dest == src) {
+		return;
 	}
 
+	/* build the new name/keys first, so a failed allocation leaves dest
+	 * in its previous valid state
+	 */
 	if(src->name) {
-		dest->name = malloc(strlen(src->name) + 1);
-		strcpy(dest->name, src->name);
+		if(!(newname = malloc(strlen(src->name) + 1))) {
+			return;
+		}
+		strcpy(newname, src->name);
+	}
+	if(!(newkeys = anm_dynarr_alloc(src->count, sizeof *newkeys))) {
+		free(newname);
+		return;
+	}
+	if(src->count > 0) {
+		memcpy(newkeys, src->keys, src->count * sizeof *newkeys);
 	}
 
+	free(dest->name);
+	anm_dynarr_free(dest->keys);
+
+	dest->name = newname;
+	dest->keys = newkeys;
 	dest->count = src->count;
-	dest->keys = anm_dynarr_alloc(src->count, sizeof *dest->keys);
-	memcpy(dest->keys, src->keys, src->count * sizeof *dest->keys);
 
 	dest->def_val = src->def_val;
 	dest->interp = src->interp;
 	dest->extrap = src->extrap;
+
+	/* note: dest->owner/owner_notify are deliberately left untouched; a
+	 * copied track keeps the ownership of the destination, so a copy into
+	 * a standalone track does not retain any link to the source's owner.
+	 */
+	notify_owner(dest);
 }
 
 int anm_set_track_name(struct anm_track *track, const char *name)
@@ -117,6 +147,7 @@ int anm_set_track_name(struct anm_track *track, const char *name)
 	if(!(tmp = malloc(strlen(name) + 1))) {
 		return -1;
 	}
+	strcpy(tmp, name);
 	free(track->name);
 	track->name = tmp;
 	return 0;
@@ -130,11 +161,13 @@ const char *anm_get_track_name(const struct anm_track *track)
 void anm_set_track_interpolator(struct anm_track *track, enum anm_interpolator in)
 {
 	track->interp = in;
+	notify_owner(track);
 }
 
 void anm_set_track_extrapolator(struct anm_track *track, enum anm_extrapolator ex)
 {
 	track->extrap = ex;
+	notify_owner(track);
 }
 
 anm_time_t anm_remap_time(const struct anm_track *track, anm_time_t tm, anm_time_t start, anm_time_t end)
@@ -145,6 +178,7 @@ anm_time_t anm_remap_time(const struct anm_track *track, anm_time_t tm, anm_time
 void anm_set_track_default(struct anm_track *track, float def)
 {
 	track->def_val = def;
+	notify_owner(track);
 }
 
 int anm_set_keyframe(struct anm_track *track, struct anm_keyframe *key)
@@ -165,6 +199,7 @@ int anm_set_keyframe(struct anm_track *track, struct anm_keyframe *key)
 		/* TODO lazy qsort */
 		qsort(track->keys, ++track->count, sizeof *track->keys, keycmp);
 	}
+	notify_owner(track);
 	return 0;
 }
 
@@ -393,4 +428,11 @@ static anm_time_t remap_pingpong(anm_time_t tm, anm_time_t start, anm_time_t end
 	anm_time_t x = remap_repeat(tm, start, end + interv);
 
 	return x > end ? end + interv - x : x;
+}
+
+static void notify_owner(struct anm_track *track)
+{
+	if(track->owner_notify) {
+		track->owner_notify(track->owner);
+	}
 }

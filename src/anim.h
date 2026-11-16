@@ -237,7 +237,11 @@ void anm_eval(struct anm_node *node, anm_time_t tm);
 
 /* These calculate the matrix and inverse matrix of this node taking hierarchy
  * into account. The results are cached in thread-specific storage and returned
- * if there's no change in time or tracks from the last query...
+ * if there's no change in time or tracks from the last query. Any edit through
+ * the public API (track edits on this node's animations, high level PRS
+ * setters, pivot, animation offsets, active animation/blend settings) invalidates
+ * the cached matrices of the affected node and its descendants, in every thread
+ * which has queried them.
  *
  * A pointer to the internal cached matrix is returned, and also if mat is not
  * null, the matrix is copied there.

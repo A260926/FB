@@ -62,6 +62,21 @@ struct anm_track {
 
 	enum anm_interpolator interp;
 	enum anm_extrapolator extrap;
+
+	/* Edit notification hook. Whenever the track is modified through the
+	 * track API (anm_set_keyframe/anm_set_value, anm_set_track_default,
+	 * anm_set_track_interpolator, anm_set_track_extrapolator, or by being
+	 * the destination of anm_copy_track), owner_notify(owner) is called,
+	 * if owner_notify is not zero. The high level animation node interface
+	 * (anim.h) uses this to invalidate the cached matrices of the node
+	 * which owns the track. Standalone tracks have both fields zeroed and
+	 * never notify anyone.
+	 *
+	 * These fields are never copied by anm_copy_track: the destination
+	 * track keeps its own owner. They are not freed by anm_destroy_track.
+	 */
+	void *owner;
+	void (*owner_notify)(void *owner);
 };
 
 #ifdef __cplusplus
@@ -78,6 +93,10 @@ void anm_free_track(struct anm_track *track);
 
 /* copies track src to dest
  * XXX: dest must have been initialized first
+ *
+ * The copy is deep: afterwards the two tracks are fully independent.
+ * Ownership (see struct anm_track) is NOT copied: dest keeps its own
+ * owner, and only dest's owner (if any) is notified about the change.
  */
 void anm_copy_track(struct anm_track *dest, const struct anm_track *src);
 

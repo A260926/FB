@@ -7,3 +7,4 @@ libanim.so*
 libanim-mt.so*
 libanim.dylib
 Makefile
+.task-build/

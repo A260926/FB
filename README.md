@@ -76,6 +76,56 @@ The animation node interface is pretty useful for a wide range of applications,
 but if it doesn't fit your design, just ignore it altogether and use the low
 level track API directly (`track.h`).
 
+### Matrix cache invalidation
+
+`anm_get_matrix`/`anm_get_inv_matrix` cache the world and inverse world
+matrices of each node (per thread in `ANIM_THREAD_SAFE` builds). Any edit
+made through the public API invalidates the cached matrices of the affected
+node and all of its descendants, in every thread which has queried them:
+
+* low level track edits on tracks owned by a node (reached for instance
+  through `anm_get_animation`): `anm_set_keyframe`/`anm_set_value`,
+  `anm_set_track_default`, `anm_set_track_interpolator`,
+  `anm_set_track_extrapolator`, and `anm_copy_track` into the track;
+* high level `anm_set_position`/`anm_set_rotation`/`anm_set_scaling`,
+  `anm_set_pivot`, animation time offsets (`anm_set_*_animation_offset`),
+  and active animation/blending settings (`anm_use_*`, `anm_transition`).
+
+Unrelated node trees keep their own caches. Renaming a node, an animation
+or a track is not a pose change and invalidates nothing. Writing directly
+to the public struct members bypasses notification; only edits through the
+functions above are tracked.
+
+Track ownership: tracks embedded in a node's animations notify their node
+when edited. Standalone tracks (`anm_create_track`/`anm_init_track`) have
+no owner and never notify. `anm_copy_track` never transfers ownership: the
+destination track keeps its own owner (none for standalone tracks), and
+only the destination's owner is notified. A standalone copy therefore
+keeps working after the source node has been destroyed.
+
+Pointers returned by `anm_get_animation` (and track pointers into it)
+alias the node's animation array. Adding animation slots
+(`anm_add_node_animation`/`anm_add_animation`) may reallocate that array,
+so re-fetch animation/track pointers after growing it; pointers obtained
+before the growth are not guaranteed to remain valid.
+
+### Threading contract
+
+In `ANIM_THREAD_SAFE` builds each thread gets its own matrix cache per
+node, and an edit invalidates the caches of all threads which have one.
+The library does not serialize edits against queries: the application must
+separate an edit phase from a query phase with external synchronization
+(e.g. a mutex and a condition variable). During a query phase any number
+of threads may call `anm_get_matrix`/`anm_get_inv_matrix` concurrently. Do
+not edit tracks or node state while other threads are querying, and do not
+let the high level `anm_transition` blending advance (it is driven lazily
+by the queries) while multiple threads are querying. Destroy nodes only
+after all worker threads which used them have finished.
+
+The PRS composition (`pivot * rotation * translation * scaling * -pivot`)
+and the slerp-based quaternion interpolation described above are unchanged
+by all of this.
+
 Build
 -----
 To build and install libanim on UNIX, run the usual:
