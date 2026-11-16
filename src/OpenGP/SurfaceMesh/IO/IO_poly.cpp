@@ -18,7 +18,7 @@ namespace OpenGP {
 //-----------------------------------------------------------------------------
 
 
-bool read_poly(SurfaceMesh& mesh, const std::string& filename)
+HEADERONLY_INLINE bool read_poly(SurfaceMesh& mesh, const std::string& filename)
 {
     unsigned int n_items;
 

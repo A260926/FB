@@ -49,7 +49,7 @@ private:
 //-----------------------------------------------------------------------------
 
 
-bool read_stl(SurfaceMesh& mesh, const std::string& filename){
+HEADERONLY_INLINE bool read_stl(SurfaceMesh& mesh, const std::string& filename){
     // typedef Vec3 Normal;
     // typedef Vec3 TextureCoordinate;
     

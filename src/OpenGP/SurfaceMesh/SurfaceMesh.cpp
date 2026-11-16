@@ -643,7 +643,43 @@ triangulate(Face f)
      triangles)
      - the halfedge handles of the new triangles will
      point to the old halfedges
+
+     The per-corner properties h:texcoord and h:normal of the source
+     polygon are preserved: every newly created diagonal halfedge takes
+     the value stored at the source corner it points to. New faces
+     inherit the f:material of the source face.
      */
+
+    // capture the source corner values before the fan is rewired; only the
+    // corners of this face are needed, so keep a compact per-face list
+    Halfedge_property<Vec3> htex = get_halfedge_property<Vec3>("h:texcoord");
+    Halfedge_property<Vec3> hnorm = get_halfedge_property<Vec3>("h:normal");
+    Face_property<int> fmat = get_face_property<int>("f:material");
+
+    struct CornerValue { Vertex v; Vec3 tex; Vec3 nrm; };
+    std::vector<CornerValue> corners;
+    if (htex || hnorm)
+    {
+        Halfedge ch = halfedge(f);
+        const Halfedge che = ch;
+        do
+        {
+            CornerValue cv;
+            cv.v = to_vertex(ch);
+            if (htex) cv.tex = htex[ch];
+            if (hnorm) cv.nrm = hnorm[ch];
+            corners.push_back(cv);
+            ch = next_halfedge(ch);
+        } while (ch != che);
+    }
+    auto corner_tex = [&](Vertex v) -> Vec3 {
+        for (const CornerValue& c : corners) if (c.v == v) return c.tex;
+        return Vec3();
+    };
+    auto corner_nrm = [&](Vertex v) -> Vec3 {
+        for (const CornerValue& c : corners) if (c.v == v) return c.nrm;
+        return Vec3();
+    };
 
     Halfedge base_h  = halfedge(f);
     Vertex   start_v = from_vertex(base_h);
@@ -655,6 +691,7 @@ triangulate(Face f)
 
         Face new_f = new_face();
         set_halfedge(new_f, base_h);
+        if (fmat) fmat[new_f] = fmat[f];
 
         Halfedge new_h = new_edge(to_vertex(next_h), start_v);
 
@@ -666,6 +703,18 @@ triangulate(Face f)
         set_face(next_h, new_f);
         set_face(new_h,  new_f);
 
+        // each diagonal side points at an original polygon corner
+        if (htex)
+        {
+            htex[new_h]                      = corner_tex(to_vertex(new_h));
+            htex[opposite_halfedge(new_h)]   = corner_tex(to_vertex(opposite_halfedge(new_h)));
+        }
+        if (hnorm)
+        {
+            hnorm[new_h]                     = corner_nrm(to_vertex(new_h));
+            hnorm[opposite_halfedge(new_h)]  = corner_nrm(to_vertex(opposite_halfedge(new_h)));
+        }
+
         base_h = opposite_halfedge(new_h);
         next_h = next_next_h;
     }
@@ -675,6 +724,96 @@ triangulate(Face f)
     set_next_halfedge(next_halfedge(next_h), base_h);
 
     set_face(base_h, f);
+}
+
+
+//-----------------------------------------------------------------------------
+
+
+bool
+SurfaceMesh::
+join_triangles(Edge e)
+{
+    /*
+     Merge the two triangles incident to edge e into one quad face.
+
+     The shared edge and the larger-index incident face are marked deleted;
+     the smaller-index face survives and grows from three halfedges to four
+     by adopting the two outer halfedges of the removed face. No vertex,
+     outer edge or halfedge identity is created or destroyed, and no
+     property values are moved.
+     */
+
+    if (!is_valid(e) || is_deleted(e))
+        return false;
+
+    Halfedge hk = halfedge(e, 0);
+    Halfedge hd = halfedge(e, 1);
+
+    if (is_boundary(hk) || is_boundary(hd))
+        return false;
+
+    Face fk = face(hk);
+    Face fd = face(hd);
+
+    if (!fk.is_valid() || !fd.is_valid() || is_deleted(fk) || is_deleted(fd))
+        return false;
+
+    // both incident faces have to be triangles
+    if (valence(fk) != 3 || valence(fd) != 3)
+        return false;
+
+    if (fk.idx() > fd.idx())
+    {
+        std::swap(fk, fd);
+        std::swap(hk, hd);
+    }
+
+    // hk runs inside the kept face, hd (its opposite) inside the deleted one
+    Halfedge a1 = next_halfedge(hk);
+    Halfedge a2 = next_halfedge(a1);
+    Halfedge b1 = next_halfedge(hd);
+    Halfedge b2 = next_halfedge(b1);
+
+    // the four outer corners must be distinct
+    Vertex vy = to_vertex(hk);
+    Vertex vx = to_vertex(hd);
+    Vertex vck = to_vertex(a1);
+    Vertex vcd = to_vertex(b1);
+    if (vx == vy || vx == vck || vx == vcd ||
+        vy == vck || vy == vcd || vck == vcd)
+        return false;
+
+    // all topological checks passed: from here on the mesh is modified.
+
+    // outer ring (kept face orientation): a1 -> a2 -> b1 -> b2 -> a1
+    set_next_halfedge(a1, a2);
+    set_next_halfedge(a2, b1);
+    set_next_halfedge(b1, b2);
+    set_next_halfedge(b2, a1);
+
+    // the deleted face's outer halfedges become halfedges of the kept face
+    set_face(b1, fk);
+    set_face(b2, fk);
+
+    // the diagonal is gone: both of its halfedges are detached from faces
+    set_face(hk, Face());
+    set_face(hd, Face());
+
+    set_halfedge(fk, a1);
+
+    // vertex representative halfedges must not point at the detached diagonal
+    if (halfedge(vy) == hd) set_halfedge(vy, a1);
+    if (halfedge(vx) == hk) set_halfedge(vx, b1);
+    adjust_outgoing_halfedge(vy);
+    adjust_outgoing_halfedge(vx);
+
+    // mark the removed edge and face; everything stays in place until GC
+    edeleted_[e]  = true;  ++deleted_edges_;
+    fdeleted_[fd] = true;  ++deleted_faces_;
+    garbage_ = true;
+
+    return true;
 }
 
 

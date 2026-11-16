@@ -3,170 +3,216 @@
 #include <OpenGP/SurfaceMesh/SurfaceMesh.h>
 #include <OpenGP/SurfaceMesh/IO/IO.h>
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <map>
+#include <tuple>
+#include <vector>
+#include <string>
 
 //=============================================================================
 namespace OpenGP {
 //=============================================================================
 
-bool read_obj(SurfaceMesh& mesh, const std::string& filename) {
-    char s[200];
-    float  x, y, z;
-    std::vector<SurfaceMesh::Vertex>  vertices;
-    std::vector<Vec3> all_tex_coords;   //individual texture coordinates
-    std::vector<int> halfedge_tex_idx; //texture coordinates sorted for halfedges
-    SurfaceMesh::Halfedge_property <Vec3> tex_coords = mesh.halfedge_property<Vec3>("h:texcoord");
-    bool with_tex_coord=false;
+namespace {
 
+// one face corner: 0-based indices, presence flags mark absent components
+struct ObjCorner
+{
+    int v;
+    int vt;
+    int vn;
+    bool has_vt;
+    bool has_vn;
+};
+
+// resolve a positive (1-based) or negative (relative) OBJ index
+int resolve_obj_index(int idx, int count)
+{
+    if (idx > 0) return idx - 1;
+    if (idx < 0) return count + idx;
+    return -1;
+}
+
+// parse one "v", "v/vt", "v//vn" or "v/vt/vn" token
+bool parse_corner(const std::string& token, ObjCorner& c)
+{
+    c.v = c.vt = c.vn = 0;
+    c.has_vt = c.has_vn = false;
+
+    size_t slash1 = token.find('/');
+    if (slash1 == std::string::npos)
+    {
+        c.v = atoi(token.c_str());
+        return c.v != 0;
+    }
+
+    c.v = atoi(token.substr(0, slash1).c_str());
+    if (c.v == 0) return false;
+
+    size_t slash2 = token.find('/', slash1 + 1);
+    if (slash2 == std::string::npos)
+    {
+        // v/vt
+        std::string t = token.substr(slash1 + 1);
+        if (t.empty()) return false;
+        c.vt = atoi(t.c_str());
+        if (c.vt == 0) return false;
+        c.has_vt = true;
+        return true;
+    }
+
+    std::string mid = token.substr(slash1 + 1, slash2 - slash1 - 1);
+    std::string tail = token.substr(slash2 + 1);
+    if (tail.empty()) return false;
+    c.vn = atoi(tail.c_str());
+    if (c.vn == 0) return false;
+    c.has_vn = true;
+
+    if (mid.empty())
+    {
+        // v//vn
+        return true;
+    }
+
+    // v/vt/vn
+    c.vt = atoi(mid.c_str());
+    if (c.vt == 0) return false;
+    c.has_vt = true;
+    return true;
+}
+
+} // anonymous namespace
+
+
+HEADERONLY_INLINE bool read_obj(SurfaceMesh& mesh, const std::string& filename)
+{
     // clear mesh
     mesh.clear();
 
-    // open file (in ASCII mode)
-    FILE* in = fopen(filename.c_str(), "r");
+    std::ifstream in(filename.c_str());
     if (!in) return false;
 
-    // clear line once
-    memset(&s, 0, 200);
+    std::vector<Vec3> all_tex_coords;    // texture coordinates, in file order
+    std::vector<Vec3> all_normals;       // normals, in file order
+    std::vector<SurfaceMesh::Vertex> vertices;
+    std::vector<ObjCorner> corners;
 
-    // pre-parse to find out the number of vertices
+    SurfaceMesh::Halfedge_property<Vec3> tex_coords;
+    SurfaceMesh::Halfedge_property<Vec3> half_normals;
+    bool with_tex_coord = false;
+    bool with_normal = false;
+
+    std::string line;
+    while (std::getline(in, line))
     {
-        uint vnormal_counter = 0; // number of vertex normals parsed
-        while (in && !feof(in) && fgets(s, 200, in)) {
-            if (s[0] == '#' || isspace(s[0])) continue; // comment
-            else if (strncmp(s, "v ", 2) == 0) { if (sscanf(s, "v %f %f %f", &x, &y, &z)) mesh.add_vertex(Vec3(0,0,0)); }
-            else if (strncmp(s, "vn ", 3) == 0) { if (sscanf(s, "vn %f %f %f", &x, &y, &z)) vnormal_counter++; }
-            else continue;
-        }
+        // strip a possible carriage return (Windows line endings)
+        if (!line.empty() && line.back() == '\r') line.pop_back();
 
-        // If we have read any vertex normals, it must match the number of vertices
-        // and in this case allocate memory for normals
-        if (vnormal_counter!=0){
-            assert(vnormal_counter==mesh.n_vertices());
-            mesh.add_vertex_property<Vec3>("v:normal");
-        }
-        
-        // Start from the beginning again
-        in = freopen(filename.c_str(),"r",in);
-    }
+        std::istringstream iss(line);
+        std::string tag;
+        if (!(iss >> tag)) continue;
 
-    // parse line by line (currently only supports vertex positions & faces
-    uint vpoint_counter = 0;  //< number of vertex positions parsed
-    uint vnormal_counter = 0; //< number of vertex normals parsed
-    auto vpoints = mesh.get_vertex_property<Vec3>("v:point");
-    auto vnormals = mesh.get_vertex_property<Vec3>("v:normal");
-    while (in && !feof(in) && fgets(s, 200, in)) {
-        // comment
-        if (s[0] == '#' || isspace(s[0])) continue;
-
-        // vertex
-        else if (strncmp(s, "v ", 2) == 0) {
-            if (sscanf(s, "v %f %f %f", &x, &y, &z)) {
-                vpoints[ SurfaceMesh::Vertex(vpoint_counter++) ] = Vec3(x,y,z);
-                // mesh.add_vertex(Vec3(x,y,z));
-            }
+        // vertex position
+        if (tag == "v")
+        {
+            Scalar x, y, z;
+            if (!(iss >> x >> y >> z)) return false;
+            vertices.push_back(mesh.add_vertex(Vec3(x, y, z)));
         }
-        // normal
-        else if (strncmp(s, "vn ", 3) == 0) {
-            int n_read = sscanf(s, "vn %f %f %f", &x, &y, &z);
-            assert((n_read==0) || (n_read==3));
-            if (n_read) {
-                // note: problematic as it can be either a vertex property when interpolated or a halfedge property for hard edges
-                assert(vnormal_counter<mesh.n_vertices());
-                vnormals[ SurfaceMesh::Vertex(vnormal_counter) ] = Vec3(x,y,z);
-                vnormal_counter++;
-            }
+        // vertex normal: independent of the number of positions
+        else if (tag == "vn")
+        {
+            Scalar x, y, z;
+            if (!(iss >> x >> y >> z)) return false;
+            all_normals.push_back(Vec3(x, y, z));
         }
-
-        // texture coordinate
-        else if (strncmp(s, "vt ", 3) == 0) {
-            if (sscanf(s, "vt %f %f", &x, &y)) {
-                z=1;
-                all_tex_coords.push_back(Vec3(x,y,z));
-            }
+        // texture coordinate (1, 2 or 3 components)
+        else if (tag == "vt")
+        {
+            Scalar x = 0, y = 0, z = 0;
+            int n = 0;
+            if (iss >> x) ++n;
+            if (iss >> y) ++n;
+            if (iss >> z) ++n;
+            if (n == 0) return false;
+            if (n == 2) z = 1;
+            all_tex_coords.push_back(Vec3(x, y, z));
         }
-
         // face
-        else if (strncmp(s, "f ", 2) == 0) {
-            int component(0), nV(0);
-            bool endOfVertex(false);
-            char* p0, *p1(s+1);
+        else if (tag == "f")
+        {
+            corners.clear();
+            std::string token;
+            int form = -1; // 0: v, 1: v/vt, 2: v//vn, 3: v/vt/vn
+            bool ok = true;
 
-            vertices.clear();
-            halfedge_tex_idx.clear();
+            while (iss >> token)
+            {
+                ObjCorner c;
+                if (!parse_corner(token, c)) { ok = false; break; }
 
-            // skip white-spaces
-            while (*p1==' ') ++p1;
+                int this_form;
+                if (!c.has_vt && !c.has_vn)       this_form = 0;
+                else if (c.has_vt && !c.has_vn)   this_form = 1;
+                else if (!c.has_vt && c.has_vn)   this_form = 2;
+                else                               this_form = 3;
 
-            while (p1) {
-                p0 = p1;
+                // the four forms have to be used consistently within a face
+                if (form == -1) form = this_form;
+                if (form != this_form) { ok = false; break; }
 
-                // overwrite next separator
+                c.v  = resolve_obj_index(c.v,  (int)vertices.size());
+                c.vt = resolve_obj_index(c.vt, (int)all_tex_coords.size());
+                c.vn = resolve_obj_index(c.vn, (int)all_normals.size());
 
-                // skip '/', '\n', ' ', '\0', '\r' <-- don't forget Windows
-                while (*p1!='/' && *p1!='\r' && *p1!='\n' && *p1!=' ' && *p1!='\0') ++p1;
+                if (c.v < 0 || c.v >= (int)vertices.size()) { ok = false; break; }
+                if (c.has_vt &&
+                    (c.vt < 0 || c.vt >= (int)all_tex_coords.size())) { ok = false; break; }
+                if (c.has_vn &&
+                    (c.vn < 0 || c.vn >= (int)all_normals.size())) { ok = false; break; }
 
-                // detect end of vertex
-                if (*p1 != '/') {
-                    endOfVertex = true;
-                }
-
-                // replace separator by '\0'
-                if (*p1 != '\0') {
-                    *p1 = '\0';
-                    p1++; // point to next token
-                }
-
-                // detect end of line and break
-                if (*p1 == '\0' || *p1 == '\n') {
-                    p1 = 0;
-                }
-
-                // read next vertex component
-                if (*p0 != '\0') {
-                    switch (component) {
-                        case 0: { // vertex
-                            vertices.push_back( SurfaceMesh::Vertex(atoi(p0) - 1) );
-                            break;
-                        }
-                        case 1: { // texture coord
-                            int idx = atoi(p0)-1;
-                            halfedge_tex_idx.push_back(idx);
-                            with_tex_coord=true;
-                            break;
-                        }
-                        case 2: // normal
-                            break;
-                    }
-                }
-
-                ++component;
-
-                if (endOfVertex) {
-                    component = 0;
-                    nV++;
-                    endOfVertex = false;
-                }
+                corners.push_back(c);
             }
 
-            SurfaceMesh::Face f=mesh.add_face(vertices);
+            if (!ok || corners.size() < 3) return false;
 
+            std::vector<SurfaceMesh::Vertex> face_verts;
+            face_verts.reserve(corners.size());
+            for (const ObjCorner& c : corners)
+                face_verts.push_back(vertices[c.v]);
 
-            // add texture coordinates
-            if (with_tex_coord) {
-                SurfaceMesh::Halfedge_around_face_circulator h_fit = mesh.halfedges(f);
-                SurfaceMesh::Halfedge_around_face_circulator h_end = h_fit;
-                unsigned v_idx =0;
-                do {
-                    tex_coords[*h_fit]=all_tex_coords.at(halfedge_tex_idx.at(v_idx));
-                    ++v_idx;
-                    ++h_fit;
-                } while (h_fit!=h_end);
+            SurfaceMesh::Face f = mesh.add_face(face_verts);
+            if (!f.is_valid()) return false;
+
+            if ((form == 1 || form == 3) && !with_tex_coord)
+            {
+                tex_coords = mesh.halfedge_property<Vec3>("h:texcoord");
+                with_tex_coord = true;
             }
+            if ((form == 2 || form == 3) && !with_normal)
+            {
+                half_normals = mesh.halfedge_property<Vec3>("h:normal");
+                with_normal = true;
+            }
+
+            // fill the per-corner attributes in face traversal order
+            SurfaceMesh::Halfedge_around_face_circulator hit = mesh.halfedges(f);
+            SurfaceMesh::Halfedge_around_face_circulator hend = hit;
+            unsigned int k = 0;
+            do
+            {
+                if (with_tex_coord && (form == 1 || form == 3))
+                    tex_coords[*hit] = all_tex_coords[corners[k].vt];
+                if (with_normal && (form == 2 || form == 3))
+                    half_normals[*hit] = all_normals[corners[k].vn];
+                ++k;
+                ++hit;
+            } while (hit != hend);
         }
-        // clear line
-        memset(&s, 0, 200);
     }
 
-    fclose(in);
     return true;
 }
 
@@ -174,9 +220,8 @@ bool read_obj(SurfaceMesh& mesh, const std::string& filename) {
 //-----------------------------------------------------------------------------
 
 
-bool write_obj(const SurfaceMesh& mesh, const std::string& filename) {
-    typedef Vec3 TextureCoordinate;
-
+HEADERONLY_INLINE bool write_obj(const SurfaceMesh& mesh, const std::string& filename)
+{
     FILE* out = fopen(filename.c_str(), "w");
     if (!out)
         return false;
@@ -184,58 +229,162 @@ bool write_obj(const SurfaceMesh& mesh, const std::string& filename) {
     // comment
     fprintf(out, "# OBJ export from SurfaceMesh\n");
 
-    //vertices
+    // only live elements are exported; renumber vertices in output order
+    std::vector<int> vout(mesh.vertices_size(), -1);
+    int vcount = 0;
+    for (SurfaceMesh::Vertex_iterator vit = mesh.vertices_begin();
+         vit != mesh.vertices_end(); ++vit)
+        vout[(*vit).idx()] = ++vcount;
+
     SurfaceMesh::Vertex_property<Vec3> points = mesh.get_vertex_property<Vec3>("v:point");
-    for (SurfaceMesh::Vertex_iterator vit=mesh.vertices_begin(); vit!=mesh.vertices_end(); ++vit) {
+
+    // positions
+    for (SurfaceMesh::Vertex_iterator vit = mesh.vertices_begin();
+         vit != mesh.vertices_end(); ++vit)
+    {
         const Vec3& p = points[*vit];
         fprintf(out, "v %.10f %.10f %.10f\n", p[0], p[1], p[2]);
     }
 
-    //normals
-    SurfaceMesh::Vertex_property<Vec3> normals = mesh.get_vertex_property<Vec3>("v:normal");
-    if (normals) {
-        for (SurfaceMesh::Vertex_iterator vit=mesh.vertices_begin(); vit!=mesh.vertices_end(); ++vit) {
-            const Vec3& p = normals[*vit];
-            fprintf(out, "vn %.10f %.10f %.10f\n", p[0], p[1], p[2]);
+    SurfaceMesh::Halfedge_property<Vec3> htex =
+        mesh.get_halfedge_property<Vec3>("h:texcoord");
+    SurfaceMesh::Halfedge_property<Vec3> hnorm =
+        mesh.get_halfedge_property<Vec3>("h:normal");
+    SurfaceMesh::Vertex_property<Vec3> vnorm =
+        mesh.get_vertex_property<Vec3>("v:normal");
+
+    // per-face-corner halfedge normals take priority over vertex normals
+    bool use_corner_normals = bool(hnorm);
+    bool use_vertex_normals = !use_corner_normals && bool(vnorm);
+
+    // build the per-corner texture index table first (no output yet);
+    // only halfedges that are actual face corners are used, so boundary
+    // outer halfedges never become render corners
+    std::map<std::tuple<float,float,float>, int> tex_index;
+    std::vector<int> htex_out(mesh.halfedges_size(), -1);
+    if (htex)
+    {
+        for (SurfaceMesh::Face_iterator fit = mesh.faces_begin();
+             fit != mesh.faces_end(); ++fit)
+        {
+            SurfaceMesh::Halfedge_around_face_circulator hit = mesh.halfedges(*fit);
+            SurfaceMesh::Halfedge_around_face_circulator hend = hit;
+            do
+            {
+                const Vec3& t = htex[*hit];
+                std::tuple<float,float,float> key(t[0], t[1], t[2]);
+                std::map<std::tuple<float,float,float>, int>::iterator
+                    it = tex_index.find(key);
+                if (it == tex_index.end())
+                {
+                    int idx = (int)tex_index.size() + 1;
+                    tex_index[key] = idx;
+                    htex_out[(*hit).idx()] = idx;
+                }
+                else
+                {
+                    htex_out[(*hit).idx()] = it->second;
+                }
+                ++hit;
+            } while (hit != hend);
         }
     }
 
-    //optionally texture coordinates
-    // do we have them?
-    std::vector<std::string> h_props= mesh.halfedge_properties();
-    bool with_tex_coord = false;
-    std::vector<std::string>::iterator h_prop_end = h_props.end();
-    std::vector<std::string>::iterator h_prop_start= h_props.begin();
-    while (h_prop_start!=h_prop_end) {
-        if (0==(*h_prop_start).compare("h:texcoord")) {
-            with_tex_coord=true;
+    // build the per-corner normal index table (no output yet); no vn is
+    // produced at all when neither corner nor vertex normals exist
+    std::map<std::tuple<float,float,float>, int> normal_index;
+    std::vector<int> hnormal_out(mesh.halfedges_size(), -1);
+    if (use_corner_normals)
+    {
+        for (SurfaceMesh::Face_iterator fit = mesh.faces_begin();
+             fit != mesh.faces_end(); ++fit)
+        {
+            SurfaceMesh::Halfedge_around_face_circulator hit = mesh.halfedges(*fit);
+            SurfaceMesh::Halfedge_around_face_circulator hend = hit;
+            do
+            {
+                const Vec3& n = hnorm[*hit];
+                std::tuple<float,float,float> key(n[0], n[1], n[2]);
+                std::map<std::tuple<float,float,float>, int>::iterator
+                    it = normal_index.find(key);
+                if (it == normal_index.end())
+                {
+                    int idx = (int)normal_index.size() + 1;
+                    normal_index[key] = idx;
+                    hnormal_out[(*hit).idx()] = idx;
+                }
+                else
+                {
+                    hnormal_out[(*hit).idx()] = it->second;
+                }
+                ++hit;
+            } while (hit != hend);
         }
-        ++h_prop_start;
     }
 
-    //if so then add
-    if (with_tex_coord) {
-        SurfaceMesh::Halfedge_property<TextureCoordinate> tex_coord = mesh.get_halfedge_property<TextureCoordinate>("h:texcoord");
-        for (SurfaceMesh::Halfedge_iterator hit=mesh.halfedges_begin(); hit!=mesh.halfedges_end(); ++hit) {
-            const TextureCoordinate& pt = tex_coord[*hit];
-            fprintf(out, "vt %.10f %.10f %.10f\n", pt[0], pt[1], pt[2]);
+    // texture coordinates, deduplicated and in index order
+    std::vector<std::tuple<float,float,float> > tex_values(tex_index.size());
+    for (std::map<std::tuple<float,float,float>, int>::const_iterator
+             it = tex_index.begin(); it != tex_index.end(); ++it)
+        tex_values[it->second - 1] = it->first;
+    for (size_t i = 0; i < tex_values.size(); ++i)
+        fprintf(out, "vt %.10f %.10f %.10f\n",
+                std::get<0>(tex_values[i]), std::get<1>(tex_values[i]),
+                std::get<2>(tex_values[i]));
+
+    // normals: corner normals (deduplicated) else the vertex normal block
+    if (use_corner_normals)
+    {
+        std::vector<std::tuple<float,float,float> > nrm_values(normal_index.size());
+        for (std::map<std::tuple<float,float,float>, int>::const_iterator
+                 it = normal_index.begin(); it != normal_index.end(); ++it)
+            nrm_values[it->second - 1] = it->first;
+        for (size_t i = 0; i < nrm_values.size(); ++i)
+            fprintf(out, "vn %.10f %.10f %.10f\n",
+                    std::get<0>(nrm_values[i]), std::get<1>(nrm_values[i]),
+                    std::get<2>(nrm_values[i]));
+    }
+    else if (use_vertex_normals)
+    {
+        for (SurfaceMesh::Vertex_iterator vit = mesh.vertices_begin();
+             vit != mesh.vertices_end(); ++vit)
+        {
+            const Vec3& n = vnorm[*vit];
+            fprintf(out, "vn %.10f %.10f %.10f\n", n[0], n[1], n[2]);
         }
     }
 
-    //faces
-    for (SurfaceMesh::Face_iterator fit=mesh.faces_begin(); fit!=mesh.faces_end(); ++fit) {
+    // faces: each face consistently uses one of the four OBJ forms
+    for (SurfaceMesh::Face_iterator fit = mesh.faces_begin();
+         fit != mesh.faces_end(); ++fit)
+    {
         fprintf(out, "f");
-        SurfaceMesh::Vertex_around_face_circulator fvit=mesh.vertices(*fit), fvend=fvit;
-        SurfaceMesh::Halfedge_around_face_circulator fhit=mesh.halfedges(*fit);
-        do {
-            if (with_tex_coord) {
-                // write vertex index, tex_coord index and normal index
-                fprintf(out, " %d/%d/%d", (*fvit).idx()+1, (*fhit).idx()+1, (*fvit).idx()+1);
-                ++fhit;
-            } else {
-                // write vertex index and normal index
-                fprintf(out, " %d//%d", (*fvit).idx()+1, (*fvit).idx()+1);
+        SurfaceMesh::Vertex_around_face_circulator fvit = mesh.vertices(*fit);
+        SurfaceMesh::Vertex_around_face_circulator fvend = fvit;
+        SurfaceMesh::Halfedge_around_face_circulator fhit = mesh.halfedges(*fit);
+        do
+        {
+            int vi = vout[(*fvit).idx()];
+            if (htex)
+            {
+                int ti = htex_out[(*fhit).idx()];
+                if (use_corner_normals)
+                    fprintf(out, " %d/%d/%d", vi, ti, hnormal_out[(*fhit).idx()]);
+                else if (use_vertex_normals)
+                    fprintf(out, " %d/%d/%d", vi, ti, vi);
+                else
+                    fprintf(out, " %d/%d", vi, ti);
             }
+            else
+            {
+                if (use_corner_normals)
+                    fprintf(out, " %d//%d", vi, hnormal_out[(*fhit).idx()]);
+                else if (use_vertex_normals)
+                    fprintf(out, " %d//%d", vi, vi);
+                else
+                    fprintf(out, " %d", vi);
+            }
+            ++fhit;
         } while (++fvit != fvend);
         fprintf(out, "\n");
     }

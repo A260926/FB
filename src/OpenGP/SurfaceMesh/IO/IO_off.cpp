@@ -199,7 +199,7 @@ inline bool read_off_binary(SurfaceMesh& mesh,
 //-----------------------------------------------------------------------------
 
 
-bool read_off(SurfaceMesh& mesh, const std::string& filename)
+HEADERONLY_INLINE bool read_off(SurfaceMesh& mesh, const std::string& filename)
 {
     char  line[200];
     bool  has_texcoords = false;
@@ -266,7 +266,7 @@ bool read_off(SurfaceMesh& mesh, const std::string& filename)
 //-----------------------------------------------------------------------------
 
 
-bool write_off(const SurfaceMesh& mesh, const std::string& filename)
+HEADERONLY_INLINE bool write_off(const SurfaceMesh& mesh, const std::string& filename)
 {
     typedef Vec3 Normal;
     typedef Vec3 Color;

@@ -1499,6 +1499,23 @@ public: //--------------------------------------------- higher-level operations
     HEADERONLY_INLINE void triangulate(Face f);
 
 
+    /** Merge the two triangles incident to edge \c e into one quad face.
+     This is a real edge-removal primitive (not a collapse and not a mesh
+     replacement): the shared edge and the face with the larger index are
+     marked deleted, while the smaller-index face survives as a quad. The
+     four original vertices, the four outer edges and their halfedge
+     identities, and all properties are preserved; the surviving face keeps
+     its own face properties. Connectivity (next/prev, face, representative
+     halfedges and vertex halfedges) is updated so that circulators, normal
+     computation, garbage_collection() and triangulate() work immediately.
+     No garbage collection is triggered.
+     \return true if the merge was performed; false (without modifying the
+     mesh) if the edge is invalid/deleted, a boundary edge, incident to a
+     non-triangle face, or does not bound four distinct vertices.
+     */
+    HEADERONLY_INLINE bool join_triangles(Edge e);
+
+
     /// returns whether collapsing the halfedge \c h is topologically legal.
     /// \attention This function is only valid for triangle meshes.
     HEADERONLY_INLINE bool is_collapse_ok(Halfedge h);

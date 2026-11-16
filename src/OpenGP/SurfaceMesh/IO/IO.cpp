@@ -16,7 +16,7 @@ inline char easytolower(char in){
 } 
 } // ::anonymous
 
-bool read_mesh(SurfaceMesh& mesh, const std::string& filename)
+HEADERONLY_INLINE bool read_mesh(SurfaceMesh& mesh, const std::string& filename)
 {
     std::setlocale(LC_NUMERIC, "C");
 
@@ -51,7 +51,7 @@ bool read_mesh(SurfaceMesh& mesh, const std::string& filename)
 //-----------------------------------------------------------------------------
 
 
-bool write_mesh(const SurfaceMesh& mesh, const std::string& filename)
+HEADERONLY_INLINE bool write_mesh(const SurfaceMesh& mesh, const std::string& filename)
 {
     // extract file extension
     std::string::size_type dot(filename.rfind("."));
