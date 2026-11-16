@@ -1,0 +1,15 @@
+CASE cut_graph torus_nonuniform checks=7
+CASE cut_graph genus2 checks=5
+CASE cut_graph root_choices checks=4
+GROUP cut_graph cases=3 checks=16 COMPLETE
+CASE disk_topology torus checks=2
+CASE disk_topology genus2 checks=7
+CASE disk_topology attributes checks=324
+GROUP disk_topology cases=3 checks=333 COMPLETE
+CASE uv_persistence uv_equations checks=685
+CASE uv_persistence residual_consistency checks=9
+CASE uv_persistence roundtrip_and_split checks=1515
+CASE uv_persistence reject_then_succeed checks=10
+CASE uv_persistence genus2_roundtrip checks=5
+GROUP uv_persistence cases=5 checks=2224 COMPLETE
+TARGET_COMPLETE cases=11

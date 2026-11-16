@@ -86,6 +86,9 @@ CGridView<D, T>             (const elements)
 - `Mesh`: vertices, faces, and edges of a polygon mesh, with their topological relations.
 - `GMesh`: geometric mesh (hence the "G"), a `Mesh` with a `Point` at each vertex and string attributes on its
   elements.
+- `make_disk_atlas()`: cuts a closed orientable triangle surface into one topological disk and solves a unit-circle
+  boundary UV layout with harmonic interior, recording source vertices/faces/edges in the result's strings; see
+  `libHh/DiskAtlas.h`.
 - `MeshSearch`: spatial index over a `GMesh`, for closest-point queries.
 - `SubMesh`: subdivides a `GMesh`, maintaining the relationship between the subdivided mesh and the base mesh.
 - `PMesh`: progressive mesh, a base mesh (`AWMesh`) with a sequence of `Vsplit` records; `PMeshIter` traverses its
