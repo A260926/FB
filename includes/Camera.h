@@ -48,6 +48,11 @@ public:
     inline const uint32_t get_width() const { return m_image_width; }
     inline const uint32_t get_height() const { return m_image_height; }
 
+    inline const Point3D& get_position() const { return m_position; }
+    inline const Vector3D& get_direction() const { return m_direction; }
+    inline const Vector3D& get_right() const { return m_right; }
+    inline const Vector3D& get_up() const { return m_up; }
+
 
     void rotate(const float roll_degrees, const float pitch_degrees, const float yaw_degrees);
 

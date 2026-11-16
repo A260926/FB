@@ -1,0 +1,5 @@
+# Task build artifacts
+.task-build/
+
+# Generated images (BMP example and original renderer output)
+*.bmp

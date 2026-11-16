@@ -56,7 +56,26 @@ void ForwardRasterizer::render(const bool use_shade, const bool use_shadow_maps)
 void ForwardRasterizer::export_output(const std::string output_path) const {
   const uint16_t image_width = m_camera->get_width();
   const uint16_t image_height = m_camera->get_height();
-  
+
   exportDepthBuffer(m_depth_buffer, "f_d_"+output_path, image_width, image_height);
   exportImage(m_pixels, "f_" + output_path, image_width, image_height);
+}
+
+void ForwardRasterizer::renderPupilFrame(const Camera& pupil_camera,
+                                         std::vector<RGBColor>& out_color,
+                                         std::vector<double>& out_depth) {
+  PupilGbuffer gbuffer;
+  rasterizePupilGeometry(pupil_camera, gbuffer);
+
+  const uint32_t pixel_count = pupil_camera.get_width() * pupil_camera.get_height();
+  out_color.assign(pixel_count, BACKGROUND_COLOR);
+  out_depth = gbuffer.depth;
+
+  // Shade immediately on visibility (forward order) using the pupil camera for
+  // the material observation direction. Background stays BACKGROUND_COLOR.
+  for (uint32_t i = 0; i < pixel_count; ++i) {
+    if (gbuffer.hit[i]) {
+      out_color[i] = Material::shade(m_world->m_lights, pupil_camera, gbuffer.fragment[i]);
+    }
+  }
 }

@@ -24,6 +24,10 @@ public:
    
   void set_camera(Camera * camera) { m_camera = camera;  }
   Camera * get_camera() { return m_camera;  }
+  const Camera * get_camera() const { return m_camera; }
+  void set_world(const World* world) { m_world = world; }
+  const World* get_world() const { return m_world; }
+  const std::vector<RGBColor>& get_pixels() const { return m_pixels; }
   virtual void render(const bool use_shade = true, const bool use_shadow_maps = true) = 0;
   virtual void export_output(const std::string output_path) const = 0;
 protected:

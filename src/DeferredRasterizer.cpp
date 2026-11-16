@@ -96,3 +96,24 @@ void DeferredRasterizer::export_output(const std::string output_path) const {
   exportImage(m_specular_buffer, "d_specular.bmp", image_width, image_height);
   exportImage(m_pixels, "d_" + output_path, image_width, image_height);
 }
+
+void DeferredRasterizer::renderPupilFrame(const Camera& pupil_camera,
+                                          std::vector<RGBColor>& out_color,
+                                          std::vector<double>& out_depth) {
+  PupilGbuffer gbuffer;
+  rasterizePupilGeometry(pupil_camera, gbuffer);
+
+  const uint32_t pixel_count = pupil_camera.get_width() * pupil_camera.get_height();
+  out_color.assign(pixel_count, BACKGROUND_COLOR);
+  out_depth = gbuffer.depth;
+
+  // Deferred lighting pass: geometry (coverage, depth, attributes) is already
+  // finalized above. Evaluate lighting once per covered pixel using the stored
+  // fragment and the pupil camera for the observation direction. Background
+  // pixels remain BACKGROUND_COLOR so they still contribute to the average.
+  for (uint32_t i = 0; i < pixel_count; ++i) {
+    if (gbuffer.hit[i]) {
+      out_color[i] = Material::shade(m_world->m_lights, pupil_camera, gbuffer.fragment[i]);
+    }
+  }
+}

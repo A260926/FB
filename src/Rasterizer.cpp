@@ -15,6 +15,49 @@ Rasterizer::Rasterizer(const World* world)
 Rasterizer::~Rasterizer() {
 }
 
+// Geometry pass for one thin-lens pupil. The renderer camera is the pupil
+// camera, so every inherited transform (rasterize, calculateDepth,
+// unrasterize, fragment interpolation) resolves through that same camera.
+// Coverage and the depth test are recomputed here for every pupil: nothing is
+// shared between samples.
+void Rasterizer::rasterizePupilGeometry(const Camera& pupil_camera, PupilGbuffer& gbuffer) const {
+  const uint32_t image_width = pupil_camera.get_width();
+  const uint32_t image_height = pupil_camera.get_height();
+  const uint32_t pixel_count = image_width * image_height;
+  const double far_plane = pupil_camera.get_far_plane();
+
+  gbuffer.depth.assign(pixel_count, far_plane);
+  gbuffer.fragment.assign(pixel_count, Fragment());
+  gbuffer.hit.assign(pixel_count, 0);
+
+  for (auto& object : m_world->m_objects) {
+    const std::vector<Triangle3D> triangles = object->triangles();
+    for (auto& triangle_world : triangles) {
+      const Triangle2D triangle_raster = this->rasterize(triangle_world);
+      const BoundingBox2D bbox_raster = triangle_raster.bbox();
+      for (int32_t pixel_raster_x = bbox_raster.min.x; pixel_raster_x <= bbox_raster.max.x; ++pixel_raster_x) {
+        for (int32_t pixel_raster_y = bbox_raster.min.y; pixel_raster_y <= bbox_raster.max.y; ++pixel_raster_y) {
+          const Point2D pixel_raster = { (double)pixel_raster_x, (double)pixel_raster_y };
+          if (triangle_raster.contains(pixel_raster)) {
+            const double depth = calculateDepth(triangle_world, triangle_raster, pixel_raster);
+            const Point3D pixel_world = unrasterize(pixel_raster, depth);
+            if (pupil_camera.insideFrustrum(pixel_raster, depth)) {
+              const uint32_t i = pixel_raster_y * image_width + pixel_raster_x;
+              if (depth < gbuffer.depth[i]) {
+                gbuffer.fragment[i] = calculateFragmentAttributes(triangle_world, pixel_world,
+                                                                   triangle_raster, pixel_raster,
+                                                                   *object->material());
+                gbuffer.depth[i] = depth;
+                gbuffer.hit[i] = 1;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 
 const Fragment Rasterizer::calculateFragmentAttributes(const Triangle3D& triangle_world, const Point3D& point_world, const Triangle2D& triangle_screen, const Point2D& pixel_screen, const Material& material) const {
   const Vector2D text_coords = calculateTextureCoords(triangle_world, point_world, triangle_screen, pixel_screen);
@@ -165,9 +208,32 @@ const void Rasterizer::createShadowMaps() {
 
 // Calculate shadows using shadow maps
 const double Rasterizer::shadowFactor(const Point3D& point_world) {
-  double shadow = 0.0;         // No shadow     
+  double shadow = 0.0;         // No shadow
   for (auto& shadow_map : m_shadow_maps) {
     shadow += shadow_map->pointInShadow(point_world);
   }
   return shadow;
+}
+
+// Independent center pinhole geometry draw. Reuses the shared geometry pass
+// with the center camera (the renderer camera is the center camera when this
+// is called), producing a depth buffer that is unrelated to any pupil sample.
+std::vector<double> Rasterizer::renderCenterDepth(const Camera& center_camera) {
+  PupilGbuffer gbuffer;
+  rasterizePupilGeometry(center_camera, gbuffer);
+  return gbuffer.depth;
+}
+
+// Exposes the original BMP export path for a frame accumulated outside the
+// renderer (the weighted thin-lens average).
+void Rasterizer::exportPupilImage(const std::vector<RGBColor>& pixels, const std::string output_path) const {
+  exportImage(pixels, output_path,
+              static_cast<uint16_t>(m_camera->get_width()),
+              static_cast<uint16_t>(m_camera->get_height()));
+}
+
+// BMP export with caller-supplied dimensions (a thin-lens comparison frame).
+void Rasterizer::exportImageSized(const std::vector<RGBColor>& pixels, const std::string output_path,
+                                  uint16_t image_width, uint16_t image_height) const {
+  exportImage(pixels, output_path, image_width, image_height);
 }

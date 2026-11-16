@@ -363,6 +363,100 @@ This project uses only two external dependencies:
 
 All these libraries are included under the lib/ directory and are build with CMake.
 
+# Thin-lens depth of field
+
+A real, per-aperture depth-of-field preview is provided by `includes/ThinLens.h`
+/ `src/ThinLens.cpp` (entry `ThinLens::render`). It does **not** blur a finished
+image and does **not** re-project from the center depth. Every pupil is treated
+as a separate off-axis perspective camera that re-runs geometry coverage,
+perspective attribute interpolation and an independent depth test; the float
+RGB frames are then combined with caller-supplied weights.
+
+## Camera model
+
+Each pupil has the same orientation, fov, aspect ratio and viewport as the
+center `PerspectiveCamera`, translated to the pupil point. For a center-camera
+point `(X, Y, Z)`, a pupil offset `(a, b)` and focal plane `Z = F`, its imaging
+coordinates are
+
+```
+X/Z + a*(1/F - 1/Z),   Y/Z + b*(1/F - 1/Z)
+```
+
+which keep the focal plane fixed (`Z = F` gives no shift) while nearer and
+farther geometry acquires parallax. Projection, unrasterization and the
+material observation direction all use the same per-pupil camera
+(`OffAxisPerspectiveCamera`). Background pixels participate in the weighted
+average, so silhouettes reveal the background the center view cannot see.
+
+The pupil samples are provided by the caller as 2D points inside the unit disk
+with non-negative weights; the actual camera-local offset is `R * point`. No
+random numbers or external resources are used. The returned `ThinLensImage`
+owns its color buffer and a center pinhole depth buffer produced by a separate
+center geometry draw (never an averaged or last-sample depth).
+
+## Constraints
+
+- `F` and `R` must be finite, `F > near`, `R >= 0`.
+- The sample list must be non-empty; every point must be finite and inside the
+  unit disk, every weight finite and non-negative, and the total weight a
+  finite positive number. Otherwise `std::invalid_argument` is thrown before
+  any drawing, leaving the camera/renderer/world relationships unchanged.
+- Orthographic cameras are rejected; shadows are disabled for this entry. The
+  existing `render` / shadow interfaces are unaffected.
+- `R == 0` performs a single center pinhole render (the pupil distribution is
+  still validated). The camera, renderer and world camera relationships are
+  restored on every normal or exceptional return.
+
+## Calling example
+
+```cpp
+#include "ThinLens.h"
+#include "PERSPECTIVECAMERA.H"
+#include "ForwardRasterizer.h"   // or DeferredRasterizer.h
+
+PerspectiveCamera camera(position, target, height, width, &renderer, near, far, fov);
+World world(objects, lights, &camera);
+renderer.set_world(&world);
+renderer.set_camera(&camera);
+
+// Deterministic pupils on the unit disk with equal weights.
+std::vector<PupilSample> samples = {
+  { { 0.0,  0.0}, 1.0 },
+  { { 1.0,  0.0}, 1.0 }, { {-1.0,  0.0}, 1.0 },
+  { { 0.0,  1.0}, 1.0 }, { { 0.0, -1.0}, 1.0 }
+};
+
+const double focal_distance_F = 10.0; // view-space depth of the focal plane
+const double aperture_radius_R = 2.5; // 0 gives a single pinhole render
+
+ThinLensImage image = ThinLens::render(camera, renderer, world,
+                                       focal_distance_F, aperture_radius_R, samples);
+
+// image.color  -> weighted-average float RGB (owns its storage)
+// image.depth  -> independent center pinhole depth
+
+ThinLens::exportImage(image, renderer, "thinlens_dof.bmp"); // original BMP writer
+```
+
+A complete runnable program that writes a pinhole image, a depth-of-field image
+and a side-by-side comparison BMP lives in
+[`examples/thinlens_example.cpp`](examples/thinlens_example.cpp). Build and run
+it from the repository root:
+
+```
+c++ -std=c++20 -D_BLINN_PHONG -D_PERSPECTIVE_TEXTURES -I. -Iincludes \
+  -Ilib/glm-0.9.8.2 $(find src -name '*.cpp' ! -name main.cpp) \
+  lib/EasyBMP_1.06/EasyBMP.cpp examples/thinlens_example.cpp -o thinlens_example
+./thinlens_example
+```
+
+The target test suite (`bash task_support/run.sh target`) exercises the
+projection/unprojection math, parallax and occlusion visibility against an
+independent ray-intersection reference, the weighted integration on both
+rendering paths, and the zero-radius / repeat / interleaved / invalid-input
+lifetime behavior.
+
 # References
 
 Fletcher Dunn, Ian Parberry: “3D Math Primer for Graphics and Game Development"
