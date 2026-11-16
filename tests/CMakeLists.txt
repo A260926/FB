@@ -3,6 +3,9 @@ project(${TARGET_NAME})
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/$<CONFIG>)
 set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 file(GLOB TEST_FILES ${SOURCE_DIR}/*.cpp)
+# trim_mesh_contracts.cpp registers standalone task callbacks (task_support
+# driver) instead of gtest cases, so it is not part of the gtest target.
+list(FILTER TEST_FILES EXCLUDE REGEX "trim_mesh_contracts\\.cpp$")
 add_executable(${TARGET_NAME} ${TEST_FILES})
 
 option(INSTALL_GTEST OFF)

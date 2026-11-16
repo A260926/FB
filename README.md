@@ -32,8 +32,68 @@ Additional Algorithms:
 |Item|Content|
 |--|--|  
 |***NURBS Curve***  | Curve Curvature and Normal</br>Curve Split/Segment/Merge/Offset</br>Curve IsLinear/IsArc</br>Curve Approximate Length</br>Curve Extension (Tangent/Arc/Natural)</br>Curve Tessellation</br>Line/Cubic Hermite (as NURBS) Creation|
-|***NURBS Surface***  | Surface AABB and OBB BoundingBox</br>Surface Curvature and Normal</br>Surface Approximate Area</br> Surface Triangulation |
+|***NURBS Surface***  | Surface AABB and OBB BoundingBox</br>Surface Curvature and Normal</br>Surface Approximate Area</br> Surface Triangulation</br> Trimmed Surface Triangulation |
 |***NURBS Volume***  | Volume Degree Elevation</br>Volume Knot Insertion/Refinement</br>Volume Point Inversion</br>Volume Split</br>Extract Surface From Volume</br>Extract IsoCurve From Volume</br>Volume Swap and Reverse|
+
+## Trimmed Surface Mesh
+
+`LNLib::TrimmedSurfaceMesh::Build` triangulates a windowed region of a closed
+NURBS surface, where the window contour is given as one counter-clockwise outer
+loop plus any number of clockwise hole loops in an **unfolded** UV domain.  Loop
+edges are straight segments in that domain; their U coordinates may lie outside
+the effective U domain of the surface.
+
+```C++
+#include "TrimmedSurfaceMesh.h"
+#include "NurbsSurface.h"
+#include "NurbsCurve.h"
+#include "Constants.h"
+
+// Full-turn cylinder.
+LN_NurbsCurve profile;
+NurbsCurve::CreateLine(XYZ(2, 0, 0), XYZ(2, 0, 3), profile);
+LN_NurbsSurface cylinder;
+NurbsSurface::CreateRevolvedSurface(XYZ(0, 0, 0), XYZ(0, 0, 1), 2.0 * Constants::Pi,
+    profile, cylinder);           // U is periodic over [0, 1], V is not
+
+// Outer window crossing the U seam, plus a hole.
+std::vector<std::vector<UV>> loops;
+loops.push_back({ UV(-0.35, 0.10), UV(0.35, 0.10), UV(0.35, 0.85), UV(-0.35, 0.85) });
+loops.push_back({ UV(-0.05, 0.45), UV(-0.05, 0.55), UV(0.05, 0.55), UV(0.05, 0.45) });
+
+TrimMeshOptions options;
+options.chordTolerance = 1e-3;   // max chord error at the 3 edge midpoints and the centroid
+options.seamTolerance  = 1e-9;   // max distance between the two sides of the seam
+options.maxDepth       = 12;     // adaptive subdivision limit per initial triangle
+
+LN_Mesh mesh = LNLib::TrimmedSurfaceMesh::Build(cylinder, loops, options);
+```
+
+Result conventions:
+
+* `mesh.Faces` holds a conforming index triangulation of the trimmed region.
+  Hole interiors are empty, every contour segment is covered by real mesh edges,
+  and no triangle crosses an original knot line or a seam `U = a + kP`.
+* `mesh.UVs` and the flattened `mesh.UVIndices` store three UVs per triangle,
+  in face-corner order.  A vertex on the seam keeps a single shared position
+  index, but its per-corner U is `b` on the left side and `a` on the right side.
+* Vertices are merged by unfolded parameter coordinates only, never by spatial
+  position: distinct unfolded points remain distinct vertices even when they
+  coincide in 3D.
+* Triangles are positively oriented in their own local UV frame; repeated runs
+  on the same input produce identical vertex/index order.
+
+Supported input: clamped tensor-product NURBS surfaces with both degrees in
+`[1, 3]`, strictly positive finite weights, interior knot multiplicity at most
+the degree, a spatially closed U direction and a non-periodic V direction whose
+valid domain contains all loops strictly.  The loops must be simple, oriented as
+described, non-intersecting, and the combined U span of all loops must be
+strictly less than one period `P`.  Unsupported input throws
+`std::invalid_argument`; refinement exhaustion, degenerate cases and a failed
+seam match throw `std::runtime_error` — a partial mesh is never returned.
+
+The full example (including OBJ export with independent `v` / `vt` indices) is
+in `examples/trim_mesh.cpp`.
 
 ## Visualization
 <img src="assets/curve.png" width=500 height=400>
