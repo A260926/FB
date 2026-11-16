@@ -66,7 +66,11 @@ bool triangle_intersects_in_range(const struct Object *object, const struct Ray 
 void triangle_get_corners(const struct Object *object, v3 corners[2]);
 void triangle_scale(const struct Object *object, const v3 neg_shift, const float scale);
 void triangle_get_light_point(const struct Object *object, const v3 point, v3 light_point);
-bool moller_trumbore(const v3 vertex, v3 edges[2], const v3 line_position, const v3 line_vector, const float epsilon, float *distance);
+bool moller_trumbore(const v3 vertex, const v3 edges[2], const v3 line_position, const v3 line_vector, const float epsilon, float *distance);
+
+/* Window-aware intersection (declared in object.h) */
+bool sphere_get_intersection_in_window(const struct Object *object, const struct Ray *ray, float tmin, float tmax, float *distance, v3 normal);
+bool triangle_get_intersection_in_window(const struct Object *object, const struct Ray *ray, float tmin, float tmax, float *distance, v3 normal);
 
 /* Plane */
 #ifdef UNBOUND_OBJECTS
@@ -374,15 +378,15 @@ bool triangle_intersects_in_range(const struct Object *object, const struct Ray 
 
 void triangle_get_corners(const struct Object *object, v3 corners[2])
 {
-	struct Triangle *triangle = (struct Triangle *)object;
-	assign3(corners[0], triangle->vertices[2]);
-	assign3(corners[1], triangle->vertices[2]);
+	const struct Triangle *triangle = (const struct Triangle *)object;
+	assign3(corners[0], triangle->vertices[0]);
+	assign3(corners[1], triangle->vertices[0]);
 	size_t i, j;
-	for (i = 0; i < 2; i++)
+	for (i = 1; i < 3; i++)
 		for (j = 0; j < 3; j++) {
 			if (corners[0][j] > triangle->vertices[i][j])
 				corners[0][j] = triangle->vertices[i][j];
-			else if (corners[1][j] < triangle->vertices[i][j])
+			if (corners[1][j] < triangle->vertices[i][j])
 				corners[1][j] = triangle->vertices[i][j];
 		}
 }
@@ -419,7 +423,7 @@ void triangle_get_light_point(const struct Object *object, const v3 point, v3 li
 }
 
 //Möller–Trumbore intersection algorithm
-bool moller_trumbore(const v3 vertex, v3 edges[2], const v3 line_position, const v3 line_vector, const float epsilon, float *distance)
+bool moller_trumbore(const v3 vertex, const v3 edges[2], const v3 line_position, const v3 line_vector, const float epsilon, float *distance)
 {
 	float a, f, u, v;
 	v3 h, s, q;
@@ -438,6 +442,70 @@ bool moller_trumbore(const v3 vertex, v3 edges[2], const v3 line_position, const
 		return false;
 	*distance = f * dot3(edges[1], q);
 	return *distance > epsilon;
+}
+
+/*******************************************************************************
+*	Window-aware intersection (used by lattice instancing)
+*******************************************************************************/
+
+bool sphere_get_intersection_in_window(const struct Object *object, const struct Ray *ray, const float tmin, const float tmax, float *distance, v3 normal)
+{
+	const struct Sphere *sphere = (const struct Sphere *)object;
+	v3 relative_position;
+	sub3v(ray->point, sphere->position, relative_position);
+	float b = -dot3(ray->direction, relative_position);
+	float c = dot3(relative_position, relative_position) - sqr(sphere->radius);
+	float det = sqr(b) - c;
+	if (det < 0.f)
+		return false;
+	float sqrt_det = sqrtf(det);
+	float near_root = b - sqrt_det;
+	float far_root = b + sqrt_det;
+	float root;
+	if (near_root > sphere->object.epsilon && near_root >= tmin) {
+		root = near_root;
+	} else if (far_root > sphere->object.epsilon && far_root >= tmin) {
+		root = far_root;
+	} else {
+		return false;
+	}
+	if (root >= tmax)
+		return false;
+	mul3s(ray->direction, root, normal);
+	add3v(normal, ray->point, normal);
+	sub3v(normal, sphere->position, normal);
+	mul3s(normal, 1.f / sphere->radius, normal);
+	*distance = root;
+	return true;
+}
+
+bool triangle_get_intersection_in_window(const struct Object *object, const struct Ray *ray, const float tmin, const float tmax, float *distance, v3 normal)
+{
+	const struct Triangle *triangle = (const struct Triangle *)object;
+	float root;
+	if (!moller_trumbore(triangle->vertices[0], triangle->edges, ray->point, ray->direction, triangle->object.epsilon, &root))
+		return false;
+	if (root < tmin || root >= tmax)
+		return false;
+	*distance = root;
+	assign3(normal, triangle->normal);
+	return true;
+}
+
+bool object_get_intersection_in_window(const struct Object *object, const struct Ray *ray, const float tmin, const float tmax, float *distance, v3 normal)
+{
+	switch (object->object_data->type) {
+	case OBJECT_SPHERE:
+		return sphere_get_intersection_in_window(object, ray, tmin, tmax, distance, normal);
+	case OBJECT_TRIANGLE:
+		return triangle_get_intersection_in_window(object, ray, tmin, tmax, distance, normal);
+#ifdef UNBOUND_OBJECTS
+	case OBJECT_PLANE:
+		/* Planes are unbounded and never instanced. */
+		return false;
+#endif
+	}
+	return false;
 }
 
 /*******************************************************************************

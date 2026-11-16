@@ -20,6 +20,7 @@
 #include "calc.h"
 #include "camera.h"
 #include "image.h"
+#include "lattice.h"
 #include "material.h"
 #include "mem.h"
 #include "object.h"
@@ -57,6 +58,27 @@ static enum ReflectionModel reflection_model = REFLECTION_PHONG;
 static enum GlobalIlluminationModel global_illumination_model = GLOBAL_ILLUMINATION_AMBIENT;
 static size_t samples_per_pixel = 1;
 static enum LightAttenuation light_attenuation = LIGHT_ATTENUATION_SQUARE;
+
+/* Optional lattice instance set borrowed for the current frame. */
+static struct Lattice *frame_lattice;
+static float frame_lattice_far_distance;
+static bool frame_lattice_enabled;
+
+void render_set_lattice(struct Lattice *lattice, const float far_distance)
+{
+	/* `far_distance` is provided by the caller and must be finite and
+	 * positive; an invalid value disables the lattice for the frame. */
+	frame_lattice = lattice;
+	frame_lattice_far_distance = far_distance;
+	frame_lattice_enabled = lattice != NULL && isfinite(far_distance) && far_distance > 0.f;
+}
+
+void render_clear_lattice(void)
+{
+	frame_lattice = NULL;
+	frame_lattice_far_distance = 0.f;
+	frame_lattice_enabled = false;
+}
 
 void render_init(void)
 {
@@ -126,11 +148,18 @@ void get_closest_intersection(const struct Ray *ray, struct Object **closest_obj
 bool is_light_blocked(const struct Ray *ray, const float distance, v3 light_intensity, const struct Object *emittant_object)
 {
 #ifdef UNBOUND_OBJECTS
-	return unbound_objects_is_light_blocked(ray, distance, light_intensity, emittant_object)
-		|| accel_is_light_blocked(ray, distance, light_intensity, emittant_object);
-#else
-	return accel_is_light_blocked(ray, distance, light_intensity, emittant_object);
+	if (unbound_objects_is_light_blocked(ray, distance, light_intensity, emittant_object))
+		return true;
 #endif
+	if (accel_is_light_blocked(ray, distance, light_intensity, emittant_object))
+		return true;
+	if (frame_lattice_enabled && frame_lattice) {
+		/* Shadow rays keep their strict, actual light-distance window. */
+		struct LatticeStats stats;
+		if (lattice_occluded(frame_lattice, ray, 0.f, distance, &stats))
+			return true;
+	}
+	return false;
 }
 
 float cast_ray(const struct Ray *ray, const v3 kr, v3 color, const uint32_t remaining_bounces, struct Object *inside_object)
@@ -138,13 +167,29 @@ float cast_ray(const struct Ray *ray, const v3 kr, v3 color, const uint32_t rema
 	struct Object *object = NULL;
 	v3 normal;
 	float min_distance;
+	struct LatticeHit lattice_hit;
+	bool is_lattice_hit = false;
 
 	/* get ray intersection */
 	if (inside_object && inside_object->object_data->get_intersection(inside_object, ray, &min_distance, normal)) {
 		object = inside_object;
 	} else {
 		min_distance = FLT_MAX;
+		/* Ordinary objects are always considered; only the lattice is
+		 * restricted to far_distance. */
 		get_closest_intersection(ray, &object, normal, &min_distance);
+		if (frame_lattice_enabled && frame_lattice) {
+			struct LatticeStats stats;
+			struct LatticeHit candidate;
+			float lattice_limit = min_distance < frame_lattice_far_distance ? min_distance : frame_lattice_far_distance;
+			if (lattice_closest(frame_lattice, ray, 0.f, lattice_limit, &candidate, &stats) && candidate.distance < min_distance) {
+				min_distance = candidate.distance;
+				lattice_hit = candidate;
+				is_lattice_hit = true;
+				object = lattice_prototype(frame_lattice, candidate.prototype);
+				assign3(normal, candidate.normal);
+			}
+		}
 	}
 
 	if (!object)
@@ -200,7 +245,17 @@ float cast_ray(const struct Ray *ray, const v3 kr, v3 color, const uint32_t rema
 				}
 
 				v3 diffuse;
-				material->texture->get_color(material->texture, outgoing_ray.point, diffuse);
+				if (is_lattice_hit) {
+					/* Sample the prototype's texture in its local frame. */
+					v3 period, local_point;
+					lattice_get_period(frame_lattice, period);
+					local_point[X] = outgoing_ray.point[X] - (float)lattice_hit.cell[X] * period[X];
+					local_point[Y] = outgoing_ray.point[Y] - (float)lattice_hit.cell[Y] * period[Y];
+					local_point[Z] = outgoing_ray.point[Z] - (float)lattice_hit.cell[Z] * period[Z];
+					material->texture->get_color(material->texture, local_point, diffuse);
+				} else {
+					material->texture->get_color(material->texture, outgoing_ray.point, diffuse);
+				}
 				mul3v(diffuse, incoming_light_intensity, diffuse);
 				mul3s(diffuse, fmaxf(0., a), diffuse);
 

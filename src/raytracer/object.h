@@ -71,6 +71,16 @@ void mesh_to_objects(const char *filename, struct Object *object, const v3 posit
 
 void get_objects_extents(v3 min, v3 max);
 
+/*
+ * Window-aware primitive intersection used by instancing code.
+ * Finds the nearest intersection strictly in front of the ray origin (distance >
+ * object->epsilon) that also lies in [tmin, tmax).  Unlike
+ * object_data->get_intersection, this keeps looking for the far root of a
+ * sphere when the near root is in front of the ray origin but before tmin.
+ * Only bounded prototypes (spheres and triangles) are supported.
+ */
+bool object_get_intersection_in_window(const struct Object *object, const struct Ray *ray, float tmin, float tmax, float *distance, v3 normal);
+
 #ifdef UNBOUND_OBJECTS
 void unbound_objects_get_closest_intersection(const struct Ray *ray, struct Object **closest_object, v3 closest_normal, float *closest_distance);
 bool unbound_objects_is_light_blocked(const struct Ray *ray, const float distance, v3 light_intensity, const struct Object *emittant_object);

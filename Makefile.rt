@@ -34,7 +34,13 @@ $(BUILD_DIR)/%.c.o: %.c
 
 debug: $(TARGET)
 
-.PHONY: clean
+# In-memory scene example: repeated pillars / grid written as a PPM.
+LATTICE_EXAMPLE_SRCS := $(filter-out ./src/raytracer/main.c ./src/raytracer/image.c,$(SRCS)) examples/lattice_ppm.c
+lattice-example: $(LATTICE_EXAMPLE_SRCS)
+	mkdir -p ./build
+	$(CC) $(INC_FLAGS) $(CFLAGS) $(LATTICE_EXAMPLE_SRCS) -o ./build/lattice_ppm $(LDFLAGS)
+
+.PHONY: clean lattice-example
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(TARGET)
