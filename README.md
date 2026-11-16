@@ -139,6 +139,79 @@ Shadow Mapping (based on "low poly house" [Link](https://sketchfab.com/3d-models
 Screen-space ambient occlussion ("Pokemon FireRed - Player's Room" [Link](https://sketchfab.com/3d-models/pokemon-firered-players-room-b23b6b253207463c97db2a7092adff74) by [Wesai](https://sketchfab.com/Wesai) licensed under [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/))
 ![alt](img/example_ssao.png)
 
+## Per-Face Quad Textures
+
+The `face_texture.h` module gives every quadrilateral face its own
+independent linear floating-point `Vec4` image. No atlas is built and
+neighbouring faces may use different (power-of-two, possibly rectangular)
+resolutions.
+
+### Topology and edge direction
+
+A face is an oriented quad whose shared position indices name its local
+corners in the order `(0,0) (1,0) (1,1) (0,1)`. Each face is rasterized as
+two triangles, `0-1-2` and `0-2-3`. Boundary edges are allowed. Resource
+construction rejects an edge that is incident to more than two faces and a
+shared edge that the two faces traverse in the same direction; the faces of
+a manifold edge must point in opposite directions along it.
+
+### Mip levels and gutters
+
+Each face generates its own mip chain down to `1x1`: every axis halves
+independently and clamps at one, so an axis that already has size one keeps
+sampling the same coordinate while the other axis keeps shrinking. Every
+level carries its interior texels plus a one-cell gutter ring. Sampling in
+a level uses bilinear weights at the continuous coordinates
+`uv * size - 0.5`, so the gutter cells participate in edge interpolation,
+and the two neighbouring levels are blended by the clamped fractional LOD.
+UV is restricted to the unit face square and the LOD must be explicit and
+finite; no anisotropic filtering is performed.
+
+- **Edge gutters** – a gutter cell represents the local rectangle of that
+  level (width `1/W`, height `1/H`). It is unfolded across the shared edge
+  into the neighbour's unit square. The shared vertex ordering determines
+  the reversed direction along the edge and the axis permutation, and the
+  cell stores an exact area-weighted average of the neighbour's
+  piecewise-constant base texels covered by the unfolded rectangle. It is
+  never a copy of the neighbour's nearest row and is never taken from the
+  neighbour's integer mip level. Boundary edges instead extend this face's
+  own edge texel.
+- **Corner gutters** – a corner cell averages the base corner texel of
+  *every* face incident to that topology vertex (the whole vertex star),
+  with equal weights, not just the two edge-adjacent faces. Boundary
+  corners follow the same rule, so a star of one reproduces the face's own
+  corner texel.
+
+### Snapshots, partial rebuilds and lifetime
+
+`FaceMaterial` owns the live state and publishes immutable,
+reference-counted `FaceSnapshot` objects. Replacing one face's base data or
+size rebuilds only:
+
+1. that face's interior mip chain and all of its gutters,
+2. the edge gutters, at every level, of faces sharing an edge with it, and
+3. the corner gutters of every face in the vertex stars of its four
+   corners.
+
+Faces and levels with no dependency keep their storage object and are
+shared between the old and new snapshot; the whole mesh is never copied or
+regenerated. `rebuild_count()` reports the number of published snapshots and
+`layer_storage(face, level)` exposes the read-only layer storage identity so
+this scope can be verified. A failed update publishes nothing and leaves the
+previous snapshot in place.
+
+A snapshot is self-contained: it stays valid and drawable after the source
+material and all original input arrays have been destroyed, and old and new
+snapshots never modify one another. Draw calls keep no global "current face"
+or "current texture" state, so two `Renderer` instances can interleave
+quad draws. The quad entry `Renderer::drawQuads` reuses the existing
+triangle rasterization, depth test and `Program` vertex/fragment flow; the
+flat per-face id replicated on a face's four corners interpolates to the
+exact original face number on both sub-triangles (an interpolatable vertex
+index is never used as a face id). The legacy triangle, indexed-buffer and
+`Sampler` paths remain unchanged. See `examples/face_texture.cpp` and the
+`topology`, `gutters` and `rendering` groups in `checks/target.cpp`.
+
 ## :books: Useful Resources
 [Tiny Renderer](https://github.com/ssloy/tinyrenderer/wiki/Lesson-0:-getting-started)   
 [Scratchpixel Lesson](https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/overview-rasterization-algorithm.html)

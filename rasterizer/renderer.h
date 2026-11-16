@@ -3,6 +3,7 @@
 #include "buffer.h"
 #include "program.h"
 #include "framebuffer.h"
+#include "face_texture.h"
 
 #include "math/utility.h"
 #include "math/rectangle.h"
@@ -92,6 +93,58 @@ struct Renderer
             break;
         default: break;
         }
+    }
+
+
+    /* Quad mesh draw entry. Every oriented quad of the snapshot is split
+     * into the two triangles 0-1-2 and 0-2-3; the generated vertices then
+     * take the exact same path as an ordinary triangle Buffer: vertex
+     * Program stage, triangle rasterization, depth test and fragment
+     * Program stage. No global face/texture state is kept, so two
+     * Renderers can interleave draw calls independently. */
+    template<typename Varying, typename Uniforms>
+    void drawQuads(const Program<FaceMeshVertex, Varying, Uniforms>& program, const FaceQuadMesh& mesh)
+    {
+        drawQuads(program, mesh, m_framebuffer, m_options);
+    }
+
+    template<typename Varying, typename Uniforms, typename... Targets>
+    void drawQuads(const Program<FaceMeshVertex, Varying, Uniforms, Framebuffer<Targets...>>& program, const FaceQuadMesh& mesh, Framebuffer<Targets...>& fb)
+    {
+        drawQuads(program, mesh, fb, m_options);
+    }
+
+    template<typename Varying, typename Uniforms, typename... Targets>
+    void drawQuads(const Program<FaceMeshVertex, Varying, Uniforms, Framebuffer<Targets...>>& program, const FaceQuadMesh& mesh, Framebuffer<Targets...>& fb, const Options& options)
+    {
+        assert(program.m_vertShader);
+        assert(program.m_fragShader);
+        assert(mesh.snapshot != nullptr);
+
+        Buffer<FaceMeshVertex> triangles;
+        triangles.primitive = ePrimitive::TRIANGLES;
+        triangles.vertices.reserve(mesh.snapshot->quads.size() * 6);
+
+        static constexpr std::array<std::array<int, 3>, 2> subTriangles = { std::array<int, 3>{0, 1, 2},
+                                                                            std::array<int, 3>{0, 2, 3} };
+
+        for(unsigned int face = 0; face < mesh.snapshot->quads.size(); face++)
+        {
+            const FaceQuad& quad = mesh.snapshot->quads[face];
+            for(const auto& tri : subTriangles)
+            {
+                for(int corner : tri)
+                {
+                    const unsigned int vertexIndex = quad.vertices[corner];
+                    assert(vertexIndex < mesh.positions.size());
+                    triangles.vertices.push_back(FaceMeshVertex{ mesh.positions[vertexIndex],
+                                                                 face_detail::corner_uvs()[corner],
+                                                                 static_cast<float>(face) });
+                }
+            }
+        }
+
+        draw(program, triangles, fb, options);
     }
 
 

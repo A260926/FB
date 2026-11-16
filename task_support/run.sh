@@ -19,7 +19,7 @@ c++ -std=c++20 -O1 -w -I. -Irasterizer -Iexternal -include task_support/prelude.
 mkdir -p .task-build/face-output
 .task-build/example .task-build/face-output
 
-  output_log=$(mktemp)
+  output_log=$(mktemp .task-build/tmp.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

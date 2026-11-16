@@ -1,0 +1,4 @@
+external/stb_image/stb_impl.cpp
+rasterizer/math/utility.cpp
+rasterizer/renderer.cpp
+rasterizer/texture.cpp
