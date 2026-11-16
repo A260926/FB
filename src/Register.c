@@ -108,6 +108,56 @@ ZydisRegister ZydisRegisterEncode(ZydisRegisterClass register_class, ZyanU8 id)
         return ZYDIS_REGISTER_NONE;
     }
 
+    // The extended APX registers (`R16`..`R31` and their 8/16/32-bit variants) are appended to
+    // the `ZydisRegister` enum to keep all pre-existing enum values stable. This means that the
+    // registers of a GPR class are not necessarily a contiguous enum range anymore (the `GPR64`
+    // class, for example, spans the legacy `RAX`..`R15` block and the appended `R16`..`R31`
+    // block). Map the id explicitly for those four classes and keep the original arithmetic for
+    // all remaining (contiguous) classes.
+    switch (register_class)
+    {
+    case ZYDIS_REGCLASS_GPR8:
+        if (id <= 3)
+        {
+            return ZYDIS_REGISTER_AL + id;
+        }
+        if (id <= 7)
+        {
+            // High-byte registers `AH`..`BH`.
+            return ZYDIS_REGISTER_AH + (id - 4);
+        }
+        if (id <= 19)
+        {
+            // `SPL`..`R15B`.
+            return ZYDIS_REGISTER_SPL + (id - 8);
+        }
+        if (id <= 35)
+        {
+            // `R16B`..`R31B`.
+            return ZYDIS_REGISTER_R16B + (id - 20);
+        }
+        return ZYDIS_REGISTER_NONE;
+    case ZYDIS_REGCLASS_GPR16:
+    case ZYDIS_REGCLASS_GPR32:
+    case ZYDIS_REGCLASS_GPR64:
+        if (id <= 15)
+        {
+            const ZydisRegister lo = REG_CLASS_LOOKUP[register_class].lo;
+            return lo + id;
+        }
+        if (id <= 31)
+        {
+            const ZydisRegister lo =
+                (register_class == ZYDIS_REGCLASS_GPR16) ? ZYDIS_REGISTER_R16W :
+                (register_class == ZYDIS_REGCLASS_GPR32) ? ZYDIS_REGISTER_R16D :
+                                                           ZYDIS_REGISTER_R16;
+            return lo + (id - 16);
+        }
+        return ZYDIS_REGISTER_NONE;
+    default:
+        break;
+    }
+
     const ZydisRegisterClassLookupItem* item = &REG_CLASS_LOOKUP[register_class];
     if (id <= (item->hi - item->lo))
     {
@@ -202,7 +252,10 @@ ZydisRegister ZydisRegisterGetLargestEnclosing(ZydisMachineMode mode, ZydisRegis
         return static_reg;
     }
 
-    static const ZyanU8 GPR8_MAPPING[20] =
+    // GPR8 ids 0..19 denote the original registers (`AL`..`R15B`). The extended registers
+    // `R16B`..`R31B` use ids 20..35 (architectural index plus 4), as required by the public
+    // `GPR8` id convention which reserves 4..7 for the high-byte registers.
+    static const ZyanU8 GPR8_MAPPING[36] =
     {
         /* AL   */  0,
         /* CL   */  1,
@@ -223,7 +276,23 @@ ZydisRegister ZydisRegisterGetLargestEnclosing(ZydisMachineMode mode, ZydisRegis
         /* R12B */ 12,
         /* R13B */ 13,
         /* R14B */ 14,
-        /* R15B */ 15
+        /* R15B */ 15,
+        /* R16B */ 16,
+        /* R17B */ 17,
+        /* R18B */ 18,
+        /* R19B */ 19,
+        /* R20B */ 20,
+        /* R21B */ 21,
+        /* R22B */ 22,
+        /* R23B */ 23,
+        /* R24B */ 24,
+        /* R25B */ 25,
+        /* R26B */ 26,
+        /* R27B */ 27,
+        /* R28B */ 28,
+        /* R29B */ 29,
+        /* R30B */ 30,
+        /* R31B */ 31
     };
 
     ZyanU8 reg_id = REG_LOOKUP[reg].id;
@@ -235,14 +304,20 @@ ZydisRegister ZydisRegisterGetLargestEnclosing(ZydisMachineMode mode, ZydisRegis
     case ZYDIS_REGCLASS_GPR16:
     case ZYDIS_REGCLASS_GPR32:
     case ZYDIS_REGCLASS_GPR64:
+        if (reg_id < 16)
+        {
+            return REG_CLASS_LOOKUP[
+                (mode_bits == 2) ? ZYDIS_REGCLASS_GPR64 :
+                (mode_bits == 1) ? ZYDIS_REGCLASS_GPR32 : ZYDIS_REGCLASS_GPR16].lo + reg_id;
+        }
         switch (mode_bits)
         {
         case 2:
-            return REG_CLASS_LOOKUP[ZYDIS_REGCLASS_GPR64].lo + reg_id;
+            return ZYDIS_REGISTER_R16 + (reg_id - 16);
         case 1:
-            return REG_CLASS_LOOKUP[ZYDIS_REGCLASS_GPR32].lo + reg_id;
+            return ZYDIS_REGISTER_R16D + (reg_id - 16);
         case 0:
-            return REG_CLASS_LOOKUP[ZYDIS_REGCLASS_GPR16].lo + reg_id;
+            return ZYDIS_REGISTER_R16W + (reg_id - 16);
         default:
             ZYAN_UNREACHABLE;
         }

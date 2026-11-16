@@ -134,6 +134,10 @@ typedef struct ZydisDecoderState_
          * The offset of a possible `CET` `no-lock` prefix.
          */
         ZyanI8 offset_notrack;
+        /**
+         * Signals, if a `REX2` prefix (`D5`) directly follows the legacy prefixes.
+         */
+        ZyanBool has_rex2;
     } prefixes;
 } ZydisDecoderState;
 
@@ -388,6 +392,109 @@ static void ZydisDecodeREX(ZydisDecoderContext* context, ZydisDecodedInstruction
     context->vector_unified.R = instruction->raw.rex.R;
     context->vector_unified.X = instruction->raw.rex.X;
     context->vector_unified.B = instruction->raw.rex.B;
+}
+
+/**
+ * Decodes the `REX2`-prefix (`D5` followed by the payload byte).
+ *
+ * @param   context     A pointer to the `ZydisDecoderContext` struct.
+ * @param   instruction A pointer to the `ZydisDecodedInstruction` struct.
+ * @param   payload     The `REX2` payload byte.
+ */
+static void ZydisDecodeREX2(ZydisDecoderContext* context, ZydisDecodedInstruction* instruction,
+    ZyanU8 payload)
+{
+    ZYAN_ASSERT(context);
+    ZYAN_ASSERT(instruction);
+
+    instruction->attributes |= ZYDIS_ATTRIB_HAS_REX2;
+
+    instruction->raw.rex2.payload = payload;
+    instruction->raw.rex2.M0 = (payload >> 7) & 0x01;
+    instruction->raw.rex2.R4 = (payload >> 6) & 0x01;
+    instruction->raw.rex2.X4 = (payload >> 5) & 0x01;
+    instruction->raw.rex2.B4 = (payload >> 4) & 0x01;
+    instruction->raw.rex2.W  = (payload >> 3) & 0x01;
+    instruction->raw.rex2.R3 = (payload >> 2) & 0x01;
+    instruction->raw.rex2.X3 = (payload >> 1) & 0x01;
+    instruction->raw.rex2.B3 = (payload >> 0) & 0x01;
+
+    // Update internal fields. The low extension bits behave like their `REX` counterparts, the
+    // additional high bits (`R4`, `X4`, `B4`) are read directly from `raw.rex2` where needed.
+    context->vector_unified.W = instruction->raw.rex2.W;
+    context->vector_unified.R = instruction->raw.rex2.R3;
+    context->vector_unified.X = instruction->raw.rex2.X3;
+    context->vector_unified.B = instruction->raw.rex2.B3;
+}
+
+/**
+ * Checks, if the given byte is a legacy prefix (including a `REX` prefix) in 64-bit mode.
+ *
+ * @param   data The byte to check.
+ *
+ * @return  `ZYAN_TRUE`, if the byte starts a legacy prefix, `ZYAN_FALSE` otherwise.
+ */
+static ZyanBool ZydisIsLegacyPrefixByte(ZyanU8 data)
+{
+    switch (data)
+    {
+    case 0xF0:
+    case 0xF2:
+    case 0xF3:
+    case 0x2E:
+    case 0x36:
+    case 0x3E:
+    case 0x26:
+    case 0x64:
+    case 0x65:
+    case 0x66:
+    case 0x67:
+        return ZYAN_TRUE;
+    default:
+        return ((data & 0xF0) == 0x40) ? ZYAN_TRUE : ZYAN_FALSE;
+    }
+}
+
+/**
+ * Checks, if the given opcode is part of the supported `REX2` instruction subset.
+ *
+ * @param   m0      The `REX2.M0` opcode-map selector.
+ * @param   opcode  The opcode byte.
+ *
+ * @return  `ZYAN_TRUE`, if the opcode is supported, `ZYAN_FALSE` otherwise.
+ */
+static ZyanBool ZydisIsSupportedREX2Opcode(ZyanU8 m0, ZyanU8 opcode)
+{
+    if (m0 == 0)
+    {
+        switch (opcode)
+        {
+        case 0x00:
+        case 0x01:
+        case 0x02:
+        case 0x03:
+        case 0x28:
+        case 0x29:
+        case 0x2A:
+        case 0x2B:
+        case 0x38:
+        case 0x39:
+        case 0x3A:
+        case 0x3B:
+        case 0x88:
+        case 0x89:
+        case 0x8A:
+        case 0x8B:
+        case 0x8D:
+            return ZYAN_TRUE;
+        default:
+            return (opcode >= 0xB0) && (opcode <= 0xBF) ? ZYAN_TRUE : ZYAN_FALSE;
+        }
+    }
+
+    // Map 1 (`M0 == 1`): `CMOVcc` and `SETcc`
+    return (((opcode >= 0x40) && (opcode <= 0x4F)) ||
+            ((opcode >= 0x90) && (opcode <= 0x9F))) ? ZYAN_TRUE : ZYAN_FALSE;
 }
 
 /**
@@ -917,6 +1024,10 @@ static ZyanU8 ZydisCalcRegisterId(const ZydisDecoderContext* context,
         {
             return value;
         }
+        if (instruction->attributes & ZYDIS_ATTRIB_HAS_REX2)
+        {
+            return value | (instruction->raw.rex2.B3 << 3) | (instruction->raw.rex2.B4 << 4);
+        }
         return value | (context->vector_unified.B << 3);
     }
     case ZYDIS_REG_ENCODING_IS4:
@@ -1225,9 +1336,14 @@ static ZyanStatus ZydisDecodeOperandRegister(const ZydisDecodedInstruction* inst
 
     if (register_class == ZYDIS_REGCLASS_GPR8)
     {
-        if ((instruction->attributes & ZYDIS_ATTRIB_HAS_REX) && (register_id >= 4))
+        if (((instruction->attributes & (ZYDIS_ATTRIB_HAS_REX | ZYDIS_ATTRIB_HAS_REX2)) &&
+            (register_id >= 4)))
         {
-            operand->reg.value = ZYDIS_REGISTER_SPL + (register_id - 4);
+            // Under `REX`/`REX2` the encoded ids 4..7 address `SPL`..`DIL` instead of the
+            // high-byte registers. The public `GPR8` ids for these are 8..11, hence the offset
+            // of 4. Extended `REX2` ids above 11 map to `R16B`..`R31B`.
+            operand->reg.value = ZydisRegisterEncode(ZYDIS_REGCLASS_GPR8, register_id + 4);
+            ZYAN_ASSERT(operand->reg.value);
         } else
         {
             operand->reg.value = ZYDIS_REGISTER_AL + register_id;
@@ -1314,8 +1430,10 @@ static ZyanStatus ZydisDecodeOperandMemory(const ZydisDecoderContext* context,
     }
     case 32:
     {
-        operand->mem.base = ZYDIS_REGISTER_EAX + ZydisCalcRegisterId(context, instruction,
-            ZYDIS_REG_ENCODING_BASE, ZYDIS_REGCLASS_GPR32);
+        operand->mem.base = ZydisRegisterEncode(ZYDIS_REGCLASS_GPR32,
+            ZydisCalcRegisterId(context, instruction, ZYDIS_REG_ENCODING_BASE,
+                ZYDIS_REGCLASS_GPR32));
+        const ZyanBool is_rex2 = !!(instruction->attributes & ZYDIS_ATTRIB_HAS_REX2);
         switch (instruction->raw.modrm.mod)
         {
         case 0:
@@ -1343,18 +1461,31 @@ static ZyanStatus ZydisDecodeOperandMemory(const ZydisDecoderContext* context,
         if (modrm_rm == 4)
         {
             ZYAN_ASSERT(instruction->attributes & ZYDIS_ATTRIB_HAS_SIB);
+            const ZyanU8 id_index = ZydisCalcRegisterId(context, instruction,
+                vidx_register_class ? ZYDIS_REG_ENCODING_VIDX : ZYDIS_REG_ENCODING_INDEX,
+                vidx_register_class ? vidx_register_class : ZYDIS_REGCLASS_GPR32);
             operand->mem.index =
-                ZydisRegisterEncode(vidx_register_class ? vidx_register_class : ZYDIS_REGCLASS_GPR32,
-                    ZydisCalcRegisterId(context, instruction,
-                        vidx_register_class ? ZYDIS_REG_ENCODING_VIDX : ZYDIS_REG_ENCODING_INDEX,
-                        vidx_register_class ? vidx_register_class : ZYDIS_REGCLASS_GPR32));
+                ZydisRegisterEncode(vidx_register_class ? vidx_register_class :
+                    ZYDIS_REGCLASS_GPR32, id_index);
             operand->mem.scale = (1 << instruction->raw.sib.scale);
-            if (operand->mem.index == ZYDIS_REGISTER_ESP)
+            // `SIB.index` denotes "no index" only if its full (extended) id equals 4. An extended
+            // index register is a real index, even though its low three bits are `4`.
+            if (!vidx_register_class && (id_index == 4))
             {
                 operand->mem.index = ZYDIS_REGISTER_NONE;
                 operand->mem.scale = 0;
             }
-            if (operand->mem.base == ZYDIS_REGISTER_EBP)
+            if (is_rex2)
+            {
+                // Under `REX2`, `mod == 0` with `SIB.base == 5` means "no base" and consumes a
+                // `disp32`, regardless of the `B4` extension bit (like the `REX2` `ModRM`
+                // sentinel above). The extended `R29` base is only usable with `mod != 0`.
+                if (instruction->raw.modrm.mod == 0)
+                {
+                    operand->mem.base = ZYDIS_REGISTER_NONE;
+                }
+                displacement_size = (instruction->raw.modrm.mod == 1) ? 8 : 32;
+            } else if (operand->mem.base == ZYDIS_REGISTER_EBP)
             {
                 if (instruction->raw.modrm.mod == 0)
                 {
@@ -1371,8 +1502,10 @@ static ZyanStatus ZydisDecodeOperandMemory(const ZydisDecoderContext* context,
     }
     case 64:
     {
-        operand->mem.base = ZYDIS_REGISTER_RAX + ZydisCalcRegisterId(context, instruction,
-            ZYDIS_REG_ENCODING_BASE, ZYDIS_REGCLASS_GPR64);
+        operand->mem.base = ZydisRegisterEncode(ZYDIS_REGCLASS_GPR64,
+            ZydisCalcRegisterId(context, instruction, ZYDIS_REG_ENCODING_BASE,
+                ZYDIS_REGCLASS_GPR64));
+        const ZyanBool is_rex2 = !!(instruction->attributes & ZYDIS_ATTRIB_HAS_REX2);
         switch (instruction->raw.modrm.mod)
         {
         case 0:
@@ -1400,21 +1533,28 @@ static ZyanStatus ZydisDecodeOperandMemory(const ZydisDecoderContext* context,
         if ((modrm_rm & 0x07) == 4)
         {
             ZYAN_ASSERT(instruction->attributes & ZYDIS_ATTRIB_HAS_SIB);
+            const ZyanU8 id_index = ZydisCalcRegisterId(context, instruction,
+                vidx_register_class ? ZYDIS_REG_ENCODING_VIDX : ZYDIS_REG_ENCODING_INDEX,
+                vidx_register_class ? vidx_register_class : ZYDIS_REGCLASS_GPR64);
             operand->mem.index =
-                ZydisRegisterEncode(vidx_register_class ? vidx_register_class : ZYDIS_REGCLASS_GPR64,
-                    ZydisCalcRegisterId(context, instruction,
-                        vidx_register_class ? ZYDIS_REG_ENCODING_VIDX : ZYDIS_REG_ENCODING_INDEX,
-                        vidx_register_class ? vidx_register_class : ZYDIS_REGCLASS_GPR64));
+                ZydisRegisterEncode(vidx_register_class ? vidx_register_class :
+                    ZYDIS_REGCLASS_GPR64, id_index);
             operand->mem.scale = (1 << instruction->raw.sib.scale);
-            if (operand->mem.index == ZYDIS_REGISTER_RSP)
+            // See the 32-bit case above: only the full extended id `4` means "no index".
+            if (!vidx_register_class && (id_index == 4))
             {
                 operand->mem.index = ZYDIS_REGISTER_NONE;
                 operand->mem.scale = 0;
             }
-            if ((operand->mem.base == ZYDIS_REGISTER_RBP) ||
-                (operand->mem.base == ZYDIS_REGISTER_R13))
+            if (instruction->raw.sib.base == 5)
             {
-                if (instruction->raw.modrm.mod == 0)
+                // `mod == 0` with `SIB.base == 5` means "no base" and consumes a `disp32`,
+                // regardless of any `REX`/`REX2` base-extension bits. A base of `R13` (or the
+                // `REX2`-extended `R29`) is only valid with `mod == 1` or `mod == 2`.
+                const ZyanBool no_base = (instruction->raw.modrm.mod == 0) &&
+                    (is_rex2 || (operand->mem.base == ZYDIS_REGISTER_RBP) ||
+                     (operand->mem.base == ZYDIS_REGISTER_R13));
+                if (no_base)
                 {
                     operand->mem.base = ZYDIS_REGISTER_NONE;
                 }
@@ -3149,6 +3289,14 @@ static ZyanStatus ZydisCollectOptionalPrefixes(ZydisDecoderState* state,
             state->prefixes.offset_asz_override = offset;
             instruction->attributes |= ZYDIS_ATTRIB_HAS_ADDRESSSIZE;
             break;
+        case 0xD5:
+            if (state->decoder->machine_mode == ZYDIS_MACHINE_MODE_LONG_64)
+            {
+                // `D5` starts a `REX2` prefix. It must be the last prefix before the opcode.
+                done = ZYAN_TRUE;
+                break;
+            }
+            ZYAN_FALLTHROUGH;
         default:
             if ((state->decoder->machine_mode == ZYDIS_MACHINE_MODE_LONG_64) &&
                 (prefix_byte & 0xF0) == 0x40)
@@ -3194,6 +3342,27 @@ static ZyanStatus ZydisCollectOptionalPrefixes(ZydisDecoderState* state,
         (state->prefixes.group2 == 0x3E))
     {
         state->prefixes.offset_notrack = state->prefixes.offset_group2;
+    }
+
+    // Peek at a possible `REX2` prefix. `REX2` (`D5`) is only valid in 64-bit mode and only if it
+    // is not immediately preceded by a legacy `REX` prefix (`D5` in that position would be the
+    // legacy `AAD` opcode otherwise). The actual decoding happens in `ZydisNodeHandlerOpcode`, so
+    // that the opcode map selected by `REX2.M0` can be honoured.
+    if (state->decoder->machine_mode == ZYDIS_MACHINE_MODE_LONG_64)
+    {
+        ZyanU8 next_byte;
+        const ZyanStatus status = ZydisInputPeek(state, instruction, &next_byte);
+        if (ZYAN_SUCCESS(status) && (next_byte == 0xD5))
+        {
+            if (rex)
+            {
+                return ZYDIS_STATUS_ILLEGAL_REX;
+            }
+            state->prefixes.has_rex2 = ZYAN_TRUE;
+        } else if (!ZYAN_SUCCESS(status) && (status != ZYDIS_STATUS_NO_MORE_DATA))
+        {
+            return status;
+        }
     }
 
     return ZYAN_STATUS_SUCCESS;
@@ -4171,17 +4340,47 @@ static ZyanStatus ZydisPopulateRegisterIds(ZydisDecoderContext* context,
     {
         const ZyanBool is_emvex = (instruction->encoding == ZYDIS_INSTRUCTION_ENCODING_EVEX) ||
                                   (instruction->encoding == ZYDIS_INSTRUCTION_ENCODING_MVEX);
+        const ZyanBool is_rex2  = !!(instruction->attributes & ZYDIS_ATTRIB_HAS_REX2);
 
         // The `index` extension by `.v'` is only valid for VSIB operands
         const ZyanU8 vsib_v2 = has_vsib ? context->vector_unified.V2 : 0;
         // The `rm` extension by `.X` is only valid for EVEX/MVEX instructions
         const ZyanU8 evex_x  = is_emvex ? context->vector_unified.X  : 0;
+        // The high extension bits (`R4`, `X4`, `B4`) are only valid for `REX2` instructions and
+        // only extend GPR register identities.
+        const ZyanU8 rex2_r4 = is_rex2 ? instruction->raw.rex2.R4 : 0;
+        const ZyanU8 rex2_x4 = is_rex2 ? instruction->raw.rex2.X4 : 0;
+        const ZyanU8 rex2_b4 = is_rex2 ? instruction->raw.rex2.B4 : 0;
 
         id_reg    |= (context->vector_unified.R2 << 4) | (context->vector_unified.R << 3);
         id_rm     |= (evex_x                     << 4) | (context->vector_unified.B << 3);
         id_ndsndd |= (context->vector_unified.V2 << 4)                                   ;
         id_base   |=                                     (context->vector_unified.B << 3);
         id_index  |= (vsib_v2                    << 4) | (context->vector_unified.X << 3);
+
+        // Apply the additional `REX2` extension bits. The extension is limited to GPR operands;
+        // other register kinds ignore it.
+        if (is_rex2)
+        {
+            if (def_reg == ZYDIS_REGKIND_GPR)
+            {
+                id_reg |= (rex2_r4 << 4);
+            }
+            if (is_reg && (def_rm == ZYDIS_REGKIND_GPR))
+            {
+                id_rm |= (rex2_b4 << 4);
+            }
+            if (!is_reg)
+            {
+                //`SIB.base`/`ModRM.rm` always address a GPR in long mode, independent of the
+                // operand kind of the memory operand.
+                id_base |= (rex2_b4 << 4);
+                if (has_sib && !has_vsib)
+                {
+                    id_index |= (rex2_x4 << 4);
+                }
+            }
+        }
 
         // The masking emulates the actual CPU behavior and does not verify if the resulting ids
         // are actually valid for the given register kind.
@@ -4206,7 +4405,7 @@ static ZyanStatus ZydisPopulateRegisterIds(ZydisDecoderContext* context,
         static const ZyanU8 mask_rm[ZYDIS_REGKIND_MAX_VALUE + 1] =
         {
             /* INVALID */ 0,
-            /* GPR     */ (1 << 4) - 1, //              ignore `.X`
+            /* GPR     */ (1 << 5) - 1, //              ignore `.X`
             /* X87     */ (1 << 3) - 1, // ignore `.B`, ignore `.X`
             /* MMX     */ (1 << 3) - 1, // ignore `.B`, ignore `.X`
             /* VR      */ (1 << 5) - 1,
@@ -4218,7 +4417,14 @@ static ZyanStatus ZydisPopulateRegisterIds(ZydisDecoderContext* context,
             /* MASK    */ (1 << 3) - 1, // ignore `.B`, ignore `.X`
             /* BOUND   */ (1 << 4) - 1  //              ignore `.X`
         };
-        id_rm &= (is_reg ? mask_rm[def_rm] : 0xFF);
+        if (is_reg)
+        {
+            // Under EVEX/MVEX the 5th `rm` bit is sourced from `.X` and must be ignored for GPR
+            // operands; under `REX2` it is a genuine `GPR` extension bit (`B4`).
+            const ZyanU8 mask = (def_rm == ZYDIS_REGKIND_GPR) && !is_rex2
+                ? ((1 << 4) - 1) : mask_rm[def_rm];
+            id_rm &= mask;
+        }
 
         // Commented out for future reference. Not required at the moment as it's always either
         // a "take all" or "take nothing" situation.
@@ -4290,9 +4496,11 @@ static ZyanStatus ZydisPopulateRegisterIds(ZydisDecoderContext* context,
         }
     };
 
-    if ((id_reg >= available_regs[is_64_bit][def_reg]) ||
+    if ((id_reg >= (is_64_bit && (instruction->attributes & ZYDIS_ATTRIB_HAS_REX2) ?
+           32 : available_regs[is_64_bit][def_reg])) ||
         (id_ndsndd >= available_regs[is_64_bit][def_ndsndd]) ||
-        (is_reg && (id_rm >= available_regs[is_64_bit][def_rm])))
+        (is_reg && (id_rm >= (is_64_bit && (instruction->attributes & ZYDIS_ATTRIB_HAS_REX2) ?
+           32 : available_regs[is_64_bit][def_rm]))))
     {
         return ZYDIS_STATUS_BAD_REGISTER;
     }
@@ -4534,6 +4742,8 @@ static ZyanStatus ZydisCheckErrorConditions(ZydisDecoderState* state,
     // Check RIP-relative memory addressing
     if (no_rip_rel)
     {
+        // `mod == 0`/`rm == 5` always encodes RIP-relative addressing, regardless of the `REX2.B`
+        // extension bit.
         const ZyanBool is_rip_rel =
             (state->decoder->machine_mode == ZYDIS_MACHINE_MODE_LONG_64) &&
             (instruction->raw.modrm.mod == 0) && (instruction->raw.modrm.rm == 5);
@@ -4663,6 +4873,72 @@ static ZyanStatus ZydisCheckErrorConditions(ZydisDecoderState* state,
 /* ---------------------------------------------------------------------------------------------- */
 
 /**
+ * Consumes a `REX2` prefix (`D5` + payload byte) and the following opcode byte. On success the
+ * decoder tree node that corresponds to the opcode (already positioned below the opcode-map
+ * filter) is returned. The `REX2.M0` bit selects the legacy opcode map without consuming a `0F`
+ * byte for map 1.
+ *
+ * @param   state       A pointer to the `ZydisDecoderState` struct.
+ * @param   instruction A pointer to the `ZydisDecodedInstruction` struct.
+ * @param   node        Receives a pointer to the decoder tree node of the selected opcode.
+ *
+ * @return  A zyan status code.
+ */
+static ZyanStatus ZydisDecodeREX2Instruction(ZydisDecoderState* state,
+    ZydisDecodedInstruction* instruction, const ZydisDecoderTreeNode** node)
+{
+    ZYAN_ASSERT(state);
+    ZYAN_ASSERT(instruction);
+    ZYAN_ASSERT(node);
+    ZYAN_ASSERT(state->prefixes.has_rex2);
+    ZYAN_ASSERT(state->decoder->machine_mode == ZYDIS_MACHINE_MODE_LONG_64);
+
+    ZyanU8 d5;
+    ZYAN_CHECK(ZydisInputNext(state, instruction, &d5));
+    ZYAN_ASSERT(d5 == 0xD5);
+    instruction->raw.rex2.offset = (ZyanU8)(instruction->length - 1);
+
+    ZyanU8 payload;
+    ZYAN_CHECK(ZydisInputNext(state, instruction, &payload));
+    ZydisDecodeREX2(state->context, instruction, payload);
+
+    ZyanU8 opcode;
+    ZYAN_CHECK(ZydisInputNext(state, instruction, &opcode));
+
+    // A map-0 `REX2` instruction must not be followed by a legacy prefix byte (including `REX`
+    // and another `REX2`). Map 1 opcodes like `0x40`..`0x4F` are valid `CMOVcc` instructions.
+    if ((opcode == 0xD5) ||
+        (!instruction->raw.rex2.M0 && ZydisIsLegacyPrefixByte(opcode)))
+    {
+        return ZYDIS_STATUS_DECODING_ERROR;
+    }
+    if (!ZydisIsSupportedREX2Opcode(instruction->raw.rex2.M0, opcode))
+    {
+        return ZYDIS_STATUS_DECODING_ERROR;
+    }
+
+    instruction->opcode = opcode;
+
+    const ZydisDecoderTreeNode* root = ZydisDecoderTreeGetRootNode();
+    if (instruction->raw.rex2.M0)
+    {
+        instruction->opcode_map = ZYDIS_OPCODE_MAP_0F;
+        root = ZydisDecoderTreeGetChildNode(root, 0x0F);
+        ZYAN_ASSERT(root->type == ZYDIS_NODETYPE_FILTER_OPCODE);
+    } else
+    {
+        instruction->opcode_map = ZYDIS_OPCODE_MAP_DEFAULT;
+    }
+    *node = ZydisDecoderTreeGetChildNode(root, opcode);
+    if ((*node)->type == ZYDIS_NODETYPE_INVALID)
+    {
+        return ZYDIS_STATUS_DECODING_ERROR;
+    }
+
+    return ZYAN_STATUS_SUCCESS;
+}
+
+/**
  * Uses the decoder-tree to decode the current instruction.
  *
  * @param   state       A pointer to the `ZydisDecoderState` struct.
@@ -4677,7 +4953,14 @@ static ZyanStatus ZydisDecodeInstruction(ZydisDecoderState* state,
     ZYAN_ASSERT(instruction);
 
     // Iterate through the decoder tree
-    const ZydisDecoderTreeNode* node = ZydisDecoderTreeGetRootNode();
+    const ZydisDecoderTreeNode* node;
+    if (state->prefixes.has_rex2)
+    {
+        ZYAN_CHECK(ZydisDecodeREX2Instruction(state, instruction, &node));
+    } else
+    {
+        node = ZydisDecoderTreeGetRootNode();
+    }
     const ZydisDecoderTreeNode* temp = ZYAN_NULL;
     ZydisDecoderTreeNodeType node_type;
     do

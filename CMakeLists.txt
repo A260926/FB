@@ -333,6 +333,7 @@ if (ZYDIS_BUILD_EXAMPLES AND NOT ZYAN_NO_LIBC)
         _add_example("Formatter02" "Formatter02.c" "Decoder")
         _add_example("Formatter03" "Formatter03.c" "Decoder")
         _add_example("ZydisPerfTest" "ZydisPerfTest.c" "Decoder")
+        _add_example("REX2" "REX2.c" "Decoder")
         if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux"
                 OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
             target_compile_definitions("ZydisPerfTest" PRIVATE "_GNU_SOURCE")

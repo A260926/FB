@@ -234,6 +234,33 @@ typedef struct ZydisRegisterContext_
 /* ---------------------------------------------------------------------------------------------- */
 /* Register                                                                                       */
 /* ---------------------------------------------------------------------------------------------- */
+/* Extended APX general-purpose registers                                                          */
+/* ---------------------------------------------------------------------------------------------- */
+
+/**
+ * The `APX` (`REX2`) extension introduces the general-purpose registers `R16`..`R31` and their
+ * 8-, 16- and 32-bit variants. They are appended at the end of the `ZydisRegister` enum (after
+ * `ZYDIS_REGISTER_UIF`) so that all pre-existing enum constants keep their numeric values.
+ *
+ * The `GPR8` id convention matches the established `ZydisRegisterGetId`/`ZydisRegisterEncode`
+ * behavior:
+ *
+ * | id       | register          |
+ * | -------- | ----------------- |
+ * | 0..7     | `AL`..`BH`        |
+ * | 8..11    | `SPL`..`DIL`      |
+ * | 12..19   | `R8B`..`R15B`     |
+ * | 20..35   | `R16B`..`R31B`    |
+ *
+ * `R16B`..`R31B` therefore use "architectural register index plus 4". The 16-, 32- and 64-bit
+ * classes continue to use the architectural index directly (`R16W`/`R16D`/`R16` are id 16).
+ *
+ * Because the extended registers are appended rather than interleaved, the registers of a class
+ * are not a contiguous enum range anymore. `ZydisRegisterEncode` and `ZydisRegisterGetId` handle
+ * this explicitly and remain consistent with each other.
+ */
+
+/* ---------------------------------------------------------------------------------------------- */
 
 /**
  * Returns the register specified by the `register_class` and `id` tuple.

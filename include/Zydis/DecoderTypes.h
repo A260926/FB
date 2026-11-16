@@ -755,6 +755,56 @@ typedef struct ZydisDecodedInstructionRawRex_
 } ZydisDecodedInstructionRawRex;
 
 /**
+ * Detailed info about the `REX2` prefix (`D5` followed by a payload byte).
+ *
+ * The payload bits (bit 7 down to bit 0) are `M0,R4,X4,B4,W,R3,X3,B3`. All bits are stored in
+ * their ordinary (non-inverted) form.
+ */
+typedef struct ZydisDecodedInstructionRawRex2_
+{
+    /**
+     * The opcode-map selector (`0` = map 0, `1` = map 1).
+     */
+    ZyanU8 M0;
+    /**
+     * Extension of the `ModRM.reg` field (bit 4).
+     */
+    ZyanU8 R4;
+    /**
+     * Extension of the `SIB.index` field (bit 4).
+     */
+    ZyanU8 X4;
+    /**
+     * Extension of the `ModRM.rm`, `SIB.base`, or `opcode.reg` field (bit 4).
+     */
+    ZyanU8 B4;
+    /**
+     * 64-bit operand-size promotion.
+     */
+    ZyanU8 W;
+    /**
+     * Extension of the `ModRM.reg` field (bit 3).
+     */
+    ZyanU8 R3;
+    /**
+     * Extension of the `SIB.index` field (bit 3).
+     */
+    ZyanU8 X3;
+    /**
+     * Extension of the `ModRM.rm`, `SIB.base`, or `opcode.reg` field (bit 3).
+     */
+    ZyanU8 B3;
+    /**
+     * The raw payload byte following the `D5` byte.
+     */
+    ZyanU8 payload;
+    /**
+     * The offset of the `D5` byte, relative to the beginning of the instruction, in bytes.
+     */
+    ZyanU8 offset;
+} ZydisDecodedInstructionRawRex2;
+
+/**
  * Detailed info about the `XOP` prefix.
  */
 typedef struct ZydisDecodedInstructionRawXop_
@@ -1125,6 +1175,7 @@ typedef struct ZydisDecodedInstructionRaw_
     union
     {
         ZydisDecodedInstructionRawRex rex;
+        ZydisDecodedInstructionRawRex2 rex2;
         ZydisDecodedInstructionRawXop xop;
         ZydisDecodedInstructionRawVex vex;
         ZydisDecodedInstructionRawEvex evex;

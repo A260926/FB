@@ -718,7 +718,31 @@ static ZyanBool ZydisIsRegisterAllowed(ZydisEncoderInstructionMatch *match, Zydi
     ZydisRegisterClass reg_class)
 {
     const ZyanI8 reg_id = ZydisRegisterGetId(reg);
-    ZYAN_ASSERT(reg_id >= 0 && reg_id <= 31);
+    ZYAN_ASSERT(reg_id >= 0 && reg_id <= 35);
+    // The extended APX registers (`R16`..`R31` and their 8/16/32-bit variants) are not
+    // encodable. `GPR8` ids 20..35 correspond to `R16B`..`R31B`, all other GPR classes use the
+    // architectural index directly.
+    const ZydisRegisterClass reg_class_of_reg = ZydisRegisterGetClass(reg);
+    switch (reg_class_of_reg)
+    {
+    case ZYDIS_REGCLASS_GPR8:
+        if (reg_id >= 20)
+        {
+            return ZYAN_FALSE;
+        }
+        break;
+    case ZYDIS_REGCLASS_GPR16:
+    case ZYDIS_REGCLASS_GPR32:
+    case ZYDIS_REGCLASS_GPR64:
+        if (reg_id >= 16)
+        {
+            return ZYAN_FALSE;
+        }
+        break;
+    default:
+        break;
+    }
+    ZYAN_ASSERT(reg_id <= 31);
     if (match->request->machine_mode == ZYDIS_MACHINE_MODE_LONG_64)
     {
         if ((match->definition->encoding != ZYDIS_INSTRUCTION_ENCODING_EVEX) &&
@@ -3693,6 +3717,8 @@ static void ZydisBuildRegisterOperand(const ZydisEncoderOperand *user_op,
             4, 5, 6, 7,                     // AH, CH, DH, BH
             4, 5, 6, 7,                     // SPL, BPL, SIL, DIL
             8, 9, 10, 11, 12, 13, 14, 15,   // R8B-R15B
+            16, 17, 18, 19, 20, 21, 22, 23, // R16B-R23B
+            24, 25, 26, 27, 28, 29, 30, 31  // R24B-R31B
         };
         ZYAN_ASSERT(
             ((ZyanUSize)user_op->reg.value - ZYDIS_REGISTER_AL) < ZYAN_ARRAY_LENGTH(reg8_lookup));

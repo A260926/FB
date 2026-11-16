@@ -715,6 +715,10 @@ typedef ZyanU64 ZydisInstructionAttributes;
  * This attribute is mainly used by the encoder.
  */
 #define ZYDIS_ATTRIB_HAS_EVEX_B                 (1ULL << 45) // TODO: rename
+/**
+ * The instruction has the `REX2` prefix (`D5`).
+ */
+#define ZYDIS_ATTRIB_HAS_REX2                   (1ULL << 46)
 
 /**
  * @}

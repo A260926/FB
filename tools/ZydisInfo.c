@@ -213,6 +213,10 @@ static void PrintSegments(const ZydisDecodedInstruction* instruction, const Zyan
             print_info[i].color = CVT100_OUT(ZYAN_VT100SGR_FG_BRIGHT_MAGENTA);
             print_info[i].name  = "REX";
             break;
+        case ZYDIS_INSTR_SEGMENT_REX2:
+            print_info[i].color = CVT100_OUT(ZYAN_VT100SGR_FG_BRIGHT_MAGENTA);
+            print_info[i].name  = "REX2";
+            break;
         case ZYDIS_INSTR_SEGMENT_XOP:
             print_info[i].color = CVT100_OUT(ZYAN_VT100SGR_FG_BRIGHT_MAGENTA);
             print_info[i].name  = "XOP";
@@ -346,7 +350,7 @@ static void PrintSizeOptimizedForm(const ZydisDecoder* decoder,
     if (!ZYAN_SUCCESS(status))
     {
         PrintStatusError(status, "Failed to craft encoder request");
-        exit(status);
+        return;
     }
 
     ZyanU8 data[ZYDIS_MAX_INSTRUCTION_LENGTH];
@@ -354,8 +358,10 @@ static void PrintSizeOptimizedForm(const ZydisDecoder* decoder,
     status = ZydisEncoderEncodeInstruction(&request, data, &len);
     if (!ZYAN_SUCCESS(status))
     {
+        // Not every decodable instruction is encodable (e.g. `APX` `REX2` instructions). Do not
+        // abort the tool in that case.
         PrintStatusError(status, "Could not encode instruction");
-        exit(status);
+        return;
     }
 
     ZydisDecodedInstruction new_instruction;
@@ -363,7 +369,7 @@ static void PrintSizeOptimizedForm(const ZydisDecoder* decoder,
     if (!ZYAN_SUCCESS(status))
     {
         PrintStatusError(status, "Could not decode instruction");
-        exit(status);
+        return;
     }
 
 #if !defined(ZYDIS_DISABLE_SEGMENT)
@@ -957,6 +963,7 @@ static void PrintInstruction(const ZydisDecoder* decoder,
         { ZYDIS_ATTRIB_HAS_VEX,                  "HAS_VEX"                  },
         { ZYDIS_ATTRIB_HAS_EVEX,                 "HAS_EVEX"                 },
         { ZYDIS_ATTRIB_HAS_MVEX,                 "HAS_MVEX"                 },
+        { ZYDIS_ATTRIB_HAS_REX2,                 "HAS_REX2"                 },
         { ZYDIS_ATTRIB_IS_RELATIVE,              "IS_RELATIVE"              },
         { ZYDIS_ATTRIB_IS_PRIVILEGED,            "IS_PRIVILEGED"            },
         { ZYDIS_ATTRIB_CPUFLAG_ACCESS,           "CPUFLAG_ACCESS"           },

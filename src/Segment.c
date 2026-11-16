@@ -61,6 +61,14 @@ ZyanStatus ZydisGetInstructionSegments(const ZydisDecodedInstruction* instructio
         }
     }
 
+    // REX2 prefix
+    if (instruction->attributes & ZYDIS_ATTRIB_HAS_REX2)
+    {
+        segments->segments[segments->count  ].type   = ZYDIS_INSTR_SEGMENT_REX2;
+        segments->segments[segments->count  ].offset = instruction->raw.rex2.offset;
+        segments->segments[segments->count++].size   = 2;
+    }
+
     // Encoding prefixes
     ZydisInstructionSegment segment_type = ZYDIS_INSTR_SEGMENT_NONE;
     ZyanU8 segment_offset = 0;
@@ -109,7 +117,9 @@ ZyanStatus ZydisGetInstructionSegments(const ZydisDecodedInstruction* instructio
         case ZYDIS_OPCODE_MAP_0F:
             ZYAN_FALLTHROUGH;
         case ZYDIS_OPCODE_MAP_0F0F:
-            segment_size = 2;
+            // A `REX2` prefix with `M0 == 1` selects the `0F` opcode map without an actual `0F`
+            // byte, so the opcode itself is only a single byte long.
+            segment_size = (instruction->attributes & ZYDIS_ATTRIB_HAS_REX2) ? 1 : 2;
             break;
         case ZYDIS_OPCODE_MAP_0F38:
             ZYAN_FALLTHROUGH;

@@ -7,6 +7,7 @@ if examples_req
     executable('Formatter01', 'Formatter01.c', dependencies: [zydis_dep])
     executable('Formatter02', 'Formatter02.c', dependencies: [zydis_dep])
     executable('Formatter03', 'Formatter03.c', dependencies: [zydis_dep])
+    executable('REX2', 'REX2.c', dependencies: [zydis_dep])
     executable(
       'ZydisPerfTest',
       'ZydisPerfTest.c',

@@ -112,11 +112,15 @@ typedef enum ZydisInstructionSegment_
      * The immediate bytes.
      */
     ZYDIS_INSTR_SEGMENT_IMMEDIATE,
+    /**
+     * The `REX2` prefix bytes (`D5` and its payload byte).
+     */
+    ZYDIS_INSTR_SEGMENT_REX2,
 
     /**
      * Maximum value of this enum.
      */
-    ZYDIS_INSTR_SEGMENT_MAX_VALUE = ZYDIS_INSTR_SEGMENT_IMMEDIATE,
+    ZYDIS_INSTR_SEGMENT_MAX_VALUE = ZYDIS_INSTR_SEGMENT_REX2,
     /**
      * The minimum number of bits required to represent all values of this enum.
      */
