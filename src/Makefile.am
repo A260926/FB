@@ -4,7 +4,7 @@ libname = libonig.la
 AM_CFLAGS = -Wall
 AM_CPPFLAGS = -I$(top_srcdir)
 
-include_HEADERS = oniguruma.h oniggnu.h
+include_HEADERS = oniguruma.h oniggnu.h reggraph.h
 
 posix_headers = onigposix.h
 
@@ -18,8 +18,8 @@ endif
 
 lib_LTLIBRARIES = $(libname)
 
-libonig_la_SOURCES = regint.h regparse.h regenc.h st.h \
-	regparse.c regcomp.c regexec.c \
+libonig_la_SOURCES = regint.h regparse.h regenc.h st.h reggraph.h \
+	regparse.c regcomp.c regexec.c reggraph.c \
 	regenc.c regerror.c regext.c regsyntax.c regtrav.c regversion.c st.c \
 	reggnu.c \
   $(posix_sources) \
