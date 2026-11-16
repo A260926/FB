@@ -10,9 +10,11 @@ endif
 LIBS= -mwindows -static -static-libgcc -static-libstdc++ -L. -lfreeglut -lopengl32
 OBJS= \
 	demo.o \
+	skin_surface.o \
 	texture.o
 GPU_OBJS= \
 	gpu-demo.o \
+	skin_surface.o \
 	texture.o
 
 default: all

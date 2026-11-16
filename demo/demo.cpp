@@ -14,6 +14,7 @@ typedef unsigned int GLuint;
 #include "util.h"
 #include "geom.h"
 #include "iqm.h"
+#include "skin_surface.h"
 
 #ifndef IQM_HEADLESS
 extern GLuint loadtexture(const char *name, int clamp);
@@ -56,6 +57,7 @@ void cleanupiqm()
     delete[] inversebaseframe;
     delete[] outframe;
     delete[] frames;
+    skinSurfaceUnload();
 }
 
 bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
@@ -123,6 +125,13 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
         textures[i] = loadtexture(&str[m.material], 0);
         if(textures[i]) printf("%s: loaded material: %s\n", filename, &str[m.material]);
     }
+
+    // Build the continuous skin surface binding from the same bind-pose data.
+    // A failure (e.g. an unskinned model with no blend arrays) never affects
+    // the original load path; surface mode simply stays unavailable.
+    if(inblendindex && inblendweight)
+        (void)skinSurfaceLoad(inposition, intexcoord, inblendindex, inblendweight,
+                              numverts, numjoints, tris, numtris, meshes, nummeshes);
 
     return true;
 }
@@ -305,6 +314,11 @@ void animateiqm(float curframe)
         index += 4;
         weight += 4;
     }
+
+    // Continuous surface mode re-evaluates the quadratic patches with this
+    // frame's palette (outframe).  On failure the previous snapshot is kept;
+    // renderiqm falls back to the classic path when no snapshot exists.
+    skinSurfaceAnimate(outframe, numjoints);
 }
 
 #ifndef IQM_HEADLESS
@@ -338,9 +352,42 @@ void renderiqm()
     glEnable(GL_NORMALIZE);
 
     glColor3f(1, 1, 1);
-    glVertexPointer(3, GL_FLOAT, 0, numframes > 0 ? outposition : inposition);
-    glNormalPointer(GL_FLOAT, 0, numframes > 0 ? outnormal : innormal);
-    glTexCoordPointer(2, GL_FLOAT, 0, intexcoord);
+
+    const SkinSurfaceMesh *surface = getSkinSurfaceDrawMesh();
+    // Fixed-function GL indexes every enabled array with one id, so the
+    // shared/deduplicated surface positions are unrolled into a per-corner
+    // array cached for the current snapshot.  Normals and UVs are already
+    // per-corner and stay parallel with it.
+    static std::vector<Vec3> surfaceCornerPos;
+    static unsigned long long surfaceCachedSeq = 0;
+    if(surface && surface->sequence != surfaceCachedSeq)
+    {
+        surfaceCornerPos.clear();
+        surfaceCornerPos.reserve(surface->triangles.size()*3);
+        for(const SkinSurfaceTriangle &t : surface->triangles)
+            for(int k = 0; k < 3; k++)
+                surfaceCornerPos.push_back(surface->positions[t.vertex[k]]);
+        surfaceCachedSeq = surface->sequence;
+    }
+    if(!surface) surfaceCachedSeq = 0;
+    if(surface)
+    {
+        // Continuous surface path: the published snapshot's shared positions,
+        // per-corner normals/UVs and per-material triangle ranges replace the
+        // original vertex arrays and index buffer, while the original texture
+        // per iqmmesh segment is kept.
+        glVertexPointer(3, GL_FLOAT, 0, surfaceCornerPos.data());
+        glNormalPointer(GL_FLOAT, sizeof(SkinSurfaceCorner),
+                        &surface->corners[0].unitNormal[0]);
+        glTexCoordPointer(2, GL_FLOAT, sizeof(SkinSurfaceCorner),
+                          &surface->corners[0].uv[0]);
+    }
+    else
+    {
+        glVertexPointer(3, GL_FLOAT, 0, numframes > 0 ? outposition : inposition);
+        glNormalPointer(GL_FLOAT, 0, numframes > 0 ? outnormal : innormal);
+        glTexCoordPointer(2, GL_FLOAT, 0, intexcoord);
+    }
 
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_NORMAL_ARRAY);
@@ -355,11 +402,23 @@ void renderiqm()
 
     glEnable(GL_TEXTURE_2D);
 
-    for(int i = 0; i < nummeshes; i++)
+    if(surface)
     {
-        iqmmesh &m = meshes[i];
-        glBindTexture(GL_TEXTURE_2D, textures[i]);
-        glDrawElements(GL_TRIANGLES, 3*m.num_triangles, GL_UNSIGNED_INT, &tris[m.first_triangle]);
+        for(int i = 0; i < nummeshes && i < (int)surface->materialRanges.size(); i++)
+        {
+            const SkinSurfaceRange &r = surface->materialRanges[i];
+            glBindTexture(GL_TEXTURE_2D, textures[i]);
+            glDrawArrays(GL_TRIANGLES, r.firstTriangle*3, r.numTriangles*3);
+        }
+    }
+    else
+    {
+        for(int i = 0; i < nummeshes; i++)
+        {
+            iqmmesh &m = meshes[i];
+            glBindTexture(GL_TEXTURE_2D, textures[i]);
+            glDrawElements(GL_TRIANGLES, 3*m.num_triangles, GL_UNSIGNED_INT, &tris[m.first_triangle]);
+        }
     }
 
     glDisable(GL_TEXTURE_2D);

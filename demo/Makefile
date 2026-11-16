@@ -4,9 +4,11 @@ override CXXFLAGS+= -Wall -fsigned-char
 LIBS=-lglut -lGL
 OBJS= \
 	demo.o \
+	skin_surface.o \
 	texture.o
 GPU_OBJS= \
 	gpu-demo.o \
+	skin_surface.o \
 	texture.o
 
 default: all

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Sandbox wrapper: macOS mktemp resolves a user temp dir that this sandbox
+# cannot write to; force the explicitly writable TMPDIR.
+exec /usr/bin/mktemp -p "${TMPDIR:-/tmp}" "$@"

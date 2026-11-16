@@ -11,6 +11,7 @@
 #include "util.h"
 #include "geom.h"
 #include "iqm.h"
+#include "skin_surface.h"
 
 #define EXTS(EXT) \
     EXT(PFNGLUSEPROGRAMPROC, glUseProgram, true) \
@@ -115,6 +116,7 @@ void cleanupiqm()
     if(ebo) glDeleteBuffers_(1, &ebo);
     if(vbo) glDeleteBuffers_(1, &vbo);
     if(ubo) glDeleteBuffers_(1, &ubo);
+    skinSurfaceUnload();
 }
 
 bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
@@ -202,6 +204,13 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
     glBufferData_(GL_ARRAY_BUFFER, hdr.num_vertexes*sizeof(vertex), verts, GL_STATIC_DRAW);
     glBindBuffer_(GL_ARRAY_BUFFER, 0);
     delete[] verts;
+
+    // Continuous skin surface binding over the same bind-pose data.  The
+    // classic GPU skinning buffers above stay untouched; the surface is only
+    // used when setSkinSurfaceEnabled(true) produces a draw snapshot.
+    if(inblendindex && inblendweight)
+        (void)skinSurfaceLoad(inposition, intexcoord, inblendindex, inblendweight,
+                              numverts, numjoints, tris, numtris, meshes, nummeshes);
 
     return true;
 }
@@ -326,6 +335,8 @@ void animateiqm(float curframe)
         if(joints[i].parent >= 0) outframe[i] = outframe[joints[i].parent] * mat;
         else outframe[i] = mat;
     }
+    // Continuous surface mode consumes the same outframe palette.
+    skinSurfaceAnimate(outframe, numjoints);
 }
 
 struct binding
@@ -546,6 +557,46 @@ void renderiqm()
     else 
     {
         noskin.set();
+    }
+
+    const SkinSurfaceMesh *surface = getSkinSurfaceDrawMesh();
+    if(surface)
+    {
+        // Continuous surface path: draw the evaluated snapshot with the fixed
+        // function pipeline.  The GPU skinning shader/VBO path below is left
+        // byte-for-byte intact for the default (surface disabled) mode.
+        static std::vector<Vec3> surfaceCornerPos;
+        static unsigned long long surfaceCachedSeq = 0;
+        if(surface->sequence != surfaceCachedSeq)
+        {
+            surfaceCornerPos.clear();
+            surfaceCornerPos.reserve(surface->triangles.size()*3);
+            for(const SkinSurfaceTriangle &t : surface->triangles)
+                for(int k = 0; k < 3; k++)
+                    surfaceCornerPos.push_back(surface->positions[t.vertex[k]]);
+            surfaceCachedSeq = surface->sequence;
+        }
+        glBindBuffer_(GL_ARRAY_BUFFER, 0);
+        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+        glVertexPointer(3, GL_FLOAT, 0, surfaceCornerPos.data());
+        glNormalPointer(GL_FLOAT, sizeof(SkinSurfaceCorner), &surface->corners[0].unitNormal[0]);
+        glTexCoordPointer(2, GL_FLOAT, sizeof(SkinSurfaceCorner), &surface->corners[0].uv[0]);
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_NORMAL_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        glEnable(GL_TEXTURE_2D);
+        for(int i = 0; i < nummeshes && i < (int)surface->materialRanges.size(); i++)
+        {
+            const SkinSurfaceRange &r = surface->materialRanges[i];
+            glBindTexture(GL_TEXTURE_2D, textures[i] ? textures[i] : notexture);
+            glDrawArrays(GL_TRIANGLES, r.firstTriangle*3, r.numTriangles*3);
+        }
+        glDisable(GL_TEXTURE_2D);
+        glDisableClientState(GL_VERTEX_ARRAY);
+        glDisableClientState(GL_NORMAL_ARRAY);
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+        glPopMatrix();
+        return;
     }
 
     glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebo);
