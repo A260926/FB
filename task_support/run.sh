@@ -14,7 +14,7 @@ c++ -std=c++14 -O2 -Isrc -I. -c tests/SurfaceLightsTarget.cpp -o .task-build/cas
 c++ -pthread .task-build/driver.o .task-build/cases.o @.task-build/objects.rsp -o .task-build/target
 c++ -std=c++14 -O2 -pthread -Isrc -I. examples/SurfaceLightsHeadless.cpp @.task-build/objects.rsp -o .task-build/lights-example
 .task-build/lights-example
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || echo .task-build/target-run.log)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

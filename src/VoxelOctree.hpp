@@ -52,6 +52,16 @@ public:
     void save(const char *path);
     bool raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 &normal, float &t);
 
+    // Read-only access to the compact hierarchy. The tree itself is never
+    // modified through these pointers; callers must keep the VoxelOctree alive.
+    const uint32 *octreeData() const {
+        return _octree.get();
+    }
+
+    uint64 octreeSize() const {
+        return _octreeSize;
+    }
+
     Vec3 center() const {
         return _center;
     }

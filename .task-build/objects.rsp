@@ -1,0 +1,14 @@
+.task-build/src_Debug_cpp.o
+.task-build/src_math_Mat4_cpp.o
+.task-build/src_math_MatrixStack_cpp.o
+.task-build/src_PlyLoader_cpp.o
+.task-build/src_thread_ThreadPool_cpp.o
+.task-build/src_thread_ThreadUtils_cpp.o
+.task-build/src_Util_cpp.o
+.task-build/src_VoxelData_cpp.o
+.task-build/src_VoxelDirect_cpp.o
+.task-build/src_VoxelOctree_cpp.o
+.task-build/src_VoxelSurfaceLights_cpp.o
+.task-build/src_third-party_lz4_c.o
+.task-build/src_third-party_tribox3_c.o
+.task-build/src_third-party_plyfile_c.o

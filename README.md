@@ -59,3 +59,105 @@ Code
 <code>VoxelOctree.cpp</code> provides routines for octree raymarching as well as generating, saving and loading octrees. It uses <code>VoxelData.cpp</code>, which robustly handles fast access to non-square, non-power-of-two voxel data not completely loaded in memory.
 
 The <code>VoxelData</code> class can also pull voxel data directly from <code>PlyLoader.cpp</code>, generating data from triangle meshes on demand, instead of from file, which vastly improves conversion performance due to elimination of file I/O. 
+
+Voxel surface lights and direct illumination
+=====
+
+The windowless CPU build adds emissive voxel face lights on top of the existing
+single directional light. The new code only *reads* the compact octree; normal
+encoding, raymarching and the save/load container are unchanged.
+
+Files
+-----
+
+* `src/VoxelOctreeReader.hpp` - read-only decoder for the compact hierarchy
+  (child/leaf masks, narrow and double-word child offsets, reverse slot order).
+* `src/VoxelSurfaceLights.hpp/.cpp` - a `VoxelSurfaceLights` resource bound to
+  an immutable `VoxelOctree`. It extracts the exposed outer-surface rectangles
+  and maintains the area-luminance sampling structure.
+* `src/VoxelDirect.hpp/.cpp` - the `estimateDirect(...)` production entry point
+  plus an exact open-interval shadow traversal of the same octree.
+* `examples/SurfaceLightsHeadless.cpp` - builds a raw scene into a real octree,
+  renders colored face lights and an occluder to PPM, and re-lights once.
+* `tests/SurfaceLightsTarget.cpp` - the `exposure`, `distribution` and
+  `transport` task cases (no `main`; driven by `task_support/driver.c`).
+
+Space convention
+----------------
+
+The root still occupies the world box `[1,2]^3`. Internally every leaf is an
+axis-aligned solid box on an integer root grid of `2^23` cells per axis, so a
+grid cell maps to `world = 1 + cell / 2^23` with no dependence on the source
+voxel resolution. Mixed-depth leaves keep their true (coarse) box size; the
+geometry pass reads the compact hierarchy directly with hierarchical neighbor
+queries and rectangle subtraction. It never expands to finest voxels, never
+enumerates unit faces and never builds a triangle mesh.
+
+Only the outer surface of occupied leaves is emissive. Two touching non-empty
+leaves - even with different payloads - share an internal face that never
+emits; when a small neighbor covers only part of a large leaf face, just the
+remaining exposed area survives as one or more rectangles. Each rectangle keeps
+a stable `faceId`, its leaf `payload`, an outward unit geometric `normal` and
+its world-space `area`; these never change when lights are toggled.
+
+Emission table and PDF
+----------------------
+
+`setEmission(uint32 key, Vec3 radiance)` stores finite, non-negative RGB keyed
+by the full 32-bit leaf payload. Unset keys are black. Invalid values throw
+`std::invalid_argument` and leave the previous distribution untouched; assigning
+the identical value again does no work. Several resources may bind the same
+tree with independent emission tables.
+
+The luminance weight is `Y = 0.2126 R + 0.7152 G + 0.0722 B`. A face carries
+mass `area * Y`; `totalMass()` is the sum over all lit faces and is zero for a
+black table. `sample(u0,u1,u2,out)` picks a face with probability proportional
+to its mass and then a point uniformly over that rectangle. `pdfArea(faceId)`
+is the joint *area* density `Y(face) / totalMass` (zero for dark faces), so its
+integral over the surface is one - it is deliberately not the reciprocal of the
+selected face area. A black table produces no samples and every PDF is zero.
+
+Update complexity
+-----------------
+
+Geometry is scanned once when the resource is constructed (counted separately
+as `geometryNodeVisits`). Recoloring a key walks only that key's patch leaves
+and their mass ancestors, then recomputes the touched ancestor masses bottom-up
+from their children (so blacking a key yields an exact zero). It never rescans
+the octree, rebuilds the face list or rebuilds the whole CDF, and does not touch
+the subtrees of unrelated keys. `lastUpdateStats()` reports
+`geometryNodeVisits`, `massNodesVisited` and `massNodesUpdated` for the most
+recent `setEmission`; the initial geometry build is not counted as an update.
+
+Direct illumination and visibility
+-----------------------------------
+
+`estimateDirect(lights, P, N, albedo, u0, u1, u2)` takes one area sample and
+returns `radiance * albedo / pi * max(0,N.wi) * max(0,Nlight.-wi) /
+(dist^2 * pdfArea)`, and zero for back faces or zero distance. Visibility is
+resolved against the same octree with a double-precision hierarchical ray/box
+traversal using the open parameter interval between the receiver and the light
+sample. Only an occupied intersection of positive length strictly inside that
+interval casts a shadow: contact at the receiving surface or the light surface
+cannot self-occlude, and no epsilon is used, so one-cell-thick blockers remain
+fully effective.
+
+Call order
+----------
+
+1. Build and keep the `VoxelOctree` alive (the resource holds a const pointer).
+2. Construct `VoxelSurfaceLights lights(&tree)` once, after geometry is ready.
+3. Call `lights.setEmission(key, radiance)` any number of times; toggle keys
+   off by assigning black, then light them again - `faceId`s stay fixed.
+4. Per shading point, call `estimateDirect(lights, P, N, albedo, u0, u1, u2)`
+   with `N` unit length, non-negative finite `albedo` and samples in `[0,1)`.
+
+Build and test
+--------------
+
+The SDL viewer, CMake build and octree save/load are retained and untouched. The
+headless flow needs no SDL, GPU or downloaded assets:
+
+    bash task_support/run.sh           # existing CPU build/ray/storage baseline
+    bash task_support/run.sh target    # baseline + new groups + headless example
+
