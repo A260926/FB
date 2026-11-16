@@ -1,0 +1,97 @@
+\subsection{Exact composition of a parameter curve with a surface.}
+\funclabel{sisl_curve_on_surface_exact}
+\begin{minipg1}
+  To create the exact 3-D non-rational B-spline curve
+  $C(t)=S(u(t),v(t))$ traced out by a 2-D parameter curve in the
+  parameter rectangle of a tensor-product B-spline surface.
+
+  Unlike the approximating routine s1383, this routine performs no
+  sampling or fitting.  The result is built entirely from polynomial
+  coefficients: each surface patch is composed algebraically with the
+  corresponding piece of the parameter curve, and the degree of every
+  output piece is at most the curve degree times the sum of the two
+  surface degrees.  Shrinkage of an error tolerance can therefore never
+  change the result.
+
+  The output shares the parameter interval of the parameter curve.
+  Its piece boundaries contain every interior knot of the parameter
+  curve and every isolated parameter value at which either $u(t)$ or
+  $v(t)$ reaches an interior knot line of the surface, including
+  tangential contacts, repeated crossings and simultaneous contacts
+  with both knot lines.  A piece that runs along a knot line does not
+  create extra subdivisions; either of the two continuous surface
+  patches may be used.  The returned object is a plain SISLCurve: it is
+  evaluated with s1221, released with freeCurve and owns all its
+  arrays.
+\end{minipg1} \\
+SYNOPSIS\\
+        \>void sisl\_curve\_on\_surface\_exact(\begin{minipg3}
+                        {\fov surface}, {\fov uv}, {\fov result}, {\fov stat})
+                \end{minipg3}\\[0.3ex]
+                \>\>    SISLSurf        \>      *{\fov surface};\\
+                \>\>    SISLCurve       \>      *{\fov uv};\\
+                \>\>    SISLCurve       \>      **{\fov result};\\
+                \>\>    int     \>      *{\fov stat};\\
+\\
+ARGUMENTS\\
+        \>Input Arguments:\\
+        \>\>    {\fov surface}\> - \>      \begin{minipg2}
+                                3-D, non-rational, open, clamped
+                                tensor-product B-spline surface with
+                                degrees 1 to 3 in both parameter axes.
+                                \end{minipg2}\\[0.3ex]
+        \>\>    {\fov uv}\> - \>   \begin{minipg2}
+                                2-D, non-rational, open, clamped
+                                B-spline curve of degree 1 to 3.
+                                Its whole trace must lie in the closed
+                                parameter rectangle of {\fov surface};
+                                control points may lie outside that
+                                rectangle as long as the trace does
+                                not.  Containment is decided from the
+                                real range of the trace, not from the
+                                control polygon.
+                                \end{minipg2}\\
+        \>Output Arguments:\\
+        \>\>    {\fov result}\> - \> \begin{minipg2}
+                                On entry this pointer is set to NULL.
+                                On success it addresses a new,
+                                independently owned 3-D non-rational
+                                SISLCurve; on every failure it stays
+                                NULL.  The input objects and their
+                                arrays are never modified.
+                                \end{minipg2}\\
+        \>\>    {\fov stat}     \> - \> Status messages\\
+                \>\>\>\>\>              $= 0$   : ok\\
+                \>\>\>\>\>              $= -101$ : out of memory\\
+                \>\>\>\>\>              $= -103$ : illegal structure or numeric value\\
+                \>\>\>\>\>              $= -104$ : unsupported object type\\
+                \>\>\>\>\>              $= -105$ : the trace leaves the surface domain\\
+\newpagetabs
+EXAMPLE OF USE\\
+                \>      \{ \\
+                \>\>    SISLSurf        \>      *{\fov surface}; \, /* Defined below */\\
+                \>\>    SISLCurve       \>      *{\fov uv}; \,      /* Defined below */\\
+                \>\>    SISLCurve       \>      *{\fov result} = NULL;\\
+                \>\>    int     \>      {\fov stat} = 0, {\fov left} = 0;\\
+                \>\>    double  \>      {\fov point}[3];\\
+                \>\>    \ldots \\
+        \>\>sisl\_curve\_on\_surface\_exact(\begin{minipg4}
+                {\fov surface}, {\fov uv}, \&{\fov result}, \&{\fov stat});
+                        \end{minipg4}\\
+                \>\>    if ({\fov stat} == 0 \&\& {\fov result} != NULL)\\
+                \>\>      \{\\
+                \>\>        s1221({\fov result}, 0, {\fov t}, \&{\fov left}, {\fov point}, \&{\fov stat});\\
+                \>\>        \ldots \\
+                \>\>        freeCurve({\fov result});\\
+                \>\>      \}\\
+                \>      \}
+\end{tabbing}
+
+A complete, compilable calling program is distributed in
+{\tt examples/exact\_composition\_example.c}.  It builds a bilinear
+surface and a 2-D parameter curve, calls the routine, and compares the
+exact curve against pointwise surface evaluation.  Compile it with
+\begin{verbatim}
+cc -std=c99 -Iinclude examples/exact_composition_example.c \
+   build/libsisl.a -lm -o exact_composition_example
+\end{verbatim}

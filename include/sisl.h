@@ -578,6 +578,11 @@ extern
 #endif
 void GO_API s1383(SISLSurf *,SISLCurve *,double,double,int,SISLCurve **,
 	   SISLCurve **,SISLCurve **,int *);
+#ifndef  SISL_CURVE_ON_SURFACE_EXACT
+extern
+#endif
+void GO_API sisl_curve_on_surface_exact(SISLSurf *,SISLCurve *,
+					SISLCurve **,int *);
 #ifndef  S1386
 extern
 #endif
@@ -1363,6 +1368,10 @@ void s1380();
 extern
 #endif
 void s1383();
+#ifndef  SISL_CURVE_ON_SURFACE_EXACT
+extern
+#endif
+void sisl_curve_on_surface_exact();
 #ifndef  S1386
 extern
 #endif
