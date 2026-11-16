@@ -93,6 +93,20 @@ public:
      * @internal
      */
     std::vector<int>* _cachedFrameIndices;
+    /**
+     * - Per-instance setup pose re-bind matrices installed by
+     * Armature#setSetupPoseOverrides(). nullptr when the armature uses the
+     * shared setup pose. In the engine's row-vector convention the re-bind is
+     * B0 * inverse(B1): _setupBindMatrix is the full affine for points,
+     * _setupBindDeltaMatrix is its linear part for FFD directions (no
+     * translation).
+     * @internal
+     */
+    const Matrix* _setupBindMatrix;
+    /**
+     * @internal
+     */
+    const Matrix* _setupBindDeltaMatrix;
 
 protected:
     bool _localDirty;
@@ -149,6 +163,17 @@ public:
      */
     inline void invalidUpdate()
     {
+        _transformDirty = true;
+    }
+    /**
+     * @internal
+     * - Drop the cached frame linkage so the bone fully re-evaluates on the
+     * next update, used when the armature switches its cache strategy.
+     */
+    inline void _invalidateCachedFrame()
+    {
+        _cachedFrameIndices = nullptr;
+        _cachedFrameIndex = -1;
         _transformDirty = true;
     }
     /**

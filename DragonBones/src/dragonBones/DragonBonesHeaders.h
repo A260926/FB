@@ -55,6 +55,7 @@
 #include "armature/Slot.h"
 #include "armature/Constraint.h"
 #include "armature/DeformVertices.h"
+#include "armature/SetupPoseBinding.h"
 
 // animation
 #include "animation/IAnimatable.h"

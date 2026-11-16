@@ -7,6 +7,7 @@
 #include "IArmatureProxy.h"
 #include "Bone.h"
 #include "Slot.h"
+#include "DeformVertices.h"
 #include "Constraint.h"
 
 DRAGONBONES_NAMESPACE_BEGIN
@@ -18,6 +19,13 @@ bool Armature::_onSortSlots(Slot* a, Slot* b)
 
 void Armature::_onClear()
 {
+    // Detach every per-instance binding pointer before the bones go back to the
+    // pool; the binding itself is discarded as well.
+    _setupPoseBinding.clear(this);
+    _setupPoseBinding.reset();
+    _setupPoseCacheBypass = false;
+    _setupPoseForceFrame = false;
+
     if (_clock != nullptr) // Remove clock before slots clear.
     {
         _clock->remove(this);
@@ -207,19 +215,29 @@ void Armature::advanceTime(float passedTime)
         std::sort(_slots.begin(), _slots.end(), Armature::_onSortSlots);
     }
 
+    // An armature with setup pose overrides never consumes the shared cache
+    // frames: pass -1 so bones and slots evaluate from the live timelines,
+    // whatever cacheFrameRate the shared ArmatureData keeps for other
+    // instances. A forced frame (set/clear boundary) also evaluates uncached
+    // once so no stale or polluted cache frame is ever read.
+    const auto forceFrame = _setupPoseForceFrame;
+    const auto effectiveCacheFrameIndex = (_setupPoseCacheBypass || forceFrame) ? -1 : _cacheFrameIndex;
+
     // Update bones and slots.
-    if (_cacheFrameIndex < 0 || _cacheFrameIndex != prevCacheFrameIndex)
+    if (forceFrame || effectiveCacheFrameIndex < 0 || effectiveCacheFrameIndex != prevCacheFrameIndex)
     {
         for (const auto bone : _bones)
         {
-            bone->update(_cacheFrameIndex);
+            bone->update(effectiveCacheFrameIndex);
         }
 
         for (const auto slot : _slots)
         {
-            slot->update(_cacheFrameIndex);
+            slot->update(effectiveCacheFrameIndex);
         }
     }
+
+    _setupPoseForceFrame = false;
 
     // Do actions.
     if (!_actions.empty()) 
@@ -483,11 +501,94 @@ void Armature::setCacheFrameRate(unsigned value)
         for (const auto & slot : _slots)
         {
             const auto childArmature = slot->getChildArmature();
-            if (childArmature != nullptr && childArmature->getCacheFrameRate() == 0) 
+            if (childArmature != nullptr && childArmature->getCacheFrameRate() == 0)
             {
                 childArmature->setCacheFrameRate(value);
             }
         }
+    }
+}
+
+bool Armature::setSetupPoseOverrides(const std::map<std::string, Transform>& overrides)
+{
+    if (overrides.empty())
+    {
+        clearSetupPoseOverrides();
+        return true;
+    }
+
+    if (!_setupPoseBinding.apply(this, overrides))
+    {
+        return false; // Existing overrides, pose and cached relations untouched.
+    }
+
+    _setupPoseCacheBypass = true;
+    _setupPoseForceFrame = true;
+
+    // The shared ArmatureData cache must stay available for other instances:
+    // only this instance stops reading/writing it.
+    for (const auto bone : _bones)
+    {
+        bone->_invalidateCachedFrame();
+    }
+
+    for (const auto slot : _slots)
+    {
+        slot->_invalidateCachedFrame();
+        slot->invalidUpdate();
+        if (slot->_deformVertices != nullptr)
+        {
+            slot->_deformVertices->verticesDirty = true;
+        }
+    }
+
+    // The next advanceTime(0) recomputes bones and meshes immediately; no
+    // animation time, weight, fade, display index or FFD value is changed.
+    advanceTime(0.0f);
+
+    return true;
+}
+
+void Armature::clearSetupPoseOverrides()
+{
+    if (!_setupPoseBinding.isActive())
+    {
+        _setupPoseCacheBypass = false;
+        return;
+    }
+
+    _setupPoseBinding.clear(this);
+    _setupPoseCacheBypass = false;
+    _setupPoseForceFrame = true;
+
+    // Re-arm the normal cached/uncached production path. Cache frames produced
+    // by other instances are shared data and remain valid; this instance never
+    // wrote any while overrides were active.
+    _animation->_armatureCacheReset();
+
+    for (const auto bone : _bones)
+    {
+        bone->_invalidateCachedFrame();
+    }
+
+    for (const auto slot : _slots)
+    {
+        slot->_invalidateCachedFrame();
+        slot->invalidUpdate();
+        if (slot->_deformVertices != nullptr)
+        {
+            slot->_deformVertices->verticesDirty = true;
+        }
+    }
+
+    advanceTime(0.0f);
+}
+
+void Armature::_notifyMeshDisplayChanged()
+{
+    if (_setupPoseBinding.isActive())
+    {
+        _setupPoseBinding.notifyMeshChanged(this);
     }
 }
 

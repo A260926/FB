@@ -96,6 +96,14 @@ public:
      */
     void advanceTime(float passedTime);
     /**
+     * @internal
+     * - Force the armature back onto its normal cache path on the next
+     * advanceTime: re-link the per-bone/per-slot cached frame indices and
+     * drop the armature level cache frame index, without touching any
+     * AnimationState time, weight or fade.
+     */
+    void _armatureCacheReset();
+    /**
      * - Clear all animations states.
      * @see dragonBones.AnimationState
      * @version DragonBones 4.5

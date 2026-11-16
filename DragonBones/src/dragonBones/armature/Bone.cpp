@@ -25,6 +25,8 @@ void Bone::_onClear()
     _boneData = nullptr;
     _parent = nullptr;
     _cachedFrameIndices = nullptr;
+    _setupBindMatrix = nullptr;
+    _setupBindDeltaMatrix = nullptr;
 }
 
 void Bone::_updateGlobalTransformMatrix(bool isCache)

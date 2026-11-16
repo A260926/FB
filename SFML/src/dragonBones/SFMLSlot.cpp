@@ -256,7 +256,6 @@ void SFMLSlot::_updateMesh()
 {
 	const auto scale = _armature->_armatureData->scale;
 	const auto& deformVertices = _deformVertices->vertices;
-	const auto& bones = _deformVertices->bones;
 	const auto verticesData = _deformVertices->verticesData;
 	const auto weightData = verticesData->weight;
 
@@ -266,46 +265,22 @@ void SFMLSlot::_updateMesh()
 
 	if (weightData != nullptr)
 	{
-		const auto data = verticesData->data;
-		const auto intArray = data->intArray;
-		const auto floatArray = data->floatArray;
-		const auto vertexCount = (std::size_t)intArray[verticesData->offset + (unsigned)BinaryOffset::MeshVertexCount];
-		int weightFloatOffset = intArray[weightData->offset + (unsigned)BinaryOffset::WeigthFloatOffset];
-
-		if (weightFloatOffset < 0)
+		// Weighted vertex evaluation goes through the engine core entry, which
+		// applies the per-instance setup pose re-bind relation to both the
+		// stored skinning point (full affine) and the FFD direction (linear
+		// part only) and outputs armature-space control vertices.
+		std::vector<Point> deformedVertices;
+		if (!getDeformedVertices(deformedVertices))
 		{
-			weightFloatOffset += 65536;
+			return;
 		}
 
-		for (
-			std::size_t i = 0, iD = 0, iB = weightData->offset + (unsigned)BinaryOffset::WeigthBoneIndices + bones.size(), iV = (std::size_t)weightFloatOffset, iF = 0;
-			i < vertexCount;
-			++i
-			)
+		// Keep the original triangle expansion and render coordinate
+		// convention: each control vertex fans out to every triangle using it.
+		for (std::size_t i = 0; i < deformedVertices.size(); ++i)
 		{
-			const auto boneCount = (std::size_t)intArray[iB++];
-			auto xG = 0.0f, yG = 0.0f;
-			for (std::size_t j = 0; j < boneCount; ++j)
-			{
-				const auto boneIndex = (unsigned)intArray[iB++];
-				const auto bone = bones[boneIndex];
-				if (bone != nullptr)
-				{
-					const auto& matrix = bone->globalTransformMatrix;
-					const auto weight = floatArray[iV++];
-					auto xL = floatArray[iV++] * scale;
-					auto yL = floatArray[iV++] * scale;
-
-					if (hasFFD)
-					{
-						xL += deformVertices[iF++];
-						yL += deformVertices[iF++];
-					}
-
-					xG += (matrix.a * xL + matrix.c * yL + matrix.tx) * weight;
-					yG += (matrix.b * xL + matrix.d * yL + matrix.ty) * weight;
-				}
-			}
+			const auto xG = deformedVertices[i].x;
+			const auto yG = deformedVertices[i].y;
 
 			auto& vertsDisplay = meshDisplay->verticesDisplay;
 

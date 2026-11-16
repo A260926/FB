@@ -91,6 +91,15 @@ void Animation::init(Armature* armature)
     _animationConfig = BaseObject::borrowObject<AnimationConfig>();
 }
 
+void Animation::_armatureCacheReset()
+{
+    // Re-link cached frame indices on the next advanceTime when the shared
+    // animation cache is enabled, and force a full uncached evaluation this
+    // frame. No AnimationState time, weight or fade is modified.
+    _animationDirty = true;
+    _armature->_cacheFrameIndex = -1;
+}
+
 void Animation::advanceTime(float passedTime)
 {
     if (passedTime < 0.0f)
@@ -125,7 +134,11 @@ void Animation::advanceTime(float passedTime)
         else
         {
             const auto animationData = animationState->_animationData;
-            const auto cacheFrameRate = animationData->cacheFrameRate;
+            // An armature owning setup pose overrides evaluates uncached even
+            // when the shared ArmatureData keeps its cache for other instances:
+            // pass 0 so the state neither quantizes time nor writes cache
+            // frames, leaving every shared cache array untouched.
+            const auto cacheFrameRate = _armature->_isSetupPoseCacheBypassed() ? 0.0f : animationData->cacheFrameRate;
             if (_animationDirty && cacheFrameRate > 0.0f) // Update cachedFrameIndices.
             {
                 _animationDirty = false;

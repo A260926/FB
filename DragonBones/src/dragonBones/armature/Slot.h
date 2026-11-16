@@ -285,6 +285,17 @@ public:
         _transformDirty = true;
     }
     /**
+     * @internal
+     * - Drop the cached frame linkage so the slot fully re-evaluates on the
+     * next update, used when the armature switches its cache strategy.
+     */
+    inline void _invalidateCachedFrame()
+    {
+        _cachedFrameIndices = nullptr;
+        _cachedFrameIndex = -1;
+        _transformDirty = true;
+    }
+    /**
      * - The visible of slot's display object.
      * @default true
      * @version DragonBones 5.6
@@ -501,6 +512,31 @@ public:
     {
         return _parent;
     }
+    /**
+     * - Collect the armature-space control vertices owned by this slot from the
+     * current display's real packed data and the current deform buffer.
+     * Skinned mesh vertices are evaluated through the per-bone setup pose
+     * re-bind relation (stored point with the full affine, FFD direction with
+     * its linear part only) and are NOT multiplied by the slot matrix;
+     * unskinned mesh vertices keep the original slot transform convention.
+     * The call does not advance time, never aliases shared packed data and the
+     * returned array stays valid across later display switches, sampling or
+     * armature disposal. An empty or non-mesh current display returns false and
+     * leaves out untouched.
+     * @version DragonBones 5.6
+     * @language en_US
+     */
+    /**
+     * - 从当前 display 的真实 packed 数据与当前 deform 缓冲，收集本插槽持有
+     * 的骨架空间控制顶点。带权 mesh 顶点按骨骼级 setup 重绑关系求值（存储
+     * 点使用完整仿射，FFD 方向仅使用线性部分），且不再乘 slot 矩阵；未蒙皮
+     * mesh 顶点保持原 slot 变换约定。该调用不推进时间，不与共享 packed 数据
+     * 别名，返回数组在之后换显示、采样或释放骨架后仍然有效。当前显示为空或
+     * 非 mesh 时返回 false 且 out 不变。
+     * @version DragonBones 5.6
+     * @language zh_CN
+     */
+    bool getDeformedVertices(std::vector<Point>& out);
 };
 
 DRAGONBONES_NAMESPACE_END

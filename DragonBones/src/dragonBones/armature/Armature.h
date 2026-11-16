@@ -27,6 +27,7 @@
 #include "../animation/IAnimatable.h"
 #include "../model/ArmatureData.h"
 #include "IArmatureProxy.h"
+#include "SetupPoseBinding.h"
 
 DRAGONBONES_NAMESPACE_BEGIN
 /**
@@ -108,6 +109,18 @@ protected:
     bool _zOrderDirty;
     bool _flipX;
     bool _flipY;
+    /**
+     * - True while setup pose overrides are installed: the shared animation
+     * cache stays intact, but this instance evaluates every bone and slot
+     * without reading or writing the shared cache frames.
+     */
+    bool _setupPoseCacheBypass;
+    /**
+     * - One-shot flag: the next advanceTime must run the full bone/slot pass
+     * even if the armature level cache frame index did not change, used when
+     * the cache strategy switches through set/clear setup pose overrides.
+     */
+    bool _setupPoseForceFrame;
     std::vector<Bone*> _bones;
     std::vector<Slot*> _slots;
     std::vector<EventObject*> _actions;
@@ -116,6 +129,11 @@ protected:
     void* _display;
     WorldClock* _clock;
     void* _replacedTexture;
+    /**
+     * - Per-instance setup pose override binding. Never shared between
+     * armatures and fully reset when the armature returns to the pool.
+     */
+    SetupPoseBinding _setupPoseBinding;
 
 public:
     Armature() :
@@ -429,6 +447,71 @@ public:
         return _armatureData->cacheFrameRate;
     }
     void setCacheFrameRate(unsigned value);
+    /**
+     * - Replace all setup pose overrides of this armature instance.
+     * The override transform substitutes the named bone's setup origin
+     * (BoneData::transform) only for this instance; bones absent from the
+     * mapping keep their original setup, but their neutral world matrices are
+     * still recomputed along the whole parent chain. An empty mapping is
+     * equivalent to clearSetupPoseOverrides().
+     * Offset and animationPose keep combining on the bone exactly as before,
+     * and shared BoneData, animation keys, packed mesh arrays and FFD keys are
+     * never modified. Unknown bone names, non-finite values, non-positive
+     * scales or unsupported skeleton configurations make the call fail with
+     * false, leaving all current overrides, pose and cached data untouched.
+     * After a successful call advanceTime(0) refreshes the pose without
+     * restarting, seeking or rebuilding any AnimationState.
+     * @version DragonBones 5.6
+     * @language en_US
+     */
+    /**
+     * - 替换本骨架实例的全部 setup pose 覆盖。
+     * 覆盖变换仅在本实例中替代指定骨骼的 setup origin（BoneData::transform），
+     * 未列出的骨骼沿用原 setup，但其中性世界矩阵仍会沿完整父链重新计算。
+     * 空映射等价于 clearSetupPoseOverrides()。
+     * 骨骼的 offset 与 animationPose 仍按既有规则组合，共享的 BoneData、
+     * 动画键、mesh packed 数组和 FFD 键均不会被修改。未知骨名、非有限值、
+     * 非正缩放或不支持的骨架配置会返回 false，且既有覆盖、当前姿态与缓存
+     * 数据保持不变。成功后调用 advanceTime(0) 即可刷新，不会重启、跳时或
+     * 重建任何 AnimationState。
+     * @version DragonBones 5.6
+     * @language zh_CN
+     */
+    bool setSetupPoseOverrides(const std::map<std::string, Transform>& overrides);
+    /**
+     * - Remove every setup pose override of this armature instance and restore
+     * the shared setup pose. The shared animation cache is reused again and no
+     * frame produced while overrides were active can be read afterwards.
+     * @version DragonBones 5.6
+     * @language en_US
+     */
+    /**
+     * - 清除本骨架实例的全部 setup pose 覆盖，恢复共享 setup。
+     * 之后重新使用共享动画缓存，且不会读到覆盖期间产生的任何缓存帧。
+     * @version DragonBones 5.6
+     * @language zh_CN
+     */
+    void clearSetupPoseOverrides();
+    /**
+     * - Whether this instance currently owns setup pose overrides.
+     * @version DragonBones 5.6
+     * @language en_US
+     */
+    inline bool hasSetupPoseOverrides() const
+    {
+        return _setupPoseBinding.isActive();
+    }
+    /**
+     * @internal
+     */
+    inline bool _isSetupPoseCacheBypassed() const
+    {
+        return _setupPoseCacheBypass;
+    }
+    /**
+     * @internal
+     */
+    void _notifyMeshDisplayChanged();
     /**
      * - The armature name.
      * @version DragonBones 3.0

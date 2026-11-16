@@ -265,7 +265,7 @@ void Slot::_updateDisplayData()
         }
 
         // Update vertices.
-        if (currentVerticesData != prevVerticesData) 
+        if (currentVerticesData != prevVerticesData)
         {
             if (_deformVertices == nullptr)
             {
@@ -273,9 +273,14 @@ void Slot::_updateDisplayData()
             }
 
             _deformVertices->init(currentVerticesData, _armature);
+
+            // A different mesh of the same ArmatureData must go through the
+            // same per-instance setup pose binding again (no-op while no
+            // override is installed).
+            _armature->_notifyMeshDisplayChanged();
         }
         else if (_deformVertices != nullptr && _textureData != prevTextureData) // Update mesh after update frame.
-        { 
+        {
             _deformVertices->verticesDirty = true;
         }
 
@@ -914,6 +919,126 @@ void Slot::setChildArmature(Armature* value)
     }
 
     setDisplay(value, DisplayType::Armature);
+}
+
+bool Slot::getDeformedVertices(std::vector<Point>& out)
+{
+    // Empty display or a current display without mesh data: fail without
+    // touching the output array.
+    if (
+        _display == nullptr ||
+        _deformVertices == nullptr ||
+        _deformVertices->verticesData == nullptr ||
+        _deformVertices->verticesData->data == nullptr
+    )
+    {
+        return false;
+    }
+
+    const auto verticesData = _deformVertices->verticesData;
+    const auto data = verticesData->data;
+    const auto intArray = data->intArray;
+    const auto floatArray = data->floatArray;
+    const auto scale = _armature->_armatureData->scale;
+    const auto& deformVertices = _deformVertices->vertices;
+    const auto hasFFD = !deformVertices.empty();
+    const auto vertexCount = (std::size_t)intArray[verticesData->offset + (unsigned)BinaryOffset::MeshVertexCount];
+
+    // Local snapshot, never aliasing the shared packed float array.
+    std::vector<Point> result;
+    result.resize(vertexCount);
+
+    const auto weightData = verticesData->weight;
+    if (weightData != nullptr)
+    {
+        const auto& bones = _deformVertices->bones;
+        int weightFloatOffset = intArray[weightData->offset + (unsigned)BinaryOffset::WeigthFloatOffset];
+        if (weightFloatOffset < 0)
+        {
+            weightFloatOffset += 65536;
+        }
+
+        for (
+            std::size_t i = 0, iD = 0, iB = weightData->offset + (unsigned)BinaryOffset::WeigthBoneIndices + bones.size(), iV = (std::size_t)weightFloatOffset;
+            i < vertexCount;
+            ++i
+        )
+        {
+            const auto boneCount = (std::size_t)intArray[iB++];
+            auto xG = 0.0f, yG = 0.0f;
+            for (std::size_t j = 0; j < boneCount; ++j)
+            {
+                const auto boneIndex = (unsigned)intArray[iB++];
+                const auto bone = boneIndex < bones.size() ? bones[boneIndex] : nullptr;
+                if (bone != nullptr)
+                {
+                    const auto weight = floatArray[iV++];
+                    const auto pX = floatArray[iV++] * scale;
+                    const auto pY = floatArray[iV++] * scale;
+
+                    auto xL = pX;
+                    auto yL = pY;
+                    if (hasFFD)
+                    {
+                        const auto dX = deformVertices[iD++];
+                        const auto dY = deformVertices[iD++];
+
+                        if (bone->_setupBindMatrix != nullptr && bone->_setupBindDeltaMatrix != nullptr)
+                        {
+                            // Row-vector re-bind: (p + d) · R = p · R + d · R_lin.
+                            // The bind translation only reaches the stored
+                            // point, never the FFD direction.
+                            const auto& m = *bone->_setupBindMatrix;
+                            const auto& md = *bone->_setupBindDeltaMatrix;
+                            xL = (m.a * pX + m.c * pY + m.tx) + (md.a * dX + md.c * dY);
+                            yL = (m.b * pX + m.d * pY + m.ty) + (md.b * dX + md.d * dY);
+                        }
+                        else
+                        {
+                            xL += dX;
+                            yL += dY;
+                        }
+                    }
+                    else if (bone->_setupBindMatrix != nullptr)
+                    {
+                        const auto& m = *bone->_setupBindMatrix;
+                        xL = m.a * pX + m.c * pY + m.tx;
+                        yL = m.b * pX + m.d * pY + m.ty;
+                    }
+
+                    // W * (rebound local point), weighted. The slot matrix is
+                    // intentionally not applied to skinned output.
+                    const auto& matrix = bone->globalTransformMatrix;
+                    xG += (matrix.a * xL + matrix.c * yL + matrix.tx) * weight;
+                    yG += (matrix.b * xL + matrix.d * yL + matrix.ty) * weight;
+                }
+            }
+
+            result[i].x = xG;
+            result[i].y = yG;
+        }
+    }
+    else
+    {
+        int vertexOffset = intArray[verticesData->offset + (unsigned)BinaryOffset::MeshFloatOffset];
+        if (vertexOffset < 0)
+        {
+            vertexOffset += 65536;
+        }
+
+        for (std::size_t i = 0; i < vertexCount; ++i)
+        {
+            const auto xLocal = floatArray[vertexOffset + i * 2] * scale + (hasFFD ? deformVertices[i * 2] : 0.0f);
+            const auto yLocal = floatArray[vertexOffset + i * 2 + 1] * scale + (hasFFD ? deformVertices[i * 2 + 1] : 0.0f);
+
+            // Unskinned mesh keeps the original convention: local mesh points
+            // are output through the slot's current transform.
+            globalTransformMatrix.transformPoint(xLocal, yLocal, result[i]);
+        }
+    }
+
+    out = std::move(result);
+    return true;
 }
 
 DRAGONBONES_NAMESPACE_END
