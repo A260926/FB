@@ -101,3 +101,54 @@ Build Gmsh using CMake's graphical user interface
 * Once you are happy with all the configuration options, click on "Generate".
 
 * Go to the build directory and build Gmsh using your chosen compiler.
+
+Periodic CAD meshes and MSH 4
+-----------------------------
+
+A periodic mesh can be written to MSH 4 and read back into a new model that
+contains the same CAD entities (e.g. the same built-in `geo` surfaces, curves
+and their boundaries) but no mesh: `gmsh::merge()` reads the nodes, the
+elements and the `$Periodic` section onto those entities. `setPeriodic()` does
+not need to be called again, and the reader does not create a separate mesh or
+re-pair the nodes from their coordinates.
+
+Node roles. The nodes of a periodic entity are kept in two disjoint
+correspondence maps:
+
+  * `correspondingVertices`: the nodes that are corners (primary vertices) of
+    the linear skeleton of the elements that actually use them;
+  * `correspondingHighOrderVertices`: the other nodes used by those elements.
+
+A node is a primary node if, and only if, it is a corner of at least one
+element of the current mesh; the role never follows from the node tag, from a
+distance between coordinates or from the polynomial order stored in the
+`MVertex`. `gmsh::model::mesh::getPeriodicNodes()` with `includeHighOrderNodes
+= false` reports the primary pairs only, and with `true` the union of the two
+maps. The maps of a periodic entity point only to nodes that the model owns and
+that its elements use; a node shared with a periodic boundary entity (a point
+of a curve bounding two periodic surfaces, for instance) is the same object in
+both correspondences, and both entities pair it with the same master node.
+
+Reading presupposes that the CAD entities of the destination model have the
+dimensions and tags of the file and that they carry no mesh before the merge.
+The reader keeps the node tags, coordinates and parametric coordinates of the
+file as they are; it does not move nodes and does not rebuild the CAD geometry
+from the mesh alone. The pairs are classified with the elements of the model,
+so the `$Periodic` section can contain high-order pairs written with
+`Mesh.HighOrderSavePeriodic` (`Mesh.SaveParametric` keeps the parameters).
+
+Order changes and refinement. `gmsh::model::mesh::setOrder()` and
+`gmsh::model::mesh::refine()` rebuild the correspondence from the known corner
+relations and the local reference positions of the line, triangle and
+quadrangle nodes. Reversed edges, cyclic rotations and flips of the elements
+of the master side are handled by mapping the reference positions, so the
+master elements are never reversed to match (they can be shared). Lowering the
+order removes the high-order nodes that the elements no longer use, together
+with every reference to them; raising it pairs the new nodes. A pair is
+identified by the corner correspondence, not by the closest node: with
+`Mesh.HighOrderPeriodic` off, a node whose coordinates were changed on purpose
+keeps its periodic counterpart. With `Mesh.Renumber` off, a pure order change
+keeps the primary nodes and their tags. The periodic section written to MSH 4
+(ASCII and binary) points to the same live nodes as the node block and the
+element connectivity, so the file can be merged again and the order changed
+further.

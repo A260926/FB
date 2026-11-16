@@ -16,7 +16,7 @@ set(SRC
     gmshSurface.cpp
     OCCVertex.cpp OCCEdge.cpp OCCFace.cpp OCCRegion.cpp
     discreteVertex.cpp discreteEdge.cpp discreteFace.cpp discreteRegion.cpp
-  GModel.cpp
+  GModel.cpp GModelPeriodic.cpp
     GModelCreateTopologyFromMesh.cpp
     GModelVertexArrays.cpp
     GModelParametrize.cpp GModelAutoExtrude.cpp

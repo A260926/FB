@@ -22,6 +22,7 @@
 #include <type_traits>
 #include <stdexcept>
 #include <variant>
+#include <unordered_set>
 
 #include "GmshDefines.h"
 #include "OS.h"
@@ -47,6 +48,7 @@
 #include "MTrihedron.h"
 #include "StringUtils.h"
 #include "Overlap.h"
+#include "GModelPeriodic.h"
 
 #if defined(HAVE_POST)
 #include "PView.h"
@@ -1455,6 +1457,18 @@ readMSH4Polytopes(GModel *const model, FILE *fp, bool binary, bool &dense,
 static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
                                   bool swap, double version)
 {
+  // The roles of the nodes (primary corner of the linear skeleton or
+  // high-order node) follow from the elements actually read: the node block
+  // may store nodes of any order, and their stored MVertex order is not a
+  // reliable clue.
+  std::unordered_set<MVertex *> usedNodes, primaryNodes;
+  gmshPeriodic::getRoles(model, usedNodes, primaryNodes);
+  // The pairs are collected in a temporary structure first: an entity's maps
+  // are then filled according to the role of their keys, without any node
+  // being moved (the coordinates and parameters of the file are kept as read).
+  std::vector<std::pair<GEntity *, std::vector<std::pair<MVertex *, MVertex *>>>>
+    links;
+
   std::size_t numPeriodicLinks = 0;
   if(binary) {
     if(fread(&numPeriodicLinks, sizeof(std::size_t), 1, fp) != 1) {
@@ -1521,10 +1535,10 @@ static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
           return false;
         }
         if(swap) SwapBytes((char *)&tfo[0], sizeof(double), numAffine);
-        slave->setMeshMaster(master, tfo);
+        slave->setMeshMasterOnly(master, tfo);
       }
       else {
-        slave->setMeshMaster(master);
+        slave->setMeshMasterOnly(master, std::vector<double>());
       }
       if(fread(&correspondingVertexSize, sizeof(std::size_t), 1, fp) != 1) {
         return false;
@@ -1541,10 +1555,10 @@ static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
           for(std::size_t i = 0; i < numAffine; i++) {
             if(fscanf(fp, "%lf", &tfo[i]) != 1) { return false; }
           }
-          slave->setMeshMaster(master, tfo);
+          slave->setMeshMasterOnly(master, tfo);
         }
         else {
-          slave->setMeshMaster(master);
+          slave->setMeshMasterOnly(master, std::vector<double>());
         }
         if(fscanf(fp, "%zu", &correspondingVertexSize) != 1) { return false; }
       }
@@ -1562,11 +1576,11 @@ static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
                     &tfo[12], &tfo[13], &tfo[14], &tfo[15]) != 16) {
             return false;
           }
-          slave->setMeshMaster(master, tfo);
+          slave->setMeshMasterOnly(master, tfo);
           if(fscanf(fp, "%zu", &correspondingVertexSize) != 1) { return false; }
         }
         else {
-          slave->setMeshMaster(master);
+          slave->setMeshMasterOnly(master, std::vector<double>());
           if(sscanf(affine, "%zu", &correspondingVertexSize) != 1) {
             return false;
           }
@@ -1574,6 +1588,8 @@ static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
       }
     }
 
+    std::vector<std::pair<MVertex *, MVertex *>> pairs;
+    pairs.reserve(correspondingVertexSize);
     for(std::size_t j = 0; j < correspondingVertexSize; j++) {
       std::size_t v1 = 0, v2 = 0;
       if(binary) {
@@ -1589,7 +1605,7 @@ static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
       MVertex *mv1 = model->getMeshVertexByTag(v1);
       MVertex *mv2 = model->getMeshVertexByTag(v2);
 
-      if(mv1 && mv2) { slave->correspondingVertices[mv1] = mv2; }
+      if(mv1 && mv2) { pairs.push_back(std::make_pair(mv1, mv2)); }
       else {
         if(!mv1) { Msg::Info("Could not find periodic node %d", v1); }
         else if(!mv2) {
@@ -1597,6 +1613,31 @@ static bool readMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
         }
       }
     }
+    links.push_back(std::make_pair(slave, std::move(pairs)));
+  }
+
+  // Dispatch the pairs by role: a pair whose slave node is a corner of the
+  // linear skeleton goes to correspondingVertices, any other used node to
+  // correspondingHighOrderVertices. The role of a node follows from the
+  // elements, and a pair is a primary pair only if both of its nodes are
+  // corners; the two maps thus stay disjoint. A pair that involves a node the
+  // elements of this model do not use cannot be part of the correspondence of
+  // the current mesh and is dropped (the source node and its pair stay in the
+  // file and in the model).
+  const bool rolesKnown = !usedNodes.empty();
+  for(auto &l : links) {
+    GEntity *slave = l.first;
+    std::map<MVertex *, MVertex *> lo, hi;
+    for(auto &p : l.second) {
+      MVertex *s = p.first, *m = p.second;
+      if(rolesKnown && (!usedNodes.count(s) || !usedNodes.count(m))) continue;
+      if(!rolesKnown || (primaryNodes.count(s) && primaryNodes.count(m)))
+        lo[s] = m; // (no elements yet: the roles are established later)
+      else
+        hi[s] = m;
+    }
+    slave->correspondingVertices.swap(lo);
+    slave->correspondingHighOrderVertices.swap(hi);
   }
   return true;
 }
@@ -4535,6 +4576,11 @@ static void writeMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
   for(std::size_t i = 0; i < entities.size(); i++)
     if(entities[i]->getMeshMaster() != entities[i]) count++;
 
+  // the nodes used by the elements of the model (the ones the node block and
+  // the element connectivity point to)
+  std::unordered_set<MVertex *> usedNodes;
+  gmshPeriodic::getUsedNodes(model, usedNodes);
+
   if(!count) return;
 
   fprintf(fp, "$Periodic\n");
@@ -4549,12 +4595,22 @@ static void writeMSH4PeriodicNodes(GModel *const model, FILE *fp, bool binary,
     GEntity *g_master = g_slave->getMeshMaster();
 
     if(g_slave != g_master) {
+      // only pairs of nodes that the elements of this model use are written:
+      // the periodic section must point to the same live nodes as the node
+      // block and the element connectivity (a pruned entity may still hold a
+      // pair for a node that no element uses any more)
       std::map<MVertex *, MVertex *, MVertexPtrLessThan> corrVert;
-      corrVert.insert(g_slave->correspondingVertices.begin(),
-                      g_slave->correspondingVertices.end());
+      auto add = [&](const std::map<MVertex *, MVertex *> &map) {
+        for(auto it = map.begin(); it != map.end(); ++it) {
+          if(!it->first || !it->second) continue;
+          if(!usedNodes.count(it->first) || !usedNodes.count(it->second))
+            continue;
+          corrVert.insert(*it);
+        }
+      };
+      add(g_slave->correspondingVertices);
       if(CTX::instance()->mesh.hoSavePeriodic)
-        corrVert.insert(g_slave->correspondingHighOrderVertices.begin(),
-                        g_slave->correspondingHighOrderVertices.end());
+        add(g_slave->correspondingHighOrderVertices);
 
       if(binary) {
         int gSlaveDim = g_slave->dim();

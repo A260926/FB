@@ -46,6 +46,7 @@
 #include "Field.h"
 #include "Options.h"
 #include "Generator.h"
+#include "GModelPeriodic.h"
 #include "meshQuadQuasiStructured.h"
 #include "meshGFaceBipartiteLabelling.h"
 #include "sizeField.h"
@@ -1524,16 +1525,6 @@ static void relocateSlaveVertices(std::vector<GEntity *> &entities,
   }
 }
 
-// the image of a node by an affine transformation
-static SPoint3 transformed(MVertex *v, const std::vector<double> &tfo)
-{
-  if(tfo.size() != 16) return v->point();
-  double src[4] = {v->x(), v->y(), v->z(), 1}, xyz[3] = {0, 0, 0};
-  for(int i = 0; i < 3; i++)
-    for(int j = 0; j < 4; j++) xyz[i] += tfo[4 * i + j] * src[j];
-  return SPoint3(xyz[0], xyz[1], xyz[2]);
-}
-
 void FixPeriodicMesh(GModel *m)
 {
   if(CTX::instance()->abortOnError && Msg::GetErrorCount()) return;
@@ -1599,11 +1590,18 @@ void FixPeriodicMesh(GModel *m)
           MLine *srcLine = srcIter->second;
           // The counterpart edge can run in the opposite direction. Its
           // interior high-order nodes must then be paired in reverse order.
-          const bool reversed = srcLine->getVertex(0) != vtcs[0];
-          const std::size_t numVertices = tgtLine->getNumVertices();
-          for(std::size_t i = 2; i < numVertices; i++)
-          p2p[tgtLine->getVertex(i)] =
-          srcLine->getVertex(reversed ? numVertices + 1 - i : i);
+          std::map<MVertex *, MVertex *> corners;
+          corners[tgtLine->getVertex(0)] = srcLine->getVertex(0);
+          corners[tgtLine->getVertex(1)] = srcLine->getVertex(1);
+          if(srcLine->getVertex(0) != vtcs[0]) {
+            corners[tgtLine->getVertex(0)] = srcLine->getVertex(1);
+            corners[tgtLine->getVertex(1)] = srcLine->getVertex(0);
+          }
+          std::vector<int> perm;
+          if(gmshPeriodic::localNodePermutation(tgtLine, srcLine, corners,
+                                                perm))
+            for(std::size_t i = 2; i < tgtLine->getNumVertices(); i++)
+              p2p[tgtLine->getVertex(i)] = srcLine->getVertex(perm[i]);
         }
       }
     }
@@ -1684,37 +1682,27 @@ void FixPeriodicMesh(GModel *m)
         }
         else {
           MElement *srcElmt = srcIter->second;
-          // Warning: this check is made in case the source and target surface
-          // meshes are oriented differently (e.g. to be consistent with the
-          // underlying orientation of the geometrical surfaces)
-          bool revert = dot(tgtFace.normal(), srcIter->first.normal()) < 0;
-          if(revert) srcElmt->reverse();
-          bool sameCorners = true;
+          // The corners of the two elements may be ordered differently
+          // (cyclic rotation and/or flip, e.g. because the surfaces are
+          // oriented differently). Map the local reference positions of the
+          // nodes: oriented or not, the master element is only read, never
+          // reversed (it can be shared with other users of the mesh).
+          std::map<MVertex *, MVertex *> corners;
           for(int iVtx = 0; iVtx < nbVtcs; iVtx++)
-            if(srcElmt->getVertex(iVtx) != vtcs[iVtx]) sameCorners = false;
-          if(sameCorners) {
-            for(std::size_t j = nbVtcs; j < srcElmt->getNumVertices(); j++)
-              p2p[tgtElmt->getVertex(j)] = srcElmt->getVertex(j);
+            corners[tgtElmt->getVertex(iVtx)] = vtcs[iVtx];
+          std::vector<int> perm;
+          if(!gmshPeriodic::localNodePermutation(tgtElmt, srcElmt, corners,
+                                                 perm)) {
+            std::ostringstream faceDef;
+            for(int iVtx = 0; iVtx < nbVtcs; iVtx++)
+              faceDef << tgtElmt->getVertex(iVtx)->getNum() << " ";
+            Msg::Error("Cannot match the high-order nodes of mesh face %s "
+                       "in surface %d on surface %d",
+                       faceDef.str().c_str(), tgt->tag(), src->tag());
+            return;
           }
-          else {
-            // the meshes were generated independently (e.g. transfinite or
-            // extruded): match the high-order nodes through the transformation
-            const std::vector<double> &tfo = tgt->affineTransform;
-            for(std::size_t j = nbVtcs; j < tgtElmt->getNumVertices(); j++) {
-              MVertex *best = nullptr;
-              double dmin = 0.;
-              for(std::size_t k = nbVtcs; k < srcElmt->getNumVertices(); k++) {
-                double d = transformed(srcElmt->getVertex(k), tfo)
-                             .distance(tgtElmt->getVertex(j)->point());
-                if(!best || d < dmin) {
-                  best = srcElmt->getVertex(k);
-                  dmin = d;
-                }
-              }
-              if(best) p2p[tgtElmt->getVertex(j)] = best;
-            }
-          }
-          if(revert) srcElmt->reverse();
+          for(std::size_t j = nbVtcs; j < tgtElmt->getNumVertices(); j++)
+            p2p[tgtElmt->getVertex(j)] = srcElmt->getVertex(perm[j]);
         }
       }
     }

@@ -316,6 +316,9 @@ public:
   void setMeshMaster(GEntity *);
   void setMeshMaster(GEntity *, const std::vector<double> &,
                      bool updateCorrespondingVertices = true);
+  // set the mesh master without deducing any node correspondence (used when
+  // reading a periodic section, whose pairs are read explicitly afterwards)
+  void setMeshMasterOnly(GEntity *gMaster, const std::vector<double> &tfo);
   // match the nodes with those of the master through the affine transform,
   // and move them onto the images of their master nodes; if tolerance >= 0,
   // do nothing and return false if a node is farther than tolerance from the

@@ -226,6 +226,22 @@ void GEntity::setMeshMaster(GEntity *gMaster, const std::vector<double> &tfo,
   if(updateCorrespVert) updateCorrespondingVertices();
 }
 
+void GEntity::setMeshMasterOnly(GEntity *gMaster,
+                                const std::vector<double> &tfo)
+{
+  if(gMaster->dim() != dim()) {
+    Msg::Error("Model entity %d of dimension %d cannot"
+               "be the mesh master of entity %d of dimension %d",
+               gMaster->tag(), gMaster->dim(), tag(), dim());
+    return;
+  }
+  _meshMaster = gMaster;
+  if(tfo.size() == 16)
+    affineTransform = tfo;
+  else
+    affineTransform.clear();
+}
+
 void GEntity::addVerticesInSet(std::set<MVertex *> &vtcs, bool closure) const
 {
   vtcs.insert(mesh_vertices.begin(), mesh_vertices.end());

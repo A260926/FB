@@ -25,6 +25,8 @@
 #include "discreteEdge.h"
 #include "discreteFace.h"
 #include "discreteRegion.h"
+#include "GModelPeriodic.h"
+#include <unordered_set>
 
 #if defined(HAVE_POST)
 #include "PView.h"
@@ -128,6 +130,14 @@ static void readMSHEntities(FILE *fp, GModel *gm)
 
 void readMSHPeriodicNodes(FILE *fp, GModel *gm) // also used in MSH2
 {
+  // the roles of the nodes follow from the elements of the model (the nodes
+  // are read before this section, and the elements are created as they are
+  // read); a pair whose nodes the elements do not use is not a correspondence
+  // of the current mesh
+  std::unordered_set<MVertex *> usedNodes, primaryNodes;
+  gmshPeriodic::getRoles(gm, usedNodes, primaryNodes);
+  const bool rolesKnown = !usedNodes.empty();
+
   int count;
   if(fscanf(fp, "%d", &count) != 1) return;
   for(int i = 0; i < count; i++) {
@@ -178,7 +188,13 @@ void readMSHPeriodicNodes(FILE *fp, GModel *gm) // also used in MSH2
       if(fscanf(fp, "%d %d", &v1, &v2) != 2) continue;
       MVertex *mv1 = gm->getMeshVertexByTag(v1);
       MVertex *mv2 = gm->getMeshVertexByTag(v2);
-      if(completePer) s->correspondingVertices[mv1] = mv2;
+      if(completePer && mv1 && mv2 &&
+         (!rolesKnown || (usedNodes.count(mv1) && usedNodes.count(mv2)))) {
+        if(!rolesKnown || (primaryNodes.count(mv1) && primaryNodes.count(mv2)))
+          s->correspondingVertices[mv1] = mv2; // (roles established later)
+        else
+          s->correspondingHighOrderVertices[mv1] = mv2;
+      }
     }
     if(!completePer) {
       if(!s)

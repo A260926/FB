@@ -35,6 +35,8 @@
 #include "MFace.h"
 #include "ExtrudeParams.h"
 #include "Field.h"
+#include "GModelPeriodic.h"
+#include <unordered_set>
 
 // For each edge (a pair of nodes, the one of smaller number first) and for each
 // face, the high-order nodes created on it, in the orientation of its key. The
@@ -1532,17 +1534,23 @@ static void setFirstOrder(GEntity *e, std::vector<T *> &elements,
   e->deleteVertexArrays();
 }
 
+// Remove the nodes of the entity that no element uses any more: after the
+// elements were replaced by first order ones, those are exactly the high-order
+// nodes (the corners of the linear skeleton are used by the new elements). The
+// role of a node follows from the elements, not from the polynomial order
+// stored in the MVertex.
 static void deleteHighOrderVertices(GEntity *e, bool onlyVisible,
-                                    bool skipDiscrete)
+                                    bool skipDiscrete,
+                                    const std::unordered_set<MVertex *> &used)
 {
   if(onlyVisible && !e->getVisibility()) return;
   if(skipDiscrete && e->isFullyDiscrete()) return;
   std::vector<MVertex *> v1;
   for(std::size_t i = 0; i < e->mesh_vertices.size(); i++) {
-    if(e->mesh_vertices[i]->getPolynomialOrder() > 1)
-      delete e->mesh_vertices[i];
-    else
+    if(used.count(e->mesh_vertices[i]))
       v1.push_back(e->mesh_vertices[i]);
+    else
+      delete e->mesh_vertices[i];
   }
   e->mesh_vertices = v1;
   e->deleteVertexArrays();
@@ -1567,13 +1575,40 @@ void SetOrder1(GModel *m, bool onlyVisible, bool skipDiscrete)
     setFirstOrder(*it, (*it)->pyramids, onlyVisible, skipDiscrete);
   }
 
-  // remove all high order vertices
+  // remove all the vertices that no element uses any more
+  std::unordered_set<MVertex *> used;
+  {
+    std::vector<GEntity *> entities;
+    m->getEntities(entities);
+    for(GEntity *ge : entities)
+      for(std::size_t i = 0; i < ge->getNumMeshElements(); i++) {
+        MElement *e = ge->getMeshElement(i);
+        for(std::size_t j = 0; j < e->getNumVertices(); j++)
+          used.insert(e->getVertex(j));
+      }
+  }
+  // a node that is about to be deleted must not be referenced by any periodic
+  // map any more (the maps are rebuilt below from the remaining nodes, but a
+  // pair of two deleted nodes would otherwise dangle in between)
+  {
+    std::unordered_set<MVertex *> dead;
+    std::vector<GEntity *> entities;
+    m->getEntities(entities);
+    for(GEntity *ge : entities)
+      for(MVertex *v : ge->mesh_vertices)
+        if(!used.count(v)) dead.insert(v);
+    gmshPeriodic::removeFromMaps(m, dead);
+  }
   for(auto it = m->firstEdge(); it != m->lastEdge(); ++it)
-    deleteHighOrderVertices(*it, onlyVisible, skipDiscrete);
+    deleteHighOrderVertices(*it, onlyVisible, skipDiscrete, used);
   for(auto it = m->firstFace(); it != m->lastFace(); ++it)
-    deleteHighOrderVertices(*it, onlyVisible, skipDiscrete);
+    deleteHighOrderVertices(*it, onlyVisible, skipDiscrete, used);
   for(auto it = m->firstRegion(); it != m->lastRegion(); ++it)
-    deleteHighOrderVertices(*it, onlyVisible, skipDiscrete);
+    deleteHighOrderVertices(*it, onlyVisible, skipDiscrete, used);
+
+  // the correspondence of the remaining (first order) nodes is rebuilt from
+  // the elements, and holds no reference to a removed node
+  gmshPeriodic::rebuildAll(m);
 }
 
 void checkHighOrderTriangles(const char *cc, GModel *m,
@@ -1975,6 +2010,11 @@ void SetOrderN(GModel *m, int order, bool linear, bool incomplete,
     m->pruneMeshVertexAssociations();
     m->renumberMeshCanonically(maxVertexBefore, maxElementBefore);
   }
+
+  // rebuild the correspondence from the corner pairs and the local positions
+  // of the nodes of the new elements (reversed edges, rotated/flipped
+  // triangles and quadrangles included)
+  gmshPeriodic::rebuildAll(m);
 
   Msg::StopProgressMeter();
   double t2 = Cpu(), w2 = TimeOfDay();

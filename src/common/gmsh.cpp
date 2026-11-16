@@ -5,6 +5,8 @@
 
 #include <sstream>
 #include <regex>
+#include <map>
+#include <unordered_set>
 
 #include "GmshConfig.h"
 #include "GmshDefines.h"
@@ -101,6 +103,7 @@
 
 // automatically generated C++ and C headers (in gmsh/api)
 #include "gmsh.h"
+#include "GModelPeriodic.h"
 extern "C" {
 #include "gmshc.h"
 }
@@ -5678,18 +5681,21 @@ GMSH_API void gmsh::model::mesh::getPeriodicNodes(
   }
   if(ge->getMeshMaster() != ge) {
     tagMaster = ge->getMeshMaster()->tag();
-    for(auto it = ge->correspondingVertices.begin();
-        it != ge->correspondingVertices.end(); ++it) {
-      nodeTags.push_back(it->first->getNum());
-      nodeTagsMaster.push_back(it->second->getNum());
-    }
-    if(includeHighOrderNodes) {
-      for(auto it = ge->correspondingHighOrderVertices.begin();
-          it != ge->correspondingHighOrderVertices.end(); ++it) {
+    // A pair is only part of the current correspondence if both of its nodes
+    // are still used by the elements of the model: a node removed by an order
+    // change must not be reported, even if a stale map entry survived.
+    std::unordered_set<MVertex *> used, primary;
+    gmshPeriodic::getRoles(GModel::current(), used, primary);
+    auto add = [&](const std::map<MVertex *, MVertex *> &map) {
+      for(auto it = map.begin(); it != map.end(); ++it) {
+        if(!it->first || !it->second) continue;
+        if(!used.count(it->first) || !used.count(it->second)) continue;
         nodeTags.push_back(it->first->getNum());
         nodeTagsMaster.push_back(it->second->getNum());
       }
-    }
+    };
+    add(ge->correspondingVertices);
+    if(includeHighOrderNodes) add(ge->correspondingHighOrderVertices);
     affineTransform = ge->affineTransform;
   }
   else {
