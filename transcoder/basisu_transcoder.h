@@ -305,6 +305,15 @@ namespace basist
 
 		bool decode_tables(const uint8_t* pTable_data, uint32_t table_data_size);
 
+		// Initializes a shared per-source-block decoder for one compressed slice stream, using this decoder's
+		// unpacked codebooks and Huffman models. Call decode_block() in spatial raster order, then finish().
+		// pPrev_frame_indices is required for video slices and is written in place.
+		bool begin_block_decoder(etc1s_block_decoder& decoder,
+			const uint8_t* pImage_data, uint32_t image_data_size,
+			uint32_t num_blocks_x, uint32_t num_blocks_y,
+			bool is_video, bool is_alpha_slice,
+			basisu::vector<uint32_t>* pPrev_frame_indices);
+
 		bool transcode_slice(void* pDst_blocks, uint32_t num_blocks_x, uint32_t num_blocks_y, const uint8_t* pImage_data, uint32_t image_data_size, block_format fmt,
 			uint32_t output_block_or_pixel_stride_in_bytes, bool bc1_allow_threecolor_blocks, const bool is_video, const bool is_alpha_slice, const uint32_t level_index, const uint32_t orig_width, const uint32_t orig_height, uint32_t output_row_pitch_in_blocks_or_pixels = 0,
 			basisu_transcoder_state* pState = nullptr, bool astc_transcode_alpha = false, void* pAlpha_blocks = nullptr, uint32_t output_rows_in_pixels = 0, uint32_t decode_flags = 0);
@@ -352,6 +361,8 @@ namespace basist
 
 		typedef basisu::vector<selector> selector_vec;
 		const selector_vec& get_selectors() const { return m_local_selectors; }
+
+		uint32_t get_selector_history_buf_size() const { return m_selector_history_buf_size; }
 				
 	private:
 		const basisu_lowlevel_etc1s_transcoder* m_pGlobal_codebook;

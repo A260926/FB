@@ -8508,6 +8508,400 @@ namespace basist
 		return true;
 	}
 
+	bool basisu_lowlevel_etc1s_transcoder::begin_block_decoder(etc1s_block_decoder& decoder,
+		const uint8_t* pImage_data, uint32_t image_data_size,
+		uint32_t num_blocks_x, uint32_t num_blocks_y,
+		bool is_video, bool is_alpha_slice,
+		basisu::vector<uint32_t>* pPrev_frame_indices)
+	{
+		const endpoint_vec& endpoints = m_pGlobal_codebook ? m_pGlobal_codebook->m_local_endpoints : m_local_endpoints;
+		const selector_vec& selectors = m_pGlobal_codebook ? m_pGlobal_codebook->m_local_selectors : m_local_selectors;
+
+		return decoder.begin(
+			endpoints.get_ptr(), (uint32_t)endpoints.size(),
+			selectors.get_ptr(), (uint32_t)selectors.size(),
+			m_endpoint_pred_model, m_delta_endpoint_model, m_selector_model, m_selector_history_buf_rle_model,
+			m_selector_history_buf_size,
+			pImage_data, image_data_size,
+			num_blocks_x, num_blocks_y, is_video, is_alpha_slice, pPrev_frame_indices);
+	}
+
+	etc1s_block_decoder::etc1s_block_decoder() :
+		m_pEndpoints(nullptr),
+		m_num_endpoints(0),
+		m_pSelectors(nullptr),
+		m_num_selectors(0),
+		m_pEndpoint_pred_model(nullptr),
+		m_pDelta_endpoint_model(nullptr),
+		m_pSelector_model(nullptr),
+		m_pSelector_history_buf_rle_model(nullptr),
+		m_selector_history_buf_size(0),
+		m_cur_selector_rle_count(0),
+		m_num_blocks_x(0),
+		m_num_blocks_y(0),
+		m_total_blocks(0),
+		m_is_video(false),
+		m_is_alpha_slice(false),
+		m_pPrev_frame_indices(nullptr),
+		m_cur_pred_bits(0),
+		m_prev_endpoint_pred_sym(0),
+		m_endpoint_pred_repeat_count(0),
+		m_prev_endpoint_index(0),
+		m_endpoint_index(0),
+		m_selector_index(0),
+		m_pred(0)
+	{
+	}
+
+	void etc1s_block_decoder::clear()
+	{
+		m_pEndpoints = nullptr;
+		m_num_endpoints = 0;
+		m_pSelectors = nullptr;
+		m_num_selectors = 0;
+		m_pEndpoint_pred_model = nullptr;
+		m_pDelta_endpoint_model = nullptr;
+		m_pSelector_model = nullptr;
+		m_pSelector_history_buf_rle_model = nullptr;
+		m_selector_history_buf_size = 0;
+		m_sym_codec.clear();
+		m_selector_history_buf = approx_move_to_front();
+		m_cur_selector_rle_count = 0;
+		m_num_blocks_x = 0;
+		m_num_blocks_y = 0;
+		m_total_blocks = 0;
+		m_is_video = false;
+		m_is_alpha_slice = false;
+		m_pPrev_frame_indices = nullptr;
+		m_block_endpoint_preds[0].clear();
+		m_block_endpoint_preds[1].clear();
+		m_cur_pred_bits = 0;
+		m_prev_endpoint_pred_sym = 0;
+		m_endpoint_pred_repeat_count = 0;
+		m_prev_endpoint_index = 0;
+		m_endpoint_index = 0;
+		m_selector_index = 0;
+		m_pred = 0;
+	}
+
+	bool etc1s_block_decoder::begin(
+		const endpoint* pEndpoints, uint32_t num_endpoints,
+		const selector* pSelectors, uint32_t num_selectors,
+		const huffman_decoding_table& endpoint_pred_model,
+		const huffman_decoding_table& delta_endpoint_model,
+		const huffman_decoding_table& selector_model,
+		const huffman_decoding_table& selector_history_buf_rle_model,
+		uint32_t selector_history_buf_size,
+		const uint8_t* pImage_data, uint32_t image_data_size,
+		uint32_t num_blocks_x, uint32_t num_blocks_y,
+		bool is_video, bool is_alpha_slice,
+		basisu::vector<uint32_t>* pPrev_frame_indices)
+	{
+		clear();
+
+		m_pEndpoints = pEndpoints;
+		m_num_endpoints = num_endpoints;
+		m_pSelectors = pSelectors;
+		m_num_selectors = num_selectors;
+		m_pEndpoint_pred_model = &endpoint_pred_model;
+		m_pDelta_endpoint_model = &delta_endpoint_model;
+		m_pSelector_model = &selector_model;
+		m_pSelector_history_buf_rle_model = &selector_history_buf_rle_model;
+		m_selector_history_buf_size = selector_history_buf_size;
+		m_num_blocks_x = num_blocks_x;
+		m_num_blocks_y = num_blocks_y;
+		m_total_blocks = num_blocks_x * num_blocks_y;
+		m_is_video = is_video;
+		m_is_alpha_slice = is_alpha_slice;
+
+		if (!m_num_endpoints || !m_num_selectors)
+		{
+			BASISU_DEVEL_ERROR("etc1s_block_decoder::begin: global codebooks must be unpacked first\n");
+			clear();
+			return false;
+		}
+
+		if (!m_sym_codec.init(pImage_data, image_data_size))
+		{
+			BASISU_DEVEL_ERROR("etc1s_block_decoder::begin: sym_codec.init failed\n");
+			clear();
+			return false;
+		}
+
+		m_selector_history_buf.init(m_selector_history_buf_size);
+
+		if (is_video)
+		{
+			if (!pPrev_frame_indices)
+			{
+				BASISU_DEVEL_ERROR("etc1s_block_decoder::begin: video slice requires previous-frame indices\n");
+				clear();
+				return false;
+			}
+
+			m_pPrev_frame_indices = pPrev_frame_indices;
+			if (m_pPrev_frame_indices->size() < m_total_blocks)
+				m_pPrev_frame_indices->resize(m_total_blocks);
+		}
+
+		if (m_block_endpoint_preds[0].size() < num_blocks_x)
+		{
+			m_block_endpoint_preds[0].resize(num_blocks_x);
+			m_block_endpoint_preds[1].resize(num_blocks_x);
+		}
+
+		return true;
+	}
+
+	bool etc1s_block_decoder::decode_block(uint32_t block_x, uint32_t block_y)
+	{
+		assert(m_pEndpoints && m_pSelectors && m_pEndpoint_pred_model && m_pDelta_endpoint_model &&
+			m_pSelector_model && m_pSelector_history_buf_rle_model);
+		assert(block_x < m_num_blocks_x && block_y < m_num_blocks_y);
+
+		const uint32_t cur_block_endpoint_pred_array = block_y & 1;
+
+		// Decode endpoint index predictor symbols
+		if ((block_x & 1) == 0)
+		{
+			if ((block_y & 1) == 0)
+			{
+				if (m_endpoint_pred_repeat_count)
+				{
+					m_endpoint_pred_repeat_count--;
+					m_cur_pred_bits = m_prev_endpoint_pred_sym;
+				}
+				else
+				{
+					m_cur_pred_bits = m_sym_codec.decode_huffman(*m_pEndpoint_pred_model);
+					if (m_cur_pred_bits == ENDPOINT_PRED_REPEAT_LAST_SYMBOL)
+					{
+						m_endpoint_pred_repeat_count = m_sym_codec.decode_vlc(ENDPOINT_PRED_COUNT_VLC_BITS) + ENDPOINT_PRED_MIN_REPEAT_COUNT - 1;
+
+						m_cur_pred_bits = m_prev_endpoint_pred_sym;
+					}
+					else
+					{
+						m_prev_endpoint_pred_sym = m_cur_pred_bits;
+					}
+				}
+
+				m_block_endpoint_preds[cur_block_endpoint_pred_array ^ 1][block_x].m_pred_bits = (uint8_t)(m_cur_pred_bits >> 4);
+			}
+			else
+			{
+				m_cur_pred_bits = m_block_endpoint_preds[cur_block_endpoint_pred_array][block_x].m_pred_bits;
+			}
+		}
+
+		// Decode endpoint index
+		uint32_t endpoint_index, selector_index = 0;
+
+		const uint32_t pred = m_cur_pred_bits & 3;
+		m_cur_pred_bits >>= 2;
+
+		if (pred == 0)
+		{
+			// Left
+			if (!block_x)
+			{
+				BASISU_DEVEL_ERROR("etc1s_block_decoder::decode_block: invalid datastream (0)\n");
+				return false;
+			}
+
+			endpoint_index = m_prev_endpoint_index;
+		}
+		else if (pred == 1)
+		{
+			// Upper
+			if (!block_y)
+			{
+				BASISU_DEVEL_ERROR("etc1s_block_decoder::decode_block: invalid datastream (1)\n");
+				return false;
+			}
+
+			endpoint_index = m_block_endpoint_preds[cur_block_endpoint_pred_array ^ 1][block_x].m_endpoint_index;
+		}
+		else if (pred == 2)
+		{
+			if (m_is_video)
+			{
+				assert(pred == CR_ENDPOINT_PRED_INDEX);
+				endpoint_index = (*m_pPrev_frame_indices)[block_x + block_y * m_num_blocks_x];
+				selector_index = endpoint_index >> 16;
+				endpoint_index &= 0xFFFFU;
+			}
+			else
+			{
+				// Upper left
+				if ((!block_x) || (!block_y))
+				{
+					BASISU_DEVEL_ERROR("etc1s_block_decoder::decode_block: invalid datastream (2)\n");
+					return false;
+				}
+
+				endpoint_index = m_block_endpoint_preds[cur_block_endpoint_pred_array ^ 1][block_x - 1].m_endpoint_index;
+			}
+		}
+		else
+		{
+			// Decode and apply delta
+			const uint32_t delta_sym = m_sym_codec.decode_huffman(*m_pDelta_endpoint_model);
+
+			endpoint_index = delta_sym + m_prev_endpoint_index;
+			if (endpoint_index >= m_num_endpoints)
+				endpoint_index -= (int)m_num_endpoints;
+		}
+
+		m_block_endpoint_preds[cur_block_endpoint_pred_array][block_x].m_endpoint_index = (uint16_t)endpoint_index;
+
+		m_prev_endpoint_index = endpoint_index;
+
+		// Decode selector index
+		if ((!m_is_video) || (pred != CR_ENDPOINT_PRED_INDEX))
+		{
+			int selector_sym;
+			if (m_cur_selector_rle_count > 0)
+			{
+				m_cur_selector_rle_count--;
+
+				selector_sym = (int)m_num_selectors;
+			}
+			else
+			{
+				selector_sym = m_sym_codec.decode_huffman(*m_pSelector_model);
+
+				const uint32_t SELECTOR_HISTORY_BUF_FIRST_SYMBOL_INDEX = m_num_selectors;
+				const uint32_t SELECTOR_HISTORY_BUF_RLE_SYMBOL_INDEX = m_selector_history_buf_size + SELECTOR_HISTORY_BUF_FIRST_SYMBOL_INDEX;
+
+				if (selector_sym == static_cast<int>(SELECTOR_HISTORY_BUF_RLE_SYMBOL_INDEX))
+				{
+					int run_sym = m_sym_codec.decode_huffman(*m_pSelector_history_buf_rle_model);
+
+					if (run_sym == (SELECTOR_HISTORY_BUF_RLE_COUNT_TOTAL - 1))
+						m_cur_selector_rle_count = m_sym_codec.decode_vlc(7) + SELECTOR_HISTORY_BUF_RLE_COUNT_THRESH;
+					else
+						m_cur_selector_rle_count = run_sym + SELECTOR_HISTORY_BUF_RLE_COUNT_THRESH;
+
+					if (m_cur_selector_rle_count > m_total_blocks)
+					{
+						// The file is corrupted or we've got a bug.
+						BASISU_DEVEL_ERROR("etc1s_block_decoder::decode_block: invalid datastream (3)\n");
+						return false;
+					}
+
+					selector_sym = (int)m_num_selectors;
+
+					m_cur_selector_rle_count--;
+				}
+			}
+
+			if (selector_sym >= (int)m_num_selectors)
+			{
+				assert(m_selector_history_buf_size > 0);
+
+				int history_buf_index = selector_sym - (int)m_num_selectors;
+
+				if (history_buf_index >= (int)m_selector_history_buf.size())
+				{
+					// The file is corrupted or we've got a bug.
+					BASISU_DEVEL_ERROR("etc1s_block_decoder::decode_block: invalid datastream (4)\n");
+					return false;
+				}
+
+				selector_index = m_selector_history_buf[history_buf_index];
+
+				if (history_buf_index != 0)
+					m_selector_history_buf.use(history_buf_index);
+			}
+			else
+			{
+				selector_index = selector_sym;
+
+				if (m_selector_history_buf_size)
+					m_selector_history_buf.add(selector_index);
+			}
+		}
+
+		if ((endpoint_index >= m_num_endpoints) || (selector_index >= m_num_selectors))
+		{
+			// The file is corrupted or we've got a bug.
+			BASISU_DEVEL_ERROR("etc1s_block_decoder::decode_block: invalid datastream (5)\n");
+			return false;
+		}
+
+		if (m_is_video)
+			(*m_pPrev_frame_indices)[block_x + block_y * m_num_blocks_x] = endpoint_index | (selector_index << 16);
+
+		m_endpoint_index = endpoint_index;
+		m_selector_index = selector_index;
+		m_pred = pred;
+
+		return true;
+	}
+
+	bool etc1s_block_decoder::finish() const
+	{
+		if (m_endpoint_pred_repeat_count != 0)
+		{
+			BASISU_DEVEL_ERROR("etc1s_block_decoder::finish: endpoint_pred_repeat_count != 0. The file is corrupted or this is a bug\n");
+			return false;
+		}
+
+		return true;
+	}
+
+	void etc1s_expand_block_rgba32(
+		const endpoint& ep, const selector& sel, etc1s_rgba32_channel_mode mode,
+		uint8_t* pDst_blocks, uint32_t output_row_pitch_in_pixels, uint32_t output_rows_in_pixels,
+		uint32_t block_x, uint32_t block_y)
+	{
+		uint8_t* pDst_pixels = static_cast<uint8_t*>(pDst_blocks) + (block_x * 4 + block_y * 4 * output_row_pitch_in_pixels) * sizeof(uint32_t);
+
+		const uint32_t max_x = basisu::minimum<int>(4, (int)output_row_pitch_in_pixels - (int)block_x * 4);
+		const uint32_t max_y = basisu::minimum<int>(4, (int)output_rows_in_pixels - (int)block_y * 4);
+
+		if (mode == cEtc1sRGBA32Alpha)
+		{
+			int colors[4];
+			decoder_etc_block::get_block_colors5_g(colors, ep.m_color5, ep.m_inten5);
+
+			for (uint32_t y = 0; y < max_y; y++)
+			{
+				const uint32_t s = sel.m_selectors[y];
+
+				for (uint32_t x = 0; x < max_x; x++)
+					pDst_pixels[3 + 4 * x] = static_cast<uint8_t>(colors[(s >> (x * 2)) & 3]);
+
+				pDst_pixels += output_row_pitch_in_pixels * sizeof(uint32_t);
+			}
+
+			return;
+		}
+
+		color32 colors[4];
+		decoder_etc_block::get_block_colors5(colors, ep.m_color5, ep.m_inten5);
+
+		for (uint32_t y = 0; y < max_y; y++)
+		{
+			const uint32_t s = sel.m_selectors[y];
+
+			for (uint32_t x = 0; x < max_x; x++)
+			{
+				const color32& c = colors[(s >> (x * 2)) & 3];
+
+				pDst_pixels[0 + 4 * x] = c.r;
+				pDst_pixels[1 + 4 * x] = c.g;
+				pDst_pixels[2 + 4 * x] = c.b;
+
+				if (mode == cEtc1sRGBA32RGBA)
+					pDst_pixels[3 + 4 * x] = 255;
+			}
+
+			pDst_pixels += output_row_pitch_in_pixels * sizeof(uint32_t);
+		}
+	}
+
 	bool basisu_lowlevel_etc1s_transcoder::transcode_slice(void* pDst_blocks, uint32_t num_blocks_x, uint32_t num_blocks_y, const uint8_t* pImage_data, uint32_t image_data_size, block_format fmt,
 		uint32_t output_block_or_pixel_stride_in_bytes, bool bc1_allow_threecolor_blocks, const bool is_video, const bool is_alpha_slice, const uint32_t level_index, const uint32_t orig_width, const uint32_t orig_height, uint32_t output_row_pitch_in_blocks_or_pixels,
 		basisu_transcoder_state* pState, bool transcode_alpha, void *pAlpha_blocks, uint32_t output_rows_in_pixels, uint32_t decode_flags)
@@ -8529,8 +8923,6 @@ namespace basist
 		if (!pState)
 			pState = &m_def_state;
 
-		const uint32_t total_blocks = num_blocks_x * num_blocks_y;
-
 		if (!output_row_pitch_in_blocks_or_pixels)
 		{
 			if (basis_block_format_is_uncompressed(fmt))
@@ -8549,7 +8941,7 @@ namespace basist
 			if (!output_rows_in_pixels)
 				output_rows_in_pixels = orig_height;
 		}
-		
+
 		basisu::vector<uint32_t>* pPrev_frame_indices = nullptr;
 		if (is_video)
 		{
@@ -8564,25 +8956,11 @@ namespace basist
 			}
 
 			pPrev_frame_indices = &pState->m_prev_frame_indices[is_alpha_slice][level_index];
-			if (pPrev_frame_indices->size() < total_blocks)
-				pPrev_frame_indices->resize(total_blocks);
 		}
-
-		basist::bitwise_decoder sym_codec;
-
-		if (!sym_codec.init(pImage_data, image_data_size))
-		{
-			BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: sym_codec.init failed\n");
-			return false;
-		}
-
-		approx_move_to_front selector_history_buf(m_selector_history_buf_size);
-				
-		uint32_t cur_selector_rle_count = 0;
 
 		decoder_etc_block block;
 		memset(&block, 0, sizeof(block));
-				
+
 		//block.set_flip_bit(true);
 		// Setting the flip bit to false to be compatible with the Khronos KDFS.
 		block.set_flip_bit(false);
@@ -8612,33 +8990,30 @@ namespace basist
 			pPVRTC_endpoints = (uint32_t*)&((decoder_etc_block*)pPVRTC_work_mem)[num_blocks_x * num_blocks_y];
 		}
 
-		if (pState->m_block_endpoint_preds[0].size() < num_blocks_x)
-		{
-			pState->m_block_endpoint_preds[0].resize(num_blocks_x);
-			pState->m_block_endpoint_preds[1].resize(num_blocks_x);
-		}
-
-		uint32_t cur_pred_bits = 0;
-		int prev_endpoint_pred_sym = 0;
-		int endpoint_pred_repeat_count = 0;
-		uint32_t prev_endpoint_index = 0;
 		const endpoint_vec& endpoints = m_pGlobal_codebook ? m_pGlobal_codebook->m_local_endpoints : m_local_endpoints;
 		const selector_vec& selectors = m_pGlobal_codebook ? m_pGlobal_codebook->m_local_selectors : m_local_selectors;
-		if (!endpoints.size() || !selectors.size())
+
+		// All per-block entropy decoding, selector history/RLE, endpoint prediction and previous-frame reference
+		// updates go through the shared core, so the whole-slice and pausable paths cannot diverge.
+		etc1s_block_decoder block_decoder;
+		if (!block_decoder.begin(
+			endpoints.get_ptr(), (uint32_t)endpoints.size(),
+			selectors.get_ptr(), (uint32_t)selectors.size(),
+			m_endpoint_pred_model, m_delta_endpoint_model, m_selector_model, m_selector_history_buf_rle_model,
+			m_selector_history_buf_size,
+			pImage_data, image_data_size,
+			num_blocks_x, num_blocks_y, is_video, is_alpha_slice, pPrev_frame_indices))
 		{
-			BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: global codebooks must be unpacked first\n");
-			
+			BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: block decoder init failed\n");
+
 			if (pPVRTC_work_mem)
 				free(pPVRTC_work_mem);
 
 			return false;
 		}
 
-		const uint32_t SELECTOR_HISTORY_BUF_FIRST_SYMBOL_INDEX = (uint32_t)selectors.size();
-		const uint32_t SELECTOR_HISTORY_BUF_RLE_SYMBOL_INDEX = m_selector_history_buf_size + SELECTOR_HISTORY_BUF_FIRST_SYMBOL_INDEX;
-
 #if BASISD_SUPPORT_BC7_MODE5
-		const bool bc7_chroma_filtering = ((decode_flags & cDecodeFlagsNoETC1SChromaFiltering) == 0) && 
+		const bool bc7_chroma_filtering = ((decode_flags & cDecodeFlagsNoETC1SChromaFiltering) == 0) &&
 			((fmt == block_format::cBC7_M5_COLOR) || (fmt == block_format::cBC7));
 
 		basisu::vector2D<uint16_t> decoded_endpoints;
@@ -8658,190 +9033,18 @@ namespace basist
 
 		for (uint32_t block_y = 0; block_y < num_blocks_y; block_y++)
 		{
-			const uint32_t cur_block_endpoint_pred_array = block_y & 1;
-
 			for (uint32_t block_x = 0; block_x < num_blocks_x; block_x++)
 			{
-				// Decode endpoint index predictor symbols
-				if ((block_x & 1) == 0)
+				if (!block_decoder.decode_block(block_x, block_y))
 				{
-					if ((block_y & 1) == 0)
-					{
-						if (endpoint_pred_repeat_count)
-						{
-							endpoint_pred_repeat_count--;
-							cur_pred_bits = prev_endpoint_pred_sym;
-						}
-						else
-						{
-							cur_pred_bits = sym_codec.decode_huffman(m_endpoint_pred_model);
-							if (cur_pred_bits == ENDPOINT_PRED_REPEAT_LAST_SYMBOL)
-							{
-								endpoint_pred_repeat_count = sym_codec.decode_vlc(ENDPOINT_PRED_COUNT_VLC_BITS) + ENDPOINT_PRED_MIN_REPEAT_COUNT - 1;
-
-								cur_pred_bits = prev_endpoint_pred_sym;
-							}
-							else
-							{
-								prev_endpoint_pred_sym = cur_pred_bits;
-							}
-						}
-
-						pState->m_block_endpoint_preds[cur_block_endpoint_pred_array ^ 1][block_x].m_pred_bits = (uint8_t)(cur_pred_bits >> 4);
-					}
-					else
-					{
-						cur_pred_bits = pState->m_block_endpoint_preds[cur_block_endpoint_pred_array][block_x].m_pred_bits;
-					}
-				}
-
-				// Decode endpoint index
-				uint32_t endpoint_index, selector_index = 0;
-
-				const uint32_t pred = cur_pred_bits & 3;
-				cur_pred_bits >>= 2;
-
-				if (pred == 0)
-				{
-					// Left
-					if (!block_x)
-					{
-						BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: invalid datastream (0)\n");
-						if (pPVRTC_work_mem)
-							free(pPVRTC_work_mem);
-						return false;
-					}
-
-					endpoint_index = prev_endpoint_index;
-				}
-				else if (pred == 1)
-				{
-					// Upper
-					if (!block_y)
-					{
-						BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: invalid datastream (1)\n");
-						if (pPVRTC_work_mem)
-							free(pPVRTC_work_mem);
-						return false;
-					}
-
-					endpoint_index = pState->m_block_endpoint_preds[cur_block_endpoint_pred_array ^ 1][block_x].m_endpoint_index;
-				}
-				else if (pred == 2)
-				{
-					if (is_video)
-					{
-						assert(pred == CR_ENDPOINT_PRED_INDEX);
-						endpoint_index = (*pPrev_frame_indices)[block_x + block_y * num_blocks_x];
-						selector_index = endpoint_index >> 16;
-						endpoint_index &= 0xFFFFU;
-					}
-					else
-					{
-						// Upper left
-						if ((!block_x) || (!block_y))
-						{
-							BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: invalid datastream (2)\n");
-							if (pPVRTC_work_mem)
-								free(pPVRTC_work_mem);
-							return false;
-						}
-
-						endpoint_index = pState->m_block_endpoint_preds[cur_block_endpoint_pred_array ^ 1][block_x - 1].m_endpoint_index;
-					}
-				}
-				else
-				{
-					// Decode and apply delta
-					const uint32_t delta_sym = sym_codec.decode_huffman(m_delta_endpoint_model);
-
-					endpoint_index = delta_sym + prev_endpoint_index;
-					if (endpoint_index >= endpoints.size())
-						endpoint_index -= (int)endpoints.size();
-				}
-
-				pState->m_block_endpoint_preds[cur_block_endpoint_pred_array][block_x].m_endpoint_index = (uint16_t)endpoint_index;
-
-				prev_endpoint_index = endpoint_index;
-
-				// Decode selector index
-				if ((!is_video) || (pred != CR_ENDPOINT_PRED_INDEX))
-				{
-					int selector_sym;
-					if (cur_selector_rle_count > 0)
-					{
-						cur_selector_rle_count--;
-
-						selector_sym = (int)selectors.size();
-					}
-					else
-					{
-						selector_sym = sym_codec.decode_huffman(m_selector_model);
-
-						if (selector_sym == static_cast<int>(SELECTOR_HISTORY_BUF_RLE_SYMBOL_INDEX))
-						{
-							int run_sym = sym_codec.decode_huffman(m_selector_history_buf_rle_model);
-
-							if (run_sym == (SELECTOR_HISTORY_BUF_RLE_COUNT_TOTAL - 1))
-								cur_selector_rle_count = sym_codec.decode_vlc(7) + SELECTOR_HISTORY_BUF_RLE_COUNT_THRESH;
-							else
-								cur_selector_rle_count = run_sym + SELECTOR_HISTORY_BUF_RLE_COUNT_THRESH;
-
-							if (cur_selector_rle_count > total_blocks)
-							{
-								// The file is corrupted or we've got a bug.
-								BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: invalid datastream (3)\n");
-								if (pPVRTC_work_mem)
-									free(pPVRTC_work_mem);
-								return false;
-							}
-
-							selector_sym = (int)selectors.size();
-
-							cur_selector_rle_count--;
-						}
-					}
-
-					if (selector_sym >= (int)selectors.size())
-					{
-						assert(m_selector_history_buf_size > 0);
-
-						int history_buf_index = selector_sym - (int)selectors.size();
-
-						if (history_buf_index >= (int)selector_history_buf.size())
-						{
-							// The file is corrupted or we've got a bug.
-							BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: invalid datastream (4)\n");
-							if (pPVRTC_work_mem)
-								free(pPVRTC_work_mem);
-							return false;
-						}
-
-						selector_index = selector_history_buf[history_buf_index];
-
-						if (history_buf_index != 0)
-							selector_history_buf.use(history_buf_index);
-					}
-					else
-					{
-						selector_index = selector_sym;
-
-						if (m_selector_history_buf_size)
-							selector_history_buf.add(selector_index);
-					}
-				}
-
-				if ((endpoint_index >= endpoints.size()) || (selector_index >= selectors.size()))
-				{
-					// The file is corrupted or we've got a bug.
-					BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: invalid datastream (5)\n");
 					if (pPVRTC_work_mem)
 						free(pPVRTC_work_mem);
 					return false;
 				}
 
-				if (is_video)
-					(*pPrev_frame_indices)[block_x + block_y * num_blocks_x] = endpoint_index | (selector_index << 16);
+				const uint32_t endpoint_index = block_decoder.get_endpoint_index();
+				const uint32_t selector_index = block_decoder.get_selector_index();
+				const uint32_t pred = block_decoder.get_pred();
 
 #if BASISD_ENABLE_DEBUG_FLAGS
 				if ((g_debug_flags & cDebugFlagVisCRs) && ((fmt == block_format::cETC1) || (fmt == block_format::cBC1)))
@@ -9086,100 +9289,22 @@ namespace basist
 				case block_format::cA32:
 				{
 					assert(sizeof(uint32_t) == output_block_or_pixel_stride_in_bytes);
-					uint8_t* pDst_pixels = static_cast<uint8_t*>(pDst_blocks) + (block_x * 4 + block_y * 4 * output_row_pitch_in_blocks_or_pixels) * sizeof(uint32_t);
-										
-					const uint32_t max_x = basisu::minimum<int>(4, (int)output_row_pitch_in_blocks_or_pixels - (int)block_x * 4);
-					const uint32_t max_y = basisu::minimum<int>(4, (int)output_rows_in_pixels - (int)block_y * 4);
-					
-					int colors[4];
-					decoder_etc_block::get_block_colors5_g(colors, pEndpoints->m_color5, pEndpoints->m_inten5);
-
-					if (max_x == 4)
-					{
-						for (uint32_t y = 0; y < max_y; y++)
-						{
-							const uint32_t s = pSelector->m_selectors[y];
-
-							pDst_pixels[3] = static_cast<uint8_t>(colors[s & 3]);
-							pDst_pixels[3+4] = static_cast<uint8_t>(colors[(s >> 2) & 3]);
-							pDst_pixels[3+8] = static_cast<uint8_t>(colors[(s >> 4) & 3]);
-							pDst_pixels[3+12] = static_cast<uint8_t>(colors[(s >> 6) & 3]);
-							
-							pDst_pixels += output_row_pitch_in_blocks_or_pixels * sizeof(uint32_t);
-						}
-					}
-					else
-					{
-						for (uint32_t y = 0; y < max_y; y++)
-						{
-							const uint32_t s = pSelector->m_selectors[y];
-
-							for (uint32_t x = 0; x < max_x; x++)
-								pDst_pixels[3 + 4 * x] = static_cast<uint8_t>(colors[(s >> (x * 2)) & 3]);
-
-							pDst_pixels += output_row_pitch_in_blocks_or_pixels * sizeof(uint32_t);
-						}
-					}
-
+					etc1s_expand_block_rgba32(*pEndpoints, *pSelector, cEtc1sRGBA32Alpha,
+						static_cast<uint8_t*>(pDst_blocks), output_row_pitch_in_blocks_or_pixels, output_rows_in_pixels, block_x, block_y);
 					break;
 				}
 				case block_format::cRGB32:
 				{
 					assert(sizeof(uint32_t) == output_block_or_pixel_stride_in_bytes);
-					uint8_t* pDst_pixels = static_cast<uint8_t*>(pDst_blocks) + (block_x * 4 + block_y * 4 * output_row_pitch_in_blocks_or_pixels) * sizeof(uint32_t);
-
-					const uint32_t max_x = basisu::minimum<int>(4, (int)output_row_pitch_in_blocks_or_pixels - (int)block_x * 4);
-					const uint32_t max_y = basisu::minimum<int>(4, (int)output_rows_in_pixels - (int)block_y * 4);
-
-					color32 colors[4];
-					decoder_etc_block::get_block_colors5(colors, pEndpoints->m_color5, pEndpoints->m_inten5);
-					
-					for (uint32_t y = 0; y < max_y; y++)
-					{
-						const uint32_t s = pSelector->m_selectors[y];
-
-						for (uint32_t x = 0; x < max_x; x++)
-						{
-							const color32& c = colors[(s >> (x * 2)) & 3];
-
-							pDst_pixels[0 + 4 * x] = c.r;
-							pDst_pixels[1 + 4 * x] = c.g;
-							pDst_pixels[2 + 4 * x] = c.b;
-						}
-
-						pDst_pixels += output_row_pitch_in_blocks_or_pixels * sizeof(uint32_t);
-					}
-
+					etc1s_expand_block_rgba32(*pEndpoints, *pSelector, cEtc1sRGBA32RGB,
+						static_cast<uint8_t*>(pDst_blocks), output_row_pitch_in_blocks_or_pixels, output_rows_in_pixels, block_x, block_y);
 					break;
 				}
 				case block_format::cRGBA32:
 				{
 					assert(sizeof(uint32_t) == output_block_or_pixel_stride_in_bytes);
-					uint8_t* pDst_pixels = static_cast<uint8_t*>(pDst_blocks) + (block_x * 4 + block_y * 4 * output_row_pitch_in_blocks_or_pixels) * sizeof(uint32_t);
-
-					const uint32_t max_x = basisu::minimum<int>(4, (int)output_row_pitch_in_blocks_or_pixels - (int)block_x * 4);
-					const uint32_t max_y = basisu::minimum<int>(4, (int)output_rows_in_pixels - (int)block_y * 4);
-
-					color32 colors[4];
-					decoder_etc_block::get_block_colors5(colors, pEndpoints->m_color5, pEndpoints->m_inten5);
-
-					for (uint32_t y = 0; y < max_y; y++)
-					{
-						const uint32_t s = pSelector->m_selectors[y];
-
-						for (uint32_t x = 0; x < max_x; x++)
-						{
-							const color32& c = colors[(s >> (x * 2)) & 3];
-
-							pDst_pixels[0 + 4 * x] = c.r;
-							pDst_pixels[1 + 4 * x] = c.g;
-							pDst_pixels[2 + 4 * x] = c.b;
-							pDst_pixels[3 + 4 * x] = 255;
-						}
-
-						pDst_pixels += output_row_pitch_in_blocks_or_pixels * sizeof(uint32_t);
-					}
-
+					etc1s_expand_block_rgba32(*pEndpoints, *pSelector, cEtc1sRGBA32RGBA,
+						static_cast<uint8_t*>(pDst_blocks), output_row_pitch_in_blocks_or_pixels, output_rows_in_pixels, block_x, block_y);
 					break;
 				}
 				case block_format::cRGB565:
@@ -9351,10 +9476,8 @@ namespace basist
 
 		} // block_y
 
-		if (endpoint_pred_repeat_count != 0)
+		if (!block_decoder.finish())
 		{
-			BASISU_DEVEL_ERROR("basisu_lowlevel_etc1s_transcoder::transcode_slice: endpoint_pred_repeat_count != 0. The file is corrupted or this is a bug\n");
-			
 			if (pPVRTC_work_mem)
 				free(pPVRTC_work_mem);
 

@@ -863,6 +863,11 @@ namespace basist
 	class approx_move_to_front
 	{
 	public:
+		approx_move_to_front() :
+			m_rover(0)
+		{
+		}
+
 		approx_move_to_front(uint32_t n)
 		{
 			init(n);
@@ -1240,6 +1245,107 @@ namespace basist
 	};
 
 	bool basis_block_format_is_uncompressed(block_format tex_type);
+
+	// Shared per-source-block ETC1S entropy decode core.
+	//
+	// This is the single implementation of the ETC1S per-block entropy decoding and reference rules used by both the
+	// legacy whole-slice transcode path and the pausable texture player. It owns the compressed-stream bit cursor,
+	// selector history buffer/RLE state, endpoint prediction state, and the two alternating endpoint prediction rows.
+	// It does not expand colors or write pixels itself: callers read get_endpoint_index()/get_selector_index() after
+	// each successful decode_block() and expand the block once.
+	//
+	// A video slice's previous-frame reference array is written in place as blocks are decoded; callers are
+	// responsible for keeping working references separate from committed ones until the frame is fully published.
+	class etc1s_block_decoder
+	{
+	public:
+		struct block_preds
+		{
+			uint16_t m_endpoint_index;
+			uint8_t m_pred_bits;
+		};
+
+		etc1s_block_decoder();
+
+		void clear();
+
+		// Prepares one compressed slice stream. pEndpoints/pSelectors must remain valid until the last decode_block()
+		// call. If is_video, pPrev_frame_indices must be non-null and is resized to num_blocks_x * num_blocks_y
+		// (new entries are zero-filled) if it is smaller.
+		bool begin(
+			const endpoint* pEndpoints, uint32_t num_endpoints,
+			const selector* pSelectors, uint32_t num_selectors,
+			const huffman_decoding_table& endpoint_pred_model,
+			const huffman_decoding_table& delta_endpoint_model,
+			const huffman_decoding_table& selector_model,
+			const huffman_decoding_table& selector_history_buf_rle_model,
+			uint32_t selector_history_buf_size,
+			const uint8_t* pImage_data, uint32_t image_data_size,
+			uint32_t num_blocks_x, uint32_t num_blocks_y,
+			bool is_video, bool is_alpha_slice,
+			basisu::vector<uint32_t>* pPrev_frame_indices);
+
+		// Decodes exactly the source block at (block_x, block_y). Callers must decode in spatial raster order, and
+		// must not re-decode a block. Returns false if the compressed stream is rejected.
+		bool decode_block(uint32_t block_x, uint32_t block_y);
+
+		// Verifies the end-of-slice prediction state. Call after the final source block has been decoded.
+		bool finish() const;
+
+		uint32_t get_endpoint_index() const { return m_endpoint_index; }
+		uint32_t get_selector_index() const { return m_selector_index; }
+		uint32_t get_pred() const { return m_pred; }
+		uint32_t get_total_blocks() const { return m_total_blocks; }
+
+	private:
+		const endpoint* m_pEndpoints;
+		uint32_t m_num_endpoints;
+		const selector* m_pSelectors;
+		uint32_t m_num_selectors;
+
+		const huffman_decoding_table* m_pEndpoint_pred_model;
+		const huffman_decoding_table* m_pDelta_endpoint_model;
+		const huffman_decoding_table* m_pSelector_model;
+		const huffman_decoding_table* m_pSelector_history_buf_rle_model;
+		uint32_t m_selector_history_buf_size;
+
+		bitwise_decoder m_sym_codec;
+		approx_move_to_front m_selector_history_buf;
+		uint32_t m_cur_selector_rle_count;
+
+		uint32_t m_num_blocks_x;
+		uint32_t m_num_blocks_y;
+		uint32_t m_total_blocks;
+		bool m_is_video;
+		bool m_is_alpha_slice;
+		basisu::vector<uint32_t>* m_pPrev_frame_indices;
+
+		basisu::vector<block_preds> m_block_endpoint_preds[2];
+
+		uint32_t m_cur_pred_bits;
+		int m_prev_endpoint_pred_sym;
+		int m_endpoint_pred_repeat_count;
+		uint32_t m_prev_endpoint_index;
+
+		uint32_t m_endpoint_index;
+		uint32_t m_selector_index;
+		uint32_t m_pred;
+	};
+
+	// How etc1s_expand_block_rgba32() writes a decoded ETC1S block into a tightly packed (32bpp) output image.
+	enum etc1s_rgba32_channel_mode
+	{
+		cEtc1sRGBA32RGB,	// writes R, G, B and leaves A untouched
+		cEtc1sRGBA32RGBA,	// writes R, G, B and sets A to 255
+		cEtc1sRGBA32Alpha	// writes A only (the decoded block's G channel), leaves R, G, B untouched
+	};
+
+	// Shared, exact ETC1S->RGBA32 block color expansion. Writes one source block (clipped to
+	// output_row_pitch_in_pixels x output_rows_in_pixels), matching the legacy cRGB32/cRGBA32/cA32 expansion.
+	void etc1s_expand_block_rgba32(
+		const endpoint& ep, const selector& sel, etc1s_rgba32_channel_mode mode,
+		uint8_t* pDst_blocks, uint32_t output_row_pitch_in_pixels, uint32_t output_rows_in_pixels,
+		uint32_t block_x, uint32_t block_y);
 
 	//------------------------------------
 
@@ -1927,7 +2033,7 @@ namespace basist
 					return (int)std::round(d / (float)L);
 				}
 
-				// L = quant step, alpha in [0,1.2] (typical 0.7–0.85)
+				// L = quant step, alpha in [0,1.2] (typical 0.7ï¿½0.85)
 				if (L <= 0) 
 					return 0;
 
