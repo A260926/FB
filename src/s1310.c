@@ -49,6 +49,7 @@
 #define S1310
 
 #include "sislP.h"
+#include "s1310_hook.h"
 /*
  * Forward declarations.
  * ---------------------
@@ -59,6 +60,10 @@ static  void s1310_s9constline(SISLSurf *,SISLSurf *,SISLIntcurve *,
 #else
 static  void s1310_s9constline();
 #endif
+
+/* Tracing hook.  SISL_NULL unless the native grid-event marcher is
+   currently running an s1310 branch.  See s1310_hook.h. */
+S1310StationSink *s1310_station_sink = SISL_NULL;
 
 #if defined(SISLNEEDPROTOTYPES)
 void
@@ -1669,6 +1674,19 @@ s1310(SISLSurf *psurf1,SISLSurf *psurf2,SISLIntcurve *pinter,
 	  scorpr2 = scorpr2 +  7*(knb1-1);
 	  knbinf  = knbinf - knb1 + 1;
         }
+    }
+
+  /* Publish the final, ordered sequence of stations accepted by this
+     marcher to an installed tracing hook.  All step acceptance, step
+     retreat and boundary clipping above has already been applied, and
+     rejected trial steps never reach this point.  The normal public
+     s1310 path has no sink installed and is unaffected. */
+
+  if (s1310_station_sink != SISL_NULL && knbinf > 0)
+    {
+      (void)s1310_station_sink->emit(s1310_station_sink->user,knbinf,
+				     scorpnt,scorpr1,scorpr2,
+				     (kstpch == 3) ? 1 : 0);
     }
 
  interpolate:
