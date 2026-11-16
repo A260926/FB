@@ -1,6 +1,6 @@
 PREFIX = /usr/local
 
-obj = c-ray-fast.o
+obj = c-ray-fast.o octree.o metaball.o
 bin = c-ray-fast
 
 CC = gcc
@@ -15,7 +15,7 @@ clean:
 	rm -f $(obj) $(bin)
 
 .PHONY: install
-install:
+install: $(bin)
 	cp $(bin) $(DESTDIR)$(PREFIX)/$(bin)
 
 .PHONY: uninstall

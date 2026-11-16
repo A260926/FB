@@ -5,7 +5,7 @@
  * of the GNU General Public License v3 or later. See COPYING for details.
  * ---------------------------------------------------------------------
  * Usage:
- *   compile:  cc -o c-ray-fast -O3 c-ray-fast.c -lm -lpthread
+ *   compile:  cc -o c-ray-fast -O3 c-ray-fast.c octree.c metaball.c -lm -lpthread
  *   run:      cat scene | ./c-ray-fast >foo.ppm
  *   enjoy:    display foo.ppm (with imagemagick)
  *      or:    imgview foo.ppm (on IRIX)
@@ -18,6 +18,9 @@
  *   # sphere
  *   s  x y z  rad   "material name"
  *   p  x y z  nx ny nz  "material name"
+ *   # fused ball field group and its weighted kernel components
+ *   B "group name"  tau  "material name"
+ *   b "group name"  x y z  R  w
  *   # light
  *   l  x y z  r g b
  *   # camera
@@ -33,7 +36,10 @@
 #include <errno.h>
 #include <pthread.h>
 
-#define VER_STR		"c-ray-fast v2.0"
+#include "scene.h"
+#include "metaball.h"
+
+#define VER_STR		"c-ray-fast v2.1"
 #define COMMENT		"# rendered with " VER_STR
 
 #if defined(__APPLE__) && defined(__MACH__)
@@ -45,139 +51,7 @@
 #endif	/* bsd */
 #endif	/* apple */
 
-/* find the appropriate way to define explicitly sized types */
-/* for C99 or GNU libc (also mach's libc) we can use stdint.h */
-#if (__STDC_VERSION__ >= 199900) || defined(__GLIBC__) || defined(__MACH__)
-#include <stdint.h>
-#elif defined(unix) || defined(__unix__)	/* some UNIX systems have them in sys/types.h */
-#include <sys/types.h>
-#elif defined(__WIN32__) || defined(WIN32)	/* the nameless one */
-typedef unsigned __int8 uint8_t;
-typedef unsigned __int32 uint32_t;
-#endif	/* sized type detection */
-
-struct vec3 {
-	double x, y, z;
-};
-
-struct color {
-	float r, g, b, a;
-};
-
-struct ray {
-	struct vec3 orig, dir, invdir;
-};
-
-struct material {
-	char *name;
-	struct color kd, ks; /* color (diffuse/specular) */
-	double spow;		/* specular power */
-	double refl;		/* reflection intensity */
-	double refr;		/* refraction (transmission) intensity */
-	double ior;			/* index of refraction */
-};
 struct material def_mtl = {0, {1, 1, 1}, {1, 1, 1}, 50, 0, 0, 0};
-
-struct sphere {
-	struct vec3 pos;
-	double rad;
-};
-
-struct plane {
-	struct vec3 pos;
-	struct vec3 norm;
-};
-
-enum {
-	OBJ_SPHERE = 1,
-	OBJ_PLANE = 2
-};
-
-struct object {
-	int type;
-	union {
-		struct sphere sph;
-		struct plane pln;
-	} o;
-	struct material mat;
-};
-
-struct spoint {
-	struct vec3 pos, normal, vref;	/* position, normal and view reflection */
-	double dist;		/* parametric distance of intersection along the ray */
-	struct object *obj;
-};
-
-struct camera {
-	struct vec3 pos, targ;
-	double fov;
-};
-
-struct light {
-	struct vec3 pos;
-	struct color col;
-};
-
-
-struct aabox {
-	struct vec3 vmin, vmax;
-};
-
-struct octnode {
-	struct aabox aabb;
-	struct object **obj;
-	int num_obj, max_obj;
-	struct octnode *sub[8];
-};
-
-struct block {
-	struct color *start;
-	int x, y, width, height;
-};
-
-void render(void);
-void *thread_func(void *arg);
-void trace(struct ray *ray, int depth, struct color *col);
-void shade(struct ray *ray, struct spoint *sp, int depth, struct color *col);
-int ray_scene(struct ray *ray, struct spoint *sp);
-void reflect(struct vec3 *res, struct vec3 *v, struct vec3 *n);
-void refract(struct vec3 *res, struct vec3 *v, struct vec3 *n, double from_ior, double to_ior);
-void cross_product(struct vec3 *res, struct vec3 *v1, struct vec3 *v2);
-void get_primary_ray(struct ray *ray, int x, int y, int sample);
-void get_sample_pos(struct vec3 *res, int x, int y, int sample);
-void jitter(struct vec3 *res, int x, int y, int s);
-int ray_object(struct object *obj, struct ray *ray, struct spoint *sp);
-int ray_sphere(struct sphere *sph, struct ray *ray, struct spoint *sp);
-int ray_plane(struct plane *pln, struct ray *ray, struct spoint *sp);
-int ray_aabox(struct aabox *aabox, struct ray *ray);
-int box_sphere(struct aabox *box, struct sphere *sph);
-int load_scene(FILE *fp);
-int build_octree(struct octnode *node, int depth);
-int populate_octnode(struct octnode *node, struct object **obj, int num_obj);
-int isect_octnode(struct octnode *node, struct ray *ray, struct spoint *spret);
-void print_obj(void);
-void print_progr(int x, int max);
-unsigned long get_msec(void);
-int detect_nproc(void);
-
-#define RAY_MAG			1000.0			/* trace rays of this magnitude */
-#define MAX_RAY_DEPTH	5				/* raytrace recursion limit */
-#define ERR_MARGIN		1e-6			/* an arbitrary error margin to avoid surface acne */
-
-#define OCT_MAX_OBJ		64
-#define OCT_MAX_DEPTH	9
-
-/* some helpful macros... */
-#define SQ(x)		((x) * (x))
-#define MAX(a, b)	((a) > (b) ? (a) : (b))
-#define MIN(a, b)	((a) < (b) ? (a) : (b))
-#define CLAMP(x, a, b)	MIN(MAX(x, a), b)
-#define DOT(a, b)	((a).x * (b).x + (a).y * (b).y + (a).z * (b).z)
-#define NORMALIZE(a)  do {\
-	double len = sqrt(DOT(a, a));\
-	(a).x /= len; (a).y /= len; (a).z /= len;\
-} while(0);
-#define LERP(a, b, t)	((a) + ((b) - (a)) * (t))
 
 /* global state */
 int xres = 800;
@@ -189,7 +63,8 @@ struct object *objects;
 struct object *infobj;	/* infinite objects (planes) */
 struct material *materials;
 struct light *lights;
-int num_obj, num_inf, num_mtl, num_lt;
+struct metaball *metaballs;
+int num_obj, num_inf, num_mtl, num_lt, num_mb;
 struct camera cam;
 double inv_gamma = 1.0 / 2.2;
 int verbose, progress;
@@ -239,8 +114,6 @@ int main(int argc, char **argv)
 	FILE *infile = stdin, *outfile = stdout, *outfile_alpha = 0;
 	char *endp;
 	float gamma;
-	struct object *obj;
-	struct aabox box;
 
 	for(i=1; i<argc; i++) {
 		if(argv[i][0] == '-') {
@@ -408,44 +281,10 @@ invalopt:		fprintf(stderr, "invalid option: %s\n", argv[i]);
 	if(blk_width > xres) blk_width = xres;
 	if(blk_height > yres) blk_height = yres;
 
-	/* prepare acceleration structure */
-	if(!(octroot = malloc(sizeof *octroot)) || !(octroot->obj = malloc(num_obj * sizeof *octroot->obj))) {
-		perror("failed to allocate octree root node");
-		return 1;
-	}
-	octroot->num_obj = 0;
-
-	box.vmin.x = box.vmin.y = box.vmin.z = DBL_MAX;
-	box.vmax.x = box.vmax.y = box.vmax.z = -DBL_MAX;
-
-	obj = objects;
-	for(i=0; i<num_obj; i++) {
-		if(obj->type == OBJ_SPHERE) {
-			struct sphere *sph = &obj->o.sph;
-			double d;
-
-			d = sph->pos.x - sph->rad;
-			if(d < box.vmin.x) box.vmin.x = d;
-			d = sph->pos.x + sph->rad;
-			if(d > box.vmax.x) box.vmax.x = d;
-			d = sph->pos.y - sph->rad;
-			if(d < box.vmin.y) box.vmin.y = d;
-			d = sph->pos.y + sph->rad;
-			if(d > box.vmax.y) box.vmax.y = d;
-			d = sph->pos.z - sph->rad;
-			if(d < box.vmin.z) box.vmin.z = d;
-			d = sph->pos.z + sph->rad;
-			if(d > box.vmax.z) box.vmax.z = d;
-
-			octroot->obj[octroot->num_obj++] = obj;
-		}
-		obj++;
-	}
-	octroot->aabb = box;
-
+	/* prepare (or rebuild) the acceleration structure over the loaded scene */
 	if(verbose) fprintf(stderr, "Building acceleration structure... ");
 	start_time = get_msec();
-	if(build_octree(octroot, 0) == -1) {
+	if(prepare_scene() == -1) {
 		return 1;
 	}
 	if(verbose) {
@@ -880,6 +719,13 @@ int ray_object(struct object *obj, struct ray *ray, struct spoint *sp)
 			return 1;
 		}
 		break;
+
+	case OBJ_METABALL:
+		if(ray_metaball(obj->o.mb, ray, sp)) {
+			if(sp) sp->obj = obj;
+			return 1;
+		}
+		break;
 	}
 	return 0;
 }
@@ -1029,6 +875,17 @@ struct material *find_material(const char *name)
 	return 0;
 }
 
+struct metaball *find_metaball(const char *name)
+{
+	int i;
+	for(i=0; i<num_mb; i++) {
+		if(strcmp(metaballs[i].name, name) == 0) {
+			return metaballs + i;
+		}
+	}
+	return 0;
+}
+
 #define APPEND(arr, suffix) \
 	do { \
 		if(num_##suffix >= max_##suffix) { \
@@ -1112,28 +969,37 @@ char *expect_str(char *ptr, char *buf, int bufsz)
 		} \
 	} while(0)
 
+static int valid_num(double n)
+{
+	return isfinite(n);
+}
 
-/* Load the scene from an extremely simple scene description file */
+/* Load the scene from an extremely simple scene description file.
+ * Returns 0 on success, -1 on any malformed field-group data or undeclared
+ * material/group reference. */
 int load_scene(FILE *fp)
 {
-	int lineno = 0;
-	char buf[256], name[64], *line, *ptr, *next;
-	int max_obj, max_mtl, max_lt, max_inf;
+	int i, lineno = 0;
+	char buf[256], name[64], gname[64], *line, *ptr, *next;
+	int max_obj, max_mtl, max_lt, max_inf, max_mb;
 	struct object *obj;
 	struct light *lt;
 	struct material *mtl;
+	struct metaball *mb;
 	double num;
 
-	max_obj = max_mtl = max_lt = max_inf = 8;
+	max_obj = max_mtl = max_lt = max_inf = max_mb = 8;
 	objects = malloc(max_obj * sizeof *objects);
 	materials = malloc(max_mtl * sizeof *materials);
 	infobj = malloc(max_inf * sizeof *infobj);
 	lights = malloc(max_lt * sizeof *lights);
+	metaballs = malloc(max_mb * sizeof *metaballs);
 
-	if(!objects || !materials || !lights || !infobj) {
+	if(!objects || !materials || !lights || !infobj || !metaballs) {
 		perror("load_scene: failed to allocate initial buffer");
 		return -1;
 	}
+	num_mb = 0;
 
 	while(fgets(buf, sizeof buf, fp)) {
 		lineno++;
@@ -1201,6 +1067,94 @@ mtldone:	num_obj++;
 			}
 			break;
 
+		case 'B':
+		{
+			double tau;
+
+			if(!(next = expect_str(ptr, gname, sizeof gname))) {
+				fprintf(stderr, "%d: B expects a quoted group name\n", lineno);
+				return -1;
+			}
+			if(!(next = expect_num(next, &tau)) || !valid_num(tau) || tau <= 0.0) {
+				fprintf(stderr, "%d: B expects a positive finite tau value\n", lineno);
+				return -1;
+			}
+			if(!(next = expect_str(next, name, sizeof name))) {
+				fprintf(stderr, "%d: B expects a quoted declared material name\n", lineno);
+				return -1;
+			}
+			if(find_metaball(gname)) {
+				fprintf(stderr, "%d: duplicate field group name: \"%s\"\n", lineno, gname);
+				return -1;
+			}
+			if(!(mtl = find_material(name))) {
+				fprintf(stderr, "%d: B references undeclared material: \"%s\"\n", lineno, name);
+				return -1;
+			}
+
+			APPEND(metaballs, mb);
+			mb = metaballs + num_mb;
+			if(!(mb->name = malloc(strlen(gname) + 1))) {
+				perror("failed to allocate group name buffer");
+				return -1;
+			}
+			strcpy(mb->name, gname);
+			mb->tau = tau;
+			mb->mat = *mtl;
+			mb->comp = 0;
+			mb->num_comp = mb->max_comp = 0;
+			mb->bbox.vmin.x = mb->bbox.vmin.y = mb->bbox.vmin.z = 0.0;
+			mb->bbox.vmax.x = mb->bbox.vmax.y = mb->bbox.vmax.z = 0.0;
+			num_mb++;
+			break;
+		}
+
+		case 'b':
+		{
+			struct vec3 center;
+			double radv, wv;
+			struct mb_component *cp;
+
+			if(!(next = expect_str(ptr, gname, sizeof gname))) {
+				fprintf(stderr, "%d: b expects a quoted group name\n", lineno);
+				return -1;
+			}
+			if(!(mb = find_metaball(gname))) {
+				fprintf(stderr, "%d: b references undeclared group: \"%s\"\n", lineno, gname);
+				return -1;
+			}
+			if(!(next = expect_vec(next, &center)) ||
+					!valid_num(center.x) || !valid_num(center.y) || !valid_num(center.z)) {
+				fprintf(stderr, "%d: b expects a finite component center\n", lineno);
+				return -1;
+			}
+			if(!(next = expect_num(next, &radv)) || !valid_num(radv) || radv <= 0.0) {
+				fprintf(stderr, "%d: b expects a positive finite radius\n", lineno);
+				return -1;
+			}
+			if(!(next = expect_num(next, &wv)) || !valid_num(wv) || wv == 0.0) {
+				fprintf(stderr, "%d: b expects a finite non-zero weight\n", lineno);
+				return -1;
+			}
+
+			if(mb->num_comp >= mb->max_comp) {
+				int newsz = mb->max_comp ? mb->max_comp * 2 : 4;
+				void *tmp = realloc(mb->comp, newsz * sizeof *mb->comp);
+				if(!tmp) {
+					fprintf(stderr, "load_scene: failed to resize group components\n");
+					return -1;
+				}
+				mb->comp = tmp;
+				mb->max_comp = newsz;
+			}
+			cp = mb->comp + mb->num_comp;
+			cp->c = center;
+			cp->r = radv;
+			cp->w = wv;
+			mb->num_comp++;
+			break;
+		}
+
 		case 'l':
 			APPEND(lights, lt);
 			lt = lights + num_lt;
@@ -1257,127 +1211,17 @@ mtldone:	num_obj++;
 		}
 	}
 
-	return 0;
-}
-
-int build_octree(struct octnode *node, int depth)
-{
-	int i;
-	struct octnode *sub;
-	double hx, hy, hz;
-
-	if(node->num_obj < OCT_MAX_OBJ || depth >= OCT_MAX_DEPTH) {
-		return 0;
+	/* every declared group becomes an object participating in the octree;
+	 * empty groups are kept around but produce no surface and no bounds. */
+	for(i=0; i<num_mb; i++) {
+		APPEND(objects, obj);
+		obj = objects + num_obj;
+		obj->type = OBJ_METABALL;
+		obj->o.mb = metaballs + i;
+		obj->mat = metaballs[i].mat;
+		num_obj++;
 	}
 
-	hx = (node->aabb.vmin.x + node->aabb.vmax.x) * 0.5;
-	hy = (node->aabb.vmin.y + node->aabb.vmax.y) * 0.5;
-	hz = (node->aabb.vmin.z + node->aabb.vmax.z) * 0.5;
-
-	for(i=0; i<8; i++) {
-		if(!(sub = malloc(sizeof *sub)) || !(sub->obj = malloc(node->num_obj * sizeof *sub->obj))) {
-			perror("failed to allocate octree node");
-			free(sub);
-			return -1;
-		}
-		sub->num_obj = 0;
-
-		sub->aabb.vmin.x = LERP(node->aabb.vmin.x, hx, i & 1);
-		sub->aabb.vmax.x = LERP(hx, node->aabb.vmax.x, i & 1);
-		sub->aabb.vmin.y = LERP(node->aabb.vmin.y, hy, (i >> 1) & 1);
-		sub->aabb.vmax.y = LERP(hy, node->aabb.vmax.y, (i >> 1) & 1);
-		sub->aabb.vmin.z = LERP(node->aabb.vmin.z, hz, (i >> 2) & 1);
-		sub->aabb.vmax.z = LERP(hz, node->aabb.vmax.z, (i >> 2) & 1);
-
-		if(!populate_octnode(sub, node->obj, node->num_obj)) {
-			/* no objects intersect this node's bbox, drop it */
-			free(sub->obj);
-			free(sub);
-			sub = 0;
-		} else {
-			if(build_octree(sub, depth + 1) == -1) {
-				return -1;
-			}
-		}
-		node->sub[i] = sub;
-	}
-
-	free(node->obj);
-	node->obj = 0;
-	node->num_obj = 0;
-	return 0;
-}
-
-int populate_octnode(struct octnode *node, struct object **objects, int num_obj)
-{
-	int i;
-	struct object *obj;
-
-	for(i=0; i<num_obj; i++) {
-		obj = *objects++;
-
-		if(obj->type == OBJ_SPHERE) {
-			if(box_sphere(&node->aabb, &obj->o.sph)) {
-				node->obj[node->num_obj++] = obj;
-			}
-		}
-	}
-	return node->num_obj;
-}
-
-int isect_octnode(struct octnode *node, struct ray *ray, struct spoint *spret)
-{
-	int i;
-	struct spoint sp, sp0;
-
-	if(!ray_aabox(&node->aabb, ray)) return 0;
-
-	if(!spret) {
-		/* find any intersection */
-
-		if(node->obj) {
-			for(i=0; i<node->num_obj; i++) {
-				if(ray_object(node->obj[i], ray, 0)) {
-					return 1;
-				}
-			}
-			return 0;
-		}
-
-		for(i=0; i<8; i++) {
-			if(node->sub[i] && isect_octnode(node->sub[i], ray, 0)) {
-				return 1;
-			}
-		}
-		return 0;
-	}
-
-	sp0.dist = DBL_MAX;
-	sp0.obj = 0;
-
-	/* find the nearest intersection */
-	if(node->obj) {
-		/* leaf node, test all objects */
-		for(i=0; i<node->num_obj; i++) {
-			if(ray_object(node->obj[i], ray, &sp) && sp.dist < sp0.dist) {
-				sp0 = sp;
-			}
-		}
-	} else {
-		/* non-leaf node, recurse to subnodes */
-		for(i=0; i<8; i++) {
-			if(!node->sub[i]) continue;
-
-			if(isect_octnode(node->sub[i], ray, &sp) && sp.dist < sp0.dist) {
-				sp0 = sp;
-			}
-		}
-	}
-
-	if(sp0.obj) {
-		*spret = sp0;
-		return 1;
-	}
 	return 0;
 }
 
@@ -1390,10 +1234,13 @@ void print_obj(void)
 		if(obj->type == OBJ_SPHERE) {
 			fprintf(stderr, "sphere: (%.2f %.2f %.2f) %.2f\n",
 					obj->o.sph.pos.x, obj->o.sph.pos.y, obj->o.sph.pos.z, obj->o.sph.rad);
-		} else {
+		} else if(obj->type == OBJ_PLANE) {
 			fprintf(stderr, " plane: (%.2f %.2f %.2f) & (%.2f %.2f %.2f)\n",
 					obj->o.pln.pos.x, obj->o.pln.pos.y, obj->o.pln.pos.z,
 					obj->o.pln.norm.x, obj->o.pln.norm.y, obj->o.pln.norm.z);
+		} else {
+			fprintf(stderr, " field: \"%s\" tau=%.3f components=%d\n",
+					obj->o.mb->name, obj->o.mb->tau, obj->o.mb->num_comp);
 		}
 		obj++;
 	}

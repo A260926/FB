@@ -1,0 +1,33 @@
+# Fused ball field group example for c-ray-fast.
+# One group with two overlapping positive kernels and a negative kernel that
+# carves a notch into the fused surface, rendered with the same lighting and
+# shading path as ordinary spheres and planes.
+? ambient 0.05 0.05 0.05
+? bgcolor 0.02 0.02 0.03
+
+# materials
+M "wax"     0.85 0.55 0.25  0.3 0.3 0.3  40  0.2 0.0 1.0
+M "glass"   0.30 0.60 0.85  0.9 0.9 0.9  80  0.1 0.9 1.33
+M "floor"   0.25 0.25 0.30  0.1 0.1 0.1  20  0.3 0.0 1.0
+
+# a fused field group: tau and an existing material, then weighted kernels
+B "lump" 0.45 "wax"
+b "lump" -0.9 0.6 0.0   1.4  1.0
+b "lump"  0.9 0.6 0.0   1.4  1.0
+b "lump"  0.0 0.6 0.9   1.1  0.8
+b "lump"  0.0 0.6 0.0   1.0 -0.55
+
+# a small glassy field group (empty of extra shells: a single kernel)
+B "drop" 0.3 "glass"
+b "drop" 2.4 0.3 -1.6 0.7 1.0
+
+# ordinary sphere and infinite plane still participate as before
+s -2.6 0.1 -1.4 0.45 "wax"
+p 0 -1.0 0  0 1 0 "floor"
+
+# lights
+l -4 5 -6
+l 4 3 6
+
+# camera
+c 0 2.4 -7  32  0 0.4 0
