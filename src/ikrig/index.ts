@@ -12,14 +12,16 @@ import {
     SwingTwistSolver,
     LimbSolver,
     HipSolver,
+    CurveChainSolver,
 }                           from './solvers/index'
 
 export {
-    IKData, BipedIKPose, 
+    IKData, BipedIKPose,
     IKRig, BipedRig, IKChain, IKLink,
 
     SwingTwistEndsSolver,
     SwingTwistSolver,
     LimbSolver,
     HipSolver,
+    CurveChainSolver,
 };

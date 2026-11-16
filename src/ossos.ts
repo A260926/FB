@@ -1,5 +1,5 @@
 //#region IMPORTS
-import { Animator, Clip, Retarget }                         from './animation/index';
+import { Animator, Clip, Retarget, CurveChainTrack }        from './animation/index';
 
 import { Armature, Bone, Pose, SkinMTX, SkinDQ, SkinDQT, SkinRTS }   from './armature/index';
 import type { ISkin, TTextureInfo }                         from './armature/index';
@@ -8,15 +8,16 @@ import BoneSpring                                           from './bonespring/i
 import type { ISpringType }                                 from './bonespring/index';
 
 import {
-    Maths, Transform, 
+    Maths, Transform,
     DualQuatUtil, Mat4Util, QuatUtil, Vec3Util, Vec4Util,
 }                                                           from './maths/index';
 
 import Gltf2, { Accessor }                                  from './parsers/gltf2/index';
 
 import {
-    IKData, BipedIKPose, IKRig, BipedRig, IKChain, IKLink, 
+    IKData, BipedIKPose, IKRig, BipedRig, IKChain, IKLink,
     SwingTwistEndsSolver, SwingTwistSolver, LimbSolver, HipSolver,
+    CurveChainSolver,
 }                                                           from './ikrig/index';
 
 //#endregion
@@ -24,6 +25,7 @@ import {
 //#region EXPORTS
 export {
     Animator, Clip, Retarget,
+    CurveChainTrack, CurveChainSolver,
     Armature, Bone, Pose, SkinMTX, SkinDQ, SkinDQT, SkinRTS,
     BoneSpring,
     Maths, Transform, DualQuatUtil, Mat4Util, QuatUtil, Vec3Util, Vec4Util,

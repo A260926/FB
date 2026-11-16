@@ -7,6 +7,7 @@ import type { ITrack }  from './tracks/types';
 import { ELerp }        from './tracks/types';
 import Vec3Track        from './tracks/Vec3Track';
 import QuatTrack        from './tracks/QuatTrack';
+import type { CurveChainTrack } from './tracks/CurveChainTrack';
 //#endregion
 
 class Clip{
@@ -16,6 +17,8 @@ class Clip{
     duration   : number                 = 0;    // How Long is the Animation
     tracks     : Array<ITrack>          = [];   // Tracks : Each track is a single Transform Property( Rot|Trans|Scale ) per bone.
     timeStamps : Array<Float32Array>    = [];   // Clip can have multiple timeStamps that is shared by the Tracks
+    /** Optional curve-chain channels solved after the ordinary tracks in Animator.applyPose. */
+    curveChains : Array<CurveChainTrack> = [];
     //#endregion
 
     //#region STATIC METHODS

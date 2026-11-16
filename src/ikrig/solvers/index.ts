@@ -13,6 +13,7 @@ import TrapezoidSolver          from './TrapezoidSolver';
 import FabrikSolver             from './FabrikSolver';
 import CatenarySolver           from './CatenarySolver';
 import NaturalCCDSolver         from './NaturalCCDSolver';
+import CurveChainSolver, { CurveChainError, CURVE_CHAIN_ERRORS } from './CurveChainSolver';
 
 export {
     //SwingTwistChainSolver,
@@ -29,4 +30,7 @@ export {
     FabrikSolver,
     CatenarySolver,
     NaturalCCDSolver,
+    CurveChainSolver,
+    CurveChainError,
+    CURVE_CHAIN_ERRORS,
 };
