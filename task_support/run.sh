@@ -14,7 +14,7 @@ c++ -std=c++17 -O1 -pthread -Wno-unknown-pragmas -Itask_support -I. examples/hlb
 rm -f .task-build/hlbvh.ppm
 .task-build/example .task-build/hlbvh.ppm
 test -s .task-build/hlbvh.ppm
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

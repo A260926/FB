@@ -14,30 +14,30 @@
 #include <omp.h>
 #ifdef _MSC_VER
 using namespace std; namespace fs=experimental::filesystem; using I=int;
-I bswap(I x){return _byteswap_ulong(x);} string pp(string p){return p;}
+inline I bswap(I x){return _byteswap_ulong(x);} inline string pp(string p){return p;}
 #elif defined(__GNUC__)
 using namespace std; namespace fs=filesystem; using I=int;
-I bswap(I x){return __builtin_bswap32(x);}
-string pp(string p){replace(p.begin(),p.end(),'\\','/'); return p;}
+inline I bswap(I x){return __builtin_bswap32(x);}
+inline string pp(string p){replace(p.begin(),p.end(),'\\','/'); return p;}
 #endif
 template<class T> using op=optional<T>; using F=double;
 using C=char; constexpr F Inf=1e+10,Eps=1e-4,Pi=3.14159265358979323846;
 struct V{F x,y,z; V(F v=0):V(v,v,v){} V(F x,F y,F z):x(x),y(y),z(z){}
  F operator[](I i)const{return(&x)[i];} F m()const{return std::max({x,y,z});}};
-V operator+(V a,V b){return{a.x+b.x,a.y+b.y,a.z+b.z};}
-V operator-(V a,V b){return{a.x-b.x,a.y-b.y,a.z-b.z};}
-V operator*(V a,V b){return{a.x*b.x,a.y*b.y,a.z*b.z};}
-V operator/(V a,V b){return{a.x/b.x,a.y/b.y,a.z/b.z};}
-V operator-(V v){return{-v.x,-v.y,-v.z};} F sq(F v){return v*v;}
-V vmin(V a,V b){return{min(a.x,b.x),min(a.y,b.y),min(a.z,b.z)};}
-V vmax(V a,V b){return{max(a.x,b.x),max(a.y,b.y),max(a.z,b.z)};}
-F dot(V a,V b){return a.x*b.x+a.y*b.y+a.z*b.z;}
-V norm(V v){return v/sqrt(dot(v,v));} V refl(V w,V n){return 2*dot(w,n)*n-w;}
-V intp(V a,V b,V c,F u,F v) {return a*(1-u-v)+b*u+c*v;}
-V cross(V a,V b){return{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
-tuple<V,V> odr(V n){F s=copysign(1,n.z),a=-1/(s+n.z),b=n.x*n.y*a;
+inline V operator+(V a,V b){return{a.x+b.x,a.y+b.y,a.z+b.z};}
+inline V operator-(V a,V b){return{a.x-b.x,a.y-b.y,a.z-b.z};}
+inline V operator*(V a,V b){return{a.x*b.x,a.y*b.y,a.z*b.z};}
+inline V operator/(V a,V b){return{a.x/b.x,a.y/b.y,a.z/b.z};}
+inline V operator-(V v){return{-v.x,-v.y,-v.z};} inline F sq(F v){return v*v;}
+inline V vmin(V a,V b){return{min(a.x,b.x),min(a.y,b.y),min(a.z,b.z)};}
+inline V vmax(V a,V b){return{max(a.x,b.x),max(a.y,b.y),max(a.z,b.z)};}
+inline F dot(V a,V b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+inline V norm(V v){return v/sqrt(dot(v,v));} inline V refl(V w,V n){return 2*dot(w,n)*n-w;}
+inline V intp(V a,V b,V c,F u,F v) {return a*(1-u-v)+b*u+c*v;}
+inline V cross(V a,V b){return{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
+inline tuple<V,V> odr(V n){F s=copysign(1,n.z),a=-1/(s+n.z),b=n.x*n.y*a;
  V u(1+s*n.x*n.x*a,s*b,-s*n.x),v(b,s+n.y*n.y*a,-n.y); return{u,v};}
-op<V> refr(V wi,V n,F et){F t=dot(wi,n),t2=1-et*et*(1-t*t);
+inline op<V> refr(V wi,V n,F et){F t=dot(wi,n),t2=1-et*et*(1-t*t);
  return t2>0?et*(n*t-wi)-n*sqrt(t2):op<V>{};}
 struct Rng{mt19937 eng; uniform_real_distribution<F> dist;
  Rng(){}; Rng(I seed){eng.seed(seed); dist.reset();}
@@ -85,9 +85,9 @@ struct B{V mi=V(Inf),ma=V(-Inf); V center()const{return (mi+ma)*.5;}
  bool isect(const R& r,F tl,F th)const{for(I i=0;i<3;i++){F vd=1/r.d[i];
   F t1=(mi[i]-r.o[i])*vd,t2=(ma[i]-r.o[i])*vd;if(vd<0){swap(t1,t2);}
   tl=max(t1,tl); th=min(t2,th); if(th<tl){return 0;}} return 1;};};
-B merge(B b,V p){return{vmin(b.mi,p),vmax(b.ma,p)};}
-B merge(B a,B b){return{vmin(a.mi,b.mi),vmax(a.ma,b.ma)};}
-F gt(const Surf& s1, const Surf& s2){V d=s2.p-s1.p; F L2=dot(d,d);
+inline B merge(B b,V p){return{vmin(b.mi,p),vmax(b.ma,p)};}
+inline B merge(B a,B b){return{vmin(a.mi,b.mi),vmax(a.ma,b.ma)};}
+inline F gt(const Surf& s1, const Surf& s2){V d=s2.p-s1.p; F L2=dot(d,d);
  d=d/sqrt(L2); return abs(dot(s1.n,d))*abs(dot(s2.n,-d))/L2;};
 struct S{I t; R r; V w; F pcs;}; struct SL{V wo; F d; V fs; F p;};
 struct Mat{I t=T::None; V Kd,Ks,Ke; Tex* mapKd=0; F Ni,Ns,an,ax,ay;};
@@ -189,6 +189,7 @@ struct Lens{F cr,t,e,ar;}; struct Obj{I t; Mat* M=0; vector<Ind> fs;
   else if(ty&T::D){if(sp.op(wi,wo)){return{};}
    auto* mp=M->mapKd; F a=(mp&&!mp->as.empty())?mp->ev(sp.t,1).x:1;
    return (mp?mp->ev(sp.t):M->Kd)*(a/Pi);} return{};}};
+#include "minpt_hlbvh.h"
 struct Scene{Geo G; Obj E; vector<Obj> os; vector<unique_ptr<Tex>> ts;
  vector<Mat> ms; vector<I> Ls; unordered_map<string,I> msmap,tsmap;
  bool useEL=0; Obj* envL(){return useEL?&os.front():nullptr;}
@@ -200,8 +201,8 @@ struct Scene{Geo G; Obj E; vector<Obj> os; vector<unique_ptr<Tex>> ts;
  F nf(C*& t){ss(t); F v=atof(t); sc(t); return v;}
  V nv(C*& t){V v; v.x=nf(t); v.y=nf(t); v.z=nf(t); return v;}
  I pi(I i,I vn){return i<0?vn+i:i>0?i-1:-1;} Ind pind(C*& t){Ind i; ss(t);
-  i.p=pi(atoi(t),I(G.ps.size())); sc(t); if(t++[0]!='/'){return i;}
-  i.t=pi(atoi(t),I(G.ts.size())); sc(t); if(t++[0]!='/'){return i;}
+  if(!*t){return i;} i.p=pi(atoi(t),I(G.ps.size())); sc(t); if(t[0]!='/'){return i;} t++;
+  i.t=pi(atoi(t),I(G.ts.size())); sc(t); if(t[0]!='/'){return i;} t++;
   i.n=pi(atoi(t),I(G.ns.size())); sc(t); return i;}
  void nn(C*& t,C name[]){sscanf(t,"%s",name);};
  void loadmtl(string p){ifstream f(p); C l[4096],name[256]; puts(p.c_str());
@@ -244,7 +245,10 @@ struct Scene{Geo G; Obj E; vector<Obj> os; vector<unique_ptr<Tex>> ts;
    F u=dot(tv,p)*s,v=dot(r.d,q)*s; if(ad<1e-8||u<0||v<0||u+v>ad) return{};
    F t=dot(e2,q)/d; return t<tl||th<t ? op<TH>{} : TH{t,u/ad,v/ad};}};
  struct N{B b; bool leaf=0; I s,e,c1,c2;}; vector<N> ns;
- vector<Tri> trs; vector<I> ti; void build(){queue<tuple<I,I,I>> q;
+ vector<Tri> trs; vector<I> ti; vector<LN> lns; bool useL=0; LD ldg;
+ void buildLBVH(unsigned W); void refitLBVH(unsigned W); bool checkLBVH()const;
+ const LD& lbvhDiag()const{return ldg;}
+ void build(){useL=0; queue<tuple<I,I,I>> q;
   for(size_t oi=0;oi<os.size();oi++){auto& fs=os[oi].fs;
    for(size_t fi=0;fi<fs.size();fi+=3){V a=G.ps[fs[fi].p],b=G.ps[fs[fi+1].p];
     V c=G.ps[fs[fi+2].p]; trs.emplace_back(a,b,c,I(oi),I(fi));}}
@@ -267,7 +271,18 @@ struct Scene{Geo G; Obj E; vector<Obj> os; vector<unique_ptr<Tex>> ts;
    q.push({n.c1=nn++,s,m}); q.push({n.c2=nn++,m,e}); cv.notify_one();}};
   vector<thread> ths(omp_get_max_threads());
   for(auto& th:ths){th=thread(process);} for(auto& th:ths){th.join();}}
- op<H> isect(const R& r,F tl=Eps,F th=Inf){op<TH> mh,h; I mi,s[99]{},si=0;
+ op<H> isect(const R& r,F tl=Eps,F th=Inf){
+  if(useL){op<TH> mh,h; I mi=-1; thread_local vector<I> stk; stk.clear();
+   if(!lns.empty()){stk.push_back(0);}
+   while(!stk.empty()){I ni=stk.back(); stk.pop_back(); auto& n=lns[ni];
+    if(!n.b.isect(r,tl,th)){continue;}
+    if(!n.leaf){stk.push_back(n.c1); stk.push_back(n.c2); continue;}
+    I i=ti[n.s]; if(h=trs[i].isect(r,tl,th)){mh=h; th=h->t; mi=i;}}
+   if(!mh){return{};} Tri& tr=trs[mi]; Obj& o=os[tr.oi]; V p=r.o+th*r.d;
+   F u=mh->u,v=mh->v; Ind& i=o.fs[tr.fi],j=o.fs[tr.fi+1],k=o.fs[tr.fi+2];
+   V n=i.n<0?tr.n:norm(intp(G.ns[i.n],G.ns[j.n],G.ns[k.n],u,v));
+   V t=i.t<0?0:intp(G.ts[i.t],G.ts[j.t],G.ts[k.t],u,v); return H{{p,n,t},&o};}
+  op<TH> mh,h; I mi,s[99]{},si=0;
   while(si>=0){auto& n=ns.at(s[si--]); if(!n.b.isect(r,tl,th)){continue;}
    if(!n.leaf){s[++si]=n.c1; s[++si]=n.c2; continue;}
    for(I i=n.s;i<n.e;i++) if(h=trs[ti[i]].isect(r,tl,th)){mh=h;th=h->t;mi=i;}}
@@ -275,7 +290,14 @@ struct Scene{Geo G; Obj E; vector<Obj> os; vector<unique_ptr<Tex>> ts;
   F u=mh->u,v=mh->v; Ind& i=o.fs[tr.fi],j=o.fs[tr.fi+1],k=o.fs[tr.fi+2];
   V n=i.n<0?tr.n:norm(intp(G.ns[i.n],G.ns[j.n],G.ns[k.n],u,v));
   V t=i.t<0?0:intp(G.ts[i.t],G.ts[j.t],G.ts[k.t],u,v); return H{{p,n,t},&o};}};
-I main(I,C**v){Scene sc; puts(v[1]); sc.load(v[1],v[2],atof(v[7])); sc.build();
+#define MINPT_HLBVH_IMPL
+#include "minpt_hlbvh.h"
+I main(I ac,C**v){Scene sc; I ul=0; unsigned lw=1;
+ if(ac>20){if(ac!=22||strcmp(v[20],"--lbvh")){return 1;} I w=0; C* s=v[21];
+  if(!*s){return 1;} while(*s){if(*s<'0'||*s>'9'){return 1;} w=w*10+(*s-'0'); s++;}
+  if(w<1||w>64){return 1;} ul=1; lw=unsigned(w);}
+ if(ac<20){return 1;}
+ puts(v[1]); sc.load(v[1],v[2],atof(v[7])); if(ul){sc.buildLBVH(lw);}else{sc.build();}
  I ns=atoi(v[5]),mb=atoi(v[6]),w=atoi(v[8]),h=atoi(v[9]),sz=w*h*3;
  vector<V> D(w*h,V()); sc.E.initE(v[3],V(atof(v[10]),atof(v[11]),atof(v[12])),
   V(atof(v[13]),atof(v[14]),atof(v[15])),V(0,1,0),F(atof(v[16])),

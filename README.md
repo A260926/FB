@@ -13,6 +13,7 @@
 - Triangle mesh support
 - OBJ model support, including MTL files (partial)
 - Acceleration structure with SAHBVH
+- Optional LBVH builder (`--lbvh`) with deterministic parallel construction and frame-to-frame refit
 - Parallel rendering support via OpenMP
 - Parallel BVH construction
 - Diffuse, specular, and glossy BSDFs
@@ -336,7 +337,7 @@ Tested with Visual Studio 2017 Community (15.6).
 
 ```bash
 > "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
-> cl /EHsc /std:c++latest /openmp minpt.cpp
+> cl /EHsc /std:c++latest /openmp minpt.cpp src/hlbvh.cpp
 ```
 
 #### Linux
@@ -344,7 +345,7 @@ Tested with Visual Studio 2017 Community (15.6).
 Tested with GCC 8.1.
 
 ```bash
-$ g++ -std=c++17 -fopenmp -O3 -w minpt.cpp -lstdc++fs -o minpt
+$ g++ -std=c++17 -fopenmp -O3 -w minpt.cpp src/hlbvh.cpp -lstdc++fs -o minpt
 ```
 
 ### Usage
@@ -378,6 +379,52 @@ $ ./minpt \
     - `focus_distance`: Focus distance on the optical axis [m]
     - `sensor_diagonal_length`: Diagonal length of the sensor [mm]
     - `sensor_sensitivity`: Sensitivity multiplier of the sensor
+- Optional trailing argument
+  - `--lbvh workers`: Build the LBVH with `workers` threads (1–64) instead of
+    the SAH BVH. Must come after the 19 positional arguments; invalid values
+    exit non-zero. Without `--lbvh` the renderer behaves exactly as before.
+
+### LBVH builder (`--lbvh`)
+
+`minpt_hlbvh.h` + `src/hlbvh.cpp` add an alternative acceleration structure
+for scenes where SAH build time dominates. The SAH builder stays the
+default; `--lbvh workers` (or `Scene::buildLBVH(workers)`) switches to it.
+
+- `Scene::buildLBVH(workers)` — full rebuild. Triangles are collected in the
+  original object/face order (`ti` carries the reordering), each centroid is
+  coded with 10 bits per axis (zero-span axes map to 0, otherwise
+  `min(1023, floor(1024*x))` of the normalized centroid), keys are sorted by
+  (Morton code, original triangle index), and a deterministic binary radix
+  hierarchy is generated: splits sit at the longest common prefix of the
+  interval's first/last keys, internal nodes are numbered in interval
+  preorder, the leaf of slot `s` is node `n-1+s` and holds exactly one face.
+  Encoding/sorting, internal-node topology tasks and the bottom-up bounds
+  reduction are distributed over `workers` `std::thread`s; node fields and
+  `ti` are identical for any worker count. Rebuilding clears the previous
+  tree and triangle cache. Empty scenes, single faces, identical codes,
+  coplanar and extremely elongated meshes are all legal.
+- `Scene::refitLBVH(workers)` — cheap frame-to-frame update. Between frames
+  the caller may modify `G.ps` (object/face topology must stay fixed), then
+  call `refitLBVH`: it recomputes the triangle cache and leaf bounds from
+  the original faces and updates the ancestor bounds. Connectivity, leaf
+  slots and `ti` are preserved; no builder or sort is invoked.
+- `Scene::checkLBVH()` — structural validation of the live tree (root
+  reachability, parent/child intervals, complete duplicate-free leaf
+  coverage, parent-box containment).
+- `Scene::lbvhDiag()` — read-only diagnostics: nodes, leaf order (`ti`),
+  Morton codes, and per-thread internal-node / bounds-reduction task counts.
+
+Frame update order: `buildLBVH` once → per frame: modify `G.ps` →
+`refitLBVH` → render. Queries keep using `Scene::isect` for nearest hits and
+finite-distance shadow rays; geometry must not be edited while rendering.
+
+A windowless example renders two frames (build → deform → refit → render)
+through the production path and writes a PPM:
+
+```bash
+$ c++ -std=c++17 -O1 -pthread -Itask_support -I. examples/hlbvh.cpp src/hlbvh.cpp -o hlbvh_example
+$ ./hlbvh_example hlbvh.ppm
+```
 
 ### Input/Output Description
 

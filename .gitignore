@@ -8,6 +8,7 @@
 
 # Project files
 [Bb]uild*/
+.task-build/
 [Rr]esults/
 misc/
 resources/
