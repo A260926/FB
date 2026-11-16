@@ -1,0 +1,94 @@
+# Offline material-slot example.
+#
+# Renders without any external asset: examples/objects/material_slots_lamp.obj
+# is shipped with the repository. Both lamp objects share the same OBJ geometry
+# cache and the same BVH; only their per-instance slot binding tables differ, so
+# the lamp shades and bulbs are differently colored without duplicating geometry.
+#
+# Run with:
+#   ./luz examples/scenes/material_slots.luz --samples 64 --resolution 800x600
+#
+# No MTL file is read: the OBJ only contributes "usemtl" slot names.
+# Blank lines separate sections (the parser treats them as section end).
+
+[settings]
+resolution=800,600
+samples=64
+maxlightbounces=4
+view_transform=standard
+sky=none
+distanceblueness=0
+outputfilename=material_slots
+
+[materials]
+material shade_warm {
+type=lambertian
+color=srgb(0.62,0.48,0.38)
+}
+material shade_cool {
+type=lambertian
+color=srgb(0.38,0.46,0.62)
+}
+material bulb_warm {
+type=emissive
+color=blackbody(3000K)
+radiance=12
+}
+material bulb_cool {
+type=emissive
+color=blackbody(8000K)
+radiance=6
+}
+material bracket_dark {
+type=principled
+base_color=srgb(0.16,0.16,0.18)
+metallic=0.9
+roughness=0.35
+}
+material neutral_fallback {
+type=lambertian
+color=srgb(0.25,0.25,0.25)
+}
+
+[meshes]
+mesh lamp {
+file=../objects/material_slots_lamp.obj
+}
+
+[scene]
+camera main {
+position=(0,1.6,4.6)
+direction=(0,-0.02,-1)
+focal_length_mm=45
+sensor_width_mm=36
+sensor_height_mm=27
+pinhole=1
+focus_distance=4.6
+}
+# The "material" line remains the instance default (and the fallback for
+# unbound slots). "material.<slot>=NAME" binds a slot; names are case-sensitive.
+object lamp_warm {
+mesh=lamp
+position=(-0.95,0,0)
+rotation=(0,12,0)
+scale=(1,1,1)
+material=neutral_fallback
+material.Shade=shade_warm
+material.Bulb=bulb_warm
+material.Frame=bracket_dark
+}
+object lamp_cool {
+mesh=lamp
+position=(0.95,0,0)
+rotation=(0,-12,0)
+scale=(1.1,1.15,1.1)
+material=neutral_fallback
+material.Shade=shade_cool
+material.Bulb=bulb_cool
+material.Frame=bracket_dark
+}
+objects{
+plane=0,(0,1,0),material[
+lambertian=(0.30,0.30,0.32)
+]
+}

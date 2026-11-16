@@ -4,9 +4,11 @@
 #include "Hittables/Hittable.hpp"
 #include "Hittables/Mesh.hpp"
 #include "Materials/Material.hpp"
+#include "Materials/MaterialBindings.hpp"
 #include "Vector3.hpp"
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 class	MeshInstance : public Hittable
@@ -19,8 +21,22 @@ class	MeshInstance : public Hittable
 			Vector3 scale,
 			std::shared_ptr<Material> material
 		);
+		// Binds material slot names to materials. Unbound slots use
+		// 'fallbackMaterial'. The geometry and its BVH are shared with other
+		// instances; the bindings live in this instance only. All scale
+		// components must be finite and non-zero.
+		MeshInstance(
+			std::shared_ptr<const Mesh> geometry,
+			Vector3 position,
+			Vector3 rotationDegrees,
+			Vector3 scale,
+			const MaterialBindings& materialBindings,
+			std::shared_ptr<Material> fallbackMaterial
+		);
 
 		const std::shared_ptr<const Mesh>&	getGeometry(void) const;
+		const MaterialBindings&	getMaterialBindings(void) const;
+		std::shared_ptr<Material>	getSlotMaterial(const std::string& slotName) const;
 		virtual Material*	getMaterial(void) const override;
 		virtual bool		hit(Ray& ray, HitRecord& hitRecord, double t_min, double t_max) const override;
 		virtual bool		hitAny(Ray& ray, double t_min, double t_max) const override;
@@ -67,8 +83,23 @@ class	MeshInstance : public Hittable
 			HitRecord& worldHitRecord
 		) const;
 
+		// Slot-aware light distribution helpers.
+		bool	_usesSlotMaterials(void) const;
+		void	_buildSlotMaterialTable(void);
+		void	_buildWorldLightMass(void) const;
+		void	_ensureWorldLightMass(void) const;
+		Material*	_resolvedMaterial(int slotIndex) const;
+		double	_worldElementArea(std::size_t index) const;
+		bool	_selectWorldLightElement(
+			double& selectedWeight,
+			double& totalWeight,
+			std::size_t& index
+		) const;
+
 		std::shared_ptr<const Mesh>	_geometry;
 		std::shared_ptr<Material>	_material;
+		MaterialBindings	_materialBindings;
+		std::vector<std::shared_ptr<Material>>	_resolvedSlotMaterials;
 		InstanceTransform	_transform;
 		AABB	_boundingBox;
 		bool	_hasBoundingBox = false;
@@ -76,4 +107,8 @@ class	MeshInstance : public Hittable
 		mutable std::once_flag	_surfaceAreaOnce;
 		mutable std::vector<double>	_transformedAreaPrefixCache;
 		mutable std::once_flag	_transformedAreaPrefixOnce;
+		mutable std::vector<double>	_worldElementAreaCache;
+		mutable std::vector<double>	_worldLightMassPrefixCache;
+		mutable double	_totalWorldLightMass = 0.0;
+		mutable std::once_flag	_worldLightMassOnce;
 };

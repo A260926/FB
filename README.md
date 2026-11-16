@@ -349,6 +349,62 @@ material=gold
 }
 ```
 
+### OBJ material slots
+
+OBJ files can group faces under `usemtl` names. Luz keeps those names and their
+per-face association through triangulation, degenerate-face filtering and the
+packed BVH; faces with no `usemtl` belong to the empty-name slot. The MTL file
+itself is never read — Luz only uses the slot names.
+
+An object block may bind each slot to a named scene material with
+`material.<slot>=<named material>`. Slot names are case-sensitive. The plain
+`material=` property remains the object's default material and is used for any
+slot the object does not bind:
+
+```text
+[materials]
+material shade_blue { type=lambertian color=srgb(0.38,0.46,0.62) }
+material bulb_warm  { type=emissive color=blackbody(3000K) radiance=12 }
+material bracket     { type=metal preset=steel roughness=0.3 }
+material neutral     { type=lambertian color=srgb(0.25,0.25,0.25) }
+
+[meshes]
+mesh lamp { file=objects/lamp.obj }
+
+[scene]
+object lamp_a {
+mesh=lamp
+position=(-0.95,0,0)
+material=neutral
+material.Shade=shade_blue
+material.Bulb=bulb_warm
+material.Frame=bracket
+}
+
+object lamp_b {
+mesh=lamp
+position=(0.95,0,0)
+scale=(1.1,1.15,1.1)
+material=neutral
+material.Shade=shade_blue
+material.Bulb=bulb_warm
+}
+```
+
+Both objects share the same parsed OBJ and the same BVH; only their binding
+tables differ, so the slots can be re-colored per instance without duplicating
+geometry. Referencing an unknown named material fails the load. Slot-bound
+instances require finite, non-zero scale components; meshes without slot
+bindings keep the previous degenerate-scale behaviour (they are applied
+directly to the geometry).
+
+Mixed-material meshes participate in lighting per face: face *i* contributes the
+selection mass `Ai * luminance(material_i->emitted())`, and only faces with a
+positive mass are sampled for next-event estimation and photon emission. A mesh
+whose resolved faces are all dark is not registered as a light at all. See
+[`examples/scenes/material_slots.luz`](examples/scenes/material_slots.luz) for a
+self-contained offline example.
+
 ## Blender Exporter
 
 Blender scenes can be exported through Blender's Python API:

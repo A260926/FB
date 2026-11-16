@@ -351,13 +351,18 @@ namespace
 		const std::shared_future<std::shared_ptr<ObjMeshData>> sourceLoad = scheduleMeshSourceLoad(context, fileName);
 		std::shared_future<std::shared_ptr<Mesh>> future = context.meshLoadScheduler->enqueue(
 			[sourceLoad] {
-				auto geometryMaterial = std::make_shared<Emissive>(Color(1.0, 1.0, 1.0));
+				// The shared geometry keeps the OBJ slot names but has no
+				// instance bindings: instances resolve their own slots and use
+				// their own fallback material. A neutral diffuse material keeps
+				// the shared cache from ever being mistaken for a light.
+				auto geometryFallback = std::make_shared<Lambertian>(Color(0.6, 0.6, 0.6));
 				return (std::make_shared<Mesh>(buildObjMesh(
 					*sourceLoad.get(),
 					Vector3(0.0, 0.0, 0.0),
 					Vector3(0.0, 0.0, 0.0),
 					Vector3(1.0, 1.0, 1.0),
-					geometryMaterial
+					MaterialBindings(),
+					geometryFallback
 				)));
 			}
 		);
@@ -372,7 +377,9 @@ namespace
 		Vector3 position,
 		Vector3 rotation,
 		Vector3 scale,
-		std::shared_ptr<Material> material
+		std::shared_ptr<Material> material,
+		bool hasMaterialBindings = false,
+		const MaterialBindings& materialBindings = MaterialBindings()
 	)
 	{
 		if (!context.meshLoadScheduler)
@@ -380,8 +387,13 @@ namespace
 			context.meshLoadScheduler = std::make_shared<SceneFile::internal::MeshLoadScheduler>(context.meshLoadConcurrency);
 		}
 
+		// Slot bindings live per instance, so a mesh file is always shared
+		// through the geometry cache and never merged into it. The unbound
+		// "material" keeps its role as the instance fallback.
+		const bool useSlotBindings = hasMaterialBindings;
+
 		std::shared_future<std::shared_ptr<Hittable>> future;
-		if (!isInvertibleMeshInstanceScale(scale))
+		if (!useSlotBindings && !isInvertibleMeshInstanceScale(scale))
 		{
 			const std::shared_future<std::shared_ptr<ObjMeshData>> sourceLoad = scheduleMeshSourceLoad(context, fileName);
 			future = context.meshLoadScheduler->enqueue(
@@ -399,17 +411,35 @@ namespace
 		else
 		{
 			const std::shared_future<std::shared_ptr<Mesh>> geometryLoad = scheduleMeshGeometryLoad(context, fileName);
-			future = context.meshLoadScheduler->enqueue(
-				[geometryLoad, position, rotation, scale, material]() -> std::shared_ptr<Hittable> {
-					return (std::make_shared<MeshInstance>(
-						geometryLoad.get(),
-						position,
-						rotation,
-						scale,
-						material
-					));
-				}
-			);
+			if (useSlotBindings)
+			{
+				future = context.meshLoadScheduler->enqueue(
+					[geometryLoad, position, rotation, scale, material, materialBindings]() -> std::shared_ptr<Hittable> {
+						return (std::make_shared<MeshInstance>(
+							geometryLoad.get(),
+							position,
+							rotation,
+							scale,
+							materialBindings,
+							material
+						));
+					}
+				);
+			}
+			else
+			{
+				future = context.meshLoadScheduler->enqueue(
+					[geometryLoad, position, rotation, scale, material]() -> std::shared_ptr<Hittable> {
+						return (std::make_shared<MeshInstance>(
+							geometryLoad.get(),
+							position,
+							rotation,
+							scale,
+							material
+						));
+					}
+				);
+			}
 		}
 
 		context.pendingMeshLoads.push_back(future);
@@ -424,7 +454,55 @@ namespace
 		Vector3	rotation = Vector3(0.0, 0.0, 0.0);
 		Vector3	scale = Vector3(1.0, 1.0, 1.0);
 		std::shared_ptr<Material>	material = std::make_shared<Lambertian>(Color(0.6, 0.6, 0.6));
+		// Explicit per-slot bindings from "material.<slot>=<named material>".
+		MaterialBindings	materialBindings;
+		bool	hasExplicitBindings = false;
 	};
+
+	// Parses a comma separated tail of "material.<slot>=<named material>"
+	// bindings (same syntax as object blocks). Returns true if any was found.
+	bool	parseObjSlotBindings(
+		const SceneFile::internal::SceneFileContext& context,
+		const std::string& tail,
+		MaterialBindings& bindings
+	)
+	{
+		const std::string suffix = SceneFile::internal::_trim(tail);
+		bool hasBindings = false;
+		std::size_t cursor = 0;
+
+		while (cursor < suffix.size())
+		{
+			const std::size_t comma = suffix.find(',', cursor);
+			const std::string part = SceneFile::internal::_trim(
+				suffix.substr(cursor, comma == std::string::npos ? std::string::npos : comma - cursor)
+			);
+			if (!part.empty())
+			{
+				const std::string lowered = SceneFile::internal::_lowerCopy(part);
+				const std::size_t equals = part.find('=');
+
+				if (equals == std::string::npos || lowered.rfind("material.", 0) != 0)
+				{
+					throw std::runtime_error("Invalid OBJ material slot binding: " + part);
+				}
+				// Slot names are case-sensitive, so take them from the original
+				// text rather than the lowercased copy.
+				const std::string slotName = SceneFile::internal::_trim(
+					part.substr(std::string("material.").size(), equals - std::string("material.").size())
+				);
+				const std::string materialName = SceneFile::internal::_trim(part.substr(equals + 1));
+				bindings[slotName] = findNamedMaterial(context, materialName);
+				hasBindings = true;
+			}
+			if (comma == std::string::npos)
+			{
+				break;
+			}
+			cursor = comma + 1;
+		}
+		return (hasBindings);
+	}
 
 	struct PhysicalLightUnits
 	{
@@ -975,7 +1053,9 @@ namespace
 					object.position,
 					object.rotation,
 					object.scale,
-					object.material
+					object.material,
+					object.hasExplicitBindings,
+					object.materialBindings
 				));
 				return;
 			}
@@ -1010,6 +1090,21 @@ namespace
 			else if (key == "material")
 			{
 				object.material = findNamedMaterial(context, value);
+			}
+			else if (key.rfind("material.", 0) == 0)
+			{
+				// material.<slot>=<named material>. Note that 'key' is
+				// lowercased by splitAssignment, so re-read the slot name from
+				// the original line to keep it case-sensitive. An empty slot
+				// name binds faces that never had a usemtl declaration.
+				const std::size_t separator = blockLine.find('=');
+				const std::string originalKey = SceneFile::internal::_trim(
+					blockLine.substr(0, separator)
+				);
+				const std::string slotName = originalKey.substr(std::string("material.").size());
+
+				object.materialBindings[slotName] = findNamedMaterial(context, value);
+				object.hasExplicitBindings = true;
 			}
 			else
 			{
@@ -2090,19 +2185,64 @@ void	SceneFile::internal::_readObjectsSubSection(Scene& scene, std::ifstream& st
 
 			if (sscanf(strObjFileName.c_str(), "%1023[^,],(%lf,%lf,%lf),material%n", objFileName, &pX, &pY, &pZ, &materialPosition) == 4)
 			{
+				const std::string tail = SceneFile::internal::_trim(
+					strObjFileName.substr(static_cast<std::size_t>(materialPosition))
+				);
+				MaterialBindings bindings;
+				bool hasBindings = false;
+				std::shared_ptr<Material> defaultMaterial;
+
+				if (!tail.empty() && tail.at(0) == '[')
+				{
+					defaultMaterial = SceneFile::internal::_readMaterialSubSection(stream);
+				}
+				else if (!tail.empty() && tail.at(0) == '=')
+				{
+					// material=NAME[,material.<slot>=NAME...]
+					const std::size_t comma = tail.find(',');
+					const std::string materialName = SceneFile::internal::_trim(
+						tail.substr(1, comma == std::string::npos ? std::string::npos : comma - 1)
+					);
+
+					defaultMaterial = findNamedMaterial(context, materialName);
+					if (comma != std::string::npos)
+					{
+						hasBindings = parseObjSlotBindings(
+							context,
+							tail.substr(comma + 1),
+							bindings
+						);
+					}
+				}
+				else if (!tail.empty() && tail.at(0) == '.')
+				{
+					// obj=FILE,(pos),material.<Slot>=NAME... : the "material"
+					// prefix was already consumed by the scanf above.
+					hasBindings = parseObjSlotBindings(
+						context,
+						"material" + tail,
+						bindings
+					);
+				}
+				else if (!tail.empty())
+				{
+					// Bare slot bindings still use the default material.
+					hasBindings = parseObjSlotBindings(context, tail, bindings);
+				}
+				if (!defaultMaterial)
+				{
+					defaultMaterial = std::make_shared<Lambertian>(Color(0.6, 0.6, 0.6));
+				}
+
 				scene.addHittable(scheduleMeshLoad(
 					context,
 					_resolveAssetPath(context.baseDirectory, objFileName),
 					Vector3(pX, pY, pZ),
 					Vector3(0.0, 0.0, 0.0),
 					Vector3(1.0, 1.0, 1.0),
-					readPrimitiveMaterial(
-						strObjFileName,
-						stream,
-						context,
-						materialPosition,
-						"OBJ object"
-					)
+					defaultMaterial,
+					hasBindings,
+					bindings
 				));
 
 				continue;

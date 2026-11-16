@@ -318,6 +318,8 @@ Mesh::Mesh(void)
 	this->_legacyBVH = BVHNode();
 	this->_totalArea = 0.0;
 	this->_usesPackedTriangles = false;
+	this->_usesMaterialSlots = false;
+	this->_totalLightMass = 0.0;
 }
 
 // Constructs the Mesh with custom values
@@ -328,6 +330,8 @@ Mesh::Mesh(Vector3 position, std::shared_ptr<Material> material, BVHNode bvh)
 	this->_legacyBVH = bvh;
 	this->_totalArea = 0.0;
 	this->_usesPackedTriangles = false;
+	this->_usesMaterialSlots = false;
+	this->_totalLightMass = 0.0;
 }
 
 // Constructs the Mesh with custom values
@@ -337,6 +341,8 @@ Mesh::Mesh(Vector3 position, std::shared_ptr<Material> material, std::vector<std
 	this->_material = material;
 	this->_totalArea = 0.0;
 	this->_usesPackedTriangles = false;
+	this->_usesMaterialSlots = false;
+	this->_totalLightMass = 0.0;
 
 	if (this->_trySetPackedTriangles(triangles))
 	{
@@ -354,7 +360,71 @@ Mesh::Mesh(Vector3 position, std::shared_ptr<Material> material, std::vector<Tri
 	this->_material = material;
 	this->_totalArea = 0.0;
 	this->_usesPackedTriangles = false;
+	this->_usesMaterialSlots = false;
+	this->_totalLightMass = 0.0;
 	this->_setPackedTriangles(std::move(triangles));
+}
+
+Mesh::Mesh(
+	Vector3 position,
+	std::shared_ptr<Material> material,
+	std::vector<Triangle> triangles,
+	std::vector<std::string> slotNames,
+	std::vector<std::shared_ptr<Material>> slotMaterials,
+	std::vector<int> triangleSlots
+)
+{
+	this->_position = position;
+	this->_material = material;
+	this->_totalArea = 0.0;
+	this->_usesPackedTriangles = false;
+	this->_usesMaterialSlots = true;
+	this->_totalLightMass = 0.0;
+
+	// Degenerate faces are dropped by the packed-triangle path. Apply the same
+	// filter here so the slot association stays parallel to the stored faces.
+	std::vector<Triangle> keptTriangles;
+	std::vector<int> keptSlots;
+
+	keptTriangles.reserve(triangles.size());
+	keptSlots.reserve(triangles.size());
+	for (std::size_t index = 0; index < triangles.size(); index++)
+	{
+		if (triangles[index].area() <= 0.0)
+		{
+			continue;
+		}
+		keptTriangles.push_back(std::move(triangles[index]));
+		keptSlots.push_back(
+			index < triangleSlots.size() ? triangleSlots[index] : -1
+		);
+	}
+
+	this->_setPackedTriangles(std::move(keptTriangles));
+	this->_materialSlotNames = std::move(slotNames);
+	this->_materialSlotMaterials = std::move(slotMaterials);
+	this->_triangleMaterialSlots = std::move(keptSlots);
+	if (this->_materialSlotMaterials.size() < this->_materialSlotNames.size())
+	{
+		this->_materialSlotMaterials.resize(this->_materialSlotNames.size(), material);
+	}
+	// Ensure each stored face points at its slot's resolved material as well,
+	// so plain hit records and per-face sampling agree.
+	for (std::size_t index = 0; index < this->_triangleMaterialSlots.size(); index++)
+	{
+		const int slot = this->_triangleMaterialSlots[index];
+		if (
+			slot >= 0
+			&& static_cast<std::size_t>(slot) < this->_materialSlotMaterials.size()
+			&& this->_materialSlotMaterials[static_cast<std::size_t>(slot)]
+		)
+		{
+			this->_triangles[index].setMaterial(
+				this->_materialSlotMaterials[static_cast<std::size_t>(slot)]
+			);
+		}
+	}
+	this->_computeLightMassDistribution();
 }
 
 void	Mesh::_setPackedTriangles(std::vector<Triangle> triangles)
@@ -382,6 +452,7 @@ void	Mesh::_setPackedTriangles(std::vector<Triangle> triangles)
 	this->_usesPackedTriangles = true;
 	this->_computePackedTriangleAreas();
 	this->_buildPackedBVH();
+	this->_computeLightMassDistribution();
 }
 
 bool	Mesh::_trySetPackedTriangles(const std::vector<std::shared_ptr<Hittable>>& triangles)
@@ -533,6 +604,137 @@ void	Mesh::_computePackedTriangleAreas(void)
 	}
 }
 
+/*
+	Light mass distribution
+
+	Each non-degenerate face i contributes A_i * Y_i where A_i is its area and
+	Y_i the luminance of the material resolved for its slot. The distribution is
+	built once, after the packed BVH has fixed the triangle order, so it can be
+	read concurrently by parallel render workers.
+*/
+void	Mesh::_computeLightMassDistribution(void)
+{
+	this->_triangleLightMasses.clear();
+	this->_lightMassPrefixSums.clear();
+	this->_totalLightMass = 0.0;
+
+	const std::size_t elementCount = this->_usesPackedTriangles
+		? this->_triangles.size()
+		: this->_legacyTriangles.size();
+	if (elementCount == 0)
+	{
+		return;
+	}
+
+	this->_triangleLightMasses.reserve(elementCount);
+	this->_lightMassPrefixSums.reserve(elementCount);
+	for (std::size_t index = 0; index < elementCount; index++)
+	{
+		double mass = 0.0;
+		const Triangle* const triangle = this->_surfaceTriangle(index);
+
+		if (triangle)
+		{
+			Material* material = triangle->getMaterial();
+			const double area = triangle->area();
+			const double luminance = material ? Utilities::luminance(material->emitted()) : 0.0;
+
+			if (
+				std::isfinite(area)
+				&& area > 0.0
+				&& std::isfinite(luminance)
+				&& luminance > 0.0
+			)
+			{
+				mass = area * luminance;
+			}
+		}
+		this->_totalLightMass += mass;
+		this->_triangleLightMasses.push_back(mass);
+		this->_lightMassPrefixSums.push_back(this->_totalLightMass);
+	}
+	if (!std::isfinite(this->_totalLightMass) || this->_totalLightMass <= 0.0)
+	{
+		this->_totalLightMass = 0.0;
+		this->_lightMassPrefixSums.clear();
+	}
+}
+
+bool	Mesh::_selectLightElement(double& selectedWeight, double& totalWeight, std::size_t& index) const
+{
+	selectedWeight = 0.0;
+	totalWeight = 0.0;
+	index = 0;
+
+	const bool useLightMass = this->_totalLightMass > 0.0;
+	const std::vector<double>& prefixSums = useLightMass
+		? this->_lightMassPrefixSums
+		: this->_triangleAreaPrefixSums;
+	const double total = useLightMass ? this->_totalLightMass : this->_totalArea;
+
+	if (prefixSums.empty() || !std::isfinite(total) || total <= 0.0)
+	{
+		return (false);
+	}
+	totalWeight = total;
+
+	const double target = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * total;
+	const auto it = std::lower_bound(prefixSums.begin(), prefixSums.end(), target);
+	std::size_t selectedIndex = std::min<std::size_t>(
+		static_cast<std::size_t>(it - prefixSums.begin()),
+		prefixSums.size() - 1
+	);
+
+	// Prefix sums contain zero-weight (dark or degenerate) faces. Skip them
+	// forward (wrapping once) so only positive-mass faces are selected.
+	for (std::size_t attempt = 0; attempt <= prefixSums.size(); attempt++)
+	{
+		const double previous = selectedIndex == 0 ? 0.0 : prefixSums[selectedIndex - 1];
+		const double weight = prefixSums[selectedIndex] - previous;
+
+		if (weight > 0.0 && std::isfinite(weight))
+		{
+			selectedWeight = weight;
+			index = selectedIndex;
+			return (true);
+		}
+		selectedIndex = (selectedIndex + 1) % prefixSums.size();
+	}
+
+	return (false);
+}
+
+void	Mesh::_assignLegacyHitSurfaceIndex(const Ray& ray, HitRecord& hitRecord) const
+{
+	// BVHNode reports the closest hit but not which element produced it.
+	// Resolve it lazily against the stored triangle list (used only by the
+	// light-density query, never on the camera/shadow hot path).
+	double closestT = T_MAX;
+	std::size_t closestIndex = static_cast<std::size_t>(-1);
+
+	for (std::size_t index = 0; index < this->_legacyTriangles.size(); index++)
+	{
+		const Triangle* triangle = dynamic_cast<const Triangle*>(this->_legacyTriangles[index].get());
+
+		if (!triangle)
+		{
+			continue;
+		}
+		Ray localRay = ray;
+		HitRecord triangleHit;
+		if (triangle->hit(localRay, triangleHit, T_MIN, closestT))
+		{
+			closestT = triangleHit.t0;
+			closestIndex = index;
+		}
+	}
+	if (closestIndex != static_cast<std::size_t>(-1))
+	{
+		hitRecord.surfaceIndex = closestIndex;
+		hitRecord.materialSlot = this->getTriangleMaterialSlot(closestIndex);
+	}
+}
+
 void	Mesh::_computeLegacyTriangleAreas(void)
 {
 	this->_triangleAreaPrefixSums.clear();
@@ -549,6 +751,7 @@ void	Mesh::_computeLegacyTriangleAreas(void)
 		}
 		this->_triangleAreaPrefixSums.push_back(this->_totalArea);
 	}
+	this->_computeLightMassDistribution();
 }
 
 const Triangle*	Mesh::_surfaceTriangle(std::size_t index) const
@@ -572,6 +775,42 @@ const Triangle*	Mesh::_surfaceTriangle(std::size_t index) const
 Material*	Mesh::getMaterial(void) const
 {
 	return (this->_material.get());
+}
+
+bool	Mesh::usesMaterialSlots(void) const
+{
+	return (this->_usesMaterialSlots);
+}
+
+const std::vector<std::string>&	Mesh::getMaterialSlotNames(void) const
+{
+	return (this->_materialSlotNames);
+}
+
+const std::vector<std::shared_ptr<Material>>&	Mesh::getMaterialSlotMaterials(void) const
+{
+	return (this->_materialSlotMaterials);
+}
+
+const std::vector<int>&	Mesh::getTriangleMaterialSlots(void) const
+{
+	return (this->_triangleMaterialSlots);
+}
+
+int	Mesh::getTriangleMaterialSlot(std::size_t triangleIndex) const
+{
+	if (triangleIndex >= this->_triangleMaterialSlots.size())
+	{
+		return (-1);
+	}
+	return (this->_triangleMaterialSlots[triangleIndex]);
+}
+
+Material*	Mesh::getSurfaceMaterial(std::size_t triangleIndex) const
+{
+	const Triangle* const triangle = this->_surfaceTriangle(triangleIndex);
+
+	return (triangle ? triangle->getMaterial() : nullptr);
 }
 
 // Calculates if the Mesh's BVH is hit by 'ray', is closer than 't_max' and farther than T_MIN
@@ -614,10 +853,13 @@ bool	Mesh::hit(Ray& ray, HitRecord& hitRecord, double t_min, double t_max) const
 		{
 			for (std::size_t i = node.start; i < node.start + node.count; i++)
 			{
-				const Triangle& triangle = this->_triangles[this->_triangleIndices[i]];
+				const std::size_t triangleIndex = this->_triangleIndices[i];
+				const Triangle& triangle = this->_triangles[triangleIndex];
 
 				if (triangle.hit(ray, triangleHitRecord, t_min, closestHit))
 				{
+					triangleHitRecord.surfaceIndex = triangleIndex;
+					triangleHitRecord.materialSlot = this->getTriangleMaterialSlot(triangleIndex);
 					hitRecord = triangleHitRecord;
 					closestHit = triangleHitRecord.t0;
 					hitAnything = true;
@@ -847,6 +1089,10 @@ double	Mesh::pdfValue(const Vector3& origin, const Vector3& vec) const
 	{
 		return (0.0);
 	}
+	if (this->_usesMaterialSlots && this->_totalLightMass <= 0.0)
+	{
+		return (0.0);
+	}
 
 	Ray ray(origin, vec);
 	HitRecord hitRecord;
@@ -856,33 +1102,69 @@ double	Mesh::pdfValue(const Vector3& origin, const Vector3& vec) const
 		return (0.0);
 	}
 
+	const double vecLength = Utilities::vectorLength(vec);
+	if (!std::isfinite(vecLength) || vecLength <= 0.0)
+	{
+		return (0.0);
+	}
 	const double distanceSquared = hitRecord.t0 * hitRecord.t0 * Utilities::vectorLengthSquared(vec);
-	const double cosine = std::fabs(Utilities::dot(vec, hitRecord.normal) / Utilities::vectorLength(vec));
-	if (cosine <= 0.0)
+	const double cosine = std::fabs(Utilities::dot(vec, hitRecord.geometricNormal) / vecLength);
+	if (!std::isfinite(distanceSquared) || !std::isfinite(cosine) || cosine <= 0.0)
 	{
 		return (0.0);
 	}
 
+	if (this->_usesMaterialSlots && this->_totalLightMass <= 0.0)
+	{
+		// A slot-aware mesh whose resolved faces are all dark emits nothing and
+		// has no light density at all.
+		return (0.0);
+	}
+
+	if (this->_totalLightMass > 0.0)
+	{
+		// Emission-weighted density: Yi / sum(Aj*Yj). A hit on a face whose
+		// resolved material is dark has zero density under this distribution.
+		if (!this->_usesPackedTriangles && hitRecord.surfaceIndex == static_cast<std::size_t>(-1))
+		{
+			// Legacy triangle lists do not report which element was hit; the
+			// light-density query is not on the camera/shadow hot path, so
+			// resolve it here.
+			this->_assignLegacyHitSurfaceIndex(ray, hitRecord);
+		}
+		if (hitRecord.surfaceIndex >= this->_triangleLightMasses.size())
+		{
+			return (0.0);
+		}
+		const double hitWeight = this->_triangleLightMasses[hitRecord.surfaceIndex];
+		const Triangle* const hitTriangle = this->_surfaceTriangle(hitRecord.surfaceIndex);
+		const double hitArea = hitTriangle ? hitTriangle->area() : 0.0;
+		if (!(hitWeight > 0.0) || !(hitArea > 0.0))
+		{
+			return (0.0);
+		}
+		return (distanceSquared * hitWeight / (cosine * this->_totalLightMass * hitArea));
+	}
+
+	// Legacy, non-emitting mesh: keep the original uniform-area density.
 	return (distanceSquared / (cosine * this->_totalArea));
 }
 
 Vector3	Mesh::random(const Vector3& origin) const
 {
-	if (this->_triangleAreaPrefixSums.empty() || this->_totalArea <= 0.0)
+	if (this->_usesMaterialSlots && this->_totalLightMass <= 0.0)
 	{
 		return (Hittable::random(origin));
 	}
 
-	const double targetArea = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * this->_totalArea;
-	const auto areaIt = std::lower_bound(
-		this->_triangleAreaPrefixSums.begin(),
-		this->_triangleAreaPrefixSums.end(),
-		targetArea
-	);
-	const std::size_t randomIndex = std::min<std::size_t>(
-		static_cast<std::size_t>(areaIt - this->_triangleAreaPrefixSums.begin()),
-		this->_triangleAreaPrefixSums.size() - 1
-	);
+	double selectedWeight = 0.0;
+	double totalWeight = 0.0;
+	std::size_t randomIndex = 0;
+
+	if (!this->_selectLightElement(selectedWeight, totalWeight, randomIndex))
+	{
+		return (Hittable::random(origin));
+	}
 
 	if (this->_usesPackedTriangles)
 	{
@@ -895,26 +1177,15 @@ Vector3	Mesh::random(const Vector3& origin) const
 bool	Mesh::sampleLight(const Vector3& origin, HittableLightSample& sample) const
 {
 	sample = HittableLightSample();
-	if (this->_triangleAreaPrefixSums.empty() || this->_totalArea <= 0.0)
+	if (this->_usesMaterialSlots && this->_totalLightMass <= 0.0)
 	{
 		return (false);
 	}
 
-	const double targetArea = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * this->_totalArea;
-	const auto areaIt = std::lower_bound(
-		this->_triangleAreaPrefixSums.begin(),
-		this->_triangleAreaPrefixSums.end(),
-		targetArea
-	);
-	const std::size_t randomIndex = std::min<std::size_t>(
-		static_cast<std::size_t>(areaIt - this->_triangleAreaPrefixSums.begin()),
-		this->_triangleAreaPrefixSums.size() - 1
-	);
-	const double previousArea = randomIndex == 0
-		? 0.0
-		: this->_triangleAreaPrefixSums[randomIndex - 1];
-	const double selectedArea = this->_triangleAreaPrefixSums[randomIndex] - previousArea;
-	if (selectedArea <= 0.0)
+	double selectedWeight = 0.0;
+	double totalWeight = 0.0;
+	std::size_t randomIndex = 0;
+	if (!this->_selectLightElement(selectedWeight, totalWeight, randomIndex))
 	{
 		return (false);
 	}
@@ -934,34 +1205,27 @@ bool	Mesh::sampleLight(const Vector3& origin, HittableLightSample& sample) const
 		return (false);
 	}
 
-	sample.pdf *= selectedArea / this->_totalArea;
+	// The triangle uses a uniform area density on the selected face; convert it
+	// to the mesh-level density (uniform area when the mesh is non-emitting, or
+	// Ai*Yi / sum(Aj*Yj) when it is).
+	sample.pdf *= selectedWeight / totalWeight;
 	sample.valid = std::isfinite(sample.pdf) && sample.pdf > 0.0;
+	sample.surfaceIndex = randomIndex;
 	return (sample.valid);
 }
 
 bool	Mesh::sampleEmission(HittableEmissionSample& sample) const
 {
 	sample = HittableEmissionSample();
-	if (this->_triangleAreaPrefixSums.empty() || this->_totalArea <= 0.0)
+	if (this->_usesMaterialSlots && this->_totalLightMass <= 0.0)
 	{
 		return (false);
 	}
 
-	const double targetArea = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * this->_totalArea;
-	const auto areaIt = std::lower_bound(
-		this->_triangleAreaPrefixSums.begin(),
-		this->_triangleAreaPrefixSums.end(),
-		targetArea
-	);
-	const std::size_t randomIndex = std::min<std::size_t>(
-		static_cast<std::size_t>(areaIt - this->_triangleAreaPrefixSums.begin()),
-		this->_triangleAreaPrefixSums.size() - 1
-	);
-	const double previousArea = randomIndex == 0
-		? 0.0
-		: this->_triangleAreaPrefixSums[randomIndex - 1];
-	const double selectedArea = this->_triangleAreaPrefixSums[randomIndex] - previousArea;
-	if (selectedArea <= 0.0)
+	double selectedWeight = 0.0;
+	double totalWeight = 0.0;
+	std::size_t randomIndex = 0;
+	if (!this->_selectLightElement(selectedWeight, totalWeight, randomIndex))
 	{
 		return (false);
 	}
@@ -981,20 +1245,42 @@ bool	Mesh::sampleEmission(HittableEmissionSample& sample) const
 		return (false);
 	}
 
-	sample.powerScale *= this->_totalArea / selectedArea;
+	// The triangle reports 2*pi*Ai. Face i is selected with probability
+	// Ai*Yi/sum(Aj*Yj), so the unbiased mesh-level value is
+	// 2*pi / (Yi/sum(Aj*Yj)) = 2*pi*Ai*sum/(Ai*Yi).
+	sample.powerScale *= totalWeight / selectedWeight;
 	sample.valid = std::isfinite(sample.powerScale) && sample.powerScale > 0.0;
 	return (sample.valid);
 }
 
 double	Mesh::lightSelectionWeight(void) const
 {
-	if (!this->_material)
+	const std::size_t elementCount = this->surfaceElementCount();
+
+	if (elementCount > 0 && this->_usesMaterialSlots)
+	{
+		// Slot-aware meshes distribute light over their resolved faces only.
+		// A fully dark slot set (including a dark fallback) contributes nothing.
+		if (!std::isfinite(this->_totalLightMass) || this->_totalLightMass <= 0.0)
+		{
+			return (0.0);
+		}
+		return (this->_totalLightMass);
+	}
+
+	if (elementCount > 0 && this->_totalLightMass > 0.0)
+	{
+		return (this->_totalLightMass);
+	}
+
+	// Meshes built from a pre-existing BVH expose no per-face data; preserve the
+	// legacy single-material weight based on the mesh area.
+	if (!this->_material || this->_totalArea <= 0.0)
 	{
 		return (0.0);
 	}
-
 	const double luminance = Utilities::luminance(this->_material->emitted());
-	if (this->_totalArea <= 0.0 || !std::isfinite(luminance) || luminance <= 0.0)
+	if (!std::isfinite(luminance) || luminance <= 0.0)
 	{
 		return (0.0);
 	}

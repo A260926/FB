@@ -1851,9 +1851,9 @@ namespace
 			return (sample);
 		}
 
-		Material* material = surfaceSample.material
-			? surfaceSample.material
-			: lights[lightIndex]->getMaterial();
+		// Mixed-material meshes report the material of the sampled face. Never
+		// fall back to an arbitrary emissive material of the hittable.
+		Material* material = surfaceSample.material;
 		if (!material)
 		{
 			return (sample);

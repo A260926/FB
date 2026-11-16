@@ -1,0 +1,46 @@
+# Material-slot demo asset for scenes/material_slots.luz.
+#
+# Three slots share one mesh:
+#   Bulb  - the bright lamp face (emissive in the scene)
+#   Shade  - the lamp shade shell (diffuse)
+#   Frame  - the supporting bracket (dark metal-ish)
+# The two instances in the scene bind these slots to different materials.
+#
+# A mobile lamp stand: a tilted shade quad, a glowing underside panel and a
+# thin bracket. Faces are named through "usemtl", which is all Luz needs; the
+# referenced MTL file (if any) is never read.
+v -0.60 1.40 -0.60
+v  0.60 1.40 -0.60
+v  0.80 1.60  0.60
+v -0.80 1.60  0.60
+v -0.55 1.34 -0.55
+v  0.55 1.34 -0.55
+v  0.62 1.34  0.55
+v -0.62 1.34  0.55
+v -0.10 0.00 -0.10
+v  0.10 0.00 -0.10
+v  0.10 0.00  0.10
+v -0.10 0.00  0.10
+v -0.06 1.34 -0.06
+v  0.06 1.34 -0.06
+v  0.06 1.34  0.06
+v -0.06 1.34  0.06
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+usemtl Frame
+f 1 2 3 4
+usemtl Shade
+f 5 6 7 8
+usemtl Bulb
+f 5 6 14 13
+f 6 7 15 14
+f 7 8 16 15
+f 8 5 13 16
+usemtl Frame
+f 9 10 14 13
+f 10 11 15 14
+f 11 12 16 15
+f 12 9 13 16
+f 9 10 11 12

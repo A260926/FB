@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 
 namespace
@@ -177,7 +178,86 @@ MeshInstance::MeshInstance(
 	  _material(std::move(material)),
 	  _transform(position, rotationDegrees, scale)
 {
+	this->_resolvedSlotMaterials.push_back(this->_material);
 	this->_hasBoundingBox = this->_computeBoundingBox();
+}
+
+MeshInstance::MeshInstance(
+	std::shared_ptr<const Mesh> geometry,
+	Vector3 position,
+	Vector3 rotationDegrees,
+	Vector3 scale,
+	const MaterialBindings& materialBindings,
+	std::shared_ptr<Material> fallbackMaterial
+)
+	: _geometry(std::move(geometry)),
+	  _material(fallbackMaterial),
+	  _materialBindings(materialBindings),
+	  _transform(position, rotationDegrees, scale)
+{
+	if (
+		!isFiniteVector(scale)
+		|| !this->_transform.invertible
+	)
+	{
+		throw std::invalid_argument(
+			"MeshInstance with material slot bindings requires finite, non-zero scale components."
+		);
+	}
+
+	this->_buildSlotMaterialTable();
+	this->_hasBoundingBox = this->_computeBoundingBox();
+}
+
+void	MeshInstance::_buildSlotMaterialTable(void)
+{
+	this->_resolvedSlotMaterials.clear();
+	if (!this->_geometry)
+	{
+		return;
+	}
+
+	const std::vector<std::string>& slotNames = this->_geometry->getMaterialSlotNames();
+
+	this->_resolvedSlotMaterials.reserve(slotNames.size());
+	for (std::size_t index = 0; index < slotNames.size(); index++)
+	{
+		std::shared_ptr<Material> resolved;
+		const auto binding = this->_materialBindings.find(slotNames[index]);
+
+		if (binding != this->_materialBindings.end() && binding->second)
+		{
+			resolved = binding->second;
+		}
+		// Unbound slots deliberately use this instance's fallback material,
+		// never whatever another instance or the shared geometry stored.
+		this->_resolvedSlotMaterials.push_back(resolved ? resolved : this->_material);
+	}
+	if (this->_resolvedSlotMaterials.empty())
+	{
+		this->_resolvedSlotMaterials.push_back(this->_material);
+	}
+}
+
+const MaterialBindings&	MeshInstance::getMaterialBindings(void) const
+{
+	return (this->_materialBindings);
+}
+
+std::shared_ptr<Material>	MeshInstance::getSlotMaterial(const std::string& slotName) const
+{
+	const auto binding = this->_materialBindings.find(slotName);
+
+	if (binding != this->_materialBindings.end())
+	{
+		return (binding->second);
+	}
+	return (this->_material);
+}
+
+bool	MeshInstance::_usesSlotMaterials(void) const
+{
+	return (this->_materialBindings.size() > 0);
 }
 
 const std::shared_ptr<const Mesh>&	MeshInstance::getGeometry(void) const
@@ -188,6 +268,157 @@ const std::shared_ptr<const Mesh>&	MeshInstance::getGeometry(void) const
 Material*	MeshInstance::getMaterial(void) const
 {
 	return (this->_material.get());
+}
+
+Material*	MeshInstance::_resolvedMaterial(int slotIndex) const
+{
+	if (
+		slotIndex < 0
+		|| static_cast<std::size_t>(slotIndex) >= this->_resolvedSlotMaterials.size()
+	)
+	{
+		return (this->_material.get());
+	}
+	return (this->_resolvedSlotMaterials[static_cast<std::size_t>(slotIndex)].get());
+}
+
+double	MeshInstance::_worldElementArea(std::size_t index) const
+{
+	if (!this->_geometry)
+	{
+		return (0.0);
+	}
+	if (this->_transform.uniformArea)
+	{
+		// A uniform scale changes every face area by the same factor; avoid
+		// retransforming all three vertices per face.
+		const double localArea = this->_geometry->transformedSurfaceElementArea(
+			index,
+			[](const Vector3& point) { return (point); }
+		);
+		const double scaledArea = localArea * this->_transform.uniformAreaScale;
+
+		return (std::isfinite(scaledArea) && scaledArea > 0.0 ? scaledArea : 0.0);
+	}
+	const double area = this->_geometry->transformedSurfaceElementArea(
+		index,
+		[this](const Vector3& point) {
+			return (this->_transform.transformPoint(point));
+		}
+	);
+	return (std::isfinite(area) && area > 0.0 ? area : 0.0);
+}
+
+/*
+	The light distribution is built from the instance's resolved slot materials
+	and the world-space area of each face, so two instances sharing geometry can
+	emit with different colors. The per-face world areas are cached; the mass
+	sampling reuses them without re-transforming.
+*/
+void	MeshInstance::_buildWorldLightMass(void) const
+{
+	std::call_once(this->_worldLightMassOnce, [this] {
+		this->_worldLightMassPrefixCache.clear();
+		this->_totalWorldLightMass = 0.0;
+		if (!this->_geometry)
+		{
+			return;
+		}
+
+		const std::size_t elementCount = this->_geometry->surfaceElementCount();
+		const bool usesSlots = this->_geometry->usesMaterialSlots()
+			&& !this->_resolvedSlotMaterials.empty();
+
+		this->_worldElementAreaCache.clear();
+		this->_worldElementAreaCache.reserve(elementCount);
+		this->_worldLightMassPrefixCache.reserve(elementCount);
+
+		double totalMass = 0.0;
+		for (std::size_t index = 0; index < elementCount; index++)
+		{
+			const double area = this->_worldElementArea(index);
+			this->_worldElementAreaCache.push_back(area);
+
+			Material* material = this->_resolvedMaterial(-1);
+			if (usesSlots)
+			{
+				material = this->_resolvedMaterial(this->_geometry->getTriangleMaterialSlot(index));
+			}
+			const double luminance = material
+				? Utilities::luminance(material->emitted())
+				: 0.0;
+			const double mass = (
+				std::isfinite(luminance)
+				&& luminance > 0.0
+				&& area > 0.0
+			) ? area * luminance : 0.0;
+
+			totalMass += mass;
+			this->_worldLightMassPrefixCache.push_back(totalMass);
+		}
+		if (!std::isfinite(totalMass) || totalMass <= 0.0)
+		{
+			this->_totalWorldLightMass = 0.0;
+			this->_worldLightMassPrefixCache.clear();
+		}
+		else
+		{
+			this->_totalWorldLightMass = totalMass;
+		}
+	});
+}
+
+bool	MeshInstance::_selectWorldLightElement(
+	double& selectedWeight,
+	double& totalWeight,
+	std::size_t& index
+) const
+{
+	selectedWeight = 0.0;
+	totalWeight = 0.0;
+	index = 0;
+
+	this->_buildWorldLightMass();
+	if (this->_worldLightMassPrefixCache.empty() || this->_totalWorldLightMass <= 0.0)
+	{
+		return (false);
+	}
+
+	totalWeight = this->_totalWorldLightMass;
+	const double target = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * totalWeight;
+	const auto it = std::lower_bound(
+		this->_worldLightMassPrefixCache.begin(),
+		this->_worldLightMassPrefixCache.end(),
+		target
+	);
+	std::size_t selectedIndex = std::min<std::size_t>(
+		static_cast<std::size_t>(it - this->_worldLightMassPrefixCache.begin()),
+		this->_worldLightMassPrefixCache.size() - 1
+	);
+
+	for (std::size_t attempt = 0; attempt <= this->_worldLightMassPrefixCache.size(); attempt++)
+	{
+		const double previous = selectedIndex == 0
+			? 0.0
+			: this->_worldLightMassPrefixCache[selectedIndex - 1];
+		const double weight = this->_worldLightMassPrefixCache[selectedIndex] - previous;
+
+		if (weight > 0.0 && std::isfinite(weight))
+		{
+			selectedWeight = weight;
+			index = selectedIndex;
+			return (true);
+		}
+		selectedIndex = (selectedIndex + 1) % this->_worldLightMassPrefixCache.size();
+	}
+
+	return (false);
+}
+
+void	MeshInstance::_ensureWorldLightMass(void) const
+{
+	// Builds the distribution (once) without consuming a sampler dimension.
+	this->_buildWorldLightMass();
 }
 
 bool	MeshInstance::_computeBoundingBox(void)
@@ -297,7 +528,7 @@ void	MeshInstance::_transformHitRecord(
 	worldHitRecord.normal = worldNormal;
 	worldHitRecord.geometricNormal = worldGeometricNormal;
 	worldHitRecord.frontFace = Utilities::dot(worldRay.getDirection(), worldNormal) < 0.0;
-	worldHitRecord.material = this->_material.get();
+	worldHitRecord.material = this->_resolvedMaterial(localHitRecord.materialSlot);
 }
 
 bool	MeshInstance::hit(Ray& ray, HitRecord& hitRecord, double t_min, double t_max) const
@@ -467,8 +698,7 @@ bool	MeshInstance::_sampleSurface(Vector3& position, Vector3& normal, double& ar
 
 double	MeshInstance::pdfValue(const Vector3& origin, const Vector3& vec) const
 {
-	const double area = this->_surfaceArea();
-	if (area <= 0.0)
+	if (!this->_geometry)
 	{
 		return (0.0);
 	}
@@ -493,6 +723,40 @@ double	MeshInstance::pdfValue(const Vector3& origin, const Vector3& vec) const
 		return (0.0);
 	}
 
+	// Emission-weighted density for slot-aware instances: the probability of
+	// sampling the actually-hit face under the world-space mass distribution.
+	// Building the distribution does not consume a sampler dimension.
+	this->_ensureWorldLightMass();
+	if (
+		this->_totalWorldLightMass > 0.0
+		&& hitRecord.surfaceIndex < this->_worldLightMassPrefixCache.size()
+	)
+	{
+		const double previous = hitRecord.surfaceIndex == 0
+			? 0.0
+			: this->_worldLightMassPrefixCache[hitRecord.surfaceIndex - 1];
+		const double hitWeight = this->_worldLightMassPrefixCache[hitRecord.surfaceIndex] - previous;
+		const double hitArea = this->_worldElementAreaCache[hitRecord.surfaceIndex];
+		if (!(hitWeight > 0.0) || !(hitArea > 0.0))
+		{
+			return (0.0);
+		}
+		// Yi / sum(Aj*Yj) = (Ai*Yi) / (sum(Aj*Yj) * Ai).
+		return (distanceSquared * hitWeight
+			/ (cosine * this->_totalWorldLightMass * hitArea));
+	}
+
+	// Legacy, non-emitting geometry keeps the uniform world-area density.
+	// Slot-bound instances with no emitting face have no valid light density.
+	if (this->_usesSlotMaterials())
+	{
+		return (0.0);
+	}
+	const double area = this->_surfaceArea();
+	if (area <= 0.0)
+	{
+		return (0.0);
+	}
 	return (distanceSquared / (cosine * area));
 }
 
@@ -510,15 +774,43 @@ Vector3	MeshInstance::random(const Vector3& origin) const
 bool	MeshInstance::sampleLight(const Vector3& origin, HittableLightSample& sample) const
 {
 	sample = HittableLightSample();
-
-	Vector3 position;
-	Vector3 normal;
-	double area = 0.0;
-	if (!this->_sampleSurface(position, normal, area))
+	if (!this->_geometry)
 	{
 		return (false);
 	}
 
+	double selectedWeight = 0.0;
+	double totalWeight = 0.0;
+	std::size_t selectedIndex = 0;
+	const bool usesMass = this->_selectWorldLightElement(selectedWeight, totalWeight, selectedIndex);
+	if (!usesMass && this->_usesSlotMaterials())
+	{
+		return (false);
+	}
+	Vector3 localPosition;
+	Vector3 localNormal;
+
+	if (usesMass)
+	{
+		// Uniformly sample the selected emissive face in local space; its world
+		// area cancels in the mass ratio because the pdf is derived from the
+		// same world-space face area.
+		if (!this->_geometry->sampleSurfaceElement(selectedIndex, localPosition, localNormal))
+		{
+			return (false);
+		}
+	}
+	else
+	{
+		double area = 0.0;
+		if (!this->_sampleSurface(localPosition, localNormal, area))
+		{
+			return (false);
+		}
+	}
+
+	const Vector3 position = this->_transform.transformPoint(localPosition);
+	const Vector3 normal = this->_transform.transformNormal(localNormal);
 	const Vector3 direction = position - origin;
 	const double distanceSquared = Utilities::vectorLengthSquared(direction);
 	if (!std::isfinite(distanceSquared) || distanceSquared <= 0.0)
@@ -535,9 +827,30 @@ bool	MeshInstance::sampleLight(const Vector3& origin, HittableLightSample& sampl
 		return (false);
 	}
 
-	sample.pdf = distanceSquared / (cosine * area);
+	double pdf;
+	Material* material;
+	if (usesMass)
+	{
+		// pdf = (Yi / sum(Aj*Yj)) * d^2 / |cos|, with Ai being the world area of
+		// the selected face; 'selectedWeight' is Ai*Yi in world units.
+		pdf = distanceSquared * selectedWeight / (cosine * totalWeight)
+			/ std::max(this->_worldElementAreaCache[selectedIndex], 1e-300);
+		material = this->_resolvedMaterial(this->_geometry->getTriangleMaterialSlot(selectedIndex));
+	}
+	else
+	{
+		pdf = distanceSquared / (cosine * this->_surfaceArea());
+		material = this->_material.get();
+	}
+	if (!material)
+	{
+		return (false);
+	}
+
+	sample.pdf = pdf;
 	sample.tMax = distance;
-	sample.material = this->_material.get();
+	sample.material = material;
+	sample.surfaceIndex = usesMass ? selectedIndex : static_cast<std::size_t>(-1);
 	sample.valid =
 		std::isfinite(sample.pdf)
 		&& sample.pdf > 0.0
@@ -549,25 +862,67 @@ bool	MeshInstance::sampleLight(const Vector3& origin, HittableLightSample& sampl
 bool	MeshInstance::sampleEmission(HittableEmissionSample& sample) const
 {
 	sample = HittableEmissionSample();
-	if (!this->_material)
+	if (!this->_geometry)
 	{
 		return (false);
 	}
 
-	const Color emitted = this->_material->emitted();
+	double selectedWeight = 0.0;
+	double totalWeight = 0.0;
+	std::size_t selectedIndex = 0;
+	const bool usesMass = this->_selectWorldLightElement(selectedWeight, totalWeight, selectedIndex);
+	if (!usesMass && this->_usesSlotMaterials())
+	{
+		// A slot-bound instance with no emissive face has no valid light sample.
+		return (false);
+	}
+
+	Material* material;
+	Color emitted;
+	if (usesMass)
+	{
+		material = this->_resolvedMaterial(this->_geometry->getTriangleMaterialSlot(selectedIndex));
+		if (!material)
+		{
+			return (false);
+		}
+		emitted = material->emitted();
+	}
+	else
+	{
+		if (!this->_material)
+		{
+			return (false);
+		}
+		material = this->_material.get();
+		emitted = material->emitted();
+	}
 	if (Utilities::luminance(emitted) <= 0.0)
 	{
 		return (false);
 	}
 
-	Vector3 position;
-	Vector3 normal;
-	double area = 0.0;
-	if (!this->_sampleSurface(position, normal, area))
+	Vector3 localPosition;
+	Vector3 localNormal;
+
+	if (usesMass)
 	{
-		return (false);
+		if (!this->_geometry->sampleSurfaceElement(selectedIndex, localPosition, localNormal))
+		{
+			return (false);
+		}
+	}
+	else
+	{
+		double area = 0.0;
+		if (!this->_sampleSurface(localPosition, localNormal, area))
+		{
+			return (false);
+		}
 	}
 
+	Vector3 normal = this->_transform.transformNormal(localNormal);
+	const Vector3 position = this->_transform.transformPoint(localPosition);
 	if (Sampler::sample1D(Sampler::DIM_LIGHT_EMISSION_SIDE) < 0.5)
 	{
 		normal = normal * -1.0;
@@ -578,7 +933,20 @@ bool	MeshInstance::sampleEmission(HittableEmissionSample& sample) const
 	sample.normal = normal;
 	sample.direction = normalizedOrZero(basis.local(Sampler::cosineHemisphere(Sampler::DIM_LIGHT_EMISSION_DIRECTION)));
 	sample.emitted = emitted;
-	sample.powerScale = 2.0 * D_PI * area;
+	sample.surfaceIndex = usesMass ? selectedIndex : static_cast<std::size_t>(-1);
+	if (usesMass)
+	{
+		// Two-sided cosine direction distribution carrying this face's own
+		// emitted value. Its world point density is Yi / sum(Aj*Yj), so
+		// powerScale = 2*pi / (Yi / sum(Aj*Yj)) = 2*pi*sum/(Ai*Yi) with
+		// 'selectedWeight' = Ai*Yi and 'worldArea' = Ai.
+		const double worldArea = this->_worldElementAreaCache[selectedIndex];
+		sample.powerScale = 2.0 * D_PI * totalWeight * worldArea / selectedWeight;
+	}
+	else
+	{
+		sample.powerScale = 2.0 * D_PI * this->_surfaceArea();
+	}
 	sample.valid =
 		std::isfinite(sample.powerScale)
 		&& sample.powerScale > 0.0
@@ -588,11 +956,27 @@ bool	MeshInstance::sampleEmission(HittableEmissionSample& sample) const
 
 double	MeshInstance::lightSelectionWeight(void) const
 {
-	if (!this->_material)
+	if (!this->_geometry)
 	{
 		return (0.0);
 	}
 
+	// Slot-bound instances describe their light emission entirely through their
+	// resolved faces. A fully dark binding set never falls back to the
+	// instance's default material or to a single arbitrary emissive face.
+	// Building the distribution here does not consume a sampler dimension.
+	if (this->_usesSlotMaterials())
+	{
+		this->_ensureWorldLightMass();
+		return (this->_totalWorldLightMass);
+	}
+
+	// Non-emitting geometry keeps the legacy single-material weight so existing
+	// non-slot meshes retain their previous behaviour.
+	if (!this->_material)
+	{
+		return (0.0);
+	}
 	const double luminance = Utilities::luminance(this->_material->emitted());
 	const double area = this->_surfaceArea();
 	if (!std::isfinite(luminance) || luminance <= 0.0 || area <= 0.0)

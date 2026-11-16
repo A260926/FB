@@ -739,14 +739,23 @@ void	Scene::updateLights(void)
 	this->_lightSelectionTotalWeight = 0.0;
 	for (std::shared_ptr<Hittable> hittable : this->_hittables)
 	{
-		Material* material = hittable ? hittable->getMaterial() : nullptr;
-
-		if (material && material->getType() == EMISSIVE)
+		if (!hittable)
 		{
-			lights.push_back(hittable);
-			this->_lightSelectionTotalWeight += sanitizedLightSelectionWeight(hittable);
-			this->_lightSelectionCumulativeWeights.push_back(this->_lightSelectionTotalWeight);
+			continue;
 		}
+		// A hittable participates in light sampling when it actually emits.
+		// Mixed-material meshes derive their weight from emissive faces only, so
+		// fully dark meshes stay out of the light table even though their
+		// fallback material exists.
+		const double weight = sanitizedLightSelectionWeight(hittable);
+
+		if (weight <= 0.0)
+		{
+			continue;
+		}
+		lights.push_back(hittable);
+		this->_lightSelectionTotalWeight += weight;
+		this->_lightSelectionCumulativeWeights.push_back(this->_lightSelectionTotalWeight);
 	}
 
 	if (this->_lightSelectionTotalWeight <= 0.0)

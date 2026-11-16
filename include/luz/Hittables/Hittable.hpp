@@ -4,6 +4,7 @@
 #include "Materials/Material.hpp"
 #include "Ray/Ray.hpp"
 #include "Vector3.hpp"
+#include <cstddef>
 #include <memory>
 
 class	AABB;
@@ -20,6 +21,12 @@ struct	HitRecord
 	double		u = 0.0;
 	double		v = 0.0;
 	Material*	material = nullptr;
+	// Index into the hit mesh's material slot table, or -1 when the hit did not
+	// come from a slot-aware mesh.
+	int			materialSlot = -1;
+	// Index of the hit surface element (triangle) inside the hit mesh, or
+	// SIZE_MAX when the hittable does not expose one.
+	std::size_t	surfaceIndex = static_cast<std::size_t>(-1);
 
 	void	setFaceNormal(const Ray& ray, const Vector3& outwardNormal)
 	{
@@ -42,6 +49,8 @@ struct	HittableLightSample
 	double		pdf = 0.0;
 	double		tMax = 0.0;
 	Material*	material = nullptr;
+	// Surface element that produced this sample, or SIZE_MAX if not applicable.
+	std::size_t	surfaceIndex = static_cast<std::size_t>(-1);
 	bool		hasEmitted = false;
 	bool		valid = false;
 };
@@ -53,6 +62,8 @@ struct	HittableEmissionSample
 	Vector3		direction;
 	Color		emitted = Color(0.0, 0.0, 0.0);
 	double		powerScale = 0.0;
+	// Surface element that produced this sample, or SIZE_MAX if not applicable.
+	std::size_t	surfaceIndex = static_cast<std::size_t>(-1);
 	bool		valid = false;
 };
 

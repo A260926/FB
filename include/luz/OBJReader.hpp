@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Hittables/Mesh.hpp"
+#include "Materials/MaterialBindings.hpp"
 #include "TerminalProgress.hpp"
 #include "Vector3.hpp"
 #include <array>
@@ -24,6 +25,29 @@ struct	ObjMeshData
 	std::vector<Vector3>	textureCoordinates;
 	std::vector<Vector3>	normals;
 	std::vector<std::array<ObjMeshFaceVertex, 3>>	triangles;
+	// Slot names in first-seen order. Faces without a preceding "usemtl" use the
+	// empty-name slot.
+	std::vector<std::string>	materialSlotNames;
+	// Parallel to 'triangles': index into 'materialSlotNames'.
+	std::vector<int>	triangleMaterialSlots;
+
+	int	materialSlotForTriangle(std::size_t triangleIndex) const
+	{
+		if (triangleIndex >= this->triangleMaterialSlots.size())
+		{
+			return (-1);
+		}
+		return (this->triangleMaterialSlots[triangleIndex]);
+	}
+
+	const std::string*	materialSlotName(int slotIndex) const
+	{
+		if (slotIndex < 0 || static_cast<std::size_t>(slotIndex) >= this->materialSlotNames.size())
+		{
+			return (nullptr);
+		}
+		return (&this->materialSlotNames[static_cast<std::size_t>(slotIndex)]);
+	}
 };
 
 struct	ObjLoadProgress
@@ -53,6 +77,17 @@ Mesh	buildObjMesh(
 	Vector3 rotationDegrees,
 	Vector3 scale,
 	std::shared_ptr<Material> material
+);
+// Resolves every triangle's material slot through 'materialBindings'. Slots
+// that are not present in the table use 'fallbackMaterial'. The returned Mesh
+// keeps the slot names and per-triangle slot association.
+Mesh	buildObjMesh(
+	const ObjMeshData& data,
+	Vector3 positionOffset,
+	Vector3 rotationDegrees,
+	Vector3 scale,
+	const MaterialBindings& materialBindings,
+	std::shared_ptr<Material> fallbackMaterial
 );
 Mesh	readObj(std::string fileName);
 Mesh	readObj(std::string fileName, Vector3 positionOffset, std::shared_ptr<Material> material);

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <string>
 #include <unistd.h>
 #include <chrono>
@@ -161,8 +162,9 @@ namespace
 		Vector3 positionOffset,
 		Vector3 rotationDegrees,
 		Vector3 scale,
-		std::shared_ptr<Material> material,
-		std::size_t* skippedDegenerateTriangles
+		const std::function<std::shared_ptr<Material>(int)>& materialForSlot,
+		std::size_t* skippedDegenerateTriangles,
+		std::vector<int>* builtTriangleSlots
 	);
 
 	Vector3	parseVectorValues(const char* value, const std::string& line)
@@ -426,8 +428,9 @@ namespace
 		Vector3 positionOffset,
 		Vector3 rotationDegrees,
 		Vector3 scale,
-		std::shared_ptr<Material> material,
-		std::size_t* skippedDegenerateTriangles
+		const std::function<std::shared_ptr<Material>(int)>& materialForSlot,
+		std::size_t* skippedDegenerateTriangles,
+		std::vector<int>* builtTriangleSlots
 	)
 	{
 		const ObjTransform transform(positionOffset, rotationDegrees, scale);
@@ -435,15 +438,22 @@ namespace
 		std::size_t skipped = 0;
 
 		triangles.reserve(data.triangles.size());
-		for (const std::array<ObjMeshFaceVertex, 3>& face : data.triangles)
+		if (builtTriangleSlots != nullptr)
 		{
+			builtTriangleSlots->clear();
+			builtTriangleSlots->reserve(data.triangles.size());
+		}
+		for (std::size_t faceIndex = 0; faceIndex < data.triangles.size(); faceIndex++)
+		{
+			const std::array<ObjMeshFaceVertex, 3>& face = data.triangles[faceIndex];
+			const int slotIndex = data.materialSlotForTriangle(faceIndex);
 			Triangle triangle = buildTriangle(
 				data,
 				face[0],
 				face[1],
 				face[2],
 				transform,
-				material
+				materialForSlot(slotIndex)
 			);
 			if (triangle.area() <= DEGENERATE_TRIANGLE_EPSILON_SQUARED)
 			{
@@ -451,6 +461,10 @@ namespace
 				continue;
 			}
 			triangles.push_back(std::move(triangle));
+			if (builtTriangleSlots != nullptr)
+			{
+				builtTriangleSlots->push_back(slotIndex);
+			}
 		}
 		if (skippedDegenerateTriangles != nullptr)
 		{
@@ -506,7 +520,77 @@ Mesh	buildObjMesh(
 	return (Mesh(
 		Vector3(),
 		material,
-		buildObjTriangles(data, positionOffset, rotationDegrees, scale, material, nullptr)
+		buildObjTriangles(
+			data,
+			positionOffset,
+			rotationDegrees,
+			scale,
+			[material](int) { return (material); },
+			nullptr,
+			nullptr
+		)
+	));
+}
+
+Mesh	buildObjMesh(
+	const ObjMeshData& data,
+	Vector3 positionOffset,
+	Vector3 rotationDegrees,
+	Vector3 scale,
+	const MaterialBindings& materialBindings,
+	std::shared_ptr<Material> fallbackMaterial
+)
+{
+	std::vector<std::string> slotNames = data.materialSlotNames;
+	if (slotNames.empty() && !data.triangles.empty())
+	{
+		slotNames.push_back(std::string());
+	}
+
+	std::vector<std::shared_ptr<Material>> slotMaterials;
+	slotMaterials.reserve(slotNames.size());
+	for (const std::string& slotName : slotNames)
+	{
+		const auto binding = materialBindings.find(slotName);
+		if (binding != materialBindings.end() && binding->second)
+		{
+			slotMaterials.push_back(binding->second);
+		}
+		else
+		{
+			slotMaterials.push_back(fallbackMaterial);
+		}
+	}
+
+	std::vector<int> triangleSlots;
+	std::vector<Triangle> triangles = buildObjTriangles(
+		data,
+		positionOffset,
+		rotationDegrees,
+		scale,
+		[&slotMaterials, fallbackMaterial](int slotIndex)
+		{
+			if (
+				slotIndex >= 0
+				&& static_cast<std::size_t>(slotIndex) < slotMaterials.size()
+				&& slotMaterials[static_cast<std::size_t>(slotIndex)]
+			)
+			{
+				return (slotMaterials[static_cast<std::size_t>(slotIndex)]);
+			}
+			return (fallbackMaterial);
+		},
+		nullptr,
+		&triangleSlots
+	);
+
+	return (Mesh(
+		Vector3(),
+		fallbackMaterial,
+		std::move(triangles),
+		std::move(slotNames),
+		std::move(slotMaterials),
+		std::move(triangleSlots)
 	));
 }
 
@@ -554,7 +638,15 @@ Mesh	readObj(
 	Mesh mesh(
 		Vector3(),
 		material,
-		buildObjTriangles(data, positionOffset, rotationDegrees, scale, material, &skippedDegenerateTriangles)
+		buildObjTriangles(
+			data,
+			positionOffset,
+			rotationDegrees,
+			scale,
+			[material](int) { return (material); },
+			&skippedDegenerateTriangles,
+			nullptr
+		)
 	);
 
 	if (useProgress)
@@ -588,6 +680,8 @@ ObjMeshData	parseObjFile(std::ifstream& stream)
 	reserveObjStorage(stream, data.vertices, data.textureCoordinates, data.normals, triangleReserveHint);
 	data.triangles.reserve(triangleReserveHint);
 
+	int currentSlot = -1;
+
 	do
 	{
 		getline(stream, line);
@@ -608,6 +702,36 @@ ObjMeshData	parseObjFile(std::ifstream& stream)
 		else if (line.rfind("vn ", 0) == 0)
 		{
 			data.normals.push_back(parseVectorValues(line.c_str() + 3, line));
+		}
+		else if (
+			line.rfind("usemtl", 0) == 0
+			&& isTokenEnd(line.size() > 6 ? line[6] : '\0')
+		)
+		{
+			// Slot names are case-sensitive. An empty name is a valid slot and
+			// is also where faces with no usemtl declaration end up.
+			std::string slotName = line.length() > 6 ? line.substr(6) : std::string();
+			const std::size_t first = slotName.find_first_not_of(" \t\r\n");
+			const std::size_t last = slotName.find_last_not_of(" \t\r\n");
+
+			slotName = first == std::string::npos
+				? std::string()
+				: slotName.substr(first, last - first + 1);
+
+			const auto existing = std::find(
+				data.materialSlotNames.begin(),
+				data.materialSlotNames.end(),
+				slotName
+			);
+			if (existing == data.materialSlotNames.end())
+			{
+				data.materialSlotNames.push_back(slotName);
+				currentSlot = static_cast<int>(data.materialSlotNames.size() - 1);
+			}
+			else
+			{
+				currentSlot = static_cast<int>(existing - data.materialSlotNames.begin());
+			}
 		}
 		else if (line.rfind("f ", 0) == 0)
 		{
@@ -642,9 +766,39 @@ ObjMeshData	parseObjFile(std::ifstream& stream)
 					faceVertices.at(index),
 					faceVertices.at(index + 1)
 				});
+				data.triangleMaterialSlots.push_back(currentSlot);
 			}
 		}
 	} while (!stream.eof());
+
+	// Faces before the first usemtl use the empty-name slot. Ensure that slot
+	// exists whenever some triangle has no declaration.
+	if (std::find(data.triangleMaterialSlots.begin(), data.triangleMaterialSlots.end(), -1) != data.triangleMaterialSlots.end())
+	{
+		const auto emptySlot = std::find(
+			data.materialSlotNames.begin(),
+			data.materialSlotNames.end(),
+			std::string()
+		);
+		int emptySlotIndex;
+
+		if (emptySlot == data.materialSlotNames.end())
+		{
+			data.materialSlotNames.push_back(std::string());
+			emptySlotIndex = static_cast<int>(data.materialSlotNames.size() - 1);
+		}
+		else
+		{
+			emptySlotIndex = static_cast<int>(emptySlot - data.materialSlotNames.begin());
+		}
+		for (int& slot : data.triangleMaterialSlots)
+		{
+			if (slot < 0)
+			{
+				slot = emptySlotIndex;
+			}
+		}
+	}
 
 	return (data);
 }
