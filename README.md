@@ -24,6 +24,45 @@ This simple program simplifies meshes stored in [OBJ](https://en.wikipedia.org/w
 
 Note that you can compile with `make sanitize` to create an executable with debugging capabilities. Finally, you can compile with `make wasm` to create WebAssembly code, as showcased [live demo web page](https://neurolabusc.github.io/simplifyjs/).
 
+**Reflection symmetry constraint**
+
+The command line tool accepts an optional `--symmetry <file>` option. The
+symmetry file is a flat whitespace separated list:
+
+```
+normal.x normal.y normal.z      # unit normal of the mirror plane
+offset                          # plane equation: normal . p + offset = 0
+input_tolerance                 # max distance between a vertex and its mirror
+vertex_count                    # number of vertices in the OBJ
+mate[0] mate[1] ...             # one mate index per vertex, 0 based
+```
+
+`mate` must be an involution (`mate[mate[i]] == i`); a self mate must lie on
+the plane. The input face set has to be invariant under reflection with
+reversed winding, and the coordinates only have to match their mirror image up
+to `input_tolerance`. Malformed input makes the tool exit non-zero. When the
+option is used the compacted mate is also written to `<output>.symmetry` in the
+same format, so a decimated symmetric mesh can be fed back in.
+
+```c++
+#include "src.cmd/Simplify.h"
+
+Simplify::SymmetryContext sym;      // normal, offset, input_tolerance, mate
+Simplify::load_obj("dome.obj", true);
+// fill sym.mate for every loaded vertex (mate[mate[i]] == i)
+try {
+    Simplify::simplify_mesh(1000, 7.0, false, &sym);
+} catch (const std::invalid_argument &e) {
+    // malformed symmetry description or an input that does not mirror
+}
+Simplify::write_obj("dome_decimated.obj");
+// sym.mate now uses the compacted indices and sym.original_to_vertex maps
+// every pre-call vertex to its final representative (or -1).
+```
+
+Reading the result back is the same as reading the OBJ; the `.symmetry` file
+lists the compacted vertex pairs so the next call can reuse it.
+
 **For Developers**
 
 The functionality is contained in Simplify.h. The function to call is *simplify_mesh(target_count)*. The code is kept pretty slim, so the main method has just around 400 lines of code.

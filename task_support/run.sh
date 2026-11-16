@@ -20,5 +20,6 @@ if [[ $mode == target ]]; then
     grep -Eq "^GROUP ${group} cases=[1-9][0-9]* checks=[1-9][0-9]* COMPLETE$" "$output_log"
   done
   grep -Eq '^TARGET_COMPLETE cases=[1-9][0-9]*$' "$output_log"
+  bash task_support/cli_symmetry.sh
 fi
 .task-build/baseline

@@ -1,0 +1,12 @@
+Mesh Simplification (C)2014 by Sven Forstmann in 2014, MIT License (64-bit)
+loading obj
+Input: 91 vertices, 144 triangles (target 29)
+symmetry iteration 0 - triangles 144 threshold 2.187e-06
+symmetry iteration 1 - triangles 138 threshold 1.6384e-05
+symmetry iteration 2 - triangles 128 threshold 7.8125e-05
+symmetry iteration 3 - triangles 98 threshold 0.000279936
+symmetry iteration 4 - triangles 62 threshold 0.000823543
+symmetry iteration 5 - triangles 44 threshold 0.00209715
+symmetry iteration 6 - triangles 34 threshold 0.00478297
+exporting obj
+Output: 19 vertices, 26 triangles (0.180556 reduction; 0.0012 sec)
