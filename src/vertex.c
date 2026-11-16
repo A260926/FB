@@ -55,11 +55,24 @@ void glopBegin(GLParam* p) {
 #define ERROR_FLAG GL_INVALID_OPERATION
 #include "error_check.h"
 #else
-	
+
 #endif
+	{
+		/* incomplete targets and sampling the attached texture reject the whole submission */
+		GLenum fb_error = gl_fb_begin_check();
+		if (fb_error != GL_NO_ERROR) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+			c->error_flag = fb_error;
+#endif
+			c->in_begin = 1;
+			c->begin_rejected = 1;
+			return;
+		}
+	}
 		type = p[1].i;
 	c->begin_type = type;
 	c->in_begin = 1;
+	c->begin_rejected = 0;
 	c->vertex_n = 0;
 	c->vertex_cnt = 0;
 
@@ -212,8 +225,10 @@ void glopVertex(GLParam* p) {
 #define ERROR_FLAG GL_INVALID_OPERATION
 #include "error_check.h"
 #else
-	
+
 #endif
+	if (c->begin_rejected)
+		return; /* a rejected submission touches neither color nor depth */
 
 		n = c->vertex_n;
 	cnt = c->vertex_cnt;
@@ -365,11 +380,15 @@ void glopEnd(GLParam* param) {
 #define ERROR_FLAG GL_INVALID_OPERATION
 #include "error_check.h"
 #else
-	
+
 	/* Assume it went alright.*/
 #endif
 
-
+	if (c->begin_rejected) {
+		c->begin_rejected = 0;
+		c->in_begin = 0;
+		return;
+	}
 
 #if TGL_FEATURE_GL_POLYGON == 1
 		if (c->begin_type == GL_LINE_LOOP) {

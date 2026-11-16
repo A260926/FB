@@ -102,7 +102,7 @@ void glDrawPixels(GLsizei width, GLsizei height, GLenum format, GLenum type, voi
 void glopDrawPixels(GLParam* p) {
 	GLContext* c = gl_get_context();
 	GLint sy, sx, ty, tx;
-	
+
 	GLint w = p[1].i;
 	GLint h = p[2].i;
 	V4 rastpos = c->rasterpos;
@@ -110,6 +110,14 @@ void glopDrawPixels(GLParam* p) {
 	PIXEL* d = p[3].p;
 	PIXEL* pbuf = zb->pbuf;
 	GLushort* zbuf = zb->zbuf;
+
+	/* an incomplete framebuffer has no color storage to receive pixels */
+	if (pbuf == NULL) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+		c->error_flag = GL_INVALID_FRAMEBUFFER_OPERATION;
+#endif
+		return;
+	}
 
 	GLubyte zbdw = zb->depth_write;
 	GLubyte zbdt = zb->depth_test;

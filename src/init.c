@@ -166,6 +166,7 @@ void glInit(void* zbuffer1) {
 #if TGL_FEATURE_ERROR_CHECK == 1
 	c->error_flag = GL_NO_ERROR;
 #endif
+	glInitFramebuffers();
 	/* allocate GLVertex array */
 	/*c->vertex_max = POLYGON_MAX_VERTEX;*/
 	/*c->vertex = gl_malloc(POLYGON_MAX_VERTEX * sizeof(GLVertex));*/
@@ -358,6 +359,7 @@ void glClose(void) {
 
 	GLuint i;
 	GLContext* c = gl_get_context();
+	glEndFramebuffers();
 	for (i = 0; i < 3; i++) {
 		gl_free(c->matrix_stack[i]);
 	}

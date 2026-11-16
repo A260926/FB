@@ -153,6 +153,15 @@ typedef struct GLTexture {
 	GLint handle;
 } GLTexture;
 
+/* framebuffer objects: a single color attachment backed by an RGB texture */
+#define MAX_FRAMEBUFFERS 1024
+typedef struct GLFramebuffer {
+	GLuint handle;
+	GLTexture* color_texture; /* NULL while no texture is attached */
+	GLTexture* depth_texture; /* image the private depth currently belongs to; survives detach */
+	ZBuffer* zb;		 /* own depth buffer; color aliases the texture image */
+} GLFramebuffer;
+
 /* buffers */
 #define MAX_BUFFERS 2048
 typedef struct GLBuffer {
@@ -194,6 +203,10 @@ typedef struct GLContext {
 	/* shared state */
 	GLSharedState shared_state;
 	ZBuffer* zb;
+	/* framebuffer objects */
+	GLFramebuffer** framebuffers; /* indexed by name - 1, name 0 is the default ZBuffer */
+	ZBuffer* default_zb;		  /* ZBuffer passed to glInit; never owned by an FBO */
+	GLuint framebuffer_binding;	  /* currently bound framebuffer name (0 = default) */
 	GLLight* first_light;
 	GLTexture* current_texture;
 	GLParamBuffer* current_op_buffer;
@@ -285,6 +298,7 @@ typedef struct GLContext {
 	/* glBegin / glEnd */
 	GLint in_begin;
 	GLint begin_type;
+	GLint begin_rejected; /* submission rejected by framebuffer validation */
 	GLint vertex_n, vertex_cnt;
 
 	/* opengl 1.1 arrays  */
@@ -450,6 +464,18 @@ GLSpecBuf* specbuf_get_buffer(const GLint shininess_i, const GLfloat shininess);
 
 #define ADD_OP(a, b, c) void glop##a(GLParam*);
 #include "opinfo.h"
+
+/* framebuffer.c */
+GLTexture* gl_find_texture(GLint h);
+GLFramebuffer* gl_fb_lookup(GLuint name);
+GLint gl_fb_is_complete(GLFramebuffer* fb);
+void gl_fb_sync_raster_state(ZBuffer* dst, const ZBuffer* src);
+void gl_fb_state_changed(void);
+void gl_fb_detach_texture(GLTexture* t);
+void gl_fb_refresh_texture(GLTexture* t);
+GLenum gl_fb_begin_check(void);
+void glInitFramebuffers(void);
+void glEndFramebuffers(void);
 
 /* this clip epsilon is needed to avoid some rounding errors after
    several clipping stages */

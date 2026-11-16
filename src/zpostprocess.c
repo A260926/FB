@@ -5,6 +5,8 @@
 void glPostProcess(GLuint (*postprocess)(GLint x, GLint y, GLuint pixel, GLushort z)) {
 	GLint i, j;
 	GLContext* c = gl_get_context();
+	if (c->zb->pbuf == NULL)
+		return; /* incomplete framebuffer: nothing to process */
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2)
 #endif

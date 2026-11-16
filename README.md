@@ -452,6 +452,55 @@ You can query glGetIntegerV with these new definitions
 ```
 to query the configuration of TinyGL.
 
+## FRAMEBUFFER OBJECTS (render to texture)
+
+TinyGL supports single-attachment framebuffer objects for off-screen
+rendering straight into a texture image.  The API mirrors the OpenGL
+names and parameters, but only the following subset is accepted:
+
+* `glGenFramebuffers`, `glDeleteFramebuffers`, `glBindFramebuffer`,
+  `glFramebufferTexture2D` and `glCheckFramebufferStatus`.
+* target `GL_FRAMEBUFFER`, attachment `GL_COLOR_ATTACHMENT0`,
+  texture target `GL_TEXTURE_2D`, mipmap level 0.
+* the attached texture must already hold a defined level-0 RGB image
+  sized `TGL_FEATURE_TEXTURE_DIM` by `TGL_FEATURE_TEXTURE_DIM`.
+
+There is no MRT, no renderbuffer and no window-system framebuffer.
+Framebuffer name 0 is the default `ZBuffer` handed to `glInit()`.  It is
+always reported complete.  A non-zero framebuffer is complete only while
+its attachment holds a defined texture image; otherwise
+`glCheckFramebufferStatus` returns
+`GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`.  Drawing or clearing an
+incomplete target raises `GL_INVALID_FRAMEBUFFER_OPERATION` and modifies
+nothing.
+
+### Ownership and storage
+
+* The default `ZBuffer` passed to `glInit()` is owned by the caller:
+  open it with `ZB_open()` and release it with `ZB_close()`.  `glClose()`
+  never frees it.
+* A texture object owns its color image.  Attaching it to a framebuffer
+  does not copy the pixels: the framebuffer's color buffer aliases the
+  texture's level-0 image, so geometry drawn into the framebuffer is
+  immediately visible when that texture is sampled on another target.
+  Deleting the texture detaches it from every framebuffer.
+* Each non-zero framebuffer owns a private depth buffer, allocated when
+  the object is created and freed by `glDeleteFramebuffers()` or
+  `glClose()`.  Two framebuffers may attach the same color texture: the
+  color image is shared while their depth buffers stay independent.
+* The depth buffer is cleared to the original far value the first time a
+  given image is attached, whenever a different image is attached, or
+  when the attached image is redefined with `glTexImage2D`.  Detaching
+  and re-attaching the same image keeps both its color and the depth.
+
+Sampling a texture while it is the current color attachment is rejected
+with `GL_INVALID_OPERATION` for the whole primitive submission (both
+`glBegin`/`glEnd` and array drawing); other textures sample normally.
+Framebuffer management calls execute immediately, are never compiled
+into display lists, and are illegal between `glBegin` and `glEnd`.
+A headless two-pass example lives in
+[`examples/headless_framebuffer.c`](examples/headless_framebuffer.c).
+
 ## TOGGLEABLE FEATURES
 
 See `include/zfeatures.h`

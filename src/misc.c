@@ -11,6 +11,7 @@ void glPolygonStipple(void* a) {
 	for (GLint i = 0; i < TGL_POLYGON_STIPPLE_BYTES; i++) {
 		zb->stipplepattern[i] = ((GLubyte*)a)[i];
 	}
+	gl_fb_state_changed();
 #endif
 }
 
@@ -61,6 +62,7 @@ void glopBlendFunc(GLParam* p) {
 	GLContext* c = gl_get_context();
 	c->zb->sfactor = p[1].i;
 	c->zb->dfactor = p[2].i;
+	gl_fb_state_changed();
 }
 
 void glBlendEquation(GLenum mode) {
@@ -73,11 +75,13 @@ void glBlendEquation(GLenum mode) {
 void glopBlendEquation(GLParam* p) {
 	GLContext* c = gl_get_context();
 	c->zb->blendeq = p[1].i;
+	gl_fb_state_changed();
 }
 
 void glopPointSize(GLParam* p) {
 	GLContext* c = gl_get_context();
 	c->zb->pointsize = p[1].f;
+	gl_fb_state_changed();
 }
 void glPointSize(GLfloat f) {
 	GLParam p[2];
@@ -145,6 +149,9 @@ void glopEnableDisable(GLParam* p) {
 		}
 		break;
 	}
+	/* blend, depth test and stipple state lives on the current ZBuffer */
+	if (code == GL_BLEND || code == GL_DEPTH_TEST || code == GL_POLYGON_STIPPLE)
+		gl_fb_state_changed();
 }
 
 void glopShadeModel(GLParam* p) {

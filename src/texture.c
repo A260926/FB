@@ -4,17 +4,8 @@
 
 #include "zgl.h"
 
-static GLTexture* find_texture(GLint h) {
-	GLTexture* t;
-	GLContext* c = gl_get_context();
-	t = c->shared_state.texture_hash_table[h & TEXTURE_HASH_TABLE_MASK];
-	while (t != NULL) {
-		if (t->handle == h)
-			return t;
-		t = t->next;
-	}
-	return NULL;
-}
+/* Texture lookup is shared with framebuffer.c (gl_find_texture). */
+#define find_texture gl_find_texture
 
 GLboolean glAreTexturesResident(GLsizei n, const GLuint* textures, GLboolean* residences) {
 #define RETVAL GL_FALSE
@@ -147,6 +138,8 @@ void glDeleteTextures(GLint n, const GLuint* textures) {
 				glBindTexture(GL_TEXTURE_2D, 0);
 #include "error_check.h"
 			}
+			/* detach from every framebuffer before the image storage goes away */
+			gl_fb_detach_texture(t);
 			free_texture(c, textures[i]);
 		}
 	}
@@ -215,6 +208,17 @@ void glopCopyTexImage2D(GLParam* p) {
 	GLint border = p[8].i;
 	GLContext* c = gl_get_context();
 	y -= h;
+
+	/* reading an incomplete target has no color buffer and is an error */
+	if (c->framebuffer_binding != 0) {
+		GLFramebuffer* fb = gl_fb_lookup(c->framebuffer_binding);
+		if (fb == NULL || !gl_fb_is_complete(fb)) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+			c->error_flag = GL_INVALID_FRAMEBUFFER_OPERATION;
+#endif
+			return;
+		}
+	}
 
 	if (c->readbuffer != GL_FRONT || c->current_texture == NULL || target != GL_TEXTURE_2D || border != 0 ||
 		w != TGL_FEATURE_TEXTURE_DIM || /*TODO Implement image interp*/
@@ -307,6 +311,8 @@ void glopTexImage1D(GLParam* p) {
 #endif
 	if (do_free)
 		gl_free(pixels1);
+	/* framebuffers attached to this image must follow the new storage */
+	gl_fb_refresh_texture(c->current_texture);
 }
 void glopTexImage2D(GLParam* p) {
 	GLint target = p[1].i;
@@ -367,6 +373,8 @@ void glopTexImage2D(GLParam* p) {
 #endif
 	if (do_free)
 		gl_free(pixels1);
+	/* framebuffers attached to this image must follow the new storage */
+	gl_fb_refresh_texture(c->current_texture);
 }
 
 /* TODO: not all tests are done */

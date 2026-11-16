@@ -189,6 +189,7 @@ void glPolygonMode(GLint face, GLint mode) {
 void glDepthMask(GLint i) {
 #include "error_check_no_context.h"
 	gl_get_context()->zb->depth_write = (i == GL_TRUE);
+	gl_fb_state_changed();
 }
 /* glEnable / glDisable */
 /* TODO go to glopEnableDisable and add error checking there on values there.*/

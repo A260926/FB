@@ -6,6 +6,7 @@ set(tinygl_srcs
   arrays.c
   clear.c
   clip.c
+  framebuffer.c
   get.c
   image_util.c
   init.c

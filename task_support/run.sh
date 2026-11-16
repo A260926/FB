@@ -16,7 +16,7 @@ cc -std=c99 -O1 -I. -Iinclude -Isrc -include task_support/build_config.h example
 rm -f .task-build/framebuffer.ppm
 .task-build/framebuffer-example
 test -s .task-build/framebuffer.ppm
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/tinygl-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

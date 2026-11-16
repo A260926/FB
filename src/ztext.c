@@ -44,8 +44,14 @@ void glopPlotPixel(GLParam* p) {
 	GLContext* c = gl_get_context();
 	GLint x = p[1].i;
 	PIXEL pix = p[2].ui;
+	if (c->zb->pbuf == NULL) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+		c->error_flag = GL_INVALID_FRAMEBUFFER_OPERATION;
+#endif
+		return;
+	}
 	c->zb->pbuf[x] = pix;
-	
+
 }
 
 void glPlotPixel(GLint x, GLint y, GLuint pix) {

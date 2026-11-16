@@ -22,5 +22,15 @@ void glopClear(GLParam* p) {
 
 	/* TODO : correct value of Z */
 
+	/* an incomplete framebuffer cannot be cleared and leaves every target untouched */
+	if (c->framebuffer_binding != 0) {
+		GLFramebuffer* fb = gl_fb_lookup(c->framebuffer_binding);
+		if (fb == NULL || !gl_fb_is_complete(fb)) {
+#if TGL_FEATURE_ERROR_CHECK == 1
+			c->error_flag = GL_INVALID_FRAMEBUFFER_OPERATION;
+#endif
+			return;
+		}
+	}
 	ZB_clear(c->zb, mask & GL_DEPTH_BUFFER_BIT, z, mask & GL_COLOR_BUFFER_BIT, r, g, b);
 }

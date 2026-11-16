@@ -606,6 +606,13 @@ enum {
 	GL_STACK_OVERFLOW		= 0x0503,
 	GL_STACK_UNDERFLOW		= 0x0504,
 	GL_OUT_OF_MEMORY		= 0x0505,
+	GL_INVALID_FRAMEBUFFER_OPERATION = 0x0506,
+
+	/* Framebuffer objects (single color attachment, RGB texture level 0) */
+	GL_FRAMEBUFFER				= 0x8D40,
+	GL_COLOR_ATTACHMENT0			= 0x8CE0,
+	GL_FRAMEBUFFER_COMPLETE			= 0x8CD5,
+	GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT	= 0x8CD6,
 
 	/*
 	 * 1.0 Extensions
@@ -1009,6 +1016,14 @@ void glDebug(GLint mode);
 
 void glInit(void *zbuffer);
 void glClose(void);
+
+/* framebuffer objects: render directly into an RGB texture's image */
+void glGenFramebuffers(GLsizei n, GLuint *framebuffers);
+void glDeleteFramebuffers(GLsizei n, const GLuint *framebuffers);
+void glBindFramebuffer(GLenum target, GLuint framebuffer);
+void glFramebufferTexture2D(GLenum target, GLenum attachment,
+                            GLenum textarget, GLuint texture, GLint level);
+GLenum glCheckFramebufferStatus(GLenum target);
 
 #ifdef __cplusplus
 }
