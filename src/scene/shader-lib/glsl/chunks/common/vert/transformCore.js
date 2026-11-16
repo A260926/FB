@@ -40,6 +40,15 @@ uniform mat4 matrix_model;
         return getBoneMatrix(vertex_boneIndices);
     }
 
+#elif defined(INSTANCED_SKIN)
+    #include "instancedSkinVS"
+
+    mat4 getModelMatrix() {
+        // the model matrix applies the world transform once, then the instance matrix positions
+        // this copy of the mesh, and the skin matrix poses it
+        return matrix_model * getInstanceMatrix() * getInstancedSkinMatrix(vertex_boneIndices, vertex_boneWeights);
+    }
+
 #elif defined(SKIN)
     #include "skinVS"
 

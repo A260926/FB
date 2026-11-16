@@ -14,7 +14,7 @@ import {
     SHADERDEF_LM, SHADERDEF_DIRLM, SHADERDEF_LMAMBIENT, SHADERDEF_INSTANCING, SHADERDEF_MORPH_TEXTURE_BASED_INT,
     SHADERDEF_INSTANCEINDEX, SHADERDEF_AFFECT_DYNAMIC, SHADERDEF_AFFECT_LIGHTMAPPED, SHADERDEF_BAKE,
     SHADERDEF_UV2, SHADERDEF_UV3, SHADERDEF_UV4, SHADERDEF_UV5, SHADERDEF_UV6, SHADERDEF_UV7,
-    SHADERDEF_CLIP,
+    SHADERDEF_CLIP, SHADERDEF_INSTANCED_SKIN,
     SHADOW_CASCADE_ALL,
     instanceLightmapUniformNames
 } from './constants.js';
@@ -29,6 +29,8 @@ import { hash32Fnv1a } from '../core/hash.js';
 import { array } from '../core/array-utils.js';
 import { PickerId } from './picker-id.js';
 import { isViewTexture } from './renderer/view-textures.js';
+import { InstancedSkin } from './instanced-skin.js';
+import { StandardMaterial } from './materials/standard-material.js';
 
 /**
  * @import { Camera } from './camera.js'
@@ -650,6 +652,15 @@ class MeshInstance {
     _skinInstance = null;
 
     /**
+     * The instanced skin drawing multiple live skeletons with one instanced draw, or null. See
+     * {@link MeshInstance#setInstancedSkin}.
+     *
+     * @type {InstancedSkin|null}
+     * @private
+     */
+    _instancedSkin = null;
+
+    /**
      * @type {MorphInstance|null}
      * @private
      */
@@ -820,6 +831,10 @@ class MeshInstance {
      */
     set mesh(mesh) {
 
+        if (mesh && this._instancedSkin) {
+            throw new RangeError('MeshInstance#mesh: the mesh cannot be changed while an instanced skin is active. Call setInstancedSkin(null) first.');
+        }
+
         if (mesh !== this._mesh) {
 
             if (this._mesh) {
@@ -881,6 +896,12 @@ class MeshInstance {
         // callback function returning world space aabb
         if (this._updateAabbFunc) {
             return this._updateAabbFunc(this._aabb);
+        }
+
+        // the instanced skin keeps its own world space bounds, evaluated before culling from the
+        // bone influence boxes and the pose it draws with - never from per-vertex skinning
+        if (this._instancedSkin) {
+            return this._instancedSkin.getAabb(this);
         }
 
         // use local space override aabb if specified
@@ -1063,6 +1084,10 @@ class MeshInstance {
      */
     set material(material) {
 
+        if (material && this._instancedSkin && !(material instanceof StandardMaterial)) {
+            throw new RangeError('MeshInstance#material: an instanced skin only supports StandardMaterial. Call setInstancedSkin(null) before assigning another material.');
+        }
+
         this.clearShaders();
 
         const prevMat = this._material;
@@ -1167,6 +1192,9 @@ class MeshInstance {
     }
 
     set batching(val) {
+        if (val && this._instancedSkin) {
+            throw new RangeError('MeshInstance#batching: batching is not supported while an instanced skin is active.');
+        }
         this._updateShaderDefs(val ? (this._shaderDefs | SHADERDEF_BATCH) : (this._shaderDefs & ~SHADERDEF_BATCH));
     }
 
@@ -1181,6 +1209,9 @@ class MeshInstance {
      * @type {SkinInstance|null}
      */
     set skinInstance(val) {
+        if (val && this._instancedSkin) {
+            throw new RangeError('MeshInstance#skinInstance: a skinInstance cannot be assigned while an instanced skin is enabled. Call setInstancedSkin(null) first.');
+        }
         this._skinInstance = val;
         this._updateShaderDefs(val ? (this._shaderDefs | SHADERDEF_SKIN) : (this._shaderDefs & ~SHADERDEF_SKIN));
         this._setupSkinUpdate();
@@ -1196,12 +1227,102 @@ class MeshInstance {
     }
 
     /**
+     * Enables or replaces the instanced skin of this mesh instance: several live skeletons of the
+     * mesh, each sampling its own animation and moved by its own root node, drawn in one
+     * hardware-instanced draw from a shared pose atlas. See {@link InstancedSkin}.
+     *
+     * `entries` lists the characters in draw order. Each entry supplies the borrowed
+     * {@link SkinInstance}, whose bones must already be bound, and the node that is the coordinate
+     * root of that copy of the mesh. The skin of every entry must be exactly the mesh's skin, and
+     * every entry must have the same non-zero number of bones. The same skin instance may appear
+     * more than once - even with different nodes. The passed records are copied, so the array can
+     * be changed or released after the call; only the borrowed nodes, bones and skin are read
+     * afterwards.
+     *
+     * The call validates everything first and only then publishes the new state, so an invalid
+     * list, a singular or non-finite node matrix, or an atlas too large for the device throws a
+     * {@link RangeError} without changing the previous atlas, buffer, instance count or shader
+     * state. Passing an empty array is valid and leaves zero instances; passing `null` disables the
+     * mode and releases only the resources this mode owns.
+     *
+     * Only four-weight triangle meshes with {@link StandardMaterial} are supported. Morphing,
+     * batching, indirect drawing, multi-draw and custom instance buffers cannot be combined with
+     * this mode, nor can a mesh whose texture coordinate sets 6 or 7 occupy the default instance
+     * attribute locations; such combinations throw a {@link RangeError}. Every node must be
+     * reachable with a positive determinant relative to the node of this mesh instance, so a
+     * character cannot be mirrored relative to the draw owner while reflecting together with it.
+     *
+     * The per-frame pose, the instance matrices and the world bounds are evaluated by the
+     * renderer before culling, and uploaded from the same result it draws with.
+     *
+     * @param {{skinInstance: SkinInstance, node: GraphNode}[]|null} entries - The entries in draw
+     * order, an empty array for zero instances, or null to disable the mode.
+     * @returns {MeshInstance} This mesh instance, for chaining.
+     * @example
+     * meshInstance.setInstancedSkin([
+     *     { skinInstance: skinInstanceA, node: rootA },
+     *     { skinInstance: skinInstanceB, node: rootB }
+     * ]);
+     * @see {@link InstancedSkin}
+     */
+    setInstancedSkin(entries) {
+
+        // disabling - release only what this mode owns
+        if (entries === null) {
+            this._destroyInstancedSkin();
+            this._updateShaderDefs(this._shaderDefs & ~SHADERDEF_INSTANCED_SKIN);
+            this._setupSkinUpdate();
+            return this;
+        }
+
+        // validate completely before publishing anything
+        const instancedSkin = InstancedSkin.create(this, entries);
+
+        // replace - the old atlas and buffer are released exactly once
+        this._destroyInstancedSkin();
+        this._instancedSkin = instancedSkin;
+
+        this._updateShaderDefs(this._shaderDefs | SHADERDEF_INSTANCED_SKIN);
+
+        // instanced skinning always runs before culling, as the bounds depend on the pose
+        this._setupSkinUpdate();
+        return this;
+    }
+
+    /**
+     * Gets the instanced skin drawing multiple live skeletons with one draw, or null when the mode
+     * is disabled. See {@link MeshInstance#setInstancedSkin}.
+     *
+     * @type {InstancedSkin|null}
+     */
+    get instancedSkin() {
+        return this._instancedSkin;
+    }
+
+    /**
+     * Releases the instanced skin of this mesh instance, if any. The borrowed skin instances,
+     * bones, mesh and material are not touched.
+     *
+     * @private
+     */
+    _destroyInstancedSkin() {
+        if (this._instancedSkin) {
+            this._instancedSkin.destroy();
+            this._instancedSkin = null;
+        }
+    }
+
+    /**
      * Sets the morph instance managing morphing of this mesh instance. Set to null if morphing is
      * not used.
      *
      * @type {MorphInstance|null}
      */
     set morphInstance(val) {
+
+        if (val && this._instancedSkin) {
+            throw new RangeError('MeshInstance#morphInstance: a morphInstance cannot be assigned while an instanced skin is enabled. Call setInstancedSkin(null) first.');
+        }
 
         // release existing
         this._morphInstance?.destroy();
@@ -1422,6 +1543,11 @@ class MeshInstance {
 
     destroy() {
 
+        // only the atlas and instance buffer owned by this mode are released - the borrowed skin
+        // instances, bones and material are left alone. Done first, as dropping the mesh is
+        // rejected while the mode is active
+        this._destroyInstancedSkin();
+
         const mesh = this.mesh;
         if (mesh) {
 
@@ -1564,6 +1690,9 @@ class MeshInstance {
      * the whole instance is always rendered.
      */
     setInstancing(vertexBuffer, cull = false) {
+        if (vertexBuffer && this._instancedSkin) {
+            throw new RangeError('MeshInstance#setInstancing: custom hardware instancing cannot be enabled while an instanced skin is active. Call setInstancedSkin(null) first.');
+        }
         if (vertexBuffer) {
             if (vertexBuffer === true) {
                 this.instancingData = new InstancingData(0);
@@ -1602,6 +1731,9 @@ class MeshInstance {
      * @param {number} [count] - Optional number of consecutive slots to use. Defaults to 1.
      */
     setIndirect(camera, slot, count = 1) {
+        if (slot !== -1 && this._instancedSkin) {
+            throw new RangeError('MeshInstance#setIndirect: indirect drawing is not supported while an instanced skin is active.');
+        }
         const key = camera?.camera.id ?? null;
 
         // disable when slot is -1
@@ -1636,6 +1768,9 @@ class MeshInstance {
      * @returns {DrawCommands|undefined} The commands container to populate with sub-draw commands.
      */
     setMultiDraw(camera, maxCount = 1) {
+        if (maxCount !== 0 && this._instancedSkin) {
+            throw new RangeError('MeshInstance#setMultiDraw: multi-draw is not supported while an instanced skin is active.');
+        }
         const key = camera?.camera.id ?? null;
         let cmd;
 
@@ -2082,6 +2217,9 @@ class MeshInstance {
      * @ignore
      */
     setCustomAabb(aabb) {
+        if (aabb && this._instancedSkin) {
+            throw new RangeError('MeshInstance#setCustomAabb: the bounds of an instanced skin are evaluated from its pose, and cannot be overridden. Call setInstancedSkin(null) first.');
+        }
         if (aabb) {
             // store the override aabb
             if (this._customAabb) {

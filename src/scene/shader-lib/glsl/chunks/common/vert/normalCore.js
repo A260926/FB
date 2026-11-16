@@ -33,7 +33,7 @@ vec3 getLocalNormal(vec3 vertexNormal) {
 
 // the normal matrix is the upper 3x3 of the model matrix, exact for a uniform scale, for skinned, batched
 // and instanced meshes, which have no normal matrix of their own, and in the shadow pass, which sets none
-#if defined(SKIN) || defined(BATCH) || defined(INSTANCING) || defined(SHADOW_PASS)
+#if defined(SKIN) || defined(BATCH) || defined(INSTANCING) || defined(INSTANCED_SKIN) || defined(SHADOW_PASS)
     mat3 getNormalMatrix(mat4 modelMatrix) {
         return mat3(modelMatrix[0].xyz, modelMatrix[1].xyz, modelMatrix[2].xyz);
     }

@@ -397,6 +397,8 @@ class Renderer {
         // Uniforms
         const scope = graphicsDevice.scope;
         this.boneTextureId = scope.resolve('texture_poseMap');
+        this.instancedSkinPoseMapId = scope.resolve('texture_instancedSkinPoseMap');
+        this.instancedSkinBoneCountId = scope.resolve('instancedSkin_boneCount');
 
         this.modelMatrixId = scope.resolve('matrix_model');
         this.normalMatrixId = scope.resolve('matrix_normal');
@@ -705,11 +707,16 @@ class Renderer {
         // #endif
 
         for (let i = 0; i < drawCallsCount; i++) {
-            const si = drawCalls[i].skinInstance;
+            const drawCall = drawCalls[i];
+            const si = drawCall.skinInstance;
             if (si) {
-                si.updateMatrices(drawCalls[i].node, _skinUpdateIndex);
+                si.updateMatrices(drawCall.node, _skinUpdateIndex);
                 si._dirty = true;
             }
+
+            // the instanced skin evaluates the pose, the instance matrices and the world bounds
+            // from the same node transforms the draw will use, before culling
+            drawCall.instancedSkin?.update(drawCall);
         }
 
         // #if _PROFILER
@@ -741,6 +748,22 @@ class Renderer {
                     skin.updateMatrixPalette(drawCall.node, _skinUpdateIndex);
                     skin._dirty = false;
                 }
+            }
+
+            const instancedSkin = drawCall.instancedSkin;
+            if (instancedSkin) {
+
+                // every entry has its own hierarchy of bones, which can be outside the scene
+                // subtree of the draw owner
+                drawCall.node.markDeformedRendered(renderVersion);
+                const entries = instancedSkin.entries;
+                for (let i = 0; i < entries.length; i++) {
+                    entries[i].node.markDeformedRendered(renderVersion);
+                    entries[i].skinInstance.rootBone?.markDeformedRendered(renderVersion);
+                }
+
+                // uploads the pose and instance matrices evaluated before culling
+                instancedSkin.upload();
             }
         }
 
@@ -834,6 +857,38 @@ class Renderer {
 
             const boneTexture = skinInstance.boneTexture;
             this.boneTextureId.setValue(boneTexture);
+
+            // a draw of the previous instanced skin shader may have set its uniforms - clear them
+            // so switching back to single skin leaves no atlas uniform behind
+            if (this.instancedSkinPoseMapId.value !== null) {
+                this.instancedSkinPoseMapId.setValue(null);
+                this.instancedSkinBoneCountId.setValue(0);
+            }
+            return;
+        }
+
+        const instancedSkin = meshInstance.instancedSkin;
+        if (instancedSkin) {
+            this._skinDrawCalls++;
+
+            // the shaders of this variant read only the instanced atlas, never the single-bone
+            // dynamic batch palette
+            this.instancedSkinPoseMapId.setValue(instancedSkin.boneTexture);
+            this.instancedSkinBoneCountId.setValue(instancedSkin.boneCount);
+            if (this.boneTextureId.value !== null) {
+                this.boneTextureId.setValue(null);
+            }
+            return;
+        }
+
+        // neither skinning path - clear the uniforms of a previous skinned draw, so a draw that
+        // does not skin cannot read a stale atlas
+        if (this.instancedSkinPoseMapId.value !== null) {
+            this.instancedSkinPoseMapId.setValue(null);
+            this.instancedSkinBoneCountId.setValue(0);
+        }
+        if (this.boneTextureId.value !== null) {
+            this.boneTextureId.setValue(null);
         }
     }
 
@@ -1422,8 +1477,9 @@ class Renderer {
                     _tempMeshInstances.push(meshInst);
                 }
 
-                // collect skinned mesh instances
-                if (meshInst.skinInstance) {
+                // collect skinned mesh instances, including the instanced skin, whose pose must be
+                // updated before culling
+                if (meshInst.skinInstance || meshInst.instancedSkin) {
                     _tempMeshInstancesSkinned.push(meshInst);
                 }
             }

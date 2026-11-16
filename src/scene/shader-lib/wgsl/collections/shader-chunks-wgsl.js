@@ -53,6 +53,7 @@ import quadVS from '../chunks/common/vert/quad.js';
 import indirectCoreCS from '../chunks/common/comp/indirect-core.js';
 import immediateLinePS from '../chunks/internal/frag/immediateLine.js';
 import immediateLineVS from '../chunks/internal/vert/immediateLine.js';
+import instancedSkinVS from '../chunks/common/vert/instancedSkin.js';
 import iridescenceDiffractionPS from '../chunks/lit/frag/iridescenceDiffraction.js';
 import iridescencePS from '../chunks/standard/frag/iridescence.js';
 import iridescenceThicknessPS from '../chunks/standard/frag/iridescenceThickness.js';
@@ -233,6 +234,7 @@ const shaderChunksWGSL = {
     indirectCoreCS,
     immediateLinePS,
     immediateLineVS,
+    instancedSkinVS,
     iridescenceDiffractionPS,
     iridescencePS,
     iridescenceThicknessPS,

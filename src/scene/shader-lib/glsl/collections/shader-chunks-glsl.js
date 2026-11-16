@@ -53,6 +53,7 @@ import glossPS from '../chunks/standard/frag/gloss.js';
 import quadVS from '../chunks/common/vert/quad.js';
 import immediateLinePS from '../chunks/internal/frag/immediateLine.js';
 import immediateLineVS from '../chunks/internal/vert/immediateLine.js';
+import instancedSkinVS from '../chunks/common/vert/instancedSkin.js';
 import iridescenceDiffractionPS from '../chunks/lit/frag/iridescenceDiffraction.js';
 import iridescencePS from '../chunks/standard/frag/iridescence.js';
 import iridescenceThicknessPS from '../chunks/standard/frag/iridescenceThickness.js';
@@ -231,6 +232,7 @@ const shaderChunksGLSL = {
     quadVS,
     immediateLinePS,
     immediateLineVS,
+    instancedSkinVS,
     iridescenceDiffractionPS,
     iridescencePS,
     iridescenceThicknessPS,

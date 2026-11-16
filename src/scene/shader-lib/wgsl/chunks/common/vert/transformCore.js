@@ -44,6 +44,17 @@ export default /* wgsl */`
             return getBoneMatrix(vertex_boneIndices);
         }
 
+    #elif defined(INSTANCED_SKIN)
+        #include "instancedSkinVS"
+
+        uniform matrix_model: mat4x4f;
+
+        fn getModelMatrix() -> mat4x4f {
+            // the model matrix applies the world transform once, then the instance matrix positions
+            // this copy of the mesh, and the skin matrix poses it
+            return uniform.matrix_model * getInstanceMatrix() * getInstancedSkinMatrix(vertex_boneIndices, vertex_boneWeights);
+        }
+
     #elif defined(SKIN)
         #include "skinVS"
 

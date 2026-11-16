@@ -201,7 +201,7 @@ class ShadowRenderer {
                     meshInstance.visibleThisFrame = true;
                     visible.push(meshInstance);
 
-                    if (meshInstance.skinInstance || meshInstance.morphInstance) {
+                    if (meshInstance.skinInstance || meshInstance.instancedSkin || meshInstance.morphInstance) {
                         processing.add(meshInstance);
                     }
                 }
@@ -595,6 +595,12 @@ class ShadowRenderer {
                 continue;
             }
 
+            // an instanced skin with no entries draws nothing
+            const instancedSkin = meshInstance.instancedSkin;
+            if (instancedSkin && instancedSkin.count === 0) {
+                continue;
+            }
+
             meshInstance.ensureMaterial(device);
             const material = meshInstance.material;
 
@@ -655,6 +661,11 @@ class ShadowRenderer {
                 device.setVertexBuffer(instancingData.vertexBuffer);
             }
 
+            // the instanced skin supplies its own per-instance matrix buffer and instance count
+            if (instancedSkin) {
+                device.setVertexBuffer(instancedSkin.vertexBuffer);
+            }
+
             // mesh / mesh normal matrix - on the scope, or in the mesh instance storage for a shader
             // reading it, which the draw indexes by its first instance
             renderer.setMeshInstanceMatrices(meshInstance);
@@ -665,7 +676,7 @@ class ShadowRenderer {
             // draw
             const style = meshInstance.renderStyle;
             const indirectData = meshInstance.getDrawCommands(camera);
-            device.draw(mesh.primitive[style], mesh.indexBuffer[style], instancingData?.count, indirectData, true, true, firstInstance);
+            device.draw(mesh.primitive[style], mesh.indexBuffer[style], instancedSkin ? instancedSkin.count : instancingData?.count, indirectData, true, true, firstInstance);
 
             // the parameters its material does not have are restored to the values they replaced,
             // such as global ones, whatever the next caster - no material sets them again
@@ -688,7 +699,7 @@ class ShadowRenderer {
             });
 
             renderer._shadowDrawCalls++;
-            if (instancingData) {
+            if (instancingData || instancedSkin) {
                 renderer._instancedDrawCalls++;
             }
 

@@ -382,6 +382,20 @@ class LitShader {
             }
         }
 
+        // instanced skin - object level define. The bones and the instance matrices are fetched
+        // from attributes and the pose atlas, so this variant has its own vertex transform and
+        // never uses the single bone palette of the SKIN or BATCH variants.
+        if (options.instancedSkin) {
+
+            attributes.vertex_boneIndices = SEMANTIC_BLENDINDICES;
+            attributes.vertex_boneWeights = SEMANTIC_BLENDWEIGHT;
+            attributes.instance_line1 = SEMANTIC_ATTR11;
+            attributes.instance_line2 = SEMANTIC_ATTR12;
+            attributes.instance_line3 = SEMANTIC_ATTR14;
+            attributes.instance_line4 = SEMANTIC_ATTR15;
+            this.sharedDefineSet(true, 'INSTANCED_SKIN', true);
+        }
+
         // attribute locations are fixed per semantic, so two attributes on one location cannot share
         // a shader. UV sets 6 and 7 sit on the locations of the default instancing format and UV
         // sets 3 and 4 on those of the MSDF text attributes.

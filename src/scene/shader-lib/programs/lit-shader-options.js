@@ -54,6 +54,12 @@ class LitShaderOptions {
     batch = false;
 
     /**
+     * If the mesh instance draws multiple live skeletons with an instanced pose atlas, see
+     * {@link MeshInstance#setInstancedSkin}.
+     */
+    instancedSkin = false;
+
+    /**
      * If hardware instancing compatible shader should be generated. Transform is read from
      * per-instance {@link VertexBuffer} instead of shader's uniforms.
      */

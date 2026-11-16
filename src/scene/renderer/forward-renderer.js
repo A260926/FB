@@ -246,6 +246,11 @@ class ForwardRenderer extends Renderer {
                 continue;
             }
 
+            // an instanced skin with no entries draws nothing
+            if (drawCall.instancedSkin && drawCall.instancedSkin.count === 0) {
+                continue;
+            }
+
             drawCall.ensureMaterial(device);
             const material = drawCall.material;
 
@@ -366,6 +371,13 @@ class ForwardRenderer extends Renderer {
                 device.setVertexBuffer(instancingData.vertexBuffer);
             }
 
+            // the instanced skin supplies its own per-instance matrix buffer and instance count
+            const instancedSkin = drawCall.instancedSkin;
+            if (instancedSkin) {
+                device.setVertexBuffer(instancedSkin.vertexBuffer);
+            }
+            const numInstances = instancedSkin ? instancedSkin.count : instancingData?.count;
+
             // mesh / mesh normal matrix - on the scope, or in the mesh instance storage for a shader
             // reading it, which the draw indexes by its first instance. The scope is set for it too,
             // as a fragment shader can still read the matrix_model uniform
@@ -396,18 +408,18 @@ class ForwardRenderer extends Renderer {
 
                     const first = v === viewListStart;
                     const last = v === viewListEnd - 1;
-                    device.draw(mesh.primitive[style], indexBuffer, instancingData?.count, indirectData, first, last, firstInstance);
+                    device.draw(mesh.primitive[style], indexBuffer, numInstances, indirectData, first, last, firstInstance);
 
                     this._forwardDrawCalls++;
-                    if (drawCall.instancingData) {
+                    if (instancingData || instancedSkin) {
                         this._instancedDrawCalls++;
                     }
                 }
             } else {
-                device.draw(mesh.primitive[style], indexBuffer, instancingData?.count, indirectData, true, true, firstInstance);
+                device.draw(mesh.primitive[style], indexBuffer, numInstances, indirectData, true, true, firstInstance);
 
                 this._forwardDrawCalls++;
-                if (drawCall.instancingData) {
+                if (instancingData || instancedSkin) {
                     this._instancedDrawCalls++;
                 }
             }

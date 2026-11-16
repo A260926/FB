@@ -817,6 +817,10 @@ export const SHADERDEF_UV7 = 16777216;
 // the mesh instance has clipping planes, see MeshInstance#clippingPlanes
 export const SHADERDEF_CLIP = 33554432;
 
+// the mesh instance draws multiple live skeletons with an instanced pose atlas, see
+// MeshInstance#setInstancedSkin
+export const SHADERDEF_INSTANCED_SKIN = 67108864;
+
 /**
  * The shadow map is not to be updated.
  *

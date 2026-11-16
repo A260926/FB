@@ -84,6 +84,94 @@ Want to play with the code yourself? Edit it on [CodePen](https://codepen.io/pla
 
 A full guide to setting up a local development environment based on the PlayCanvas Engine can be found [here](https://developer.playcanvas.com/user-manual/engine/standalone/).
 
+## Instanced skin
+
+A single mesh shared by many characters can carry several live skeletons in one instanced draw
+call, without baking the animation into a per-vertex texture. Each character samples its own
+animation, runs its own IK and moves its own parent node every frame.
+
+```js
+import { MeshInstance } from 'playcanvas';
+
+meshInstance.setInstancedSkin([
+    { skinInstance: skinInstanceA, node: rootA },
+    { skinInstance: skinInstanceB, node: rootB }
+]);
+```
+
+- `MeshInstance#setInstancedSkin` takes the entries in draw order. Part of the public API
+  since 2.25.0.
+- `InstancedSkin` is the atlas and instance buffer the mode owns. It is created by
+  `setInstancedSkin` and is not constructed directly.
+
+### Interface
+
+`entries` lists `{ skinInstance, node }` records in draw order:
+
+- `skinInstance` is a `SkinInstance` whose `bones` are already bound.
+- `node` is the coordinate root of that copy of the character mesh.
+- The same `skinInstance` may appear more than once, even with different nodes.
+- The record array is copied. It can be released or changed after the call; only the borrowed
+  nodes, bones and skin are read afterwards.
+
+`setInstancedSkin` returns `this`. Passing an empty array is valid and leaves zero instances.
+Passing `null` disables the mode. While the mode is enabled, the older setters reject conflicting
+assignments: `skinInstance`, `morphInstance`, `setInstancing` and `setMultiDraw` throw a
+`RangeError`.
+
+The mode only supports four-weight triangle meshes with a `StandardMaterial`. Morphing, batching,
+indirect drawing, multi-draw and custom instance buffers cannot be combined with it, nor can a mesh
+or material whose UV sets 6 and 7 occupy the default instance attribute locations. These
+combinations throw a `RangeError` rather than being silently ignored.
+
+`Material`/`mesh` and inverse bind pose are shared. Every entry's skin must be exactly the mesh's
+skin, and every entry must have the same non-zero number of bones. Weights must be finite and
+non-negative, one point's weights must sum to 1 within `1e-5`, and a positive weight must name a
+valid bone.
+
+Face orientation follows the existing rules: each entry's node must have a positive determinant
+relative to the draw owner's node. The owner and the entries can reflect together, but two
+characters with different chirality cannot be mixed in one instanced skin.
+
+### Ownership
+
+The mode borrows the `SkinInstance`s, their bones, the mesh and the material. It never rewrites a
+borrowed `matrices`, `matrixPalette`, animation state or resources. It owns only the pose atlas
+texture and the instance matrix vertex buffer, and releases exactly those on replacement or
+disable (once each). `MeshInstance.destroy` releases the mode's resources but not the borrowed
+objects; the mesh's reference counting is unchanged.
+
+`InstancedSkin` exposes read-only `boneCount`, `count`, `boneTexture` and `matrixPalette` for
+debugging. The palette includes any tail padding of the texture. It also exposes the instance
+matrix `vertexBuffer`.
+
+### Stages
+
+1. **Pose evaluation.** Before culling, `Renderer.updateCpuSkinMatrices` evaluates every entry: the
+   bone matrices into the atlas, the instance matrices into the buffer, and the world bounds from
+   the mesh's bone influence boxes. No vertex is skinned on the CPU to find the bounds.
+2. **Culling.** `MeshInstance.aabb` returns the bounds evaluated in the same step, so a character
+   is never culled with a stale pose.
+3. **GPU upload.** `Renderer.updateGpuSkinMatrices` uploads exactly the pose and instance data the
+   previous step produced, once per change.
+4. **Draw binding.** `Renderer.setSkinning` binds the atlas and the bone count for the forward,
+   shadow and depth passes, and clears the single-bone pose map, so switching back to normal
+   skinning leaves no atlas uniform behind.
+
+The shader finds each instance's bone block by the instance index. The atlas is laid out by
+instance and then by bone, using the 12 float row layout of `SkinInstance.matrixPalette`, three
+RGBA32F texels per bone. Its width is a multiple of 3, so no bone crosses a row, and both
+dimensions stay within `device.maxTextureSize`.
+
+Each entry's bone matrix is `inverse(node.world) * bone.world * inverseBind`, and its instance
+matrix is `inverse(meshInstance.node.world) * node.world`. The vertex shader therefore computes
+`model * instance * skin`, so the world transform is applied exactly once. This is implemented for
+both GLSL and WGSL, with an independent variant and define so the old normal skin, matrix
+instancing and shader cache keys keep working unchanged.
+
+Run `bash task_support/run.sh target` to run the target tests and the example, followed by the
+normal single-skin baseline.
+
 ## Features
 
 PlayCanvas is a fully-featured game engine.
