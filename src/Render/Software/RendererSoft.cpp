@@ -5,6 +5,7 @@
  */
 
 #include "RendererSoft.h"
+#include "CommandListSoft.h"
 #include "Base/SIMD.h"
 #include "Base/HashUtils.h"
 #include "FramebufferSoft.h"
@@ -173,16 +174,17 @@ void RendererSoft::processVertexShader() {
   varyingsAlignedSize_ = MemoryUtils::alignedSize(varyingsCnt_ * sizeof(float));
   varyingsAlignedCnt_ = varyingsAlignedSize_ / sizeof(float);
 
-  varyings_ = MemoryUtils::makeAlignedBuffer<float>(vao_->vertexCnt * varyingsAlignedCnt_);
+  size_t vertexCnt = vao_->vertexCount();
+  varyings_ = MemoryUtils::makeAlignedBuffer<float>(vertexCnt * varyingsAlignedCnt_);
   float *varyingBuffer = varyings_.get();
 
-  uint8_t *vertexPtr = vao_->vertexes.data();
-  vertexes_.resize(vao_->vertexCnt);
-  for (int idx = 0; idx < vao_->vertexCnt; idx++) {
+  const uint8_t *vertexPtr = vao_->vertexData();
+  vertexes_.resize(vertexCnt);
+  for (int idx = 0; idx < vertexCnt; idx++) {
     VertexHolder &holder = vertexes_[idx];
     holder.discard = false;
     holder.index = idx;
-    holder.vertex = vertexPtr;
+    holder.vertex = const_cast<uint8_t *>(vertexPtr);
     holder.varyings = (varyingsAlignedSize_ > 0) ? (varyingBuffer + idx * varyingsAlignedCnt_) : nullptr;
     vertexShaderImpl(holder);
     vertexPtr += vao_->vertexStride;
@@ -407,31 +409,34 @@ void RendererSoft::processColorBlending(int x, int y, glm::vec4 &color, int samp
 }
 
 void RendererSoft::processPointAssembly() {
-  primitives_.resize(vao_->indicesCnt);
+  const int32_t *indices = vao_->indexData();
+  primitives_.resize(vao_->indexCount());
   for (int idx = 0; idx < primitives_.size(); idx++) {
     auto &point = primitives_[idx];
-    point.indices[0] = vao_->indices[idx];
+    point.indices[0] = indices[idx];
     point.discard = false;
   }
 }
 
 void RendererSoft::processLineAssembly() {
-  primitives_.resize(vao_->indicesCnt / 2);
+  const int32_t *indices = vao_->indexData();
+  primitives_.resize(vao_->indexCount() / 2);
   for (int idx = 0; idx < primitives_.size(); idx++) {
     auto &line = primitives_[idx];
-    line.indices[0] = vao_->indices[idx * 2];
-    line.indices[1] = vao_->indices[idx * 2 + 1];
+    line.indices[0] = indices[idx * 2];
+    line.indices[1] = indices[idx * 2 + 1];
     line.discard = false;
   }
 }
 
 void RendererSoft::processPolygonAssembly() {
-  primitives_.resize(vao_->indicesCnt / 3);
+  const int32_t *indices = vao_->indexData();
+  primitives_.resize(vao_->indexCount() / 3);
   for (int idx = 0; idx < primitives_.size(); idx++) {
     auto &triangle = primitives_[idx];
-    triangle.indices[0] = vao_->indices[idx * 3];
-    triangle.indices[1] = vao_->indices[idx * 3 + 1];
-    triangle.indices[2] = vao_->indices[idx * 3 + 2];
+    triangle.indices[0] = indices[idx * 3];
+    triangle.indices[1] = indices[idx * 3 + 1];
+    triangle.indices[2] = indices[idx * 3 + 2];
     triangle.discard = false;
   }
 }

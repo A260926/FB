@@ -103,6 +103,80 @@ class Renderer {
 };
 ```
 
+## Recorded Command Lists (Software Renderer)
+
+The software backend can also record a group of CPU draws once and hand the
+recorded list to another software renderer to replay repeatedly into different
+offscreen targets. Recording never runs the vertex or fragment shader and never
+stores the final image or pre-transformed vertices: it freezes the currently
+bound state so the list stays valid after every source object (VAO, uniform
+blocks, `ShaderResources`, `ShaderProgram`, textures, external `Buffer`s) and
+even the recording `RendererSoft` / `SnapshotStore` have been destroyed.
+
+All types live in `Render/Software/CommandListSoft.h`:
+
+```cpp
+namespace SoftGL {
+
+class CommandListSoft {
+ public:
+  // Append an immutable copy of the currently bound state of `renderer`.
+  // Runs no vertex or fragment shader and stores no final image or
+  // transformed vertices. Returns false (leaving the list and store
+  // untouched) for an incomplete binding or an unsupported resource.
+  bool appendFrom(RendererSoft &renderer, SnapshotStore &snapshots);
+
+  // Replay in recorded order onto `renderer` / `frameBuffer`.
+  // The caller owns clearing and target selection; the previous target,
+  // viewport, render states, VAO and program are restored before returning.
+  bool replay(RendererSoft &renderer, std::shared_ptr<FrameBuffer> &frameBuffer);
+
+  size_t size() const;
+  bool empty() const;
+};
+
+class SnapshotStore {
+ public:
+  // Number of distinct image / mesh snapshots currently alive
+  size_t imageSnapshotCount() const;
+  size_t meshSnapshotCount() const;
+  size_t snapshotCount() const;
+
+  // Bytes held by live snapshots and the cumulative bytes copied so far
+  size_t heldBytes() const;
+  size_t copiedBytes() const;
+};
+
+}
+```
+
+Each `appendFrom` freezes the vertex/index buffers, viewport, Early-Z flag,
+`RenderStates`, program defines, uniform bytes, and every valid sampler binding
+together with its sampling state and a copy of the image content. Supported
+images are 2D RGBA8 and FLOAT32 textures including a complete mip chain;
+multi-sample sampler images are rejected before anything is recorded.
+
+Deduplication is content based: two samplers pointing at the same texture share
+one frozen image while keeping independent sampling states, and appending the
+same content twice reuses the already-live snapshot instead of copying it
+again. Rewriting an external `Buffer` (including via `Buffer::set`) is picked
+up on the next append, because the fingerprint is recomputed from the pixels
+rather than a manual dirty flag. The cache only holds weak references, so a
+snapshot is released as soon as no command list uses it.
+
+The original immediate-drawing interface is unchanged, and shader subclasses
+still follow the existing `clone()` contract; only explicitly bound resources
+are frozen, and pointers a shader borrows on its own are not taken over.
+
+`checks/target.cpp` exercises the capture, ownership and replay behaviour, and
+`examples/recorded_material.cpp` records two materials, releases the source
+objects and replays onto two offscreen targets as PPM images. Run them with:
+
+```bash
+bash task_support/run.sh target
+```
+
+
 ## Getting Started
 
 ### Prerequisites

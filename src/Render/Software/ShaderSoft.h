@@ -66,6 +66,14 @@ class ShaderSoft {
 
   virtual std::shared_ptr<ShaderSoft> clone() = 0;
 
+  // drop every borrowed pointer (attributes / uniforms / varyings / builtin /
+  // defines / derivative callback); used by recorded shader templates so no
+  // source-side pointer can ever be retained or dereferenced later
+  virtual void clearBoundPointers() {
+    gl = nullptr;
+    texLodFunc = nullptr;
+  }
+
  public:
   static inline glm::ivec2 textureSize(Sampler2DSoft<RGBA> *sampler, int lod) {
     auto &buffer = sampler->getTexture()->getImage().getBuffer(lod);
@@ -193,6 +201,14 @@ class ShaderSoft {
                                                         \
   size_t getShaderVaryingsSize() override {             \
     return sizeof(ShaderVaryings);                      \
+  }                                                     \
+                                                        \
+  void clearBoundPointers() override {                  \
+    ShaderSoft::clearBoundPointers();                   \
+    def = nullptr;                                      \
+    a = nullptr;                                        \
+    u = nullptr;                                        \
+    v = nullptr;                                        \
   }
 
 #define CREATE_SHADER_CLONE(T)                          \

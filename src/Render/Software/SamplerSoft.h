@@ -7,9 +7,43 @@
 #pragma once
 
 #include <functional>
+#include <memory>
+#include <vector>
+#include "FrozenSoft.h"
 #include "TextureSoft.h"
 
 namespace SoftGL {
+
+class SnapshotRef;
+
+template<typename T>
+struct SamplerDataType;
+template<>
+struct SamplerDataType<RGBA> {
+  static constexpr TextureFormat format = TextureFormat_RGBA8;
+};
+template<>
+struct SamplerDataType<float> {
+  static constexpr TextureFormat format = TextureFormat_FLOAT32;
+};
+
+// Runtime sampling state captured at append time; independent per sampler
+// even when several samplers share one frozen image.
+struct SamplerRuntimeState {
+  FilterMode filter = Filter_NEAREST;
+  WrapMode wrapS = Wrap_CLAMP_TO_EDGE;
+  WrapMode wrapT = Wrap_CLAMP_TO_EDGE;
+  WrapMode wrapR = Wrap_CLAMP_TO_EDGE;
+  bool useMipmaps = false;
+};
+
+// Description of one frozen image, produced by SamplerSoft::describeImage.
+struct SamplerImageDesc {
+  TextureType type = TextureType_2D;
+  TextureFormat format = TextureFormat_RGBA8;
+  std::string fingerprint;
+  size_t bytes = 0;
+};
 
 #define CoordMod(i, n) ((i) & ((n) - 1) + (n)) & ((n) - 1)  // (i % n + n) % n
 #define CoordMirror(i) (i) >= 0 ? (i) : (-1 - (i))
@@ -17,10 +51,16 @@ namespace SoftGL {
 template<typename T>
 class BaseSampler {
  public:
-  virtual bool empty() = 0;
+  virtual ~BaseSampler() = default;
+
+  virtual bool empty() const = 0;
   inline size_t width() const { return width_; }
   inline size_t height() const { return height_; }
   inline T &borderColor() { return borderColor_; };
+  inline const T &borderColorValue() const { return borderColor_; }
+  inline FilterMode getFilterMode() const { return filterMode_; }
+  inline WrapMode getWrapMode() const { return wrapMode_; }
+  inline bool getUseMipmaps() const { return useMipmaps; }
 
   T textureImpl(TextureImageSoft<T> *tex, glm::vec2 &uv, float lod = 0.f, glm::ivec2 offset = glm::ivec2(0));
   static T sampleNearest(Buffer<T> *buffer, glm::vec2 &uv, WrapMode wrap, glm::ivec2 &offset, T border);
@@ -66,7 +106,7 @@ class BaseSampler2D : public BaseSampler<T> {
     BaseSampler<T>::useMipmaps = BaseSampler<T>::filterMode_ > Filter_LINEAR;
   }
 
-  inline bool empty() override {
+  inline bool empty() const override {
     return tex_ == nullptr;
   }
 
@@ -282,7 +322,7 @@ class BaseSamplerCube : public BaseSampler<T> {
     }
   }
 
-  inline bool empty() override {
+  inline bool empty() const override {
     return texes_[0] == nullptr;
   }
 
@@ -374,8 +414,23 @@ void BaseSamplerCube<T>::convertXYZ2UV(float x, float y, float z, int *index, fl
 
 class SamplerSoft {
  public:
+  virtual ~SamplerSoft() = default;
+
   virtual TextureType texType() = 0;
   virtual void setTexture(const std::shared_ptr<Texture> &tex) = 0;
+
+  // snapshot support
+  virtual TextureFormat texFormat() const = 0;
+  virtual bool valid() const = 0;
+  virtual SamplerRuntimeState runtimeState() const = 0;
+  virtual std::vector<uint8_t> borderBytes() const = 0;
+  // validate the bound image and fingerprint its content; false when the image
+  // is missing, multi sample or has an incomplete mip chain
+  virtual bool describeImage(SamplerImageDesc &desc) const = 0;
+  // immutable copy of the full image (null when unsupported / multi sample)
+  virtual std::shared_ptr<SnapshotRef> freezeImage() const = 0;
+  // independent copy sharing the same read-only image, no temporary callbacks
+  virtual std::shared_ptr<SamplerSoft> cloneSampler() const = 0;
 };
 
 template<typename T>
@@ -391,6 +446,68 @@ class Sampler2DSoft : public SamplerSoft {
     sampler_.setFilterMode(tex_->getSamplerDesc().filterMin);
     sampler_.setWrapMode(tex_->getSamplerDesc().wrapS);
     sampler_.setImage(&tex_->getImage());
+  }
+
+  // replay attachment: state first, then the frozen image (no source pointer)
+  inline void setFrozenImage(TextureImageSoft<T> *image,
+                             const SamplerRuntimeState &state,
+                             const void *border,
+                             size_t borderSize) {
+    if (border && borderSize == sizeof(T)) {
+      memcpy(&sampler_.borderColor(), border, sizeof(T));
+    }
+    sampler_.setFilterMode(state.filter);
+    sampler_.setWrapMode(state.wrapS);
+    sampler_.setImage(image);
+  }
+
+  TextureFormat texFormat() const override {
+    return SamplerDataType<T>::format;
+  }
+
+  bool valid() const override {
+    return tex_ != nullptr && !sampler_.empty();
+  }
+
+  SamplerRuntimeState runtimeState() const override {
+    SamplerRuntimeState state;
+    state.filter = sampler_.getFilterMode();
+    state.wrapS = sampler_.getWrapMode();
+    state.wrapT = sampler_.getWrapMode();
+    state.wrapR = sampler_.getWrapMode();
+    state.useMipmaps = sampler_.getUseMipmaps();
+    return state;
+  }
+
+  std::vector<uint8_t> borderBytes() const override {
+    std::vector<uint8_t> ret(sizeof(T));
+    memcpy(ret.data(), &sampler_.borderColorValue(), sizeof(T));
+    return ret;
+  }
+
+  bool describeImage(SamplerImageDesc &desc) const override {
+    if (!valid()) {
+      return false;
+    }
+    desc.type = TextureType_2D;
+    desc.format = SamplerDataType<T>::format;
+    return describeTextureImage<T>(&tex_->getImage(), runtimeState().useMipmaps,
+                                   SamplerDataType<T>::format, desc.fingerprint, desc.bytes);
+  }
+
+  std::shared_ptr<SnapshotRef> freezeImage() const override {
+    if (tex_ == nullptr) {
+      return nullptr;
+    }
+    return FrozenTextureImageSoft<T>::freeze(&tex_->getImage());
+  }
+
+  std::shared_ptr<SamplerSoft> cloneSampler() const override {
+    auto ret = std::make_shared<Sampler2DSoft<T>>();
+    ret->sampler_ = sampler_;
+    ret->sampler_.setLodFunc(nullptr);  // never keep a temporary LOD callback
+    ret->tex_ = tex_;
+    return ret;
   }
 
   inline TextureSoft<T> *getTexture() const {
@@ -433,6 +550,49 @@ class SamplerCubeSoft : public SamplerSoft {
     for (int i = 0; i < 6; i++) {
       sampler_.setImage(&tex_->getImage((CubeMapFace) i), i);
     }
+  }
+
+  TextureFormat texFormat() const override {
+    return SamplerDataType<T>::format;
+  }
+
+  bool valid() const override {
+    return tex_ != nullptr && !sampler_.empty();
+  }
+
+  SamplerRuntimeState runtimeState() const override {
+    SamplerRuntimeState state;
+    state.filter = sampler_.getFilterMode();
+    state.wrapS = sampler_.getWrapMode();
+    state.wrapT = sampler_.getWrapMode();
+    state.wrapR = sampler_.getWrapMode();
+    state.useMipmaps = sampler_.getUseMipmaps();
+    return state;
+  }
+
+  std::vector<uint8_t> borderBytes() const override {
+    std::vector<uint8_t> ret(sizeof(T));
+    memcpy(ret.data(), &sampler_.borderColorValue(), sizeof(T));
+    return ret;
+  }
+
+  // cube maps are not snapshotted: append rejects them explicitly
+  bool describeImage(SamplerImageDesc &desc) const override {
+    desc.type = TextureType_CUBE;
+    desc.format = SamplerDataType<T>::format;
+    desc.fingerprint.clear();
+    desc.bytes = 0;
+    return false;
+  }
+
+  std::shared_ptr<SnapshotRef> freezeImage() const override { return nullptr; }
+
+  std::shared_ptr<SamplerSoft> cloneSampler() const override {
+    auto ret = std::make_shared<SamplerCubeSoft<T>>();
+    ret->sampler_ = sampler_;
+    ret->sampler_.setLodFunc(nullptr);
+    ret->tex_ = tex_;
+    return ret;
   }
 
   inline TextureSoft<T> *getTexture() const {

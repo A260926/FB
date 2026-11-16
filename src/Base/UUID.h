@@ -6,12 +6,14 @@
 
 #pragma once
 
+#include <atomic>
+
 namespace SoftGL {
 
 template<typename T>
 class UUID {
  public:
-  UUID() : uuid_(uuidCounter_++) {}
+  UUID() : uuid_(uuidCounter_.fetch_add(1)) {}
 
   inline int get() const {
     return uuid_;
@@ -19,10 +21,10 @@ class UUID {
 
  private:
   int uuid_ = -1;
-  static int uuidCounter_;
+  static std::atomic<int> uuidCounter_;
 };
 
 template<typename T>
-int UUID<T>::uuidCounter_ = 0;
+std::atomic<int> UUID<T>::uuidCounter_{0};
 
 }

@@ -15,6 +15,8 @@
 
 namespace SoftGL {
 
+class CommandListSoft;
+
 class RendererSoft : public Renderer {
  public:
   RendererType type() override { return Renderer_SOFT; }
@@ -51,6 +53,66 @@ class RendererSoft : public Renderer {
 
  public:
   inline void setEnableEarlyZ(bool enable) { earlyZ_ = enable; };
+  inline bool isEarlyZEnabled() const { return earlyZ_; };
+
+  // recorded-state access, used by CommandListSoft::appendFrom
+  inline const Viewport &getViewport() const { return viewport_; }
+  inline const RenderStates *getRenderStates() const { return renderState_; }
+  inline VertexArrayObjectSoft *getVertexArrayObject() const { return vao_; }
+  inline ShaderProgramSoft *getShaderProgram() const { return shaderProgram_; }
+  inline PrimitiveType getPrimitiveType() const { return primitiveType_; }
+
+  // bindings restored verbatim after a replay
+  struct DrawBinding {
+    FrameBufferSoft *fbo = nullptr;
+    VertexArrayObjectSoft *vao = nullptr;
+    ShaderProgramSoft *program = nullptr;
+    const RenderStates *renderStates = nullptr;
+    Viewport viewport{};
+    bool earlyZ = true;
+    PrimitiveType primitiveType = Primitive_TRIANGLE;
+  };
+
+  DrawBinding saveBinding() const {
+    DrawBinding b;
+    b.fbo = fbo_;
+    b.vao = vao_;
+    b.program = shaderProgram_;
+    b.renderStates = renderState_;
+    b.viewport = viewport_;
+    b.earlyZ = earlyZ_;
+    b.primitiveType = primitiveType_;
+    return b;
+  }
+
+  void restoreBinding(const DrawBinding &b) {
+    fbo_ = b.fbo;
+    fboColor_ = fbo_ ? fbo_->getColorBuffer() : nullptr;
+    fboDepth_ = fbo_ ? fbo_->getDepthBuffer() : nullptr;
+    vao_ = b.vao;
+    shaderProgram_ = b.program;
+    renderState_ = b.renderStates;
+    viewport_ = b.viewport;
+    earlyZ_ = b.earlyZ;
+    primitiveType_ = b.primitiveType;
+  }
+
+  // direct binding used by replay (no resource-bind side effects)
+  void applyBinding(FrameBufferSoft *fbo,
+                    VertexArrayObjectSoft *vao,
+                    ShaderProgramSoft *program,
+                    const RenderStates *states,
+                    const Viewport &viewport,
+                    bool earlyZ) {
+    fbo_ = fbo;
+    fboColor_ = fbo_ ? fbo_->getColorBuffer() : nullptr;
+    fboDepth_ = fbo_ ? fbo_->getDepthBuffer() : nullptr;
+    vao_ = vao;
+    shaderProgram_ = program;
+    renderState_ = states;
+    viewport_ = viewport;
+    earlyZ_ = earlyZ;
+  }
 
  private:
   void processVertexShader();
