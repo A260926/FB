@@ -4191,44 +4191,71 @@ DMatrix Object::evalLocal(const DVec3& translation, const DVec3& rotation) const
 }
 
 
+DMatrix eulerRotationMatrix(const DVec3& euler, RotationOrder order)
+{
+	return getRotationMatrix(euler, order);
+}
+
+
+DMatrix translationMatrix(const DVec3& translation)
+{
+	DMatrix m = makeIdentity();
+	setTranslation(translation, &m);
+	return m;
+}
+
+
+DMatrix scalingMatrix(const DVec3& scaling)
+{
+	DMatrix m = makeIdentity();
+	m.m[0] = scaling.x;
+	m.m[5] = scaling.y;
+	m.m[10] = scaling.z;
+	return m;
+}
+
+
+LocalTransformFactors getLocalTransformFactors(const Object& object,
+	const DVec3& translation, const DVec3& rotation, const DVec3& scaling)
+{
+	LocalTransformFactors f;
+	f.translation = translation;
+	f.rotation = rotation;
+	f.scaling = scaling;
+	f.rotation_order = object.getRotationOrder();
+	f.pre_rotation = object.getPreRotation();
+	f.post_rotation = object.getPostRotation();
+	f.rotation_offset = object.getRotationOffset();
+	f.rotation_pivot = object.getRotationPivot();
+	f.scaling_offset = object.getScalingOffset();
+	f.scaling_pivot = object.getScalingPivot();
+	return f;
+}
+
+
+DMatrix composeLocalTransform(const LocalTransformFactors& f)
+{
+	// http://help.autodesk.com/view/FBX/2017/ENU/?guid=__files_GUID_10CDD63C_79C1_4F2D_BB28_AD2BE65A02ED_htm
+	DMatrix t = translationMatrix(f.translation);
+	DMatrix r = getRotationMatrix(f.rotation, f.rotation_order);
+	DMatrix r_pre = getRotationMatrix(f.pre_rotation, RotationOrder::EULER_XYZ);
+	DMatrix r_post_inv = getRotationMatrix(-f.post_rotation, RotationOrder::EULER_ZYX);
+	DMatrix r_off = translationMatrix(f.rotation_offset);
+	DMatrix r_p = translationMatrix(f.rotation_pivot);
+	DMatrix r_p_inv = translationMatrix(-f.rotation_pivot);
+	DMatrix s_off = translationMatrix(f.scaling_offset);
+	DMatrix s_p = translationMatrix(f.scaling_pivot);
+	DMatrix s_p_inv = translationMatrix(-f.scaling_pivot);
+	DMatrix s = scalingMatrix(f.scaling);
+
+	return t * r_off * r_p * r_pre * r * r_post_inv * r_p_inv * s_off * s_p * s * s_p_inv;
+}
+
+
 DMatrix Object::evalLocal(const DVec3& translation, const DVec3& rotation, const DVec3& scaling) const
 {
-	DVec3 rotation_pivot = getRotationPivot();
-	DVec3 scaling_pivot = getScalingPivot();
-	RotationOrder rotation_order = getRotationOrder();
-
-	DMatrix s = makeIdentity();
-	s.m[0] = scaling.x;
-	s.m[5] = scaling.y;
-	s.m[10] = scaling.z;
-
-	DMatrix t = makeIdentity();
-	setTranslation(translation, &t);
-
-	DMatrix r = getRotationMatrix(rotation, rotation_order);
-	DMatrix r_pre = getRotationMatrix(getPreRotation(), RotationOrder::EULER_XYZ);
-	DMatrix r_post_inv = getRotationMatrix(-getPostRotation(), RotationOrder::EULER_ZYX);
-
-	DMatrix r_off = makeIdentity();
-	setTranslation(getRotationOffset(), &r_off);
-
-	DMatrix r_p = makeIdentity();
-	setTranslation(rotation_pivot, &r_p);
-
-	DMatrix r_p_inv = makeIdentity();
-	setTranslation(-rotation_pivot, &r_p_inv);
-
-	DMatrix s_off = makeIdentity();
-	setTranslation(getScalingOffset(), &s_off);
-
-	DMatrix s_p = makeIdentity();
-	setTranslation(scaling_pivot, &s_p);
-
-	DMatrix s_p_inv = makeIdentity();
-	setTranslation(-scaling_pivot, &s_p_inv);
-
-	// http://help.autodesk.com/view/FBX/2017/ENU/?guid=__files_GUID_10CDD63C_79C1_4F2D_BB28_AD2BE65A02ED_htm
-	return t * r_off * r_p * r_pre * r * r_post_inv * r_p_inv * s_off * s_p * s * s_p_inv;
+	LocalTransformFactors f = getLocalTransformFactors(*this, translation, rotation, scaling);
+	return composeLocalTransform(f);
 }
 
 

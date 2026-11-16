@@ -24,7 +24,7 @@ c++ -std=c++17 -O1 -I. examples/export_pivot.cpp .task-build/ofbx_gltf.o .task-b
 rm -f .task-build/example.glb
 .task-build/example
 test -s .task-build/example.glb
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/gltf_target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

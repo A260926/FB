@@ -180,6 +180,43 @@ struct AnimationCurveNode;
 struct AnimationLayer;
 struct Scene;
 struct IScene;
+struct Object;
+
+
+// Shared decomposition of an FBX node's local transform.
+// Object::evalLocal() and the offline GLB exporter (ofbx_gltf.h) both build
+// the local matrix from exactly these factors, so the pivot/offset/Pre/Post
+// formula exists in one place only:
+//
+// evalLocal(t, r, s) ==
+//   T(translation) * T(rotation_offset) * T(rotation_pivot) *
+//   R(pre_rotation, EULER_XYZ) * R(rotation, rotation_order) *
+//   R(-post_rotation, EULER_ZYX) * T(-rotation_pivot) *
+//   T(scaling_offset) * T(scaling_pivot) * S(scaling) * T(-scaling_pivot)
+//
+// Angles are stored in degrees, exactly as FBX properties define them.
+struct LocalTransformFactors
+{
+	DVec3 translation;
+	DVec3 rotation;         // animated/static euler angles, interpreted with rotation_order
+	DVec3 scaling;
+	RotationOrder rotation_order;
+	DVec3 pre_rotation;     // always applied as EULER_XYZ
+	DVec3 post_rotation;    // undone as EULER_ZYX with negated angles
+	DVec3 rotation_offset;
+	DVec3 rotation_pivot;
+	DVec3 scaling_offset;
+	DVec3 scaling_pivot;
+};
+
+LocalTransformFactors getLocalTransformFactors(const Object& obj,
+	const DVec3& translation, const DVec3& rotation, const DVec3& scaling);
+DMatrix composeLocalTransform(const LocalTransformFactors& f);
+
+// Matrix builders used by both the loader and the GLB exporter.
+DMatrix eulerRotationMatrix(const DVec3& euler_degrees, RotationOrder order);
+DMatrix translationMatrix(const DVec3& translation);
+DMatrix scalingMatrix(const DVec3& scaling);
 
 
 struct Object
