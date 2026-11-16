@@ -1,5 +1,12 @@
 #include <object/Material.hpp>
 
+void SoftRasterizer::Material::setOpacity(float value) {
+  if (!std::isfinite(value) || value < 0.f || value > 1.f) {
+    throw std::invalid_argument("opacity must be finite and in [0, 1]");
+  }
+  opacity = value;
+}
+
 SoftRasterizer::BsdfSample
 SoftRasterizer::Material::sample(const glm::vec3 &incoming,
                                  const glm::vec3 &normal, bool frontFace,

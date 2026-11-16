@@ -37,7 +37,7 @@ add_library(soft_rasterizer STATIC
   src/BVHAcceleration.cpp src/Camera.cpp src/Cube.cpp
   src/Material.cpp src/Mesh.cpp src/Object.cpp src/ObjLoader.cpp
   src/PathTracing.cpp src/Rasterizer.cpp src/Render.cpp src/Scene.cpp
-  src/Sphere.cpp src/TextureLoader.cpp src/Triangle.cpp)
+  src/Sphere.cpp src/Stochastic.cpp src/TextureLoader.cpp src/Triangle.cpp)
 
 target_include_directories(soft_rasterizer PUBLIC include)
 target_include_directories(soft_rasterizer SYSTEM PUBLIC external/glm external/simde)

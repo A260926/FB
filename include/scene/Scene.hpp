@@ -1,5 +1,6 @@
 #pragma once
 #include <bvh/BVHAcceleration.hpp>
+#include <cstdint>
 #include <light/Light.hpp>
 #include <loader/ObjLoader.hpp>
 #include <map>
@@ -69,12 +70,25 @@ public:
     return m_rasterTriangles;
   }
 
+  /*Assign the stable stochastic identity base of one object's triangles.
+   * The object's k-th raster triangle receives surfaceId + k; zero is
+   * rejected and duplicate ids within the scene are rejected during the next
+   * prepare(), before any image is written. The mapping survives cache
+   * rebuilds and object-name ordering.*/
+  bool setSurfaceId(const std::string &objectName,
+                    std::uint64_t surfaceId);
+  /*Configured base id, or zero when the object uses automatic ids.*/
+  std::uint64_t surfaceId(const std::string &objectName) const;
+
   const auto &pointLights() const {
     return m_lights;
   }
 
 private:
   void updateLightDistribution();
+  /*Populate stable, unique surface ids on the freshly rebuilt triangle
+   * stream and reject zero/duplicate identities before rendering.*/
+  void assignSurfaceIds();
 
 private:
   /*Objects and resources loaded by name, as in the original scene interface.*/
@@ -85,6 +99,11 @@ private:
 
   std::map<std::string, ObjData> m_loadedObjs;
   std::map<std::string, std::unique_ptr<ObjLoader>> m_objLoaders;
+  /*Explicit (nonzero) or automatically allocated base surface ids, keyed by
+   * the stable object name so name ordering and cache rebuilds cannot change
+   * them.*/
+  std::map<std::string, std::uint64_t> m_surfaceBaseIds;
+  std::uint64_t m_nextAutoSurfaceId = 1;
   std::map<std::string, std::shared_ptr<Shader>> m_shaders;
   std::map<std::string, std::shared_ptr<light_struct>> m_lights;
   /*World-space acceleration and cached raster triangle stream.*/

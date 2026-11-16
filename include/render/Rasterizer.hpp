@@ -1,5 +1,6 @@
 #pragma once
 #include <base/Render.hpp>
+#include <render/Stochastic.hpp>
 
 namespace SoftRasterizer {
 
@@ -11,6 +12,35 @@ public:
   void setSIMD(const bool enabled);
   void setBackfaceCulling(const bool enabled);
   void draw(Primitive type = Primitive::TRIANGLES) override;
+
+  /*Stochastic transparency progression.*/
+  // Begin (or re-begin after resetStochastic) a convergence run. The settings
+  // only select the deterministic random stream; nothing is rendered yet.
+  void configureStochastic(const StochasticSettings &settings);
+  // Drop every accumulated frame so a new run can start; configuration stays
+  // valid until the next configureStochastic() call.
+  void resetStochastic();
+  bool stochasticActive() const {
+    return m_stochasticActive;
+  }
+  // Number of frames actually folded into the current running mean.
+  std::uint64_t accumulatedFrames() const {
+    return m_stochasticFrames;
+  }
+  StochasticSettings stochasticSettings() const {
+    return m_stochasticSettings;
+  }
+  // Render and accumulate `count` consecutive frames starting at firstFrame.
+  // Frame numbering starts at zero and must continue the previous run without
+  // repeats or gaps. Invalid arguments are rejected before any sample or
+  // accumulator is touched. LINES are not supported while a run is active.
+  void advance(std::uint64_t firstFrame, std::uint64_t count = 1);
+  // Re-publish the current running mean to the color buffer. Read-only with
+  // respect to the accumulated history, so repeated calls are identical.
+  void resolveStochastic();
+  // Inspection of the latest frame's eight per-pixel samples for debugging.
+  float stochasticSampleDepth(std::size_t pixel, int sample) const;
+  std::uint64_t stochasticSampleSurface(std::size_t pixel, int sample) const;
 
 private:
   enum class FrustumPlane { Left, Right, Bottom, Top, Near, Far };
@@ -36,6 +66,8 @@ private:
     bool frontFace;
     std::shared_ptr<Material> material;
     std::shared_ptr<Shader> shader;
+    // Stable source identity used as the stochastic hash's surface dimension.
+    std::uint64_t surfaceId = 0;
   };
 
   /*Clip-space plane expression before /w: >= 0 is inside, < 0 is outside.*/
@@ -106,6 +138,12 @@ private:
                                  const ScreenTriangle &triangle,
                                  const glm::vec3 &perspectiveWeights);
 
+  /*One stochastic-transparency frame: eight samples per pixel, then fold the
+   * frame mean into the persistent running mean.*/
+  void rasterizeStochasticFrame(const Scene &scene,
+                                const std::vector<ScreenTriangle> &triangles,
+                                std::uint64_t frame);
+
 private:
   // Chosen fixed-point precision, not a mandatory rasterization standard.
   // Each axis has 256 coordinate steps per pixel (8 fractional bits).
@@ -118,5 +156,19 @@ private:
   static constexpr int TileSize = 32;
   bool m_useSIMD = true;
   bool m_cullBackfaces = false;
+
+  /*Stochastic-transparency state. All persistent buffers are sized by the
+   * pixel count only; no transparent fragment lists are retained.*/
+  bool m_stochasticConfigured = false;
+  bool m_stochasticActive = false;
+  StochasticSettings m_stochasticSettings{};
+  std::uint64_t m_stochasticFrames = 0; // Frames folded into the running mean.
+  // Running mean of per-frame means, updated online per accumulated frame.
+  std::vector<glm::vec3> m_stochasticMean;
+  // Latest frame's eight independent samples: depth, surface identity and
+  // un-premultiplied linear color. Background color and infinity initially.
+  std::vector<float> m_stochasticDepth;
+  std::vector<std::uint64_t> m_stochasticSurface;
+  std::vector<glm::vec3> m_stochasticColor;
 };
 } // namespace SoftRasterizer

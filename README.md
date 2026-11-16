@@ -220,6 +220,81 @@ Wireframe mode draws the edges of each original triangle, including mesh triangu
 
 Subpixel coordinates have 8 fractional bits (256 coordinate steps per pixel on each axis). This stabilizes integer edge tests; it does not increase resolution or sample count. All three triangle boundaries are included. Equal-depth overlap retains the first draw, so coincident surfaces can depend on submission order.
 
+## 0x02A Progressive Stochastic Transparency
+
+The ordinary raster path keeps only the nearest opaque color per pixel, so intersecting thin surfaces cannot blend. The stochastic path adds a fixed-memory, progressively converging alternative that keeps the real material shading and perspective interpolation while avoiding any transparent fragment list.
+
+### Model
+
+Each pixel keeps **eight independent color/depth samples**, initialized to the scene background color and infinite depth. Coverage, back-face culling, the near/far depth range and the `TEXTURE` / `BLINN_PHONG` rules are identical to the opaque raster path; attributes are still sampled once at the original pixel center. For every covered fragment and each of the eight samples:
+
+1. A deterministic unsigned-integer hash of `(seed, generation, frame, x, y, sample, surfaceId)` produces a value `r` in `[0, 1)`.
+2. The fragment competes for that sample only when `r < opacity`. A rejected fragment writes neither depth nor color.
+3. Accepted fragments compete by nearest depth; equal depth is resolved by the smaller `surfaceId`.
+4. `opacity = 0` never contributes and needs no random draw; `opacity = 1` always passes and needs no random draw. Stored sample colors are **not** premultiplied by alpha.
+
+The eight sample colors are averaged into one frame mean, then folded into a running online mean over the accumulated frames. Persistent memory depends only on the pixel count (one running mean plus eight depth/id/color slots per pixel), never on the number of transparent fragments. Multi-frame accumulation converges toward the per-pixel source-over expectation.
+
+### Deterministic random hash
+
+`stochasticHash64(...)` (`include/render/Stochastic.hpp`) is a pure, stateless function of all seven coordinates. It applies SplitMix64-style avalanche mixing to the seed, then folds in `generation, frame, x, y, sample, surfaceId` one at a time. Because the surface identity is part of the input, every surface draws from an independent random dimension, and the result cannot change with triangle submission order, tile scheduling, batch splitting or SIMD width.
+
+```cpp
+std::uint64_t stochasticHash64(std::uint64_t seed, std::uint64_t generation,
+                               std::uint64_t frame, std::uint64_t x,
+                               std::uint64_t y, std::uint64_t sample,
+                               std::uint64_t surfaceId);
+float stochasticHashRandom(/*same arguments*/); // [0, 1)
+```
+
+`stochasticHashRandom` maps the hash onto a uniform 2^24-level grid:
+
+```text
+r = float(hash64(...) >> 40) * (1 / 2^24)   // always 0 <= r < 1
+```
+
+so `r < 1` always passes (opaque) and `r < 0` never passes (fully transparent).
+
+### Material and scene identity
+
+```cpp
+material->setOpacity(0.5f); // finite [0, 1]; default is 1; invalid values throw
+```
+
+Every raster triangle needs a unique, nonzero `uint64_t` identity. Assign a stable base id per object; the object's *k*-th source triangle receives `surfaceId + k`, so leave enough range for meshes with multiple triangles:
+
+```cpp
+scene->setSurfaceId("red", 10);  // returns false for an unknown object name
+```
+
+Objects without an explicit id receive automatic ids. Ids are stored by object name and therefore survive geometry-cache rebuilds and name-sorted traversal. Zero ids and duplicate ids are rejected by `Scene::prepare()` (and hence by `draw()`/`advance()`) before any image is written.
+
+### Renderer API
+
+```cpp
+SoftRasterizer::StochasticSettings settings;
+settings.seed = 0xC0FFEEULL;       // any uint64; selects the random stream
+settings.generation = 0;           // any uint64; identifies one convergence run
+rasterizer.configureStochastic(settings);
+
+rasterizer.advance(/*firstFrame=*/0, /*count=*/256); // frames 0..255
+rasterizer.advance(256, 64);                          // continue: no repeat/gap
+rasterizer.resolveStochastic();     // read-only republish of the current mean
+rasterizer.pixels();                // the running mean
+rasterizer.accumulatedFrames();     // number of frames folded into the mean
+rasterizer.stochasticSampleDepth(pixel, sample);  // debugging: 0..7
+rasterizer.stochasticSampleSurface(pixel, sample);
+
+rasterizer.resetStochastic();       // clear history; reconfigure to start over
+```
+
+- `advance(firstFrame, count)` accumulates `count` consecutive frames. Frame numbers start at zero and must continue the current run without repeats or gaps; otherwise the call throws **before touching any image or accumulator**. `count = 0`, an unconfigured renderer and a missing scene are likewise rejected up front.
+- `resetStochastic()` discards all history so a new run can be configured; `configureStochastic()` itself also starts a fresh run.
+- Repeated `resolveStochastic()` calls only read the current mean. Ordinary `draw()` and `clear()` never reuse or alter the transparent history, and the opaque result is unchanged.
+- `Primitive::LINES` is not supported while a run is active and is rejected before rendering.
+- After changing the camera, geometry, materials or background, the caller must `resetStochastic()`; accumulating across a scene change is unsupported. Inputs must use finite coordinates with every triangle vertex inside the view frustum — the path does not extend the existing clipping behavior.
+- Two rasterizers (or two runs) keep independent histories. A worked PPM example lives in `examples/stochastic.cpp`.
+
 ### Rendering Results
 
 #### Current room preview (384×384)

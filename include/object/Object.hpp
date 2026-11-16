@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <bvh/Bounds3.hpp>
+#include <cstdint>
 #include <ray/Intersection.hpp>
 #include <shader/Shader.hpp>
 #include <vector>
@@ -19,6 +20,9 @@ struct RasterTriangle {
   std::array<Vertex, 3> vertices;
   std::shared_ptr<Material> material;
   std::shared_ptr<Shader> shader;
+  // Stable, caller-assigned identity of the source triangle; zero means
+  // unassigned. Stochastic rendering requires unique nonzero ids.
+  std::uint64_t surfaceId = 0;
 };
 
 class Object : public std::enable_shared_from_this<Object> {

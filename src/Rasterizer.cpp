@@ -1,5 +1,6 @@
 #include <hpc/Parallel.hpp>
 #include <hpc/Simd.hpp>
+#include <limits>
 #include <render/Rasterizer.hpp>
 
 namespace Parallel = SoftRasterizer::Parallel;
@@ -20,6 +21,12 @@ void SoftRasterizer::TraditionalRasterizer::setBackfaceCulling(
 void SoftRasterizer::TraditionalRasterizer::draw(Primitive type) {
   if (m_scenes.size() > 1) {
     throw std::invalid_argument("Rasterizer renders one scene at a time");
+  }
+  // Wireframes have no per-surface stochastic semantics; reject them while a
+  // convergence run is active instead of silently corrupting the history.
+  if (m_stochasticActive && type != Primitive::TRIANGLES) {
+    throw std::invalid_argument(
+        "LINES are not supported while stochastic accumulation is active");
   }
   clear();
   if (m_scenes.empty()) {
@@ -176,6 +183,7 @@ bool SoftRasterizer::TraditionalRasterizer::prepareScreenTriangle(
     ScreenTriangle &triangle) {
   triangle.material = source.material;
   triangle.shader = source.shader;
+  triangle.surfaceId = source.surfaceId;
   for (int j = 0; j < 3; ++j) {
     if (!projectToScreen(clipVertices[j], width, height,
                          triangle.vertices[j])) {
@@ -460,4 +468,227 @@ glm::vec3 SoftRasterizer::TraditionalRasterizer::shadeFragment(
     return albedo;
   }
   return shadeBlinnPhong(scene, triangle, fragment, albedo);
+}
+
+namespace {
+// Reject a frame request before any sample buffer or accumulator is touched.
+void validateStochasticFrameRequest(bool configured,
+                                    std::uint64_t accumulatedFrames,
+                                    std::uint64_t firstFrame,
+                                    std::uint64_t count) {
+  if (!configured) {
+    throw std::invalid_argument(
+        "stochastic advance requires configureStochastic() first");
+  }
+  if (count == 0) {
+    throw std::invalid_argument("stochastic advance count must be nonzero");
+  }
+  if (firstFrame != accumulatedFrames) {
+    throw std::invalid_argument(
+        "stochastic frames must continue from frame 0 without repeats or "
+        "gaps");
+  }
+  if (firstFrame > std::numeric_limits<std::uint64_t>::max() - (count - 1)) {
+    throw std::invalid_argument("stochastic frame range overflow");
+  }
+}
+} // namespace
+
+void SoftRasterizer::TraditionalRasterizer::configureStochastic(
+    const StochasticSettings &settings) {
+  // Every uint64_t seed/generation pair is a finite, legal stream selector.
+  // Reconfiguring starts a fresh run, so previous history cannot leak in.
+  const std::size_t pixels = m_width * m_height;
+  m_stochasticSettings = settings;
+  m_stochasticConfigured = true;
+  m_stochasticActive = false;
+  m_stochasticFrames = 0;
+  m_stochasticMean.assign(pixels, glm::vec3(0));
+  m_stochasticDepth.assign(pixels * StochasticSampleCount,
+                           std::numeric_limits<float>::infinity());
+  m_stochasticSurface.assign(pixels * StochasticSampleCount, 0);
+  m_stochasticColor.assign(pixels * StochasticSampleCount, glm::vec3(0));
+}
+
+void SoftRasterizer::TraditionalRasterizer::resetStochastic() {
+  m_stochasticActive = false;
+  m_stochasticFrames = 0;
+  std::fill(m_stochasticMean.begin(), m_stochasticMean.end(), glm::vec3(0));
+  std::fill(m_stochasticDepth.begin(), m_stochasticDepth.end(),
+            std::numeric_limits<float>::infinity());
+  std::fill(m_stochasticSurface.begin(), m_stochasticSurface.end(), 0);
+  std::fill(m_stochasticColor.begin(), m_stochasticColor.end(), glm::vec3(0));
+  // The ordinary framebuffers keep no stochastic history either.
+  clear();
+}
+
+void SoftRasterizer::TraditionalRasterizer::advance(
+    const std::uint64_t firstFrame, const std::uint64_t count) {
+  // Validate everything first: an illegal request must leave both the image
+  // and the accumulated history untouched.
+  validateStochasticFrameRequest(m_stochasticConfigured, m_stochasticFrames,
+                                 firstFrame, count);
+  if (m_scenes.size() > 1) {
+    throw std::invalid_argument("Rasterizer renders one scene at a time");
+  }
+  if (m_scenes.empty()) {
+    throw std::invalid_argument("stochastic advance requires a scene");
+  }
+  auto &scene = *m_scenes.front();
+  // prepare() rebuilds the cached triangle stream and rejects zero/duplicate
+  // surface ids before any framebuffer write below.
+  scene.prepare();
+  for (const auto &triangle : scene.triangles()) {
+    if (!std::isfinite(triangle.material->opacity) ||
+        triangle.material->opacity < 0.f ||
+        triangle.material->opacity > 1.f) {
+      throw std::invalid_argument("opacity must be finite and in [0, 1]");
+    }
+  }
+  auto screenTriangles = prepareScreenTriangles(
+      scene, int(m_width), int(m_height), m_cullBackfaces,
+      Primitive::TRIANGLES);
+  for (std::uint64_t offset = 0; offset < count; ++offset) {
+    rasterizeStochasticFrame(scene, screenTriangles, firstFrame + offset);
+  }
+}
+
+void SoftRasterizer::TraditionalRasterizer::resolveStochastic() {
+  if (!m_stochasticActive) {
+    return;
+  }
+  // Read-only: re-publish the running mean without touching accumulators or
+  // the per-frame sample buffers.
+  std::copy(m_stochasticMean.begin(), m_stochasticMean.end(), m_color.begin());
+}
+
+void SoftRasterizer::TraditionalRasterizer::rasterizeStochasticFrame(
+    const Scene &scene, const std::vector<ScreenTriangle> &triangles,
+    const std::uint64_t frame) {
+  const std::size_t pixels = m_width * m_height;
+  const auto background = scene.backgroundColor();
+  // Every frame restarts the eight samples at background / infinity; only the
+  // running mean carries across frames.
+  std::fill(m_stochasticDepth.begin(), m_stochasticDepth.end(),
+            std::numeric_limits<float>::infinity());
+  std::fill(m_stochasticSurface.begin(), m_stochasticSurface.end(), 0);
+  for (auto &color : m_stochasticColor) {
+    color = background;
+  }
+
+  const int tileColumns = (int(m_width) + TileSize - 1) / TileSize,
+            tileRows = (int(m_height) + TileSize - 1) / TileSize;
+  const auto tileTriangles =
+      binTrianglesIntoTiles(triangles, tileColumns, tileRows);
+  const auto settings = m_stochasticSettings;
+  /*Tiles own disjoint pixels, and every decision is a pure function of the
+   * deterministic hash and the fragment depth/id, so scheduling cannot change
+   * the result.*/
+  Parallel::parallelFor(
+      std::size_t(0), tileTriangles.size(), [&](std::size_t tile) {
+        const int tileX = int(tile % tileColumns) * TileSize,
+                  tileY = int(tile / tileColumns) * TileSize;
+        for (const auto index : tileTriangles[tile]) {
+          const auto &triangle = triangles[index];
+          const int startX = std::max(triangle.startX, tileX),
+                    endX = std::min(triangle.endX, tileX + TileSize - 1);
+          const int startY = std::max(triangle.startY, tileY),
+                    endY = std::min(triangle.endY, tileY + TileSize - 1);
+          for (int y = startY; y <= endY; ++y) {
+            for (int x = startX; x <= endX; ++x) {
+              // One attribute sample at the original pixel center, exactly as
+              // the opaque path uses.
+              glm::vec3 screenWeights;
+              if (!calculatePixelCoverage(triangle, x, y,
+                                          Primitive::TRIANGLES,
+                                          screenWeights)) {
+                continue;
+              }
+              float barycentric[3][8]{};
+              float depths[8]{};
+              for (int j = 0; j < 3; ++j) {
+                barycentric[j][0] = screenWeights[j];
+              }
+              interpolateDepthAndWeightsScalar(triangle, barycentric, depths,
+                                               1);
+              const float depth = depths[0];
+              // Near/far depth range rule is shared with the opaque path.
+              if (!(depth >= 0 && depth <= 1)) {
+                continue;
+              }
+              const float opacity = triangle.material->opacity;
+              if (opacity <= 0.f) {
+                continue; // Fully transparent surfaces never contribute.
+              }
+              // Shade once per covered pixel: real TEXTURE/BLINN_PHONG rules
+              // and perspective-correct interpolation, un-premultiplied.
+              const glm::vec3 fragmentColor = shadeFragment(
+                  scene, triangle,
+                  {barycentric[0][0], barycentric[1][0], barycentric[2][0]});
+              const std::size_t pixel = std::size_t(y) * m_width + x;
+              for (int sample = 0; sample < StochasticSampleCount;
+                   ++sample) {
+                if (opacity < 1.f) {
+                  const float random = stochasticHashRandom(
+                      settings.seed, settings.generation, frame,
+                      std::uint64_t(x), std::uint64_t(y),
+                      std::uint64_t(sample), triangle.surfaceId);
+                  // A rejected fragment must not write depth or color.
+                  if (random >= opacity) {
+                    continue;
+                  }
+                }
+                const std::size_t slot =
+                    pixel * StochasticSampleCount + sample;
+                const bool nearer = depth < m_stochasticDepth[slot];
+                const bool sameDepthSmallerId =
+                    depth == m_stochasticDepth[slot] &&
+                    triangle.surfaceId < m_stochasticSurface[slot];
+                if (nearer || sameDepthSmallerId) {
+                  m_stochasticDepth[slot] = depth;
+                  m_stochasticSurface[slot] = triangle.surfaceId;
+                  m_stochasticColor[slot] = fragmentColor;
+                }
+              }
+            }
+          }
+        }
+      });
+
+  // Average the eight samples, then fold the frame mean into the online
+  // running mean. Welford-style delta update keeps only one accumulator per
+  // pixel regardless of the frame count.
+  m_stochasticFrames += 1;
+  const float inverseSamples = 1.f / float(StochasticSampleCount);
+  const float inverseFrames = 1.f / float(m_stochasticFrames);
+  for (std::size_t pixel = 0; pixel < pixels; ++pixel) {
+    glm::vec3 frameMean(0);
+    for (int sample = 0; sample < StochasticSampleCount; ++sample) {
+      frameMean += m_stochasticColor[pixel * StochasticSampleCount + sample];
+    }
+    frameMean *= inverseSamples;
+    m_stochasticMean[pixel] +=
+        (frameMean - m_stochasticMean[pixel]) * inverseFrames;
+    // resolve() only ever reads the current mean through pixels().
+    m_color[pixel] = m_stochasticMean[pixel];
+  }
+  m_stochasticActive = true;
+}
+
+float SoftRasterizer::TraditionalRasterizer::stochasticSampleDepth(
+    const std::size_t pixel, const int sample) const {
+  if (pixel >= m_width * m_height || sample < 0 ||
+      sample >= StochasticSampleCount) {
+    throw std::invalid_argument("invalid stochastic sample coordinate");
+  }
+  return m_stochasticDepth[pixel * StochasticSampleCount + sample];
+}
+
+std::uint64_t SoftRasterizer::TraditionalRasterizer::stochasticSampleSurface(
+    const std::size_t pixel, const int sample) const {
+  if (pixel >= m_width * m_height || sample < 0 ||
+      sample >= StochasticSampleCount) {
+    throw std::invalid_argument("invalid stochastic sample coordinate");
+  }
+  return m_stochasticSurface[pixel * StochasticSampleCount + sample];
 }

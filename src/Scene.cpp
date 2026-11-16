@@ -1,4 +1,6 @@
 #include <scene/Scene.hpp>
+#include <limits>
+#include <unordered_set>
 
 SoftRasterizer::Scene::Scene(std::string, const glm::vec3 &eye,
                              const glm::vec3 &center, const glm::vec3 &up,
@@ -9,6 +11,42 @@ SoftRasterizer::Scene::Scene(std::string, const glm::vec3 &eye,
     throw std::invalid_argument("invalid background");
   }
   m_camera.lookAt(eye, center, up);
+}
+
+bool SoftRasterizer::Scene::setSurfaceId(const std::string &objectName,
+                                         std::uint64_t surfaceId) {
+  if (surfaceId == 0) {
+    throw std::invalid_argument("surfaceId must be nonzero");
+  }
+  startLoadingMesh(objectName);
+  if (!m_loadedObjs.count(objectName)) {
+    return false;
+  }
+  m_surfaceBaseIds[objectName] = surfaceId;
+  m_geometryDirty = true;
+  return true;
+}
+
+std::uint64_t
+SoftRasterizer::Scene::surfaceId(const std::string &objectName) const {
+  auto iter = m_surfaceBaseIds.find(objectName);
+  return iter == m_surfaceBaseIds.end() ? 0 : iter->second;
+}
+
+/*Assign stable identities to one object's slice of the rebuilt triangle
+ * stream. Explicit ids come from setSurfaceId(); other objects receive an
+ * automatic base that is stored by object name, so neither cache rebuilds nor
+ * name-sorted iteration can change it. The whole-stream uniqueness check that
+ * follows in prepare() rejects any zero or duplicate identity.*/
+void SoftRasterizer::Scene::assignSurfaceIds() {
+  std::unordered_set<std::uint64_t> used;
+  used.reserve(m_rasterTriangles.size() * 2 + 1);
+  for (const auto &triangle : m_rasterTriangles) {
+    if (triangle.surfaceId == 0 || !used.insert(triangle.surfaceId).second) {
+      throw std::invalid_argument(
+          "raster triangles require unique nonzero surfaceId values");
+    }
+  }
 }
 
 bool SoftRasterizer::Scene::addGraphicObj(std::shared_ptr<Object> object,
@@ -124,10 +162,37 @@ void SoftRasterizer::Scene::prepare() {
     m_rasterTriangles.clear();
     for (auto &[name, objData] : m_loadedObjs) {
       objData.mesh->appendPrimitives(m_primitives);
+      const std::size_t triangleOffset = m_rasterTriangles.size();
       objData.mesh->appendRasterTriangles(m_rasterTriangles);
+      const std::size_t triangleCount =
+          m_rasterTriangles.size() - triangleOffset;
+      auto configured = m_surfaceBaseIds.find(name);
+      if (configured == m_surfaceBaseIds.end()) {
+        // Automatic ids are remembered by object name, so later rebuilds and
+        // name-sorted traversal keep the same identities.
+        m_surfaceBaseIds.emplace(name, m_nextAutoSurfaceId);
+        configured = m_surfaceBaseIds.find(name);
+      }
+      const std::uint64_t base = configured->second;
+      if (triangleCount > 0 &&
+          base > std::numeric_limits<std::uint64_t>::max() -
+                     (triangleCount - 1)) {
+        throw std::invalid_argument("surfaceId range overflow");
+      }
+      for (std::size_t k = 0; k < triangleCount; ++k) {
+        m_rasterTriangles[triangleOffset + k].surfaceId = base + k;
+      }
+      // Advance the auto counter past every id ever consumed, including the
+      // ranges of explicitly identified objects.
+      m_nextAutoSurfaceId =
+          std::max(m_nextAutoSurfaceId, base + triangleCount);
       objData.preparedRevision = objData.mesh->revision();
     }
     m_bvh.rebuild(m_primitives);
+    // Keep the cache marked dirty until identity validation succeeds, so a
+    // rejected (zero/duplicate id) configuration re-validates on the next
+    // prepare() instead of silently rendering with bad ids.
+    assignSurfaceIds();
     m_geometryDirty = false;
   }
   updateLightDistribution();

@@ -34,10 +34,16 @@ struct Material {
   MaterialType type = MaterialType::DIFFUSE_AND_GLOSSY;
   glm::vec3 Kd{0.7f}, emission{0}, Ks{0};
   float ior = 1.5f, specularExponent = 32;
+  // Stochastic-transparency coverage. One is fully opaque (the default); zero
+  // is fully transparent. Only finite values in [0, 1] are accepted.
+  float opacity = 1.0f;
   std::shared_ptr<TextureLoader> texture;
 
   explicit Material(MaterialType t = MaterialType::DIFFUSE_AND_GLOSSY)
       : type(t) {}
+
+  // Reject non-finite or out-of-range opacity before any frame is rendered.
+  void setOpacity(float value);
 
   glm::vec3 albedo(const glm::vec2 &uv) const {
     return glm::clamp(

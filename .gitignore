@@ -8,5 +8,6 @@
 
 # Local CMake builds and rendered frames
 /build*/
+/.task-build/
 *.ppm
 .clang-format
