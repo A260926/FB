@@ -1531,6 +1531,7 @@ trace_lights make_trace_lights(
 
   for (auto handle : range(scene.instances.size())) {
     auto& instance = scene.instances[handle];
+    if (!instance.visible) continue;
     auto& material = scene.materials[instance.material];
     if (material.emission == vec3f{0, 0, 0}) continue;
     auto& shape = scene.shapes[instance.shape];
@@ -1578,6 +1579,39 @@ trace_lights make_trace_lights(
 
   // handle progress
   return lights;
+}
+
+// Update the scene between frames: publish node state, refit the bvh,
+// rebuild lights and reset the progressive state.
+void update_trace_scene(scene_data& scene, trace_bvh& bvh,
+    trace_lights& lights, trace_state& state, const trace_params& params,
+    const vector<int>& updated_shapes) {
+  // fully validate the update inputs before touching any derived state
+  if (bvh.ebvh.ebvh)
+    throw std::invalid_argument{"embree bvhs cannot be updated"};
+  if (bvh.bvh.shapes.size() != scene.shapes.size())
+    throw std::invalid_argument{"bvh does not match the scene shapes"};
+  if (bvh.bvh.bvh.primitives.size() != scene.instances.size())
+    throw std::invalid_argument{"bvh does not match the scene instances"};
+  for (auto shape : updated_shapes) {
+    if (shape < 0 || shape >= (int)scene.shapes.size())
+      throw std::invalid_argument{"updated shape index out of range"};
+  }
+
+  // validate the node hierarchy and publish frames and visibility to the
+  // bound instances; throws without publishing on invalid hierarchies
+  update_scene_nodes(scene);
+
+  // refit the shape and top-level bvhs, reusing node connectivity, leaf
+  // ranges and primitive ordering
+  update_scene_bvh(bvh.bvh, scene, {}, updated_shapes);
+
+  // rebuild the light set and area distributions, skipping hidden instances
+  lights = make_trace_lights(scene, params);
+
+  // reset the progressive state to a state newly created with the same
+  // params, so no stale samples are mixed into the next frames
+  state = make_trace_state(scene, params);
 }
 
 // Progressively computes an image.

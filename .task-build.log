@@ -1,0 +1,59 @@
+[ 11%] Building CXX object deps/stb_image/CMakeFiles/stb_image.dir/stb_image/stb_image.cpp.o
+[ 11%] Building C object deps/cgltf/CMakeFiles/cgltf.dir/cgltf/cgltf.c.o
+In file included from /Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/exts/stb_image/stb_image/stb_image.cpp:44:
+/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/exts/stb_image/stb_image/stb_image_write.h:776:13: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  776 |       len = sprintf(buffer, "EXPOSURE=          1.0000000000000\n\n-Y %d +X %d\n", y, x);
+      |             ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 16%] Building C object deps/cgltf/CMakeFiles/cgltf.dir/cgltf/cgltf_write.c.o
+1 warning generated.
+[ 22%] Linking CXX static library libstb_image.a
+[ 22%] Built target stb_image
+[ 27%] Building CXX object deps/tinyexr/CMakeFiles/tinyexr.dir/tinyexr/tinyexr.cpp.o
+[ 33%] Linking C static library libcgltf.a
+[ 33%] Built target cgltf
+[ 38%] Linking CXX static library libtinyexr.a
+[ 38%] Built target tinyexr
+[ 50%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_image.cpp.o
+[ 50%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_bvh.cpp.o
+[ 55%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_modelio.cpp.o
+[ 61%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_pbrtio.cpp.o
+[ 66%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_scene.cpp.o
+[ 72%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_sceneio.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_sceneio.cpp:47:
+/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/exts/nlohmann_json/single_include/nlohmann/json.hpp:21898:35: warning: identifier '_json' preceded by whitespace in a literal operator declaration is deprecated [-Wdeprecated-literal-operator]
+ 21898 | inline nlohmann::json operator "" _json(const char* s, std::size_t n)
+       |                       ~~~~~~~~~~~~^~~~~
+       |                       operator""_json
+/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/exts/nlohmann_json/single_include/nlohmann/json.hpp:21906:49: warning: identifier '_json_pointer' preceded by whitespace in a literal operator declaration is deprecated [-Wdeprecated-literal-operator]
+ 21906 | inline nlohmann::json::json_pointer operator "" _json_pointer(const char* s, std::size_t n)
+       |                                     ~~~~~~~~~~~~^~~~~~~~~~~~~
+       |                                     operator""_json_pointer
+[ 77%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_shape.cpp.o
+[ 83%] Building CXX object CMakeFiles/task_cpu.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/libs/yocto/yocto_trace.cpp.o
+2 warnings generated.
+[ 88%] Linking CXX static library libtask_cpu.a
+[ 88%] Built target task_cpu
+[ 94%] Building CXX object CMakeFiles/task_baseline.dir/baseline.cpp.o
+[100%] Linking CXX executable task_baseline
+[100%] Built target task_baseline
+[ 15%] Built target cgltf
+[ 26%] Built target stb_image
+[ 36%] Built target tinyexr
+[ 84%] Built target task_cpu
+[ 94%] Building CXX object CMakeFiles/target.dir/driver.c.o
+[ 94%] Building CXX object CMakeFiles/target.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/checks/scene_nodes.cpp.o
+[100%] Linking CXX executable target
+[100%] Built target target
+[ 22%] Built target stb_image
+[ 27%] Built target cgltf
+[ 38%] Built target tinyexr
+[ 88%] Built target task_cpu
+[ 94%] Building CXX object CMakeFiles/scene_nodes_example.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/examples/scene_nodes.cpp.o
+[100%] Linking CXX executable scene_nodes_example
+[100%] Built target scene_nodes_example

@@ -599,6 +599,7 @@ scene_intersection intersect_scene_bvh(const scene_bvh& sbvh,
     } else {
       for (auto idx = node.start; idx < node.start + node.num; idx++) {
         auto& instance_ = scene.instances[bvh.primitives[idx]];
+        if (!instance_.visible) continue;
         auto  inv_ray   = transform_ray(inverse(instance_.frame, true), ray);
         auto  sintersection = intersect_shape_bvh(sbvh.shapes[instance_.shape],
              scene.shapes[instance_.shape], inv_ray, find_any);
@@ -619,6 +620,7 @@ scene_intersection intersect_scene_bvh(const scene_bvh& sbvh,
 scene_intersection intersect_instance_bvh(const scene_bvh& sbvh,
     const scene_data& scene, int instance_, const ray3f& ray, bool find_any) {
   auto& instance     = scene.instances[instance_];
+  if (!instance.visible) return {};
   auto  inv_ray      = transform_ray(inverse(instance.frame, true), ray);
   auto  intersection = intersect_shape_bvh(sbvh.shapes[instance.shape],
        scene.shapes[instance.shape], inv_ray, find_any);

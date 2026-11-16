@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/scene_nodes_example.dir/Volumes/UserFBWorkspace/questions/FS01B0AE9C5A49U11822/attempts/20261116T024440829128Z/repo/examples/scene_nodes.cpp.o -o scene_nodes_example  libtask_cpu.a deps/stb_image/libstb_image.a deps/tinyexr/libtinyexr.a deps/cgltf/libcgltf.a

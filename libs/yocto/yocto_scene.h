@@ -146,6 +146,20 @@ struct instance_data {
   frame3f frame    = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0, 0, 0}};
   int     shape    = invalidid;
   int     material = invalidid;
+  bool    visible  = true;
+};
+
+// Scene node used to group instances under an editable hierarchy.
+// Nodes form a forest: `parent` is the index of the parent node or -1 for a
+// root, and `instance` is the index of the bound instance or -1 for a pure
+// grouping node. Node indices are not required to be sorted by hierarchy and
+// multiple roots are allowed, but each instance is bound to at most one node.
+// The local transform is a finite rigid frame (rotation and translation only).
+struct scene_node {
+  int     parent   = invalidid;
+  int     instance = invalidid;
+  frame3f local    = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0, 0, 0}};
+  bool    visible  = true;
 };
 
 // Environment map.
@@ -198,6 +212,7 @@ struct scene_data {
   vector<texture_data>     textures     = {};
   vector<material_data>    materials    = {};
   vector<subdiv_data>      subdivs      = {};
+  vector<scene_node>       nodes        = {};
 
   // names (this will be cleanup significantly later)
   vector<string> camera_names      = {};
@@ -211,6 +226,33 @@ struct scene_data {
   // copyright info preserve in IO
   string copyright = "";
 };
+
+}  // namespace yocto
+
+// -----------------------------------------------------------------------------
+// SCENE NODES
+// -----------------------------------------------------------------------------
+namespace yocto {
+
+// Updates the node hierarchy: computes each node's world frame as the parent
+// world frame times the node local frame, and publishes the world frame and
+// the logical and of the ancestors' visibility to the bound instance.
+// Instances not bound to any node keep their own frame and visibility, while
+// bound instances have these two fields managed exclusively by the nodes.
+// Throws std::invalid_argument on duplicate instance bindings, out-of-range
+// parent or instance indices, cycles, self-parenting, or non-finite or
+// non-rigid local frames, without publishing any partial result.
+void update_scene_nodes(scene_data& scene);
+
+// Rebinds `node` to a new `parent` (-1 for a root). With `keep_world` the
+// whole subtree keeps its current world pose by recomputing the node local
+// frame; otherwise the node keeps its current local frame. Both modes
+// re-inherit visibility from the new ancestors. Throws std::invalid_argument
+// on out-of-range indices, cycles, self-parenting, or non-finite or non-rigid
+// resulting local frames; on failure the node parent and local frame are left
+// untouched and no instance state is published.
+void reparent_scene_node(
+    scene_data& scene, int node, int parent, bool keep_world);
 
 }  // namespace yocto
 

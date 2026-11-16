@@ -167,6 +167,18 @@ trace_lights make_trace_lights(
 // Build the bvh acceleration structure.
 trace_bvh make_trace_bvh(const scene_data& scene, const trace_params& params);
 
+// Updates the scene between frames: validates the node hierarchy and the
+// list of updated shapes, publishes node frames and visibility to bound
+// instances, refits the shape and top-level bvhs reusing their node
+// connectivity, leaf ranges and primitive ordering, rebuilds the light set
+// and area distributions, and resets the progressive state to the sample
+// count, image and RNG of a state newly created with the same params.
+// Throws std::invalid_argument on an invalid hierarchy or update list,
+// leaving instance state, bvh, lights and trace state untouched.
+void update_trace_scene(scene_data& scene, trace_bvh& bvh,
+    trace_lights& lights, trace_state& state, const trace_params& params,
+    const vector<int>& updated_shapes);
+
 // Progressively computes an image.
 void trace_samples(trace_state& state, const scene_data& scene,
     const trace_bvh& bvh, const trace_lights& lights,

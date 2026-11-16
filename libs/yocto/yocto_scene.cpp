@@ -57,6 +57,167 @@ using namespace std::string_literals;
 }  // namespace yocto
 
 // -----------------------------------------------------------------------------
+// SCENE NODES
+// -----------------------------------------------------------------------------
+namespace yocto {
+
+// Check that a node local frame is finite and rigid: the linear part must
+// satisfy R^T R == I with a per-element error of at most 1e-4 and have a
+// positive determinant, so only rotations and translations are allowed.
+static bool is_rigid_node_frame(const frame3f& frame) {
+  if (!isfinite(frame.x) || !isfinite(frame.y) || !isfinite(frame.z) ||
+      !isfinite(frame.o))
+    return false;
+  auto rot = mat3f{frame.x, frame.y, frame.z};
+  auto rtr = transpose(rot) * rot;
+  for (auto i : range(3)) {
+    for (auto j : range(3)) {
+      if (abs(rtr[i][j] - identity3x3f[i][j]) > 1e-4f) return false;
+    }
+  }
+  if (determinant(rot) <= 0) return false;
+  return true;
+}
+
+// Validate the node hierarchy, throwing std::invalid_argument on the first
+// error found. The scene is not modified.
+static void validate_scene_nodes(const scene_data& scene) {
+  auto& nodes = scene.nodes;
+  for (auto idx : range(nodes.size())) {
+    auto& node = nodes[idx];
+    if (node.parent < -1 || node.parent >= (int)nodes.size())
+      throw std::invalid_argument{"node parent index out of range"};
+    if (node.parent == (int)idx)
+      throw std::invalid_argument{"node cannot be its own parent"};
+    if (node.instance < -1 || node.instance >= (int)scene.instances.size())
+      throw std::invalid_argument{"node instance index out of range"};
+    if (!is_rigid_node_frame(node.local))
+      throw std::invalid_argument{"node local frame is not finite and rigid"};
+  }
+  // each instance is bound to at most one node
+  auto bound = vector<bool>(scene.instances.size(), false);
+  for (auto& node : nodes) {
+    if (node.instance == invalidid) continue;
+    if (bound[node.instance])
+      throw std::invalid_argument{"instance bound to multiple nodes"};
+    bound[node.instance] = true;
+  }
+  // cycles: any chain longer than the node count must repeat a node
+  for (auto idx : range(nodes.size())) {
+    auto current = (int)idx;
+    for (auto step : range(nodes.size())) {
+      current = nodes[current].parent;
+      if (current == -1) break;
+    }
+    if (current != -1)
+      throw std::invalid_argument{"node hierarchy contains a cycle"};
+  }
+}
+
+// Compute world frames and effective visibility for all nodes. Assumes the
+// hierarchy has been validated. Handles unsorted indices and multiple roots.
+static void compute_node_worlds(const scene_data& scene,
+    vector<frame3f>& worlds, vector<bool>& visibles) {
+  auto& nodes = scene.nodes;
+  worlds.assign(nodes.size(), identity3x4f);
+  visibles.assign(nodes.size(), true);
+  auto done = vector<bool>(nodes.size(), false);
+  for (auto idx : range(nodes.size())) {
+    // collect the chain of ancestors not yet computed
+    auto chain   = vector<int>{};
+    auto current = (int)idx;
+    while (current != -1 && !done[current]) {
+      chain.push_back(current);
+      current = nodes[current].parent;
+    }
+    // walk the chain from the root down accumulating transforms
+    auto world   = current == -1 ? identity3x4f : worlds[current];
+    auto visible = current == -1 ? true : visibles[current];
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+      world           = world * nodes[*it].local;
+      visible         = visible && nodes[*it].visible;
+      worlds[*it]     = world;
+      visibles[*it]   = visible;
+      done[*it]       = true;
+    }
+  }
+}
+
+void update_scene_nodes(scene_data& scene) {
+  // validate the full hierarchy before touching any derived state
+  validate_scene_nodes(scene);
+
+  // compute world frames and inherited visibility
+  auto worlds   = vector<frame3f>{};
+  auto visibles = vector<bool>{};
+  compute_node_worlds(scene, worlds, visibles);
+
+  // publish to bound instances only after all results are computed, so that
+  // unbound instances keep their own frame and visibility
+  for (auto idx : range(scene.nodes.size())) {
+    auto& node = scene.nodes[idx];
+    if (node.instance == invalidid) continue;
+    scene.instances[node.instance].frame   = worlds[idx];
+    scene.instances[node.instance].visible = visibles[idx];
+  }
+}
+
+void reparent_scene_node(
+    scene_data& scene, int node, int parent, bool keep_world) {
+  auto& nodes = scene.nodes;
+  if (node < 0 || node >= (int)nodes.size())
+    throw std::invalid_argument{"node index out of range"};
+  if (parent < -1 || parent >= (int)nodes.size())
+    throw std::invalid_argument{"parent index out of range"};
+  if (parent == node)
+    throw std::invalid_argument{"node cannot be its own parent"};
+
+  // the new parent must not be a descendant of the node; the walk also
+  // validates that the current ancestor chain of the parent is cycle-free
+  {
+    auto current = parent;
+    for (auto step = (size_t)0; step <= nodes.size(); step++) {
+      if (current == -1) break;
+      if (current == node)
+        throw std::invalid_argument{"reparenting would create a cycle"};
+      current = nodes[current].parent;
+    }
+    if (current != -1)
+      throw std::invalid_argument{"node hierarchy contains a cycle"};
+  }
+
+  // compute the new local frame before mutating anything
+  auto local = nodes[node].local;
+  if (keep_world) {
+    // world frames are needed, so the current hierarchy must be valid
+    validate_scene_nodes(scene);
+    auto worlds   = vector<frame3f>{};
+    auto visibles = vector<bool>{};
+    compute_node_worlds(scene, worlds, visibles);
+    auto parent_world = parent == -1 ? identity3x4f : worlds[parent];
+    local             = inverse(parent_world) * worlds[node];
+    if (!is_rigid_node_frame(local))
+      throw std::invalid_argument{
+          "resulting local frame is not finite and rigid"};
+  }
+
+  // commit and republish, restoring the previous content on failure
+  auto old_parent    = nodes[node].parent;
+  auto old_local     = nodes[node].local;
+  nodes[node].parent = parent;
+  nodes[node].local  = local;
+  try {
+    update_scene_nodes(scene);
+  } catch (...) {
+    nodes[node].parent = old_parent;
+    nodes[node].local  = old_local;
+    throw;
+  }
+}
+
+}  // namespace yocto
+
+// -----------------------------------------------------------------------------
 // CAMERA PROPERTIES
 // -----------------------------------------------------------------------------
 namespace yocto {

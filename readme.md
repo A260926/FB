@@ -60,6 +60,48 @@ included in the [project site](https://xelatihy.github.io/yocto-gl/).
 
 ![Image rendered with Yocto/GL path tracer. Model by Disney Animation Studios.](images/island.jpg)
 
+## Scene nodes and frame-to-frame updates
+
+Scenes can optionally organize instances under an editable node hierarchy.
+`scene_data::nodes` holds `scene_node` elements with a `parent` index (-1 for
+a root), an `instance` index (-1 for a pure grouping node), a rigid `local`
+frame (rotation and translation) and a `visible` flag. Node indices do not
+need to be sorted by hierarchy and multiple roots are allowed, but each
+instance is bound to at most one node. `update_scene_nodes(scene)` computes
+world frames as parent-world times local and publishes them, together with
+the logical and of the ancestors' visibility, to the bound instances;
+unbound instances keep their own `frame` and `visible` fields.
+`reparent_scene_node(scene, node, parent, keep_world)` rebinds a node to a
+new parent, either preserving the subtree's world pose or its local frame.
+Invalid hierarchies (duplicate bindings, out-of-range indices, cycles,
+self-parenting, non-finite or non-rigid local frames) throw
+`std::invalid_argument` without publishing partial results.
+
+Hidden instances are skipped by `intersect_scene_bvh` and
+`intersect_instance_bvh` (both closest and `find_any` queries), do not
+occlude visible geometry and do not contribute area lights. Between frames,
+`update_trace_scene(scene, bvh, lights, state, params, updated_shapes)`
+validates the hierarchy and the update list, publishes node state, refits
+the existing shape and top-level bvhs reusing their topology, rebuilds the
+light set and resets the progressive trace state, so the CPU path tracer
+uses the new hierarchy state on the next frame:
+
+```cpp
+auto bvh = make_trace_bvh(scene, params);      // once
+auto lights = make_trace_lights(scene, params);
+auto state = make_trace_state(scene, params);
+// each frame: edit nodes/shapes, then
+update_trace_scene(scene, bvh, lights, state, params, updated_shapes);
+while (state.samples < params.samples)
+  trace_samples(state, scene, bvh, lights, params);
+```
+
+See `examples/scene_nodes.cpp` for a complete example that renders a scene
+of shared-mesh cards to `before.ppm` and `after.ppm` across a group move, a
+visibility toggle and a shared-geometry edit. Build and run it, together
+with the checks in `checks/scene_nodes.cpp`, with `bash task_support/run.sh
+target`.
+
 ## Design Considerations
 
 Yocto/GL follows a "data-oriented programming model" that makes data explicit.
