@@ -221,6 +221,60 @@ $ cmake --build . --target <example_name>
 $ ../examples/bin/example_name
 ```
 
+## Reflective Shadow Map (RSM)
+
+A CPU-only, deterministic one-bounce diffuse color-bleeding module lives under
+`include/microgl/rsm/`, with `Rsm.h` as the single, independently includable public
+entry point. It reuses the micro-gl triangle pipeline (six-plane homogeneous
+clipping, top-left barycentric coverage and the uint16 nearest-wins depth path) and
+stores full precision world position, normalized world normal and floating point RGB
+flux per light-map texel — never byte-encoded colors.
+
+Key points:
+
+* square light maps from `8` to `64`;
+* input is local-space triangles with per-vertex normals, per-face linear RGB
+  reflectance, an invertible affine model matrix and an orthographic directional
+  light (view/projection, unit propagation direction, world width/height, RGB
+  irradiance);
+* normals are transformed with the inverse-transpose of the model matrix;
+* double-sided occlusion: a back-facing nearest surface keeps its position/depth but
+  stores zero flux;
+* receiver transport sums **every** texel (no random sampling, no renormalization by
+  valid-texel count) and adds no secondary occlusion between reflector and receiver;
+* the snapshot owns its data and is unaffected by later canvas clears, input-array
+  edits or other camera draws; recapture replaces it, a failed capture keeps the
+  previous one, and capture never touches the caller's canvas or depth buffer.
+
+Minimal usage:
+
+```cpp
+#include <microgl/rsm/Rsm.h>
+using namespace microgl::rsm;
+
+Rsm<float> rsm;
+rsm.capture(surface, light, 32);                 // surface/light describe the scene
+auto flux = rsm.texelFlux(x, y);                  // read-only texel query
+auto color = rsm.shade(point, normal,             // linear receiver color
+                       receiver_reflectance, ambient, gain, epsilon);
+```
+
+The headless example `examples/headless_rsm.cpp` builds two colored walls and a
+receiver, runs the full production path and writes a PPM. Build and run it without a
+window, GPU or any download:
+
+```bash
+$ c++ -std=c++17 -O1 -Iinclude examples/headless_rsm.cpp -o rsm-example
+$ ./rsm-example            # writes .task-build/rsm.ppm
+```
+
+The task test harness compiles the implementation, tests and the example and also
+runs the original triangle production baseline:
+
+```bash
+$ bash task_support/run.sh target
+```
+
 ```text
 Author: Tomer Shalev, tomer.shalev@gmail.com, all rights reserved (2021)
 ```
