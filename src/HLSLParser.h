@@ -99,10 +99,10 @@ private:
     void BeginScope();
     void EndScope();
 
-    void DeclareVariable(const char* name, const HLSLType& type);
+    void DeclareVariable(const char* name, const HLSLType& type, bool readOnly = false);
 
     /** Returned pointer is only valid until Declare or Begin/EndScope is called. */
-    const HLSLType* FindVariable(const char* name, bool& global) const;
+    const HLSLType* FindVariable(const char* name, bool& global, bool* readOnly = NULL) const;
 
     const HLSLFunction* FindFunction(const char* name) const;
     const HLSLFunction* FindFunction(const HLSLFunction* fun) const;
@@ -120,12 +120,17 @@ private:
     const char* GetFileName();
     int GetLineNumber() const;
 
+    bool CheckLValue(HLSLExpression* expression, HLSLBinaryOp binaryOp);
+    bool CheckMatrixAssignment(HLSLBinaryExpression* binaryExpression);
+    bool CheckFunctionCallArguments(HLSLFunctionCall* functionCall);
+
 private:
 
     struct Variable
     {
         const char*     name;
         HLSLType        type;
+        bool            readOnly;   // const (or a cbuffer/tbuffer field)
     };
 
     HLSLTokenizer           m_tokenizer;

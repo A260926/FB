@@ -44,6 +44,11 @@ public:
     const char* GetResult() const;
     void Reset();
 
+    /** Current length of the generated text. Used to splice in declarations
+     * after a statement has been generated. */
+    size_t GetSize() const;
+    void Insert(size_t position, const char* text);
+
 private:
 
     std::string     m_buffer;

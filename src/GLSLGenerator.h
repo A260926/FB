@@ -12,6 +12,10 @@
 
 #include "CodeWriter.h"
 #include "HLSLTree.h"
+#include "MatrixTarget.h"
+
+#include <string>
+#include <vector>
 
 namespace M4
 {
@@ -105,6 +109,47 @@ private:
     HLSLStruct* FindStruct(HLSLRoot* root, const char* name);
 
     void Error(const char* format, ...);
+    void ErrorAt(const char* fileName, int line, const char* format, ...);
+
+    /** Matrix row and multi component selection support. */
+    struct CapturedExpression
+    {
+        HLSLExpression* expression;
+        std::string     name;
+        HLSLType        type;
+    };
+
+    typedef std::vector<CapturedExpression> CaptureList;
+
+    bool IsPureExpression(HLSLExpression* expression) const;
+    bool IsLValueChain(HLSLExpression* expression) const;
+
+    std::string MakeTempName(const char* prefix);
+    void DeclareTemp(const HLSLType& type, const std::string& name);
+    std::string FormatType(const HLSLType& type) const;
+    static const char* VectorTypeName(int count);
+
+    int FindCapture(const CaptureList& captures, HLSLExpression* expression) const;
+    std::string CaptureValue(HLSLExpression* expression, const HLSLType& type, CaptureList& captures);
+    void OutputCaptureAssignments(const CaptureList& captures);
+    void CaptureChainIndexes(HLSLExpression* expression, CaptureList& captures);
+
+    void OutputChain(HLSLExpression* expression, const CaptureList& captures);
+    void OutputCapturedValue(HLSLExpression* expression, const CaptureList& captures);
+    void OutputMatrixBase(const HLSLMatrixTarget& target, const CaptureList& captures);
+
+    void PrepareMatrixRead(HLSLMatrixTarget target, CaptureList& captures);
+    void PrepareMatrixWrite(HLSLMatrixTarget target, CaptureList& captures);
+    void OutputRowComponent(const HLSLMatrixTarget& target, int component, const CaptureList& captures);
+    void OutputMatrixRead(const HLSLMatrixTarget& target, const CaptureList& captures);
+    void OutputMatrixWriteComponents(const HLSLMatrixTarget& target, const CaptureList& captures,
+                                     const std::string& valueName, HLSLBinaryOp binaryOp,
+                                     bool valueIsVector);
+
+    bool OutputMatrixAssignment(HLSLBinaryExpression* binaryExpression);
+    bool OutputFunctionCallWithMatrixOutputs(HLSLFunctionCall* functionCall);
+
+    void FlushPendingDeclarations(size_t base, int indent, size_t position);
 
     /** GLSL contains some reserved words that don't exist in HLSL. This function will
      * sanitize those names. */
@@ -154,6 +199,9 @@ private:
 	char                m_bvecTernary[ 64 ];
 
     bool                m_error;
+
+    std::vector<std::string> m_pendingDeclarations;
+    int                 m_tempCounter;
 
     char                m_reservedWord[s_numReservedWords][64];
 

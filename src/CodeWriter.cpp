@@ -145,4 +145,18 @@ void CodeWriter::Reset()
     m_buffer.clear();
 }
 
+size_t CodeWriter::GetSize() const
+{
+    return m_buffer.size();
+}
+
+void CodeWriter::Insert(size_t position, const char* text)
+{
+    if (position > m_buffer.size())
+    {
+        position = m_buffer.size();
+    }
+    m_buffer.insert(position, text);
+}
+
 }

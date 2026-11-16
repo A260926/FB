@@ -129,6 +129,7 @@ GLSLGenerator::GLSLGenerator() :
 	m_bvecTernary[ 0 ]			= 0;
     m_outputPosition            = false;
     m_outputTargets             = 0;
+    m_tempCounter               = 0;
 }
 
 bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, const char* entryName, const Options& options)
@@ -140,6 +141,14 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
     m_version   = version;
     m_versionLegacy = (version == Version_110 || version == Version_100_ES);
     m_options   = options;
+
+    // Regenerating from the same tree must produce the same output.
+    m_writer.Reset();
+    m_pendingDeclarations.clear();
+    m_tempCounter = 0;
+    m_outputPosition = false;
+    m_outputTargets = 0;
+    m_error = false;
 
     ChooseUniqueName("matrix_row", m_matrixRowFunction, sizeof(m_matrixRowFunction));
     ChooseUniqueName("matrix_ctor", m_matrixCtorFunction, sizeof(m_matrixCtorFunction));
@@ -391,6 +400,8 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
         m_writer.WriteLine(0, "#extension GL_OES_standard_derivatives : require");
     }
 
+    size_t prologueEnd = m_writer.GetSize();
+
     OutputAttributes(entryFunction);
 
     if (m_target == Target_FragmentShader)
@@ -403,7 +414,12 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
     }
 
     OutputStatements(0, statement);
+    FlushPendingDeclarations(0, 0, prologueEnd);
     OutputEntryCaller(entryFunction);
+
+    // Anything still pending would belong to the entry caller; keep the
+    // generator clean for a second Generate call.
+    m_pendingDeclarations.clear();
 
     m_tree = NULL;
 
@@ -420,6 +436,681 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
 const char* GLSLGenerator::GetResult() const
 {
     return m_writer.GetResult();
+}
+
+const char* GLSLGenerator::VectorTypeName(int count)
+{
+    switch (count)
+    {
+    case 1: return "float";
+    case 2: return "vec2";
+    case 3: return "vec3";
+    case 4: return "vec4";
+    default: return "vec4";
+    }
+}
+
+std::string GLSLGenerator::FormatType(const HLSLType& type) const
+{
+    if (type.baseType == HLSLBaseType_UserDefined)
+    {
+        return std::string(type.typeName != NULL ? type.typeName : "?");
+    }
+    return std::string(GetTypeName(type));
+}
+
+std::string GLSLGenerator::MakeTempName(const char* prefix)
+{
+    char buffer[64];
+    for (int i = 0; i < 1024; ++i)
+    {
+        String_Printf(buffer, sizeof(buffer), "%s%d", prefix, m_tempCounter++);
+        if (!m_tree->GetContainsString(buffer))
+        {
+            return std::string(buffer);
+        }
+    }
+    return std::string(prefix);
+}
+
+void GLSLGenerator::DeclareTemp(const HLSLType& type, const std::string& name)
+{
+    m_pendingDeclarations.push_back(FormatType(type) + " " + name + ";");
+}
+
+void GLSLGenerator::FlushPendingDeclarations(size_t base, int indent, size_t position)
+{
+    if (m_pendingDeclarations.size() <= base)
+    {
+        return;
+    }
+
+    std::string text;
+    for (size_t i = base; i < m_pendingDeclarations.size(); ++i)
+    {
+        for (int j = 0; j < indent * 4; ++j)
+        {
+            text += ' ';
+        }
+        text += m_pendingDeclarations[i];
+        text += '\n';
+    }
+    m_pendingDeclarations.resize(base);
+    m_writer.Insert(position, text.c_str());
+}
+
+bool GLSLGenerator::IsPureExpression(HLSLExpression* expression) const
+{
+    if (expression == NULL)
+    {
+        return true;
+    }
+    switch (expression->nodeType)
+    {
+    case HLSLNodeType_LiteralExpression:
+    case HLSLNodeType_IdentifierExpression:
+        return true;
+    case HLSLNodeType_MemberAccess:
+        return IsPureExpression(static_cast<HLSLMemberAccess*>(expression)->object);
+    case HLSLNodeType_ArrayAccess:
+        return IsPureExpression(static_cast<HLSLArrayAccess*>(expression)->array) &&
+            IsPureExpression(static_cast<HLSLArrayAccess*>(expression)->index);
+    case HLSLNodeType_ConstructorExpression:
+        {
+            HLSLExpression* argument = static_cast<HLSLConstructorExpression*>(expression)->argument;
+            while (argument != NULL)
+            {
+                if (!IsPureExpression(argument))
+                {
+                    return false;
+                }
+                argument = argument->nextExpression;
+            }
+            return true;
+        }
+    case HLSLNodeType_CastingExpression:
+        return IsPureExpression(static_cast<HLSLCastingExpression*>(expression)->expression);
+    case HLSLNodeType_BinaryExpression:
+        {
+            HLSLBinaryExpression* binary = static_cast<HLSLBinaryExpression*>(expression);
+            if (IsAssignOp(binary->binaryOp))
+            {
+                return false;
+            }
+            return IsPureExpression(binary->expression1) && IsPureExpression(binary->expression2);
+        }
+    case HLSLNodeType_ConditionalExpression:
+        {
+            HLSLConditionalExpression* conditional = static_cast<HLSLConditionalExpression*>(expression);
+            return IsPureExpression(conditional->condition) &&
+                IsPureExpression(conditional->trueExpression) &&
+                IsPureExpression(conditional->falseExpression);
+        }
+    case HLSLNodeType_UnaryExpression:
+        {
+            HLSLUnaryExpression* unary = static_cast<HLSLUnaryExpression*>(expression);
+            if (unary->unaryOp == HLSLUnaryOp_PreIncrement || unary->unaryOp == HLSLUnaryOp_PreDecrement ||
+                unary->unaryOp == HLSLUnaryOp_PostIncrement || unary->unaryOp == HLSLUnaryOp_PostDecrement)
+            {
+                return false;
+            }
+            return IsPureExpression(unary->expression);
+        }
+    default:
+        // Function calls may have side effects or output arguments.
+        return false;
+    }
+}
+
+bool GLSLGenerator::IsLValueChain(HLSLExpression* expression) const
+{
+    if (expression == NULL)
+    {
+        return false;
+    }
+    switch (expression->nodeType)
+    {
+    case HLSLNodeType_IdentifierExpression:
+        return true;
+    case HLSLNodeType_MemberAccess:
+        return IsLValueChain(static_cast<HLSLMemberAccess*>(expression)->object);
+    case HLSLNodeType_ArrayAccess:
+        return IsLValueChain(static_cast<HLSLArrayAccess*>(expression)->array);
+    default:
+        return false;
+    }
+}
+
+int GLSLGenerator::FindCapture(const CaptureList& captures, HLSLExpression* expression) const
+{
+    for (size_t i = 0; i < captures.size(); ++i)
+    {
+        if (captures[i].expression == expression)
+        {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+std::string GLSLGenerator::CaptureValue(HLSLExpression* expression, const HLSLType& type, CaptureList& captures)
+{
+    int index = FindCapture(captures, expression);
+    if (index >= 0)
+    {
+        return captures[index].name;
+    }
+
+    CapturedExpression captured;
+    captured.expression = expression;
+    captured.type       = type;
+    captured.name       = MakeTempName("m4_tmp");
+    DeclareTemp(type, captured.name);
+    captures.push_back(captured);
+    return captured.name;
+}
+
+void GLSLGenerator::OutputCaptureAssignments(const CaptureList& captures)
+{
+    for (size_t i = 0; i < captures.size(); ++i)
+    {
+        if (i > 0)
+        {
+            m_writer.Write(", ");
+        }
+        m_writer.Write("%s = ", captures[i].name.c_str());
+        OutputExpression(captures[i].expression, &captures[i].type);
+    }
+}
+
+void GLSLGenerator::CaptureChainIndexes(HLSLExpression* expression, CaptureList& captures)
+{
+    if (expression == NULL)
+    {
+        return;
+    }
+    if (expression->nodeType == HLSLNodeType_MemberAccess)
+    {
+        CaptureChainIndexes(static_cast<HLSLMemberAccess*>(expression)->object, captures);
+    }
+    else if (expression->nodeType == HLSLNodeType_ArrayAccess)
+    {
+        HLSLArrayAccess* arrayAccess = static_cast<HLSLArrayAccess*>(expression);
+        CaptureChainIndexes(arrayAccess->array, captures);
+        if (!IsPureExpression(arrayAccess->index))
+        {
+            CaptureValue(arrayAccess->index, arrayAccess->index->expressionType, captures);
+        }
+    }
+}
+
+void GLSLGenerator::OutputChain(HLSLExpression* expression, const CaptureList& captures)
+{
+    if (expression == NULL)
+    {
+        return;
+    }
+    switch (expression->nodeType)
+    {
+    case HLSLNodeType_IdentifierExpression:
+        OutputExpression(expression);
+        break;
+    case HLSLNodeType_MemberAccess:
+        {
+            HLSLMemberAccess* memberAccess = static_cast<HLSLMemberAccess*>(expression);
+            OutputChain(memberAccess->object, captures);
+            m_writer.Write(".%s", memberAccess->field);
+        }
+        break;
+    case HLSLNodeType_ArrayAccess:
+        {
+            HLSLArrayAccess* arrayAccess = static_cast<HLSLArrayAccess*>(expression);
+            OutputChain(arrayAccess->array, captures);
+            m_writer.Write("[");
+            int index = FindCapture(captures, arrayAccess->index);
+            if (index >= 0)
+            {
+                m_writer.Write("%s", captures[index].name.c_str());
+            }
+            else
+            {
+                OutputExpression(arrayAccess->index);
+            }
+            m_writer.Write("]");
+        }
+        break;
+    default:
+        OutputExpression(expression);
+        break;
+    }
+}
+
+void GLSLGenerator::OutputCapturedValue(HLSLExpression* expression, const CaptureList& captures)
+{
+    int index = FindCapture(captures, expression);
+    if (index >= 0)
+    {
+        m_writer.Write("%s", captures[index].name.c_str());
+    }
+    else
+    {
+        OutputExpression(expression);
+    }
+}
+
+void GLSLGenerator::OutputMatrixBase(const HLSLMatrixTarget& target, const CaptureList& captures)
+{
+    int index = FindCapture(captures, target.base);
+    if (index >= 0)
+    {
+        m_writer.Write("%s", captures[index].name.c_str());
+    }
+    else
+    {
+        OutputChain(target.base, captures);
+    }
+}
+
+void GLSLGenerator::OutputRowComponent(const HLSLMatrixTarget& target, int component, const CaptureList& captures)
+{
+    // GLSL stores matrices column major: m[column][row].
+    OutputMatrixBase(target, captures);
+
+    if (target.dynamicColumn)
+    {
+        m_writer.Write("[");
+        OutputCapturedValue(target.columnExpression, captures);
+        m_writer.Write("]");
+    }
+    else
+    {
+        m_writer.Write("[%d]", target.column[component]);
+    }
+
+    if (target.dynamicRow)
+    {
+        m_writer.Write("[");
+        OutputCapturedValue(target.rowExpression, captures);
+        m_writer.Write("]");
+    }
+    else
+    {
+        m_writer.Write("[%d]", target.row[component]);
+    }
+}
+
+void GLSLGenerator::OutputMatrixRead(const HLSLMatrixTarget& target, const CaptureList& captures)
+{
+    if (target.count == 1)
+    {
+        OutputRowComponent(target, 0, captures);
+        return;
+    }
+
+    // A multi component selection has to preserve the requested order and may
+    // repeat components.  GLSL rejects swizzles that overlap themselves, so
+    // build the result explicitly.
+    m_writer.Write("%s(", VectorTypeName(target.count));
+    for (int i = 0; i < target.count; ++i)
+    {
+        if (i > 0)
+        {
+            m_writer.Write(", ");
+        }
+        OutputRowComponent(target, i, captures);
+    }
+    m_writer.Write(")");
+}
+
+void GLSLGenerator::PrepareMatrixRead(HLSLMatrixTarget target, CaptureList& captures)
+{
+    if (target.base != NULL)
+    {
+        if (IsLValueChain(target.base))
+        {
+            CaptureChainIndexes(target.base, captures);
+        }
+        else if (!IsPureExpression(target.base))
+        {
+            // A matrix returning call (or similar) must be evaluated once.
+            CaptureValue(target.base, target.base->expressionType, captures);
+        }
+    }
+    if (target.dynamicRow && !IsPureExpression(target.rowExpression))
+    {
+        CaptureValue(target.rowExpression, target.rowExpression->expressionType, captures);
+    }
+    if (target.dynamicColumn && !IsPureExpression(target.columnExpression))
+    {
+        CaptureValue(target.columnExpression, target.columnExpression->expressionType, captures);
+    }
+}
+
+void GLSLGenerator::PrepareMatrixWrite(HLSLMatrixTarget target, CaptureList& captures)
+{
+    // The target must be located exactly once, even when it contains
+    // increments.  Capture the indexes rather than a copy of the matrix, so
+    // writes still reach the original storage.
+    CaptureChainIndexes(target.base, captures);
+    if (target.dynamicRow)
+    {
+        CaptureValue(target.rowExpression, target.rowExpression->expressionType, captures);
+    }
+    if (target.dynamicColumn)
+    {
+        CaptureValue(target.columnExpression, target.columnExpression->expressionType, captures);
+    }
+}
+
+void GLSLGenerator::OutputMatrixWriteComponents(const HLSLMatrixTarget& target, const CaptureList& captures,
+                                                const std::string& valueName, HLSLBinaryOp binaryOp,
+                                                bool valueIsVector)
+{
+    const char* op = "=";
+    switch (binaryOp)
+    {
+    case HLSLBinaryOp_AddAssign: op = "+="; break;
+    case HLSLBinaryOp_SubAssign: op = "-="; break;
+    case HLSLBinaryOp_MulAssign: op = "*="; break;
+    case HLSLBinaryOp_DivAssign: op = "/="; break;
+    default: op = "="; break;
+    }
+
+    for (int i = 0; i < target.count; ++i)
+    {
+        if (i > 0)
+        {
+            m_writer.Write(", ");
+        }
+        OutputRowComponent(target, i, captures);
+        m_writer.Write(" %s ", op);
+
+        if (!valueName.empty())
+        {
+            m_writer.Write("%s", valueName.c_str());
+            if (valueIsVector && target.count > 1)
+            {
+                m_writer.Write(".%c", "xyzw"[i]);
+            }
+        }
+        else
+        {
+            OutputExpression(target.rhs, NULL);
+        }
+    }
+}
+
+bool GLSLGenerator::OutputMatrixAssignment(HLSLBinaryExpression* binaryExpression)
+{
+    HLSLMatrixTarget target;
+    if (!GetHLSLMatrixTarget(m_tree, binaryExpression->expression1, target))
+    {
+        return false;
+    }
+
+    target.rhs = binaryExpression->expression2;
+
+    if (!MatrixTargetHasUniqueComponents(target))
+    {
+        ErrorAt(binaryExpression->expression1->fileName, binaryExpression->expression1->line,
+            "matrix assignment target selects the same component more than once");
+        m_writer.Write("0");
+        return true;
+    }
+
+    CaptureList captures;
+
+    // Locate the target once, and also locate any impure base expression
+    // before the right hand side runs.
+    PrepareMatrixWrite(target, captures);
+
+    // The right hand side has to be fully evaluated before the first store
+    // whenever several components are written, since it may read the same
+    // matrix.
+    std::string valueName;
+    if (target.count > 1)
+    {
+        valueName = MakeTempName("m4_rhs");
+        DeclareTemp(binaryExpression->expression2->expressionType, valueName);
+        m_writer.Write("(");
+        if (!captures.empty())
+        {
+            for (size_t i = 0; i < captures.size(); ++i)
+            {
+                if (i > 0)
+                {
+                    m_writer.Write(", ");
+                }
+                m_writer.Write("%s = ", captures[i].name.c_str());
+                OutputExpression(captures[i].expression, &captures[i].type);
+            }
+            m_writer.Write(", ");
+        }
+        m_writer.Write("%s = ", valueName.c_str());
+        OutputExpression(binaryExpression->expression2, &binaryExpression->expression2->expressionType);
+        m_writer.Write(", ");
+        OutputMatrixWriteComponents(target, captures, valueName, binaryExpression->binaryOp,
+            binaryExpression->expression2->expressionType.baseType != HLSLBaseType_Float &&
+            binaryExpression->expression2->expressionType.baseType != HLSLBaseType_Half &&
+            binaryExpression->expression2->expressionType.baseType != HLSLBaseType_Int &&
+            binaryExpression->expression2->expressionType.baseType != HLSLBaseType_Uint &&
+            binaryExpression->expression2->expressionType.baseType != HLSLBaseType_Bool);
+        // Preserve the value of the assignment expression.
+        m_writer.Write(", ");
+        OutputMatrixRead(target, captures);
+        m_writer.Write(")");
+        return true;
+    }
+
+    // A single component target.  Captures are emitted as a comma expression
+    // so that increments happen on the original evaluation path, not when the
+    // surrounding statement happens to be generated.
+    m_writer.Write("(");
+    for (size_t i = 0; i < captures.size(); ++i)
+    {
+        if (i > 0)
+        {
+            m_writer.Write(", ");
+        }
+        m_writer.Write("%s = ", captures[i].name.c_str());
+        OutputExpression(captures[i].expression, &captures[i].type);
+    }
+    if (!captures.empty())
+    {
+        m_writer.Write(", ");
+    }
+    OutputMatrixWriteComponents(target, captures, std::string(), binaryExpression->binaryOp, false);
+    m_writer.Write(")");
+    return true;
+}
+
+bool GLSLGenerator::OutputFunctionCallWithMatrixOutputs(HLSLFunctionCall* functionCall)
+{
+    const HLSLFunction* function = functionCall->function;
+    if (function == NULL)
+    {
+        return false;
+    }
+
+    struct OutArg
+    {
+        HLSLExpression*  argument;
+        HLSLArgument*    parameter;
+        bool             isInout;
+        bool             isMatrix;
+        HLSLMatrixTarget target;
+        std::string      valueName;
+    };
+
+    std::vector<OutArg> outArgs;
+    bool needsHelp = false;
+
+    {
+        HLSLExpression* argument = functionCall->argument;
+        HLSLArgument* parameter = function->argument;
+        while (argument != NULL && parameter != NULL)
+        {
+            if (parameter->modifier == HLSLArgumentModifier_Out ||
+                parameter->modifier == HLSLArgumentModifier_Inout)
+            {
+                OutArg outArg;
+                outArg.argument = argument;
+                outArg.parameter = parameter;
+                outArg.isInout = parameter->modifier == HLSLArgumentModifier_Inout;
+                outArg.isMatrix = GetHLSLMatrixTarget(m_tree, argument, outArg.target);
+                if (outArg.isMatrix || !IsPureExpression(argument) || !IsLValueChain(argument))
+                {
+                    needsHelp = true;
+                }
+                outArgs.push_back(outArg);
+            }
+            argument = argument->nextExpression;
+            parameter = parameter->nextArgument;
+        }
+    }
+
+    if (!needsHelp)
+    {
+        return false;
+    }
+
+    CaptureList captures;
+
+    // For every matrix target output, precompute the run-time values needed
+    // to address it (including increments, which must happen exactly once and
+    // at this point of evaluation).
+    for (size_t i = 0; i < outArgs.size(); ++i)
+    {
+        OutArg& outArg = outArgs[i];
+        if (outArg.isMatrix)
+        {
+            PrepareMatrixWrite(outArg.target, captures);
+        }
+        else if (!IsLValueChain(outArg.argument))
+        {
+            ErrorAt(outArg.argument->fileName, outArg.argument->line,
+                "argument passed to output parameter is not addressable");
+            m_writer.Write("0");
+            return true;
+        }
+        else
+        {
+            CaptureChainIndexes(outArg.argument, captures);
+        }
+    }
+
+    std::string returnTemp;
+    bool returnsValue = function->returnType.baseType != HLSLBaseType_Void;
+    if (returnsValue)
+    {
+        // Both branches of the comma expression must produce a value, so the
+        // temporary is read after the copy-back statements.
+        returnTemp = MakeTempName("m4_ret");
+        DeclareTemp(function->returnType, returnTemp);
+    }
+
+    m_writer.Write("(");
+
+    OutputCaptureAssignments(captures);
+    bool first = captures.empty();
+
+    // inout parameters must be read before the call; out parameters must not
+    // read the old value.
+    for (size_t i = 0; i < outArgs.size(); ++i)
+    {
+        OutArg& outArg = outArgs[i];
+        if (!outArg.isMatrix)
+        {
+            continue;
+        }
+        outArg.valueName = MakeTempName("m4_out");
+        DeclareTemp(outArg.argument->expressionType, outArg.valueName);
+        if (outArg.isInout)
+        {
+            if (!first) m_writer.Write(", ");
+            m_writer.Write("%s = ", outArg.valueName.c_str());
+            OutputMatrixRead(outArg.target, captures);
+            first = false;
+        }
+    }
+
+    if (!first) m_writer.Write(", ");
+    first = false;
+
+    if (returnsValue)
+    {
+        m_writer.Write("%s = ", returnTemp.c_str());
+    }
+
+    OutputIdentifier(functionCall->function->name);
+    m_writer.Write("(");
+
+    int index = 0;
+    HLSLExpression* argument = functionCall->argument;
+    HLSLArgument* parameter = function->argument;
+    while (argument != NULL)
+    {
+        if (index > 0)
+        {
+            m_writer.Write(", ");
+        }
+
+        OutArg* outArg = NULL;
+        for (size_t i = 0; i < outArgs.size(); ++i)
+        {
+            if (outArgs[i].argument == argument)
+            {
+                outArg = &outArgs[i];
+                break;
+            }
+        }
+
+        if (outArg != NULL)
+        {
+            if (outArg->isMatrix)
+            {
+                m_writer.Write("%s", outArg->valueName.c_str());
+            }
+            else
+            {
+                OutputChain(argument, captures);
+            }
+        }
+        else
+        {
+            OutputExpression(argument, parameter != NULL ? &parameter->type : NULL);
+        }
+
+        argument = argument->nextExpression;
+        if (parameter != NULL)
+        {
+            parameter = parameter->nextArgument;
+        }
+        ++index;
+    }
+    m_writer.Write(")");
+
+    // Write the output values back into the matrix selections.  This happens
+    // after the call, so an out argument never observes its old value.
+    for (size_t i = 0; i < outArgs.size(); ++i)
+    {
+        OutArg& outArg = outArgs[i];
+        if (!outArg.isMatrix)
+        {
+            continue;
+        }
+        m_writer.Write(", ");
+        OutputMatrixWriteComponents(outArg.target, captures, outArg.valueName, HLSLBinaryOp_Assign,
+            outArg.target.count > 1);
+    }
+
+    if (returnsValue)
+    {
+        m_writer.Write(", %s", returnTemp.c_str());
+    }
+
+    m_writer.Write(")");
+    return true;
 }
 
 void GLSLGenerator::OutputExpressionList(HLSLExpression* expression, HLSLArgument* argument)
@@ -468,6 +1159,7 @@ const HLSLType* commonScalarType(const HLSLType& lhs, const HLSLType& rhs)
 
 void GLSLGenerator::OutputExpression(HLSLExpression* expression, const HLSLType* dstType)
 {
+    HLSLMatrixTarget matrixTarget;
 
     bool cast = dstType != NULL && !GetCanImplicitCast(expression->expressionType, *dstType);
     if (expression->nodeType == HLSLNodeType_CastingExpression)
@@ -496,9 +1188,64 @@ void GLSLGenerator::OutputExpression(HLSLExpression* expression, const HLSLType*
     else if (expression->nodeType == HLSLNodeType_ConstructorExpression)
     {
         HLSLConstructorExpression* constructorExpression = static_cast<HLSLConstructorExpression*>(expression);
-        m_writer.Write("%s(", GetTypeName(constructorExpression->type));
-        OutputExpressionList(constructorExpression->argument);
-        m_writer.Write(")");
+
+        int rows = 0;
+        int columns = 0;
+        bool singleMatrixArgument =
+            constructorExpression->argument != NULL &&
+            constructorExpression->argument->nextExpression == NULL &&
+            GetMatrixTypeShape(constructorExpression->argument->expressionType.baseType, rows, columns);
+
+        if (GetMatrixTypeShape(constructorExpression->type.baseType, rows, columns))
+        {
+            if (singleMatrixArgument)
+            {
+                // Converting one matrix to another copies matching row and
+                // column pairs in both languages, so emit it directly.
+                m_writer.Write("%s(", GetTypeName(constructorExpression->type));
+                OutputExpression(constructorExpression->argument);
+                m_writer.Write(")");
+                return;
+            }
+
+            // HLSL matrix constructors take values in row major order while
+            // GLSL constructors fill columns.  Emit the transposed copy so
+            // both agree on the logical matrix.
+            m_writer.Write("%s(", GetTypeName(constructorExpression->type));
+            for (int c = 0; c < columns; ++c)
+            {
+                for (int r = 0; r < rows; ++r)
+                {
+                    if (c > 0 || r > 0)
+                    {
+                        m_writer.Write(", ");
+                    }
+                    int source = r * columns + c;
+                    HLSLExpression* argument = constructorExpression->argument;
+                    int index = 0;
+                    while (argument != NULL && index < source)
+                    {
+                        argument = argument->nextExpression;
+                        ++index;
+                    }
+                    if (argument != NULL)
+                    {
+                        OutputExpression(argument);
+                    }
+                    else
+                    {
+                        m_writer.Write("0.0");
+                    }
+                }
+            }
+            m_writer.Write(")");
+        }
+        else
+        {
+            m_writer.Write("%s(", GetTypeName(constructorExpression->type));
+            OutputExpressionList(constructorExpression->argument);
+            m_writer.Write(")");
+        }
     }
     else if (expression->nodeType == HLSLNodeType_CastingExpression)
     {
@@ -564,6 +1311,12 @@ void GLSLGenerator::OutputExpression(HLSLExpression* expression, const HLSLType*
             m_writer.Write("%s", op);
         }
         m_writer.Write(")");
+    }
+    else if (expression->nodeType == HLSLNodeType_BinaryExpression &&
+             IsAssignOp(static_cast<HLSLBinaryExpression*>(expression)->binaryOp) &&
+             OutputMatrixAssignment(static_cast<HLSLBinaryExpression*>(expression)))
+    {
+        // The assignment was emitted by the matrix target path.
     }
     else if (expression->nodeType == HLSLNodeType_BinaryExpression)
     {
@@ -657,6 +1410,32 @@ void GLSLGenerator::OutputExpression(HLSLExpression* expression, const HLSLType*
 			OutputExpression( conditionalExpression->falseExpression, dstType );
 			m_writer.Write( "))" );
 		}
+    }
+    else if ((expression->nodeType == HLSLNodeType_MemberAccess ||
+              expression->nodeType == HLSLNodeType_ArrayAccess) &&
+             GetHLSLMatrixTarget(m_tree, expression, matrixTarget))
+    {
+        CaptureList captures;
+        PrepareMatrixRead(matrixTarget, captures);
+        if (!captures.empty())
+        {
+            m_writer.Write("(");
+            for (size_t i = 0; i < captures.size(); ++i)
+            {
+                if (i > 0)
+                {
+                    m_writer.Write(", ");
+                }
+                m_writer.Write("%s = ", captures[i].name.c_str());
+                OutputExpression(captures[i].expression, &captures[i].type);
+            }
+            m_writer.Write(", ");
+        }
+        OutputMatrixRead(matrixTarget, captures);
+        if (!captures.empty())
+        {
+            m_writer.Write(")");
+        }
     }
     else if (expression->nodeType == HLSLNodeType_MemberAccess)
     {
@@ -764,6 +1543,12 @@ void GLSLGenerator::OutputExpression(HLSLExpression* expression, const HLSLType*
             m_writer.Write("]");
         }
 
+    }
+    else if (expression->nodeType == HLSLNodeType_FunctionCall &&
+             OutputFunctionCallWithMatrixOutputs(static_cast<HLSLFunctionCall*>(expression)))
+    {
+        // The call and its output write-backs were emitted by the matrix
+        // output argument path.
     }
     else if (expression->nodeType == HLSLNodeType_FunctionCall)
     {
@@ -1046,7 +1831,10 @@ void GLSLGenerator::OutputStatements(int indent, HLSLStatement* statement, const
                 m_writer.Write(") {");
                 m_writer.EndLine();
 
+                size_t declarationsBase = m_pendingDeclarations.size();
+                size_t bodyPosition = m_writer.GetSize();
                 OutputStatements(indent + 1, function->statement, &function->returnType);
+                FlushPendingDeclarations(declarationsBase, indent + 1, bodyPosition);
                 m_writer.WriteLine(indent, "}");
             }
         }
@@ -1826,6 +2614,26 @@ void GLSLGenerator::OutputCast(const HLSLType& type)
         m_writer.Write("%s", m_matrixCtorFunction);
     else
         OutputDeclaration(type, "");
+}
+
+void GLSLGenerator::ErrorAt(const char* fileName, int line, const char* format, ...)
+{
+    if (m_error)
+    {
+        return;
+    }
+    m_error = true;
+
+    char buffer[1024];
+    va_list args;
+    va_start(args, format);
+    String_PrintfArgList(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    // Include the source position of the offending construct.  The parser
+    // already reports most errors, but this path exists for anything that can
+    // only be detected while generating GLSL.
+    Log_Error("%s(%d) : %s\n", fileName ? fileName : "<unknown>", line, buffer);
 }
 
 void GLSLGenerator::Error(const char* format, ...)

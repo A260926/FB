@@ -12,6 +12,7 @@
 
 #include "HLSLParser.h"
 #include "HLSLTree.h"
+#include "MatrixTarget.h"
 
 #include <algorithm>
 #include <ctype.h>
@@ -1383,7 +1384,7 @@ bool HLSLParser::ParseTopLevel(HLSLStatement*& statement)
                 m_tokenizer.Error("Expected variable declaration");
                 return false;
             }
-            DeclareVariable( field->name, field->type );
+            DeclareVariable( field->name, field->type, true );
             field->buffer = buffer;
             if (buffer->field == NULL)
             {
@@ -1509,7 +1510,8 @@ bool HLSLParser::ParseTopLevel(HLSLStatement*& statement)
                 }
             }
 
-            DeclareVariable( globalName, declaration->type );
+            DeclareVariable( globalName, declaration->type,
+                (declaration->type.flags & HLSLTypeFlag_Static) == 0 );
 
             if (!ParseDeclarationAssignment(declaration))
             {
@@ -1858,7 +1860,8 @@ bool HLSLParser::ParseDeclaration(HLSLDeclaration*& declaration)
         declaration->type  = type;
         declaration->name  = name;
 
-        DeclareVariable( declaration->name, declaration->type );
+        DeclareVariable( declaration->name, declaration->type,
+            (declaration->type.flags & HLSLTypeFlag_Const) != 0 );
 
         // Handle option assignment of the declared variables(s).
         if (!ParseDeclarationAssignment( declaration )) {
@@ -1981,6 +1984,16 @@ bool HLSLParser::ParseExpression(HLSLExpression*& expression)
         // This type is not strictly correct, since the type should be a reference.
         // However, for our usage of the types it should be sufficient.
         binaryExpression->expressionType = expression->expressionType;
+
+        if (!CheckLValue(expression, assignOp))
+        {
+            return false;
+        }
+
+        if (!CheckMatrixAssignment(binaryExpression))
+        {
+            return false;
+        }
 
         if (!CheckTypeCast(expression2->expressionType, expression->expressionType))
         {
@@ -2217,6 +2230,13 @@ bool HLSLParser::ParseTerminalExpression(HLSLExpression*& expression, bool& need
         {
             return false;
         }
+        if (unaryOp == HLSLUnaryOp_PreIncrement || unaryOp == HLSLUnaryOp_PreDecrement)
+        {
+            if (!CheckLValue(unaryExpression->expression, HLSLBinaryOp_Assign))
+            {
+                return false;
+            }
+        }
         if (unaryOp == HLSLUnaryOp_BitNot)
         {
             if (unaryExpression->expression->expressionType.baseType < HLSLBaseType_FirstInteger || 
@@ -2344,10 +2364,14 @@ bool HLSLParser::ParseTerminalExpression(HLSLExpression*& expression, bool& need
 
             bool undeclaredIdentifier = false;
 
-            const HLSLType* identifierType = FindVariable(identifierExpression->name, identifierExpression->global);
+            const HLSLType* identifierType = FindVariable(identifierExpression->name, identifierExpression->global, &identifierExpression->readOnly);
             if (identifierType != NULL)
             {
                 identifierExpression->expressionType = *identifierType;
+                if ((identifierExpression->expressionType.flags & HLSLTypeFlag_Const) != 0)
+                {
+                    identifierExpression->readOnly = true;
+                }
             }
             else
             {
@@ -2398,6 +2422,10 @@ bool HLSLParser::ParseTerminalExpression(HLSLExpression*& expression, bool& need
             unaryExpression->unaryOp = unaryOp;
             unaryExpression->expression = expression;
             unaryExpression->expressionType = unaryExpression->expression->expressionType;
+            if (!CheckLValue(expression, HLSLBinaryOp_Assign))
+            {
+                return false;
+            }
             expression = unaryExpression;
             done = false;
         }
@@ -2527,6 +2555,12 @@ bool HLSLParser::ParseTerminalExpression(HLSLExpression*& expression, bool& need
 
             functionCall->function = function;
             functionCall->expressionType = function->returnType;
+
+            if (!CheckFunctionCallArguments(functionCall))
+            {
+                return false;
+            }
+
             expression = functionCall;
         }
 
@@ -2606,7 +2640,10 @@ bool HLSLParser::ParseArgumentList(HLSLArgument*& firstArgument, int& numArgumen
             return false;
         }
 
-        DeclareVariable( argument->name, argument->type );
+        // Only an explicitly const parameter is read-only.  An 'in'
+        // parameter is a copy and can still be assigned inside the function.
+        DeclareVariable( argument->name, argument->type,
+            argument->modifier == HLSLArgumentModifier_Const );
 
         // Optional semantic.
         if (Accept(':') && !ExpectIdentifier(argument->semantic))
@@ -3573,13 +3610,17 @@ void HLSLParser::EndScope()
     m_variables.Resize(numVariables);
 }
 
-const HLSLType* HLSLParser::FindVariable(const char* name, bool& global) const
+const HLSLType* HLSLParser::FindVariable(const char* name, bool& global, bool* readOnly) const
 {
     for (int i = m_variables.GetSize() - 1; i >= 0; --i)
     {
         if (m_variables[i].name == name)
         {
             global = (i < m_numGlobals);
+            if (readOnly != NULL)
+            {
+                *readOnly = m_variables[i].readOnly;
+            }
             return &m_variables[i].type;
         }
     }
@@ -3637,7 +3678,7 @@ const HLSLFunction* HLSLParser::FindFunction(const HLSLFunction* fun) const
     return NULL;
 }
 
-void HLSLParser::DeclareVariable(const char* name, const HLSLType& type)
+void HLSLParser::DeclareVariable(const char* name, const HLSLType& type, bool readOnly)
 {
     if (m_variables.GetSize() == m_numGlobals)
     {
@@ -3646,6 +3687,7 @@ void HLSLParser::DeclareVariable(const char* name, const HLSLType& type)
     Variable& variable = m_variables.PushBackNew();
     variable.name = name;
     variable.type = type;
+    variable.readOnly = readOnly;
 }
 
 bool HLSLParser::GetIsFunction(const char* name) const
@@ -3776,61 +3818,46 @@ bool HLSLParser::GetMemberType(const HLSLType& objectType, HLSLMemberAccess * me
     if (_baseTypeDescriptions[objectType.baseType].numDimensions <= 1)
     {
         // Check for a swizzle on the scalar/vector types.
-        for (int i = 0; fieldName[i] != 0; ++i)
+        int indices[4];
+        if (!DecodeSwizzleField(fieldName, indices, swizzleLength))
         {
-            if (fieldName[i] != 'x' && fieldName[i] != 'y' && fieldName[i] != 'z' && fieldName[i] != 'w' &&
-                fieldName[i] != 'r' && fieldName[i] != 'g' && fieldName[i] != 'b' && fieldName[i] != 'a')
-            {
-                m_tokenizer.Error("Invalid swizzle '%s'", fieldName);
-                return false;
-            }
-            ++swizzleLength;
+            m_tokenizer.Error("Invalid swizzle '%s'", fieldName);
+            return false;
         }
-        ASSERT(swizzleLength > 0);
+
+        // Scalars allow any swizzle letters (they all name the single
+        // component).  Vectors must stay within their component count.
+        if (_baseTypeDescriptions[objectType.baseType].numComponents > 1)
+        {
+            for (int i = 0; i < swizzleLength; ++i)
+            {
+                if (indices[i] >= _baseTypeDescriptions[objectType.baseType].numComponents)
+                {
+                    m_tokenizer.Error("Invalid swizzle '%s' on '%s'", fieldName, _baseTypeDescriptions[objectType.baseType].typeName);
+                    return false;
+                }
+            }
+        }
     }
     else
     {
 
-        // Check for a matrix element access (e.g. _m00 or _11)
+        // Check for a matrix element selection (e.g. _m00, _m00_m12 or _11_23).
 
-        const char* n = fieldName;
-        while (n[0] == '_')
-        {
-            ++n;
-            int base = 1;
-            if (n[0] == 'm')
-            {
-                base = 0;
-                ++n;
-            }
-            if (!isdigit(n[0]) || !isdigit(n[1]))
-            {
-                return false;
-            }
-
-            int r = (n[0] - '0') - base;
-            int c = (n[1] - '0') - base;
-            if (r >= _baseTypeDescriptions[objectType.baseType].height ||
-                c >= _baseTypeDescriptions[objectType.baseType].numComponents)
-            {
-                return false;
-            }
-            ++swizzleLength;
-            n += 2;
-
-        }
-
-        if (n[0] != 0)
+        int firstDigitMax = 0;
+        int secondDigitMax = 0;
+        if (!GetMatrixSelectorBounds(objectType.baseType, firstDigitMax, secondDigitMax))
         {
             return false;
         }
 
-    }
-
-    if (swizzleLength > 4)
-    {
-        m_tokenizer.Error("Invalid swizzle '%s'", fieldName);
-        return false;
+        int row[4];
+        int column[4];
+        if (!DecodeMatrixSelectorField(fieldName, firstDigitMax, secondDigitMax, row, column, swizzleLength))
+        {
+            m_tokenizer.Error("Invalid matrix component selection '%s' on '%s'", fieldName, _baseTypeDescriptions[objectType.baseType].typeName);
+            return false;
+        }
     }
 
     static const HLSLBaseType floatType[] = { HLSLBaseType_Float, HLSLBaseType_Float2, HLSLBaseType_Float3, HLSLBaseType_Float4 };
@@ -3838,7 +3865,7 @@ bool HLSLParser::GetMemberType(const HLSLType& objectType, HLSLMemberAccess * me
     static const HLSLBaseType intType[]   = { HLSLBaseType_Int,   HLSLBaseType_Int2,   HLSLBaseType_Int3,   HLSLBaseType_Int4   };
     static const HLSLBaseType uintType[]  = { HLSLBaseType_Uint,  HLSLBaseType_Uint2,  HLSLBaseType_Uint3,  HLSLBaseType_Uint4  };
     static const HLSLBaseType boolType[]  = { HLSLBaseType_Bool,  HLSLBaseType_Bool2,  HLSLBaseType_Bool3,  HLSLBaseType_Bool4  };
-    
+
     switch (_baseTypeDescriptions[objectType.baseType].numericType)
     {
     case NumericType_Float:
@@ -3861,8 +3888,146 @@ bool HLSLParser::GetMemberType(const HLSLType& objectType, HLSLMemberAccess * me
     }
 
     memberAccess->swizzle = true;
-    
+
     return true;
 }
 
 }
+namespace M4
+{
+
+bool HLSLParser::CheckLValue(HLSLExpression* expression, HLSLBinaryOp binaryOp)
+{
+    if (expression == NULL)
+    {
+        m_tokenizer.Error("left operand of assignment is not an l-value");
+        return false;
+    }
+
+    switch (expression->nodeType)
+    {
+    case HLSLNodeType_IdentifierExpression:
+        {
+            HLSLIdentifierExpression* identifier = static_cast<HLSLIdentifierExpression*>(expression);
+            if (identifier->readOnly)
+            {
+                m_tokenizer.Error("cannot assign to read-only variable '%s'", identifier->name);
+                return false;
+            }
+            return true;
+        }
+    case HLSLNodeType_MemberAccess:
+        return CheckLValue(static_cast<HLSLMemberAccess*>(expression)->object, binaryOp);
+    case HLSLNodeType_ArrayAccess:
+        {
+            HLSLArrayAccess* arrayAccess = static_cast<HLSLArrayAccess*>(expression);
+
+            // Indexing a matrix selection is only writable when the whole
+            // selection can be expressed by the generator.  Reject the rest
+            // instead of emitting GLSL that can not be assigned to.
+            HLSLMatrixTarget selection;
+            if (GetHLSLMatrixTarget(m_tree, arrayAccess->array, selection))
+            {
+                HLSLMatrixTarget whole;
+                bool dynamicIndex = (arrayAccess->index->expressionType.flags & HLSLTypeFlag_Const) == 0;
+                bool representable = GetHLSLMatrixTarget(m_tree, expression, whole) &&
+                    MatrixTargetHasUniqueComponents(whole);
+                if (dynamicIndex && !representable)
+                {
+                    m_tokenizer.Error("dynamic index of a matrix component selection is not assignable");
+                    return false;
+                }
+                if (dynamicIndex && whole.dynamicColumn && whole.count != 1)
+                {
+                    m_tokenizer.Error("dynamic index of a matrix component selection is not assignable");
+                    return false;
+                }
+            }
+
+            return CheckLValue(arrayAccess->array, binaryOp);
+        }
+    default:
+        m_tokenizer.Error("left operand of assignment is not an l-value");
+        return false;
+    }
+}
+
+bool HLSLParser::CheckMatrixAssignment(HLSLBinaryExpression* binaryExpression)
+{
+    HLSLMatrixTarget target;
+    if (!GetHLSLMatrixTarget(m_tree, binaryExpression->expression1, target))
+    {
+        return true;
+    }
+
+    if (!MatrixTargetHasUniqueComponents(target) || target.dynamicColumn)
+    {
+        m_tokenizer.Error("matrix assignment target selects the same component more than once");
+        return false;
+    }
+
+    // The right hand side must be at least as large as the selection.  The
+    // regular cast check already enforces the common cases; here we only
+    // make sure element counts line up when the selection is a multi
+    // component one.
+    if (target.count > 1)
+    {
+        int rhsComponents = _baseTypeDescriptions[binaryExpression->expression2->expressionType.baseType].numComponents;
+        if (binaryExpression->expression2->expressionType.baseType == HLSLBaseType_UserDefined ||
+            binaryExpression->expression2->expressionType.array)
+        {
+            m_tokenizer.Error("cannot assign '%s' to a matrix component selection",
+                GetTypeName(binaryExpression->expression2->expressionType));
+            return false;
+        }
+        // A scalar broadcasts and a wider vector is truncated, matching
+        // HLSL's usual conversion rules.
+        if (rhsComponents > 1 && rhsComponents < target.count)
+        {
+            m_tokenizer.Error("cannot assign '%s' to a selection of %d matrix components",
+                GetTypeName(binaryExpression->expression2->expressionType), target.count);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool HLSLParser::CheckFunctionCallArguments(HLSLFunctionCall* functionCall)
+{
+    HLSLExpression* argument = functionCall->argument;
+    HLSLArgument* parameter = functionCall->function->argument;
+
+    while (argument != NULL && parameter != NULL)
+    {
+        if (parameter->modifier == HLSLArgumentModifier_Out ||
+            parameter->modifier == HLSLArgumentModifier_Inout)
+        {
+            if (!CheckLValue(argument, HLSLBinaryOp_Assign))
+            {
+                m_tokenizer.Error("argument passed to %s parameter '%s' is not an l-value",
+                    parameter->modifier == HLSLArgumentModifier_Out ? "out" : "inout",
+                    parameter->name);
+                return false;
+            }
+
+            HLSLMatrixTarget target;
+            if (GetHLSLMatrixTarget(m_tree, argument, target))
+            {
+                if (!MatrixTargetHasUniqueComponents(target) || target.dynamicColumn)
+                {
+                    m_tokenizer.Error("matrix argument passed to parameter '%s' selects the same component more than once",
+                        parameter->name);
+                    return false;
+                }
+            }
+        }
+
+        argument = argument->nextExpression;
+        parameter = parameter->nextArgument;
+    }
+
+    return true;
+}
+
+} // namespace M4

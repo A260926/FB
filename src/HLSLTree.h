@@ -675,9 +675,11 @@ struct HLSLIdentifierExpression : public HLSLExpression
     {
         name     = NULL;
         global  = false;
+        readOnly = false;
     }
     const char*         name;
     bool                global; // This is a global variable.
+    bool                readOnly; // Const or a constant buffer field.
 };
 
 /** float2(1, 2) */
