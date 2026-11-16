@@ -43,6 +43,10 @@ public:
   double raymarch_reflect_step;
   double raymarch_refract_step;
 
+  // When true, volumes with a transfer function are integrated through the
+  // CPU transfer-function preview path instead of the legacy raymarcher.
+  bool transfer_volume = false;
+
   const ObjectGroup *trace_target;
 };
 

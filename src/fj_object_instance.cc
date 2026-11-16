@@ -296,6 +296,36 @@ bool ObjectInstance::GetVolumeSample(const Vector &point, Real time,
   return hit;
 }
 
+bool ObjectInstance::HasTransferVolume() const
+{
+  return IsVolume() && volume_->HasTransferFunction();
+}
+
+bool ObjectInstance::IntegrateTransfer(const Ray &world_ray, Real time,
+    Real world_direction_length, Real world_step,
+    bool shadow_only, Color4 *out_color, VolumeTransferStats *stats) const
+{
+  if (!IsVolume() || !volume_->HasTransferFunction()) {
+    return false;
+  }
+
+  // Inverse-transform at the current sample time. The ray parameter t is
+  // untouched, so world arc length and the caller's step phase are kept.
+  Transform transform_interp;
+  XfmLerpTransformSample(&transform_samples_, time, &transform_interp);
+
+  Ray object_ray = world_ray;
+  XfmTransformPointInverse(&transform_interp, &object_ray.orig);
+  XfmTransformVectorInverse(&transform_interp, &object_ray.dir);
+
+  *out_color = shadow_only ?
+      volume_->IntegrateTransferShadow(object_ray,
+          world_direction_length, world_step, stats) :
+      volume_->IntegrateTransfer(object_ray,
+          world_direction_length, world_step, stats);
+  return true;
+}
+
 void ObjectInstance::update_bounds()
 {
   if (IsSurface()) {

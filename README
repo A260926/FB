@@ -79,5 +79,85 @@ designed to handle production image rendering.
 * Extensibility
   + Rendering callbacks - 5 points to hook rendering process
 
+  Transfer-function volume preview (CPU)
+------------------------------------------------
+A volume can be shaded by a piecewise-linear transfer function for a quick
+CPU preview that is independent of the legacy raymarch shaders. Each
+TransferKnot maps a density to an extinction coefficient and an RGB emission;
+densities between knots are linearly interpolated and values outside the
+knot range are clamped to the two end knots. The first call to
+Volume::SetTransferFunction builds a sparse density hierarchy over the voxel
+grid; changing the knots later only replaces the function and never rescans
+or rebuilds the grid, while SetValue refits the affected leaf blocks and
+their ancestors in O(log N) node updates. Density intervals that are fully
+transparent under the current function are skipped whole.
+
+The example below builds the volume entirely in memory and writes a PPM
+image, using the C++17 standard library only:
+
+    #include "fj_volume.h"
+    #include "fj_shading.h"
+    #include "fj_object_group.h"
+    #include "fj_object_instance.h"
+    #include "fj_volume_accelerator.h"
+    #include "fj_accelerator.h"
+    #include <vector>
+
+    using namespace fj;
+
+    Volume volume;
+    volume.Resize(64, 64, 64);
+    volume.SetBounds(Box(Vector(-1, -1, -1), Vector(1, 1, 1)));
+    for (int z = 0; z < 64; z++)
+      for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 64; x++)
+          volume.SetValue(x, y, z, /* density */ 0.f);
+
+    std::vector<TransferKnot> knots;
+    knots.push_back(TransferKnot(0.,   0.,  Color(0, 0, 0)));
+    knots.push_back(TransferKnot(.15, .8,  Color(.10f, .04f, .02f)));
+    knots.push_back(TransferKnot(.45, 2.2, Color(.95f, .35f, .08f)));
+    volume.SetTransferFunction(knots);
+
+    ObjectInstance object;
+    object.SetVolume(&volume);
+    object.ComputeBounds();
+
+    ObjectGroup group;
+    group.AddObject(&object);
+    group.ComputeBounds();
+    const_cast<Accelerator *>(group.GetSurfaceAccelerator())->Build();
+    VolumeAccBuild(const_cast<VolumeAccelerator *>(
+        group.GetVolumeAccelerator()));
+
+    TraceContext context = SlCameraContext(&group);
+    context.transfer_volume = true;   // enable the preview path
+    context.raymarch_step = .03;      // world-space step length
+
+    Ray ray;                          // O + t D
+    ray.orig = Vector(0, 0, -3);
+    ray.dir  = Vector(0, 0, 1);
+    ray.tmin = .001;
+    ray.tmax = 8;
+
+    Color4 color;
+    double t_hit = 0;
+    SlTrace(&context, &ray.orig, &ray.dir, ray.tmin, ray.tmax,
+        &color, &t_hit);
+
+A complete, compilable version that writes the image to a binary PPM file is
+in examples/transfer_volume_preview.cpp. Build and run it from the
+repository root after the core library has been compiled:
+
+    c++ -std=c++17 -O1 -I. -Isrc \
+        examples/transfer_volume_preview.cpp \
+        .task-build/libfujiyama.a -o transfer_volume_preview
+    ./transfer_volume_preview preview.ppm
+
+IntegrateTransfer can also be called directly on a Volume for an object-space
+integration; VolumeTransferStats reports the hierarchy nodes visited and the
+density samples actually taken. With transfer_volume left at its default of
+false, every existing render path keeps its original behavior.
+
 http://fujiyama-renderer.com/
 Copyright (c) 2011-2020 Hiroshi Tsubokawa

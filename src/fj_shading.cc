@@ -4,6 +4,7 @@
 #include "fj_shading.h"
 #include "fj_volume_accelerator.h"
 #include "fj_object_instance.h"
+#include "fj_object_set.h"
 #include "fj_intersection.h"
 #include "fj_object_group.h"
 #include "fj_accelerator.h"
@@ -33,11 +34,13 @@ static void setup_surface_input(
     const Intersection *isect,
     const Ray *ray,
     SurfaceInput *in);
-
 static int trace_surface(const TraceContext *cxt, const Ray &ray,
     Color4 *out_rgba, double *t_hit);
 static int raymarch_volume(const TraceContext *cxt, const Ray *ray,
     Color4 *out_rgba);
+static int raymarch_transfer_volume(const TraceContext *cxt, const Ray *ray,
+    Color4 *out_rgba);
+static double context_raymarch_step(const TraceContext *cxt);
 
 void SlFaceforward(const Vector *I, const Vector *N, Vector *Nf)
 {
@@ -168,7 +171,9 @@ int SlTrace(const TraceContext *cxt,
     ray.tmax = *t_hit;
   }
 
-  hit_volume = raymarch_volume(cxt, &ray, &volume_color);
+  hit_volume = cxt->transfer_volume ?
+      raymarch_transfer_volume(cxt, &ray, &volume_color) :
+      raymarch_volume(cxt, &ray, &volume_color);
 
   out_rgba->r = volume_color.r + surface_color.r * (1 - volume_color.a);
   out_rgba->g = volume_color.g + surface_color.g * (1 - volume_color.a);
@@ -218,6 +223,7 @@ TraceContext SlCameraContext(const ObjectGroup *target)
   cxt.time = 0;
 
   cxt.opacity_threshold = .995f;
+  cxt.transfer_volume = false;
   cxt.raymarch_step = .05;
   cxt.raymarch_shadow_step = .05;
   cxt.raymarch_diffuse_step = .05;
@@ -699,6 +705,79 @@ static int shadow_ray_has_reached_opcity_limit(const TraceContext *cxt, float op
   } else {
     return 0;
   }
+}
+
+static double context_raymarch_step(const TraceContext *cxt)
+{
+  switch (cxt->ray_context) {
+  case CXT_CAMERA_RAY:
+    return cxt->raymarch_step;
+  case CXT_SHADOW_RAY:
+    return cxt->raymarch_shadow_step;
+  case CXT_DIFFUSE_RAY:
+    return cxt->raymarch_diffuse_step;
+  case CXT_REFLECT_RAY:
+    return cxt->raymarch_reflect_step;
+  case CXT_REFRACT_RAY:
+    return cxt->raymarch_refract_step;
+  default:
+    return cxt->raymarch_step;
+  }
+}
+
+// Transfer-function preview path. The target group may contain surfaces, but
+// at most one volume with a transfer function; everything else is ignored here.
+static int raymarch_transfer_volume(const TraceContext *cxt, const Ray *ray,
+    Color4 *out_rgba)
+{
+  out_rgba->r = 0;
+  out_rgba->g = 0;
+  out_rgba->b = 0;
+  out_rgba->a = 0;
+
+  const ObjectSet *volume_set = cxt->trace_target->GetVolumeSet();
+  const Index volume_count = volume_set->GetObjectCount();
+
+  // Exactly one volume with a transfer function is allowed; surfaces and
+  // volumes without one are handled elsewhere/ignored by this path.
+  const ObjectInstance *transfer_object = NULL;
+  for (Index i = 0; i < volume_count; i++) {
+    const ObjectInstance *object = volume_set->GetObject(i);
+    if (object->IsVolume() && object->HasTransferVolume()) {
+      if (transfer_object != NULL) {
+        return 0;
+      }
+      transfer_object = object;
+    }
+  }
+
+  if (transfer_object == NULL) {
+    return 0;
+  }
+
+  const double world_direction_length = Length(ray->dir);
+  const double world_step = context_raymarch_step(cxt);
+  if (!(world_direction_length > 0) || !(world_step > 0)) {
+    return 0;
+  }
+
+  const bool shadow_only = (cxt->ray_context == CXT_SHADOW_RAY);
+  Color4 volume_color;
+  const bool hit = transfer_object->IntegrateTransfer(*ray, cxt->time,
+      world_direction_length, world_step, shadow_only, &volume_color);
+
+  if (!hit) {
+    return 0;
+  }
+
+  if (shadow_only) {
+    // Shadow rays report extinction alpha only; emission is never accumulated.
+    out_rgba->a = volume_color.a;
+  } else {
+    *out_rgba = volume_color;
+  }
+
+  return 1;
 }
 
 } // namespace xxx

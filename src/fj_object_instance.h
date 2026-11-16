@@ -20,6 +20,8 @@ class Shader;
 class Volume;
 class Light;
 class Ray;
+class Color4;
+class VolumeTransferStats;
 
 class ObjectGroup;
 
@@ -64,6 +66,15 @@ public:
   bool RayIntersect(const Ray &ray, Real time, Intersection *isect) const;
   bool RayVolumeIntersect(const Ray &ray, Real time, Interval *interval) const;
   bool GetVolumeSample(const Vector &point, Real time, VolumeSample *sample) const;
+
+  // Transfer-function preview integration of the owned volume, if any.
+  // The world-space ray is inverse-transformed at time while t and world
+  // arc length are preserved. Returns false when the volume has no function.
+  bool HasTransferVolume() const;
+  bool IntegrateTransfer(const Ray &world_ray, Real time,
+      Real world_direction_length, Real world_step,
+      bool shadow_only, Color4 *out_color,
+      VolumeTransferStats *stats = NULL) const;
 
 private:
   void update_bounds();

@@ -20,6 +20,7 @@ public:
   void AddObject(const ObjectInstance *obj);
   const Accelerator *GetSurfaceAccelerator() const;
   const VolumeAccelerator *GetVolumeAccelerator() const;
+  const ObjectSet *GetVolumeSet() const;
 
   void ComputeBounds();
 
