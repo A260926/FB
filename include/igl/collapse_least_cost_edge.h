@@ -73,6 +73,39 @@ namespace igl
     int & e2,
     int & f1,
     int & f2);
+  /// \overload
+  ///
+  /// Same as above but, after a successful collapse, also refreshes any
+  /// _extra_ edges returned by `extra_refresh_edges` in addition to the
+  /// geometric one-ring edges. This keeps the heap consistent for cost
+  /// functions whose dependencies extend beyond the geometric one-ring (e.g.
+  /// a Schur-complement operator). When `extra_refresh_edges` is empty the
+  /// behavior is identical to the original overload.
+  ///
+  /// @param[in] extra_refresh_edges  callback collecting extra edge ids to
+  ///   refresh after a successful collapse (may be an empty std::function)
+  /// @param[out] num_extra_refreshed  optional, receives the number of extra
+  ///   (non-geometric) edges actually refreshed on this call
+  IGL_INLINE bool collapse_least_cost_edge(
+    const decimate_cost_and_placement_callback & cost_and_placement,
+    const decimate_pre_collapse_callback       & pre_collapse,
+    const decimate_post_collapse_callback      & post_collapse,
+    const decimate_extra_refresh_edges_callback & extra_refresh_edges,
+    Eigen::MatrixXd & V,
+    Eigen::MatrixXi & F,
+    Eigen::MatrixXi & E,
+    Eigen::VectorXi & EMAP,
+    Eigen::MatrixXi & EF,
+    Eigen::MatrixXi & EI,
+    igl::min_heap< std::tuple<double,int,int> > & Q,
+    Eigen::VectorXi & EQ,
+    Eigen::MatrixXd & C,
+    int & e,
+    int & e1,
+    int & e2,
+    int & f1,
+    int & f2,
+    int * num_extra_refreshed = nullptr);
 }
 
 #ifndef IGL_STATIC_LIBRARY

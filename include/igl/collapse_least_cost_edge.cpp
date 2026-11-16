@@ -30,7 +30,36 @@ IGL_INLINE bool igl::collapse_least_cost_edge(
   int & f1,
   int & f2)
 {
+  // Original behavior: no edges beyond the geometric one-ring are refreshed.
+  const decimate_extra_refresh_edges_callback no_extra;
+  return collapse_least_cost_edge(
+    cost_and_placement,pre_collapse,post_collapse,no_extra,
+    V,F,E,EMAP,EF,EI,Q,EQ,C,e,e1,e2,f1,f2,nullptr);
+}
+
+IGL_INLINE bool igl::collapse_least_cost_edge(
+  const decimate_cost_and_placement_callback & cost_and_placement,
+  const decimate_pre_collapse_callback       & pre_collapse,
+  const decimate_post_collapse_callback      & post_collapse,
+  const decimate_extra_refresh_edges_callback & extra_refresh_edges,
+  Eigen::MatrixXd & V,
+  Eigen::MatrixXi & F,
+  Eigen::MatrixXi & E,
+  Eigen::VectorXi & EMAP,
+  Eigen::MatrixXi & EF,
+  Eigen::MatrixXi & EI,
+  igl::min_heap< std::tuple<double,int,int> > & Q,
+  Eigen::VectorXi & EQ,
+  Eigen::MatrixXd & C,
+  int & e,
+  int & e1,
+  int & e2,
+  int & f1,
+  int & f2,
+  int * num_extra_refreshed)
+{
   using namespace igl;
+  if(num_extra_refreshed) *num_extra_refreshed = 0;
   std::tuple<double,int,int> p;
   while(true)
   {
@@ -124,6 +153,27 @@ IGL_INLINE bool igl::collapse_least_cost_edge(
     // Only process edge once
     std::sort( Ne.begin(), Ne.end() );
     Ne.erase( std::unique( Ne.begin(), Ne.end() ), Ne.end() );
+    // Merge in any extra edges whose costs depend on the collapsed edge
+    // through a graph wider than the geometric one-ring (e.g. Schur
+    // fill-in). These go through the same timestamp/heap refresh.
+    int num_extra = 0;
+    if(extra_refresh_edges)
+    {
+      std::vector<int> extra;
+      extra_refresh_edges(e,e1,e2,f1,f2,Ne,extra);
+      std::sort(extra.begin(),extra.end());
+      extra.erase(std::unique(extra.begin(),extra.end()),extra.end());
+      for(const auto ei : extra)
+      {
+        if(ei < 0 || ei >= EQ.size() || EQ(ei) == -1) continue;
+        if(!std::binary_search(Ne.begin(),Ne.end(),ei))
+        {
+          Ne.push_back(ei);
+          num_extra++;
+        }
+      }
+      if(num_extra_refreshed) *num_extra_refreshed = num_extra;
+    }
     for(auto & ei : Ne)
     {
        // compute cost and potential placement

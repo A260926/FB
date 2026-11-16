@@ -162,6 +162,33 @@ namespace igl
       const int                                           ,/*f2*/
       const bool                                           /*collapsed*/
       )>;
+  /// Optional callback used by collapse_least_cost_edge (and callers such as
+  /// igl::qslim_operator) to collect _extra_ edges whose costs must be
+  /// refreshed after a successful collapse, beyond the geometric one-ring
+  /// edges gathered from the collapsed faces. This is needed when the cost
+  /// depends on data whose dependency graph is wider than the geometric
+  /// one-ring (e.g. Schur-complement fill-in). Edges returned here are merged
+  /// with the geometric one-ring set and go through the exact same
+  /// timestamp/heap refresh.
+  ///
+  /// @param[in] e   index into E of the edge that was just collapsed
+  /// @param[in] e1  index into E of edge collapsed on the left
+  /// @param[in] e2  index into E of edge collapsed on the right
+  /// @param[in] f1  index into F of face collapsed on the left
+  /// @param[in] f2  index into F of face collapsed on the right
+  /// @param[in] geometric_edges  edges already scheduled for refresh (the
+  ///   geometric one-ring); extra edges should exclude these
+  /// @param[out] extra_edges  additional edge ids to refresh
+  using decimate_extra_refresh_edges_callback =
+    std::function<void(
+      const int                ,/*e*/
+      const int                ,/*e1*/
+      const int                ,/*e2*/
+      const int                ,/*f1*/
+      const int                ,/*f2*/
+      const std::vector<int> & ,/*geometric_edges*/
+      std::vector<int> &        /*extra_edges*/
+      )>;
   /// Function handle used to "decorate" (wrap) the `pre_collapse` and
   /// `post_collapse` callbacks used by igl::decimate/igl::qslim. Given the
   /// current callbacks (in/out), a decorator replaces them with new callbacks
