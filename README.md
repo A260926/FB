@@ -24,8 +24,7 @@ $ npm install nurbs
   - [Transforms](#transforms)
   - [Curves, Surfaces, Volumes, etc.](#curves-surfaces-volumes-etc)
   - [ndarrays](#ndarrays)
-- [API](#api)
-  - [`nurbs`](#nurbspoints-degree-weights-knots-boundary-options)
+- [API](#api)  - [`nurbs`](#nurbspoints-degree-weights-knots-boundary-options)
   - [Properties](#properties)
     - [`domain`](#splinedomain)
     - [`splineDimension`](#splinesplinedimension)
@@ -36,6 +35,7 @@ $ npm install nurbs
     - [`evaluator`](#splineevaluatorderivativeorders-isbasis)
     - [`support`](#splinesupportout-t0-t1--tn_1)
     - [`transform`](#splinetransformm)
+  - [Sampling CAD surfaces](#samplecadspline-options-from-extrassample-cadjs)
 
 
 ## Examples
@@ -167,7 +167,7 @@ var derivative = curve.evaluator([0, 3]);
 derivative([], 1.3, 2.4);
 ```
 
-**Note that currently only first derivatives are implemented for non-uniform rational b-splines. Non-uniform (*non-rational*) b-splines support higher orders.**
+**Note that analytical derivatives up to total order 2 are implemented for non-uniform rational b-splines (curves and surfaces). Non-uniform (*non-rational*) b-splines support higher orders.** Rational second derivatives are evaluated with an explicit homogeneous quotient rule, so requests such as `[2, 0]`, `[0, 2]`, `[1, 1]`, `[2]`, `[2, 0]` in basis mode, and the corresponding basis-derivative sums all share the same evaluator cache. Rational point values keep their existing generated-code behaviour.
 
 For simple curves, a non-array-wrapped derivative order is permitted so that the first derivative of a curve is simply:
 
@@ -321,7 +321,7 @@ Returns a function which evaluates the spline according to the specified argumen
 Arguments are:
 - `derivativeOrders` (Number or Array of Numbers, default: `undefined`): If provided, evaluates the corresponding partial derivative. For example, to evaluate the third derivative in the second dimension of a spline, you would call `spline.evaluator([0, 3])`. See \[1\] for more details.
 
-  **Currently only first derivatives are implemented for non-uniform rational b-splines. Non-uniform (*non-rational*) b-splines support higher orders.**
+  **Analytical derivatives up to total order 2 are implemented for non-uniform rational b-splines (curves and surfaces). The rational second and mixed partials use the homogeneous quotient rule; higher orders remain available for non-rational splines.**
 - `isBasis` (boolean, default: `false`): If true, creates a basis function evaluator instead of a direct spline evaluator. Returns a function `function basis(t0, t1, ..., tn_1, i0, i1, ..., in_1)` (no `out` argument is necessary since the answer is always a scalar) which evaluates the value of the spline basis functions for a given parameter location and control hull indices. The inputs `t0, ..., tn_1` are the spline parameters <em>(t<sub>0</sub>, t<sub>1</sub>, ..., t<sub>n - 1</sub>)</em> and the indices `i0, ..., in_1` are the integer indices of a control point <em>(i<sub>0</sub>, i<sub>1</sub>, ..., i<sub>n - 1</sub>)</em>. The output is a real number between <em>0</em> and <em>1</em> by which the correpsonding control point is multiplied. Summing across all points in the `spline.support` gives the computed spline position. When possible, evaluating the spline directly is much faster.
 
 ---
@@ -335,6 +335,54 @@ Compute the [support][support] of a point on the spline. That is, the integer in
 ### `spline.transform(m)`
 
 Transform a spline in-place using gl-matrix-style matrices (e.g. [gl-mat3](https://github.com/stackgl/gl-mat3) or [gl-mat4](https://github.com/stackgl/gl-mat4)). Modifies spline data and returns a reference to the spline.
+
+---
+
+### `sampleCad(spline, options)` (from `extras/sample-cad.js`)
+
+Sample a three-dimensional, two-parameter NURBS surface into a triangle mesh that is safe for CAD-style polar (collapsed) edges such as dome tops and cone tips. Unlike `extras/sample.js`, which treats the control hull as a plain rectangular grid, `sampleCad` never emits overlapping pole vertices, zero-area faces or zero normals.
+
+```javascript
+var sampleCad = require('nurbs/extras/sample-cad');
+
+var mesh = sampleCad(spline, {
+  resolution: [16, 8],   // segments per non-zero knot interval, per axis
+  collapsed: ['vmax']    // declared polar edge(s); optional
+});
+
+mesh.positions;      // flat xyz triples
+mesh.cells;          // flat triangle indices
+mesh.cornerUVs;      // flat uv pairs, per triangle corner
+mesh.cornerNormals;  // flat unit xyz triples, per triangle corner
+```
+
+Options:
+
+- **`resolution`** (`[nu, nv]`, required): number of segments each non-zero knot interval of each axis is split into. Both values must be integers in `[1, 32]`. Sample stations come from every non-zero knot interval in the effective domain; shared knot values are emitted once.
+- **`collapsed`** (optional): an array of edge names drawn from `'umin'`, `'umax'`, `'vmin'`, `'vmax'`. The declared edge's whole Cartesian control row must be exactly identical coordinate-by-coordinate; spatial coincidence of undeclared control points is never welded. Collapsed edges may not lie on a periodic axis and may not be adjacent; two opposite edges may be declared together.
+
+Sampling and topology:
+
+- Ordinary cells are split along the lower-left to upper-right diagonal into two triangles with positive UV winding.
+- A declared collapsed edge contributes exactly one shared position index. Its adjacent ring becomes a fan; each adjacent cell keeps one non-degenerate triangle.
+- On a periodic axis (`boundary: 'closed'`, using the library's existing periodic knot and control-net convention, at most one axis) the first and last sample station share one position index, while their corner UVs still use the original domain ends. Pole merging and periodic stitching therefore compose: no duplicate faces, duplicate corners, zero-area faces or dangling links are left behind.
+- Pole corner UVs use the midpoint of the fan cell's along-edge interval and the boundary for the lateral coordinate. The corner's position remains the pole; UVs are not inset to dodge the singularity.
+
+Normals:
+
+- Ordinary corners use `normalize(Pu × Pv)`.
+- Pole corners use the analytic one-sided limit at that corner UV: `vmin` / `vmax` use `normalize(±Puv × Pv)` and `umin` / `umax` use `normalize(Pu × ±Puv)`, with the positive sign for the `min` edge and the negative sign for the `max` edge. A cone's pole normals therefore vary from corner to corner; they are never averaged by position or replaced by a triangle normal or a numerical difference.
+
+Supported input range:
+
+- Spline dimension 2 and spatial dimension 3 only.
+- Degree 2 or 3 in each axis, with nested-array control points and positive finite weights in `[0.1, 10]` (weights may be omitted).
+- Explicit knots or the library's implicit uniform knots. Non-periodic axes must be clamped; at most one axis may be periodic.
+- Interior knot multiplicity at most `degree - 1`; every non-zero knot interval at least `1e-4` of the axis' full domain width.
+- Coordinate magnitudes at most `10`. Ordinary tangents and pole limit cross products must have relative area at least `1e-8`.
+
+`sampleCad` validates the control net, knots, domain widths, weights, options and declared collapsed edges before evaluating the spline. Non-finite or non-positive weights, out-of-range structures, non-clamped non-periodic axes, bad resolutions and duplicate or illegal collapsed edges all raise `RangeError`. If a normal cannot be unitized or a triangle has zero area within the supported range, it also raises `RangeError` instead of returning a partial mesh. The call does not modify its input, and the existing default output layout of `extras/sample.js` is unchanged.
+
 
 ## References
 

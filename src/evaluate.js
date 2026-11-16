@@ -8,9 +8,24 @@ var accessorPreamble = require('./utils/accessor-preamble');
 var inferType = require('./utils/infer-type');
 var isArrayLike = require('./utils/is-array-like');
 var sizeGetter = require('./utils/size-getter');
+var createRationalDerivative = require('./rational-derivative');
 
 var evaluatorCache = {};
 var codeCache = {};
+
+// Total order supported by the analytical rational quotient-rule evaluator.
+// The evaluator covers curves and surfaces (spline dimension <= 2).  Point
+// values keep the generated code; rational derivatives in that range are routed
+// there so that first and second partials are mutually consistent.
+var RATIONAL_TOTAL_ORDER_LIMIT = 2;
+
+function isRationalDerivativeRequest (splineDimension, hasWeights, derivative) {
+  if (!hasWeights || !derivative) return false;
+  if (splineDimension > 2) return false;
+  var total = 0;
+  for (var i = 0; i < derivative.length; i++) total += derivative[i] || 0;
+  return total >= 1 && total <= RATIONAL_TOTAL_ORDER_LIMIT;
+}
 
 module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBasis, derivative) {
   var splineDimension = nurbs.splineDimension;
@@ -33,7 +48,7 @@ module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBas
       if (derivative[i] === undefined) derivative[i] = 0;
       totalDerivativeOrder += derivative[i];
     }
-    if (hasWeights && totalDerivativeOrder > 1) {
+    if (hasWeights && totalDerivativeOrder > RATIONAL_TOTAL_ORDER_LIMIT) {
       throw new Error('Analytical derivative not implemented for rational b-splines with order n = ' + totalDerivativeOrder + '.');
     }
   }
@@ -51,6 +66,19 @@ module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBas
     }
 
     return cachedEvaluator.bind(nurbs);
+  }
+
+  //
+  // Rational derivatives up to total order 2 need the homogeneous quotient
+  // rule: the generated de Boor code only differentiates one dimension at a
+  // time, so it cannot produce a mixed or second partial consistently.  The
+  // evaluator is stored in the same cache and reads data through the same
+  // accessor conventions.
+  //
+  if (isRationalDerivativeRequest(splineDimension, hasWeights, derivative)) {
+    var rationalEvaluator = createRationalDerivative(derivative, isBasis);
+    evaluatorCache[cacheKey] = rationalEvaluator;
+    return rationalEvaluator.bind(nurbs);
   }
 
   var code = [];
