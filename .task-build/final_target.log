@@ -1,0 +1,18 @@
+CASE fairing dense_reference_finite_difference checks=25
+CASE fairing outside_ring_influence checks=19
+CASE fairing nonplanar_hole checks=93
+CASE fairing refinement_rounds checks=192
+CASE fairing rigid_transform checks=12
+GROUP fairing cases=5 checks=341 COMPLETE
+CASE topology patch_connectivity checks=108
+CASE topology old_handles_preserved checks=65
+CASE topology unselected_hole checks=11
+CASE topology invalid_input_rollback checks=13
+CASE topology runtime_failure_then_continue checks=8
+GROUP topology cases=5 checks=205 COMPLETE
+CASE channels_io full_roundtrip checks=1241
+CASE channels_io mixed_negative_ngon checks=58
+CASE channels_io missing_uv_no_fake checks=194
+CASE channels_io sparse_slots_cleanup checks=671
+GROUP channels_io cases=4 checks=2164 COMPLETE
+TARGET_COMPLETE cases=14

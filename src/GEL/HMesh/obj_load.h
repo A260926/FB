@@ -14,16 +14,24 @@
 
 #include <string>
 #include <GEL/HMesh/Manifold.h>
+#include <GEL/HMesh/AttributedManifold.h>
 
 namespace HMesh
 {
-    /** Load a Wavefront OBJ file. 
-        The first argument is a string containing the file name (including path) 
+    /** Load a Wavefront OBJ file.
+        The first argument is a string containing the file name (including path)
      and the second is the Manifold into which the mesh is loaded. The third argument
      is an attribute vector containing the indices of the original
     points.  */
-     
+
     bool obj_load(const std::string&, Manifold& m, VertexAttributeVector<int>& orig_vertex_indices);
     bool obj_load(const std::string&, Manifold& m);
+
+    /** Load a Wavefront OBJ file including v/vt/vn corner attributes into an
+        AttributedManifold. Supports independent positive and negative indices,
+        v, v/vt, v//vn and v/vt/vn mixed corners and polygonal faces. Geometry
+        vertices are not split by texture or normal data. On failure the
+        argument is left untouched and false is returned. */
+    bool obj_load(const std::string&, AttributedManifold& am);
 }
 #endif

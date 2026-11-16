@@ -14,14 +14,20 @@
 
 #include <string>
 #include <GEL/HMesh/Manifold.h>
+#include <GEL/HMesh/AttributedManifold.h>
 
 namespace HMesh
 {
     class Manifold;
-    /// \brief Save in Wavefront OBJ format. 
+    /// \brief Save in Wavefront OBJ format.
     bool obj_save(const std::string&, Manifold& m);
     /// \brief Save in Wavefront OBJ format with color.
     bool obj_save(const std::string&, Manifold& m, VertexAttributeVector<CGLA::Vec3d> &c);
+
+    /// \brief Save an AttributedManifold in Wavefront OBJ format, using
+    /// independent corner indices together with the per-corner validity
+    /// masks. Corners lacking an attribute omit that index.
+    bool obj_save(const std::string&, AttributedManifold& am);
 
 }
 #endif

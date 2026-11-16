@@ -14,6 +14,7 @@
 
 #include <GEL/HMesh/Manifold.h>
 #include <GEL/HMesh/AttributeVector.h>
+#include <GEL/HMesh/AttributedManifold.h>
 
 namespace HMesh
 {
@@ -94,5 +95,82 @@ namespace HMesh
 
        return true;
    }
+
+    bool obj_save(const string& filename, AttributedManifold& am)
+    {
+        Manifold& m = am.mesh;
+
+        ofstream os(filename.data());
+        os.precision(20);
+        if(!os)
+            return false;
+
+        VertexAttributeVector<int> vmap;
+        int vcount = 0;
+        for(VertexID v : m.vertices()){
+            Vec3d p = m.pos(v);
+            os << "v " << p[0] << " " << p[1] << " " << p[2] << "\n";
+            vmap[v] = ++vcount;
+        }
+
+        bool any_t = false, any_n = false;
+        for(HalfEdgeID h : m.halfedges()){
+            if(m.walker(h).face() == InvalidFaceID)
+                continue;
+            if(am.has_texcoord[h])
+                any_t = true;
+            if(am.has_normal[h])
+                any_n = true;
+        }
+
+        // Independent corner indices: each attributed corner gets its own
+        // vt/vn entry, so geometry vertices are not split and the stored
+        // attribute values are written verbatim.
+        HalfEdgeAttributeVector<int> tmap(-1);
+        HalfEdgeAttributeVector<int> nmap(-1);
+        int tcount = 0, ncount = 0;
+        if(any_t){
+            for(FaceID f : m.faces())
+                for(Walker w = m.walker(f); !w.full_circle(); w = w.circulate_face_ccw()){
+                    HalfEdgeID h = w.halfedge();
+                    if(am.has_texcoord[h]){
+                        const Vec2d& t = am.texcoords[h];
+                        os << "vt " << t[0] << " " << t[1] << "\n";
+                        tmap[h] = ++tcount;
+                    }
+                }
+        }
+        if(any_n){
+            for(FaceID f : m.faces())
+                for(Walker w = m.walker(f); !w.full_circle(); w = w.circulate_face_ccw()){
+                    HalfEdgeID h = w.halfedge();
+                    if(am.has_normal[h]){
+                        const Vec3d& n = am.normals[h];
+                        os << "vn " << n[0] << " " << n[1] << " " << n[2] << "\n";
+                        nmap[h] = ++ncount;
+                    }
+                }
+        }
+
+        for(FaceID f : m.faces()){
+            os << "f";
+            for(Walker w = m.walker(f); !w.full_circle(); w = w.circulate_face_ccw()){
+                HalfEdgeID h = w.halfedge();
+                int vi = vmap[w.vertex()];
+                bool ht = any_t && am.has_texcoord[h];
+                bool hn = any_n && am.has_normal[h];
+                os << " " << vi;
+                if(ht)
+                    os << "/" << tmap[h];
+                else if(hn)
+                    os << "/";
+                if(hn)
+                    os << "/" << nmap[h];
+            }
+            os << "\n";
+        }
+
+        return static_cast<bool>(os);
+    }
 
 }

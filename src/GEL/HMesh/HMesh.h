@@ -3,6 +3,8 @@
 
 #include <GEL/HMesh/Manifold.h>
 #include <GEL/HMesh/AttributeVector.h>
+#include <GEL/HMesh/AttributedManifold.h>
+#include <GEL/HMesh/HolePatch.h>
 #include <GEL/HMesh/Iterators.h>
 #include <GEL/HMesh/Walker.h>
 #include <GEL/HMesh/cleanup.h>
