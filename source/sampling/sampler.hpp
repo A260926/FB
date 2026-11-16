@@ -14,7 +14,17 @@ struct Sampler
 {
     Sampler() = delete;
 
-    // Non-type template dimension-range and loop-unrolling is about 4% faster 
+    // Self-contained, copyable snapshot of all per-path random state.
+    struct State
+    {
+        uint32_t base_seed = 0u, seed = 0u, sequence = 0u,
+                 bit_reversed_index = 0u, shuffled_index = 0u;
+
+        bool operator==(const State&) const = default;
+        bool operator!=(const State&) const = default;
+    };
+
+    // Non-type template dimension-range and loop-unrolling is about 4% faster
     // for my use, but probably doesn't work well for more Sobol dimensions.
     template<int START_DIM, int NUM_DIMS = 1>
     static auto get()
@@ -32,6 +42,28 @@ struct Sampler
     static void initiate(uint32_t start_seed)
     {
         base_seed = hashCombine(global_seed, hash(start_seed));
+    }
+
+    // Same as the single-argument entry point, but with an explicit render seed
+    // replacing the non-deterministic global seed. Hashing and Sobol rules are unchanged.
+    static void initiate(uint32_t pixel_seed, uint32_t render_seed)
+    {
+        base_seed = hashCombine(render_seed, hash(pixel_seed));
+    }
+
+    // Snapshot/restores the complete thread-local per-path random state, field by field.
+    static State capture()
+    {
+        return State{ base_seed, seed, sequence, bit_reversed_index, shuffled_index };
+    }
+
+    static void restore(const State& s)
+    {
+        base_seed = s.base_seed;
+        seed = s.seed;
+        sequence = s.sequence;
+        bit_reversed_index = s.bit_reversed_index;
+        shuffled_index = s.shuffled_index;
     }
 
     // Called with e.g. ray path index before each pixel sample

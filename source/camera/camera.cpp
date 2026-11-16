@@ -9,6 +9,7 @@
 
 #include "../ray/ray.hpp"
 #include "../integrator/path-tracer/path-tracer.hpp"
+#include "../integrator/path-tracer/wavefront.hpp"
 #include "../integrator/photon-mapper/photon-mapper.hpp"
 #include "../sampling/sampling.hpp"
 #include "../sampling/sampler.hpp"
@@ -61,41 +62,129 @@ Camera::Camera(const nlohmann::json &j, const Option &option)
     }
 
     thin_lens = aperture_radius > 0.0 && focus_distance > 0.0;
+
+    wavefront_capacity = static_cast<size_t>(getOptional(c, "wavefront_capacity", 0));
+    if (c.find("render_seed") != c.end())
+    {
+        render_seed = c.at("render_seed").get<uint32_t>();
+    }
+}
+
+Camera::CameraSample Camera::generateCameraSample(size_t x, size_t y, int sample_index)
+{
+    double pixel_size = sensor_width / image.width;
+    glm::dvec2 half_dim = glm::dvec2(image.width, image.height) * 0.5;
+
+    uint32_t pixel_seed = static_cast<uint32_t>(y * image.width + x);
+    if (render_seed.has_value())
+    {
+        Sampler::initiate(pixel_seed, *render_seed);
+    }
+    else
+    {
+        Sampler::initiate(pixel_seed);
+    }
+
+    Sampler::setIndex(static_cast<uint32_t>(sample_index));
+
+    auto u = Sampler::get<Dim::PIXEL, 2>();
+    glm::dvec2 px(x + u[0], y + u[1]);
+    glm::dvec2 local = pixel_size * (half_dim - px);
+    glm::dvec3 direction = glm::normalize(forward * focal_length + left * local.x + up * local.y);
+
+    // Pinhole camera ray
+    Ray ray(eye, direction, integrator->scene.ior);
+
+    if (thin_lens)
+    {
+        // Thin lens camera ray for depth of field
+        auto u = Sampler::get<Dim::LENS, 2>();
+        glm::dvec2 aperture_sample = Sampling::uniformDisk(u[0], u[1]) * aperture_radius;
+        glm::dvec3 focus_point = ray(focus_distance / glm::dot(ray.direction, forward));
+        glm::dvec3 start = eye + left * aperture_sample.x + up * aperture_sample.y;
+        ray = Ray(start, glm::normalize(focus_point - start), integrator->scene.ior);
+    }
+
+    // Captured after camera (and lens) sampling, before the path's first shuffle.
+    return CameraSample{ ray, px, Sampler::capture() };
 }
 
 void Camera::samplePixel(size_t x, size_t y)
 {
-    double pixel_size = sensor_width / image.width;
     size_t spp = pow2(sqrtspp);
 
-    glm::dvec2 half_dim = glm::dvec2(image.width, image.height) * 0.5;
-
-    Sampler::initiate(static_cast<uint32_t>(y * image.width + x));
-
-    for(int i = 0; i < spp; i++)
+    for (int i = 0; i < spp; i++)
     {
-        Sampler::setIndex(i);
-
-        auto u = Sampler::get<Dim::PIXEL, 2>();
-        glm::dvec2 px(x + u[0], y + u[1]);
-        glm::dvec2 local = pixel_size * (half_dim - px);
-        glm::dvec3 direction = glm::normalize(forward * focal_length + left * local.x + up * local.y);
-
-        // Pinhole camera ray
-        Ray ray(eye, direction, integrator->scene.ior);
-
-        if (thin_lens)
-        {
-            // Thin lens camera ray for depth of field
-            auto u = Sampler::get<Dim::LENS, 2>();
-            glm::dvec2 aperture_sample = Sampling::uniformDisk(u[0], u[1]) * aperture_radius;
-            glm::dvec3 focus_point = ray(focus_distance / glm::dot(ray.direction, forward));
-            glm::dvec3 start = eye + left * aperture_sample.x + up * aperture_sample.y;
-            ray = Ray(start, glm::normalize(focus_point - start), integrator->scene.ior);
-        }
-        film.deposit(px, integrator->sampleRay(ray));
+        CameraSample sample = generateCameraSample(x, y, i);
+        film.deposit(sample.pixel, integrator->sampleRay(sample.ray));
     }
     num_sampled_pixels++;
+}
+
+// Drives one bucket's camera samples through a single WavefrontBatch. Many pixels
+// share the batch; it is only drained when all capacity slots are retained or at
+// the end, never once per pixel.
+void Camera::sampleBucketWavefront(const Bucket& bucket)
+{
+    auto* path_tracer = dynamic_cast<PathTracer*>(integrator.get());
+
+    WavefrontBatch batch(*path_tracer, wavefront_capacity);
+
+    const size_t spp = pow2(sqrtspp);
+    const size_t cols = bucket.max.x - bucket.min.x;
+    const size_t rows = bucket.max.y - bucket.min.y;
+    const size_t total = cols * rows * spp;
+
+    // Pixel position of each submitted path, kept in submission order. Results are
+    // released as a completed prefix, so the two stay aligned from the front.
+    std::deque<glm::dvec2> pending_pixels;
+    uint64_t next_id = 0;
+    size_t cursor = 0;
+
+    // A small fixed budget keeps the work split across many steps (yield/resume).
+    const size_t step_budget = std::max<size_t>(1, wavefront_capacity);
+
+    auto drain = [&]()
+    {
+        for (const WavefrontBatch::Result& result : batch.takeCompleted())
+        {
+            film.deposit(pending_pixels.front(), result.radiance);
+            pending_pixels.pop_front();
+        }
+    };
+
+    while (cursor < total || batch.retainedCount() > 0)
+    {
+        // Fill every free slot before advancing the staged transport.
+        while (cursor < total && batch.retainedCount() < wavefront_capacity)
+        {
+            size_t index = cursor++;
+            size_t sample_index = index % spp;
+            size_t pixel_index = index / spp;
+            size_t x = bucket.min.x + pixel_index % cols;
+            size_t y = bucket.min.y + pixel_index / cols;
+
+            CameraSample sample = generateCameraSample(x, y, static_cast<int>(sample_index));
+
+            uint64_t id = next_id++;
+            while (!batch.submit(id, sample.ray, sample.sampler_state))
+            {
+                batch.step(1);
+                drain();
+            }
+            pending_pixels.push_back(sample.pixel);
+        }
+
+        if (batch.retainedCount() == 0)
+        {
+            break;
+        }
+
+        batch.step(step_budget);
+        drain();
+    }
+
+    num_sampled_pixels += cols * rows;
 }
 
 void Camera::sampleImage()
@@ -149,6 +238,12 @@ void Camera::sampleImageThread(WorkQueue<Bucket>& buckets)
     Bucket bucket;
     while (buckets.getWork(bucket))
     {
+        if (wavefront_capacity > 0 && dynamic_cast<PathTracer*>(integrator.get()))
+        {
+            sampleBucketWavefront(bucket);
+            continue;
+        }
+
         for (size_t y = bucket.min.y; y < bucket.max.y; y++)
         {
             for (size_t x = bucket.min.x; x < bucket.max.x; x++)

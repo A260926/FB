@@ -442,6 +442,54 @@ ___
 
 ___
 
+## Wavefront Path Tracing
+
+In addition to the scalar `PathTracer::sampleRay` entry point, the path tracer can run as a **staged wavefront** transport through `WavefrontBatch` (`source/integrator/path-tracer/wavefront.hpp`). A path is never wrapped up as a single "trace this whole ray" task and no thread is parked to suspend a scalar loop. Instead each bounce flows through three independent pending queues:
+
+1. **ray queue** — main and continuation ray intersection, using the existing `Scene`/`BVH`;
+2. **shade queue** — `Interaction` construction, emissive accounting, direct-light setup and BSDF sampling, reusing `Interaction`/`BSDF`;
+3. **shadow queue** — direct-light visibility rays.
+
+Everything a path needs to pause and resume (throughput, accumulated radiance, `RefractionHistory`, the previous `LightSample`/BSDF density, and its own `Sampler` state) is retained in the batch slot, so work can yield in the middle of a frame and continue later. The scene is only read while a batch is alive. A batch may be handed off sequentially between threads; it is not required to be driven concurrently.
+
+### Random context
+
+`Sampler` now has a copyable, self-contained `Sampler::State` plus `Sampler::capture()` and `Sampler::restore(const State&)`, covering every per-path random field. There is also an explicit-seed overload:
+
+```cpp
+Sampler::initiate(pixel_seed, render_seed); // render_seed replaces the automatic global seed
+```
+
+The single-argument `initiate(pixel_seed)` keeps its old behaviour (the non-deterministic global seed); all hashing and Sobol/Owen rules are unchanged. Submit a path with the state captured **after camera/lens sampling and before the path's first shuffle**. Each `WavefrontBatch::step` restores the calling thread's sampler state field-by-field on return, so alternating between two batches on the same thread cannot cross-contaminate them.
+
+### Calling sequence
+
+```cpp
+WavefrontBatch batch(path_tracer, capacity);   // capacity must be positive
+
+bool accepted = batch.submit(id, ray, sampler_state); // false when full; duplicate retained id throws
+size_t queries = batch.step(query_budget);            // <= query_budget real Scene intersections;
+                                                       // main and shadow rays both count; step(0) does nothing
+for (auto& result : batch.takeCompleted()) { ... }     // completed prefix of submission order only
+batch.retainedCount();                                 // in-flight + completed-but-untaken
+batch.stats();                                         // path/shadow intersections, completed paths, queue peaks
+```
+
+At most `capacity` paths (including completed results not yet taken) are retained; the three stage queues together never hold more than `capacity` tasks (`<= 3 * capacity` slots). `takeCompleted()` only removes the contiguous completed prefix of the submission order, after which those slots and ids can be reused; each result is returned exactly once.
+
+### Camera options
+
+A camera entry accepts two optional fields:
+
+| field                 | meaning |
+| --------------------- | ------- |
+| `wavefront_capacity`  | When positive, the camera's production sampling is driven through a `WavefrontBatch` of that capacity instead of the scalar loop. Multiple pixels always share one batch. |
+| `render_seed`         | Explicit sampler render seed. With the same `render_seed`, scalar and wavefront modes produce identical per-sample and film results. |
+
+When `wavefront_capacity` is unset or non-positive the camera stays in scalar mode. Ray generation, thin-lens sampling and the `Film` pixel positions follow the original rules, and results are deposited in submission order. The photon mapper is unchanged and is not scheduled through the wavefront path.
+
+See `examples/wavefront.cpp` for a pause/resume driver that writes a PPM image, and `checks/wavefront.cpp` for the scalar-vs-wavefront parity, visibility, capacity, budget and ordering checks.
+
 ## Renders
 
 ![Path traced render of shells, 7 million triangles.](https://imgur.com/9Im3WBW.jpg "Path traced render of shells, 7 million triangles.")

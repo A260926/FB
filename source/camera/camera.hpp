@@ -3,6 +3,8 @@
 #include <chrono>
 #include <deque>
 #include <atomic>
+#include <optional>
+#include <cstdint>
 
 #include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
@@ -15,6 +17,8 @@
 #include "../scene/scene.hpp"
 #include "../common/work-queue.hpp"
 #include "../common/option.hpp"
+#include "../ray/ray.hpp"
+#include "../sampling/sampler.hpp"
 
 class Integrator;
 
@@ -63,11 +67,28 @@ private:
     void samplePixel(size_t x, size_t y);
     void sampleImageThread(WorkQueue<Bucket>& buckets);
 
+    // One camera sample: produces the ray, pixel position and the sampler state as
+    // it is after camera/lens sampling and before the path's first shuffle.
+    struct CameraSample
+    {
+        Ray ray;
+        glm::dvec2 pixel;
+        Sampler::State sampler_state;
+    };
+
+    CameraSample generateCameraSample(size_t x, size_t y, int sample_index);
+    void sampleBucketWavefront(const Bucket& bucket);
+
     void printInfoThread(WorkQueue<Bucket>& buckets);
 
     const size_t bucket_size = 32;
 
     std::shared_ptr<Integrator> integrator;
+
+    // Optional wavefront transport. wavefront_capacity > 0 routes the camera's
+    // production sampling through a WavefrontBatch; otherwise scalar mode is used.
+    size_t wavefront_capacity = 0;
+    std::optional<uint32_t> render_seed;
 
     std::atomic_size_t num_sampled_pixels = 0;
     size_t last_num_sampled_pixels = 0;
