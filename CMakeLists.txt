@@ -42,6 +42,8 @@ set(SOURCES
     src/remesher.cpp
     src/simplifier.cpp
     src/spatialorder.cpp
+    src/surfaceerror.cpp
+    src/surfaceerror.h
     src/stripifier.cpp
     src/tangentspace.cpp
     src/vcacheoptimizer.cpp

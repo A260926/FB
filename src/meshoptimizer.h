@@ -541,6 +541,55 @@ MESHOPTIMIZER_API size_t meshopt_simplify(unsigned int* destination, const unsig
 MESHOPTIMIZER_API size_t meshopt_simplifyWithAttributes(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* result_error);
 
 /**
+ * Surface error statistics for meshopt_simplifyWithSurfaceError
+ */
+struct meshopt_SurfaceErrorStats
+{
+	double certified_error; /* final conservative two-sided surface distance bound (object space) */
+	size_t accepted_collapses; /* number of geometric EdgeCollapses that were actually committed */
+	size_t rejected_distance; /* number of candidates rejected because the distance bound was provably exceeded */
+	size_t rejected_budget; /* number of candidates rejected because the subdivision depth limit was reached before a proof */
+	size_t invalidated_certificates; /* number of coverage certificates invalidated by successfully committed collapses */
+	size_t distance_tests; /* number of point-triangle distance evaluations performed */
+};
+
+/**
+ * Mesh simplifier with a certified surface distance limit
+ * Reduces the number of triangles in the mesh using the same candidate selection, error ranking, attribute and seam handling as meshopt_simplifyWithAttributes.
+ * In addition to the quadric error limit (target_error/result_error, which retain their original QEM meaning), this entry point certifies that the
+ * two-sided Hausdorff distance between the original surface S (the union of all input triangles at call time) and the current surface T
+ * (the union of all live triangles) never exceeds max_surface_error while collapses are being committed, and that the final output satisfies the same bound.
+ * The bound covers triangle interiors and edges: source and target triangle domains are adaptively subdivided and each cell is proven using a conservative
+ * point-triangle distance bound. It is an upper bound, not an exact Hausdorff distance; numerically uncertain cells are rejected.
+ *
+ * The resulting index buffer references vertices from the original vertex buffer; vertex positions and attributes are not modified.
+ * Returns the number of indices after simplification, with destination containing new index data.
+ *
+ * destination must contain enough space for the target index buffer, worst case is index_count elements (*not* target_index_count)!
+ * vertex_positions should have float3 position in the first 12 bytes of each vertex
+ * vertex_attributes should have attribute_count floats for each vertex
+ * attribute_weights should have attribute_count floats in total; the weights determine relative priority of attributes between each other and wrt position
+ * attribute_count must be <= 32
+ * vertex_lock can be NULL; when it's not NULL, it should have a value for each vertex composed of meshopt_SimplifyVertex_* flags
+ * target_error represents the error relative to mesh extents that can be tolerated, e.g. 0.01 = 1% deformation (unless absolute error option is used)
+ * options can be 0 or a combination of meshopt_SimplifySparse, meshopt_SimplifyLockBorder and meshopt_SimplifyErrorAbsolute; other options are not supported
+ * result_error can be NULL; when it's not NULL, it will contain the resulting (relative/absolute) QEM error after simplification
+ * max_surface_error is an absolute distance in object space and is not affected by meshopt_SimplifyErrorAbsolute; it must be finite and non-negative when enabled;
+ * the special value -1 disables surface error enforcement, in which case indices, result_error and behavior are identical to meshopt_simplifyWithAttributes
+ * max_depth is the maximum adaptive subdivision depth per triangle domain, with the root at depth 0; it must be in [0, 20] when surface error is enabled
+ * stats can be NULL; when it's not NULL it receives the final certified bound and counters (all counters are zeroed when surface error is disabled)
+ *
+ * Input surface requirements: all referenced coordinates must be finite, all input triangles must have positive area and the surface must be an oriented
+ * 2-manifold; multiple shells, open borders and attribute seams (duplicate vertices at the same position) are supported. Empty input is supported.
+ *
+ * Floating point and degeneracy notes: all distance bounds are evaluated in double precision and outward-expanded by a small epsilon proportional to the
+ * coordinate magnitude to account for floating point round-off (uncertain results are rejected, never accepted). Adaptive cells are subdivided by exact
+ * midpoints; a degenerate (zero-area) cell contributes no area to the cover and is only accepted when its corners can be proven, never assumed. max_depth
+ * counts subdivision steps from the original triangle (depth 0).
+ */
+MESHOPTIMIZER_API size_t meshopt_simplifyWithSurfaceError(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* result_error, float max_surface_error, unsigned int max_depth, struct meshopt_SurfaceErrorStats* stats);
+
+/**
  * Mesh simplifier with position/attribute update
  * Reduces the number of triangles in the mesh, attempting to preserve mesh appearance as much as possible.
  * Similar to meshopt_simplifyWithAttributes, but destructively updates positions and attribute values for optimal appearance.
@@ -1136,6 +1185,8 @@ inline size_t meshopt_simplify(T* destination, const T* indices, size_t index_co
 template <typename T>
 inline size_t meshopt_simplifyWithAttributes(T* destination, const T* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options = 0, float* result_error = NULL);
 template <typename T>
+inline size_t meshopt_simplifyWithSurfaceError(T* destination, const T* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options = 0, float* result_error = NULL, float max_surface_error = -1.f, unsigned int max_depth = 8, struct meshopt_SurfaceErrorStats* stats = NULL);
+template <typename T>
 inline size_t meshopt_simplifyWithUpdate(T* indices, size_t index_count, float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, float* vertex_attributes, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options = 0, float* result_error = NULL);
 template <typename T>
 inline size_t meshopt_simplifySloppy(T* destination, const T* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, size_t target_index_count, float target_error, float* result_error = NULL);
@@ -1540,6 +1591,15 @@ inline size_t meshopt_simplifyWithAttributes(T* destination, const T* indices, s
 	meshopt_IndexAdapter<T> out(destination, NULL, index_count);
 
 	return meshopt_simplifyWithAttributes(out.data, in.data, index_count, vertex_positions, vertex_count, vertex_positions_stride, vertex_attributes, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options, result_error);
+}
+
+template <typename T>
+inline size_t meshopt_simplifyWithSurfaceError(T* destination, const T* indices, size_t index_count, const float* vertex_positions, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* result_error, float max_surface_error, unsigned int max_depth, struct meshopt_SurfaceErrorStats* stats)
+{
+	meshopt_IndexAdapter<T> in(NULL, indices, index_count);
+	meshopt_IndexAdapter<T> out(destination, NULL, index_count);
+
+	return meshopt_simplifyWithSurfaceError(out.data, in.data, index_count, vertex_positions, vertex_count, vertex_positions_stride, vertex_attributes, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options, result_error, max_surface_error, max_depth, stats);
 }
 
 template <typename T>

@@ -1,0 +1,7 @@
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/meshoptimizer.dir
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FSACB05845D950U11825/attempts/20261116T161027552390Z/repo/.task-build/cmake/CMakeFiles/install/strip.dir

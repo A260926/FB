@@ -1,5 +1,6 @@
 // This file is part of meshoptimizer library; see meshoptimizer.h for version/license details
 #include "meshoptimizer.h"
+#include "surfaceerror.h"
 
 #include <assert.h>
 #include <float.h>
@@ -1524,7 +1525,7 @@ static void sortEdgeCollapses(unsigned int* sort_order, const Collapse* collapse
 	}
 }
 
-static size_t performEdgeCollapses(unsigned int* collapse_remap, unsigned char* collapse_locked, const Collapse* collapses, size_t collapse_count, const unsigned int* collapse_order, const unsigned int* remap, const unsigned int* wedge, const unsigned char* vertex_kind, const unsigned int* loop, const unsigned int* loopback, const Vector3* vertex_positions, const EdgeAdjacency& adjacency, size_t triangle_collapse_goal, float error_limit, float& result_error)
+static size_t performEdgeCollapses(unsigned int* collapse_remap, unsigned char* collapse_locked, const Collapse* collapses, size_t collapse_count, const unsigned int* collapse_order, const unsigned int* remap, const unsigned int* wedge, const unsigned char* vertex_kind, const unsigned int* loop, const unsigned int* loopback, const Vector3* vertex_positions, const EdgeAdjacency& adjacency, size_t triangle_collapse_goal, float error_limit, float& result_error, SurfaceErrorCertifier* surface_certifier)
 {
 	size_t edge_collapses = 0;
 	size_t triangle_collapses = 0;
@@ -1532,6 +1533,10 @@ static size_t performEdgeCollapses(unsigned int* collapse_remap, unsigned char* 
 	// most collapses remove 2 triangles; use this to establish a bound on the pass in terms of error limit
 	// note that edge_collapse_goal is an estimate; triangle_collapse_goal will be used to actually limit collapses
 	size_t edge_collapse_goal = triangle_collapse_goal / 2;
+
+	// surface error certification uses the exact vertex moves of each candidate; wedge loops are small in practice and
+	// a candidate whose fully expanded wedge loop exceeds this bound is conservatively rejected
+	SurfaceErrorMove surface_moves[kSurfaceMoveCapacity];
 
 #if TRACE
 	size_t stats[7] = {};
@@ -1595,6 +1600,54 @@ static size_t performEdgeCollapses(unsigned int* collapse_remap, unsigned char* 
 
 		assert(collapse_remap[r0] == r0);
 		assert(collapse_remap[r1] == r1);
+
+		// surface error certification: reconstruct the exact set of vertex moves this candidate performs (including all wedge linkage),
+		// simulate the resulting active surface and commit the move only if both distance directions can be certified
+		if (surface_certifier)
+		{
+			size_t move_count = 1;
+
+			if (kind == Kind_Complex || kind == Kind_Fringe)
+				for (unsigned int v = wedge[i0]; v != i0; v = wedge[v])
+					move_count++;
+
+			// an unusually large wedge loop cannot be proven cheaply; reject the candidate instead of overflowing
+			if (move_count > kSurfaceMoveCapacity)
+				continue;
+
+			move_count = 0;
+
+			if (kind == Kind_Complex || kind == Kind_Fringe)
+			{
+				SurfaceErrorMove m0 = {i0, i1};
+				surface_moves[move_count++] = m0;
+
+				for (unsigned int v = wedge[i0]; v != i0; v = wedge[v])
+				{
+					SurfaceErrorMove mv = {v, getComplexTarget(v, i1, remap, loop, loopback)};
+					surface_moves[move_count++] = mv;
+				}
+			}
+			else if (kind == Kind_Seam)
+			{
+				unsigned int s0 = wedge[i0];
+				unsigned int s1 = loop[i0] == i1 ? loopback[s0] : loop[s0];
+				s1 = (s1 != ~0u) ? s1 : wedge[i1];
+
+				SurfaceErrorMove m0 = {i0, i1};
+				SurfaceErrorMove m1 = {s0, s1};
+				surface_moves[move_count++] = m0;
+				surface_moves[move_count++] = m1;
+			}
+			else
+			{
+				SurfaceErrorMove m0 = {i0, i1};
+				surface_moves[move_count++] = m0;
+			}
+
+			if (!surface_certifier->simulate(surface_moves, move_count))
+				continue;
+		}
 
 		if (kind == Kind_Complex || kind == Kind_Fringe)
 		{
@@ -2337,7 +2390,7 @@ enum
 	meshopt_SimplifyInternalDebug = 1 << 30
 };
 
-size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions_data, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes_data, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* out_result_error)
+size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions_data, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes_data, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* out_result_error, float max_surface_error, unsigned int max_surface_depth, struct meshopt_SurfaceErrorStats* out_surface_stats)
 {
 	using namespace meshopt;
 
@@ -2351,6 +2404,22 @@ size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indic
 	assert(attribute_count <= kMaxAttributes);
 	for (size_t i = 0; i < attribute_count; ++i)
 		assert(attribute_weights[i] >= 0);
+
+	bool surface_enabled = max_surface_error >= 0;
+
+	if (surface_enabled)
+	{
+		// max_surface_error must be finite and non-negative; comparing against FLT_MAX rejects infinities and NaN
+		assert(max_surface_error == max_surface_error && max_surface_error <= FLT_MAX);
+		assert(max_surface_depth <= 20);
+	}
+	else
+	{
+		assert(max_surface_error == -1.f); // -1 disables; other negative values (and NaN) are invalid
+
+		if (out_surface_stats)
+			memset(out_surface_stats, 0, sizeof(struct meshopt_SurfaceErrorStats));
+	}
 
 	meshopt_Allocator allocator;
 
@@ -2489,6 +2558,16 @@ size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indic
 	float error_scale = (options & meshopt_SimplifyErrorAbsolute) ? vertex_scale : 1.f;
 	float error_limit = (target_error * target_error) / (error_scale * error_scale);
 
+	// surface error is only supported with the options that preserve the simplifier's existing triangle-set semantics
+	if (surface_enabled)
+		assert((options & (meshopt_SimplifyPrune | meshopt_SimplifyPermissive | meshopt_SimplifyRegularize | meshopt_SimplifyRegularizeLight | meshopt_SimplifyPreserveFolds | meshopt_SimplifyErrorClamped)) == 0);
+
+	// surface error certifier tracks the two-sided distance between the original surface and the surface being built
+	SurfaceErrorCertifier surface_certifier(max_surface_error, max_surface_depth);
+
+	if (surface_enabled)
+		surface_certifier.init(vertex_positions_data, vertex_positions_stride, sparse_remap, vertex_count, result, index_count, remap);
+
 	while (result_count > target_index_count)
 	{
 		// note: throughout the simplification process adjacency structure reflects welded topology for result-in-progress
@@ -2516,12 +2595,14 @@ size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indic
 
 		memset(collapse_locked, 0, vertex_count);
 
-		size_t collapses = performEdgeCollapses(collapse_remap, collapse_locked, edge_collapses, edge_collapse_count, collapse_order, remap, wedge, vertex_kind, loop, loopback, vertex_positions, adjacency, triangle_collapse_goal, error_limit, result_error);
+		size_t collapses = performEdgeCollapses(collapse_remap, collapse_locked, edge_collapses, edge_collapse_count, collapse_order, remap, wedge, vertex_kind, loop, loopback, vertex_positions, adjacency, triangle_collapse_goal, error_limit, result_error, surface_enabled ? &surface_certifier : NULL);
 
 		// no edges can be collapsed any more due to hitting the error limit or triangle collapse limit
 		if (collapses == 0)
 			break;
 
+		// surface error certification requires every committed collapse to be mirrored by the simplifier; the certifier only accepted
+		// candidates that the simplifier is about to apply, so the live triangle count must agree after the index remap below
 		updateQuadrics(collapse_remap, vertex_count, vertex_quadrics, volume_gradients, attribute_quadrics, attribute_gradients, attribute_count, vertex_positions, remap, vertex_error);
 
 		// updateQuadrics will update vertex error if we use attributes, but if we don't then result_error and vertex_error are equivalent
@@ -2537,6 +2618,10 @@ size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indic
 
 		if ((options & meshopt_SimplifyPrune) && result_count > target_index_count && component_nexterror <= vertex_error)
 			result_count = pruneComponents(result, result_count, components, component_errors, component_count, vertex_error, component_nexterror);
+
+		// rebuild spatial indexes and compact certificate bookkeeping once per pass
+		if (surface_enabled)
+			surface_certifier.reorganize();
 	}
 
 	// at this point, component_nexterror might be stale: component it references may have been removed through a series of edge collapses
@@ -2621,6 +2706,12 @@ size_t meshopt_simplifyEdge(unsigned int* destination, const unsigned int* indic
 	if (out_result_error)
 		*out_result_error = sqrtf(result_error) * error_scale;
 
+	if (surface_enabled)
+	{
+		assert(surface_certifier.liveTriangles() == result_count / 3);
+		surface_certifier.finalize(out_surface_stats);
+	}
+
 	return result_count;
 }
 
@@ -2628,19 +2719,26 @@ size_t meshopt_simplify(unsigned int* destination, const unsigned int* indices, 
 {
 	assert((options & meshopt_SimplifyInternalSolve) == 0); // use meshopt_simplifyWithUpdate instead
 
-	return meshopt_simplifyEdge(destination, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, NULL, 0, NULL, 0, NULL, target_index_count, target_error, options, out_result_error);
+	return meshopt_simplifyEdge(destination, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, NULL, 0, NULL, 0, NULL, target_index_count, target_error, options, out_result_error, -1.f, 0, NULL);
 }
 
 size_t meshopt_simplifyWithAttributes(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions_data, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes_data, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* out_result_error)
 {
 	assert((options & meshopt_SimplifyInternalSolve) == 0); // use meshopt_simplifyWithUpdate instead
 
-	return meshopt_simplifyEdge(destination, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, vertex_attributes_data, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options, out_result_error);
+	return meshopt_simplifyEdge(destination, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, vertex_attributes_data, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options, out_result_error, -1.f, 0, NULL);
+}
+
+size_t meshopt_simplifyWithSurfaceError(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions_data, size_t vertex_count, size_t vertex_positions_stride, const float* vertex_attributes_data, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* out_result_error, float max_surface_error, unsigned int max_depth, struct meshopt_SurfaceErrorStats* out_surface_stats)
+{
+	assert((options & meshopt_SimplifyInternalSolve) == 0); // use meshopt_simplifyWithUpdate instead
+
+	return meshopt_simplifyEdge(destination, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, vertex_attributes_data, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options, out_result_error, max_surface_error, max_depth, out_surface_stats);
 }
 
 size_t meshopt_simplifyWithUpdate(unsigned int* indices, size_t index_count, float* vertex_positions_data, size_t vertex_count, size_t vertex_positions_stride, float* vertex_attributes_data, size_t vertex_attributes_stride, const float* attribute_weights, size_t attribute_count, const unsigned char* vertex_lock, size_t target_index_count, float target_error, unsigned int options, float* out_result_error)
 {
-	return meshopt_simplifyEdge(indices, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, vertex_attributes_data, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options | meshopt_SimplifyInternalSolve, out_result_error);
+	return meshopt_simplifyEdge(indices, indices, index_count, vertex_positions_data, vertex_count, vertex_positions_stride, vertex_attributes_data, vertex_attributes_stride, attribute_weights, attribute_count, vertex_lock, target_index_count, target_error, options | meshopt_SimplifyInternalSolve, out_result_error, -1.f, 0, NULL);
 }
 
 size_t meshopt_simplifySloppy(unsigned int* destination, const unsigned int* indices, size_t index_count, const float* vertex_positions_data, size_t vertex_count, size_t vertex_positions_stride, const unsigned char* vertex_lock, size_t target_index_count, float target_error, float* out_result_error)

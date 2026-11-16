@@ -1,0 +1,26 @@
+CASE continuous plane checks=7
+CASE continuous bump_interior checks=6
+CASE continuous trough checks=5
+CASE continuous zero_tolerance checks=3
+GROUP continuous cases=4 checks=21 COMPLETE
+CASE invalidation witness_replacement checks=4
+CASE invalidation no_witness checks=4
+CASE invalidation distance_rejection checks=4
+CASE invalidation seam_copies checks=5
+CASE invalidation compaction checks=3
+GROUP invalidation cases=5 checks=20 COMPLETE
+CASE budget depth_limit checks=6
+CASE budget depth_subdivisions checks=5
+CASE budget depth_zero checks=3
+CASE budget sampling_growth checks=8
+GROUP budget cases=4 checks=22 COMPLETE
+CASE compatibility disabled checks=9
+CASE compatibility sparse checks=3
+CASE compatibility short16 checks=75
+CASE compatibility empty checks=4
+CASE compatibility locks checks=27
+CASE compatibility attributes checks=6
+SURFACE_LOD input_triangles=1152 output_triangles=112 certified_error=0.00997611731 qem_error=0.000125881052
+CASE compatibility example checks=452
+GROUP compatibility cases=7 checks=576 COMPLETE
+TARGET_COMPLETE cases=20
