@@ -62,6 +62,7 @@ class quad : public hittable {
         rec.t = t;
         rec.p = intersection;
         rec.mat = mat;
+        rec.instance_id = invalid_instance_id;
         rec.set_face_normal(r, normal);
 
         return true;

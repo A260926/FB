@@ -11,9 +11,11 @@
 // along with this software. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //==============================================================================================
 
+#include "rtweekend.h"
 #include "hittable.h"
 #include "pdf.h"
 #include "material.h"
+#include "scene_snapshot.h"
 
 
 class camera {
@@ -33,6 +35,20 @@ class camera {
     double focus_dist = 10;    // Distance from camera lookfrom point to plane of perfect focus
 
     void render(const hittable& world, const hittable& lights) {
+        // The legacy entry point always treats its light set as sampleable, so
+        // its random-number consumption is preserved exactly.
+        render_impl(world, lights, true);
+    }
+
+    // Render one immutable scene version. The whole render, at every bounce,
+    // sees only that snapshot's world and lights. With no emissive instances the
+    // material's own PDF is used and the empty light set is never sampled.
+    void render(const scene_snapshot& snapshot) {
+        render_impl(snapshot.world(), snapshot.lights(), snapshot.light_count() > 0);
+    }
+
+  private:
+    void render_impl(const hittable& world, const hittable& lights, bool has_lights) {
         initialize();
 
         std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
@@ -44,7 +60,7 @@ class camera {
                 for (int s_j = 0; s_j < sqrt_spp; s_j++) {
                     for (int s_i = 0; s_i < sqrt_spp; s_i++) {
                         ray r = get_ray(i, j, s_i, s_j);
-                        pixel_color += ray_color(r, max_depth, world, lights);
+                        pixel_color += ray_color(r, max_depth, world, lights, has_lights);
                     }
                 }
                 write_color(std::cout, pixel_samples_scale * pixel_color);
@@ -53,8 +69,6 @@ class camera {
 
         std::clog << "\rDone.                 \n";
     }
-
-  private:
     int    image_height;         // Rendered image height
     double pixel_samples_scale;  // Color scale factor for a sum of pixel samples
     int    sqrt_spp;             // Square root of number of samples per pixel
@@ -150,6 +164,14 @@ class camera {
 
     color ray_color(const ray& r, int depth, const hittable& world, const hittable& lights)
     const {
+        // Legacy callers always have a sampleable light set, so this keeps the
+        // original mixture-PDF behavior and random-number consumption.
+        return ray_color(r, depth, world, lights, true);
+    }
+
+    color ray_color(const ray& r, int depth, const hittable& world,
+                    const hittable& lights, bool has_lights)
+    const {
         // If we've exceeded the ray bounce limit, no more light is gathered.
         if (depth <= 0)
             return color(0,0,0);
@@ -167,18 +189,30 @@ class camera {
             return color_from_emission;
 
         if (srec.skip_pdf) {
-            return srec.attenuation * ray_color(srec.skip_pdf_ray, depth-1, world, lights);
+            return srec.attenuation * ray_color(srec.skip_pdf_ray, depth-1, world, lights, has_lights);
         }
 
-        auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
-        mixture_pdf p(light_ptr, srec.pdf_ptr);
+        shared_ptr<pdf> light_pdf;
+        if (has_lights)
+            light_pdf = make_shared<hittable_pdf>(lights, rec.p);
 
-        ray scattered = ray(rec.p, p.generate(), r.time());
-        auto pdf_value = p.value(scattered.direction());
+        ray scattered;
+        double pdf_value;
+        if (has_lights) {
+            mixture_pdf p(light_pdf, srec.pdf_ptr);
+            scattered = ray(rec.p, p.generate(), r.time());
+            pdf_value = p.value(scattered.direction());
+        } else {
+            // No emissive instances: use the material PDF alone and never call
+            // random() on the empty light set. The background is not treated as
+            // a light.
+            scattered = ray(rec.p, srec.pdf_ptr->generate(), r.time());
+            pdf_value = srec.pdf_ptr->value(scattered.direction());
+        }
 
         double scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
 
-        color sample_color = ray_color(scattered, depth-1, world, lights);
+        color sample_color = ray_color(scattered, depth-1, world, lights, has_lights);
         color color_from_scatter =
             (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
 

@@ -13,8 +13,16 @@
 
 #include "aabb.h"
 
+#include <cstddef>
+#include <limits>
+
 
 class material;
+
+
+// Sentinel stored in hit_record::instance_id when a hit does not come from a
+// scene_snapshot instance leaf.
+inline constexpr size_t invalid_instance_id = std::numeric_limits<size_t>::max();
 
 
 class hit_record {
@@ -26,6 +34,10 @@ class hit_record {
     double u;
     double v;
     bool front_face;
+
+    // Stable slot of the scene_snapshot instance that produced the hit.
+    // Defaults to invalid so that reusing a record cannot keep a stale identity.
+    size_t instance_id = invalid_instance_id;
 
     void set_face_normal(const ray& r, const vec3& outward_normal) {
         // Sets the hit record normal vector.

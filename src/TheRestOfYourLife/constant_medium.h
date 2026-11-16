@@ -59,6 +59,7 @@ class constant_medium : public hittable {
         rec.normal = vec3(1,0,0);  // arbitrary
         rec.front_face = true;     // also arbitrary
         rec.mat = phase_function;
+        rec.instance_id = invalid_instance_id;
 
         return true;
     }

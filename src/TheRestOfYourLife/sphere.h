@@ -63,6 +63,7 @@ class sphere : public hittable {
         rec.set_face_normal(r, outward_normal);
         get_sphere_uv(outward_normal, rec.u, rec.v);
         rec.mat = mat;
+        rec.instance_id = invalid_instance_id;
 
         return true;
     }
