@@ -1,3 +1,5 @@
+import type { SkinMotionEditOptions, SkinMotionEditResult } from './SkinMotionEdit';
+
 export interface GLTFAnimationData {
     node: any;
     transform: any;
@@ -24,4 +26,11 @@ export class GLTFAnimation {
     update(totalWeight?: number, isSet?: boolean): void;
 
     cubicSplineInterpolate(t: number, prevVal: any, prevTan: any, nextTan: any, nextVal: any): any;
+
+    /**
+     * Jointly solves local rotation corrections over the whole clip so that
+     * skinned surface probes match world-space observations. The original mesh,
+     * skin weights, channels and playback state are never modified.
+     */
+    editSkinMotion(options: SkinMotionEditOptions): SkinMotionEditResult;
 }

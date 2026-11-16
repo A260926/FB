@@ -1,5 +1,6 @@
 import { Vec3 } from '../math/Vec3.js';
 import { Quat } from '../math/Quat.js';
+import { editSkinMotion } from './SkinMotionEdit.js';
 
 const tmpVec3A = /* @__PURE__ */ new Vec3();
 const tmpVec3B = /* @__PURE__ */ new Vec3();
@@ -113,5 +114,13 @@ export class GLTFAnimation {
         }
 
         return prevVal;
+    }
+
+    // Jointly solve local rotation corrections over the whole clip so that
+    // skinned surface probes match world-space observations. The original mesh,
+    // skin weights, channels and playback state are never modified; the returned
+    // animation plays back through the same Transform / GLTFSkin pipeline.
+    editSkinMotion(options) {
+        return editSkinMotion(this, options);
     }
 }

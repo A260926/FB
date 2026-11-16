@@ -216,6 +216,97 @@ import { Renderer, Geometry, Program, Mesh } from 'ogl';
 }
 ```
 
+## Skin motion editing
+
+`GLTFAnimation.editSkinMotion(options)` adjusts an existing animation by moving
+skinned **surface points** instead of individual bone endpoints. The original
+mesh, skin weights and animation channels are never modified; the solver works
+on shadow copies of the hierarchy and returns a brand new `GLTFAnimation` that
+plays back through the same `Transform` / `GLTFSkin` pipeline.
+
+```js
+const result = animation.editSkinMotion({
+    skin,                       // the GLTFSkin being edited
+    root,                       // common ancestor of every skeleton joint
+    joints: [foreArm, hand],    // adjustable joints, numbered in array order
+    times: [0, 0.5, 1, 1.5, 2], // 3..32 strictly increasing absolute seconds
+    probes: [{ triangle: 17, barycentric: [0.2, 0.3, 0.5] }],
+    observations: [{ sample: 2, probe: 0, target: [x, y, z], weight: 1 }],
+    lambda: 1e-3,               // Tikhonov weight on the rotation corrections
+    smoothness: 1e-2,           // discrete-time acceleration weight
+    maxAngle: Math.PI / 4,      // per-frame correction ball, 0 < maxAngle < PI/2
+    tolerance: 1e-6,            // optional, defaults to 1e-6
+    maxIterations: 1000,        // optional, defaults to 1000
+});
+```
+
+### Coordinates and correction parameterization
+
+Everything is expressed in world space for `target`, while corrections live in
+each joint's **local** frame. For adjustable joint `k` at internal sample `s`,
+the output local rotation is the original animated quaternion right-multiplied
+by an exponential map `Exp(x_{s,k})`, where the angle of `Exp` is the length of
+the three-vector `x_{s,k}`. End samples are pinned (`x = 0`), and every
+internal block is constrained to `||x_{s,k}|| <= maxAngle` by projection onto a
+ball. Translations, non-adjustable joint rotations, hierarchy propagation and
+binding weights all stay fixed.
+
+A probe first skins its three bound vertices independently with the stored
+`skinIndex` / `skinWeight` (weights are used as stored, never renormalized, and
+the mesh's own world matrix is ignored, matching `GLTFSkin.draw`), then mixes
+the three skinned points with the barycentric coordinates. `GLTFSkin` also
+exposes `sampleSurface(probes)`, a CPU-only counterpart that returns an
+independent `Float64Array` of the current world-space surface points after the
+caller has updated world matrices. It shares its `worldMatrix * bindInverse`
+palette assembly with `updateUniforms` and never uploads to the GPU or dirties
+the bone texture.
+
+### Joint objective and discrete-time smoothing
+
+All internal frames are solved in a single optimization starting from `x = 0`:
+
+```
+E = 0.5 * Σ_observation weight * ||surface(x) - target||²
+  + 0.5 * lambda * ||x||²
+  + 0.5 * smoothness * Σ_s,k h_s * ||a_{s,k}||²
+```
+
+with `d_s = times[s+1] - times[s]`, `h_s = (d_{s-1} + d_s) / 2` and
+
+```
+a_{s,k} = ( (x_{s+1,k} - x_{s,k}) / d_s
+          - (x_{s,k} - x_{s-1,k}) / d_{s-1} ) / h_s
+```
+
+The smoothness term penalizes acceleration of the **rotation corrections**,
+not acceleration of the final world positions, so the original motion is
+preserved as closely as possible. Non-uniform sample times are handled
+explicitly through `d_s` and `h_s`; because every frame shares one problem, an
+observation on one frame propagates to its neighbors instead of being solved
+per-frame and filtered afterwards. The analytic gradient includes the
+exponential-map derivative, shared-ancestor chains and multi-bone skinning,
+driven by a Gauss-Newton/conjugate-gradient step with monotone projected
+backtracking. Only `residual = max |x - P(x - g)| <= tolerance` reports
+convergence; the returned `history` holds the initial objective plus the full
+objective after every accepted step.
+
+### Playing the result
+
+The returned animation contains complete `LINEAR` `position` and `quaternion`
+channels on every node of the `root` subtree (including helper nodes that had
+no source channels), keyed exactly on the requested `times`, with
+`weight = 1`, `elapsed = 0` and `loop = false`. Static scales are left
+untouched, and the final key reproduces the original end pose exactly. Play it
+back with the ordinary pipeline — no separate renderer or animation entry
+point is introduced:
+
+```js
+result.animation.elapsed = t;
+result.animation.update(1, true);
+rootParent.updateMatrixWorld(); // any ancestor above root
+skin.updateUniforms();
+```
+
 ## Structure
 
 In an attempt to keep things light and modular, the library is split up into three components: **Math**, **Core**, and **Extras**.
