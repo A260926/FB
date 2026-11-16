@@ -55,6 +55,7 @@ SET(EMBREE_LIBRARY_FILES
   common/scene_grid_mesh.cpp
   common/scene_points.cpp
   common/motion_derivative.cpp
+  common/instance_exclusion.cpp
 
   subdiv/bezier_curve.cpp
   subdiv/bspline_curve.cpp

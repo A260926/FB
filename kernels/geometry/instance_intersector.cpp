@@ -18,9 +18,16 @@ namespace embree
 
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
-      if ((ray.mask & instance->mask) == 0) 
+      if ((ray.mask & instance->mask) == 0)
         return;
 #endif
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionCursorGuard exclusionGuard(context->exclusionState, 0);
+      if (context->exclusionState &&
+          context->exclusionState->transitionLane(0, prim.instID_, RTC_INVALID_GEOMETRY_ID))
+        return;
+
       RTCRayQueryContext* user_context = context->user;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
       {
@@ -29,24 +36,30 @@ namespace embree
         const Vec3ff ray_dir = ray.dir;
         ray.org = Vec3ff(xfmPoint(world2local, ray_org), ray.tnear());
         ray.dir = Vec3ff(xfmVector(world2local, ray_dir), ray.time());
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.intersect((RTCRayHit&)ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
         instance_id_stack::pop(user_context);
       }
     }
-    
+
     bool InstanceIntersector1::occluded(const Precalculations& pre, Ray& ray, RayQueryContext* context, const InstancePrimitive& prim)
     {
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
-      if ((ray.mask & instance->mask) == 0) 
+      if ((ray.mask & instance->mask) == 0)
         return false;
 #endif
-      
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionCursorGuard exclusionGuard(context->exclusionState, 0);
+      if (context->exclusionState &&
+          context->exclusionState->transitionLane(0, prim.instID_, RTC_INVALID_GEOMETRY_ID))
+        return false;
+
       RTCRayQueryContext* user_context = context->user;
       bool occluded = false;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
@@ -56,7 +69,7 @@ namespace embree
         const Vec3ff ray_dir = ray.dir;
         ray.org = Vec3ff(xfmPoint(world2local, ray_org), ray.tnear());
         ray.dir = Vec3ff(xfmVector(world2local, ray_dir), ray.time());
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.occluded((RTCRay&)ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
@@ -103,13 +116,19 @@ namespace embree
     void InstanceIntersector1MB::intersect(const Precalculations& pre, RayHit& ray, RayQueryContext* context, const InstancePrimitive& prim)
     {
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
-      if ((ray.mask & instance->mask) == 0) 
+      if ((ray.mask & instance->mask) == 0)
         return;
 #endif
-      
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionCursorGuard exclusionGuard(context->exclusionState, 0);
+      if (context->exclusionState &&
+          context->exclusionState->transitionLane(0, prim.instID_, RTC_INVALID_GEOMETRY_ID))
+        return;
+
       RTCRayQueryContext* user_context = context->user;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
       {
@@ -118,24 +137,30 @@ namespace embree
         const Vec3ff ray_dir = ray.dir;
         ray.org = Vec3ff(xfmPoint(world2local, ray_org), ray.tnear());
         ray.dir = Vec3ff(xfmVector(world2local, ray_dir), ray.time());
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.intersect((RTCRayHit&)ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
         instance_id_stack::pop(user_context);
       }
     }
-    
+
     bool InstanceIntersector1MB::occluded(const Precalculations& pre, Ray& ray, RayQueryContext* context, const InstancePrimitive& prim)
     {
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
-      if ((ray.mask & instance->mask) == 0) 
+      if ((ray.mask & instance->mask) == 0)
         return false;
 #endif
-      
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionCursorGuard exclusionGuard(context->exclusionState, 0);
+      if (context->exclusionState &&
+          context->exclusionState->transitionLane(0, prim.instID_, RTC_INVALID_GEOMETRY_ID))
+        return false;
+
       RTCRayQueryContext* user_context = context->user;
       bool occluded = false;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
@@ -145,12 +170,12 @@ namespace embree
         const Vec3ff ray_dir = ray.dir;
         ray.org = Vec3ff(xfmPoint(world2local, ray_org), ray.tnear());
         ray.dir = Vec3ff(xfmVector(world2local, ray_dir), ray.time());
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.occluded((RTCRay&)ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
         occluded = ray.tfar < 0.0f;
-        instance_id_stack::pop(user_context);      
+        instance_id_stack::pop(user_context);
       }
       return occluded;
     }
@@ -193,13 +218,22 @@ namespace embree
     {
       vbool<K> valid = valid_i;
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
       valid &= (ray.mask & instance->mask) != 0;
       if (none(valid)) return;
 #endif
-        
+
+      /* reject excluded instance subtrees before any descent or callback;
+       * each lane follows its own trie cursor selected via ray.id */
+      ExclusionPacketGuard<K> exclusionGuard(context->exclusionState, valid);
+      if (context->exclusionState) {
+        const vbool<K> blocked = context->exclusionState->transitionPacket<K>(valid, prim.instID_, RTC_INVALID_GEOMETRY_ID);
+        valid &= !blocked;
+        if (none(valid)) return;
+      }
+
       RTCRayQueryContext* user_context = context->user;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
       {
@@ -208,7 +242,7 @@ namespace embree
         const Vec3vf<K> ray_dir = ray.dir;
         ray.org = xfmPoint(world2local, ray_org);
         ray.dir = xfmVector(world2local, ray_dir);
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.intersect(valid, ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
@@ -221,13 +255,21 @@ namespace embree
     {
       vbool<K> valid = valid_i;
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
       valid &= (ray.mask & instance->mask) != 0;
       if (none(valid)) return false;
 #endif
-        
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionPacketGuard<K> exclusionGuard(context->exclusionState, valid);
+      if (context->exclusionState) {
+        const vbool<K> blocked = context->exclusionState->transitionPacket<K>(valid, prim.instID_, RTC_INVALID_GEOMETRY_ID);
+        valid &= !blocked;
+        if (none(valid)) return false;
+      }
+
       RTCRayQueryContext* user_context = context->user;
       vbool<K> occluded = false;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
@@ -237,14 +279,14 @@ namespace embree
         const Vec3vf<K> ray_dir = ray.dir;
         ray.org = xfmPoint(world2local, ray_org);
         ray.dir = xfmVector(world2local, ray_dir);
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.occluded(valid, ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
         occluded = ray.tfar < 0.0f;
         instance_id_stack::pop(user_context);
       }
-      return occluded;    
+      return occluded;
     }
     
     template<int K>
@@ -252,13 +294,21 @@ namespace embree
     {
       vbool<K> valid = valid_i;
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
       valid &= (ray.mask & instance->mask) != 0;
       if (none(valid)) return;
 #endif
-        
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionPacketGuard<K> exclusionGuard(context->exclusionState, valid);
+      if (context->exclusionState) {
+        const vbool<K> blocked = context->exclusionState->transitionPacket<K>(valid, prim.instID_, RTC_INVALID_GEOMETRY_ID);
+        valid &= !blocked;
+        if (none(valid)) return;
+      }
+
       RTCRayQueryContext* user_context = context->user;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
       {
@@ -267,7 +317,7 @@ namespace embree
         const Vec3vf<K> ray_dir = ray.dir;
         ray.org = xfmPoint(world2local, ray_org);
         ray.dir = xfmVector(world2local, ray_dir);
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.intersect(valid, ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;
@@ -280,13 +330,21 @@ namespace embree
     {
       vbool<K> valid = valid_i;
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
       valid &= (ray.mask & instance->mask) != 0;
       if (none(valid)) return false;
 #endif
-        
+
+      /* reject excluded instance subtrees before any descent or callback */
+      ExclusionPacketGuard<K> exclusionGuard(context->exclusionState, valid);
+      if (context->exclusionState) {
+        const vbool<K> blocked = context->exclusionState->transitionPacket<K>(valid, prim.instID_, RTC_INVALID_GEOMETRY_ID);
+        valid &= !blocked;
+        if (none(valid)) return false;
+      }
+
       RTCRayQueryContext* user_context = context->user;
       vbool<K> occluded = false;
       if (likely(instance_id_stack::push(user_context, prim.instID_, 0)))
@@ -296,7 +354,7 @@ namespace embree
         const Vec3vf<K> ray_dir = ray.dir;
         ray.org = xfmPoint(world2local, ray_org);
         ray.dir = xfmVector(world2local, ray_dir);
-        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args);
+        RayQueryContext newcontext((Scene*)instance->object, user_context, context->args, context->exclusionState);
         instance->object->intersectors.occluded(valid, ray, &newcontext);
         ray.org = ray_org;
         ray.dir = ray_dir;

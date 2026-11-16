@@ -620,8 +620,15 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
-    
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 1);
+    exclusionState.initLane(0, rayhit->ray.id);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
+
     scene->intersectors.intersect(*rayhit,&context);
 #if defined(DEBUG)
     ((RayHit*)rayhit)->verifyHit();
@@ -694,7 +701,14 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 4);
+    for (size_t k = 0; k < 4; ++k) exclusionState.initLane(k, rayhit->ray.id[k]);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
 
     if (likely(scene->intersectors.intersector4))
       scene->intersectors.intersect4(valid,*rayhit,&context);
@@ -704,11 +718,12 @@ RTC_NAMESPACE_BEGIN;
       for (size_t i=0; i<4; i++) {
         if (!valid[i]) continue;
         RayHit ray1; ray4->get(i,ray1);
+        exclusionState.initLane(0, ray1.id); // scalar fallback drives lane 0
         scene->intersectors.intersect((RTCRayHit&)ray1,&context);
         ray4->set(i,ray1);
       }
     }
-    
+
     RTC_CATCH_END2(scene);
   }
 
@@ -821,22 +836,30 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
-    
-    if (likely(scene->intersectors.intersector8)) 
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 8);
+    for (size_t k = 0; k < 8; ++k) exclusionState.initLane(k, rayhit->ray.id[k]);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
+
+    if (likely(scene->intersectors.intersector8))
       scene->intersectors.intersect8(valid,*rayhit,&context);
-    
+
     else
     {
       RayHit8* ray8 = (RayHit8*) rayhit;
       for (size_t i=0; i<8; i++) {
         if (!valid[i]) continue;
         RayHit ray1; ray8->get(i,ray1);
+        exclusionState.initLane(0, ray1.id); // scalar fallback drives lane 0
         scene->intersectors.intersect((RTCRayHit&)ray1,&context);
         ray8->set(i,ray1);
       }
     }
-    
+
     RTC_CATCH_END2(scene);
   }
 
@@ -882,7 +905,14 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 16);
+    for (size_t k = 0; k < 16; ++k) exclusionState.initLane(k, rayhit->ray.id[k]);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
 
     if (likely(scene->intersectors.intersector16))
       scene->intersectors.intersect16(valid,*rayhit,&context);
@@ -892,6 +922,7 @@ RTC_NAMESPACE_BEGIN;
       for (size_t i=0; i<16; i++) {
         if (!valid[i]) continue;
         RayHit ray1; ray16->get(i,ray1);
+        exclusionState.initLane(0, ray1.id); // scalar fallback drives lane 0
         scene->intersectors.intersect((RTCRayHit&)ray1,&context);
         ray16->set(i,ray1);
       }
@@ -939,8 +970,15 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
-    
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 1);
+    exclusionState.initLane(0, ray->id);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
+
     scene->intersectors.occluded(*ray,&context);
     RTC_CATCH_END2(scene);
   }
@@ -1011,7 +1049,14 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 4);
+    for (size_t k = 0; k < 4; ++k) exclusionState.initLane(k, ray->id[k]);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
 
     if (likely(scene->intersectors.intersector4))
        scene->intersectors.occluded4(valid,*ray,&context);
@@ -1021,11 +1066,12 @@ RTC_NAMESPACE_BEGIN;
       for (size_t i=0; i<4; i++) {
         if (!valid[i]) continue;
         Ray ray1; ray4->get(i,ray1);
+        exclusionState.initLane(0, ray1.id); // scalar fallback drives lane 0
         scene->intersectors.occluded((RTCRay&)ray1,&context);
         ray4->set(i,ray1);
       }
     }
-    
+
     RTC_CATCH_END2(scene);
   }
 
@@ -1117,7 +1163,14 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 8);
+    for (size_t k = 0; k < 8; ++k) exclusionState.initLane(k, ray->id[k]);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
 
     if (likely(scene->intersectors.intersector8))
       scene->intersectors.occluded8(valid,*ray,&context);
@@ -1127,6 +1180,7 @@ RTC_NAMESPACE_BEGIN;
       for (size_t i=0; i<8; i++) {
         if (!valid[i]) continue;
         Ray ray1; ray8->get(i,ray1);
+        exclusionState.initLane(0, ray1.id); // scalar fallback drives lane 0
         scene->intersectors.occluded((RTCRay&)ray1,&context);
         ray8->set(i,ray1);
       }
@@ -1177,7 +1231,14 @@ RTC_NAMESPACE_BEGIN;
       rtcInitRayQueryContext(&defaultContext);
       user_context = &defaultContext;
     }
-    RayQueryContext context(scene,user_context,args);
+    if (args->exclusionStats) {
+      args->exclusionStats->transitions = 0;
+      args->exclusionStats->comparisons = 0;
+    }
+    ExclusionRunState exclusionState;
+    exclusionState.setup(args->exclusions, args->exclusionCount, args->exclusionStats, 16);
+    for (size_t k = 0; k < 16; ++k) exclusionState.initLane(k, ray->id[k]);
+    RayQueryContext context(scene,user_context,args,&exclusionState);
 
     if (likely(scene->intersectors.intersector16))
       scene->intersectors.occluded16(valid,*ray,&context);
@@ -1187,6 +1248,7 @@ RTC_NAMESPACE_BEGIN;
       for (size_t i=0; i<16; i++) {
         if (!valid[i]) continue;
         Ray ray1; ray16->get(i,ray1);
+        exclusionState.initLane(0, ray1.id); // scalar fallback drives lane 0
         scene->intersectors.occluded((RTCRay&)ray1,&context);
         ray16->set(i,ray1);
       }

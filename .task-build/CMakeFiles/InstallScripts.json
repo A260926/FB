@@ -1,0 +1,15 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/common/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/common/sys/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/common/math/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/common/simd/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/common/lexers/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/common/tasking/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/kernels/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC0050C137AFFU11839/attempts/20261116T161123843784Z/repo/.task-build/tests/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

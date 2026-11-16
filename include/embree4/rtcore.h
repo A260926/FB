@@ -12,3 +12,4 @@
 #include "rtcore_scene.h"
 #include "rtcore_builder.h"
 #include "rtcore_quaternion.h"
+#include "rtcore_exclusion.h"

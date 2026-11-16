@@ -8293,6 +8293,9 @@ The following features can get enabled using feature flags:
       struct RTCRayQueryContext* context;
       RTCFilterFunctionN filter;
       RTCIntersectFunctionN intersect;
+      const RTCInstanceExclusion* exclusions;
+      size_t exclusionCount;
+      struct RTCInstanceExclusionStats* exclusionStats;
     #if RTC_MIN_WIDTH
       float minWidthDistanceFactor;
     #endif
@@ -8395,6 +8398,9 @@ No error code is set by this function.
       struct RTCRayQueryContext* context;
       RTCFilterFunctionN filter;
       RTCOccludedFunctionN intersect;
+      const RTCInstanceExclusion* exclusions;
+      size_t exclusionCount;
+      struct RTCInstanceExclusionStats* exclusionStats;
     #if RTC_MIN_WIDTH
       float minWidthDistanceFactor;
     #endif
@@ -8468,6 +8474,114 @@ No error code is set by this function.
 [rtcOccluded1], [rtcOccluded4/8/16], [RTCFeatureFlags],
 [rtcInitRayQueryContext], [RTC_GEOMETRY_TYPE_USER],
 [rtcSetGeometryMaxRadiusScale]
+
+```{=tex}
+
+```
+## rtcNewInstanceExclusion
+
+#### NAME {#name}
+
+    rtcNewInstanceExclusion - creates an immutable instance path exclusion handle
+    rtcRetainInstanceExclusion - increments the exclusion handle reference count
+    rtcReleaseInstanceExclusion - decrements the exclusion handle reference count
+
+#### SYNOPSIS {#synopsis}
+
+    #include <embree4/rtcore.h>
+
+    typedef struct RTCInstanceExclusionTy* RTCInstanceExclusion;
+
+    struct RTCInstanceExclusionPath
+    {
+      unsigned int geomID;
+      unsigned int instPrimID;
+    };
+
+    struct RTCInstanceExclusionStats
+    {
+      uint64_t transitions;
+      uint64_t comparisons;
+    };
+
+    RTCInstanceExclusion rtcNewInstanceExclusion(
+      RTCDevice device,
+      const struct RTCInstanceExclusionPath* const* paths,
+      const size_t* pathLengths,
+      size_t pathCount
+    );
+
+    void rtcRetainInstanceExclusion(RTCInstanceExclusion exclusion);
+    void rtcReleaseInstanceExclusion(RTCInstanceExclusion exclusion);
+
+#### DESCRIPTION {#description}
+
+The `rtcNewInstanceExclusion` function creates an immutable handle holding
+a set of instance path exclusion rules. Each rule is an ordered list of
+`RTCInstanceExclusionPath` edges from the root scene towards an inner
+instance. An edge identifies an instance geometry by its `geomID` inside
+its parent scene and, for an instance array
+(`RTC_GEOMETRY_TYPE_INSTANCE_ARRAY`), the array element number in
+`instPrimID`. For a regular instance (`RTC_GEOMETRY_TYPE_INSTANCE`) the
+`instPrimID` must be `RTC_INVALID_GEOMETRY_ID`.
+
+A ray query carrying the handle in the `exclusions` table of its
+`RTCIntersectArguments` or `RTCOccludedArguments` rejects an instance as
+soon as the path walked so far matches a rule. Matching is by prefix, so
+one rule excludes the entire subtree below the matched instance, including
+every geometry and nested instance in it. Duplicate paths are merged and
+descendant paths already covered by an ancestor add no query work. The
+rules are compiled into a sparse trie whose edge tables are searched with
+a binary search, so query cost depends on path depth and node degree
+rather than on the total number of rules. No per-ray heap memory is
+allocated.
+
+The `exclusions` member is a table indexed by the ray's `id` member. A
+null table, a zero `exclusionCount`, or a null entry for a given ray id
+means that ray has no exclusion rule and never touches the trie. The
+caller guarantees that the table covers every active ray id and that the
+handles stay alive for the duration of the query. The handle itself is
+immutable and may be shared across threads and interleaved queries.
+
+When `exclusionStats` is non-null it is reset at the beginning of each
+query. `transitions` counts trie edge transition attempts along instance
+descents and `comparisons` counts key comparisons inside the sparse edge
+tables. Rays without a rule contribute no counts; counters are never
+filled in from expected results.
+
+All input arrays are deep copied, so they may be released or reused
+immediately. The handle stores only IDs and never geometry pointers, so
+re-committing scenes does not invalidate it: paths are reinterpreted with
+the current instance IDs on every query.
+
+`RTC_ERROR_INVALID_ARGUMENT` is reported on the device and a null handle
+is returned when the device is invalid, when `pathCount` is non-zero with
+a null `paths` or `pathLengths` table, when an individual path is null or
+has zero edges, when a path is longer than
+`RTC_MAX_INSTANCE_LEVEL_COUNT`, or when an edge carries an invalid
+`geomID`. An empty rule table (`pathCount == 0`) is legal and yields a
+handle that never excludes anything.
+
+The instance ray mask test is always applied first; only instances that
+pass the mask reach the exclusion trie. Excluded subtrees are rejected
+before any user geometry callback, filter, or nested traversal runs, so an
+occluded instance cannot shorten the nearest distance or report a false
+occlusion. Non-instance geometry attached directly to a scene, including
+root scene triangles and user geometry, is never affected.
+
+`rtcRetainInstanceExclusion` and `rtcReleaseInstanceExclusion` manage the
+handle's reference count. Point queries, the file format, and SYCL/GPU
+builds do not use this feature.
+
+#### EXIT STATUS {#exit-status}
+
+On error an error code is set on the device and a null handle is returned.
+
+#### SEE ALSO {#see-also}
+
+[rtcInitIntersectArguments], [rtcInitOccludedArguments],
+[rtcIntersect1], [rtcIntersect4/8/16], [rtcOccluded1],
+[rtcOccluded4/8/16], [rtcInitRayQueryContext]
 
 ```{=tex}
 

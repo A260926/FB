@@ -15,7 +15,8 @@ rm -f .task-build/exclusion-example/exclude_b.ppm
 .task-build/task-example .task-build/exclusion-example
 test -s .task-build/exclusion-example/exclude_a.ppm
 test -s .task-build/exclusion-example/exclude_b.ppm
-  output_log=$(mktemp)
+  mkdir -p .task-build/tmp
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/tmp/tasklog.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

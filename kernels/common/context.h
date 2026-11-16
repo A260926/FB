@@ -6,6 +6,7 @@
 #include "default.h"
 #include "rtcore.h"
 #include "point_query.h"
+#include "instance_exclusion.h"
 
 namespace embree
 {
@@ -20,6 +21,16 @@ namespace embree
 
     __forceinline RayQueryContext(Scene* scene, RTCRayQueryContext* user_context, RTCOccludedArguments* args)
       : scene(scene), user(user_context), args((RTCIntersectArguments*)args) {}
+
+    /* Nested contexts created while descending into instances share the
+     * per-query exclusion state. */
+    __forceinline RayQueryContext(Scene* scene, RTCRayQueryContext* user_context,
+                                  RTCIntersectArguments* args, ExclusionRunState* exclusionState)
+      : scene(scene), user(user_context), args(args), exclusionState(exclusionState) {}
+
+    __forceinline RayQueryContext(Scene* scene, RTCRayQueryContext* user_context,
+                                  RTCOccludedArguments* args, ExclusionRunState* exclusionState)
+      : scene(scene), user(user_context), args((RTCIntersectArguments*)args), exclusionState(exclusionState) {}
 
     __forceinline bool hasContextFilter() const {
       return args->filter != nullptr;
@@ -59,6 +70,7 @@ namespace embree
     Scene* scene = nullptr;
     RTCRayQueryContext* user = nullptr;
     RTCIntersectArguments* args = nullptr;
+    ExclusionRunState* exclusionState = nullptr;
   };
 
   template<int M, typename Geometry>

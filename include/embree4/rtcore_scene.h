@@ -4,6 +4,7 @@
 #pragma once
 
 #include "rtcore_device.h"
+#include "rtcore_exclusion.h"
 
 RTC_NAMESPACE_BEGIN
 
@@ -38,6 +39,9 @@ struct RTCIntersectArguments
   struct RTCRayQueryContext* context;     // optional pointer to ray query context
   RTCFilterFunctionN filter;               // filter function to execute
   RTCIntersectFunctionN intersect;         // user geometry intersection callback to execute
+  const RTCInstanceExclusion* exclusions;  // table of exclusion handles indexed by ray.id (may be NULL)
+  size_t exclusionCount;                   // number of entries in the exclusions table
+  struct RTCInstanceExclusionStats* exclusionStats; // optional per-query trie statistics (reset each query)
 #if RTC_MIN_WIDTH
   float minWidthDistanceFactor;            // curve radius is set to this factor times distance to ray origin
 #endif
@@ -51,6 +55,9 @@ RTC_FORCEINLINE void rtcInitIntersectArguments(struct RTCIntersectArguments* arg
   args->context = NULL;
   args->filter = NULL;
   args->intersect = NULL;
+  args->exclusions = NULL;
+  args->exclusionCount = 0;
+  args->exclusionStats = NULL;
 
 #if RTC_MIN_WIDTH
   args->minWidthDistanceFactor = 0.0f;
@@ -66,6 +73,10 @@ struct RTCOccludedArguments
   RTCFilterFunctionN filter;               // filter function to execute
   RTCOccludedFunctionN occluded;           // user geometry occlusion callback to execute
 
+  const RTCInstanceExclusion* exclusions;  // table of exclusion handles indexed by ray.id (may be NULL)
+  size_t exclusionCount;                   // number of entries in the exclusions table
+  struct RTCInstanceExclusionStats* exclusionStats; // optional per-query trie statistics (reset each query)
+
 #if RTC_MIN_WIDTH
   float minWidthDistanceFactor;            // curve radius is set to this factor times distance to ray origin
 #endif
@@ -79,6 +90,9 @@ RTC_FORCEINLINE void rtcInitOccludedArguments(struct RTCOccludedArguments* args)
   args->context = NULL;
   args->filter = NULL;
   args->occluded = NULL;
+  args->exclusions = NULL;
+  args->exclusionCount = 0;
+  args->exclusionStats = NULL;
 
 #if RTC_MIN_WIDTH
   args->minWidthDistanceFactor = 0.0f;
