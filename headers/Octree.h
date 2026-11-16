@@ -9,6 +9,8 @@
 #define OCTREE_H
 
     #include "Octant.h"
+    #include <cstdint>
+    #include <string>
     #define RAYSTEP_MIN_VALUE 1.0f
 
     class Octree
@@ -94,6 +96,18 @@
         * initAccelerator
         */
         void initAccelerator();
+
+
+        /*
+        * Export the current spatial partition to an immutable paged snapshot
+        * file (see headers/PagedOctree.h for the format).  `recordsPerPage`
+        * sets how many node records share a page.  Implemented by
+        * PagedOctree.cpp so the classic synchronous rendering path does not
+        * depend on the paging module.  Returns false and fills *error (when
+        * given) on failure.
+        */
+        bool exportPagedSnapshot(const char* path,
+        uint32_t recordsPerPage, std::string* error = NULL) const;
 
 
         private:
