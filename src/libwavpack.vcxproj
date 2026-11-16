@@ -181,6 +181,7 @@
     <ClCompile Include="pack_dsd.c" />
     <ClCompile Include="pack_floats.c" />
     <ClCompile Include="pack_utils.c" />
+    <ClCompile Include="push_decoder.c" />
     <ClCompile Include="read_words.c" />
     <ClCompile Include="tags.c" />
     <ClCompile Include="tag_utils.c" />

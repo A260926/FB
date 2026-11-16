@@ -160,6 +160,7 @@ add_library(wavpack
     src/pack_dns.c
     src/pack_floats.c
     src/pack_utils.c
+    src/push_decoder.c
     src/read_words.c
     src/tags.c
     src/tag_utils.c
@@ -297,6 +298,13 @@ set(WAVPACK_EXPORT_SYMBOLS
     WavpackOpenRawDecoder
     WavpackPackInit
     WavpackPackSamples
+    WavpackPushCreate
+    WavpackPushDestroy
+    WavpackPushFeed
+    WavpackPushFinish
+    WavpackPushGetError
+    WavpackPushGetInfo
+    WavpackPushRead
     WavpackSeekSample
     WavpackSeekSample64
     WavpackSeekTrailingWrapper

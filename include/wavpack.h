@@ -431,6 +431,72 @@ void WavpackNativeToLittleEndian (void *data, char *format);
 void WavpackBigEndianToNative (void *data, char *format);
 void WavpackNativeToBigEndian (void *data, char *format);
 
+// Push (streaming) decoder. This interface accepts two independently
+// arriving byte streams (WV on lane 0, WVC on lane 1) that may be split at
+// arbitrary byte boundaries, never treating a temporary shortage of bytes as
+// end-of-file. Complete block groups are assembled and paired before any PCM
+// is handed out, and only one unconsumed block group is buffered per lane.
+
+typedef struct WavpackPushDecoder WavpackPushDecoder;
+
+// Status codes returned by WavpackPushRead().
+
+#define WV_PUSH_PCM         1       // PCM frames were written
+#define WV_PUSH_NEED_WV     2       // waiting for more WV bytes
+#define WV_PUSH_NEED_WVC    3       // waiting for more WVC bytes
+#define WV_PUSH_NEED_OUTPUT 4       // capacity was zero
+#define WV_PUSH_DONE        5       // both lanes finished and all PCM delivered
+#define WV_PUSH_ERROR       (-1)    // sticky error, query WavpackPushGetError()
+
+typedef struct {
+    uint32_t channels;          // 0 until the format has been determined
+    uint32_t sample_rate;       // 0 until the format has been determined
+    uint32_t bits_per_sample;   // 0 until the format has been determined
+    uint64_t samples_returned;  // frames already handed to the caller
+    size_t buffered_wv;         // compressed WV bytes currently held
+    size_t buffered_wvc;        // compressed WVC bytes currently held
+} WavpackPushInfo;
+
+// Create a push decoder. max_group_bytes is the compressed-byte limit for a
+// single block group on each lane (at least 32). require_wvc selects plain
+// lossless (0) or hybrid lossless with a complete correction stream (1).
+// Returns NULL on invalid arguments or allocation failure.
+
+WavpackPushDecoder *WavpackPushCreate (size_t max_group_bytes, int require_wvc);
+
+// Append bytes to a lane. *accepted receives the number of prefix bytes
+// actually stored; the caller must resend the remaining suffix later. Feeding
+// never decodes or delivers PCM. Returns 0 on success, -1 on invalid
+// arguments or a sticky error.
+
+int WavpackPushFeed (WavpackPushDecoder *s, int lane, const void *data, size_t size, size_t *accepted);
+
+// Mark a lane permanently finished; may be called repeatedly. Returns 0 on
+// success, -1 on invalid arguments or a sticky error.
+
+int WavpackPushFinish (WavpackPushDecoder *s, int lane);
+
+// Read interleaved PCM frames (capacity and *written in per-channel frames).
+// Returns one of the WV_PUSH_* status codes above. -1 is only used for
+// invalid arguments, which never corrupt a valid decoder.
+
+int WavpackPushRead (WavpackPushDecoder *s, int32_t *pcm, uint32_t capacity, uint32_t *written);
+
+// Query decoder state. Returns 1 once the format is known (first three fields
+// valid), 0 while it is still undetermined. Returns -1 on invalid arguments.
+
+int WavpackPushGetInfo (WavpackPushDecoder *s, WavpackPushInfo *info);
+
+// Return a decoder-owned, NUL-terminated description of the sticky error, or
+// NULL when no error has occurred. The pointer stays valid until the decoder
+// is destroyed.
+
+const char *WavpackPushGetError (WavpackPushDecoder *s);
+
+// Destroy the decoder. Accepts NULL.
+
+void WavpackPushDestroy (WavpackPushDecoder *s);
+
 uint32_t WavpackGetLibraryVersion (void);
 const char *WavpackGetLibraryVersionString (void);
 

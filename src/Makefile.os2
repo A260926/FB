@@ -47,6 +47,7 @@ SRCS = common_utils.c &
 	pack_dns.c &
 	pack_floats.c &
 	pack_utils.c &
+	push_decoder.c &
 	read_words.c &
 	tags.c &
 	tag_utils.c &

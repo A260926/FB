@@ -148,6 +148,7 @@ src_libwavpack_la_SOURCES = \
 	src/pack_dns.c \
 	src/pack_floats.c \
 	src/pack_utils.c \
+	src/push_decoder.c \
 	src/read_words.c \
 	src/tags.c \
 	src/tag_utils.c \

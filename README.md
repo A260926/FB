@@ -60,6 +60,70 @@ There is now a CLI program to do a full suite of stress tests for _libwavpack_, 
 
 ---
 
+## Push (streaming) decoder
+
+For single-threaded receive loops where the WV and WVC bytes arrive on
+separate connections and a temporary shortage of bytes must never be treated
+as end-of-file, the library provides a persistent push decoder
+(`WavpackPushDecoder`, declared in `include/wavpack.h`). Complete block
+groups are assembled and paired (using the original 40-bit block indexes)
+before any PCM is handed out, at most one unconsumed group is buffered per
+lane, and the same decode context keeps the entropy position across partial
+reads — no whole-song buffering, worker threads, or decoder restarts.
+
+Minimal C usage:
+
+```c
+#include "wavpack.h"
+
+static WavpackPushDecoder *pd;
+
+void decoder_start (void)
+{
+    /* lane 0 = WV, lane 1 = WVC (pass require_wvc = 0 for plain lossless) */
+    pd = WavpackPushCreate (1u << 20, 1);
+}
+
+/* network receive callback: push whatever arrived; resend the suffix
+   that the decoder did not have room for (backpressure) */
+void on_bytes (int lane, const unsigned char *data, size_t size)
+{
+    size_t off = 0;
+
+    while (off < size) {
+        size_t accepted = 0;
+
+        if (WavpackPushFeed (pd, lane, data + off, size - off, &accepted) != 0)
+            return;                       /* sticky error, see WavpackPushGetError() */
+
+        off += accepted;                 /* accepted prefix was copied and may be freed */
+    }
+}
+
+void on_end (int lane) { WavpackPushFinish (pd, lane); }
+
+/* playback/device side: pull interleaved PCM at its own pace */
+void pump_audio (int32_t *pcm, uint32_t frame_capacity)
+{
+    uint32_t written = 0;
+    int status = WavpackPushRead (pd, pcm, frame_capacity, &written);
+
+    switch (status) {
+        case WV_PUSH_PCM:        /* 'written' interleaved frames are ready */ break;
+        case WV_PUSH_NEED_WV:    /* waiting for more main data */            break;
+        case WV_PUSH_NEED_WVC:   /* waiting for more correction data */      break;
+        case WV_PUSH_NEED_OUTPUT:/* capacity was 0 */                        break;
+        case WV_PUSH_DONE:       /* both lanes ended, all PCM delivered */   break;
+        default:                 /* WV_PUSH_ERROR: query WavpackPushGetError() */ break;
+    }
+}
+
+void decoder_stop (void)
+{
+    WavpackPushDestroy (pd);              /* accepts NULL */
+}
+```
+
 ## Assembly
 
 Assembly language optimizations are provided for x86 and x86-64 (AMD64) processors (encoding and decoding) and ARMv7 (decoding only).
