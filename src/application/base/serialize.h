@@ -1,0 +1,124 @@
+#ifndef CUBIQUITY_PATHS_H
+#define CUBIQUITY_PATHS_H
+
+#include "storage.h"
+
+#include "base/logging.h"
+#include "metadata.h"
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <utility>
+
+class InputHandle
+{
+public:
+	InputHandle(const std::string& path) {
+		namespace fs = std::filesystem;
+
+		if (path == "-") {
+			// NOTE: Untested on Windows (may require setting cin to binary mode)
+			log_debug("Reading from stdin");
+			use_stdin = true;
+		} else if (fs::is_fifo(path)) {
+			log_debug("Reading from FIFO {} (may block waiting for writer...)", path);
+			m_stream = std::make_unique<std::ifstream>(path, std::ios::in | std::ios::binary);
+			log_debug("Done constructing stream");
+		} else if (!fs::exists(path)) {
+			throw std::runtime_error(fmt::format("Path '{}' does not exist", path));
+		} else {
+			log_debug("Reading from regular file {}", path);
+			m_stream = std::make_unique<std::ifstream>(path, std::ios::in | std::ios::binary);
+		}
+
+		if(m_stream && (m_stream->bad() || m_stream->is_open() == false)) {
+			throw std::runtime_error("Error reading from " + path);
+		}
+	}
+
+	// Accessor
+	std::istream& get() {
+		assert(((use_stdin && m_stream) == false) && "Cannot both be active");
+		return use_stdin ? std::cin : *m_stream;
+	}
+
+	std::istream* operator->() { return &get(); }
+	std::istream& operator*()  { return get(); }
+
+private:
+	bool use_stdin = false;
+	std::unique_ptr<std::ifstream> m_stream;
+};
+
+class OutputHandle
+{
+public:
+	OutputHandle(const std::string& path, bool force = false) {
+		namespace fs = std::filesystem;
+
+		if (path == "-") {
+			// NOTE: Untested on Windows (may require setting cout to binary mode)
+			log_debug("Writing to stdout");
+			use_stdout = true;
+		} else {
+			std::ios::openmode mode = std::ios::out | std::ios::binary;
+			if (fs::is_fifo(path)) {
+				log_debug("Writing to FIFO {} (may block waiting for reader...)", path);
+				m_stream = std::make_unique<std::ofstream>(path, mode |= std::ios::app);
+				log_debug("Done constructing stream");
+			} else if (fs::exists(path) && force == false) {
+				throw std::runtime_error(fmt::format(
+					"Path '{}' already exists (and force flag not specified): ", path));
+			} else {
+				log_debug("Writing to regular file {}", path);
+				m_stream = std::make_unique<std::ofstream>(path, mode |= std::ios::trunc);
+			}
+
+			if(m_stream->bad() || m_stream->is_open() == false) {
+				throw std::runtime_error("Error writing to  " + path);
+			}
+		}
+	}
+
+	// Accessor
+	std::ostream& get() {
+		assert(((use_stdout && m_stream) == false) && "Cannot both be active");
+		return use_stdout ? std::cout : *m_stream;
+	}
+
+	std::ostream* operator->() { return &get(); }
+	std::ostream& operator*()  { return get(); }
+
+private:
+	bool use_stdout = false;
+	std::unique_ptr<std::ofstream> m_stream;
+};
+
+// Create ifstream with exceptions enabled prior to opening
+std::ifstream make_safe_ifstream(const std::string& path,
+								 std::ios::openmode mode = std::ios::in,
+								 std::ios_base::iostate except_flags =
+									std::ifstream::failbit | std::ifstream::badbit);
+
+// Create ofstream with exceptions enabled prior to opening
+std::ofstream make_safe_ofstream(const std::string& path,
+								 std::ios::openmode mode = std::ios::out,
+								 std::ios_base::iostate except_flags =
+									std::ofstream::failbit | std::ofstream::badbit);
+
+bool checkInputFileIsValid(const std::filesystem::path& inputFile);
+bool checkOutputDirIsValid(const std::filesystem::path& outputDir);
+
+// FIXME - I'd rather return the volume by value but
+// I need to make a working move constructor first.
+std::pair<std::unique_ptr<Cubiquity::Volume>, Metadata>
+    loadVolume(const std::filesystem::path& vol_path);
+
+void saveVolume(const std::filesystem::path& volume_path, 
+                Cubiquity::Volume& volume, Metadata& metadata);
+
+#endif // CUBIQUITY_PATHS_H
+
+
