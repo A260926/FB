@@ -1,0 +1,112 @@
+{
+  "repo": "https://github.com/elnormous/SoftwareRenderer",
+  "commit": "f0dfd4ae0287ee6d1313f9062645c4123a7cca98",
+  "license": "Unlicense",
+  "exported": [
+    {
+      "source": "sr/BlendState.hpp",
+      "destination": "sr/BlendState.hpp",
+      "sha256": "48a5b648f2e65a68411562389e4f67917a79aab8221da2852f3553401f59877d"
+    },
+    {
+      "source": "sr/Color.hpp",
+      "destination": "sr/Color.hpp",
+      "sha256": "3761a58bf734d059b9592b76bb6d393d25ab9bebc2dabbfe46f2aa0674f36c11"
+    },
+    {
+      "source": "sr/Constants.hpp",
+      "destination": "sr/Constants.hpp",
+      "sha256": "99f6544549ad1c50aeecec27cee6ec1d80f6cf42529138bb54b6a76a382c1d9f"
+    },
+    {
+      "source": "sr/DepthState.hpp",
+      "destination": "sr/DepthState.hpp",
+      "sha256": "39cc9974c4f2b71d9dc7573060cdc0d7cf9b589d9b9672c3b9e3edcbecd330ef"
+    },
+    {
+      "source": "sr/Matrix.hpp",
+      "destination": "sr/Matrix.hpp",
+      "sha256": "5ef77dc0d04109a2ab3fdb13d8bcb857c2704aed8921f0a0952c9fcea7ca6210"
+    },
+    {
+      "source": "sr/PixelFormat.hpp",
+      "destination": "sr/PixelFormat.hpp",
+      "sha256": "9cbca408c8b1f6d154205380e42b0b4a8b21050a6e6a9f635dec58fe48de893f"
+    },
+    {
+      "source": "sr/Rect.hpp",
+      "destination": "sr/Rect.hpp",
+      "sha256": "2220e31db82881f75363c944e7a889b3118486e00dfa8ab9e2c85dfac80fd27c"
+    },
+    {
+      "source": "sr/RenderError.hpp",
+      "destination": "sr/RenderError.hpp",
+      "sha256": "6e7484bf5220b0251bb816c2d6495306f4ce8d9faeed52e509ad925aa1994006"
+    },
+    {
+      "source": "sr/Renderer.hpp",
+      "destination": "sr/Renderer.hpp",
+      "sha256": "5ffa52093c665c20f16cb77b15aa8c1b655e91c83a3db179cf01131919eda42e"
+    },
+    {
+      "source": "sr/Sampler.hpp",
+      "destination": "sr/Sampler.hpp",
+      "sha256": "c96c202a8f012ff96b5800ee2cc9ee89e4271729e3f38e9868d2acde15923040"
+    },
+    {
+      "source": "sr/Shader.hpp",
+      "destination": "sr/Shader.hpp",
+      "sha256": "11a86caacf3a1539ad77d8f23cb3d07d7df2309f3d2b3d699c46ce923240a19d"
+    },
+    {
+      "source": "sr/Size.hpp",
+      "destination": "sr/Size.hpp",
+      "sha256": "98e875f1a6ec59c10d404deed125c87d104a21925751bff42aaee2fa76c5e603"
+    },
+    {
+      "source": "sr/Texture.hpp",
+      "destination": "sr/Texture.hpp",
+      "sha256": "a068a7e7e2f1a11987a3687f7724c1cd58d7fa299e9507c5ab539039bc5b2ed1"
+    },
+    {
+      "source": "sr/Vector.hpp",
+      "destination": "sr/Vector.hpp",
+      "sha256": "e389b2467f953f3e79864525e4690f989f0676bf4dfe5b4611ddb13447a9bdb1"
+    },
+    {
+      "source": "sr/Vertex.hpp",
+      "destination": "sr/Vertex.hpp",
+      "sha256": "16b7f26d6d9eb769a3248223f8fcf4ab9a54e411798424818905689aeb1beb01"
+    },
+    {
+      "source": "sr/sr.hpp",
+      "destination": "sr/sr.hpp",
+      "sha256": "9332bd505ae0471941f38d47579dc1efbcd81b2e3df943dbb5f4800c81fe46fc"
+    },
+    {
+      "source": "README.md",
+      "destination": "README.md",
+      "sha256": "5ff744c442dc677d63885a03c918fb5905c7f2c5217076362d6a835aa79c30f8"
+    },
+    {
+      "source": "UNLICENSE",
+      "destination": "UNLICENSE",
+      "sha256": "ca2abdf695884c77ea4b4a5b64ca7b732d9d9dbade4eebc1c2e76c53e9e3bc83"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".gitmodules and external/Catch2 gitlink",
+      "reason": "只供test/main.cpp与空TEST_CASE构建使用，不被sr生产头引用；未声称原测试已运行"
+    },
+    {
+      "path": "test/",
+      "reason": "仅空Catch2 TEST_CASE，原文证据在private/upstream-tests.txt"
+    },
+    {
+      "path": "demo/",
+      "reason": "平台窗口展示程序及其资源，不被sr生产头引用"
+    }
+  ],
+  "production_changes": []
+}
