@@ -1,0 +1,31 @@
+{
+  "repo": "https://github.com/ddiakopoulos/MoogLadders",
+  "commit": "a968ec6ddfe1cf9b228faea277cb0e66a060639a",
+  "git_tree_sha256": "47cba6939bf4a087840c2df074914b952e0710130114e56886e5a4fab72a2130",
+  "included": [
+    "src",
+    "third_party/rtaudio",
+    "LICENSE",
+    "README.md",
+    "CMakeLists.txt"
+  ],
+  "excluded": [
+    {
+      "path": "assets/sample.wav",
+      "reason": "unused binary audio; baseline synthesizes input"
+    },
+    {
+      "path": "scripts/",
+      "reason": "unused optional coefficient generators/analysis; fixed generated coefficients retained"
+    },
+    {
+      "path": "example/",
+      "reason": "unused device-playback examples; fixed production AudioDevice and RtAudio source retained"
+    },
+    {
+      "path": ".github/, .gitignore",
+      "reason": "unused CI and VCS settings"
+    }
+  ],
+  "licenses": "root LICENSE Unlicense; RKSimulationModel.h BSD-2-Clause header; RtAudio copyright and permission text preserved in third_party/rtaudio"
+}
