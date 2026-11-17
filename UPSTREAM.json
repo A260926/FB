@@ -1,0 +1,1580 @@
+{
+  "repo": "xiph/speex",
+  "commit": "09b569d1b437e5edccf3406a38714ad795e46d38",
+  "gitlinks": [],
+  "gitmodules": false,
+  "included": [
+    {
+      "path": "AUTHORS",
+      "mode": "100644",
+      "git_blob": "d3fe5a97698e93350823b9e982690034e4035398",
+      "sha256": "da457c4cb1faec3b1dabad4ddb8269c560347686965052afcdde6902ea0e8827",
+      "binary": false
+    },
+    {
+      "path": "COPYING",
+      "mode": "100644",
+      "git_blob": "7d6dc4aabd38f6e184028ff871744ac6b71b63ae",
+      "sha256": "2654a4264b2bfe298dedc508748d140111840c315cc8eb646a3a68c13fa75b01",
+      "binary": false
+    },
+    {
+      "path": "README",
+      "mode": "100644",
+      "git_blob": "84fe74adb40414859fb326ed76da66958e21203f",
+      "sha256": "75151bf738e419a42dd99ff200b9f195c4870fb89d844a0dde03839a1b988986",
+      "binary": false
+    },
+    {
+      "path": "include/Makefile.am",
+      "mode": "100644",
+      "git_blob": "09613b63a01fb350abcf1bc6ed5fb41a98aaf8fe",
+      "sha256": "8e788047bdd82c3de5de411fafebc2dbad0d1cc283421ed50d9f58b7e6af8f3e",
+      "binary": false
+    },
+    {
+      "path": "include/speex/Makefile.am",
+      "mode": "100644",
+      "git_blob": "dff69d63c250cd16b56098edd9a0f0897e44db51",
+      "sha256": "e5f9bd663975f89916ed4c660f4cbdce22cb9a32ee22bdb7304c5ab616725cf1",
+      "binary": false
+    },
+    {
+      "path": "include/speex/meson.build",
+      "mode": "100644",
+      "git_blob": "e5402ff1d4bd41726ac0dea25ce874965938c0d6",
+      "sha256": "47a3a190cfb56826165269f6a84aa5a7f6ab3aa3e967d9064fe61a68c86daf76",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex.h",
+      "mode": "100644",
+      "git_blob": "34919e2f00acb7199a80cc961ad85ac42f2d605c",
+      "sha256": "32a4c1a8161a47c1f53b8bd35129fa4132745546ca0830f964a44739e6b81c14",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex_bits.h",
+      "mode": "100644",
+      "git_blob": "f98b8268febf778e05a59ca91945dfedf3544b48",
+      "sha256": "7abb31dd98c83e6f609f04bedff166341f788dd1acb18ce3042f9b8419cca420",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex_callbacks.h",
+      "mode": "100644",
+      "git_blob": "3928c34fae5f4f21dfec8cf30f25e5cdbb37bcd1",
+      "sha256": "1962147f928790582fe8da21977c5d1c45f6a4fa28c7e387bc81d47e33b13489",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex_config_types.h.in",
+      "mode": "100644",
+      "git_blob": "5ea7b556126afa05590304f598a6a8dffb87d4aa",
+      "sha256": "52e5b3ba5f00b4f2729f04ab6ef8ad3d26dbe16a65e998e231de6b1e316e92e1",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex_header.h",
+      "mode": "100644",
+      "git_blob": "ffe8c4713767b43ee87d4460154930a25f35a885",
+      "sha256": "cf73f0a3687d50407c2ab1481545b1215d7027e12d883ace78cacfdc7d1881ab",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex_stereo.h",
+      "mode": "100644",
+      "git_blob": "12af2bbf6e945902364c32f66b3793d963da602d",
+      "sha256": "af7dc45d348cbce614a112539a475c3794166cb69423a97fe3697cc6c57f3d2e",
+      "binary": false
+    },
+    {
+      "path": "include/speex/speex_types.h",
+      "mode": "100644",
+      "git_blob": "bdc63295c41ca0fbba150574c24c603e28ede75b",
+      "sha256": "db0b75f099a370b9bc196b268b677799c9f0bbd01f1fd4ac3bfc2c9bf40166c3",
+      "binary": false
+    },
+    {
+      "path": "libspeex/Makefile.am",
+      "mode": "100644",
+      "git_blob": "8fe9bff91939fa9f5ddb25a45d311808e8661457",
+      "sha256": "d1a9fda0fd926c816ac6a6481bab58be529951ebfde3ef4ecccf966236454c4c",
+      "binary": false
+    },
+    {
+      "path": "libspeex/_kiss_fft_guts.h",
+      "mode": "100644",
+      "git_blob": "f5f2a5fd7691225a56ba27bd03fc417891fb9718",
+      "sha256": "a375fe2c2006fa18605a9e75431a537101caf4084b614d33240068bb1f475c86",
+      "binary": false
+    },
+    {
+      "path": "libspeex/arch.h",
+      "mode": "100644",
+      "git_blob": "20f6eaacb7c3b2e1160ebed7b037506326c9842b",
+      "sha256": "924810a1366377aede73aea094537bd86966a69583be7d95118de89e2c4e1285",
+      "binary": false
+    },
+    {
+      "path": "libspeex/bfin.h",
+      "mode": "100644",
+      "git_blob": "b934cf2f139ea6d3c1c9803ee2f46b077097f861",
+      "sha256": "c0ddab9ee357edc62de172c7913dbb4990c103bdd6becc5021420f0314e57a79",
+      "binary": false
+    },
+    {
+      "path": "libspeex/bits.c",
+      "mode": "100644",
+      "git_blob": "c5546e89472c3f1776a2203a23626fe20af6d010",
+      "sha256": "cc326d16a06cf3758fd8c7182d0bae58d09ecf6947c957c820de1ea800f99461",
+      "binary": false
+    },
+    {
+      "path": "libspeex/cb_search.c",
+      "mode": "100644",
+      "git_blob": "9271a57c4479850150483cf4ec69aee54cf62a00",
+      "sha256": "f2698cab1aba87d6e203f3f4930ba30aef1187bcae4a9728ad43ec75d5e3826e",
+      "binary": false
+    },
+    {
+      "path": "libspeex/cb_search.h",
+      "mode": "100644",
+      "git_blob": "4c4732bf67fda492316592652064e162fed56c9b",
+      "sha256": "fc9b3e6657390e9c3f28f3eff47c1a313f3f670d71c8d6f35c3a43e91355122b",
+      "binary": false
+    },
+    {
+      "path": "libspeex/cb_search_arm4.h",
+      "mode": "100644",
+      "git_blob": "39da580de5e6150b5de432bbdc19d7c2c65d097c",
+      "sha256": "5e02e5247d15cf55b9201d3e7a18a01e77638d1cc4dcf672b13ca80f75646b8c",
+      "binary": false
+    },
+    {
+      "path": "libspeex/cb_search_bfin.h",
+      "mode": "100644",
+      "git_blob": "c1be4635c06debb71997ceb80a37dde70e02a767",
+      "sha256": "87ce944f7e992a9ab4e021d88b957f926cee712fb03b566d87564a7a89e406aa",
+      "binary": false
+    },
+    {
+      "path": "libspeex/cb_search_sse.h",
+      "mode": "100644",
+      "git_blob": "286326ae4749952fe555d75ea501151d8cc3f599",
+      "sha256": "43b3405ca8577f1e5631fb9916edd5d2585e982c63cfb2c80d73ee836339b14b",
+      "binary": false
+    },
+    {
+      "path": "libspeex/exc_10_16_table.c",
+      "mode": "100644",
+      "git_blob": "f75ba30340268df83ef8d5171f6796007c73e9a4",
+      "sha256": "b31b41657b2fc0e68e729448f296149db0926674a35f590b5906ea8cd6d553aa",
+      "binary": false
+    },
+    {
+      "path": "libspeex/exc_10_32_table.c",
+      "mode": "100644",
+      "git_blob": "89425f0bc7379007d283707ed55c4d222a4c2bd4",
+      "sha256": "b2cef9d2bd38d53d2414a9acc6272e38fcee30e39a7491d53f175bfa9b6b94cb",
+      "binary": false
+    },
+    {
+      "path": "libspeex/exc_20_32_table.c",
+      "mode": "100644",
+      "git_blob": "f7b3032bb701f3ba5a4ba818d416b36eb6c469b4",
+      "sha256": "d2cd29d2c2dee08d059240965a398f5863a2f204b1ebf12eef681b53c3c54346",
+      "binary": false
+    },
+    {
+      "path": "libspeex/exc_5_256_table.c",
+      "mode": "100644",
+      "git_blob": "169b628761ddd255abc8cbc47031b6253bb8a0c9",
+      "sha256": "d61edbb767e991f7237aaa3ba955866518778e5fd55b8a1dbe658274d472b901",
+      "binary": false
+    },
+    {
+      "path": "libspeex/exc_5_64_table.c",
+      "mode": "100644",
+      "git_blob": "6d2ae2be5522fa015bc31d09a5cb259619b32f03",
+      "sha256": "ad32ea8109048e1b67b0c74af62c450badf719160ec3f5e9da19ff203fc77384",
+      "binary": false
+    },
+    {
+      "path": "libspeex/exc_8_128_table.c",
+      "mode": "100644",
+      "git_blob": "fd0589061973e0b1ab8b9226d398647c9a19ace4",
+      "sha256": "f69eb3622e05961d22e2173b32b4aa7e446a6c01d548520ceb0271ad04078b51",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fftwrap.c",
+      "mode": "100644",
+      "git_blob": "4573479d006ce63be67f50e8cfc474380b257388",
+      "sha256": "a59ec583e5660207da9cf3c1ddd6a7ff1ed91382eb40df2a4e77d5cddfe14c52",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fftwrap.h",
+      "mode": "100644",
+      "git_blob": "2c0742559c11f9ab686654a2dc6cacf54bb58dc1",
+      "sha256": "fd289dcc47b9ddb2b33039c1990c4644bb279c9413ede6e74fdb2742c3888ee5",
+      "binary": false
+    },
+    {
+      "path": "libspeex/filters.c",
+      "mode": "100644",
+      "git_blob": "5e1e45ee0dd5dcd8c3997a2e3b40564e0c7332c5",
+      "sha256": "d072485a37ab056cae3c87b94f18dad2ad3550e9a8d43ef101a2b82be63becc5",
+      "binary": false
+    },
+    {
+      "path": "libspeex/filters.h",
+      "mode": "100644",
+      "git_blob": "455365a66117346b004772fea9cfed1b1e0c604b",
+      "sha256": "0cb808719064dee1c3a2124180c53f88ef6424668f564e8913c0591fcede1cce",
+      "binary": false
+    },
+    {
+      "path": "libspeex/filters_arm4.h",
+      "mode": "100644",
+      "git_blob": "ed5a4f14930928de7bcfb45b2595281d9b8f127b",
+      "sha256": "b433861fb8e222ae5ccaa16dafd0709158530dc798c3d4135890a5e48b41569b",
+      "binary": false
+    },
+    {
+      "path": "libspeex/filters_bfin.h",
+      "mode": "100644",
+      "git_blob": "a9bc0d2bc6d31f018234e9719faa1d4f7ab1f9c9",
+      "sha256": "428a175acc1badf558acf14611437ef3ec4dd48fa7a1c7b4f26a7abae1bbec5e",
+      "binary": false
+    },
+    {
+      "path": "libspeex/filters_sse.h",
+      "mode": "100644",
+      "git_blob": "b9d0cde035953b2dca695e5181520c1a789b2d01",
+      "sha256": "a5a9d73462e433f7fd4edfe361d6ce2076b8d58967495ae794b0a284cf5d2aa4",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fixed_arm4.h",
+      "mode": "100644",
+      "git_blob": "223478c9083955231293b0b89d62f15d29177f90",
+      "sha256": "ef8869ea8a1a7f772ef47f38bad74052a102dfcce066961c1b291ef6ccb969b9",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fixed_arm5e.h",
+      "mode": "100644",
+      "git_blob": "15c6d5dee116d1ee0456ca52a86b8847b9e22f2e",
+      "sha256": "93a85568fd1c9a8676dcff16748cce2e58d470103ff2edd44055c905f43a1c4b",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fixed_bfin.h",
+      "mode": "100644",
+      "git_blob": "646a48375f698c20f8b3b437b166d84902afbbad",
+      "sha256": "2d74bb3940cffc0b29e6947d7563f824b7d168ca667bc886c5196fae91e10cbe",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fixed_debug.h",
+      "mode": "100644",
+      "git_blob": "756138b87fc044cec9a856e4efa19e17e9880566",
+      "sha256": "d1565d01c278c895e29397ffd52948f86430d8cba47aebe5920df2b28d08c1cc",
+      "binary": false
+    },
+    {
+      "path": "libspeex/fixed_generic.h",
+      "mode": "100644",
+      "git_blob": "8ae5e4d7026eaef778d71323c2534ff97912dfd6",
+      "sha256": "2c03ddd22882a6d36e119d42a49078446526e7190317c6f24122efe22dd14091",
+      "binary": false
+    },
+    {
+      "path": "libspeex/gain_table.c",
+      "mode": "100644",
+      "git_blob": "63dc6e7e3133f74d3e0bc93f796c05da5a8ff9b5",
+      "sha256": "2a0953ee1e1fa3d47fbc7d870820a86a63ac8c70a793351b18bb899a4de421b4",
+      "binary": false
+    },
+    {
+      "path": "libspeex/gain_table_lbr.c",
+      "mode": "100644",
+      "git_blob": "be464f374151f59496c02e807aab56a466c4e341",
+      "sha256": "cf5343fb500e5f560c7ebeabd8f409714f082b4fbf60eeaed867e290cd068848",
+      "binary": false
+    },
+    {
+      "path": "libspeex/hexc_10_32_table.c",
+      "mode": "100644",
+      "git_blob": "1c7f285ac2cc600a4e0838773dadb96f8e23ddc2",
+      "sha256": "cd1d54f2e2efdd92c3ee3e58003d11859403e12fa7daa3468cd4cc8ad4d70004",
+      "binary": false
+    },
+    {
+      "path": "libspeex/hexc_table.c",
+      "mode": "100644",
+      "git_blob": "6e36069ef45d91dcf6d45d0ffeaf57d5e964ad96",
+      "sha256": "e278fda62931e0421fc117a96216c58859bfe17fa85156bc0398b2059b0187fb",
+      "binary": false
+    },
+    {
+      "path": "libspeex/high_lsp_tables.c",
+      "mode": "100644",
+      "git_blob": "732c8b54fb1b3e96535344bd3896011019b8bf6b",
+      "sha256": "f1c49702928f617eb61edf36527c5961eefe63eb81888294139a223cddb0c411",
+      "binary": false
+    },
+    {
+      "path": "libspeex/kiss_fft.c",
+      "mode": "100644",
+      "git_blob": "8dc9345428b13a3694c1d909574ae56596b1403d",
+      "sha256": "cf0da304f5067c71cf85df711af74252802805714dfda736be93be391e7c4c1c",
+      "binary": false
+    },
+    {
+      "path": "libspeex/kiss_fft.h",
+      "mode": "100644",
+      "git_blob": "bb19eadbd9e4832c187c52d6f3430dd13b6803eb",
+      "sha256": "61c31ff4a2002186086c8b7efa14cc28af733741175056abad95d985c2ecf3ae",
+      "binary": false
+    },
+    {
+      "path": "libspeex/kiss_fftr.c",
+      "mode": "100644",
+      "git_blob": "827e0b14df9675d61d0cd9618f1bd3603ad205be",
+      "sha256": "13b7ec32c17b927e0978195ce9eeb09e9791b236fcee94b807fd0086d14cb25e",
+      "binary": false
+    },
+    {
+      "path": "libspeex/kiss_fftr.h",
+      "mode": "100644",
+      "git_blob": "8cfeda138a550fd6468582ab86e2e2da2b155360",
+      "sha256": "2f6ef60fa5900508d8aa0d303a27cae6c1f17a6620a4e174d51f0ff8adc18bf2",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lpc.c",
+      "mode": "100644",
+      "git_blob": "fca4d9eea77166ad37cf420a62890c27e93a1b0a",
+      "sha256": "e756a91dacb4266c0a9f81a098f75659042719383600a66dc76847c936504a8d",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lpc.h",
+      "mode": "100644",
+      "git_blob": "8885471f8acf455365aeea4bcaffc4d048cc8353",
+      "sha256": "a474ca1e36faf27dcb37fc5d1264b44fafdc036566322792ed6e63fde0a50c60",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lpc_bfin.h",
+      "mode": "100644",
+      "git_blob": "d2e040656d6e7048df0a761af21734b42aa44d55",
+      "sha256": "8baf969acdf77acbb9a3cfb3189da4cdd0f27ecf90e8c5798abcd89b95af5767",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lsp.c",
+      "mode": "100644",
+      "git_blob": "f4c0fe06e1acfcd700f1d630ed59d5ba2644a818",
+      "sha256": "2f86caffe2fcfcc9f3f3e6b8e0c516598633d2666e0a317f12b355515a38d856",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lsp.h",
+      "mode": "100644",
+      "git_blob": "fed49bc3aa96e1b694be8e50268236db8807d8a5",
+      "sha256": "3b727b47e2ab4d9136642636671b490d8b16449cf8c071cde298c1434660a482",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lsp_bfin.h",
+      "mode": "100644",
+      "git_blob": "4f91d524edebc410b9c98bece036d6e0ac1b8ae9",
+      "sha256": "0c8e5424c33cc28f12baa9905bee16b7977a7ea879db32552536d7006bc5b5e1",
+      "binary": false
+    },
+    {
+      "path": "libspeex/lsp_tables_nb.c",
+      "mode": "100644",
+      "git_blob": "8015b9ac96c390349ca347828bd2b69a5b9275ba",
+      "sha256": "826b31f36f300ec40e9910409453e27c22bfa4bec3bfdaaceca5820c1e85aae7",
+      "binary": false
+    },
+    {
+      "path": "libspeex/ltp.c",
+      "mode": "100644",
+      "git_blob": "347a9db7436bf8b5e7293ca9831f226110a18235",
+      "sha256": "16788159b0dc3efcfbccdd51abf31bb4a3f49835e284fd3d7f21a262676cdf2a",
+      "binary": false
+    },
+    {
+      "path": "libspeex/ltp.h",
+      "mode": "100644",
+      "git_blob": "28d25173e4a713b116fada6ad67690721d290bb1",
+      "sha256": "30bf424a1726cc89adad94408c05aa4c27830b5ac85d7e329445a3ba59cb71a6",
+      "binary": false
+    },
+    {
+      "path": "libspeex/ltp_arm4.h",
+      "mode": "100644",
+      "git_blob": "18be0d126e4a5dc1fb14b5850a9ab7641184c307",
+      "sha256": "57e942e3f6726515a3e1afbe54ee14792ff0053ab1075b95b7a789ab0117e544",
+      "binary": false
+    },
+    {
+      "path": "libspeex/ltp_bfin.h",
+      "mode": "100644",
+      "git_blob": "c2ba4821122a26087cc1fde915f7e5e66cdc7b20",
+      "sha256": "38861ac833a31e7854f131a1ca575b646549c5e8d50c3b754a510da1f99c8e98",
+      "binary": false
+    },
+    {
+      "path": "libspeex/ltp_sse.h",
+      "mode": "100644",
+      "git_blob": "326000831b366cedc3196c5f3ee0f45f3e061461",
+      "sha256": "2c25f3dcd8402e4c45f19daa7f8592838d697de548333c009284277e29de2a19",
+      "binary": false
+    },
+    {
+      "path": "libspeex/math_approx.h",
+      "mode": "100644",
+      "git_blob": "a01349c915588eb0b597c23659ad55c7633854c6",
+      "sha256": "b99fcd3424c6741c7b5ceca5579b80511fa5914499bfd3bf8ab45fb045fa8809",
+      "binary": false
+    },
+    {
+      "path": "libspeex/meson.build",
+      "mode": "100644",
+      "git_blob": "c744dd0288070a418fc23a3fa7045531290b32cc",
+      "sha256": "148256cb8a644894fe0fb4c1d56b07e229cea1801acf5f8ab07353c8b925ecf2",
+      "binary": false
+    },
+    {
+      "path": "libspeex/misc_bfin.h",
+      "mode": "100644",
+      "git_blob": "4e27681c95462e9d014c0213d2d73279f4281aa7",
+      "sha256": "d6d8e15caf36437a29eced5b7cfcfde79ccceea316ae385175be05b0149f69da",
+      "binary": false
+    },
+    {
+      "path": "libspeex/modes.c",
+      "mode": "100644",
+      "git_blob": "88e431aef70a3494e5bd3cd7945fee2024a0f3ea",
+      "sha256": "68929f7e120e47623259288d69e5ff0c5d3658b7ca331f0d93fc144182560cf0",
+      "binary": false
+    },
+    {
+      "path": "libspeex/modes.h",
+      "mode": "100644",
+      "git_blob": "2d5adc423fc9d31c4a674682aedab6b957a97e61",
+      "sha256": "1eaf2b0e56fa5965e54a8229edf8641bd179e24745874be740ac2c385d572ecb",
+      "binary": false
+    },
+    {
+      "path": "libspeex/modes_wb.c",
+      "mode": "100644",
+      "git_blob": "aef5fdfeb4dca3bb464e7de123e0d7cb07acfa2a",
+      "sha256": "f25c8c84fabff718e483437aa61b3624bbddd6ecc07782641f7fcc5424e0094b",
+      "binary": false
+    },
+    {
+      "path": "libspeex/nb_celp.c",
+      "mode": "100644",
+      "git_blob": "b9803a988e4e2d6f713e50cf6c3a1958fb432fbe",
+      "sha256": "988c7675acdf763cb93d0bb1a6093f46de2f83cee2f1bd271e981e9a37d7c99a",
+      "binary": false
+    },
+    {
+      "path": "libspeex/nb_celp.h",
+      "mode": "100644",
+      "git_blob": "8fe60ce11f64c41680023358b9722f7dc2e2b92c",
+      "sha256": "7b31236713dc17e9dce7ebed91547f5c74810eeddfb55c201ddfcf12c259bce1",
+      "binary": false
+    },
+    {
+      "path": "libspeex/os_support.h",
+      "mode": "100644",
+      "git_blob": "0db31a61df1b497de71585f7ff3df80f6926c841",
+      "sha256": "5ab9c979e8ac1f72c7441d24e39e7840828dd9356aac49a31eabeddb808bf1d3",
+      "binary": false
+    },
+    {
+      "path": "libspeex/quant_lsp.c",
+      "mode": "100644",
+      "git_blob": "0d023ecf15d6dcdef29379a0f7d71cf796b973c5",
+      "sha256": "9182542bb78d8886549a3adc11e1d9bccd855e6922f228b095c747834ddbd033",
+      "binary": false
+    },
+    {
+      "path": "libspeex/quant_lsp.h",
+      "mode": "100644",
+      "git_blob": "aea6eb2b7b7a0e924652de0e2c1b78c4c058f47c",
+      "sha256": "a121ea04066e7d5d443558f9838dd26649c8368d1ba48a1ef2dec0d01847cbbd",
+      "binary": false
+    },
+    {
+      "path": "libspeex/quant_lsp_bfin.h",
+      "mode": "100644",
+      "git_blob": "238adb93017d2b68b8fb7321443a84cff91a92cc",
+      "sha256": "362fecbf9cd21b87f868c957a79e633c428eb93541a44f8cea0c8fd5172640dc",
+      "binary": false
+    },
+    {
+      "path": "libspeex/sb_celp.c",
+      "mode": "100644",
+      "git_blob": "d2758f0c1538ffdf51a07cf1794a552aa5f2051a",
+      "sha256": "ac5ff56479c69c744278e7929a3c357b1e61ad1f0b4709ecb3b8c2a083743a58",
+      "binary": false
+    },
+    {
+      "path": "libspeex/sb_celp.h",
+      "mode": "100644",
+      "git_blob": "c6b92940dbde35c7c13625891cf082364be86a0b",
+      "sha256": "1abcb673c7a2ff50734d0ad9cae9d922237861f0b37c142b1ddfb1f28191b61b",
+      "binary": false
+    },
+    {
+      "path": "libspeex/smallft.c",
+      "mode": "100644",
+      "git_blob": "82c3b0a4a11decb72f36a52ed2b1ebc7ace975c1",
+      "sha256": "25bcc6e38baeca23e828bfcbbb1cc0a0d3f6f898d9e02c95cbb4b4c0fb4b3df7",
+      "binary": false
+    },
+    {
+      "path": "libspeex/smallft.h",
+      "mode": "100644",
+      "git_blob": "446e2f65b198462122fa39085f64a4ebf93af90b",
+      "sha256": "715352e7efe55cb671f37fa341610ce7df893016625506e22175d9f1b1b817e9",
+      "binary": false
+    },
+    {
+      "path": "libspeex/speex.c",
+      "mode": "100644",
+      "git_blob": "33701ba26c20dd5783840daa463d430eb27187a3",
+      "sha256": "4fe73c540d7c4611454b0a846df6c96c743b1980711e695177240c12018a7297",
+      "binary": false
+    },
+    {
+      "path": "libspeex/speex.def",
+      "mode": "100644",
+      "git_blob": "0464fad1cc81ce9e1102b8df9633794e911e9579",
+      "sha256": "7b0fc6d3510bd6cff4389a6c583c88047e637acf6ae8f19eac0e5712132fd9f4",
+      "binary": false
+    },
+    {
+      "path": "libspeex/speex_callbacks.c",
+      "mode": "100644",
+      "git_blob": "8be9e389b15a0a63d5e88294098ef84012921370",
+      "sha256": "fa23919c8bc9d0c85ae1e5865a3b9662c01066337cd287a0a84c8bc533662f70",
+      "binary": false
+    },
+    {
+      "path": "libspeex/speex_header.c",
+      "mode": "100644",
+      "git_blob": "5900d365a793a050cb4e32bd0f2f0f6f10826241",
+      "sha256": "048e87026f09e68139d90ca28ea6bd38b1a3ba5e6cd4787f7487a16bb0e87989",
+      "binary": false
+    },
+    {
+      "path": "libspeex/stack_alloc.h",
+      "mode": "100644",
+      "git_blob": "a446065825584d50eadc0792c577ce71bc032139",
+      "sha256": "69ce6484585e63c961c8c3319122eb4095d2a4673cb1a0875e43ebd7ae3fd583",
+      "binary": false
+    },
+    {
+      "path": "libspeex/stereo.c",
+      "mode": "100644",
+      "git_blob": "a397d2fdae435a6cd7fba26530393a4d09b06d02",
+      "sha256": "6d63d02a6f042bf3faa86edec8cb3e198d49aa3255005bb3bf8b0278956f9b75",
+      "binary": false
+    },
+    {
+      "path": "libspeex/testenc.c",
+      "mode": "100644",
+      "git_blob": "1f634ed74586bb3b7e7be4e5e7e2fdd8e5db91f0",
+      "sha256": "033bb92f1094b91f3d9ee597223f834febf5fa2b934b67d7f9f5b177615fe946",
+      "binary": false
+    },
+    {
+      "path": "libspeex/testenc_uwb.c",
+      "mode": "100644",
+      "git_blob": "9c144fd0c1e1a7f4f50442f84bf5e4d4ddcdfe37",
+      "sha256": "82e36885d2747e4e9c7cbdf55e4a2f00e204d77688e6506ed410d088b9900b25",
+      "binary": false
+    },
+    {
+      "path": "libspeex/testenc_wb.c",
+      "mode": "100644",
+      "git_blob": "c1beb43a2888d8c4735bff430b7114301477f1d6",
+      "sha256": "2feb0b1f538b6c5698e8a0595be98e2d85384434a9cac2e9374736edc2b05553",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vbr.c",
+      "mode": "100644",
+      "git_blob": "015ecd26da44f25e7512e805d7eaa81259a405bb",
+      "sha256": "c749da4ab6eb9955e1d42f0d14bc320b6e202451956dc2b0db4b3f57b7aaad1c",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vbr.h",
+      "mode": "100644",
+      "git_blob": "d713a5caddd9892ce29d50d6f8388e937054635b",
+      "sha256": "a02d896b4b9f8c633dfe5176d0d878e299fd7b33d7aa0265b7bc8c4cbd91185c",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vorbis_psy.c",
+      "mode": "100644",
+      "git_blob": "a054158323f47d23a7a5d18104567d96c6f50e0e",
+      "sha256": "eba6ce7be058c71a8268e308098f10abbc2cbd74726851064f117d976dab4cde",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vorbis_psy.h",
+      "mode": "100644",
+      "git_blob": "19ea9c3cf2758beb4f9ba1416e003e70f1c692a7",
+      "sha256": "bdce08a5a05d9536771b2c687c5a464647b8132f405271872f4ae84f1f7bb177",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vq.c",
+      "mode": "100644",
+      "git_blob": "c7f13965933692b24e5af8802b95494f1d251334",
+      "sha256": "d3762f4124a743d53222ad46d169e6ca7c7488fca4eeed488b5f33fb6f2e8646",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vq.h",
+      "mode": "100644",
+      "git_blob": "5c707f0555bc492d5a1ab1b0848283ed8d8e459d",
+      "sha256": "f35ea0e1015540fe796fe047fc165b927965d0d8b28a3ae468bc5de9c671fd13",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vq_arm4.h",
+      "mode": "100644",
+      "git_blob": "957e195f24abe708ad5d4717f7e7320ae1cca4fd",
+      "sha256": "ee2b89afec06f226c17dbc041dc671230b03feeeed9f33fa0b27aacf49c5368c",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vq_bfin.h",
+      "mode": "100644",
+      "git_blob": "82979894ebebe0691e042034d7e23c23b3404d92",
+      "sha256": "ced7dd1fc9c581430b58157bfae805e4b721501b2280ac95d853f265f63ebd67",
+      "binary": false
+    },
+    {
+      "path": "libspeex/vq_sse.h",
+      "mode": "100644",
+      "git_blob": "2abe880b973b0c02c33f55842c5c24c2a5053ef4",
+      "sha256": "4eb8ed6a22a1fcd89e664d14c879bc156a10d8548478d6ee1444e1104a31092e",
+      "binary": false
+    },
+    {
+      "path": "libspeex/window.c",
+      "mode": "100644",
+      "git_blob": "a89d4d71f08250c821b601503efe58eb55a6cda8",
+      "sha256": "269b5e54659ee57b519947e8f40212afe3019b52a05c04c33b579518236422d9",
+      "binary": false
+    }
+  ],
+  "excluded_unused": [
+    {
+      "path": ".clusterfuzzlite/Dockerfile",
+      "mode": "100644",
+      "git_blob": "fe21519cb392e39c80f244ee48316ab983614303"
+    },
+    {
+      "path": ".clusterfuzzlite/build.sh",
+      "mode": "100644",
+      "git_blob": "2962f34b08fe526bd92579f40f95777632c95970"
+    },
+    {
+      "path": ".clusterfuzzlite/project.yaml",
+      "mode": "100644",
+      "git_blob": "248a6eafe825a5d957152c375227db45b0effe93"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "7c309990d51982bf5af63573f32fc139f3a5c050"
+    },
+    {
+      "path": ".gitlab-ci.yml",
+      "mode": "100644",
+      "git_blob": "63b607a0e2313c0bdb1ad303247c1612adf6cd09"
+    },
+    {
+      "path": ".travis.yml",
+      "mode": "100644",
+      "git_blob": "ff85bc3580d88870a9152f4dbbe01d2c08e68a5d"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "mode": "100644",
+      "git_blob": "c6d948df1c5fdd374027fcba15995f8ca36148b7"
+    },
+    {
+      "path": "ChangeLog",
+      "mode": "100644",
+      "git_blob": "9a6cd8af090be696e259fd756c119bdc38e8e2cf"
+    },
+    {
+      "path": "Doxyfile",
+      "mode": "100644",
+      "git_blob": "772934fc3d29f12b572690792fe523ff848cc6a4"
+    },
+    {
+      "path": "IDEAS",
+      "mode": "100644",
+      "git_blob": "73fe26e725f6bfddc99eca3cc961c23aebf2c9f7"
+    },
+    {
+      "path": "INSTALL",
+      "mode": "100644",
+      "git_blob": "94bb742c006a76b9c7abcb6f8f949f9ec74288cb"
+    },
+    {
+      "path": "Makefile.am",
+      "mode": "100644",
+      "git_blob": "26365a09bee304c683a2c7b6db1a38b7a9d3f4e1"
+    },
+    {
+      "path": "NEWS",
+      "mode": "100644",
+      "git_blob": "9a995291411909242261fab88d9c59a315f2fd8b"
+    },
+    {
+      "path": "OPTIMIZE",
+      "mode": "100644",
+      "git_blob": "d36f5f7d65a677498a0277aeee566dc67b8107b2"
+    },
+    {
+      "path": "README.TI-DSP",
+      "mode": "100644",
+      "git_blob": "74503eed60337790487e512b08c6bce83b0c362e"
+    },
+    {
+      "path": "README.Trimedia",
+      "mode": "100644",
+      "git_blob": "493b2c473efa7daf88cd842c8ee7a9c2d8daa916"
+    },
+    {
+      "path": "README.blackfin",
+      "mode": "100644",
+      "git_blob": "5923e864567ce75efcc9f2f57f407e0c40f7280f"
+    },
+    {
+      "path": "README.symbian",
+      "mode": "100644",
+      "git_blob": "a4f8d95868b1a9b0615b0cb042e56a15120998cc"
+    },
+    {
+      "path": "README.win32",
+      "mode": "100644",
+      "git_blob": "9f0c7b30fb05c6f0e73d54762193b0c02c4aefc0"
+    },
+    {
+      "path": "Speex.kdevelop",
+      "mode": "100644",
+      "git_blob": "1b3d683b0778a535b8d622ef64a6cfc67076671a"
+    },
+    {
+      "path": "Speex.spec.in",
+      "mode": "100644",
+      "git_blob": "bccfc2351ac3019bbdc967204aaf4465bccf123b"
+    },
+    {
+      "path": "TODO",
+      "mode": "100644",
+      "git_blob": "47be3f640915e02c167c7e39d41d5361839d259d"
+    },
+    {
+      "path": "autogen.sh",
+      "mode": "100755",
+      "git_blob": "dc6f711347a609fe5ab220caef3ba293ea1a8e96"
+    },
+    {
+      "path": "configure.ac",
+      "mode": "100644",
+      "git_blob": "2fd4a7cbaf6857310ab97b6ef2af98124f01e791"
+    },
+    {
+      "path": "contrib/oss-fuzz/speexdec_fuzzer.cc",
+      "mode": "100644",
+      "git_blob": "259dd592ac38a238ced8b2688fb3a92d6433d105"
+    },
+    {
+      "path": "contrib/oss-fuzz/speexenc_fuzzer.cc",
+      "mode": "100644",
+      "git_blob": "be2b277836acddf57f4b949e2d107d5009f725b0"
+    },
+    {
+      "path": "doc/Makefile.am",
+      "mode": "100644",
+      "git_blob": "d2896efabb3896b6a1589cf58b29b1c4005ffe1d"
+    },
+    {
+      "path": "doc/celp_decoder.eps",
+      "mode": "100644",
+      "git_blob": "87f0704468bad7f66e85211f746fa6001b8e1a1c"
+    },
+    {
+      "path": "doc/celp_decoder.odg",
+      "mode": "100644",
+      "git_blob": "ed537ad440656d290004fd7184b869c70a205880"
+    },
+    {
+      "path": "doc/components.eps",
+      "mode": "100644",
+      "git_blob": "8ac53a4aea4285349430a33fedeca8a8d1420b63"
+    },
+    {
+      "path": "doc/components.odg",
+      "mode": "100644",
+      "git_blob": "28aa86c9de9f0d78855920e013ef1535257729e3"
+    },
+    {
+      "path": "doc/draft-herlein-avt-rtp-speex-00.txt",
+      "mode": "100644",
+      "git_blob": "36733e9526dd4471048a850a0bbea2981d7d417f"
+    },
+    {
+      "path": "doc/draft-herlein-speex-rtp-profile-02.txt",
+      "mode": "100644",
+      "git_blob": "2b25ea64c627f5147c74adc2b73b1a03c7af9e97"
+    },
+    {
+      "path": "doc/draft-herlein-speex-rtp-profile-03.txt",
+      "mode": "100644",
+      "git_blob": "d1ad4b3789dd39dd147e74c8ac92af49555c458c"
+    },
+    {
+      "path": "doc/draft-herlein-speex-rtp-profile-03.xml",
+      "mode": "100644",
+      "git_blob": "709efcdf41802c3a1d1cce494dfe9cb217ea3405"
+    },
+    {
+      "path": "doc/draft-ietf-avt-rtp-speex-00.txt",
+      "mode": "100644",
+      "git_blob": "53facab4bba8bd9217196d3b82d74ea3dba7cced"
+    },
+    {
+      "path": "doc/draft-ietf-avt-rtp-speex-01-tmp.txt",
+      "mode": "100644",
+      "git_blob": "1410b8580b650e0d1f2e9a30a2ba080c92ba34ce"
+    },
+    {
+      "path": "doc/draft-ietf-avt-rtp-speex-05-tmp.txt",
+      "mode": "100644",
+      "git_blob": "70c8007ae738fe6778c8e3b8a622d1934f6fa909"
+    },
+    {
+      "path": "doc/echo_path.eps",
+      "mode": "100644",
+      "git_blob": "c5a458c5343ae7cba678bf443f91b5cc8c874c9e"
+    },
+    {
+      "path": "doc/echo_path.odg",
+      "mode": "100644",
+      "git_blob": "460af845f55cde33573ab6e80ea68c2a4360cc1c"
+    },
+    {
+      "path": "doc/manual.lyx",
+      "mode": "100644",
+      "git_blob": "fa980a485e62be7e146aae2b858d06c5e5f17073"
+    },
+    {
+      "path": "doc/manual.pdf",
+      "mode": "100644",
+      "git_blob": "292f304defd312957dbf95c66b3afc6316cfc255"
+    },
+    {
+      "path": "doc/meson.build",
+      "mode": "100644",
+      "git_blob": "331edeed56ed0aa6fdd18a8e77a3ba8686eded73"
+    },
+    {
+      "path": "doc/nb_celp.c",
+      "mode": "100644",
+      "git_blob": "50d5ffaca50677c583939392b18b01f04dc37906"
+    },
+    {
+      "path": "doc/programming.html",
+      "mode": "100644",
+      "git_blob": "7b5bc7ae6fcc0a31a87f71aeb5a00c34daf8c957"
+    },
+    {
+      "path": "doc/ref_shaping.eps",
+      "mode": "100644",
+      "git_blob": "4ef7007f523909bd3ffc213d4828ee418e98b35c"
+    },
+    {
+      "path": "doc/rtp.txt",
+      "mode": "100644",
+      "git_blob": "1c25153040d501e42fa1c022ad6a88160ade57eb"
+    },
+    {
+      "path": "doc/sampledec.c",
+      "mode": "100644",
+      "git_blob": "8e89e12ce6438cd590e58becccc95e8c995c6f1e"
+    },
+    {
+      "path": "doc/sampleenc.c",
+      "mode": "100644",
+      "git_blob": "b6a0636ffaa2c507fcdabc18d5f688fc72ad1ee5"
+    },
+    {
+      "path": "doc/speex_abs.eps",
+      "mode": "100644",
+      "git_blob": "079c07196757405400bcd20c37fe3f58ca66fa36"
+    },
+    {
+      "path": "doc/speex_abs.odg",
+      "mode": "100644",
+      "git_blob": "a43291bfe21e5c13ed67d445590a3787e6f0c8c8"
+    },
+    {
+      "path": "doc/speex_analysis.eps",
+      "mode": "100644",
+      "git_blob": "5f34fc2d985597bc7ca5f63f84cedad628c4e418"
+    },
+    {
+      "path": "doc/speex_analysis.odg",
+      "mode": "100644",
+      "git_blob": "919945d89450558e75c9d34c977bf5e8cf37c318"
+    },
+    {
+      "path": "html/index.html",
+      "mode": "100644",
+      "git_blob": "789a796e3f7a7e2bd4a2ef44f96b240645ac8122"
+    },
+    {
+      "path": "html/patents.html",
+      "mode": "100644",
+      "git_blob": "d81c961e587cca679370faeb47582710bb74d61a"
+    },
+    {
+      "path": "html/speex.png",
+      "mode": "100644",
+      "git_blob": "4db28733e672a821351514567ed57c5850f6fbef"
+    },
+    {
+      "path": "html/speex.webprj",
+      "mode": "100644",
+      "git_blob": "23139f61097dafeb8d819b9f5d1c4995e89eaca1"
+    },
+    {
+      "path": "html/speex.xcf",
+      "mode": "100644",
+      "git_blob": "e55471233e1036e51c63382676afeee2ed59bdac"
+    },
+    {
+      "path": "library.json",
+      "mode": "100644",
+      "git_blob": "a02a0282aa223acdd7a23527cbf4b30e5af30b92"
+    },
+    {
+      "path": "m4/add_cflags.m4",
+      "mode": "100644",
+      "git_blob": "d9b633c726e1abc27336b07be99618f93a4e052c"
+    },
+    {
+      "path": "m4/pkg.m4",
+      "mode": "100644",
+      "git_blob": "25ef3331b13ffa7fa35464a79418dbbe6ae32015"
+    },
+    {
+      "path": "macosx/English.lproj/InfoPlist.strings",
+      "mode": "100644",
+      "git_blob": "166513d3b5a79c9406df1ff0e2a55257fb7553dc"
+    },
+    {
+      "path": "macosx/Info.plist",
+      "mode": "100644",
+      "git_blob": "1d1c47c81841391e07206f48d1c79a3da11e8592"
+    },
+    {
+      "path": "macosx/Speex.xcodeproj/project.pbxproj",
+      "mode": "100644",
+      "git_blob": "6025aadad61b47d829ac496021f1391cfb78ba43"
+    },
+    {
+      "path": "macosx/Speex_Prefix.pch",
+      "mode": "100644",
+      "git_blob": "13abf5e4171f0b02d4a2994c816bdaae4d31f01f"
+    },
+    {
+      "path": "macosx/Speex_UB.xcodeproj/project.pbxproj",
+      "mode": "100644",
+      "git_blob": "49b0fb9bab37165988e18574bd7b21c379c3c620"
+    },
+    {
+      "path": "meson.build",
+      "mode": "100644",
+      "git_blob": "416ff1b557192f6194997b95d37f8a270a6b421a"
+    },
+    {
+      "path": "meson_options.txt",
+      "mode": "100644",
+      "git_blob": "760c4542389df6dc981b4eefbf95417046888234"
+    },
+    {
+      "path": "speex.m4",
+      "mode": "100644",
+      "git_blob": "a4d63a3b8db8c9cbc8857b37529c36fcbb4a5b00"
+    },
+    {
+      "path": "speex.pc.in",
+      "mode": "100644",
+      "git_blob": "97bba4ff9f387ee77a74482d3c8e054736cd6220"
+    },
+    {
+      "path": "speexclient/README",
+      "mode": "100644",
+      "git_blob": "69140d3226df10507d493ce7acd3256b1261ff46"
+    },
+    {
+      "path": "speexclient/alsa_device.c",
+      "mode": "100644",
+      "git_blob": "40cd281c65553354a52f7b543357c764856b000f"
+    },
+    {
+      "path": "speexclient/alsa_device.h",
+      "mode": "100644",
+      "git_blob": "d11d22d97b3e93f14ffa179049185e261c29b5ab"
+    },
+    {
+      "path": "speexclient/compile.sh",
+      "mode": "100755",
+      "git_blob": "fae58a0b7ab937ec191dc4cddce8499074e79e85"
+    },
+    {
+      "path": "speexclient/speex_jitter_buffer.c",
+      "mode": "100644",
+      "git_blob": "aa76d26c7827bf75b000f71209e4d374ebe38285"
+    },
+    {
+      "path": "speexclient/speex_jitter_buffer.h",
+      "mode": "100644",
+      "git_blob": "6380b4460f0f5909fc96f5fde632b0ebea32df59"
+    },
+    {
+      "path": "speexclient/speexclient.c",
+      "mode": "100644",
+      "git_blob": "116befe1e8ef9722e76cb282ad5e3927064cc69c"
+    },
+    {
+      "path": "src/Makefile.am",
+      "mode": "100644",
+      "git_blob": "ce870ac7912a573110bb139c86aad05d964d5df7"
+    },
+    {
+      "path": "src/generate-samples.sh",
+      "mode": "100755",
+      "git_blob": "0a1453ee81886f5ad8653f36cc0eb1bb6698c45a"
+    },
+    {
+      "path": "src/getopt.c",
+      "mode": "100644",
+      "git_blob": "f10bcd760d873203714ab2c926b69a332ef5521d"
+    },
+    {
+      "path": "src/getopt1.c",
+      "mode": "100644",
+      "git_blob": "fe2eb1d8aa3bbcc39aaf0e0b67dc7916f0c24467"
+    },
+    {
+      "path": "src/getopt_win.h",
+      "mode": "100644",
+      "git_blob": "b0147e9d2ac314401941304659c3c19575f025df"
+    },
+    {
+      "path": "src/meson.build",
+      "mode": "100644",
+      "git_blob": "dfacee73e081f18bee57adb15652e0d5dffaec2e"
+    },
+    {
+      "path": "src/skeleton.c",
+      "mode": "100644",
+      "git_blob": "658f9e3534a61a03fe3829e48357a50b2701ac5e"
+    },
+    {
+      "path": "src/skeleton.h",
+      "mode": "100644",
+      "git_blob": "1559f8f5008dfd27470d3024c60152494794e6f2"
+    },
+    {
+      "path": "src/speexdec.1",
+      "mode": "100644",
+      "git_blob": "3545f094144eb4cfae4e0371a4a743d98ed3ac82"
+    },
+    {
+      "path": "src/speexdec.c",
+      "mode": "100644",
+      "git_blob": "11df8bdcdcb0776975d16a97142f38fe68116ed7"
+    },
+    {
+      "path": "src/speexenc.1",
+      "mode": "100644",
+      "git_blob": "9b0d6a78c2beba1bcd0e9801859488a023297d53"
+    },
+    {
+      "path": "src/speexenc.c",
+      "mode": "100644",
+      "git_blob": "a1d5f788533edb007259aa3e0f6284cab98ddb76"
+    },
+    {
+      "path": "src/wav_io.c",
+      "mode": "100644",
+      "git_blob": "09d62eb017bb48fe48fa1efcaa122719ef1fe39f"
+    },
+    {
+      "path": "src/wav_io.h",
+      "mode": "100644",
+      "git_blob": "8e3888b645eaed58c5dcb156aa6739a16da108f4"
+    },
+    {
+      "path": "src/wave_out.c",
+      "mode": "100644",
+      "git_blob": "0f871b902dc6c7dd4115f1e19ad1b9869e97bc91"
+    },
+    {
+      "path": "src/wave_out.h",
+      "mode": "100644",
+      "git_blob": "1121d8524ef6ca53fbd7952a30a7aa6e9e317a03"
+    },
+    {
+      "path": "symbian/Makefile.am",
+      "mode": "100644",
+      "git_blob": "6cdaf24b4b1b02f8a74f00ec4a94d1170e2b310d"
+    },
+    {
+      "path": "symbian/bld.inf",
+      "mode": "100644",
+      "git_blob": "52450e9e926bf516845526bf287da38c3907c08c"
+    },
+    {
+      "path": "symbian/config.h",
+      "mode": "100644",
+      "git_blob": "4ead5768530c8a5b93b6f3a4ca4e389d9484957c"
+    },
+    {
+      "path": "symbian/speex.mmp",
+      "mode": "100644",
+      "git_blob": "daadb4d4c879028394799630f7ace260f681e3d2"
+    },
+    {
+      "path": "ti/Makefile.am",
+      "mode": "100644",
+      "git_blob": "200ca195477d4a2acebbf873614421723a69e067"
+    },
+    {
+      "path": "ti/config.h",
+      "mode": "100644",
+      "git_blob": "0957472f3c7f537b4a51432537a9a1d9de34db15"
+    },
+    {
+      "path": "ti/os_support_custom.h",
+      "mode": "100644",
+      "git_blob": "bc0dc555c475bd1ea8c259138641a85bde01ae35"
+    },
+    {
+      "path": "ti/speex_C54_test/Makefile.am",
+      "mode": "100644",
+      "git_blob": "f7b10bc4c5701d4ea3d668ed675ed364e583a456"
+    },
+    {
+      "path": "ti/speex_C54_test/speex_C54_test.cmd",
+      "mode": "100644",
+      "git_blob": "4dd4c18eb80b1c7c824e45e479522b33fc8c047d"
+    },
+    {
+      "path": "ti/speex_C54_test/speex_C54_test.pjt",
+      "mode": "100644",
+      "git_blob": "73b94fa7d88ef0741c7994b32104425491223711"
+    },
+    {
+      "path": "ti/speex_C55_test/Makefile.am",
+      "mode": "100644",
+      "git_blob": "6c89ed7c151f660bf28186da52ba9552d74d4d51"
+    },
+    {
+      "path": "ti/speex_C55_test/speex_C55_test.cmd",
+      "mode": "100644",
+      "git_blob": "36e7923771d9384a03e6ac8edbcd5013aade3488"
+    },
+    {
+      "path": "ti/speex_C55_test/speex_C55_test.pjt",
+      "mode": "100644",
+      "git_blob": "aad9f0179105d357b44be3c59488c14f7746155c"
+    },
+    {
+      "path": "ti/speex_C64_test/Makefile.am",
+      "mode": "100644",
+      "git_blob": "14ea2baaeab51546af17cb562f7b332481709749"
+    },
+    {
+      "path": "ti/speex_C64_test/speex_C64_test.cmd",
+      "mode": "100644",
+      "git_blob": "545e7b491bbbdddb5793b7a9dc359678326128b9"
+    },
+    {
+      "path": "ti/speex_C64_test/speex_C64_test.pjt",
+      "mode": "100644",
+      "git_blob": "10c5356e4ad928de9789b23bb0f128594e40fc06"
+    },
+    {
+      "path": "ti/testenc-TI-C5x.c",
+      "mode": "100644",
+      "git_blob": "623276228c2a89d8f6d30b50b06710a4f67ad80e"
+    },
+    {
+      "path": "ti/testenc-TI-C64x.c",
+      "mode": "100644",
+      "git_blob": "5902717e280e2c1bf00450b696325a7bec513441"
+    },
+    {
+      "path": "tmv/_kiss_fft_guts_tm.h",
+      "mode": "100644",
+      "git_blob": "55c30490504a2abafa00071235d2ab5e0f758319"
+    },
+    {
+      "path": "tmv/cb_search_tm.h",
+      "mode": "100644",
+      "git_blob": "15ca1d59e593a96b8cba46a6aadb0bc9ce34561e"
+    },
+    {
+      "path": "tmv/config.h",
+      "mode": "100644",
+      "git_blob": "20aee6a0b947475fcbb9535994b8caa7802d044d"
+    },
+    {
+      "path": "tmv/fftwrap_tm.h",
+      "mode": "100644",
+      "git_blob": "39d924e89138b689115a14a69e7803233174794b"
+    },
+    {
+      "path": "tmv/filterbank_tm.h",
+      "mode": "100644",
+      "git_blob": "39d2332d674aeb14729c8d43f863f111f13ceef6"
+    },
+    {
+      "path": "tmv/filters_tm.h",
+      "mode": "100644",
+      "git_blob": "8f28102971ac1c152023ccd141115327a2e4eb04"
+    },
+    {
+      "path": "tmv/fixed_tm.h",
+      "mode": "100644",
+      "git_blob": "c8fa968f414e0eb0d71738780ff603b657fd01df"
+    },
+    {
+      "path": "tmv/kiss_fft_tm.h",
+      "mode": "100644",
+      "git_blob": "dce2072bf8e4f9a8032d86a49178904861272d72"
+    },
+    {
+      "path": "tmv/kiss_fftr_tm.h",
+      "mode": "100644",
+      "git_blob": "5b2b2cfaa69c4119c4c9f9de018cd3147b93a5c2"
+    },
+    {
+      "path": "tmv/lpc_tm.h",
+      "mode": "100644",
+      "git_blob": "f5e9bcd566cd2d8cbe850f89fc20220caa689b10"
+    },
+    {
+      "path": "tmv/lsp_tm.h",
+      "mode": "100644",
+      "git_blob": "acb0d91beccfc33a5dce54f4600a7bc46d84254a"
+    },
+    {
+      "path": "tmv/ltp_tm.h",
+      "mode": "100644",
+      "git_blob": "eccd701f7810436c653f056c334be9e0e2233792"
+    },
+    {
+      "path": "tmv/misc_tm.h",
+      "mode": "100644",
+      "git_blob": "4d6cea7310d978ff757572b5d5293446a49e9580"
+    },
+    {
+      "path": "tmv/profile_tm.h",
+      "mode": "100644",
+      "git_blob": "8588e263950c368a397d5ff8bdf4ee3cc9a399cd"
+    },
+    {
+      "path": "tmv/quant_lsp_tm.h",
+      "mode": "100644",
+      "git_blob": "e704eae04d8537d9cc34679a8c3eb655ede44b30"
+    },
+    {
+      "path": "tmv/speex_config_types.h",
+      "mode": "100644",
+      "git_blob": "e63303f2682a5246f3b5d45f1fbeda10f5b3c53a"
+    },
+    {
+      "path": "tmv/vq_tm.h",
+      "mode": "100644",
+      "git_blob": "c8c6109934cc1a9d62d309727ed574b4ee2cbd60"
+    },
+    {
+      "path": "win32/Makefile.am",
+      "mode": "100644",
+      "git_blob": "9ab53870ca3c5706aae09412fd5d881d1cdf2544"
+    },
+    {
+      "path": "win32/VS2003/Makefile.am",
+      "mode": "100644",
+      "git_blob": "3fec6aabecba66e3bff4cc82fe51ce790ff42278"
+    },
+    {
+      "path": "win32/VS2003/libspeex.sln",
+      "mode": "100644",
+      "git_blob": "4693b1a91bd30b6ba07553cb602f8b46de5b8f01"
+    },
+    {
+      "path": "win32/VS2003/libspeex/Makefile.am",
+      "mode": "100644",
+      "git_blob": "5de466c791180bc9c45a00e91d315166e8517fb0"
+    },
+    {
+      "path": "win32/VS2003/libspeex/libspeex.vcproj",
+      "mode": "100644",
+      "git_blob": "1bf043abc13e116fbc441cf6932f2388997d8e41"
+    },
+    {
+      "path": "win32/VS2003/speexdec/Makefile.am",
+      "mode": "100644",
+      "git_blob": "93b93c17694d780a9f0a85fe43a77286ffd186db"
+    },
+    {
+      "path": "win32/VS2003/speexdec/speexdec.vcproj",
+      "mode": "100644",
+      "git_blob": "d950422a3b8f648aca25a8de62d5f5a0ebefe22a"
+    },
+    {
+      "path": "win32/VS2003/speexenc/Makefile.am",
+      "mode": "100644",
+      "git_blob": "49e32dc7bdcad663105e43c251ab9493e586e38a"
+    },
+    {
+      "path": "win32/VS2003/speexenc/speexenc.vcproj",
+      "mode": "100644",
+      "git_blob": "68ef4945d172b8ce42546eed1d6ca38f06f60d88"
+    },
+    {
+      "path": "win32/VS2003/tests/Makefile.am",
+      "mode": "100644",
+      "git_blob": "8211ba35265cce8242ec9d21156b868a0a5f69d8"
+    },
+    {
+      "path": "win32/VS2003/tests/testenc.vcproj",
+      "mode": "100644",
+      "git_blob": "42488f07795c466ad8cd1d8c4d63619f1241d22a"
+    },
+    {
+      "path": "win32/VS2003/tests/testenc_uwb.vcproj",
+      "mode": "100644",
+      "git_blob": "3178b5271be57e168c60f14569bbae722724762a"
+    },
+    {
+      "path": "win32/VS2003/tests/testenc_wb.vcproj",
+      "mode": "100644",
+      "git_blob": "472fc66588b2236be237a203d912b23c21b7618f"
+    },
+    {
+      "path": "win32/VS2005/Makefile.am",
+      "mode": "100644",
+      "git_blob": "3fec6aabecba66e3bff4cc82fe51ce790ff42278"
+    },
+    {
+      "path": "win32/VS2005/libspeex.sln",
+      "mode": "100644",
+      "git_blob": "0fc8b637e33c4f5efe54bd439e0a72170aa81028"
+    },
+    {
+      "path": "win32/VS2005/libspeex/Makefile.am",
+      "mode": "100644",
+      "git_blob": "5de466c791180bc9c45a00e91d315166e8517fb0"
+    },
+    {
+      "path": "win32/VS2005/libspeex/libspeex.vcproj",
+      "mode": "100644",
+      "git_blob": "79913d0fba97ee149c45080031ab86326582d355"
+    },
+    {
+      "path": "win32/VS2005/speexdec/Makefile.am",
+      "mode": "100644",
+      "git_blob": "93b93c17694d780a9f0a85fe43a77286ffd186db"
+    },
+    {
+      "path": "win32/VS2005/speexdec/speexdec.vcproj",
+      "mode": "100644",
+      "git_blob": "e5d420375be724fcae28564aad4d29517eb26d4c"
+    },
+    {
+      "path": "win32/VS2005/speexenc/Makefile.am",
+      "mode": "100644",
+      "git_blob": "49e32dc7bdcad663105e43c251ab9493e586e38a"
+    },
+    {
+      "path": "win32/VS2005/speexenc/speexenc.vcproj",
+      "mode": "100644",
+      "git_blob": "b9413172d61b42402853b2e090548c1f53017a8e"
+    },
+    {
+      "path": "win32/VS2005/tests/Makefile.am",
+      "mode": "100644",
+      "git_blob": "8211ba35265cce8242ec9d21156b868a0a5f69d8"
+    },
+    {
+      "path": "win32/VS2005/tests/testenc.vcproj",
+      "mode": "100644",
+      "git_blob": "4a7b3c80a6ae4c8dcc2535dfe9c6831477d7f252"
+    },
+    {
+      "path": "win32/VS2005/tests/testenc_uwb.vcproj",
+      "mode": "100644",
+      "git_blob": "3689b4c67e38c02497109fae302b212d0200c19f"
+    },
+    {
+      "path": "win32/VS2005/tests/testenc_wb.vcproj",
+      "mode": "100644",
+      "git_blob": "9d63fb244ee90747d461d98e60c03fdb3378d43b"
+    },
+    {
+      "path": "win32/VS2008/Makefile.am",
+      "mode": "100644",
+      "git_blob": "3fec6aabecba66e3bff4cc82fe51ce790ff42278"
+    },
+    {
+      "path": "win32/VS2008/libspeex.sln",
+      "mode": "100644",
+      "git_blob": "b46f42cf4655c5c9839ebcff37aae3558563910a"
+    },
+    {
+      "path": "win32/VS2008/libspeex/Makefile.am",
+      "mode": "100644",
+      "git_blob": "5de466c791180bc9c45a00e91d315166e8517fb0"
+    },
+    {
+      "path": "win32/VS2008/libspeex/libspeex.vcproj",
+      "mode": "100644",
+      "git_blob": "f1d9adbb28c40c1dfc7cbae3df69ed862a23e4d5"
+    },
+    {
+      "path": "win32/VS2008/speexdec/Makefile.am",
+      "mode": "100644",
+      "git_blob": "93b93c17694d780a9f0a85fe43a77286ffd186db"
+    },
+    {
+      "path": "win32/VS2008/speexdec/speexdec.vcproj",
+      "mode": "100644",
+      "git_blob": "ead9e7e0e39c8101b1502cb1a99b60a60907d5c5"
+    },
+    {
+      "path": "win32/VS2008/speexenc/Makefile.am",
+      "mode": "100644",
+      "git_blob": "49e32dc7bdcad663105e43c251ab9493e586e38a"
+    },
+    {
+      "path": "win32/VS2008/speexenc/speexenc.vcproj",
+      "mode": "100644",
+      "git_blob": "2797bf968862aea391076a23f8eded62f15676c4"
+    },
+    {
+      "path": "win32/VS2008/tests/Makefile.am",
+      "mode": "100644",
+      "git_blob": "8211ba35265cce8242ec9d21156b868a0a5f69d8"
+    },
+    {
+      "path": "win32/VS2008/tests/testenc.vcproj",
+      "mode": "100644",
+      "git_blob": "5224459c1c02e36d2fe723796c4cf12781b290ec"
+    },
+    {
+      "path": "win32/VS2008/tests/testenc_uwb.vcproj",
+      "mode": "100644",
+      "git_blob": "f7a7d01a7335f8571fa0f60c1681a9aaf8e29f87"
+    },
+    {
+      "path": "win32/VS2008/tests/testenc_wb.vcproj",
+      "mode": "100644",
+      "git_blob": "e31006e532a354be43b6627f03cb7540f36ad626"
+    },
+    {
+      "path": "win32/config.h",
+      "mode": "100644",
+      "git_blob": "6366d7b035b580c0d3402ecf425980a8b7d59b81"
+    },
+    {
+      "path": "win32/libspeex.def",
+      "mode": "100644",
+      "git_blob": "eab200b712bdffa9bc430ff37ba2fb4d984442b6"
+    },
+    {
+      "path": "win32/libspeex/Makefile.am",
+      "mode": "100644",
+      "git_blob": "4d95004a2d4b85793ddaf7e6228da887eb272bf1"
+    },
+    {
+      "path": "win32/libspeex/libspeex.dsp",
+      "mode": "100644",
+      "git_blob": "9cfa1692969056f5ede2206fb289f7a648314db3"
+    },
+    {
+      "path": "win32/libspeex/libspeex.dsw",
+      "mode": "100644",
+      "git_blob": "ff24f2a89e8d29f2c735b0c9e14a402d280f2139"
+    },
+    {
+      "path": "win32/libspeex/libspeex_dynamic.dsp",
+      "mode": "100644",
+      "git_blob": "cd1945ca693ae22359c8ae5155076a24ac731656"
+    },
+    {
+      "path": "win32/speex.iss",
+      "mode": "100644",
+      "git_blob": "b10264687094756e3c1863f74a62ea3e0c838261"
+    },
+    {
+      "path": "win32/speexdec/Makefile.am",
+      "mode": "100644",
+      "git_blob": "7c479220146bf65509a81d991429f22dca723e32"
+    },
+    {
+      "path": "win32/speexdec/speexdec.dsp",
+      "mode": "100644",
+      "git_blob": "10b732d2a3b2808b6d68e680113d4420399ce8a9"
+    },
+    {
+      "path": "win32/speexdec/speexdec.dsw",
+      "mode": "100644",
+      "git_blob": "a7de36240a0f9cb2e07a70a2ad6b382e95e3ff84"
+    },
+    {
+      "path": "win32/speexenc/Makefile.am",
+      "mode": "100644",
+      "git_blob": "c15584f6fbbbb1271882e0466ff2aec6c5a8cc30"
+    },
+    {
+      "path": "win32/speexenc/speexenc.dsp",
+      "mode": "100644",
+      "git_blob": "eeae18e1b01f67604c52e34a8b30e74db6de72f2"
+    },
+    {
+      "path": "win32/speexenc/speexenc.dsw",
+      "mode": "100644",
+      "git_blob": "d1e77b8a23140c075c7a0fe5b977bf107f38850f"
+    }
+  ],
+  "selection": "Only library production source/public headers and licensing; CLI, docs and upstream build integrations unused by the standard C build are excluded."
+}
