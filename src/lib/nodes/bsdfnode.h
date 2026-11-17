@@ -26,10 +26,28 @@ struct bsdfSample {
 	struct color emitted; // FIXME: Not really the right place for this
 };
 
-//TODO: Expand and refactor to match a standard bsdf signature with eval, sample and pdf
+// Directional query result for a fully supported closure graph.
+// response is the directional response f*cos(theta), i.e. it already
+// includes the projected cosine, and pdf is the matching directional
+// density with the color factor removed. Both are defined per unit solid
+// angle over the unit sphere; zero outside the closure's support domain.
+struct bsdfEval {
+	struct color response;
+	float pdf;
+};
+
+// A bsdfNode always provides sample(). The eval and emission callbacks are
+// only present when the whole graph is made of supported leaves (diffuse,
+// translucent, isotropic, emission) combined with mix/add. Graphs containing
+// any other leaf leave both callbacks NULL and keep relying on sample() alone,
+// in which case no complete directional density is promised.
+// eval() does not draw scattering random numbers and never stores transient
+// hit state in the shared node.
 struct bsdfNode {
 	struct nodeBase base;
 	struct bsdfSample (*sample)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record);
+	struct bsdfEval (*eval)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction);
+	struct color (*emission)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record);
 };
 
 struct bsdf_buffer {

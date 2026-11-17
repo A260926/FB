@@ -49,8 +49,25 @@ static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, c
 	const struct vector scatterDir = vec_on_unit_sphere(sampler);
 	return (struct bsdfSample){
 		.out = { .start= record->hitPoint, .direction = scatterDir, .type = rt_transmission | rt_diffuse },
-		.weight = isoBsdf->color->eval(isoBsdf->color, sampler, record)
+		.pdf = 1.0f / (4.0f * PI),
+		.weight = isoBsdf->color->eval(isoBsdf->color, sampler, record),
+		.emitted = g_black_color
 	};
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	(void)direction;
+	struct isotropicBsdf *isoBsdf = (struct isotropicBsdf *)bsdf;
+	const struct color albedo = isoBsdf->color->eval(isoBsdf->color, sampler, record);
+	return (struct bsdfEval){
+		.response = colorCoef(1.0f / (4.0f * PI), albedo),
+		.pdf = 1.0f / (4.0f * PI)
+	};
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	(void)bsdf; (void)sampler; (void)record;
+	return g_black_color;
 }
 
 const struct bsdfNode *newIsotropic(const struct node_storage *s, const struct colorNode *color) {
@@ -58,6 +75,8 @@ const struct bsdfNode *newIsotropic(const struct node_storage *s, const struct c
 		.color = color ? color : newConstantTexture(s, g_black_color),
 		.bsdf = {
 			.sample = sample,
+			.eval = eval,
+			.emission = emission,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});

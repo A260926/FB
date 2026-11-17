@@ -47,10 +47,33 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
 	struct diffuseBsdf *diffBsdf = (struct diffuseBsdf *)bsdf;
 	const struct vector scatterDir = vec_normalize(vec_add(record->surfaceNormal, vec_on_unit_sphere(sampler)));
+	const struct color albedo = diffBsdf->color->eval(diffBsdf->color, sampler, record);
+	const float cosine = max(vec_dot(record->surfaceNormal, scatterDir), 0.0f);
+	// Cosine-weighted hemisphere density of the proposed direction.
+	const float pdf = cosine / PI;
+	// weight = response / pdf, with the response carrying the cosine.
+	const struct color weight = pdf > 0.0f ? albedo : g_black_color;
 	return (struct bsdfSample){
 		.out = { .start = record->hitPoint, .direction = scatterDir, .type = rt_reflection | rt_diffuse },
-		.weight = diffBsdf->color->eval(diffBsdf->color, sampler, record)
+		.pdf = pdf,
+		.weight = weight,
+		.emitted = g_black_color
 	};
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	struct diffuseBsdf *diffBsdf = (struct diffuseBsdf *)bsdf;
+	const struct color albedo = diffBsdf->color->eval(diffBsdf->color, sampler, record);
+	const float cosine = max(vec_dot(record->surfaceNormal, direction), 0.0f);
+	return (struct bsdfEval){
+		.response = colorCoef(cosine / PI, albedo),
+		.pdf = cosine / PI
+	};
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	(void)bsdf; (void)sampler; (void)record;
+	return g_black_color;
 }
 
 const struct bsdfNode *newDiffuse(const struct node_storage *s, const struct colorNode *color) {
@@ -58,6 +81,8 @@ const struct bsdfNode *newDiffuse(const struct node_storage *s, const struct col
 		.color = color ? color : newConstantTexture(s, g_black_color),
 		.bsdf = {
 			.sample = sample,
+			.eval = eval,
+			.emission = emission,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});

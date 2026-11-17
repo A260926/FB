@@ -46,30 +46,69 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 	snprintf(dumpbuf, bufsize, "addBsdf { A: %s, B: %s }", A, B);
 }
 
-static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
-	struct addBsdf *mixBsdf = (struct addBsdf *)bsdf;
-	struct bsdfSample A = mixBsdf->A->sample(mixBsdf->A, sampler, record);
-	struct bsdfSample B = mixBsdf->B->sample(mixBsdf->B, sampler, record);
-	// TODO: Do we just add the outgoing vertices together or what...?
-	// TODO: Find out if we want to even keep this node around.
-	// FIXME: Hackery. We're using B.out here, so our fake Principled Shader graph works
-	// as expected. This will be resolved once this shader system is rewritten to be correct,
-	// we're not supposed to compute the out direction here.
-	// Cycles does the add with OSL shading closures, instead of at this stage, so we'd have to
-	// do something similar to that, probably.
+static bool supported(const struct addBsdf *addBsdf) {
+	return addBsdf->A->eval && addBsdf->A->emission && addBsdf->B->eval && addBsdf->B->emission;
+}
+
+static struct bsdfSample sample_legacy(const struct addBsdf *addBsdf, sampler *sampler, const struct hitRecord *record) {
+	struct bsdfSample A = addBsdf->A->sample(addBsdf->A, sampler, record);
+	struct bsdfSample B = addBsdf->B->sample(addBsdf->B, sampler, record);
+	// Original branch rule for unsupported graphs: the direction comes from B.
 	return (struct bsdfSample){.out = B.out, .weight = colorAdd(A.weight, B.weight)};
 }
 
+static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	struct addBsdf *addBsdf = (struct addBsdf *)bsdf;
+	if (!supported(addBsdf)) return sample_legacy(addBsdf, sampler, record);
+
+	// Propose one of the two child closures with equal probability.
+	const struct bsdfNode *chosen = sampler_dimension(sampler) < 0.5f ? addBsdf->A : addBsdf->B;
+	struct bsdfSample picked = chosen->sample(chosen, sampler, record);
+
+	const struct bsdfEval ea = addBsdf->A->eval(addBsdf->A, sampler, record, picked.out.direction);
+	const struct bsdfEval eb = addBsdf->B->eval(addBsdf->B, sampler, record, picked.out.direction);
+	// Marginal density of the whole graph in the proposed direction.
+	const float pdf = 0.5f * (ea.pdf + eb.pdf);
+	// Responses of the two closures add; a shared child reached through both
+	// paths contributes twice and is never deduplicated by pointer.
+	const struct color response = colorAdd(ea.response, eb.response);
+
+	const struct color emA = addBsdf->A->emission(addBsdf->A, sampler, record);
+	const struct color emB = addBsdf->B->emission(addBsdf->B, sampler, record);
+	return (struct bsdfSample){
+		.out = picked.out,
+		.pdf = pdf,
+		.weight = pdf > 0.0f ? colorCoef(1.0f / pdf, response) : g_black_color,
+		.emitted = colorAdd(emA, emB)
+	};
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	struct addBsdf *addBsdf = (struct addBsdf *)bsdf;
+	const struct bsdfEval ea = addBsdf->A->eval(addBsdf->A, sampler, record, direction);
+	const struct bsdfEval eb = addBsdf->B->eval(addBsdf->B, sampler, record, direction);
+	return (struct bsdfEval){
+		.response = colorAdd(ea.response, eb.response),
+		.pdf = 0.5f * (ea.pdf + eb.pdf)
+	};
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	struct addBsdf *addBsdf = (struct addBsdf *)bsdf;
+	return colorAdd(addBsdf->A->emission(addBsdf->A, sampler, record), addBsdf->B->emission(addBsdf->B, sampler, record));
+}
+
 const struct bsdfNode *newAdd(const struct node_storage *s, const struct bsdfNode *A, const struct bsdfNode *B) {
-	if (A == B) {
-		logr(debug, "A == B, pruning add node.\n");
-		return A;
-	}
+	// A == B is intentionally not pruned: add(A, A) has to scatter and emit
+	// twice, and a shared child must count once per path it is used on.
 	HASH_CONS(s->node_table, hash, struct addBsdf, {
 		.A = A ? A : newDiffuse(s, newConstantTexture(s, g_black_color)),
 		.B = B ? B : newDiffuse(s, newConstantTexture(s, g_black_color)),
 		.bsdf = {
 			.sample = sample,
+			// A NULL child is replaced above by a supported diffuse.
+			.eval = (!A || A->eval) && (!B || B->eval) ? eval : NULL,
+			.emission = (!A || A->emission) && (!B || B->emission) ? emission : NULL,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});

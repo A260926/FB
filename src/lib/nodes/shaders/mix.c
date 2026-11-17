@@ -49,9 +49,12 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 	snprintf(dumpbuf, bufsize, "mixBsdf { A: %s, B: %s, factor: %s }", A, B, factor);
 }
 
-static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
-	struct mixBsdf *mixBsdf = (struct mixBsdf *)bsdf;
-	const float lerp = mixBsdf->factor->eval(mixBsdf->factor, sampler, record);
+static bool supported(const struct mixBsdf *mixBsdf) {
+	return mixBsdf->A->eval && mixBsdf->A->emission && mixBsdf->B->eval && mixBsdf->B->emission;
+}
+
+static struct bsdfSample sample_legacy(const struct mixBsdf *mixBsdf, sampler *sampler, const struct hitRecord *record, const float lerp) {
+	// Original branch rule: one child direction is chosen and returned as-is.
 	if (sampler_dimension(sampler) > lerp) {
 		return mixBsdf->A->sample(mixBsdf->A, sampler, record);
 	} else {
@@ -59,17 +62,63 @@ static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, c
 	}
 }
 
+static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	struct mixBsdf *mixBsdf = (struct mixBsdf *)bsdf;
+	const float lerp = clamp(mixBsdf->factor->eval(mixBsdf->factor, sampler, record), 0.0f, 1.0f);
+	if (!supported(mixBsdf)) return sample_legacy(mixBsdf, sampler, record, lerp);
+
+	// Only one child direction is drawn, but the returned pdf is the full
+	// graph's marginal density in that direction.
+	const struct bsdfNode *chosen = sampler_dimension(sampler) > lerp ? mixBsdf->A : mixBsdf->B;
+	struct bsdfSample picked = chosen->sample(chosen, sampler, record);
+
+	const struct bsdfEval ea = mixBsdf->A->eval(mixBsdf->A, sampler, record, picked.out.direction);
+	const struct bsdfEval eb = mixBsdf->B->eval(mixBsdf->B, sampler, record, picked.out.direction);
+	const float pdf = (1.0f - lerp) * ea.pdf + lerp * eb.pdf;
+	const struct color response = colorAdd(colorCoef(1.0f - lerp, ea.response), colorCoef(lerp, eb.response));
+
+	const struct color emA = mixBsdf->A->emission(mixBsdf->A, sampler, record);
+	const struct color emB = mixBsdf->B->emission(mixBsdf->B, sampler, record);
+	return (struct bsdfSample){
+		.out = picked.out,
+		.pdf = pdf,
+		.weight = pdf > 0.0f ? colorCoef(1.0f / pdf, response) : g_black_color,
+		.emitted = colorAdd(colorCoef(1.0f - lerp, emA), colorCoef(lerp, emB))
+	};
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	struct mixBsdf *mixBsdf = (struct mixBsdf *)bsdf;
+	const float lerp = clamp(mixBsdf->factor->eval(mixBsdf->factor, sampler, record), 0.0f, 1.0f);
+	const struct bsdfEval ea = mixBsdf->A->eval(mixBsdf->A, sampler, record, direction);
+	const struct bsdfEval eb = mixBsdf->B->eval(mixBsdf->B, sampler, record, direction);
+	return (struct bsdfEval){
+		.response = colorAdd(colorCoef(1.0f - lerp, ea.response), colorCoef(lerp, eb.response)),
+		.pdf = (1.0f - lerp) * ea.pdf + lerp * eb.pdf
+	};
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	struct mixBsdf *mixBsdf = (struct mixBsdf *)bsdf;
+	const float lerp = clamp(mixBsdf->factor->eval(mixBsdf->factor, sampler, record), 0.0f, 1.0f);
+	const struct color emA = mixBsdf->A->emission(mixBsdf->A, sampler, record);
+	const struct color emB = mixBsdf->B->emission(mixBsdf->B, sampler, record);
+	return colorAdd(colorCoef(1.0f - lerp, emA), colorCoef(lerp, emB));
+}
+
 const struct bsdfNode *newMix(const struct node_storage *s, const struct bsdfNode *A, const struct bsdfNode *B, const struct valueNode *factor) {
-	if (A == B) {
-		logr(debug, "A == B, pruning mix node.\n");
-		return A;
-	}
+	// A == B is intentionally not pruned: the graph structure has to survive
+	// so that mix(A, A) keeps evaluating as the unchanged closure.
 	HASH_CONS(s->node_table, hash, struct mixBsdf, {
 		.A = A ? A : newDiffuse(s, newConstantTexture(s, g_black_color)),
 		.B = B ? B : newDiffuse(s, newConstantTexture(s, g_black_color)),
 		.factor = factor ? factor : newConstantValue(s, 0.5f),
 		.bsdf = {
 			.sample = sample,
+			// A NULL child is replaced above by a supported diffuse, so only an
+			// explicitly unsupported child suppresses the callbacks.
+			.eval = (!A || A->eval) && (!B || B->eval) ? eval : NULL,
+			.emission = (!A || A->emission) && (!B || B->emission) ? emission : NULL,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});

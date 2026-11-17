@@ -119,6 +119,76 @@ All the .json files in `input/` are test scenes provided with c-ray, assets for 
 
 If you make a cool scene and have Python3 installed, you can bundle up the scene into a portable .zip file using the `scripts/bundle.py` script.
 
+## Closure (BSDF) graphs
+
+BSDF nodes live in `src/lib/nodes/bsdfnode.h`. Every node provides a `sample()`
+closure that proposes an outgoing direction. Two additional callbacks are
+available on *supported* graphs:
+
+```c
+struct bsdfEval {
+    struct color response; // directional response, already including the projected cosine
+    float pdf;             // directional probability density per unit solid angle
+};
+
+struct bsdfEval (*eval)(const struct bsdfNode *, sampler *, const struct hitRecord *, struct vector direction);
+struct color    (*emission)(const struct bsdfNode *, sampler *, const struct hitRecord *);
+```
+
+Both callbacks are present only when the **whole** graph is built from the
+supported leaves `diffuse`, `translucent`, `isotropic` and `emission`, combined
+with `mix`/`add`. A graph containing any other leaf (metal, glass, plastic,
+transparent, background) leaves both callbacks `NULL`; such graphs keep using
+the original branch rules inside `sample()` and make no completeness claim
+about their density. `eval()`/`emission()` do not draw scattering random
+numbers and never store transient hit state in the shared node.
+
+### Density units
+
+`pdf` is a density over the unit sphere measured per steradian, so it
+integrates to 1 over the sphere. `response` is the directional response
+**with** the projected cosine already folded in (`f * cos(theta)`), not a bare
+BRDF value. The leaf forms are:
+
+- diffuse: `response = color * max(N·d, 0) / π`, `pdf = max(N·d, 0) / π`
+- translucent: `response = color * max(-N·d, 0) / π`, `pdf = max(-N·d, 0) / π`
+  (the reflection hemisphere is flipped to the transmission side)
+- isotropic: `response = color / (4π)`, `pdf = 1 / (4π)` over the whole sphere
+- emission: `response = 0` with the same cosine-hemisphere proposal and `pdf`
+  as diffuse; the `emission()` callback returns `color * strength`
+
+For the three scattering leaves the `pdf` is the same directional density as
+the response with the color factor removed. Query directions and hit normals
+are finite unit vectors, colors and strengths are non-negative and finite, and
+a finite `mix` factor outside the range is clamped to `[0,1]`.
+
+### Combination rules
+
+- `mix(A, B, factor)` weights the response, pdf and emission of A and B by
+  `(1-factor)` and `factor`.
+- `add(A, B)` adds the responses and emissions, proposes either child
+  direction with equal (1/2) probability, and uses the mean of the two child
+  pdfs.
+- A shared child reached through both add paths contributes twice — nodes are
+  never deduplicated by pointer. `add(A, A)` therefore doubles both scattering
+  and emission, while `mix(A, A)` leaves the closure unchanged. Neither node
+  prunes an `A == B` graph anymore.
+
+`sample()` still draws only one child direction, but the returned `pdf` is the
+**whole graph's** marginal density in that direction, `weight` is
+`response / pdf` for the whole graph (never just the picked leaf's weight), and
+`emitted` is the graph's full self-emission. A zero response terminates a path
+without any division by zero or non-finite values.
+
+### Path tracing
+
+For a supported graph `path_trace()` queries the self-emission independently
+on every hit, adds it exactly once per hit, and draws no scattering direction
+once the bounce budget is exhausted. On a continuing bounce only the
+scattering weight is multiplied into the path throughput. Unsupported graphs
+continue to pass scattering and emission through `sample()`/`emitted` exactly
+as before, preserving the legacy metal, glass and plastic behavior.
+
 ## Credits
 
 3rd party libraries included in this project include:

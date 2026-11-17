@@ -51,10 +51,29 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
 	struct emissiveBsdf *emitBsdf = (struct emissiveBsdf *)bsdf;
 	const struct vector scatterDir = vec_normalize(vec_add(record->surfaceNormal, vec_on_unit_sphere(sampler)));
+	const float cosine = max(vec_dot(record->surfaceNormal, scatterDir), 0.0f);
 	return (struct bsdfSample){
 		.out = { .start = record->hitPoint, .direction = scatterDir, .type = rt_reflection | rt_diffuse },
+		// Emission scatters no light, so the scattering weight is zero.
+		.pdf = cosine / PI,
+		.weight = g_black_color,
 		.emitted = colorCoef(emitBsdf->strength->eval(emitBsdf->strength, sampler, record), emitBsdf->color->eval(emitBsdf->color, sampler, record))
 	};
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	(void)bsdf; (void)sampler;
+	// No directional scattering response, but the cosine hemisphere proposal
+	// is retained, so the pdf matches the diffuse leaf.
+	return (struct bsdfEval){
+		.response = g_black_color,
+		.pdf = max(vec_dot(record->surfaceNormal, direction), 0.0f) / PI
+	};
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	struct emissiveBsdf *emitBsdf = (struct emissiveBsdf *)bsdf;
+	return colorCoef(emitBsdf->strength->eval(emitBsdf->strength, sampler, record), emitBsdf->color->eval(emitBsdf->color, sampler, record));
 }
 
 const struct bsdfNode *newEmission(const struct node_storage *s, const struct colorNode *color, const struct valueNode *strength) {
@@ -63,6 +82,8 @@ const struct bsdfNode *newEmission(const struct node_storage *s, const struct co
 		.strength = strength ? strength : newConstantValue(s, 1.0f),
 		.bsdf = {
 			.sample = sample,
+			.eval = eval,
+			.emission = emission,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});
