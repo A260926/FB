@@ -16,6 +16,10 @@ class Cylinder : public Object {
     bool exclude_from_bvh() const override { return excluded; }
 
     bool intersect(const Ray& r, Interval ray_t, IntersectionRecord& rec) const override {
+        // Hidden from this ray's layers: treat as if the object does not exist.
+        if ((r.visibility_mask() & visibility_mask()) == 0)
+            return false;
+
         ++hit_call_count;
 
         IntersectionRecord temp_rec;

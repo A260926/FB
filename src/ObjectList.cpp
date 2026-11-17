@@ -4,6 +4,10 @@
 #include "object/Triangle.h"
 #include "object/Cylinder.h"
 
+#include <queue>
+#include <unordered_set>
+#include <utility>
+
 ObjectList::ObjectList() {}
 
 ObjectList::ObjectList(std::shared_ptr<Object> object) {
@@ -12,6 +16,9 @@ ObjectList::ObjectList(std::shared_ptr<Object> object) {
 
 void ObjectList::clear() {
     objects.clear();
+    excluded_objects.clear();
+    leaf_index_.clear();
+    root.reset();
 }
 
 void ObjectList::add(std::shared_ptr<Object> object) {
@@ -19,6 +26,11 @@ void ObjectList::add(std::shared_ptr<Object> object) {
 }
 
 void ObjectList::build() {
+    // A rebuild replaces the previous excluded list and leaf index entirely.
+    excluded_objects.clear();
+    leaf_index_.clear();
+    root.reset();
+
     // Build the BVH
     std::vector<std::shared_ptr<Object>> bvh_objects;
 
@@ -31,7 +43,96 @@ void ObjectList::build() {
     }
     if (!bvh_objects.empty()) {
         root = std::make_shared<Node>(bvh_objects, 0, bvh_objects.size());
+        index_leaves(root.get());
     }
+}
+
+void ObjectList::index_leaves(Node* node) {
+    if (!node) return;
+    if (node->left) {
+        if (Node* left_node = dynamic_cast<Node*>(node->left.get())) {
+            index_leaves(left_node);
+        } else {
+            // Leaf slot holding a primitive: record the occurrence.
+            leaf_index_.emplace(node->left.get(), node);
+        }
+    }
+    if (node->right) {
+        if (Node* right_node = dynamic_cast<Node*>(node->right.get())) {
+            index_leaves(right_node);
+        } else {
+            leaf_index_.emplace(node->right.get(), node);
+        }
+    }
+}
+
+VisibilityRefreshStats ObjectList::refresh_visibility(const std::vector<const Object*>& dirty) {
+    VisibilityRefreshStats stats;
+    if (dirty.empty()) return stats;
+
+    // De-duplicate the dirty list: each distinct object is processed once.
+    std::unordered_set<const Object*> seen;
+    std::vector<const Object*> unique_dirty;
+    unique_dirty.reserve(dirty.size());
+    for (const Object* obj : dirty) {
+        if (obj && seen.insert(obj).second) {
+            unique_dirty.push_back(obj);
+        }
+    }
+
+    // Ancestors waiting for a recomputation, ordered deepest-first so that
+    // children are always reduced before their parents and each affected
+    // node is reduced at most once.
+    std::priority_queue<std::pair<int, Node*>> pending;
+    std::unordered_set<Node*> queued;
+    auto queue_node = [&](Node* node) {
+        if (node && queued.insert(node).second) {
+            pending.emplace(node->depth, node);
+        }
+    };
+
+    // Locate every leaf occurrence of each dirty object and refresh its cache.
+    for (const Object* obj : unique_dirty) {
+        auto range = leaf_index_.equal_range(obj);
+        if (range.first == range.second) {
+            continue;  // Not part of this tree (e.g. excluded from the BVH)
+        }
+        ++stats.object_reads;
+        const std::uint32_t mask = obj->visibility_mask();
+        for (auto it = range.first; it != range.second; ++it) {
+            Node* leaf = it->second;
+            ++stats.node_reductions;  // Recompute the leaf's cached OR
+            if (leaf->visibility_or == mask) {
+                continue;  // Unchanged: nothing to propagate
+            }
+            leaf->visibility_or = mask;
+            queue_node(leaf->parent);
+        }
+    }
+
+    // Propagate the changes towards the root.
+    while (!pending.empty()) {
+        Node* node = pending.top().second;
+        pending.pop();
+        std::uint32_t mask = 0;
+        for (const shared_ptr<Object>* child : {&node->left, &node->right}) {
+            if (!*child) continue;
+            if (const Node* child_node = dynamic_cast<const Node*>(child->get())) {
+                mask |= child_node->visibility_or;  // Internal cache: not an object read
+            } else {
+                ++stats.object_reads;
+                mask |= (*child)->visibility_mask();
+            }
+        }
+        ++stats.node_reductions;
+        if (mask == node->visibility_or) {
+            continue;  // OR unchanged: ancestors cannot change either, stop early
+        }
+        node->visibility_or = mask;
+        queue_node(node->parent);
+    }
+
+    return stats;
 }
 
 bool ObjectList::intersect_bvh_enabled(const Ray& r, Interval ray_t, IntersectionRecord& rec) const {

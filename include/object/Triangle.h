@@ -19,6 +19,10 @@ class Triangle : public Object {
 
     bool intersect(const Ray& r, Interval ray_t, IntersectionRecord& rec) const override {
 
+        // Hidden from this ray's layers: treat as if the object does not exist.
+        if ((r.visibility_mask() & visibility_mask()) == 0)
+            return false;
+
         ++hit_call_count;
 
         // Using the Möller–Trumbore algorithm for ray-triangle intersection

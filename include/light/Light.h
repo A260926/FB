@@ -7,18 +7,24 @@
 
 #include "Material.h"
 
+#include <cstdint>
+
 class Light {
     public:
 
      virtual ~Light() = default;
 
+     // The visibility_mask argument carries the layers of the ray being
+     // shaded; shadow rays spawned by the light inherit it. It defaults to
+     // all layers so existing calls keep their previous behavior.
      virtual Radiance phong_shading(
       const Point3& p,                // Point of intersection
       const Vector3& normal,          // Normal at the point of intersection
       const Vector3& view_dir,        // Direction of the view
       const IntersectionRecord& rec,  // Intersection record
       const Object& world,            // World object
-      const Radiance& ambient_light   // Ambient light
+      const Radiance& ambient_light,  // Ambient light
+      std::uint32_t visibility_mask = 0xffffffffu  // Visibility layers of the querying ray
      ) const = 0;
 
      virtual Radiance brdf_shading(
@@ -27,7 +33,8 @@ class Light {
       const Vector3& view_dir,        // Direction of the view
       const FancyBRDF& brdf,          // BRDF of the material
       const Object& world,            // World object
-      const Vector3& coefficient      // Coefficient for the BRDF contribution
+      const Vector3& coefficient,     // Coefficient for the BRDF contribution
+      std::uint32_t visibility_mask = 0xffffffffu  // Visibility layers of the querying ray
      ) const = 0;
 
 };

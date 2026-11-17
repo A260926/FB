@@ -1,5 +1,31 @@
 #include "bvh/Node.h"
 
+void Node::finalize_visibility_cache() {
+    // Children are fully constructed by the split strategies before this runs,
+    // so their cached OR values are already valid. Link them back to this
+    // node and reduce their masks into this node's cache.
+    std::uint32_t mask = 0;
+    if (left) {
+        if (Node* left_node = dynamic_cast<Node*>(left.get())) {
+            left_node->parent = this;
+            left_node->depth = depth + 1;
+            mask |= left_node->visibility_or;
+        } else {
+            mask |= left->visibility_mask();
+        }
+    }
+    if (right) {
+        if (Node* right_node = dynamic_cast<Node*>(right.get())) {
+            right_node->parent = this;
+            right_node->depth = depth + 1;
+            mask |= right_node->visibility_or;
+        } else {
+            mask |= right->visibility_mask();
+        }
+    }
+    visibility_or = mask;
+}
+
 void Node::random_splits(std::vector<shared_ptr<Object>>& objects, size_t start, size_t end) {
     // RANDOM SPLITS
     // Check if no objects

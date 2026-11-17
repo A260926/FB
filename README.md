@@ -198,6 +198,47 @@ Rectangular area lights use `type: "rectlight"` with `u`, `v`, `width`, `height`
 | `phong` | Blinn-Phong shading with shadow rays, recursive reflection, and refraction via Schlick's approximation. Configurable bounce depth. | Lit scene with highlights, shadows, mirrors, and glass |
 | `path` | Monte Carlo path tracing. Each pixel sends multiple samples, bouncing through the scene with BRDF importance sampling. Russian Roulette terminates paths stochastically. | Physically-based global illumination with soft shadows and indirect lighting |
 
+## Visibility Layers (C++ API)
+
+Objects and rays carry 32-bit visibility masks so the same geometry can be
+reused across logical layers (e.g. camera-only objects, shadow-only blockers).
+An object is treated as non-existent for a ray — it does not intersect, cast
+shadows, or appear in reflections — whenever the bitwise AND of the two masks
+is zero. Both default to `0xffffffff`, so scenes built with the original
+calls behave exactly as before, and the JSON scene format is unchanged.
+
+```cpp
+// Assign objects to layers.
+auto hero = std::make_shared<Sphere>(Point3(0, 0, -3), 1.0, &hero_mat);
+hero->set_visibility_mask(0x2);            // visible on layer bit 1 only
+
+ObjectList world;
+world.add(hero);
+world.build();
+
+// A ray that only queries layer bit 1.
+Ray ray(origin, direction, 0x2);
+
+// Edit layers without rebuilding the BVH: mutate masks, then refresh every
+// scene that references the object, then query. Only the leaf occurrences of
+// the dirty objects and their ancestors are re-reduced; the tree topology,
+// root pointer, and bounding boxes are untouched.
+hero->set_visibility_mask(0x4);
+VisibilityRefreshStats stats = world.refresh_visibility({hero.get()});
+// stats.object_reads    — primitive masks actually read
+// stats.node_reductions — node OR caches actually recomputed
+
+// Cameras stamp primary rays; reflection, refraction, diffuse, and shadow
+// rays (PointLight / RectangularLight, including refraction continuations)
+// inherit the querying ray's mask.
+Camera cam;
+cam.visibility_mask = 0x4;
+
+// Light shading entry points accept an optional mask (old calls still work):
+// light.phong_shading(p, n, v, rec, world, ambient, cam.visibility_mask);
+// light.shadow_factor(p, world, cam.visibility_mask);
+```
+
 ## Test Suite
 
 A smoke test builds the project and renders all scenes in `TestSuite/`:

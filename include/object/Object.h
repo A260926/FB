@@ -5,6 +5,7 @@
 #include "bvh/BoundingBox.h"
 #include "Material.h"
 #include <algorithm>
+#include <cstdint>
 
 
 
@@ -42,6 +43,15 @@ class Object {
 
     // Check if the object should be excluded from the BVH
     virtual bool exclude_from_bvh() const { return false; }
+
+    // Visibility layers this object belongs to. A ray only sees the object
+    // when (ray.visibility_mask() & visibility_mask()) != 0; a zero result
+    // means the object is treated as if it does not exist for that ray.
+    void set_visibility_mask(std::uint32_t mask) { visibilityMask = mask; }
+    std::uint32_t visibility_mask() const { return visibilityMask; }
+
+  private:
+    std::uint32_t visibilityMask = 0xffffffffu;
 };
 
 #endif

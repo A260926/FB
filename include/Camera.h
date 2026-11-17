@@ -8,6 +8,8 @@
 #include "light/LightList.h"
 #include "ThreadPool.h"
 
+#include <cstdint>
+
 class Camera {
   public:
     /* Public Camera Parameters Here */
@@ -20,6 +22,11 @@ class Camera {
     double vfov     = 90;              // from fov (vertical)
     Radiance background = Radiance(0,0,0);   // Background color
     Radiance ambient_light = Radiance(0.3, 0.3, 0.3); // Example ambient light
+
+    // Visibility layers queried by this camera. Primary rays carry this mask
+    // and every secondary ray (reflection, refraction, diffuse, shadow)
+    // inherits it from the ray that spawned it.
+    std::uint32_t visibility_mask = 0xffffffffu;
 
     int nbounces = 8;  // Number of bounces for ray tracing
     double exposure = 0.1;  // Exposure value for tone mapping

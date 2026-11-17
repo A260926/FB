@@ -3,13 +3,17 @@
 
 #include "util/Vector3.h"
 
+#include <cstdint>
+
 class Ray {
   public:
     Ray() : originPoint(0,0,0), vectorDirection(0,0,0), invDirection(0,0,0) {}
 
-    Ray(const Point3& rayOrigin, const Vector3& rayDirection)
+    Ray(const Point3& rayOrigin, const Vector3& rayDirection,
+        std::uint32_t visibility_mask = 0xffffffffu)
       : originPoint(rayOrigin), vectorDirection(rayDirection),
-        invDirection(1.0/rayDirection[0], 1.0/rayDirection[1], 1.0/rayDirection[2]) {}
+        invDirection(1.0/rayDirection[0], 1.0/rayDirection[1], 1.0/rayDirection[2]),
+        visibilityMask(visibility_mask) {}
 
     Point3 at(double t) const {
       return  t*vectorDirection + originPoint;
@@ -19,10 +23,15 @@ class Ray {
     const Vector3& direction() const { return vectorDirection; }
     const Vector3& inv_direction() const { return invDirection; }
 
+    // Visibility layers queried by this ray. An object is only visible to the
+    // ray when (ray.visibility_mask() & object.visibility_mask()) != 0.
+    std::uint32_t visibility_mask() const { return visibilityMask; }
+
   private:
     Point3 originPoint;
     Vector3 vectorDirection;
     Vector3 invDirection;
+    std::uint32_t visibilityMask = 0xffffffffu;
 };
 
 #endif

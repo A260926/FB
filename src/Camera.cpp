@@ -99,7 +99,7 @@ Ray Camera::get_sampled_ray(int i, int j, Vector3 offset) const {
     // Vector3 ray_direction = focal_target - offset_origin;
     Vector3 ray_direction = focal_target - offset_origin;
 
-    return Ray(offset_origin, ray_direction);
+    return Ray(offset_origin, ray_direction, visibility_mask);
 }
 
 
@@ -125,7 +125,7 @@ Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lig
 
     // Compute Blinn-Phong shading at the intersection point
     Vector3 view_dir = unit_vector(-r.direction());
-    Radiance local_shading = lights.phong_shading(rec.p, rec.normal, view_dir, rec, world, ambient_light);
+    Radiance local_shading = lights.phong_shading(rec.p, rec.normal, view_dir, rec, world, ambient_light, r.visibility_mask());
 
     // Compute ambient light contribution
     Radiance ambient = calculate_ambient(*rec.mat_ptr, ambient_light, rec.u, rec.v);
@@ -142,7 +142,7 @@ Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lig
     // Reflective only case
     if (rec.mat_ptr->is_reflective && !rec.mat_ptr->is_refractive) {
         Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
-        Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
+        Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir, r.visibility_mask());
         reflected_color = trace_phong(reflect_ray, world, lights, depth - 1);
         result = (1 - rec.mat_ptr->reflectivity) * (ambient + local_shading) +
                 rec.mat_ptr->reflectivity * reflected_color;
@@ -160,19 +160,19 @@ Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lig
         if (sin_theta_t > 1.0) {
             // Total Internal Reflection: Treat as reflective
             Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
-            Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
+            Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir, r.visibility_mask());
             refracted_color = trace_phong(reflect_ray, world, lights, depth - 1);
         } else {
             // Compute refraction direction using Snell's law
             Vector3 refract_dir = refract(unit_vector(r.direction()), rec.normal, eta);
-            Ray refract_ray(rec.p + 0.001 * refract_dir, refract_dir);
+            Ray refract_ray(rec.p + 0.001 * refract_dir, refract_dir, r.visibility_mask());
             refracted_color = trace_phong(refract_ray, world, lights, depth - 1);
         }
 
         // Reflective contribution
         if (rec.mat_ptr->is_reflective) {
             Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
-            Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
+            Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir, r.visibility_mask());
             reflected_color = trace_phong(reflect_ray, world, lights, depth - 1);
         }
 
@@ -202,7 +202,7 @@ Radiance Camera::trace_path_phong(const Ray& r, const Object& world, const Light
     Material* mat = rec.mat_ptr;
     Radiance emitted = Radiance(0,0,0);
     Vector3 view_dir = unit_vector(-r.direction());
-    Radiance surface_color = lights.phong_shading(rec.p, rec.normal, view_dir, rec, world, ambient_light);
+    Radiance surface_color = lights.phong_shading(rec.p, rec.normal, view_dir, rec, world, ambient_light, r.visibility_mask());
     // Albedo for indirect diffuse bounce throughput
     Radiance albedo = rec.mat_ptr->kd * (rec.mat_ptr->has_texture 
         ? rec.mat_ptr->get_texture_color(rec.u, rec.v) 
@@ -230,7 +230,7 @@ Radiance Camera::trace_path_phong(const Ray& r, const Object& world, const Light
     Radiance refraction_color(0, 0, 0);
     if (mat->is_reflective) {
         Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
-        Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
+        Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir, r.visibility_mask());
         reflection_color = trace_path(reflect_ray, world, lights, depth - 1);
     }
     if (mat->is_refractive) {
@@ -240,11 +240,11 @@ Radiance Camera::trace_path_phong(const Ray& r, const Object& world, const Light
 
         if (sin_theta_t_sq > 1.0) {
             Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
-            Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
+            Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir, r.visibility_mask());
             refraction_color = trace_path(reflect_ray, world, lights, depth - 1);
         } else {
             Vector3 refract_dir = refract(unit_vector(r.direction()), rec.normal, eta);
-            Ray refract_ray(rec.p + 0.001 * refract_dir, refract_dir);
+            Ray refract_ray(rec.p + 0.001 * refract_dir, refract_dir, r.visibility_mask());
             refraction_color = trace_path(refract_ray, world, lights, depth - 1);
         }
     }
@@ -262,7 +262,7 @@ Radiance Camera::trace_path_phong(const Ray& r, const Object& world, const Light
     } else {
         Vector3 scatter_dir = unit_vector(random_in_hemisphere(rec.normal));
         double cos_theta = std::max(0.0, dot(scatter_dir, rec.normal));
-        Ray scattered_ray(rec.p + 0.001 * scatter_dir, scatter_dir);
+        Ray scattered_ray(rec.p + 0.001 * scatter_dir, scatter_dir, r.visibility_mask());
         Radiance indirect = 2.0 * cos_theta * albedo * trace_path(scattered_ray, world, lights, depth - 1);
         result += surface_color + rr_weight * indirect;
     }
@@ -287,7 +287,7 @@ Radiance Camera::trace_path_brdf(const Ray& r, const Object& world, const Light&
     FancyBRDF brdf = rec.mat_ptr->build_brdf( rec.normal, rec.u, rec.v);
 
     Vector3 coefficient = Vector3(1, 1, 1);
-    Radiance direct = lights.brdf_shading(rec.p, rec.normal, view_dir, brdf, world, coefficient);
+    Radiance direct = lights.brdf_shading(rec.p, rec.normal, view_dir, brdf, world, coefficient, r.visibility_mask());
 
     // Russian Roulette: check BEFORE recursive trace
     if (depth > 3) {
@@ -303,7 +303,7 @@ Radiance Camera::trace_path_brdf(const Ray& r, const Object& world, const Light&
 
     coefficient *= weight;
 
-    Ray scattered_ray(rec.p + 0.001 * l, l);
+    Ray scattered_ray(rec.p + 0.001 * l, l, r.visibility_mask());
     Radiance indirect = trace_path(scattered_ray, world, lights, depth - 1);
 
     Radiance result = direct + rr_weight * coefficient * indirect;
@@ -443,7 +443,7 @@ std::vector<Radiance> Camera::render_binary(const Object& world) {
         for (int i = 0; i < image_width; i++) {
             auto pixel_center = first_pixel + (i * pixel_delta_u) + (j * pixel_delta_v);
             auto ray_direction = pixel_center - center;
-            Ray r(center, ray_direction);
+            Ray r(center, ray_direction, visibility_mask);
             // Pass `nbounces` to control recursive depth
             Radiance pixel_color = trace_binary(r, world);
             pixelData[static_cast<size_t>(j) * static_cast<size_t>(image_width) + static_cast<size_t>(i)] = pixel_color;
@@ -460,7 +460,7 @@ std::vector<Radiance> Camera::render_phong(const Object& world, const Light& lig
         for (int i = 0; i < image_width; i++) {
             auto pixel_center = first_pixel + (i * pixel_delta_u) + (j * pixel_delta_v);
             auto ray_direction = pixel_center - center;
-            Ray r(center, ray_direction);
+            Ray r(center, ray_direction, visibility_mask);
             // Pass `nbounces` to control recursive depth
             Radiance pixel_color = trace_phong(r, world, lights, nbounces);
             pixelData[static_cast<size_t>(j) * static_cast<size_t>(image_width) + static_cast<size_t>(i)] = tone_map(pixel_color);
