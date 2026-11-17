@@ -75,17 +75,36 @@ CPUFeaturesAuditor::GetFormToVisitorFnMap() {
 // Every instruction must update last_instruction_, even if only to clear it,
 // and every instruction must also update seen_ once it has been fully handled.
 // This scope makes that simple, and allows early returns in the decode logic.
+//
+// The `CPUFeatureRequirements` state is updated alongside the `CPUFeatures`
+// state. Each `Record` call represents a requirement that is AND-ed onto the
+// instruction's requirements, and `RecordOneOrBothOf` adds an OR-ed pair of
+// alternatives. Note that `CPUFeatures` uses the `available_` list as a hint
+// to pick a single feature, while the requirements are exact.
 class CPUFeaturesAuditor::RecordInstructionFeaturesScope {
  public:
   explicit RecordInstructionFeaturesScope(CPUFeaturesAuditor* auditor)
       : auditor_(auditor) {
     auditor_->last_instruction_ = CPUFeatures::None();
+    auditor_->last_instruction_requirements_ = CPUFeatureRequirements();
   }
   ~RecordInstructionFeaturesScope() {
     auditor_->seen_.Combine(auditor_->last_instruction_);
+    auditor_->seen_requirements_.Combine(
+        auditor_->last_instruction_requirements_);
   }
 
   void Record(const CPUFeatures& features) {
+    auditor_->last_instruction_.Combine(features);
+    auditor_->last_instruction_requirements_.Combine(features);
+  }
+
+  // Record a feature for the historical `CPUFeatures` interface only. This is
+  // intended for encodings which can be decoded as NOPs when a feature is not
+  // implemented, such as HINT instructions: they do not impose an exact
+  // requirement, but the legacy interface has always reported the feature when
+  // it is available.
+  void RecordLegacyOnly(const CPUFeatures& features) {
     auditor_->last_instruction_.Combine(features);
   }
 
@@ -94,21 +113,28 @@ class CPUFeaturesAuditor::RecordInstructionFeaturesScope {
               CPUFeatures::Feature feature2 = CPUFeatures::kNone,
               CPUFeatures::Feature feature3 = CPUFeatures::kNone) {
     auditor_->last_instruction_.Combine(feature0, feature1, feature2, feature3);
+    auditor_->last_instruction_requirements_.Combine(
+        CPUFeatures(feature0, feature1, feature2, feature3));
   }
 
   // If exactly one of a or b is known to be available, record it. Otherwise,
   // record both. This is intended for encodings that can be provided by two
   // different features.
+  //
+  // The `CPUFeatures` result depends on `available_`, but the requirements
+  // always record both alternatives exactly.
   void RecordOneOrBothOf(CPUFeatures::Feature a, CPUFeatures::Feature b) {
     bool hint_a = auditor_->available_.Has(a);
     bool hint_b = auditor_->available_.Has(b);
     if (hint_a && !hint_b) {
-      Record(a);
+      auditor_->last_instruction_.Combine(a);
     } else if (hint_b && !hint_a) {
-      Record(b);
+      auditor_->last_instruction_.Combine(b);
     } else {
-      Record(a, b);
+      auditor_->last_instruction_.Combine(a, b);
     }
+    auditor_->last_instruction_requirements_.Combine(
+        CPUFeatureRequirements({CPUFeatures(a), CPUFeatures(b)}));
   }
 
  private:
@@ -1335,8 +1361,10 @@ void CPUFeaturesAuditor::VisitSystem(const Instruction* instr) {
 
   // The instructions above are all HINTs and behave as NOPs if the
   // corresponding features are not implemented, so we record the corresponding
-  // features only if they are available.
-  if (available_.Has(required)) scope.Record(required);
+  // features only if they are available. They are also not exact requirements:
+  // a HINT decodes and executes as a NOP without them, so the exact
+  // requirements stay empty.
+  if (available_.Has(required)) scope.RecordLegacyOnly(required);
 
   switch (form_hash_) {
     case "cfinv_m_pstate"_h:

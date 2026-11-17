@@ -326,6 +326,7 @@ class PrintDisassembler : public Disassembler {
       : cpu_features_auditor_(NULL),
         cpu_features_prefix_("// Needs: "),
         cpu_features_suffix_(""),
+        exact_cpu_features_(false),
         signed_addresses_(false),
         stream_(stream) {}
 
@@ -355,6 +356,22 @@ class PrintDisassembler : public Disassembler {
     cpu_features_suffix_ = suffix;
   }
 
+  // Select how the CPU feature annotation is computed.
+  //
+  // By default, the annotation uses the historical `CPUFeatures` interface:
+  // the instruction's features, reduced by the auditor's available features,
+  // are printed as a comma-separated list.
+  //
+  // With `SetExactCPUFeatures(true)`, the annotation instead uses the exact
+  // `CPUFeatureRequirements` of the instruction. It prints the minimal
+  // supplement required given the available features. Each alternative is
+  // enclosed in parentheses, the features within an alternative are separated
+  // by `, `, and alternatives are separated by ` | `. For example, an
+  // `LDR D0, [X1]` with no available features prints `(FP) | (NEON)`. If any
+  // alternative is already satisfied by the available features, nothing is
+  // printed.
+  void SetExactCPUFeatures(bool exact) { exact_cpu_features_ = exact; }
+
   // By default, addresses are printed as simple, unsigned 64-bit hex values.
   //
   // With `PrintSignedAddresses(true)`:
@@ -371,6 +388,7 @@ class PrintDisassembler : public Disassembler {
   CPUFeaturesAuditor* cpu_features_auditor_;
   const char* cpu_features_prefix_;
   const char* cpu_features_suffix_;
+  bool exact_cpu_features_;
   bool signed_addresses_;
 
  private:

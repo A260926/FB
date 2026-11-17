@@ -26,7 +26,9 @@
 
 #include "cpu-features.h"
 
+#include <algorithm>
 #include <ostream>
+#include <vector>
 
 #include "globals-vixl.h"
 #include "utils-vixl.h"
@@ -155,6 +157,106 @@ CPUFeaturesConstIterator CPUFeaturesConstIterator::operator++(int) {  // Postfix
   CPUFeaturesConstIterator result = *this;
   ++(*this);
   return result;
+}
+
+namespace {
+
+// Return the enabled features of `features`, in feature-enumeration order.
+std::vector<CPUFeatures::Feature> FeatureSequence(const CPUFeatures& features) {
+  std::vector<CPUFeatures::Feature> sequence;
+  for (int i = 0; i < static_cast<int>(CPUFeatures::kNumberOfFeatures); ++i) {
+    CPUFeatures::Feature feature = static_cast<CPUFeatures::Feature>(i);
+    if (features.Has(feature)) sequence.push_back(feature);
+  }
+  return sequence;
+}
+
+bool FeatureSequenceLess(const CPUFeatures& a, const CPUFeatures& b) {
+  return std::lexicographical_compare(FeatureSequence(a).begin(),
+                                      FeatureSequence(a).end(),
+                                      FeatureSequence(b).begin(),
+                                      FeatureSequence(b).end());
+}
+
+}  // namespace
+
+void CPUFeatureRequirements::Normalize() {
+  // Store the alternatives in a canonical order so that comparison and
+  // reduction are deterministic. Duplicate alternatives are removed first, as
+  // they would otherwise each hide the other from the strict-superset check.
+  std::sort(alternatives_.begin(), alternatives_.end(), FeatureSequenceLess);
+  alternatives_.erase(
+      std::unique(alternatives_.begin(), alternatives_.end()),
+      alternatives_.end());
+
+  // Drop any alternative that is a strict superset of another: if `b` is a
+  // subset of `a`, then anything that satisfies `b` also satisfies `a`, so `a`
+  // carries no extra information.
+  std::vector<CPUFeatures> reduced;
+  for (size_t i = 0; i < alternatives_.size(); ++i) {
+    bool is_redundant = false;
+    for (size_t j = 0; j < alternatives_.size(); ++j) {
+      if (i == j) continue;
+      // Equality was handled by std::unique above, so any other subset
+      // relationship here is strict.
+      if (alternatives_[i].Has(alternatives_[j])) {
+        is_redundant = true;
+        break;
+      }
+    }
+    if (!is_redundant) reduced.push_back(alternatives_[i]);
+  }
+  // Sort again: removing elements does not disturb the existing order, but
+  // being explicit keeps the invariant obvious.
+  std::sort(reduced.begin(), reduced.end(), FeatureSequenceLess);
+  alternatives_.swap(reduced);
+}
+
+bool CPUFeatureRequirements::IsSatisfiedBy(
+    const CPUFeatures& available) const {
+  for (const CPUFeatures& alternative : alternatives_) {
+    if (available.Has(alternative)) return true;
+  }
+  return false;
+}
+
+void CPUFeatureRequirements::Combine(const CPUFeatures& features) {
+  for (CPUFeatures& alternative : alternatives_) {
+    alternative.Combine(features);
+  }
+  Normalize();
+}
+
+void CPUFeatureRequirements::Combine(const CPUFeatureRequirements& other) {
+  std::vector<CPUFeatures> combined;
+  for (const CPUFeatures& a : alternatives_) {
+    for (const CPUFeatures& b : other.alternatives_) {
+      CPUFeatures union_of_alternatives(a);
+      union_of_alternatives.Combine(b);
+      combined.push_back(union_of_alternatives);
+    }
+  }
+  alternatives_.swap(combined);
+  Normalize();
+}
+
+void CPUFeatureRequirements::CombineAlternatives(
+    const CPUFeatureRequirements& other) {
+  alternatives_.insert(alternatives_.end(),
+                       other.alternatives_.begin(),
+                       other.alternatives_.end());
+  Normalize();
+}
+
+CPUFeatureRequirements CPUFeatureRequirements::Without(
+    const CPUFeatures& available) const {
+  std::vector<CPUFeatures> remaining;
+  for (const CPUFeatures& alternative : alternatives_) {
+    CPUFeatures supplement(alternative);
+    supplement.Remove(available);
+    remaining.push_back(supplement);
+  }
+  return CPUFeatureRequirements(remaining);
 }
 
 }  // namespace vixl

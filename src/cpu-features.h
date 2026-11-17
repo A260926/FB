@@ -28,7 +28,9 @@
 #define VIXL_CPU_FEATURES_H
 
 #include <bitset>
+#include <initializer_list>
 #include <ostream>
+#include <vector>
 
 #include "globals-vixl.h"
 
@@ -413,6 +415,107 @@ class CPUFeatures {
 
 std::ostream& operator<<(std::ostream& os, vixl::CPUFeatures::Feature feature);
 std::ostream& operator<<(std::ostream& os, const vixl::CPUFeatures& features);
+
+// A precise representation of the CPU features required by an instruction (or
+// by a sequence of instructions).
+//
+// Some encodings can be provided by more than one architectural feature. For
+// example, an A64 `LDR D0, [X1]` can be implemented by either the FP extension
+// or the NEON extension. A plain `CPUFeatures` set cannot express this: it can
+// only list every possible feature as if all of them were required.
+//
+// `CPUFeatureRequirements` stores a list of _alternatives_. Each alternative is
+// a `CPUFeatures` set which is, on its own, sufficient to execute the
+// instruction. The instruction can run on a CPU if it supports every feature
+// in at least one of the alternatives. An empty alternative means that no
+// additional features are required.
+//
+// Alternatives are normalised on construction and whenever the value is
+// modified:
+//
+//  - duplicates are removed,
+//  - alternatives which are strict supersets of another alternative are
+//    removed, and
+//  - the remaining alternatives are sorted lexicographically by their feature
+//    enumeration sequence.
+//
+// As a result, two values which describe the same requirement compare equal,
+// and the representation is stable regardless of the order in which the
+// requirement was built.
+//
+// Expected usage:
+//
+//     CPUFeatureRequirements req(
+//         {CPUFeatures(CPUFeatures::kFP), CPUFeatures(CPUFeatures::kNEON)});
+//     req.IsSatisfiedBy(CPUFeatures(CPUFeatures::kNEON));  // true
+//     req.IsSatisfiedBy(CPUFeatures::kCRC32);              // false
+//
+//     // Requirements are combined with a logical AND: both operands must be
+//     // satisfied, so the alternatives are distributed over each other.
+//     req.Combine(CPUFeatures(CPUFeatures::kFPHalf));
+//
+//     // A conjured "minimal supplement" can be computed for a given CPU.
+//     CPUFeatureRequirements missing = req.Without(available);
+class CPUFeatureRequirements {
+ public:
+  // No requirements: a single empty alternative.
+  CPUFeatureRequirements() { alternatives_.push_back(CPUFeatures::None()); }
+
+  // A single alternative requiring exactly `features`.
+  // Note that this constructor is implicit, so a `CPUFeatures` can be used
+  // wherever a requirement for that feature set is expected.
+  // NOLINTNEXTLINE(runtime/explicit)
+  CPUFeatureRequirements(const CPUFeatures& features) {
+    alternatives_.push_back(features);
+  }
+
+  // The given alternatives, normalised as described above.
+  explicit CPUFeatureRequirements(
+      const std::vector<CPUFeatures>& alternatives)
+      : alternatives_(alternatives) {
+    Normalize();
+  }
+  CPUFeatureRequirements(std::initializer_list<CPUFeatures> alternatives)
+      : alternatives_(alternatives) {
+    Normalize();
+  }
+
+  // Return the normalised list of alternatives. Each element is sufficient on
+  // its own; the empty `CPUFeatures` set means that no features are required.
+  std::vector<CPUFeatures> GetAlternatives() const { return alternatives_; }
+
+  // Return true if `available` satisfies at least one alternative.
+  bool IsSatisfiedBy(const CPUFeatures& available) const;
+
+  // Logical AND: this requirement and `features` must both be satisfied.
+  // `features` is added to every alternative.
+  void Combine(const CPUFeatures& features);
+
+  // Logical AND with another requirement. This is the Cartesian product of the
+  // two alternative lists (unioning each pair).
+  void Combine(const CPUFeatureRequirements& other);
+
+  // Logical OR with another requirement: either this or `other` is enough.
+  void CombineAlternatives(const CPUFeatureRequirements& other);
+
+  // Return the requirement which remains once `available` is taken into
+  // account: alternatives are reduced by the available features, satisfied
+  // alternatives disappear, and the result is normalised. An empty
+  // alternative in the result means that nothing further is needed.
+  CPUFeatureRequirements Without(const CPUFeatures& available) const;
+
+  bool operator==(const CPUFeatureRequirements& other) const {
+    return alternatives_ == other.alternatives_;
+  }
+  bool operator!=(const CPUFeatureRequirements& other) const {
+    return !(*this == other);
+  }
+
+ private:
+  void Normalize();
+
+  std::vector<CPUFeatures> alternatives_;
+};
 
 // This is not a proper C++ iterator type, but it simulates enough of
 // ForwardIterator that simple loops can be written.

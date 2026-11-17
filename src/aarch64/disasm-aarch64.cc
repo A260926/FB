@@ -29,6 +29,8 @@
 #include <bitset>
 #include <cstdlib>
 #include <sstream>
+#include <string>
+#include <vector>
 
 namespace vixl {
 namespace aarch64 {
@@ -7675,9 +7677,40 @@ void PrintDisassembler::ProcessOutput(const Instruction *instr) {
                               instr->GetInstructionBits(),
                               GetOutput());
   if (cpu_features_auditor_ != NULL) {
-    CPUFeatures needs = cpu_features_auditor_->GetInstructionFeatures();
-    needs.Remove(cpu_features_auditor_->GetAvailableFeatures());
-    if (needs != CPUFeatures::None()) {
+    std::string features;
+    if (exact_cpu_features_) {
+      // Compute the minimal supplement required given the available features.
+      // `Without()` removes the available features from each alternative and
+      // reduces the result, so satisfied alternatives become empty and are
+      // dropped. If the resulting requirement has an empty alternative, the
+      // instruction needs nothing more and we print no annotation.
+      CPUFeatureRequirements requirements =
+          cpu_features_auditor_->GetInstructionRequirements().Without(
+              cpu_features_auditor_->GetAvailableFeatures());
+      std::vector<CPUFeatures> alternatives = requirements.GetAlternatives();
+      // `Without()` removes any alternative that was already satisfied, and
+      // reduces the rest. If nothing remains, `alternatives` holds only the
+      // empty set, which means that no annotation is needed.
+      if (!(alternatives.size() == 1 && alternatives[0].HasNoFeatures())) {
+        std::stringstream stream;
+        bool first_alternative = true;
+        for (const CPUFeatures& alternative : alternatives) {
+          if (!first_alternative) stream << " | ";
+          first_alternative = false;
+          stream << "(" << alternative << ")";
+        }
+        features = stream.str();
+      }
+    } else {
+      CPUFeatures needs = cpu_features_auditor_->GetInstructionFeatures();
+      needs.Remove(cpu_features_auditor_->GetAvailableFeatures());
+      if (needs != CPUFeatures::None()) {
+        std::stringstream stream;
+        stream << needs;
+        features = stream.str();
+      }
+    }
+    if (!features.empty()) {
       // Try to align annotations. This value is arbitrary, but based on looking
       // good with most instructions. Note that, for historical reasons, the
       // disassembly itself is printed with tab characters, so bytes_printed is
@@ -7691,12 +7724,10 @@ void PrintDisassembler::ProcessOutput(const Instruction *instr) {
       int pad = std::max(min_pad, (indent_to - bytes_printed));
       fprintf(stream_, "%*s", pad, "");
 
-      std::stringstream features;
-      features << needs;
       fprintf(stream_,
               "%s%s%s",
               cpu_features_prefix_,
-              features.str().c_str(),
+              features.c_str(),
               cpu_features_suffix_);
     }
   }

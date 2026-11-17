@@ -43,7 +43,15 @@ namespace aarch64 {
 // It provides:
 //  - the set of CPU features required by the most recently decoded instruction,
 //  - a cumulative set of encountered CPU features,
-//  - an optional list of 'available' CPU features.
+//  - an optional list of 'available' CPU features,
+//  - the requirements of the most recently decoded instruction, and the
+//    cumulative requirements, as `CPUFeatureRequirements` values.
+//
+// The `CPUFeatures` interface is the original one, and keeps its historical
+// behaviour: where an instruction can be provided by more than one feature, the
+// `available` list is used as a hint to choose one. The
+// `CPUFeatureRequirements` interface is exact and independent of `available`:
+// it records every alternative that would be sufficient.
 //
 // Primarily, this allows the Disassembler and Simulator to share the same CPU
 // features logic. However, it can be used standalone to scan code blocks for
@@ -61,6 +69,11 @@ class CPUFeaturesAuditor : public DecoderVisitor {
   //     in `available` when one of these instructions is encountered, then the
   //     auditor will record that feature. Otherwise, it will record _both_
   //     features.
+  //
+  //     This hint only affects the historical `CPUFeatures` queries
+  //     (`GetInstructionFeatures`, `GetSeenFeatures` and
+  //     `InstructionIsAvailable`). The `CPUFeatureRequirements` queries are
+  //     exact and never depend on `available`.
   explicit CPUFeaturesAuditor(
       Decoder* decoder, const CPUFeatures& available = CPUFeatures::None())
       : available_(available), decoder_(decoder) {
@@ -78,6 +91,8 @@ class CPUFeaturesAuditor : public DecoderVisitor {
   void ResetSeenFeatures() {
     seen_ = CPUFeatures::None();
     last_instruction_ = CPUFeatures::None();
+    seen_requirements_ = CPUFeatureRequirements();
+    last_instruction_requirements_ = CPUFeatureRequirements();
   }
 
   // Query or set available CPUFeatures.
@@ -96,6 +111,20 @@ class CPUFeaturesAuditor : public DecoderVisitor {
 
   bool InstructionIsAvailable() const {
     return available_.Has(last_instruction_);
+  }
+
+  // Query the exact requirements of the last instruction visited by this
+  // auditor. This is independent of the `available` features list.
+  CPUFeatureRequirements GetInstructionRequirements() const {
+    return last_instruction_requirements_;
+  }
+
+  // Query the combined requirements of all instructions visited since
+  // construction (or the last call to `ResetSeenFeatures()`). Combining is a
+  // logical AND: an alternative of the result is the union of one alternative
+  // from each instruction.
+  CPUFeatureRequirements GetSeenRequirements() const {
+    return seen_requirements_;
   }
 
   // The common CPUFeatures interface operates on the available_ list.
@@ -122,6 +151,9 @@ class CPUFeaturesAuditor : public DecoderVisitor {
   CPUFeatures seen_;
   CPUFeatures last_instruction_;
   CPUFeatures available_;
+
+  CPUFeatureRequirements seen_requirements_;
+  CPUFeatureRequirements last_instruction_requirements_;
 
   Decoder* decoder_;
 
