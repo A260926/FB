@@ -14,6 +14,7 @@ using BufferT = nanovdb::HostBuffer;
 #include <nanovdb/GridHandle.h>
 #include <nanovdb/io/IO.h>
 #include <nanovdb/math/Ray.h>
+#include <nanovdb/tools/FogSession.h>
 
 #include "common.h"
 
@@ -41,6 +42,48 @@ void runNanoVDB(nanovdb::GridHandle<BufferT>& handle, int numIterations, int wid
     RayGenOp<Vec3T> rayGenOp(wBBoxDimZ, wBBoxCenter);
     CompositeOp     compositeOp;
 
+    // CPU path: integrate the world-space ray through the sparse hierarchy
+    // with a resumable FogSession instead of the old fixed-step product.
+    // A ray is clipped to the grid's index bounding box, then transformed
+    // back to world space so the session receives a finite interval.
+    //
+    // FogSession is a host-only CPU API, so when this translation unit is
+    // compiled by nvcc the device variant of the lambda is an inert stub; the
+    // runtime passes useCuda=false here, so only the host variant ever runs.
+    auto renderCpuOp = [width, height, rayGenOp, compositeOp, treeIndexBbox] __hostdev__(int start, int end, float* image, const GridT* grid) {
+#if defined(__CUDA_ARCH__)
+        (void)start; (void)end; (void)image; (void)grid;
+#else
+        for (int i = start; i < end; ++i) {
+            Vec3T rayEye;
+            Vec3T rayDir;
+            rayGenOp(i, width, height, rayEye, rayDir);
+            const RayT wRay(rayEye, rayDir);
+            RayT       iRay = wRay.worldToIndexF(*grid);
+            if (!iRay.clip(treeIndexBbox)) {
+                compositeOp(image, i, width, height, 0.0f, 0.0f);
+                continue;
+            }
+            const RayT clippedWorldRay = iRay.indexToWorldF(*grid);
+
+            nanovdb::tools::FogVolume volume;
+            volume.grid       = grid;
+            volume.extinction = 0.1;
+            volume.emission   = nanovdb::Vec3d(0.0);
+            nanovdb::tools::FogSession session({volume}, nanovdb::math::Ray<double>(nanovdb::Vec3d(clippedWorldRay.eye()),
+                                                                                    nanovdb::Vec3d(clippedWorldRay.dir()),
+                                                                                    double(clippedWorldRay.t0()),
+                                                                                    double(clippedWorldRay.t1())),
+                                               nanovdb::Vec3d(0.0));
+            while (!session.advance(1u << 14)) {
+            }
+            const float transmittance = float(session.result().transmittance);
+            compositeOp(image, i, width, height, 0.0f, 1.0f - transmittance);
+        }
+#endif
+    };
+
+#if defined(NANOVDB_USE_CUDA)
     auto renderOp = [width, height, rayGenOp, compositeOp, treeIndexBbox] __hostdev__(int start, int end, float* image, const GridT* grid) {
         // get an accessor.
         auto acc = grid->tree().getAccessor();
@@ -69,11 +112,12 @@ void runNanoVDB(nanovdb::GridHandle<BufferT>& handle, int numIterations, int wid
             compositeOp(image, i, width, height, 0.0f, 1.0f - transmittance);
         }
     };
+#endif
 
     {
         float durationAvg = 0;
         for (int i = 0; i < numIterations; ++i) {
-            float duration = renderImage(false, renderOp, width, height, h_outImage, h_grid);
+            float duration = renderImage(false, renderCpuOp, width, height, h_outImage, h_grid);
             //std::cout << "Duration(NanoVDB-Host) = " << duration << " ms" << std::endl;
             durationAvg += duration;
         }

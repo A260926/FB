@@ -341,6 +341,7 @@ set(NANOVDB_INCLUDE_MATH_FILES
 set(NANOVDB_INCLUDE_TOOLS_FILES
   tools/CreateNanoGrid.h
   tools/CreatePrimitives.h
+  tools/FogSession.h
   tools/GridBuilder.h
   tools/GridChecksum.h
   tools/GridStats.h
