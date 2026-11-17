@@ -1,0 +1,240 @@
+
+# SCReAM
+This project includes an implementation of SCReAM, a mobile optimised congestion control algorithm for realtime interactive media.
+
+## News
+- 2026-11-11 :
+  - Latency scaling of sclI disabled when L4S is enabled.
+  - Build date for BW test tool sender changed.
+- 2026-11-08 :
+  - Experimental adaptive target queue delay algorithm added (-expfeature 1).
+  - Build date for BW test tool sender changed.
+- 2026-11-06 :
+  -	virtualL4sAlpha scaling removed.
+  - Inconsistence against IETF draft on sclI fixed.
+  - Build date for BW test tool sender changed.
+- 2026-10-27 :
+  - latencyDiffCwndScale logic modified further, with increased robustness to scheduling delay jitter. 
+  - Build date for BW test tool sender changed.
+- 2026-10-20 :
+  - CWND undershoot avoidance modified.
+  - Congestion backoff interval changed to at most every sRtt.
+  - Congestion backoff reduction at large RTTs removed.
+  - Build date for BW test tool sender changed.
+- 2026-10-04 :
+  - latencyDiffCwndScale logic and constants changed.
+  - bytesInflightHeadroom reduced to 1.2 to make SCReAM work better (avoid large RTP queue) when SCReAM becomes CPU limited.
+  - kTotalAckedBitrateFraction restored back to 0.8.
+  - Additional frameSizeDev added to compensate for cases when the frame sizes are constantly higher than the nominal for the given target bitrate.
+  - Build date for BW test tool sender changed.	 
+- 2026-09-26 :
+  - latencyDiffCwndScale CWND increase scaling applied to also to L4S when CWND is low.
+  - kTotalAckedBitrateFraction reduced to 0.5.
+- 2026-09-19 :
+  -	RTCP feedback is changed to be fully RFC8888 compliant rather than following an older version of the draft.
+  - Build date for BW test tool sender/receiver changed, it is IMPORTANT to update both sender and receiver!
+- 2026-09-07 :
+  - latencyDiffCwndScale calculation modified further.
+  - CWND increase gain controlled by latencyDiffCwndScale.
+  - Build date for BW test tool sender changed.	 
+- 2026-09-02 :
+  - Relaxed pacing restricted when CE marking occurs.
+  - latencyDiffCwndScale calculation modified. 
+  - Build date for BW test tool sender changed.	 
+- 2026-08-30 :
+  - cwndI update function modified.
+  - Optional cyclic pacing function, selectable with -cyclicpacing option in BW test tool. Function can increase rate stability when sources are static (fixed frame sizes).
+  - Build date for BW test tool sender changed.	 
+- 2026-08-27 :
+  - Additional hold time for cwndI update.
+- 2026-08-26 :
+  - CWND inflection point scaling relaxed at high CWND (high bitrates).
+  - CWND increase scaled down by a factor 2, this gives a better match against the L4S throughput equation with more real L4S queues. 
+  - Slow decay l4sAlpha removed.
+  - Default postcongestion delay reduced to 50 RTTs.
+  - Build date for BW test tool sender changed.	 
+- 2026-08-23 :
+  - Existing window overhead and cwnd growth restriction adapted to work better with cellular access, configurable schedulingJitterMargin.
+  - postCogestionDelayRtts is configurable
+  - New SCReAM BW test tool parameters -jittermargin and -postcongdelay
+  - Build date for BW test tool sender changed
+- 2026-07-02 :
+  - cwndI update simplified
+- 2026-06-30 :
+  - Reduction of queue delay variations modified
+  - CWND reduction is restricted when target rate is below the ACKed bitrate
+  - New function increases robustness to link layer losses
+  - Experimental rate policer detection and remediation added
+  - Build date for BW test tool sender changed
+- 2026-05-07 :
+  - -burst option did not work correctly 
+  - Build date for BW test tool sender changed
+- 2026-04-30 :
+  - sRtt calculation slowed down when bytes in flight is considerably lower than cwnd (application limited).  
+- 2026-03-04 :
+  - Calculation of queueDelayDev changed. 
+  - Configurable estimatedJitter with function setEstimatedJitter
+  - Build date for BW test tool sender changed
+- 2026-01-21 :
+  - Calculation of queueDelayDev modified to be less sensitive to scheduling jitter
+   - Additional restrition of window headroom and rate increase applied when CWND/MSS is low
+  - RTCP adjusted for slightly less frequent feedback  
+  - Build date for BW test tool sender/receiver changed  
+- 2025-11-10 :
+  - virtual L4S backoff made faster
+  - Build date for BW test tool sender changed  
+- 2025-11-04 - 06 :
+  - l4sAlpha calculation use fast attack slow decay filter
+  - Reference window headroom made adaptive based on queue delay variation
+  - CWND increase restriction based on queue delay variation 
+  - Build date for BW test tool sender changed
+- 2025-10-16 :
+  - Delay and L4S based CC further modified for increased stability  
+  - Build date for BW test tool changed
+- 2025-10-15 :
+  - Delay based CC modified slightly
+  - L4S based CC action after long non-congested period is modified
+  - Build date for BW test tool changed
+- 2025-10-14 :
+  - Bug in congestion avoidance logic fixed
+  - Delay based and L4S CC stablity improved for large RTTs
+  
+Older version history is found here https://github.com/EricssonResearch/scream/blob/master/version-history.md 
+## What is SCReAM
+SCReAM (**S**elf-**C**locked **R**at**e** **A**daptation for **M**ultimedia) is a congestion control algorithm devised mainly for Video.
+Congestion control for WebRTC media is currently being standardized in the IETF RMCAT WG, the scope of the working group was to define requirements for congestion control and also to standardize a few candidate solutions.
+SCReAM is a congestion control candidate solution for WebRTC developed at Ericsson Research and optimized for good performance in wireless access.  
+
+The algorithm is an IETF experimental standard [1], a Sigcomm paper [2] and [3] explains the rationale behind the design of the algorithm in more detail. Because SCReAM as most other congestion control algorithms are continously improved over time, the current implementation available here has deviated from what is described in the papers and IETF RFC. The most important new development is addition of L4S support. In addition the algorithm has been modified to become more stable.
+
+As mentioned above, SCReAM was originally devised for WebRTC but is sofar not incorporated into that platform. Instead, SCReAM has found use as congestion control for remote controlled vehicles, cloud gaming demos and benchmarking of 5G networks with and without L4S support.
+
+Since standardization in RFC8298, SCReAM has undergone changes and a new V2 is described in https://datatracker.ietf.org/doc/draft-johansson-ccwg-rfc8298bis-screamv2/
+
+Test report(s) for SCReAM V2 is found here https://github.com/EricssonResearch/scream/blob/master/test-record.md 
+
+A test report at CableLabs L4S interop test in november 2024 shows that SCReAM V2 works fine when subject to competing flows over the same bottleneck. 
+https://github.com/EricssonResearch/scream/blob/master/CableLabs-L4S-interop-nov-2024-Ericsson.pdf 
+
+## What is L4S ?
+L4S is short for **L**ow **L**atency **L**ow **L**oss **S**calable thorughput, L4S is specified in [4]. A network node that is L4S capable can remark packets that have the ECT(1) code point set to CE. The marking threshold is set very low (milliseconds).
+
+A sender that is L4S capable sets the ECT(1) code point on outgoing packets. If CE packets are detected, then the sender should reduce the transmission rate in proportion to the amount of packets that are marked. A document that highlights how L4S improves performance for low latency applications is found in [https://github.com/EricssonResearch/scream/blob/master/L4S-Results.pdf](https://github.com/EricssonResearch/scream/blob/master/L4S-Results.pdf?raw=true)
+
+In steady state, 2 packets per RTT should be marked. The expected rate then becomes <br> rate = (2.0/pMark) * MSS * 8/RTT [bps]    
+How SCReAM (V2) manages this is illustrated in the figure below ![SCReAM V2 mark probability vs bitrate, RTT=25ms, 1360byte packets](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-RTT-25ms-1360B.png)  
+Figure 1 : SCReAM V2 bitrate as function of packet marking probability. RTT = 25ms, MSS=1360B. Dotted is theoretical, blue is actual
+
+
+### The more nitty gritty details
+Unlike many other congestion control algorithms that are rate based i.e. they estimate the network throughput and adjust the media bitrate accordingly, SCReAM is self-clocked which essentially means that the algorithm does not send in more data into a network than what actually exits the network.
+
+To achieve this, SCReAM implements a feedback protocol over RTCP that acknowledges received RTP packets.
+A congestion window is determined from the feedback, this congestion window determines how many RTP packets that can be in flight i.e. transmitted by not yet acknowledged, an RTP queue is maintained at the sender side to temporarily store the RTP packets pending transmission, this RTP queue is mostly empty but can temporarily become larger when the link throughput decreases.
+The congestion window is frequently adjusted for minimal e2e delay while still maintaining as high link utilization as possible. The use of self-clocking in SCReAM which is also the main principle in TCP has proven to work particularly well in wireless scenarios where the link throughput may change rapidly. This enables a congestion control which is robust to channel jitter, introduced by e.g. radio resource scheduling while still being able to respond promptly to reduced link throughput.
+SCReAM is optimized in house in a state of the art LTE system simulator for optimal performance in deployments where the LTE radio conditions are limiting. In addition, SCReAM is also optimized for good performance in simple bottleneck case such as those given in home gateway deployments. SCReAM is verified in simulator and in a testbed to operate in a rate range from a couple of 100kbps up to well over 100Mbps.
+The fact that SCReAM maintains a RTP queue on the sender side opens up for further optimizations to congestion, for instance it is possible to discard the contents of the RTP queue and replace with an I frame in order to refresh the video quickly at congestion.
+
+### SCReAM performance and behavior
+SCReAM has been evaluated in a number of experiments over the years. Some of these are exemplified below.
+
+
+A short [video](https://www.youtube.com/watch?v=_jBFu-Y0wwo) exemplifies the use of SCReAM in a small vehicle, remote controlled over a public LTE network. [8] explains the rationale behind the use of SCReAM in remote controlled applications over LTE/5G.
+
+#### ECN (Explicit Congestion Notification)
+SCReAM supports "classic" ECN, i.e. that the sending rate is reduced as a result of one or more ECN marked RTP packets in one RTT, similar to the guidelines in RFC3168. .
+
+In addition SCReAM also supports L4S, i.e that the sending rate is reduced proportional to the fraction of the RTP packets that are ECN-CE marked. This enables lower network queue delay.  
+
+Below is shown two simulation examples with a simple 50Mbps 25ms. The video trace is from a video encoder.
+
+L4S gives a somewhat lower media rate, the reason is that a larger headroom is added to ensure the low delay, considering the varying output rate of the video encoder. This is self-adjusting by inherent design because the larger frames hit the L4S enabled queue more and thus causes more marking. The average bitrate would increase if the frame size variations are smaller.
+
+![Simple bottleneck simulation SCReAM no L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-noL4S.png)
+Figure 2 : SCReAM V2 without L4S support
+
+![Simple bottleneck simulation SCReAM with L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-V2-L4S.png)
+Figure 3 : SCReAM V2 with L4S support. L4S ramp-marker (Th_low=2ms, Th_high=10ms)
+
+Another example with the SCreAM BW test tool over a 50Mbps, 25ms bottleneck with DualPi2 AQM 
+![SCReAM V2 no L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-DualPi2-50Mbps-25ms-noL4S.png)
+Figure 4 : SCReAM V2 without L4S support, 50Mbps, 25ms bottleneck with DualPi2 AQM 
+
+![SCReAM V2 L4S support](https://github.com/EricssonResearch/scream/blob/master/images/SCReAM-DualPi2-50Mbps-25ms-L4S.png)
+Figure 5 : SCReAM V2 with L4S support, 50Mbps, 25ms bottleneck with DualPi2 AQM 
+
+SCReAM is also implemented in a remote controlled car prototype. The two videos below show how it works in different situations
+- [Boliden Kankberg mine](https://www.youtube.com/watch?v=r7QxdTP3jB0 "Boliden Kankberg mine")
+- [Winter wonderland](https://www.youtube.com/watch?v=eU1crtEvMv4 "Winter wonderland")
+
+SCReAM V2 was also implemented for MWC 2023 demo in collaboration between Ericsson, DT and Vay. https://vay.io/press-release/mwc-ericsson-deutsche-telekom-and-vay-show-live-teledrive-technology-demo-with-5g/
+
+----------
+
+A older comparison against GCC (Google Congestion Control) is shown in [5]. Final presentations are found in [6] and [7].that show how SCReAM performs
+
+
+SCReAM has been successfully be used on more recent experiments, examples will be added later.
+
+## Build
+The SCReAM code comes in two (three) applications
+
+- Windows based test application : This application implements a simple bottleneck and does only local simulation. Open the scream.sln application in Visual studio and build.
+- Linux based BW test application :  Makes in possible to benchmark the throughput live networks and test beds. The tool models a video encoder. See https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx for further instructions.
+- multicam version :  See ./multicam/README.md for details.
+- gstreamer plugin :  See ./gstscream/README.md for details.
+
+### The code
+The main SCReAM algorithm components are found in the C++ classes:
+
+- ScreamTx : SCReAM sender algorithm
+  - ScreamV1Tx : Older version, removed
+  - ScreamV2Tx, ScreamV2Stream : Version
+
+- ScreamRx : SCReAM receiver algorithm
+
+- RtpQueue : Rudimentary RTP packet queue
+
+A few support classes for experimental use are implemented in:
+
+- VideoEnc : A very simple model of a Video encoder
+
+
+- NetQueue : Simple delay and bandwidth limitation
+
+For more information on how to use the code in multimedia clients or in experimental platforms, please see [https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx](https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx?raw=true)
+
+### Feedback format
+The feedback format is according to [9]. The feedback interval depends heavily on the media bitrate.
+
+### Build SCReAM BW test tool
+The SCReAM BW test application runs on e.g Ubuntu 16.04 and later. The build steps are:
+
+```
+cmake .
+make
+```
+
+You need git, cmake, make and g++ installed
+
+A SCReAM BW test tool user guide is found at [https://github.com/EricssonResearch/scream/blob/master/SCReAM-BW-test-tool.docx](https://github.com/EricssonResearch/scream/blob/master/SCReAM-BW-test-tool.docx?raw=true)
+
+
+# References
+[1] https://tools.ietf.org/html/rfc8298
+
+[2] Sigcomm paper http://dl.acm.org/citation.cfm?id=2631976
+
+[3] Sigcomm presentation http://conferences.sigcomm.org/sigcomm/2014/doc/slides/150.pdf
+
+[4] https://tools.ietf.org/html/rfc9331
+
+[5] IETF RMCAT presentation, comparison against Google Congestion Control (GCC) http://www.ietf.org/proceedings/90/slides/slides-90-rmcat-3.pdf
+
+[6] IETF RMCAT presentation (final for WGLC) : https://www.ietf.org/proceedings/96/slides/slides-96-rmcat-0.pdf
+
+[7] IETF RMCAT presention , SCReAM for remote controlled vehicles over 4G/5G : https://datatracker.ietf.org/meeting/100/materials/slides-100-rmcat-scream-experiments
+
+[8] Adaptive Video with SCReAM over LTE for Remote-Operated Working Machines : https://www.hindawi.com/journals/wcmc/2018/3142496/
+
+[9] https://tools.ietf.org/html/rfc8888
