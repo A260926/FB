@@ -1,0 +1,54 @@
+//
+//  bsdfnode.h
+//  c-ray
+//
+//  Created by Valtteri Koskivuori on 29/11/2020.
+//  Copyright © 2020-2024 Valtteri Koskivuori. All rights reserved.
+//
+
+#pragma once
+
+#include <v.h>
+
+#include "../datatypes/lightray.h"
+#include "../../common/color.h"
+#include "../../common/mempool.h"
+#include "valuenode.h"
+#include "vectornode.h"
+#include "colornode.h"
+#include "../datatypes/hitrecord.h"
+#include "nodebase.h"
+
+struct bsdfSample {
+	struct lightRay out;
+	float pdf;
+	struct color weight;
+	struct color emitted; // FIXME: Not really the right place for this
+};
+
+//TODO: Expand and refactor to match a standard bsdf signature with eval, sample and pdf
+struct bsdfNode {
+	struct nodeBase base;
+	struct bsdfSample (*sample)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record);
+};
+
+struct bsdf_buffer {
+	const struct bsdfNode **bsdfs;
+	struct cr_shader_node **descriptions;
+};
+
+void bsdf_buffer_free(struct bsdf_buffer *b);
+
+#include "shaders/diffuse.h"
+#include "shaders/glass.h"
+#include "shaders/metal.h"
+#include "shaders/mix.h"
+#include "shaders/plastic.h"
+#include "shaders/transparent.h"
+#include "shaders/add.h"
+#include "shaders/background.h"
+#include "shaders/emission.h"
+#include "shaders/isotropic.h"
+#include "shaders/translucent.h"
+
+const struct bsdfNode *build_bsdf_node(struct cr_scene *s_ext, const struct cr_shader_node *desc);
