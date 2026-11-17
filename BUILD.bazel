@@ -1,0 +1,94 @@
+load("@community//build:tests-options.bzl", "jps_test")
+load("@rules_jvm//:jvm.bzl", "jvm_library")
+load("//platform/build-scripts/bazel-rules:content_module_jar.bzl", "content_module_jar")
+
+filegroup(
+    name = "testData",
+    srcs = glob(["testData/**"]),
+    visibility = ["//visibility:public"],
+)
+
+jps_test(
+    name = "java-decompiler-engine-tests_test",
+    timeout = "long",
+    data = [":testData"],
+    tags = ["community-java-tests"],
+    runtime_deps = [":java-decompiler-engine-tests_test_lib"],
+)
+### skip generation section `test intellij.java.decompiler.engine.tests`
+
+### auto-generated section `dev intellij.java.decompiler.engine` start
+content_module_jar(module = ":engine")
+### auto-generated section `dev intellij.java.decompiler.engine` end
+
+### auto-generated section `build intellij.java.decompiler.engine` start
+jvm_library(
+    name = "engine",
+    srcs = glob(
+        [
+            "src/**/*.kt",
+            "src/**/*.java",
+            "src/**/*.form",
+        ],
+        allow_empty = True,
+    ),
+    manifest_lines = [
+        "Main-Class: org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler",
+        "Automatic-Module-Name: org.jetbrains.java.decompiler",
+    ],
+    module_name = "intellij.java.decompiler.engine",
+    resource_strip_prefix = "resources",
+    resources = glob(
+        ["resources/**/*"],
+    ),
+    visibility = ["//visibility:public"],
+    deps = ["//libraries/jetbrains/annotations"],
+)
+### auto-generated section `build intellij.java.decompiler.engine` end
+
+### auto-generated section `iml intellij.java.decompiler.engine` start
+exports_files(
+    [
+        "intellij.java.decompiler.engine.iml",
+        "resources/intellij.java.decompiler.engine.xml",
+    ],
+    visibility = ["//visibility:public"],
+)
+### auto-generated section `iml intellij.java.decompiler.engine` end
+
+### auto-generated section `build intellij.java.decompiler.engine.tests` start
+jvm_library(
+    name = "java-decompiler-engine-tests_test_lib",
+    testonly = True,
+    srcs = glob(
+        [
+            "test/**/*.kt",
+            "test/**/*.java",
+            "test/**/*.form",
+        ],
+        allow_empty = True,
+    ),
+    module_name = "intellij.java.decompiler.engine.tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        # do not sort,
+        "//libraries/jetbrains/annotations",
+        "//java/java-runtime:rt",
+        "//libraries/junit6",
+        "//libraries/junit6-params",
+        "//libraries/junit6-launcher",
+        "@lib//:eclipse",
+        "//libraries/groovy",
+        "//plugins/java-decompiler/engine",
+    ],
+)
+### auto-generated section `build intellij.java.decompiler.engine.tests` end
+
+### auto-generated section `iml intellij.java.decompiler.engine.tests` start
+exports_files(
+    [
+        "intellij.java.decompiler.engine.tests.iml",
+    ],
+    visibility = ["//visibility:public"],
+)
+### auto-generated section `iml intellij.java.decompiler.engine.tests` end
