@@ -76,6 +76,65 @@ Assuming that you have managed to read the ELF symbol table, the easiest way to 
 
 A final note is that only function `disasm_buffer` uses the symbol table to select (and switch) the mode, based on the address. The `disasm_thumb` or `disasm_arm` functions ignore the symbol table.
 
+# Mapping symbols
+
+An executable section may mix ARM instructions, Thumb instructions and data. The ELF format describes such regions with *mapping symbols* (`$a`, `$t` and `$d`). These are handled separately from the ordinary symbol names:
+
+    bool disasm_mapping(ARMSTATE *state, uint32_t address, int mode);
+    void disasm_clear_mappings(ARMSTATE *state);
+
+A mapping symbol marks the start of a range with a fixed mode: `ARMMODE_ARM`, `ARMMODE_THUMB` or `ARMMODE_DATA`. The marker governs the half-open interval from its own address up to the next mapping symbol. The list is kept sorted on address; adding the same mode at the same address merges into the existing entry, and adding a *different* mode at an address that is already mapped returns `false`. Mappings are independent of the ordinary symbol names and never replace a function name at the same address.
+
+`disasm_buffer` applies a mapping symbol only after decoding has reached its address, so markers ahead of the current position never influence the mode. When no mapping symbol is in effect, `disasm_buffer` falls back to the mode passed to it (and to the ordinary symbol rules described above). In a code range, a mapping symbol takes precedence over the literal-pool speculation: an address that an `LDR` guessed to be a literal pool is still decoded as an instruction when it lies in an ARM or Thumb mapping range.
+
+In an `ARMMODE_DATA` range, no instruction decoding is attempted at all: the bytes are emitted one by one, in order, as `.byte 0xNN` (two lower-case hexadecimal digits). No branches, symbols or literal pools are inferred from data. Likewise, ARM (4-byte) and Thumb (2- or 4-byte) instructions never consume bytes that belong to the next mapping range, and a remainder at the end of a range that is too short for a complete instruction is emitted byte-by-byte as well.
+
+Leaving Thumb code (for data or for ARM code) or encountering such a fragment clears the IT state, so a predicate is never inherited from a block of Thumb code after an intervening non-Thumb range. Decoding does not add any new IT-state information beyond what the IT instructions themselves provide.
+
+Mapping symbols are freed by `disasm_clear_mappings` and by `disasm_cleanup`.
+
+## ELF sections
+
+The optional `armelf.c`/`armelf.h` helper loads the symbols of one executable section from a little-endian ARM ELF32 file and disassembles it through `disasm_buffer`:
+
+    bool disasm_elf_section(ARMSTATE *state, const uint8_t *image, size_t size,
+                            uint32_t section_index,
+                            DISASM_CALLBACK callback, void *user);
+
+Supported input is a little-endian `EM_ARM` ELF32 file of type `ET_REL` or `ET_EXEC`, and the selected section must be an executable `SHT_PROGBITS` section. Any other input makes the function return `false`.
+
+For every `SHT_SYMTAB` section, `sh_link` locates the associated string table. Only symbols whose `st_shndx` refers to the selected section are imported, so symbols from other sections never leak in.
+
+* Local `STT_NOTYPE` symbols named `$a`, `$t` or `$d` — also with a dot suffix such as `$a.1` or `$t.0` — are installed with `disasm_mapping`.
+* `STT_FUNC` symbols are installed with `disasm_symbol`, after clearing the Thumb address bit (bit 0). The low bit selects the mode recorded for the symbol; the name is then available to the ordinary comment lookup.
+
+For `ET_REL` files, `st_value` is a section offset and is converted to the section's `sh_addr` coordinate space; for `ET_EXEC`, `st_value` is already an address in that space. Every call rebuilds the ordinary symbols, the mappings and the code pool for the selected section, while the display options set by `disasm_init` (and any literal blocks added with `disasm_literals`) are preserved. Consequently, disassembling another section with the same state yields independent results. The image is treated as read-only and is never modified.
+
+Example:
+
+    #include <stdio.h>
+    #include "armdisasm.h"
+    #include "armelf.h"
+
+    static bool on_line(uint32_t address, const char *text, void *user)
+    {
+      (void)user;
+      printf("%08x  %s\n", address, text);
+      return true;             /* return false to abort */
+    }
+
+    int main(void)
+    {
+      /* read the whole ELF file into `image` (see the test program) */
+      ARMSTATE state;
+      disasm_init(&state, DISASM_ADDRESS | DISASM_COMMENT);
+      bool ok = disasm_elf_section(&state, image, imagesize, 1, on_line, NULL);
+      disasm_cleanup(&state);
+      return ok ? 0 : 1;
+    }
+
+The mappings installed by `disasm_elf_section` remain in the state, so a following direct call to `disasm_buffer` on the same address range uses them as well.
+
 # Symbolic information and string literals
 
 If you have symbolic information for the binary code, you can add this with function `disasm_symbol` prior to starting to disassemble instructions.

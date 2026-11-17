@@ -1,0 +1,98 @@
+e001        b       0x0000006
+d33a        bcc     0x000007a
+d048        beq     0x0000098
+e7ea        b       0x8000474
+f7ff fed1   bl      0x80002d4
+dbfa        blt     0x800041c
+4770        bx      lr
+4790        blx     r2
+f7ff efea   blx     0x0000080
+af00        add     r7, sp, #0
+3304        adds    r3, #4
+f107 0308   add     r3, r7, #8
+4013        ands    r3, r2
+b12c        cbz     r4, 0x8001598
+fab2 f282   clz     r2, r2
+2a00        cmp     r2, #0
+f5b4 6faf   cmp     r4, #1400
+407c        eors    r4, r7
+4b09        ldr     r3, [pc, #36]
+687a        ldr     r2, [r7, #4]
+f852 3023   ldr     r3, [r2, r3, lsl #2]
+f85f 1ef0   ldr     r1, [pc, #-3824]
+5cd1        ldrb    r1, [r2, r3]
+880b        ldrh    r3, [r1, #0]
+f852 1eff   ldrt    r1, [r2, #255]
+0783        lsls    r3, r0, #30
+079d        lsls    r5, r3, #30
+fa01 f202   lsl     r2, r1, r2
+2208        movs    r2, #8
+46bd        mov     sp, r7
+f44f 5200   mov     r2, #8192
+f644 631f   movw    r3, #19999
+f3ef 8311   mrs     r3, BASEPRI
+f381 8811   msr     BASEPRI, r1
+4353        muls    r3, r2
+bf00        nop
+ea41 0300   orr     r3, r1, r0
+f892 1fab   ldrb    r1, [r2, #4011]
+f892 ffab   pld     [r2, #4011]
+bd30        pop     {r4, r5, pc}
+bd80        pop     {r7, pc}
+b530        push    {r4, r5, lr}
+b580        push    {r7, lr}
+b4ff        push    {r0-r7}
+b5ff        push    {r0-r7, lr}
+6078        str     r0, [r7, #4]
+60bb        str     r3, [r7, #8]
+f8c3 20f0   str     r2, [r3, #240]
+9300        str     r3, [sp, #0]
+70fb        strb    r3, [r7, #3]
+8003        strh    r3, [r0, #0]
+e942 5504   strd    r5, r5, [r2, #-16]
+e942 5502   strd    r5, r5, [r2, #-8]
+b084        sub     sp, #16
+1e54        subs    r4, r2, #1
+3c01        subs    r4, #1
+1ad3        subs    r3, r2, r3
+df01        swi     #1
+b2ca        uxtb    r2, r1
+b299        uxth    r1, r3
+bf1c        itt     ne
+fa22 f20c   lsrne   r2, r2, ip
+4313        orrne   r3, r2
+bf04        itt     eq
+f851 3b04   ldreq   r3, [r1], #4
+3004        addeq   r0, #4
+e0a13082    adc     r3, r1, r2, lsl #1
+e59f00f0    ldr     r0, [pc, #240]
+e2400024    sub     r0, r0, #36
+e321f0db    msr     CPSR_c, #219
+e1a0d000    mov     sp, r0
+e2400004    sub     r0, r0, #4
+e1a0b001    mov     fp, r1
+e59f108c    ldr     r1, [pc, #140]
+e1510003    cmp     r1, r3
+34910004    ldrcc   r0, [r1], #4
+30244000    eorcc   r4, r4, r0
+3afffffb    bcc     0x000009c
+e12fff12    bx      r2
+e12fff32    blx     r2
+fafffff4    blx     0x0000080
+0000049c    muleq   r0, ip, r4
+3fffcfff    swicc   0xffcfff
+e92d0030    push    {r4, r5}
+e8bd0030    pop     {r4, r5}
+e1a03083    lsl     r3, r3, #1
+e7d01003    ldrb    r1, [r0, r3]
+e1d210b8    ldrh    r1, [r2, #8]
+e0c20293    smull   r0, r2, r3, r2
+e10f0000    mrs     r0, CPSR
+9e6495a3    cdpls   5, 6, cr9, cr4, cr3, {5}
+0edb8832    mrceq   8, 6, r8, cr11, cr2, {1}
+be0b1010    mcrlt   0, 0, r1, cr11, cr0, {0}
+1db71064    ldcne   0, cr1, [r7, #400]!
+f5d3f000    pld     [r3, #0]
+e1413094    swpb    r3, r4, [r1]
+e6842351    pkhtb   r2, r4, r1, asr #6
+e6e141d2    usat    r4, #1, r2, asr #3

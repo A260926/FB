@@ -19,6 +19,7 @@
 #define _ARMDISASM_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct ARMSYMBOL {
@@ -38,6 +39,11 @@ typedef struct ARMDATA {
   uint32_t size;      /**< size of the block */
   uint8_t *block;     /**< copy of the block */
 } ARMDATA;
+
+typedef struct ARMMAPPING {
+  uint32_t address;   /**< start address of the mapping interval */
+  int mode;           /**< ARMMODE_ARM, ARMMODE_THUMB or ARMMODE_DATA */
+} ARMMAPPING;
 
 typedef struct {
   char text[128];     /**< decoded instruction (optionally prefixed with address/hex values) */
@@ -62,6 +68,10 @@ typedef struct {
   int poolcount;      /**< number of valid entries in the code map */
   int poolsize;       /**< number of allocated entries in the code map */
 
+  ARMMAPPING *mappings; /**< list of mapping-symbol ranges (sorted on address) */
+  int mappingcount;     /**< number of valid entries in the mapping list */
+  int mappingsize;      /**< number of allocated entries in the mapping list */
+
   ARMDATA *literals;  /**< pointer to optional memory blocks for decoding literal data */
   int literals_count; /**< count of literal data blocks */
 } ARMSTATE;
@@ -84,6 +94,9 @@ enum {
 };
 void disasm_symbol(ARMSTATE *state, const char *name, uint32_t address, int mode);
 void disasm_address(ARMSTATE *state, uint32_t address);
+
+bool disasm_mapping(ARMSTATE *state, uint32_t address, int mode);
+void disasm_clear_mappings(ARMSTATE *state);
 
 bool disasm_thumb(ARMSTATE *state, uint16_t hw, uint16_t hw2);
 bool disasm_arm(ARMSTATE *state, uint32_t w);
