@@ -150,6 +150,18 @@ public:
 		// compares.
 		bool relax_nan_checks = false;
 
+		// Emit explicit bounds guards around scalar/vector loads and stores made through ordinary
+		// OpAccessChain (and chained access chains) into logical StorageBuffer (SSBO) blocks.
+		// Out-of-bounds reads produce a zero of the result type, and out-of-bounds stores are dropped,
+		// instead of relying on the driver's implicit clamping of the index.
+		//
+		// Only desktop, non-ES GLSL 430 compute shaders are supported. Enabling this on any other
+		// target, or using an SSBO access which cannot be guarded (cross-function pointer parameters,
+		// pointer Phi/Select, OpCopyMemory, atomics, physical storage buffer pointers or whole-struct
+		// accesses), results in a compile-time error rather than partially guarded output.
+		// Defaults to off; when off, output and reflection are unchanged.
+		bool robust_buffer_access = false;
+
 		// Loading row-major matrices from UBOs on older AMD Windows OpenGL drivers is problematic.
 		// To load these types correctly, we must generate a wrapper. them in a dummy function which only purpose is to
 		// ensure row_major decoration is actually respected.
@@ -804,6 +816,42 @@ protected:
 	std::string access_chain(uint32_t base, const uint32_t *indices, uint32_t count, const SPIRType &target_type,
 	                         AccessChainMeta *meta = nullptr, bool ptr_chain = false,
 	                         const SPIRType *untyped_data_type = nullptr);
+
+	// One dynamic indexing step of a robust-buffer access chain.
+	// The index operand is evaluated exactly once and in order; fixed-length arrays use a constant
+	// bound derived from the type, while runtime arrays use the actual .length() of the buffer array,
+	// so an empty runtime array rejects every access.
+	struct RobustIndexCheck
+	{
+		uint32_t index_id = 0;
+		bool runtime_sized = false;
+		// GLSL expression for the (exclusive) upper bound when the step is not runtime sized.
+		std::string fixed_bound;
+	};
+
+	// Robust buffer access support (Options::robust_buffer_access).
+	void validate_robust_buffer_access_target() const;
+	void analyze_robust_buffer_access_support();
+	bool robust_ssbo_pointer_is_supported(uint32_t ptr_id);
+	bool resolve_robust_access_chain(uint32_t ptr_id, uint32_t &root_id, SmallVector<uint32_t> &flat_indices);
+	bool build_robust_ssbo_checks(uint32_t ptr_id, SmallVector<RobustIndexCheck> &checks);
+	void emit_robust_ssbo_access(uint32_t result_type, uint32_t result_id, uint32_t ptr_id, uint32_t value_id,
+	                             bool is_store);
+	void emit_robust_ssbo_load(uint32_t result_type, uint32_t result_id, uint32_t ptr_id);
+	void emit_robust_ssbo_store(uint32_t ptr_id, uint32_t value_id);
+	std::unordered_set<uint32_t> robust_ssbo_variables;
+
+	struct RobustAccessChainInfo
+	{
+		uint32_t base = 0;
+		uint32_t type_id = 0; // OpAccessChain result pointer type
+		SmallVector<uint32_t> indices;
+		bool ptr_chain = false;
+	};
+	std::unordered_map<uint32_t, RobustAccessChainInfo> robust_access_chains;
+	// Per-block cache of index SSA id -> emitted uint temporary, so a side-effecting index referenced
+	// by several accesses in the same block is evaluated exactly once. Reset at the start of each block.
+	std::unordered_map<uint32_t, uint32_t> robust_index_temp_cache;
 
 	std::string flattened_access_chain(uint32_t base, const uint32_t *indices, uint32_t count,
 	                                   const SPIRType &target_type, uint32_t offset, uint32_t matrix_stride,

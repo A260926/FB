@@ -847,6 +847,11 @@ string CompilerGLSL::compile()
 	update_active_builtins();
 	analyze_image_and_sampler_usage();
 	analyze_interlocked_resource_usage();
+	if (options.robust_buffer_access)
+	{
+		validate_robust_buffer_access_target();
+		analyze_robust_buffer_access_support();
+	}
 	if (!inout_color_attachments.empty())
 		emit_inout_fragment_outputs_copy_to_subpass_inputs();
 	if (has_extension("GL_EXT_abort"))
@@ -12609,6 +12614,7 @@ void CompilerGLSL::register_control_dependent_expression(uint32_t expr)
 void CompilerGLSL::emit_block_instructions(SPIRBlock &block)
 {
 	current_emitting_block = &block;
+	robust_index_temp_cache.clear();
 
 	if (backend.requires_relaxed_precision_analysis)
 	{
@@ -12697,6 +12703,500 @@ void CompilerGLSL::handle_store_to_invariant_variable(uint32_t store_id, uint32_
 		return;
 
 	disallow_forwarding_in_expression_chain(*expr);
+}
+
+void CompilerGLSL::validate_robust_buffer_access_target() const
+{
+	// Robust SSBO guarding is deliberately scoped down. The bounds checks rely on desktop GLSL 430
+	// SSBO .length() semantics and plain int/uint arithmetic, so reject every other target up front.
+	if (options.es)
+		SPIRV_CROSS_THROW("robust_buffer_access is only supported for desktop (non-ES) GLSL.");
+	if (options.version < 430)
+		SPIRV_CROSS_THROW("robust_buffer_access requires at least GLSL 430.");
+	if (get_execution_model() != ExecutionModelGLCompute)
+		SPIRV_CROSS_THROW("robust_buffer_access is only supported for GLCompute entry points.");
+	if (ir.addressing_model == AddressingModelPhysicalStorageBuffer64)
+		SPIRV_CROSS_THROW("robust_buffer_access does not support physical storage buffer pointers.");
+}
+
+void CompilerGLSL::analyze_robust_buffer_access_support()
+{
+	robust_ssbo_variables.clear();
+	robust_access_chains.clear();
+
+	// Collect every logical StorageBuffer block variable. These are the only resources this mode guards.
+	ir.for_each_typed_id<SPIRVariable>([&](uint32_t, SPIRVariable &var) {
+		if (var.storage == StorageClassStorageBuffer)
+			robust_ssbo_variables.insert(var.self);
+	});
+
+	auto points_into_ssbo = [&](uint32_t id) -> bool {
+		auto *backing = maybe_get_backing_variable(id);
+		return backing && robust_ssbo_variables.count(backing->self) != 0;
+	};
+
+	auto reject = [&](const char *what, uint32_t id) {
+		SPIRV_CROSS_THROW(join("robust_buffer_access: ", what,
+		                       " involving a storage buffer (id ", convert_to_string(id),
+		                       ") is not supported; cannot emit partially guarded shader."));
+	};
+
+	// First, record the structural information of every access chain rooted at an SSBO so the guard
+	// builder can reconstruct the per-level array/vector indexing without re-emitting a chain twice.
+	ir.for_each_typed_id<SPIRFunction>([&](uint32_t, SPIRFunction &func) {
+		for (auto block_id : func.blocks)
+		{
+			auto &block = get<SPIRBlock>(block_id);
+			for (auto &instr : block.ops)
+			{
+				auto opcode = static_cast<Op>(instr.op);
+				if (opcode != OpAccessChain && opcode != OpInBoundsAccessChain && opcode != OpPtrAccessChain)
+					continue;
+
+				auto *ops = stream(instr);
+				uint32_t result_id = ops[1];
+				uint32_t base_id = ops[2];
+
+				if (!points_into_ssbo(base_id) && !points_into_ssbo(result_id))
+					continue;
+
+				RobustAccessChainInfo info;
+				info.base = base_id;
+				info.type_id = ops[0];
+				info.ptr_chain = (opcode == OpPtrAccessChain);
+				for (uint32_t i = 3; i < instr.length; i++)
+					info.indices.push_back(ops[i]);
+				robust_access_chains[result_id] = std::move(info);
+			}
+		}
+	});
+
+	// Then, reject every SSBO-touching access pattern this mode does not know how to guard.
+	ir.for_each_typed_id<SPIRFunction>([&](uint32_t, SPIRFunction &func) {
+		for (auto block_id : func.blocks)
+		{
+			auto &block = get<SPIRBlock>(block_id);
+			for (auto &instr : block.ops)
+			{
+				auto opcode = static_cast<Op>(instr.op);
+				auto *ops = stream(instr);
+
+				switch (opcode)
+				{
+				case OpAtomicExchange:
+				case OpAtomicCompareExchange:
+				case OpAtomicIIncrement:
+				case OpAtomicIDecrement:
+				case OpAtomicIAdd:
+				case OpAtomicFAddEXT:
+				case OpAtomicISub:
+				case OpAtomicSMin:
+				case OpAtomicUMin:
+				case OpAtomicSMax:
+				case OpAtomicUMax:
+				case OpAtomicAnd:
+				case OpAtomicOr:
+				case OpAtomicXor:
+					if (points_into_ssbo(ops[2]))
+						reject("atomic operation", ops[2]);
+					break;
+
+				case OpAtomicLoad:
+					if (points_into_ssbo(ops[2]))
+						reject("atomic operation", ops[2]);
+					break;
+
+				case OpAtomicStore:
+					// OpAtomicStore has no result id, so its pointer operand is first.
+					if (points_into_ssbo(ops[0]))
+						reject("atomic operation", ops[0]);
+					break;
+
+				case OpCooperativeMatrixLoadKHR:
+				case OpCooperativeMatrixStoreKHR:
+					if (points_into_ssbo(ops[2]))
+						reject("cooperative matrix load/store", ops[2]);
+					break;
+
+				case OpCopyMemory:
+					if (points_into_ssbo(ops[0]) || points_into_ssbo(ops[1]))
+						reject("OpCopyMemory", ops[0]);
+					break;
+
+				case OpLoad:
+					// Every SSBO load must be guardable, otherwise we would emit an unguarded access.
+					if (points_into_ssbo(ops[2]) && !robust_ssbo_pointer_is_supported(ops[2]))
+						reject("unsupported storage buffer load", ops[2]);
+					break;
+
+				case OpStore:
+					// Every SSBO store must be guardable for the pointer's scalar/vector value type.
+					if (points_into_ssbo(ops[0]) && !robust_ssbo_pointer_is_supported(ops[0]))
+						reject("unsupported storage buffer store", ops[0]);
+					break;
+
+				case OpPtrAccessChain:
+					if (points_into_ssbo(ops[1]))
+						reject("OpPtrAccessChain", ops[1]);
+					break;
+
+				case OpSelect:
+				{
+					// Pointer selection produces a pointer which could be an SSBO pointer.
+					auto &result_type = get<SPIRType>(ops[0]);
+					if (result_type.pointer &&
+					    (points_into_ssbo(ops[3]) || points_into_ssbo(ops[4])))
+						reject("pointer OpSelect", ops[1]);
+					break;
+				}
+
+				case OpFunctionCall:
+				{
+					// Passing an SSBO pointer across a function boundary is not in scope.
+					uint32_t arg_count = instr.length - 3;
+					for (uint32_t i = 0; i < arg_count; i++)
+					{
+						if (points_into_ssbo(ops[3 + i]))
+							reject("storage buffer pointer function argument", ops[3 + i]);
+					}
+					break;
+				}
+
+				default:
+					break;
+				}
+			}
+		}
+	});
+
+	// Pointer Phi nodes are lowered to function-scope variables by the parser; flag any such variable
+	// which carries an SSBO pointer so guarded loads/stores cannot accidentally read through it.
+	ir.for_each_typed_id<SPIRVariable>([&](uint32_t, SPIRVariable &var) {
+		if (var.phi_variable)
+		{
+			auto &type = get<SPIRType>(var.basetype);
+			if (type.pointer && type.storage == StorageClassStorageBuffer)
+				reject("pointer Phi", var.self);
+		}
+	});
+}
+
+bool CompilerGLSL::robust_ssbo_pointer_is_supported(uint32_t ptr_id)
+{
+	auto *backing = maybe_get_backing_variable(ptr_id);
+	if (!backing || robust_ssbo_variables.count(backing->self) == 0)
+		return false;
+
+	// Only ordinary access-chain pointers rooted directly at the SSBO variable are guarded.
+	// Anything else (pointer parameters, Phi/Select pointers, ...) was rejected during analysis,
+	// but guard here too so an unguarded access can never slip through.
+	auto chain_itr = robust_access_chains.find(ptr_id);
+	if (chain_itr == end(robust_access_chains) || chain_itr->second.ptr_chain)
+		return false;
+
+	// The access-chain result pointer type is always a valid SPIRType, even during the analysis pass
+	// before SSA expressions exist. Derive the accessed value type from its pointee type.
+	const SPIRType &ptr_type = get<SPIRType>(chain_itr->second.type_id);
+	if (!is_pointer(ptr_type))
+		return false;
+	const SPIRType &value_type = get_pointee_type(ptr_type);
+
+	// Only 32-bit int/uint/float scalars and vectors are in scope.
+	if (value_type.basetype != SPIRType::Int && value_type.basetype != SPIRType::UInt &&
+	    value_type.basetype != SPIRType::Float)
+		return false;
+	if (value_type.width != 32 || value_type.columns != 1 || value_type.vecsize > 4 ||
+	    !value_type.array.empty() || value_type.basetype == SPIRType::Struct)
+		return false;
+	return true;
+}
+
+bool CompilerGLSL::resolve_robust_access_chain(uint32_t ptr_id, uint32_t &root_id,
+                                                SmallVector<uint32_t> &flat_indices)
+{
+	flat_indices.clear();
+
+	// Walk ordinary (non-Ptr) access chains back until we reach the block variable, collecting each
+	// chain's index list. Chained access chains are flattened so that outer and inner indices are all
+	// guarded by the same bounds test.
+	SmallVector<SmallVector<uint32_t>> levels;
+	uint32_t cur = ptr_id;
+	for (uint32_t depth = 0; depth < 1024; depth++)
+	{
+		auto itr = robust_access_chains.find(cur);
+		if (itr == end(robust_access_chains) || itr->second.ptr_chain)
+			break;
+		levels.push_back(itr->second.indices);
+		cur = itr->second.base;
+	}
+
+	auto *var = maybe_get<SPIRVariable>(cur);
+	if (!var || robust_ssbo_variables.count(var->self) == 0)
+		return false;
+
+	root_id = cur;
+	for (int32_t level = int32_t(levels.size()) - 1; level >= 0; level--)
+		for (uint32_t index : levels[level])
+			flat_indices.push_back(index);
+
+	return true;
+}
+
+bool CompilerGLSL::build_robust_ssbo_checks(uint32_t ptr_id, SmallVector<RobustIndexCheck> &checks)
+{
+	checks.clear();
+
+	uint32_t root_id = 0;
+	SmallVector<uint32_t> indices;
+	if (!resolve_robust_access_chain(ptr_id, root_id, indices))
+		return false;
+
+	// Walk the logical type hierarchy from the block variable downwards in parallel with the flattened
+	// indices, mirroring access_chain_internal, but only collecting the steps that need a runtime bounds
+	// test. The walk also rejects anything outside the supported scalar/vector scope.
+	uint32_t type_id = expression_type_id(root_id);
+	const SPIRType *type = &get_pointee_type(type_id);
+
+	for (uint32_t index_id : indices)
+	{
+		// Arrays are checked before structs on purpose. An array-of-structs type keeps the element's
+		// Struct basetype while also carrying the array dimensions, so testing basetype first would
+		// misread an array element index as a struct member.
+		if (!type->array.empty())
+		{
+			uint32_t dim = uint32_t(type->array.size()) - 1;
+			bool runtime = is_runtime_size_array(*type);
+
+			// Every array layer is bounds-checked, even a constant index into a fixed-length array,
+			// because a constant can still exceed the type's length. Runtime arrays use the actual
+			// buffer length; fixed arrays use the length from the type.
+			bool literal = type->array_size_literal[dim];
+			RobustIndexCheck check;
+			check.index_id = index_id;
+			check.runtime_sized = runtime;
+			if (!runtime)
+				check.fixed_bound = literal ? convert_to_string(type->array[dim]) :
+				                               to_expression(type->array[dim]);
+			checks.push_back(std::move(check));
+
+			type_id = type->parent_type;
+			type = &get<SPIRType>(type_id);
+			continue;
+		}
+
+		if (type->basetype == SPIRType::Struct)
+		{
+			// Struct member indices are static, legal constants. Resolve the constant id to its literal
+			// member number; no runtime bounds test is needed for a field.
+			uint32_t member = evaluate_constant_u32(index_id);
+			if (member < uint32_t(type->member_type_index_redirection.size()))
+				member = type->member_type_index_redirection[member];
+			if (member >= uint32_t(type->member_types.size()))
+				return false;
+
+			type_id = type->member_types[member];
+			type = &get<SPIRType>(type_id);
+			continue;
+		}
+
+		if (type->op == OpTypeVector)
+		{
+			bool constant_index = ir.ids[index_id].get_type() == TypeConstant;
+			if (!constant_index)
+			{
+				RobustIndexCheck check;
+				check.index_id = index_id;
+				check.runtime_sized = false;
+				check.fixed_bound = convert_to_string(type->vecsize);
+				checks.push_back(std::move(check));
+			}
+
+			type_id = type->parent_type;
+			type = &get<SPIRType>(type_id);
+			continue;
+		}
+
+		if (type->columns > 1)
+		{
+			// Matrices are outside the supported scalar/vector scope.
+			return false;
+		}
+
+		return false;
+	}
+
+	return true;
+}
+
+void CompilerGLSL::emit_robust_ssbo_access(uint32_t result_type, uint32_t result_id, uint32_t ptr_id,
+                                           uint32_t value_id, bool is_store)
+{
+	const SPIRType &value_type = get<SPIRType>(result_type);
+
+	SmallVector<RobustIndexCheck> checks;
+	if (!build_robust_ssbo_checks(ptr_id, checks))
+		SPIRV_CROSS_THROW("robust_buffer_access: failed to construct bounds check for an SSBO access.");
+
+	uint32_t root_id = 0;
+	SmallVector<uint32_t> indices;
+	if (!resolve_robust_access_chain(ptr_id, root_id, indices))
+		SPIRV_CROSS_THROW("robust_buffer_access: failed to resolve an SSBO access chain.");
+
+	// For a store, evaluate the right-hand side first and bind it to a temporary. Helper side effects
+	// in the value therefore run exactly once and in SPIR-V order even when the address is out of
+	// bounds and the write itself is dropped.
+	uint32_t rhs_tmp = 0;
+	if (is_store)
+	{
+		rhs_tmp = ir.increase_bound_by(1);
+		emit_uninitialized_temporary_expression(result_type, rhs_tmp);
+		statement(to_name(rhs_tmp), " = ", to_pointer_expression(value_id), ";");
+	}
+
+	// Bind each dynamic index to a uint temporary, in chain order and evaluated once per block.
+	// Casting to uint turns negative signed indices into large unsigned values; they then fail the
+	// unsigned upper-bound test together with genuinely huge unsigned indices, leaving no overflow
+	// gap. A shared index id used by several accesses in the same block reuses one temporary so its
+	// expression keeps the SPIR-V evaluation count rather than being recomputed.
+	SmallVector<uint32_t> index_tmp_ids;
+	index_tmp_ids.reserve(checks.size());
+	for (auto &check : checks)
+	{
+		auto cached = robust_index_temp_cache.find(check.index_id);
+		uint32_t tmp_id;
+		if (cached != end(robust_index_temp_cache))
+		{
+			tmp_id = cached->second;
+		}
+		else
+		{
+			tmp_id = ir.increase_bound_by(1);
+			add_local_variable_name(tmp_id);
+			statement("uint ", to_name(tmp_id), " = uint(", to_unpacked_expression(check.index_id), ");");
+			robust_index_temp_cache[check.index_id] = tmp_id;
+		}
+		index_tmp_ids.push_back(tmp_id);
+	}
+
+	// Re-walk the type chain to assemble the conjunctive bounds condition and the element lvalue,
+	// reusing the bound index temporaries so no index expression is ever evaluated a second time.
+	uint32_t walk_type_id = expression_type_id(root_id);
+	const SPIRType *walk_type = &get_pointee_type(walk_type_id);
+	std::string prefix = to_enclosed_expression(root_id, false);
+	std::string cond;
+	uint32_t check_index = 0;
+
+	for (uint32_t index_id : indices)
+	{
+		// Match access_chain_internal ordering: arrays (which may carry a Struct element basetype)
+		// before struct members.
+		if (!walk_type->array.empty())
+		{
+			bool runtime = is_runtime_size_array(*walk_type);
+
+			// Every array step has a check (including constant indices), so always consume one.
+			const auto &check = checks[check_index];
+			const auto &tmp_name = to_name(index_tmp_ids[check_index]);
+
+			if (!cond.empty())
+				cond += " && ";
+			cond += tmp_name;
+			cond += " < ";
+			// A runtime array is bounded by its actual length, which is 0 for an empty buffer.
+			cond += runtime ? join("uint(", prefix, ".length())") :
+			                  join("uint(", check.fixed_bound, ")");
+
+			prefix += "[" + tmp_name + "]";
+			check_index++;
+
+			walk_type_id = walk_type->parent_type;
+			walk_type = &get<SPIRType>(walk_type_id);
+			continue;
+		}
+
+		if (walk_type->basetype == SPIRType::Struct)
+		{
+			uint32_t member = evaluate_constant_u32(index_id);
+			if (member < uint32_t(walk_type->member_type_index_redirection.size()))
+				member = walk_type->member_type_index_redirection[member];
+
+			prefix += to_member_reference(root_id, *walk_type, member, true);
+			walk_type_id = walk_type->member_types[member];
+			walk_type = &get<SPIRType>(walk_type_id);
+			continue;
+		}
+
+		if (walk_type->op == OpTypeVector)
+		{
+			bool constant_index = ir.ids[index_id].get_type() == TypeConstant;
+			if (!constant_index)
+			{
+				const auto &check = checks[check_index];
+				const auto &tmp_name = to_name(index_tmp_ids[check_index]);
+
+				if (!cond.empty())
+					cond += " && ";
+				cond += tmp_name + " < uint(" + check.fixed_bound + ")";
+
+				prefix += "[" + tmp_name + "]";
+				check_index++;
+			}
+			else
+			{
+				prefix += join("[", to_unpacked_expression(index_id, false), "]");
+			}
+
+			walk_type_id = walk_type->parent_type;
+			walk_type = &get<SPIRType>(walk_type_id);
+			continue;
+		}
+
+		SPIRV_CROSS_THROW("robust_buffer_access: unexpected type step while building SSBO guard.");
+	}
+
+	if (check_index != uint32_t(checks.size()))
+		SPIRV_CROSS_THROW("robust_buffer_access: internal mismatch while building SSBO guard.");
+	if (cond.empty())
+		cond = "true";
+
+	if (is_store)
+	{
+		// Out-of-bounds stores are dropped: there is no else branch, so no element is touched.
+		statement("if (", cond, ")");
+		begin_scope();
+		statement(prefix, " = ", to_name(rhs_tmp), ";");
+		end_scope();
+		register_write(ptr_id);
+	}
+	else
+	{
+		// Bind the result to a real temporary so this load cannot be forwarded past a later store.
+		emit_uninitialized_temporary_expression(result_type, result_id);
+
+		statement("if (", cond, ")");
+		begin_scope();
+		statement(to_name(result_id), " = ", prefix, ";");
+		end_scope();
+		// An out-of-bounds read yields a zero of the same shape as the result type. When the whole
+		// vector address is invalid, no component is loaded, so the entire vector becomes zero.
+		statement("else");
+		begin_scope();
+		statement(to_name(result_id), " = ", type_to_glsl_constructor(value_type), "(0);");
+		end_scope();
+
+		register_read(result_id, ptr_id, false);
+		inherit_expression_dependencies(result_id, ptr_id);
+	}
+}
+
+void CompilerGLSL::emit_robust_ssbo_load(uint32_t result_type, uint32_t result_id, uint32_t ptr_id)
+{
+	emit_robust_ssbo_access(result_type, result_id, ptr_id, 0, false);
+}
+
+void CompilerGLSL::emit_robust_ssbo_store(uint32_t ptr_id, uint32_t value_id)
+{
+	emit_robust_ssbo_access(expression_type_id(value_id), 0, ptr_id, value_id, true);
 }
 
 void CompilerGLSL::emit_store_statement(uint32_t lhs_expression, uint32_t rhs_expression)
@@ -13109,6 +13609,14 @@ void CompilerGLSL::emit_instruction(const Instruction &instruction)
 
 		flush_variable_declaration(ptr);
 
+		// Robust SSBO access: lower a guarded scalar/vector load directly so the bounds test is
+		// evaluated at this exact point, before any later store can invalidate a forwarded expression.
+		if (options.robust_buffer_access && robust_ssbo_pointer_is_supported(ptr))
+		{
+			emit_robust_ssbo_load(result_type, id, ptr);
+			break;
+		}
+
 		// If we're loading from memory that cannot be changed by the shader,
 		// just forward the expression directly to avoid needless temporaries.
 		// If an expression is mutable and forwardable, we speculate that it is immutable.
@@ -13396,6 +13904,12 @@ void CompilerGLSL::emit_instruction(const Instruction &instruction)
 		{
 			store_flattened_struct(ops[0], ops[1]);
 			register_write(ops[0]);
+		}
+		else if (options.robust_buffer_access && robust_ssbo_pointer_is_supported(ops[0]))
+		{
+			// Robust SSBO access: evaluate the stored value first (preserving any side effects it has),
+			// then only perform the write when every dynamic index is in range.
+			emit_robust_ssbo_store(ops[0], ops[1]);
 		}
 		else
 		{
