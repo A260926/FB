@@ -1,0 +1,217 @@
+/* ///////////////////////////////////////////////////////////////////////////
+//                                                                          //
+// opts/decode.c                                                            //
+//                                                                          //
+//////////////////////////////////////////////////////////////////////////////
+//                                                                          //
+// Copyright (C) 2023-2025, Shane Seelig                                    //
+// SPDX-License-Identifier: GPL-3.0-or-later                                //
+//                                                                          //
+/////////////////////////////////////////////////////////////////////////// */
+
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "../common.h"
+#include "../debug.h"
+#include "../formats.h"
+#include "../help.h"
+#include "../main.h"
+
+#include "./common.h"
+#include "./optsget.h"
+
+/* //////////////////////////////////////////////////////////////////////// */
+
+#undef argv
+static int opt_decode_format(
+	unsigned int, unsigned int, unsigned int, char *const *argv,
+	enum OptMode
+)
+/*@globals	fileSystem,
+		internalState,
+		g_flag
+@*/
+/*@modifies	fileSystem,
+		internalState,
+		g_flag.decfmt,
+		**argv
+@*/
+;
+
+static int
+opt_decode_help(
+	unsigned int, unsigned int, unsigned int, char *const *, enum OptMode
+)
+/*@globals	fileSystem@*/
+/*@modifies	fileSystem@*/
+;
+
+/* //////////////////////////////////////////////////////////////////////// */
+
+#define DECODE_OPTDICT_NMEMB	8u
+
+/**@var decode_optdict_longopt
+ * @brief array of longopts
+**/
+/*@observer@*/ /*@unchecked@*/
+static const char *decode_optdict_longopt[DECODE_OPTDICT_NMEMB] = {
+	"single-threaded",
+	"multi-threaded",
+	"delete-src",
+	"format",
+	"outfile",
+	"quiet",
+	"threads",
+	"help"
+};
+
+/**@var decode_optdict_shortopt
+ * @brief array of shortopts
+**/
+/*@unchecked@*/
+static const int decode_optdict_shortopt[DECODE_OPTDICT_NMEMB] = {
+	'S',	/* single-threaded */
+	'M',	/* multi-threaded  */
+	'd',	/* delete-src      */
+	'f',	/* format          */
+	'o',	/* outfile         */
+	'q',	/* quiet           */
+	't',	/* threads         */
+	'?'	/* help            */
+};
+
+/**@var decode_optdict_fn
+ * @brief array of option function pointers
+**/
+/*@unchecked@*/
+static optdict_fnptr decode_optdict_fn[DECODE_OPTDICT_NMEMB] = {
+	opt_common_single_threaded,
+	opt_common_multi_threaded,
+	opt_common_delete_src,
+	opt_decode_format,
+	opt_common_outfile,
+	opt_common_quiet,
+	opt_common_threads,
+	opt_decode_help,
+};
+
+/*@-redef@*/
+
+/**@var decode_optdict
+ * @brief option dictionary for optargs_process
+**/
+/*@-redef@*/
+/*@unchecked@*/
+BUILD const struct OptDict decode_optdict = {
+	.nmemb    = DECODE_OPTDICT_NMEMB,
+	.longopt  = decode_optdict_longopt,
+	.shortopt = decode_optdict_shortopt,
+	.fn       = decode_optdict_fn
+};
+/*@=redef@*/
+
+/* //////////////////////////////////////////////////////////////////////// */
+
+/**@fn opt_decode_format
+ * @brief sets the destination file format
+ *
+ * @param optind0 - index of  'argv'
+ * @param optind1 - index of *'argv'
+ * @param argc    - argument count from main()
+ * @param argv    - argument vector from main()
+ * @param mode    - short or long
+ *
+ * @return number of args used (long), or number of char's read (short)
+**/
+static int
+opt_decode_format(
+	const unsigned int optind0, const unsigned int optind1,
+	const unsigned int argc, char *const *const argv,
+	const enum OptMode mode
+)
+/*@globals	fileSystem,
+		internalState,
+		g_flag
+@*/
+/*@modifies	fileSystem,
+		internalState,
+		g_flag.decfmt,
+		**argv
+@*/
+{
+	/*@observer@*/
+	const char *const decfmt_name[] = DECFMT_NAME_ARRAY;
+	char *const opt = &argv[optind0][optind1];
+	/* * */
+	int retval   = 0;
+	char *subopt = NULL;
+	unsigned int i;
+
+	switch ( mode ){
+	default:
+		assert(false);
+		break;
+	case OPTMODE_SHORT:
+		if ( opt[1u] == '\0' ){
+			optsget_argcheck(optind0, argc, 1u, opt);
+			subopt = argv[optind0 + 1u];
+			retval = -1;
+		}
+		else {	subopt = &opt[1u];
+			retval = (int) strlen(subopt);
+		}
+		break;
+	case OPTMODE_LONG:
+		(void) strtok(opt, "=");
+		subopt = strtok(NULL, "");
+		if UNLIKELY ( subopt == NULL ){
+			error_tta("%s: missing argument", "--format");
+		}
+		retval = 0;
+		break;
+	}
+	assert(subopt != NULL);
+
+	for ( i = 0; i < DECFMT_NMEMB; ++i ){
+		if ( strcmp(subopt, decfmt_name[i]) == 0 ){
+			g_flag.decfmt = (enum DecFormat) i;
+			break;
+		}
+		else if UNLIKELY ( i == DECFMT_NMEMB - 1u ){
+			error_tta("%s: bad argument: %s",
+				mode == OPTMODE_SHORT ? "-f" : "--format",
+				subopt
+			);
+		} else{;}
+	}
+	return retval;
+}
+
+/**@fn opt_decode_help
+ * @brief print the mode_decode help to stderr and exit
+ *
+ * @param optind0 - unused
+ * @param optind1 - unused
+ * @param argc    - unused
+ * @param argv    - unused
+ * @param mode    - unused
+ *
+ * @return does not return
+**/
+NORETURN COLD
+int
+opt_decode_help(
+	UNUSED const unsigned int optind0, UNUSED const unsigned int optind1,
+	UNUSED const unsigned int argc, UNUSED char *const *const argv,
+	UNUSED const enum OptMode mode
+)
+/*@globals	fileSystem@*/
+/*@modifies	fileSystem@*/
+{
+	errprint_help_mode_decode();
+	exit(EXIT_SUCCESS);
+}
+
+/* EOF //////////////////////////////////////////////////////////////////// */

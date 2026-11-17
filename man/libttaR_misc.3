@@ -1,0 +1,185 @@
+.\" t
+.\"     Title: libttaR_misc
+.\"    Author: Shane Seelig
+.\"      Date: 2025-12-24
+.\"    Source: libttaR 2.1
+.\"  Language: English
+.\"
+.\" ##########################################################################
+
+.TH "LIBTTAr_MISC" "3" "2025\-12\-24" "libttaR 2.1" \
+"LibTTAr Programmer's Manual"
+
+.\" ##########################################################################
+
+.SH "NAME"
+libttaR_misc \- miscellaneous functions and objects
+
+.\" ##########################################################################
+
+.SH "SYNOPSIS"
+
+.nf
+.B #include <libttaR.h>
+
+.BI "int libttaR_test_nchan(unsigned int " nchan ");
+.BI "size_t libttaR_nsamples_perframe_tta1(size_t " samplerate ");
+.BI "size_t libttaR_ttabuf_safety_margin(
+.RS 8
+.BI "enum LibTTAr_Samplebytes " samplebytes ", unsigned int " nchan "
+.RE
+.BI );
+.BI "size_t libttaR_codecstate_priv_size(unsigned int " nchan ");
+
+.BI "const struct LibTTAr_VersionInfo libttaR_info;"
+.fi
+
+.\" ##########################################################################
+
+.SH "DESCRIPTION"
+
+.BR libttaR_test_nchan (3)
+tests whether the library was built to support \fInchan\fR audio channels.
+
+.BR libttaR_nsamples_perframe_tta1 (3)
+calculates the number of samples in a TTA1 frame for a given \fIsamplerate\fR.
+
+.BR libttaR_ttabuf_safety_margin (3)
+calculates a safety-margin size for padding the TTA buffer in order to prevent
+a possible buffer overrun.
+The calculated size is greater than the maximum number of TTA bytes that could
+be encoded for one PCM sample with \fInchan\fR channels.
+When decoding, the padding is needed in case the TTA data is corrupted or
+malformed.
+Not using this function may result in a \fBLIBTTAr_RET_INVAL_BOUNDS\fR
+return from a codec function if the TTA buffer length is too small.
+
+.BR libttaR_codecstate_priv_size (3)
+calculates the size of a private state struct with \fInchan\fR audio channels.
+The returned size is suitable for passing to
+.BR aligned_alloc (3).
+
+.RS 4
+.EX
+#include <stdlib.h>
+#include <libttaR.h>
+
+/*@only@*/ /*@null@*/
+LibTTAr_CodecState_Priv *
+priv_alloc(const unsigned int nchan)
+/*@globals	internalState@*/
+/*@modifies	internalState@*/
+{
+	const size_t size = libttaR_codecstate_priv_size(nchan);
+
+	if ( size == 0 ){
+		return NULL;
+	}
+	return aligned_alloc(LIBTTAr_CODECSTATE_PRIV_ALIGN, size);
+}
+.EE
+.RE
+
+.BR libttaR_info
+is a read-only object containing the library's version information.
+
+.RS 4
+.nf
+\fBstruct LibTTAr_VersionInfo\fR {
+    unsigned int       version;
+    unsigned int       version_major;   /* API change               */
+    unsigned int       version_minor;   /* bugfix or improvement    */
+    unsigned int       version_revis;	/* inbetween minor versions */
+    const char        *version_extra;
+    const char        *version_date;
+    const char        *copyright;
+    const char        *license;
+};
+.fi
+.RE
+
+.\" -------------------------------------------------------------------------#
+
+.SS Arguments
+
+\fInchan\fR
+.RS 8
+The number of audio channels in the PCM.
+.RE
+
+\fIsamplerate\fR
+.RS 8
+The audio sampling frequency in samples-per-second.
+.RE
+
+\fIsamplebytes\fR
+.RS 8
+The number of bytes per samples in the originally sized PCM.
+
+.nf
+\fBenum LibTTAr_SampleBytes\fR {
+    LIBTTAr_SAMPLEBYTES_1   = 1u,
+    LIBTTAr_SAMPLEBYTES_2   = 2u,
+    LIBTTAr_SAMPLEBYTES_3   = 3u
+};
+.fi
+.RE
+
+.\" ##########################################################################
+
+.SH "RETURN VALUE"
+
+.BR libttaR_test_nchan (3)
+.RS 8
+Non-0 on success.
+.RE
+
+.BR libttaR_nsamples_perframe_tta1 (3)
+.RS 8
+The number of samples in a TTA1 frame.
+.RE
+
+.BR libttaR_ttabuf_safety_margin (3)
+.RS 8
+How much to pad the TTA buffer by.
+.RE
+
+.BR libttaR_codecstate_priv_size (3)
+.RS 8
+The size of a private state struct.
+.RE
+
+.\" ##########################################################################
+
+.SH "ERRORS"
+
+0 - bad parameter or integer overflow.
+
+The debug build of the library may abort instead of returning an error.
+
+.\" ##########################################################################
+
+.SH "ATTRIBUTES"
+
+All are MT-Safe.
+
+.\" ##########################################################################
+
+.SH "SEE ALSO"
+
+.BR libttaR_tta_encode (3),
+.BR libttaR_tta_decode (3),
+.BR libttaR_pcm_read (3),
+.BR libttaR_pcm_write (3),
+.BR libttaR_crc32 (3)
+
+.\" ##########################################################################
+
+.SH "AUTHOR"
+
+.B "Shane Seelig"
+.RS 4
+Developer
+.RE
+
+.\" EOF ######################################################################

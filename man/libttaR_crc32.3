@@ -1,0 +1,105 @@
+.\" t
+.\"     Title: libttaR_crc32
+.\"    Author: Shane Seelig
+.\"      Date: 2025-12-24
+.\"    Source: libttaR 2.1
+.\"  Language: English
+.\"
+.\" ##########################################################################
+
+.TH "LIBTTAr_CRC32" "3" "2025\-12\-24" "libttaR 2.1" \
+"LibTTAr Programmer's Manual"
+
+.\" ##########################################################################
+
+.SH "NAME"
+libttaR_crc32 \- calculate the CRC used by TTA
+
+.\" ##########################################################################
+
+.SH "SYNOPSIS"
+
+.nf
+.B #include <libttaR.h>
+
+.BI "uint32_t libttaR_crc32(const void *restrict " buf ", size_t " size ");
+.fi
+
+.\" ##########################################################################
+
+.SH "DESCRIPTION"
+
+.BR libttaR_crc32 (3)
+calculates the CRC
+of the data in \fIbuf\fR
+with a size of \fIsize\fR.
+
+.\" -------------------------------------------------------------------------#
+
+.SS Arguments
+
+*\fIbuf\fR
+.RS 8
+The source buffer.
+.RE
+
+\fIsize\fR
+.RS 8
+The size of the buffer.
+.RE
+
+.\" ##########################################################################
+
+.SH "RETURN VALUE"
+
+the CRC
+
+.\" ##########################################################################
+
+.SH "ERRORS"
+
+The debug build of the library may abort.
+
+.\" ##########################################################################
+
+.SH "ATTRIBUTES"
+
+MT-Safe.
+
+.\" ##########################################################################
+
+.SH "NOTES"
+
+The CRC has the following properties:
+.nf
+    width   : 32-bit
+    endian  : little
+    poly    : 0xEDB88320u
+    xor-in  : 0xFFFFFFFFu
+    xor-out : 0xFFFFFFFFu
+.fi
+
+This function is optimized for size instead of speed.
+It is just meant for use on the file format's header and seektable.
+A frame's CRC calculation is inlined into the codec functions.
+
+.\" ##########################################################################
+
+.SH "SEE ALSO"
+
+.BR libttaR_tta_encode (3),
+.BR libttaR_tta_decode (3),
+.BR libttaR_pcm_read (3),
+.BR libttaR_pcm_write (3),
+.BR libttaR_misc (3)
+
+.\" ##########################################################################
+
+.SH "AUTHOR"
+
+.B "Shane Seelig"
+.RS 4
+Developer
+.RE
+
+.\" EOF ######################################################################

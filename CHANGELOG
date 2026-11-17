@@ -1,0 +1,251 @@
+
+# libttaR ####################################################################
+
+next:-------------------------------------------------------------------------
+
+	- performance improvements (rice encoder)
+
+2.1.1 (2025-12-30):-----------------------------------------------------------
+
+	- additional safety-margin overflow checks in ttabuf_safety_margin()
+    and tta_encode()/tta_decode()
+		- overflow would likely only be possible on 32-bit systems
+
+2.1.0 (2025-12-24):===========================================================
+
+	- added some overflow checks to several of the functions
+	- added undefined behavior checks to tta_encode()/tta_decode()
+	- renamed/added some enums to tta_encode()/tta_decode()
+	- codecstate_priv_size() return is now suitable for aligned_alloc(3)
+		- added CODECSTATE_PRIV_ALIGN
+	- crc32() takes a (void *) now
+	- some refactoring
+		- made the library generally more static-library friendly
+
+2.0.1 (2025-05-01):-----------------------------------------------------------
+
+	- debug-version functions may abort instead of returning an error
+
+2.0.0 (2025-04-01):===========================================================
+
+	- libttaR_tta_encode/libttaR_tta_decode
+		- parameter changes and enum return types
+		- INVAL returns are now negative instead of positive
+	- libttaR_test_nchan returns int instead of bool
+		- still acts like a boolean
+	- libttaR_nsamples_perframe_tta1 is no longer a macro
+	- added some structs/enums/defines and changed the names of others
+		- all now start with 'LibTTAr_'/'LIBTTAr_'
+	- all pointer parameters in all functions are now restict'd
+		- practically only affects libttaR_pcm_read/libttaR_pcm_write
+	- header should be completely C89-friendly now
+	- possible small performance improvements
+		- gcc build is much faster now (still slower than clang)
+
+1.2.14 (2025-03-22):----------------------------------------------------------
+
+	- encoder performance improvement (~2%)
+	- user->ncalls_codec will not overflow
+
+1.2.13 (2024-09-27):----------------------------------------------------------
+
+	- safety-margin bugfix
+		- increased memory usage
+
+1.2.12 (2024-09-12):----------------------------------------------------------
+
+	- aarch SIMD intrinsics (filter)
+
+1.2.11 (2024-08-20):----------------------------------------------------------
+
+	- powerpc SIMD intrinsics (filter)
+	- possible performance improvements (internal data alignment)
+
+1.2.10 (2024-08-16):----------------------------------------------------------
+
+	- x86-64-v1 SIMD intrinsics (filter)
+	- possible minor intrinsic improvements
+
+1.2.9 (2024-08-13):-----------------------------------------------------------
+
+	- x86-64-v3 SIMD intrinsics (filter)
+		- changed to x86-64-v2 in revision (no benefit from AVX2)
+	- other minor improvements
+	- new compile option symbol
+
+1.2.8 (2024-08-08):-----------------------------------------------------------
+
+	- performance improvements (filter)
+
+1.2.7 (2024-08-06):-----------------------------------------------------------
+
+	- performance improvements (encoder and decoder)
+	- more debug asserts
+	- new compile option symbols
+
+1.2.6 (2024-08-03):-----------------------------------------------------------
+
+	- performance improvements (rice decoder and filter)
+	- removed some compile option symbols
+
+1.2.5 (2024-08-02):-----------------------------------------------------------
+
+	- performance improvements (rice coder)
+	- new and renamed compile option symbols
+
+1.2.4 (2024-08-01):-----------------------------------------------------------
+
+	- performance improvements (rice coder)
+		- possible regression for 32-bit encoding
+	- safety-margin bugfix
+	- more debug asserts
+
+1.2.3 (2024-07-30):-----------------------------------------------------------
+
+	- possible performance improvement (branchless filter)
+	- new compile option symbol
+
+1.2.2 (2024-07-07):-----------------------------------------------------------
+
+	- debug assertions
+	- trimmed some lookup tables
+	- replaced the tbcnt8_32 backup bithack with a lookup table
+	- a little refactoring
+	- possible performance improvements
+
+1.2.1 (2024-07-03):-----------------------------------------------------------
+
+	- tbcnt8 lookup table
+	- a little refactoring
+	- possible performance improvements
+
+1.2.0 (2024-07-01):===========================================================
+
+	- libttaR_ttabuf_safety_margin is now a function (instead of a macro)
+    with an additional parameter. This is to make a program using the library
+    more memory efficient with 8/16-bit audio.
+	- libttaR_nsamples_perframe_tta1 macro uses integer math
+	- added and removed some compile option symbols
+	- added another safety check to the decoder
+	- performance improvements (despite the new check)
+
+1.1.1 (2024-06-15):-----------------------------------------------------------
+
+	- safety-margin bugfix
+	- additional compile option symbols
+	- performance improvements
+
+1.1.0 (2024-06-01):===========================================================
+
+	- libttaR_tta_encode/libttaR_tta_decode:
+		- enum returns and new parameter(s)
+		- return determines if they finished or not, not struct field
+	- LibTTAr_CodecState_User:
+		- fields changed
+		- must be init'd with LIBTTAr_CODECSTATE_USER_INIT before
+	    calling for each new frame
+	- reworked libttaR_ttabuf_size into libttaR_ttabuf_safety_margin
+	- renamed libttaR_nsamples_perframe to libttaR_nsamples_perframe_tta1
+	- put the version num/str's into the struct libttaR_info
+	- performance impovements
+
+1.0.2 (2024-04-24):-----------------------------------------------------------
+
+	- fixed libttaR_ttabuf_size / safety-margin bug from 1.0.1-8
+
+1.0.1 (2023-12-19):-----------------------------------------------------------
+
+	- changed library strings from arrays to pointers
+	- extra parameter checks (some functions now return errors)
+	- performance impovements
+
+1.0.0 (2023-12-10):===========================================================
+
+	- initial release
+
+# ttaR #######################################################################
+
+1.1.11 (2025-12-24):----------------------------------------------------------
+
+	- updated for libttaR 2.1.0
+	- missing conditional byteswap in the ApeTag skipper
+	- one or two other minor bugs
+	- some refactoring
+
+1.1.10 (2025-07-13):----------------------------------------------------------
+
+	- fixed the function that calculates the number of seektable entries
+		- an off by 1 or so error could add an extra seektable entry
+	    thereby creating undecodable files
+
+1.1.9 (2025-04-01):-----------------------------------------------------------
+
+	- updated to use libttaR 2.0
+	- some extra error/file checks
+	- bugfix: program could exit with a 0 ($?) on error
+
+1.1.8 (2024-12-20):-----------------------------------------------------------
+
+	- minor threading improvements
+	- some other minor tweaks/improvements
+
+1.1.7 (2024-09-27):-----------------------------------------------------------
+
+	- mostly native Win32 port (MinGW)
+	- some minor bugfixes
+
+1.1.6 (2024-07-30):-----------------------------------------------------------
+
+	- improved multi-threading (~25% fewer page-faults)
+	- some refactoring
+
+1.1.5 (2024-07-26):-----------------------------------------------------------
+
+	- --threads=1 decode bugfix
+
+1.1.4 (2024-07-21):-----------------------------------------------------------
+
+	- fewer allocations in multi-threaded initialization
+	- minor bugfixes
+
+1.1.3 (2024-07-18):-----------------------------------------------------------
+
+	- some refactoring
+
+1.1.2 (2024-07-01):-----------------------------------------------------------
+
+	- POSIX.1-2008 instead of GNU_SOURCE
+	- encode buffer size scales with channel count
+	- fixed codec a bug where the codec buffers could get way too large
+	- uses more memory now (codec buffers no longer overlap)
+		- the codec buffers bug was hiding how much slower it was
+	- other minor bugfixes and changes
+	- more debug asserts
+	- updated for libttaR 1.2.0
+
+1.1.1 (2024-06-15):-----------------------------------------------------------
+
+	- removed channel mask and frame from info printout
+	- refactored some stuff
+
+1.1.0 (2024-06-01):===========================================================
+
+	- multi-threaded encoder and decoder
+	- faster single-threaded encoder and decoder
+	- fixed/improved wav and w64 parsing
+	- fixed endianness bugs (omitted some conditional byteswaps)
+	- reworked and refactored a lot of code
+	- updated for libttaR 1.1.0
+
+1.0.2 (2024-05-05):-----------------------------------------------------------
+
+	- can write to /dev/null (ftruncate issue)
+	- dealloc's before exit on success
+
+1.0.1 (2023-04-23):-----------------------------------------------------------
+
+	- removed copyright/version info printing from standard use
+
+1.0.0 (2023-12-10):===========================================================
+
+	- initial release
