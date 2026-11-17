@@ -1,0 +1,68 @@
+# --- Build outputs (any depth) ---------------------------------------------
+build/
+build-*/
+out/
+cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/Makefile
+**/compile_commands.json
+CMakeUserPresets.json
+
+# --- Local toolchains / package managers -----------------------------------
+.toolchains/
+vcpkg_installed/
+.vcpkg/
+
+# --- IDE / editor ----------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln.docstates
+.clangd
+.cache/
+*.VC.db
+*.VC.opendb
+
+# --- Compiled / link artifacts ---------------------------------------------
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.so
+*.so.*
+*.dylib
+*.exe
+*.exp
+*.ilk
+*.iobj
+*.ipdb
+*.pch
+*.pdb
+*.idb
+
+# Accidental nested junk left from local experiments (directory named *.pdb)
+/mono-2.0-bdwgc.pdb/
+
+# --- Test / tool output ----------------------------------------------------
+mempdb_report.txt
+*_dump/
+ntdll_dump/
+
+# --- Archives (local backups, not source) ----------------------------------
+*.7z
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+
+# --- OS junk ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
