@@ -1,0 +1,46 @@
+10.06.2014 (1.0.0)
+ - First official release
+03.02.2015 (1.1.0)
+ - Wrapper for C++ language
+ - Some minor fixes in unit tests
+ - Multi-pass assembler tests could have failed on some systems due to a bug
+ - Several missing 'extern "C"' declarations added
+ - 'dist' build targed has been fixed
+ - pkg-config support
+ - Lexer generated using newer version of flex
+04.08.2015 (1.1.1)
+ - Bug fix #1 - FCML-based HSDIS crashes when used with WinPerfAsmProfiler
+ - Some minor build related changes
+ - Internal unit tests have been disabled for MinGW and Cygwin builds
+ - \DEBUG option has been added to hsdis (Debug) for VS2013 project
+23.09.2016 (1.1.2)
+ - hsdis - License changed to LGPL 2.1
+18.10.2016 (1.1.3)
+ - bug fix in tests (https://github.com/swojtasiak/fcml-lib/pull/3)
+ - additional Apache 2.0 license added to hsdis
+13.11.2019 (1.2.0)
+ - bug fixes
+ - AVX-512 support
+24.04.2020 (1.2.1)
+ - a new option (-all) added to fcml-asm
+ - lots of refactoring and cleanup
+ - important bug fixes: a bug in [ebp] encoding fixed (assembler)
+ - important bug fixes: a bug in es segment register override fixed (assembler)
+26.04.2020 (1.2.2)
+ - some c99 features were removed in order to continue with VS support
+ - support for vs2015 removed
+11.04.2021 (1.2.3)
+ - bug fix: https://github.com/swojtasiak/fcml-lib/issues/313
+ - bug fix: https://github.com/swojtasiak/fcml-lib/issues/314
+ - bug fix: https://github.com/swojtasiak/fcml-lib/issues/318
+ - bison upgraded, deprecated directives removed
+ - symbols are not exported by default anymore
+ - the error handling refactored a bit
+ - lots of code cleanups
+26.01.2024 (1.3.0)
+ - bug fix: https://github.com/swojtasiak/fcml-lib/issues/331
+ - bug fix: https://github.com/swojtasiak/fcml-lib/issues/330
+ - improvements in the default instruction chooser
+ - bison upgraded
+ - code cleanup
+ - bug fix in vmovaps
