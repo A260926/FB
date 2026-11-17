@@ -1,0 +1,387 @@
+{
+  "repo": "https://github.com/sacd-ripper/sacd-ripper",
+  "commit": "a3d981c935c3224217e2842cd492f9351106c81e",
+  "gitlinks": [],
+  "gitmodules": false,
+  "files": [
+    {
+      "path": "COPYING",
+      "git_blob": "d60c31a97a544b53039088d14fe9114583c0efc3",
+      "mode": "100644",
+      "sha256": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670"
+    },
+    {
+      "path": "libs/libcommon/charset.c",
+      "git_blob": "01fa0ac1531fb6ec6e91cea4f0273a5840e2cebc",
+      "mode": "100644",
+      "sha256": "0a8351360f2ac61688f6936d9c5a646c32e20726e23558855c5404ce55afcca5"
+    },
+    {
+      "path": "libs/libcommon/charset.h",
+      "git_blob": "9a5b1e9289a40048fb7e3281a3bd91dda31494e2",
+      "mode": "100644",
+      "sha256": "16757cadae4d3b9ff174275c464ed228179ee368410d1e72fbf20215b59e1f33"
+    },
+    {
+      "path": "libs/libcommon/fileutils.h",
+      "git_blob": "051f5cfb65894b92dfbd1f1ee42402b4b54cfde7",
+      "mode": "100644",
+      "sha256": "3c7815537f1649b4b3b0fce9f7a285e56dd75048377e25f6b3241833e13fd0c5"
+    },
+    {
+      "path": "libs/libcommon/list.h",
+      "git_blob": "4f9fb07a0424f438231409c383938bcd39b27a01",
+      "mode": "100644",
+      "sha256": "f7897db339fea1a1220729ad79bcc3e148be19e19ebb6e380e80482c0802fbee"
+    },
+    {
+      "path": "libs/libcommon/log.c",
+      "git_blob": "2065dc78ba6a2d8c0074f8edda0cea78a8626679",
+      "mode": "100644",
+      "sha256": "7bb77c7dca7c07fb64e375d41594936027adc57a9b44ed0ee426a9243a275247"
+    },
+    {
+      "path": "libs/libcommon/log.h",
+      "git_blob": "074321ba2a16e4887fcd2366d89ff0d65bab81e8",
+      "mode": "100644",
+      "sha256": "4b9b77874e848d10046f6bd4d468db0c760c0bc3ab8cb40607d876d588cdb290"
+    },
+    {
+      "path": "libs/libcommon/logging.c",
+      "git_blob": "d608b2826d70fc17c5e569a15f0c2af8a94857a2",
+      "mode": "100644",
+      "sha256": "c70ddcac3a17e3c167a9754ef37ed68941671fbc8f1ada600e4567cbf668ba1a"
+    },
+    {
+      "path": "libs/libcommon/logging.h",
+      "git_blob": "1ac2a145a2a97226d2cd64eb4f837a6165a4caa5",
+      "mode": "100644",
+      "sha256": "26b5ccf1ed2115d4e815ec9559e38f9109284837165a547a76bf6f8acc145245"
+    },
+    {
+      "path": "libs/libcommon/pb.h",
+      "git_blob": "f7ecaa2be6cd856062bef610097f91b425622582",
+      "mode": "100644",
+      "sha256": "ce13e04f006025d86f5f4e87fab0d72ef1c03e606dd7af4b795ab54675ec8c85"
+    },
+    {
+      "path": "libs/libcommon/pb_decode.h",
+      "git_blob": "f12b190099743323e706ac54c89deae82697bee8",
+      "mode": "100644",
+      "sha256": "ea953a3b733deeefc7d614aa8f20af3ccce3ef1036405565e43a6dfe37cf021d"
+    },
+    {
+      "path": "libs/libcommon/pb_encode.h",
+      "git_blob": "864a48b732ef879f871ccddd99593dc24ad43018",
+      "mode": "100644",
+      "sha256": "70bcf24e1afc7c6b3aa73c648baf5908f2723bd8dec4b505a02ac64007db76aa"
+    },
+    {
+      "path": "libs/libcommon/socket.h",
+      "git_blob": "f38c6d85474521537ddb1038a7c19ad31274cb3e",
+      "mode": "100644",
+      "sha256": "52dac97b916dbf8d3016940535824c4acd1389d070e373b1fefa17d2675d30f8"
+    },
+    {
+      "path": "libs/libcommon/timeout.h",
+      "git_blob": "e1720c22d18be0871d0f9942c8049a0e26a394d8",
+      "mode": "100644",
+      "sha256": "1a09ac83d54e4353c8f13f1ff603d40e6d0eda8343f88045b888cee971e152fa"
+    },
+    {
+      "path": "libs/libcommon/usocket.h",
+      "git_blob": "f55c501093a89cc90cf9420a5f7be9f46bf6a135",
+      "mode": "100644",
+      "sha256": "ad1935f8b77e2c6fe2e4ba7d02c30b4b5588610befd09947c849047193ccb1ba"
+    },
+    {
+      "path": "libs/libcommon/utils.c",
+      "git_blob": "bf63b978f4341a4ab26e289b11286dbe66ffc5f7",
+      "mode": "100644",
+      "sha256": "24acd034091ecee408dd887d6350294f18211ac33e97c5735f9c39ccd47b0fc4"
+    },
+    {
+      "path": "libs/libcommon/utils.h",
+      "git_blob": "688b17d570635a2fd86067f0b00cfbe4715bb26b",
+      "mode": "100644",
+      "sha256": "f6c558bdc01449f833e24dec14b33bf4b80be8ca35c970fee1f6606df683b4fb"
+    },
+    {
+      "path": "libs/libcommon/wsocket.h",
+      "git_blob": "505b332d997e5561e6c959e824369b96af42dfd1",
+      "mode": "100644",
+      "sha256": "7a0d142edb86ad313639b8b3f176abb2b1187bde2c7c75506103e682a1f0a60c"
+    },
+    {
+      "path": "libs/libdstdec/buffer_pool.h",
+      "git_blob": "6a276bdc8c0ec76826ae2a5c5a7ccb63a17ed4cd",
+      "mode": "100644",
+      "sha256": "009407d3fd99a1080b1ef89853126d593845379a87f0bedc2dbfe50ba9a06998"
+    },
+    {
+      "path": "libs/libdstdec/ccp_calc.h",
+      "git_blob": "14fe777049bc4c6aef0acb87b9ac7c8594c1f0a4",
+      "mode": "100644",
+      "sha256": "9ee688dcb4a23df5266ef26764aa331ea3d8a7fcd5fa655f7679979b6e528c8f"
+    },
+    {
+      "path": "libs/libdstdec/conststr.h",
+      "git_blob": "fbe55eb88c2d9b7b6062f05ccce888e914e94109",
+      "mode": "100644",
+      "sha256": "51b103be8b954aa5ce83b9b673e8d27c155cf21df8a64522ad3540e06e15ae5f"
+    },
+    {
+      "path": "libs/libdstdec/dst_ac.h",
+      "git_blob": "368d655da6b2e83cd0b26f66605e58a0630ac1c0",
+      "mode": "100644",
+      "sha256": "630986c6eb70a44ef8b06f1a426f169a13c5b7bd8b5cc59307a688f6d5edb81f"
+    },
+    {
+      "path": "libs/libdstdec/dst_data.h",
+      "git_blob": "42fe7d1456804af9c3fe537a3c7758d226621dea",
+      "mode": "100644",
+      "sha256": "c8ae095e9ad06a18a588c58bfc9ea5c6076b923e2d451ca1e8d507cbbef2c3ee"
+    },
+    {
+      "path": "libs/libdstdec/dst_decoder.h",
+      "git_blob": "bb125f9557f3d82e951bf75e3d356bd6f3041aea",
+      "mode": "100644",
+      "sha256": "ea82ec4d74deb88982df1a5f48aaf86836c9a366762ffe2d92e897d9815e146a"
+    },
+    {
+      "path": "libs/libdstdec/dst_fram.h",
+      "git_blob": "f15a6590802dccd6563acc3c85dfbaeb15e6d670",
+      "mode": "100644",
+      "sha256": "471fdac2a7069490f3e76626d998d0241c05464137bfd7612bd5b652df295fa2"
+    },
+    {
+      "path": "libs/libdstdec/dst_init.h",
+      "git_blob": "95e6c34b21f8cf187fc4cd70f1db99a31ceb367f",
+      "mode": "100644",
+      "sha256": "f4f77999d78972c6d9eff48235ce309250e51f18b889bff74921eb3581c9961b"
+    },
+    {
+      "path": "libs/libdstdec/types.h",
+      "git_blob": "70949c93e8230210b185aea06b0901e2a7c164f4",
+      "mode": "100644",
+      "sha256": "5521f30b50891191c3bed412a32d194e2b8e665444fdbc0acd9d89850b7ef490"
+    },
+    {
+      "path": "libs/libdstdec/unpack_dst.h",
+      "git_blob": "f7ec9f2e5521fd072e3ba97d9c652cb61395e27f",
+      "mode": "100644",
+      "sha256": "291af9f0f61cc7014e848932a2511771c63019f004ffae6a6238d6a81467af87"
+    },
+    {
+      "path": "libs/libdstdec/yarn.h",
+      "git_blob": "50935ed1e149e0c00f188e6e8639c41140ca3ee6",
+      "mode": "100644",
+      "sha256": "09ffca4d5f3385bb62f52159dc18639040415623a82c73b71c50a2432824a94e"
+    },
+    {
+      "path": "libs/libiconv/COPYING.LIB",
+      "git_blob": "161a3d1d47b94f5d092b4c5fa316007c6f22fe81",
+      "mode": "100644",
+      "sha256": "d7bf9d064ac3e5840f9dd02422b7eeec4f1fd03f37fadbd043602be5e882304f"
+    },
+    {
+      "path": "libs/libid3/genre.dat",
+      "git_blob": "9926d0ef0a86e03d1644f9919c210c961e787caa",
+      "mode": "100644",
+      "sha256": "cf1b7b203688a74c68084319e942a510638dbad0ac57aebe3a08fdb17c7cb980"
+    },
+    {
+      "path": "libs/libid3/id3.c",
+      "git_blob": "0501900bea960ae92dc7bb5aee07c4c8918a8a27",
+      "mode": "100644",
+      "sha256": "190d2a6402ee8767d7657cd5fca1bba2cf945f94269e831f3cb91de58b50815e"
+    },
+    {
+      "path": "libs/libid3/id3.h",
+      "git_blob": "48c5b22b82b583b8c0743cdd44003fae1f53bc4c",
+      "mode": "100644",
+      "sha256": "f4c43bbb78d86b8af63eeaa0a734dc83603428dbbb4204c431066cd24dc2c25a"
+    },
+    {
+      "path": "libs/libid3/id3_frame.c",
+      "git_blob": "0c559dc23572969b6da1267db00ba875b1100dee",
+      "mode": "100644",
+      "sha256": "c4949cc14b3fa5a9fade660e6a3e6e3819a69372a169598188d37465769251ee"
+    },
+    {
+      "path": "libs/libid3/id3_frame_content.c",
+      "git_blob": "364a6b8cf12f8ee933bf77262b9bb7a46215841e",
+      "mode": "100644",
+      "sha256": "0499498da9b559960121f51c8f8782e9e7652423de1504f0b925a2e08a9bc8f9"
+    },
+    {
+      "path": "libs/libid3/id3_frame_text.c",
+      "git_blob": "448ba4dfa5ba7e924cfbcc245086114b7fceec29",
+      "mode": "100644",
+      "sha256": "b7494efd4d7424373c5905055a5d6b99dde2c48b5b27e0ff3302ed0a5d7aadf0"
+    },
+    {
+      "path": "libs/libid3/id3_frame_url.c",
+      "git_blob": "bf44252295037405a70924d32a9a9f3b3a868d2e",
+      "mode": "100644",
+      "sha256": "42711ca72b319301b008458ee4a289d35d251518a512cb93c7a477f111f9f036"
+    },
+    {
+      "path": "libs/libid3/id3_header.h",
+      "git_blob": "c2a8495c870c5937233e1053469d92825f447f64",
+      "mode": "100644",
+      "sha256": "4f22e7d671d70aff5026ad3282272e72cb39839e57bc6796412fdf8ce126da8b"
+    },
+    {
+      "path": "libs/libid3/id3_tag.c",
+      "git_blob": "2340958364d20a13bd14999e125cd8d0d5991a2e",
+      "mode": "100644",
+      "sha256": "eabcd7a55e1cd66b79e085c4cbd83d3f07239bbcb5af4b3814eefa7496008a04"
+    },
+    {
+      "path": "libs/libid3/unicode.c",
+      "git_blob": "238b7bd86885e3fc4814757dd61cc2eb0f56e26e",
+      "mode": "100644",
+      "sha256": "ee0c06636555174751e116125615e60de51528936a81c56314e900f40206f3d5"
+    },
+    {
+      "path": "libs/libsacd/cuesheet.h",
+      "git_blob": "e823b83c8947754d82580fa77016cda767788267",
+      "mode": "100644",
+      "sha256": "e709a9f4f15c66923e0550331d1194723e7b6f814e036592d746836813488f12"
+    },
+    {
+      "path": "libs/libsacd/dsdiff.c",
+      "git_blob": "2da2707da19fb4bc94cc975fc483a8e33a768eea",
+      "mode": "100644",
+      "sha256": "2ba8fd0d986a69555108d0375d80c4b8193b2194742047efa78451b960be9f29"
+    },
+    {
+      "path": "libs/libsacd/dsdiff.h",
+      "git_blob": "98f9364afc6423f9305b656817bfcae758ddce97",
+      "mode": "100644",
+      "sha256": "70d422f60208454c8a6073997f54ab727780e74324af671183534ff50f81f765"
+    },
+    {
+      "path": "libs/libsacd/dsf.c",
+      "git_blob": "0b8f2ba17c0f99fc9f686f690e811a3c837a9fd2",
+      "mode": "100644",
+      "sha256": "187b7c054db279364198ff77e959c7d6dda40a5f8468ee8757874737170b684a"
+    },
+    {
+      "path": "libs/libsacd/dsf.h",
+      "git_blob": "9442ec650e22e9657380b9a563bdad40cd05a6d5",
+      "mode": "100644",
+      "sha256": "33adef7f30b1afc136a317e756c5d1c8bff8b8a56dd6a2ce0e31b1e1b4c98ad8"
+    },
+    {
+      "path": "libs/libsacd/dst_decoder_ps3.h",
+      "git_blob": "f2827dbb4ad0f8d8245b276653d7689b5d9d3291",
+      "mode": "100644",
+      "sha256": "9f3d590af35419056f656ca46b73b7c0a41515fbdc063f30a41cbff68a81fc8c"
+    },
+    {
+      "path": "libs/libsacd/endianess.h",
+      "git_blob": "547eeffb5ec4e90264a0b32661ae87e7135a351c",
+      "mode": "100644",
+      "sha256": "fbc1db8b79bfb98102f8be23bd073f1eb1500e703c9142f432173deca25c6179"
+    },
+    {
+      "path": "libs/libsacd/ioctl.h",
+      "git_blob": "e5d1b9968d9adf8427b45b2845ebb0fde8d4bb36",
+      "mode": "100644",
+      "sha256": "3e7f5352eb99daeae44c6cc1021ee068f4dc9f9e870316a7231bdbbdff798c83"
+    },
+    {
+      "path": "libs/libsacd/sac_accessor.h",
+      "git_blob": "58b0c8dbeb491c8c5028636a16632523dcfc2ef6",
+      "mode": "100644",
+      "sha256": "6bdd175bb806fc4ae3955f36543a10cf6079131a73d2c00abc3d89bd0eb724a2"
+    },
+    {
+      "path": "libs/libsacd/sacd_input.h",
+      "git_blob": "a7123f151dae4a9cee1d270ba1ae071e9f57672e",
+      "mode": "100644",
+      "sha256": "8d572c58c9b3c1cd56ed8cad1220fb2b4eea5976f164c32800cf308b0467fcd9"
+    },
+    {
+      "path": "libs/libsacd/sacd_pb_stream.h",
+      "git_blob": "9042c031c1a5fa87114edf57908edade0074edcc",
+      "mode": "100644",
+      "sha256": "bdf4bb5b99a537c3261e1773f3b3edc06d917897d0c27c6abcb2111a10a3ef26"
+    },
+    {
+      "path": "libs/libsacd/sacd_read_internal.h",
+      "git_blob": "1b346f5fd95b54ce0089e824423cc774f3252a31",
+      "mode": "100644",
+      "sha256": "8ad4d216f763d3fd24da48b7a146639b2f9871617a4db449ac573f115fce28b4"
+    },
+    {
+      "path": "libs/libsacd/sacd_reader.h",
+      "git_blob": "cee00c13a294bd016cddca9f42a73c1fbc2919a9",
+      "mode": "100644",
+      "sha256": "3e9bdb58db6980aab19c114a36809272f9ec57eff086910bab6e4dc4c0234506"
+    },
+    {
+      "path": "libs/libsacd/sacd_ripper.pb.h",
+      "git_blob": "2bf2ae795bfc724611bb6aca0aeea28127f82ee2",
+      "mode": "100644",
+      "sha256": "22d75c2a29c22d0aa54adc884db5fd297e29dc784fd73ab293e03c434cd0a13a"
+    },
+    {
+      "path": "libs/libsacd/scarletbook.h",
+      "git_blob": "a3744398e8cd769395a58fd9e373bad81cb4cd1e",
+      "mode": "100644",
+      "sha256": "a18430c0d5b01af702ed15dc631b9e21db13622f8de8292ea334a29bc82e45b6"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_helpers.h",
+      "git_blob": "f97250dd5d28fdac583f495192a6f61ee2bf0f75",
+      "mode": "100644",
+      "sha256": "a0f159bd1802cd54aa75db4f0777a8a1611725f4b026a074ade27515f1b4009c"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_id3.c",
+      "git_blob": "7b66b71d6e78f433a3a001c6cd36b64eeaa13cbc",
+      "mode": "100644",
+      "sha256": "b490ff8bb152657659399593b21b5d6de8b51006a8b365c13bbec6d0994331d4"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_id3.h",
+      "git_blob": "cf825440bfb66c2c6876890345d774b3c83443bd",
+      "mode": "100644",
+      "sha256": "4f3d3d78c482c01650f64a06e8276217cee1ae51722d5eab05b6b8389526f606"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_output.h",
+      "git_blob": "9f4fd89c52a1c79d1643dd68c15d7cfc63da419a",
+      "mode": "100644",
+      "sha256": "15f8ab5fa51418e54fe8130e6e3db74c18b722f01ce2c92aa2ea08fb7b117679"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_print.h",
+      "git_blob": "f3959a9be6df9dc518f2f992307158ed33e34bf8",
+      "mode": "100644",
+      "sha256": "3051444ebb223acee41eba9df11b7e29eb2ceb8598eb6d55ef9882e410af8416"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_read.h",
+      "git_blob": "ebf7ee9293a2b2ad3d5db283357f049a42b29f31",
+      "mode": "100644",
+      "sha256": "be1619a00ce52353a1928ec170d04341eb093638b5b598fb29b5bf36e3332ccb"
+    },
+    {
+      "path": "libs/libsacd/scarletbook_xml.h",
+      "git_blob": "05ef20ee4ab5f2033c4dd94f30a4305fcc5e91fe",
+      "mode": "100644",
+      "sha256": "f3c12276f8f70f79e54c9550042fb50e537f4e88cfdd55ce7be1874da1acb541"
+    },
+    {
+      "path": "libs/libsacd/version.h",
+      "git_blob": "3494603c9449d1b1681046f7639a2d1bc4941f8c",
+      "mode": "100644",
+      "sha256": "88e3dcca04d2c13da37070598c2543019c154dd7f7c9585fae8268804c5b6be2"
+    }
+  ],
+  "exclusion_reason": "仅导出原始DSF/DSDIFF封装和实际依赖闭包；SACD设备/网络/PS3、DST解码器实现和图形工具不参与此构建。没有修改保留的生产逻辑。"
+}
