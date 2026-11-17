@@ -1,0 +1,3 @@
+# Hashes of file build rules.
+6453f898de65478ed24d31236b3c5827 wabt/CMakeFiles/gen-wasm2c-prebuilt-target
+a2ed25c793cf7e13fd0404abf72dd5a3 wabt/gen-wasm2c-prebuilt
