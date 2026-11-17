@@ -68,6 +68,7 @@ typedef union {
     struct mk_memory_map_s *memory_map;
     struct mk_memory_map_task_s *memory_map_task;
     struct mk_memory_map_self_s *memory_map_self;
+    struct mk_memory_map_file_s *memory_map_file;
 } mk_memory_map_ref _mk_transparent_union;
 
 //! The identifier for the Memory Map type.
