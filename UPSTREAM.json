@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/pjsip/pjproject",
+  "commit": "d78f0ddc7b95057a4b459e57f65694dda1c05728",
+  "license": "GPL-2.0-or-later",
+  "scope": "固定RTP生产子集；未导出未使用模块。"
+}
