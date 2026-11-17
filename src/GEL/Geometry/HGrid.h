@@ -14,6 +14,9 @@
 // Author: J. Andreas Bærentzen,
 // Created: Wed Jan 24 18:29:0
 
+#include <cassert>
+#include <cmath>
+#include <type_traits>
 #include <vector>
 #include <GEL/Geometry/AncestorGrid.h>
 #include <GEL/Geometry/Cell.h>
@@ -37,7 +40,7 @@ namespace Geometry
 	private:
 
 		/// Dimensions of top level grid.
-		const CGLA::Vec3i top_dims;
+		CGLA::Vec3i top_dims;
 
 		/// Top level grid. I.e. vector of sub grids.
 		std::vector<CellT> top_grid;
@@ -128,7 +131,99 @@ namespace Geometry
 			for(int i=0;i<N;++i)
 				top_grid[i].coalesce(default_val);
 		}
-		
+
+		/** \brief Fill an axis aligned, half-open box of voxels with a value.
+
+			The box spans the voxels @c p with @c lo[i] <= p[i] < @c hi[i] for
+			all three axes. A precondition is that @c lo[i] <= @c hi[i] on each
+			axis. An empty box, either as given or after clipping against the
+			grid, leaves the grid unchanged.
+
+			The box is clipped to the grid. Parts outside the grid are ignored,
+			and values outside the box are preserved.
+
+			Top level cells which are completely covered by the box are merged
+			into a single value directly - they are never split and written
+			voxel by voxel. Cells which are only partially covered are modified
+			voxel by voxel, and afterwards such a cell is merged again if all
+			its in-domain voxels became equal. The padding of a partially
+			covered last cell is not part of the voxel domain and is never
+			examined or modified.
+
+			The value must be finite. This is only enforced for floating point
+			types (by an assertion). */
+ 		void fill_box(const CGLA::Vec3i& lo, const CGLA::Vec3i& hi, const T& value)
+		{
+			assert(lo[0] <= hi[0] && lo[1] <= hi[1] && lo[2] <= hi[2]);
+			if constexpr (std::is_floating_point_v<T>)
+				assert(std::isfinite(value));
+
+			const CGLA::Vec3i dims = this->get_dims();
+			const CGLA::Vec3i lo_c = CGLA::v_max(lo, CGLA::Vec3i(0));
+			const CGLA::Vec3i hi_c = CGLA::v_min(hi, dims);
+			if(lo_c[0] >= hi_c[0] || lo_c[1] >= hi_c[1] || lo_c[2] >= hi_c[2])
+				return;
+
+			const int bd = CellT::get_dim();
+			const CGLA::Vec3i t_lo = lo_c / bd;
+			const CGLA::Vec3i t_hi = (hi_c - CGLA::Vec3i(1)) / bd + CGLA::Vec3i(1);
+
+			for(int tz = t_lo[2]; tz < t_hi[2]; ++tz)
+				for(int ty = t_lo[1]; ty < t_hi[1]; ++ty)
+					for(int tx = t_lo[0]; tx < t_hi[0]; ++tx)
+					{
+						const CGLA::Vec3i toff(tx*bd, ty*bd, tz*bd);
+						// In-domain extent of this top level cell. The
+						// remainder (padding) of a last cell is not part of
+						// the voxel domain.
+						const CGLA::Vec3i ext = CGLA::v_min(CGLA::Vec3i(bd), dims - toff);
+
+						// Box clipped to this cell's in-domain extent.
+						const CGLA::Vec3i clo = CGLA::v_max(lo_c - toff, CGLA::Vec3i(0));
+						const CGLA::Vec3i chi = CGLA::v_min(hi_c - toff, ext);
+						if(clo[0] >= chi[0] || clo[1] >= chi[1] || clo[2] >= chi[2])
+							continue;
+
+						CellT& cell = get_cell(CGLA::Vec3i(tx, ty, tz));
+
+						// The cell is completely covered: merge directly.
+						if(clo == CGLA::Vec3i(0) && chi == ext)
+						{
+							cell.coalesce(value);
+							continue;
+						}
+
+						// Partial coverage.
+						if(cell.is_coalesced())
+						{
+							// Nothing changes if the cell already holds the value.
+							if(cell[CGLA::Vec3i(0)] == value)
+								continue;
+							cell.split();
+						}
+
+						for(int z = clo[2]; z < chi[2]; ++z)
+							for(int y = clo[1]; y < chi[1]; ++y)
+								for(int x = clo[0]; x < chi[0]; ++x)
+									cell.store(CGLA::Vec3i(x, y, z), value);
+
+						// If every in-domain voxel of the cell is now equal,
+						// merge the cell again to regain the compressed form.
+						const T first = cell[CGLA::Vec3i(0)];
+						bool uniform = true;
+						for(int z = 0; z < ext[2] && uniform; ++z)
+							for(int y = 0; y < ext[1] && uniform; ++y)
+								for(int x = 0; x < ext[0]; ++x)
+									if(!(cell[CGLA::Vec3i(x, y, z)] == first))
+									{
+										uniform = false;
+										break;
+									}
+						if(uniform)
+							cell.coalesce(first);
+					}
+		}
+
 	};
 
 }

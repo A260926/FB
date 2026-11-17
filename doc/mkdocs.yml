@@ -83,6 +83,7 @@ nav:
     - HMesh Module: api/hmesh.md
     - Graph Module: api/graph.md
     - Spatial Module: api/spatial.md
+    - HGrid Editing & Sparse Surfaces (C++): api/hgrid_surface.md
     - GL Display: api/gl_display.md
     - Jupyter Display: api/jupyter_display.md
   - Tutorials:

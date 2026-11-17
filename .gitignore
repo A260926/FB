@@ -27,6 +27,7 @@ GEL_WIN/Release/*
 .idea/
 build/
 cmake-build-*/
+.task-build/
 GEL_UNIX/.deps
 GEL_UNIX/fabricate.pyc
 
