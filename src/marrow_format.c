@@ -82,11 +82,15 @@ static mrw_result validate_skeleton(const uint8_t *base, uint64_t off, uint64_t 
     if ((rc = span_ok(noff_off,   (uint64_t)joint_count * MRW_NAME_OFF_STRIDE,     secsz))) return rc;
     if ((rc = span_ok(nblob_off,  (uint64_t)name_blob_size,                           secsz))) return rc;
 
-    /* parents: parent[0]==0xFFFF (single root); parent[j]<j for j>=1; no other 0xFFFF */
+    /* parents: 0xFFFF is a forest root and may appear at any index; a non-root parent is always a
+     * strictly smaller index. That rule rejects self-reference (pj==j ⇒ FORMAT), forward edges
+     * (pj>j) and out-of-range parents (⇒ RANGE), and guarantees an ascending local→model pass
+     * resolves every parent first. A blob with exactly one root is still the single-tree case. */
     for (uint32_t j = 0; j < joint_count; ++j) {
         uint16_t pj = mrw_rd_u16(h + parent_off + (size_t)j * MRW_PARENT_STRIDE);
-        if (j == 0) { if (pj != 0xFFFF) return MRW_E_FORMAT; }
-        else { if (pj == 0xFFFF) return MRW_E_FORMAT; if (pj >= j) return MRW_E_RANGE; }
+        if (pj == 0xFFFFu) continue;               /* forest root (any index) */
+        if (pj == j) return MRW_E_FORMAT;          /* self-reference */
+        if (pj > j) return MRW_E_RANGE;            /* forward edge or out of range */
     }
     /* rest_local: 10 f32/joint, quat (first 4) near-unit; inverse_bind: 12 f32/joint */
     for (uint32_t j = 0; j < joint_count; ++j) {

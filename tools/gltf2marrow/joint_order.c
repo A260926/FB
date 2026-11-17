@@ -3,6 +3,7 @@
 #include "joint_order.h"
 
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,18 @@ static void set_diag(char *diag, size_t cap, const char *fmt, ...) {
     va_list ap; va_start(ap, fmt);
     vsnprintf(diag, cap, fmt, ap);
     va_end(ap);
+}
+
+/* Node pointer -> index within data->nodes, or -1 when the pointer is not one of data's nodes.
+ * Compared as integers: a relational test on pointers that are not members of the same array is
+ * undefined in C, and a malformed skin/animation can supply any pointer. */
+static int64_t node_index_of(const cgltf_data *data, const cgltf_node *node) {
+    if (!node) return -1;
+    uintptr_t p = (uintptr_t)node;
+    uintptr_t lo = (uintptr_t)data->nodes;
+    if (p < lo || p >= lo + (uintptr_t)data->nodes_count * sizeof(cgltf_node)) return -1;
+    if ((p - lo) % sizeof(cgltf_node) != 0) return -1;
+    return (int64_t)((p - lo) / sizeof(cgltf_node));
 }
 
 /* skin-joint index of a node, or -1 if the node is not one of the skin's joints. */
@@ -103,4 +116,209 @@ void mrw_g2m_joint_order_free(mrw_g2m_joint_order *jo) {
     free(jo->order);
     free(jo->marrow_of);
     memset(jo, 0, sizeof *jo);
+}
+
+/* ---- preserve-nodes (forest) ordering ----
+ *
+ * Allocates every array up front, so the build is all-or-nothing: any error frees everything and
+ * leaves *out zeroed. The output ordering is produced by a single iterative pre-order walk over
+ * the retained forest (roots ascending node index; children ascending node index), which gives
+ * parent-before-child output indices for free. */
+mrw_result mrw_g2m_forest_order_build(cgltf_data *data, const cgltf_skin *skin,
+                                     mrw_g2m_forest_order *out,
+                                     char *diag, size_t diag_cap) {
+    if (!data || !skin || !out) { set_diag(diag, diag_cap, "invalid arguments"); return MRW_E_FORMAT; }
+    memset(out, 0, sizeof *out);
+
+    if (skin->joints_count < 1 || skin->joints_count > 0xFFFEu) {
+        set_diag(diag, diag_cap, "skin has %zu joints (must be 1..65534)", skin->joints_count);
+        return MRW_E_RANGE;
+    }
+    cgltf_size nn = data->nodes_count;
+    uint32_t sc = (uint32_t)skin->joints_count;
+    if (nn == 0) {
+        set_diag(diag, diag_cap, "glTF has no nodes");
+        return MRW_E_FORMAT;
+    }
+
+    /* node index of every node (nodes are a flat array, so this is pointer arithmetic - but only
+     * after proving the pointer actually belongs to this data's array). */
+    uint8_t *keep            = (uint8_t *)calloc(nn ? (size_t)nn : 1, 1);
+    uint32_t *node_to_output = (uint32_t *)malloc((nn ? (size_t)nn : 1) * sizeof(uint32_t));
+    mrw_g2m_forest_order fo;
+    memset(&fo, 0, sizeof fo);
+    if (!keep || !node_to_output) {
+        free(keep); free(node_to_output);
+        set_diag(diag, diag_cap, "out of memory");
+        return MRW_E_OVERFLOW;
+    }
+    for (cgltf_size i = 0; i < nn; ++i) node_to_output[i] = UINT32_MAX;
+
+    /* -- mark the skin joints, rejecting a duplicate slot (one node may appear in the retained set
+     *    only once; a repeated joint slot would make skin_to_output ambiguous). `keep` holds only
+     *    joint nodes at this point, so it doubles as the duplicate test. -- */
+    for (uint32_t js = 0; js < sc; ++js) {
+        int64_t idx = node_index_of(data, skin->joints[js]);
+        if (idx < 0) {
+            free(keep); free(node_to_output);
+            set_diag(diag, diag_cap, "skin joint %u is not a node of this glTF", js);
+            return MRW_E_FORMAT;
+        }
+        uint32_t ni = (uint32_t)idx;
+        if (keep[ni]) {
+            free(keep); free(node_to_output);
+            set_diag(diag, diag_cap, "skin joint %u duplicates node %u in another skin slot", js, ni);
+            return MRW_E_FORMAT;
+        }
+        keep[ni] = 1;
+    }
+
+    /* -- ancestor closure (up to each real tree root; stop at the first node whose parent is NULL) -- */
+    for (uint32_t js = 0; js < sc; ++js) {
+        uint32_t ni = (uint32_t)node_index_of(data, skin->joints[js]);
+        const cgltf_node *cur = data->nodes[ni].parent;
+        uint32_t depth = 0;
+        while (cur) {
+            int64_t ci64 = node_index_of(data, cur);
+            if (ci64 < 0) {
+                free(keep); free(node_to_output);
+                set_diag(diag, diag_cap, "joint %u: ancestor is not a node of this glTF", js);
+                return MRW_E_FORMAT;
+            }
+            uint32_t ci = (uint32_t)ci64;
+            keep[ci] = 1;
+            if (++depth > (uint32_t)nn) {  /* longer than the node count ⇒ a parent cycle */
+                free(keep); free(node_to_output);
+                set_diag(diag, diag_cap, "node hierarchy has a parent cycle above joint %u", js);
+                return MRW_E_FORMAT;
+            }
+            cur = cur->parent;
+        }
+    }
+
+    /* -- count the retained set; enforce the joint limit (extension still bounded) -- */
+    uint32_t jc = 0;
+    for (cgltf_size i = 0; i < nn; ++i) if (keep[i]) ++jc;
+    if (jc < 1 || jc > 0xFFFEu) {
+        free(keep); free(node_to_output);
+        set_diag(diag, diag_cap, "retained node closure has %u joints (must be 1..65534)", jc);
+        return MRW_E_RANGE;
+    }
+
+    /* -- final arrays -- */
+    const cgltf_node **nodes_out = (const cgltf_node **)malloc((size_t)jc * sizeof(cgltf_node *));
+    uint32_t *out_node_full      = (uint32_t *)malloc((size_t)jc * sizeof(uint32_t));
+    uint16_t *parent             = (uint16_t *)malloc((size_t)jc * sizeof(uint16_t));
+    uint32_t *skin_to_output     = (uint32_t *)malloc((size_t)sc * sizeof(uint32_t));
+    uint32_t *stack              = (uint32_t *)malloc((size_t)jc * sizeof(uint32_t)); /* DFS scratch */
+    uint32_t *kids               = (uint32_t *)malloc((size_t)jc * sizeof(uint32_t)); /* children scratch */
+    if (!nodes_out || !out_node_full || !parent || !skin_to_output || !stack || !kids) {
+        free(keep); free(node_to_output);
+        free(nodes_out); free(out_node_full); free(parent); free(skin_to_output); free(stack); free(kids);
+        set_diag(diag, diag_cap, "out of memory");
+        return MRW_E_OVERFLOW;
+    }
+
+    /* -- pre-order DFS. Roots are pushed in DESCENDING node index so the smallest pops first;
+     *    a node's retained children are gathered and pushed in descending node index too, so they
+     *    pop in ascending order. (children[] order is the file's, not necessarily node order.) -- */
+    uint32_t sp = 0, cnt = 0;
+    for (cgltf_size ri = nn; ri-- > 0; )
+        if (keep[ri] && data->nodes[ri].parent == NULL) stack[sp++] = (uint32_t)ri;
+
+    while (sp) {
+        uint32_t ni = stack[--sp];
+        /* A retained node must be reached exactly once; a second visit means two listed parents (or
+         * a cycle). */
+        if (node_to_output[ni] != UINT32_MAX) {
+            free(keep); free(node_to_output);
+            free(nodes_out); free(out_node_full); free(parent); free(skin_to_output); free(stack); free(kids);
+            set_diag(diag, diag_cap, "node %u is reachable twice (child cycle or split parent)", ni);
+            return MRW_E_FORMAT;
+        }
+        node_to_output[ni] = cnt;
+        out_node_full[cnt] = ni;
+        /* parent output index: by construction the parent was emitted before this node. If a node
+         * lists a child whose own parent link disagrees, the DFS may reach the child first - that
+         * is a malformed hierarchy, not a forest, so reject rather than emit a bogus parent. */
+        const cgltf_node *pn = data->nodes[ni].parent;
+        if (pn) {
+            int64_t pnidx = node_index_of(data, pn);
+            uint32_t po = (pnidx < 0) ? UINT32_MAX : node_to_output[(uint32_t)pnidx];
+            if (po == UINT32_MAX || po >= cnt) {
+                free(keep); free(stack); free(kids);
+                free(nodes_out); free(out_node_full); free(parent); free(skin_to_output);
+                /* node_to_output and the DFS scratch are still owned here */
+                free(node_to_output);
+                set_diag(diag, diag_cap, "node %u: parent/child links disagree", ni);
+                return MRW_E_FORMAT;
+            }
+            parent[cnt] = (uint16_t)po;
+        } else {
+            parent[cnt] = 0xFFFFu;
+        }
+        ++cnt;
+
+        const cgltf_node *node = &data->nodes[ni];
+        uint32_t nk = 0;
+        for (cgltf_size ci = 0; ci < node->children_count; ++ci) {
+            const cgltf_node *ch = node->children[ci];
+            if (!ch) continue;
+            int64_t chi64 = node_index_of(data, ch);
+            if (chi64 < 0) {
+                free(keep); free(node_to_output);
+                free(nodes_out); free(out_node_full); free(parent); free(skin_to_output); free(stack); free(kids);
+                set_diag(diag, diag_cap, "node %u: child is not a node of this glTF", ni);
+                return MRW_E_FORMAT;
+            }
+            uint32_t chi = (uint32_t)chi64;
+            if (keep[chi]) kids[nk++] = chi;
+        }
+        /* ascending by original node index, then push largest-first */
+        for (uint32_t a = 1; a < nk; ++a) { /* insertion sort: sibling lists are short */
+            uint32_t v = kids[a], b = a;
+            while (b > 0 && kids[b - 1] > v) { kids[b] = kids[b - 1]; --b; }
+            kids[b] = v;
+        }
+        if (sp + nk > jc) { /* every retained node is pushed at most once ⇒ a child cycle */
+            free(keep); free(node_to_output);
+            free(nodes_out); free(out_node_full); free(parent); free(skin_to_output); free(stack); free(kids);
+            set_diag(diag, diag_cap, "node hierarchy is not a forest (child cycle)");
+            return MRW_E_FORMAT;
+        }
+        for (uint32_t a = nk; a-- > 0; ) stack[sp++] = kids[a];
+    }
+    if (cnt != jc) { /* retained nodes unreachable from a real root: a parent/child inconsistency */
+        free(keep); free(node_to_output);
+        free(nodes_out); free(out_node_full); free(parent); free(skin_to_output); free(stack); free(kids);
+        set_diag(diag, diag_cap, "retained node set is not reachable from a real root");
+        return MRW_E_FORMAT;
+    }
+
+    /* -- node -> output and skin slot -> output maps -- */
+    for (uint32_t mj = 0; mj < jc; ++mj)
+        nodes_out[mj] = &data->nodes[out_node_full[mj]];
+    for (uint32_t js = 0; js < sc; ++js)
+        skin_to_output[js] = node_to_output[(uint32_t)node_index_of(data, skin->joints[js])];
+
+    free(keep); free(stack); free(kids);
+
+    fo.joint_count    = jc;
+    fo.nodes          = nodes_out;
+    fo.node_index     = out_node_full;
+    fo.parent         = parent;
+    fo.skin_to_output = skin_to_output;
+    fo.node_to_output = node_to_output;
+    *out = fo;
+    return MRW_OK;
+}
+
+void mrw_g2m_forest_order_free(mrw_g2m_forest_order *fo) {
+    if (!fo) return;
+    free((void *)fo->nodes);
+    free(fo->node_index);
+    free(fo->parent);
+    free(fo->skin_to_output);
+    free(fo->node_to_output);
+    memset(fo, 0, sizeof *fo);
 }

@@ -117,9 +117,8 @@ static mrw_result batch_scalar(const mrw_skeleton_view *skel, const mrw_clip_vie
         }
 
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
             uint16_t parent = 0;
-            if (!is_root) mrw_skeleton_parent(skel, j, &parent); /* parent < j (validated) */
+            mrw_skeleton_parent(skel, j, &parent); /* parent < j, or 0xFFFF for a forest root */
 
             /* Compose model(j) per lane: model(j) = root ? local : model(parent) ∘ local. */
             for (uint32_t l = 0; l < MRW_LANES; ++l) {
@@ -134,7 +133,7 @@ static mrw_result batch_scalar(const mrw_skeleton_view *skel, const mrw_clip_vie
                 }
                 float local12[MRW_PALETTE_FLOATS], mj[MRW_PALETTE_FLOATS];
                 mrw_trs_to_affine(&lj, local12);
-                if (is_root) {
+                if (parent == 0xFFFFu) {
                     memcpy(mj, local12, sizeof mj);
                 } else {
                     float pm[MRW_PALETTE_FLOATS];

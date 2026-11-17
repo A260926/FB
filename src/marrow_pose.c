@@ -33,6 +33,16 @@ mrw_result mrw_clip_sample_local(const mrw_clip_view *clip, float t,
 
 /* ------------------------------------------------------------------ local→model→palette */
 
+/* Compose model(j) from an already-built local affine: a forest root (parent 0xFFFF) starts its
+ * own world from its local; any other joint composes onto its parent's model. `parent < j` is a
+ * loader invariant (validated), including for a forest: a root's index IS smaller than every one
+ * of its descendants, so one ascending pass handles any number of roots. Shared by the single-pose
+ * and fused paths. */
+static void compose_model(const float local12[12], uint32_t j, uint16_t parent, float *out_model) {
+    if (parent == 0xFFFFu) memcpy(out_model + (size_t)j * 12, local12, sizeof(float) * 12);
+    else mrw_affine_mul(out_model + (size_t)parent * 12, local12, out_model + (size_t)j * 12);
+}
+
 mrw_result mrw_local_to_model(const mrw_skeleton_view *skel, const mrw_trs *locals,
                                     float *out_model, uint32_t joint_capacity) {
     if (!skel || !locals || !out_model) return MRW_E_RANGE;
@@ -41,13 +51,9 @@ mrw_result mrw_local_to_model(const mrw_skeleton_view *skel, const mrw_trs *loca
     for (uint32_t j = 0; j < n; ++j) {
         float local12[12];
         mrw_trs_to_affine(&locals[j], local12);
-        if (j == 0) {
-            memcpy(out_model, local12, sizeof local12);          /* root: model = local */
-        } else {
-            uint16_t parent;
-            mrw_skeleton_parent(skel, j, &parent);            /* parent < j (validated) */
-            mrw_affine_mul(out_model + (size_t)parent * 12, local12, out_model + (size_t)j * 12);
-        }
+        uint16_t parent;
+        mrw_skeleton_parent(skel, j, &parent);                /* parent < j (validated) */
+        compose_model(local12, j, parent, out_model);
     }
     return MRW_OK;
 }
@@ -89,13 +95,9 @@ mrw_result mrw_clip_to_palette(const mrw_skeleton_view *skel, const mrw_clip_vie
         }
         float local12[12];
         mrw_trs_to_affine(&lj, local12);
-        if (j == 0) {
-            memcpy(scratch_model, local12, sizeof local12);
-        } else {
-            uint16_t parent;
-            mrw_skeleton_parent(skel, j, &parent);
-            mrw_affine_mul(scratch_model + (size_t)parent * 12, local12, scratch_model + (size_t)j * 12);
-        }
+        uint16_t parent;
+        mrw_skeleton_parent(skel, j, &parent);                /* parent < j (validated) */
+        compose_model(local12, j, parent, scratch_model);
         float ib[12];
         mrw_skeleton_inverse_bind(skel, j, ib);
         mrw_affine_mul(scratch_model + (size_t)j * 12, ib, out_palette + (size_t)j * 12);

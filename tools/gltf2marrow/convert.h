@@ -14,6 +14,10 @@ typedef struct {
     int         force_codec0;   /* skip the unit-scale codec-1 snap; always emit raw codec 0 */
     const char *const *anims;   /* NULL = all animations; else only those named here   */
     uint32_t    anim_count;     /* length of anims[]                                   */
+    int         preserve_nodes; /* 0 (default) = fold non-joint chain nodes into joint locals;
+                                 * 1 = keep every real node (joints + ancestor closure) as its
+                                 * own bone, so a shear in a chain product stays in the model
+                                 * matrices instead of failing a TRS decomposition.            */
 } mrw_g2m_options;
 
 /* Parse + fold/resample + serialize into a fresh 64-aligned blob (free with mrw_authoring_free).

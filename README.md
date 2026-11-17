@@ -185,7 +185,10 @@ The runtime only *consumes* assets. Producing them lives in separate targets tha
 libraries and are never linked into the runtime:
 
 - **`gltf2marrow`**: imports a glTF 2.0 skin + animations into a v0 `.mrw` (vendored cgltf;
-  resamples to dense clips; self-validates before emit).
+  resamples to dense clips; self-validates before emit). By default it folds non-joint nodes between
+  joints into each joint's local TRS (and rejects a chain whose product is a shear); `--preserve-nodes`
+  instead keeps every real node of the skin's ancestor closure as its own bone, so a shear stays in
+  the model-matrix product and a skin spanning disconnected trees imports as a forest.
 - **`marrow-bake`**: bakes a `.mrw` clip set into a Tier-B baked texture section, polar-decomposing
   each bone to `Q+T+uniform-scale`, measuring the reconstruction residual, and **rejecting rigs
   that can't be represented** (they stay valid Tier-A assets).

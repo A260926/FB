@@ -85,9 +85,8 @@ static mrw_result blend_scalar(const mrw_skeleton_view *skel,
             stB[l] = mrw_clip_frame(clipB, timesB[idx], &i0B[l], &uB[l]);
         }
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
             uint16_t parent = 0;
-            if (!is_root) mrw_skeleton_parent(skel, j, &parent);
+            mrw_skeleton_parent(skel, j, &parent); /* parent < j, or 0xFFFF for a forest root */
             float ib[12]; mrw_skeleton_inverse_bind(skel, j, ib);
             for (uint32_t l = 0; l < MRW_LANES; ++l) {
                 uint32_t idx = base + (l < live ? l : 0);
@@ -99,7 +98,7 @@ static mrw_result blend_scalar(const mrw_skeleton_view *skel,
                 float we = mrw_clampf(wc * mj, 0.0f, 1.0f);
                 mrw_interp_trs(&la, &lb, we, &blended);            /* blend (== mrw_pose_blend) */
                 float local12[12]; mrw_trs_to_affine(&blended, local12);
-                compose_scatter_scalar(model, ib, local12, is_root, parent,
+                compose_scatter_scalar(model, ib, local12, parent == 0xFFFFu, parent,
                                        j, jc, base + l, l, l < live, out_palettes, out_format);
             }
         }
@@ -121,9 +120,8 @@ static mrw_result accum_scalar(const mrw_skeleton_view *skel, const mrw_clip_vie
             st[l] = mrw_clip_frame(base_clip, times[idx], &i0[l], &uu[l]);
         }
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
             uint16_t parent = 0;
-            if (!is_root) mrw_skeleton_parent(skel, j, &parent);
+            mrw_skeleton_parent(skel, j, &parent); /* parent < j, or 0xFFFF for a forest root */
             float ib[12]; mrw_skeleton_inverse_bind(skel, j, ib);
             for (uint32_t l = 0; l < MRW_LANES; ++l) {
                 uint32_t idx = base + (l < live ? l : 0);
@@ -142,7 +140,7 @@ static mrw_result accum_scalar(const mrw_skeleton_view *skel, const mrw_clip_vie
                     acc.scale[k] = bp.scale[k] + we * (target - bp.scale[k]);
                 }
                 float local12[12]; mrw_trs_to_affine(&acc, local12);
-                compose_scatter_scalar(model, ib, local12, is_root, parent,
+                compose_scatter_scalar(model, ib, local12, parent == 0xFFFFu, parent,
                                        j, jc, base + l, l, l < live, out_palettes, out_format);
             }
         }

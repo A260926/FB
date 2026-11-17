@@ -302,7 +302,10 @@ uint16_t mrw_f32_to_f16   (float f);                                   /**< IEEE
 mrw_result mrw_clip_sample_local(const mrw_clip_view *clip, float t,
                                        mrw_trs *out_locals, uint32_t joint_capacity);
 
-/** Hierarchy compose: model(j) = root ? local(j) : model(parent)∘local(j). */
+/** Hierarchy compose: model(j) = root ? local(j) : model(parent)∘local(j). A joint is a root when
+ * its parent slot is 0xFFFF; a skeleton may be a forest (several roots, each starting its own
+ * model from its local). Non-root parents are strictly smaller indices, so one ascending pass
+ * composes any tree or forest. */
 mrw_result mrw_local_to_model(const mrw_skeleton_view *skel, const mrw_trs *locals,
                                     float *out_model, uint32_t joint_capacity);
 

@@ -1,0 +1,1 @@
+{"asset":{"version":"2.0"},"nodes":[{"name":"scale_helper","scale":[2,1,1],"children":[1]},{"name":"joint","rotation":[0,0,0.3826834324,0.9238795325]}],"skins":[{"joints":[1]}]}

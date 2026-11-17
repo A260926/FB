@@ -34,7 +34,7 @@ offsets, so the views can borrow the bytes directly.
 
 | Type | Holds |
 |---|---|
-| `MRW_SECTION_SKELETON` | The joint hierarchy: parents, rest-local transforms, inverse-bind matrices, joint names. A blob has at most one. |
+| `MRW_SECTION_SKELETON` | The joint hierarchy: parents, rest-local transforms, inverse-bind matrices, joint names. A blob has at most one. The parent table may describe a single tree or a **forest**: a slot is a root when its parent is `0xFFFF` (allowed at any index), and every non-root parent is a strictly smaller index. That rule rejects self-reference, forward edges and out-of-range parents. |
 | `MRW_SECTION_CLIP` | A dense animation clip: per-joint samples at a fixed `fps`, optional root-motion track, looping flag. |
 | `MRW_SECTION_BAKED` | The Tier-B baked palette: per-bone `Q + T + scale` texels plus a clip table (see @ref concept_two_tiers). |
 

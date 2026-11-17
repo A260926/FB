@@ -193,11 +193,50 @@ static int node_local_affine(cgltf_data *data, const cgltf_node *node, const sam
 typedef struct {
     cgltf_data *data;
     const cgltf_skin *skin;
-    const int32_t  *parent_js; /* skin-order joint -> parent skin-order index, -1 = root */
-    const uint32_t *order;     /* marrow index -> skin-order joint index                 */
+    const int32_t  *parent_js; /* fold mode: skin-order joint -> parent skin-order index, -1 root */
+    const uint32_t *order;     /* fold mode: marrow index -> skin-order joint index                 */
+    const mrw_g2m_forest_order *forest; /* preserve mode: real-node ordering (NULL in fold mode)    */
     uint32_t jc;
     char *diag; size_t diag_cap;
 } skelctx;
+
+static mrw_result fold_local(const skelctx *c, const samplers *ss, float t, uint32_t mj, float out10[10]);
+
+/* Single real node's own local TRS at `t`. A static `matrix` node must be decomposed - the same
+ * representability limit fold mode has always applied to a one-node chain (shear ⇒ error); every
+ * T/R/S node is used verbatim, so an ancestor's animation applies exactly once in the hierarchy. */
+static mrw_result node_own_local(const skelctx *c, const samplers *ss, float t, uint32_t oi,
+                                 float out10[10]) {
+    const cgltf_node *N = c->forest->nodes[oi];
+    if (!N->has_matrix) {
+        mrw_trs trs;
+        if (node_trs_at(c->data, N, ss, t, &trs)) { set_diag(c->diag, c->diag_cap, "joint %u: sampler read failed", oi); return MRW_E_FORMAT; }
+        memcpy(out10 + 0, trs.rot, 16);
+        memcpy(out10 + 4, trs.trans, 12);
+        memcpy(out10 + 7, trs.scale, 12);
+        return MRW_OK;
+    }
+    float m[12];
+    colmajor4x4_to_affine(N->matrix, m);
+    float q[4], tr[3], sc[3];
+    if (!decompose_trs(m, q, tr, sc, 1e-4f)) {
+        set_diag(c->diag, c->diag_cap, "joint %u: node matrix has shear or degenerate scale (not representable as TRS)", oi);
+        return MRW_E_FORMAT;
+    }
+    memcpy(out10 + 0, q, 16);
+    memcpy(out10 + 4, tr, 12);
+    memcpy(out10 + 7, sc, 12);
+    return MRW_OK;
+}
+
+/* The output bone's local TRS at `t` (ss=NULL → rest pose), in the selected mode. */
+static mrw_result bone_local_at(const skelctx *c, const samplers *ss, float t, uint32_t mj,
+                                float out10[10]) {
+    if (c->forest) return node_own_local(c, ss, t, mj, out10);
+    /* fold mode: the chain from the parent joint (exclusive) to the joint (inclusive), composed
+     * and decomposed; a shear in that product is rejected. */
+    return fold_local(c, ss, t, mj, out10);
+}
 
 /* Fold the node chain from the parent joint (exclusive) to joint `mj` (inclusive) into a marrow
  * local TRS at time `t` (ss=NULL → rest pose). Fast path: a single non-`matrix` node emits its TRS
@@ -242,8 +281,14 @@ static mrw_result fold_local(const skelctx *c, const samplers *ss, float t, uint
     return MRW_OK;
 }
 
-/* mark every node that appears in any joint's fold path (the nodes whose animation affects output) */
+/* mark every node whose animation affects the output: in fold mode, the nodes along each joint's
+ * fold path; in preserve mode, exactly the retained real nodes. */
 static void mark_relevant(const skelctx *c, uint8_t *relevant) {
+    if (c->forest) {
+        for (uint32_t mj = 0; mj < c->jc; ++mj)
+            relevant[c->forest->node_index[mj]] = 1;
+        return;
+    }
     for (uint32_t mj = 0; mj < c->jc; ++mj) {
         uint32_t js = c->order[mj];
         const cgltf_node *N = c->skin->joints[js];
@@ -320,7 +365,7 @@ static mrw_result build_clip(const skelctx *c, const cgltf_animation *anim, floa
         float t = (sample_count < 2) ? 0.0f : (sidx == sample_count - 1 ? D : (float)sidx / fps_stored);
         for (uint32_t mj = 0; mj < c->jc; ++mj) {
             float *dst = samples + ((size_t)mj * sample_count + sidx) * 10; /* joint-major layout */
-            rc = fold_local(c, &ss, t, mj, dst);
+            rc = bone_local_at(c, &ss, t, mj, dst);
             if (rc) { free(samples); goto cleanup; }
         }
     }
@@ -403,8 +448,11 @@ mrw_result mrw_g2m_convert(const mrw_g2m_options *opt, uint8_t **out_buf, size_t
 
     mrw_result rc = MRW_OK;
     mrw_g2m_joint_order jo = {0};
+    mrw_g2m_forest_order fo = {0};
     uint16_t *parent = NULL; float *rest_local = NULL, *inverse_bind = NULL;
     char **names = NULL; char *name_pool = NULL;
+    uint32_t *skin_to_output = NULL; /* NULL ⇒ fold mode (skin slot == output index) */
+    int32_t  *output_to_slot = NULL; /* preserve mode: output index -> skin slot, -1 = aux bone */
     uint8_t *relevant = NULL;
     mrw_clip *clips = NULL; float **clip_samples = NULL; uint32_t nclip = 0;
     uint32_t *anim_sel = NULL;
@@ -421,14 +469,24 @@ mrw_result mrw_g2m_convert(const mrw_g2m_options *opt, uint8_t **out_buf, size_t
     } else { set_diag(diag, diag_cap, "%zu skins present; pass --skin <index>", data->skins_count); rc = MRW_E_FORMAT; goto done; }
     const cgltf_skin *skin = &data->skins[skin_i];
 
-    /* ---- parent resolution + single-root requirement + topological (marrow) order ---- */
-    rc = mrw_g2m_joint_order_build(skin, &jo, diag, diag_cap);
-    if (rc) goto done;
-    uint32_t jc = jo.joint_count;
+    /* ---- ordering. Default: fold non-joint chain nodes, requiring a single-root joint tree.
+     *      preserve_nodes: keep the real node forest (joints + ancestor closure, no virtual root). ---- */
+    skelctx ctx = { data, skin, NULL, NULL, NULL, 0, diag, diag_cap };
+    if (opt->preserve_nodes) {
+        rc = mrw_g2m_forest_order_build(data, skin, &fo, diag, diag_cap);
+        if (rc) goto done;
+        ctx.forest = &fo;
+        ctx.jc = fo.joint_count;
+    } else {
+        rc = mrw_g2m_joint_order_build(skin, &jo, diag, diag_cap);
+        if (rc) goto done;
+        ctx.parent_js = jo.parent_js;
+        ctx.order = jo.order;
+        ctx.jc = jo.joint_count;
+    }
+    uint32_t jc = ctx.jc;
 
-    skelctx ctx = { data, skin, jo.parent_js, jo.order, jc, diag, diag_cap };
-
-    /* ---- skeleton arrays in marrow order ---- */
+    /* ---- skeleton arrays in output order ---- */
     parent = (uint16_t *)malloc((size_t)jc * sizeof(uint16_t));
     rest_local = (float *)malloc((size_t)jc * 10 * sizeof(float));
     inverse_bind = (float *)malloc((size_t)jc * 12 * sizeof(float));
@@ -436,22 +494,43 @@ mrw_result mrw_g2m_convert(const mrw_g2m_options *opt, uint8_t **out_buf, size_t
     name_pool = (char *)malloc((size_t)jc * 24); /* "joint_4294967295" + NUL fits in 24 */
     if (!parent || !rest_local || !inverse_bind || !names || !name_pool) { rc = MRW_E_OVERFLOW; goto done; }
 
-    for (uint32_t mj = 0; mj < jc; ++mj) {
-        uint32_t js = jo.order[mj];
-        parent[mj] = (jo.parent_js[js] < 0) ? 0xFFFFu : (uint16_t)jo.marrow_of[jo.parent_js[js]];
+    /* In preserve mode a skin slot and an output index are different things: the original skin's
+     * inverse-bind matrix is paired with its slot (never with the output index), and the extra
+     * ancestor bones get identity. Vertex JOINTS_0 values stay skin slots; a consumer remaps them
+     * with fo.skin_to_output. Fold mode keeps the historical slot-==-output behavior. */
+    if (fo.joint_count) {
+        skin_to_output = (uint32_t *)malloc((size_t)skin->joints_count * sizeof(uint32_t));
+        output_to_slot = (int32_t *)malloc((size_t)jc * sizeof(int32_t));
+        if (!skin_to_output || !output_to_slot) { rc = MRW_E_OVERFLOW; goto done; }
+        memcpy(skin_to_output, fo.skin_to_output, (size_t)skin->joints_count * sizeof(uint32_t));
+        for (uint32_t mj = 0; mj < jc; ++mj) output_to_slot[mj] = -1;
+        for (uint32_t js = 0; js < skin->joints_count; ++js) output_to_slot[skin_to_output[js]] = (int32_t)js;
+    }
 
-        rc = fold_local(&ctx, NULL, 0.0f, mj, rest_local + (size_t)mj * 10);
+    for (uint32_t mj = 0; mj < jc; ++mj) {
+        if (fo.joint_count) {
+            parent[mj] = fo.parent[mj];
+        } else {
+            uint32_t js = jo.order[mj];
+            parent[mj] = (jo.parent_js[js] < 0) ? 0xFFFFu : (uint16_t)jo.marrow_of[jo.parent_js[js]];
+        }
+
+        rc = bone_local_at(&ctx, NULL, 0.0f, mj, rest_local + (size_t)mj * 10);
         if (rc) goto done;
 
-        if (skin->inverse_bind_matrices) {
+        /* which element of skin.inverse_bind_matrices (a skin slot), or -1 for an added ancestor
+         * bone that has no inverse-bind of its own (identity). */
+        int32_t ib_slot = fo.joint_count ? output_to_slot[mj] : (int32_t)jo.order[mj];
+
+        if (skin->inverse_bind_matrices && ib_slot >= 0) {
             float m16[16];
-            if (!cgltf_accessor_read_float(skin->inverse_bind_matrices, js, m16, 16)) { set_diag(diag, diag_cap, "joint %u: inverse-bind matrix read failed", mj); rc = MRW_E_FORMAT; goto done; }
+            if (!cgltf_accessor_read_float(skin->inverse_bind_matrices, (cgltf_size)ib_slot, m16, 16)) { set_diag(diag, diag_cap, "joint %u: inverse-bind matrix read failed", mj); rc = MRW_E_FORMAT; goto done; }
             colmajor4x4_to_affine(m16, inverse_bind + (size_t)mj * 12);
         } else {
             memcpy(inverse_bind + (size_t)mj * 12, G2M_IDENT12, sizeof G2M_IDENT12);
         }
 
-        const char *nm = skin->joints[js]->name;
+        const char *nm = fo.joint_count ? fo.nodes[mj]->name : skin->joints[jo.order[mj]]->name;
         if (nm) { names[mj] = (char *)nm; }
         else { char *p = name_pool + (size_t)mj * 24; snprintf(p, 24, "joint_%u", mj); names[mj] = p; }
     }
@@ -510,6 +589,8 @@ done:
     free(clips);
     free(anim_sel); free(relevant);
     free(name_pool); free(names); free(inverse_bind); free(rest_local); free(parent);
+    free(skin_to_output); free(output_to_slot);
+    mrw_g2m_forest_order_free(&fo);
     mrw_g2m_joint_order_free(&jo);
     cgltf_free(data);
     return rc;
