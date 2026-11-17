@@ -31,6 +31,7 @@ SET(SOURCE_FILES
     OpenVolumeMesh/Mesh/HexahedralMeshTopologyKernel.cc
     OpenVolumeMesh/Unstable/Topology/TetTopology.cc
     OpenVolumeMesh/Unstable/Topology/TriangleTopology.cc
+    OpenVolumeMesh/Unstable/Topology/InterfaceCut.cc
 )
 
 # No Qt in any of our headers:

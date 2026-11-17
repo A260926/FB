@@ -804,6 +804,24 @@ public:
     /// Exchanges the indices of two vertices while keeping the mesh otherwise unaffected.
     virtual void swap_vertex_indices(VertexHandle _h1, VertexHandle _h2);
 
+    /// \brief Copy the values of all properties of one entity to another entity
+    ///        of the same type.
+    ///
+    /// Every property that is currently tracked for the entity type is copied,
+    /// independent of whether it is persistent, shared, or serializable.
+    /// This makes it possible to duplicate user-defined, copy-assignable
+    /// property types that cannot be written to a file.
+    ///
+    /// Both handles must refer to existing entities of the same type. The
+    /// destination entity is not modified in any other way.
+    template <typename Handle>
+    void copy_entity_properties(Handle _src, Handle _dst)
+    {
+        static_assert(is_handle_v<Handle>,
+                      "copy_entity_properties() requires an entity handle.");
+        copy_property_elements(_src, _dst);
+    }
+
 protected:
 
     class EdgeCorrector {
