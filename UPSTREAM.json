@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/PHZ76/RtspServer",
+  "commit": "1fe0ac9a0a9d417d09c2125b6fd2c1627beea186",
+  "license": "MIT; bundled md5 retains src/3rdpart/md5/COPYING",
+  "scope": "固定全部src生产源码；七个Darwin分支补丁，未加入目标功能。"
+}
