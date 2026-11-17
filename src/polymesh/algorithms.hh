@@ -28,6 +28,7 @@
 #include "algorithms/operations.hh"
 #include "algorithms/sampling.hh"
 #include "algorithms/smoothing.hh"
+#include "algorithms/soup_repair.hh"
 #include "algorithms/stats.hh"
 #include "algorithms/subdivision/loop.hh"
 #include "algorithms/subdivision/sqrt3.hh"

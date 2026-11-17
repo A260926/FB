@@ -1,4 +1,5 @@
 src/polymesh/Mesh.cc
 src/polymesh/assert.cc
 src/polymesh/debug.cc
+src/polymesh/algorithms/soup_repair.cc
 src/polymesh/formats/obj.cc
