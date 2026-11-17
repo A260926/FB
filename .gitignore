@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Task build artifacts
+.task-build/
+
 # Compiled Object files
 *.slo
 *.lo
