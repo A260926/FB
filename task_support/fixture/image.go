@@ -2,46 +2,193 @@
 package fixture
 
 import (
- "bytes"
- "encoding/binary"
- "github.com/blacktop/go-macho/types"
+	"bytes"
+	"encoding/binary"
+	"github.com/blacktop/go-macho/types"
 )
 
 // Image contains the source bytes and physical table positions for extensions.
-type Image struct { Bytes []byte; Symoff, Stroff, Modoff, Tocoff, Refoff, Indoff uint32 }
+type Image struct {
+	Bytes                                          []byte
+	Symoff, Stroff, Modoff, Tocoff, Refoff, Indoff uint32
+}
 
 // Build emits two same-named modules, two distinct same-named definitions,
 // duplicate TOC rows, and reference windows in a different order from modules.
 func Build(wide, big, dysymFirst bool) Image {
- var order binary.ByteOrder = binary.LittleEndian
- if big { order = binary.BigEndian }
- out:=Image{Bytes:make([]byte,0x900),Symoff:0x200,Stroff:0x300,Modoff:0x400,Tocoff:0x500,Refoff:0x600,Indoff:0x700}
- var strings bytes.Buffer
- strings.WriteByte(0)
- add:=func(s string) uint32 { p:=uint32(strings.Len());strings.WriteString(s);strings.WriteByte(0);return p }
- local:=add("same");def:=add("_same");need:=add("_need");module:=add("unit.o")
- copy(out.Bytes[out.Stroff:],strings.Bytes())
- sym:=types.SymtabCmd{LoadCmd:types.LC_SYMTAB,Len:24,Symoff:out.Symoff,Nsyms:6,Stroff:out.Stroff,Strsize:uint32(strings.Len())}
- dys:=types.DysymtabCmd{LoadCmd:types.LC_DYSYMTAB,Len:80,Ilocalsym:0,Nlocalsym:2,Iextdefsym:2,Nextdefsym:2,Iundefsym:4,Nundefsym:2,Tocoffset:out.Tocoff,Ntoc:3,Modtaboff:out.Modoff,Nmodtab:2,Extrefsymoff:out.Refoff,Nextrefsyms:3,Indirectsymoff:out.Indoff,Nindirectsyms:3}
- var loads bytes.Buffer
- if dysymFirst { binary.Write(&loads,order,dys);binary.Write(&loads,order,sym) } else { binary.Write(&loads,order,sym);binary.Write(&loads,order,dys) }
- h:=types.FileHeader{Magic:types.Magic32,CPU:types.CPUX86,Type:types.MH_DYLIB,NCommands:2,SizeCommands:uint32(loads.Len())}
- if wide { h.Magic=types.Magic64;h.CPU=types.CPUAmd64 }
- start:=h.Put(out.Bytes,order);copy(out.Bytes[start:],loads.Bytes())
- names:=[]uint32{local,local,def,def,need,need};values:=[]uint64{0x11,0x22,0x100,0x200,0,0}
- var nlists bytes.Buffer
- for i,n:=range names { binary.Write(&nlists,order,n);typ:=byte(2);if i>=2 {typ=3};if i>=4 {typ=1};nlists.WriteByte(typ);nlists.WriteByte(0);binary.Write(&nlists,order,uint16(0));if wide {binary.Write(&nlists,order,values[i])} else {binary.Write(&nlists,order,uint32(values[i]))} }
- copy(out.Bytes[out.Symoff:],nlists.Bytes())
- var mods bytes.Buffer
- for i:=0;i<2;i++ {
-  refs,count:=uint32(1),uint32(2);if i==1 {refs=0;count=1}
-  head:=[]uint32{module,uint32(2+i),1,refs,count,uint32(i),1,0,0,0,0}
-  for _,v:=range head {binary.Write(&mods,order,v)}
-  if wide {binary.Write(&mods,order,uint32(0));binary.Write(&mods,order,uint64(0))} else {binary.Write(&mods,order,uint32(0));binary.Write(&mods,order,uint32(0))}
- }
- copy(out.Bytes[out.Modoff:],mods.Bytes())
- for i,pair:=range [][2]uint32{{3,1},{2,0},{2,0}} {order.PutUint32(out.Bytes[int(out.Tocoff)+i*8:],pair[0]);order.PutUint32(out.Bytes[int(out.Tocoff)+i*8+4:],pair[1])}
- for i,pair:=range [][2]uint32{{2,1},{5,0},{4,1}} {raw:=pair[0]|pair[1]<<24;if big {raw=pair[0]<<8|pair[1]};order.PutUint32(out.Bytes[int(out.Refoff)+i*4:],raw)}
- for i,v:=range []uint32{2,types.INDIRECT_SYMBOL_LOCAL,5} {order.PutUint32(out.Bytes[int(out.Indoff)+i*4:],v)}
- return out
+	var order binary.ByteOrder = binary.LittleEndian
+	if big {
+		order = binary.BigEndian
+	}
+	out := Image{Bytes: make([]byte, 0x900), Symoff: 0x200, Stroff: 0x300, Modoff: 0x400, Tocoff: 0x500, Refoff: 0x600, Indoff: 0x700}
+	var strings bytes.Buffer
+	strings.WriteByte(0)
+	add := func(s string) uint32 {
+		p := uint32(strings.Len())
+		strings.WriteString(s)
+		strings.WriteByte(0)
+		return p
+	}
+	local := add("same")
+	def := add("_same")
+	need := add("_need")
+	module := add("unit.o")
+	copy(out.Bytes[out.Stroff:], strings.Bytes())
+	sym := types.SymtabCmd{LoadCmd: types.LC_SYMTAB, Len: 24, Symoff: out.Symoff, Nsyms: 6, Stroff: out.Stroff, Strsize: uint32(strings.Len())}
+	dys := types.DysymtabCmd{LoadCmd: types.LC_DYSYMTAB, Len: 80, Ilocalsym: 0, Nlocalsym: 2, Iextdefsym: 2, Nextdefsym: 2, Iundefsym: 4, Nundefsym: 2, Tocoffset: out.Tocoff, Ntoc: 3, Modtaboff: out.Modoff, Nmodtab: 2, Extrefsymoff: out.Refoff, Nextrefsyms: 3, Indirectsymoff: out.Indoff, Nindirectsyms: 3}
+	var loads bytes.Buffer
+	if dysymFirst {
+		binary.Write(&loads, order, dys)
+		binary.Write(&loads, order, sym)
+	} else {
+		binary.Write(&loads, order, sym)
+		binary.Write(&loads, order, dys)
+	}
+	h := types.FileHeader{Magic: types.Magic32, CPU: types.CPUX86, Type: types.MH_DYLIB, NCommands: 2, SizeCommands: uint32(loads.Len())}
+	if wide {
+		h.Magic = types.Magic64
+		h.CPU = types.CPUAmd64
+	}
+	start := h.Put(out.Bytes, order)
+	copy(out.Bytes[start:], loads.Bytes())
+	names := []uint32{local, local, def, def, need, need}
+	values := []uint64{0x11, 0x22, 0x100, 0x200, 0, 0}
+	var nlists bytes.Buffer
+	for i, n := range names {
+		binary.Write(&nlists, order, n)
+		typ := byte(2)
+		if i >= 2 {
+			typ = 3
+		}
+		if i >= 4 {
+			typ = 1
+		}
+		nlists.WriteByte(typ)
+		nlists.WriteByte(0)
+		binary.Write(&nlists, order, uint16(0))
+		if wide {
+			binary.Write(&nlists, order, values[i])
+		} else {
+			binary.Write(&nlists, order, uint32(values[i]))
+		}
+	}
+	copy(out.Bytes[out.Symoff:], nlists.Bytes())
+	var mods bytes.Buffer
+	for i := 0; i < 2; i++ {
+		refs, count := uint32(1), uint32(2)
+		if i == 1 {
+			refs = 0
+			count = 1
+		}
+		head := []uint32{module, uint32(2 + i), 1, refs, count, uint32(i), 1, 0, 0, 0, 0}
+		for _, v := range head {
+			binary.Write(&mods, order, v)
+		}
+		if wide {
+			// 64-bit tail: size first, then the 64-bit Objective-C address.
+			binary.Write(&mods, order, uint32(0x50+i))
+			binary.Write(&mods, order, uint64(0xB000)+uint64(i))
+		} else {
+			// 32-bit tail: Objective-C address first, then the size.
+			binary.Write(&mods, order, uint32(0xA000)+uint32(i))
+			binary.Write(&mods, order, uint32(0x50+i))
+		}
+	}
+	copy(out.Bytes[out.Modoff:], mods.Bytes())
+	for i, pair := range [][2]uint32{{3, 1}, {2, 0}, {2, 0}} {
+		order.PutUint32(out.Bytes[int(out.Tocoff)+i*8:], pair[0])
+		order.PutUint32(out.Bytes[int(out.Tocoff)+i*8+4:], pair[1])
+	}
+	for i, pair := range [][2]uint32{{2, 1}, {5, 0}, {4, 1}} {
+		raw := pair[0] | pair[1]<<24
+		if big {
+			raw = pair[0]<<8 | pair[1]
+		}
+		order.PutUint32(out.Bytes[int(out.Refoff)+i*4:], raw)
+	}
+	for i, v := range []uint32{2, types.INDIRECT_SYMBOL_LOCAL, 5} {
+		order.PutUint32(out.Bytes[int(out.Indoff)+i*4:], v)
+	}
+	return out
+}
+
+// BuildEmptyTables emits a dylib whose TOC, module, reference and indirect
+// counts are all zero. Their recorded offsets point past the image, so a
+// parser that reads a zero-count table fails instead of succeeding.
+func BuildEmptyTables(wide, big bool) Image {
+	var order binary.ByteOrder = binary.LittleEndian
+	if big {
+		order = binary.BigEndian
+	}
+	out := Image{Bytes: make([]byte, 0x400), Symoff: 0x200, Stroff: 0x300}
+	var strings bytes.Buffer
+	strings.WriteByte(0)
+	strings.WriteString("a")
+	strings.WriteByte(0)
+	copy(out.Bytes[out.Stroff:], strings.Bytes())
+	sym := types.SymtabCmd{LoadCmd: types.LC_SYMTAB, Len: 24, Symoff: out.Symoff, Nsyms: 1, Stroff: out.Stroff, Strsize: uint32(strings.Len())}
+	const deadOffset uint32 = 0xfffffff0
+	dys := types.DysymtabCmd{
+		LoadCmd: types.LC_DYSYMTAB, Len: 80,
+		Tocoffset: deadOffset, Modtaboff: deadOffset, Extrefsymoff: deadOffset, Indirectsymoff: deadOffset,
+	}
+	var loads bytes.Buffer
+	binary.Write(&loads, order, sym)
+	binary.Write(&loads, order, dys)
+	h := types.FileHeader{Magic: types.Magic32, CPU: types.CPUX86, Type: types.MH_DYLIB, NCommands: 2, SizeCommands: uint32(loads.Len())}
+	if wide {
+		h.Magic = types.Magic64
+		h.CPU = types.CPUAmd64
+	}
+	start := h.Put(out.Bytes, order)
+	copy(out.Bytes[start:], loads.Bytes())
+	var nlist bytes.Buffer
+	binary.Write(&nlist, order, uint32(1)) // string-table offset of "a"
+	nlist.WriteByte(0x0f)                  // N_EXT | N_SECT
+	nlist.WriteByte(1)
+	binary.Write(&nlist, order, uint16(0))
+	if wide {
+		binary.Write(&nlist, order, uint64(0x1000))
+	} else {
+		binary.Write(&nlist, order, uint32(0x1000))
+	}
+	copy(out.Bytes[out.Symoff:], nlist.Bytes())
+	return out
+}
+
+// BuildNoDysym emits an image carrying only LC_SYMTAB, with no
+// LC_DYSYMTAB at all.
+func BuildNoDysym(wide, big bool) Image {
+	var order binary.ByteOrder = binary.LittleEndian
+	if big {
+		order = binary.BigEndian
+	}
+	out := Image{Bytes: make([]byte, 0x400), Symoff: 0x200, Stroff: 0x300}
+	var strings bytes.Buffer
+	strings.WriteByte(0)
+	strings.WriteString("_lonely")
+	strings.WriteByte(0)
+	copy(out.Bytes[out.Stroff:], strings.Bytes())
+	sym := types.SymtabCmd{LoadCmd: types.LC_SYMTAB, Len: 24, Symoff: out.Symoff, Nsyms: 1, Stroff: out.Stroff, Strsize: uint32(strings.Len())}
+	var loads bytes.Buffer
+	binary.Write(&loads, order, sym)
+	h := types.FileHeader{Magic: types.Magic32, CPU: types.CPUX86, Type: types.MH_DYLIB, NCommands: 1, SizeCommands: uint32(loads.Len())}
+	if wide {
+		h.Magic = types.Magic64
+		h.CPU = types.CPUAmd64
+	}
+	start := h.Put(out.Bytes, order)
+	copy(out.Bytes[start:], loads.Bytes())
+	var nlist bytes.Buffer
+	binary.Write(&nlist, order, uint32(1))
+	nlist.WriteByte(0x0f)
+	nlist.WriteByte(1)
+	binary.Write(&nlist, order, uint16(0))
+	if wide {
+		binary.Write(&nlist, order, uint64(0x2000))
+	} else {
+		binary.Write(&nlist, order, uint32(0x2000))
+	}
+	copy(out.Bytes[out.Symoff:], nlist.Bytes())
+	return out
 }

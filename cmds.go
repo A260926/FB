@@ -867,6 +867,23 @@ type Dysymtab struct {
 	LoadBytes
 	types.DysymtabCmd
 	IndirectSyms []uint32 // indices into Symtab.Syms
+	// TOC is the file-order table of contents (Ntoc entries of 8 bytes at
+	// Tocoffset). SymbolIndex is an absolute LC_SYMTAB nlist index and
+	// ModuleIndex is a zero-based index into ModuleTable; duplicate rows are
+	// retained. It is nil when Ntoc is zero, in which case Tocoffset is never
+	// read.
+	TOC []types.DylibTableOfContents
+	// ModuleTable is the module table (Nmodtab entries at Modtaboff) in
+	// physical order, with every symbol relationship resolved against
+	// Symtab.Syms. It is nil when Nmodtab is zero, in which case Modtaboff is
+	// never read.
+	ModuleTable []DylibModule
+	// ExternalRefs is the referenced symbol table (Nextrefsyms 32-bit words
+	// at Extrefsymoff) in file order; each entry carries the raw word, the
+	// byte-order-decoded 24-bit nlist index and 8-bit flags, and a pointer to
+	// the referenced Symtab.Syms slot. It is nil when Nextrefsyms is zero, in
+	// which case Extrefsymoff is never read.
+	ExternalRefs []DylibExternalReference
 }
 
 func (d *Dysymtab) LoadSize() uint32 {

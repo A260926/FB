@@ -1,0 +1,10 @@
+./categories.go
+./classes.go
+./image.go
+./methods.go
+./objects.go
+./properties.go
+./protocols.go
+./reader.go
+./references.go
+./resilient.go

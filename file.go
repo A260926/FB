@@ -263,6 +263,16 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 		return nil, &FormatError{offset, "too many load commands", nil}
 	}
 	f.Loads = make([]Load, 0, c)
+	// LC_SYMTAB and LC_DYSYMTAB may appear in either order. The string-table
+	// resolver and the pending dynamic symbol table are kept until all load
+	// commands have been collected, so the module/TOC/reference relationships
+	// can be built with both tables in hand.
+	var (
+		symtabNameAt func(uint64) string
+		symtabStrsz  uint32
+		dysymtab     *Dysymtab
+		dysymOff     int64
+	)
 	bo := f.ByteOrder
 	for i := uint32(0); i < f.NCommands; i++ {
 		// Each load command begins with uint32 command and length.
@@ -420,6 +430,10 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			st.Len = siz
 			f.Loads = append(f.Loads, st)
 			f.Symtab = st
+			// Keep the bounded string-table resolver for the deferred
+			// LC_DYSYMTAB module names; module names need not match any nlist.
+			symtabNameAt = nameAt
+			symtabStrsz = hdr.Strsize
 		case types.LC_SYMSEG:
 			var led types.SymsegCmd
 			b := bytes.NewReader(cmddat)
@@ -595,16 +609,14 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			if err := binary.Read(b, bo, &hdr); err != nil {
 				return nil, fmt.Errorf("failed to read LC_DYSYMTAB: %v", err)
 			}
-			if f.Symtab == nil {
-				return nil, &FormatError{offset, "dynamic symbol table seen before any ordinary symbol table", nil}
-			} else if hdr.Iundefsym > uint32(len(f.Symtab.Syms)) {
-				return nil, &FormatError{offset, fmt.Sprintf(
-					"undefined symbols index in dynamic symbol table command is greater than symbol table length (%d > %d)",
-					hdr.Iundefsym, len(f.Symtab.Syms)), nil}
-			} else if hdr.Iundefsym+hdr.Nundefsym > uint32(len(f.Symtab.Syms)) {
-				return nil, &FormatError{offset, fmt.Sprintf(
-					"number of undefined symbols after index in dynamic symbol table command is greater than symbol table length (%d > %d)",
-					hdr.Iundefsym+hdr.Nundefsym, len(f.Symtab.Syms)), nil}
+			// LC_SYMTAB may follow this command; the historical undefined
+			// symbol window checks are re-applied to all global windows once
+			// every command has been collected.
+			if f.Symtab != nil {
+				if err := checkNlistWindow("undefined symbols", hdr.Iundefsym, hdr.Nundefsym,
+					uint32(len(f.Symtab.Syms)), offset); err != nil {
+					return nil, err
+				}
 			}
 			dat, err := saferio.ReadDataAt(f.cr, uint64(hdr.Nindirectsyms)*4, int64(hdr.Indirectsymoff))
 			if err != nil {
@@ -614,10 +626,9 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			if err := binary.Read(bytes.NewReader(dat), bo, x); err != nil {
 				return nil, fmt.Errorf("failed to read Nindirectsyms: %v", err)
 			}
-			// TODO: parse DylibTableOfContents if Ntoc > 0
-			// TODO: parse DylibModule if Nmodtab > 0
-			// TODO: parse DylibReference if Nextrefsyms > 0
-			// TODO: parse RelocInfo if Nlocrel > 0
+			// The TOC, module table and external reference table need the
+			// ordinary symbol table, which may appear later in the command
+			// stream. They are resolved once all commands are collected.
 			st := new(Dysymtab)
 			st.LoadBytes = cmddat
 			st.LoadCmd = cmd
@@ -626,6 +637,8 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			st.IndirectSyms = x
 			f.Loads = append(f.Loads, st)
 			f.Dysymtab = st
+			dysymtab = st
+			dysymOff = offset
 		case types.LC_LOAD_DYLIB:
 			var hdr types.DylibCmd
 			b := bytes.NewReader(cmddat)
@@ -1460,6 +1473,19 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			}
 			s.sr = io.NewSectionReader(r, int64(s.Offset), int64(s.Filesz))
 			s.ReaderAt = f.sr
+		}
+	}
+
+	// Resolve the dylib module/TOC/reference relationships only after every
+	// load command has been collected, so LC_SYMTAB and LC_DYSYMTAB may occur
+	// in either order. A file without LC_DYSYMTAB keeps the ordinary symbol
+	// path exactly as before, including a nil Dysymtab.
+	if dysymtab != nil {
+		if f.Symtab == nil {
+			return nil, &FormatError{dysymOff, "LC_DYSYMTAB without an LC_SYMTAB ordinary symbol table", nil}
+		}
+		if err := f.parseDylibTables(dysymtab, symtabNameAt, symtabStrsz, dysymOff); err != nil {
+			return nil, err
 		}
 	}
 
