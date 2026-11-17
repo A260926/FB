@@ -74,6 +74,11 @@
 typedef struct operand_wrapper {
     fcml_st_operand operand;
     fcml_en_access_mode access_mode;
+    /* Raw encoding fields standing behind the operand values. They are
+     * captured while the instruction is decoded, so neither a second
+     * decoding pass nor value scanning is needed. */
+    fcml_st_encoded_field encoded_fields[FCML_DASM_ENCODED_FIELDS_PER_OPERAND];
+    fcml_int encoded_field_count;
 } operand_wrapper;
 
 /* Definition is located below.*/
@@ -405,6 +410,44 @@ static instruction_decoder choose_instruction_decoder(
 /** Operand decoders. **/
 /***********************/
 
+/*********************
+ * Encoded fields.
+ *********************/
+
+/* Reads the raw unsigned little-endian value of a field directly from
+ * the instruction image. The image is only read, exactly like during
+ * the regular decoding process; nothing is decoded or scanned again. */
+static fcml_uint64_t read_raw_unsigned(
+        const fcml_st_memory_stream *stream, fcml_usize offset,
+        fcml_usize size) {
+    fcml_uint64_t value = 0;
+    const fcml_uint8_t *base = (const fcml_uint8_t *) stream->base_address;
+    if (offset + size <= (fcml_usize) stream->size) {
+        for (fcml_usize i = 0; i < size; i++) {
+            value |= (fcml_uint64_t) base[offset + i] << (8 * i);
+        }
+    }
+    return value;
+}
+
+/* Stores provenance of one encoded field on the operand being decoded.
+ * Fields are appended in their physical order in the instruction. */
+static void capture_encoded_field(operand_wrapper *operand_wrapper,
+        fcml_en_encoded_field_kind kind, fcml_usize offset, fcml_usize size,
+        fcml_uint64_t raw_value) {
+    if (operand_wrapper->encoded_field_count >=
+            FCML_DASM_ENCODED_FIELDS_PER_OPERAND) {
+        return;
+    }
+    fcml_st_encoded_field *field =
+            &(operand_wrapper->encoded_fields[
+                    operand_wrapper->encoded_field_count++]);
+    field->kind = kind;
+    field->offset = offset;
+    field->size = size;
+    field->raw_value = raw_value;
+}
+
 /********************/
 /* Immediate value. */
 /********************/
@@ -446,18 +489,30 @@ static fcml_ceh_error operand_decoder_imm(decoding_context *context,
     /* All immediate integers are signed.*/
     immediate->is_signed = FCML_TRUE;
 
+    /* Remember the physical field before the stream advances. The field
+     * keeps its original width even if the semantic value is sign
+     * extended to size_ex afterwards. */
+    fcml_usize field_offset = (fcml_usize) stream->offset;
+    fcml_usize field_size = size / 8;
+
     error = fcml_fn_utils_decode_integer(stream, immediate, size);
     if (error) {
         return error;
     }
 
     if (size_ex != size) {
-        error = fcml_fn_utils_conv_int_to_int(immediate, immediate, 
+        error = fcml_fn_utils_conv_int_to_int(immediate, immediate,
                 size, size_ex);
         if (error) {
             return error;
         }
     }
+
+    /* The raw unsigned value is taken from the image itself, so a
+     * one-byte 'add eax,-1' stays a one-byte field even though the
+     * semantic immediate is already 32 bits wide. */
+    capture_encoded_field(operand_wrapper, FCML_EFK_IMMEDIATE, field_offset,
+            field_size, read_raw_unsigned(stream, field_offset, field_size));
 
     return error;
 }
@@ -612,11 +667,20 @@ static fcml_ceh_error operand_decoder_immediate_dis_relative(
     fcml_st_integer integer;
     integer.is_signed = FCML_TRUE;
 
+    /* The field holds the raw relative displacement; the absolute
+     * target IP is derived below and must not leak into raw_value. */
+    fcml_usize field_offset = (fcml_usize) context->stream->offset;
+    fcml_usize field_size = int_size / 8;
+
     /* Read displacement value from stream.*/
     error = fcml_fn_utils_decode_integer(context->stream, &integer, int_size);
     if (error) {
         return error;
     }
+
+    capture_encoded_field(operand_wrapper, FCML_EFK_RELATIVE_BRANCH,
+            field_offset, field_size,
+            read_raw_unsigned(context->stream, field_offset, field_size));
 
     operand_wrapper->operand.type = FCML_OT_ADDRESS;
     operand_wrapper->operand.address.address_form = FCML_AF_OFFSET;
@@ -692,6 +756,12 @@ static fcml_ceh_error operand_decoder_far_pointer(decoding_context *context,
 
     operand->type = FCML_OT_FAR_POINTER;
 
+    /* The offset is encoded first, followed by the segment selector.
+     * Both fields are preserved in that physical order. */
+    fcml_usize offset_field_offset = (fcml_usize) context->stream->offset;
+    fcml_usize offset_field_size =
+            context->effective_operand_size_attribute / 8;
+
     switch (context->effective_operand_size_attribute) {
     case FCML_DS_16:
         far_pointer->offset16 = (fcml_int16_t)fcml_fn_stream_read_word(
@@ -706,16 +776,27 @@ static fcml_ceh_error operand_decoder_far_pointer(decoding_context *context,
         break;
     }
 
+    if (error) {
+        return error;
+    }
+
     far_pointer->offset_size = context->effective_operand_size_attribute;
+
+    capture_encoded_field(operand_wrapper, FCML_EFK_FAR_OFFSET,
+            offset_field_offset, offset_field_size,
+            read_raw_unsigned(context->stream, offset_field_offset,
+                    offset_field_size));
+
+    fcml_usize segment_field_offset = (fcml_usize) context->stream->offset;
 
     far_pointer->segment = fcml_fn_stream_read_word(context->stream, &result);
     if (!result) {
         return FCML_CEH_GEC_EOF;
     }
 
-    if (!result) {
-        error = FCML_CEH_GEC_EOF;
-    }
+    capture_encoded_field(operand_wrapper, FCML_EFK_FAR_SEGMENT,
+            segment_field_offset, 2,
+            read_raw_unsigned(context->stream, segment_field_offset, 2));
 
     return error;
 }
@@ -777,6 +858,12 @@ static fcml_ceh_error operand_decoder_segment_relative_offset(
 
     operand->type = FCML_OT_ADDRESS;
 
+    /* moffs is a plain absolute offset encoded directly in the
+     * instruction, without a ModR/M byte. */
+    fcml_usize field_offset = (fcml_usize) context->stream->offset;
+    fcml_usize field_size =
+            context->effective_address_size_attribute / 8;
+
     switch (context->effective_address_size_attribute) {
     case FCML_DS_16:
         offset->off16 = fcml_fn_stream_read_word(context->stream, &result);
@@ -796,6 +883,12 @@ static fcml_ceh_error operand_decoder_segment_relative_offset(
 
     if (!result) {
         error = FCML_CEH_GEC_EOF;
+    }
+
+    if (!error) {
+        capture_encoded_field(operand_wrapper, FCML_EFK_MOFFS, field_offset,
+                field_size,
+                read_raw_unsigned(context->stream, field_offset, field_size));
     }
 
     return error;
@@ -898,12 +991,29 @@ static fcml_ceh_error operand_decoder_rm(decoding_context *context,
         }
 
         /* These hints aren't used in 32 bit addressing mode.*/
-        if ((context->disassembler_context->entry_point.op_mode 
-                    == FCML_OM_64_BIT) 
+        if ((context->disassembler_context->entry_point.op_mode
+                    == FCML_OM_64_BIT)
                 && (address->address_form == FCML_AF_OFFSET)) {
-            operand->hints |= context->decoded_modrm.is_rip 
-                ? FCML_OP_HINT_RELATIVE_ADDRESSING 
+            operand->hints |= context->decoded_modrm.is_rip
+                ? FCML_OP_HINT_RELATIVE_ADDRESSING
                 : FCML_OP_HINT_ABSOLUTE_ADDRESSING;
+        }
+
+        /* Expose the raw ModR/M displacement, including RIP-relative and
+         * compressed EVEX disp8*N encodings. The semantic displacement in
+         * the address may be scaled or sign extended; the field keeps the
+         * original bytes. */
+        fcml_st_modrm_displacement *raw_disp =
+                &(context->decoded_modrm_details.displacement);
+        if (raw_disp->displacement.size > 0
+                && raw_disp->displacement_offset.is_not_null
+                && raw_disp->displacement_size.is_not_null) {
+            fcml_usize disp_offset = raw_disp->displacement_offset.value;
+            fcml_usize disp_size = raw_disp->displacement_size.value;
+            capture_encoded_field(operand_wrapper,
+                    FCML_EFK_MODRM_DISPLACEMENT, disp_offset, disp_size,
+                    read_raw_unsigned(context->stream, disp_offset,
+                            disp_size));
         }
 
     } else {
@@ -2924,12 +3034,19 @@ static fcml_ceh_error disassemble_core(fcml_st_disassembler_context *context,
                 &(decoding_context.operand_wrappers[i]);
             if (operand_wrapper->operand.type != FCML_OT_NONE) {
                 if (operand_wrapper->operand.type == FCML_OT_ADDRESS) {
-                    memory_data_size = 
+                    memory_data_size =
                         operand_wrapper->operand.address.size_operator;
                 }
                 inst->operands[i] = operand_wrapper->operand;
-                inst_details->operand_details[i].access_mode = 
+                inst_details->operand_details[i].access_mode =
                     operand_wrapper->access_mode;
+                for (fcml_int f = 0;
+                        f < operand_wrapper->encoded_field_count; f++) {
+                    inst_details->operand_details[i].encoded_fields[f] =
+                            operand_wrapper->encoded_fields[f];
+                }
+                inst_details->operand_details[i].encoded_field_count =
+                        operand_wrapper->encoded_field_count;
             } else {
                 break;
             }

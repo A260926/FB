@@ -41,6 +41,55 @@ extern "C" {
 /** Maximal number of instruction prefixes. */
 #define FCML_DASM_PREFIXES_COUNT	12
 
+/** Maximal number of raw encoded fields exposed for one instruction
+ * operand. A far pointer consists of two physical fields, every other
+ * supported operand uses at most one. */
+#define FCML_DASM_ENCODED_FIELDS_PER_OPERAND	2
+
+/**
+ * Kind of the raw encoding field a decoded operand value originates from.
+ * It describes the role the bytes play in the instruction encoding, not
+ * the semantic value derived from them.
+ */
+typedef enum fcml_en_encoded_field_kind {
+    /** Plain immediate value encoded as Ib/Iw/Iz/Io. */
+    FCML_EFK_IMMEDIATE = 0,
+    /** Relative displacement of a control-flow branch. The decoded
+     * operand already holds the absolute target IP, while this field
+     * keeps the raw relative displacement. */
+    FCML_EFK_RELATIVE_BRANCH,
+    /** Displacement encoded as part of the ModR/M (and optional SIB)
+     * addressing, including RIP-relative and compressed EVEX disp8*N
+     * fields. */
+    FCML_EFK_MODRM_DISPLACEMENT,
+    /** Absolute offset of a moffs (MOV to/from offset) operand. */
+    FCML_EFK_MOFFS,
+    /** 16/32-bit offset part of a direct far pointer. */
+    FCML_EFK_FAR_OFFSET,
+    /** Segment selector part of a direct far pointer. */
+    FCML_EFK_FAR_SEGMENT
+} fcml_en_encoded_field_kind;
+
+/**
+ * One raw encoding field standing behind a decoded operand value.
+ * The image is always treated as read-only data; these descriptors are
+ * captured during the normal decoding process and never cause the code
+ * to be decoded or scanned again.
+ */
+typedef struct fcml_st_encoded_field {
+    /** Role of the field in the instruction encoding. */
+    fcml_en_encoded_field_kind kind;
+    /** Offset of the first byte of the field, counted from the first
+     * byte of the instruction (prefixes included). */
+    fcml_usize offset;
+    /** Size of the field in bytes. */
+    fcml_usize size;
+    /** Raw, unsigned little-endian value exactly as encoded in the
+     * image. Sign extension, RIP adjustment and disp8*N scaling are
+     * never applied here. */
+    fcml_uint64_t raw_value;
+} fcml_st_encoded_field;
+
 /** First group of conditional suffixes (See FCML manual). */
 #define FCML_DASM_CONDITIONAL_GROUP_1	0x00
 /** Second group of conditional suffixes (See FCML manual). */
@@ -191,6 +240,15 @@ typedef struct fcml_st_prefixes_details {
 typedef struct fcml_st_operand_details {
     /** Instruction operand access mode READ, WRITE or both. */
     fcml_en_access_mode access_mode;
+    /** Raw encoding fields standing behind the values of this operand.
+     * Only operands actually consuming instruction bytes get entries;
+     * implicit constants and registers have none. The fields follow the
+     * physical order in the instruction image, so a far pointer exposes
+     * its offset first and its segment second. */
+    fcml_st_encoded_field encoded_fields[
+            FCML_DASM_ENCODED_FIELDS_PER_OPERAND];
+    /** Number of valid entries in encoded_fields (0, 1 or 2). */
+    fcml_int encoded_field_count;
 } fcml_st_operand_details;
 
 /**

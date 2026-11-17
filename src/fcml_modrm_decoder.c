@@ -83,10 +83,20 @@ static fcml_ceh_error decode_displacement(
 
     fcml_st_integer integer = {0};
 
+    /* Remember the physical location of the displacement so the
+     * disassembler can expose the raw field. For compressed disp8*N this
+     * is the single encoded byte, not the scaled semantic value. */
+    fcml_usize field_offset = (fcml_usize) stream->offset;
+
     error = fcml_fn_utils_decode_integer(stream, &integer, size);
     if (error) {
         return error;
     }
+
+    raw_displacement->displacement_offset.is_not_null = FCML_TRUE;
+    raw_displacement->displacement_offset.value = field_offset;
+    raw_displacement->displacement_size.is_not_null = FCML_TRUE;
+    raw_displacement->displacement_size.value = size / 8;
 
     /* Offsets and displacement are signed integers.*/
     integer.is_signed = FCML_TRUE;

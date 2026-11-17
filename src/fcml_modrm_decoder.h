@@ -58,6 +58,11 @@ typedef struct fcml_st_modrm_displacement {
     fcml_st_integer displacement;
     /** Scaling factor N in EVEX specific compressed disp8*N. */
     fcml_nuint32_t N;
+    /** Offset of the raw displacement field from the first byte of the
+     * instruction. Not set when the addressing form has no displacement. */
+    fcml_nuint32_t displacement_offset;
+    /** Size in bytes of the raw displacement field. */
+    fcml_nuint32_t displacement_size;
 } fcml_st_modrm_displacement;
 
 typedef struct fcml_st_modrm_details {

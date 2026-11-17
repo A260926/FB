@@ -231,6 +231,43 @@ fcml_ceh_error fcml_fn_rend_utils_format_append_integer(
     return FCML_CEH_GEC_NO_ERROR;
 }
 
+const fcml_st_encoded_field *fcml_fn_rend_utils_find_encoded_field(
+        const fcml_st_operand_details *operand_details,
+        fcml_en_encoded_field_kind kind) {
+    if (!operand_details) {
+        return NULL;
+    }
+    for (fcml_int i = 0; i < operand_details->encoded_field_count; i++) {
+        if (operand_details->encoded_fields[i].kind == kind) {
+            return &(operand_details->encoded_fields[i]);
+        }
+    }
+    return NULL;
+}
+
+fcml_ceh_error fcml_fn_rend_utils_append_field_integer(
+        fcml_string patterns[6][4], fcml_st_memory_stream *stream,
+        const fcml_st_render_config *config, fcml_int operand_index,
+        const fcml_st_encoded_field *field,
+        const fcml_st_integer *integer, fcml_bool is_hex,
+        fcml_bool remove_leading_zeros) {
+
+    /* Numbers without real encoding bytes never reach the resolver. */
+    if (field && config && config->symbol_resolver) {
+        const fcml_char *symbol = config->symbol_resolver(
+                config->symbol_context, operand_index, field, integer);
+        if (symbol) {
+            /* Only the number slot is replaced; every surrounding
+             * decoration is added by the caller. */
+            fcml_fn_rend_utils_format_append_str(stream, symbol);
+            return FCML_CEH_GEC_NO_ERROR;
+        }
+    }
+
+    return fcml_fn_rend_utils_format_append_integer(patterns, stream,
+            integer, is_hex, remove_leading_zeros);
+}
+
 void fcml_fn_rend_utils_format_append_reg(
         const fcml_st_dialect_context_int *dialect_context,
         fcml_st_memory_stream *output_stream, const fcml_st_register *reg,

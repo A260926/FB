@@ -160,6 +160,60 @@ Output:
 adc byte ptr [ecx+eax+2],3
 ```
 
+#### Encoded-field provenance and symbol names
+
+A decoded number is not always the raw encoding. `add eax,-1` stores a single
+sign-extended byte, RIP-relative addressing stores a relative displacement
+while the operand carries the absolute address, and EVEX compressed `disp8*N`
+stores one byte while the operand carries the scaled value. Each visible
+operand therefore exposes the raw field(s) it was decoded from in
+`instruction_details.operand_details[i].encoded_fields`:
+
+```c
+const fcml_st_operand_details *details =
+        &result.instruction_details.operand_details[operand_index];
+for (int i = 0; i < details->encoded_field_count; i++) {
+    const fcml_st_encoded_field *field = &details->encoded_fields[i];
+    /* field->kind       role: immediate, relative branch, ModR/M
+     *                    displacement, moffs, far offset/segment
+     * field->offset     byte offset from the first instruction byte
+     * field->size       field width in bytes
+     * field->raw_value  unsigned little-endian value as encoded
+     */
+}
+```
+
+Fields are captured during the normal decode, so the image is only read and
+never decoded or scanned twice. Implicit constants and registers have no
+encoding bytes and therefore no fields; a far pointer keeps two fields in
+their physical order (offset, then segment). The semantic operand values,
+instruction code, lengths and automatic IP advancement are unchanged.
+
+To annotate rendered text with local symbols, set an optional resolver on
+the render configuration. It is consulted once per displayed number that has
+a real field behind it, receiving the operand index (GAS operand reversal
+already applied), the field and the integer actually displayed; returning
+`NULL` keeps the ordinary number, so the `$`, brackets, register names and
+far-pointer separators are untouched:
+
+```c
+static const fcml_char *resolve(fcml_ptr context, fcml_int operand_index,
+        const fcml_st_encoded_field *field, const fcml_st_integer *value) {
+    if (field->kind == FCML_EFK_RELATIVE_BRANCH) {
+        return "branch_target";   /* label the branch destination */
+    }
+    return NULL;                  /* leave every other number alone */
+}
+
+fcml_st_render_config render_config = {0};
+render_config.symbol_resolver = resolve;
+render_config.symbol_context = my_symbol_table;
+fcml_fn_render(dialect, &render_config, buffer, sizeof(buffer), &result);
+```
+
+Without a resolver the rendered text is byte-for-byte identical to the plain
+numeric rendering. See `task_support/example.c` for a complete example.
+
 ### C++
 
 The C++ wrapper provides RAII-managed classes, a fluent instruction builder,

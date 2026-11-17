@@ -39,3 +39,4 @@ test-driver
 configure~
 dist/
 *.log
+/.task-build/

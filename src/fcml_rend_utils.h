@@ -61,6 +61,26 @@ fcml_ceh_error fcml_fn_rend_utils_format_append_integer(
         const fcml_st_integer *integer, fcml_bool is_hex,
         fcml_bool remove_leading_zeros);
 
+/*
+ * Renders one numeric slot. When the slot is backed by a real encoded
+ * field and a symbol resolver is configured, the resolver is consulted
+ * exactly once for that field. A NULL field (or a NULL callback result)
+ * falls back to the ordinary numeric rendering, so the output is
+ * unchanged when no resolver is set.
+ */
+fcml_ceh_error fcml_fn_rend_utils_append_field_integer(
+        fcml_string patterns[6][4], fcml_st_memory_stream *stream,
+        const fcml_st_render_config *config, fcml_int operand_index,
+        const fcml_st_encoded_field *field,
+        const fcml_st_integer *integer, fcml_bool is_hex,
+        fcml_bool remove_leading_zeros);
+
+/* Returns the encoded field of the requested kind on an operand, or
+ * NULL when the operand does not carry such a field. */
+const fcml_st_encoded_field *fcml_fn_rend_utils_find_encoded_field(
+        const fcml_st_operand_details *operand_details,
+        fcml_en_encoded_field_kind kind);
+
 void fcml_fn_rend_utils_format_append_reg(
         const fcml_st_dialect_context_int *dialect_context,
         fcml_st_memory_stream *stream, const fcml_st_register *reg,

@@ -82,15 +82,22 @@ static fcml_string integer_formats_gas[6][4] = {
 static fcml_ceh_error operand_renderer_imm(
         const fcml_st_render_config *config,
         fcml_st_memory_stream *output_stream,
+        const fcml_st_disassembler_result *result, fcml_int operand_index,
         const fcml_st_operand *operand) {
 
     const fcml_st_integer *immediate = &(operand->immediate);
 
     fcml_fn_rend_utils_format_append_str(output_stream, FCML_TEXT("$"));
 
-    return fcml_fn_rend_utils_format_append_integer(
-            integer_formats_gas, output_stream, immediate,
-            config->render_flags & FCML_REND_FLAG_HEX_IMM,
+    const fcml_st_encoded_field *field =
+            fcml_fn_rend_utils_find_encoded_field(
+                    &(result->instruction_details
+                            .operand_details[operand_index]),
+                    FCML_EFK_IMMEDIATE);
+
+    return fcml_fn_rend_utils_append_field_integer(
+            integer_formats_gas, output_stream, config, operand_index, field,
+            immediate, config->render_flags & FCML_REND_FLAG_HEX_IMM,
             config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
 }
 
@@ -109,13 +116,15 @@ static fcml_ceh_error operand_renderer_address(
         const fcml_st_render_config *config,
         const fcml_st_dialect_context_int *dialect_context,
         fcml_st_memory_stream *output_stream,
-        const fcml_st_disassembler_result *result,
+        const fcml_st_disassembler_result *result, fcml_int operand_index,
         const fcml_st_operand *operand) {
 
     fcml_ceh_error error = FCML_CEH_GEC_NO_ERROR;
     const fcml_st_address *address = &(operand->address);
     const fcml_st_prefixes_details *prefixes =
             &(result->instruction_details.prefixes_details);
+    const fcml_st_operand_details *operand_details =
+            &(result->instruction_details.operand_details[operand_index]);
     fcml_hints hints = operand->hints;
 
     if (hints & FCML_OP_HINT_DISPLACEMENT_RELATIVE_ADDRESS) {
@@ -127,12 +136,14 @@ static fcml_ceh_error operand_renderer_address(
             return error;
         }
 
-        error = fcml_fn_rend_utils_format_append_integer(
-                integer_formats_gas, output_stream,
-                &integer, FCML_TRUE,
-                config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
+        const fcml_st_encoded_field *field =
+                fcml_fn_rend_utils_find_encoded_field(operand_details,
+                        FCML_EFK_RELATIVE_BRANCH);
 
-        return error;
+        return fcml_fn_rend_utils_append_field_integer(
+                integer_formats_gas, output_stream, config, operand_index,
+                field, &integer, FCML_TRUE,
+                config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
     }
 
     if (!address->segment_selector.is_default_reg
@@ -155,11 +166,16 @@ static fcml_ceh_error operand_renderer_address(
         /* Displacement.*/
         if (effective_address->displacement.size > 0) {
 
-            error = fcml_fn_rend_utils_format_append_integer(
-                    integer_formats_gas, output_stream,
-                    &(effective_address->displacement),
+            const fcml_st_encoded_field *disp_field =
+                    fcml_fn_rend_utils_find_encoded_field(operand_details,
+                            FCML_EFK_MODRM_DISPLACEMENT);
+
+            error = fcml_fn_rend_utils_append_field_integer(
+                    integer_formats_gas, output_stream, config, operand_index,
+                    disp_field, &(effective_address->displacement),
                     config->render_flags & FCML_REND_FLAG_HEX_DISPLACEMENT,
-                    config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
+                    config->render_flags
+                            & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
             if (error) {
                 return error;
             }
@@ -206,9 +222,14 @@ static fcml_ceh_error operand_renderer_address(
             fcml_st_integer integer;
             if (address->effective_address.base.type == FCML_REG_IP) {
                 /* IP relative addressing.*/
-                error = fcml_fn_rend_utils_format_append_integer(
-                        integer_formats_gas, output_stream,
-                        &(address->effective_address.displacement), FCML_TRUE,
+                const fcml_st_encoded_field *field =
+                        fcml_fn_rend_utils_find_encoded_field(operand_details,
+                                FCML_EFK_MODRM_DISPLACEMENT);
+                error = fcml_fn_rend_utils_append_field_integer(
+                        integer_formats_gas, output_stream, config,
+                        operand_index, field,
+                        &(address->effective_address.displacement),
+                        FCML_TRUE,
                         config->render_flags
                                 & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
                 if (!error) {
@@ -220,15 +241,23 @@ static fcml_ceh_error operand_renderer_address(
                             FCML_TEXT(")"));
                 }
             } else {
-                /* Absolute offset.*/
+                /* Absolute offset (moffs).*/
                 fcml_ceh_error error = fcml_fn_utils_offset_to_integer(
                         &(address->offset), &integer);
                 if (error) {
                     return error;
                 }
-                error = fcml_fn_rend_utils_format_append_integer(
-                        integer_formats_gas, output_stream,
-                        &integer, FCML_TRUE,
+                const fcml_st_encoded_field *field =
+                        fcml_fn_rend_utils_find_encoded_field(operand_details,
+                                FCML_EFK_MOFFS);
+                if (!field) {
+                    field = fcml_fn_rend_utils_find_encoded_field(
+                            operand_details,
+                            FCML_EFK_MODRM_DISPLACEMENT);
+                }
+                error = fcml_fn_rend_utils_append_field_integer(
+                        integer_formats_gas, output_stream, config,
+                        operand_index, field, &integer, FCML_TRUE,
                         config->render_flags
                                 & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
             }
@@ -241,19 +270,31 @@ static fcml_ceh_error operand_renderer_address(
 static fcml_ceh_error operand_renderer_far_pointer(
         const fcml_st_render_config *config,
         fcml_st_memory_stream *output_stream,
+        const fcml_st_disassembler_result *result, fcml_int operand_index,
         const fcml_st_operand *operand) {
 
     fcml_ceh_error error = FCML_CEH_GEC_NO_ERROR;
     fcml_st_integer integer = { 0 };
 
+    const fcml_st_operand_details *operand_details =
+            &(result->instruction_details.operand_details[operand_index]);
+
     integer.is_signed = FCML_TRUE;
     integer.size = 16;
     integer.int16 = operand->far_pointer.segment;
 
+    const fcml_st_encoded_field *segment_field =
+            fcml_fn_rend_utils_find_encoded_field(operand_details,
+                    FCML_EFK_FAR_SEGMENT);
+
     fcml_fn_rend_utils_format_append_str(output_stream, FCML_TEXT("$"));
-    fcml_fn_rend_utils_format_append_integer(integer_formats_gas, output_stream,
-            &integer, FCML_TRUE,
+    error = fcml_fn_rend_utils_append_field_integer(integer_formats_gas,
+            output_stream, config, operand_index, segment_field, &integer,
+            FCML_TRUE,
             config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
+    if (error) {
+        return error;
+    }
 
     fcml_fn_rend_utils_format_append_str(output_stream, FCML_TEXT(","));
 
@@ -267,12 +308,15 @@ static fcml_ceh_error operand_renderer_far_pointer(
         break;
     }
 
-    fcml_fn_rend_utils_format_append_str(output_stream, FCML_TEXT("$"));
-    fcml_fn_rend_utils_format_append_integer(integer_formats_gas, output_stream,
-            &integer, FCML_TRUE,
-            config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
+    const fcml_st_encoded_field *offset_field =
+            fcml_fn_rend_utils_find_encoded_field(operand_details,
+                    FCML_EFK_FAR_OFFSET);
 
-    return error;
+    fcml_fn_rend_utils_format_append_str(output_stream, FCML_TEXT("$"));
+    return fcml_fn_rend_utils_append_field_integer(integer_formats_gas,
+            output_stream, config, operand_index, offset_field, &integer,
+            FCML_TRUE,
+            config->render_flags & FCML_REND_FLAG_REMOVE_LEADING_ZEROS);
 }
 
 static fcml_ceh_error print_operand(const fcml_st_render_config *config,
@@ -286,14 +330,16 @@ static fcml_ceh_error print_operand(const fcml_st_render_config *config,
 
     switch (operand->type) {
     case FCML_OT_IMMEDIATE:
-        error = operand_renderer_imm(config, output_stream, operand);
+        error = operand_renderer_imm(config, output_stream, result,
+                operand_index, operand);
         break;
     case FCML_OT_FAR_POINTER:
-        error = operand_renderer_far_pointer(config, output_stream, operand);
+        error = operand_renderer_far_pointer(config, output_stream, result,
+                operand_index, operand);
         break;
     case FCML_OT_ADDRESS:
         error = operand_renderer_address(config, dialect_context,
-                output_stream, result, operand);
+                output_stream, result, operand_index, operand);
         break;
     case FCML_OT_REGISTER:
         error = operand_renderer_reg(dialect_context, output_stream,

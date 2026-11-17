@@ -153,6 +153,9 @@ public:
         dest.prefered_code_padding = src.getPreferedCodePadding();
         dest.prefered_mnemonic_padding = src.getPreferedMnemonicPadding();
         dest.render_flags = src.getRenderFlags();
+        /* Symbol resolution is only exposed through the C API so far. */
+        dest.symbol_resolver = 0;
+        dest.symbol_context = 0;
     }
 
 };

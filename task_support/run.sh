@@ -6,7 +6,7 @@ if [[ $mode == target ]]; then test -s check/field_origin_cases.c; fi
 bash task_support/build.sh
 if [[ $mode == target ]]; then
   "${CC:-cc}" -std=c99 -I. -Iinclude -Isrc check/field_origin_cases.c task_support/driver.c .task-build/libfcml.a -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/fcml-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
