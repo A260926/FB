@@ -1,0 +1,2 @@
+
+Allows building values, via `Partial`, and inspecting existing values, via `PeekValue`.

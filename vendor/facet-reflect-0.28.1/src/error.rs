@@ -1,0 +1,292 @@
+use facet_core::{Characteristic, EnumType, FieldError, Shape, TryFromError};
+use owo_colors::OwoColorize;
+
+/// Errors that can occur when reflecting on types.
+#[derive(Clone)]
+pub enum ReflectError {
+    /// Tried to set an enum to a variant that does not exist
+    NoSuchVariant {
+        /// The enum definition containing all known variants.
+        enum_type: EnumType,
+    },
+
+    /// Tried to get the wrong shape out of a value — e.g. we were manipulating
+    /// a `String`, but `.get()` was called with a `u64` or something.
+    WrongShape {
+        /// The expected shape of the value.
+        expected: &'static Shape,
+        /// The actual shape of the value.
+        actual: &'static Shape,
+    },
+
+    /// Attempted to perform an operation that expected a struct or something
+    WasNotA {
+        /// The name of the expected type.
+        expected: &'static str,
+
+        /// The type we got instead
+        actual: &'static Shape,
+    },
+
+    /// A field was not initialized during build
+    UninitializedField {
+        /// The shape containing the field
+        shape: &'static Shape,
+        /// The name of the field that wasn't initialized
+        field_name: &'static str,
+    },
+
+    /// A field in an enum variant was not initialized during build
+    UninitializedEnumField {
+        /// The enum shape
+        shape: &'static Shape,
+        /// The name of the field that wasn't initialized
+        field_name: &'static str,
+        /// The name of the variant containing the field
+        variant_name: &'static str,
+    },
+
+    /// A scalar value was not initialized during build
+    UninitializedValue {
+        /// The scalar shape
+        shape: &'static Shape,
+    },
+
+    /// An invariant of the reflection system was violated.
+    InvariantViolation {
+        /// The invariant that was violated.
+        invariant: &'static str,
+    },
+
+    /// Attempted to set a value to its default, but the value doesn't implement `Default`.
+    MissingCharacteristic {
+        /// The shape of the value that doesn't implement `Default`.
+        shape: &'static Shape,
+        /// The characteristic that is missing.
+        characteristic: Characteristic,
+    },
+
+    /// An operation failed for a given shape
+    OperationFailed {
+        /// The shape of the value for which the operation failed.
+        shape: &'static Shape,
+        /// The name of the operation that failed.
+        operation: &'static str,
+    },
+
+    /// An error occurred when attempting to access or modify a field.
+    FieldError {
+        /// The shape of the value containing the field.
+        shape: &'static Shape,
+        /// The specific error that occurred with the field.
+        field_error: FieldError,
+    },
+
+    /// Indicates that we try to access a field on an `Arc<T>`, for example, and the field might exist
+    /// on the T, but you need to do begin_smart_ptr first when using the WIP API.
+    MissingPushPointee {
+        /// The smart pointer (`Arc<T>`, `Box<T>` etc.) shape on which field was caleld
+        shape: &'static Shape,
+    },
+
+    /// An unknown error occurred.
+    Unknown,
+
+    /// An error occured while putting
+    TryFromError {
+        /// The shape of the value being converted from.
+        src_shape: &'static Shape,
+
+        /// The shape of the value being converted to.
+        dst_shape: &'static Shape,
+
+        /// The inner error
+        inner: TryFromError,
+    },
+
+    /// A shape has a `default` attribute, but no implementation of the `Default` trait.
+    DefaultAttrButNoDefaultImpl {
+        /// The shape of the value that has a `default` attribute but no default implementation.
+        shape: &'static Shape,
+    },
+
+    /// The type is unsized
+    Unsized {
+        /// The shape for the type that is unsized
+        shape: &'static Shape,
+        /// The operation we were trying to perform
+        operation: &'static str,
+    },
+
+    /// Array not fully initialized during build
+    ArrayNotFullyInitialized {
+        /// The shape of the array
+        shape: &'static Shape,
+        /// The number of elements pushed
+        pushed_count: usize,
+        /// The expected array size
+        expected_size: usize,
+    },
+
+    /// Array index out of bounds
+    ArrayIndexOutOfBounds {
+        /// The shape of the array
+        shape: &'static Shape,
+        /// The index that was out of bounds
+        index: usize,
+        /// The array size
+        size: usize,
+    },
+
+    /// Invalid operation for the current state
+    InvalidOperation {
+        /// The operation that was attempted
+        operation: &'static str,
+        /// The reason why it failed
+        reason: &'static str,
+    },
+
+    /// No active frame in Partial
+    NoActiveFrame,
+}
+
+impl core::fmt::Display for ReflectError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ReflectError::NoSuchVariant { enum_type } => {
+                write!(f, "No such variant in enum. Known variants: ")?;
+                for v in enum_type.variants {
+                    write!(f, ", {}", v.name.cyan())?;
+                }
+                write!(f, ", that's it.")
+            }
+            ReflectError::WrongShape { expected, actual } => {
+                write!(
+                    f,
+                    "Wrong shape: expected {}, but got {}",
+                    expected.green(),
+                    actual.red()
+                )
+            }
+            ReflectError::WasNotA { expected, actual } => {
+                write!(
+                    f,
+                    "Wrong shape: expected {}, but got {}",
+                    expected.green(),
+                    actual.red()
+                )
+            }
+            ReflectError::UninitializedField { shape, field_name } => {
+                write!(f, "Field '{shape}::{field_name}' was not initialized")
+            }
+            ReflectError::UninitializedEnumField {
+                shape,
+                field_name,
+                variant_name,
+            } => {
+                write!(
+                    f,
+                    "Field '{}::{}' in variant '{}' was not initialized",
+                    shape.blue(),
+                    field_name.yellow(),
+                    variant_name.red()
+                )
+            }
+            ReflectError::UninitializedValue { shape } => {
+                write!(f, "Value '{}' was not initialized", shape.blue())
+            }
+            ReflectError::InvariantViolation { invariant } => {
+                write!(f, "Invariant violation: {}", invariant.red())
+            }
+            ReflectError::MissingCharacteristic {
+                shape,
+                characteristic,
+            } => write!(
+                f,
+                "{shape} does not implement characteristic {characteristic:?}",
+            ),
+            ReflectError::OperationFailed { shape, operation } => {
+                write!(
+                    f,
+                    "Operation failed on shape {}: {}",
+                    shape.blue(),
+                    operation
+                )
+            }
+            ReflectError::FieldError { shape, field_error } => {
+                write!(f, "Field error for shape {}: {}", shape.red(), field_error)
+            }
+            ReflectError::MissingPushPointee { shape } => {
+                write!(
+                    f,
+                    "Tried to access a field on smart pointer '{}', but you need to call {} first to work with the value it points to (and pop it with {} later)",
+                    shape.blue(),
+                    ".begin_smart_ptr()".yellow(),
+                    ".pop()".yellow()
+                )
+            }
+            ReflectError::Unknown => write!(f, "Unknown error"),
+            ReflectError::TryFromError {
+                src_shape,
+                dst_shape,
+                inner,
+            } => {
+                write!(
+                    f,
+                    "While trying to put {} into a {}: {}",
+                    src_shape.green(),
+                    dst_shape.blue(),
+                    inner.red()
+                )
+            }
+            ReflectError::DefaultAttrButNoDefaultImpl { shape } => write!(
+                f,
+                "Shape '{}' has a `default` attribute but no default implementation",
+                shape.red()
+            ),
+            ReflectError::Unsized { shape, operation } => write!(
+                f,
+                "Shape '{}' is unsized, can't perform operation {}",
+                shape.red(),
+                operation
+            ),
+            ReflectError::ArrayNotFullyInitialized {
+                shape,
+                pushed_count,
+                expected_size,
+            } => {
+                write!(
+                    f,
+                    "Array '{}' not fully initialized: expected {} elements, but got {}",
+                    shape.blue(),
+                    expected_size,
+                    pushed_count
+                )
+            }
+            ReflectError::ArrayIndexOutOfBounds { shape, index, size } => {
+                write!(
+                    f,
+                    "Array index {} out of bounds for '{}' (array length is {})",
+                    index,
+                    shape.blue(),
+                    size
+                )
+            }
+            ReflectError::InvalidOperation { operation, reason } => {
+                write!(f, "Invalid operation '{}': {}", operation.yellow(), reason)
+            }
+            ReflectError::NoActiveFrame => {
+                write!(f, "No active frame in Partial")
+            }
+        }
+    }
+}
+
+impl core::fmt::Debug for ReflectError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Use Display implementation for more readable output
+        write!(f, "ReflectError({self})")
+    }
+}
+
+impl core::error::Error for ReflectError {}

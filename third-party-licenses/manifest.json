@@ -1,0 +1,136 @@
+{
+  "scope": "Supplement to unchanged crate archives that omit license bodies. Existing per-file copyright/SPDX notices remain in vendor. No copyright ownership or upstream-provided file is invented.",
+  "apache_text_source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+  "entries": [
+    {
+      "name": "enum-map",
+      "version": "2.7.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/enum-map-2.7.3/Cargo.toml",
+      "license_text": "third-party-licenses/enum-map/LICENSES/MIT.txt",
+      "text_sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+      "origin": "https://codeberg.org/xfix/enum-map/raw/commit/c788a9c4bd0431308d889942719f7a38761d9884/LICENSES/MIT.txt",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "enum-map-derive",
+      "version": "0.17.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/enum-map-derive-0.17.0/Cargo.toml",
+      "license_text": "third-party-licenses/enum-map-derive/LICENSES/MIT.txt",
+      "text_sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+      "origin": "https://codeberg.org/xfix/enum-map/raw/commit/2026968c30ad14d268f3d70c618a704e22a3b980/LICENSES/MIT.txt",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "facet",
+      "version": "0.28.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/facet-0.28.1/Cargo.toml",
+      "license_text": "third-party-licenses/facet/LICENSE-MIT",
+      "text_sha256": "21a2121221d2a35df2d8d333d00a61ed240446b6107092741ff996941acdc919",
+      "origin": "https://raw.githubusercontent.com/facet-rs/facet/cb546ff136de603021db1d3ab546f9cbc2950aae/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "facet-core",
+      "version": "0.28.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/facet-core-0.28.1/Cargo.toml",
+      "license_text": "third-party-licenses/facet/LICENSE-MIT",
+      "text_sha256": "21a2121221d2a35df2d8d333d00a61ed240446b6107092741ff996941acdc919",
+      "origin": "https://raw.githubusercontent.com/facet-rs/facet/cb546ff136de603021db1d3ab546f9cbc2950aae/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "facet-macros",
+      "version": "0.28.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/facet-macros-0.28.1/Cargo.toml",
+      "license_text": "third-party-licenses/facet/LICENSE-MIT",
+      "text_sha256": "21a2121221d2a35df2d8d333d00a61ed240446b6107092741ff996941acdc919",
+      "origin": "https://raw.githubusercontent.com/facet-rs/facet/cb546ff136de603021db1d3ab546f9cbc2950aae/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "facet-macros-emit",
+      "version": "0.28.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/facet-macros-emit-0.28.1/Cargo.toml",
+      "license_text": "third-party-licenses/facet/LICENSE-MIT",
+      "text_sha256": "21a2121221d2a35df2d8d333d00a61ed240446b6107092741ff996941acdc919",
+      "origin": "https://raw.githubusercontent.com/facet-rs/facet/cb546ff136de603021db1d3ab546f9cbc2950aae/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "facet-macros-parse",
+      "version": "0.28.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/facet-macros-parse-0.28.1/Cargo.toml",
+      "license_text": "third-party-licenses/facet/LICENSE-MIT",
+      "text_sha256": "21a2121221d2a35df2d8d333d00a61ed240446b6107092741ff996941acdc919",
+      "origin": "https://raw.githubusercontent.com/facet-rs/facet/cb546ff136de603021db1d3ab546f9cbc2950aae/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "facet-reflect",
+      "version": "0.28.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/facet-reflect-0.28.1/Cargo.toml",
+      "license_text": "third-party-licenses/facet/LICENSE-MIT",
+      "text_sha256": "21a2121221d2a35df2d8d333d00a61ed240446b6107092741ff996941acdc919",
+      "origin": "https://raw.githubusercontent.com/facet-rs/facet/cb546ff136de603021db1d3ab546f9cbc2950aae/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "fxhash",
+      "version": "0.2.1",
+      "declared_license": "Apache-2.0/MIT",
+      "source_manifest": "vendor/fxhash-0.2.1/Cargo.toml",
+      "license_text": "third-party-licenses/Apache-2.0.txt",
+      "text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "origin": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "basis": "standard Apache-2.0 text; this option is explicitly offered in original crate metadata (fxhash lib.rs also says or at your option); original copyright/source notices preserved"
+    },
+    {
+      "name": "mutants",
+      "version": "0.0.3",
+      "declared_license": "MIT",
+      "source_manifest": "vendor/mutants-0.0.3/Cargo.toml",
+      "license_text": "third-party-licenses/mutants/LICENSE",
+      "text_sha256": "479cbeb2506157776cf80abe31df18065d0fe50b5816ff77bfd75d5deb04ab5c",
+      "origin": "https://raw.githubusercontent.com/sourcefrog/cargo-mutants/9685de346012afb9c379432eaf9c6960e22185df/LICENSE",
+      "basis": "exact release VCS commit upstream license text"
+    },
+    {
+      "name": "r-efi",
+      "version": "5.3.0",
+      "declared_license": "MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "source_manifest": "vendor/r-efi-5.3.0/Cargo.toml",
+      "license_text": "third-party-licenses/Apache-2.0.txt",
+      "text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "origin": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "basis": "standard Apache-2.0 text; this option is explicitly offered in original crate metadata (fxhash lib.rs also says or at your option); original copyright/source notices preserved"
+    },
+    {
+      "name": "shadow_counted",
+      "version": "0.4.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "source_manifest": "vendor/shadow_counted-0.4.0/Cargo.toml",
+      "license_text": "third-party-licenses/Apache-2.0.txt",
+      "text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "origin": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "basis": "standard Apache-2.0 text; this option is explicitly offered in original crate metadata (fxhash lib.rs also says or at your option); original copyright/source notices preserved"
+    },
+    {
+      "name": "wit-bindgen-rt",
+      "version": "0.39.0",
+      "declared_license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "source_manifest": "vendor/wit-bindgen-rt-0.39.0/Cargo.toml",
+      "license_text": "third-party-licenses/wit-bindgen-rt/LICENSE-MIT",
+      "text_sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "origin": "https://raw.githubusercontent.com/bytecodealliance/wit-bindgen/f2393e6e98fa5f9236cac580db8a3fc9de6a4b70/LICENSE-MIT",
+      "basis": "exact release VCS commit upstream license text"
+    }
+  ]
+}
