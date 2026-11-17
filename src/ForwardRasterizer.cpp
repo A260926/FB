@@ -9,6 +9,7 @@ ForwardRasterizer::ForwardRasterizer(const World* world)
 }
 
 ForwardRasterizer::~ForwardRasterizer() {
+  clearShadowMaps();
 }
 
 
@@ -21,6 +22,10 @@ void ForwardRasterizer::render(const bool use_shade, const bool use_shadow_maps)
 
   if (use_shadow_maps) {
     this->createShadowMaps();
+  }
+  else {
+    // Drop any maps left over from a previous render with shadows enabled.
+    this->clearShadowMaps();
   }
 
   for (auto& object : m_world->m_objects) {
@@ -40,9 +45,8 @@ void ForwardRasterizer::render(const bool use_shade, const bool use_shadow_maps)
                 const Fragment fragment = calculateFragmentAttributes(triangle_world, pixel_world, triangle_raster, pixel_raster, *object->material());
                 m_depth_buffer[i] = depth;
                 if (use_shade) {
-                  const RGBColor object_color = Material::shade(m_world->m_lights, *m_world->m_camera, fragment);
-                  const RGBColor shadow = shadowFactor(pixel_world);
-                  m_pixels[i] = object_color - shadow;
+                  const RGBColor object_color = Material::shade(m_world->m_lights, *m_world->m_camera, fragment, shadowFactors(pixel_world));
+                  m_pixels[i] = object_color;
                 }
               }
             }

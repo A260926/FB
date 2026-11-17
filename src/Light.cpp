@@ -12,6 +12,6 @@ Light::~Light() {
 
 }
 
-const RGBColor & Light::getColor() {
+const RGBColor & Light::getColor() const {
   return m_color;
 }

@@ -1,5 +1,5 @@
 #pragma once
-#include "CAMERA.H"
+#include "Camera.h"
 class PerspectiveCamera : public Camera {
 public:
   float m_fov, m_zoom;

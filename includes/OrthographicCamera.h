@@ -12,6 +12,8 @@ public:
   const Point3D projectTransformInv(const Point2D& point_projected, const double depth) const override;
 
   const Vector3D viewDirection(const Point3D& point) const override;
+
+  const bool isOrthographic() const override { return true; }
 };
 
 #endif // !ORTHOGRAPHICCAMERA_H

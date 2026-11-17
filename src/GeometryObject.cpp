@@ -4,13 +4,19 @@
 #define _USE_MATH_DEFINES
 #include <math.h>       /* sin */
 GeometryObject::GeometryObject() {
-
+  m_model = glm::mat4(1.0f);
+  m_rotation = glm::mat4(1.0f);
+  m_translation = glm::mat4(1.0f);
 }
 
 GeometryObject::GeometryObject(Material* material, const std::vector<Point3D>& vertices, const std::vector<RGBColor>& colors, const std::vector<Vector2D>& texture_coords, const std::vector<uint32_t>& indices, const Point3D& center)
   : m_material(material), m_vertices(vertices), m_colors(colors), m_texture_coords(texture_coords), m_indices(indices) {
-  
-  m_translation = glm::translate(m_model, glm::vec3(center.x, center.y, center.z));
+
+  // Start from the identity so objects created without an explicit rotation
+  // or translation still have a well-defined model transform.
+  m_model = glm::mat4(1.0f);
+  m_rotation = glm::mat4(1.0f);
+  m_translation = glm::translate(glm::mat4(1.0f), glm::vec3(center.x, center.y, center.z));
 
 }
 

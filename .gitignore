@@ -32,3 +32,8 @@ nbproject/
 *.exe
 *.out
 *.app
+
+# Task harness build output
+.task-build/
+# Shadow map debug export written during rendering
+shadow_map.bmp

@@ -2,17 +2,21 @@
 #include "OrthographicCamera.h"
 #include "ForwardRasterizer.h"
 
+int Rasterizer::s_live_instances = 0;
+
 Rasterizer::Rasterizer()
   : Renderer() {
-
+  ++s_live_instances;
 }
 
 Rasterizer::Rasterizer(const World* world)
   : Renderer(world) {
-
+  ++s_live_instances;
 }
 
 Rasterizer::~Rasterizer() {
+  clearShadowMaps();
+  --s_live_instances;
 }
 
 
@@ -29,7 +33,7 @@ const Fragment Rasterizer::calculateFragmentAttributes(const Triangle3D& triangl
   return f;
 }
 
-// Calculate depth in screen space and then interpolate using inverse function (1/z) 
+// Calculate depth in screen space and then interpolate using inverse function (1/z)
 const double Rasterizer::calculateDepth(const Triangle3D& triangle_world, const Triangle2D& triangle_raster, const Point2D& pixel_raster) const {
   const Triangle3D triangle_camera = Triangle3D(
     Vertex3D (m_camera->viewTransform(triangle_world.v1.position), triangle_world.v1.color, triangle_world.v1.texture_coords, triangle_world.v1.normal),
@@ -40,11 +44,23 @@ const double Rasterizer::calculateDepth(const Triangle3D& triangle_world, const 
   // Calculate barycentric coords in camera space
   double u, v, w;
   triangle_raster.calculateBarycentricCoords(u, v, w, pixel_raster);
+
+  if (m_camera->isOrthographic()) {
+    // Under an orthographic projection the view-space z of a planar triangle
+    // is an affine function of screen position, so the depth at a pixel is
+    // simply the barycentric interpolation in screen space.
+    const double depth_linear =
+      triangle_camera.v1.position.z * u +
+      triangle_camera.v2.position.z * v +
+      triangle_camera.v3.position.z * w;
+    return depth_linear;
+  }
+
   // Interpolate Z in 3D using inverse function and barycentric coordinates in 2D
-  const double depth = 1 / 
+  const double depth = 1 /
     (
-      (1 / triangle_camera.v1.position.z) * u + 
-      (1 / triangle_camera.v2.position.z) * v + 
+      (1 / triangle_camera.v1.position.z) * u +
+      (1 / triangle_camera.v2.position.z) * v +
       (1 / triangle_camera.v3.position.z) * w
     );
   return depth;
@@ -154,8 +170,18 @@ void Rasterizer::exportDepthBuffer(const std::vector<double>& depth_buffer, cons
   exportImage(depth_buffer_grey, output_path, image_width, image_height);
 }
 
-// Build a shadow map for each light
-const void Rasterizer::createShadowMaps() {
+// Delete every shadow map and its owned camera/rasterizer. Rendering always
+// starts from an empty map list, so stale maps can never survive a render.
+void Rasterizer::clearShadowMaps() {
+  for (auto& shadow_map : m_shadow_maps) {
+    delete shadow_map;
+  }
+  m_shadow_maps.clear();
+}
+
+// Build a shadow map for each light in the current light list
+void Rasterizer::createShadowMaps() {
+  clearShadowMaps();
   for (auto& light : m_world->m_lights) {
     ShadowMap * shadow_map = new ShadowMap(m_world, light);
     shadow_map->render();
@@ -163,11 +189,13 @@ const void Rasterizer::createShadowMaps() {
   }
 }
 
-// Calculate shadows using shadow maps
-const double Rasterizer::shadowFactor(const Point3D& point_world) {
-  double shadow = 0.0;         // No shadow     
+// Per-light occlusion ratios, in the same order as the world's lights. Each
+// shadow map only ever affects the light it was built for.
+const std::vector<double> Rasterizer::shadowFactors(const Point3D& point_world) const {
+  std::vector<double> factors;
+  factors.reserve(m_shadow_maps.size());
   for (auto& shadow_map : m_shadow_maps) {
-    shadow += shadow_map->pointInShadow(point_world);
+    factors.push_back(shadow_map->pointInShadow(point_world));
   }
-  return shadow;
+  return factors;
 }

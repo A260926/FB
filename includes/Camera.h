@@ -37,10 +37,16 @@ protected:
     m_image_width;
 
   Renderer * m_renderer;
+
+  static int s_live_instances;
 public:
     Camera();
     Camera(const Point3D& position, const Point3D& target, const uint32_t image_height, const uint32_t image_width, Renderer * renderer, const uint32_t near = 2, const uint32_t far = 5000);
-    ~Camera();
+    virtual ~Camera();
+
+    // Number of live Camera instances (used by the lifetime regression to
+    // verify that shadow cameras are released together with their maps).
+    static int liveInstances() { return s_live_instances; }
 
     inline const uint32_t get_near_plane() const { return m_near; }
     inline const uint32_t get_far_plane() const { return m_far; }
@@ -52,7 +58,11 @@ public:
     void rotate(const float roll_degrees, const float pitch_degrees, const float yaw_degrees);
 
     const bool insideFrustrum(const Point2D& point_raster, const float depth) const;
-    
+
+    // Orthographic cameras are affine along the view axis, so depth is
+    // interpolated linearly in screen space instead of with inverse depth.
+    virtual const bool isOrthographic() const { return false; }
+
     // Transformations
     const Point3D viewTransform(const Point3D& point_world) const;
     const Point3D viewTransformInv(const Point3D& point_camera) const;

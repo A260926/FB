@@ -72,6 +72,8 @@ public:
     r += color.r;
     g += color.g;
     b += color.b;
+
+    return *this;
   }
 
   ~RGBColor();

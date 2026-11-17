@@ -17,7 +17,7 @@ public:
 
   virtual const Point3D getPosition() const = 0;
   virtual const Vector3D getDirectionToPoint(const Point3D& position) const = 0;
-  const RGBColor& getColor();
+  const RGBColor& getColor() const;
 };
 
 

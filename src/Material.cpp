@@ -1,6 +1,40 @@
 #include "Material.h"
 #include "../lib/EasyBMP_1.06/EasyBMP.h"
 
+#include <algorithm>
+#include <cmath>
+
+namespace {
+
+// Ambient is a single constant term, added once for the whole fragment and
+// never attenuated by shadows.
+const double AMBIENT = 0.1;
+
+// Per-light shadow factor for the i-th light: 1 is fully occluded, 0 fully lit.
+// Missing entries (e.g. no shadow maps at all) mean fully lit.
+double shadowAttenuation(const std::vector<double>& shadow_factors, const size_t index) {
+  if (index >= shadow_factors.size()) {
+    return 1.0;
+  }
+  return 1.0 - std::min(std::max(shadow_factors[index], 0.0), 1.0);
+}
+
+RGBColor composeColor(const RGBColor& vertex_color, const double sum_r, const double sum_g, const double sum_b) {
+  // Direct lighting is accumulated without clamping so that the result does
+  // not depend on the light order. Clamp the per-channel total to [0, 1] only
+  // here, before multiplying by the vertex color.
+  const double total_r = std::min(std::max(sum_r, 0.0), 1.0);
+  const double total_g = std::min(std::max(sum_g, 0.0), 1.0);
+  const double total_b = std::min(std::max(sum_b, 0.0), 1.0);
+
+  return RGBColor(
+    (float)(total_r * vertex_color.r),
+    (float)(total_g * vertex_color.g),
+    (float)(total_b * vertex_color.b));
+}
+
+} // namespace
+
 /******************************** Material ********************************/
 
 Material::Material(){
@@ -14,50 +48,73 @@ Material::~Material() {
 }
 
 const RGBColor Material::shade(const std::vector<Light*>& lights, const Camera& camera, const Fragment& fragment) {
+  return shade(lights, camera, fragment, std::vector<double>());
+}
+
+const RGBColor Material::shade(const std::vector<Light*>& lights, const Camera& camera, const Fragment& fragment,
+  const std::vector<double>& shadow_factors) {
 #ifdef _FLAT
   return fragment.color;
 #endif // _FLAT
 
 #ifdef _PHONG
-  return phongEquation(lights, fragment.normal, -camera.viewDirection(fragment.position), fragment.position, fragment.color, fragment.diffuse, fragment.specular, 1.0);
+  return phongEquation(lights, fragment.normal, -camera.viewDirection(fragment.position), fragment.position, fragment.color, fragment.diffuse, fragment.specular, 1.0, shadow_factors);
 #endif // _PHONG
 
 #ifdef _BLINN_PHONG
-  return blinnPhongEquation(lights, fragment.normal, -camera.viewDirection(fragment.position), fragment.position, fragment.color, fragment.diffuse, fragment.specular, 1.0);
+  return blinnPhongEquation(lights, fragment.normal, -camera.viewDirection(fragment.position), fragment.position, fragment.color, fragment.diffuse, fragment.specular, 1.0, shadow_factors);
 #endif // _BLINN-PHONG
 }
 
 const RGBColor Material::blinnPhongEquation(const std::vector<Light*>& lights, const Vector3D& N, const Vector3D& V, const Point3D vertex_position,
-                                    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess) {
-  const RGBColor ambient(0.1);
-  RGBColor diffuse, specular;
-  for (auto& light : lights) {
+                                    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess,
+                                    const std::vector<double>& shadow_factors) {
+  // Ambient light is added exactly once.
+  double sum_r = AMBIENT, sum_g = AMBIENT, sum_b = AMBIENT;
+
+  for (size_t i = 0; i < lights.size(); ++i) {
+    const Light* light = lights[i];
+    const double attenuation = shadowAttenuation(shadow_factors, i);
+
     const Vector3D L = -(light->getDirectionToPoint(vertex_position));
     Vector3D H = V + L;
     H.normalize();
 
-    diffuse = light->getColor() * diffuse_color * std::max((L * N), 0.0);
-    specular = light->getColor() *  specular_color * pow(std::max((H * V), 0.0), shininess);
+    const double diffuse_factor = attenuation * std::max((L * N), 0.0);
+    const double specular_factor = attenuation * pow(std::max((H * V), 0.0), shininess);
+
+    const RGBColor& light_color = light->getColor();
+    sum_r += light_color.r * (diffuse_color.r * diffuse_factor + specular_color.r * specular_factor);
+    sum_g += light_color.g * (diffuse_color.g * diffuse_factor + specular_color.g * specular_factor);
+    sum_b += light_color.b * (diffuse_color.b * diffuse_factor + specular_color.b * specular_factor);
   }
 
-  const RGBColor result = (ambient + diffuse + specular) * vertex_color;
-  return result;
+  return composeColor(vertex_color, sum_r, sum_g, sum_b);
 }
 
 const RGBColor Material::phongEquation(const std::vector<Light*>& lights, const Vector3D& N, const Vector3D& V, const Point3D vertex_position,
-  const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess) {
-  const RGBColor ambient(0.1);
-  RGBColor diffuse, specular;
-  for (auto& light : lights) {
+  const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess,
+  const std::vector<double>& shadow_factors) {
+  // Ambient light is added exactly once.
+  double sum_r = AMBIENT, sum_g = AMBIENT, sum_b = AMBIENT;
+
+  for (size_t i = 0; i < lights.size(); ++i) {
+    const Light* light = lights[i];
+    const double attenuation = shadowAttenuation(shadow_factors, i);
+
     const Vector3D L = -(light->getDirectionToPoint(vertex_position));
     const Vector3D R = 2 * (N * L) * N - L;
 
-    diffuse = light->getColor() * diffuse_color * std::max((L * N), 0.0);
-    specular = light->getColor() *  specular_color * pow(std::max((R * V), 0.0), shininess);
+    const double diffuse_factor = attenuation * std::max((L * N), 0.0);
+    const double specular_factor = attenuation * pow(std::max((R * V), 0.0), shininess);
+
+    const RGBColor& light_color = light->getColor();
+    sum_r += light_color.r * (diffuse_color.r * diffuse_factor + specular_color.r * specular_factor);
+    sum_g += light_color.g * (diffuse_color.g * diffuse_factor + specular_color.g * specular_factor);
+    sum_b += light_color.b * (diffuse_color.b * diffuse_factor + specular_color.b * specular_factor);
   }
 
-  const RGBColor phong_result = (ambient + diffuse + specular) * vertex_color;
-  return phong_result;
+  return composeColor(vertex_color, sum_r, sum_g, sum_b);
 }
 
 

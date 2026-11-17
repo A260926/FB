@@ -20,7 +20,7 @@ protected:
 public:
   Renderer();
   Renderer(const World* world);
-  ~Renderer();
+  virtual ~Renderer();
    
   void set_camera(Camera * camera) { m_camera = camera;  }
   Camera * get_camera() { return m_camera;  }

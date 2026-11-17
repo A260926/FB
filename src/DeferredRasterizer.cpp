@@ -9,6 +9,7 @@ DeferredRasterizer::DeferredRasterizer(const World* world)
 }
 
 DeferredRasterizer::~DeferredRasterizer() {
+  clearShadowMaps();
 }
 
 
@@ -25,6 +26,10 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
 
   if (use_shadow_maps) {
     this->createShadowMaps();
+  }
+  else {
+    // Drop any maps left over from a previous render with shadows enabled.
+    this->clearShadowMaps();
   }
 
   // Render color, depth and normals
@@ -74,9 +79,8 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
           m_specular_buffer[i],
           (Vector3D)m_normal_buffer[i]
         };
-        const RGBColor object_color = Material::shade(m_world->m_lights, *m_world->m_camera, fragment);
-        const RGBColor shadow_factor = shadowFactor(fragment.position);
-        m_pixels[i] = object_color - shadow_factor;
+        const RGBColor object_color = Material::shade(m_world->m_lights, *m_world->m_camera, fragment, shadowFactors(fragment.position));
+        m_pixels[i] = object_color;
       }
       else {
         m_pixels[i] = BACKGROUND_COLOR;

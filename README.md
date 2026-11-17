@@ -14,6 +14,7 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Depth buffering](https://github.com/mtrebi/rasterizer/blob/master/README.md#depth-buffering)  <br/> 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Rendering paths](https://github.com/mtrebi/rasterizer/blob/master/README.md#rendering-paths)  <br/> 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Shadow mapping](https://github.com/mtrebi/rasterizer/blob/master/README.md#shadow-mapping)  <br/> 
+&nbsp;[Regression tests](https://github.com/mtrebi/rasterizer/blob/master/README.md#regression-tests)  <br/> 
 &nbsp;[Gallery](https://github.com/mtrebi/rasterizer/blob/master/README.md#gallery)  <br/> 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Cool images](https://github.com/mtrebi/rasterizer/blob/master/README.md#cool-images)  <br/> 
 &nbsp;[External dependencies](https://github.com/mtrebi/rasterizer/blob/master/README.md#external-dependencies)  <br/> 
@@ -35,7 +36,7 @@ I've implement some basic features that I consider relevant for any graphics pro
 * Simple optimizations
 * A depth-buffer to solve the visibility surface problem
 * Two rendering paths: Forward and deferred
-* Shadow mapping for directional lights with PCF
+* Shadow mapping for directional and point lights, one shadow map per light, with per-light shadow factors and PCF
 
 # Build instructions
 
@@ -172,6 +173,23 @@ In the next image:
 
 <p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/flat_phong_blinn.bmp"> </p>
 
+### Multi-light composition
+
+Direct lighting from every light is summed per light, so the result does not depend on the order of the lights in the world. With a shininess `s`, a normal `N`, a view direction `V` and, for each light `i`, its color `L_i`:
+
+```
+diffuse_i  = L_i * k_d * max(N . L, 0)
+specular_i = L_i * k_s * max(R . V, 0)^s        (Phong)
+           = L_i * k_s * max(H . V, 0)^s        (Blinn-Phong, H = normalize(L + V))
+
+total      = ambient + sum_i(diffuse_i + specular_i)
+color      = clamp(total, [0, 1]) * k_vertex
+```
+
+The ambient term (`0.1`) is added exactly once for the whole fragment and is never attenuated by a shadow. The per-channel sum is accumulated without clamping so that the light order cannot change the result; the clamp to `[0, 1]` happens only at the very end, before multiplying by the interpolated vertex color. Each light's direct term is attenuated by its own shadow factor only (see below), which is why blocking one light leaves the other lights and the ambient term untouched.
+
+Because the forward and deferred paths share this composition step, both produce the same visible-surface color for the same camera, geometry and material.
+
 ## Phong and Blinn-Phong shading using textures
 
 Using textures is a simple modification in the program but it produces a huge quality increasement. The idea is to replace is basic color that we got previously by a color that we retrieve from a texture using __Texture Coordinates__. Texture coordinates are specifider per vertex (exaclty as colors are) and then, to get the color of a specific point in the triangle, an interpolation is performed across the vertices.
@@ -279,32 +297,35 @@ Then, to calculate shading we just have to combine all these different buffers a
 
 ## Shadow mapping
 
-In order to add shadows to my scene I've implemented a technique called *Shadow Mapping*. It consists of three parts:
+In order to add shadows to my scene I've implemented a technique called *Shadow Mapping*. Every render builds one shadow map per light in the current light list: the depth of the scene is rendered from an orthographic camera placed at the light and looking at the world origin. Rendering, reordering or removing lights rebuilds the maps from scratch, and disabling shadows releases them, so no stale map is ever reused. Each map owns its light camera and its internal rasterizer; both are freed with the map and when the renderer is destroyed.
 
-1. *Render the depth of the scene from the Light point of view*. We store in each pixel the distance from the light to the closest object that it sees. This is called a Shadow Map.
-2. We render the image from the camera as always but now we have to check if a pixel is in shadow. To do so, we*convert this pixel into World Space and then into Light Space*.
-3. Finally, because the pixel is in Light Space we can retrieve it's depth from the Light's POV. Then, we compare this depth with the distance from that point (in world space) to the light. If it is smaller, it means that there is some object in between and thus, the pixel is in shadow.
+To shade a fragment, its position is transformed into the shadow camera's space and compared, per light, with that light's own shadow map:
 
+* The comparison uses the **axial depth of the orthographic shadow camera**, not the distance to the light, so the world-unit bias keeps the same meaning it always had. The receiving fragment's depth is `viewTransform(point).z` under the shadow camera and the stored value is the same kind of depth.
+* For a tilted occluding triangle under an orthographic projection the depth is a **linear interpolation in screen space** of the triangle's vertex depths (barycentric weights at the pixel centre). The main camera's perspective path keeps its inverse-depth interpolation, which the shadow camera does not use.
+* The bias is the existing world-unit `SHADOW_MAP_BIAS = 7.5`.
+* If the receiving point maps outside the shadow map image, or lies outside the light camera's `near`/`far` range, it is treated as **unoccluded**.
 
-The following image is the Shadow Map of the previous scene:
+`ShadowMap::pointInShadow` returns an **occlusion ratio in `[0, 1]`** (0 = fully lit, 1 = fully occluded), not a color to subtract. `Rasterizer::shadowFactors` returns one ratio per light in world light order, and the shading step uses factor `i` only on the contribution of light `i`. `Rasterizer::createShadowMaps()` owns the maps: each `ShadowMap` deletes the orthographic camera and internal rasterizer it created, and the rasterizer's destructor deletes every remaining map, so the resources have a single owner (the renderer) and a single cleanup point.
 
-<p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/shadow_map.bmp"> </p>
+### Hard shadows and PCF
 
-Testing the depth of this shadow map and the distance from each point to the light sources we can create shadows:
+By default the occlusion test is a hard comparison against the **nearest texel** (the texel containing the fragment). When `_PCF_SHADOWS` is defined (the default in `CMakeLists.txt`) the shadow test takes the average of a **3×3 comparison centred on that same nearest texel**, giving nine samples; taps that fall outside the map count as unoccluded. `ShadowMap::pcfShadows()` toggles the filter at runtime as well, which the regression tests use to check both modes.
 
-<p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/shadows_flat_scene.bmp"> </p>
-
-And moving the camera a behind to have a different point of view:
-
-<p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/shadows_flat_scene_behind.bmp"> </p>
-
-_If you want to know more, this is by far [best tutorial](https://www.youtube.com/watch?v=EsccgeUpdsM) that I've found about shadow mapping_
-
-### PCF
-
-PCF (Percentage Closer Filtering) help us to create soft shadows and making them less "blocky". The idea is, instead of taking only one sample from the shadow map, we take many of them and we calculate the average. In my case I took nine samples: the center point and neighbors. The result has a much better quality:
+PCF (Percentage Closer Filtering) helps to create soft shadows and makes them less "blocky": instead of one sample we average nine. The result has a much better quality:
 
 <p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/shadows_jaggy_pcf.PNG"> </p>
+
+# Regression tests
+
+`tests/lighting_target.cpp` is a headless C++ regression suite for the behaviour above. It includes `task_support/check.h`, registers cases under the `lighting`, `projection` and `lifetime` groups through `task_cases`/`task_case_count`, and asserts with `TASK_CHECK`; no window is opened. It:
+
+* computes two-light-plus-ambient values independently from the shading formula;
+* drives real geometry through shadow capture, including a tilted occluder, a receiver at the shadow map border and points outside the image / outside the light camera's range;
+* compares a Forward and a Deferred render of a scene where one light is blocked and the other is not;
+* exercises shadow toggling, a moved-away occluder, and consecutive renders after adding, removing and reordering lights (protected buffers are read through derived probe classes).
+
+Run it with `bash task_support/run.sh target`; the production-only baseline path is `bash task_support/run.sh baseline`.
 
 # Gallery
 

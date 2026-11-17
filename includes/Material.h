@@ -18,16 +18,23 @@ public:
   ~Material();
 
   static const RGBColor shade(const std::vector<Light*>& lights, const Camera& camera, const Fragment& fragment);
+  // Per-light shadow factors are occlusion ratios in [0, 1], one entry per
+  // light (missing entries are treated as fully lit). Each light's direct
+  // contribution is attenuated only by its own factor.
+  static const RGBColor shade(const std::vector<Light*>& lights, const Camera& camera, const Fragment& fragment,
+    const std::vector<double>& shadow_factors);
   virtual const RGBColor getDiffuseColor(const Vector2D& text_coords) const = 0;
   virtual const RGBColor getSpecularColor(const Vector2D& text_coords) const = 0;
   virtual const Vector3D getNormal(const Triangle3D& triangle_world, const Vector2D& text_coords) const = 0;
 
-protected:  
+protected:
   static const RGBColor phongEquation(const std::vector<Light*>& lights, const Vector3D& N, const Vector3D& V, const Point3D vertex_position,
-    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess);
-  
+    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess,
+    const std::vector<double>& shadow_factors = std::vector<double>());
+
   static const RGBColor blinnPhongEquation(const std::vector<Light*>& lights, const Vector3D& N, const Vector3D& V, const Point3D vertex_position,
-    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess);
+    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess,
+    const std::vector<double>& shadow_factors = std::vector<double>());
 };
 
 class FlatMaterial : public Material {

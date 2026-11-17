@@ -1,12 +1,15 @@
 #include "Camera.h"
 #define _USE_MATH_DEFINES
 #include <math.h>       /* sin */
-Camera::Camera() {
+int Camera::s_live_instances = 0;
 
+Camera::Camera() {
+  ++s_live_instances;
 }
 
 Camera::Camera(const Point3D& position, const Point3D& target, const uint32_t image_height, const uint32_t image_width, Renderer * renderer, const uint32_t near, const uint32_t far)
   : m_position(position), m_image_height(image_height), m_image_width(image_width), m_renderer(renderer) {
+  ++s_live_instances;
   m_renderer->set_camera(this);
 
   m_near = near;
@@ -39,7 +42,7 @@ Camera::Camera(const Point3D& position, const Point3D& target, const uint32_t im
 }
 
 Camera::~Camera(){
-
+  --s_live_instances;
 }
 
 // Camera space to NDC [-1,1]
