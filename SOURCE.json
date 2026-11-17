@@ -1,0 +1,65 @@
+{
+  "repo": "https://github.com/pascoej/caf",
+  "commit": "f3a8aaeba5b23b5d229d19a900feb144f9dbcd08",
+  "files": [
+    {
+      "path": ".gitignore",
+      "git_blob": "b0132858671cc5d0ecf2af792a600bd272dc606f",
+      "sha256": "b956d40850922779b54aa3783d39790a3bb5ec941b66d813ab2174a60035d816",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "LICENSE",
+      "git_blob": "1d12c82731461b8544c1a26794a0d1ee761c98e3",
+      "sha256": "e5031f5f24f4dcac671f52773d645330b833c2d5df780ba787b677f57d7a8e9c",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "README.md",
+      "git_blob": "a5288b9c3a6e30ded62095becd172c265cdba4ed",
+      "sha256": "1b15afd5b2c34ef3e71517c0499346889345ec74343dcf5648465d82798a4ffc",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "caf.go",
+      "git_blob": "7189d94bde2b649dc0b0a4a19b3dd804a865a0d7",
+      "sha256": "0f776998a8382c7359a03ff9fffe67bd2328806287a8f5f2295a1a71de819cd4",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "caf_test.go",
+      "git_blob": "b22da8faf5df6f901671d44d61f86c7ecaaecc25",
+      "sha256": "4cdbd24a3f4a2140669f450f4bd923ec91412c3ee3e4ef140322cff3834f54b7",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "go.mod",
+      "git_blob": "43932e4eefb5b109024d50cc5d148d28008293b3",
+      "sha256": "3bdbdaec9228a2422107acf4e88db23fa84e8ea8134b1bb686a4537a69a530d0",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "go.sum",
+      "git_blob": "14c35c5dcd95b99dddccf8338ad1aaff97cd7b5a",
+      "sha256": "14f330a0bbaff91390758782fb5a01ebc152dd172516b284557c12985d628d9d",
+      "mode": "100644",
+      "binary": false
+    },
+    {
+      "path": "samples/helenkane.caf",
+      "git_blob": "2556c7674bb059b236d55006142535332f10e586",
+      "sha256": "0054160e09c77b3d1f7b33015a46d46ccc4f01f0fa88f9d6ec88536a81a3b0d5",
+      "mode": "100644",
+      "binary": true
+    }
+  ],
+  "excluded": [],
+  "gitlinks": [],
+  "gitmodules": false
+}
