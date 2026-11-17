@@ -56,14 +56,26 @@ public final class ElfRelocationAddend {
     public final long r_addend; // int32_t or int64_t
 
     private final ElfFile elfFile;
+    /** Section index of the symbol table referenced by the owning relocation section's sh_link. */
+    private final int symbolTableSectionIndex;
 
-    ElfRelocationAddend(ElfParser parser, long offset) {
+    ElfRelocationAddend(ElfParser parser, long offset, int symbolTableSectionIndex) {
         parser.seek(offset);
 
         r_offset = parser.readIntOrLong();
         r_info = parser.readIntOrLong();
         r_addend = parser.readIntOrLong();
         elfFile = parser.elfFile;
+        this.symbolTableSectionIndex = symbolTableSectionIndex;
+    }
+
+    /** Creates a relocation already decoded from an Android packed relocation stream. */
+    ElfRelocationAddend(ElfFile elfFile, long r_offset, long r_info, long r_addend, int symbolTableSectionIndex) {
+        this.elfFile = elfFile;
+        this.r_offset = r_offset;
+        this.r_info = r_info;
+        this.r_addend = r_addend;
+        this.symbolTableSectionIndex = symbolTableSectionIndex;
     }
 
     /**
@@ -88,9 +100,18 @@ public final class ElfRelocationAddend {
     /**
      * The symbol table index, with respect to which the relocation must be made.
      * Use {@link #getSymbolIndex()}} to get the resolved {@link ElfSymbol} from this index.
+     * <p>
+     * The symbol is looked up in the symbol table referenced by the owning relocation
+     * section's {@code sh_link}.
      */
     public ElfSymbol getSymbol() {
-        return elfFile.getSymbolTableSection().symbols[getSymbolIndex()];
+        ElfSymbolTableSection table = elfFile.symbolTableSectionAt(symbolTableSectionIndex);
+        int symbolIndex = getSymbolIndex();
+        if (symbolIndex < 0 || symbolIndex >= table.symbols.length) {
+            throw new ElfException("Relocation symbol index " + symbolIndex + " is out of range for the symbol table"
+                    + " at section " + symbolTableSectionIndex + " (" + table.symbols.length + " entries)");
+        }
+        return table.symbols[symbolIndex];
     }
 
     @Override

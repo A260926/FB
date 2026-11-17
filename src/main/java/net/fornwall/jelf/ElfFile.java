@@ -1093,6 +1093,46 @@ public final class ElfFile {
     }
 
     /**
+     * Returns the symbol table section at the given section index, as referenced by a relocation
+     * section's {@code sh_link}.
+     *
+     * @param sectionIndex index of a {@link ElfSectionHeader#SHT_SYMTAB} or
+     *     {@link ElfSectionHeader#SHT_DYNSYM} section
+     * @return the symbol table section at that index
+     */
+    ElfSymbolTableSection symbolTableSectionAt(int sectionIndex) throws ElfException {
+        ElfSection section = sectionAt(sectionIndex, "symbol table");
+        if (!(section instanceof ElfSymbolTableSection)) {
+            throw new ElfException("Section index " + sectionIndex + " is not a symbol table (type=0x"
+                    + Long.toHexString(section.header.sh_type) + ")");
+        }
+        return (ElfSymbolTableSection) section;
+    }
+
+    /**
+     * Returns the string table section at the given section index, as referenced by a symbol
+     * table's {@code sh_link}.
+     *
+     * @param sectionIndex index of a {@link ElfSectionHeader#SHT_STRTAB} section
+     * @return the string table section at that index
+     */
+    ElfStringTable stringTableSectionAt(int sectionIndex) throws ElfException {
+        ElfSection section = sectionAt(sectionIndex, "string table");
+        if (!(section instanceof ElfStringTable)) {
+            throw new ElfException("Section index " + sectionIndex + " is not a string table (type=0x"
+                    + Long.toHexString(section.header.sh_type) + ")");
+        }
+        return (ElfStringTable) section;
+    }
+
+    private ElfSection sectionAt(int sectionIndex, String what) throws ElfException {
+        if (sectionIndex < 0 || sectionIndex >= e_shnum) {
+            throw new ElfException("Invalid " + what + " section index " + sectionIndex);
+        }
+        return getSection(sectionIndex);
+    }
+
+    /**
      * The {@link ElfSectionHeader#SHT_DYNAMIC} section (of which there may be only one). Named ".dynamic".
      *
      * @return the dynamic section for this file, if any
@@ -1379,6 +1419,10 @@ public final class ElfFile {
                         case ElfSectionHeader.SHT_RELA:
                             return new ElfRelocationAddendSection(parser, elfSectionHeader);
                         case ElfSectionHeader.SHT_REL:
+                            return new ElfRelocationSection(parser, elfSectionHeader);
+                        case ElfSectionHeader.SHT_ANDROID_RELA:
+                            return new ElfRelocationAddendSection(parser, elfSectionHeader);
+                        case ElfSectionHeader.SHT_ANDROID_REL:
                             return new ElfRelocationSection(parser, elfSectionHeader);
                         case ElfSectionHeader.SHT_GNU_HASH:
                             return new ElfGnuHashTable(parser, elfSectionHeader);

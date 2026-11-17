@@ -20,7 +20,7 @@ public class ElfSymbolTableSection extends ElfSection {
         symbols = new ElfSymbol[num_entries];
         for (int i = 0; i < num_entries; i++) {
             final long symbolOffset = header.sh_offset + (i * header.sh_entsize);
-            symbols[i] = new ElfSymbol(parser, symbolOffset, header.sh_type);
+            symbols[i] = new ElfSymbol(parser, symbolOffset, header.sh_type, header.sh_link);
         }
     }
 }

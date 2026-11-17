@@ -102,6 +102,19 @@ public class ElfSectionHeader {
     public static final int SHT_GNU_versym = 0x6fffffff;
 
     /**
+     * Android packed relocation entries without explicit addends. The section payload is an
+     * {@code APS2} compressed stream which is expanded into {@link ElfRelocation} entries by
+     * {@link ElfRelocationSection}.
+     */
+    public static final int SHT_ANDROID_REL = 0x60000001;
+    /**
+     * Android packed relocation entries with explicit addends. The section payload is an
+     * {@code APS2} compressed stream which is expanded into {@link ElfRelocationAddend} entries by
+     * {@link ElfRelocationAddendSection}.
+     */
+    public static final int SHT_ANDROID_RELA = 0x60000002;
+
+    /**
      * Lower bound of the range of indexes reserved for operating system-specific semantics.
      */
     public static final int SHT_LOOS = 0x60000000;

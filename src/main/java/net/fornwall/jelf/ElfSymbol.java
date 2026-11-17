@@ -161,9 +161,16 @@ public final class ElfSymbol {
     public final long offset;
 
     private final ElfFile elfHeader;
+    /**
+     * Section index of the string table referenced by the owning symbol table's {@code sh_link}.
+     * Resolved independently per symbol table, so a regular and a dynamic symbol table may use
+     * different string tables.
+     */
+    private final int stringTableSectionIndex;
 
-    ElfSymbol(ElfParser parser, long offset, int section_type) {
+    ElfSymbol(ElfParser parser, long offset, int section_type, int stringTableSectionIndex) {
         this.elfHeader = parser.elfFile;
+        this.stringTableSectionIndex = stringTableSectionIndex;
         parser.seek(offset);
         this.offset = offset;
         if (parser.elfFile.ei_class == ElfFile.CLASS_32) {
@@ -231,14 +238,9 @@ public final class ElfSymbol {
         // Check to make sure this symbol has a name.
         if (st_name == 0) return null;
 
-        // Retrieve the name of the symbol from the correct string table.
-        String symbol_name = null;
-        if (section_type == ElfSectionHeader.SHT_SYMTAB) {
-            symbol_name = elfHeader.getStringTable().get(st_name);
-        } else if (section_type == ElfSectionHeader.SHT_DYNSYM) {
-            symbol_name = elfHeader.getDynamicStringTable().get(st_name);
-        }
-        return symbol_name;
+        // Retrieve the name of the symbol from the string table referenced by the
+        // owning symbol table's sh_link.
+        return elfHeader.stringTableSectionAt(stringTableSectionIndex).get(st_name);
     }
 
     public Visibility getVisibility() {

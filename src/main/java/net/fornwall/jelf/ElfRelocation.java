@@ -40,13 +40,24 @@ public final class ElfRelocation {
     public final long r_info; // Elf32_Word or Elf64_Xword
 
     private final ElfFile elfFile;
+    /** Section index of the symbol table referenced by the owning relocation section's sh_link. */
+    private final int symbolTableSectionIndex;
 
-    ElfRelocation(ElfParser parser, long offset) {
+    ElfRelocation(ElfParser parser, long offset, int symbolTableSectionIndex) {
         parser.seek(offset);
 
         r_offset = parser.readIntOrLong();
         r_info = parser.readIntOrLong();
         elfFile = parser.elfFile;
+        this.symbolTableSectionIndex = symbolTableSectionIndex;
+    }
+
+    /** Creates a relocation already decoded from an Android packed relocation stream. */
+    ElfRelocation(ElfFile elfFile, long r_offset, long r_info, int symbolTableSectionIndex) {
+        this.elfFile = elfFile;
+        this.r_offset = r_offset;
+        this.r_info = r_info;
+        this.symbolTableSectionIndex = symbolTableSectionIndex;
     }
 
     /**
@@ -71,9 +82,18 @@ public final class ElfRelocation {
     /**
      * The symbol with respect to which the relocation must be made.
      * Use {@link #getSymbolIndex()}} to get the resolved {@link ElfSymbol} from this index.
+     * <p>
+     * The symbol is looked up in the symbol table referenced by the owning relocation
+     * section's {@code sh_link}.
      */
     public ElfSymbol getSymbol() {
-        return elfFile.getSymbolTableSection().symbols[getSymbolIndex()];
+        ElfSymbolTableSection table = elfFile.symbolTableSectionAt(symbolTableSectionIndex);
+        int symbolIndex = getSymbolIndex();
+        if (symbolIndex < 0 || symbolIndex >= table.symbols.length) {
+            throw new ElfException("Relocation symbol index " + symbolIndex + " is out of range for the symbol table"
+                    + " at section " + symbolTableSectionIndex + " (" + table.symbols.length + " entries)");
+        }
+        return table.symbols[symbolIndex];
     }
 
     @Override
