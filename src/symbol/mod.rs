@@ -806,7 +806,16 @@ pub struct ProcedureSymbol<'t> {
     ///
     /// The type contains the complete signature, including parameters, modifiers and the return
     /// type.
+    ///
+    /// The raw bits from the symbol record are preserved verbatim. Use
+    /// [`type_reference`](Self::type_reference) to determine which stream these bits index.
     pub type_index: TypeIndex,
+    /// Which stream [`type_index`](Self::type_index) refers to.
+    ///
+    /// Ordinary procedure symbols refer to the TPI stream. Symbols with an `_ID` suffix refer to
+    /// the IPI stream, where [`type_index`](Self::type_index) is an id containing the TPI
+    /// procedure type.
+    pub type_reference: TypeReference,
     /// Code offset of the start of this procedure.
     pub offset: PdbInternalSectionOffset,
     /// Detailed flags of this procedure.
@@ -821,16 +830,33 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ProcedureSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
+        let parent = parse_optional_index(&mut buf)?;
+        let end = buf.parse()?;
+        let next = parse_optional_index(&mut buf)?;
+        let len = buf.parse()?;
+        let dbg_start_offset = buf.parse()?;
+        let dbg_end_offset = buf.parse()?;
+        let type_index: TypeIndex = buf.parse()?;
+        let type_reference = if matches!(
+            kind,
+            S_GPROC32_ID | S_LPROC32_ID | S_LPROC32_DPC_ID
+        ) {
+            TypeReference::Id(IdIndex(type_index.0))
+        } else {
+            TypeReference::Type(type_index)
+        };
+
         let symbol = ProcedureSymbol {
             global: matches!(kind, S_GPROC32 | S_GPROC32_ST | S_GPROC32_ID),
             dpc: matches!(kind, S_LPROC32_DPC | S_LPROC32_DPC_ID),
-            parent: parse_optional_index(&mut buf)?,
-            end: buf.parse()?,
-            next: parse_optional_index(&mut buf)?,
-            len: buf.parse()?,
-            dbg_start_offset: buf.parse()?,
-            dbg_end_offset: buf.parse()?,
-            type_index: buf.parse()?,
+            parent,
+            end,
+            next,
+            len,
+            dbg_start_offset,
+            dbg_end_offset,
+            type_index,
+            type_reference,
             offset: buf.parse()?,
             flags: buf.parse()?,
             name: parse_symbol_name(&mut buf, kind)?,
@@ -1998,6 +2024,7 @@ mod tests {
                     dbg_start_offset: 5,
                     dbg_end_offset: 5,
                     type_index: TypeIndex(4103),
+                    type_reference: TypeReference::Type(TypeIndex(4103)),
                     offset: PdbInternalSectionOffset {
                         offset: 21824,
                         section: 1
@@ -2067,6 +2094,7 @@ mod tests {
                     dbg_start_offset: 4,
                     dbg_end_offset: 9,
                     type_index: TypeIndex(4224),
+                    type_reference: TypeReference::Type(TypeIndex(4224)),
                     offset: PdbInternalSectionOffset {
                         offset: 22468,
                         section: 1

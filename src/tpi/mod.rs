@@ -19,12 +19,15 @@ mod header;
 mod id;
 mod primitive;
 
-use self::header::*;
-use self::primitive::type_data_for_primitive;
-
 pub use self::data::*;
 pub use self::id::*;
 pub use self::primitive::{Indirection, PrimitiveKind, PrimitiveType};
+
+// Internal helpers shared with the type graph. These use the same record decoders as the public
+// parsing API rather than a second CodeView implementation.
+pub(crate) use self::data::{parse_padding, parse_type_data};
+pub(crate) use self::header::Header;
+pub(crate) use self::primitive::type_data_for_primitive;
 
 /// Zero-copy access to a PDB type or id stream.
 ///

@@ -455,7 +455,7 @@ fn parse_string<'t>(leaf: u16, buf: &mut ParseBuffer<'t>) -> Result<RawString<'t
 }
 
 #[inline]
-fn parse_padding(buf: &mut ParseBuffer<'_>) -> Result<()> {
+pub(crate) fn parse_padding(buf: &mut ParseBuffer<'_>) -> Result<()> {
     while !buf.is_empty() && buf.peek_u8()? >= 0xf0 {
         let padding = buf.parse_u8()?;
         if padding > 0xf0 {

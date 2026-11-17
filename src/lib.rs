@@ -60,6 +60,7 @@ mod source;
 mod strings;
 mod symbol;
 mod tpi;
+mod type_graph;
 
 // exports
 pub use crate::common::*;
@@ -74,6 +75,7 @@ pub use crate::source::*;
 pub use crate::strings::*;
 pub use crate::symbol::*;
 pub use crate::tpi::*;
+pub use crate::type_graph::*;
 
 // re-export FallibleIterator for convenience
 #[doc(no_inline)]

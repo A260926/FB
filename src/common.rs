@@ -108,6 +108,38 @@ pub enum Error {
 
     /// An unknown binary annotation was encountered.
     UnknownBinaryAnnotation(u32),
+
+    /// A reached type or id record is valid but is not supported by the type graph.
+    ///
+    /// `source` identifies the stream and index of the record that was reached, and `kind` is the
+    /// raw record kind. `path` lists the references followed to reach it, outermost first.
+    TypeGraphUnsupported {
+        /// Stream and index of the record that was reached.
+        source: TypeReference,
+        /// Raw leaf kind of the record.
+        kind: u16,
+        /// References followed from the query root to the unsupported record.
+        path: Vec<TypeReference>,
+    },
+
+    /// A class or struct forward declaration matched more than one complete definition.
+    TypeGraphAmbiguousForward {
+        /// Index of the forward declaration.
+        forward: TypeIndex,
+        /// Sorted indices of the complete definitions that matched.
+        candidates: Vec<TypeIndex>,
+    },
+
+    /// An id reference was requested but the IPI stream does not contain the record.
+    TypeGraphMissingId(IdIndex),
+
+    /// An id or procedure reference resolved to an unexpected record kind.
+    TypeGraphProcedureMismatch {
+        /// Stream and index of the reference that produced the mismatch.
+        source: TypeReference,
+        /// Description of the mismatch.
+        detail: &'static str,
+    },
 }
 
 impl std::error::Error for Error {
@@ -186,6 +218,39 @@ impl fmt::Display for Error {
                 write!(f, "Invalid source file checksum offset {:#x}", offset)
             }
             Self::UnknownBinaryAnnotation(num) => write!(f, "Unknown binary annotation {}", num),
+            Self::TypeGraphUnsupported {
+                source,
+                kind,
+                path,
+            } => {
+                write!(
+                    f,
+                    "Type graph reached unsupported record kind {:#06x} at {}",
+                    kind, source
+                )?;
+                if !path.is_empty() {
+                    write!(f, " (path:")?;
+                    for reference in path {
+                        write!(f, " {}", reference)?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Self::TypeGraphAmbiguousForward {
+                forward,
+                candidates,
+            } => write!(
+                f,
+                "Forward declaration {} is ambiguous between complete definitions {:?}",
+                forward, candidates
+            ),
+            Self::TypeGraphMissingId(id) => write!(f, "Id {} not found in the IPI stream", id),
+            Self::TypeGraphProcedureMismatch { source, detail } => write!(
+                f,
+                "Type graph reference {} did not resolve to a procedure: {}",
+                source, detail
+            ),
             _ => fmt::Debug::fmt(self, f),
         }
     }
@@ -617,6 +682,32 @@ impl_hex_fmt!(IdIndex);
 impl_pread!(IdIndex);
 
 impl ItemIndex for IdIndex {}
+
+/// Identifies which stream an index in a procedure symbol belongs to.
+///
+/// Ordinary procedure symbols (for example `S_GPROC32` and `S_LPROC32`) store a
+/// [`TypeIndex`] into the TPI stream. Symbols whose kind has an `_ID` suffix
+/// (`S_GPROC32_ID`, `S_LPROC32_ID`, `S_LPROC32_DPC_ID`) instead store an
+/// [`IdIndex`] into the IPI stream.
+///
+/// Numerically equal indices from the two streams refer to different records and
+/// must never be substituted for one another.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TypeReference {
+    /// An index into the TPI stream ([`TypeInformation`](crate::TypeInformation)).
+    Type(TypeIndex),
+    /// An index into the IPI stream ([`IdInformation`](crate::IdInformation)).
+    Id(IdIndex),
+}
+
+impl fmt::Display for TypeReference {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Type(index) => write!(f, "TPI type {}", index),
+            Self::Id(index) => write!(f, "IPI id {}", index),
+        }
+    }
+}
 
 /// An [`ItemIndex`] that is local to a module.
 ///

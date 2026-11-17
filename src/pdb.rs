@@ -17,6 +17,7 @@ use crate::source::Source;
 use crate::strings::StringTable;
 use crate::symbol::SymbolTable;
 use crate::tpi::{IdInformation, TypeInformation};
+use crate::type_graph::TypeGraph;
 
 // Some streams have a fixed stream index.
 // http://llvm.org/docs/PDB/index.html
@@ -110,6 +111,36 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     pub fn id_information(&mut self) -> Result<IdInformation<'s>> {
         let stream = self.msf.get(IPI_STREAM, None)?;
         IdInformation::parse(stream)
+    }
+
+    /// Build a self-contained, read-only type graph from the TPI and IPI streams.
+    ///
+    /// The returned [`TypeGraph`] copies the bytes it needs and owns everything it refers to, so it
+    /// stays usable after this `PDB`, its module views and its source have been dropped. It never
+    /// borrows from the `PDB` and never shares cached nodes with another graph.
+    ///
+    /// A missing IPI stream is acceptable: direct TPI queries still work, and only an id-based
+    /// procedure query fails with [`Error::TypeGraphMissingId`].
+    ///
+    /// # Errors
+    ///
+    /// * `Error::StreamNotFound` if the PDB does not contain the type information stream
+    /// * `Error::InvalidTypeInformationHeader` if a stream header was not understood
+    /// * `Error::InvalidStreamLength` if a stream's records are truncated
+    /// * `Error::IoError` if returned by the `Source`
+    pub fn type_graph(&mut self) -> Result<TypeGraph> {
+        let types = self.raw_stream(StreamIndex(TPI_STREAM as u16))?;
+        let ids = match self.raw_stream(StreamIndex(IPI_STREAM as u16)) {
+            Ok(stream) => stream,
+            // A missing IPI stream is expected for binaries without inline functions.
+            Err(Error::StreamNotFound(_)) => None,
+            Err(error) => return Err(error),
+        };
+
+        TypeGraph::from_streams(
+            types.as_ref().map(|stream| stream.as_slice()),
+            ids.as_ref().map(|stream| stream.as_slice()),
+        )
     }
 
     /// Retrieve the `DebugInformation` for this PDB.
