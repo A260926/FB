@@ -1,0 +1,3040 @@
+/*
+ * Copyright 2020 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "table_i8086.h"
+#include "entry_i8086.h"
+#include "entry_table.h"
+#include "reg_i8086.h"
+#include "text_i8086.h"
+
+namespace libasm {
+namespace i8086 {
+
+using namespace reg;
+using namespace libasm::text::i8086;
+
+#define X3(_opc, _cf, _name, _sz, _dst, _src, _ext, _dpos, _spos, _epos, _cls, _lock, _nsz, \
+        _fix)                                                                                \
+    {_opc,                                                                                   \
+            Entry::Flags::create(_cf, _dst, _src, _ext, _dpos, _spos, _epos, _sz, _cls,      \
+                    _lock, _nsz, _fix),                                                      \
+            _name}
+#define X2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos, _cls, _lock, _nsz, _fix) \
+    X3(_opc, _cf, _name, _sz, _dst, _src, M_NONE, _dpos, _spos, P_NONE, _cls, _lock, _nsz, _fix)
+#define X1(_opc, _cf, _name, _sz, _dst, _dpos, _cls, _lock, _nsz, _fix) \
+    X2(_opc, _cf, _name, _sz, _dst, M_NONE, _dpos, P_NONE, _cls, _lock, _nsz, _fix)
+#define E3(_opc, _cf, _name, _sz, _dst, _src, _ext, _dpos, _spos, _epos) \
+    X3(_opc, _cf, _name, _sz, _dst, _src, _ext, _dpos, _spos, _epos, STR_NONE, false, false, false)
+#define E2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos) \
+    E3(_opc, _cf, _name, _sz, _dst, _src, M_NONE, _dpos, _spos, P_NONE)
+#define E1(_opc, _cf, _name, _sz, _dst, _dpos) \
+    E2(_opc, _cf, _name, _sz, _dst, M_NONE, _dpos, P_NONE)
+#define E0(_opc, _cf, _name, _sz) E1(_opc, _cf, _name, _sz, M_NONE, P_NONE)
+#define L2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos) \
+    X2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos, STR_NONE, true, false, false)
+#define L1(_opc, _cf, _name, _sz, _dst, _dpos) \
+    L2(_opc, _cf, _name, _sz, _dst, M_NONE, _dpos, P_NONE)
+#define N2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos) \
+    X2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos, STR_NONE, false, true, false)
+#define N1(_opc, _cf, _name, _sz, _dst, _dpos) \
+    N2(_opc, _cf, _name, _sz, _dst, M_NONE, _dpos, P_NONE)
+#define M2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos) \
+    X2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos, STR_NONE, true, true, false)
+#define M1(_opc, _cf, _name, _sz, _dst, _dpos) \
+    M2(_opc, _cf, _name, _sz, _dst, M_NONE, _dpos, P_NONE)
+#define S2(_opc, _cf, _name, _cls, _sz, _dst, _src) \
+    X2(_opc, _cf, _name, _sz, _dst, _src, P_NONE, P_NONE, _cls, false, false, false)
+#define S1(_opc, _cf, _name, _cls, _sz, _dst) S2(_opc, _cf, _name, _cls, _sz, _dst, M_NONE)
+#define S0(_opc, _cf, _name, _cls, _sz) S1(_opc, _cf, _name, _cls, _sz, M_NONE)
+#define T2(_opc, _cf, _name, _cls, _sz, _dst, _src) \
+    X2(_opc, _cf, _name, _sz, _dst, _src, P_NONE, P_NONE, _cls, false, true, false)
+#define T1(_opc, _cf, _name, _cls, _sz, _dst) T2(_opc, _cf, _name, _cls, _sz, _dst, M_NONE)
+// F* entries: operand width fixed by the opcode itself (ARPL, LLDT/LTR/VERR/VERW,
+// LMSW). DATA32 (0x66) is suppressed in use32; the entry assembles to the same
+// bytes regardless of mode.
+#define F2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos) \
+    X2(_opc, _cf, _name, _sz, _dst, _src, _dpos, _spos, STR_NONE, false, false, true)
+#define F1(_opc, _cf, _name, _sz, _dst, _dpos) \
+    F2(_opc, _cf, _name, _sz, _dst, M_NONE, _dpos, P_NONE)
+
+// clang-format off
+constexpr Entry T8086_00[] = {
+    E2(0xA0, CF_00, TEXT_MOV,    SZ_BYTE, M_AL,   M_BDIR, P_NONE, P_OPR),
+    E2(0xA1, CF_00, TEXT_MOV,    SZ_DATA, M_AX,   M_WDIR, P_NONE, P_OPR),
+    E2(0xA2, CF_00, TEXT_MOV,    SZ_BYTE, M_BDIR, M_AL,   P_OPR,  P_NONE),
+    E2(0xA3, CF_00, TEXT_MOV,    SZ_DATA, M_WDIR, M_AX,   P_OPR,  P_NONE),
+    E0(0x90, CF_00, TEXT_NOP,    SZ_NONE),
+    E2(0x90, CF_07, TEXT_XCHG,   SZ_DATA, M_AX,   M_WREG, P_NONE, P_OREG),
+    E2(0x90, CF_07, TEXT_XCHG,   SZ_DATA, M_WREG, M_AX,   P_OREG, P_NONE),
+    E2(0x04, CF_00, TEXT_ADD,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x05, CF_00, TEXT_ADD,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    E2(0x0C, CF_00, TEXT_OR,     SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x0D, CF_00, TEXT_OR,     SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    L2(0x00, CF_00, TEXT_ADD,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x02, CF_00, TEXT_ADD,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x01, CF_00, TEXT_ADD,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x03, CF_00, TEXT_ADD,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E1(0x06, CF_30, TEXT_PUSH,   SZ_WORD, M_SREG, P_OSEG),
+    E1(0x0F, CF_00, TEXT_POP,    SZ_WORD, M_CS,   P_NONE),
+    E1(0x07, CF_30, TEXT_POP,    SZ_WORD, M_SREG, P_OSEG),
+    L2(0x08, CF_00, TEXT_OR,     SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x0A, CF_00, TEXT_OR,     SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x09, CF_00, TEXT_OR,     SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x0B, CF_00, TEXT_OR,     SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    L2(0x10, CF_00, TEXT_ADC,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x12, CF_00, TEXT_ADC,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x11, CF_00, TEXT_ADC,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x13, CF_00, TEXT_ADC,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x14, CF_00, TEXT_ADC,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x15, CF_00, TEXT_ADC,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    L2(0x18, CF_00, TEXT_SBB,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x1A, CF_00, TEXT_SBB,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x19, CF_00, TEXT_SBB,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x1B, CF_00, TEXT_SBB,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x1C, CF_00, TEXT_SBB,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x1D, CF_00, TEXT_SBB,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    L2(0x20, CF_00, TEXT_AND,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x22, CF_00, TEXT_AND,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x21, CF_00, TEXT_AND,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x23, CF_00, TEXT_AND,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x24, CF_00, TEXT_AND,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x25, CF_00, TEXT_AND,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    E0(0x26, CF_00, TEXT_SEGES,  SZ_BYTE),
+    E0(0x27, CF_00, TEXT_DAA,    SZ_BYTE),
+    L2(0x28, CF_00, TEXT_SUB,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x2A, CF_00, TEXT_SUB,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x29, CF_00, TEXT_SUB,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x2B, CF_00, TEXT_SUB,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x2C, CF_00, TEXT_SUB,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x2D, CF_00, TEXT_SUB,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    E0(0x2E, CF_00, TEXT_SEGCS,  SZ_BYTE),
+    E0(0x2F, CF_00, TEXT_DAS,    SZ_BYTE),
+    L2(0x30, CF_00, TEXT_XOR,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x32, CF_00, TEXT_XOR,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x31, CF_00, TEXT_XOR,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x33, CF_00, TEXT_XOR,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x34, CF_00, TEXT_XOR,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x35, CF_00, TEXT_XOR,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    E0(0x36, CF_00, TEXT_SEGSS,  SZ_NONE),
+    E0(0x37, CF_00, TEXT_AAA,    SZ_NONE),
+    E2(0x38, CF_00, TEXT_CMP,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x3A, CF_00, TEXT_CMP,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    E2(0x39, CF_00, TEXT_CMP,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x3B, CF_00, TEXT_CMP,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x3C, CF_00, TEXT_CMP,    SZ_BYTE, M_AL,   M_WIMM, P_NONE, P_OPR),
+    E2(0x3D, CF_00, TEXT_CMP,    SZ_DATA, M_AX,   M_WIMM, P_NONE, P_OPR),
+    E0(0x3E, CF_00, TEXT_SEGDS,  SZ_NONE),
+    E0(0x3F, CF_00, TEXT_AAS,    SZ_NONE),
+    E1(0x40, CF_07, TEXT_INC,    SZ_DATA, M_WREG, P_OREG),
+    E1(0x48, CF_07, TEXT_DEC,    SZ_DATA, M_WREG, P_OREG),
+    E1(0x50, CF_07, TEXT_PUSH,   SZ_DATA, M_WREG, P_OREG),
+    E1(0x58, CF_07, TEXT_POP,    SZ_DATA, M_WREG, P_OREG),
+    E1(0x70, CF_00, TEXT_JO,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x71, CF_00, TEXT_JNO,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x72, CF_00, TEXT_JB,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x72, CF_00, TEXT_JC,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x72, CF_00, TEXT_JNAE,   SZ_NONE, M_REL8, P_OPR),
+    E1(0x73, CF_00, TEXT_JAE,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x73, CF_00, TEXT_JNB,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x73, CF_00, TEXT_JNC,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x74, CF_00, TEXT_JE,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x74, CF_00, TEXT_JZ,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x75, CF_00, TEXT_JNE,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x75, CF_00, TEXT_JNZ,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x76, CF_00, TEXT_JBE,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x76, CF_00, TEXT_JNA,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x77, CF_00, TEXT_JA,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x77, CF_00, TEXT_JNBE,   SZ_NONE, M_REL8, P_OPR),
+    E1(0x78, CF_00, TEXT_JS,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x79, CF_00, TEXT_JNS,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7A, CF_00, TEXT_JPE,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7A, CF_00, TEXT_JP,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x7B, CF_00, TEXT_JPO,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7B, CF_00, TEXT_JNP,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7C, CF_00, TEXT_JL,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x7C, CF_00, TEXT_JNGE,   SZ_NONE, M_REL8, P_OPR),
+    E1(0x7D, CF_00, TEXT_JGE,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7D, CF_00, TEXT_JNL,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7E, CF_00, TEXT_JLE,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7E, CF_00, TEXT_JNG,    SZ_NONE, M_REL8, P_OPR),
+    E1(0x7F, CF_00, TEXT_JG,     SZ_NONE, M_REL8, P_OPR),
+    E1(0x7F, CF_00, TEXT_JNLE,   SZ_NONE, M_REL8, P_OPR),
+    E2(0x84, CF_00, TEXT_TEST,   SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x84, CF_00, TEXT_TEST,   SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    E2(0x85, CF_00, TEXT_TEST,   SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x85, CF_00, TEXT_TEST,   SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    L2(0x86, CF_00, TEXT_XCHG,   SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    L2(0x86, CF_00, TEXT_XCHG,   SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    L2(0x87, CF_00, TEXT_XCHG,   SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    L2(0x87, CF_00, TEXT_XCHG,   SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x88, CF_00, TEXT_MOV,    SZ_BYTE, M_BMOD, M_BREG, P_MOD,  P_REG),
+    E2(0x8A, CF_00, TEXT_MOV,    SZ_BYTE, M_BREG, M_BMOD, P_REG,  P_MOD),
+    E2(0x89, CF_00, TEXT_MOV,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0x8B, CF_00, TEXT_MOV,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0x8C, CF_00, TEXT_MOV,    SZ_WORD, M_WMOD, M_SREG, P_MOD,  P_REG),
+    E2(0x8D, CF_00, TEXT_LEA,    SZ_DATA, M_WREG, M_MEM,  P_REG,  P_MOD),
+    E2(0x8E, CF_00, TEXT_MOV,    SZ_WORD, M_SREG, M_WMOD, P_REG,  P_MOD),
+    E0(0x98, CF_00, TEXT_CBW,    SZ_NONE),
+    E0(0x99, CF_00, TEXT_CWD,    SZ_NONE),
+    E1(0x9A, CF_00, TEXT_CALL,   SZ_NONE, M_FAR,  P_OPR), // FMODE_FAR
+    E1(0x9A, CF_00, TEXT_CALLF,  SZ_NONE, M_FAR,  P_OPR), // FMODE_F
+    E2(0x9A, CF_00, TEXT_LCALL,  SZ_NONE, M_SEG,  M_OFF, P_OPR,  P_OPR), // FMODE_L
+    E0(0x9B, CF_00, TEXT_WAIT,   SZ_NONE),
+    E0(0x9C, CF_00, TEXT_PUSHF,  SZ_WORD),
+    E0(0x9D, CF_00, TEXT_POPF,   SZ_WORD),
+    E0(0x9E, CF_00, TEXT_SAHF,   SZ_NONE),
+    E0(0x9F, CF_00, TEXT_LAHF,   SZ_NONE),
+    S2(0xA4, CF_00, TEXT_MOVSB,  STR_MOVE, SZ_BYTE, M_BMEM, M_BMEM),
+    S2(0xA5, CF_00, TEXT_MOVSW,  STR_MOVE, SZ_WORD, M_WMEM, M_WMEM),
+    T2(0xA4, CF_00, TEXT_MOVS,   STR_MOVE, SZ_BYTE, M_BMEM, M_BMEM),
+    T2(0xA5, CF_00, TEXT_MOVS,   STR_MOVE, SZ_DATA, M_WMEM, M_WMEM),
+    S0(0xA4, CF_00, TEXT_MOVSB,  STR_MOVE, SZ_NONE),
+    S0(0xA5, CF_00, TEXT_MOVSW,  STR_MOVE, SZ_NONE),
+    S2(0xA6, CF_00, TEXT_CMPSB,  STR_COMP, SZ_BYTE, M_BMEM, M_BMEM),
+    S2(0xA7, CF_00, TEXT_CMPSW,  STR_COMP, SZ_WORD, M_WMEM, M_WMEM),
+    T2(0xA6, CF_00, TEXT_CMPS,   STR_COMP, SZ_BYTE, M_BMEM, M_BMEM),
+    T2(0xA7, CF_00, TEXT_CMPS,   STR_COMP, SZ_DATA, M_WMEM, M_WMEM),
+    S0(0xA6, CF_00, TEXT_CMPSB,  STR_COMP, SZ_NONE),
+    S0(0xA7, CF_00, TEXT_CMPSW,  STR_COMP, SZ_NONE),
+    E2(0xA8, CF_00, TEXT_TEST,   SZ_BYTE, M_AL,   M_WIMM,  P_NONE, P_OPR),
+    E2(0xA9, CF_00, TEXT_TEST,   SZ_DATA, M_AX,   M_WIMM,  P_NONE, P_OPR),
+    S1(0xAA, CF_00, TEXT_STOSB,  STR_MOVE, SZ_BYTE, M_BMEM),
+    S1(0xAB, CF_00, TEXT_STOSW,  STR_MOVE, SZ_WORD, M_WMEM),
+    T1(0xAA, CF_00, TEXT_STOS,   STR_MOVE, SZ_BYTE, M_BMEM),
+    T1(0xAB, CF_00, TEXT_STOS,   STR_MOVE, SZ_DATA, M_WMEM),
+    S0(0xAA, CF_00, TEXT_STOSB,  STR_MOVE, SZ_NONE),
+    S0(0xAB, CF_00, TEXT_STOSW,  STR_MOVE, SZ_NONE),
+    S1(0xAC, CF_00, TEXT_LODSB,  STR_MOVE, SZ_BYTE, M_BMEM),
+    S1(0xAD, CF_00, TEXT_LODSW,  STR_MOVE, SZ_WORD, M_WMEM),
+    T1(0xAC, CF_00, TEXT_LODS,   STR_MOVE, SZ_BYTE, M_BMEM),
+    T1(0xAD, CF_00, TEXT_LODS,   STR_MOVE, SZ_DATA, M_WMEM),
+    S0(0xAC, CF_00, TEXT_LODSB,  STR_MOVE, SZ_NONE),
+    S0(0xAD, CF_00, TEXT_LODSW,  STR_MOVE, SZ_NONE),
+    S1(0xAE, CF_00, TEXT_SCASB,  STR_COMP, SZ_BYTE, M_BMEM),
+    S1(0xAF, CF_00, TEXT_SCASW,  STR_COMP, SZ_WORD, M_WMEM),
+    T1(0xAE, CF_00, TEXT_SCAS,   STR_COMP, SZ_BYTE, M_BMEM),
+    T1(0xAF, CF_00, TEXT_SCAS,   STR_COMP, SZ_DATA, M_WMEM),
+    S0(0xAE, CF_00, TEXT_SCASB,  STR_COMP, SZ_NONE),
+    S0(0xAF, CF_00, TEXT_SCASW,  STR_COMP, SZ_NONE),
+    E2(0xB0, CF_07, TEXT_MOV,    SZ_BYTE, M_BREG, M_WIMM, P_OREG, P_OPR),
+    E2(0xB8, CF_07, TEXT_MOV,    SZ_DATA, M_WREG, M_WIMM, P_OREG, P_OPR),
+    E1(0xC2, CF_00, TEXT_RET,    SZ_NONE, M_UI16, P_OPR),
+    E0(0xC3, CF_00, TEXT_RET,    SZ_NONE),
+    E2(0xC4, CF_00, TEXT_LES,    SZ_DATA, M_WREG, M_MEM, P_REG,  P_MOD),
+    E2(0xC5, CF_00, TEXT_LDS,    SZ_DATA, M_WREG, M_MEM, P_REG,  P_MOD),
+    E1(0xCA, CF_00, TEXT_RETF,   SZ_WORD, M_UI16, P_OPR), // FMODE_FAR
+    E1(0xCA, CF_00, TEXT_RETF,   SZ_WORD, M_UI16, P_OPR), // FMODE_F
+    E1(0xCA, CF_00, TEXT_LRET,   SZ_WORD, M_UI16, P_OPR), // FMODE_L
+    E0(0xCB, CF_00, TEXT_RETF,   SZ_NONE),                // FMODE_FAR
+    E0(0xCB, CF_00, TEXT_RETF,   SZ_NONE),                // FMODE_F
+    E0(0xCB, CF_00, TEXT_LRET,   SZ_NONE),                // FMODE_L
+    E1(0xCC, CF_00, TEXT_INT,    SZ_NONE, M_VAL3, P_NONE),
+    E1(0xCD, CF_00, TEXT_INT,    SZ_BYTE, M_WIMM, P_OPR),
+    E0(0xCE, CF_00, TEXT_INTO,   SZ_NONE),
+    E0(0xCF, CF_00, TEXT_IRET,   SZ_NONE),
+    E0(0xD7, CF_00, TEXT_XLAT,   SZ_NONE),
+    E1(0xE0, CF_00, TEXT_LOOPNE, SZ_NONE, M_REL8, P_OPR),
+    E2(0xE0, CF_00, TEXT_LOOPNE, SZ_NONE, M_REL8, M_CX, P_OPR, P_NONE),
+    E1(0xE0, CF_00, TEXT_LOOPNZ, SZ_NONE, M_REL8, P_OPR),
+    E2(0xE0, CF_00, TEXT_LOOPNZ, SZ_NONE, M_REL8, M_CX, P_OPR, P_NONE),
+    E1(0xE1, CF_00, TEXT_LOOPE,  SZ_NONE, M_REL8, P_OPR),
+    E2(0xE1, CF_00, TEXT_LOOPE,  SZ_NONE, M_REL8, M_CX, P_OPR, P_NONE),
+    E1(0xE1, CF_00, TEXT_LOOPZ,  SZ_NONE, M_REL8, P_OPR),
+    E2(0xE1, CF_00, TEXT_LOOPZ,  SZ_NONE, M_REL8, M_CX, P_OPR, P_NONE),
+    E1(0xE2, CF_00, TEXT_LOOP,   SZ_NONE, M_REL8, P_OPR),
+    E2(0xE2, CF_00, TEXT_LOOP,   SZ_NONE, M_REL8, M_CX, P_OPR, P_NONE),
+    E1(0xE3, CF_00, TEXT_JCXZ,   SZ_NONE, M_REL8, P_OPR),
+    E2(0xE4, CF_00, TEXT_IN,     SZ_BYTE, M_AL,   M_IOA,  P_NONE, P_OPR),
+    E2(0xE5, CF_00, TEXT_IN,     SZ_DATA, M_AX,   M_IOA,  P_NONE, P_OPR),
+    E2(0xE6, CF_00, TEXT_OUT,    SZ_BYTE, M_IOA,  M_AL,   P_OPR,  P_NONE),
+    E2(0xE7, CF_00, TEXT_OUT,    SZ_DATA, M_IOA,  M_AX,   P_OPR,  P_NONE),
+    E1(0xE8, CF_00, TEXT_CALL,   SZ_NONE, M_REL,  P_OPR),
+    E1(0xEB, CF_00, TEXT_JMP,    SZ_NONE, M_REL8, P_OPR),
+    E1(0xE9, CF_00, TEXT_JMP,    SZ_NONE, M_REL,  P_OPR),
+    E1(0xEA, CF_00, TEXT_JMP,    SZ_NONE, M_FAR,  P_OPR),
+    E1(0xEA, CF_00, TEXT_JMPF,   SZ_NONE, M_FAR,  P_OPR),
+    E2(0xEA, CF_00, TEXT_LJMP,   SZ_NONE, M_SEG,  M_OFF,  P_OPR,  P_OPR),
+    E2(0xEC, CF_00, TEXT_IN,     SZ_BYTE, M_AL,   M_DX,   P_NONE, P_NONE),
+    E2(0xED, CF_00, TEXT_IN,     SZ_DATA, M_AX,   M_DX,   P_NONE, P_NONE),
+    E2(0xEE, CF_00, TEXT_OUT,    SZ_BYTE, M_DX,   M_AL,   P_NONE, P_NONE),
+    E2(0xEF, CF_00, TEXT_OUT,    SZ_DATA, M_DX,   M_AX,   P_NONE, P_NONE),
+    E0(0xF0, CF_00, TEXT_LOCK,   SZ_NONE),
+    E0(0xF2, CF_00, TEXT_REPNE,  SZ_NONE),
+    E0(0xF2, CF_00, TEXT_REPNZ,  SZ_NONE),
+    E0(0xF3, CF_00, TEXT_REP,    SZ_NONE),
+    E0(0xF3, CF_00, TEXT_REPE,   SZ_NONE),
+    E0(0xF3, CF_00, TEXT_REPZ,   SZ_NONE),
+    E0(0xF4, CF_00, TEXT_HLT,    SZ_NONE),
+    E0(0xF5, CF_00, TEXT_CMC,    SZ_NONE),
+    E0(0xF8, CF_00, TEXT_CLC,    SZ_NONE),
+    E0(0xF9, CF_00, TEXT_STC,    SZ_NONE),
+    E0(0xFA, CF_00, TEXT_CLI,    SZ_NONE),
+    E0(0xFB, CF_00, TEXT_STI,    SZ_NONE),
+    E0(0xFC, CF_00, TEXT_CLD,    SZ_NONE),
+    E0(0xFD, CF_00, TEXT_STD,    SZ_NONE),
+};
+
+constexpr uint8_t I8086_00[] = {
+     57,  // TEXT_AAA
+     65,  // TEXT_AAS
+     22,  // TEXT_ADC
+     23,  // TEXT_ADC
+     24,  // TEXT_ADC
+     25,  // TEXT_ADC
+     26,  // TEXT_ADC
+     27,  // TEXT_ADC
+      7,  // TEXT_ADD
+      8,  // TEXT_ADD
+     11,  // TEXT_ADD
+     12,  // TEXT_ADD
+     13,  // TEXT_ADD
+     14,  // TEXT_ADD
+     34,  // TEXT_AND
+     35,  // TEXT_AND
+     36,  // TEXT_AND
+     37,  // TEXT_AND
+     38,  // TEXT_AND
+     39,  // TEXT_AND
+    117,  // TEXT_CALL
+    189,  // TEXT_CALL
+    118,  // TEXT_CALLF
+    115,  // TEXT_CBW
+    207,  // TEXT_CLC
+    211,  // TEXT_CLD
+    209,  // TEXT_CLI
+    206,  // TEXT_CMC
+     58,  // TEXT_CMP
+     59,  // TEXT_CMP
+     60,  // TEXT_CMP
+     61,  // TEXT_CMP
+     62,  // TEXT_CMP
+     63,  // TEXT_CMP
+    133,  // TEXT_CMPS
+    134,  // TEXT_CMPS
+    131,  // TEXT_CMPSB
+    135,  // TEXT_CMPSB
+    132,  // TEXT_CMPSW
+    136,  // TEXT_CMPSW
+    116,  // TEXT_CWD
+     41,  // TEXT_DAA
+     49,  // TEXT_DAS
+     67,  // TEXT_DEC
+    205,  // TEXT_HLT
+    185,  // TEXT_IN
+    186,  // TEXT_IN
+    195,  // TEXT_IN
+    196,  // TEXT_IN
+     66,  // TEXT_INC
+    169,  // TEXT_INT
+    170,  // TEXT_INT
+    171,  // TEXT_INTO
+    172,  // TEXT_IRET
+     84,  // TEXT_JA
+     75,  // TEXT_JAE
+     72,  // TEXT_JB
+     82,  // TEXT_JBE
+     73,  // TEXT_JC
+    184,  // TEXT_JCXZ
+     78,  // TEXT_JE
+     98,  // TEXT_JG
+     94,  // TEXT_JGE
+     92,  // TEXT_JL
+     96,  // TEXT_JLE
+    190,  // TEXT_JMP
+    191,  // TEXT_JMP
+    192,  // TEXT_JMP
+    193,  // TEXT_JMPF
+     83,  // TEXT_JNA
+     74,  // TEXT_JNAE
+     76,  // TEXT_JNB
+     85,  // TEXT_JNBE
+     77,  // TEXT_JNC
+     80,  // TEXT_JNE
+     97,  // TEXT_JNG
+     93,  // TEXT_JNGE
+     95,  // TEXT_JNL
+     99,  // TEXT_JNLE
+     71,  // TEXT_JNO
+     91,  // TEXT_JNP
+     87,  // TEXT_JNS
+     81,  // TEXT_JNZ
+     70,  // TEXT_JO
+     89,  // TEXT_JP
+     88,  // TEXT_JPE
+     90,  // TEXT_JPO
+     86,  // TEXT_JS
+     79,  // TEXT_JZ
+    124,  // TEXT_LAHF
+    119,  // TEXT_LCALL
+    162,  // TEXT_LDS
+    113,  // TEXT_LEA
+    161,  // TEXT_LES
+    194,  // TEXT_LJMP
+    199,  // TEXT_LOCK
+    147,  // TEXT_LODS
+    148,  // TEXT_LODS
+    145,  // TEXT_LODSB
+    149,  // TEXT_LODSB
+    146,  // TEXT_LODSW
+    150,  // TEXT_LODSW
+    182,  // TEXT_LOOP
+    183,  // TEXT_LOOP
+    178,  // TEXT_LOOPE
+    179,  // TEXT_LOOPE
+    174,  // TEXT_LOOPNE
+    175,  // TEXT_LOOPNE
+    176,  // TEXT_LOOPNZ
+    177,  // TEXT_LOOPNZ
+    180,  // TEXT_LOOPZ
+    181,  // TEXT_LOOPZ
+    165,  // TEXT_LRET
+    168,  // TEXT_LRET
+      0,  // TEXT_MOV
+      1,  // TEXT_MOV
+      2,  // TEXT_MOV
+      3,  // TEXT_MOV
+    108,  // TEXT_MOV
+    109,  // TEXT_MOV
+    110,  // TEXT_MOV
+    111,  // TEXT_MOV
+    112,  // TEXT_MOV
+    114,  // TEXT_MOV
+    157,  // TEXT_MOV
+    158,  // TEXT_MOV
+    127,  // TEXT_MOVS
+    128,  // TEXT_MOVS
+    125,  // TEXT_MOVSB
+    129,  // TEXT_MOVSB
+    126,  // TEXT_MOVSW
+    130,  // TEXT_MOVSW
+      4,  // TEXT_NOP
+      9,  // TEXT_OR
+     10,  // TEXT_OR
+     18,  // TEXT_OR
+     19,  // TEXT_OR
+     20,  // TEXT_OR
+     21,  // TEXT_OR
+    187,  // TEXT_OUT
+    188,  // TEXT_OUT
+    197,  // TEXT_OUT
+    198,  // TEXT_OUT
+     16,  // TEXT_POP
+     17,  // TEXT_POP
+     69,  // TEXT_POP
+    122,  // TEXT_POPF
+     15,  // TEXT_PUSH
+     68,  // TEXT_PUSH
+    121,  // TEXT_PUSHF
+    202,  // TEXT_REP
+    203,  // TEXT_REPE
+    200,  // TEXT_REPNE
+    201,  // TEXT_REPNZ
+    204,  // TEXT_REPZ
+    159,  // TEXT_RET
+    160,  // TEXT_RET
+    163,  // TEXT_RETF
+    164,  // TEXT_RETF
+    166,  // TEXT_RETF
+    167,  // TEXT_RETF
+    123,  // TEXT_SAHF
+     28,  // TEXT_SBB
+     29,  // TEXT_SBB
+     30,  // TEXT_SBB
+     31,  // TEXT_SBB
+     32,  // TEXT_SBB
+     33,  // TEXT_SBB
+    153,  // TEXT_SCAS
+    154,  // TEXT_SCAS
+    151,  // TEXT_SCASB
+    155,  // TEXT_SCASB
+    152,  // TEXT_SCASW
+    156,  // TEXT_SCASW
+     48,  // TEXT_SEGCS
+     64,  // TEXT_SEGDS
+     40,  // TEXT_SEGES
+     56,  // TEXT_SEGSS
+    208,  // TEXT_STC
+    212,  // TEXT_STD
+    210,  // TEXT_STI
+    141,  // TEXT_STOS
+    142,  // TEXT_STOS
+    139,  // TEXT_STOSB
+    143,  // TEXT_STOSB
+    140,  // TEXT_STOSW
+    144,  // TEXT_STOSW
+     42,  // TEXT_SUB
+     43,  // TEXT_SUB
+     44,  // TEXT_SUB
+     45,  // TEXT_SUB
+     46,  // TEXT_SUB
+     47,  // TEXT_SUB
+    100,  // TEXT_TEST
+    101,  // TEXT_TEST
+    102,  // TEXT_TEST
+    103,  // TEXT_TEST
+    137,  // TEXT_TEST
+    138,  // TEXT_TEST
+    120,  // TEXT_WAIT
+      5,  // TEXT_XCHG
+      6,  // TEXT_XCHG
+    104,  // TEXT_XCHG
+    105,  // TEXT_XCHG
+    106,  // TEXT_XCHG
+    107,  // TEXT_XCHG
+    173,  // TEXT_XLAT
+     50,  // TEXT_XOR
+     51,  // TEXT_XOR
+     52,  // TEXT_XOR
+     53,  // TEXT_XOR
+     54,  // TEXT_XOR
+     55,  // TEXT_XOR
+};
+
+constexpr Entry T8086_80[] = {
+    M2(000, CF_00, TEXT_ADD, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(010, CF_00, TEXT_OR,  SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(020, CF_00, TEXT_ADC, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(030, CF_00, TEXT_SBB, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(040, CF_00, TEXT_AND, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(050, CF_00, TEXT_SUB, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(060, CF_00, TEXT_XOR, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    N2(070, CF_00, TEXT_CMP, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+};
+
+constexpr uint8_t I8086_8X[] = {
+      2,  // TEXT_ADC
+      0,  // TEXT_ADD
+      4,  // TEXT_AND
+      7,  // TEXT_CMP
+      1,  // TEXT_OR
+      3,  // TEXT_SBB
+      5,  // TEXT_SUB
+      6,  // TEXT_XOR
+};
+
+constexpr Entry T8086_81[] = {
+    M2(000, CF_00, TEXT_ADD, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(010, CF_00, TEXT_OR,  SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(020, CF_00, TEXT_ADC, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(030, CF_00, TEXT_SBB, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(040, CF_00, TEXT_AND, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(050, CF_00, TEXT_SUB, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M2(060, CF_00, TEXT_XOR, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    N2(070, CF_00, TEXT_CMP, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+};
+
+constexpr Entry T8086_83[] = {
+    M2(000, CF_00, TEXT_ADD, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    M2(010, CF_00, TEXT_OR,  SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    M2(020, CF_00, TEXT_ADC, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    M2(030, CF_00, TEXT_SBB, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    M2(040, CF_00, TEXT_AND, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    M2(050, CF_00, TEXT_SUB, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    M2(060, CF_00, TEXT_XOR, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+    N2(070, CF_00, TEXT_CMP, SZ_DATA, M_WMOD, M_BIMM, P_OMOD, P_OPR),
+};
+
+constexpr Entry T8086_8F[] = {
+    E1(000, CF_00, TEXT_POP, SZ_WORD, M_WMOD, P_OMOD),
+};
+
+constexpr uint8_t I8086_8F[] = {
+      0,  // TEXT_POP
+};
+
+constexpr Entry T8086_C6[] = {
+    N2(000, CF_00, TEXT_MOV, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+};
+
+constexpr uint8_t I8086_C6[] = {
+      0,  // TEXT_MOV
+};
+
+constexpr Entry T8086_C7[] = {
+    N2(000, CF_00, TEXT_MOV, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+};
+
+constexpr uint8_t I8086_C7[] = {
+      0,  // TEXT_MOV
+};
+
+constexpr Entry T8086_D0[] = {
+    N2(000, CF_00, TEXT_ROL, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(010, CF_00, TEXT_ROR, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(020, CF_00, TEXT_RCL, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(030, CF_00, TEXT_RCR, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SHL, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SAL, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(050, CF_00, TEXT_SHR, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(070, CF_00, TEXT_SAR, SZ_BYTE, M_BMOD, M_VAL1, P_OMOD, P_NONE),
+};
+
+constexpr uint8_t I8086_DX[] = {
+      2,  // TEXT_RCL
+      3,  // TEXT_RCR
+      0,  // TEXT_ROL
+      1,  // TEXT_ROR
+      5,  // TEXT_SAL
+      7,  // TEXT_SAR
+      4,  // TEXT_SHL
+      6,  // TEXT_SHR
+};
+
+constexpr Entry T8086_D1[] = {
+    N2(000, CF_00, TEXT_ROL, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(010, CF_00, TEXT_ROR, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(020, CF_00, TEXT_RCL, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(030, CF_00, TEXT_RCR, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SHL, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SAL, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(050, CF_00, TEXT_SHR, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+    N2(070, CF_00, TEXT_SAR, SZ_DATA, M_WMOD, M_VAL1, P_OMOD, P_NONE),
+};
+
+constexpr Entry T8086_D2[] = {
+    N2(000, CF_00, TEXT_ROL, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(010, CF_00, TEXT_ROR, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(020, CF_00, TEXT_RCL, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(030, CF_00, TEXT_RCR, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SHL, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SAL, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(050, CF_00, TEXT_SHR, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+    N2(070, CF_00, TEXT_SAR, SZ_BYTE, M_BMOD, M_CL, P_OMOD, P_NONE),
+};
+
+constexpr Entry T8086_D3[] = {
+    N2(000, CF_00, TEXT_ROL, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(010, CF_00, TEXT_ROR, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(020, CF_00, TEXT_RCL, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(030, CF_00, TEXT_RCR, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SHL, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(040, CF_00, TEXT_SAL, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(050, CF_00, TEXT_SHR, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+    N2(070, CF_00, TEXT_SAR, SZ_DATA, M_WMOD, M_CL, P_OMOD, P_NONE),
+};
+
+constexpr Entry T8086_D4[] = {
+    E0(0x0A, CF_00, TEXT_AAM, SZ_NONE),
+};
+
+constexpr uint8_t I8086_D4[] = {
+      0,  // TEXT_AAM
+};
+
+constexpr Entry T8086_D5[] = {
+    E0(0x0A, CF_00, TEXT_AAD, SZ_NONE),
+};
+
+constexpr uint8_t I8086_D5[] = {
+      0,  // TEXT_AAD
+};
+
+constexpr Entry T8086_F6[] = {
+    N2(000, CF_00, TEXT_TEST, SZ_BYTE, M_BMOD, M_WIMM, P_OMOD, P_OPR),
+    M1(020, CF_00, TEXT_NOT,  SZ_BYTE, M_BMOD, P_OMOD),
+    M1(030, CF_00, TEXT_NEG,  SZ_BYTE, M_BMOD, P_OMOD),
+    N1(040, CF_00, TEXT_MUL,  SZ_BYTE, M_BMOD, P_OMOD),
+    N1(050, CF_00, TEXT_IMUL, SZ_BYTE, M_BMOD, P_OMOD),
+    N1(060, CF_00, TEXT_DIV,  SZ_BYTE, M_BMOD, P_OMOD),
+    N1(070, CF_00, TEXT_IDIV, SZ_BYTE, M_BMOD, P_OMOD),
+};
+
+constexpr uint8_t I8086_FX[] = {
+      5,  // TEXT_DIV
+      6,  // TEXT_IDIV
+      4,  // TEXT_IMUL
+      3,  // TEXT_MUL
+      2,  // TEXT_NEG
+      1,  // TEXT_NOT
+      0,  // TEXT_TEST
+};
+
+constexpr Entry T8086_F7[] = {
+    N2(000, CF_00, TEXT_TEST, SZ_DATA, M_WMOD, M_WIMM, P_OMOD, P_OPR),
+    M1(020, CF_00, TEXT_NOT,  SZ_DATA, M_WMOD, P_OMOD),
+    M1(030, CF_00, TEXT_NEG,  SZ_DATA, M_WMOD, P_OMOD),
+    N1(040, CF_00, TEXT_MUL,  SZ_DATA, M_WMOD, P_OMOD),
+    N1(050, CF_00, TEXT_IMUL, SZ_DATA, M_WMOD, P_OMOD),
+    N1(060, CF_00, TEXT_DIV,  SZ_DATA, M_WMOD, P_OMOD),
+    N1(070, CF_00, TEXT_IDIV, SZ_DATA, M_WMOD, P_OMOD),
+};
+
+constexpr Entry T8086_FE[] = {
+    M1(000, CF_00, TEXT_INC, SZ_BYTE, M_BMOD, P_OMOD),
+    M1(010, CF_00, TEXT_DEC, SZ_BYTE, M_BMOD, P_OMOD),
+};
+
+constexpr uint8_t I8086_FE[] = {
+      1,  // TEXT_DEC
+      0,  // TEXT_INC
+};
+
+constexpr Entry T8086_FF[] = {
+    M1(000, CF_00, TEXT_INC,   SZ_WORD, M_WMOD, P_OMOD),
+    M1(010, CF_00, TEXT_DEC,   SZ_WORD, M_WMOD, P_OMOD),
+    E1(020, CF_00, TEXT_CALL,  SZ_NONE, M_WMOD, P_OMOD),
+    E1(030, CF_00, TEXT_CALL,  SZ_NONE, M_FARM, P_OMOD), // FMODE_FAR
+    E1(030, CF_00, TEXT_CALLF, SZ_NONE, M_WMEM, P_OMOD), // FMODE_F
+    E1(030, CF_00, TEXT_LCALL, SZ_NONE, M_WMEM, P_OMOD), // FMODE_L
+    E1(040, CF_00, TEXT_JMP,   SZ_NONE, M_WMOD, P_OMOD),
+    E1(050, CF_00, TEXT_JMP,   SZ_NONE, M_FARM, P_OMOD), // FMODE_FAR
+    E1(050, CF_00, TEXT_JMPF,  SZ_NONE, M_WMEM, P_OMOD), // FMODE_F
+    E1(050, CF_00, TEXT_LJMP,  SZ_NONE, M_WMEM, P_OMOD), // FMODE_L
+    E1(060, CF_00, TEXT_PUSH,  SZ_WORD, M_WMOD, P_OMOD),
+};
+
+constexpr uint8_t I8086_FF[] = {
+      2,  // TEXT_CALL
+      3,  // TEXT_CALL
+      4,  // TEXT_CALLF
+      1,  // TEXT_DEC
+      0,  // TEXT_INC
+      6,  // TEXT_JMP
+      7,  // TEXT_JMP
+      8,  // TEXT_JMPF
+      5,  // TEXT_LCALL
+      9,  // TEXT_LJMP
+     10,  // TEXT_PUSH
+};
+
+// i80186
+
+constexpr Entry T80186_00[] = {
+    E0(0x60, CF_00, TEXT_PUSHA, SZ_NONE),
+    E0(0x61, CF_00, TEXT_POPA,  SZ_NONE),
+    E2(0x62, CF_00, TEXT_BOUND, SZ_DATA, M_WREG, M_WMEM, P_REG,  P_MOD),
+    E1(0x6A, CF_00, TEXT_PUSH,  SZ_BYTE, M_BIMM, P_OPR),
+    E3(0x6B, CF_00, TEXT_IMUL,  SZ_DATA, M_WREG, M_WMOD, M_BIMM, P_REG, P_MOD, P_OPR),
+    E2(0x6B, CF_00, TEXT_IMUL,  SZ_DATA, M_WREG, M_BIMM, P_MREG, P_OPR),
+    E1(0x68, CF_00, TEXT_PUSH,  SZ_DATA, M_WIMM, P_OPR),
+    E3(0x69, CF_00, TEXT_IMUL,  SZ_DATA, M_WREG, M_WMOD, M_WIMM, P_REG, P_MOD, P_OPR),
+    E2(0x69, CF_00, TEXT_IMUL,  SZ_DATA, M_WREG, M_WIMM, P_MREG, P_OPR),
+    S2(0x6C, CF_00, TEXT_INSB,  STR_MOVE, SZ_BYTE, M_BMEM, M_DX),
+    S2(0x6D, CF_00, TEXT_INSW,  STR_MOVE, SZ_WORD, M_WMEM, M_DX),
+    T2(0x6C, CF_00, TEXT_INS,   STR_MOVE, SZ_BYTE, M_BMEM, M_DX),
+    T2(0x6D, CF_00, TEXT_INS,   STR_MOVE, SZ_DATA, M_WMEM, M_DX),
+    S0(0x6C, CF_00, TEXT_INSB,  STR_MOVE, SZ_BYTE),
+    S0(0x6D, CF_00, TEXT_INSW,  STR_MOVE, SZ_WORD),
+    S2(0x6E, CF_00, TEXT_OUTSB, STR_MOVE, SZ_BYTE, M_DX,   M_BMEM),
+    S2(0x6F, CF_00, TEXT_OUTSW, STR_MOVE, SZ_WORD, M_DX,   M_WMEM),
+    T2(0x6E, CF_00, TEXT_OUTS,  STR_MOVE, SZ_BYTE, M_DX,   M_BMEM),
+    T2(0x6F, CF_00, TEXT_OUTS,  STR_MOVE, SZ_DATA, M_DX,   M_WMEM),
+    S0(0x6E, CF_00, TEXT_OUTSB, STR_MOVE, SZ_BYTE),
+    S0(0x6F, CF_00, TEXT_OUTSW, STR_MOVE, SZ_WORD),
+    E2(0xC8, CF_00, TEXT_ENTER, SZ_NONE, M_UI16, M_UI8,  P_OPR,  P_OPR),
+    E0(0xC9, CF_00, TEXT_LEAVE, SZ_NONE),
+};
+
+constexpr uint8_t I80186_00[] = {
+      2,  // TEXT_BOUND
+     21,  // TEXT_ENTER
+      4,  // TEXT_IMUL
+      5,  // TEXT_IMUL
+      7,  // TEXT_IMUL
+      8,  // TEXT_IMUL
+     11,  // TEXT_INS
+     12,  // TEXT_INS
+      9,  // TEXT_INSB
+     13,  // TEXT_INSB
+     10,  // TEXT_INSW
+     14,  // TEXT_INSW
+     22,  // TEXT_LEAVE
+     17,  // TEXT_OUTS
+     18,  // TEXT_OUTS
+     15,  // TEXT_OUTSB
+     19,  // TEXT_OUTSB
+     16,  // TEXT_OUTSW
+     20,  // TEXT_OUTSW
+      1,  // TEXT_POPA
+      3,  // TEXT_PUSH
+      6,  // TEXT_PUSH
+      0,  // TEXT_PUSHA
+};
+
+constexpr Entry T80186_C0[] = {
+    N2(000, CF_00, TEXT_ROL, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(010, CF_00, TEXT_ROR, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(020, CF_00, TEXT_RCL, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(030, CF_00, TEXT_RCR, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(040, CF_00, TEXT_SHL, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(040, CF_00, TEXT_SAL, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(050, CF_00, TEXT_SHR, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+    N2(070, CF_00, TEXT_SAR, SZ_BYTE, M_BMOD, M_BIT, P_OMOD, P_OPR),
+};
+
+constexpr uint8_t I80186_CX[] = {
+      2,  // TEXT_RCL
+      3,  // TEXT_RCR
+      0,  // TEXT_ROL
+      1,  // TEXT_ROR
+      5,  // TEXT_SAL
+      7,  // TEXT_SAR
+      4,  // TEXT_SHL
+      6,  // TEXT_SHR
+};
+
+constexpr Entry T80186_C1[] = {
+    N2(000, CF_00, TEXT_ROL, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(010, CF_00, TEXT_ROR, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(020, CF_00, TEXT_RCL, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(030, CF_00, TEXT_RCR, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(040, CF_00, TEXT_SHL, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(040, CF_00, TEXT_SAL, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(050, CF_00, TEXT_SHR, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+    N2(070, CF_00, TEXT_SAR, SZ_DATA, M_WMOD, M_BIT, P_OMOD, P_OPR),
+};
+
+// i80286
+
+constexpr Entry T80286_00[] = {
+    F2(0x63, CF_00, TEXT_ARPL,  SZ_WORD, M_WMOD, M_WREG, P_MOD, P_REG),
+    E1(0xD7, CF_00, TEXT_XLAT,  SZ_BYTE, M_BMEM, P_NONE),
+    E0(0xD7, CF_00, TEXT_XLATB, SZ_NONE),
+};
+
+constexpr uint8_t I80286_00[] = {
+      0,  // TEXT_ARPL
+      1,  // TEXT_XLAT
+      2,  // TEXT_XLATB
+};
+
+constexpr Entry T80286_0F[] = {
+    E0(0x06, CF_00, TEXT_CLTS, SZ_NONE),
+    E2(0x02, CF_00, TEXT_LAR,  SZ_DATA, M_WREG, M_WMOD, P_REG, P_MOD),
+    E2(0x03, CF_00, TEXT_LSL,  SZ_DATA, M_WREG, M_WMOD, P_REG, P_MOD),
+};
+
+constexpr uint8_t I80286_0F[] = {
+      0,  // TEXT_CLTS
+      1,  // TEXT_LAR
+      2,  // TEXT_LSL
+};
+
+constexpr Entry T80286_0F00[] = {
+    E1(000, CF_00, TEXT_SLDT, SZ_WORD, M_WMOD, P_OMOD),
+    E1(010, CF_00, TEXT_STR,  SZ_WORD, M_WMOD, P_OMOD),
+    F1(020, CF_00, TEXT_LLDT, SZ_WORD, M_WMOD, P_OMOD),
+    F1(030, CF_00, TEXT_LTR,  SZ_WORD, M_WMOD, P_OMOD),
+    F1(040, CF_00, TEXT_VERR, SZ_WORD, M_WMOD, P_OMOD),
+    F1(050, CF_00, TEXT_VERW, SZ_WORD, M_WMOD, P_OMOD),
+};
+
+constexpr uint8_t I80286_0F00[] = {
+      2,  // TEXT_LLDT
+      3,  // TEXT_LTR
+      0,  // TEXT_SLDT
+      1,  // TEXT_STR
+      4,  // TEXT_VERR
+      5,  // TEXT_VERW
+};
+
+constexpr Entry T80286_0F01[] = {
+    E1(000, CF_00, TEXT_SGDT, SZ_NONE, M_MEM,  P_OMOD),
+    E1(010, CF_00, TEXT_SIDT, SZ_NONE, M_MEM,  P_OMOD),
+    E1(020, CF_00, TEXT_LGDT, SZ_NONE, M_MEM,  P_OMOD),
+    E1(030, CF_00, TEXT_LIDT, SZ_NONE, M_MEM,  P_OMOD),
+    E1(040, CF_00, TEXT_SMSW, SZ_WORD, M_WMOD, P_OMOD),
+    F1(060, CF_00, TEXT_LMSW, SZ_WORD, M_WMOD, P_OMOD),
+};
+
+constexpr uint8_t I80286_0F01[] = {
+      2,  // TEXT_LGDT
+      3,  // TEXT_LIDT
+      5,  // TEXT_LMSW
+      0,  // TEXT_SGDT
+      1,  // TEXT_SIDT
+      4,  // TEXT_SMSW
+};
+
+// i80386
+
+constexpr Entry T80386_00[] = {
+    E0(0x64, CF_00, TEXT_SEGFS, SZ_NONE),
+    E0(0x65, CF_00, TEXT_SEGGS, SZ_NONE),
+    // PUSHD imm32: asm-only alias for "DATA32 PUSH imm32" in use16 / "PUSH
+    // imm32" in use32. Disasm prefers TEXT_PUSH (with explicit data32) so the
+    // existing roundtrip text stays unchanged.
+    E1(0x68, CF_00, TEXT_PUSHD, SZ_DWORD, M_WIMM, P_OPR),
+    E2(0xE0, CF_00, TEXT_LOOPNE, SZ_NONE, M_REL8, M_ECX, P_OPR, P_NONE),
+    E2(0xE0, CF_00, TEXT_LOOPNZ, SZ_NONE, M_REL8, M_ECX, P_OPR, P_NONE),
+    E2(0xE1, CF_00, TEXT_LOOPE,  SZ_NONE, M_REL8, M_ECX, P_OPR, P_NONE),
+    E2(0xE1, CF_00, TEXT_LOOPZ,  SZ_NONE, M_REL8, M_ECX, P_OPR, P_NONE),
+    E2(0xE2, CF_00, TEXT_LOOP,   SZ_NONE, M_REL8, M_ECX, P_OPR, P_NONE),
+};
+
+constexpr uint8_t I80386_00[] = {
+      7,  // TEXT_LOOP
+      5,  // TEXT_LOOPE
+      3,  // TEXT_LOOPNE
+      4,  // TEXT_LOOPNZ
+      6,  // TEXT_LOOPZ
+      2,  // TEXT_PUSHD
+      0,  // TEXT_SEGFS
+      1,  // TEXT_SEGGS
+};
+
+constexpr Entry T80386_8F[] = {
+    N1(000, CF_00, TEXT_POP, SZ_DATA, M_WMOD, P_OMOD),
+};
+
+constexpr Entry T80386_FF[] = {
+    M1(000, CF_00, TEXT_INC,   SZ_DATA, M_WMOD, P_OMOD),
+    M1(010, CF_00, TEXT_DEC,   SZ_DATA, M_WMOD, P_OMOD),
+    N1(020, CF_00, TEXT_CALL,  SZ_DATA, M_WMOD, P_OMOD),
+    N1(030, CF_00, TEXT_CALL,  SZ_DATA, M_FARM, P_OMOD),
+    E1(030, CF_00, TEXT_CALLF, SZ_DATA, M_WMEM, P_OMOD),
+    E1(030, CF_00, TEXT_LCALL, SZ_DATA, M_WMEM, P_OMOD),
+    N1(040, CF_00, TEXT_JMP,   SZ_DATA, M_WMOD, P_OMOD),
+    N1(050, CF_00, TEXT_JMP,   SZ_DATA, M_FARM, P_OMOD),
+    E1(050, CF_00, TEXT_JMPF,  SZ_DATA, M_WMEM, P_OMOD),
+    E1(050, CF_00, TEXT_LJMP,  SZ_DATA, M_WMEM, P_OMOD),
+    N1(060, CF_00, TEXT_PUSH,  SZ_DATA, M_WMOD, P_OMOD),
+};
+
+constexpr Entry TCODE16_00[] = {
+    E0(0x60, CF_00, TEXT_PUSHA, SZ_NONE),
+    E0(0x61, CF_00, TEXT_POPA,  SZ_NONE),
+    S2(0x6D, CF_00, TEXT_INSW,  STR_MOVE, SZ_WORD, M_WMEM, M_DX),
+    S0(0x6D, CF_00, TEXT_INSW,  STR_MOVE, SZ_NONE),
+    S2(0x6F, CF_00, TEXT_OUTSW, STR_MOVE, SZ_WORD, M_DX,   M_WMEM),
+    S0(0x6F, CF_00, TEXT_OUTSW, STR_MOVE, SZ_NONE),
+    E0(0x98, CF_00, TEXT_CBW,   SZ_NONE),
+    E0(0x99, CF_00, TEXT_CWD,   SZ_NONE),
+    E0(0x9C, CF_00, TEXT_PUSHF, SZ_NONE),
+    E0(0x9D, CF_00, TEXT_POPF,  SZ_NONE),
+    S2(0xA5, CF_00, TEXT_MOVSW, STR_MOVE, SZ_WORD, M_DMEM, M_DMEM),
+    S0(0xA5, CF_00, TEXT_MOVSW, STR_MOVE, SZ_NONE),
+    S2(0xA7, CF_00, TEXT_CMPSW, STR_COMP, SZ_WORD, M_DMEM, M_DMEM),
+    S0(0xA7, CF_00, TEXT_CMPSW, STR_COMP, SZ_NONE),
+    S1(0xAB, CF_00, TEXT_STOSW, STR_MOVE, SZ_WORD, M_DMEM),
+    S0(0xAB, CF_00, TEXT_STOSW, STR_MOVE, SZ_NONE),
+    S1(0xAD, CF_00, TEXT_LODSW, STR_MOVE, SZ_WORD, M_DMEM),
+    S0(0xAD, CF_00, TEXT_LODSW, STR_MOVE, SZ_NONE),
+    S1(0xAF, CF_00, TEXT_SCASW, STR_COMP, SZ_WORD, M_DMEM),
+    S0(0xAF, CF_00, TEXT_SCASW, STR_COMP, SZ_NONE),
+    E0(0xCF, CF_00, TEXT_IRET,  SZ_WORD),
+    E1(0xE3, CF_00, TEXT_JCXZ,  SZ_NONE,  M_REL8, P_OPR),
+};
+
+constexpr Entry TCODE32_00[] = {
+    E0(0x60, CF_00, TEXT_PUSHAD, SZ_NONE),
+    E0(0x61, CF_00, TEXT_POPAD,  SZ_NONE),
+    S2(0x6D, CF_00, TEXT_INSD,   STR_MOVE, SZ_DWORD, M_DMEM, M_DX),
+    S0(0x6D, CF_00, TEXT_INSD,   STR_MOVE, SZ_NONE),
+    S2(0x6F, CF_00, TEXT_OUTSD,  STR_MOVE, SZ_DWORD, M_DX,   M_DMEM),
+    S0(0x6F, CF_00, TEXT_OUTSD,  STR_MOVE, SZ_NONE),
+    E0(0x98, CF_00, TEXT_CWDE,   SZ_NONE),
+    E0(0x99, CF_00, TEXT_CDQ,    SZ_NONE),
+    E0(0x9C, CF_00, TEXT_PUSHFD, SZ_NONE),
+    E0(0x9D, CF_00, TEXT_POPFD,  SZ_NONE),
+    S2(0xA5, CF_00, TEXT_MOVSD,  STR_MOVE, SZ_DWORD, M_DMEM, M_DMEM),
+    S0(0xA5, CF_00, TEXT_MOVSD,  STR_MOVE, SZ_NONE),
+    S2(0xA7, CF_00, TEXT_CMPSD,  STR_COMP, SZ_DWORD, M_DMEM, M_DMEM),
+    S0(0xA7, CF_00, TEXT_CMPSD,  STR_COMP, SZ_NONE),
+    S1(0xAB, CF_00, TEXT_STOSD,  STR_MOVE, SZ_DWORD, M_DMEM),
+    S0(0xAB, CF_00, TEXT_STOSD,  STR_MOVE, SZ_NONE),
+    S1(0xAD, CF_00, TEXT_LODSD,  STR_MOVE, SZ_DWORD, M_DMEM),
+    S0(0xAD, CF_00, TEXT_LODSD,  STR_MOVE, SZ_NONE),
+    S1(0xAF, CF_00, TEXT_SCASD,  STR_COMP, SZ_DWORD, M_DMEM),
+    S0(0xAF, CF_00, TEXT_SCASD,  STR_COMP, SZ_NONE),
+    E0(0xCF, CF_00, TEXT_IRETD,  SZ_NONE),
+    E1(0xE3, CF_00, TEXT_JECXZ,  SZ_NONE,  M_REL8, P_OPR),
+};
+
+constexpr uint8_t ICODE32_00[] = {
+          7,  // TEXT_CDQ
+         12,  // TEXT_CMPSD
+         13,  // TEXT_CMPSD
+          6,  // TEXT_CWDE
+          2,  // TEXT_INSD
+          3,  // TEXT_INSD
+         20,  // TEXT_IRETD
+         21,  // TEXT_JECXZ
+         16,  // TEXT_LODSD
+         17,  // TEXT_LODSD
+         10,  // TEXT_MOVSD
+         11,  // TEXT_MOVSD
+          4,  // TEXT_OUTSD
+          5,  // TEXT_OUTSD
+          1,  // TEXT_POPAD
+          9,  // TEXT_POPFD
+          0,  // TEXT_PUSHAD
+          8,  // TEXT_PUSHFD
+         18,  // TEXT_SCASD
+         19,  // TEXT_SCASD
+         14,  // TEXT_STOSD
+         15,  // TEXT_STOSD
+};
+
+constexpr uint8_t ICODE16_00[] = {
+          6,  // TEXT_CBW
+         12,  // TEXT_CMPSW
+         13,  // TEXT_CMPSW
+          7,  // TEXT_CWD
+          2,  // TEXT_INSW
+          3,  // TEXT_INSW
+         20,  // TEXT_IRET
+         21,  // TEXT_JCXZ
+         16,  // TEXT_LODSW
+         17,  // TEXT_LODSW
+         10,  // TEXT_MOVSW
+         11,  // TEXT_MOVSW
+          4,  // TEXT_OUTSW
+          5,  // TEXT_OUTSW
+          1,  // TEXT_POPA
+          9,  // TEXT_POPF
+          0,  // TEXT_PUSHA
+          8,  // TEXT_PUSHF
+         18,  // TEXT_SCASW
+         19,  // TEXT_SCASW
+         14,  // TEXT_STOSW
+         15,  // TEXT_STOSW
+};
+
+constexpr Entry T80386_0F[] = {
+    E2(0x20, CF_00, TEXT_MOV,  SZ_DWORD, M_DREG, M_CTLR, P_MOD, P_REG),
+    E2(0x21, CF_00, TEXT_MOV,  SZ_DWORD, M_DREG, M_DBGR, P_MOD, P_REG),
+    E2(0x22, CF_00, TEXT_MOV,  SZ_DWORD, M_CTLR, M_DREG, P_REG, P_MOD),
+    E2(0x23, CF_00, TEXT_MOV,  SZ_DWORD, M_DBGR, M_DREG, P_REG, P_MOD),
+    E2(0x24, CF_00, TEXT_MOV,  SZ_DWORD, M_DREG, M_TSTR, P_MOD, P_REG),
+    E2(0x26, CF_00, TEXT_MOV,  SZ_DWORD, M_TSTR, M_DREG, P_REG, P_MOD),
+    E1(0x80, CF_00, TEXT_JO,   SZ_NONE, M_REL, P_OPR),
+    E1(0x81, CF_00, TEXT_JNO,  SZ_NONE, M_REL, P_OPR),
+    E1(0x82, CF_00, TEXT_JB,   SZ_NONE, M_REL, P_OPR),
+    E1(0x82, CF_00, TEXT_JC,   SZ_NONE, M_REL, P_OPR),
+    E1(0x82, CF_00, TEXT_JNAE, SZ_NONE, M_REL, P_OPR),
+    E1(0x83, CF_00, TEXT_JAE,  SZ_NONE, M_REL, P_OPR),
+    E1(0x83, CF_00, TEXT_JNB,  SZ_NONE, M_REL, P_OPR),
+    E1(0x83, CF_00, TEXT_JNC,  SZ_NONE, M_REL, P_OPR),
+    E1(0x84, CF_00, TEXT_JE,   SZ_NONE, M_REL, P_OPR),
+    E1(0x84, CF_00, TEXT_JZ,   SZ_NONE, M_REL, P_OPR),
+    E1(0x85, CF_00, TEXT_JNE,  SZ_NONE, M_REL, P_OPR),
+    E1(0x85, CF_00, TEXT_JNZ,  SZ_NONE, M_REL, P_OPR),
+    E1(0x86, CF_00, TEXT_JBE,  SZ_NONE, M_REL, P_OPR),
+    E1(0x86, CF_00, TEXT_JNA,  SZ_NONE, M_REL, P_OPR),
+    E1(0x87, CF_00, TEXT_JA,   SZ_NONE, M_REL, P_OPR),
+    E1(0x87, CF_00, TEXT_JNBE, SZ_NONE, M_REL, P_OPR),
+    E1(0x88, CF_00, TEXT_JS,   SZ_NONE, M_REL, P_OPR),
+    E1(0x89, CF_00, TEXT_JNS,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8A, CF_00, TEXT_JPE,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8A, CF_00, TEXT_JP,   SZ_NONE, M_REL, P_OPR),
+    E1(0x8B, CF_00, TEXT_JPO,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8B, CF_00, TEXT_JNP,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8C, CF_00, TEXT_JL,   SZ_NONE, M_REL, P_OPR),
+    E1(0x8C, CF_00, TEXT_JNGE, SZ_NONE, M_REL, P_OPR),
+    E1(0x8D, CF_00, TEXT_JGE,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8D, CF_00, TEXT_JNL,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8E, CF_00, TEXT_JLE,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8E, CF_00, TEXT_JNG,  SZ_NONE, M_REL, P_OPR),
+    E1(0x8F, CF_00, TEXT_JG,   SZ_NONE, M_REL, P_OPR),
+    E1(0x8F, CF_00, TEXT_JNLE, SZ_NONE, M_REL, P_OPR),
+    E1(0x90, CF_00, TEXT_SETO,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x91, CF_00, TEXT_SETNO,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x92, CF_00, TEXT_SETB,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x92, CF_00, TEXT_SETC,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x92, CF_00, TEXT_SETNAE, SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x93, CF_00, TEXT_SETAE,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x93, CF_00, TEXT_SETNB,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x93, CF_00, TEXT_SETNC,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x94, CF_00, TEXT_SETE,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x94, CF_00, TEXT_SETZ,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x95, CF_00, TEXT_SETNE,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x95, CF_00, TEXT_SETNZ,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x96, CF_00, TEXT_SETBE,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x96, CF_00, TEXT_SETNA,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x97, CF_00, TEXT_SETA,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x97, CF_00, TEXT_SETNBE, SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x98, CF_00, TEXT_SETS,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x99, CF_00, TEXT_SETNS,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9A, CF_00, TEXT_SETPE,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9A, CF_00, TEXT_SETP,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9B, CF_00, TEXT_SETPO,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9B, CF_00, TEXT_SETNP,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9C, CF_00, TEXT_SETL,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9C, CF_00, TEXT_SETNGE, SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9D, CF_00, TEXT_SETGE,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9D, CF_00, TEXT_SETNL,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9E, CF_00, TEXT_SETLE,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9E, CF_00, TEXT_SETNG,  SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9F, CF_00, TEXT_SETG,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x9F, CF_00, TEXT_SETNLE, SZ_BYTE, M_BMOD, P_MOD),
+    E1(0xA0, CF_00, TEXT_PUSH,   SZ_WORD, M_FS,   P_NONE),
+    E1(0xA1, CF_00, TEXT_POP,    SZ_WORD, M_FS,   P_NONE),
+    E2(0xA3, CF_00, TEXT_BT,     SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E3(0xA4, CF_00, TEXT_SHLD,   SZ_DATA, M_WMOD, M_WREG, M_BIT,  P_MOD, P_REG, P_OPR),
+    E3(0xA5, CF_00, TEXT_SHLD,   SZ_DATA, M_WMOD, M_WREG, M_CL,   P_MOD, P_REG, P_NONE),
+    E1(0xA8, CF_00, TEXT_PUSH,   SZ_WORD, M_GS,   P_NONE),
+    E1(0xA9, CF_00, TEXT_POP,    SZ_WORD, M_GS,   P_NONE),
+    E2(0xAB, CF_00, TEXT_BTS,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E3(0xAC, CF_00, TEXT_SHRD,   SZ_DATA, M_WMOD, M_WREG, M_BIT,  P_MOD, P_REG, P_OPR),
+    E3(0xAD, CF_00, TEXT_SHRD,   SZ_DATA, M_WMOD, M_WREG, M_CL,   P_MOD, P_REG, P_NONE),
+    E2(0xAF, CF_00, TEXT_IMUL,   SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0xB2, CF_00, TEXT_LSS,    SZ_DATA, M_WREG, M_MEM, P_REG,  P_MOD),
+    E2(0xB3, CF_00, TEXT_BTR,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0xB4, CF_00, TEXT_LFS,    SZ_DATA, M_WREG, M_MEM, P_REG,  P_MOD),
+    E2(0xB5, CF_00, TEXT_LGS,    SZ_DATA, M_WREG, M_MEM, P_REG,  P_MOD),
+    E2(0xBB, CF_00, TEXT_BTC,    SZ_DATA, M_WMOD, M_WREG, P_MOD,  P_REG),
+    E2(0xBC, CF_00, TEXT_BSF,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    E2(0xBD, CF_00, TEXT_BSR,    SZ_DATA, M_WREG, M_WMOD, P_REG,  P_MOD),
+    N2(0xB6, CF_00, TEXT_MOVZX,  SZ_DATA, M_WREG, M_BMOD, P_REG,  P_MOD),
+    N2(0xB7, CF_00, TEXT_MOVZX,  SZ_DATA, M_WREG, M_WMOD16, P_REG,  P_MOD),
+    N2(0xBE, CF_00, TEXT_MOVSX,  SZ_DATA, M_WREG, M_BMOD, P_REG,  P_MOD),
+    N2(0xBF, CF_00, TEXT_MOVSX,  SZ_DATA, M_WREG, M_WMOD16, P_REG,  P_MOD),
+};
+
+constexpr uint8_t I80386_0F[] = {
+     82,  // TEXT_BSF
+     83,  // TEXT_BSR
+     68,  // TEXT_BT
+     81,  // TEXT_BTC
+     78,  // TEXT_BTR
+     73,  // TEXT_BTS
+     76,  // TEXT_IMUL
+     20,  // TEXT_JA
+     11,  // TEXT_JAE
+      8,  // TEXT_JB
+     18,  // TEXT_JBE
+      9,  // TEXT_JC
+     14,  // TEXT_JE
+     34,  // TEXT_JG
+     30,  // TEXT_JGE
+     28,  // TEXT_JL
+     32,  // TEXT_JLE
+     19,  // TEXT_JNA
+     10,  // TEXT_JNAE
+     12,  // TEXT_JNB
+     21,  // TEXT_JNBE
+     13,  // TEXT_JNC
+     33,  // TEXT_JNG
+     29,  // TEXT_JNGE
+     31,  // TEXT_JNL
+     35,  // TEXT_JNLE
+      7,  // TEXT_JNO
+     27,  // TEXT_JNP
+     23,  // TEXT_JNS
+     17,  // TEXT_JNZ
+      6,  // TEXT_JO
+     25,  // TEXT_JP
+     24,  // TEXT_JPE
+     26,  // TEXT_JPO
+     22,  // TEXT_JS
+     15,  // TEXT_JZ
+     79,  // TEXT_LFS
+     80,  // TEXT_LGS
+     77,  // TEXT_LSS
+      0,  // TEXT_MOV
+      1,  // TEXT_MOV
+      2,  // TEXT_MOV
+      3,  // TEXT_MOV
+      4,  // TEXT_MOV
+      5,  // TEXT_MOV
+     86,  // TEXT_MOVSX
+     87,  // TEXT_MOVSX
+     84,  // TEXT_MOVZX
+     85,  // TEXT_MOVZX
+     67,  // TEXT_POP
+     72,  // TEXT_POP
+     66,  // TEXT_PUSH
+     71,  // TEXT_PUSH
+     50,  // TEXT_SETA
+     41,  // TEXT_SETAE
+     38,  // TEXT_SETB
+     48,  // TEXT_SETBE
+     39,  // TEXT_SETC
+     44,  // TEXT_SETE
+     64,  // TEXT_SETG
+     60,  // TEXT_SETGE
+     58,  // TEXT_SETL
+     62,  // TEXT_SETLE
+     49,  // TEXT_SETNA
+     40,  // TEXT_SETNAE
+     42,  // TEXT_SETNB
+     51,  // TEXT_SETNBE
+     43,  // TEXT_SETNC
+     46,  // TEXT_SETNE
+     63,  // TEXT_SETNG
+     59,  // TEXT_SETNGE
+     61,  // TEXT_SETNL
+     65,  // TEXT_SETNLE
+     37,  // TEXT_SETNO
+     57,  // TEXT_SETNP
+     53,  // TEXT_SETNS
+     47,  // TEXT_SETNZ
+     36,  // TEXT_SETO
+     55,  // TEXT_SETP
+     54,  // TEXT_SETPE
+     56,  // TEXT_SETPO
+     52,  // TEXT_SETS
+     45,  // TEXT_SETZ
+     69,  // TEXT_SHLD
+     70,  // TEXT_SHLD
+     74,  // TEXT_SHRD
+     75,  // TEXT_SHRD
+};
+
+constexpr Entry T80386_0FBA[] = {
+    N2(040, CF_00, TEXT_BT,  SZ_DATA, M_WMOD, M_UI8, P_OMOD, P_OPR),
+    N2(050, CF_00, TEXT_BTS, SZ_DATA, M_WMOD, M_UI8, P_OMOD, P_OPR),
+    N2(060, CF_00, TEXT_BTR, SZ_DATA, M_WMOD, M_UI8, P_OMOD, P_OPR),
+    N2(070, CF_00, TEXT_BTC, SZ_DATA, M_WMOD, M_UI8, P_OMOD, P_OPR),
+};
+
+constexpr uint8_t I80386_0FBA[] = {
+    0,  // TEXT_BT
+    3,  // TEXT_BTC
+    2,  // TEXT_BTR
+    1,  // TEXT_BTS
+};
+
+// i80486
+
+constexpr Entry T80486_0F[] = {
+    E0(0x08, CF_00, TEXT_INVD,    SZ_NONE),
+    E0(0x09, CF_00, TEXT_WBINVD,  SZ_NONE),
+    E1(0xC8, CF_07, TEXT_BSWAP,   SZ_DATA,  M_DREG, P_OREG),
+    L2(0xC0, CF_00, TEXT_XADD,    SZ_BYTE,  M_BMOD, M_BREG, P_MOD, P_REG),
+    L2(0xC1, CF_00, TEXT_XADD,    SZ_DATA,  M_WMOD, M_WREG, P_MOD, P_REG),
+    L2(0xB0, CF_00, TEXT_CMPXCHG, SZ_BYTE,  M_BMOD, M_BREG, P_MOD, P_REG),
+    L2(0xB1, CF_00, TEXT_CMPXCHG, SZ_DATA,  M_WMOD, M_WREG, P_MOD, P_REG),
+};
+
+constexpr uint8_t I80486_0F[] = {
+      2,  // TEXT_BSWAP
+      5,  // TEXT_CMPXCHG (byte)
+      6,  // TEXT_CMPXCHG (data)
+      0,  // TEXT_INVD
+      1,  // TEXT_WBINVD
+      3,  // TEXT_XADD (byte)
+      4,  // TEXT_XADD (data)
+};
+
+constexpr Entry T80486_0F01[] = {
+    N1(0070, CF_00, TEXT_INVLPG, SZ_NONE, M_MEM, P_OMOD),
+};
+
+constexpr uint8_t I80486_0F01[] = {
+      0,  // TEXT_INVLPG
+};
+
+// V series
+
+constexpr Entry TVSERIES_00[] = {
+    E0(0x64, CF_00, TEXT_REPNC,  SZ_NONE),
+    E0(0x65, CF_00, TEXT_REPC,   SZ_NONE),
+};
+
+constexpr uint8_t IVSERIES_00[] = {
+      1,  // TEXT_REPC
+      0,  // TEXT_REPNC
+};
+
+constexpr Entry TVSERIES_0F[] = {
+    S2(0x20, CF_00, TEXT_ADD4S,  STR_BCD,  SZ_BYTE, M_BMEM, M_BMEM),
+    S0(0x20, CF_00, TEXT_ADD4S,  STR_BCD,  SZ_NONE),
+    S2(0x26, CF_00, TEXT_CMP4S,  STR_BCD,  SZ_BYTE, M_BMEM, M_BMEM),
+    S0(0x26, CF_00, TEXT_CMP4S,  STR_BCD,  SZ_NONE),
+    S2(0x22, CF_00, TEXT_SUB4S,  STR_BCD,  SZ_BYTE, M_BMEM, M_BMEM),
+    S0(0x22, CF_00, TEXT_SUB4S,  STR_BCD,  SZ_NONE),
+    E1(0x28, CF_00, TEXT_ROL4,   SZ_BYTE, M_BMOD, P_MOD),
+    E1(0x2A, CF_00, TEXT_ROR4,   SZ_BYTE, M_BMOD, P_MOD),
+    E2(0x31, CF_00, TEXT_INS,    SZ_WORD, M_BREG, M_BREG, P_MOD,  P_REG),
+    E2(0x39, CF_00, TEXT_INS,    SZ_WORD, M_BREG, M_BIT,  P_MOD,  P_OPR),
+    E2(0x33, CF_00, TEXT_EXT,    SZ_WORD, M_BREG, M_BREG, P_MOD,  P_REG),
+    E2(0x3B, CF_00, TEXT_EXT,    SZ_WORD, M_BREG, M_BIT,  P_MOD,  P_OPR),
+    N2(0x12, CF_00, TEXT_CLR1,   SZ_BYTE, M_BMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x13, CF_00, TEXT_CLR1,   SZ_WORD, M_WMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x1A, CF_00, TEXT_CLR1,   SZ_BYTE, M_BMOD, M_BIT,  P_MOD,  P_OPR), 
+    N2(0x1B, CF_00, TEXT_CLR1,   SZ_WORD, M_WMOD, M_BIT,  P_MOD,  P_OPR), 
+    N2(0x14, CF_00, TEXT_SET1,   SZ_BYTE, M_BMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x15, CF_00, TEXT_SET1,   SZ_WORD, M_WMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x1C, CF_00, TEXT_SET1,   SZ_BYTE, M_BMOD, M_BIT,  P_MOD,  P_OPR), 
+    N2(0x1D, CF_00, TEXT_SET1,   SZ_WORD, M_WMOD, M_BIT,  P_MOD,  P_OPR), 
+    N2(0x16, CF_00, TEXT_NOT1,   SZ_BYTE, M_BMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x17, CF_00, TEXT_NOT1,   SZ_WORD, M_WMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x1E, CF_00, TEXT_NOT1,   SZ_BYTE, M_BMOD, M_BIT,  P_MOD,  P_OPR),
+    N2(0x1F, CF_00, TEXT_NOT1,   SZ_WORD, M_WMOD, M_BIT,  P_MOD,  P_OPR),
+    N2(0x10, CF_00, TEXT_TEST1,  SZ_BYTE, M_BMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x11, CF_00, TEXT_TEST1,  SZ_WORD, M_WMOD, M_CL,   P_MOD,  P_NONE),
+    N2(0x18, CF_00, TEXT_TEST1,  SZ_BYTE, M_BMOD, M_BIT,  P_MOD,  P_OPR),
+    N2(0x19, CF_00, TEXT_TEST1,  SZ_WORD, M_WMOD, M_BIT,  P_MOD,  P_OPR),
+};
+
+constexpr uint8_t IVSERIES_0F[] = {
+      0,  // TEXT_ADD4S
+      1,  // TEXT_ADD4S
+     12,  // TEXT_CLR1
+     13,  // TEXT_CLR1
+     14,  // TEXT_CLR1
+     15,  // TEXT_CLR1
+      2,  // TEXT_CMP4S
+      3,  // TEXT_CMP4S
+     10,  // TEXT_EXT
+     11,  // TEXT_EXT
+      8,  // TEXT_INS
+      9,  // TEXT_INS
+     20,  // TEXT_NOT1
+     21,  // TEXT_NOT1
+     22,  // TEXT_NOT1
+     23,  // TEXT_NOT1
+      6,  // TEXT_ROL4
+      7,  // TEXT_ROR4
+     16,  // TEXT_SET1
+     17,  // TEXT_SET1
+     18,  // TEXT_SET1
+     19,  // TEXT_SET1
+      4,  // TEXT_SUB4S
+      5,  // TEXT_SUB4S
+     24,  // TEXT_TEST1
+     25,  // TEXT_TEST1
+     26,  // TEXT_TEST1
+     27,  // TEXT_TEST1
+};
+
+// V30
+
+constexpr Entry TV30_0F[] = {
+    E1(0xFF, CF_00, TEXT_BRKEM,  SZ_BYTE, M_UI8,  P_OPR),
+};
+
+constexpr uint8_t IV30_0F[] = {
+      0,  // TEXT_BRKEM
+};
+
+// V33
+
+constexpr Entry TV33_0F[] = {
+    E1(0xE0, CF_00, TEXT_BRKXA,  SZ_BYTE, M_UI8,  P_OPR),
+    E1(0xF0, CF_00, TEXT_RETXA,  SZ_BYTE, M_UI8,  P_OPR),
+};
+
+constexpr uint8_t IV33_0F[] = {
+      0,  // TEXT_BRKXA
+      1,  // TEXT_RETXA
+};
+
+// V35
+
+constexpr Entry TV35_0F[] = {
+    E0(0x25, CF_00, TEXT_MOVSPA, SZ_NONE),
+    E0(0x91, CF_00, TEXT_RETRBI, SZ_NONE),
+    E0(0x92, CF_00, TEXT_FINT,   SZ_NONE),
+    E3(0x9C, CF_00, TEXT_BTCLR,  SZ_BYTE, M_SFR,  M_BIT, M_REL8, P_OPR, P_OPR, P_OPR),
+    E0(0x9E, CF_00, TEXT_STOP,   SZ_NONE),
+};
+
+constexpr uint8_t IV35_0F[] = {
+      3,  // TEXT_BTCLR
+      2,  // TEXT_FINT
+      0,  // TEXT_MOVSPA
+      1,  // TEXT_RETRBI
+      4,  // TEXT_STOP
+};
+
+// The register operand of these three is a mod-reg byte with a fixed reg
+// field, so each takes a page of its own like the i80386 0FBA group.
+
+constexpr Entry TV35_0F2D[] = {
+    E1(000, CF_00, TEXT_BRKCS,  SZ_WORD, M_WREG, P_OMOD),
+};
+
+constexpr uint8_t IV35_0F2D[] = {
+      0,  // TEXT_BRKCS
+};
+
+constexpr Entry TV35_0F94[] = {
+    E1(070, CF_00, TEXT_TSKSW,  SZ_WORD, M_WREG, P_OMOD),
+};
+
+constexpr uint8_t IV35_0F94[] = {
+      0,  // TEXT_TSKSW
+};
+
+constexpr Entry TV35_0F95[] = {
+    E1(070, CF_00, TEXT_MOVSPB, SZ_WORD, M_WREG, P_OMOD),
+};
+
+constexpr uint8_t IV35_0F95[] = {
+      0,  // TEXT_MOVSPB
+};
+
+#if !defined(LIBASM_I8086_NOFPU)
+constexpr Entry T8087_00[] = {
+    E0(0x9B, CF_00, TEXT_FWAIT,  SZ_NONE),
+};
+
+constexpr uint8_t I8087_00[] = {
+      0,  // TEXT_FWAIT
+};
+
+constexpr Entry T8087_D8[] = {
+    E2(0xC0, CF_07, TEXT_FADD,   SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xC8, CF_07, TEXT_FMUL,   SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E1(0xD0, CF_07, TEXT_FCOM,   SZ_NONE,  M_STI,  P_OREG),
+    E1(0xD8, CF_07, TEXT_FCOMP,  SZ_NONE,  M_STI,  P_OREG),
+    E2(0xE0, CF_07, TEXT_FSUB,   SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xE8, CF_07, TEXT_FSUBR,  SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xF0, CF_07, TEXT_FDIV,   SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xF8, CF_07, TEXT_FDIVR,  SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    N1(000,  CF_00, TEXT_FADD,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FMUL,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FCOM,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FCOMP,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FSUB,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FSUBR,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FDIV,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FDIVR,  SZ_DWORD, M_DMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_D8[] = {
+      0,  // TEXT_FADD
+      8,  // TEXT_FADD
+      2,  // TEXT_FCOM
+     10,  // TEXT_FCOM
+      3,  // TEXT_FCOMP
+     11,  // TEXT_FCOMP
+      6,  // TEXT_FDIV
+     14,  // TEXT_FDIV
+      7,  // TEXT_FDIVR
+     15,  // TEXT_FDIVR
+      1,  // TEXT_FMUL
+      9,  // TEXT_FMUL
+      4,  // TEXT_FSUB
+     12,  // TEXT_FSUB
+      5,  // TEXT_FSUBR
+     13,  // TEXT_FSUBR
+};
+
+constexpr Entry T8087_D9[] = {
+    E1(0xC0, CF_07, TEXT_FLD,     SZ_NONE,  M_STI,  P_OREG),
+    E1(0xC8, CF_07, TEXT_FXCH,    SZ_NONE,  M_STI,  P_OREG),
+    E0(0xD0, CF_00, TEXT_FNOP,    SZ_NONE),
+    E0(0xE0, CF_00, TEXT_FCHS,    SZ_NONE),
+    E0(0xE1, CF_00, TEXT_FABS,    SZ_NONE),
+    E0(0xE4, CF_00, TEXT_FTST,    SZ_NONE),
+    E0(0xE5, CF_00, TEXT_FXAM,    SZ_NONE),
+    E0(0xE8, CF_00, TEXT_FLD1,    SZ_NONE),
+    E0(0xE9, CF_00, TEXT_FLDL2T,  SZ_NONE),
+    E0(0xEA, CF_00, TEXT_FLDL2E,  SZ_NONE),
+    E0(0xEB, CF_00, TEXT_FLDPI,   SZ_NONE),
+    E0(0xEC, CF_00, TEXT_FLDLG2,  SZ_NONE),
+    E0(0xED, CF_00, TEXT_FLDLN2,  SZ_NONE),
+    E0(0xEE, CF_00, TEXT_FLDZ,    SZ_NONE),
+    E0(0xF0, CF_00, TEXT_F2XM1,   SZ_NONE),
+    E0(0xF1, CF_00, TEXT_FYL2X,   SZ_NONE),
+    E0(0xF2, CF_00, TEXT_FPTAN,   SZ_NONE),
+    E0(0xF3, CF_00, TEXT_FPATAN,  SZ_NONE),
+    E0(0xF4, CF_00, TEXT_FXTRACT, SZ_NONE),
+    E0(0xF6, CF_00, TEXT_FDECSTP, SZ_NONE),
+    E0(0xF7, CF_00, TEXT_FINCSTP, SZ_NONE),
+    E0(0xF8, CF_00, TEXT_FPREM,   SZ_NONE),
+    E0(0xF9, CF_00, TEXT_FYL2XP1, SZ_NONE),
+    E0(0xFA, CF_00, TEXT_FSQRT,   SZ_NONE),
+    E0(0xFC, CF_00, TEXT_FRNDINT, SZ_NONE),
+    E0(0xFD, CF_00, TEXT_FSCALE,  SZ_NONE),
+    N1(000,  CF_00, TEXT_FLD,     SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FST,     SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FSTP,    SZ_DWORD, M_DMEM, P_OMOD),
+    E1(040,  CF_00, TEXT_FLDENV,  SZ_NONE,  M_MEM,  P_OMOD),
+    E1(050,  CF_00, TEXT_FLDCW,   SZ_WORD,  M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_D9[] = {
+     14,  // TEXT_F2XM1
+      4,  // TEXT_FABS
+      3,  // TEXT_FCHS
+     19,  // TEXT_FDECSTP
+     20,  // TEXT_FINCSTP
+      0,  // TEXT_FLD
+     26,  // TEXT_FLD
+      7,  // TEXT_FLD1
+     30,  // TEXT_FLDCW
+     29,  // TEXT_FLDENV
+      9,  // TEXT_FLDL2E
+      8,  // TEXT_FLDL2T
+     11,  // TEXT_FLDLG2
+     12,  // TEXT_FLDLN2
+     10,  // TEXT_FLDPI
+     13,  // TEXT_FLDZ
+      2,  // TEXT_FNOP
+     17,  // TEXT_FPATAN
+     21,  // TEXT_FPREM
+     16,  // TEXT_FPTAN
+     24,  // TEXT_FRNDINT
+     25,  // TEXT_FSCALE
+     23,  // TEXT_FSQRT
+     27,  // TEXT_FST
+     28,  // TEXT_FSTP
+      5,  // TEXT_FTST
+      6,  // TEXT_FXAM
+      1,  // TEXT_FXCH
+     18,  // TEXT_FXTRACT
+     15,  // TEXT_FYL2X
+     22,  // TEXT_FYL2XP1
+};
+
+constexpr Entry T8087_D9N[] = {
+    E1(060,  CF_00, TEXT_FNSTENV, SZ_NONE,  M_MEM,  P_OMOD),
+    E1(070,  CF_00, TEXT_FNSTCW,  SZ_WORD,  M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_D9N[] = {
+      1,  // TEXT_FNSTCW
+      0,  // TEXT_FNSTENV
+};
+
+constexpr Entry T8087_DA[] = {
+    N1(000,  CF_00, TEXT_FIADD,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FIMUL,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FICOM,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FICOMP, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FISUB,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FISUBR, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FIDIV,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FIDIVR, SZ_DWORD, M_DMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_DA[] = {
+      0,  // TEXT_FIADD
+      2,  // TEXT_FICOM
+      3,  // TEXT_FICOMP
+      6,  // TEXT_FIDIV
+      7,  // TEXT_FIDIVR
+      1,  // TEXT_FIMUL
+      4,  // TEXT_FISUB
+      5,  // TEXT_FISUBR
+};
+
+constexpr Entry T8087_DB[] = {
+    N1(000,  CF_00, TEXT_FILD,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FIST,   SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FISTP,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FLD,    SZ_TBYTE, M_FMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FSTP,   SZ_TBYTE, M_FMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_DB[] = {
+      0,  // TEXT_FILD
+      1,  // TEXT_FIST
+      2,  // TEXT_FISTP
+      3,  // TEXT_FLD
+      4,  // TEXT_FSTP
+};
+
+constexpr Entry T8087_DBN[] = {
+    E0(0xE0, CF_00, TEXT_FNENI,  SZ_NONE),
+    E0(0xE1, CF_00, TEXT_FNDISI, SZ_NONE),
+    E0(0xE2, CF_00, TEXT_FNCLEX, SZ_NONE),
+    E0(0xE3, CF_00, TEXT_FNINIT, SZ_NONE),
+};
+
+constexpr uint8_t I8087_DBN[] = {
+      2,  // TEXT_FNCLEX
+      1,  // TEXT_FNDISI
+      0,  // TEXT_FNENI
+      3,  // TEXT_FNINIT
+};
+
+constexpr Entry T8087_DC[] = {
+    E2(0xC0, CF_07, TEXT_FADD,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xC8, CF_07, TEXT_FMUL,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xE8, CF_07, TEXT_FSUB,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xE0, CF_07, TEXT_FSUBR, SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xF8, CF_07, TEXT_FDIV,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xF0, CF_07, TEXT_FDIVR, SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    N1(000,  CF_00, TEXT_FADD,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FMUL,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FCOM,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FCOMP, SZ_QWORD, M_FMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FSUB,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FSUBR, SZ_QWORD, M_FMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FDIV,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FDIVR, SZ_QWORD, M_FMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_DC[] = {
+      0,  // TEXT_FADD
+      6,  // TEXT_FADD
+      8,  // TEXT_FCOM
+      9,  // TEXT_FCOMP
+      4,  // TEXT_FDIV
+     12,  // TEXT_FDIV
+      5,  // TEXT_FDIVR
+     13,  // TEXT_FDIVR
+      1,  // TEXT_FMUL
+      7,  // TEXT_FMUL
+      2,  // TEXT_FSUB
+     10,  // TEXT_FSUB
+      3,  // TEXT_FSUBR
+     11,  // TEXT_FSUBR
+};
+
+constexpr Entry T8087_DD[] = {
+    E1(0xC0, CF_07, TEXT_FFREE,  SZ_NONE,  M_STI,  P_OREG),
+    E1(0xD0, CF_07, TEXT_FST,    SZ_NONE,  M_STI,  P_OREG),
+    E1(0xD8, CF_07, TEXT_FSTP,   SZ_NONE,  M_STI,  P_OREG),
+    N1(000,  CF_00, TEXT_FLD,    SZ_QWORD, M_FMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FST,    SZ_QWORD, M_FMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FSTP,   SZ_QWORD, M_FMEM, P_OMOD),
+    E1(040,  CF_00, TEXT_FRSTOR, SZ_NONE,  M_MEM,  P_OMOD),
+};
+
+constexpr uint8_t I8087_DD[] = {
+      0,  // TEXT_FFREE
+      3,  // TEXT_FLD
+      6,  // TEXT_FRSTOR
+      1,  // TEXT_FST
+      4,  // TEXT_FST
+      2,  // TEXT_FSTP
+      5,  // TEXT_FSTP
+};
+
+constexpr Entry T8087_DDN[] = {
+    E1(060,  CF_00, TEXT_FNSAVE, SZ_NONE,  M_MEM,  P_OMOD),
+    E1(070,  CF_00, TEXT_FNSTSW, SZ_WORD,  M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_DDN[] = {
+      0,  // TEXT_FNSAVE
+      1,  // TEXT_FNSTSW
+};
+
+constexpr Entry T8087_DE[] = {
+    E2(0xC0, CF_07, TEXT_FADDP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xC8, CF_07, TEXT_FMULP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E0(0xD9, CF_00, TEXT_FCOMPP, SZ_NONE),
+    E2(0xE0, CF_07, TEXT_FSUBRP, SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xE8, CF_07, TEXT_FSUBP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xF0, CF_07, TEXT_FDIVRP, SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xF8, CF_07, TEXT_FDIVP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    N1(000,  CF_00, TEXT_FIADD,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FIMUL,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FICOM,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FICOMP, SZ_WORD, M_WMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FISUB,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FISUBR, SZ_WORD, M_WMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FIDIV,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FIDIVR, SZ_WORD, M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_DE[] = {
+      0,  // TEXT_FADDP
+      2,  // TEXT_FCOMPP
+      6,  // TEXT_FDIVP
+      5,  // TEXT_FDIVRP
+      7,  // TEXT_FIADD
+      9,  // TEXT_FICOM
+     10,  // TEXT_FICOMP
+     13,  // TEXT_FIDIV
+     14,  // TEXT_FIDIVR
+      8,  // TEXT_FIMUL
+     11,  // TEXT_FISUB
+     12,  // TEXT_FISUBR
+      1,  // TEXT_FMULP
+      4,  // TEXT_FSUBP
+      3,  // TEXT_FSUBRP
+};
+
+constexpr Entry T8087_DF[] = {
+    N1(000,  CF_00, TEXT_FILD,  SZ_WORD,  M_WMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FIST,  SZ_WORD,  M_WMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FISTP, SZ_WORD,  M_WMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FBLD,  SZ_TBYTE, M_FMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FILD,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FBSTP, SZ_TBYTE, M_FMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FISTP, SZ_QWORD, M_FMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_DF[] = {
+      3,  // TEXT_FBLD
+      5,  // TEXT_FBSTP
+      0,  // TEXT_FILD
+      4,  // TEXT_FILD
+      1,  // TEXT_FIST
+      2,  // TEXT_FISTP
+      6,  // TEXT_FISTP
+};
+
+constexpr Entry T8087_9BD9[] = {
+    E1(060,  CF_00, TEXT_FSTENV, SZ_NONE, M_MEM,  P_OMOD),
+    E1(070,  CF_00, TEXT_FSTCW,  SZ_WORD, M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_9BD9[] = {
+      1,  // TEXT_FSTCW
+      0,  // TEXT_FSTENV
+};
+
+constexpr Entry T8087_9BDB[] = {
+    E0(0xE0, CF_00, TEXT_FENI,  SZ_NONE),
+    E0(0xE1, CF_00, TEXT_FDISI, SZ_NONE),
+    E0(0xE2, CF_00, TEXT_FCLEX, SZ_NONE),
+    E0(0xE3, CF_00, TEXT_FINIT, SZ_NONE),
+};
+
+constexpr uint8_t I8087_9BDB[] = {
+      2,  // TEXT_FCLEX
+      1,  // TEXT_FDISI
+      0,  // TEXT_FENI
+      3,  // TEXT_FINIT
+};
+
+constexpr Entry T8087_9BDD[] = {
+    E1(060,  CF_00, TEXT_FSAVE, SZ_NONE, M_MEM,  P_OMOD),
+    E1(070,  CF_00, TEXT_FSTSW, SZ_WORD, M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_9BDD[] = {
+      0,  // TEXT_FSAVE
+      1,  // TEXT_FSTSW
+};
+
+// 8087 instructions with no preceding WAIT under --fwait=auto.
+constexpr Entry T8087_FN_D8[] = {
+    E2(0xC0, CF_07, TEXT_FNADD,  SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xC8, CF_07, TEXT_FNMUL,  SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E1(0xD0, CF_07, TEXT_FNCOM,  SZ_NONE,  M_STI,  P_OREG),
+    E1(0xD8, CF_07, TEXT_FNCOMP, SZ_NONE,  M_STI,  P_OREG),
+    E2(0xE0, CF_07, TEXT_FNSUB,  SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xE8, CF_07, TEXT_FNSUBR, SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xF0, CF_07, TEXT_FNDIV,  SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    E2(0xF8, CF_07, TEXT_FNDIVR, SZ_NONE,  M_ST0,  M_STI,  P_NONE, P_OREG),
+    N1(000,  CF_00, TEXT_FNADD,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FNMUL,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNCOM,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNCOMP, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FNSUB,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FNSUBR, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FNDIV,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FNDIVR, SZ_DWORD, M_DMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_D8[] = {
+      0,  // TEXT_FNADD
+      8,  // TEXT_FNADD
+      2,  // TEXT_FNCOM
+     10,  // TEXT_FNCOM
+      3,  // TEXT_FNCOMP
+     11,  // TEXT_FNCOMP
+      6,  // TEXT_FNDIV
+     14,  // TEXT_FNDIV
+      7,  // TEXT_FNDIVR
+     15,  // TEXT_FNDIVR
+      1,  // TEXT_FNMUL
+      9,  // TEXT_FNMUL
+      4,  // TEXT_FNSUB
+     12,  // TEXT_FNSUB
+      5,  // TEXT_FNSUBR
+     13,  // TEXT_FNSUBR
+};
+
+constexpr Entry T8087_FN_D9[] = {
+    E1(0xC0, CF_07, TEXT_FNLD,     SZ_NONE,  M_STI,  P_OREG),
+    E1(0xC8, CF_07, TEXT_FNXCH,    SZ_NONE,  M_STI,  P_OREG),
+    E0(0xD0, CF_00, TEXT_FNNOP,    SZ_NONE),
+    E0(0xE0, CF_00, TEXT_FNCHS,    SZ_NONE),
+    E0(0xE1, CF_00, TEXT_FNABS,    SZ_NONE),
+    E0(0xE4, CF_00, TEXT_FNTST,    SZ_NONE),
+    E0(0xE5, CF_00, TEXT_FNXAM,    SZ_NONE),
+    E0(0xE8, CF_00, TEXT_FNLD1,    SZ_NONE),
+    E0(0xE9, CF_00, TEXT_FNLDL2T,  SZ_NONE),
+    E0(0xEA, CF_00, TEXT_FNLDL2E,  SZ_NONE),
+    E0(0xEB, CF_00, TEXT_FNLDPI,   SZ_NONE),
+    E0(0xEC, CF_00, TEXT_FNLDLG2,  SZ_NONE),
+    E0(0xED, CF_00, TEXT_FNLDLN2,  SZ_NONE),
+    E0(0xEE, CF_00, TEXT_FNLDZ,    SZ_NONE),
+    E0(0xF0, CF_00, TEXT_FN2XM1,   SZ_NONE),
+    E0(0xF1, CF_00, TEXT_FNYL2X,   SZ_NONE),
+    E0(0xF2, CF_00, TEXT_FNPTAN,   SZ_NONE),
+    E0(0xF3, CF_00, TEXT_FNPATAN,  SZ_NONE),
+    E0(0xF4, CF_00, TEXT_FNXTRACT, SZ_NONE),
+    E0(0xF6, CF_00, TEXT_FNDECSTP, SZ_NONE),
+    E0(0xF7, CF_00, TEXT_FNINCSTP, SZ_NONE),
+    E0(0xF8, CF_00, TEXT_FNPREM,   SZ_NONE),
+    E0(0xF9, CF_00, TEXT_FNYL2XP1, SZ_NONE),
+    E0(0xFA, CF_00, TEXT_FNSQRT,   SZ_NONE),
+    E0(0xFC, CF_00, TEXT_FNRNDINT, SZ_NONE),
+    E0(0xFD, CF_00, TEXT_FNSCALE,  SZ_NONE),
+    N1(000,  CF_00, TEXT_FNLD,     SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNST,     SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNSTP,    SZ_DWORD, M_DMEM, P_OMOD),
+    E1(040,  CF_00, TEXT_FNLDENV,  SZ_NONE,  M_MEM,  P_OMOD),
+    E1(050,  CF_00, TEXT_FNLDCW,   SZ_WORD,  M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_D9[] = {
+     14,  // TEXT_FN2XM1
+      4,  // TEXT_FNABS
+      3,  // TEXT_FNCHS
+     19,  // TEXT_FNDECSTP
+     20,  // TEXT_FNINCSTP
+      0,  // TEXT_FNLD
+     26,  // TEXT_FNLD
+      7,  // TEXT_FNLD1
+     30,  // TEXT_FNLDCW
+     29,  // TEXT_FNLDENV
+      9,  // TEXT_FNLDL2E
+      8,  // TEXT_FNLDL2T
+     11,  // TEXT_FNLDLG2
+     12,  // TEXT_FNLDLN2
+     10,  // TEXT_FNLDPI
+     13,  // TEXT_FNLDZ
+      2,  // TEXT_FNNOP
+     17,  // TEXT_FNPATAN
+     21,  // TEXT_FNPREM
+     16,  // TEXT_FNPTAN
+     24,  // TEXT_FNRNDINT
+     25,  // TEXT_FNSCALE
+     23,  // TEXT_FNSQRT
+     27,  // TEXT_FNST
+     28,  // TEXT_FNSTP
+      5,  // TEXT_FNTST
+      6,  // TEXT_FNXAM
+      1,  // TEXT_FNXCH
+     18,  // TEXT_FNXTRACT
+     15,  // TEXT_FNYL2X
+     22,  // TEXT_FNYL2XP1
+};
+
+constexpr Entry T8087_FN_DA[] = {
+    N1(000,  CF_00, TEXT_FNIADD,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FNIMUL,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNICOM,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNICOMP, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FNISUB,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FNISUBR, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FNIDIV,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FNIDIVR, SZ_DWORD, M_DMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_DA[] = {
+      0,  // TEXT_FNIADD
+      2,  // TEXT_FNICOM
+      3,  // TEXT_FNICOMP
+      6,  // TEXT_FNIDIV
+      7,  // TEXT_FNIDIVR
+      1,  // TEXT_FNIMUL
+      4,  // TEXT_FNISUB
+      5,  // TEXT_FNISUBR
+};
+
+constexpr Entry T8087_FN_DB[] = {
+    N1(000,  CF_00, TEXT_FNILD,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNIST,  SZ_DWORD, M_DMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNISTP, SZ_DWORD, M_DMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FNLD,   SZ_TBYTE, M_FMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FNSTP,  SZ_TBYTE, M_FMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_DB[] = {
+      0,  // TEXT_FNILD
+      1,  // TEXT_FNIST
+      2,  // TEXT_FNISTP
+      3,  // TEXT_FNLD
+      4,  // TEXT_FNSTP
+};
+
+constexpr Entry T8087_FN_DC[] = {
+    E2(0xC0, CF_07, TEXT_FNADD,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xC8, CF_07, TEXT_FNMUL,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xE8, CF_07, TEXT_FNSUB,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xE0, CF_07, TEXT_FNSUBR, SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xF8, CF_07, TEXT_FNDIV,  SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    E2(0xF0, CF_07, TEXT_FNDIVR, SZ_NONE,  M_STI,  M_ST0,  P_OREG, P_NONE),
+    N1(000,  CF_00, TEXT_FNADD,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FNMUL,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNCOM,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNCOMP, SZ_QWORD, M_FMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FNSUB,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FNSUBR, SZ_QWORD, M_FMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FNDIV,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FNDIVR, SZ_QWORD, M_FMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_DC[] = {
+      0,  // TEXT_FNADD
+      6,  // TEXT_FNADD
+      8,  // TEXT_FNCOM
+      9,  // TEXT_FNCOMP
+      4,  // TEXT_FNDIV
+     12,  // TEXT_FNDIV
+      5,  // TEXT_FNDIVR
+     13,  // TEXT_FNDIVR
+      1,  // TEXT_FNMUL
+      7,  // TEXT_FNMUL
+      2,  // TEXT_FNSUB
+     10,  // TEXT_FNSUB
+      3,  // TEXT_FNSUBR
+     11,  // TEXT_FNSUBR
+};
+
+constexpr Entry T8087_FN_DD[] = {
+    E1(0xC0, CF_07, TEXT_FNFREE,  SZ_NONE,  M_STI,  P_OREG),
+    E1(0xD0, CF_07, TEXT_FNST,    SZ_NONE,  M_STI,  P_OREG),
+    E1(0xD8, CF_07, TEXT_FNSTP,   SZ_NONE,  M_STI,  P_OREG),
+    N1(000,  CF_00, TEXT_FNLD,    SZ_QWORD, M_FMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNST,    SZ_QWORD, M_FMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNSTP,   SZ_QWORD, M_FMEM, P_OMOD),
+    E1(040,  CF_00, TEXT_FNRSTOR, SZ_NONE,  M_MEM,  P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_DD[] = {
+      0,  // TEXT_FNFREE
+      3,  // TEXT_FNLD
+      6,  // TEXT_FNRSTOR
+      1,  // TEXT_FNST
+      4,  // TEXT_FNST
+      2,  // TEXT_FNSTP
+      5,  // TEXT_FNSTP
+};
+
+constexpr Entry T8087_FN_DE[] = {
+    E2(0xC0, CF_07, TEXT_FNADDP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xC8, CF_07, TEXT_FNMULP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E0(0xD9, CF_00, TEXT_FNCOMPP, SZ_NONE),
+    E2(0xE0, CF_07, TEXT_FNSUBRP, SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xE8, CF_07, TEXT_FNSUBP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xF0, CF_07, TEXT_FNDIVRP, SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    E2(0xF8, CF_07, TEXT_FNDIVP,  SZ_NONE, M_STI,  M_ST0, P_OREG, P_NONE),
+    N1(000,  CF_00, TEXT_FNIADD,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(010,  CF_00, TEXT_FNIMUL,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNICOM,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNICOMP, SZ_WORD, M_WMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FNISUB,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FNISUBR, SZ_WORD, M_WMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FNIDIV,  SZ_WORD, M_WMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FNIDIVR, SZ_WORD, M_WMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_DE[] = {
+      0,  // TEXT_FNADDP
+      2,  // TEXT_FNCOMPP
+      6,  // TEXT_FNDIVP
+      5,  // TEXT_FNDIVRP
+      7,  // TEXT_FNIADD
+      9,  // TEXT_FNICOM
+     10,  // TEXT_FNICOMP
+     13,  // TEXT_FNIDIV
+     14,  // TEXT_FNIDIVR
+      8,  // TEXT_FNIMUL
+     11,  // TEXT_FNISUB
+     12,  // TEXT_FNISUBR
+      1,  // TEXT_FNMULP
+      4,  // TEXT_FNSUBP
+      3,  // TEXT_FNSUBRP
+};
+
+constexpr Entry T8087_FN_DF[] = {
+    N1(000,  CF_00, TEXT_FNILD,  SZ_WORD,  M_WMEM, P_OMOD),
+    N1(020,  CF_00, TEXT_FNIST,  SZ_WORD,  M_WMEM, P_OMOD),
+    N1(030,  CF_00, TEXT_FNISTP, SZ_WORD,  M_WMEM, P_OMOD),
+    N1(040,  CF_00, TEXT_FNBLD,  SZ_TBYTE, M_FMEM, P_OMOD),
+    N1(050,  CF_00, TEXT_FNILD,  SZ_QWORD, M_FMEM, P_OMOD),
+    N1(060,  CF_00, TEXT_FNBSTP, SZ_TBYTE, M_FMEM, P_OMOD),
+    N1(070,  CF_00, TEXT_FNISTP, SZ_QWORD, M_FMEM, P_OMOD),
+};
+
+constexpr uint8_t I8087_FN_DF[] = {
+      3,  // TEXT_FNBLD
+      5,  // TEXT_FNBSTP
+      0,  // TEXT_FNILD
+      4,  // TEXT_FNILD
+      1,  // TEXT_FNIST
+      2,  // TEXT_FNISTP
+      6,  // TEXT_FNISTP
+};
+
+constexpr Entry T80287_DB[] = {
+    E0(0xE4, CF_00, TEXT_FNSETPM, SZ_NONE),
+};
+
+constexpr uint8_t I80287_DB[] = {
+      0,  // TEXT_FNSETPM
+};
+
+constexpr Entry T80287_DF[] = {
+    E1(0xE0, CF_00, TEXT_FNSTSW, SZ_NONE,  M_AX, P_NONE),
+};
+
+constexpr uint8_t I80287_DF[] = {
+      0,  // TEXT_FNSTSW
+};
+
+// i80287 WAIT forms (9B prefix): FSETPM (9B DB E4) and FSTSW AX (9B DF E0),
+// the WAIT counterparts of FNSETPM/FNSTSW AX.
+constexpr Entry T80287_9BDB[] = {
+    E0(0xE4, CF_00, TEXT_FSETPM, SZ_NONE),
+};
+
+constexpr uint8_t I80287_9BDB[] = {
+      0,  // TEXT_FSETPM
+};
+
+constexpr Entry T80287_9BDF[] = {
+    E1(0xE0, CF_00, TEXT_FSTSW, SZ_NONE, M_AX, P_NONE),
+};
+
+constexpr uint8_t I80287_9BDF[] = {
+      0,  // TEXT_FSTSW
+};
+
+constexpr Entry T80387_D9[] = {
+    E0(0xF5, CF_00, TEXT_FPREM1,  SZ_NONE),
+    E0(0xFB, CF_00, TEXT_FSINCOS, SZ_NONE),
+    E0(0xFE, CF_00, TEXT_FSIN,    SZ_NONE),
+    E0(0xFF, CF_00, TEXT_FCOS,    SZ_NONE),
+};
+
+constexpr uint8_t I80387_D9[] = {
+      3,  // TEXT_FCOS
+      0,  // TEXT_FPREM1
+      2,  // TEXT_FSIN
+      1,  // TEXT_FSINCOS
+};
+
+constexpr Entry T80387_DA[] = {
+    E0(0xE9, CF_00, TEXT_FUCOMPP, SZ_NONE),
+};
+
+constexpr uint8_t I80387_DA[] = {
+      0,  // TEXT_FUCOMPP
+};
+
+constexpr Entry T80387_DD[] = {
+    E1(0xE0, CF_07, TEXT_FUCOM,  SZ_NONE, M_STI, P_OREG),
+    E1(0xE8, CF_07, TEXT_FUCOMP, SZ_NONE, M_STI, P_OREG),
+};
+
+constexpr uint8_t I80387_DD[] = {
+      0,  // TEXT_FUCOM
+      1,  // TEXT_FUCOMP
+};
+
+constexpr Entry T80287XL_DB[] = {
+    E0(0xF4, CF_00, TEXT_FNRSTPM, SZ_NONE),
+};
+
+constexpr uint8_t I80287XL_DB[] = {
+      0,  // TEXT_FNRSTPM
+};
+
+// i80287XL WAIT form (9B prefix): FRSTPM (9B DB F4)
+constexpr Entry T80287XL_9BDB[] = {
+    E0(0xF4, CF_00, TEXT_FRSTPM, SZ_NONE),
+};
+
+constexpr uint8_t I80287XL_9BDB[] = {
+      0,  // TEXT_FRSTPM
+};
+#endif
+
+// clang-format on
+
+using EntryPage = entry::PrefixTableBase<Entry>;
+
+constexpr EntryPage I8086_PAGES[] = {
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},  // M_WIMM
+        {0x8F, ARRAY_RANGE(T8086_8F), ARRAY_RANGE(I8086_8F)},
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T8086_FF), ARRAY_RANGE(I8086_FF)},
+};
+
+constexpr EntryPage I80186_PAGES[] = {
+        // i80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},  // M_WIMM
+        {0x8F, ARRAY_RANGE(T8086_8F), ARRAY_RANGE(I8086_8F)},
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T8086_FF), ARRAY_RANGE(I8086_FF)},
+};
+
+constexpr EntryPage I80286_PAGES[] = {
+        // i80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i80286
+        {0x00, ARRAY_RANGE(T80286_00), ARRAY_RANGE(I80286_00)},
+        {0x0F, ARRAY_RANGE(T80286_0F), ARRAY_RANGE(I80286_0F)},
+        {0x0F00, ARRAY_RANGE(T80286_0F00), ARRAY_RANGE(I80286_0F00)},
+        {0x0F01, ARRAY_RANGE(T80286_0F01), ARRAY_RANGE(I80286_0F01)},
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},  // M_WIMM
+        {0x8F, ARRAY_RANGE(T8086_8F), ARRAY_RANGE(I8086_8F)},
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T8086_FF), ARRAY_RANGE(I8086_FF)},
+};
+
+constexpr EntryPage I80386_PAGES[] = {
+        // i80386
+        {0x00, ARRAY_RANGE(TCODE16_00), ARRAY_RANGE(ICODE16_00)},
+        {0x00, ARRAY_RANGE(TCODE32_00), ARRAY_RANGE(ICODE32_00)},
+        // i80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i80286
+        {0x00, ARRAY_RANGE(T80286_00), ARRAY_RANGE(I80286_00)},
+        {0x0F, ARRAY_RANGE(T80286_0F), ARRAY_RANGE(I80286_0F)},
+        {0x0F00, ARRAY_RANGE(T80286_0F00), ARRAY_RANGE(I80286_0F00)},
+        {0x0F01, ARRAY_RANGE(T80286_0F01), ARRAY_RANGE(I80286_0F01)},
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},   // M_WIMM
+        {0x8F, ARRAY_RANGE(T80386_8F), ARRAY_RANGE(I8086_8F)},  // i80386
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T80386_FF), ARRAY_RANGE(I8086_FF)},  // i80386
+        // i80386
+        {0x00, ARRAY_RANGE(T80386_00), ARRAY_RANGE(I80386_00)},
+        {0x0F, ARRAY_RANGE(T80386_0F), ARRAY_RANGE(I80386_0F)},
+        {0x0FBA, ARRAY_RANGE(T80386_0FBA), ARRAY_RANGE(I80386_0FBA)},
+};
+
+constexpr EntryPage I80486_PAGES[] = {
+        // i80386 inherited
+        {0x00, ARRAY_RANGE(TCODE16_00), ARRAY_RANGE(ICODE16_00)},
+        {0x00, ARRAY_RANGE(TCODE32_00), ARRAY_RANGE(ICODE32_00)},
+        // i80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i80286
+        {0x00, ARRAY_RANGE(T80286_00), ARRAY_RANGE(I80286_00)},
+        {0x0F, ARRAY_RANGE(T80286_0F), ARRAY_RANGE(I80286_0F)},
+        {0x0F00, ARRAY_RANGE(T80286_0F00), ARRAY_RANGE(I80286_0F00)},
+        {0x0F01, ARRAY_RANGE(T80286_0F01), ARRAY_RANGE(I80286_0F01)},
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},   // M_WIMM
+        {0x8F, ARRAY_RANGE(T80386_8F), ARRAY_RANGE(I8086_8F)},  // i80386
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T80386_FF), ARRAY_RANGE(I8086_FF)},  // i80386
+        // i80386
+        {0x00, ARRAY_RANGE(T80386_00), ARRAY_RANGE(I80386_00)},
+        {0x0F, ARRAY_RANGE(T80386_0F), ARRAY_RANGE(I80386_0F)},
+        {0x0FBA, ARRAY_RANGE(T80386_0FBA), ARRAY_RANGE(I80386_0FBA)},
+        // i80486
+        {0x0F,   ARRAY_RANGE(T80486_0F),   ARRAY_RANGE(I80486_0F)},
+        {0x0F01, ARRAY_RANGE(T80486_0F01), ARRAY_RANGE(I80486_0F01)},
+};
+
+constexpr EntryPage V30_PAGES[] = {
+        // V30
+        {0x0F, ARRAY_RANGE(TV30_0F), ARRAY_RANGE(IV30_0F)},
+        // V series
+        {0x00, ARRAY_RANGE(TVSERIES_00), ARRAY_RANGE(IVSERIES_00)},
+        {0x0F, ARRAY_RANGE(TVSERIES_0F), ARRAY_RANGE(IVSERIES_0F)},
+        // I80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},  // M_WIMM
+        {0x8F, ARRAY_RANGE(T8086_8F), ARRAY_RANGE(I8086_8F)},
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T8086_FF), ARRAY_RANGE(I8086_FF)},
+};
+
+constexpr EntryPage V33_PAGES[] = {
+        // V33
+        {0x0F, ARRAY_RANGE(TV33_0F), ARRAY_RANGE(IV33_0F)},
+        // V series
+        {0x00, ARRAY_RANGE(TVSERIES_00), ARRAY_RANGE(IVSERIES_00)},
+        {0x0F, ARRAY_RANGE(TVSERIES_0F), ARRAY_RANGE(IVSERIES_0F)},
+        // I80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},  // M_WIMM
+        {0x8F, ARRAY_RANGE(T8086_8F), ARRAY_RANGE(I8086_8F)},
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T8086_FF), ARRAY_RANGE(I8086_FF)},
+};
+
+constexpr EntryPage V35_PAGES[] = {
+        // V35
+        {0x0F2D, ARRAY_RANGE(TV35_0F2D), ARRAY_RANGE(IV35_0F2D)},
+        {0x0F94, ARRAY_RANGE(TV35_0F94), ARRAY_RANGE(IV35_0F94)},
+        {0x0F95, ARRAY_RANGE(TV35_0F95), ARRAY_RANGE(IV35_0F95)},
+        {0x0F,   ARRAY_RANGE(TV35_0F),   ARRAY_RANGE(IV35_0F)},
+        // V series
+        {0x00, ARRAY_RANGE(TVSERIES_00), ARRAY_RANGE(IVSERIES_00)},
+        {0x0F, ARRAY_RANGE(TVSERIES_0F), ARRAY_RANGE(IVSERIES_0F)},
+        // I80186
+        {0x00, ARRAY_RANGE(T80186_00), ARRAY_RANGE(I80186_00)},
+        {0xD0, ARRAY_RANGE(T8086_D0), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xD1, ARRAY_RANGE(T8086_D1), ARRAY_RANGE(I8086_DX)},    // M_VAL1
+        {0xC0, ARRAY_RANGE(T80186_C0), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        {0xC1, ARRAY_RANGE(T80186_C1), ARRAY_RANGE(I80186_CX)},  // M_BIT
+        // i8086
+        {0x83, ARRAY_RANGE(T8086_83), ARRAY_RANGE(I8086_8X)},  // M_BIMM
+        {0x00, ARRAY_RANGE(T8086_00), ARRAY_RANGE(I8086_00)},
+        {0x80, ARRAY_RANGE(T8086_80), ARRAY_RANGE(I8086_8X)},
+        {0x81, ARRAY_RANGE(T8086_81), ARRAY_RANGE(I8086_8X)},  // M_WIMM
+        {0x8F, ARRAY_RANGE(T8086_8F), ARRAY_RANGE(I8086_8F)},
+        {0xC6, ARRAY_RANGE(T8086_C6), ARRAY_RANGE(I8086_C6)},
+        {0xC7, ARRAY_RANGE(T8086_C7), ARRAY_RANGE(I8086_C7)},
+        {0xD2, ARRAY_RANGE(T8086_D2), ARRAY_RANGE(I8086_DX)},
+        {0xD3, ARRAY_RANGE(T8086_D3), ARRAY_RANGE(I8086_DX)},
+        {0xD4, ARRAY_RANGE(T8086_D4), ARRAY_RANGE(I8086_D4)},
+        {0xD5, ARRAY_RANGE(T8086_D5), ARRAY_RANGE(I8086_D5)},
+        {0xF6, ARRAY_RANGE(T8086_F6), ARRAY_RANGE(I8086_FX)},
+        {0xF7, ARRAY_RANGE(T8086_F7), ARRAY_RANGE(I8086_FX)},
+        {0xFE, ARRAY_RANGE(T8086_FE), ARRAY_RANGE(I8086_FE)},
+        {0xFF, ARRAY_RANGE(T8086_FF), ARRAY_RANGE(I8086_FF)},
+};
+
+using Cpu = entry::CpuBase<CpuType, EntryPage>;
+
+constexpr Cpu CPU_TABLE[] = {
+        {I8086, TEXT_CPU_8086, ARRAY_RANGE(I8086_PAGES)},
+        {I80186, TEXT_CPU_80186, ARRAY_RANGE(I80186_PAGES)},
+        {I80286, TEXT_CPU_80286, ARRAY_RANGE(I80286_PAGES)},
+        {I80386, TEXT_CPU_80386, ARRAY_RANGE(I80386_PAGES)},
+        {I80486, TEXT_CPU_80486, ARRAY_RANGE(I80486_PAGES)},
+        {V30, TEXT_CPU_V30, ARRAY_RANGE(V30_PAGES)},
+        {V33, TEXT_CPU_V33, ARRAY_RANGE(V33_PAGES)},
+        {V35, TEXT_CPU_V35, ARRAY_RANGE(V35_PAGES)},
+};
+
+const Cpu *cpu(CpuType cpuType) {
+    return Cpu::search(cpuType, ARRAY_RANGE(CPU_TABLE));
+}
+
+#define EMPTY_RANGE(a) ARRAY_BEGIN(a), ARRAY_BEGIN(a)
+
+#if !defined(LIBASM_I8086_NOFPU)
+constexpr EntryPage I8087_PAGES[] = {
+        // i8087
+        {0xD8, ARRAY_RANGE(T8087_D8), ARRAY_RANGE(I8087_D8)},
+        {0xD9, ARRAY_RANGE(T8087_D9), ARRAY_RANGE(I8087_D9)},
+        {0xD9, ARRAY_RANGE(T8087_D9N), ARRAY_RANGE(I8087_D9N)},
+        {0xDA, ARRAY_RANGE(T8087_DA), ARRAY_RANGE(I8087_DA)},
+        {0xDB, ARRAY_RANGE(T8087_DB), ARRAY_RANGE(I8087_DB)},
+        {0xDB, ARRAY_RANGE(T8087_DBN), ARRAY_RANGE(I8087_DBN)},
+        {0xDC, ARRAY_RANGE(T8087_DC), ARRAY_RANGE(I8087_DC)},
+        {0xDD, ARRAY_RANGE(T8087_DD), ARRAY_RANGE(I8087_DD)},
+        {0xDD, ARRAY_RANGE(T8087_DDN), ARRAY_RANGE(I8087_DDN)},
+        {0xDE, ARRAY_RANGE(T8087_DE), ARRAY_RANGE(I8087_DE)},
+        {0xDF, ARRAY_RANGE(T8087_DF), ARRAY_RANGE(I8087_DF)},
+        {0x00, ARRAY_RANGE(T8087_00), ARRAY_RANGE(I8087_00)},
+        {0x9BD9, ARRAY_RANGE(T8087_9BD9), ARRAY_RANGE(I8087_9BD9)},
+        {0x9BDB, ARRAY_RANGE(T8087_9BDB), ARRAY_RANGE(I8087_9BDB)},
+        {0x9BDD, ARRAY_RANGE(T8087_9BDD), ARRAY_RANGE(I8087_9BDD)},
+};
+
+constexpr EntryPage I8087_AUTO_PAGES[] = {
+        // i8087 with a WAIT
+        {0x9BD8, ARRAY_RANGE(T8087_D8), ARRAY_RANGE(I8087_D8)},
+        {0x9BD9, ARRAY_RANGE(T8087_D9), ARRAY_RANGE(I8087_D9)},
+        {0x9BDA, ARRAY_RANGE(T8087_DA), ARRAY_RANGE(I8087_DA)},
+        {0x9BDB, ARRAY_RANGE(T8087_DB), ARRAY_RANGE(I8087_DB)},
+        {0x9BDC, ARRAY_RANGE(T8087_DC), ARRAY_RANGE(I8087_DC)},
+        {0x9BDD, ARRAY_RANGE(T8087_DD), ARRAY_RANGE(I8087_DD)},
+        {0x9BDE, ARRAY_RANGE(T8087_DE), ARRAY_RANGE(I8087_DE)},
+        {0x9BDF, ARRAY_RANGE(T8087_DF), ARRAY_RANGE(I8087_DF)},
+        {0x00, ARRAY_RANGE(T8087_00), ARRAY_RANGE(I8087_00)},
+        {0x9BD9, ARRAY_RANGE(T8087_9BD9), ARRAY_RANGE(I8087_9BD9)},
+        {0x9BDB, ARRAY_RANGE(T8087_9BDB), ARRAY_RANGE(I8087_9BDB)},
+        {0x9BDD, ARRAY_RANGE(T8087_9BDD), ARRAY_RANGE(I8087_9BDD)},
+        // i8087 without a WAIT
+        {0xD9, ARRAY_RANGE(T8087_D9N), ARRAY_RANGE(I8087_D9N)},
+        {0xDB, ARRAY_RANGE(T8087_DBN), ARRAY_RANGE(I8087_DBN)},
+        {0xDD, ARRAY_RANGE(T8087_DDN), ARRAY_RANGE(I8087_DDN)},
+        {0xD8, ARRAY_RANGE(T8087_FN_D8), ARRAY_RANGE(I8087_FN_D8)},
+        {0xD9, ARRAY_RANGE(T8087_FN_D9), ARRAY_RANGE(I8087_FN_D9)},
+        {0xDA, ARRAY_RANGE(T8087_FN_DA), ARRAY_RANGE(I8087_FN_DA)},
+        {0xDB, ARRAY_RANGE(T8087_FN_DB), ARRAY_RANGE(I8087_FN_DB)},
+        {0xDC, ARRAY_RANGE(T8087_FN_DC), ARRAY_RANGE(I8087_FN_DC)},
+        {0xDD, ARRAY_RANGE(T8087_FN_DD), ARRAY_RANGE(I8087_FN_DD)},
+        {0xDE, ARRAY_RANGE(T8087_FN_DE), ARRAY_RANGE(I8087_FN_DE)},
+        {0xDF, ARRAY_RANGE(T8087_FN_DF), ARRAY_RANGE(I8087_FN_DF)},
+};
+
+constexpr EntryPage I8087_ASM86_PAGES[] = {
+        // i8087 with a WAIT
+        {0x9BD8, ARRAY_RANGE(T8087_D8), ARRAY_RANGE(I8087_D8)},
+        {0x9BD9, ARRAY_RANGE(T8087_D9), ARRAY_RANGE(I8087_D9)},
+        {0x9BDA, ARRAY_RANGE(T8087_DA), ARRAY_RANGE(I8087_DA)},
+        {0x9BDB, ARRAY_RANGE(T8087_DB), ARRAY_RANGE(I8087_DB)},
+        {0x9BDC, ARRAY_RANGE(T8087_DC), ARRAY_RANGE(I8087_DC)},
+        {0x9BDD, ARRAY_RANGE(T8087_DD), ARRAY_RANGE(I8087_DD)},
+        {0x9BDE, ARRAY_RANGE(T8087_DE), ARRAY_RANGE(I8087_DE)},
+        {0x9BDF, ARRAY_RANGE(T8087_DF), ARRAY_RANGE(I8087_DF)},
+        {0x00, ARRAY_RANGE(T8087_00), ARRAY_RANGE(I8087_00)},
+        {0x9BD9, ARRAY_RANGE(T8087_9BD9), ARRAY_RANGE(I8087_9BD9)},
+        {0x9BDB, ARRAY_RANGE(T8087_9BDB), ARRAY_RANGE(I8087_9BDB)},
+        {0x9BDD, ARRAY_RANGE(T8087_9BDD), ARRAY_RANGE(I8087_9BDD)},
+        // i8087 no-wait forms with a NOP
+        {0x90D9, ARRAY_RANGE(T8087_D9N), ARRAY_RANGE(I8087_D9N)},
+        {0x90DB, ARRAY_RANGE(T8087_DBN), ARRAY_RANGE(I8087_DBN)},
+        {0x90DD, ARRAY_RANGE(T8087_DDN), ARRAY_RANGE(I8087_DDN)},
+};
+
+constexpr EntryPage I80287_PAGES[] = {
+        // i8087
+        {0xD8, ARRAY_RANGE(T8087_D8), ARRAY_RANGE(I8087_D8)},
+        {0xD9, ARRAY_RANGE(T8087_D9), ARRAY_RANGE(I8087_D9)},
+        {0xD9, ARRAY_RANGE(T8087_D9N), ARRAY_RANGE(I8087_D9N)},
+        {0xDA, ARRAY_RANGE(T8087_DA), ARRAY_RANGE(I8087_DA)},
+        {0xDB, ARRAY_RANGE(T8087_DB), ARRAY_RANGE(I8087_DB)},
+        {0xDB, ARRAY_RANGE(T8087_DBN), ARRAY_RANGE(I8087_DBN)},
+        {0xDC, ARRAY_RANGE(T8087_DC), ARRAY_RANGE(I8087_DC)},
+        {0xDD, ARRAY_RANGE(T8087_DD), ARRAY_RANGE(I8087_DD)},
+        {0xDD, ARRAY_RANGE(T8087_DDN), ARRAY_RANGE(I8087_DDN)},
+        {0xDE, ARRAY_RANGE(T8087_DE), ARRAY_RANGE(I8087_DE)},
+        {0xDF, ARRAY_RANGE(T8087_DF), ARRAY_RANGE(I8087_DF)},
+        {0x00, ARRAY_RANGE(T8087_00), ARRAY_RANGE(I8087_00)},
+        {0x9BD9, ARRAY_RANGE(T8087_9BD9), ARRAY_RANGE(I8087_9BD9)},
+        {0x9BDB, ARRAY_RANGE(T8087_9BDB), ARRAY_RANGE(I8087_9BDB)},
+        {0x9BDD, ARRAY_RANGE(T8087_9BDD), ARRAY_RANGE(I8087_9BDD)},
+        // i80287
+        {0xDB, ARRAY_RANGE(T80287_DB), ARRAY_RANGE(I80287_DB)},
+        {0xDF, ARRAY_RANGE(T80287_DF), ARRAY_RANGE(I80287_DF)},
+        {0x9BDB, ARRAY_RANGE(T80287_9BDB), ARRAY_RANGE(I80287_9BDB)},
+        {0x9BDF, ARRAY_RANGE(T80287_9BDF), ARRAY_RANGE(I80287_9BDF)},
+};
+
+constexpr EntryPage I80387_PAGES[] = {
+        // i8087
+        {0xD8, ARRAY_RANGE(T8087_D8), ARRAY_RANGE(I8087_D8)},
+        {0xD9, ARRAY_RANGE(T8087_D9), ARRAY_RANGE(I8087_D9)},
+        {0xD9, ARRAY_RANGE(T8087_D9N), ARRAY_RANGE(I8087_D9N)},
+        {0xDA, ARRAY_RANGE(T8087_DA), ARRAY_RANGE(I8087_DA)},
+        {0xDB, ARRAY_RANGE(T8087_DB), ARRAY_RANGE(I8087_DB)},
+        {0xDB, ARRAY_RANGE(T8087_DBN), ARRAY_RANGE(I8087_DBN)},
+        {0xDC, ARRAY_RANGE(T8087_DC), ARRAY_RANGE(I8087_DC)},
+        {0xDD, ARRAY_RANGE(T8087_DD), ARRAY_RANGE(I8087_DD)},
+        {0xDD, ARRAY_RANGE(T8087_DDN), ARRAY_RANGE(I8087_DDN)},
+        {0xDE, ARRAY_RANGE(T8087_DE), ARRAY_RANGE(I8087_DE)},
+        {0xDF, ARRAY_RANGE(T8087_DF), ARRAY_RANGE(I8087_DF)},
+        {0x00, ARRAY_RANGE(T8087_00), ARRAY_RANGE(I8087_00)},
+        {0x9BD9, ARRAY_RANGE(T8087_9BD9), ARRAY_RANGE(I8087_9BD9)},
+        {0x9BDB, ARRAY_RANGE(T8087_9BDB), ARRAY_RANGE(I8087_9BDB)},
+        {0x9BDD, ARRAY_RANGE(T8087_9BDD), ARRAY_RANGE(I8087_9BDD)},
+        // i80287
+        {0xDB, ARRAY_RANGE(T80287_DB), ARRAY_RANGE(I80287_DB)},
+        {0xDF, ARRAY_RANGE(T80287_DF), ARRAY_RANGE(I80287_DF)},
+        {0x9BDB, ARRAY_RANGE(T80287_9BDB), ARRAY_RANGE(I80287_9BDB)},
+        {0x9BDF, ARRAY_RANGE(T80287_9BDF), ARRAY_RANGE(I80287_9BDF)},
+        // i80387
+        {0xD9, ARRAY_RANGE(T80387_D9), ARRAY_RANGE(I80387_D9)},
+        {0xDA, ARRAY_RANGE(T80387_DA), ARRAY_RANGE(I80387_DA)},
+        {0xDD, ARRAY_RANGE(T80387_DD), ARRAY_RANGE(I80387_DD)},
+};
+
+constexpr EntryPage I80287XL_PAGES[] = {
+        // i8087
+        {0xD8, ARRAY_RANGE(T8087_D8), ARRAY_RANGE(I8087_D8)},
+        {0xD9, ARRAY_RANGE(T8087_D9), ARRAY_RANGE(I8087_D9)},
+        {0xD9, ARRAY_RANGE(T8087_D9N), ARRAY_RANGE(I8087_D9N)},
+        {0xDA, ARRAY_RANGE(T8087_DA), ARRAY_RANGE(I8087_DA)},
+        {0xDB, ARRAY_RANGE(T8087_DB), ARRAY_RANGE(I8087_DB)},
+        {0xDB, ARRAY_RANGE(T8087_DBN), ARRAY_RANGE(I8087_DBN)},
+        {0xDC, ARRAY_RANGE(T8087_DC), ARRAY_RANGE(I8087_DC)},
+        {0xDD, ARRAY_RANGE(T8087_DD), ARRAY_RANGE(I8087_DD)},
+        {0xDD, ARRAY_RANGE(T8087_DDN), ARRAY_RANGE(I8087_DDN)},
+        {0xDE, ARRAY_RANGE(T8087_DE), ARRAY_RANGE(I8087_DE)},
+        {0xDF, ARRAY_RANGE(T8087_DF), ARRAY_RANGE(I8087_DF)},
+        {0x00, ARRAY_RANGE(T8087_00), ARRAY_RANGE(I8087_00)},
+        {0x9BD9, ARRAY_RANGE(T8087_9BD9), ARRAY_RANGE(I8087_9BD9)},
+        {0x9BDB, ARRAY_RANGE(T8087_9BDB), ARRAY_RANGE(I8087_9BDB)},
+        {0x9BDD, ARRAY_RANGE(T8087_9BDD), ARRAY_RANGE(I8087_9BDD)},
+        // i80287
+        {0xDB, ARRAY_RANGE(T80287_DB), ARRAY_RANGE(I80287_DB)},
+        {0xDF, ARRAY_RANGE(T80287_DF), ARRAY_RANGE(I80287_DF)},
+        {0x9BDB, ARRAY_RANGE(T80287_9BDB), ARRAY_RANGE(I80287_9BDB)},
+        {0x9BDF, ARRAY_RANGE(T80287_9BDF), ARRAY_RANGE(I80287_9BDF)},
+        // i80387
+        {0xD9, ARRAY_RANGE(T80387_D9), ARRAY_RANGE(I80387_D9)},
+        {0xDA, ARRAY_RANGE(T80387_DA), ARRAY_RANGE(I80387_DA)},
+        {0xDD, ARRAY_RANGE(T80387_DD), ARRAY_RANGE(I80387_DD)},
+        // i80287XL
+        {0xDB, ARRAY_RANGE(T80287XL_DB), ARRAY_RANGE(I80287XL_DB)},
+        {0x9BDB, ARRAY_RANGE(T80287XL_9BDB), ARRAY_RANGE(I80287XL_9BDB)},
+};
+
+using Fpu = entry::CpuBase<FpuType, EntryPage>;
+
+constexpr Fpu FPU_TABLE[] = {
+        {FPU_I8087, TEXT_FPU_8087, ARRAY_RANGE(I8087_PAGES)},
+        {FPU_I8087_AUTO, TEXT_FPU_8087, ARRAY_RANGE(I8087_AUTO_PAGES)},
+        {FPU_I8087_ASM86, TEXT_FPU_8087, ARRAY_RANGE(I8087_ASM86_PAGES)},
+        {FPU_I80287, TEXT_FPU_80287, ARRAY_RANGE(I80287_PAGES)},
+        {FPU_I80387, TEXT_FPU_80387, ARRAY_RANGE(I80387_PAGES)},
+        {FPU_I80487, TEXT_FPU_80487, ARRAY_RANGE(I80387_PAGES)},
+        {FPU_I80C187, TEXT_FPU_80C187, ARRAY_RANGE(I80387_PAGES)},
+        {FPU_I80287XL, TEXT_FPU_80287XL, ARRAY_RANGE(I80287XL_PAGES)},
+        {FPU_NONE, TEXT_none, EMPTY_RANGE(I8087_PAGES)},
+};
+
+const Fpu *fpu(FpuType fpuType) {
+    return Fpu::search(fpuType, ARRAY_RANGE(FPU_TABLE));
+}
+#endif
+
+bool acceptMode(AddrMode opr, AddrMode table, OprPos pos) {
+    if (opr == table)
+        return true;
+    if (opr == M_AL || opr == M_CL)
+        return table == M_BREG || table == M_BMOD;
+    if (opr == M_AX || opr == M_DX || opr == M_CX)
+        return table == M_WREG || table == M_WMOD || table == M_WMOD16;
+    if (opr == M_BREG)
+        return table == M_BMOD;
+    if (opr == M_WREG)
+        return table == M_WMOD || table == M_WMOD16;
+    if (opr == M_ECX)
+        return table == M_WMOD || table == M_WREG || table == M_DREG || table == M_AX;
+    if (opr == M_DREG)
+        return table == M_WMOD || table == M_WREG || table == M_DREG || table == M_AX;
+    if (opr == M_MEM)  // checked by |acceptSize| later.
+        return table == M_BMOD || table == M_BMEM || table == M_WMOD || table == M_WMOD16 ||
+               table == M_WMEM || table == M_DMEM;
+    if (opr == M_DIR)  // checked by |acceptSize| later.
+        return table == M_BMOD || table == M_BMEM || table == M_BDIR || table == M_WMOD ||
+               table == M_WMOD16 || table == M_WMEM || table == M_WDIR || table == M_MEM;
+    if (opr == M_VAL1 || opr == M_VAL3)
+        return table == M_WIMM || table == M_BIMM || table == M_IOA || table == M_UI16 ||
+               table == M_UI8 || table == M_SFR || table == M_BIT || table == M_REL8 ||
+               table == M_REL || table == M_SEG || table == M_OFF;
+    if (opr == M_WIMM || opr == M_BIMM)
+        return table == M_WIMM || table == M_IOA || table == M_UI16 || table == M_UI8 ||
+               table == M_SFR || table == M_BIT || table == M_REL8 || table == M_REL ||
+               table == M_SEG || table == M_OFF;
+    if (opr == M_BMEM)
+        return table == M_BMOD;
+    if (opr == M_WMEM)
+        return table == M_WMOD || table == M_WMOD16;
+    if (opr == M_DMEM)
+        return table == M_WMOD || table == M_WMEM;
+    if (opr == M_BDIR)
+        return table == M_BMOD || table == M_BMEM;
+    if (opr == M_WDIR)
+        return table == M_WMOD || table == M_WMOD16 || table == M_WMEM;
+    if (opr == M_CS)
+        return table == M_SREG;
+    if (opr == M_FS || opr == M_GS) {
+        // FS/GS act as Sreg in MOV r/m,Sreg / MOV Sreg,r/m (P_REG, mod-reg-r/m
+        // field supports all 6 segregs), but cannot use the opcode-embedded
+        // Sreg encoding (P_OSEG) -- that's PUSH/POP r,Sreg (0x06+rd / 0x07+rd)
+        // which only encodes 2 bits, supporting ES/CS/SS/DS only. FS/GS use
+        // the 0F-prefixed form (PUSH FS=0F A0 etc.) at different opcodes.
+        return table == M_SREG && pos != P_OSEG;
+    }
+    if (opr == M_ST0)
+        return table == M_STI;
+    return false;
+}
+
+bool hasSize(AddrMode mode) {
+    return mode == M_AX || mode == M_DX || mode == M_CX || mode == M_WREG ||
+           mode == M_ECX || mode == M_DREG || mode == M_AL ||
+           mode == M_CL || mode == M_BREG || mode == M_CS || mode == M_SREG ||
+           mode == M_FS || mode == M_GS;
+}
+
+bool acceptSize(const AsmInsn &insn, const Entry *entry) {
+    const auto dst = insn.dstOp.mode;
+    const auto src = insn.srcOp.mode;
+    const auto flags = entry->readFlags();
+    if (dst == M_MEM || dst == M_DIR) {
+        if (src == M_NONE) {
+            // Memory operand without explicit size. PUSH/CALL/JMP have no
+            // competing byte form, so default size is unambiguous in either
+            // model. Lock-capable entries (INC/DEC and friends) coexist with
+            // byte forms via FE/FF and still require explicit size.
+            return !flags.needSize() || !flags.lockCapable();
+        }
+        return hasSize(src) || flags.stringInsn();
+    }
+    if (src == M_MEM || src == M_DIR)
+        return hasSize(dst) || flags.stringInsn();
+    if (dst == M_FMEM) {
+        const auto ptrSize = pointerSize(insn.dstOp.ptr);
+        return ptrSize == flags.size();
+    }
+    return true;
+}
+
+// M_AX table slot means specifically the accumulator (AX in default-mode
+// word, EAX with DATA32). A 32-bit-register source operand matches only
+// when it is EAX; ECX (or any other 32-bit register) is not the accumulator.
+bool acceptAccumulator(const Operand &op, AddrMode table) {
+    if (table != M_AX)
+        return true;
+    if (op.mode == M_DREG)
+        return op.reg == REG_EAX;
+    if (op.mode == M_ECX)
+        return false;
+    return true;
+}
+
+// Within an SZ_DATA entry the data size is set by the current model (or
+// flipped by DATA32). Operands in size-flexible slots must therefore agree
+// on width; otherwise a DATA32 promotion would silently reinterpret a
+// source-named 16-bit register as its 32-bit alias (e.g. MOV AX, ECX ->
+// MOV EAX, ECX). M_AX is included because DATA32 promotes it to EAX.
+bool sizeFlexibleTableSlot(AddrMode table) {
+    return table == M_WMOD || table == M_WREG || table == M_WMEM || table == M_AX;
+}
+
+bool oprIs16Bit(AddrMode opr) {
+    return opr == M_AX || opr == M_CX || opr == M_DX ||
+           opr == M_WREG || opr == M_WMEM;
+}
+
+bool oprIs32Bit(AddrMode opr) {
+    return opr == M_DREG || opr == M_ECX || opr == M_DMEM;
+}
+
+void collectSizeInfo(AddrMode opr, AddrMode table, bool &any16, bool &any32) {
+    if (!sizeFlexibleTableSlot(table))
+        return;
+    if (oprIs16Bit(opr))
+        any16 = true;
+    if (oprIs32Bit(opr))
+        any32 = true;
+}
+
+bool acceptSizes(const AsmInsn &insn, const Entry *entry) {
+    const auto flags = entry->readFlags();
+    if (flags.size() != SZ_DATA)
+        return true;
+    bool any16 = false, any32 = false;
+    collectSizeInfo(insn.dstOp.mode, flags.dst(), any16, any32);
+    collectSizeInfo(insn.srcOp.mode, flags.src(), any16, any32);
+    collectSizeInfo(insn.extOp.mode, flags.ext(), any16, any32);
+    return !(any16 && any32);
+}
+
+bool acceptModes(AsmInsn &insn, const Entry *entry) {
+    const auto table = entry->readFlags();
+    return acceptMode(insn.dstOp.mode, table.dst(), table.dstPos()) &&
+           acceptMode(insn.srcOp.mode, table.src(), table.srcPos()) &&
+           acceptMode(insn.extOp.mode, table.ext(), table.extPos()) &&
+           acceptAccumulator(insn.dstOp, table.dst()) &&
+           acceptAccumulator(insn.srcOp, table.src()) &&
+           acceptAccumulator(insn.extOp, table.ext()) &&
+           acceptSize(insn, entry) &&
+           acceptSizes(insn, entry);
+}
+
+// JCXZ (use16) / JECXZ (use32) share opcode 0xE3 and switch on address
+// size; every other TCODE16<->TCODE32 pair switches on data size.
+constexpr Config::opcode_t JCXZ_OPCODE = 0xE3;
+// PUSHA/POPA/PUSHF/POPF/IRET share opcodes with their D-suffix forms
+// (PUSHAD/POPAD/PUSHFD/POPFD/IRETD); GAS treats W and D as equivalent in
+// use32 (emits the no-prefix encoding for both). Match that behavior so the
+// existing committed hexes line up.
+constexpr Config::opcode_t PUSHA_OPCODE = 0x60;
+constexpr Config::opcode_t POPA_OPCODE = 0x61;
+constexpr Config::opcode_t PUSHF_OPCODE = 0x9C;
+constexpr Config::opcode_t POPF_OPCODE = 0x9D;
+constexpr Config::opcode_t IRET_OPCODE = 0xCF;
+
+bool isStatePreservingTcode16(Config::opcode_t opc) {
+    return opc == PUSHA_OPCODE || opc == POPA_OPCODE || opc == PUSHF_OPCODE ||
+           opc == POPF_OPCODE || opc == IRET_OPCODE;
+}
+
+void applyTcodeSizePrefix(AsmInsn &insn) {
+    if (insn.opCode() == JCXZ_OPCODE)
+        insn.setAddr32();
+    else
+        insn.setData32();
+}
+
+bool isData16(const Entry *entry) {
+    return entry >= TCODE16_00 && entry < ARRAY_END(TCODE16_00);
+}
+
+bool isData32(const Entry *entry) {
+    return entry >= TCODE32_00 && entry < ARRAY_END(TCODE32_00);
+}
+
+// Apply DATA32/ADDR32 prefix when a matched mnemonic's natural mode differs
+// from the current model. TCODE16_00 mnemonics (CBW, MOVSW, ...) are natural
+// in use16 and need DATA32 in use32; TCODE32_00 mnemonics (CWDE, MOVSD, ...)
+// are the reverse. PUSH r/m (0x50, 0xFF) isn't confused with PUSH imm16 /
+// PUSHD imm32 (0x68) because we identify the page via entry-pointer
+// membership, not opcode lookup. State-preserving forms (PUSHA/POPA/PUSHF/
+// POPF/IRET) share opcodes with their D-suffix forms and don't flip -- GAS
+// emits the no-prefix encoding for both in use32.
+void applyTcodePrefix(AsmInsn &insn, const Entry *entry) {
+    if (!entry)
+        return;
+    if (isData32(entry)) {
+        if (!insn.model32())
+            applyTcodeSizePrefix(insn);
+    } else if (isData16(entry) && insn.model32() &&
+               !isStatePreservingTcode16(insn.opCode())) {
+        applyTcodeSizePrefix(insn);
+    }
+}
+
+Error searchName(const CpuSpec &cpuSpec, AsmInsn &insn) {
+    const auto *entry = cpu(cpuSpec.cpu)->searchName(insn, acceptModes);
+#if !defined(LIBASM_I8086_NOFPU)
+    if (insn.getError() == UNKNOWN_INSTRUCTION)
+        entry = fpu(cpuSpec.fpu)->searchName(insn, acceptModes);
+#endif
+    applyTcodePrefix(insn, entry);
+    if (insn.getError() == UNKNOWN_INSTRUCTION)
+        insn.setError(insn.name(), insn);
+    return insn.getError();
+}
+
+bool isSegmentPrefix(const CpuSpec &cpuSpec, Config::opcode_t opCode) {
+    return overrideSeg(cpuSpec, opCode) != REG_UNDEF;
+}
+
+// REPC/REPNC exist on the whole V series.
+static bool vSeries(CpuType cpuType) {
+    return cpuType == V30 || cpuType == V33 || cpuType == V35;
+}
+
+bool isRepeatPrefix(const CpuSpec &cpuSpec, Config::opcode_t opCode) {
+    if (opCode == 0xF2 || opCode == 0xF3)
+        return true;
+    return vSeries(cpuSpec.cpu) && (opCode == 0x64 || opCode == 0x65);
+}
+
+RegName overrideSeg(const CpuSpec &cpuSpec, Config::opcode_t opCode, RegName defSeg) {
+    switch (opCode) {
+    case 0x26:
+        return REG_ES;
+    case 0x2E:
+        return REG_CS;
+    case 0x36:
+        return REG_SS;
+    case 0x3E:
+        return REG_DS;
+    case 0x64:
+        return cpuSpec.hasExtraSeg() ? REG_FS : defSeg;
+    case 0x65:
+        return cpuSpec.hasExtraSeg() ? REG_GS : defSeg;
+    default:
+        return defSeg;
+    }
+}
+
+Config::opcode_t segOverridePrefix(const CpuSpec &cpuSpec, RegName name) {
+    switch (name) {
+    case REG_ES:
+        return 0x26;
+    case REG_CS:
+        return 0x2E;
+    case REG_SS:
+        return 0x36;
+    case REG_DS:
+        return 0x3E;
+    case REG_FS:
+        return cpuSpec.hasExtraSeg() ? 0x64 : 0;
+    case REG_GS:
+        return cpuSpec.hasExtraSeg() ? 0x65 : 0;
+    default:
+        return 0;
+    }
+}
+
+bool EntryInsn::repeatInsn(Config::opcode_t opc, CpuType cpuType) {
+    switch (opc) {
+    case 0xF2:
+    case 0xF3:
+        return true;
+    case 0x64:
+    case 0x65:
+        return vSeries(cpuType);
+    default:
+        return false;
+    }
+}
+
+bool matchOpCode(DisInsn &insn, const Entry *entry, const EntryPage *page) {
+    auto opc = insn.opCode();
+    const auto flags = entry->readFlags();
+    auto mask = flags.mask();
+    if (flags.dstPos() == P_OMOD || flags.srcPos() == P_OMOD) {
+        const auto prefix = page->readPrefix();
+        // non-FPU or non-register modReg instruction needs to be
+        // masked out mode and reg field of |opc|.
+        const auto mod = (opc >> 6);
+        // A register-only operand has no memory form, so the mode field must
+        // select a register; masking it out would decode one that isn't there.
+        const auto omod = (flags.dstPos() == P_OMOD) ? flags.dst() : flags.src();
+        if (omod == M_WREG && mod != 3)
+            return false;
+        if (!DisInsn::escapeInsn(prefix) || mod != 3)
+            mask |= 0307;
+    }
+    opc &= ~mask;
+    return opc == entry->readOpCode();
+}
+
+// TCODE16_00 and TCODE32_00 must be parallel arrays: same length, with each
+// TCODE32_00[i] being the 32-bit data form of TCODE16_00[i] (matching opcode).
+static_assert(sizeof(TCODE16_00) == sizeof(TCODE32_00),
+        "TCODE16_00 and TCODE32_00 must be the same length");
+constexpr bool tcodeParallel(size_t i = 0) {
+    return i == sizeof(TCODE16_00) / sizeof(Entry)
+                   ? true
+                   : (TCODE16_00[i].opCode() == TCODE32_00[i].opCode() &&
+                             tcodeParallel(i + 1));
+}
+static_assert(tcodeParallel(),
+        "TCODE16_00[i] and TCODE32_00[i] must share the same opcode");
+
+const Entry *toData32(const Entry *entry) {
+    return (entry - TCODE16_00) + TCODE32_00;
+}
+
+Error searchOpCode(const CpuSpec &cpuSpec, DisInsn &insn, StrBuffer &out) {
+#if !defined(LIBASM_I8086_NOFPU)
+    // ASM86 spells WAIT as FWAIT, which the FPU table has.
+    if (cpuSpec.fpu == FPU_I8087_ASM86 && fpu(cpuSpec.fpu)->searchOpCode(insn, out, matchOpCode))
+        return insn.getError();
+#endif
+    auto entry = cpu(cpuSpec.cpu)->searchOpCode(insn, out, matchOpCode);
+    if (isData16(entry)) {
+        // JCXZ/JECXZ (0xE3) switches based on address size, not data size
+        const bool switch32 = (cpuSpec.has32bit() && insn.opCode() == 0xE3)
+                                      ? insn.useAddr32()
+                                      : insn.useData32();
+        if (switch32) {
+            entry = toData32(entry);
+            Cpu::defaultReadName(insn, entry, out);
+        }
+    }
+    if (insn.farInsn() && insn.farMode() != FMODE_FAR) {
+        entry += (insn.farMode() == FMODE_F ? 1 : 2);
+        Cpu::defaultReadName(insn, entry, out);
+    }
+#if !defined(LIBASM_I8086_NOFPU)
+    if (insn.getError() == UNKNOWN_INSTRUCTION)
+        fpu(cpuSpec.fpu)->searchOpCode(insn, out, matchOpCode);
+#endif
+    return insn.getError();
+}
+
+namespace {
+bool leadMatcher(uint16_t code, const EntryPage *page) {
+    const auto prefix = page->readPrefix();
+    return (prefix >> 8) == code && DisInsn::escapeInsn(prefix);
+}
+}  // namespace
+
+bool isWaitLead(const CpuSpec &cpuSpec, Config::opcode_t code) {
+#if !defined(LIBASM_I8086_NOFPU)
+    return fpu(cpuSpec.fpu)->isPrefix(code, leadMatcher);
+#else
+    return false;
+#endif
+}
+
+CpuSpec noWaitSpec(const CpuSpec &cpuSpec) {
+#if !defined(LIBASM_I8086_NOFPU)
+    if (cpuSpec.fpu == FPU_I8087_AUTO || cpuSpec.fpu == FPU_I8087_ASM86)
+        return CpuSpec(cpuSpec.cpu, FPU_I8087);
+#endif
+    return cpuSpec;
+}
+
+bool isPrefix(const CpuSpec &cpuSpec, uint16_t code) {
+    return cpu(cpuSpec.cpu)->isPrefix(code)
+#if !defined(LIBASM_I8086_NOFPU)
+           || fpu(cpuSpec.fpu)->isPrefix(code);
+#endif
+    ;
+}
+
+const char *TableI8086::listCpu_P() const {
+    return TEXT_I8086_LIST;
+}
+
+const char *TableI8086::cpuName_P(CpuType cpuType) const {
+    return cpu(cpuType)->name_P();
+}
+
+Error TableI8086::searchCpuName(StrScanner &name, CpuType &cpuType) const {
+    auto t = Cpu::search(name, ARRAY_RANGE(CPU_TABLE));
+    if (t == nullptr && name.iexpect('i'))
+        t = Cpu::search(name, ARRAY_RANGE(CPU_TABLE));
+    if (t == nullptr)
+        return UNSUPPORTED_CPU;
+    cpuType = t->readCpuType();
+    return OK;
+}
+
+void Config::setCpuType(CpuType cpuType) {
+    _cpuSpec.cpu = cpuType;
+    ConfigImpl::setCpuType(cpuType);
+    setFpuType(_cpuSpec.fpu == FPU_NONE ? FPU_NONE : FPU_ON);
+    // Reset model to the CPU's natural default: 32-bit CPUs default to use32,
+    // 16-bit CPUs to use16. This keeps asm and dis defaults consistent.
+    _model32 = _cpuSpec.has32bit();
+}
+
+const char *Config::fpu_P() const {
+    return fpu(_cpuSpec.fpu)->name_P();
+}
+
+Error Config::setFpuType(FpuType fpuType) {
+    if (fpuType == FPU_NONE) {
+        _cpuSpec.fpu = FPU_NONE;
+        return OK;
+    }
+#if defined(LIBASM_I8086_NOFPU)
+    return FLOAT_NOT_SUPPORTED;
+#else
+    const auto cpuType = _cpuSpec.cpu;
+    if (fpuType == FPU_ON) {
+        if (cpuType == I8086 || cpuType == I80186) {
+            _cpuSpec.fpu = i8087();
+            return OK;
+        } else if (cpuType == I80286) {
+            _cpuSpec.fpu = FPU_I80287;
+            return OK;
+        } else if (cpuType == I80386) {
+            _cpuSpec.fpu = FPU_I80387;
+            return OK;
+        } else if (cpuType == I80486) {
+            _cpuSpec.fpu = FPU_I80487;
+            return OK;
+        }
+    } else if (fpuType == FPU_I8087 || fpuType == FPU_I8087_AUTO ||
+               fpuType == FPU_I8087_ASM86) {
+        if (cpuType == I8086 || cpuType == I80186) {
+            _cpuSpec.fpu = i8087();
+            return OK;
+        }
+    } else if (fpuType == FPU_I80287) {
+        if (cpuType == I80286) {
+            _cpuSpec.fpu = FPU_I80287;
+            return OK;
+        }
+    } else if (fpuType == FPU_I80387) {
+        if (cpuType == I80386) {
+            _cpuSpec.fpu = FPU_I80387;
+            return OK;
+        }
+    } else if (fpuType == FPU_I80487) {
+        if (cpuType == I80486) {
+            _cpuSpec.fpu = FPU_I80487;
+            return OK;
+        }
+    } else if (fpuType == FPU_I80C187) {
+        if (cpuType == I80186) {
+            _cpuSpec.fpu = FPU_I80C187;
+            return OK;
+        }
+    } else if (fpuType == FPU_I80287XL) {
+        if (cpuType == I80286) {
+            _cpuSpec.fpu = FPU_I80287XL;
+            return OK;
+        }
+    }
+    _cpuSpec.fpu = FPU_NONE;
+    return FLOAT_NOT_SUPPORTED;
+#endif
+}
+
+uint8_t Config::nameMax() const {
+#if !defined(LIBASM_I8086_NOFPU)
+    if (fpuType() == FPU_I8087_AUTO)
+        return 8;  // FN forms of every instruction
+#endif
+    return fpuType() == FPU_NONE ? 6 : 7;
+}
+
+FpuType Config::i8087() const {
+#if defined(LIBASM_I8086_NOFPU)
+    return FPU_NONE;
+#else
+    if (_fwait == FWAIT_AUTO)
+        return FPU_I8087_AUTO;
+    return _fwait == FWAIT_ASM86 ? FPU_I8087_ASM86 : FPU_I8087;
+#endif
+}
+
+Error Config::setFwaitName(StrScanner &scan) {
+    if (scan.iequals_P(TEXT_none)) {
+        _fwait = FWAIT_NONE;
+    } else if (scan.iequals_P(TEXT_FWAIT_AUTO)) {
+        _fwait = FWAIT_AUTO;
+    } else if (scan.iequals_P(TEXT_FWAIT_ASM86)) {
+        _fwait = FWAIT_ASM86;
+    } else {
+        return UNKNOWN_OPERAND;
+    }
+#if !defined(LIBASM_I8086_NOFPU)
+    if (_cpuSpec.fpu == FPU_I8087 || _cpuSpec.fpu == FPU_I8087_AUTO ||
+            _cpuSpec.fpu == FPU_I8087_ASM86)
+        _cpuSpec.fpu = i8087();
+#endif
+    return OK;
+}
+
+Error Config::setFpuName(StrScanner &scan) {
+    if (scan.expectFalse())
+        return setFpuType(FPU_NONE);
+#if !defined(LIBASM_I8086_NOFPU)
+    if (scan.expectTrue())
+        return setFpuType(FPU_ON);
+    auto p = scan;
+    p.iexpect('i');
+    if (p.iequals_P(TEXT_FPU_8087))
+        return setFpuType(FPU_I8087);
+    if (p.iequals_P(TEXT_FPU_80287))
+        return setFpuType(FPU_I80287);
+    if (p.iequals_P(TEXT_FPU_80387))
+        return setFpuType(FPU_I80387);
+    if (p.iequals_P(TEXT_FPU_80487))
+        return setFpuType(FPU_I80487);
+    if (p.iequals_P(TEXT_FPU_80C187))
+        return setFpuType(FPU_I80C187);
+    if (p.iequals_P(TEXT_FPU_80287XL))
+        return setFpuType(FPU_I80287XL);
+#endif
+    return UNKNOWN_OPERAND;
+}
+
+static constexpr auto LEA = 0x8D;      // LEA
+static constexpr auto CALLF = 0x9A;    // CALL far
+static constexpr auto JMPF = 0xEA;     // JMPF far
+static constexpr auto RETFu16 = 0xCA;  // RETF u16
+static constexpr auto RETF = 0xCB;     // RETF
+static constexpr auto PUSHiw = 0x68;   // PUSH iw
+
+bool EntryInsn::leaInsn() const {
+    return prefix() == 0 && opCode() == LEA;
+}
+
+bool EntryInsn::farInsn() const {
+    const auto pre = prefix();
+    const auto opc = opCode();
+    if (pre == 0)
+        return opc == CALLF || opc == JMPF || opc == RETFu16 || opc == RETF;
+    if (pre == 0xFF) {
+        const auto reg = (opc >> 3) & 7;
+        return reg == 3 || reg == 5;  // CALLF/JMPF
+    }
+    return false;
+}
+
+const TableI8086 TABLE;
+
+}  // namespace i8086
+}  // namespace libasm
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

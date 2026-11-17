@@ -1,0 +1,1123 @@
+/*
+ * Copyright 2026 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "asm_h8300.h"
+#include "test_asm_helper.h"
+
+using namespace libasm;
+using namespace libasm::h8300;
+using namespace libasm::test;
+
+AsmH8300 as8300;
+Assembler &assembler(as8300);
+
+// True for any CPU in the H8S family (H8S/2000 and H8S/2600).
+bool is_h8s() {
+    const auto *cpu_P = assembler.config().cpu_P();
+    return strcmp("H8S/2000", cpu_P) == 0 || strcmp("H8S/2600", cpu_P) == 0;
+}
+
+bool is_h8s2600() {
+    return strcmp("H8S/2600", assembler.config().cpu_P()) == 0;
+}
+
+bool is_h8300h() {
+    return strcmp("H8/300H", assembler.config().cpu_P()) == 0;
+}
+
+void set_up() {
+    assembler.reset();
+}
+
+void tear_down() {
+    symtab.reset();
+}
+
+// clang-format off
+
+void test_cpu() {
+    EQUALS("cpu H8/300", true,    assembler.setCpu("H8/300"));
+    EQUALS_P("cpu H8/300", "H8/300", assembler.config().cpu_P());
+
+    EQUALS("cpu H8300", false, assembler.setCpu("H8300"));
+}
+
+void test_system() {
+    TEST("NOP",    0x0000);
+    TEST("SLEEP",  0x0180);
+    TEST("RTS",    0x5470);
+    TEST("RTE",    0x5670);
+    TEST("EEPMOV", 0x7B5C, 0x598F);
+
+    if (is_h8300h() || is_h8s()) {
+        // TRAPA #vec  (vec at bits 5:4; only 0..3 are architecturally defined)
+        TEST("TRAPA #0", 0x5700|(0<<4));
+        TEST("TRAPA #1", 0x5700|(1<<4));
+        TEST("TRAPA #2", 0x5700|(2<<4));
+        TEST("TRAPA #3", 0x5700|(3<<4));
+
+        // EEPMOV.W (0x7BD4 prefix; H8/300 EEPMOV.B stays at 0x7B5C)
+        TEST("EEPMOV.W", 0x7BD4, 0x598F);
+    }
+}
+
+void test_ccr() {
+    // STC CCR,Rd: byte2=Rd nibble
+    TEST("STC   CCR, R0H", 0x0200|0x0);
+    TEST("STC.B CCR, R4L", 0x0200|0xC);
+    ERRT("STC.W CCR, R4L", ILLEGAL_SIZE, ".W CCR, R4L");
+
+    // LDC Rs,CCR: byte2=Rs nibble
+    TEST("LDC   R0H, CCR", 0x0300|0x0);
+    TEST("LDC.b R2L, CCR", 0x0300|0xA);
+    ERRT("LDC.w R2L, CCR", ILLEGAL_SIZE, ".w R2L, CCR");
+
+    // ORC/XORC/ANDC/LDC #imm,CCR: byte2=imm8
+    TEST("ORC    #H'FF, CCR", 0x0400|0xFF);
+    TEST("ORC.B  #H'F0, CCR", 0x0400|0xF0);
+    TEST("XORC   #15, CCR",   0x0500|0x0F);
+    TEST("XORC.B #H'55, CCR", 0x0500|0x55);
+    TEST("ANDC   #H'F0, CCR", 0x0600|0xF0);
+    TEST("ANDC.B #H'0F, CCR", 0x0600|0x0F);
+    TEST("LDC    #0, CCR",    0x0700|0x00);
+    ERRT("LDC    #0:16, CCR", OPERAND_NOT_ALLOWED, "#0:16, CCR");
+
+    if (is_h8300h() || is_h8s()) {
+        // LDC / STC ccr with memory operand via 0x0140 super-prefix
+        TEST("LDC @ER0, CCR",             0x0140, 0x6900|(0<<4));
+        TEST("LDC @SP, CCR",              0x0140, 0x6900|(7<<4));
+        TEST("STC CCR, @ER0",             0x0140, 0x6980|(0<<4));
+        TEST("STC CCR, @SP",              0x0140, 0x6980|(7<<4));
+        TEST("LDC @ER0+, CCR",            0x0140, 0x6D00|(0<<4));
+        TEST("STC CCR, @-ER1",            0x0140, 0x6D80|(1<<4));
+        TEST("LDC @H'1234, CCR",          0x0140, 0x6B00,        0x1234);
+        TEST("STC CCR, @H'1234",          0x0140, 0x6B80,        0x1234);
+        TEST("LDC @(H'1234,ER0), CCR",    0x0140, 0x6F00|(0<<4), 0x1234);
+        TEST("STC CCR, @(H'1234,ER0)",    0x0140, 0x6F80|(0<<4), 0x1234);
+
+        if (!is_h8s()) {
+            // LDC / STC ccr,@(d:24,ERn) via SPRX_0140 + 0x7800 prefix.
+            // H8S uses @(d:32, ERn) instead.
+            TEST("LDC @(H'001234:24,ER0), CCR", 0x0140, 0x7800|(0<<4), 0x6B20, 0x0000, 0x1234);
+            TEST("STC CCR, @(H'FFFFE0:24,ER7)", 0x0140, 0x7800|(7<<4), 0x6BA0, 0x00FF, 0xFFE0);
+        }
+    }
+}
+
+void test_data_move() {
+    // MOV.B Rs,Rd: byte2=(Rs<<4)|Rd
+    TEST("MOV.B R0H, R0H", 0x0C00|(0x0<<4)|0x0);
+    TEST("MOV.B R1H, R3L", 0x0C00|(0x1<<4)|0xB);
+    TEST("MOV   R7L, R7L", 0x0C00|(0xF<<4)|0xF);
+    ERRT("MOV   R1H, R3",  OPERAND_NOT_ALLOWED, "R1H, R3");
+
+    // MOV.W Rs,Rd: byte2=(Rs3<<4)|Rd3
+    TEST("MOV.W R0, R0", 0x0D00|(0<<4)|0);
+    TEST("MOV   R2, R5", 0x0D00|(2<<4)|5);
+
+    // MOV.B @aa:8,Rd (0x20-0x2F): byte1=(0x20|Rd nibble), byte2=aa
+    // Rd nibble: 0..7=R0H..R7H, 8..F=R0L..R7L (full 16 byte registers)
+    TEST("MOV.B @H'00:8,   R0H", 0x2000|(0<<8)|0x00);
+    TEST("MOV.B @H'FF12:8, R3H", 0x2000|(3<<8)|0x12);
+    TEST("MOV   @H'FF12,   R3H", 0x2000|(3<<8)|0x12);
+    TEST("MOV   @H'12:8,   R3H", 0x2000|(3<<8)|0x12);
+    TEST("MOV   @H'12,     R3H", 0x6A00|3, 0x0012);
+    TEST("MOV.B @H'FF34:8, R0L", 0x2000|(8<<8)|0x34);
+    TEST("MOV.B @H'FFFF:8, R7L", 0x2000|(0xF<<8)|0xFF);
+
+    // MOV.B Rs,@aa:8 (0x30-0x3F): byte1=(0x30|Rs nibble), byte2=aa
+    TEST("MOV.B R0H, @H'00:8",   0x3000|(0<<8)|0x00);
+    TEST("MOV.B R5H, @H'FFAB:8", 0x3000|(5<<8)|0xAB);
+    TEST("MOV   R5H, @H'FFAB",   0x3000|(5<<8)|0xAB);
+    TEST("MOV   R5H, @H'AB:8",   0x3000|(5<<8)|0xAB);
+    TEST("MOV   R5H, @H'AB",     0x6A80|5, 0x00AB);
+    TEST("MOV.B R0L, @H'FF34:8", 0x3000|(8<<8)|0x34);
+    TEST("MOV.B R7L, @H'FFFF:8", 0x3000|(0xF<<8)|0xFF);
+
+    // MOV.B @Rn,Rd (0x68, bit7=0): byte2=(Rn3<<4)|Rd
+    TEST("MOV.B @R0, R0H", 0x6800|(0<<4)|0x0);
+    TEST("MOV   @R2, R5L", 0x6800|(2<<4)|0xD);
+
+    // MOV.B Rs,@Rn (0x68, bit7=1): byte2=0x80|(Rn3<<4)|Rs
+    TEST("MOV.B R0H, @R0", 0x6880|(0<<4)|0x0);
+    TEST("MOV   R3L, @R6", 0x6880|(6<<4)|0xB);
+
+    // MOV.W @Rn,Rd (0x69, bit7=0): byte2=(Rn3<<4)|Rd3
+    TEST("MOV.W @R0, R0", 0x6900|(0<<4)|0);
+    TEST("MOV   @R3, R5", 0x6900|(3<<4)|5);
+
+    // MOV.W Rs,@Rn (0x69, bit7=1): byte2=0x80|(Rn3<<4)|Rs3
+    TEST("MOV.W R0, @R0", 0x6980|(0<<4)|0);
+    TEST("MOV   R7, @R4", 0x6980|(4<<4)|7);
+
+    // MOV.B @abs16,Rd (0x6A, bits[7:6]=00): byte2=Rd nibble
+    TEST("MOV.B @H'1234:16, R0H", 0x6A00|0x0, 0x1234);
+    TEST("MOV   @H'1234:16, R0H", 0x6A00|0x0, 0x1234);
+    TEST("MOV.B @H'FFFF:16, R7L", 0x6A00|0xF, 0xFFFF);
+    TEST("MOV   @H'FFFF,    R7L", 0x2000|(0xF<<8)|0xFF);
+
+    // MOV.B Rs,@abs16 (0x6A, bits[7:6]=10): byte2=0x80|Rs nibble
+    TEST("MOV.B R0H, @H'1234:16", 0x6A80|0x0, 0x1234);
+    TEST("MOV   R0H, @H'1234:16", 0x6A80|0x0, 0x1234);
+    TEST("MOV.B R3L, @H'0100:16", 0x6A80|0xB, 0x0100);
+    TEST("MOV   R3L, @H'FF12",    0x3000|(0xB<<8)|0x12);
+
+    // MOV.W @abs16,Rd (0x6B, bit7=0): byte2=Rd3
+    TEST("MOV.W @H'1234:16, R0", 0x6B00|0, 0x1234);
+    TEST("MOV   @H'FFFE:16, R7", 0x6B00|7, 0xFFFE);
+    TEST("MOV   @H'FE:8,    R7", 0x6B00|7, 0xFFFE);
+
+    // MOV.W Rs,@abs16 (0x6B, bit7=1): byte2=0x80|Rs3
+    TEST("MOV.W R0, @H'1234:16", 0x6B80|0, 0x1234);
+    TEST("MOV   R5, @H'0200:16", 0x6B80|5, 0x0200);
+    TEST("MOV   R5, @H'14:8",    0x6B80|5, 0xFF14);
+
+    // MOV.B @Rn+,Rd (0x6C, bit7=0): byte2=(Rn3<<4)|Rd
+    TEST("MOV.B @R0+, R0H", 0x6C00|(0<<4)|0x0);
+    TEST("MOV   @R3+, R5L", 0x6C00|(3<<4)|0xD);
+
+    // MOV.B Rs,@-Rn (0x6C, bit7=1): byte2=0x80|(Rn3<<4)|Rs
+    TEST("MOV.B R0H, @-R0", 0x6C80|(0<<4)|0x0);
+    TEST("MOV   R4L, @-R2", 0x6C80|(2<<4)|0xC);
+
+    // MOV.W @Rn+,Rd (0x6D, bit7=0, Rn!=SP): byte2=(Rn3<<4)|Rd3
+    TEST("MOV.W @R0+, R0", 0x6D00|(0<<4)|0);
+    TEST("MOV   @R2+, R4", 0x6D00|(2<<4)|4);
+
+    // POP Rd (0x6D, Rn=SP=R7, bit7=0): byte2=0x70|Rd3
+    TEST("POP   R0", 0x6D70|0);
+    TEST("POP.W R5", 0x6D70|5);
+    ERRT("POP   R5L", OPERAND_NOT_ALLOWED, "R5L");
+
+    // MOV.W Rs,@-Rn (0x6D, bit7=1, Rn!=SP): byte2=0x80|(Rn3<<4)|Rs3
+    TEST("MOV.W R0, @-R0", 0x6D80|(0<<4)|0);
+    TEST("MOV   R5, @-R3", 0x6D80|(3<<4)|5);
+    // SP is a register-name alias for R7; @SP / @SP+ / @-SP must encode identically to @R7 forms.
+    TEST("MOV.W R0, @SP",  0x6980|(7<<4)|0);
+    TEST("MOV.W @SP+, R1", 0x6D00|(7<<4)|1);
+    TEST("MOV   R5, @-SP", 0x6DF0|5);
+    TEST("MOV.W @SP, R6",  0x6900|(7<<4)|6);
+    if (!is_h8300h() && !is_h8s()) {
+        // On H8/300 SP is R7 in register-direct operands too.
+        TEST("MOV.W SP, R0",   0x0D00|(7<<4)|0);
+        TEST("ADDS  #2, SP",   0x0B80|7);
+    }
+
+    // PUSH Rs (0x6D, Rn=SP=R7, bit7=1): byte2=0xF0|Rs3
+    TEST("PUSH   R0", 0x6DF0|0);
+    TEST("PUSH.W R6", 0x6DF0|6);
+    ERRT("PUSH   R6H", OPERAND_NOT_ALLOWED, "R6H");
+
+    // MOV.B @(d16,Rn),Rd (0x6E, bit7=0): byte2=(Rn3<<4)|Rd, then disp16
+    TEST("MOV.B @(0, R0),  R0H", 0x6E00|(0<<4)|0x0, 0x0000);
+    TEST("MOV   @(16, R2), R3L", 0x6E00|(2<<4)|0xB, 0x0010);
+    TEST("MOV.B @(-1, R5), R7H", 0x6E00|(5<<4)|0x7, 0xFFFF);
+    TEST("MOV   @(16:16, R5), R7H", 0x6E00|(5<<4)|0x7, 0x0010);
+    ERRT("MOV   @(16:8, R5),  R7H", ILLEGAL_SIZE, ":8, R5),  R7H");
+
+    // MOV.B Rs,@(d16,Rn) (0x6E, bit7=1): byte2=0x80|(Rn3<<4)|Rs
+    TEST("MOV.B R0H, @(0, R0)", 0x6E80|(0<<4)|0x0, 0x0000);
+    TEST("MOV   R4L, @(1, R3)", 0x6E80|(3<<4)|0xC, 0x0001);
+    TEST("MOV   R4L, @(1, R3)", 0x6E80|(3<<4)|0xC, 0x0001);
+    TEST("MOV.B R4L, @(1:16, R3)", 0x6E80|(3<<4)|0xC, 0x0001);
+    ERRT("MOV.B R4L, @(1:8, R3)",  ILLEGAL_SIZE, ":8, R3)");
+
+    // MOV.W @(d16,Rn),Rd (0x6F, bit7=0): byte2=(Rn3<<4)|Rd3
+    TEST("MOV.W @(0, R0), R0",   0x6F00|(0<<4)|0, 0x0000);
+    TEST("MOV   @(32, R1), R2",  0x6F00|(1<<4)|2, 0x0020);
+
+    // MOV.W Rs,@(d16,Rn) (0x6F, bit7=1): byte2=0x80|(Rn3<<4)|Rs3
+    TEST("MOV.W R0, @(0, R0)",  0x6F80|(0<<4)|0, 0x0000);
+    TEST("MOV   R5, @(-2, R6)", 0x6F80|(6<<4)|5, 0xFFFE);
+
+    // MOV.W #imm,Rd (0x79): byte2=Rd3, then imm16
+    TEST("MOV.W #0, R0",      0x7900|0, 0x0000);
+    TEST("MOV   #H'1234, R3", 0x7900|3, 0x1234);
+    TEST("MOV.W #H'FF:8, R7", 0x7900|7, 0x00FF);
+    TEST("MOV   #-1, R7",     0x7900|7, 0xFFFF);
+
+    // MOV.B #imm,Rd (0xF0-0xFF): byte1=0xF0|(Rd nibble), byte2=imm8
+    TEST("MOV.B #0, R0H",    0xF000|(0x0<<8)|0x00);
+    TEST("MOV   #H'FF, R7L", 0xF000|(0xF<<8)|0xFF);
+    ERRT("MOV.B #-1, R7L",   OPERAND_NOT_ALLOWED, "#-1, R7L");
+
+    // MOVFPE @abs16,Rd (0x6A, bits[7:6]=01): byte2=0x40|Rd nibble (full 16 byte registers)
+    TEST("MOVFPE   @H'1234:16, R0H", 0x6A40|0x0, 0x1234);
+    TEST("MOVFPE.B @H'1234:16, R0H", 0x6A40|0x0, 0x1234);
+    TEST("MOVFPE   @H'5678:16, R7L", 0x6A40|0xF, 0x5678);
+    // MOVTPE Rs,@abs16 (0x6A, bits[7:6]=11): byte2=0xC0|Rs nibble (full 16 byte registers)
+    TEST("MOVTPE   R0H, @H'1234:16", 0x6AC0|0x0, 0x1234);
+    TEST("MOVTPE   R5L, @H'5678:16", 0x6AC0|0xD, 0x5678);
+    TEST("MOVTPE.B R5L, @H'5678:16", 0x6AC0|0xD, 0x5678);
+
+    if (is_h8300h() || is_h8s()) {
+        // MOV.L ERs,ERd: 0x0F80 | (ERs<<4) | ERd
+        TEST("MOV.L ER0, ER1",            0x0F80|(0<<4)|1);
+        TEST("MOV.L ER2, ER5",            0x0F80|(2<<4)|5);
+        TEST("MOV.L ER7, ER0",            0x0F80|(7<<4)|0);
+        TEST("MOV.L SP, ER0",             0x0F80|(7<<4)|0);  // SP resolves to ER7
+        TEST("MOV.L ER0, SP",             0x0F80|(0<<4)|7);
+        ERRT("MOV.L R0, ER1",             OPERAND_NOT_ALLOWED, "R0, ER1");
+
+        // MOV.L #imm32, ERd
+        TEST("MOV.L #H'12345678, ER0",    0x7A00|0, 0x1234, 0x5678);
+        TEST("MOV.L #0,            ER3",  0x7A00|3, 0x0000, 0x0000);
+        TEST("MOV.L #-1,           ER7",  0x7A00|7, 0xFFFF, 0xFFFF);
+
+        // MOV.B / MOV.W with ER pointer (M_INDIR/M_IDX16 entries; ER accepted
+        // via isAddrReg + encodeOprAddrReg dispatch).
+        TEST("MOV.B @ER0, R0H",           0x6800|(0<<4)|0x0);
+        TEST("MOV.B R0H, @ER7",           0x6880|(7<<4)|0x0);
+        TEST("MOV.W @ER3, R5",            0x6900|(3<<4)|0x5);
+        TEST("MOV.W R0, @-ER1",           0x6D80|(1<<4)|0x0);
+        TEST("MOV.B @(H'1234,ER0), R0H",  0x6E00|(0<<4)|0x0, 0x1234);
+        TEST("MOV.W @(H'FFFE,ER7), R0",   0x6F00|(7<<4)|0x0, 0xFFFE);
+
+        if (!is_h8s()) {
+            // MOV.B / MOV.W @(d:24,ERn) via 0x7800 normal prefix.
+            // H8S uses @(d:32, ERn) instead.
+            TEST("MOV.B @(H'000000:24,ER0), R0H", 0x7800|(0<<4), 0x6A20|0x0, 0x0000, 0x0000);
+            TEST("MOV.B @(H'FFFFFF:24,ER7), R7L", 0x7800|(7<<4), 0x6A20|0xF, 0x00FF, 0xFFFF);
+            TEST("MOV.B R0H, @(H'000000:24,ER0)", 0x7800|(0<<4), 0x6AA0|0x0, 0x0000, 0x0000);
+            TEST("MOV.W @(H'001234:24,ER3), R5",  0x7800|(3<<4), 0x6B20|0x5, 0x0000, 0x1234);
+            TEST("MOV.W R7, @(H'FFFFFE:24,ER0)",  0x7800|(0<<4), 0x6BA0|0x7, 0x00FF, 0xFFFE);
+        }
+
+        // MOV.B / MOV.W @aa:24 and MOV.L @aa:24 (H8/300H + H8S share these).
+        TEST("MOV.B @H'000000:24, R0H",   0x6A20|0x0,         0x0000, 0x0000);
+        TEST("MOV.B @H'FFFFFF:24, R7L",   0x6A20|0xF,         0x00FF, 0xFFFF);
+        TEST("MOV.B R0H, @H'000000:24",   0x6AA0|0x0,         0x0000, 0x0000);
+        TEST("MOV.W @H'000100:24, R0",    0x6B20|0x0,         0x0000, 0x0100);
+        TEST("MOV.W R7, @H'FFFFFE:24",    0x6BA0|0x7,         0x00FF, 0xFFFE);
+        TEST("MOV.L @H'000100:24, ER0",   0x0100, 0x6B20|0,   0x0000, 0x0100);
+        TEST("MOV.L ER7, @H'FFFFFE:24",   0x0100, 0x6BA0|7,   0x00FF, 0xFFFE);
+
+        // MOV.L with addressing modes via 0x0100 prefix
+        TEST("MOV.L @ER0, ER1",           0x0100, 0x6900|(0<<4)|1);
+        TEST("MOV.L ER1, @ER0",           0x0100, 0x6980|(0<<4)|1);
+        TEST("MOV.L @ER0+, ER1",          0x0100, 0x6D00|(0<<4)|1);
+        TEST("MOV.L ER0, @-ER1",          0x0100, 0x6D80|(1<<4)|0);
+        TEST("MOV.L @H'1234:16, ER0",     0x0100, 0x6B00|0,        0x1234);
+        TEST("MOV.L ER0, @H'1234:16",     0x0100, 0x6B80|0,        0x1234);
+        TEST("MOV.L @(H'1234,ER0), ER1",  0x0100, 0x6F00|(0<<4)|1, 0x1234);
+        TEST("MOV.L ER0, @(H'1234,ER1)",  0x0100, 0x6F80|(1<<4)|0, 0x1234);
+        // SP -> ER7 for indirect pointer
+        TEST("MOV.L @SP, ER0",            0x0100, 0x6900|(7<<4)|0);
+        TEST("MOV.L ER0, @-SP",           0x0100, 0x6D80|(7<<4)|0);
+
+        // POP.L / PUSH.L (canonical mnemonics for MOV.L @SP+, ERd / ERs, @-SP)
+        TEST("POP.L  ER0",                0x0100, 0x6D70|0);
+        TEST("POP.L  ER5",                0x0100, 0x6D70|5);
+        TEST("PUSH.L ER0",                0x0100, 0x6DF0|0);
+        TEST("PUSH.L ER6",                0x0100, 0x6DF0|6);
+    }
+}
+
+void test_arithmetic() {
+    // ADD/SUB/CMP/ADDX/SUBX reg-reg: byte2=(Rs<<4)|Rd
+    TEST("ADD.B  R0H, R0H", 0x0800|(0x0<<4)|0x0);
+    TEST("ADD    R1H, R3L", 0x0800|(0x1<<4)|0xB);
+    TEST("ADD.W  R0, R0",   0x0900|(0<<4)|0);
+    TEST("ADD    R3, R5",   0x0900|(3<<4)|5);
+    TEST("ADDX.B R0H, R1H", 0x0E00|(0x0<<4)|0x1);
+    TEST("ADDX   R0H, R1H", 0x0E00|(0x0<<4)|0x1);
+
+    TEST("SUB.B  R0H, R0H", 0x1800|(0x0<<4)|0x0);
+    TEST("SUB    R5L, R2H", 0x1800|(0xD<<4)|0x2);
+    TEST("SUB.W  R0, R0",   0x1900|(0<<4)|0);
+    TEST("SUB    R4, R7",   0x1900|(4<<4)|7);
+    TEST("SUBX.B R0H, R7L", 0x1E00|(0x0<<4)|0xF);
+    TEST("SUBX   R0H, R7L", 0x1E00|(0x0<<4)|0xF);
+
+    TEST("CMP.B  R0H, R0H", 0x1C00|(0x0<<4)|0x0);
+    TEST("CMP    R2H, R6L", 0x1C00|(0x2<<4)|0xE);
+    TEST("CMP.W  R0, R0",   0x1D00|(0<<4)|0);
+    TEST("CMP    R1, R6",   0x1D00|(1<<4)|6);
+
+    // INC/DEC Rd: byte2=Rd nibble
+    TEST("INC   R0H", 0x0A00|0x0);
+    TEST("INC.B R7L", 0x0A00|0xF);
+    TEST("DEC   R0H", 0x1A00|0x0);
+    TEST("DEC.B R4H", 0x1A00|0x4);
+
+    // ADDS/SUBS #1/#2,Rd
+    TEST("ADDS   #1, R0", 0x0B00|0);
+    TEST("ADDS.W #1, R5", 0x0B00|5);
+    TEST("ADDS   #2, R0", 0x0B80|0);
+    TEST("ADDS.W #2, R7", 0x0B80|7);
+    TEST("SUBS   #1, R0", 0x1B00|0);
+    TEST("SUBS.W #1, R3", 0x1B00|3);
+    TEST("SUBS   #2, R0", 0x1B80|0);
+    TEST("SUBS.W #2, R7", 0x1B80|7);
+
+    // DAA/DAS Rd
+    TEST("DAA   R0H", 0x0F00|0x0);
+    TEST("DAA.B R7L", 0x0F00|0xF);
+    TEST("DAS   R0H", 0x1F00|0x0);
+    TEST("DAS.B R7L", 0x1F00|0xF);
+
+    // MULXU/DIVXU Rs8,Rd16: byte2=(Rs nibble<<4)|Rd3
+    TEST("MULXU   R0H, R0", 0x5000|(0x0<<4)|0);
+    TEST("MULXU.B R3H, R5", 0x5000|(0x3<<4)|5);
+    TEST("DIVXU   R0H, R0", 0x5100|(0x0<<4)|0);
+    TEST("DIVXU.B R7L, R2", 0x5100|(0xF<<4)|2);
+
+    // NEG Rd (0x17, bit7=1): byte2=0x80|Rd nibble
+    TEST("NEG   R0H", 0x1780|0x0);
+    TEST("NEG.B R7L", 0x1780|0xF);
+
+    // ADD/ADDX/CMP/SUBX #imm,Rd (0x80-0xBF): byte1=0x?0|(Rd nibble), byte2=imm8
+    TEST("ADD.B  #0, R0H",    0x8000|(0x0<<8)|0x00);
+    TEST("ADD    #H'FF, R7L", 0x8000|(0xF<<8)|0xFF);
+    TEST("ADDX.B #1, R0H",    0x9000|(0x0<<8)|0x01);
+    TEST("ADDX   #1, R0H",    0x9000|(0x0<<8)|0x01);
+    TEST("CMP.B  #H'55, R5H", 0xA000|(0x5<<8)|0x55);
+    TEST("CMP    #H'55, R5H", 0xA000|(0x5<<8)|0x55);
+    TEST("SUBX.B #2, R2L",    0xB000|(0xA<<8)|0x02);
+    TEST("SUBX   #2, R2L",    0xB000|(0xA<<8)|0x02);
+
+    if (is_h8300h() || is_h8s()) {
+        // ADD.L / SUB.L / CMP.L ERs,ERd
+        TEST("ADD.L ER0, ER1",          0x0A80|(0<<4)|1);
+        TEST("ADD.L ER7, ER0",          0x0A80|(7<<4)|0);
+        TEST("SUB.L ER0, ER1",          0x1A80|(0<<4)|1);
+        TEST("SUB.L SP,  ER0",          0x1A80|(7<<4)|0);
+        TEST("CMP.L ER3, ER5",          0x1F80|(3<<4)|5);
+
+        // NEG.W / NEG.L Rd
+        TEST("NEG.W R3",                0x1790|0x3);
+        TEST("NEG.L ER2",               0x17B0|2);
+
+        // INC.W #1/#2, Rd / INC.L #1/#2, ERd
+        TEST("INC.W #1, R0",            0x0B50|0x0);
+        TEST("INC.W #2, R7",            0x0BD0|0x7);
+        TEST("INC.W #1, E5",            0x0B50|0xD);
+        TEST("INC.L #1, ER0",           0x0B70|0);
+        TEST("INC.L #2, ER7",           0x0BF0|7);
+        // DEC.W / DEC.L
+        TEST("DEC.W #1, R0",            0x1B50|0x0);
+        TEST("DEC.W #2, R7",            0x1BD0|0x7);
+        TEST("DEC.L #1, ER3",           0x1B70|3);
+        TEST("DEC.L #2, ER5",           0x1BF0|5);
+
+        // ADDS / SUBS via M_ADREG on H8/300H accept ER (or SP -> ER7)
+        TEST("ADDS #1, ER0",            0x0B00|0);
+        TEST("ADDS #1, ER7",            0x0B00|7);
+        TEST("ADDS #1, SP",             0x0B00|7);
+        TEST("ADDS #2, ER3",            0x0B80|3);
+        TEST("SUBS #1, ER0",            0x1B00|0);
+        TEST("SUBS #2, ER5",            0x1B80|5);
+        // ADDS #4 / SUBS #4 (H8/300H-only)
+        TEST("ADDS #4, ER0",            0x0B90|0);
+        TEST("ADDS #4, ER7",            0x0B90|7);
+        TEST("SUBS #4, ER0",            0x1B90|0);
+        TEST("SUBS #4, ER5",            0x1B90|5);
+
+        // ADD.W / SUB.W / CMP.W #imm16, Rd
+        TEST("ADD.W #H'1234, R0",       0x7910|0x0, 0x1234);
+        TEST("ADD.W #H'FFFF, E7",       0x7910|0xF, 0xFFFF);
+        TEST("CMP.W #H'1234, R0",       0x7920|0x0, 0x1234);
+        TEST("SUB.W #H'1234, R0",       0x7930|0x0, 0x1234);
+
+        // ADD.L / SUB.L / CMP.L #imm32, ERd
+        TEST("ADD.L #H'12345678, ER0",  0x7A10|0, 0x1234, 0x5678);
+        TEST("CMP.L #H'00000001, ER1",  0x7A20|1, 0x0000, 0x0001);
+        TEST("SUB.L #H'00010000, ER2",  0x7A30|2, 0x0001, 0x0000);
+
+        // MULXU.W / DIVXU.W Rs,ERd
+        TEST("MULXU.W R0, ER0",         0x5200|(0x0<<4)|0);
+        TEST("MULXU.W R3, ER5",         0x5200|(0x3<<4)|5);
+        TEST("MULXU.W E2, ER7",         0x5200|(0xA<<4)|7);
+        TEST("MULXU.W R0, SP",          0x5200|(0x0<<4)|7);
+        TEST("DIVXU.W R0, ER1",         0x5300|(0x0<<4)|1);
+        TEST("DIVXU.W E7, ER7",         0x5300|(0xF<<4)|7);
+        ERRT("MULXU.W R0, R0",          OPERAND_NOT_ALLOWED, "R0, R0");
+
+        // MULXS / DIVXS (0x01C0 / 0x01D0 prefix)
+        TEST("MULXS.B R0H, R0",         0x01C0, 0x5000|(0x0<<4)|0x0);
+        TEST("MULXS.B R3H, R5",         0x01C0, 0x5000|(0x3<<4)|0x5);
+        TEST("MULXS.W R0,  ER0",        0x01C0, 0x5200|(0x0<<4)|0);
+        TEST("MULXS.W E7,  ER7",        0x01C0, 0x5200|(0xF<<4)|7);
+        TEST("DIVXS.B R0H, R0",         0x01D0, 0x5100|(0x0<<4)|0x0);
+        TEST("DIVXS.W R3,  ER2",        0x01D0, 0x5300|(0x3<<4)|2);
+    }
+}
+
+void test_logic() {
+    // OR/XOR/AND reg-reg: byte2=(Rs<<4)|Rd
+    TEST("OR.B  R0H, R0H", 0x1400|(0x0<<4)|0x0);
+    TEST("OR    R2H, R3L", 0x1400|(0x2<<4)|0xB);
+    TEST("XOR.B R0H, R0H", 0x1500|(0x0<<4)|0x0);
+    TEST("XOR   R1H, R5L", 0x1500|(0x1<<4)|0xD);
+    TEST("AND.B R0H, R0H", 0x1600|(0x0<<4)|0x0);
+    TEST("AND   R4L, R3H", 0x1600|(0xC<<4)|0x3);
+
+    // NOT Rd (0x17, bit7=0): byte2=Rd nibble
+    TEST("NOT   R0H", 0x1700|0x0);
+    TEST("NOT.B R7L", 0x1700|0xF);
+
+    // OR/XOR/AND #imm,Rd (0xC0-0xEF): byte1=0x?0|(Rd nibble), byte2=imm8
+    TEST("OR.B  #H'FF, R7L", 0xC000|(0xF<<8)|0xFF);
+    TEST("OR    #H'FF, R7L", 0xC000|(0xF<<8)|0xFF);
+    TEST("XOR.B #H'AA, R5H", 0xD000|(0x5<<8)|0xAA);
+    TEST("XOR   #H'AA, R5H", 0xD000|(0x5<<8)|0xAA);
+    TEST("AND.B #H'F0, R0H", 0xE000|(0x0<<8)|0xF0);
+    TEST("AND   #H'F0, R0H", 0xE000|(0x0<<8)|0xF0);
+
+    if (is_h8300h() || is_h8s()) {
+        // NOT.W / NOT.L Rd
+        TEST("NOT.W R0",                0x1710|0x0);
+        TEST("NOT.W E5",                0x1710|0xD);
+        TEST("NOT.L ER0",               0x1730|0);
+        TEST("NOT.L ER7",               0x1730|7);
+        // EXTU.W / EXTU.L Rd  (zero-extend)
+        TEST("EXTU.W R0",               0x1750|0x0);
+        TEST("EXTU.W E7",               0x1750|0xF);
+        TEST("EXTU.L ER4",              0x1770|4);
+        // EXTS.W / EXTS.L Rd  (sign-extend)
+        TEST("EXTS.W R1",               0x17D0|0x1);
+        TEST("EXTS.L ER6",              0x17F0|6);
+
+        // AND.W / OR.W / XOR.W Rs,Rd
+        TEST("AND.W R0, R1",            0x6600|(0x0<<4)|0x1);
+        TEST("AND.W E0, R1",            0x6600|(0x8<<4)|0x1);
+        TEST("OR.W  R0, E7",            0x6400|(0x0<<4)|0xF);
+        TEST("XOR.W E0, E7",            0x6500|(0x8<<4)|0xF);
+        // AND.W / OR.W / XOR.W #imm16, Rd
+        TEST("AND.W #H'1234, R0",       0x7960|0x0, 0x1234);
+        TEST("AND.W #H'FFFF, E7",       0x7960|0xF, 0xFFFF);
+        TEST("OR.W  #H'1234, R0",       0x7940|0x0, 0x1234);
+        TEST("XOR.W #H'1234, R0",       0x7950|0x0, 0x1234);
+
+        // OR.L / XOR.L / AND.L #imm32, ERd
+        TEST("OR.L  #H'AABBCCDD, ER3",  0x7A40|3, 0xAABB, 0xCCDD);
+        TEST("XOR.L #H'5A5A5A5A, ER4",  0x7A50|4, 0x5A5A, 0x5A5A);
+        TEST("AND.L #H'F0F0F0F0, ER5",  0x7A60|5, 0xF0F0, 0xF0F0);
+
+        // AND.L / OR.L / XOR.L reg-reg via 0x01F0 prefix
+        TEST("AND.L ER0, ER1",          0x01F0, 0x6600|(0<<4)|1);
+        TEST("AND.L ER5, ER6",          0x01F0, 0x6600|(5<<4)|6);
+        TEST("OR.L  ER0, ER1",          0x01F0, 0x6400|(0<<4)|1);
+        TEST("XOR.L ER3, ER4",          0x01F0, 0x6500|(3<<4)|4);
+    }
+}
+
+void test_shift_rotate() {
+    // Shift/rotate Rd: bit7=0 logical/rotate-thru-X, bit7=1 arithmetic/rotate
+    TEST("SHLL    R0H", 0x1000|0x0);
+    TEST("SHLL.B  R7L", 0x1000|0xF);
+    TEST("SHAL    R0H", 0x1080|0x0);
+    TEST("SHAL.B  R5L", 0x1080|0xD);
+    TEST("SHLR    R0H", 0x1100|0x0);
+    TEST("SHLR.B  R7H", 0x1100|0x7);
+    TEST("SHAR    R3L", 0x1180|0xB);
+    TEST("SHAR.B  R3L", 0x1180|0xB);
+    TEST("ROTXL   R0H", 0x1200|0x0);
+    TEST("ROTXL.B R0H", 0x1200|0x0);
+    TEST("ROTL    R0H", 0x1280|0x0);
+    TEST("ROTL.B  R0H", 0x1280|0x0);
+    TEST("ROTXR   R0H", 0x1300|0x0);
+    TEST("ROTXR.B R0H", 0x1300|0x0);
+    TEST("ROTR    R7L", 0x1380|0xF);
+    TEST("ROTR.B  R7L", 0x1380|0xF);
+
+    if (is_h8300h() || is_h8s()) {
+        // Shift / rotate .W and .L
+        TEST("SHLL.W R0",  0x1010|0x0);
+        TEST("SHLL.L ER0", 0x1030|0);
+        TEST("SHAL.W R3",  0x1090|0x3);
+        TEST("SHAL.L ER5", 0x10B0|5);
+        TEST("SHLR.W E0",  0x1110|0x8);
+        TEST("SHLR.L ER7", 0x1130|7);
+        TEST("SHAR.W R7",  0x1190|0x7);
+        TEST("SHAR.L ER1", 0x11B0|1);
+        TEST("ROTXL.W R0", 0x1210|0x0);
+        TEST("ROTXL.L ER2",0x1230|2);
+        TEST("ROTL.W R4",  0x1290|0x4);
+        TEST("ROTL.L ER3", 0x12B0|3);
+        TEST("ROTXR.W R0", 0x1310|0x0);
+        TEST("ROTXR.L ER6",0x1330|6);
+        TEST("ROTR.W E6",  0x1390|0xE);
+        TEST("ROTR.L ER0", 0x13B0|0);
+    }
+}
+
+void test_bit_ops() {
+    // BSET/BNOT/BCLR/BTST Rs,Rd (0x60-0x63): byte2=(Rs<<4)|Rd
+    TEST("BSET   R0H, R0H", 0x6000|(0x0<<4)|0x0);
+    TEST("BSET.B R2H, R5L", 0x6000|(0x2<<4)|0xD);
+    TEST("BNOT   R0H, R0H", 0x6100|(0x0<<4)|0x0);
+    TEST("BNOT.B R3L, R1H", 0x6100|(0xB<<4)|0x1);
+    TEST("BCLR   R0H, R0H", 0x6200|(0x0<<4)|0x0);
+    TEST("BCLR.B R7L, R4H", 0x6200|(0xF<<4)|0x4);
+    TEST("BTST   R0H, R0H", 0x6300|(0x0<<4)|0x0);
+    TEST("BTST.B R5H, R2L", 0x6300|(0x5<<4)|0xA);
+
+    // BSET/BNOT/BCLR/BTST #bit,Rd (0x70-0x73): byte2=(bit<<4)|Rd
+    TEST("BSET   #0, R0H", 0x7000|(0<<4)|0x0);
+    TEST("BSET.B #7, R7L", 0x7000|(7<<4)|0xF);
+    TEST("BNOT   #3, R2H", 0x7100|(3<<4)|0x2);
+    TEST("BNOT.B #3, R2H", 0x7100|(3<<4)|0x2);
+    TEST("BCLR   #5, R4L", 0x7200|(5<<4)|0xC);
+    TEST("BCLR.B #5, R4L", 0x7200|(5<<4)|0xC);
+    TEST("BTST   #1, R0H", 0x7300|(1<<4)|0x0);
+    TEST("BTST.B #1, R0H", 0x7300|(1<<4)|0x0);
+
+    // BSET/BNOT/BCLR/BTST Rs,@Rd (0x60-0x63): byte2=(Rd<<4) byte4=(Rs<<4)
+    TEST("BSET R0H, @R0", 0x7D00, 0x6000|(0x0<<4));
+    TEST("BSET R2H, @R1", 0x7D10, 0x6000|(0x2<<4));
+    TEST("BNOT R0H, @R2", 0x7D20, 0x6100|(0x0<<4));
+    TEST("BNOT R3L, @R3", 0x7D30, 0x6100|(0xB<<4));
+    TEST("BCLR R0H, @R4", 0x7D40, 0x6200|(0x0<<4));
+    TEST("BCLR R7L, @R5", 0x7D50, 0x6200|(0xF<<4));
+    TEST("BTST R0H, @R6", 0x7C60, 0x6300|(0x0<<4));
+    TEST("BTST R5H, @R7", 0x7C70, 0x6300|(0x5<<4));
+
+    // BSET/BNOT/BCLR/BTST #bit,@Rd (0x70-0x73): byte2=(Rd<<4) byte4=(bit<<4)
+    TEST("BSET #0, @R7", 0x7D70, 0x7000|(0<<4));
+    TEST("BSET #7, @R6", 0x7D60, 0x7000|(7<<4));
+    TEST("BNOT #3, @R5", 0x7D50, 0x7100|(3<<4));
+    TEST("BCLR #5, @R4", 0x7D40, 0x7200|(5<<4));
+    TEST("BTST #1, @R3", 0x7C30, 0x7300|(1<<4));
+
+    // BSET/BNOT/BCLR/BTST Rs,@aa:8 (0x60-0x63): byte2=aa:8 byte4=(Rs<<4)
+    TEST("BSET R0H, @H'FF00:8", 0x7F00, 0x6000|(0x0<<4));
+    TEST("BSET R2H, @H'FF10:8", 0x7F10, 0x6000|(0x2<<4));
+    TEST("BNOT R0H, @H'FF20:8", 0x7F20, 0x6100|(0x0<<4));
+    TEST("BNOT R3L, @H'FF30:8", 0x7F30, 0x6100|(0xB<<4));
+    TEST("BCLR R0H, @H'FF40:8", 0x7F40, 0x6200|(0x0<<4));
+    TEST("BCLR R7L, @H'FF50:8", 0x7F50, 0x6200|(0xF<<4));
+    TEST("BTST R0H, @H'FF60:8", 0x7E60, 0x6300|(0x0<<4));
+    TEST("BTST R5H, @H'FFFF:8", 0x7EFF, 0x6300|(0x5<<4));
+
+    // BSET/BNOT/BCLR/BTST #bit,@aa:8 (0x70-0x73): byte2=aa:8 byte4=(bit<<4)
+    TEST("BSET #0, @H'FF70:8", 0x7F70, 0x7000|(0<<4));
+    TEST("BSET #7, @H'FF60:8", 0x7F60, 0x7000|(7<<4));
+    TEST("BNOT #3, @H'FF50:8", 0x7F50, 0x7100|(3<<4));
+    TEST("BCLR #5, @H'FF40:8", 0x7F40, 0x7200|(5<<4));
+    TEST("BTST #1, @H'FF30:8", 0x7E30, 0x7300|(1<<4));
+
+    // BST/BIST #bit,Rd (0x67)
+    TEST("BST    #0, R0H", 0x6700|(0<<4)|0x0);
+    TEST("BST.B  #7, R5L", 0x6700|(7<<4)|0xD);
+    TEST("BIST   #0, R0H", 0x6780|(0<<4)|0x0);
+    TEST("BIST.B #3, R6L", 0x6780|(3<<4)|0xE);
+
+    // BOR/BIOR/BXOR/BIXOR/BAND/BIAND/BLD/BILD #bit,Rd (0x74-0x77)
+    TEST("BOR     #0, R0H", 0x7400|(0<<4)|0x0);
+    TEST("BOR.B   #5, R3H", 0x7400|(5<<4)|0x3);
+    TEST("BIOR    #2, R1H", 0x7480|(2<<4)|0x1);
+    TEST("BIOR.B  #2, R1H", 0x7480|(2<<4)|0x1);
+    TEST("BXOR    #4, R0H", 0x7500|(4<<4)|0x0);
+    TEST("BXOR.B  #4, R0H", 0x7500|(4<<4)|0x0);
+    TEST("BIXOR   #1, R7L", 0x7580|(1<<4)|0xF);
+    TEST("BIXOR.B #1, R7L", 0x7580|(1<<4)|0xF);
+    TEST("BAND    #6, R2H", 0x7600|(6<<4)|0x2);
+    TEST("BAND.B  #6, R2H", 0x7600|(6<<4)|0x2);
+    TEST("BIAND   #3, R4L", 0x7680|(3<<4)|0xC);
+    TEST("BIAND.B #3, R4L", 0x7680|(3<<4)|0xC);
+    TEST("BLD     #7, R0H", 0x7700|(7<<4)|0x0);
+    TEST("BLD.B   #7, R0H", 0x7700|(7<<4)|0x0);
+    TEST("BILD    #0, R7L", 0x7780|(0<<4)|0xF);
+    TEST("BILD.B  #0, R7L", 0x7780|(0<<4)|0xF);
+
+    // BST/BIST #bit,@Rd (0x67): byte2=Rd byte4=(bit<<4)(bit7=0→BST, bit7=1→BIST)
+    TEST("BST  #0, @R0", 0x7D00, 0x6700|(0<<4));
+    TEST("BST  #7, @R5", 0x7D50, 0x6700|(7<<4));
+    TEST("BIST #1, @R2", 0x7D20, 0x6780|(1<<4));
+    TEST("BIST #3, @R6", 0x7D60, 0x6780|(3<<4));
+
+    // BOR/BIOR/BXOR/BIXOR/BAND/BIAND/BLD/BILD #bit,@Rd (0x74-0x77):
+    // byte2=Rd byte4=(bit<<4) (bit7=0→Bxx, bit7=1→BIxx)
+    TEST("BOR   #0, @R0", 0x7C00, 0x7400|(0<<4));
+    TEST("BOR   #5, @R3", 0x7C30, 0x7400|(5<<4));
+    TEST("BIOR  #2, @R1", 0x7C10, 0x7480|(2<<4));
+    TEST("BXOR  #4, @R0", 0x7C00, 0x7500|(4<<4));
+    TEST("BIXOR #1, @R7", 0x7C70, 0x7580|(1<<4));
+    TEST("BAND  #6, @R2", 0x7C20, 0x7600|(6<<4));
+    TEST("BIAND #3, @R4", 0x7C40, 0x7680|(3<<4));
+    TEST("BLD   #7, @R0", 0x7C00, 0x7700|(7<<4));
+    TEST("BILD  #0, @R7", 0x7C70, 0x7780|(0<<4));
+
+    // BST/BIST #bit,@aa:8 (0x67): byte2=aa:8 byte4=(bit<<4)(bit7=0→BST, bit7=1→BIST)
+    TEST("BST  #0, @H'FF00:8", 0x7F00, 0x6700|(0<<4));
+    TEST("BST  #7, @H'FF50:8", 0x7F50, 0x6700|(7<<4));
+    TEST("BIST #1, @H'FF20:8", 0x7F20, 0x6780|(1<<4));
+    TEST("BIST #3, @H'FF60:8", 0x7F60, 0x6780|(3<<4));
+
+    // BOR/BIOR/BXOR/BIXOR/BAND/BIAND/BLD/BILD #bit,@aa:8 (0x74-0x77):
+    // byte2=aa:8 byte4=(bit<<4) (bit7=0→Bxx, bit7=1→BIxx)
+    TEST("BOR   #0, @H'FF00:8", 0x7E00, 0x7400|(0<<4));
+    TEST("BOR   #5, @H'FF30:8", 0x7E30, 0x7400|(5<<4));
+    TEST("BIOR  #2, @H'FF10:8", 0x7E10, 0x7480|(2<<4));
+    TEST("BXOR  #4, @H'FF00:8", 0x7E00, 0x7500|(4<<4));
+    TEST("BIXOR #1, @H'FF70:8", 0x7E70, 0x7580|(1<<4));
+    TEST("BAND  #6, @H'FF20:8", 0x7E20, 0x7600|(6<<4));
+    TEST("BIAND #3, @H'FF40:8", 0x7E40, 0x7680|(3<<4));
+    TEST("BLD   #7, @H'FF00:8", 0x7E00, 0x7700|(7<<4));
+    TEST("BILD  #0, @H'FF70:8", 0x7E70, 0x7780|(0<<4));
+
+    ERRT("BSET #8, R0H", ILLEGAL_BIT_NUMBER, "#8, R0H", 0x7000|(0<<4)|0x0);
+}
+
+void test_branch() {
+    // Bcc d:8 / BSR d:8 — byte1 = 0x4c (condition) or 0x55 (BSR), byte2 = signed disp.
+    // target = origin + 2 + disp_signed. Range: -128..+127.
+    // Vary the displacement across conditions and exercise the ±128 edges.
+
+    // Trivial case: origin=0, disp=0 → target=0x0002.
+    TEST("BRA H'0002", 0x4000|0x00);
+
+    // ----- Edge: max positive +126 (disp = 0x7E) -----
+    ATEST(0x1000, "BT  H'1080", 0x4000|0x7E);   // BT alias for BRA
+    ATEST(0x1000, "BHS H'1080", 0x4400|0x7E);   // BHS alias for BCC
+    ATEST(0x1000, "BVS H'1080", 0x4900|0x7E);
+    ATEST(0x1000, "BLE H'1080", 0x4F00|0x7E);
+    ATEST(0x1000, "BSR H'1080", 0x5500|0x7E);
+
+    // ----- Edge: max negative -128 (disp = 0x80) -----
+    ATEST(0x1000, "BF  H'0F82", 0x4100|0x80);   // BF alias for BRN
+    ATEST(0x1000, "BLO H'0F82", 0x4500|0x80);   // BLO alias for BCS
+    ATEST(0x1000, "BPL H'0F82", 0x4A00|0x80);
+    ATEST(0x1000, "BSR H'0F82", 0x5500|0x80);
+
+    // ----- Edge: branch to self start (disp = -2, byte = 0xFE) -----
+    ATEST(0x1000, "BRN H'1000", 0x4100|0xFE);
+    ATEST(0x1000, "BEQ H'1000", 0x4700|0xFE);
+
+    // ----- Mid-range displacements (assorted) -----
+    ATEST(0x1000, "BHI H'1004", 0x4200|0x02);
+    ATEST(0x1000, "BLS H'0FFE", 0x4300|0xFC);
+    ATEST(0x1000, "BCC H'107E", 0x4400|0x7C);
+    ATEST(0x1000, "BCS H'1010", 0x4500|0x0E);
+    ATEST(0x1000, "BNE H'1020", 0x4600|0x1E);
+    ATEST(0x1000, "BVC H'1060", 0x4800|0x5E);
+    ATEST(0x1000, "BMI H'0FF0", 0x4B00|0xEE);
+    ATEST(0x1000, "BGE H'1012", 0x4C00|0x10);
+    ATEST(0x1000, "BLT H'0FF4", 0x4D00|0xF2);
+    ATEST(0x1000, "BGT H'0FFA", 0x4E00|0xF8);
+
+    if (is_h8300h() || is_h8s()) {
+        // 8-bit overflow auto-promotes to :16 long branch on H8/300H.
+        ATEST(0x1000, "BRA H'1082", 0x5800, 0x1082 - 0x1004);
+        ATEST(0x1000, "BRA H'2000", 0x5800, 0x2000 - 0x1004);
+        ATEST(0x1000, "BSR H'2000", 0x5C00, 0x2000 - 0x1004);
+        ATEST(0x1000, "BHI H'2000", 0x5820, 0x2000 - 0x1004);
+        ATEST(0x1000, "BRA H'1010", 0x4000|0x0E);          // BRA :8 still fits
+    } else {
+        // H8/300 has no long branch; signed 8-bit disp must be in -128..+127.
+        AERRT(0x1000, "BRA H'1082", OPERAND_TOO_FAR, "H'1082", 0x4000|0x80);
+    }
+}
+
+void test_jump() {
+    // JMP @Rn (0x59): byte2=(Rn3<<4)
+    TEST("JMP @R0", 0x5900|(0<<4));
+    TEST("JMP @R5", 0x5900|(5<<4));
+    TEST("JMP @R7", 0x5900|(7<<4));
+
+    // JMP @abs16 (0x5A)
+    TEST("JMP @H'1234:16", 0x5A00, 0x1234);
+    TEST("JMP @H'0000:16", 0x5A00, 0x0000);
+
+    // JMP @@abs8 (0x5B): byte2=abs8
+    TEST("JMP @@H'00:8", 0x5B00|0x00);
+    TEST("JMP @@H'FF:8", 0x5B00|0xFF);
+
+    // JSR @Rn (0x5D): byte2=(Rn3<<4)
+    TEST("JSR @R0", 0x5D00|(0<<4));
+    TEST("JSR @R3", 0x5D00|(3<<4));
+
+    // JSR @abs16 (0x5E)
+    TEST("JSR @H'5678:16", 0x5E00, 0x5678);
+
+    // JSR @@abs8 (0x5F): byte2=abs8
+    TEST("JSR @@H'80:8", 0x5F00|0x80);
+
+    if (is_h8300h() || is_h8s()) {
+        // JMP / JSR @aa:24 (24-bit address packed: high byte in opcode, low 16 in next word)
+        TEST("JMP @H'000100:24", 0x5A00, 0x0100);
+        TEST("JMP @H'FFFFE0:24", 0x5AFF, 0xFFE0);
+        TEST("JSR @H'000100:24", 0x5E00, 0x0100);
+        TEST("JSR @H'FFFFE0:24", 0x5EFF, 0xFFE0);
+    }
+}
+
+
+void test_advanced_mode() {
+    assembler.setOption("advanced-mode", "on");
+
+    // @aa:8 short-page widens 0xnn -> 0xFFFFnn in advanced mode (24-bit).
+    TEST("MOV.B @H'FFFFFF:8, R0H", 0x2000|(0<<8)|0xFF);
+    TEST("MOV.B @H'FFFF80:8, R7L", 0x2000|(0xF<<8)|0x80);
+    TEST("MOV.B @H'80:8,     R7L", 0x2000|(0xF<<8)|0x80);
+
+    // @aa:16 sign-extends bit 15 in advanced mode: 0x0000..0x7FFF and
+    // 0xFF8000..0xFFFFFF reachable; 0x008000..0xFF7FFF is overflow.
+    TEST("MOV.B @H'FFFF80:16, R0H", 0x6A00|0x0, 0xFF80);
+    TEST("MOV.B @H'FF8000:16, R0H", 0x6A00|0x0, 0x8000);
+    TEST("MOV.B @H'0080:16,   R0H", 0x6A00|0x0, 0x0080);
+    TEST("MOV.B @H'7FFF:16,   R0H", 0x6A00|0x0, 0x7FFF);
+    ERRT("MOV.B @H'008000:16, R0H", OVERFLOW_RANGE, "H'008000:16, R0H",
+            0x6A00|0x0, 0x8000);
+    ERRT("MOV.B @H'FF7FFF:16, R0H", OVERFLOW_RANGE, "H'FF7FFF:16, R0H",
+            0x6A00|0x0, 0x7FFF);
+
+    // @(d:16, ERn) displacement: in advanced mode it must be a strict
+    // signed 16-bit value [-32768,32767]; unsigned values >0x7FFF are
+    // rejected. (Normal mode is more permissive -- see test_data_move.)
+    TEST("MOV.W @(-1, ER0), R0",      0x6F00|(0<<4)|0x0, 0xFFFF);
+    TEST("MOV.W @(-32768, ER0), R0",  0x6F00|(0<<4)|0x0, 0x8000);
+    TEST("MOV.W @(32767, ER0), R0",   0x6F00|(0<<4)|0x0, 0x7FFF);
+    ERRT("MOV.W @(H'FFFF, ER0), R0",  OVERFLOW_RANGE, "H'FFFF, ER0), R0",
+            0x6F00|(0<<4)|0x0, 0xFFFF);
+    ERRT("MOV.W @(-32769, ER0), R0",  OVERFLOW_RANGE, "-32769, ER0), R0",
+            0x6F00|(0<<4)|0x0, 0x7FFF);
+
+    // @aa:24 form always covers full 24-bit space.
+    TEST("MOV.B @H'001234:24, R0H", 0x6A20|0x0, 0x0000, 0x1234);
+    TEST("MOV.B @H'FFFFE0:24, R7L", 0x6A20|0xF, 0x00FF, 0xFFE0);
+
+    // JMP / JSR @aa:24 targets up to 0xFFFFFF.
+    TEST("JMP @H'FFFFFF:24", 0x5AFF, 0xFFFF);
+    TEST("JSR @H'FFFFFF:24", 0x5EFF, 0xFFFF);
+
+    if (is_h8s()) {
+        // H8S advanced mode adds @aa:32 data addressing (manual table 1.5).
+        // Byte encoding is identical to @aa:24 but takes a full 32-bit value.
+        TEST("MOV.B @H'00000000:32, R0H", 0x6A20|0x0, 0x0000, 0x0000);
+        TEST("MOV.B @H'FFFFFFFF:32, R7L", 0x6A20|0xF, 0xFFFF, 0xFFFF);
+        TEST("MOV.B R0H, @H'00000000:32", 0x6AA0|0x0, 0x0000, 0x0000);
+        TEST("MOV.B R7L, @H'FFFFFFFF:32", 0x6AA0|0xF, 0xFFFF, 0xFFFF);
+        TEST("MOV.W @H'00000100:32, R0",  0x6B20|0x0, 0x0000, 0x0100);
+        TEST("MOV.W R7, @H'FFFFFFFE:32",  0x6BA0|0x7, 0xFFFF, 0xFFFE);
+        TEST("MOV.L @H'00000100:32, ER0", 0x0100, 0x6B20|0x0, 0x0000, 0x0100);
+        TEST("MOV.L ER7, @H'FFFFFFFE:32", 0x0100, 0x6BA0|0x7, 0xFFFF, 0xFFFE);
+        TEST("LDC @H'12345678:32, CCR",   0x0140, 0x6B20, 0x1234, 0x5678);
+        TEST("STC CCR, @H'12345678:32",   0x0140, 0x6BA0, 0x1234, 0x5678);
+        TEST("LDC @H'12345678:32, EXR",   0x0141, 0x6B20, 0x1234, 0x5678);
+        TEST("STC EXR, @H'12345678:32",   0x0141, 0x6BA0, 0x1234, 0x5678);
+    }
+
+    assembler.setOption("advanced-mode", "off");
+
+    // After turning advanced-mode off, the 24-bit short/absolute forms are
+    // still accepted as aliases of the 16-bit forms (they encode identically),
+    // so sources shared with advanced mode assemble without modification.
+    TEST("MOV.B @H'FFFFFF:8, R0H",  0x2000|(0<<8)|0xFF);
+    TEST("MOV.B @H'FFFF80:16, R0H", 0x6A00|0x0, 0xFF80);
+    // Values outside both the normal page and the advanced-mode high page
+    // still overflow.
+    ERRT("MOV.B @H'FF0000:8, R0H",  OVERFLOW_RANGE, "H'FF0000:8, R0H",
+            0x2000|(0<<8)|0x00);
+    ERRT("MOV.B @H'FE0000:16, R0H", OVERFLOW_RANGE, "H'FE0000:16, R0H",
+            0x6A00|0x0, 0x0000);
+}
+
+void test_data_constant() {
+    // .DATA defaults to word, big-endian; strings not allowed.
+    TEST(".data H'1234, H'5678", 0x1234, 0x5678);
+    TEST(".data.w H'8000", 0x8000);
+    TEST(".data.b H'AB, H'CD", 0xABCD);
+    TEST(".data.l H'12345678", 0x1234, 0x5678);
+
+    // .SDATA emits raw string bytes; comma-separated operands concatenate.
+    TEST(R"(.sdata "Hi")",       0x4869);
+    TEST(R"(.sdata "")");
+    BTEST(R"(.sdata "Hi", "!")", 0x48, 0x69, 0x21);
+
+    // Hitachi letter syntax: "X" delimits a single character; "" inside the
+    // delimiters is an escaped double-quote (0x22).
+    TEST(R"(MOV.B #"A", R0H)",   0xF041);
+    TEST(R"(MOV.B #"0", R0H)",   0xF030);
+    TEST(R"(MOV.B #" ", R0H)",   0xF020);
+    TEST(R"(MOV.B #"""", R0H)",  0xF022);
+
+    // .RES reserves space without emitting bytes; output buffer is empty.
+    TEST(".res 2");
+    TEST(".res.b 3");
+    TEST(".res.w 1");
+    TEST(".res.l 1");
+}
+
+void test_h8s_extensions() {
+    // Bit operations on @aa:16 and @aa:32.  The prefix carries the address
+    // width and whether the operation writes memory, the address follows it,
+    // and the operation code comes last (manual section 2 format tables).
+    TEST("BTST #0, @H'1234:16",  0x6A10, 0x1234, 0x7300);
+    TEST("BTST R1L, @H'1234:16", 0x6A10, 0x1234, 0x6390);
+    TEST("BOR #1, @H'1234:16",   0x6A10, 0x1234, 0x7410);
+    TEST("BIOR #1, @H'1234:16",  0x6A10, 0x1234, 0x7490);
+    TEST("BXOR #2, @H'1234:16",  0x6A10, 0x1234, 0x7520);
+    TEST("BIXOR #2, @H'1234:16", 0x6A10, 0x1234, 0x75A0);
+    TEST("BAND #3, @H'1234:16",  0x6A10, 0x1234, 0x7630);
+    TEST("BIAND #3, @H'1234:16", 0x6A10, 0x1234, 0x76B0);
+    TEST("BLD #4, @H'1234:16",   0x6A10, 0x1234, 0x7740);
+    TEST("BILD #4, @H'1234:16",  0x6A10, 0x1234, 0x77C0);
+    // Read-modify-write forms take the 0x6A18 prefix instead.
+    TEST("BSET #5, @H'1234:16",  0x6A18, 0x1234, 0x7050);
+    TEST("BSET R1L, @H'1234:16", 0x6A18, 0x1234, 0x6090);
+    TEST("BNOT #6, @H'1234:16",  0x6A18, 0x1234, 0x7160);
+    TEST("BNOT R1L, @H'1234:16", 0x6A18, 0x1234, 0x6190);
+    TEST("BCLR #7, @H'1234:16",  0x6A18, 0x1234, 0x7270);
+    TEST("BCLR R1L, @H'1234:16", 0x6A18, 0x1234, 0x6290);
+    TEST("BST #0, @H'1234:16",   0x6A18, 0x1234, 0x6700);
+    TEST("BIST #0, @H'1234:16",  0x6A18, 0x1234, 0x6780);
+    // @aa:32 uses 0x6A30 and 0x6A38 with a four-byte address.
+    TEST("BTST #0, @H'00012345:32", 0x6A30, 0x0001, 0x2345, 0x7300);
+    TEST("BSET #5, @H'00012345:32", 0x6A38, 0x0001, 0x2345, 0x7050);
+    TEST("BST #0, @H'00012345:32",  0x6A38, 0x0001, 0x2345, 0x6700);
+
+    // TAS @ERn (01E0 7B|er*16|C); architectural set is {ER0,ER1,ER4,ER5},
+    // but the encoder accepts all ERn (decoder also recognises @SP as ER7).
+    TEST("TAS @ER0",            0x01E0, 0x7B0C);
+    TEST("TAS @ER1",            0x01E0, 0x7B1C);
+    TEST("TAS @ER4",            0x01E0, 0x7B4C);
+    TEST("TAS @ER5",            0x01E0, 0x7B5C);
+    TEST("TAS @SP",             0x01E0, 0x7B7C);
+
+    // LDM.L @SP+, ER list (01|count-1*16 6D 7|last_reg)
+    TEST("LDM.L @ER7+, ER0-ER1", 0x0110, 0x6D71);
+    TEST("LDM.L @SP+, ER2-ER3", 0x0110, 0x6D73);
+    TEST("LDM @SP+, ER4-ER5",   0x0110, 0x6D75);
+    TEST("LDM.L @SP+, ER0-ER2", 0x0120, 0x6D72);
+    TEST("LDM @SP+, ER4-ER6",   0x0120, 0x6D76);
+    TEST("LDM.L @SP+, ER0-ER3", 0x0130, 0x6D73);
+    // STM.L ER list, @-SP (01|count-1*16 6D F|first_reg)
+    TEST("STM.L ER0-ER1, @-ER7", 0x0110, 0x6DF0);
+    TEST("STM.L ER2-ER3, @-SP", 0x0110, 0x6DF2);
+    TEST("STM ER4-ER5, @-SP",   0x0110, 0x6DF4);
+    TEST("STM.L ER0-ER2, @-SP", 0x0120, 0x6DF0);
+    TEST("STM ER4-ER6, @-SP",   0x0120, 0x6DF4);
+    TEST("STM.L ER0-ER3, @-SP", 0x0130, 0x6DF0);
+
+    // Invalid register lists.
+    ERRT("LDM.L @SP+, ER1-ER2", ILLEGAL_REGISTER, "ER1-ER2");          // misaligned 2-reg
+    ERRT("LDM.L @SP+, ER1-ER3", ILLEGAL_REGISTER, "ER1-ER3");          // 3-reg not at 0/4
+    ERRT("LDM.L @SP+, ER0-ER0", ILLEGAL_REGISTER, "ER0-ER0");          // count 1
+    ERRT("LDM.L @SP+, ER1-ER0", ILLEGAL_REGISTER, "ER1-ER0");          // reversed
+    ERRT("STM.L R0-R1, @-SP",   ILLEGAL_REGISTER, "R0-R1, @-SP");      // 16-bit reg
+    ERRT("STM.L ER0-R1, @-SP",  ILLEGAL_REGISTER, "R1, @-SP");         // second reg not ER
+
+    // Implicit @SP for LDM/STM: any other ER must be rejected.
+    ERRT("LDM.L @ER0+, ER0-ER1", REGISTER_NOT_ALLOWED, "@ER0+, ER0-ER1", 0x0110, 0x6D71);
+    ERRT("STM.L ER0-ER1, @-ER3", REGISTER_NOT_ALLOWED, "@-ER3",          0x0110, 0x6DF0);
+
+    // LDC/STC EXR register-to-register (031|rs, 021|rd; H8S only).
+    TEST("LDC R0L, EXR",           0x0318);
+    TEST("LDC R3H, EXR",           0x0313);
+    TEST("STC EXR, R1L",           0x0219);
+    // LDC/ANDC/ORC/XORC #imm:8, EXR (0141 0[7|6|4|5] imm).
+    TEST("LDC #H'A5, EXR",         0x0141, 0x07A5);
+    TEST("ANDC #H'F0, EXR",        0x0141, 0x06F0);
+    TEST("ORC #H'A5, EXR",         0x0141, 0x04A5);
+    TEST("XORC #H'0F, EXR",        0x0141, 0x050F);
+    // LDC/STC EXR with memory (0141 super-prefix + CCR pattern).
+    TEST("LDC @ER0, EXR",          0x0141, 0x6900);
+    TEST("LDC @ER7, EXR",          0x0141, 0x6970);
+    TEST("STC EXR, @ER0",          0x0141, 0x6980);
+    TEST("STC EXR, @SP",           0x0141, 0x69F0);
+    TEST("LDC @ER0+, EXR",         0x0141, 0x6D00);
+    TEST("STC EXR, @-ER1",         0x0141, 0x6D90);
+    TEST("LDC @H'1234, EXR",       0x0141, 0x6B00, 0x1234);
+    TEST("STC EXR, @H'1234",       0x0141, 0x6B80, 0x1234);
+    TEST("LDC @(H'1234,ER0), EXR", 0x0141, 0x6F00, 0x1234);
+    TEST("STC EXR, @(H'1234,ER0)", 0x0141, 0x6F80, 0x1234);
+
+    // 2-bit shift/rotate #2,Rd forms (sets bit 6 of byte 2 vs the #1 form).
+    TEST("SHLL #2, R0H",  0x1040);
+    TEST("SHLL #2, R7L",  0x104F);
+    TEST("SHLL.W #2, R0", 0x1050);
+    TEST("SHLL.W #2, E7", 0x105F);
+    TEST("SHLL.L #2, ER0", 0x1070);
+    TEST("SHLL.L #2, ER7", 0x1077);
+    TEST("SHAL #2, R0H",  0x10C0);
+    TEST("SHAL.W #2, R0", 0x10D0);
+    TEST("SHAL.L #2, ER0", 0x10F0);
+    TEST("SHLR #2, R0H",  0x1140);
+    TEST("SHLR.W #2, R0", 0x1150);
+    TEST("SHLR.L #2, ER0", 0x1170);
+    TEST("SHAR #2, R0H",  0x11C0);
+    TEST("SHAR.W #2, R0", 0x11D0);
+    TEST("SHAR.L #2, ER0", 0x11F0);
+    TEST("ROTXL #2, R0H",  0x1240);
+    TEST("ROTXL.W #2, R0", 0x1250);
+    TEST("ROTXL.L #2, ER0", 0x1270);
+    TEST("ROTL #2, R0H",  0x12C0);
+    TEST("ROTL.W #2, R0", 0x12D0);
+    TEST("ROTL.L #2, ER0", 0x12F0);
+    TEST("ROTXR #2, R0H",  0x1340);
+    TEST("ROTXR.W #2, R0", 0x1350);
+    TEST("ROTXR.L #2, ER0", 0x1370);
+    TEST("ROTR #2, R0H",  0x13C0);
+    TEST("ROTR.W #2, R0", 0x13D0);
+    TEST("ROTR.L #2, ER0", 0x13F0);
+
+    // @(d:32, ERn) addressing for MOV.B/W/L and LDC/STC CCR/EXR.
+    TEST("MOV.B @(H'12345678:32,ER0), R0H", 0x7800, 0x6A20, 0x1234, 0x5678);
+    TEST("MOV.B @(H'7FFFFFFF:32,ER7), R7L", 0x7870, 0x6A2F, 0x7FFF, 0xFFFF);
+    TEST("MOV.B R0H, @(H'12345678:32,ER0)", 0x7800, 0x6AA0, 0x1234, 0x5678);
+    TEST("MOV.B R7L, @(H'7FFFFFFF:32,SP)",  0x7870, 0x6AAF, 0x7FFF, 0xFFFF);
+    TEST("MOV.W @(H'12345678:32,ER0), R0",  0x7800, 0x6B20, 0x1234, 0x5678);
+    TEST("MOV.W R7, @(H'7FFFFFFF:32,SP)",   0x7870, 0x6BA7, 0x7FFF, 0xFFFF);
+    TEST("MOV.L @(H'12345678:32,ER0), ER1", 0x0100, 0x7800, 0x6B21, 0x1234, 0x5678);
+    TEST("MOV.L ER0, @(H'12345678:32,ER0)", 0x0100, 0x7880, 0x6BA0, 0x1234, 0x5678);
+    TEST("MOV.L ER6, @(H'7FFFFFFF:32,SP)",  0x0100, 0x78F0, 0x6BA6, 0x7FFF, 0xFFFF);
+    TEST("LDC @(H'12345678:32,ER0), CCR",   0x0140, 0x7800, 0x6B20, 0x1234, 0x5678);
+    TEST("STC CCR, @(H'12345678:32,ER0)",   0x0140, 0x7800, 0x6BA0, 0x1234, 0x5678);
+    TEST("LDC @(H'12345678:32,ER0), EXR",   0x0141, 0x7800, 0x6B20, 0x1234, 0x5678);
+    TEST("STC EXR, @(H'12345678:32,ER0)",   0x0141, 0x7800, 0x6BA0, 0x1234, 0x5678);
+}
+
+void test_h8s2600_mac() {
+    // CLRMAC (0x01A0): single-word opcode, no operands.
+    TEST("CLRMAC", 0x01A0);
+
+    // MAC @ERn+,@ERm+: prefix 0x0160, body 0x6D|n*16|m.
+    TEST("MAC @ER0+, @ER0+", 0x0160, 0x6D00);
+    TEST("MAC @ER0+, @ER7+", 0x0160, 0x6D07);
+    TEST("MAC @ER7+, @ER0+", 0x0160, 0x6D70);
+    TEST("MAC @SP+,  @SP+",  0x0160, 0x6D77);
+    TEST("MAC @ER3+, @ER4+", 0x0160, 0x6D34);
+
+    // LDMAC ERs, MACH/MACL: byte2 low 3 bits = ERs.
+    TEST("LDMAC ER0, MACH", 0x0320);
+    TEST("LDMAC ER7, MACH", 0x0327);
+    TEST("LDMAC SP,  MACH", 0x0327);
+    TEST("LDMAC ER0, MACL", 0x0330);
+    TEST("LDMAC ER7, MACL", 0x0337);
+
+    // STMAC MACH/MACL, ERd: byte2 low 3 bits = ERd.
+    TEST("STMAC MACH, ER0", 0x0220);
+    TEST("STMAC MACH, ER7", 0x0227);
+    TEST("STMAC MACL, ER0", 0x0230);
+    TEST("STMAC MACL, SP",  0x0237);
+
+    // MAC/LDMAC/STMAC are H8S/2600-only; not accepted on other CPUs.
+}
+
+void test_undef() {
+    // An undefined symbol is a soft error: ErrorReporter::hasError() returns
+    // false for UNDEFINED_SYMBOL, so parseOperand keeps going with value 0 and
+    // the instruction is still encoded at its proper length (the value bytes
+    // come out 0). encodeImpl then propagates UNDEFINED_SYMBOL so the final
+    // assembler pass reports it. Cover every operand mode that takes a value.
+
+    // ----- Immediate (size fixed by suffix/opcode, not by the value) -----
+    ERUS("MOV.B  #UNDEF, R0H", "UNDEF, R0H", 0xF000);
+    ERUS("MOV.W  #UNDEF, R0",  "UNDEF, R0",  0x7900|0, 0x0000);
+    ERUS("ADD.B  #UNDEF, R0H", "UNDEF, R0H", 0x8000);
+    ERUS("ADDX.B #UNDEF, R0H", "UNDEF, R0H", 0x9000);
+    ERUS("CMP.B  #UNDEF, R5H", "UNDEF, R5H", 0xA000|(0x5<<8));
+    ERUS("SUBX.B #UNDEF, R2L", "UNDEF, R2L", 0xB000|(0xA<<8));
+    ERUS("OR.B   #UNDEF, R7L", "UNDEF, R7L", 0xC000|(0xF<<8));
+    ERUS("XOR.B  #UNDEF, R5H", "UNDEF, R5H", 0xD000|(0x5<<8));
+    ERUS("AND.B  #UNDEF, R0H", "UNDEF, R0H", 0xE000|(0x0<<8));
+
+    // ----- Bit number immediate (M_IMM3) -----
+    ERUS("BSET #UNDEF, R0H", "UNDEF, R0H", 0x7000);
+    ERUS("BCLR #UNDEF, R4L", "UNDEF, R4L", 0x7200|0xC);
+    ERUS("BTST #UNDEF, R0H", "UNDEF, R0H", 0x7300);
+
+    // ----- Absolute @aa:8 (value 0 -> short form, byte 0) -----
+    ERUS("MOV.B @UNDEF:8, R0H", "UNDEF:8, R0H", 0x2000);
+    // No suffix: an undefined value can't be proven to live in the 0xFF00..0xFFFF
+    // zero page, so the safe @aa:16 form is selected (same as any out-of-page value).
+    ERUS("MOV.B @UNDEF,   R0H", "UNDEF,   R0H", 0x6A00, 0x0000);
+
+    // ----- Absolute @aa:16 -----
+    ERUS("MOV.B @UNDEF:16, R0H", "UNDEF:16, R0H", 0x6A00, 0x0000);
+    ERUS("MOV.W @UNDEF:16, R0",  "UNDEF:16, R0",  0x6B00, 0x0000);
+
+    // ----- Memory indirect @@aa:8 -----
+    ERUS("JMP @@UNDEF:8", "UNDEF:8", 0x5B00);
+    ERUS("JSR @@UNDEF:8", "UNDEF:8", 0x5F00);
+
+    // ----- Jump absolute @aa:16 -----
+    ERUS("JMP @UNDEF:16", "UNDEF:16", 0x5A00, 0x0000);
+    ERUS("JSR @UNDEF:16", "UNDEF:16", 0x5E00, 0x0000);
+
+    // ----- Indexed @(d:16,Rn) -----
+    ERUS("MOV.B @(UNDEF, R0), R0H", "UNDEF, R0), R0H", 0x6E00, 0x0000);
+    ERUS("MOV.W @(UNDEF, R0), R0",  "UNDEF, R0), R0",  0x6F00, 0x0000);
+
+    // ----- Branch relative (value 0 -> displacement 0) -----
+    ERUS("BRA UNDEF", "UNDEF", 0x4000);
+    ERUS("BEQ UNDEF", "UNDEF", 0x4700);
+    ERUS("BSR UNDEF", "UNDEF", 0x5500);
+
+    if (is_h8300h() || is_h8s()) {
+        // 32-bit immediate.
+        ERUS("MOV.L #UNDEF, ER0", "UNDEF, ER0", 0x7A00|0, 0x0000, 0x0000);
+        ERUS("ADD.L #UNDEF, ER0", "UNDEF, ER0", 0x7A10|0, 0x0000, 0x0000);
+        ERUS("CMP.L #UNDEF, ER1", "UNDEF, ER1", 0x7A20|1, 0x0000, 0x0000);
+        ERUS("ADD.W #UNDEF, R0",  "UNDEF, R0",  0x7910|0, 0x0000);
+
+        // Absolute @aa:24.
+        ERUS("MOV.B @UNDEF:24, R0H", "UNDEF:24, R0H", 0x6A20|0x0, 0x0000, 0x0000);
+        ERUS("MOV.W @UNDEF:24, R0",  "UNDEF:24, R0",  0x6B20|0x0, 0x0000, 0x0000);
+        ERUS("JMP @UNDEF:24", "UNDEF:24", 0x5A00, 0x0000);
+        ERUS("JSR @UNDEF:24", "UNDEF:24", 0x5E00, 0x0000);
+    }
+
+    if (is_h8300h()) {
+        // Indexed @(d:24,ERn) via 0x7800 prefix (H8/300H only; H8S uses :32).
+        ERUS("MOV.B @(UNDEF:24, ER0), R0H", "UNDEF:24, ER0), R0H",
+                0x7800|(0<<4), 0x6A20|0x0, 0x0000, 0x0000);
+        ERUS("MOV.W @(UNDEF:24, ER3), R5",  "UNDEF:24, ER3), R5",
+                0x7800|(3<<4), 0x6B20|0x5, 0x0000, 0x0000);
+    }
+
+    if (is_h8s()) {
+        // H8S advanced @aa:32 data addressing (byte encoding as @aa:24).
+        ERUS("MOV.B @UNDEF:32, R0H", "UNDEF:32, R0H", 0x6A20|0x0, 0x0000, 0x0000);
+        ERUS("MOV.W @UNDEF:32, R0",  "UNDEF:32, R0",  0x6B20|0x0, 0x0000, 0x0000);
+        ERUS("MOV.L @UNDEF:32, ER0", "UNDEF:32, ER0", 0x0100, 0x6B20|0x0, 0x0000, 0x0000);
+        // Indexed @(d:32,ERn) via 0x7800 prefix.
+        ERUS("MOV.B @(UNDEF:32, ER0), R0H", "UNDEF:32, ER0), R0H",
+                0x7800|(0<<4), 0x6A20|0x0, 0x0000, 0x0000);
+        ERUS("MOV.W @(UNDEF:32, ER3), R5",  "UNDEF:32, ER3), R5",
+                0x7800|(3<<4), 0x6B20|0x5, 0x0000, 0x0000);
+    }
+}
+
+void run_tests(const char *cpu) {
+    assembler.setCpu(cpu);
+    RUN_TEST(test_system);
+    RUN_TEST(test_ccr);
+    RUN_TEST(test_data_move);
+    RUN_TEST(test_arithmetic);
+    RUN_TEST(test_logic);
+    RUN_TEST(test_shift_rotate);
+    RUN_TEST(test_bit_ops);
+    if (is_h8s())
+        RUN_TEST(test_h8s_extensions);
+    if (is_h8s2600())
+        RUN_TEST(test_h8s2600_mac);
+    RUN_TEST(test_branch);
+    RUN_TEST(test_jump);
+    if (is_h8300h() || is_h8s())
+        RUN_TEST(test_advanced_mode);
+    RUN_TEST(test_data_constant);
+    RUN_TEST(test_undef);
+}
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

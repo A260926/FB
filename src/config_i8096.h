@@ -1,0 +1,65 @@
+/*
+ * Copyright 2022 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef __LIBASM_CONFIG_I8096_H__
+#define __LIBASM_CONFIG_I8096_H__
+
+#include "config_base.h"
+
+namespace libasm {
+namespace i8096 {
+
+enum CpuType : uint8_t {
+    I8096,
+    I80196KB,
+    I80196,
+    I80196N,
+    I80296,
+};
+
+struct Config : ConfigImpl<CpuType, ADDRESS_24BIT, ADDRESS_BYTE, OPCODE_8BIT, ENDIAN_LITTLE, 7, 5> {
+    Config(const InsnTable<CpuType> &table) : ConfigImpl(table, I8096) {}
+
+    // Only the N and the 296 reach past 64K; the rest stay 16-bit so their
+    // listings and disassembly are unchanged.
+    AddressWidth addressWidth() const override {
+        return cpuType() >= I80196N ? ADDRESS_24BIT : ADDRESS_16BIT;
+    }
+
+protected:
+    bool ioAddress(uint16_t addr) const {
+        return addr >= 0x02 && addr < 0x18;
+    }
+
+    // The 80296 reads a word multiply destination below 10H as a
+    // multiply-accumulate selector, so it cannot name a register there
+    // (manual 3.3.2).
+    bool macSelector(uint16_t addr) const {
+        return cpuType() == I80296 && addr < 0x10;
+    }
+};
+
+}  // namespace i8096
+}  // namespace libasm
+
+#endif  // __LIBASM_CONFIG_I8096_H__
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

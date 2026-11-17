@@ -1,0 +1,268 @@
+# Copyright 2020 Tadashi G. Takaoka
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# List of architectures.
+ARCHS = \
+	am29000  \
+	c166     \
+	cdp1802  \
+	cp1600   \
+	f3850    \
+	h16      \
+	h8300    \
+	h8500    \
+	i8048    \
+	i8051    \
+	i8080    \
+	i8086    \
+	i8096    \
+	i960     \
+	ins8060  \
+	ins8070  \
+	mc6800   \
+	mc68000  \
+	mc6805   \
+	mc6809   \
+	mc68hc12 \
+	mc68hc16 \
+	mn1610   \
+	mos6502  \
+	ns32000  \
+	pdp11    \
+	pdp8     \
+	scn2650  \
+	superh   \
+	tlcs90   \
+	tlcs900  \
+	tms320   \
+	tms320f  \
+	tms370   \
+	tms7000  \
+	tms9900  \
+	z280     \
+	z380     \
+	z8       \
+	z80      \
+	z8000
+
+# define OBJS_arch variable which contains architecture related objects.
+define objs-arch # arch
+OBJS_$(1) = table_$(1).o reg_$(1).o text_$(1).o
+
+endef
+$(eval $(foreach a,$(ARCHS),$(call objs-arch,$(a))))
+
+# target list for each architecture.
+TGT_am29000  = am29200 am29245 am29030 am29240 am29040 am29050
+TGT_i960     = i960
+TGT_c166     = c166 c167 xc16x
+TGT_cdp1802  = cdp1802 cdp1804 cdp1804a
+TGT_cp1600   = cp1600
+TGT_f3850    = f3850
+TGT_h16      = h16
+TGT_h8300    = h8300 h8300hn h8300h h8s2000n h8s2000 h8s2600n h8s2600
+GENOPT_h8300h = -O advanced-mode=on
+GENOPT_h8s2000 = -O advanced-mode=on
+GENOPT_h8s2600 = -O advanced-mode=on
+TGT_h8500    = h8510 h8510n h8520 h8520n h8530 h8530n
+GENOPT_h8510 = -O maximum-mode=on
+GENOPT_h8520 = -O maximum-mode=on
+GENOPT_h8530 = -O maximum-mode=on
+TGT_i8048    = i8039 i8048 i80c39 i80c48 msm80c39 msm80c48
+TGT_i8051    = i8051
+TGT_i8080    = i8080 i8085 v30emu
+TGT_i8086    = i8086 i80186 i80286 i80386 i80486 v30 v33 v35
+# ASL takes LOCK only as a statement of its own, so the V series generates it
+# that way: ASL is the sole external assembler that knows these instructions,
+# and an outside cross-check is worth more than the round-trip coverage lost
+# when every locked form dedups down to one bare LOCK.
+GENOPT_v30   = -O lock-insn=on
+GENOPT_v33   = -O lock-insn=on
+GENOPT_v35   = -O lock-insn=on
+TGT_i8096    = i8096 i80196kb i80196 i80196n i80296
+TGT_ins8060  = ins8060
+TGT_ins8070  = ins8070
+TGT_mc68000  = mc68000 mc68010 mc68020 mc68030 mc68040
+TGT_mc6800   = mc6800 mb8861 mc6801 mc68hc11 hd6301
+TGT_mc6805   = mc6805 mc146805 mc68hc05 mc68hc08 mc68hcs08
+TGT_mc6809   = mc6809 hd6309
+TGT_mc68hc12 = mc68hc12 mc68hcs12 mc68hcs12x
+TGT_mc68hc16 = mc68hc16
+TGT_mn1610   = mn1610 mn1613
+TGT_mos6502  = mos6502 g65sc02 r65c02 w65c02s w65c816
+TGT_ns32000  = ns32000
+TGT_pdp11    = j11 t11
+TGT_pdp8     = im6100 hd6120
+TGT_scn2650  = scn2650
+TGT_superh   = sh1 sh2 shdsp sh2e sh2a
+TGT_tlcs90   = tlcs90
+TGT_tlcs900  = tlcs900 tlcs900h tlcs900h2 tlcs900l
+TGT_tms320   = tms32010 tms320c25 tms320c26 tms320c20x tms320c5x
+TGT_tms320f  = tms320c30 tms320c31 tms320c32
+TGT_tms370   = tms370
+TGT_tms7000  = tms7000
+TGT_tms9900  = tms9900 tms9980 tms9995 tms99105 tms99110
+TGT_z280     = z280
+TGT_z380     = z380
+TGT_z8000    = z8001 z8002
+TGT_z80      = z80 z180
+TGT_z8       = z8 z86c z88
+
+# CPU for each target
+CPU_i960     = 80960
+CPU_am29200  = AM29200
+CPU_am29245  = AM29245
+CPU_am29030  = AM29030
+CPU_am29240  = AM29240
+CPU_am29040  = AM29040
+CPU_am29050  = AM29050
+CPU_c166     = 80C166
+CPU_c167     = 80C167
+CPU_xc16x    = XC16X
+CPU_cdp1802  = 1802
+CPU_cdp1804  = 1804
+CPU_cdp1804a = 1804A
+CPU_cp1600   = CP1600
+CPU_f3850    = F3850
+CPU_h16      = H16
+CPU_h8510    = H8/510
+CPU_h8510n   = H8/510
+CPU_h8520    = H8/520
+CPU_h8520n   = H8/520
+CPU_h8530    = H8/530
+CPU_h8530n   = H8/530
+CPU_g65sc02  = 65SC02
+CPU_h8300    = h8/300
+CPU_h8300h   = h8/300h
+CPU_h8300hn  = h8/300h
+CPU_h8s2000n = h8s/2000
+CPU_h8s2000  = h8s/2000
+CPU_h8s2600n = h8s/2600
+CPU_h8s2600  = h8s/2600
+CPU_hd6120   = 6120
+CPU_hd6301   = 6301
+CPU_hd6309   = 6309
+CPU_i80186   = 80186
+CPU_i80286   = 80286
+CPU_i80386   = 80386
+CPU_i80486   = 80486
+CPU_i8039    = 8039
+CPU_i8048    = 8048
+CPU_i8051    = 8051
+CPU_i8080    = 8080
+CPU_i8085    = 8085
+CPU_i8086    = 8086
+CPU_i8096    = 8096
+CPU_i80196kb = 80196KB
+CPU_i80196   = 80196
+CPU_i80196n  = 80196N
+CPU_i80296   = 80296
+CPU_i80c39   = 80C39
+CPU_i80c48   = 80C48
+CPU_im6100   = 6100
+CPU_ins8060  = SC/MP
+CPU_ins8070  = 8070
+CPU_j11      = J11
+CPU_mb8861   = MB8861
+CPU_mc6805   = 6805
+CPU_mc146805 = 146805
+CPU_mc68000  = 68000
+CPU_mc6800   = 6800
+CPU_mc68010  = 68010
+CPU_mc6801   = 6801
+CPU_mc68020  = 68020
+CPU_mc68030  = 68030
+CPU_mc68040  = 68040
+CPU_mc6809   = 6809
+CPU_mc68hc05 = 68HC05
+CPU_mc68hc08 = 68HC08
+CPU_mc68hc11 = 6811
+CPU_mc68hc12 = 68HC12
+CPU_mc68hc16 = 68HC16
+CPU_mc68hcs08 = 68HCS08
+CPU_mc68hcs12 = 68HCS12
+CPU_mc68hcs12x = 68HCS12X
+CPU_mn1610   = MN1610
+CPU_mn1613   = MN1613
+CPU_mos6502  = 6502
+CPU_msm80c39 = MSM80C39
+CPU_msm80c48 = MSM80C48
+CPU_ns32000  = NS32032
+CPU_r65c02   = 65C02
+CPU_scn2650  = 2650
+CPU_sh1      = SH-1
+CPU_sh2      = SH-2
+CPU_shdsp    = SH-DSP
+CPU_sh2e     = SH-2E
+CPU_sh2a     = SH-2A
+CPU_t11      = T11
+CPU_tlcs90   = TLCS90
+CPU_tlcs900  = TLCS900
+CPU_tlcs900h = TLCS900H
+CPU_tlcs900h2 = TLCS900H2
+CPU_tlcs900l = TLCS900L
+CPU_tms32010 = 32010
+CPU_tms320c20x = 320C20X
+CPU_tms320c25 = 320C25
+CPU_tms320c26 = 320C26
+CPU_tms320c30 = 320C30
+CPU_tms320c31 = 320C31
+CPU_tms320c32 = 320C32
+CPU_tms320c5x = 320C5X
+CPU_tms370   = TMS370
+CPU_tms7000  = TMS7000
+CPU_tms9900  = TMS9900
+CPU_tms99105 = TMS99105
+CPU_tms99110 = TMS99110
+CPU_tms9980  = TMS9980
+CPU_tms9995  = TMS9995
+CPU_v30emu   = V30EMU
+CPU_v30      = V30
+CPU_v33      = V33
+CPU_v35      = V35
+CPU_w65c02s  = W65C02S
+CPU_w65c816  = 65816
+CPU_z180     = Z180
+CPU_z280     = Z280
+CPU_z380     = Z380
+CPU_z8001    = Z8001
+CPU_z8002    = Z8002
+CPU_z80      = Z80
+CPU_z86c     = Z86C40
+CPU_z88      = Z88C00
+CPU_z8       = Z8601
+
+# targets with Motorola S19 format
+S19_OUTS = $(TGT_mc6809) $(TGT_mc6800) $(TGT_mc6805) $(TGT_mc68hc12) mos6502 g65sc02 r65c02 w65c02s \
+    h8300 h8300hn h8s2000n h8s2600n h8510n h8520n h8530n
+# targets with Motorola S28 format
+S28_OUTS = mc68000 mc68010 mc68hc16 mc68hc12_mmc mc68hcs12_mmc mc68hcs12x_mmc w65c816 w65c816_m0x0 w65c816_m0x1 w65c816_m1x0 w65c816_m1x1 \
+    h8300h h8s2000 h8s2600 h8510 h8520 h8530
+# targets with Motorola S37 format
+S37_OUTS = mc68020 mc68030 mc68040 $(TGT_superh) h16
+# targets with Intel32 (32bit address) format
+I32_OUTS = $(TGT_am29000) $(TGT_i8086) $(TGT_i8096) $(TGT_mn1610) $(TGT_i960) $(TGT_c166) c167_esfr c167_dpp \
+    z180 z280 z380 z8001 ns32032 tms320c25 tms320c26 tms320c20x tms320c3x tms320c2x
+# other targets use Intel8 format
+define __out-ext # target
+$(if $(filter $(1),$(S19_OUTS)),s19,$(if $(filter $(1),$(S28_OUTS)),s28,$(if $(filter $(1),$(S37_OUTS)),s37,hex)))
+endef
+define out-ext # file
+$(call __out-ext,$(subst gen_,,$(subst test_,,$(1))))
+endef
+
+# Local Variables:
+# mode: makefile-gmake
+# End:
+# vim: set ft=make:

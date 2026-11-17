@@ -1,0 +1,237 @@
+/*
+ * Copyright 2020 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef __LIBASM_ENTRY_I8086_H__
+#define __LIBASM_ENTRY_I8086_H__
+
+#include <stdint.h>
+
+#include "config_i8086.h"
+#include "entry_base.h"
+
+namespace libasm {
+namespace i8086 {
+
+// |mod|reg|r/m|
+// mod=11: r/m=reg
+// mod=00: disp=void
+// mod=01: disp=int8_t
+// mod=10: disp=uint16_t
+//  r/m=000: [BX+SI+disp]
+//  r/m=001: [BX+DI+disp]
+//  r/m=010: [BP+SI+disp]
+//  r/m=011: [BP+DI+disp]
+//  r/m=100: [SI+disp]
+//  r/m=101: [DI+disp]
+//  r/m=110: [BP+disp], [disp]
+//  r/m=111: [BX+disp]
+
+enum AddrMode : uint8_t {
+    M_NONE = 0,
+    // dst/src/ext
+    M_WIMM = 1,  // 16/32-bit Immediate Constant
+    M_BIMM = 2,  // Sign-extended 8-bit Immediate
+    M_BIT = 3,   // 3/4-bit shift count/bit number constant
+    M_CL = 4,    // Bit Counter: CL
+    // M_REL8 is an |ext| operand of BTCLR, and |ext| is 3 bits wide, so it
+    // must stay <= 7.  It traded values with M_AL, which is never an |ext|.
+    M_REL8 = 5,  // Relative: 8-bit displacement
+    // dst/src
+    M_BREG = 6,   // Byte Register: AL, AH, BL, BH, CL, CH, DL, DH
+    M_AX = 7,     // Word/Dword Accumulator: AX/EAX
+    M_DX = 8,     // Dynamic I/O Address: DX
+    M_WREG = 9,   // Word/Dword Register: AX/EAX, BX/EBX, CX/ECX, DX/EDX, SP/ESP, BP/EBP, SI/ESI,
+                  // DI/EDI
+    M_DREG = 10,  // Dword Register: EAX, EBX, ECX, EDX, ESP, EBP, ESI, EDI
+    M_SREG = 11,  // Segment Register: ES, CS, SS, DS, FS, GS
+    M_BMOD = 12,  // Byte memory/register mode
+    M_WMOD = 13,  // Word/Dword memory/register mode
+    // M_BMEM to M_WDIR must be contiguous
+    M_BMEM = 14,  // Byte memory: BYTE [addr]
+    M_WMEM = 15,  // Word memory: WORD [addr]
+    M_DMEM = 16,  // Double Word memory: DWORD [addr]
+    M_FARM = 17,  // Far word/dword memory FAR [WORD/DWORD] [addr]
+    M_FMEM = 18,  // i8087 float word, DWORD/QWORD/TBYTE PTR
+    M_MEM = 19,   // Memory address: no sized M_BMEM/M_WMEM/M_DMEM MEM
+    M_BDIR = 20,  // Byte Direct mode: BYTE [nnnn]
+    M_WDIR = 21,  // Word Direct mode: WORD [nnnn]
+    M_VAL1 = 22,  // Constant 1: for bit counter
+    M_VAL3 = 23,  // Constant 3: for INT type
+    M_REL = 24,   // Relative: 16-bit displacement
+    M_AL = 25,    // Byte Accumulator: AL
+    M_IOA = 26,   // I/O Address
+    M_SEG = 27,   // Segment: nnnn
+    M_OFF = 28,   // Offset: nnnn
+    M_FAR = 29,   // Far address: M_SEG:M_OFF
+    M_CS = 30,    // Code Segment Register: CS
+    M_FS = 31,    // Extra Segment Register: FS
+    M_GS = 32,    // Extra Segment Register: GS
+    M_UI16 = 33,  // 16-bit unsigned immediate
+    M_UI8 = 34,   // 8-bit unsigned immediate
+    M_ST0 = 35,   // i8087 stack top ST(0)
+    M_STI = 36,   // i8087 stack ST(i)
+    M_CTLR = 37,  // Control register
+    M_DBGR = 38,  // Debug register
+    M_TSTR = 39,  // Test register
+    M_CX = 40,   // Counter register CX  (LOOP explicit operand)
+    M_ECX = 41,  // Counter register ECX (LOOP explicit operand)
+    M_WMOD16 = 42,  // Fixed 16-bit memory/register (Ew): MOVSX/MOVZX word source
+    M_SFR = 43,     // V35 special function register: 8-bit offset
+    // Assembler
+    M_DIR = 44,  // Direct mode: [nnnn]
+};
+
+enum OprSize : uint8_t {
+    SZ_NONE = Size::SZ_NONE,
+    SZ_BYTE = Size::SZ_BYTE,   // 1 byte
+    SZ_WORD = Size::SZ_WORD,   // 2 byte
+    SZ_DWORD = Size::SZ_QUAD,  // 4 byte
+    SZ_QWORD = Size::SZ_OCTA,  // 8 byte
+    SZ_DATA = Size::SZ_DATA,   // 4 or 8 byte
+    SZ_TBYTE = 6,              // 10 byte
+};
+
+enum OprPos : uint8_t {
+    P_NONE = 0,
+    // dst/src/ext
+    P_OPR = 1,  // In operand
+    // dst/src
+    P_OREG = 2,  // In opcode:      __|___|reg
+    P_OSEG = 3,  // In opcode:      ___|ss|___
+    P_OMOD = 4,  // In opcode:      mo|___|r/m
+    P_MOD = 5,   // In mod-reg-r/m: mo|___|r/m
+    P_REG = 6,   // In mod-reg-r/m: __|reg|___
+    P_MREG = 7,  // In mod-reg-r/m: mo|reg|reg
+};
+
+// String instruction class.  The repeat prefixes are defined only for the
+// block instructions, and the conditional ones only for block compare:
+// iAPX 86,88/186,188 PRM, 80286 PRM 3.7.2, 80386 PRM 3.6.1 and i486 PRM 3.6.1
+// all say REPE/REPZ and REPNE/REPNZ are used "exclusively" with CMPS and SCAS,
+// and the NEC V Series manual restricts REPNE/REPNZ, REPC and REPNC to block
+// compare (CMPBK/CMPM).
+enum StrClass : uint8_t {
+    STR_NONE = 0,  // not a string instruction
+    STR_BCD = 1,   // string operands but no repeat prefix: ADD4S/SUB4S/CMP4S
+    STR_MOVE = 2,  // block transfer/IO: REP only
+    STR_COMP = 3,  // block compare: REP plus the conditional repeats
+};
+
+enum CodeFormat : uint8_t {
+    CF_00 = 0,  // 0000
+    CF_07 = 1,  // 0007
+    CF_30 = 2,  // 0030
+};
+
+struct Entry final : entry::Base<Config::opcode_t> {
+    struct Flags final {
+        uint16_t _mode;
+        uint16_t _attr;
+
+        static constexpr Flags create(CodeFormat cf, AddrMode dst, AddrMode src, AddrMode ext,
+                OprPos dpos, OprPos spos, OprPos epos, OprSize size, StrClass strCls,
+                bool lockCapable, bool needSize, bool noData32) {
+            return Flags{mode(dst, src, ext, noData32),
+                    attr(dpos, spos, epos, size, cf, strCls, lockCapable, needSize)};
+        }
+
+        AddrMode dst() const { return AddrMode((_mode >> dst_gp) & dst_gm); }
+        AddrMode src() const { return AddrMode((_mode >> src_gp) & src_gm); }
+        AddrMode ext() const { return AddrMode((_mode >> ext_gp) & ext_gm); }
+        OprPos dstPos() const { return OprPos((_attr >> dpos_gp) & dpos_gm); }
+        OprPos srcPos() const { return OprPos((_attr >> spos_gp) & spos_gm); }
+        OprPos extPos() const { return OprPos((_attr >> epos_gp) & epos_gm); }
+        OprSize size() const { return OprSize((_attr >> size_gp) & size_gm); }
+        StrClass strClass() const { return StrClass((_attr >> strCls_gp) & strCls_gm); }
+        bool stringInsn() const { return strClass() != STR_NONE; }
+        bool repeatable() const { return strClass() >= STR_MOVE; }
+        bool blockCompare() const { return strClass() == STR_COMP; }
+        bool lockCapable() const { return _attr & lockCapable_bm; }
+        bool needSize() const { return _attr & needSize_bm; }
+        bool noData32() const { return _mode & noData32_bm; }
+        uint8_t mask() const {
+            static constexpr uint8_t MASK[] = {
+                    0000,  // CF_00 = 0
+                    0007,  // CF_07 = 1
+                    0030,  // CF_30 = 2
+            };
+            return MASK[(_attr >> cf_gp) & cf_gm];
+        }
+
+    private:
+        static constexpr uint16_t mode(AddrMode dst, AddrMode src, AddrMode ext, bool noData32) {
+            return static_cast<uint16_t>((dst << dst_gp) | (src << src_gp) | (ext << ext_gp) |
+                                         (noData32 ? noData32_bm : 0));
+        }
+        static constexpr uint16_t attr(OprPos dpos, OprPos spos, OprPos epos, OprSize size,
+                CodeFormat cf, StrClass cls, bool lockCapable, bool needSize) {
+            return static_cast<uint16_t>(
+                    (dpos << dpos_gp) | (spos << spos_gp) | (epos << epos_gp) | (size << size_gp) |
+                    (cf << cf_gp) | (cls << strCls_gp) | (lockCapable ? lockCapable_bm : 0) |
+                    (needSize ? needSize_bm : 0));
+        }
+
+        // |_mode|
+        static constexpr auto dst_gp = 0;
+        static constexpr auto src_gp = 6;
+        static constexpr auto ext_gp = 12;
+        static constexpr uint_fast8_t dst_gm = 0x3F;
+        static constexpr uint_fast8_t src_gm = 0x3F;
+        static constexpr uint_fast8_t ext_gm = 0x07;
+        // |_attr| is full to the last bit, so this one flag lives here.
+        static constexpr auto noData32_bp = 15;
+        static constexpr uint_fast16_t noData32_bm = (1 << noData32_bp);
+        // |_attr|
+        static constexpr auto dpos_gp = 0;
+        static constexpr auto spos_gp = 3;
+        static constexpr auto epos_gp = 6;
+        static constexpr auto size_gp = 7;
+        static constexpr auto cf_gp = 10;
+        static constexpr auto strCls_gp = 12;
+        static constexpr auto lockCapable_bp = 14;
+        static constexpr auto needSize_bp = 15;
+        static constexpr uint_fast8_t dpos_gm = 0x7;
+        static constexpr uint_fast8_t spos_gm = 0x7;
+        static constexpr uint_fast8_t epos_gm = 0x1;
+        static constexpr uint_fast8_t size_gm = 0x7;
+        static constexpr uint_fast8_t cf_gm = 0x3;
+        static constexpr uint_fast8_t strCls_gm = 0x3;
+        static constexpr uint_fast16_t lockCapable_bm = (1 << lockCapable_bp);
+        static constexpr uint_fast16_t needSize_bm = (1 << needSize_bp);
+    };
+
+    constexpr Entry(Config::opcode_t opc, Flags flags, const char *name_P)
+        : Base(name_P, opc), _flags_P(flags) {}
+
+    Flags readFlags() const {
+        return Flags{_flags_P._mode, _flags_P._attr};
+    }
+
+private:
+    const Flags _flags_P;
+};
+
+}  // namespace i8086
+}  // namespace libasm
+
+#endif  // __LIBASM_ENTRY_I8086_H__
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

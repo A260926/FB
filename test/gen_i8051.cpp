@@ -1,0 +1,47 @@
+/*
+ * Copyright 2020 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "dis_i8051.h"
+#include "gen_driver.h"
+#include "tokenizer.h"
+
+using namespace libasm::i8051;
+using namespace libasm::gen;
+
+namespace {
+const RegisterTokenizer REG_Rn("R", 7, "Rn");
+}  // namespace
+
+int main(int argc, const char **argv) {
+    DisI8051 dis8051;
+    GenDriver driver(dis8051);
+    if (driver.main(argc, argv))
+        return 1;
+
+    dis8051.setOption("relative", "enable");
+
+    TestGenerator generator(driver, dis8051, 0x0100, standardTokenizers<IntelNumber>(dis8051.curSym(), {&REG_Rn}));
+    generator.generate();
+
+    return driver.close();
+}
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

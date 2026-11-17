@@ -1,0 +1,56 @@
+/*
+ * Copyright 2026 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "dis_h8300.h"
+#include "gen_driver.h"
+#include "tokenizer.h"
+
+using namespace libasm::h8300;
+using namespace libasm::gen;
+
+static const IndexDispTokenizer<CstyleNumber, CommaIndex> INDEX_TOK;  // INDEX_TOK_INSTANCE
+static const RegisterTokenizer REG_ER("ER", 7, "ERn");
+static const RegisterTokenizer REG_R("R", 7, "Rn", "HL");
+static const RegisterTokenizer REG_E("E", 7, "En");
+
+int main(int argc, const char **argv) {
+    DisH8300 dish8300;
+    GenDriver driver(dish8300);
+    if (driver.main(argc, argv))
+        return 1;
+
+    dish8300.setOption("relative", "enable");
+    dish8300.setOption("c-style", "enable");
+    // The SP alias spells R7/ER7, which the Rn tokenizers already cover.
+    dish8300.setOption("sp-alias", "disable");
+    if (driver.generateGas()) {
+        dish8300.setOption("gnu-as", "enable");
+    } else {
+        dish8300.setOption("origin-char", "*");
+    }
+
+    TestGenerator generator(driver, dish8300, 0x0100, standardTokenizers<CstyleNumber>(dish8300.curSym(), {&INDEX_TOK, &REG_ER, &REG_R, &REG_E}));
+    generator.generate();
+
+    return driver.close();
+}
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

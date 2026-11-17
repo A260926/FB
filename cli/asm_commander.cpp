@@ -1,0 +1,399 @@
+/*
+ * Copyright 2020 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "asm_commander.h"
+#include <cstring>
+#include "asm_directive.h"
+#include "file_printer.h"
+#include "file_sources.h"
+#include "intel_hex.h"
+#include "moto_srec.h"
+#include "stored_printer.h"
+
+namespace libasm {
+namespace cli {
+
+using namespace libasm::driver;
+
+AsmCommander::AsmCommander(std::initializer_list<AsmDirective *> directives)
+    : _driver(directives) {}
+
+char AsmCommander::encoderType(const char *output_name) const {
+    const auto dot = strrchr(output_name, '.');
+    if (dot) {
+        if (strcasecmp(dot, ".hex") == 0) {
+            if (_encoder == 'S')
+                fprintf(stderr, "ignore -S option");
+            return 'H';
+        }
+        if (strcasecmp(dot, ".s19") == 0 || strcasecmp(dot, ".s28") == 0 ||
+                strcasecmp(dot, ".s37") == 0) {
+            if (_encoder == 'H')
+                fprintf(stderr, "ignore -H option");
+            return 'S';
+        }
+    }
+    return _encoder;
+}
+
+int AsmCommander::assemble() {
+    if (_cpu && !_driver.setCpu(_cpu)) {
+        fprintf(stderr, "unknown CPU '%s'\n", _cpu);
+        return 4;
+    }
+    for (const auto &it : _options) {
+        const auto name = it.first.c_str();
+        const auto value = it.second.c_str();
+        auto error = _driver.setOption(name, value);
+        // A CPU chosen by -C must accept the value itself.
+        if (_cpu) {
+            const auto cpuError = _driver.current()->setOption(name, value);
+            if (cpuError != UNKNOWN_OPTION)
+                error = cpuError;
+        }
+        if (error && error != UNKNOWN_OPTION) {
+            fprintf(stderr, "invalid option value --%s=%s\n", name, value);
+            return 1;
+        }
+    }
+
+    int pass = 0;
+    if (_verbose) {
+        fprintf(stderr, "libasm assembler (version " LIBASM_VERSION_STRING ")\n");
+        fprintf(stderr, "%s: Pass %d\n", _input_name, ++pass);
+    }
+    _driver.clearSymbols();
+
+    // The loop below repeats until the image and the symbols stop changing.
+    // An instruction whose length depends on its own target has no such fixed
+    // point, so give up rather than spin forever.  The whole reference suite
+    // settles within five passes.
+    constexpr auto MAX_PASSES = 20;
+    auto passes = 0;
+    auto converged = false;
+
+    BinMemory memory, prev;
+    SymbolStoreImpl symbols;
+    StoredPrinter listout, errorout;
+    bool reportError = false;
+    do {
+        FileSources sources;
+        if (sources.open(_input_name)) {
+            fprintf(stderr, "Can't open input file %s\n", _input_name);
+            return 1;
+        }
+        if (_verbose)
+            fprintf(stderr, "%s: Pass %d\n", _input_name, ++pass);
+        prev.swap(memory);
+        symbols.copy(_driver.symbols());
+        memory.clear();
+        listout.clear();
+        errorout.clear();
+        _driver.setUpperHex(_upper_hex);
+        _driver.setLineNumber(_line_number);
+        _driver.reset();
+        if (_cpu)
+            _driver.setCpu(_cpu);
+        for (const auto &it : _options) {
+            _driver.setOption(it.first.c_str(), it.second.c_str());
+        }
+        _driver.assemble(sources, memory, listout, errorout, reportError);
+        reportError = true;
+        converged = (memory == prev && symbols == _driver.symbols());
+    } while (errorout.size() == 0 && !converged && ++passes < MAX_PASSES);
+
+    if (!converged && errorout.size() == 0) {
+        fprintf(stderr, "%s: assembly didn't converge after %d passes\n", _input_name, passes);
+        return 1;
+    }
+
+    int errors = 0;
+    for (size_t lineno = 1; lineno <= errorout.size(); lineno++) {
+        fprintf(stderr, "%s\n", errorout.line(lineno));
+        ++errors;
+    }
+
+    if (_list_name) {
+        if (_verbose)
+            fprintf(stderr, "%s: Opened for listing\n", _list_name);
+        FILE *list = fopen(_list_name, "w");
+        if (list == nullptr) {
+            fprintf(stderr, "Can't open list file %s\n", _list_name);
+            ++errors;
+        } else {
+            for (size_t lineno = 1; lineno <= listout.size(); lineno++)
+                fprintf(list, "%s\n", listout.line(lineno));
+            fclose(list);
+        }
+    }
+
+    if (_output_name) {
+        FilePrinter output;
+        if (!output.open(_output_name)) {
+            fprintf(stderr, "Can't open output file %s\n", _output_name);
+            ++errors;
+        } else {
+            const auto type = encoderType(_output_name);
+            auto *encoder = &_driver.current()->defaultEncoder();
+            if (type == 'S')
+                encoder = &MotoSrec::encoder();
+            else if (type == 'H')
+                encoder = &IntelHex::encoder();
+            encoder->reset(_record_bytes);
+            encoder->encode(memory, output);
+            if (_verbose) {
+                const auto unit = _driver.current()->config().addressUnit();
+                for (auto block = memory.begin(); block != nullptr; block = block->next()) {
+                    const auto start = block->base() / unit;
+                    const auto size = block->size();
+                    const auto end = (block->base() + size - 1) / unit;
+                    fprintf(stderr, "%s: Write %4u bytes %04x-%04x\n", _output_name, size, start,
+                            end);
+                }
+            }
+        }
+    }
+
+    return errors;
+}
+
+bool AsmCommander::defaultDirective() {
+    const auto prefix = strstr(_prog_name, PROG_PREFIX);
+    if (prefix) {
+        const auto cpu = prefix + strlen(PROG_PREFIX);
+        return _driver.restrictCpu(cpu);
+    }
+    return false;
+}
+
+int AsmCommander::usage() {
+    if (!defaultDirective() && _cpu && !_driver.restrictCpu(_cpu))
+        fprintf(stderr, "Unknown CPU specified\n");
+    std::string list;
+    const auto cpuSep = "\n     ";
+    std::string buf;
+    for (auto &cpu : _driver.listCpu()) {
+        if (buf.size())
+            buf += " ";
+        if (buf.size() + cpu.size() < 70) {
+            buf += cpu;
+        } else {
+            list += cpuSep;
+            list += buf;
+            buf = cpu;
+        }
+    }
+    if (list.size() + buf.size() < 70) {
+        list += ": " + buf;
+    } else {
+        list += cpuSep + buf;
+    }
+    fprintf(stderr,
+            R"(libasm assembler (version %s)
+usage: %s [-o <output>] [-l <list>] <input>
+  -C <CPU>          : target CPU%s
+  -o <output>       : output file
+  -l <list>         : list file
+  -S[<bytes>]       : output Motorola S-Record format
+  -H[<bytes>]       : output Intel HEX format
+                    : optional <bytes> specifies data record length (max 32)
+  -h                : use lower case letter for hexadecimal
+  -n                : output line number to list file
+  -v                : print progress verbosely
+)",
+            LIBASM_VERSION_STRING, _prog_name, list.c_str());
+    bool longOptions = false;
+    for (const auto *dir : _driver)
+        longOptions |= (dir->commonOptions().head() || dir->options().head());
+    if (longOptions) {
+        fprintf(stderr, "  --<name>=<vale>   : extra options (<type> [, <CPU>])\n");
+        fprintf(stderr, "  --<name>          : --<name>=true\n");
+        fprintf(stderr, "  --no-<name>       : --<name>=false\n");
+        const auto dir = *_driver.begin();
+        for (const auto *opt = dir->commonOptions().head(); opt; opt = opt->next()) {
+            if (opt->isPrivate())
+                continue;
+            fprintf(stderr, "  --%-16s: %s (%s)\n", opt->name_P(), opt->description_P(),
+                    Options::nameof(opt->spec()));
+        }
+        // Group options by (name, description): a name shared across CPUs with
+        // differing descriptions is listed once per distinct description, each
+        // with the CPUs that use it, rather than collapsing to the first text.
+        std::map<std::pair<std::string, std::string>, std::string> cpus;
+        std::map<std::pair<std::string, std::string>, OptionBase::OptionSpec> specs;
+        for (const auto *dir : _driver) {
+            for (const auto *opt = dir->options().head(); opt; opt = opt->next()) {
+                if (opt->isPrivate())
+                    continue;
+                const std::pair<std::string, std::string> key{
+                        opt->name_P(), opt->description_P()};
+                if (cpus.find(key) == cpus.end()) {
+                    cpus[key] = dir->cpu_P();
+                    specs[key] = opt->spec();
+                } else {
+                    cpus[key] += ", ";
+                    cpus[key] += dir->cpu_P();
+                }
+            }
+        }
+        for (const auto &opt : cpus) {
+            const auto &name = opt.first.first;
+            const auto &desc = opt.first.second;
+            fprintf(stderr, "  --%-16s: %s (%s: %s)\n", name.c_str(), desc.c_str(),
+                    Options::nameof(specs[opt.first]), opt.second.c_str());
+        }
+    }
+    return 2;
+}
+
+static const char *basename(const char *str, char sep_char = '/') {
+    const auto sep = strrchr(str, sep_char);
+    return sep ? sep + 1 : str;
+}
+
+static bool hasOption(const AsmDirective *dir, const char *name) {
+    return dir->commonOptions().search(name) || dir->options().search(name);
+}
+
+void AsmCommander::parseOptionValue(const char *option) {
+    const auto equ = strchr(option, '=');
+    if (equ) {
+        // --<name>=<value>
+        _options.emplace(std::string(option, equ), std::string(equ + 1));
+    } else if (strncmp(option, "no-", 3) == 0) {
+        // --no-<name>
+        _options.emplace(option + 3, "false");
+    } else {
+        // --<name>
+        _options.emplace(option, "true");
+    }
+}
+
+int AsmCommander::parseArgs(int argc, const char **argv) {
+    _prog_name = basename(argv[0]);
+    _input_name = nullptr;
+    _output_name = nullptr;
+    _list_name = nullptr;
+    _cpu = nullptr;
+    _encoder = 0;
+    _record_bytes = 32;
+    _upper_hex = true;
+    _line_number = false;
+    _verbose = false;
+    for (auto i = 1; i < argc; i++) {
+        const auto *opt = argv[i];
+        if (*opt == '-') {
+            switch (*++opt) {
+            case 'o':
+                if (++i >= argc) {
+                    fprintf(stderr, "-o requires output file name\n");
+                    return 1;
+                }
+                _output_name = argv[i];
+                break;
+            case 'l':
+                if (++i >= argc) {
+                    fprintf(stderr, "-l requires listing file name\n");
+                    return 1;
+                }
+                _list_name = argv[i];
+                break;
+            case 'S':
+            case 'H':
+                _encoder = *opt++;
+                if (*opt) {
+                    char *end;
+                    const auto v = strtoul(opt, &end, 10);
+                    if (*end || v > 64) {
+                        fprintf(stderr, "invalid record length: %s\n", argv[i]);
+                        return 3;
+                    }
+                    _record_bytes = v;
+                }
+                break;
+            case 'C':
+                if (++i >= argc) {
+                    fprintf(stderr, "-C requires CPU name\n");
+                    return 1;
+                }
+                _cpu = argv[i];
+                break;
+            case 'h':
+                _upper_hex = false;
+                break;
+            case 'n':
+                _line_number = true;
+                break;
+            case 'v':
+                _verbose = true;
+                break;
+            case '-':
+                parseOptionValue(++opt);
+                break;
+            default:
+                fprintf(stderr, "unknown option: %s\n", opt);
+                return 1;
+            }
+        } else {
+            if (_input_name) {
+                fprintf(stderr, "multiple input files specified: %s and %s\n", _input_name, opt);
+                return 1;
+            }
+            _input_name = opt;
+        }
+    }
+    if (_input_name == nullptr) {
+        fprintf(stderr, "no input file\n");
+        return 1;
+    }
+    if (_output_name && strcmp(_output_name, _input_name) == 0) {
+        fprintf(stderr, "output file overwrite input file\n");
+        return 2;
+    }
+    if (_list_name && strcmp(_list_name, _input_name) == 0) {
+        fprintf(stderr, "listing file overwrite input file\n");
+        return 2;
+    }
+
+    // A source file may switch CPUs, so a name is valid if any directive has it,
+    // unless -C names a CPU.
+    const auto *cpu = (_cpu && _driver.setCpu(_cpu)) ? _driver.current() : nullptr;
+    for (auto &option : _options) {
+        const auto name = option.first.c_str();
+        auto valid = false;
+        if (cpu) {
+            valid = hasOption(cpu, name);
+        } else {
+            for (const auto *dir : _driver)
+                valid |= hasOption(dir, name);
+        }
+        if (!valid) {
+            fprintf(stderr, "unknown option --%s=%s\n", name, option.second.c_str());
+            return 1;
+        }
+    }
+    return 0;
+}
+
+}  // namespace cli
+}  // namespace libasm
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

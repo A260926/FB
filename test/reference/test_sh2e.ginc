@@ -1,0 +1,53 @@
+! Copyright 2026 Tadashi G. Takaoka
+!
+! Licensed under the Apache License, Version 2.0 (the "License");
+! you may not use this file except in compliance with the License.
+! You may obtain a copy of the License at
+!
+!     http://www.apache.org/licenses/LICENSE-2.0
+!
+! Unless required by applicable law or agreed to in writing, software
+! distributed under the License is distributed on an "AS IS" BASIS,
+! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+! See the License for the specific language governing permissions and
+! limitations under the License.
+
+!!! SH-2E FPU-related CPU instructions: LDS/STS to the FPU system registers
+!!! FPUL/FPSCR. They require the FPU (mandatory on the SH-2E).
+
+!! LDS Rm,FPUL
+        lds     r0,fpul                 ;# 405A
+        lds     r15,fpul                ;# 4F5A
+
+!! LDS Rm,FPSCR
+        lds     r0,fpscr                ;# 406A
+        lds     r15,fpscr               ;# 4F6A
+
+!! STS FPUL,Rn
+        sts     fpul,r0                 ;# 005A
+        sts     fpul,r15                ;# 0F5A
+
+!! STS FPSCR,Rn
+        sts     fpscr,r0                ;# 006A
+        sts     fpscr,r15               ;# 0F6A
+
+!! LDS.L @Rm+,FPUL
+        lds.l   @r0+,fpul               ;# 4056
+        lds.l   @r15+,fpul              ;# 4F56
+
+!! LDS.L @Rm+,FPSCR
+        lds.l   @r0+,fpscr              ;# 4066
+        lds.l   @r15+,fpscr             ;# 4F66
+
+!! STS.L FPUL,@-Rn
+        sts.l   fpul,@-r0               ;# 4052
+        sts.l   fpul,@-r15              ;# 4F52
+
+!! STS.L FPSCR,@-Rn
+        sts.l   fpscr,@-r0              ;# 4062
+        sts.l   fpscr,@-r15             ;# 4F62
+
+! Local Variables:
+! mode: asm
+! End:
+! vim: set ft=asm:

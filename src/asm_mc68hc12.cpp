@@ -1,0 +1,754 @@
+/*
+ * Copyright 2025 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "asm_mc68hc12.h"
+#include "function_table.h"
+#include "table_mc68hc12.h"
+#include "text_common.h"
+#include "text_mc68hc12.h"
+
+namespace libasm {
+namespace mc68hc12 {
+
+using namespace pseudo;
+using namespace reg;
+using namespace text::common;
+using namespace text::mc68hc12;
+
+namespace {
+
+// clang-format off
+constexpr Pseudo PSEUDOS[] = {
+    { TEXT_FCB, &Assembler::defineDataConstant, Assembler::DATA_BYTE_NO_STRING },
+    { TEXT_FCC, &Assembler::defineString       },
+    { TEXT_FDB, &Assembler::defineDataConstant, Assembler::DATA_WORD_NO_STRING },
+    { TEXT_RMB, &Assembler::allocateSpaces,     Assembler::DATA_BYTE           },
+};
+constexpr Pseudos PSEUDO_TABLE{ARRAY_RANGE(PSEUDOS)};
+
+constexpr char TEXT_DIRECT[] = "DIRECT";
+constexpr char TEXT_DPAGE[] = "DPAGE";
+constexpr char TEXT_EPAGE[] = "EPAGE";
+constexpr char TEXT_GPAGE[] = "GPAGE";
+constexpr char TEXT_PPAGE[] = "PPAGE";
+constexpr char TEXT_RPAGE[] = "RPAGE";
+
+struct PageDirective {
+    const char *name_P;
+    PageReg reg;
+};
+
+constexpr PageDirective PAGE_DIRECTIVES[] = {
+    { TEXT_DIRECT, PAGE_DIRECT },
+    { TEXT_DPAGE,  PAGE_DPAGE  },
+    { TEXT_EPAGE,  PAGE_EPAGE  },
+    { TEXT_GPAGE,  PAGE_GPAGE  },
+    { TEXT_PPAGE,  PAGE_PPAGE  },
+    { TEXT_RPAGE,  PAGE_RPAGE  },
+};
+// clang-format on
+
+}  // namespace
+
+const ValueParser::Plugins &AsmMc68HC12::defaultPlugins() {
+    static const struct final : ValueParser::MotorolaPlugins {
+        const FunctionTable &function() const override {
+            return Mc68hc12FunctionTable::singleton();
+        }
+    } PLUGINS{};
+    return PLUGINS;
+}
+
+AsmMc68HC12::AsmMc68HC12(const ValueParser::Plugins &plugins)
+    : Assembler(plugins, PSEUDO_TABLE, &_opt_mmc),
+      Config(TABLE),
+      _opt_mmc(this, &Config::setPagedModel, OPT_BOOL_MMC, OPT_DESC_MMC) {
+    reset();
+}
+
+void AsmMc68HC12::reset() {
+    Assembler::reset();
+    setPagedModel(false);
+    for (auto &page : _page)
+        page = -1;
+}
+
+Error AsmMc68HC12::processPseudo(StrScanner &scan, Insn &insn) {
+    for (const auto &d : PAGE_DIRECTIVES) {
+        const auto reg = PageReg(d.reg);
+        const auto *name_P = d.name_P;
+        if (strcasecmp(insn.name(), name_P) == 0 && pageRegisterBits(cpuType(), reg))
+            return processPage(scan, insn, reg);
+    }
+    return Assembler::processPseudo(scan, insn);
+}
+
+// `PPAGE <value>` sets the assumed value of a page register; no operand makes it undefined.
+Error AsmMc68HC12::processPage(StrScanner &scan, Insn &insn, PageReg reg) {
+    auto p = scan.skipSpaces();
+    if (endOfLine(p)) {
+        _page[reg] = -1;
+        return OK;
+    }
+    const auto at = p;
+    ErrorAt error;
+    const auto value = parseInteger(p, error);
+    if (error.hasError())
+        return insn.setError(error);
+    if (value.overflow((1U << pageRegisterBits(cpuType(), reg)) - 1))
+        return insn.setError(at, OVERFLOW_RANGE);
+    _page[reg] = value.getUnsigned();
+    scan = p;
+    return OK;
+}
+
+uint8_t AsmMc68HC12::directPage() const {
+    return _page[PAGE_DIRECT] < 0 ? 0 : _page[PAGE_DIRECT];
+}
+
+// An operand value up to $FFFF is a CPU address, a larger one is a physical address, which must be
+// mapped through a fixed region or a single window on its assumed page.  Code on a program page
+// assumes that page.
+uint16_t AsmMc68HC12::cpuAddress(
+        const AsmInsn &insn, ErrorAt &error, const ErrorAt &at, uint32_t addr) const {
+    if (!pagedModel() || addr <= UINT16_MAX)
+        return addr;
+    int16_t pages[PAGE_NONE];
+    for (auto i = 0; i < PAGE_NONE; i++)
+        pages[i] = _page[i];
+    if (insn.locationPage >= 0)
+        pages[PAGE_PPAGE] = insn.locationPage;
+    uint16_t cpu = addr;
+    error.setErrorIf(at, mc68hc12::cpuAddress(cpuType(), addr, pages, cpu));
+    return cpu;
+}
+
+uint16_t AsmMc68HC12::encodeAddress(AsmInsn &insn, const Operand &op) const {
+    const auto addr = op.val.getUnsigned();
+    if (op.val.isUndefined())
+        return addr;
+    if (pagedModel() ? op.val.overflow(0xFFFFFF) : op.val.overflowUint16()) {
+        insn.setErrorIf(op, OVERFLOW_RANGE);
+        return addr;
+    }
+    if (insn.mode2() == M_PAG && addr > UINT16_MAX) {
+        // CALL switches PPAGE to the page operand
+        uint16_t cpu = addr;
+        int16_t page;
+        if (!programPage(cpuType(), addr, cpu, page) ||
+                insn.op2.val.getUnsigned() != static_cast<uint32_t>(page))
+            insn.setErrorIf(op, OVERFLOW_RANGE);
+        return cpu;
+    }
+    return cpuAddress(insn, insn, op, addr);
+}
+
+// Whether a defined |val| is an address on the direct page.
+bool AsmMc68HC12::inDirectPage(const Value &val) const {
+    if (val.isUndefined() || (pagedModel() ? val.overflow(0xFFFFFF) : val.overflowUint16()))
+        return false;
+    uint16_t cpu = val.getUnsigned();
+    if (val.getUnsigned() > UINT16_MAX &&
+            mc68hc12::cpuAddress(cpuType(), val.getUnsigned(), _page, cpu) != OK)
+        return false;
+    return (cpu >> 8) == directPage();
+}
+
+// A global address is GPAGE:address, and must be on GPAGE if it is assumed.
+uint16_t AsmMc68HC12::encodeGlobal(AsmInsn &insn, const Operand &op) const {
+    const auto addr = op.val.getUnsigned();
+    if (op.val.isUndefined())
+        return addr;
+    const auto gpage = _page[PAGE_GPAGE];
+    if (pagedModel() ? op.val.overflow(0x7FFFFF) : op.val.overflowUint16()) {
+        insn.setErrorIf(op, OVERFLOW_RANGE);
+    } else if (addr > UINT16_MAX && gpage >= 0 && (addr >> 16) != static_cast<uint32_t>(gpage)) {
+        insn.setErrorIf(op, OVERFLOW_RANGE);
+    }
+    return addr;
+}
+
+uint8_t AsmMc68HC12::encodeDirect(AsmInsn &insn, const Operand &op) const {
+    const auto addr = op.val.getUnsigned();
+    if (op.val.isUndefined())
+        return addr;
+    if (!inDirectPage(op.val)) {
+        insn.setErrorIf(op, OVERFLOW_RANGE);
+        return addr;
+    }
+    return cpuAddress(insn, insn, op, addr);
+}
+
+// A branch on the memory map controller stays in the 64K CPU address space.
+int32_t AsmMc68HC12::branchDelta16(const AsmInsn &insn, uint32_t base, uint32_t target,
+        ErrorAt &error, const ErrorAt &at) const {
+    if (!pagedModel())
+        return branchDelta(base, target, error, at);
+    const uint16_t cpuBase = insn.cpuLocation + (base - insn.address());
+    const uint16_t cpuTarget = cpuAddress(insn, error, at, target);
+    const auto delta = signExtend(cpuTarget - cpuBase, 16);
+    if ((delta >= 0 && cpuTarget < cpuBase) || (delta < 0 && cpuTarget >= cpuBase))
+        error.setErrorIf(at, OVERFLOW_RANGE);
+    return delta;
+}
+
+Config::ptrdiff_t AsmMc68HC12::calculateDisplacement(
+        AsmInsn &insn, const Operand &op, AddrMode mode) const {
+    if (mode == M_RL8) {
+        auto len = insn.length();
+        if (len == 0) {
+            len = 2;  // Bcc
+        } else {
+            len += 1;  // BRxxx
+        }
+        const auto base = insn.address() + len;
+        const auto target = op.getError() ? base : op.val.getUnsigned();
+        return branchDelta16(insn, base, target, insn, op);
+    }
+    if (mode == M_RL9) {
+        const auto base = insn.address() + 3;  // DBcc/IBcc/TBcc
+        const auto target = op.getError() ? base : op.val.getUnsigned();
+        return branchDelta16(insn, base, target, insn, op);
+    }
+    const auto base = insn.address() + 4;  // LBccc
+    const auto target = op.getError() ? base : op.val.getUnsigned();
+    return branchDelta16(insn, base, target, insn, op);
+}
+
+namespace {
+bool maySmartBranch(const AsmInsn &insn) {
+    const auto opc = insn.opCode();
+    if ((opc & 0xF0) == 0x20) {
+        const auto cc = opc & 0x0F;
+        return cc != 1;  // exclude BRN/LBRN
+    }
+    return false;
+}
+}  // namespace
+
+void AsmMc68HC12::encodeRelative(AsmInsn &insn, const Operand &op, AddrMode mode) const {
+    const auto smartBranch = _smartBranch && maySmartBranch(insn);
+    if (mode == M_RL8 && !smartBranch) {
+    short_branch:
+        const auto delta = calculateDisplacement(insn, op, M_RL8);
+        if (overflowDelta(delta, 8))
+            insn.setErrorIf(op, OPERAND_TOO_FAR);
+        insn.emitOperand8(delta);
+        return;
+    }
+    if (mode == M_RL16 && !smartBranch) {
+    long_branch:
+        const auto delta = calculateDisplacement(insn, op, M_RL16);
+        insn.emitOperand16(delta);
+        return;
+    }
+    if (mode == M_RL9) {
+        const auto delta = calculateDisplacement(insn, op, M_RL9);
+        if (delta < 0)
+            insn.embed(0x10);
+        insn.emitOperand8(delta);
+        return;
+    }
+    const auto delta = calculateDisplacement(insn, op, M_RL8);
+    if (op.getError() || overflowDelta(delta, 8)) {
+        insn.setPrefix(0x18);
+        goto long_branch;
+    }
+    insn.setPrefix(0);
+    goto short_branch;
+}
+
+uint_fast8_t encodeBaseHigh(AsmInsn &insn, const Operand &op) {
+    static constexpr uint8_t BASE_HIGH[] = {
+            0xE0,  // REG_X
+            0xE8,  // REG_Y
+            0xF0,  // REG_SP
+            0xF8,  // REG_PC
+    };
+    if (op.base < REG_X || op.base > REG_PC) {
+        insn.setErrorIf(op.baseAt, REGISTER_NOT_ALLOWED);
+        return 0xE0;
+    }
+    return BASE_HIGH[op.base - REG_X];
+}
+
+void emitPostByte(AsmInsn &insn, Config::opcode_t post, AddrMode mode) {
+    if (mode == M_CIDX) {
+        insn.setOpCode(post);
+    } else {
+        insn.emitOperand8(post);
+    }
+}
+
+void AsmMc68HC12::encodeAccumIndexed(AsmInsn &insn, const Operand &op, AddrMode mode) const {
+    uint8_t post = 6;
+    switch (op.index) {
+    case REG_A:
+        if (op.indir)
+            insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+        post = 4;
+        break;
+    case REG_B:
+        if (op.indir)
+            insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+        post = 5;
+        break;
+    case REG_D:
+        post = op.indir ? 7 : 6;
+        break;
+    default:
+        insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+        break;
+    }
+    post |= encodeBaseHigh(insn, op);
+    emitPostByte(insn, post, mode);
+}
+
+uint_fast8_t encodeBaseLow(AsmInsn &insn, const Operand &op) {
+    static constexpr uint8_t BASE_LOW[] = {
+            0x00,  // REG_X
+            0x40,  // REG_Y
+            0x80,  // REG_SP
+            0xC0,  // REG_PC
+    };
+    if (op.base < REG_X || op.base > REG_PC) {
+        insn.setErrorIf(op.baseAt, REGISTER_NOT_ALLOWED);
+        return 0x00;
+    }
+    return BASE_LOW[op.base - REG_X];
+}
+
+void AsmMc68HC12::encodePcRelative(AsmInsn &insn, const Operand &op, AddrMode mode) const {
+    auto len = insn.length();
+    if (len == 0)
+        len = 1;  // opcode
+    if (insn.hasPrefix())
+        len++;  // prefix byte
+    if (mode != M_CIDX)
+        len++;  // post byte
+    if (insn.isMove()) {
+        if (cpuType() == MC68HC12) {
+            len = insn.hc12MovePcBase(op.pos);
+        } else {
+            len = (insn.length() ? insn.length() : 2) + 1 + insn.moveTrailer(op.pos);
+        }
+    }
+    const auto mode2 = insn.mode2();
+    if (mode2 == M_IM8 || mode2 == M_PAG) {
+        len++;  // BCLR/BSET/CALL
+        if (insn.mode3() == M_RL8)
+            len++;  // BRCLR/BRSET
+    }
+    // Try 5-bit offset
+    ErrorAt error;
+    auto post = encodeBaseLow(insn, op);
+    auto base = insn.address() + len;
+    auto target = op.getError() ? base : op.val.getUnsigned();
+    auto delta = branchDelta16(insn, base, target, error, op);
+    if (!op.indir && op.size == 0 && !overflowDelta(delta, 5)) {
+        post |= delta & 0x1F;
+        emitPostByte(insn, post, mode);
+        return;
+    }
+    // Try 9-bit offset
+    post = encodeBaseHigh(insn, op);
+    if (op.indir)
+        post |= 0x01;
+    if (mode == M_NIDX || (op.indir && mode == M_DIDX)) {
+        insn.setErrorIf(op, OPERAND_NOT_ALLOWED);
+        emitPostByte(insn, post | 0x02, mode);
+        return;
+    }
+    base = insn.address() + len + 1;
+    target = op.getError() ? base : op.val.getUnsigned();
+    delta = branchDelta16(insn, base, target, error, op);
+    if (!op.indir && op.size != 16 && !overflowDelta(delta, 9)) {
+        if (delta < 0)
+            post |= 0x01;
+        emitPostByte(insn, post, mode);
+        insn.emitOperand8(delta);
+        return;
+    }
+    // 16-bit offset
+    base = insn.address() + len + 2;
+    target = op.getError() ? base : op.val.getUnsigned();
+    delta = branchDelta16(insn, base, target, error, op);
+    emitPostByte(insn, post | 0x02, mode);
+    insn.emitOperand16(delta);
+}
+
+void AsmMc68HC12::encodeIndexed(AsmInsn &insn, const Operand &op, AddrMode mode) const {
+    if (op.indir && (mode == M_DIDX || mode == M_NIDX))
+        insn.setErrorIf(op, OPERAND_NOT_ALLOWED);
+
+    if (op.mode == M_PAIR || op.index != REG_UNDEF) {
+        encodeAccumIndexed(insn, op, mode);
+        return;
+    }
+
+    // Constant indexed
+    if (op.update < 0) {
+        if (op.base == REG_PC) {
+            encodePcRelative(insn, op, mode);
+            return;
+        }
+        if (op.indir || op.size == 16 || op.val.overflow(0xFF, -0x100)) {
+            auto post = encodeBaseHigh(insn, op) | 0x02;
+            if (op.indir)
+                post |= 0x01;
+            if (op.val.overflowUint16())
+                insn.setErrorIf(op, OVERFLOW_RANGE);
+            emitPostByte(insn, post, mode);
+            if (mode == M_NIDX) {
+                insn.setErrorIf(op, OPERAND_NOT_ALLOWED);
+            } else {
+                insn.emitOperand16(op.val.getUnsigned());
+            }
+        } else if (op.size == 8 || op.val.overflow(15, -16)) {
+            auto post = encodeBaseHigh(insn, op);
+            if (op.val.isNegative())
+                post |= 0x01;
+            emitPostByte(insn, post, mode);
+            if (mode == M_NIDX) {
+                insn.setErrorIf(op, OPERAND_NOT_ALLOWED);
+            } else {
+                insn.emitOperand8(op.val.getUnsigned());
+            }
+        } else {
+            auto post = encodeBaseLow(insn, op);
+            post |= op.val.getUnsigned() & 0x1F;
+            emitPostByte(insn, post, mode);
+        }
+        return;
+    }
+
+    // Auto Pre/Post Decrement/Increment Indexed
+    auto post = encodeBaseLow(insn, op) | 0x20 | (op.update << 3);
+    if (op.base == REG_PC) {
+        insn.setErrorIf(op.baseAt, REGISTER_NOT_ALLOWED);
+        post = 0;
+    }
+    auto disp = op.val.getSigned();
+    if (disp <= 0 || disp > 8) {
+        disp = 1;
+        insn.setErrorIf(op, OVERFLOW_RANGE);
+    }
+    if (op.update == 0 || op.update == 2) {
+        post |= (disp - 1);
+    } else {
+        post |= (16 - disp);
+    }
+    emitPostByte(insn, post, mode);
+}
+
+void AsmMc68HC12::encodeRegisterPair(AsmInsn &insn, const Operand &op) const {
+    if (insn.opCode() == 0x04) {  // SEX M_R8H,M_R16L
+        if (regSize(op.index) != 8)
+            insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+        if (regSize(op.base) != 16)
+            insn.setErrorIf(op.baseAt, REGISTER_NOT_ALLOWED);
+    }
+    if (op.index == REG_PC || isS12xReg(op.index))
+        insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+    if (op.base == REG_PC || isS12xReg(op.base))
+        insn.setErrorIf(op.baseAt, REGISTER_NOT_ALLOWED);
+    insn.embed(encodeRegNum(op.index) << 4);
+    insn.embed(encodeRegNum(op.base));
+}
+
+void AsmMc68HC12::encodeOperand(AsmInsn &insn, const Operand &op, AddrMode mode) const {
+    insn.setErrorIf(op);
+    switch (mode) {
+    case M_RL8:
+    case M_RL9:
+    case M_RL16:
+        encodeRelative(insn, op, mode);
+        break;
+    case M_GN8:
+    case M_GN16:
+        if (op.mode == M_DIR) {
+            insn.embed(0x10);
+            insn.emitOperand8(encodeDirect(insn, op));
+            break;
+        }
+        if (op.mode == M_IDX || op.mode == M_PAIR) {
+            insn.embed(0x20);
+            encodeIndexed(insn, op, mode);
+            break;
+        }
+        if (op.mode == M_EXT) {
+            insn.embed(0x30);
+            insn.emitOperand16(encodeAddress(insn, op));
+            break;
+        }
+        if (op.mode == M_IM16) {
+            if (mode == M_GN8) {
+            imm8:
+                if (op.val.overflowUint8())
+                    insn.setErrorIf(op, OVERFLOW_RANGE);
+                insn.emitOperand8(op.val.getUnsigned());
+            } else {
+            imm16:
+                if (op.val.overflowUint16())
+                    insn.setErrorIf(op, OVERFLOW_RANGE);
+                insn.emitOperand16(op.val.getUnsigned());
+            }
+        }
+        break;
+    case M_IM8:
+        goto imm8;
+    case M_IM16:
+        goto imm16;
+    case M_PAG:
+        goto imm8;
+    case M_GMEM:
+        if (op.mode == M_IDX || op.mode == M_PAIR) {
+            insn.embed(0x60);
+            encodeIndexed(insn, op, mode);
+            break;
+        }
+        if (op.mode == M_EXT) {
+            insn.embed(0x70);
+            insn.emitOperand16(encodeAddress(insn, op));
+            break;
+        }
+        // Fall-through
+    case M_DIR:
+        insn.emitOperand8(encodeDirect(insn, op));
+        break;
+    case M_EXT:
+        insn.emitOperand16(encodeAddress(insn, op));
+        break;
+    case M_GDIR:
+        if (!op.val.isUndefined() && ((op.val.getUnsigned() & UINT16_MAX) >> 8) != directPage())
+            insn.setErrorIf(op, OVERFLOW_RANGE);
+        insn.emitOperand8(encodeGlobal(insn, op));
+        break;
+    case M_GEXT:
+        insn.emitOperand16(encodeGlobal(insn, op));
+        break;
+    case M_FEXT: {
+        // CALL to a physical address on a program page
+        uint16_t cpu = op.val.getUnsigned();
+        int16_t page = 0;
+        if (!op.val.isUndefined() && op.val.getUnsigned() <= UINT16_MAX) {
+            insn.setErrorIf(op, OPERAND_NOT_ALLOWED);
+        } else if (!op.val.isUndefined() && (op.val.overflow(0xFFFFFF) ||
+                                                    !programPage(cpuType(), op.val.getUnsigned(), cpu, page))) {
+            insn.setErrorIf(op, OVERFLOW_RANGE);
+        }
+        insn.emitOperand16(cpu);
+        insn.emitOperand8(page);
+        break;
+    }
+    case M_IDX:
+    case M_DIDX:
+    case M_NIDX:
+    case M_CIDX:
+        encodeIndexed(insn, op, mode);
+        break;
+    case M_R8L: {
+        auto opc = encodeRegNum(op.index);
+        if (opc >= 2) {
+            insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+            opc = 0;
+        }
+        insn.embed(opc);
+        break;
+    }
+    case M_R16L: {
+        auto opc = encodeRegNum(op.index);
+        if (opc < 4) {
+            insn.setErrorIf(op, REGISTER_NOT_ALLOWED);
+            opc = 0;
+        }
+        insn.embed(opc);
+        break;
+    }
+    case M_PAIR:
+        encodeRegisterPair(insn, op);
+        break;
+    case M_XPAIR:
+    case M_XSEX: {
+        auto opc = insn.opCode();
+        encodeXferPair(mode, opc, op.index, op.base);
+        insn.setOpCode(opc);
+        break;
+    }
+    case M_TRAP:
+        if (op.val.overflowUint8() || !isTrapCode(cpuType(), op.val.getUnsigned())) {
+            insn.setErrorIf(op, OVERFLOW_RANGE);
+        } else {
+            insn.setOpCode(op.val.getUnsigned());
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+Error AsmMc68HC12::parseOperand(StrScanner &scan, Operand &op) const {
+    auto p = scan.skipSpaces();
+    op.setAt(p);
+    if (endOfLine(p))
+        return OK;
+
+    if (p.expect('#')) {
+        op.val = parseInteger(p, op);
+        if (op.hasError())
+            return op.getError();
+        op.mode = M_IM16;
+        scan = p;
+        return OK;
+    }
+
+    if ((op.indir = p.expect('[')))
+        p.skipSpaces();
+    op.index = parseRegName(p, parser(), cpuType());
+    if (op.index != REG_UNDEF) {
+        auto a = p.skipSpaces();
+        if (!p.expect(','))
+            return op.setErrorIf(p, UNKNOWN_OPERAND);
+        op.baseAt = p.skipSpaces();
+        op.base = parseRegName(p, parser(), cpuType());
+        if (op.base == REG_UNDEF) {
+            if (isS12xReg(op.index))
+                return op.setErrorIf(REGISTER_NOT_ALLOWED);
+            op.mode = (op.index == REG_A || op.index == REG_B) ? M_R8L : M_R16L;
+            scan = a;
+            return OK;
+        }
+        if (op.indir && (isS12xReg(op.index) || isS12xReg(op.base)))
+            return op.setErrorIf(REGISTER_NOT_ALLOWED);
+        if (op.indir && !p.skipSpaces().expect(']'))
+            return op.setErrorIf(p, MISSING_CLOSING_BRACKET);
+        op.mode = op.indir ? M_IDX : M_PAIR;
+        scan = p;
+        return OK;
+    }
+    if (p.expect('>')) {
+        op.size = 16;  // >nn
+    } else if (p.expect('<')) {
+        op.size = 8;  // <nn
+    }
+    op.val = parseInteger(p, op);
+    if (op.hasError())
+        return op.getError();
+    auto a = p.skipSpaces();
+    if (p.expect(',')) {
+        op.baseAt = p.skipSpaces();
+        if (p.expect('+')) {
+            op.update = 0;  // +X
+        } else if (p.expect('-')) {
+            op.update = 1;  // -X
+        }
+        op.base = parseRegName(p, parser(), cpuType());
+        if (isS12xReg(op.base))
+            return op.setErrorIf(op.baseAt, REGISTER_NOT_ALLOWED);
+        if (op.base < REG_X) {
+        absolute:
+            if (op.indir)
+                return op.setErrorIf(scan, UNKNOWN_OPERAND);
+            if (op.size == 0)
+                op.size = inDirectPage(op.val) ? 8 : 16;
+            op.mode = (op.size == 8) ? M_DIR : M_EXT;
+            scan = a;
+            return OK;
+        }
+
+        auto u = p;
+        if (p.expect('+')) {
+            if (op.update >= 0)
+                return op.setErrorIf(u, UNKNOWN_OPERAND);
+            op.update = 2;  // X+
+        } else if (p.expect('-')) {
+            if (op.update >= 0)
+                return op.setErrorIf(u, UNKNOWN_OPERAND);
+            op.update = 3;  // X-
+        }
+        if (op.indir && !p.skipSpaces().expect(']'))
+            return op.setErrorIf(p, MISSING_CLOSING_BRACKET);
+        op.mode = M_IDX;
+        scan = p;
+        return OK;
+    }
+    goto absolute;
+}
+
+Error AsmMc68HC12::encodeImpl(StrScanner &scan, Insn &_insn) const {
+    AsmInsn insn(_insn);
+    if (hasOperand(cpuType(), insn)) {
+        insn.op1.pos = 1;
+        if (parseOperand(scan, insn.op1) && insn.op1.hasError())
+            return _insn.setError(insn.op1);
+        if (scan.skipSpaces().expect(',')) {
+            insn.op2.pos = 2;
+            if (parseOperand(scan, insn.op2) && insn.op2.hasError())
+                return _insn.setError(insn.op2);
+        }
+        if (scan.skipSpaces().expect(',')) {
+            insn.op3.pos = 3;
+            if (parseOperand(scan, insn.op3) && insn.op3.hasError())
+                return _insn.setError(insn.op3);
+        }
+    }
+    scan.skipSpaces();
+
+    insn.pagedModel = pagedModel();
+    // An instruction is in program space; one below $10000 is at its own CPU address
+    auto inProgram = true;
+    if (pagedModel()) {
+        const auto addr = insn.address();
+        uint16_t cpu;
+        int16_t page;
+        inProgram = programAddress(cpuType(), addr, cpu, page) && (addr > UINT16_MAX || cpu == addr);
+        if (inProgram) {
+            insn.cpuLocation = cpu;
+            insn.locationPage = page;
+        }
+    }
+    if (searchName(cpuType(), insn))
+        return _insn.setError(insn.op1, insn);
+
+    if (insn.moveDestFirst()) {
+        // Special index post byte order for MOVW/MOVB
+        encodeOperand(insn, insn.op2, insn.mode2());
+        encodeOperand(insn, insn.op1, insn.mode1());
+    } else {
+        encodeOperand(insn, insn.op1, insn.mode1());
+        encodeOperand(insn, insn.op2, insn.mode2());
+    }
+    encodeOperand(insn, insn.op3, insn.mode3());
+    insn.emitInsn();
+    if (!inProgram) {
+        insn.setErrorIf(insn.op1, OVERFLOW_RANGE);
+    } else if (insn.locationPage >= 0 &&
+               insn.cpuLocation + insn.length() - 1 > pageWindowLast(cpuType(), insn.cpuLocation)) {
+        // An instruction on a page may not run off the end of its window
+        insn.setErrorIf(insn.op1, OVERFLOW_RANGE);
+    }
+    return _insn.setError(insn);
+}
+
+}  // namespace mc68hc12
+}  // namespace libasm
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

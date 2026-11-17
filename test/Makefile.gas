@@ -1,0 +1,512 @@
+# Copyright 2020 Tadashi G. Takaoka
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# GNU assembler rules
+
+# Am29000 family targets.
+# a29k-coff-as has no CPU selector; it accepts the whole family's instruction
+# set, including the Am29050-only opcodes, so every target shares one rule.
+# The linker flags live in <stem>.ld_flags: the section start, plus a --defsym
+# for any target the source names rather than spells out.  binutils 2.11.2's
+# a29k-coff-ld predates @file, so the flags are read with a command
+# substitution instead.  Both directories generate that file, and both hold an
+# am29000.ld; see it for why the link uses a script of its own.
+# The .hex carries no architecture, hence the explicit -m a29k on objdump.
+# Note that a29k-coff-objdump 2.11.2 segfaults on a CONSTH placed at address 0:
+# it reads the preceding word to recognize a CONST/CONSTH pair, and that read
+# underflows past the bounds check when there is nothing before it.  Every text
+# origin here is non-zero, so the step is safe.
+# $(1) target suffix.
+define gas-am29000-rule
+gas-%_$(1).hex: %_$(1).gas %_$(1).ld_flags am29000.ld
+	a29k-coff-as --warn -o $$(<:.gas=.p) -al=$$(<:.gas=.lst) $$<
+	a29k-coff-ld --entry=0 -T am29000.ld $$$$(cat $$*_$(1).ld_flags) \
+		-o $$(<:.gas=.o) $$(<:.gas=.p)
+	a29k-coff-objcopy -I coff-a29k-big -O ihex $$(<:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $$(<:.gas=.hex)
+	a29k-coff-objdump -m a29k -D $$(<:.gas=.hex) > $$(<:.gas=.dis)
+endef
+$(eval $(call gas-am29000-rule,am29200))
+$(eval $(call gas-am29000-rule,am29245))
+$(eval $(call gas-am29000-rule,am29030))
+$(eval $(call gas-am29000-rule,am29240))
+$(eval $(call gas-am29000-rule,am29040))
+$(eval $(call gas-am29000-rule,am29050))
+
+# PDP-11 targets.
+#
+# binutils 2.46.1's --target-help advertises -mt11/-mj11, but the option
+# table in this build only contains the kd11/ka11/kb11 entries, so those
+# flags are rejected. Pass each instruction-set extension explicitly per
+# the J-11 / T-11 architecture handbooks until upstream lands the CPU
+# aliases:
+#   T-11: limited EIS (incl. RTT), MTPS/MFPS, MFPT
+#   J-11: full EIS,  MTPS/MFPS, MFPT, SPL, CSM, TSTSET/WRTLCK
+#          (-mmultiproc), and FP-11 floating point.
+T11_FLAGS = -mno-extensions -mlimited-eis -mmxps -mmfpt
+J11_FLAGS = -mno-extensions -meis -mmxps -mmfpt -mspl -mcsm -mmultiproc -mfpp
+
+gas-%_t11.hex: %_t11.gas
+	pdp11-aout-as $(T11_FLAGS) --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	pdp11-aout-ld --entry=0 -section-start=.text=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	pdp11-aout-objcopy -I a.out-pdp11 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	pdp11-aout-objdump -m pdp11 -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+gas-%_j11.hex: %_j11.gas
+	pdp11-aout-as $(J11_FLAGS) --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	pdp11-aout-ld --entry=0 -section-start=.text=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	pdp11-aout-objcopy -I a.out-pdp11 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	pdp11-aout-objdump -m pdp11 -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# Z8001 target
+# all --section-start linker flags (text + per-segment helpers) live in
+# <stem>.ld_flags and are passed to ld via @<stem>.ld_flags.  Both directories
+# generate that file from Z8001_TEXT_ORG, which objcopy's
+# --adjust-section-vma reads directly.
+# Helper sections are discarded from the .hex via `-j .text` so only
+# emitted instructions appear.
+# Keep Z8001_TEXT_ORG at or above 0x100000: objcopy writes the ihex base as a
+# type 02 record (extended segment, base<<4) below 1MB and as a type 04 record
+# (extended linear, base<<16) at or above it.  Only type 04 describes a Z8001
+# segment number, and only type 04 matches what the other assemblers emit.
+gas-%_z8001.hex: %_z8001.gas %_z8001.ld_flags
+	z8k-coff-as --warn -o $(<:.gas=.p) -al=$(<:.gas=.lst) $<
+	z8k-coff-ld -m z8001 --entry=0 -o $(<:.gas=.o) $(<:.gas=.p) \
+		@$*_z8001.ld_flags
+	z8k-coff-objcopy -I coff-z8k -O ihex -j .text $(<:.gas=.o) /dev/stdout \
+		--adjust-section-vma .text=$(Z8001_TEXT_ORG) \
+	| tr -d '\015' > $(<:.gas=.hex)
+	z8k-coff-objdump -m z8001 -D $(<:.gas=.hex) > $(<:.gas=.dis)
+
+# Z8002 target
+# all --section-start linker flags live in <stem>.ld_flags and are
+# passed to ld via @<stem>.ld_flags; the text VMA is extracted from
+# the same file for objcopy's --adjust-section-vma.
+gas-%_z8002.hex: %_z8002.gas %_z8002.ld_flags
+	z8k-coff-as --warn -o $(<:.gas=.p) -al=$(<:.gas=.lst) $<
+	z8k-coff-ld -m z8002 --entry=0 -o $(<:.gas=.o) $(<:.gas=.p) \
+		@$*_z8002.ld_flags
+	text_vma=$$(sed -n 's/^--section-start=\.text=//p' $*_z8002.ld_flags); \
+	z8k-coff-objcopy -I coff-z8k -O ihex $(<:.gas=.o) /dev/stdout \
+		--adjust-section-vma .text=$$text_vma \
+	| tr -d '\015' > $(<:.gas=.hex)
+	z8k-coff-objdump -m z8002 -D $(<:.gas=.hex) > $(<:.gas=.dis)
+
+# NS32032 target
+gas-%_ns32032.hex: %_ns32032.gas
+	ns32k-openbsd-as -m32032 --warn -o $(^:.gas=.o) -al=$(^:.gas=.lst) $^
+	ns32k-openbsd-objcopy -I a.out-ns32k-netbsd -O ihex -j .text \
+		--adjust-section-vma .text=0x10000 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	ns32k-openbsd-objdump -m ns32k:32032 -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# H8/300 target
+gas-%_h8300.s19: %_h8300.gas
+	h8300-elf-as --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s19)
+	h8300-elf-objdump -m h8300 -D $(^:.gas=.s19) > $(^:.gas=.dis)
+
+# H8/300H target
+gas-%_h8300h.s28: %_h8300h.gas
+	h8300-elf-as -mach=h8300h --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300helf --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s28)
+	h8300-elf-objdump -m h8300h -D $(^:.gas=.s28) > $(^:.gas=.dis)
+
+# H8/300H normal mode target
+gas-%_h8300hn.s19: %_h8300hn.gas
+	h8300-elf-as -mach=h8300hn --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300hnelf --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s19)
+	h8300-elf-objdump -m h8300h -D $(^:.gas=.s19) > $(^:.gas=.dis)
+
+# H8/300H advanced mode target
+gas-%_h8s2000.s28: %_h8s2000.gas
+	h8300-elf-as -mach=h8300s --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300self --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s28)
+	h8300-elf-objdump -m h8300s -D $(^:.gas=.s28) > $(^:.gas=.dis)
+
+# H8S/2000 normal mode target
+gas-%_h8s2000n.s19: %_h8s2000n.gas
+	h8300-elf-as -mach=h8300sn --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300snelf --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s19)
+	h8300-elf-objdump -m h8300s -D $(^:.gas=.s19) > $(^:.gas=.dis)
+
+# H8S/2000 advanced mode target
+gas-%_h8s2000.s28: %_h8s2000.gas
+	h8300-elf-as -mach=h8300s --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300self --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s28)
+	h8300-elf-objdump -m h8300s -D $(^:.gas=.s28) > $(^:.gas=.dis)
+
+# H8S/2600 normal mode target
+gas-%_h8s2600n.s19: %_h8s2600n.gas
+	h8300-elf-as -mach=h8300sn --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300snelf --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s19)
+	h8300-elf-objdump -m h8300s -D $(^:.gas=.s19) > $(^:.gas=.dis)
+
+# H8S/2600 advanced mode target
+gas-%_h8s2600.s28: %_h8s2600.gas
+	h8300-elf-as -mach=h8300s --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	h8300-elf-ld -mh8300self --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	h8300-elf-objcopy -I elf32-h8300 -O srec --srec-len=16 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s28)
+	h8300-elf-objdump -m h8300s -D $(^:.gas=.s28) > $(^:.gas=.dis)
+
+# H8/500 family targets (h8510, h8520, h8530)
+# The .gas wrapper uses a .include directive so h8500-hms-as inlines the
+# .ginc directly (no cpp pass).
+# $(1) target suffix, $(2) S-record extension, $(3) link text origin.
+# Maximum-mode targets link past 0xFFFF (24-bit physical, S2 records); the
+# minimum-mode "n" targets stay in the 16-bit space (S1 records).
+define gas-h8500-rule
+gas-%_$(1).$(2): %_$(1).gas
+	h8500-hms-as --warn -o $$(^:.gas=.p) -als=$$(^:.gas=.lst) $$^
+	h8500-hms-ld --entry=0 -Ttext $(3) -o $$(^:.gas=.o) $$(^:.gas=.p)
+	h8500-hms-objcopy -O srec --srec-len=16 $$(^:.gas=.o) /dev/stdout \
+	  | tr -d '\015' > $$(^:.gas=.$(2))
+	h8500-hms-objdump -m h8500 -D $$(^:.gas=.$(2)) > $$(^:.gas=.dis)
+endef
+$(eval $(call gas-h8500-rule,h8510,s28,0x010000))
+$(eval $(call gas-h8500-rule,h8510n,s19,0x0100))
+$(eval $(call gas-h8500-rule,h8520,s28,0x010000))
+$(eval $(call gas-h8500-rule,h8520n,s19,0x0100))
+$(eval $(call gas-h8500-rule,h8530,s28,0x010000))
+$(eval $(call gas-h8500-rule,h8530n,s19,0x0100))
+
+# i8086 target
+gas-%_i8086.hex: %_i8086.gas
+	i386-elf-as -mtune=i8086 --warn -mnaked-reg -msyntax=intel \
+		-mmnemonic=intel -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	i386-elf-ld --entry=0 -section-start=.text=0x1000 -o $(^:.gas=.o) $(^:.gas=.p)
+	i386-elf-objcopy -I elf32-i386 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	i386-elf-objdump -m i8086 -M intel -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# i80186 target
+gas-%_i80186.hex: %_i80186.gas
+	i386-elf-as -mtune=i186 --warn -mnaked-reg -msyntax=intel \
+		-mmnemonic=intel -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	i386-elf-ld --entry=0 -section-start=.text=0x1000 -o $(^:.gas=.o) $(^:.gas=.p)
+	i386-elf-objcopy -I elf32-i386 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	i386-elf-objdump -m i8086 -M intel -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# i80286 target
+gas-%_i80286.hex: %_i80286.gas
+	i386-elf-as -mtune=i286 --warn -mnaked-reg -msyntax=intel \
+		-mmnemonic=intel -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	i386-elf-ld --entry=0 -section-start=.text=0x1000 -o $(^:.gas=.o) $(^:.gas=.p)
+	i386-elf-objcopy -I elf32-i386 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	i386-elf-objdump -m i8086 -M intel -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# i80386 target
+gas-%_i80386.hex: %_i80386.gas
+	i386-elf-as -mtune=i386 --warn -mnaked-reg -msyntax=intel \
+		-mmnemonic=intel -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	i386-elf-ld --entry=0 -section-start=.text=0x1000 -o $(^:.gas=.o) $(^:.gas=.p)
+	i386-elf-objcopy -I elf32-i386 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	i386-elf-objdump -m i386 -M intel -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# i80486 target
+# -mtune only picks between equivalent encodings here (it does not gate the
+# instruction set), and the i486 tuning prefers the 3-byte "C0 /4 ib" shift
+# form over the canonical 2-byte "D0 /4" that both libasm and nasm emit for a
+# shift count of 1, so keep the i386 tuning.
+gas-%_i80486.hex: %_i80486.gas
+	i386-elf-as -mtune=i386 --warn -mnaked-reg -msyntax=intel \
+		-mmnemonic=intel -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	i386-elf-ld --entry=0 -section-start=.text=0x1000 -o $(^:.gas=.o) $(^:.gas=.p)
+	i386-elf-objcopy -I elf32-i386 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	i386-elf-objdump -m i386 -M intel -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# MC68000 target
+gas-%_mc68000.s28: %_mc68000.gas
+	m68k-elf-as -m68000 -m68881 --warn --register-prefix-optional \
+		--base-size-default-16 -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m68k-elf-ld --entry=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	m68k-elf-objcopy -I elf32-m68k -O srec --srec-len=16 \
+		--adjust-section-vma .text=0x10000 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s28)
+	m68k-elf-objdump -m 68000 -D $(^:.gas=.s28) > $(^:.gas=.dis)
+
+# MC68010 target
+gas-%_mc68010.s28: %_mc68010.gas
+	m68k-elf-as -m68010 -m68881 --warn --register-prefix-optional \
+		--base-size-default-16 -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m68k-elf-ld --entry=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	m68k-elf-objcopy -I elf32-m68k -O srec --srec-len=16 \
+		--adjust-section-vma .text=0x10000 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s28)
+	m68k-elf-objdump -m 68010 -D $(^:.gas=.s28) > $(^:.gas=.dis)
+
+# MC68020 target
+gas-%_mc68020.s37: %_mc68020.gas
+	m68k-elf-as -m68020 -m68881 --warn --register-prefix-optional \
+		--base-size-default-16 -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m68k-elf-ld --entry=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	m68k-elf-objcopy -I elf32-m68k -O srec --srec-len=16 \
+		--adjust-section-vma .text=0x10000 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	m68k-elf-objdump -m 68020 -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# MC68030 target
+gas-%_mc68030.s37: %_mc68030.gas
+	m68k-elf-as -m68030 -m68881 --warn --register-prefix-optional \
+		--base-size-default-16 -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m68k-elf-ld --entry=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	m68k-elf-objcopy -I elf32-m68k -O srec --srec-len=16 \
+		--adjust-section-vma .text=0x10000 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	m68k-elf-objdump -m 68030 -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# MC68040 target
+gas-%_mc68040.s37: %_mc68040.gas
+	m68k-elf-as -m68040 --warn --register-prefix-optional \
+		--base-size-default-16 -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m68k-elf-ld --entry=0 -o $(^:.gas=.o) $(^:.gas=.p)
+	m68k-elf-objcopy -I elf32-m68k -O srec --srec-len=16 \
+		--adjust-section-vma .text=0x10000 $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	m68k-elf-objdump -m 68040 -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# MC68HC11 target
+# Converted straight from the assembler output: the m68hc11 linker script
+# rounds .text up and would append fill bytes the libasm reference does not
+# have.  Each include sits in its own section so the reference's alignment
+# boundaries stay empty rather than zero-filled, and objcopy places them.
+gas-%_mc68hc11.s19: %_mc68hc11.gas
+	m6811-elf-as -m68hc11 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m6811-elf-objcopy -I elf32-m68hc11 -O srec --srec-len=16 \
+		-j .text -j mc6801part -j mc68hc11part \
+		--change-section-lma .text=0x0100 \
+		--change-section-lma mc6801part=0x02A0 \
+		--change-section-lma mc68hc11part=0x02E0 \
+		$(^:.gas=.p) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s19)
+	m6811-elf-objdump -m m68hc11 -D $(^:.gas=.s19) > $(^:.gas=.dis)
+
+# MC68HC12 target
+# Converted straight from the assembler output; the m68hc12 linker script
+# rounds .text up and would append a trailing fill byte.
+gas-%_mc68hc12.s19: %_mc68hc12.gas
+	m6811-elf-as -m68hc12 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	m6811-elf-objcopy -I elf32-m68hc12 -O srec --srec-len=16 -j .text \
+	        --change-section-lma .text=0x0100 $(^:.gas=.p) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s19)
+	m6811-elf-objdump -m m68hc12 -D $(^:.gas=.s19) > $(^:.gas=.dis)
+
+# MC68HCS12 and MC68HCS12X targets
+define gas-m68hcs12-rule
+gas-%_$(1).s19: %_$(1).gas
+	m6811-elf-as $(2) --warn -o $$(^:.gas=.p) -al=$$(^:.gas=.lst) $$^
+	m6811-elf-objcopy -I elf32-m68hc12 -O srec --srec-len=16 -j .text \
+	        --change-section-lma .text=0x0100 $$(^:.gas=.p) /dev/stdout \
+	| tr -d '\015' > $$(^:.gas=.s19)
+	m6811-elf-objdump -m m68hc12 -D $$(^:.gas=.s19) > $$(^:.gas=.dis)
+endef
+$(eval $(call gas-m68hcs12-rule,mc68hcs12,-m68hcs12))
+$(eval $(call gas-m68hcs12-rule,mc68hcs12x,-mm9s12x))
+
+# MC68HC12 family memory map controller targets
+# Linked with the banked emulation so that CALL, %page() and %addr() resolve;
+# see mc68hc12_mmc.ld.  objcopy then places each section at its physical
+# address.
+# $(1) target suffix, $(2) as option, $(3) text origin, $(4) text, page $30,
+# page $31 and fixed area physical addresses.
+define gas-m68hc12-mmc-rule
+gas-%_$(1).s28: %_$(1).gas mc68hc12_mmc.ld
+	m6811-elf-as $(2) --warn -o $$(<:.gas=.p) -al=$$(<:.gas=.lst) $$<
+	m6811-elf-ld -m m68hc12elfb --bank-window bank --entry=0 -T mc68hc12_mmc.ld \
+		--section-start=.text=$(3) -o $$(<:.gas=.o) $$(<:.gas=.p)
+	m6811-elf-objcopy -O srec --srec-len=16 \
+		$$(foreach s,$(join .text= .p30= .p31= .fixed=,$(4)),--change-section-lma $$(s)) \
+		$$(<:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $$(<:.gas=.s28)
+	m6811-elf-objdump -m m68hc12 -D $$(<:.gas=.s28) > $$(<:.gas=.dis)
+endef
+$(eval $(call gas-m68hc12-mmc-rule,mc68hc12_mmc,-m68hc12,0x1000,0x3F1000 0x0C0000 0x0C4000 0x3FC000))
+$(eval $(call gas-m68hc12-mmc-rule,mc68hcs12_mmc,-m68hcs12,0x0100,0x000100 0x0C0000 0x0C4000 0x0FC000))
+$(eval $(call gas-m68hc12-mmc-rule,mc68hcs12x_mmc,-mm9s12x,0x4000,0x7F4000 0x4C0000 0x4C4000 0x7FC000))
+
+# TMS320C30 target
+gas-%_tms320c30.hex: %_tms320c30.gas
+	tic4x-coff-as -mcpu=30 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	tic4x-coff-ld --entry=0 -section-start=.text=0x300 -o $(^:.gas=.o) $(^:.gas=.p)
+	tic4x-coff-objcopy -I coff1-tic4x -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	tic4x-coff-objdump -m c30 -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# TMS320C31 target
+gas-%_tms320c31.hex: %_tms320c31.gas
+	tic4x-coff-as -mcpu=31 --mrev=5 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	tic4x-coff-ld --entry=0 -section-start=.text=0x300 -o $(^:.gas=.o) $(^:.gas=.p)
+	tic4x-coff-objcopy -I coff1-tic4x -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	tic4x-coff-objdump -m c31 -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# TMS320C32 target
+gas-%_tms320c32.hex: %_tms320c32.gas
+	tic4x-coff-as -mcpu=32 --mrev=2 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	tic4x-coff-ld --entry=0 -section-start=.text=0x300 -o $(^:.gas=.o) $(^:.gas=.p)
+	tic4x-coff-objcopy -I coff1-tic4x -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	tic4x-coff-objdump -m c32 -D $(^:.gas=.hex) > $(^:.gas=.dis)
+
+# Z80 target
+gas-%_z80.hex: %_z80.gas
+	z80-elf-as -march=z80 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	z80-elf-ld --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	z80-elf-objcopy -I elf32-z80 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	z80-elf-objdump -mz80 -D $(^:.gas=.o) > $(^:.gas=.dis)
+
+# Z180 target
+gas-%_z180.hex: %_z180.gas
+	z80-elf-as -march=z180 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	z80-elf-ld --entry=0 -section-start=.text=0x0100 -o $(^:.gas=.o) $(^:.gas=.p)
+	z80-elf-objcopy -I elf32-z80 -O ihex $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.hex)
+	z80-elf-objdump -mz180 -D $(^:.gas=.o) > $(^:.gas=.dis)
+
+# SH-1 target
+gas-%_sh1.s37: %_sh1.gas
+	sh-elf-as --isa=sh --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	sh-elf-ld --entry=0 -section-start=.text=0x0000 -o $(^:.gas=.o) $(^:.gas=.p)
+	sh-elf-objcopy -I elf32-sh -O srec --srec-len=16 -j .text $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	sh-elf-objdump -m sh -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# SH-2 target
+gas-%_sh2.s37: %_sh2.gas
+	sh-elf-as --isa=sh2 --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	sh-elf-ld --entry=0 -section-start=.text=0x0000 -o $(^:.gas=.o) $(^:.gas=.p)
+	sh-elf-objcopy -I elf32-sh -O srec --srec-len=16 -j .text $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	sh-elf-objdump -m sh2 -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# SH-DSP target (SH-2 + DSP)
+gas-%_shdsp.s37: %_shdsp.gas
+	sh-elf-as --isa=sh-dsp --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	sh-elf-ld --entry=0 -section-start=.text=0x0000 -o $(^:.gas=.o) $(^:.gas=.p)
+	sh-elf-objcopy -I elf32-sh -O srec --srec-len=16 -j .text $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	sh-elf-objdump -m sh-dsp -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# SH-2E target (SH-2 + single-precision FPU)
+gas-%_sh2e.s37: %_sh2e.gas
+	sh-elf-as --isa=sh2e --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	sh-elf-ld --entry=0 -section-start=.text=0x0000 -o $(^:.gas=.o) $(^:.gas=.p)
+	sh-elf-objcopy -I elf32-sh -O srec --srec-len=16 -j .text $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	sh-elf-objdump -m sh2e -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# SH-2A target (SH-2E + extra CPU instructions, optional FPU; use FPU here)
+gas-%_sh2a.s37: %_sh2a.gas
+	sh-elf-as --isa=sh2a --warn -o $(^:.gas=.p) -al=$(^:.gas=.lst) $^
+	sh-elf-ld --entry=0 -section-start=.text=0x0000 -o $(^:.gas=.o) $(^:.gas=.p)
+	sh-elf-objcopy -I elf32-sh -O srec --srec-len=16 -j .text $(^:.gas=.o) /dev/stdout \
+	| tr -d '\015' > $(^:.gas=.s37)
+	sh-elf-objdump -m sh2a -D $(^:.gas=.s37) > $(^:.gas=.dis)
+
+# Intel 80960 target.
+#
+# -AKA selects the 80960KA instruction set, which is the base architecture
+# plus the synchronous instructions; the KB floating point and decimal
+# instructions are rejected, so this also guards the base sources against
+# accidentally picking one up.
+#
+# No link step: the sources name no undefined symbol and every branch is
+# PC-relative and resolved by the assembler, so objcopy moves the section to
+# its final address directly.  Going through i960-coff-ld instead would append
+# the linker script's section padding to the image.
+#
+# Keep I960_TEXT_ORG at or above 0x100000 so objcopy writes the ihex base as a
+# type 04 record (extended linear) rather than a type 02 (extended segment),
+# which is what libasm and p2hex emit.
+I960_TEXT_ORG = 0x00100000
+
+# GNU as and ASL cannot read the same source: as takes '#' as its comment
+# character and treats ';' as a statement separator, while ASL rejects '#'
+# outright.  The .ginc files are therefore derived from the .inc that ASL
+# reads, so the instruction list has a single origin.
+#
+# Only the comment marker has to change: an IP-relative operand is written as
+# its displacement, which is what GNU as and the manual both mean by it, so the
+# two assemblers read the same operand text.
+I960_GINCS = test_i960_common.ginc test_i960_iprel.ginc test_i960_fpu.ginc
+$(I960_GINCS): %.ginc: %.inc
+	sed -e 's/;/#/g' $< > $@
+
+# The autogen source needs neither substitution: the disassembler already
+# writes a branch against the location counter and an IP-relative operand as
+# its displacement when it generates for GNU as, so only the generator's
+# ";###" comment marker has to become one GNU as reads.
+gen_i960_gas.inc: %_gas.inc: %.ginc
+	sed -e 's/^;#*/#/' $< > $@
+
+# The recipe names its files from the stem rather than from $<, so that each
+# source can carry its own extra prerequisites without displacing the .gas.
+gas-%_i960.hex: %_i960.gas
+	i960-coff-as -AKB --warn -o $*_i960.p -al=$*_i960.lst $*_i960.gas
+	i960-coff-objcopy -I coff-Intel-little -O ihex -j .text \
+		--adjust-section-vma .text=$(I960_TEXT_ORG) $*_i960.p /dev/stdout \
+	| tr -d '\015' > $*_i960.hex
+	i960-coff-objdump -d $*_i960.p > $*_i960.dis
+gas-test_i960.hex: $(I960_GINCS)
+gas-gen_i960.hex: gen_i960_gas.inc
+
+# C166 family targets.
+# xc16x-elf-as comes from binutils 2.34, the last release with the target.  It
+# has a single machine, the 80C167 instruction set with the XC16X branches, so
+# the 80C166, 80C167 and XC16X sources share it.  The link resolves absolute
+# branch targets at the text origin; c166.ld replaces the default script, whose
+# memory region does not reach the origins used here.  The origin must match
+# the org of the test source; the autogen sources use the generator's.
+C166_TEXT_ORG = 0x10100
+gas-test_c166.hex: C166_TEXT_ORG = 0x12340
+gas-test_c167.hex gas-test_xc16x.hex: C166_TEXT_ORG = 0xAB1230
+# $(1) target suffix.
+define gas-c166-rule
+gas-%_$(1).hex: %_$(1).gas c166.ld
+	xc16x-elf-as --warn -o $$*_$(1).p -al=$$*_$(1).lst $$*_$(1).gas
+	xc16x-elf-ld --entry=0 -T c166.ld -Ttext=$$(C166_TEXT_ORG) -o $$*_$(1).o $$*_$(1).p
+	xc16x-elf-objcopy -O ihex -j .text $$*_$(1).o /dev/stdout \
+	| tr -d '\015' | awk -f ../../scripts/ihex-segment-to-linear.awk > $$*_$(1).hex
+	xc16x-elf-objdump -d $$*_$(1).o > $$*_$(1).dis
+endef
+$(eval $(call gas-c166-rule,c166))
+$(eval $(call gas-c166-rule,c167))
+$(eval $(call gas-c166-rule,xc16x))
+
+# Local Variables:
+# mode: makefile-gmake
+# End:
+# vim: set ft=make:

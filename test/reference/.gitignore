@@ -1,0 +1,6 @@
+*.ninc
+*.lst
+*.dis
+*.p
+*.o
+*.bin

@@ -1,0 +1,38 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches:
+      - main
+      - devel
+    tags-ignore:
+      - '*.*.*'
+    paths-ignore:
+      - ".github/**"
+      - "**/*.md"
+      - "**/*.txt"
+      - "library.*"
+      - "**/*.asm"
+      - "**/*.inc"
+      - "**/*.hex"
+      - "**/*.s19"
+      - "**/*.s28"
+      - "**/*.s37"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v7
+    - name: build test and run
+      run: cd test; make test
+    - name: build generator
+      run: cd test; make gen
+    - name: build command line interface
+      run: cd cli; make cli

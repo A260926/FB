@@ -1,0 +1,56 @@
+/*
+ * Copyright 2021 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "reg_mc6805.h"
+#include "reg_base.h"
+
+using namespace libasm::reg;
+
+namespace libasm {
+namespace mc6805 {
+namespace reg {
+
+RegName parseRegName(StrScanner &scan) {
+    auto p = scan;
+    if (p.iexpect('X') && !isIdLetter(*p)) {
+        scan = p;
+        return REG_X;
+    }
+    if (p.iexpect('S') && p.iexpect('P') && !isIdLetter(*p)) {
+        scan = p;
+        return REG_SP;
+    }
+    return REG_UNDEF;
+}
+
+StrBuffer &outRegName(StrBuffer &out, RegName name) {
+    if (name == REG_X)
+        return out.letter('X');
+    if (name == REG_SP)
+        return out.letter('S').letter('P');
+    return out;
+}
+
+}  // namespace reg
+}  // namespace mc6805
+}  // namespace libasm
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

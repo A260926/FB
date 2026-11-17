@@ -1,0 +1,164 @@
+/*
+ * Copyright 2025 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef __LIBASM_TEXT_H8500__
+#define __LIBASM_TEXT_H8500__
+
+#include "text_common.h"
+
+namespace libasm {
+namespace text {
+namespace h8500 {
+// clang-format off
+
+extern const char TEXT_H8500_LIST[];
+extern const char TEXT_CPU_H8500[];
+extern const char TEXT_CPU_H8510[];
+extern const char TEXT_CPU_H8520[];
+extern const char TEXT_CPU_H8530[];
+
+extern const char OPT_BOOL_MAX_MODE[];
+extern const char OPT_DESC_MAX_MODE[];
+extern const char OPT_BOOL_FP_ALIAS[];
+extern const char OPT_DESC_FP_ALIAS[];
+extern const char OPT_BOOL_SP_ALIAS[];
+extern const char OPT_DESC_SP_ALIAS[];
+
+using common::TEXT_MAXMODE;
+
+// Instructions reused from common
+using common::TEXT_ADD;
+using common::TEXT_ADDS;
+using common::TEXT_ADDX;
+using common::TEXT_AND;
+using common::TEXT_BCLR;
+using common::TEXT_BCC;
+using common::TEXT_BCS;
+using common::TEXT_BEQ;
+using common::TEXT_BF;
+using common::TEXT_BGE;
+using common::TEXT_BGT;
+using common::TEXT_BHI;
+using common::TEXT_BHS;
+using common::TEXT_BLE;
+using common::TEXT_BLO;
+using common::TEXT_BLS;
+using common::TEXT_BLT;
+using common::TEXT_BMI;
+using common::TEXT_BNE;
+using common::TEXT_BPL;
+using common::TEXT_BRA;
+using common::TEXT_BRN;
+using common::TEXT_BSR;
+using common::TEXT_BSET;
+using common::TEXT_BT;
+using common::TEXT_BTST;
+using common::TEXT_BVC;
+using common::TEXT_BVS;
+using common::TEXT_CLR;
+using common::TEXT_EXTS;
+using common::TEXT_JMP;
+using common::TEXT_JSR;
+using common::TEXT_LDC;
+using common::TEXT_LDM;
+using common::TEXT_LINK;
+using common::TEXT_MOV;
+using common::TEXT_NEG;
+using common::TEXT_NOP;
+using common::TEXT_NOT;
+using common::TEXT_OR;
+using common::TEXT_RTE;
+using common::TEXT_RTS;
+using common::TEXT_SHLL;
+using common::TEXT_STC;
+using common::TEXT_STM;
+using common::TEXT_SUB;
+using common::TEXT_SUBS;
+using common::TEXT_SUBX;
+using common::TEXT_SWAP;
+using common::TEXT_TAS;
+using common::TEXT_TST;
+using common::TEXT_UNLK;
+using common::TEXT_XCH;
+using common::TEXT_XOR;
+
+// H8/500-specific instruction mnemonics. MOV/ADD/CMP store only the stem; the
+// ":x" class (G/E/F/I/L/S/Q) is an Entry attribute, not part of the name.
+using common::TEXT_ANDC;
+using common::TEXT_BNOT;
+using common::TEXT_CMP;
+using common::TEXT_DADD;
+using common::TEXT_DIVXU;
+extern const char TEXT_DSUB[];
+using common::TEXT_EXTU;
+using common::TEXT_MOVFPE;
+using common::TEXT_MOVTPE;
+using common::TEXT_MULXU;
+using common::TEXT_ORC;
+extern const char TEXT_PJMP[];
+extern const char TEXT_PJSR[];
+extern const char TEXT_PRTD[];
+extern const char TEXT_PRTS[];
+using common::TEXT_ROTL;
+using common::TEXT_ROTR;
+using common::TEXT_ROTXL;
+using common::TEXT_ROTXR;
+using common::TEXT_RTD;
+extern const char TEXT_SCB_EQ[];   // "SCB/EQ"
+extern const char TEXT_SCB_F[];    // "SCB/F"
+extern const char TEXT_SCB_NE[];   // "SCB/NE"
+using common::TEXT_SHAL;
+using common::TEXT_SHAR;
+using common::TEXT_SHLR;
+using common::TEXT_SLEEP;
+extern const char TEXT_TRAP_VS[];  // "TRAP/VS"
+using common::TEXT_TRAPA;
+using common::TEXT_XORC;
+
+// Register names from common
+using common::TEXT_REG_CCR;
+using common::TEXT_REG_DP;
+using common::TEXT_REG_R0;
+using common::TEXT_REG_R1;
+using common::TEXT_REG_R2;
+using common::TEXT_REG_R3;
+using common::TEXT_REG_R4;
+using common::TEXT_REG_R5;
+using common::TEXT_REG_R6;
+using common::TEXT_REG_R7;
+using common::TEXT_REG_SP;
+using common::TEXT_REG_SR;
+
+// H8/500-specific register names
+extern const char TEXT_REG_BR[];
+extern const char TEXT_REG_CP[];
+extern const char TEXT_REG_EP[];
+using common::TEXT_REG_FP;
+extern const char TEXT_REG_TP[];
+
+// clang-format on
+}  // namespace h8500
+}  // namespace text
+}  // namespace libasm
+
+#endif  // __LIBASM_TEXT_H8500__
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

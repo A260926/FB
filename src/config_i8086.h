@@ -1,0 +1,121 @@
+/*
+ * Copyright 2020 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef __LIBASM_CONFIG_I8086_H__
+#define __LIBASM_CONFIG_I8086_H__
+
+#include "config_base.h"
+
+/** Disable i8087 FPU instructions */
+// #define LIBASM_I8086_NOFPU
+
+namespace libasm {
+namespace i8086 {
+
+enum CpuType : uint8_t {
+    I8086,
+    I80186,
+    V30,
+    V33,
+    V35,
+    I80286,
+    I80386,
+    I80486,
+};
+
+enum FpuType : uint8_t {
+    FPU_NONE,
+#if !defined(LIBASM_I8086_NOFPU)
+    FPU_ON,
+    FPU_I8087,
+    FPU_I8087_AUTO,   // i8087 with a WAIT before every instruction but FN forms
+    FPU_I8087_ASM86,  // i8087 with a WAIT, or a NOP before no-wait forms
+    FPU_I80287,
+    FPU_I80387,
+    FPU_I80487,
+    FPU_I80C187,
+    FPU_I80287XL,
+#endif
+};
+
+enum FwaitMode : uint8_t {
+    FWAIT_NONE,
+    FWAIT_AUTO,
+    FWAIT_ASM86,
+};
+
+struct CpuSpec final {
+    CpuSpec(CpuType cpu_, FpuType fpu_) : cpu(cpu_), fpu(fpu_) {}
+    CpuType cpu;
+    FpuType fpu;
+    bool hasExtraSeg() const { return cpu == I80386 || cpu == I80486; }
+    bool has32bit() const { return cpu == I80386 || cpu == I80486; }
+    // i80386 has TR6/TR7; i80486 adds cache-test registers TR3-TR5.
+    bool hasTstReg(uint8_t num) const { return num >= (cpu == I80486 ? 3 : 6); }
+};
+
+struct Config : ConfigImpl<CpuType, ADDRESS_32BIT, ADDRESS_BYTE, OPCODE_8BIT, ENDIAN_LITTLE, 6, 8> {
+    Config(const InsnTable<CpuType> &table)
+        : ConfigImpl(table, I8086),
+          _cpuSpec(I8086, FPU_NONE),
+          _model32(false),
+          _fwait(FWAIT_NONE) {}
+
+    AddressWidth addressWidth() const override {
+        return _cpuSpec.has32bit() ? ADDRESS_32BIT
+                                   : (_cpuSpec.cpu < I80286 ? ADDRESS_20BIT : ADDRESS_24BIT);
+    }
+    uint8_t nameMax() const override;
+
+    void setCpuType(CpuType cpuType) override;
+
+    const char *fpu_P() const;
+    FpuType fpuType() const { return _cpuSpec.fpu; }
+    Error setFpuType(FpuType fpuType);
+    Error setFpuName(StrScanner &scan) override;
+    Error setFwaitName(StrScanner &scan);
+
+    Error setUse16(bool use) { return setModel(!use); }
+    Error setUse32(bool use) { return setModel(use); }
+    bool model32() const { return _model32; }
+
+protected:
+    CpuSpec _cpuSpec;
+    bool _model32;
+    FwaitMode _fwait;
+
+    FpuType i8087() const;
+
+    Error setModel(bool model32) {
+        if (_cpuSpec.has32bit()) {
+            _model32 = model32;
+            return OK;
+        }
+        return OPTION_NOT_SUPPORTED;
+    }
+};
+
+}  // namespace i8086
+}  // namespace libasm
+
+#endif  // __LIBASM_CONFIG_I8086_H__
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

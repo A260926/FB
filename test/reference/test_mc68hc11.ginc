@@ -1,0 +1,113 @@
+;;; Copyright 2020 Tadashi G. Takaoka
+;;;
+;;; Licensed under the Apache License, Version 2.0 (the "License");
+;;; you may not use this file except in compliance with the License.
+;;; You may obtain a copy of the License at
+;;;
+;;;     http://www.apache.org/licenses/LICENSE-2.0
+;;;
+;;; Unless required by applicable law or agreed to in writing, software
+;;; distributed under the License is distributed on an "AS IS" BASIS,
+;;; WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+;;; See the License for the specific language governing permissions and
+;;; limitations under the License.
+
+;;; 0X
+        idiv
+        fdiv
+;;; 1X
+        brset   *0x13 #0x14 (.+0x19)
+        brclr   *0x14 #0x15 (.+0x1A)
+        bset    *0x15 #0x16
+        bclr    *0x16 #0x17
+        bset    0x1D,x #0x1E
+        bclr    0x1E,x #0x1F
+        brset   0x1F,x #0x20 (.+0x25)
+        brclr   0x20,x #0x21 (.+0x26)
+;;; 8X
+        xgdx
+;;; CX
+        stop
+;;; 180X
+        iny
+        dey
+;;; 181X
+        bset    *0x1D,y #0x1E
+        bclr    *0x1E,y #0x1F
+        brset   0x1F,y #0x20 (.+0x26)
+        brclr   0x20,y #0x21 (.+0x27)
+;;; 183X
+        tsy
+        tys
+        puly
+        aby
+        pshy
+;;; 186X
+        neg     0,y
+        com     0,y
+        lsr     1,y
+        ror     6,y
+        asr     8,y
+        lsl     9,y
+        asl     9,y
+        rol     10,y
+        dec     11,y
+        inc     13,y
+        tst     14,y
+        jmp     15,y
+        clr     255,y
+;;; 188X
+        cpy     #0x8d8e
+        xgdy
+;;; 189X
+        cpy     *0x9d
+;;; 18AX
+        suba    0,y
+        cmpa    0,y
+        sbca    0,y
+        subd    1,y
+        anda    2,y
+        bita    3,y
+        ldaa    4,y
+        staa    5,y
+        eora    6,y
+        adca    127,y
+        oraa    128,y
+        adda    255,y
+        cpy     0,y
+        jsr     2,y
+        lds     4,y
+        sts     6,y
+;;; 18BX
+        cpy     0xbdbe
+;;; 18CX
+        ldy     #0xcfd0
+;;; 18DX
+        ldy     *0xdf
+        sty     *0xe0
+;;; 18EX
+        addd    0xe4,y
+        ldd     0xed,y
+        ldy     0xef,y
+        sty     0xf0,y
+;;; 10FX
+        ldy     0xff00
+        sty     0x1234
+;;; 1AXX
+        cpd     #0x8485
+        cpd     *0x94
+        cpd     0xa4,x
+        cpy     0xad,x
+        cpd     0xb4b5
+        ldy     0xef,x
+        sty     0xf0,x
+;;; CDXX
+        cpd     0xa4,y
+        cpx     0xad,y
+        ldx     0xef,y
+        stx     0xf0,y
+
+;;; Local Variables:
+;;; mode: asm
+;;; End:
+;;; vim: set ft=asm:

@@ -1,0 +1,50 @@
+/*
+ * Copyright 2022 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "dis_i8096.h"
+#include "gen_driver.h"
+#include "tokenizer.h"
+
+using namespace libasm::i8096;
+using namespace libasm::gen;
+
+int main(int argc, const char **argv) {
+    DisI8096 dis8096;
+    GenDriver driver(dis8096);
+    if (driver.main(argc, argv))
+        return 1;
+
+    dis8096.setOption("relative", "enable");
+
+    TestGenerator generator(driver, dis8096, 0x2000, standardTokenizers<IntelNumber>(dis8096.curSym()));
+    // The 1-Mbyte extended operands pair a double-word register with a 24-bit
+    // displacement, so only one byte combination in eight decodes and the drop
+    // heuristic never reaches its threshold; bound the search by how long it
+    // has gone without finding anything new instead.
+    if (strcasecmp("80196N", dis8096.cpu_P()) == 0 ||
+            strcasecmp("80296", dis8096.cpu_P()) == 0)
+        generator.maxBarren(12 << 20);
+    generator.generate();
+
+    return driver.close();
+}
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

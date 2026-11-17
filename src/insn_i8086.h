@@ -1,0 +1,239 @@
+/*
+ * Copyright 2020 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef __LIBASM_INSN_I8086_H__
+#define __LIBASM_INSN_I8086_H__
+
+#include "config_i8086.h"
+#include "entry_i8086.h"
+#include "insn_base.h"
+#include "reg_i8086.h"
+#include "value.h"
+
+namespace libasm {
+namespace i8086 {
+
+struct EntryInsn : EntryInsnPrefix<Config, Entry> {
+    EntryInsn() : _lock(0), _repeat(0), _segment(0), _model32(false) {}
+
+    AddrMode dst() const { return flags().dst(); }
+    AddrMode src() const { return flags().src(); }
+    AddrMode ext() const { return flags().ext(); }
+    OprPos dstPos() const { return flags().dstPos(); }
+    OprPos srcPos() const { return flags().srcPos(); }
+    OprPos extPos() const { return flags().extPos(); }
+    OprSize size() const { return flags().size(); }
+    bool stringInsn() const { return flags().stringInsn(); }
+    // REP (F3) goes with the block transfer and I/O primitives as well as the
+    // block compare ones; the conditional repeats only with block compare.
+    bool repeatAllowed() const {
+        if (!flags().repeatable())
+            return false;
+        return _repeat == 0xF3 || flags().blockCompare();
+    }
+    bool lockCapable() const { return flags().lockCapable(); }
+    bool needSize() const { return flags().needSize(); }
+    bool noData32() const { return flags().noData32(); }
+    bool farInsn() const;
+    bool leaInsn() const;
+
+    void setLock(Config::opcode_t lock) { _lock = lock; }
+    Config::opcode_t lock() const { return _lock; }
+    void setRepeat(Config::opcode_t repeat) { _repeat = repeat; }
+    Config::opcode_t repeat() const { return _repeat; }
+    void setSegment(Config::opcode_t segment) { _segment = segment; }
+    Config::opcode_t segment() const { return _segment; }
+
+    void setModel(bool model32) { _model32 = model32; }
+    bool model32() const { return _model32; }
+
+    static constexpr Config::opcode_t DATA32 = 0x66;
+    static constexpr Config::opcode_t ADDR32 = 0x67;
+    static constexpr Config::opcode_t LOCK_PREFIX = 0xF0;
+    static bool escapeInsn(Config::opcode_t opc) { return opc >= 0xD8 && opc < 0xE0; }
+    static bool loopInsn(Config::opcode_t opc) { return opc >= 0xE0 && opc <= 0xE2; }
+    static bool repeatInsn(Config::opcode_t opc, CpuType cpuType);
+
+protected:
+    Config::opcode_t _lock;
+    Config::opcode_t _repeat;
+    Config::opcode_t _segment;
+    bool _model32;
+};
+
+struct Operand final : ErrorAt {
+    AddrMode mode;
+    PrefixName ptr;
+    RegName seg;
+    RegName reg;
+    RegName index;
+    uint8_t scale;
+    bool hasDisp;
+    Value val;
+    Value segval;
+    Operand()
+        : mode(M_NONE),
+          ptr(PRE_UNDEF),
+          seg(REG_UNDEF),
+          reg(REG_UNDEF),
+          index(REG_UNDEF),
+          scale(1),
+          hasDisp(false),
+          val(),
+          segval() {}
+    uint8_t encodeMod() const;
+    uint8_t encodeR_m() const;
+    uint8_t encodeMod32() const;
+    uint8_t encodeR_m32() const;
+    uint8_t encodeSib32() const;
+    AddrMode immediateMode() const;
+    void print(const char *) const;
+};
+
+struct AsmInsn final : AsmInsnImpl<Config>, EntryInsn {
+    AsmInsn(Insn &insn)
+        : AsmInsnImpl(insn), _modReg(0), _hasModReg(false), _data32(0), _addr32(0) {}
+
+    Operand dstOp, srcOp, extOp;
+
+    bool farOperand() const { return flags().dst() == M_SEG && flags().src() == M_OFF; }
+
+    void prepareModReg();
+    void embedModReg(Config::opcode_t data);
+    Config::opcode_t modReg() const { return _modReg; }
+
+    void setData32() { _data32 = DATA32; }
+    bool hasData32Prefix() const { return _data32 != 0; }
+
+    void setAddr32() { _addr32 = ADDR32; }
+    bool hasAddr32Prefix() const { return _addr32 != 0; }
+    bool useAddr32() const { return _model32 ^ (_addr32 != 0); }
+
+    void emitInsn();
+    // Offset the next operand byte goes to: prefixes, opcode, mod-reg byte and
+    // any operand already emitted.  A relative operand needs it to find the end
+    // of the instruction.
+    uint_fast8_t operandPos() const;
+    Error emitOperand8(uint8_t val8) { return emitByte(val8, operandPos()); }
+    Error emitOperand16(uint16_t val16) { return emitUint16(val16, operandPos()); }
+    Error emitOperand32(uint32_t val32) { return emitUint32Le(val32, operandPos()); }
+#if !defined(LIBASM_ASM_NOFLOAT)
+    Error emitFloat32(const float80_t &value) { return emitFloat32Le(value); }
+    Error emitFloat64(const float80_t &value) { return emitFloat64Le(value); }
+    Error emitPackedDecimal(int64_t val64);
+    Error emitTemporaryReal(const float80_t &val80);
+#endif
+
+    void saveAsPrefix() { _prefixSave.rtext(name()).letter(' '); }
+    void prependPrefix();
+
+    // Emit DATA32/ADDR32 prefixes when the user's operand sizing doesn't match
+    // the current model's defaults (e.g. 32-bit reg in use16, or 16-bit reg
+    // in use32). Driven by the parsed operand modes and the table entry's
+    // expected modes.
+    void applyAutoSizePrefix();
+
+private:
+    Config::opcode_t _modReg;
+    bool _hasModReg;
+    Config::opcode_t _data32;
+    Config::opcode_t _addr32;
+    char _prefixBuffer[Insn::MAX_NAME + 1];
+    StrBuffer _prefixSave{_prefixBuffer, sizeof(_prefixBuffer)};
+};
+
+enum FarMode : uint8_t {
+    FMODE_FAR = 0,  // add FAR prefix to operand; call far [si]
+    FMODE_F = 1,    // add F suffix to mnemonic;  callf [si]
+    FMODE_L = 2,    // add L prefix to mnemonic;  lcall [si]
+};
+
+struct DisInsn final : DisInsnImpl<Config>, EntryInsn {
+    DisInsn(Insn &insn, DisMemory &memory, const StrBuffer &out)
+        : DisInsnImpl(insn, memory, out),
+          _modReg(0),
+          _hasData32(false),
+          _hasAddr32(false),
+          _hasUnusedData32(false),
+          _hasUnusedAddr32(false),
+          _farMode(FMODE_FAR),
+          _noWaitForm(false) {}
+    DisInsn(Insn &insn, DisInsn &o, const StrBuffer &out)
+        : DisInsnImpl(insn, o, out),
+          _modReg(0),
+          _hasData32(o._hasData32),
+          _hasAddr32(o._hasAddr32),
+          _hasUnusedData32(o._hasUnusedData32),
+          _hasUnusedAddr32(o._hasUnusedAddr32),
+          _farMode(o._farMode),
+          _noWaitForm(o._noWaitForm) {}
+
+    void addPrefix(const char *prefix_P, StrBuffer &out);
+
+    Config::opcode_t readPrefixCodes(Config::opcode_t opc, const CpuSpec &cpuSpec, bool segInsn,
+            bool repInsn, bool lockInsn);
+    bool data32() const { return _model32 ^ _hasData32; };
+    bool addr32() const { return _model32 ^ _hasAddr32; }
+    bool hasData32() const { return _hasData32; };
+    bool hasAddr32() const { return _hasAddr32; }
+    bool useData32() {
+        if (_hasData32)
+            _hasUnusedData32 = false;
+        return data32();
+    }
+    bool useAddr32() {
+        if (_hasAddr32)
+            _hasUnusedAddr32 = false;
+        return addr32();
+    }
+    /** An 8087 escape the WAIT convention has no form for. */
+    bool noWaitForm() const { return _noWaitForm; }
+    void setNoWaitForm() { _noWaitForm = true; }
+    bool hasUnusedData32() const { return _hasUnusedData32; }
+    bool hasUnusedAddr32() const { return _hasUnusedAddr32; }
+
+    bool needData32() const;
+
+    uint32_t farOffset;
+    void setFarMode(FarMode mode) { _farMode = mode; }
+    FarMode farMode() const { return _farMode; }
+
+    void readModReg();
+    uint_fast8_t mod() const { return (_modReg >> 6) & 3; }
+    uint_fast8_t r_m() const { return _modReg & 7; }
+    uint_fast8_t reg() const { return (_modReg >> 3) & 7; }
+
+private:
+    Config::opcode_t _modReg;
+    bool _hasData32;
+    bool _hasAddr32;
+    bool _hasUnusedData32;
+    bool _hasUnusedAddr32;
+    FarMode _farMode;
+    bool _noWaitForm;
+};
+
+}  // namespace i8086
+}  // namespace libasm
+
+#endif  // __LIBASM_INSN_I8086_H__
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

@@ -1,0 +1,247 @@
+# Copyright 2020 Tadashi G. Takaoka
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+help:
+	@echo '"make gen" auto generate test sources'
+	@echo '"make asm-test" assemble with "asm" command'
+	@echo '"make asl-test" assemble with "asl" command'
+	@echo '"make gas-test" assemble with "gas" command'
+	@echo '"make nasm-test" round-trip i8086 family through nasm'
+
+-include ../../src/Makefile.arch
+-include ../Makefile.asm
+-include ../Makefile.asl
+-include ../Makefile.gas
+
+.PHONY:: gen asm-test asl-test gas-test nasm-test
+.PHONY:: clean clean-gen clean-asm clean-asl clean-gas
+
+# Round-trip the i8086-family autogen through nasm as a third independent
+# assembler (alongside libasm and gas); requires "make gen" first.
+nasm-test:
+	./nasm-roundtrip.sh
+
+# target which has ".inc" suffix for output.
+INC_targets = w65c816 tlcs90 $(TGT_tlcs900) i8086 i80186 i80386 i80486 v30 \
+    v33 v35 $(TGT_mc68000) $(TGT_z8000) $(TGT_nm1610) ns32000 tms320c20x \
+    tms320c5x tms320c30 tms320c31 tms320c32 tms370 tms7000 tms9980 j11 t11 \
+    mc146805 z80 z180 z380 h8300 h8300hn h8300h $(TGT_h8500) $(TGT_h16) \
+    cp1600 $(TGT_superh) $(TGT_z8) $(TGT_am29000) mc68hcs12 mc68hcs12x \
+    $(TGT_c166)
+# target which for GNU assembler (also ".ginc" targets)
+GINC_targets = $(TGT_mc68000) $(TGT_z8000) $(TGT_pdp11) $(TGT_h8300) \
+    $(TGT_h8500) $(TGT_superh) $(TGT_am29000) $(TGT_i960) ns32000 mc68hc11 \
+    $(TGT_mc68hc12) i8086 i80186 i80286 i80386 i80486 tms320c30 tms320c31 \
+    tms320c32 $(TGT_c166)
+# target which also has Zilog syntax (also ".zinc" targets)
+ZINC_targets = i8080 i8085 v30emu
+# target which doesn't need ".asm"
+# i960 generates only the .ginc: its GNU as syntax differs from the native one
+# in nothing but the comment marker, so one generated file serves both and
+# gen_i960.asm includes it directly.
+NOASM_targets = i80286 h8s2000n h8s2000 h8s2600n h8s2600 i960
+# CPU variants whose generated source ASL cannot assemble. This filters
+# which asl-X.hex rules exist (asl-test target). Generation of .inc/.ginc
+# still happens because libasm and gas consume them.
+# h8500: the disassembler emits MOV:F negative displacements as @(-0x7F,FP),
+# which ASL rejects (it needs @((-0x7F),fp)); the curated reference test, which
+# spells them ASL-compatibly, is byte-identical with ASL.
+# am29050: ASL has no AM29050 selector, so it knows neither the opcodes
+# exclusive to that chip nor its own special-purpose registers.
+# h16: ASL puts DADD at 0x83 and DSUB at 0x87, the size-3 slots of AND and
+# XOR; the manual (16.3.29, 16.3.32) assigns 0xA3 and 0xA7, which is what the
+# disassembler emits, so ASL cannot assemble this generated source.  The
+# curated reference test omits them and stays byte-identical with ASL.
+# See ~/asl_bugs/asl_bug_h16_dadd.md.
+# i960: ASL's code960.c has six encoding bugs (wrong opcodes for xor, bno and
+# testno, src2 routed into the src/dst field for scanbyte and synmov*, and an
+# integer literal on a register-pair operand evaluated as a float), so it
+# cannot adjudicate this generated source; see ~/asl_bugs/asl_bug_i960.md.
+# shdsp: ASL knows no MOD/RS/RE control register and no LDRS/LDRE/SETRC.
+# See ~/asl_bugs/asl_bug_superh.md.
+# xc16x: ASL has no XC16X (C166S V2) selector, so it knows neither the MAC unit
+# nor JMPA+/-, the USR conditions, SBRK and ENWDT.
+ASL_exclude = mb8861 i80286 h8300hn h8300h h8s2000n h8s2000 h8s2600n h8s2600 \
+    shdsp $(TGT_h8500) am29050 i960 h16 xc16x
+# CPU variants whose gas toolchain does not produce a manual-conforming
+# encoding. h8300-elf-as has no -mach=h8300; it always emits the H8/300H
+# 4-byte form for JMP/JSR @aa:16, producing bytes that don't execute on
+# real H8/300 silicon. Excluded from gas-test.
+# h8500-hms-as encodes the general (:g) immediate forms with a leading EA
+# prefix (e.g. A0 04 55) where libasm/ASL use the EA-suffix form (04 55 70);
+# both decode the same, but the bytes never match the ASL-conformant output.
+# sh2a: MOVI20S takes the 20-bit field per the SH-2A manual (6.3.22, the
+# example "MOVI20S H'7FFFF,R0" leaves R0 = H'07FFFF00), which is what the
+# disassembler writes; sh-elf-as wants that value already shifted left 8 and
+# rejects anything with low bits set.  The reference test still checks sh2a
+# against gas -- test_sh2a.ginc carries the shifted spelling by hand.
+GAS_exclude = h8300 sh2a $(TGT_h8500)
+
+# file name of generating file
+define out-inc # target
+$(filter $(1),$(INC_targets) $(ZINC_targets:%=%_inc))
+endef
+define gen-out # target
+$(if $(filter $(1),$(GINC_targets:%=%_ginc)),gen_$(1:%_ginc=%).ginc,\
+$(if $(filter $(1),$(ZINC_targets:%=%_zinc)),gen_$(1:%_zinc=%).zinc,\
+$(if $(filter $(1),$(NOASM_targets)),,\
+$(if $(call out-inc,$(1)),gen_$(1).inc,gen_$(1).asm))))
+endef
+
+# generator options
+define ginc-out
+$(filter $(1),$(GINC_targets:%=%_ginc))
+endef
+define zinc-out
+$(filter $(1),$(ZINC_targets:%=%_zinc))
+endef
+define zinc-out
+$(filter $(1),$(ZINC_targets:%=%_zinc))
+endef
+define gen-opt
+$(if $(call ginc-out,$(1)),-g -i,$(if $(call out-inc,$(1)),-i -u,-u)) \
+$(if $(call zinc-out,$(1)),-z)
+endef
+define arch-target # arch
+$(foreach t,$(TGT_$(1)),$(t) \
+  $(if $(filter $(t),$(ZINC_targets)),$(t)_zinc) \
+  $(if $(filter $(t),$(GINC_targets)),$(t)_ginc))
+endef
+define cpu-opt # out
+$(if $(call zinc-out,$(1)),-C $(CPU_$(1:%_zinc=%)),\
+$(if $(call ginc-out,$(1)),-C $(CPU_$(1:%_ginc=%)),-C $(CPU_$(1))))
+endef
+define target-stem # out
+$(if $(call zinc-out,$(1)),$(1:%_zinc=%),\
+$(if $(call ginc-out,$(1)),$(1:%_ginc=%),$(1)))
+endef
+
+# make rule for auto generation file
+define gen-target # arch target out opt
+	../gen_$(1) $(4) $(call cpu-opt,$(2)) $(GENOPT_$(strip $(call target-stem,$(2)))) -o $(3) -l gen_$(2).lst
+endef
+define gen-target-rule # arch target out opt
+$(3): #../gen_$(1)
+	$(call gen-target,$(1),$(2),$(3),$(4))
+
+endef
+define gen-arch-rule # arch
+clean_$(1):
+	rm -f $(foreach t,$(call arch-target,$(1)),$(call gen-out,$(t)))
+gen_$(1): clean_$(1)
+	@make -j $(foreach t,$(call arch-target,$(1)),$(call gen-out,$(t)))
+
+endef
+
+GEN_OUTS = $(foreach a,$(ARCHS),$(foreach t,$(call arch-target,$(a)),$(call gen-out,$(t))))
+
+# rules for auto generations
+$(eval $(foreach a,$(ARCHS),$(call gen-arch-rule,$(a))))
+$(eval $(foreach a,$(ARCHS),$(foreach t,$(call arch-target,$(a)),\
+	$(call gen-target-rule,$(a),$(t),$(call gen-out,$(t)),$(call gen-opt,$(t))))))
+
+gen: $(foreach a,$(ARCHS),gen_$(a))
+
+ASM=../../cli/asm
+$(ASM)-refresh:
+	+$(MAKE) -C ../../cli asm
+
+ASM_TESTS = $(patsubst %.asm,%,$(wildcard gen_*.asm))
+ASM_OUTS  = $(foreach f,$(ASM_TESTS),$(f).$(call out-ext,$(f)))
+define asm-rule # source stem suffix option
+.PHONY:: asm-$(2).$(3)
+asm-$(2).$(3):: $(ASM)-refresh
+asm-$(2).$(3):: $(1)
+	$$(ASM) $$(ASM_FLAGS) $(4) -o $(2).$(3) -l $(2).lst $$^
+
+endef
+$(eval $(foreach f,$(ASM_TESTS),$(call asm-rule,$(f).asm,$(f),$(call out-ext,$(f)),$(call asm-opt,$(f)))))
+
+asm-test: $(ASM)-refresh clean-asm $(ASM_OUTS:%=asm-%)
+clean-asm:
+	-rm -f $(ASM_OUTS)
+
+ASL_SRCS = $(foreach t,$(ASM_TESTS),$(if $(filter $(t:gen_%=%),$(ASL_exclude)),,$(t)))
+# A .asl wrapper is kept for every excluded target so the check can come back
+# when the tool is fixed, so ASL_exclude has to be applied to the wrappers too.
+ASL_TESTS = $(ASL_SRCS) \
+	$(foreach t,$(patsubst %.asl,%,$(wildcard gen_*.asl)),\
+	   $(if $(filter $(t),$(ASL_SRCS))$(filter $(t:gen_%=%),$(ASL_exclude)),,$(t)))
+ASL_OUTS  = $(foreach f,$(ASL_TESTS),$(f).$(call out-ext,$(f)))
+define asl-file # stem
+$(if $(wildcard $(1).asl),$(1).asl,$(1).asm)
+endef
+define asl-rule # source stem suffix option
+.PHONY:: asl-$(2).$(3)
+asl-$(2).$(3): $(1)
+	$$(ASL) $$(ASL_FLAGS) -L $$^ && $$(call asl-conv,$(2),$(3))
+
+endef
+$(eval $(foreach f,$(ASL_TESTS),$(call asl-rule,$(call asl-file,$(f)),$(f),$(call out-ext,$(f)),$(call asl-opt,$(f)))))
+
+asl-test: clean-asl $(ASL_OUTS:%=asl-%)
+clean-asl:
+	-rm -f $(ASL_OUTS)
+
+
+GAS_TESTS = $(foreach f,$(wildcard gen_*.gas),\
+            $(if $(filter $(patsubst gen_%.gas,%,$(f)),$(GAS_exclude)),,$(f)))
+GAS_OUTS    = $(foreach f,$(GAS_TESTS),$(f:.gas=).$(call out-ext,$(f:.gas=)))
+gas-test: clean-gas $(GAS_OUTS:%=gas-%)
+clean-gas:
+	-rm -f $(GAS_OUTS) gen_*.syms gen_*.ld_flags am29000.ld
+
+# Z8001 per-segment helper sections + linker --section-start flags are
+# scraped from the dis output (.ginc).  Reference tests ship a hand-
+# written .ld_flags; this autogen-only rule generates both files.  The
+# text origin must match gen_z8001.asm's `org` and the org passed to
+# gen_z8000 (see TestGenerator), chosen so .text lands in a segment not
+# referenced by any direct-address operand the dis emits.
+Z8001_TEXT_ORG = 0x020000
+%_z8001.syms %_z8001.ld_flags: %_z8001.ginc
+	../../scripts/scrape-z8001-syms.sh $< $*_z8001.syms $*_z8001.ld_flags $(Z8001_TEXT_ORG)
+
+# Z8002 has no segmented relocation, so the autogen @file is just a
+# single --section-start=.text line; gen on demand (kept out of git so
+# clean-gas can wipe it).  Reference tests ship a hand-written file.
+# Am29000 branch target symbols and the linker @file are scraped from the dis
+# output (.ginc); the reference tests name no such symbol and generate an @file
+# holding just their own origin.  The text origin must match the org in
+# gen_am29XXX.asm and the org passed to gen_am29000 (see TestGenerator).
+AM29000_TEXT_ORG = 0x40000
+gen_%.ld_flags: gen_%.ginc
+	../../scripts/scrape-am29000-syms.sh $< $@ $(AM29000_TEXT_ORG)
+# Keep the scraped @file: it is a prerequisite of a pattern rule, so make would
+# otherwise treat it as intermediate and delete it after linking.
+.SECONDARY: $(foreach t,$(TGT_am29000),gen_$(t).ld_flags)
+
+# The Am29000 link needs the same script the reference tests use; keep one
+# master there and copy it in, so the two cannot drift apart.
+am29000.ld: ../reference/am29000.ld
+	cp $< $@
+
+GEN_Z8002_TEXT_ORG = 0x1000
+gen_z8002.ld_flags:
+	printf -- '--section-start=.text=%s\n' '$(GEN_Z8002_TEXT_ORG)' > $@
+
+clean-gen:
+	-rm -f $(GEN_OUTS)
+
+clean: clean-asm clean-asl clean-gas
+	-rm -f *.p *.o *.lst *.dis *.bin
+
+# Local Variables:
+# mode: makefile-gmake
+# End:
+# vim: set ft=make:

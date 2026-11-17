@@ -1,0 +1,380 @@
+/*
+ * Copyright 2022 Tadashi G. Takaoka
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "dis_i8096.h"
+#include "reg_i8096.h"
+#include "table_i8096.h"
+
+namespace libasm {
+namespace i8096 {
+
+using namespace reg;
+
+namespace {
+
+const char OPT_BOOL_ABSOLUTE[] = "use-absolute";
+const char OPT_DESC_ABSOLUTE[] = "zero register indexing as absolute addressing";
+
+}  // namespace
+
+const ValueFormatter::Plugins &DisI8096::defaultPlugins() {
+    return ValueFormatter::Plugins::intel();
+}
+
+DisI8096::DisI8096(const ValueFormatter::Plugins &plugins)
+    : Disassembler(plugins, &_opt_absolute),
+      Config(TABLE),
+      _opt_absolute(this, &DisI8096::setUseAbsolute, OPT_BOOL_ABSOLUTE, OPT_DESC_ABSOLUTE) {
+    reset();
+}
+
+void DisI8096::reset() {
+    Disassembler::reset();
+    setUseAbsolute(false);
+}
+
+Error DisI8096::setUseAbsolute(bool enable) {
+    _useAbsolute = enable;
+    return OK;
+}
+
+StrBuffer &DisI8096::outRegister(StrBuffer &out, DisInsn &insn, uint8_t regno, bool indir) const {
+    if (regno == 0 && indir && _useAbsolute)  // omit [0]
+        return out;
+    if (indir) {
+        if (ioAddress(regno))
+            insn.setError(out, ILLEGAL_REGISTER);
+        out.letter('[');
+    } else if (insn.mulDivInsn() && ioAddress(regno)) {
+        insn.setError(out, ILLEGAL_REGISTER);
+    }
+    outDec(out, regno, 8);
+    if (indir)
+        out.letter(']');
+    return out;
+}
+
+StrBuffer &DisI8096::outRelative(StrBuffer &out, DisInsn &insn, const Operand &op) const {
+    if (op.mode == M_REL8) {
+        // Jx: 2 bytes, DJNZ/JBx: 3 bytes
+        const auto base = insn.address() + ((insn.opCode() & 0xF0) == 0xD0 ? 2 : 3);
+        const auto target = base + op.int8();
+        insn.setErrorIf(out, checkAddr(target));
+        return outRelAddr(out, target, insn.address(), 8);
+    } else if (op.mode == M_REL11) {
+        const auto base = insn.address() + 2;
+        // Sign exetends 11-bit number.
+        const auto offset = signExtend(op.val16, 11);
+        const auto target = base + offset;
+        insn.setErrorIf(out, checkAddr(target));
+        return outRelAddr(out, target, insn.address(), 11);
+    } else {  // M_REL16:
+        const auto base = insn.address() + 3;
+        const auto target = base + op.int16();
+        insn.setErrorIf(out, checkAddr(target));
+        return outRelAddr(out, target, insn.address(), 16);
+    }
+}
+
+StrBuffer &DisI8096::outOperand(StrBuffer &out, DisInsn &insn, const Operand &op) const {
+    switch (op.mode) {
+    case M_COUNT:
+        if (op.regno < 16) {
+            out.letter('#');
+            if (op.getError())
+                insn.setErrorIf(out, op);
+            return outDec(out, op.regno, 4);
+        }
+        // Fall-through
+    case M_BREG:
+    case M_WREG:
+    case M_QREG:
+    case M_ACCSEL:
+    case M_SWREG:
+        return outRegister(out, insn, op.regno);
+    case M_LREG:
+    case M_SLREG:
+        // A word multiply destination below 10H is a MAC selector, which the
+        // MAC entries match first; the FE prefixed form still reaches here.
+        if (insn.mulWordInsn() && macSelector(op.regno))
+            insn.setErrorIf(out, ILLEGAL_REGISTER);
+        return outRegister(out, insn, op.regno);
+    case M_POINTR:
+        // A bit pointer is an immediate up to 1FH, a register from 20H up.
+        if (op.regno < 32) {
+            out.letter('#');
+            return outDec(out, op.regno, 5);
+        }
+        return outRegister(out, insn, op.regno);
+    case M_INDIR:
+    case M_EINDIR:
+    case M_EBIND:
+        return outRegister(out, insn, op.regno, true);
+    case M_EIDX:
+        return outRegister(outAbsAddr(out, op.val24, 24), insn, op.regno, true);
+    case M_REL24:
+        // The 24-bit PC wraps.
+        return outRelAddr(out, (insn.address() + 4 + op.val24) & UINT32_C(0xFFFFFF),
+                insn.address(), 24);
+    case M_AINC:
+        return outRegister(out, insn, op.regno & ~1, true).letter('+');
+    case M_IDX8:
+        return outRegister(outDec(out, op.int8(), -8), insn, op.regno, true);
+    case M_IDX16:
+        return outRegister(outAbsAddr(out, op.val16, 16), insn, op.regno, true);
+    case M_REL8:
+    case M_REL11:
+    case M_REL16:
+        return outRelative(out, insn, op);
+    case M_BITNO:
+        return outHex(out, op.val16, 3);
+    case M_IMM8:
+    case M_IMM16:
+        out.letter('#');
+        if (op.getError())
+            insn.setErrorIf(out, op);
+        return outHex(out, op.val16, op.mode == M_IMM8 ? 8 : 16);
+    default:
+        return out;
+    }
+}
+
+void DisI8096::Operand::readIndirect(DisInsn &insn) {
+    regno = insn.nextByte();
+    if (isWreg(regno)) {
+        mode = M_INDIR;
+    } else {
+        regno &= ~1;
+        mode = M_AINC;
+    }
+}
+
+void DisI8096::Operand::readIndexed(DisInsn &insn) {
+    regno = insn.nextByte();
+    if (isWreg(regno)) {  // 8bit displacement
+        val16 = static_cast<int16_t>(insn.nextByte());
+        mode = M_IDX8;
+    } else {  // 16bit displacement
+        regno &= ~1;
+        val16 = insn.nextUint16();
+        mode = M_IDX16;
+    }
+}
+
+Error DisI8096::Operand::read(DisInsn &insn, AddrMode opMode) {
+    switch (mode = opMode) {
+    case M_BREG:
+    case M_COUNT:
+    case M_POINTR:
+        regno = insn.nextByte();
+        break;
+    case M_ACCSEL:
+        // The low bits are the selector that told MVAC from MSAC.
+        regno = insn.nextByte() & ~3;
+        break;
+    case M_SLREG:
+    case M_SWREG:
+        // Bit 0 is the sign the table search has already matched; see M_SLREG.
+        regno = insn.nextByte() & ~1;
+        break;
+    case M_WREG:
+        regno = insn.nextByte();
+        if (!isWreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_INDIR:
+        // BR's operand byte may already have been read to tell it from EBR.
+        regno = insn.nextByte();
+        if (!isWreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_LREG:
+        regno = insn.nextByte();
+        if (!isLreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_QREG:
+        regno = insn.nextByte();
+        if (!isQreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_EINDIR:
+        regno = insn.nextByte();
+        if (!isLreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_EBIND:
+        // EBR shares opcode E3 with BR and sets bit 0 to say so.
+        regno = insn.nextByte() & ~1;
+        if (!isLreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_EIDX:
+        regno = insn.nextByte();
+        if (!isLreg(regno))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        val24 = insn.nextUint16();
+        val24 |= static_cast<uint32_t>(insn.nextByte()) << 16;
+        break;
+    case M_REL24:
+        val24 = insn.nextUint16();
+        val24 |= static_cast<uint32_t>(insn.nextByte()) << 16;
+        break;
+    case M_BIDX:
+        readIndexed(insn);
+        break;
+    case M_WIDX:
+        readIndexed(insn);
+        if (regno == 0 && !isWreg(val16))
+            setErrorIf(OPERAND_NOT_ALIGNED);
+        break;
+    case M_BAOP:
+        switch (insn.aa()) {
+        case AA_REG:
+            regno = insn.nextByte();
+            mode = M_BREG;
+            break;
+        case AA_IMM:
+            val16 = insn.nextByte();
+            mode = M_IMM8;
+            break;
+        case AA_INDIR:
+            readIndirect(insn);
+            break;
+        case AA_IDX:
+            readIndexed(insn);
+            break;
+        }
+        break;
+    case M_WAOP:
+        switch (insn.aa()) {
+        case AA_REG:
+            regno = insn.nextByte();
+            if (!isWreg(regno))
+                setErrorIf(OPERAND_NOT_ALIGNED);
+            mode = M_WREG;
+            break;
+        case AA_IMM:
+            val16 = insn.nextUint16();
+            mode = M_IMM16;
+            break;
+        case AA_INDIR:
+            readIndirect(insn);
+            break;
+        case AA_IDX:
+            readIndexed(insn);
+            if (regno == 0 && !isWreg(val16))
+                setErrorIf(OPERAND_NOT_ALIGNED);
+            break;
+        }
+        break;
+    case M_IMM8:
+    case M_REL8:
+        val16 = insn.nextByte();
+        break;
+    case M_REL11:
+        val16 = (static_cast<int16_t>(insn.opCode() & 7) << 8) | insn.nextByte();
+        break;
+    case M_REL16:
+        val16 = insn.nextUint16();
+        break;
+    case M_BITNO:
+        val16 = insn.opCode() & 7;
+        break;
+    default:
+        break;
+    }
+    return getError();
+}
+
+Error DisI8096::decodeImpl(DisMemory &memory, Insn &_insn, StrBuffer &out) const {
+    DisInsn insn(_insn, memory, out);
+    const auto opc = insn.readByte();
+    insn.setOpCode(opc);
+    if (isPrefix(cpuType(), opc)) {
+        insn.setPrefix(opc);
+        insn.setOpCode(insn.readByte());
+        if (insn.getError())
+            return _insn.setError(insn);
+    }
+    if (searchOpCode(cpuType(), insn, out))
+        return _insn.setErrorIf(insn);
+
+    const auto jbx_djnz = insn.src2() == M_REL8 || insn.src1() == M_REL8;
+    const auto tijmp = insn.src2() == M_IMM8;
+    Operand src2, src1, dst;
+    if (jbx_djnz) {
+        if (dst.read(insn, insn.dst()))
+            insn.setErrorIf(out, dst);
+        outOperand(out, insn, dst);
+        if (insn.src1() != M_NONE) {
+            out.comma();
+            if (src1.read(insn, insn.src1()))
+                insn.setErrorIf(out, src1);
+            outOperand(out, insn, src1);
+        }
+        if (insn.src2() != M_NONE) {
+            out.comma();
+            if (src2.read(insn, insn.src2()))
+                insn.setErrorIf(out, src2);
+            outOperand(out, insn, src2);
+        }
+    } else if (tijmp) {
+        // TIJMP dst, src1, #src2
+        src1.read(insn, insn.src1());
+        src2.read(insn, insn.src2());
+        if (dst.read(insn, insn.dst()))
+            insn.setErrorIf(out, dst);
+        outOperand(out, insn, dst);
+        if (src1.getError())
+            insn.setErrorIf(out, src1);
+        outOperand(out.comma(), insn, src1);
+        if (src2.getError())
+            insn.setErrorIf(out, src2);
+        outOperand(out.comma(), insn, src2);
+    } else {
+        src2.read(insn, insn.src2());
+        src1.read(insn, insn.src1());
+        if (insn.dst() != M_NONE) {
+            if (dst.read(insn, insn.dst()))
+                insn.setErrorIf(out, dst);
+            outOperand(out, insn, dst);
+        }
+        if (insn.src1() != M_NONE) {
+            out.comma();
+            if (src1.getError())
+                insn.setErrorIf(out, src1);
+            outOperand(out, insn, src1);
+        }
+        if (insn.src2() != M_NONE && !insn.hasPost()) {
+            out.comma();
+            if (src2.getError())
+                insn.setErrorIf(out, src2);
+            outOperand(out, insn, src2);
+        }
+    }
+    return _insn.setError(insn);
+}
+
+}  // namespace i8096
+}  // namespace libasm
+
+// Local Variables:
+// mode: c++
+// c-basic-offset: 4
+// tab-width: 4
+// End:
+// vim: set ft=cpp et ts=4 sw=4:

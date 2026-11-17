@@ -1,0 +1,33 @@
+;;; Copyright 2026 Tadashi G. Takaoka
+;;;
+;;; Licensed under the Apache License, Version 2.0 (the "License");
+;;; you may not use this file except in compliance with the License.
+;;; You may obtain a copy of the License at
+;;;
+;;;     http://www.apache.org/licenses/LICENSE-2.0
+;;;
+;;; Unless required by applicable law or agreed to in writing, software
+;;; distributed under the License is distributed on an "AS IS" BASIS,
+;;; WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+;;; See the License for the specific language governing permissions and
+;;; limitations under the License.
+
+        cpu     TLCS900L
+        org     0100h
+;;; 900/L resets to maximum mode: test the general 32-bit register instructions
+;;; first, then switch to minimum mode for the minimum-mode instructions.
+        MAXMODE ON
+        include "test_tlcs900_common.inc"
+        include "test_tlcs900_maxmode.inc"
+        MAXMODE OFF
+        include "test_tlcs900_common.inc"
+        include "test_tlcs900_intnest.inc"
+        include "test_tlcs900_min.inc"
+        include "test_tlcs900_ldx.inc"
+        include "test_tlcs900_minmode.inc"
+        end
+
+;;; Local Variables:
+;;; mode: asm
+;;; End:
+;;; vim: set ft=asm:
