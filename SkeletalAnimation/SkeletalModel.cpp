@@ -1,5 +1,8 @@
 #include "SkeletalModel.h"
 
+#include <cmath>
+#include <cstring>
+
 //////////////////////////////////////////////////////////////////////////
 // Based on: http://ogldev.atspace.co.uk/www/tutorial38/tutorial38.html //
 //////////////////////////////////////////////////////////////////////////
@@ -44,6 +47,8 @@ namespace SA
 		}
 		m_Skeleton.Bones.clear();
 
+		m_BoneGlobalTransforms.clear();
+
 		m_Animation.NodeAnimations.clear();
 		m_Animation.Duration = 0.0f;
 		m_Animation.TicksPerSecond = 0.0f;
@@ -58,10 +63,22 @@ namespace SA
 
 	void SkeletalModel::Update(float a_Dt)
 	{
-		m_AnimationTime = fmodf(m_AnimationTime + a_Dt * m_Animation.TicksPerSecond, m_Animation.Duration);
-		//
+		if (m_Animation.Duration > 0.0f)
+		{
+			m_AnimationTime = fmodf(m_AnimationTime + a_Dt * m_Animation.TicksPerSecond, m_Animation.Duration);
+		}
+		else
+		{
+			m_AnimationTime = 0.0f;
+		}
 
-		ReadNodeHierarchy(m_AnimationTime, m_Animation, m_Skeleton, m_Skeleton.Bones[0], glm::mat4x4(1));
+		m_BoneGlobalTransforms.assign(m_Skeleton.Bones.size(), glm::mat4x4(1));
+
+		if (!m_Skeleton.Bones.empty())
+		{
+			ReadNodeHierarchy(m_AnimationTime, m_Animation, m_Skeleton, m_Skeleton.Bones[0], glm::mat4x4(1), 0);
+		}
+
 		TransformVertices(m_Skeleton);
 	}
 
@@ -69,7 +86,7 @@ namespace SA
 
 
 
-	void SkeletalModel::ReadNodeHierarchy(float AnimationTime, sAnimation& a_Animation, sSkeleton& a_Skeleton, sBone& a_Bone, const glm::mat4x4& ParentTransform)
+	void SkeletalModel::ReadNodeHierarchy(float AnimationTime, sAnimation& a_Animation, sSkeleton& a_Skeleton, sBone& a_Bone, const glm::mat4x4& ParentTransform, unsigned int a_BoneIndex)
 	{
 		std::string NodeName(a_Bone.Name);
 		glm::mat4x4 NodeTransformation(a_Bone.NodeTransform);
@@ -91,18 +108,27 @@ namespace SA
 			NodeTransformation = TranslationM2 * RotationM2;// * ScalingM2;
 		}
 
+		// The hierarchy pose depends only on the node transforms. A mesh's
+		// inverse bind matrix must never leak into the child transforms.
 		glm::mat4x4 GlobalTransformation = ParentTransform * NodeTransformation;
 
-		unsigned int BoneIndex = Skeleton_FindBoneIndex(a_Skeleton, NodeName);
-		if (BoneIndex != -1)
+		if (a_BoneIndex < a_Skeleton.Bones.size())
 		{
-			sBone* pBone = &a_Skeleton.Bones[BoneIndex];
+			m_BoneGlobalTransforms[a_BoneIndex] = GlobalTransformation;
+
+			// Legacy single-mesh behaviour: FinalTransformation still includes
+			// the bone's own OffsetMatrix.
+			sBone* pBone = &a_Skeleton.Bones[a_BoneIndex];
 			pBone->FinalTransformation = m_GlobalInverseTransform * GlobalTransformation * pBone->OffsetMatrix;
 		}
 
 		for (unsigned int i = 0; i < a_Bone.NumChildren; i++)
 		{
-			ReadNodeHierarchy(AnimationTime, a_Animation, a_Skeleton, a_Skeleton.Bones[a_Bone.pChildren[i]], GlobalTransformation);
+			unsigned int ChildIndex = a_Bone.pChildren[i];
+			if (ChildIndex < a_Skeleton.Bones.size())
+			{
+				ReadNodeHierarchy(AnimationTime, a_Animation, a_Skeleton, a_Skeleton.Bones[ChildIndex], GlobalTransformation, ChildIndex);
+			}
 		}
 	}
 
@@ -114,42 +140,120 @@ namespace SA
 	{
 		for (unsigned int i = 0; i < m_Meshes.size(); ++i)
 		{
-			// Reset mesh vertices and normals
 			sAnimatedMesh& AnimMesh = m_Meshes[i];
-			memset(AnimMesh.pTransformedVertices, 0, AnimMesh.NumVertices*sizeof(glm::vec3));
-			memset(AnimMesh.pTransformedNormals, 0, AnimMesh.NumVertices*sizeof(glm::vec3));
 
-			//
-			for (unsigned int i = 0; i < a_Skeleton.Bones.size(); ++i)
+			if (AnimMesh.UseMeshBindings)
 			{
-				const sBone& Bone = a_Skeleton.Bones[i];
-				//
-				glm::mat4x4 Transformation = Bone.FinalTransformation;
-				glm::mat3x3 Rotation = glm::mat3x3(Transformation);
-				//
-				for (unsigned int i = 0; i < Bone.NumWeights; ++i)
-				{
-					sWeight Weight = Bone.pWeights[i];
-					//
-					glm::vec3 inVertex = AnimMesh.pVertices[Weight.VertexID];
-					glm::vec3& outVertex = AnimMesh.pTransformedVertices[Weight.VertexID];
-					outVertex += glm::vec3((Transformation * glm::vec4(inVertex, 1)) * Weight.Weight);
-					//
-					glm::vec3 inNormal = AnimMesh.pNormals[Weight.VertexID];
-					glm::vec3& outNormal = AnimMesh.pTransformedNormals[Weight.VertexID];
-					outNormal += (Rotation * inNormal) * Weight.Weight;
-				}
+				TransformMeshWithBindings(AnimMesh, a_Skeleton);
 			}
+			else
+			{
+				TransformMeshWithBoneWeights(AnimMesh, a_Skeleton);
+			}
+
+			NormalizeTransformedNormals(AnimMesh);
+		}
+	}
+
+
+
+
+
+	void SkeletalModel::TransformMeshWithBindings(sAnimatedMesh& a_Mesh, const sSkeleton& a_Skeleton) const
+	{
+		if (a_Mesh.NumVertices == 0)
+			return;
+
+		// Vertices that receive no weight keep their original position and
+		// unit normal.
+		for (unsigned int v = 0; v < a_Mesh.NumVertices; ++v)
+		{
+			a_Mesh.pTransformedVertices[v] = a_Mesh.pVertices[v];
+			a_Mesh.pTransformedNormals[v] = a_Mesh.pNormals[v];
 		}
 
-		// Normalize normals
-		for (unsigned int i = 0; i < m_Meshes.size(); ++i)
+		std::vector<bool> Touched(a_Mesh.NumVertices, false);
+
+		for (unsigned int b = 0; b < a_Mesh.MeshBindings.size(); ++b)
 		{
-			sAnimatedMesh& AnimMesh = m_Meshes[i];
-			for (unsigned int i = 0; i < AnimMesh.NumVertices; ++i)
+			const sMeshBoneBinding& Binding = a_Mesh.MeshBindings[b];
+			if (Binding.BoneIndex >= a_Skeleton.Bones.size() || Binding.BoneIndex >= m_BoneGlobalTransforms.size())
+				continue;
+
+			glm::mat4x4 Transformation = m_GlobalInverseTransform * m_BoneGlobalTransforms[Binding.BoneIndex] * Binding.OffsetMatrix;
+			glm::mat3x3 Rotation = glm::mat3x3(Transformation);
+
+			for (unsigned int w = 0; w < Binding.Weights.size(); ++w)
 			{
-				AnimMesh.pTransformedNormals[i] = glm::normalize(AnimMesh.pTransformedNormals[i]);
+				const sWeight& Weight = Binding.Weights[w];
+				if (Weight.VertexID >= a_Mesh.NumVertices)
+					continue;
+
+				if (!Touched[Weight.VertexID])
+				{
+					Touched[Weight.VertexID] = true;
+					a_Mesh.pTransformedVertices[Weight.VertexID] = glm::vec3(0.0f);
+					a_Mesh.pTransformedNormals[Weight.VertexID] = glm::vec3(0.0f);
+				}
+
+				const glm::vec3& inVertex = a_Mesh.pVertices[Weight.VertexID];
+				a_Mesh.pTransformedVertices[Weight.VertexID] += glm::vec3(Transformation * glm::vec4(inVertex, 1.0f)) * Weight.Weight;
+
+				const glm::vec3& inNormal = a_Mesh.pNormals[Weight.VertexID];
+				a_Mesh.pTransformedNormals[Weight.VertexID] += (Rotation * inNormal) * Weight.Weight;
 			}
+		}
+	}
+
+
+
+
+
+	void SkeletalModel::TransformMeshWithBoneWeights(sAnimatedMesh& a_Mesh, const sSkeleton& a_Skeleton) const
+	{
+		if (a_Mesh.NumVertices == 0)
+			return;
+
+		// Reset mesh vertices and normals
+		memset(a_Mesh.pTransformedVertices, 0, a_Mesh.NumVertices*sizeof(glm::vec3));
+		memset(a_Mesh.pTransformedNormals, 0, a_Mesh.NumVertices*sizeof(glm::vec3));
+
+		for (unsigned int b = 0; b < a_Skeleton.Bones.size(); ++b)
+		{
+			const sBone& Bone = a_Skeleton.Bones[b];
+			//
+			glm::mat4x4 Transformation = Bone.FinalTransformation;
+			glm::mat3x3 Rotation = glm::mat3x3(Transformation);
+			//
+			for (unsigned int w = 0; w < Bone.NumWeights; ++w)
+			{
+				const sWeight& Weight = Bone.pWeights[w];
+				if (Weight.VertexID >= a_Mesh.NumVertices)
+					continue;
+
+				glm::vec3 inVertex = a_Mesh.pVertices[Weight.VertexID];
+				glm::vec3& outVertex = a_Mesh.pTransformedVertices[Weight.VertexID];
+				outVertex += glm::vec3((Transformation * glm::vec4(inVertex, 1)) * Weight.Weight);
+				//
+				glm::vec3 inNormal = a_Mesh.pNormals[Weight.VertexID];
+				glm::vec3& outNormal = a_Mesh.pTransformedNormals[Weight.VertexID];
+				outNormal += (Rotation * inNormal) * Weight.Weight;
+			}
+		}
+	}
+
+
+
+
+
+	void SkeletalModel::NormalizeTransformedNormals(sAnimatedMesh& a_Mesh) const
+	{
+		for (unsigned int v = 0; v < a_Mesh.NumVertices; ++v)
+		{
+			glm::vec3& Normal = a_Mesh.pTransformedNormals[v];
+			float LengthSq = glm::dot(Normal, Normal);
+			if (LengthSq > 0.0f)
+				Normal = Normal / sqrtf(LengthSq);
 		}
 	}
 

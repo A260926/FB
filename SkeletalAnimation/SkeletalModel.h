@@ -33,11 +33,19 @@ namespace SA
 		sAnimation                      m_Animation;
 		glm::mat4x4                     m_GlobalInverseTransform;
 
+		// Global pose of every bone for the current frame, computed from the
+		// node hierarchy only. Mesh bindings combine this with their own
+		// inverse bind matrices, so they never influence the hierarchy.
+		std::vector<glm::mat4x4>        m_BoneGlobalTransforms;
+
 		float                           m_AnimationTime;
 
 	private:
-		void                            ReadNodeHierarchy(float AnimationTime, sAnimation& a_Animation, sSkeleton& a_Skeleton, sBone& a_Bone, const glm::mat4x4& ParentTransform);
+		void                            ReadNodeHierarchy(float AnimationTime, sAnimation& a_Animation, sSkeleton& a_Skeleton, sBone& a_Bone, const glm::mat4x4& ParentTransform, unsigned int a_BoneIndex);
 		void                            TransformVertices(const sSkeleton& a_Skeleton);
+		void                            TransformMeshWithBindings(sAnimatedMesh& a_Mesh, const sSkeleton& a_Skeleton) const;
+		void                            TransformMeshWithBoneWeights(sAnimatedMesh& a_Mesh, const sSkeleton& a_Skeleton) const;
+		void                            NormalizeTransformedNormals(sAnimatedMesh& a_Mesh) const;
 	};
 }
 

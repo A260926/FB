@@ -17,6 +17,14 @@ namespace SA
 		float Weight;
 	};
 
+	// Per-mesh binding of a bone. Weights index vertices of the owning mesh only.
+	struct sMeshBoneBinding
+	{
+		unsigned int BoneIndex;
+		glm::mat4x4 OffsetMatrix; // Inverse bind matrix in the mesh's local space
+		std::vector<sWeight> Weights;
+	};
+
 	struct sBone
 	{
 		std::string Name;
@@ -44,6 +52,11 @@ namespace SA
 
 		unsigned int NumIndices;
 		unsigned int* pIndices;
+
+		// Mesh-local bone bindings. When UseMeshBindings is true these replace
+		// the weights/offset matrices stored on the skeleton bones for this mesh.
+		bool UseMeshBindings = false;
+		std::vector<sMeshBoneBinding> MeshBindings;
 	};
 
 	struct sSkeleton

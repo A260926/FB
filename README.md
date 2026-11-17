@@ -13,7 +13,8 @@ Rendering     |              | X      |
 CPU Skinning  | V            |        |
 GPU Skinning  |              | X      |
 Skinned Vertices | V         |        |
-Skinned Normals |            | X      | To do
+Skinned Normals | V         |        |
+Mesh-local Bindings | V     |        | Body + equipment on one skeleton; see [docs/mesh_bindings.md](docs/mesh_bindings.md)
 Materials     |              | X      | To do
 Textures      |              | X      | To do
 Multi-threaded  |            | X      | Will maybe add
@@ -78,6 +79,14 @@ void Render()
 	}
 }
 ```
+
+# Mesh-local bone bindings
+
+A character whose body and equipment share one skeleton can give each mesh its
+own vertex numbering and inverse bind matrices instead of storing weights on
+`sBone`. See [docs/mesh_bindings.md](docs/mesh_bindings.md) for the API, the
+skinning rules and the versioned serialization format; a windowless runnable
+example is in [examples/mesh_binding_example.cpp](examples/mesh_binding_example.cpp).
 
 # References
 
