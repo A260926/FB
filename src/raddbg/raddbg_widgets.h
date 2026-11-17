@@ -1,0 +1,205 @@
+// Copyright (c) Epic Games Tools
+// Licensed under the MIT license (https://opensource.org/license/mit/)
+
+#ifndef RADDBG_WIDGETS_H
+#define RADDBG_WIDGETS_H
+
+////////////////////////////////
+//~ rjf: Cell Types
+
+typedef U32 RD_CellFlags;
+enum
+{
+  //- rjf: expander
+  RD_CellFlag_Expander            = (1<<0),
+  RD_CellFlag_ExpanderSpace       = (1<<1),
+  RD_CellFlag_ExpanderPlaceholder = (1<<2),
+  
+  //- rjf: toggle switch extension
+  RD_CellFlag_ToggleSwitch        = (1<<3),
+  
+  //- rjf: slider extension
+  RD_CellFlag_Slider              = (1<<4),
+  
+  //- rjf: bindings extension
+  RD_CellFlag_Bindings            = (1<<5),
+  
+  //- rjf: extra button extensions
+  RD_CellFlag_EmptyEditButton     = (1<<6),
+  RD_CellFlag_RevertButton        = (1<<7),
+  RD_CellFlag_Lock                = (1<<8),
+  RD_CellFlag_BrowseButton        = (1<<9),
+  
+  //- rjf: behavior
+  RD_CellFlag_DisableEdit         = (1<<10),
+  RD_CellFlag_KeyboardClickable   = (1<<11),
+  RD_CellFlag_SingleClickActivate = (1<<12),
+  
+  //- rjf: contents description
+  RD_CellFlag_CodeContents        = (1<<13),
+  
+  //- rjf: appearance
+  RD_CellFlag_Border              = (1<<14),
+  RD_CellFlag_NoBackground        = (1<<15),
+  RD_CellFlag_Button              = (1<<16),
+};
+
+typedef struct RD_CellParams RD_CellParams;
+struct RD_CellParams
+{
+  //- rjf: catchall parameters
+  RD_CellFlags flags;
+  S32 depth;
+  String8 pre_edit_value;
+  DR_FStrList meta_fstrs;
+  DR_FStrList value_fstrs;
+  DR_FStrList note_fstrs;
+  UI_Size note_width;
+  String8 search_needle;
+  String8 description;
+  
+  //- rjf: expander r/w info
+  B32 *expanded_out;
+  
+  //- rjf: lock r/w info
+  B32 *lock_out;
+  
+  //- rjf: toggle-switch r/w info
+  B32 *toggled_out;
+  
+  //- rjf: slider info r/w info
+  F32 *slider_value_out;
+  
+  //- rjf: bindings name w info
+  String8 bindings_name;
+  
+  //- rjf: revert out
+  B32 *revert_out;
+  
+  //- rjf: browse out
+  B32 *browse_out;
+  
+  //- rjf: text editing r/w info
+  U64 *cursor;
+  U64 *mark;
+  U8 *edit_buffer;
+  U64 edit_buffer_size;
+  U64 *edit_string_size_out;
+  UI_Key *line_edit_key_out;
+};
+
+////////////////////////////////
+//~ rjf: Code Slice Types
+
+typedef U32 RD_CodeSliceFlags;
+enum
+{
+  RD_CodeSliceFlag_Clickable         = (1<<0),
+  RD_CodeSliceFlag_PriorityMargin    = (1<<1),
+  RD_CodeSliceFlag_CatchallMargin    = (1<<2),
+  RD_CodeSliceFlag_LineNums          = (1<<3),
+};
+
+typedef struct RD_CodeSliceParams RD_CodeSliceParams;
+struct RD_CodeSliceParams
+{
+  // rjf: content
+  RD_CodeSliceFlags flags;
+  Rng1S64 line_num_range;
+  String8 *line_text;
+  Rng1U64 *line_ranges;
+  TXT_TokenArray *line_tokens;
+  CFG_NodePtrList *line_bps;
+  D_EntityList *line_ips;
+  CFG_NodePtrList *line_pins;
+  U64 *line_vaddrs;
+  S64 run_to_line_num;
+  D_LineList *line_infos;
+  DI_KeyList relevant_dbgi_keys;
+  TXT_TextInfo *text_info;
+  TXT_PatchList *patches;
+  String8 text_data;
+  
+  // rjf: visual parameters
+  FNT_Tag font;
+  F32 font_size;
+  F32 tab_size;
+  String8 search_query;
+  F32 line_height_px;
+  F32 priority_margin_width_px;
+  F32 catchall_margin_width_px;
+  F32 line_num_width_px;
+  F32 line_text_max_width_px;
+  F32 margin_float_off_px;
+};
+
+typedef struct RD_CodeSliceSignal RD_CodeSliceSignal;
+struct RD_CodeSliceSignal
+{
+  UI_Signal base;
+  U64 mouse_off;
+  Rng1U64 mouse_expr_rng;
+};
+
+////////////////////////////////
+//~ rjf: UI Building Helpers
+
+#define RD_Font(slot) UI_Font(rd_font_from_slot(slot)) UI_TextRasterFlags(rd_raster_flags_from_slot((slot)))
+
+////////////////////////////////
+//~ rjf: UI Widgets: Fancy Title Strings
+
+internal DR_FStrList rd_title_fstrs_from_cfg(Arena *arena, CFG_Node *cfg, B32 include_extras);
+internal DR_FStrList rd_title_fstrs_from_ctrl_entity(Arena *arena, D_Entity *entity, B32 include_extras);
+internal DR_FStrList rd_title_fstrs_from_code_name(Arena *arena, String8 code_name);
+internal DR_FStrList rd_title_fstrs_from_file_path(Arena *arena, String8 file_path, B32 include_folder);
+
+////////////////////////////////
+//~ rjf: UI Widgets: Loading Overlay
+
+internal void rd_loading_overlay(Rng2F32 rect, F32 loading_t, U64 progress_v, U64 progress_v_target);
+
+////////////////////////////////
+//~ rjf: UI Widgets: Fancy Buttons
+
+typedef U32 RD_CmdBindingButtonFlags;
+enum
+{
+  RD_CmdBindingButtonFlag_AddNew = (1<<0),
+  RD_CmdBindingButtonFlag_NoEdit = (1<<1),
+};
+internal void rd_cmd_binding_buttons(String8 name, String8 filter, U64 limit, RD_CmdBindingButtonFlags flags);
+internal UI_Signal rd_menu_bar_button(String8 string);
+internal UI_Signal rd_cmd_spec_button(String8 name);
+internal void rd_cmd_list_menu_buttons(U64 count, String8 *cmd_names, U32 *fastpath_codepoints);
+internal UI_Signal rd_icon_button(RD_IconKind kind, FuzzyMatchRangeList *matches, String8 string);
+internal UI_Signal rd_icon_buttonf(RD_IconKind kind, FuzzyMatchRangeList *matches, char *fmt, ...);
+
+////////////////////////////////
+//~ rjf: UI Widgets: Text View
+
+internal UI_BOX_CUSTOM_DRAW(rd_code_slice_text_draw_extensions);
+internal UI_BOX_CUSTOM_DRAW(rd_thread_box_draw_extensions);
+internal UI_BOX_CUSTOM_DRAW(rd_bp_box_draw_extensions);
+internal RD_CodeSliceSignal rd_code_slice(RD_CodeSliceParams *params, U64 *cursor, U64 *mark, S64 *preferred_column, String8 string);
+internal RD_CodeSliceSignal rd_code_slicef(RD_CodeSliceParams *params, U64 *cursor, U64 *mark, S64 *preferred_column, char *fmt, ...);
+
+internal B32 rd_do_txt_controls(TXT_TextInfo *info, String8 data, TXT_PatchList *patches, U64 line_count_per_page, TxtPt *cursor, TxtPt *mark, S64 *preferred_column);
+
+////////////////////////////////
+//~ rjf: UI Widgets: Fancy Labels
+
+internal DR_FStrList rd_fstrs_from_rich_string(Arena *arena, String8 string);
+internal UI_Signal rd_label(String8 string);
+internal UI_Signal rd_error_label(String8 string);
+internal B32 rd_help_label(String8 string);
+internal DR_FStrList rd_fstrs_from_code_string(Arena *arena, F32 alpha, B32 indirection_size_change, Vec4F32 base_color, String8 string);
+internal UI_Box *rd_code_label(F32 alpha, B32 indirection_size_change, Vec4F32 base_color, String8 string);
+
+////////////////////////////////
+//~ rjf: UI Widgets: Line Edit
+
+internal UI_Signal rd_cell(RD_CellParams *params, String8 string);
+internal UI_Signal rd_cellf(RD_CellParams *params, char *fmt, ...);
+
+#endif // RADDBG_WIDGETS_H

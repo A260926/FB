@@ -1,0 +1,1039 @@
+// Copyright (c) Epic Games Tools
+// Licensed under the MIT license (https://opensource.org/license/mit/)
+
+////////////////////////////////
+//~ rjf: milestone TODO notes
+//
+// [ ] remote / multi-server debugging
+// [ ] new evaluation system
+// [ ] natvis
+// [ ] plugins (backend abstraction, static builtins + dynamic)
+//   [ ] server / controller backend
+//   [ ] visualizer
+//
+// [ ] "someday" plugins (not immediately necessary)
+//   [ ] architecture
+//   [ ] disassembly
+//   [ ] unwinder
+//   [ ] converter
+
+////////////////////////////////
+//~ rjf: remote TODO notes
+//
+// [ ] ui -> ui?
+// [ ] ui (w/ debug info) -> ui (w/out debug info)?
+// [ ] ctrl -> slim server?
+//
+// [ ] get all slow paths off UI thread - UI should ONLY ever access cached register blocks,
+//     cache lookup should NOT fill with slow path, etc.
+
+////////////////////////////////
+//~ rjf: linux TODO notes
+//
+// post initial alpha:
+// [ ] 0x1b (SIGPROF) - need to ignore by default
+// [ ] line stepping over function epilogue seems to end up just resuming in some cases
+// [ ] function breakpoint resolution racing
+// [ ] conditional breakpoint evaluation bug
+//
+// [ ] windowing
+//  [ ] wayland
+// [ ] support
+//  [ ] .eh_frame unwinding without .eh_frame_hdr
+// [ ] geometry rendering
+//
+// [x] recycling semaphore files - or alt strat?
+// [x] clipboard
+// [x] jai exes - busted call stacks / unwind info / paths?
+// [x] statically linked EXEs - busted unwinding
+// [x] statically linked EXEs, not parsing maps file correctly
+// [x] asan
+// [x] multithreaded stepping - trap hits reported on other threads.
+// [x] .so loading/debugging - missing debug info
+// [x] missing disasm
+// [x] control
+// [x] stale memory - things evaluating to stale values that are definitely not zero
+// [x] thread names
+// [x] rendering
+//  [x] bitmaps
+
+////////////////////////////////
+//~ rjf: evaluation system pass TODO notes
+//
+// The first pass of the debugger's evaluation engine has some significant
+// problems, and sooner rather than later we need to do a pass which addresses
+// them. It's a complicated thing, so I am gathering unstructured notes &
+// comments here:
+//
+// - coupling of some evaluation things to running on the UI thread - for some
+//   things we don't care, e.g. I don't care to evaluate theme colors literally
+//   anywhere except for the UI thread. but, for something like a thread's
+//   call stack, that should pretty unambiguously be accessible via the control
+//   thread (and thus in conditional breakpoints etc.).
+//
+// - whether something is available on the control thread or not, we should be
+//   able to *know* that from the UI thread, so that we can display it clearly.
+//
+// - there is an uncomfortable bifurcation between establishing evaluation
+//   context on the UI thread vs. the control thread. ideally, the common
+//   things (like debug entities) are just common, and there is ~0 extra code.
+//
+// - currently we lump all sorts of "context" things into the same mechanism.
+//   the problem is that a lot of this stuff needs to change *mid-expression*.
+//   for example:
+//
+//   thread.call_stack[1].locals.foo + other_thread.call_stack[2].locals.bar
+//
+//   this requires changing all sorts of things about the context for different
+//   portions of expression bytecode! currently, the only context that we
+//   support changing like this is the 'space'. but there is a lot more
+//   'volatile context' than just the space. so I think instead of "set space"
+//   opcodes, we need (also, or to replace? unclear) a "set context" opcode.
+//
+//   this is all completely distinct from "base context", or whatever we want
+//   to call it, which includes unchanging things, like the set of loaded debug
+//   infos, modules, etc.
+//
+// - we need to be able to disambiguate between *processes* too in expressions.
+//   we can *sort of do this* with addresses, now that we can do
+//   process.memory + 0x1000. but for example if we had a foo.dll in two
+//   processes, we can't disambiguate between the two in identifier resolution.
+//   we can currently do foo.dll!bar, but we'd need to be able to do
+//   `<pid>!foo.dll!bar` too or something.
+//
+// - there are ambiguous cases in the expression language that we need to shake
+//   out, notably because of type views. this is because "$" is overloaded. the
+//   idea was to make it a *chain* of parent expressions, but this seems to be
+//   confusing and/or not working in some cases - the example that found this
+//   was `array(...)` used inside of `rows(...)`, e.g. this:
+//
+//     array(cast(char*)$.data, $.size)
+//
+//   working, but this:
+//
+//     rows($, array(cast(char*)$.data, $.size), some_other_member)
+//
+//   not.
+//
+// - the expression parser, to support C-style syntax, needs identifier
+//   resolution. I took this out before, but that was a mistake, because people
+//   just need to be able to do `(foo)&bar` and have it work. to a dumb
+//   parser without identifier resolution, there is no way to disambiguate that
+//   from a bitwise &. but that is why we need identifier resolution.
+
+////////////////////////////////
+//~ rjf: post-0.9.27 TODO notes
+//
+// [ ] beginning usage UI notes (cakezzz)
+//  [ ] rebinding a hotkey should be much more visually obvious, & add tooltips to '+' button - very ambiguous
+//  [ ] pass over default layouts - remove tabs that are secondary/tertiary features, like pins/locals/etc.
+//  [ ] undo/redo for panel layout changes
+//  [ ] 'are you sure?' step for closing panel
+//  [ ] show breakpoint trails from any location - very confusing if they are off-screen but resolve to a line
+//  [ ] we probably want to just cap the breakpoint 'trailing' too? if it's more than like 100 lines away seems dumb...
+//  [ ] after above, show breakpoint resolution status - if it can't resolve anywhere, suggest as much in the UI (? icon or whatever)
+//
+// [ ] debug info loading retry mechanism, in cases where the load failed, but settings/filesystem state changes -
+//     e.g. turn on automatic downloads, already tried to load symbol server cache file that doesn't exist ->
+//     need to retry
+// [ ] wassim memory bug
+//
+// [ ] core dump saving/loading
+//
+// [ ] memory_size(...) view for quickly evaluating memory sizes
+// [ ] value coloring view in watch window, so you can quickly scroll & see values outside of a threshold
+//
+// [x] more things should move to user data, but project-tagged - like
+//     recent files, watches?, etc.
+//
+// [ ] linux/dwarf fixes
+//  [ ] type views for `MyByte *` example do not match correctly
+//  [x] excessive CPU usage on async threads - barrier impl?
+//
+// [ ] many threads hitting conditional breakpoints -> causes 0x8000003 exception!
+// [ ] string conditional breakpoints -> size != 0 check seems to fail, can test w/ "rd_init" subprogram type gen in d2r2
+//
+// [ ] PDB -> RDI conversion memory usage
+//
+//- evaluation space coverage pass
+// [ ] need concrete ways of referring into a space at any offset - e.g. `process.memory + 0x1234`, `file:"foo".data + 0x1234`, `thread.regs + 0x80`, etc.
+// [ ] memory view needs to take advantage of above when peeking; ensure peeking works on files etc.
+// [ ] need to eliminate accelerators from evaluation context, and build them on the fly instead -
+//     this is necessary because, for instance, the correct locals_map varies by expression, if we
+//     want to (we do) support features like "look up call stack to find local"
+//
+//- memory view pass
+// [ ] toggleable ascii column
+// [ ] toggleable annotation tree column
+// [ ] horizontal scrolling
+//
+//- fabian complaints / reports
+// [ ] simplified default layout
+//  [ ] memory view deserves larger spot, in default layout
+// [ ] ambiguous parsing cases - need to re-introduce identifier resolution into eval parse. (foo *)&bar
+// [ ] broadly, view discoverability / docs
+// [ ] signify empty watch window "expression" slot more as a text field?
+//
+//- jeff notes
+// [ ] focus changing on f10/f11? may be related to auto_run/auto_step - look at a bin/jeffr
+//     auto_step, launching terminal, terminal steals focus from debugger...
+//
+//- urgent fixes
+// [ ] (use msvc assert as an example) show fastfail exception info (code, name, etc.) - comes from ExceptionInformation @fastfail
+// [ ] stepping w/ spoofs & shadow stack enabled - writing spoof will send a stack buffer overrun event @shadow_stack_step
+// [ ] native filesystem dialog, resizing raddbg window -> crash!
+// [ ] stdout/stderr path target setting is now busted >:( (i think this is because of path confusion? check working dir)
+// [ ] target ui entry point should override built-in entry point
+// [ ] list of all tabs in palette
+// [ ] u64 + (ptr - ptr) seems to produce unexpected results - double check with C rules?
+//
+//- flow notes
+// [ ] "skip breakpoint, run to source", when stopped at a non-source location
+// [ ] adjust menu bar rendering when not focused
+// [ ] treat int 0x29 similarly to int3
+//
+//- memory view
+// [ ] have smaller visible range than entire memory space, within some bounds (e.g. 64KB)
+// [ ] dynamically expand memory space, based on scrolling
+// [ ] disambiguate . character in ASCII columns
+//
+//- watch improvements
+// [ ] *ALL* expressions in watch windows need to be editable.
+//
+//- cfg improvements
+// [ ] config hot-reloading, using cfg wins
+// [ ] undo/redo, using cfg wins
+// [ ] back/forward, using cfg wins
+//  [ ]  mouse back button should make view to go back after I double clicked
+//       on function to open it
+// [ ] expand %environment_variables% in target environment strings - is there
+//     a way we can defer to the underlying shell in a non-horrible way...?
+//
+//- stepping or breakpoint oddness/fixes
+// [ ] stepping-onto a line with a conditional breakpoint, which fails, causes a
+// single step over the first instruction of that line, even if the thread
+// would've stopped at the first instruction due to the step, were that bp not
+// there.
+// [ ] breakpoints in optimized code? maybe early-terminating bp resolution loop? @bpmiss
+//      - actually this seems to be potentially because of incomplete src-line-map info...
+// [ ] Mohit-reported breakpoint not hitting - may be similar thing to @bpmiss
+//
+//- ui improvements
+// [ ] we probably want to disable pop/pull out for transient things, e.g. theme color cfgs
+//     (actually, just kill the tabs on load if they refer to transient things)
+// [ ] universal ctx menu address/watch options; e.g. watch -> memory; watch -> add watch
+// [ ] rich hover coverage; bitmap <-> geo <-> memory <-> disassembly <-> text; etc.
+// [ ] tooltip coverage pass (row commands, etc.)
+// [ ] visualize all breakpoints everywhere - source view should show up in
+//     disasm, disasm should show up in source view, function should show up in
+//     both, etc.
+//  [ ] ** Function breakpoints should show up in the source listing. Without
+//      them being visible, it is confusing when you run and you stop there,
+//      because you're like "wait why did it stop" and then you later remember
+//      that's because there was a function breakpoint there.
+// [ ] (reported by forrest) 'set-next-statement' -> prioritize current
+//     module/symbol, in cases where one line maps to many voffs
+// [ ] "Browse..." buttons should adopt a more relevant starting search path,
+//     if possible
+//  [ ] (since browse buttons are currently gone i should just add them backin
+//       while respecting this old todo)
+// [ ] For the Scheduler window, it would be nice if you could dim or
+//     folderize threads that are not your threads - eg., if a thread doesn't
+//     have any resolved stack pointers in your executable code, then you can
+//     ignore it when you are focusing on your own code. I don't know what the
+//     best way to detect this is, other than by walking the call stack... one
+//     way might be to just have a way to separate threads you've named from
+//     threads you haven't? Or, there could even be a debugger-specific API
+//     that you use to tag them. Just some way that would make it easier to
+//     focus on your own threads.
+// [ ] use backslashes on windows by default, forward slashes elsewhere (?)
+// [ ] For theme editing, when you hove the mouse over a theme color entry and
+//     it highlights that entry, it might help to temporarily change that
+//     color to white (or the inverse of the background color, or whatever) so
+//     that the user can see what things on the screen use that theme color.
+// [ ] The hex format for color values in the config file was a real
+//     mindbender. It's prefixed with "0x", so I was assuming it was either
+//     Windows Big Endian (0xAARRGGBB) or Mac Little Endian (0xAABBGGRR). To
+//     my surprise, it was neither - it was actually web format (RRGGBBAA),
+//     which I was not expecting because that is normally written with a
+//     number sign (#AARRGGBB) not an 0x.
+// [ ] It'd be nice to have a "goto byte" option for source views, for jumping
+//     to error messages that are byte-based instead of line-based.
+//  [ ] Clicking on either side of a scroll bar is idiosyncratic. Normally,
+//      that is "page up" / "page down", but here it is "smooth scroll upward"
+//      / "smooth scroll downward" for some reason?
+//  [ ]  Alt+8 to switch to disassembly would be nice (regardless on which
+//       panel was previous, don't want to use ctrl+, multiple times)
+//       Alt+8 for disasm and Alt+6 for memory view are shortcuts I often use
+//       in VS
+//  [ ]  default font size is too small for me - not only source code, but
+//       menus/tab/watch names (which don't resize). Maybe you could query
+//       Windows for initial font size?
+// [ ] globally disable/configure default view rule-like things (string
+//     viz for u8s in particular)
+// [ ] fancy string runs can include "weakness" information for text truncation
+//     ... can prioritize certain parts of strings to be truncated before
+//     others. would be good for e.g. the middle of a path
+//
+//- visualizer improvements
+// [ ] disasm starting address - need to use debug info for more correct results...
+// [ ] multidimensional `array`
+// [ ] 2-vector, 3-vector, quaternion
+// [ ] audio waveform views
+//
+//- eval improvements
+// [ ] maybe add extra caching layer to process memory querying? we pay a pretty
+//     heavy cost even to just read 8 bytes...
+// [ ] serializing eval view maps (?)
+// [ ] EVAL LOOKUP RULES -> currently going 0 -> rdis_count, but we need
+//  to prioritize the primary rdi
+// [ ] wide transforms
+//  [ ] sum
+//  [ ] plot
+//  [ ] max view rule
+//  [ ] min view rule
+//  [ ] histogram view rule
+//  [ ] diffs?
+//  [ ] ** One very nice feature of RemedyBG that I use all the time is the
+//      ability to put "$err, hr" into the watch window, which will just show
+//      the value of GetLastError() as a string. This is super useful for
+//      debugging, so you don't have to litter your own code with it.
+//      (NOTE(rjf): NtQueryInformationThread)
+// [ ] C++ virtual inheritance member visualization
+// [ ] smart scopes - expression operators for "grab me the first type X"
+// [ ] "pinning" watch expressions, to attach it to a particular scope/evaluation context
+//
+//- control improvements
+// [ ] debug info overrides (both path-based AND module-based)
+// [ ] can it ignore stepping into _RTC_CheckStackVars generated functions?
+// [ ] jump table thunks, on code w/o /INCREMENTAL:NO
+// [ ] investigate /DEBUG:FASTLINK - can we somehow alert that we do not
+//     support it?
+// [ ] just-in-time debugging
+//
+//- late-conversion performance improvements
+// [ ] live++ investigations - ctrl+alt+f11 in UE?
+//
+//- short-to-medium term future features
+// [ ] search-in-all-files
+//  [ ] automatically snap to search matches when searching source files
+// [ ] memory view
+//  [ ] memory view user-made annotations
+//  [ ] memory view searching
+// [ ] disasm view
+//  [ ] visualize jump destinations in disasm
+//
+//- longer-term future features
+// [ ] long-term future notes from martins
+//  [ ] parallel call stacks view
+//  [ ] parallel watch view
+//  [ ] mixed native/interpreted/jit debugging
+//      - it seems python has a top-level linked list of interpreter states,
+//        which should allow the debugger to map native callstacks to python
+//        code
+//
+//- code cleanup
+// [ ] eliminate explicit font parameters in the various ui paths (e.g.
+//     code slice params)
+// [ ] font cache eviction (both for font tags, closing fp handles, and
+//     rasterizations)
+
+////////////////////////////////
+//~ rjf: Recently Completed
+//
+// [x] fix for-loop stepping oddities, likely single-line for-loop stepping
+// [x] `foo, x` needs to correctly match `hex(foo)`, e.g. in application to expansions
+// [x] eval: pointer casts of register space should promote to process space
+// [x] more control over string visualization; specifically, when *not* to do it, even when using e.g. char *s
+// [x] sign bits should not display on unsigned integers?
+// [x] source/disasm ctx menu should include options for e.g. "go to selected thread"
+//  [x] correct type interpretations; togglable interpretations
+//  [x] make address editable; specialized version of the cursor address editor in tab right-click menu
+// [x] broadly, need to complete memory view & fix issues
+// [x] dumb panel click-through thing
+// [x] cursor info at bottom? # of selected bytes, address range, cursor hierarchical location?
+// [x] clean up tooltip? it's a bit big/noisy (maybe remove it after above?)
+// [x] missing call stack frames?
+// [x] scroll bar
+//
+// [x] fix type intepretations of cursor in bottom pane
+// [x] fix clicking through occluded panels etc.
+// [x] hardware breakpoints regression (global eval in ctrl)
+// [x] RDI_Local, RDI_GlobalVariable, RDI_ThreadVariable -> RDI_Variable
+// [x] RDI_Variable gets RDI_ContainerFlags, and a container_idx
+// [x] RDI_Namespace can be a container, same as types/procedures
+// [x] If procedure-contained, then index goes to scope now, not procedure
+// [x] Location sections -> split by location kind, fixed tables for simple locations, one catch-all table for bytecode.
+// [x] Location kind -> can be thread-local offset, or module virtual offset, to enclose globals/tlocals cases
+// [x] Referring to one location -> kind * index
+// [x] Referring to many locations, based on scope offsets -> kind = BlockList; BlockList encodes a first/opl pair into Block table, each Block has scope_off_first/opl, location_kind, location_idx - but a block's location kind CANNOT BE BlockList
+// [x] RDI_Variable has location_kind, location_idx
+//
+// [x] we keep flat tables of symbols, *but*, "sort" by containing unit. unit -> [f, opl) of procedures, globals, threadvars, constants, etc.
+// [x] container can also be a unit, so you can also go from procedure/global/tvar -> unit
+// [x] *OR*, because we can guarantee that the units themselves will be sorted from lowest -> highest in all symbol tables, we can simply binary search the unit table (small) with a symbol's index to find its corresponding unit. that way, no need to duplicate e.g. namespaces and so on across units. and actually, we have to do this, because containers can be types, and those cannot be unit-locked.
+//
+// [x] symbols only store their *partly-qualified name*, e.g. `x` for A::B::C::x
+// [x] default name maps look up *partly-qualified names*
+// [x] to match a *fully qualified name*, there needs to be a second kind of different lookup - instead of string-matching, we need to match against the *fully qualified names*. the maps must be built by hashing the *fully qualified name*, but redirecting to the symbol with the *partially qualified name*. this is to allow fully-qualified lookups, but avoid storing fully-qualified names.
+//
+// [x] option to turn off transient tabs altogether
+// [x] step out of scopes / loops
+// [x] asan pass
+// [x] codebase-internal barrier impl (win7/linux support)
+// [x] policy for closing debug info which is no longer relevant?
+// [x] killing/restarting thread performance (#780)
+//  [x] rd_frame has no type info, should be (void -> void) - type should be generated but it
+//      is not being hooked up correctly
+// [x] project/user file improvements
+//  [x] "default" -> "untitled"
+//  [x] should clear default project data every time the program starts
+//  [x] new project / user should not require picking a path; should just
+//      by default go to "untitled" in default user path
+//  [x] memory view mutation controls
+//  [x] step-over/step-into doesn't step successfully in many cases, just causes a continue
+// [x] eval space reads/writes -> needs staleness/badness info - replace ctrl layer, to apply to all spaces
+// [x] no selected thread -> causing evaluation failures, e.g. with go-to-definition
+// [x] single-line viz for pointers w/ bad (unmapped) addresses
+// [x] option to prefer addresses first with string ptrs
+// [x] external window focusing bugs
+// [x] "autos" collection, which can be evaluated
+// [x] show "autos" inline in source code near thread?
+// [x] switch off spoofs for step-over
+// [x] jeff stepping bug
+// [x] unwinding crash - f5 on bp in w32_http_status_callback to repro
+// [x] unwinding in jit page - fail
+// [x] test concepts -> base
+// [x] debugger, d2r, p2r exemplar / determinism testing
+// [x] halting during a spoof-ridden step leaves the spoofs in place!!!
+//     (repro via LOTS of code on one line & halting)
+// [x] unit / module name qualification
+// [x] step-out-of-loop
+// [x] symbol server
+
+////////////////////////////////
+//~ rjf: Build Options
+
+#define BUILD_TITLE "The RAD Debugger"
+#define OS_FEATURE_GRAPHICAL 1
+
+#define DMN_INIT_MANUAL 1
+#define D_INIT_MANUAL 1
+#define WM_INIT_MANUAL 1
+#define FP_INIT_MANUAL 1
+#define R_INIT_MANUAL 1
+#define FNT_INIT_MANUAL 1
+#define RD_INIT_MANUAL 1
+
+#define ARENA_TABLE_DEBUG BUILD_DEBUG
+
+////////////////////////////////
+//~ rjf: Includes
+
+//- rjf: [h]
+#include "base/base_inc.h"
+#include "x64/x64_inc.h"
+#include "win32/win32_inc.h"
+#include "linux/linux_inc.h"
+#include "linker/base_ext/base_bit_array.h"
+#include "artifact_cache/artifact_cache.h"
+#include "rdi/rdi_local.h"
+#include "rdi_make/rdi_make_local.h"
+#include "minidump/minidump.h"
+#include "minidump/minidump_parse.h"
+#include "mdesk/mdesk.h"
+#include "window_manager/window_manager_inc.h"
+#include "shell/shell_inc.h"
+#include "socket/socket_inc.h"
+#include "http/http_inc.h"
+#include "symbol_server/symbol_server_inc.h"
+#include "config/config_inc.h"
+#include "content/content.h"
+#include "file_stream/file_stream.h"
+#include "text/text.h"
+#include "mutable_text/mutable_text.h"
+#include "coff/coff.h"
+#include "coff/coff_parse.h"
+#include "pe/pe.h"
+#include "elf/elf.h"
+#include "gnu/gnu.h"
+#include "gnu/gnu_parse.h"
+#include "elf/elf_parse.h"
+#include "elf/elf_dump.h"
+#include "codeview/codeview.h"
+#include "codeview/codeview_parse.h"
+#include "msf/msf.h"
+#include "msf/msf_parse.h"
+#include "pdb/pdb.h"
+#include "pdb/pdb_parse.h"
+#include "pdb/pdb_stringize.h"
+#include "dwarf/dwarf_inc.h"
+#include "eh_frame/eh_frame.h"
+#include "eh_frame/eh_frame_dump.h"
+#include "unwind/unwind_inc.h"
+#include "rdi_from_coff/rdi_from_coff.h"
+#include "rdi_from_elf/rdi_from_elf.h"
+#include "rdi_from_codeview/rdi_from_codeview.h"
+#include "rdi_from_pdb/rdi_from_pdb.h"
+#include "rdi_from_dwarf/rdi_from_dwarf.h"
+#include "radbin/radbin.h"
+#include "arch/arch_inc.h"
+#include "dbg_info/dbg_info.h"
+#include "disasm/disasm_inc.h"
+#include "stap/stap_parse.h"
+#include "demon/demon_inc.h"
+#include "dbg_server/dbg_server.h"
+#include "eval/eval_inc.h"
+#include "eval2/eval2.h"
+#include "dbg_engine/dbg_engine_inc.h"
+#include "eval_visualization/eval_visualization_inc.h"
+#include "font_provider/font_provider_inc.h"
+#include "render/render_inc.h"
+#include "font_cache/font_cache.h"
+#include "draw/draw.h"
+#include "ui/ui_inc.h"
+#include "raddbg/raddbg_inc.h"
+
+//- rjf: [c]
+#include "base/base_inc.c"
+#include "x64/x64.c"
+#include "win32/win32_inc.c"
+#include "linux/linux_inc.c"
+#include "linker/base_ext/base_bit_array.c"
+#include "artifact_cache/artifact_cache.c"
+#include "rdi/rdi_local.c"
+#include "rdi_make/rdi_make_local.c"
+#include "minidump/minidump.c"
+#include "minidump/minidump_parse.c"
+#include "mdesk/mdesk.c"
+#include "window_manager/window_manager_inc.c"
+#include "shell/shell_inc.c"
+#include "socket/socket_inc.c"
+#include "http/http_inc.c"
+#include "symbol_server/symbol_server_inc.c"
+#include "config/config_inc.c"
+#include "content/content.c"
+#include "file_stream/file_stream.c"
+#include "text/text.c"
+#include "mutable_text/mutable_text.c"
+#include "coff/coff.c"
+#include "coff/coff_parse.c"
+#include "pe/pe.c"
+#include "elf/elf.c"
+#include "gnu/gnu.c"
+#include "gnu/gnu_parse.c"
+#include "elf/elf_parse.c"
+#include "elf/elf_dump.c"
+#include "codeview/codeview.c"
+#include "codeview/codeview_parse.c"
+#include "msf/msf.c"
+#include "msf/msf_parse.c"
+#include "pdb/pdb.c"
+#include "pdb/pdb_parse.c"
+#include "pdb/pdb_stringize.c"
+#include "dwarf/dwarf_inc.c"
+#include "eh_frame/eh_frame.c"
+#include "eh_frame/eh_frame_dump.c"
+#include "unwind/unwind_inc.c"
+#include "rdi_from_coff/rdi_from_coff.c"
+#include "rdi_from_elf/rdi_from_elf.c"
+#include "rdi_from_codeview/rdi_from_codeview.c"
+#include "rdi_from_pdb/rdi_from_pdb.c"
+#include "rdi_from_dwarf/rdi_from_dwarf.c"
+#include "radbin/radbin.c"
+#include "arch/arch_inc.c"
+#include "dbg_info/dbg_info.c"
+#include "disasm/disasm_inc.c"
+#include "stap/stap_parse.c"
+#include "demon/demon_inc.c"
+#include "dbg_server/dbg_server.c"
+#include "eval/eval_inc.c"
+#include "eval2/eval2.c"
+#include "dbg_engine/dbg_engine_inc.c"
+#include "eval_visualization/eval_visualization_inc.c"
+#include "font_provider/font_provider_inc.c"
+#include "render/render_inc.c"
+#include "font_cache/font_cache.c"
+#include "draw/draw.c"
+#include "ui/ui_inc.c"
+#include "raddbg/raddbg_inc.c"
+
+////////////////////////////////
+//~ rjf: Top-Level Execution Types
+
+typedef enum ExecMode
+{
+  ExecMode_Normal,
+  ExecMode_IPCSender,
+  ExecMode_BinaryUtility,
+  ExecMode_Help,
+}
+ExecMode;
+
+////////////////////////////////
+//~ rjf: IPC Packets
+
+#define IPC_PACKET_MAGIC 0x72726300
+#define IPC_PACKET_SIZE KB(1)
+
+typedef struct IPCPacketHeader IPCPacketHeader;
+struct IPCPacketHeader
+{
+  U32 magic;
+  B32 is_last;
+};
+
+////////////////////////////////
+//~ rjf: Ctrl -> Main Thread Wakeup Hook
+
+internal D_WAKEUP_FUNCTION_DEF(wakeup_hook_ctrl)
+{
+  wm_send_wakeup_event();
+}
+
+////////////////////////////////
+//~ rjf: Per-Frame Entry Point
+
+internal B32
+frame(void)
+{
+  rd_frame();
+  return rd_state->quit;
+}
+
+////////////////////////////////
+//~ rjf: Entry Point
+
+internal void
+entry_point(CmdLine *cmd_line)
+{
+  Temp scratch = scratch_begin(0, 0);
+  
+  //- rjf: re-open stdout handles if cli
+#if OS_WINDOWS
+  if(cmd_line_has_flag(cmd_line, s("cli")))
+  {
+    AttachConsole(ATTACH_PARENT_PROCESS);
+    freopen("CONOUT$", "wt", stdout);
+    freopen("CONOUT$", "wt", stderr);
+  }
+#endif
+  
+  //- rjf: unpack command line arguments
+  ExecMode exec_mode = ExecMode_Normal;
+  B32 auto_run = 0;
+  B32 auto_step = 0;
+  B32 jit_attach = 0;
+  U64 jit_pid = 0;
+  U64 jit_code = 0;
+  U64 jit_addr = 0;
+  U64 ipc_port = 7423;
+  {
+    if(cmd_line_has_flag(cmd_line, s("ipc")))
+    {
+      exec_mode = ExecMode_IPCSender;
+    }
+    else if(cmd_line_has_flag(cmd_line, s("bin")))
+    {
+      exec_mode = ExecMode_BinaryUtility;
+    }
+    else if(cmd_line_has_flag(cmd_line, s("?")) ||
+            cmd_line_has_flag(cmd_line, s("help")))
+    {
+      exec_mode = ExecMode_Help;
+    }
+    auto_run = cmd_line_has_flag(cmd_line, s("auto_run"));
+    auto_step = cmd_line_has_flag(cmd_line, s("auto_step"));
+    String8 jit_pid_string = cmd_line_string(cmd_line, s("jit_pid"));
+    String8 jit_code_string = cmd_line_string(cmd_line, s("jit_code"));
+    String8 jit_addr_string = cmd_line_string(cmd_line, s("jit_addr"));
+    try_u64_from_str8_c_rules(jit_pid_string, &jit_pid);
+    try_u64_from_str8_c_rules(jit_code_string, &jit_code);
+    try_u64_from_str8_c_rules(jit_addr_string, &jit_addr);
+    String8 ipc_port_string = cmd_line_string(cmd_line, s("ipc_port"));
+    U64 ipc_port_try = 0;
+    if(try_u64_from_str8_c_rules(ipc_port_string, &ipc_port_try))
+    {
+      ipc_port = ipc_port_try;
+    }
+    jit_attach = (jit_addr != 0);
+  }
+  
+  // init log
+  g_logs_folder = cmd_line_string(cmd_line, s("logs"));
+  if(g_logs_folder.size == 0)
+  {
+    String8 user_program_logs_data_path = get_process_info()->user_program_logs_data_path;
+    g_logs_folder = push_str8f(scratch.arena, "%S/raddbg/logs", user_program_logs_data_path);
+  }
+  make_directory(g_logs_folder);
+  
+  //- rjf: dispatch to top-level codepath based on execution mode
+  switch(exec_mode)
+  {
+    //- rjf: normal execution
+    default:
+    case ExecMode_Normal:
+    {
+      //- rjf: windows -> turn off output handles, as we need to control those for target processes
+#if OS_WINDOWS
+      HANDLE output_handles[3] =
+      {
+        GetStdHandle(STD_INPUT_HANDLE),
+        GetStdHandle(STD_OUTPUT_HANDLE),
+        GetStdHandle(STD_ERROR_HANDLE),
+      };
+      for(U64 idx = 0; idx < ArrayCount(output_handles); idx += 1)
+      {
+        B32 duplicate = 0;
+        for(U64 idx2 = 0; idx2 < idx; idx2 += 1)
+        {
+          if(output_handles[idx2] == output_handles[idx])
+          {
+            duplicate = 1;
+            break;
+          }
+        }
+        if(duplicate)
+        {
+          output_handles[idx] = 0;
+        }
+      }
+      for(U64 idx = 0; idx < ArrayCount(output_handles); idx += 1)
+      {
+        if(output_handles[idx] != 0)
+        {
+          CloseHandle(output_handles[idx]);
+        }
+      }
+      SetStdHandle(STD_INPUT_HANDLE, 0);
+      SetStdHandle(STD_OUTPUT_HANDLE, 0);
+      SetStdHandle(STD_ERROR_HANDLE, 0);
+#endif
+      
+      //- rjf: manual layer initialization
+      {
+        dmn_init();
+        d_init();
+        wm_init();
+        fp_init();
+        r_init(cmd_line);
+        fnt_init();
+        rd_init(cmd_line);
+        d_set_wakeup_hook(wakeup_hook_ctrl);
+      }
+      
+      //- rjf: set up IPC resources
+      SOCK_Session ipc_sock_session = sock_session_open((U16)ipc_port, wakeup_hook_ctrl, IPC_PACKET_SIZE);
+      Arena *ipc_packet_arena = arena_alloc();
+      String8List ipc_msg_pieces = {0};
+      
+      //- rjf: main application loop
+      {
+        for(B32 quit = 0; !quit;)
+        {
+          //- rjf: receive next IPC packet
+          B32 ipc_command_frame = 0;
+          SOCK_Endpoint ipc_endpoint = {0};
+          {
+            Temp scratch = scratch_begin(0, 0);
+            U8 *packet_buffer = push_array(scratch.arena, U8, IPC_PACKET_SIZE);
+            if(sock_recv(ipc_sock_session, &ipc_endpoint, 0, packet_buffer, 0))
+            {
+              String8 packet = str8(packet_buffer, IPC_PACKET_SIZE);
+              IPCPacketHeader header = {0};
+              str8_deserial_read_struct(packet, 0, &header);
+              String8 msg_piece = str8_skip(packet, sizeof(header));
+              msg_piece = str8_cstring_capped(msg_piece.str, msg_piece.str + msg_piece.size);
+              str8_list_push(ipc_packet_arena, &ipc_msg_pieces, str8_copy(ipc_packet_arena, msg_piece));
+              if(header.is_last)
+              {
+                ipc_command_frame = 1;
+              }
+            }
+            scratch_end(scratch);
+          }
+          
+          //- rjf: if this is an ipc command frame, we're done receiving a chain of packets.
+          // join & send down as a command
+          if(ipc_command_frame)
+          {
+            Temp scratch = scratch_begin(0, 0);
+            String8 msg = str8_list_join(scratch.arena, &ipc_msg_pieces, 0);
+            MemoryZeroStruct(&ipc_msg_pieces);
+            arena_clear(ipc_packet_arena);
+            
+            // rjf: split command by ;s
+            String8List cmd_parts_of_msg = str8_split(scratch.arena, msg, (U8 *)";", 1, 0);
+            
+            // rjf: pick target window
+            RD_WindowState *dst_ws = rd_state->first_window_state;
+            for(RD_WindowState *ws = dst_ws; ws != &rd_nil_window_state; ws = ws->order_next)
+            {
+              if(wm_window_is_focused(ws->os))
+              {
+                dst_ws = ws;
+                break;
+              }
+            }
+            
+            // rjf: got a window -> send command
+            if(dst_ws != &rd_nil_window_state)
+            {
+              dst_ws->window_temporarily_focused_ipc = 1;
+              RD_RegsScope()
+              {
+                if(dst_ws->cfg_id != rd_regs()->window)
+                {
+                  Temp scratch = scratch_begin(0, 0);
+                  CFG_PanelTree panel_tree = cfg_panel_tree_from_cfg(scratch.arena, cfg_node_from_id(dst_ws->cfg_id));
+                  rd_regs()->window = dst_ws->cfg_id;
+                  rd_regs()->panel  = panel_tree.focused->cfg->id;
+                  rd_regs()->tab    = panel_tree.focused->selected_tab->id;
+                  rd_regs()->view   = panel_tree.focused->selected_tab->id;
+                  scratch_end(scratch);
+                }
+                for EachNode(n, String8Node, cmd_parts_of_msg.first)
+                {
+                  String8 cmd_string = str8_skip_chop_whitespace(n->string);
+                  if(cmd_string.size != 0)
+                  {
+                    rd_cmd(RD_CmdKind_RunExternalDriverTextCommand, .string = cmd_string);
+                  }
+                }
+                rd_request_frame();
+                ipc_command_frame = 1;
+                rd_state->ipc_sock_endpoint = ipc_endpoint;
+              }
+            }
+            
+            scratch_end(scratch);
+          }
+          
+          //- rjf: update
+          quit = update();
+          
+          //- rjf: auto run
+          if(auto_run)
+          {
+            auto_run = 0;
+            rd_cmd(RD_CmdKind_Run);
+          }
+          
+          //- rjf: auto step
+          if(auto_step)
+          {
+            auto_step = 0;
+            rd_cmd(RD_CmdKind_StepInto);
+          }
+          
+          //- rjf: jit attach
+          if(jit_attach)
+          {
+            jit_attach = 0;
+            rd_cmd(RD_CmdKind_Attach, .pid = jit_pid);
+          }
+          
+          //- rjf: gather command outputs & send them back back to sender
+          if(ipc_command_frame)
+          {
+            Temp scratch = scratch_begin(0, 0);
+            String8 cmd_outputs = str8_list_join(scratch.arena, &rd_state->cmd_outputs, 0);
+            U64 header_size = sizeof(IPCPacketHeader);
+            U64 payload_size_per_packet = (IPC_PACKET_SIZE - header_size);
+            U64 packet_count = (cmd_outputs.size + payload_size_per_packet-1) / payload_size_per_packet;
+            packet_count = Max(1, packet_count);
+            for EachIndex(packet_idx, packet_count)
+            {
+              Temp scratch2 = scratch_begin(&scratch.arena, 1);
+              IPCPacketHeader header = {IPC_PACKET_MAGIC, (packet_idx+1 == packet_count)};
+              String8 payload = str8_substr(cmd_outputs, r1u64(packet_idx*payload_size_per_packet, (packet_idx+1)*payload_size_per_packet));
+              U64 padding_byte_count = payload_size_per_packet - payload.size;
+              U8 *padding_bytes = push_array(scratch2.arena, U8, padding_byte_count);
+              String8 padding = str8(padding_bytes, padding_byte_count);
+              String8List packet_parts = {0};
+              str8_list_push(scratch2.arena, &packet_parts, str8_struct(&header));
+              str8_list_push(scratch2.arena, &packet_parts, payload);
+              str8_list_push(scratch2.arena, &packet_parts, padding);
+              String8 packet = str8_list_join(scratch2.arena, &packet_parts, 0);
+              sock_send(ipc_sock_session, ipc_endpoint, SOCK_Protocol_TCP, packet, max_U64);
+              scratch_end(scratch2);
+            }
+            scratch_end(scratch);
+          }
+        }
+      }
+      
+    }break;
+    
+    //- rjf: inter-process communication message sender
+    case ExecMode_IPCSender:
+    {
+      Temp scratch = scratch_begin(0, 0);
+      
+      //- rjf: create socket session
+      SOCK_Session ipc_sock_session = sock_session_open(0, 0, IPC_PACKET_SIZE);
+      GuardedRing *ipc_send_completion_ring = guarded_ring_alloc(scratch.arena, KB(4));
+      
+      //- rjf: form target raddbg endpoint address
+      SOCK_Endpoint endpoint = {0};
+      {
+        endpoint.address_u8[0] = 127;
+        endpoint.address_u8[3] = 1;
+        endpoint.port = (U16)ipc_port;
+        String8 explicit_ipc_addr_arg = cmd_line_string(cmd_line, s("ipc_addr"));
+        if(explicit_ipc_addr_arg.size != 0)
+        {
+          endpoint = sock_endpoint_from_string(explicit_ipc_addr_arg);
+        }
+      }
+      
+      //- rjf: command line inputs -> text describing commands
+      String8 text = {0};
+      {
+        String8List text_parts = {0};
+        for EachIndex(idx, cmd_line->argc-1)
+        {
+          String8 arg = str8_cstring(cmd_line->argv[idx+1]);
+          if(!str8_match(arg, s("--ipc"), 0) && !str8_match(arg, s("-ipc"), 0))
+          {
+            str8_list_push(scratch.arena, &text_parts, arg);
+          }
+        }
+        StringJoin join = {.sep = s(" ")};
+        text = str8_list_join(scratch.arena, &text_parts, &join);
+      }
+      
+      //- rjf: text -> packets
+      String8List packets = {0};
+      {
+        U64 header_size = sizeof(IPCPacketHeader);
+        U64 payload_size_per_packet = IPC_PACKET_SIZE - header_size;
+        U64 packet_count = (text.size + payload_size_per_packet - 1) / payload_size_per_packet;
+        for EachIndex(packet_idx, packet_count)
+        {
+          Temp scratch2 = scratch_begin(&scratch.arena, 1);
+          String8List packet_parts = {0};
+          IPCPacketHeader header = {IPC_PACKET_MAGIC, (packet_idx+1 == packet_count)};
+          {
+            String8 payload = str8_substr(text, r1u64(packet_idx*payload_size_per_packet, (packet_idx+1)*payload_size_per_packet));
+            U64 padding_byte_count = payload_size_per_packet - payload.size;
+            U8 *padding_bytes = push_array(scratch2.arena, U8, padding_byte_count);
+            String8 padding = str8(padding_bytes, padding_byte_count);
+            str8_list_push(scratch2.arena, &packet_parts, str8_struct(&header));
+            str8_list_push(scratch2.arena, &packet_parts, payload);
+            str8_list_push(scratch2.arena, &packet_parts, padding);
+          }
+          String8 packet = str8_list_join(scratch.arena, &packet_parts, 0);
+          str8_list_push(scratch.arena, &packets, packet);
+          scratch_end(scratch2);
+        }
+      }
+      
+      //- rjf: send to server, get outputs
+      String8List outputs = {0};
+      {
+        // rjf: send packets
+        {
+          for EachNode(n, String8Node, packets.first)
+          {
+            sock_send(ipc_sock_session, endpoint, SOCK_Protocol_TCP, n->string, max_U64, .id = 1, .out_ring = ipc_send_completion_ring);
+          }
+        }
+        
+        // rjf: get send completions
+        B32 good_send = 1;
+        for EachNode(n, String8Node, packets.first)
+        {
+          SOCK_SendCompletion send_completion = {0};
+          sock_wait_for_send_completion(ipc_send_completion_ring, &send_completion, max_U64);
+          good_send = (good_send && send_completion.good);
+        }
+        
+        // rjf: bad send -> report
+        if(!good_send)
+        {
+          String8 endpoint_string = sock_string_from_endpoint(scratch.arena, endpoint);
+          fprintf(stderr, "ERROR: couldn't successfully connect to %.*s\n", str8_varg(endpoint_string));
+        }
+        
+        // rjf: if we sent successfully -> receive outputs
+        if(good_send)
+        {
+          String8List responses = {0};
+          for(B32 done = 0; !done;)
+          {
+            U8 *packet_buffer = push_array(scratch.arena, U8, IPC_PACKET_SIZE);
+            if(!sock_recv(ipc_sock_session, 0, 0, packet_buffer, now_time_us()+10000000))
+            {
+              fprintf(stderr, "ERROR: didn't receive outputs in time\n");
+              done = 1;
+            }
+            else
+            {
+              String8 packet = str8(packet_buffer, IPC_PACKET_SIZE);
+              IPCPacketHeader header = {0};
+              str8_deserial_read_struct(packet, 0, &header);
+              String8 payload = str8_skip(packet, sizeof(header));
+              str8_list_push(scratch.arena, &responses, payload);
+              if(header.is_last)
+              {
+                done = 1;
+              }
+            }
+          }
+          String8 response = str8_list_join(scratch.arena, &responses, 0);
+          U8 split_char = 0;
+          outputs = str8_split(scratch.arena, response, &split_char, 1, 0);
+        }
+      }
+      
+      //- rjf: write outputs to stdout
+      if(outputs.node_count == 0)
+      {
+        fprintf(stdout, "(response received, no output)\n");
+      }
+      for(String8Node *n = outputs.first; n != 0; n = n->next)
+      {
+        fwrite(n->string.str, 1, n->string.size, stdout);
+      }
+      fflush(stdout);
+      
+      scratch_end(scratch);
+    }break;
+    
+    //- rjf: built-in binary utility mode
+    case ExecMode_BinaryUtility:
+    {
+      rb_entry_point(cmd_line);
+      di_signal_completion();
+    }break;
+    
+    //- rjf: help message box
+    case ExecMode_Help:
+    {
+      sh_message(0,
+                 s("The RAD Debugger - Help"),
+                 s("The following options may be used when starting the RAD Debugger from the command line:\n\n"
+                   "--user:<path>\n"
+                   "Use to specify the location of a user file which should be used. User files are used to store settings for users, including window and panel setups, path mapping, and visual settings. If this file does not exist, it will be created as necessary. This file will be autosaved as user-related changes are made.\n\n"
+                   "--project:<path>\n"
+                   "Use to specify the location of a project file which should be used. Project files are used to store settings for users and projects. If this file does not exist, it will be created as necessary. This file will be autosaved as project-related changes are made.\n\n"
+                   "--auto_step\n"
+                   "This will step into all active targets after the debugger initially starts.\n\n"
+                   "--auto_run\n"
+                   "This will run all active targets after the debugger initially starts.\n\n"
+                   "--quit_after_success (or -q)\n"
+                   "This will close the debugger automatically after all processes exit, if they all exited successfully (with code 0), and ran with no interruptions.\n\n"
+                   "--ipc <command>\n"
+                   "This will launch the debugger in the non-graphical IPC mode, which is used to communicate with another running instance of the debugger. The debugger instance will launch, send the specified command, then immediately terminate. This may be used by editors or other programs to control the debugger.\n\n"
+                   "--gen_crash_dump\n"
+                   "Generate mini dump on crash.\n\n"
+                   "--logs:<path>\n"
+                   "Overrides default path to the folder with logs.\n"
+                   ));
+    }break;
+  }
+  
+  scratch_end(scratch);
+}

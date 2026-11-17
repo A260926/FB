@@ -1,0 +1,457 @@
+// Copyright (c) Epic Games Tools
+// Licensed under the MIT license (https://opensource.org/license/mit/)
+
+#pragma once
+
+// --- Input -------------------------------------------------------------------
+
+typedef struct LNK_LibMemberRef
+{
+  LNK_Lib    *lib;
+  U32         member_idx;
+  LNK_Symbol *link_symbol;
+  struct LNK_LibMemberRef *next;
+} LNK_LibMemberRef;
+
+typedef struct LNK_LibMemberRefList
+{
+  U64               count;
+  LNK_LibMemberRef *first;
+  LNK_LibMemberRef *last;
+} LNK_LibMemberRefList;
+
+typedef enum
+{
+  LNK_InputSource_CmdLine, // specified on command line
+  LNK_InputSource_Default, // specified through defaultlib switch
+  LNK_InputSource_Obj,     // refrenced from objects
+  LNK_InputSource_Count
+} LNK_InputSourceType;
+
+typedef struct LNK_Input
+{
+  String8  path;
+  String8  data;
+  B32      disallow;
+  B32      is_thin;
+  B32      owns_file_map;
+  File     handle;
+  B32      exclude_from_debug_info;
+  LNK_Lib *lib;
+  U32      member_idx;
+  CFM_Map *cfm_map;
+
+  COFF_DataType type;
+  union {
+    LNK_ObjNode      *obj;
+    COFF_ShortImport *import_header;
+  };
+
+  struct LNK_Input *next;
+} LNK_Input;
+
+typedef struct LNK_InputList
+{
+  U64        count;
+  LNK_Input *first;
+  LNK_Input *last;
+} LNK_InputList;
+
+typedef struct LNK_InputPtrArray
+{
+  U64         count;
+  LNK_Input **v;
+} LNK_InputPtrArray;
+
+typedef struct LNK_Inputer
+{
+  Arena *arena;
+
+  LNK_InputList  objs;
+  HashTable     *objs_ht;
+  LNK_InputList  new_objs;
+
+  LNK_InputList  members;
+  LNK_InputList  new_members;
+
+  HashTable     *libs_ht;
+  HashTable     *cmd_lib_names_ht;
+  HashTable     *missing_lib_ht;
+  LNK_InputList  libs;
+  LNK_InputList  new_libs[LNK_InputSource_Count];
+
+  CFM_Context *cfm;
+} LNK_Inputer;
+
+typedef struct LNK_LibrarianInputs
+{
+  LNK_LibList       libs;
+  LNK_ObjList       objs;
+  LNK_ExportTable  *exports;
+  LNK_InputPtrArray members; // original objects and short imports, in input order
+} LNK_LibrarianInputs;
+
+typedef struct LNK_ReleaseFileMapsTask
+{
+  LNK_InputPtrArray inputs;
+  U64               next_input_idx;
+} LNK_ReleaseFileMapsTask;
+
+// --- Image Link -------------------------------------------------------------
+
+#define LNK_NULL_SYMBOL "*** RAD_NULL_SYMBOL ***"
+
+#define LNK_SECTION_FLAG_DEBUG (1 << 0)
+#define LNK_SECTION_FLAG_NOICF (1 << 1)
+
+typedef U8 LNK_LibMemberFlags;
+enum
+{
+  LNK_LibMemberFlag_Queued = (1 << 0),
+  LNK_LibMemberFlag_Forced = (1 << 1),
+};
+
+typedef struct LNK_Import LNK_Import;
+struct LNK_Import
+{
+  LNK_Import                     *next;
+  LNK_Input                      *input;
+  U64                             input_order;
+  U32                             make_jump_thunk;
+};
+
+typedef struct LNK_ImportList
+{
+  LNK_Import *first;
+  LNK_Import *last;
+  U64         count;
+} LNK_ImportList;
+
+typedef struct LNK_LibMemberInfo
+{
+  LNK_Symbol        *link;
+  LNK_Import        *import;
+  LNK_LibMemberFlags flags;
+} LNK_LibMemberInfo;
+
+typedef struct LNK_Link
+{
+  Arena                  *arena;
+  LNK_ObjList             objs;
+  LNK_LibList             libs;
+  LNK_ExportTable        *exports;
+  LNK_ObjNode           **last_symbol_input;
+  LNK_IncludeSymbolNode **last_include;
+  LNK_AltNameNode       **last_func_override_alt_name;
+  String8Node           **last_cmd_lib;
+  String8Node           **last_default_lib;
+  String8Node           **last_obj_lib;
+  HashMap                 lib_member_infos_hm;
+  LNK_ImportList          imports;
+  HashMap                 import_symbols;
+  HashMap                 import_descriptors;
+  HashMap                 required_import_descriptors;
+  HashMap                 suppressed_import_descriptors;
+  B32                     try_to_resolve_entry_point;
+  B32                     asan_libs_resolved;
+} LNK_Link;
+
+typedef struct LNK_LinkResult
+{
+  LNK_ObjList         objs;
+  LNK_LibList         libs;
+  PE_FinalizedExports exports;
+} LNK_LinkResult;
+
+// -- Image Layout ------------------------------------------------------------
+
+#define LNK_REMOVED_ASSOCIATIVE_SYMBOL_VALUE ((U32)-4)
+#define LNK_REMOVED_SECTION_NUMBER_32        ((U32)-3)
+#define LNK_REMOVED_SECTION_NUMBER_16        ((U16)-3)
+
+typedef struct LNK_ImageContext
+{
+  String8           image_data;
+  LNK_SectionTable *sectab;
+} LNK_ImageContext;
+
+typedef struct LNK_SectionDefinition
+{
+  String8           name;
+  COFF_SectionFlags flags;
+  U64               contribs_count;
+  struct LNK_Obj   *obj;
+  U64               obj_section_number;
+} LNK_SectionDefinition;
+
+typedef struct LNK_CommonBlockContrib
+{
+  struct LNK_Symbol *symbol;
+  union {
+    U32 size;
+    U32 offset;
+  } u;
+} LNK_CommonBlockContrib;
+
+// --- Reloc Ref ---------------------------------------------------------------
+
+typedef struct LNK_RelocRefs
+{
+  LNK_Obj         *obj;
+  COFF_RelocArray  relocs;
+} LNK_RelocRefs;
+
+typedef struct LNK_RelocRefsBatch LNK_RelocRefsBatch;
+struct LNK_RelocRefsBatch
+{
+  LNK_RelocRefsBatch *next;
+  U64                count;
+  LNK_RelocRefs      v[64];
+};
+
+typedef union
+{
+  struct {
+    LNK_RelocRefsBatch *node;
+    U64                tag;
+  };
+  U64 v[2];
+} LNK_RelocRefsBatchPointer;
+
+typedef struct AlignType(16) 
+{
+  LNK_RelocRefsBatchPointer head;
+} LNK_RelocRefsBatchList;
+
+// --- Base Reloc --------------------------------------------------------------
+
+typedef struct LNK_BaseRelocPage
+{
+  U32      buffer_offset;
+  U32      voff;
+  U64List *entries_addr32;
+  U64List *entries_addr64;
+} LNK_BaseRelocPage;
+
+typedef struct LNK_BaseRelocPageNode
+{
+  struct LNK_BaseRelocPageNode *next;
+  LNK_BaseRelocPage             v;
+} LNK_BaseRelocPageNode;
+
+typedef struct LNK_BaseRelocPageList
+{
+  U64                    count;
+  LNK_BaseRelocPageNode *first;
+  LNK_BaseRelocPageNode *last;
+} LNK_BaseRelocPageList;
+
+typedef struct LNK_BaseRelocPageArray
+{
+  U64                count;
+  LNK_BaseRelocPage *v;
+} LNK_BaseRelocPageArray;
+
+// --- Workers Contexts --------------------------------------------------------
+
+typedef struct
+{
+  B32                   search_anti_deps;
+  LNK_SymbolTable      *symtab;
+  LNK_Lib              *lib;
+  LNK_LibMemberInfo    *lib_member_infos;
+  LNK_LibMemberRefList *member_ref_lists;
+} LNK_SearchLibTask;
+
+typedef struct
+{
+  LNK_SymbolTable  *symtab;
+  LNK_Config       *config;
+  LNK_Obj         **objs;
+  U64               objs_count;
+  U32Array         *obj_indices;
+} LNK_OptTask;
+
+typedef struct
+{
+  String8              image_data;
+  LNK_Obj            **objs;
+  U64                  image_base;
+  COFF_SectionHeader **image_section_table;
+  U64                  image_section_table_count;
+} LNK_ObjRelocPatcher;
+
+typedef struct
+{
+  U64 page_size;
+  B32 is_large_addr_aware;
+  union {
+    struct {
+      LNK_Obj               **objs;
+      LNK_BaseRelocPageList  *pages;
+      HashTable             **page_ht;
+    } gather;
+    struct {
+      U64                     buffer_size;
+      U8                     *buffer;
+      LNK_BaseRelocPageArray  pages;
+    } serialize;
+  };
+} LNK_BaseRelocsTask;
+
+typedef struct LNK_ImageFillNode
+{
+  U64                  base_foff;
+  U64                  sc_count;
+  LNK_SectionContrib **sc;
+
+  struct LNK_ImageFillNode *next;
+} LNK_ImageFillNode;
+
+typedef struct
+{
+  LNK_Config                *config;
+  LNK_SymbolTable           *symtab;
+  LNK_SectionTable          *sectab;
+  U64                        objs_count;
+  LNK_Obj                  **objs;
+  U64                        function_pad_min;
+  U64                        default_align;
+  U64                        sect_align;
+  LNK_SectionContrib        *null_sc;
+  LNK_SectionContrib      ***sect_map;
+  HashTable                 *contribs_ht;
+  LNK_SectionArray           image_sects;
+  union {
+    struct {
+      Arena     *arena;
+      HashTable **defns;
+    } gather_sects;
+    struct {
+      U64                    *counts;
+      U64                    *offsets;
+      LNK_CommonBlockContrib *contribs;
+    } common_block;
+    struct {
+      LNK_SectionContribChunk **chunks;
+    } sort_contribs;
+    struct {
+      B8                        **was_symbol_patched;
+      LNK_Section                *common_block_sect;
+       U64                        common_block_count;
+      LNK_CommonBlockContrib     *common_block_contribs;
+      COFF_SymbolValueInterpType  fixup_type;
+    } patch_symtabs;
+    struct {
+      String8             image_data;
+      LNK_ImageFillNode **fill_nodes;
+    } image_fill;
+  } u;
+} LNK_BuildImageTask;
+
+typedef struct
+{
+  String8  data;
+  U32      chunk_count;
+  U128    *hashes;
+} LNK_Blake3Hasher;
+
+typedef struct
+{
+  LNK_MergedTypes *cv_types;
+  String8         *type_data_out;
+  Rng1U64         *type_data_ranges_out;
+} LNK_RRTTypeDataSerializer;
+
+typedef struct
+{
+  RDIM_BakeResults   bake_results;
+  LNK_Config        *config;
+  String8            pdb_data;
+  String8            image_data;
+} LNK_P2R;
+
+// --- Entry Point -------------------------------------------------------------
+
+internal void lnk_run(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config);
+
+// --- Path --------------------------------------------------------------------
+
+internal String8 lnk_make_full_path(Arena *arena, PathStyle system_path_style, String8 work_dir, String8 path);
+
+// --- Hasher ------------------------------------------------------------------
+
+internal U128 lnk_blake3_hash_parallel(TP_Context *tp, U64 chunk_count, String8 data);
+
+// --- Manifest ----------------------------------------------------------------
+
+internal String8 lnk_make_linker_manifest(Arena *arena, B32 manifest_uac, String8 manifest_level, String8 manifest_ui_access, String8List manifest_dependency_list);
+internal void    lnk_merge_manifest_files(String8 mt_path, String8 out_name, String8List manifest_path_list);
+internal String8 lnk_manifest_from_inputs(Arena *arena, String8 mt_path, String8 manifest_name, B32 manifest_uac, String8 manifest_level, String8 manifest_ui_access, String8List input_manifest_path_list, String8List deps_list);
+
+// --- Internal Objs -----------------------------------------------------------
+
+internal String8 lnk_make_null_obj(Arena *arena);
+internal String8 lnk_make_res_obj(Arena *arena, String8List res_file_list, String8List res_path_list, COFF_MachineType machine, U32 time_stamp, String8 work_dir, PathStyle system_path_style, String8 obj_name);
+internal String8 lnk_make_linker_obj(Arena *arena, LNK_Config *config, MSCRT_FeatFlags feat_flags);
+
+// --- Inputer -----------------------------------------------------------------
+
+internal void              lnk_input_list_push_node(LNK_InputList *list, LNK_Input *node);
+internal void              lnk_input_list_concat_in_place(LNK_InputList *list, LNK_InputList *to_concat);
+internal LNK_InputPtrArray lnk_array_from_input_list(Arena *arena, LNK_InputList list);
+
+internal LNK_Inputer * lnk_inputer_init(void);
+
+internal LNK_Input * lnk_input_push(Arena *arena, LNK_InputList *list, String8 path, String8 data);
+internal LNK_Input * lnk_inputer_push_linkgen(Arena *arena, LNK_InputList *list, String8 path, String8 data);
+internal LNK_Input * lnk_inputer_push_thin(Arena *arena, LNK_InputList *list, HashTable *ht, String8 full_path);
+
+internal LNK_Input * lnk_inputer_push_obj(LNK_Inputer *inputer, LNK_Lib *lib, String8 path, String8 data);
+internal LNK_Input * lnk_inputer_push_obj_linkgen(LNK_Inputer *inputer, LNK_Lib *lib, String8 path, String8 data);
+internal LNK_Input * lnk_inputer_push_obj_thin(LNK_Inputer *inputer, LNK_Lib *lib, String8 path);
+
+internal LNK_Input * lnk_inputer_push_lib(LNK_Inputer *inputer, LNK_InputSourceType input_source, String8 path, String8 data);
+internal LNK_Input * lnk_inputer_push_lib_linkgen(LNK_Inputer *inputer, LNK_InputSourceType input_source, String8 path, String8 data);
+internal LNK_Input * lnk_inputer_push_lib_thin(LNK_Inputer *inputer, LNK_Config *config, LNK_InputSourceType input_source, String8 lib_path);
+
+internal B32               lnk_has_pending_input_work(LNK_Inputer *inputer, LNK_Link *link);
+internal LNK_InputPtrArray lnk_inputer_flush(Arena *arena, TP_Context *tp, LNK_Config *config, LNK_Inputer *inputer, LNK_InputList *all_inputs, LNK_InputList *new_inputs);
+internal void              lnk_inputer_release_file_maps(TP_Context *tp, LNK_Inputer *inputer);
+
+// --- Link Context ------------------------------------------------------------
+
+internal void                lnk_lib_member_ref_list_push_node(LNK_LibMemberRefList *list, LNK_LibMemberRef *node);
+internal void                lnk_lib_member_ref_list_concat_in_place_array(LNK_LibMemberRefList *list, LNK_LibMemberRefList *to_concat_arr, U64 count);
+internal int                 lnk_lib_member_ref_is_before(void *raw_a, void *raw_b);
+internal LNK_LibMemberRef ** lnk_array_from_lib_member_list(Arena *arena, LNK_LibMemberRefList list);
+
+internal LNK_Link *     lnk_link_init  (TP_Arena *arena, LNK_Config *config);
+internal LNK_ObjList    lnk_load_objs  (TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer *inputer);
+internal void           lnk_load_libs  (TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer *inputer, LNK_LibList *libs);
+internal void           lnk_link_inputs(TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer *inputer, LNK_SymbolTable *symtab, LNK_Link *link);
+internal LNK_LinkResult lnk_link_image (TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer *inputer, LNK_SymbolTable *symtab);
+
+// --- Optimizations -----------------------------------------------------------
+
+internal void lnk_opt_ref(TP_Context *tp, LNK_SymbolTable *symtab, LNK_Config *config, LNK_Obj **objs, U64 objs_count);
+internal void lnk_opt_icf(TP_Context *tp, LNK_SymbolTable *symtab, LNK_Config *config, LNK_Obj **objs, U64 objs_count);
+
+// --- Win32 Image -------------------------------------------------------------
+
+internal String8List      lnk_build_guard_tables(TP_Context *tp, LNK_SectionTable *sectab, LNK_SymbolTable *symtab, U64 objs_count, LNK_Obj **objs, COFF_MachineType machine, String8 entry_point_name, LNK_GuardFlags guard_flags, B32 emit_suppress_flag);
+internal String8          lnk_build_base_relocs(TP_Context *tp, TP_Arena *tp_temp, LNK_Config *config, U64 objs_count, LNK_Obj **objs);
+internal String8List      lnk_build_win32_image_header(Arena *arena, LNK_SymbolTable *symtab, LNK_Config *config, LNK_SectionArray sect_arr, U64 expected_image_header_size, U64 *file_header_offset_out, String8List *string_table_out);
+internal LNK_ImageContext lnk_build_image(TP_Arena *arena, TP_Context *tp, LNK_Config *config, LNK_SymbolTable *symtab, U64 obj_count, LNK_Obj **objs);
+
+// --- Logger ------------------------------------------------------------------
+
+internal void lnk_log_link_stats(LNK_ObjList obj_list, LNK_LibList *lib_index, LNK_SectionTable *sectab);
+internal void lnk_log_timers(void);
+
+// --- Fast Exit ---------------------------------------------------------------
+
+internal B32  lnk_fast_exit_is_child(void);
+internal void lnk_fast_exit_child_init(void);
+internal void lnk_fast_exit_signal(U32 exit_code);
+internal B32  lnk_fast_exit_run_child(U32 *exit_code_out);

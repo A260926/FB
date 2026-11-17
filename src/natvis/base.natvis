@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="String8">
+    <DisplayString>{{ size={size} str={str,[size]} }}</DisplayString>
+  </Type>
+
+  <Type Name="String8Node">
+    <DisplayString>{{ string={string} next={next} }}</DisplayString>
+  </Type>
+
+	<Type Name="String8List">
+    <DisplayString Condition="node_count == 0">empty</DisplayString>
+    <DisplayString>{{node count={node_count} total size={total_size} first={first->string} last={last->string} }} </DisplayString>
+		<Expand>
+			<Item Name="[node count]">node_count</Item>
+			<Item Name="[total size]">total_size</Item>
+			<LinkedListItems>
+				<Size>node_count</Size>
+				<HeadPointer>first</HeadPointer>
+				<NextPointer>next</NextPointer>
+				<ValueNode>string</ValueNode>
+			</LinkedListItems>
+		</Expand>
+	</Type>
+	
+  <Type Name="String8Array">
+    <DisplayString>{{ count={count} pointer={v} }}</DisplayString>
+    <Expand>
+      <Item Name="[count]">count</Item>
+      <ArrayItems>
+        <Size>count</Size>
+        <ValuePointer>v</ValuePointer>
+      </ArrayItems>
+    </Expand>
+	</Type>
+
+  <Type Name="Vec2F32">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="[length squared]">x*x + y*y</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Vec2S32">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="[length squared]">x*x + y*y</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Vec2S64">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="[length squared]">x*x + y*y</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Vec3F32">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="z">z</Item>
+      <Item Name="[length squared]">x*x + y*y + z*z</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Vec3S32">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="z">z</Item>
+      <Item Name="[length squared]">x*x + y*y + z*z</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Vec4F32">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="z">z</Item>
+      <Item Name="w">w</Item>
+      <Item Name="[length squared]">x*x + y*y + z*z + w*w</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Vec4S32">
+    <Expand>
+      <Item Name="x">x</Item>
+      <Item Name="y">y</Item>
+      <Item Name="z">z</Item>
+      <Item Name="w">w</Item>
+      <Item Name="[length squared]">x*x + y*y + z*z + w*w</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Rng1U32">
+    <DisplayString>{{ min={min} max={max} [dim]={max - min} }}</DisplayString>
+    <Expand>
+      <Item Name="min">min</Item>
+      <Item Name="max">max</Item>
+      <Item Name="[dim]">max - min</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Rng1S32">
+    <DisplayString>{{ min={min} max={max} [dim]={max - min} }}</DisplayString>
+    <Expand>
+      <Item Name="min">min</Item>
+      <Item Name="max">max</Item>
+      <Item Name="[dim]">max - min</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Rng1U64">
+    <DisplayString>{{ min={min} max={max} [dim]={max - min} }}</DisplayString>
+    <Expand>
+      <Item Name="min">min</Item>
+      <Item Name="max">max</Item>
+      <Item Name="[dim]">max - min</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Rng1S64">
+    <DisplayString>{{ min={min} max={max} [dim]={max - min} }}</DisplayString>
+    <Expand>
+      <Item Name="min">min</Item>
+      <Item Name="max">max</Item>
+      <Item Name="[dim]">max - min</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Rng1F32">
+    <DisplayString>{{ min={min} max={max} [dim]={max - min} }}</DisplayString>
+    <Expand>
+      <Item Name="min">min</Item>
+      <Item Name="max">max</Item>
+      <Item Name="[dim]">max - min</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="CmdLineOpt">
+    <DisplayString>{{ name={string} hash={hash} value_string={value_string} value_strings={value_strings} }}</DisplayString>
+  </Type>
+
+  <Type Name="CmdLineOptList">
+    <AlternativeType Name="Rng1U64List"/>
+    <AlternativeType Name="Rng1S64List"/>
+    <AlternativeType Name="DW_AttribList"/>
+    <AlternativeType Name="DW_LocList"/>
+    <AlternativeType Name="COFF_LibWriterSymbolList"/>
+    <AlternativeType Name="COFF_LibWriterMemberList"/>
+    <AlternativeType Name="PE_BaseRelocBlockList"/>
+    <AlternativeType Name="DW_Expr"/>
+    <AlternativeType Name="DW_LineInstList"/>
+    <DisplayString>{{ count={count} first={first} }} </DisplayString>
+    <Expand>
+			<Item Name="[count]">count</Item>
+      <LinkedListItems>
+        <Size>count</Size>
+        <HeadPointer>first</HeadPointer>
+        <NextPointer>next</NextPointer>
+        <ValueNode>this</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="RDIM_EvalBytecode">
+    <DisplayString>{{ op_count={op_count} encoded_size={encoded_size} first_op={first_op} }} </DisplayString>
+    <Expand>
+			<Item Name="[count]">op_count</Item>
+      <LinkedListItems>
+        <Size>op_count</Size>
+        <HeadPointer>first_op</HeadPointer>
+        <NextPointer>next</NextPointer>
+        <ValueNode>this</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
+
+	<Type Name="RDIM_TypeChunkList">
+    <AlternativeType Name="RDIM_SrcFileChunkList"/>
+    <AlternativeType Name="RDIM_LineTableChunkList"/>
+    <AlternativeType Name="RDIM_UnitChunkList"/>
+    <AlternativeType Name="RDIM_UDTChunkList"/>
+    <AlternativeType Name="RDIM_SymbolChunkList"/>
+    <AlternativeType Name="RDIM_InlineSiteChunkList"/>
+    <AlternativeType Name="RDIM_ScopeChunkList"/>
+		<Expand>
+      <Item Name="[chunk count]">chunk_count</Item>
+      <CustomListItems MaxItemsPerView="5000">
+        <Variable Name="node" InitialValue="first"/>
+        <Variable Name="idx" InitialValue="0"/>
+        <Loop>
+          <Break Condition="node == 0"/>
+          <Exec>idx = 0</Exec>
+          <Loop>
+            <Break Condition="idx >= node->count"/>
+            <Item>node->v[idx]</Item>
+            <Exec>idx += 1</Exec>
+          </Loop>
+          <Exec>node = node->next</Exec>
+        </Loop>
+      </CustomListItems>
+		</Expand>
+	</Type>
+
+  <Type Name="DW_WriterTag">
+    <Expand>
+      <Item Name="kind">kind</Item>
+      <Item Name="next">next</Item>
+      <Item Name="parent">parent</Item>
+      <Synthetic Name="[children]">
+        <DisplayString>{first_child}</DisplayString>
+        <Expand>
+          <CustomListItems MaxItemsPerView="5000">
+            <Variable Name="node" InitialValue="first_child"/>
+            <Variable Name="idx" InitialValue="0"/>
+            <Loop>
+              <Break Condition="node == 0"/>
+              <Item>node</Item>
+              <Exec>node = node->next</Exec>
+            </Loop>
+          </CustomListItems>
+        </Expand>
+      </Synthetic>
+      <Synthetic Name="[attribs]">
+        <DisplayString>count={attrib_count}, [0]={first_attrib}</DisplayString>
+        <Expand>
+          <LinkedListItems>
+            <Size>attrib_count</Size>
+            <HeadPointer>first_attrib</HeadPointer>
+            <NextPointer>next</NextPointer>
+            <ValueNode>this</ValueNode>
+          </LinkedListItems>
+        </Expand>
+      </Synthetic>
+    </Expand>
+  </Type>
+
+</AutoVisualizer>

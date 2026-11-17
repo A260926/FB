@@ -1,0 +1,138 @@
+// Copyright (c) Epic Games Tools
+// Licensed under the MIT license (https://opensource.org/license/mit/)
+
+#pragma once
+
+// --- Symbol ------------------------------------------------------------------
+
+typedef struct LNK_ObjSymbolRef
+{
+  struct LNK_Obj *obj;
+  U32             symbol_idx;
+} LNK_ObjSymbolRef;
+
+typedef struct LNK_ObjSymbolRefNode
+{
+  struct LNK_ObjSymbolRefNode *next;
+  LNK_ObjSymbolRef             v;
+} LNK_ObjSymbolRefNode;
+
+typedef U32 LNK_SymbolSearchType;
+enum
+{
+  LNK_SymbolSearch_Null,
+  LNK_SymbolSearch_Undefined,
+  LNK_SymbolSearch_WeakLibrary,
+  LNK_SymbolSearch_WeakAntiDependency,
+  LNK_SymbolSearch_WeakOther,
+};
+
+typedef struct LNK_Symbol
+{
+  String8               name;
+  LNK_ObjSymbolRefNode *first_ref;
+  U64                   last_ref_and_search_type; // Tail pointer with search type in its low bits.
+} LNK_Symbol;
+
+StaticAssert(sizeof(LNK_Symbol) == 32, lnk_symbol_size_check);
+
+// --- Symbol Containers -------------------------------------------------------
+
+typedef struct LNK_SymbolNode
+{
+  struct LNK_SymbolNode *next;
+  LNK_Symbol            *data;
+} LNK_SymbolNode;
+
+typedef struct LNK_SymbolList
+{
+  U64             count;
+  LNK_SymbolNode *first;
+  LNK_SymbolNode *last;
+} LNK_SymbolList;
+
+typedef struct LNK_SymbolArray
+{
+  U64         count;
+  LNK_Symbol *v;
+} LNK_SymbolArray;
+
+// --- Symbol Hash Trie --------------------------------------------------------
+
+typedef LNK_NameTrieNode      LNK_SymbolHashTrie;
+typedef LNK_NameTrieChunk     LNK_SymbolHashTrieChunk;
+typedef LNK_NameTrieChunkList LNK_SymbolHashTrieChunkList;
+
+// --- Symbol Table ------------------------------------------------------------
+
+typedef struct LNK_SymbolTable
+{
+  TP_Arena                    *arena;
+  LNK_SymbolHashTrie          *root;
+  LNK_SymbolHashTrieChunkList *chunks;
+  LNK_SymbolHashTrieChunkList *search_chunks;
+} LNK_SymbolTable;
+
+// --- Workers Contexts --------------------------------------------------------
+
+typedef struct
+{
+  LNK_SymbolTable          *symtab;
+  LNK_SymbolHashTrieChunk **chunks;
+} LNK_ReplaceWeakSymbolsWithDefaultSymbolTask;
+
+// --- Symbol -----------------------------------------------------------------
+
+internal LNK_SymbolSearchType     lnk_symbol_search_type_from_coff(struct LNK_Obj *obj, COFF_ParsedSymbol symbol, COFF_SymbolValueInterpType interp);
+internal LNK_Symbol *             lnk_make_symbol(Arena *arena, String8 name, struct LNK_Obj *obj, U32 symbol_idx, LNK_SymbolSearchType search_type);
+internal LNK_ObjSymbolRefNode *   lnk_last_ref_from_symbol(LNK_Symbol *symbol);
+internal LNK_SymbolSearchType     lnk_search_type_from_symbol(LNK_Symbol *symbol);
+internal void                     lnk_symbol_set_last_ref(LNK_Symbol *symbol, LNK_ObjSymbolRefNode *last_ref);
+internal void                     lnk_symbol_set_search_type(LNK_Symbol *symbol, LNK_SymbolSearchType search_type);
+
+internal int lnk_obj_symbol_ref_is_before(void *raw_a, void *raw_b);
+internal int lnk_obj_symbol_ref_ptr_is_before(void *raw_a, void *raw_b);
+internal int lnk_symbol_is_before(void *raw_a, void *raw_b);
+internal int lnk_symbol_ptr_is_before(void *raw_a, void *raw_b);
+
+// --- Symbol Containers ------------------------------------------------------
+
+internal void             lnk_symbol_list_push_node(LNK_SymbolList *list, LNK_SymbolNode *node);
+internal LNK_SymbolNode * lnk_symbol_list_push(Arena *arena, LNK_SymbolList *list, LNK_Symbol *symbol);
+
+// --- Symbol Hash Trie --------------------------------------------------------
+
+internal void                       lnk_symbol_hash_trie_insert_or_replace(Arena *arena, LNK_SymbolHashTrieChunkList *chunks, LNK_SymbolHashTrie **trie, U64 hash, LNK_Symbol *symbol);
+#define lnk_symbol_hash_trie_chunk_list_concat_in_place lnk_name_trie_chunk_list_concat
+#define lnk_symbol_hash_trie_search lnk_name_trie_search
+#define lnk_symbol_hash_trie_remove lnk_name_trie_remove
+#define lnk_array_from_symbol_hash_trie_chunk_list lnk_name_trie_chunk_array
+
+// --- Symbol Helpers ----------------------------------------------------------
+
+internal LNK_ObjSymbolRef           lnk_ref_from_symbol(LNK_Symbol *symbol);
+internal U64                        lnk_ref_count_from_symbol(LNK_Symbol *symbol);
+internal COFF_ParsedSymbol          lnk_parsed_from_symbol(LNK_Symbol *symbol);
+internal COFF_SymbolValueInterpType lnk_interp_from_symbol(LNK_Symbol *symbol);
+
+// --- Symbol Table ------------------------------------------------------------
+
+internal U64 lnk_symbol_table_hasher(String8 string);
+
+internal LNK_SymbolTable * lnk_symbol_table_init(TP_Arena *arena);
+internal void              lnk_symbol_table_push(LNK_SymbolTable *symtab, LNK_Symbol *symbol);
+internal LNK_Symbol *      lnk_symbol_table_search(LNK_SymbolTable *symtab, String8 name);
+internal LNK_Symbol *      lnk_symbol_table_searchf(LNK_SymbolTable *symtab, char *fmt, ...);
+
+// --- Symbol Contrib Helpers --------------------------------------------------
+
+internal ISectOff lnk_sc_from_symbol(LNK_Symbol *symbol);
+internal U64      lnk_voff_from_symbol(COFF_SectionHeader **image_section_table, LNK_Symbol *symbol);
+internal U64      lnk_foff_from_symbol(COFF_SectionHeader **image_section_table, LNK_Symbol *symbol);
+
+// --- Weak Symbol -------------------------------------------------------------
+
+internal B32 lnk_resolve_weak_symbol(LNK_SymbolTable *symtab, LNK_ObjSymbolRef symbol, LNK_ObjSymbolRef *resolved_symbol_out);
+internal B32 lnk_resolve_symbol(LNK_SymbolTable *symtab, LNK_ObjSymbolRef symbol, LNK_ObjSymbolRef *symbol_out);
+
+internal void lnk_replace_weak_with_default_symbols(TP_Context *tp, LNK_SymbolTable *symtab);
