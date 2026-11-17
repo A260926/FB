@@ -1,0 +1,3046 @@
+{
+  "repo": "https://github.com/leibnitz27/cfr",
+  "commit": "c4145259dfcd8ad3e99004e4d9ecb0aed55dcc5a",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "d0b36fd265410a15e634220fdc6101976582799a09c69764f44bc21c21611527"
+    },
+    {
+      "path": "README.md",
+      "sha256": "ff7df575f48a3120825719f71ad7d4f3a412029e2eca24b606af5406d39a3e1e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/CfrDriverImpl.java",
+      "sha256": "260c7d82971743f525f7711f9295b8d695e9a4ee02a516026dbb60febc9fc77d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/Driver.java",
+      "sha256": "a90fee5a7c7384d5e4add99e961bbbe4081dba5151d58f4a322b2de53d55c2f4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/Main.java",
+      "sha256": "83d5073f22f443c358d775db7d0544cb3e035b04d6d18a57e4c7cd091ab17dc2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/PluginRunner.java",
+      "sha256": "9724c1b9b1fba67b7fd7e4c55d2023fd8845bb77464689d48cecad7f81afb1f2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/api/CfrDriver.java",
+      "sha256": "3b924ffd966f5f4603c02080eab5c3c5c4a2499db4d952f34cacc21a4f81d286"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/api/ClassFileSource.java",
+      "sha256": "682005bd880c54787badfad1d38685c79b0d007dc32fc1d587384e4dc18461b2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/api/OutputSinkFactory.java",
+      "sha256": "353ec8aab5260b838cda76fd2f9070a5863731fa53f1e32d5841a6a5eb13e01e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/api/SinkReturns.java",
+      "sha256": "981e8ac2727d9f9e4d2a71d52d551dded88c423ec321c0aff2f0b93f88198670"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/apiunreleased/ClassFileSource2.java",
+      "sha256": "7121e02e3cc4136ef0a24db06bb8992a12ba3af954a334894b32cf6e9e8a2478"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/apiunreleased/JarContent.java",
+      "sha256": "5ce7052db0ddbe92da376e35cd575a3079f1c13830e755a7c4251c7afca969f1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/AnalysisResult.java",
+      "sha256": "e162fa31bd388717b1d945abccbdc16bb9b900496e1ff5b3d8260ca950c878d4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/AnalysisResultFromException.java",
+      "sha256": "c5d27b82f6597a885b6d023790cdb31525a525e5e7344db2a742acd275f6a6de"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/AnalysisResultSuccessful.java",
+      "sha256": "03296a455621e0dd49d9bba824ef13cd6ead1ba772be26da67f8e0285010e1b5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/AnonymousClassUsage.java",
+      "sha256": "1832aade2244ec8e17bc45a7c8c51e437afe9449cc6992f1394449555890fc09"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/BytecodeMeta.java",
+      "sha256": "93a3e1799a9cf9ed1b855b922e23e91b74d61fda121977f69b698ba9e6f92075"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/CodeAnalyser.java",
+      "sha256": "5708ee7b5a0831d19efe829bf6c197dff66a999d8968743ebc67a5572c79624c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/CodeAnalyserWholeClass.java",
+      "sha256": "e8de1cdfbc16f82cae91e9b58358db9cc7cd1f7bd76222e75a9503d17dbe62a1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/RecoveryOption.java",
+      "sha256": "384f2c0011e088acdecffd1f2cf0ab644a807a63ea66fe741028e9c321fb6115"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/RecoveryOptions.java",
+      "sha256": "0d34d0298482c04f053ed9a4e7b0eb2fb598d7e1c2118426b841daceeb1eb8ad"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLoc.java",
+      "sha256": "6d05af4619c9b91925eea42974647abab973f5a1302839322fce799f1c02cbec"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocCollector.java",
+      "sha256": "9632ffed38c6506f1f97341abade99f3775f56b22cd205411b5cf08fed2181c9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocFactory.java",
+      "sha256": "9917431f65bf8f79069fa7b0836598fec71b7ced6ea73772f2b26855d7408fcc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocFactoryImpl.java",
+      "sha256": "1ac0c88fe5d4335e6c5f7dfa773679625275cea34791216811905c9f384f490d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocFactoryStub.java",
+      "sha256": "fec885481b82461c933d57b5732e38d43bdbe341fca3b59c86e4dd207ed18b58"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocSet.java",
+      "sha256": "3febf11fe451a0a751b6aa83e263dd0112439004f632d4e71e078b185e7f7eba"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocSimple.java",
+      "sha256": "dfa9ca4fdf34cb654e82804ef9bd3bc0ad37b2f3356026f66927752dce30dfa8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/BytecodeLocSpecific.java",
+      "sha256": "7144dcc6934d46143b4473bec765eb47cfe78901dbc2ea85a6658e4d95a24d2c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/loc/HasByteCodeLoc.java",
+      "sha256": "9499e5961954c8893688e62c2f3baa9ddcbb43cbe7e3f55f6ab8b7d8e489383a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/Graph.java",
+      "sha256": "5b68f85e487c276f6f29469b985dc8ce80f1f23aee00d2e9060b63657e154c9c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/GraphConversionHelper.java",
+      "sha256": "336f9c7a89432cce57f57639e5758c25edfb2339c56386c8275224f72020f997"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/IndexedStatement.java",
+      "sha256": "496b2dc105011e64438cae838897b80828ed66a88f09f9d6e1e3d8c0771cd8dd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/InstrIndex.java",
+      "sha256": "9c633910a3e89bcb5467211e425ba6aa32b184ddfe2a9f098cfaf84b2facbc44"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/MutableGraph.java",
+      "sha256": "bc658ca276d3d0827ae53803dbfb57b78dd67f955e2383086a2159bc4fb76a4d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/Op01WithProcessedDataAndByteJumps.java",
+      "sha256": "c5d1254a829bbd4791303af2cda91ef544d2d6db8f1347521819571096fc61ac"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/Op02WithProcessedDataAndRefs.java",
+      "sha256": "f0019cc804165929d798043a8f2dad729ddcd8a8bf49fc77d241351074166c67"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/Op03Blocks.java",
+      "sha256": "f5af2da9c829494d0f20dd0223c8234a1caaa89b88959c7b09971e13f0f252e0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/Op03SimpleStatement.java",
+      "sha256": "d830bb7a2c51f686ec25bcd1de52853ce89372aa9d826a39a2e4a0665bcc51e6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/Op04StructuredStatement.java",
+      "sha256": "6ef85a5eb0bd9b67bb9b25560a1bcea76843fc38cc6bbe35b596e973e95181f1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op02obf/ControlFlowIntDiv0Exception.java",
+      "sha256": "047454b5aa2b3df91042b96e6add5c10cac17d44c2c9cdf39151e44a7a00670a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op02obf/ControlFlowNullException.java",
+      "sha256": "d517a67bd81aaba7b4fd6b0f978e3190c10c96c576750064fc5a33ce11131d4b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op02obf/ControlFlowNumericObf.java",
+      "sha256": "57461eddb9eb10a9f80805405f5de9d5d394bba3e3f6aa80ac9a3b295dcf4637"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op02obf/Op02Obf.java",
+      "sha256": "02ec7be72961ec99d860f127a86099912d716f4450e481b0c1733840a82eb64b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op02obf/SimpleControlFlowBase.java",
+      "sha256": "0064e74bcf5c19b2d46177570f2a33c3e69453592a4f6f171761c0f4449c5620"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op03obf/Op03Obf.java",
+      "sha256": "f81063dad43ac0921364f62a8a32865048815ba20777af805063299a89f9f43a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/GetClassTest.java",
+      "sha256": "714bef871601b108c992a5eed5d9713639af3b208db6067f5ac4528d9a9b924a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/GetClassTestInnerConstructor.java",
+      "sha256": "0b58dedc061c752d6530f3644285479f38816c18270c714b268f093d23603684"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/GetClassTestLambda.java",
+      "sha256": "33eace283114d523802e96f4eb84c13ab75d43ae021bb6bffb51cbb5f111a777"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/Op02GetClassRewriter.java",
+      "sha256": "dd82327e9a980d188325fa1e2c3756c0f80b0c95fb56469300d3070b2d5e0f34"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/Op02RedundantStoreRewriter.java",
+      "sha256": "51eae4058df863040882556468d4a89d94a231ff23d21a4710a7f561da7f2c07"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/TypeHintRecovery.java",
+      "sha256": "03d2dbf4486adc87f2444d3b1ce83c70e5e05b5b2d801b0b2b83778455faf70f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/TypeHintRecoveryImpl.java",
+      "sha256": "c5d0b0574a124f8e1ed4945466eb6020af76c3d9efa9c28f93315545434bcd4d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op2rewriters/TypeHintRecoveryNone.java",
+      "sha256": "de2eb9d14bc8d773f5055f0bcbb75fd12d6a92ef73f761ee00298516e160836a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/AnonymousArray.java",
+      "sha256": "08ef028458f8a89a6bee36805d6a989f645ca49505fcd7ee53248e0703160405"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/AnonymousBlocks.java",
+      "sha256": "f36a680a7e66f7a9b6fd944ddf59e67f613ec933b3e3d0fcb3fa0f9eacf739ef"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/AssertionJumps.java",
+      "sha256": "5e320a0a5ca958e8a7f66bb7fd8bcd48c614c8b9c29f96e63b111072dd888d69"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/BadBoolAssignmentRewriter.java",
+      "sha256": "e995d247885d5c899b451ea60522527bbcf9c7d51421fef37c0447a9328c2aa0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/BadCompareRewriter.java",
+      "sha256": "97bd915d421f1c663d86f0d60b404ac2305d8979e5884be7c780cb5d9bef13bc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/BadNarrowingArgRewriter.java",
+      "sha256": "2ee98c04de80f70c8d21dd6b9211ee730ac7e9aa0c6b6cb6b594c26b1a81c3f2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/BreakRewriter.java",
+      "sha256": "5d2e85bb574725f8c3af699a4223640609251bb3446f895100ca204f2802ca1b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ClassifyGotos.java",
+      "sha256": "2d20de88f56568f591536c17848add5e909c2fe3a2b5ef169994daf08abe7722"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/Cleaner.java",
+      "sha256": "7ec2b86269ba7aa08af6a4960f226aded1ce9ee3fd0f26f00febfd0ee937d0ff"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/CompareByIndex.java",
+      "sha256": "ad0fad62cb5c2d6733e45eefbddfdc5231e49de4e3fce2fc9c23296cdc4b5aba"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/CondenseConditionals.java",
+      "sha256": "c9b869af884194bc8c679412deb29b1025a8a4967659dc357c0a9694a5618f01"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/CondenseConstruction.java",
+      "sha256": "b14994e33b4a7dc970d89e983ba8a3df92c66cf0a61ddc20cc57aea2f24b91ef"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ConditionalCondenser.java",
+      "sha256": "8d6b98f3ab08a64771684a32b50e44f57b555f807c2ed66e62449114ef9c9f5a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ConditionalRewriter.java",
+      "sha256": "6cbf1bf3c935a511f8867cda7493933f057287741a474a4e9d16ef87bf7dc46d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ConditionalSimplifier.java",
+      "sha256": "2796367ec4d53d175c4b6105d28d6aadb13690d65add47e5af92fc08ef20b51f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/DeadConditionalRemover.java",
+      "sha256": "58de577adeacd12ba356fb2b35ba004e73313d0a965326217ab99760bbb9d108"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/DupAssigns.java",
+      "sha256": "0b5494fd15e981fbdbb9a5786d54a6ae8eb25503e571842585eca4c1c9c13641"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/EclipseLoops.java",
+      "sha256": "58a9e86a5848a1e3e5d3016262813986d7c818baf3e92c08ec7a36984e53c019"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ExactTypeFilter.java",
+      "sha256": "7e4b0e9bb11dd0b5db0f0c3cf1c525ef37ff002c43097efa01d30dff74c5fc2c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ExceptionRewriters.java",
+      "sha256": "35096db431e29d4aeed2c8ace68c48b1a5f3f264d0e67b89f14a3dc5ef5be8b5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/FinallyRewriter.java",
+      "sha256": "db61a05090828be6bc1e8f3dd66c35d71d3761a59c37e0c6c30776a12d3bd24d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/GenericInferer.java",
+      "sha256": "9498a434c827fe4f3591d78d5042b73334f6a767d96423f762f1f4d0873f3823"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/InlineDeAssigner.java",
+      "sha256": "937b8a9b1bb53fbfe4fa08100b13c9c9806cc4a63bdf85985f57c7d0f71f3911"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/InstanceConstants.java",
+      "sha256": "5894dca078e4375bcc520adfdd8a7c68f2f3a398e0d826bbff3fd22b358ec172"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/IsolatedStackValue.java",
+      "sha256": "4e46fb8de446e9b134ed951d92239edb721a8ead51afe36d4049c2638cc52af7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/IterLoopRewriter.java",
+      "sha256": "62e387cb31459beeb3dd71da51e389517544a05869770220e8f62cc621ea95f2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/JoinBlocks.java",
+      "sha256": "9de80d714152d220b2fdb21949117e187a55ab1b52b264c382a2feb0076ab9b8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/JumpsIntoDoRewriter.java",
+      "sha256": "685ad2f867ecde2ec8cbfdcb6eee45199522be2e45bb29f9d609d6a4b8f1ad37"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/JumpsIntoLoopCloneRewriter.java",
+      "sha256": "6e136a6cc0169cfff8b546d7a5e2cba1e8be0938ea994f84860717a8b6942552"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/KotlinSwitchHandler.java",
+      "sha256": "6e3a157de6a0d918414666e872fc937278005cb3b9f099db860933f2b25e2485"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/LValueCondense.java",
+      "sha256": "d10eb9442f75ae9c6c5af4e54444f385b2ada69e131e519355f88dbdf1ca2c2f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/LValueProp.java",
+      "sha256": "064593f4edf88022195c37d54867e8abe322f7b29e155b01568a812434147f62"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/LValuePropSimple.java",
+      "sha256": "29c1f43173fbec6cea42f4c116b99ba56a54449d5214135d657b083d495a80de"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/LinearScannedBlock.java",
+      "sha256": "1b1be84ba6e9115bb4c026036759221657be727c257aae36a8866be1f2ec91b1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/LoopIdentifier.java",
+      "sha256": "f7bee8c77951c15600dd977c6b418485b8749133bc2d7d7424657b83349ee491"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/LoopLivenessClash.java",
+      "sha256": "3b4ba1415f8e91e423045e399b654db92725b7124264053ec464bb786078d78c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/Misc.java",
+      "sha256": "0ad040f6b21e4325bb0762d5b097e8059b126396430322d9cbbe8e787053f039"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/MonitorRewriter.java",
+      "sha256": "58b1cec85a88d8edd28a2080c2a4260c99e72b6bb8b564e2d592c298c6e682e5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/NOPSearchingExpressionRewriter.java",
+      "sha256": "e51a2d78ab48dd89ccaaef7bed403ffb401fd01b37d5f10df96122cec5d4b528"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/NarrowingTypeRewriter.java",
+      "sha256": "5a321fa873134a35f93e4640ec947248d7b77147b88ad00fa2169cce19698892"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/NegativeJumps.java",
+      "sha256": "d61cc39f65eab6d32089f1ab9321ac341cf6d8a026bd856187acfc158040e7bb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/NullTypedLValueRewriter.java",
+      "sha256": "ed55d588917287f8e34435c8018d5f020b3368771ad56644e348218dbaece03b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/Op03Rewriters.java",
+      "sha256": "e3387c87e15a9071f2d0f22c164891b8a15c39acf58a4b98e339ce029952e5f3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/PointlessExpressions.java",
+      "sha256": "dabfd7c676cd5f28dbc314147e84a16f74d82ae6eec1221890762f7182e274cf"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/PointlessJumps.java",
+      "sha256": "b24d34ae39b6016b3c7a4b10d22ecc095fb511d7cbc171e3425ef33ae6983d7c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/PrePostchangeAssignmentRewriter.java",
+      "sha256": "69829f86614902311ce1ff2d0e47b0b24eda468c98e83362d3c68b3ccf53d2b2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/PushThroughGoto.java",
+      "sha256": "72101bcae8f0873c104c2c4cf1c69efa410078c38e4c8586825e5a2de0345767"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/RedundantPatternSwitchExceptions.java",
+      "sha256": "ebd31746f1f9ecba194400433a0a117dbab40d2f1929d8577d72f4063ae62a90"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/RedundantTries.java",
+      "sha256": "39dec80ec7a913a94fe3003a3ef36c176e083c97cf503af7216b7f7d7bcce27f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/RemoveDeterministicJumps.java",
+      "sha256": "e870aa0f1f77baa1cfd04dbc3b8851c9c518090671d7c367f4e08cb9893d219d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/ReturnRewriter.java",
+      "sha256": "37211f9af7d35cc3462742dfe6134b4aeaedae31df32c55c9e0d8dbf5b752214"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/StatementEquivalenceConstraint.java",
+      "sha256": "d1b2a769130c08409d19fd5a9e435e2b1d5739c823638196fc0143b169611193"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/StaticInitReturnRewriter.java",
+      "sha256": "b29e1ad40edb6548e34156c466ae594ef7fe1637b576c364e3433987e3f865c3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/StaticInstanceCondenser.java",
+      "sha256": "ac1da70dcbc407467585d0125699a425afd9253592233b4c8637400d9e02ef22"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/SwitchReplacer.java",
+      "sha256": "73d69df086e6726b00d73e479abc6ee5b7d9072bb3f49b6f902e6e43415acc00"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/SwitchUtils.java",
+      "sha256": "ca429205fea13e0ba3f52eb323b89d5adaf6651cd1aa90e740353994e1c85fec"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/SynchronizedBlocks.java",
+      "sha256": "d29cf1fe7f1f98610d133ac27a720caf2250cb542d7e113d7347d71f75b78300"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/SynchronizedRewriter.java",
+      "sha256": "192bbd26952c5a291004e56bc34a5bf3b019e0bf956c445a371f9c694ea9b0d2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/TryRewriter.java",
+      "sha256": "384013715f0f7463ea091a96318dcaa1608e6b8a3083d5e47192f829ebbc5259"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/TypeFilter.java",
+      "sha256": "615ed5a0387631b44a96b9edbdd70e903b67f2e6c9677cd5b22ddc586b098277"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/UselessNops.java",
+      "sha256": "629114a253b9ac4c2a246356ba4e5536bd87e7ae55c0b91a117c307bc308749a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op3rewriters/WhileRewriter.java",
+      "sha256": "9b2a1187fd3aafc0a556e5fe43ab3613ecb239b14b05e9134a1eb9f1054475f1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/AnonymousClassConstructorRewriter.java",
+      "sha256": "31db29f6d18061befbf3967100f1984c231e7ae8f422635efebeac2a448f9036"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/AssertRewriter.java",
+      "sha256": "b5315b21253cadc765a97fed8ae97331b1e6401af0eede2e9f1428ef5896da6d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/BadCastChainRewriter.java",
+      "sha256": "f7e79e50c1c61f9b85dcc05fe18c2db2bed6612e09ea59f993d6cc4300328efe"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/ClashDeclarationReducer.java",
+      "sha256": "ad4705b1c5ab17719e505f1843c41f101ce82bc16f823430e083fdcc2ec021af"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/EnumAllSuperRewriter.java",
+      "sha256": "21316bfd006318ea8038e4f85ecbd475951de1fa8feeaa739665c150518a0769"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/EnumClassRewriter.java",
+      "sha256": "d8114a060fd60e204b7c1fcfc4fe0d433ed1792cdb63128e8212f5bafa362869"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/EnumSuperRewriter.java",
+      "sha256": "6ea0da97efaae10822e23bad40e74a3c73a5458a9a60449e13aa35cf5d327fd1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/ExpressionReplacingRewriter.java",
+      "sha256": "4e00227d2e453b8779085cadddcccf3246fe1e1ecd003b38d205485d41aa0fc9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/ExpressionWildcardReplacingRewriter.java",
+      "sha256": "20c4ba424dd6ad1b10655455ae083e10831b5e2fa1858845d134d2eee235e069"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/FakeMethodRewriter.java",
+      "sha256": "e47935d1254498723faa9c21658af2ccb71a0167a84284ef056bb439f92c47c1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/IllegalGenericRewriter.java",
+      "sha256": "f3dcd100d92015a0ed18183a726c0737277f36a6637994875cc262ee5ff52055"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/InnerClassConstructorRewriter.java",
+      "sha256": "cef68eeb98a5b5302fcbcb3d30016042b6c7090656768a6dc16c76b73d0fe0c8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/InstanceofMatchTidyingRewriter.java",
+      "sha256": "05fe28761ddac4fc9704c089a9ca60958917cb268dc168f275c5ad1f2a5fb3f2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/J14ClassObjectRewriter.java",
+      "sha256": "914cf3f61e20345fc2c4ce1a30c97fc01a5409c09442f48c5dc446b209161ad8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/LValueReplacingRewriter.java",
+      "sha256": "553773bd3765547b5ff639681d7e241466316a9cd667070f87d5d2ab7ea4c5ce"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/LambdaRewriter.java",
+      "sha256": "3565ce67331447d077ea2f15dd42234cc789901f3fdcfc4221bcc5eb129015ab"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/LocalInlinedStringConstantRewriter.java",
+      "sha256": "56e5953d5f9d12b40ed56350c4b5a35fc4c060a9fa0bf43eb9b6900c47e0ea73"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/NarrowingAssignmentRewriter.java",
+      "sha256": "219d24648c4e1a0e4f003099cc549737df3ebb486d5886683456dad5eb1d8b50"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/NonStaticLifter.java",
+      "sha256": "e3c8aa79652c660572a6b95fa9ca000ed5603ea0901841cbf0807538a41e2f7f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/Op04Rewriter.java",
+      "sha256": "39697a943412f2b69a653bb009617a7d041b5d3decf61a01bc4026c002c9b87e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/PointlessStructuredExpressions.java",
+      "sha256": "a6310797f3fac546c956287b9451b59141617333abd95dc445d1524f956d4f6d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/PrimitiveBoxingRewriter.java",
+      "sha256": "ebd093097a50c292e61ed9a7ff6b1b4cba45f213f7edc7d550f9ca6c7565ed1f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/RecordRewriter.java",
+      "sha256": "80236fd930435816a5dc36f0c72cccfdc3b9cb0d50d68b7e753bbb3a7a6e7af1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/RedundantSuperRewriter.java",
+      "sha256": "efea08e85c08b4e6b3ef3fe8952555108d58f5329e7b87ced89fc8aaf06ce5e1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/ResourceReleaseDetector.java",
+      "sha256": "3e6cf7cf8848392b499218337dd896aa185cecc0db1149a54160f7eb23bc87f0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/RetroLambdaRewriter.java",
+      "sha256": "9a5dc42c5b4d747d3c9c087b1ba3f81c70d08002e7d628113e51d54f6b4a64df"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/ScopeHidingVariableRewriter.java",
+      "sha256": "fbac58ca678d37c0d89b1a7f3c07f036b3294f33004957e5a37ee237a6182b83"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SealedClassChecker.java",
+      "sha256": "04d83c216a5e41f852d644abffdc3989b53ee1bb7ea249a09fecfb5948b50d82"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/StaticLifter.java",
+      "sha256": "ee651767084df4c6b55be943880e9f796774aecec48ca55f57b80547b63509bf"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SwitchEnumRewriter.java",
+      "sha256": "e0710154afd97828b6807cd267278ac633e5b4a40363b7a380125ccdb7acb815"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SwitchExpressionRewriter.java",
+      "sha256": "761eca920e3101b40a204c07e84000d550b6de1cfac9dc83d1d138f6c9411c2a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SwitchPatternRewriter.java",
+      "sha256": "f994a6102289a86574069987e33af0f4817f210097fa301548e9203434066485"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SwitchStringRewriter.java",
+      "sha256": "077042542996cb66890c00ed1db9733cace5df553b98c67dae22df73ade7ef44"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SyntheticAccessorRewriter.java",
+      "sha256": "a52db5176dccc25aaf3955c9d3c3774ae21c12183d0416aac2e647efaf2a3d64"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/SyntheticOuterRefRewriter.java",
+      "sha256": "325d9dc56d0308954d0cc190967fc3151af9e10df1063ad97318295f534611e0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/UnreachableStaticRewriter.java",
+      "sha256": "d17d4992fcdd54e5a195e2ad0d39a3e97c64a3e8eb979547c98953a22c09c7e0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/VarArgsRewriter.java",
+      "sha256": "a26af5e4e13eb3e3e83feae77dd7bb633e0474b2e82e042219d919a71ed90efc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/checker/IllegalReturnChecker.java",
+      "sha256": "0f50e892a6cc74ef2c95f4b40b8e494f7673a29a08821421c3adbe62168b5be3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/checker/LooseCatchChecker.java",
+      "sha256": "4c1fdaa4b0db1e028c67fda0b1bcad905716b1f1507576ea35473cdcd5fa5f65"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/checker/Op04Checker.java",
+      "sha256": "f331976095d4c001b9be6cc336112fb996b28478d247699a5456179e9efcd41c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/checker/VoidVariableChecker.java",
+      "sha256": "3b4c771074ee5b1d1f0d53c0e55855ad2e0a7bcb626adc003c5a3dc8937ab91c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/AbstractMatchResultIterator.java",
+      "sha256": "db5f4e9a2d44a9e4300c19dace90c39bd274d823912fd3fea411b999dc8e2aed"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/CollectMatch.java",
+      "sha256": "f3f2fdf74ba5ba9fd1b09bda7d82de3b831261d9828ac2bc739a681976f6ef95"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/DeadMethodRemover.java",
+      "sha256": "ee7cf9da3c36bb73c97f2767aa913a15b5b61fef19be0b0d87fb8d3d4cbdc7f7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/EmptyMatchResultCollector.java",
+      "sha256": "09d13e5b5ce52b59ba11053809d0de7fac90d6664a343a5ad9e68229ada2462e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/KleeneN.java",
+      "sha256": "4c75f39324d02df0c739b0d41067d47bce66821d310ffa90f6fe1a99e1cb0e8a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/KleenePlus.java",
+      "sha256": "7652ebbfbadda8bf2ecb5214626da64f36cf51358ad56aa4c0a22faec7cfcfbb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/KleeneStar.java",
+      "sha256": "d6832abbff3dfa24b8516063cd5f4ab64bb1182a86e35f7bf9370f3d87dc04f1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/MatchIterator.java",
+      "sha256": "12df0236ff28f3321b71b9e2e0e757dfa1e896b38f7824642671085147acec00"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/MatchOneOf.java",
+      "sha256": "964f078b9b6f0b0fff201e4a10e3d4c89c2414687d5eb0c7a0217540660a3101"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/MatchOpt.java",
+      "sha256": "ab64361216d1c3c6f01580b1580048bffcdd3186c2568ec6490d79ecd07dafd9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/MatchResultCollector.java",
+      "sha256": "5875d0867983cfbbe6fea9283456886955063a9ee19deb503017d6637af4778b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/MatchSequence.java",
+      "sha256": "6581a28e8ba5ed8365def4e6f8a704402ebbc80bca3fea69bad552a140440145"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/Matcher.java",
+      "sha256": "9091dc1e9da7764ac1e6b57a4069a16d9e3dc91c0a6fc435d56e90e909e43eee"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/matchutil/ResetAfterTest.java",
+      "sha256": "88854c97bbd5893ffb5fae7060847b7728f011f2088e6a8388579e6785f6b061"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/BadLoopPrettifier.java",
+      "sha256": "8e7342adb69b3a5cf280483a801c277e098d12ebccadea35f49c9a9ea391bf11"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/CanRemovePointlessBlock.java",
+      "sha256": "1da325aea4e2fda881232feeaf179adbf4ee2be5ddd31d76b115bdec5ab189f4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/ControlFlowCleaningTransformer.java",
+      "sha256": "db53d4c45471925c1936a9798cab1dccb965e83b206a897257e30b0f8561dd54"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/ExpressionRewriterTransformer.java",
+      "sha256": "0d5872417dfcf16d703bc0cb06c1538ce16fe673c0cf92c1c5932aab573e9660"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/HexLiteralTidier.java",
+      "sha256": "1e9b42ff9410abb8d2abd4a7c97cee4f6de106ecc9b3a1b57f27ff9918e0678f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/InfiniteAssertRewriter.java",
+      "sha256": "4245bac22435ed5cb51953cc0e9392956cb4b5a1d1ac1479dc2880590fa3761e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/InstanceOfAssignRewriter.java",
+      "sha256": "0e5cb8890ded70cdb044fa296a2b49827cede55a9e5f1bded324326ef3107487"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/InstanceOfMatchCheckTransformer.java",
+      "sha256": "7fb534843b9a4f6ef7f88bbc15d10113b1dfe13f121c2979886592525cf165d1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/InstanceOfTreeTransformer.java",
+      "sha256": "03499ca6ce87fecb786d729b42b8aca3959d5c53d75b5160c59575f703dcfa77"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/InvalidBooleanCastCleaner.java",
+      "sha256": "89a61ad998232469186de530a6c10766e973a38e379a65ba5e8a779ffe281e72"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/InvalidExpressionStatementCleaner.java",
+      "sha256": "ca9a75365286848e48cb9e2ebc4cf95aaa57adc094055b527108343818a52ed3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/LValueTypeClashCheck.java",
+      "sha256": "a4def319d5d9068cc1b3e41372f88b183110e9111f9aadd0c726cb7134e2a06e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/LambdaCleaner.java",
+      "sha256": "e594b3e21d02a85a7db23f6d0ef2b7f05f6dd32ce40631eb003e028b863233c4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/LocalDeclarationRemover.java",
+      "sha256": "c48f321a140cb987bcf4bc714ae97358995153c520557f2f3959284a5d17a9b8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/LocalUsageCheck.java",
+      "sha256": "8318e393e542c0052b5f61e80daa965b712eb19aad4da98bcae352d356375900"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/LocalUsageRemover.java",
+      "sha256": "b1a07353ca067a70b671ed6ae71c87232f5e392d363b3c74b79097823d49485d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/NakedNullCaster.java",
+      "sha256": "0e9fcf5d299fb078c73dfea492230d3e1b1a1dbfe5c9c8cfdaaf787c00e6eca5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/ObjectTypeUsageRewriter.java",
+      "sha256": "eae19836dba2d7619096f1ad5d817a7c74b998e1d7173fece93064a0cd965d68"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/PreconditionAssertRewriter.java",
+      "sha256": "f8db06b2d180f16972c5a83dee9facfe685cb007c818be00b94622bc3ebbacbe"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/RedundantIntersectionCastTransformer.java",
+      "sha256": "f0baecea0c6fdb21df62d2afd406202f2aa7aae2787ae33d9445de997b6d7d98"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/StringIndexOfTidier.java",
+      "sha256": "c47d4ab11a8becc4880dadd92edf40b803726c828e46ebb829683eeda79128ea"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/StructuredStatementTransformer.java",
+      "sha256": "5078f39d96f9d7f53c2e7fb445ab6b701c36bdd39b57341142ab4154f6553ede"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TernaryCastCleaner.java",
+      "sha256": "bd44139de94ef94278cbd73bd129feb27e53ba034fdc95913d2fd35cfcecbf66"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TryResourceTransformerFinally.java",
+      "sha256": "c1ebeb0902613a183c93346a2ef9924e19cd4ebbb93185c27ce576adcdace93d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TryResourcesCollapser.java",
+      "sha256": "982d97c143b385c296dcafd52d63fc441bf4aecd215e42e2c7bbcbf5ab0862f0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TryResourcesTransformerBase.java",
+      "sha256": "1260bd3fd8a78f678f831d02fd4c523ad0a810e02f06fc3719d5da23cb0d0ba8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TryResourcesTransformerJ12.java",
+      "sha256": "884abe898d346626e20882f4358c9ba9865a5cde9058568e727521d2ecc278dd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TryResourcesTransformerJ7.java",
+      "sha256": "40ec321af61375dbdcaf5963e6c8cbed480323697801555000ff29831ece2443"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TryResourcesTransformerJ9.java",
+      "sha256": "0f88033c0916a9661984b72076190b7bd883471f34d285b8d21b4c8e5fb1fb36"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TypeAnnotationTransformer.java",
+      "sha256": "3407b074c692c2ed426711aa863f4fe7bf4036b044760560b5c33a0395d29cab"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/TypedBooleanTidier.java",
+      "sha256": "f2f9ed6db7329f92634c0dec62be4d60cee9f0c59bb92d4622b19aeea44d38c3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/UnusedAnonymousBlockFlattener.java",
+      "sha256": "749ec23bc771d6aa3acf225fbb931d5705a51f99669278b50aedb24313252971"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/transformers/VariableNameTidier.java",
+      "sha256": "17c970214449a482a48a47c781e8f98bb63ef4a3a778a2b99ee931bbe18b83c4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/util/BoxingHelper.java",
+      "sha256": "5fcc2570f313859511bf3800908acd975b6bd6d5c71168f65048a46bed4b30c6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/util/ConstructorUtils.java",
+      "sha256": "6f163ba79e7801e1125fddb6ed0973d325f6872d244f5063741b434b7079f2d1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/opgraph/op4rewriters/util/MiscStatementTools.java",
+      "sha256": "1e45c0cda42d92a84b23b39b09cb529d6f54bf6280ee4a5ef4c438eaddbc0ce4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/Expression.java",
+      "sha256": "e2d62a77e69478cb06fbdd164e3ee105c49a352103f0a8166379b4f6f177d9d4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/LValue.java",
+      "sha256": "b30419cf4002f64617a281a2aacd459362e02d8cd07ba0f2213270b36da7ebec"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/Pattern.java",
+      "sha256": "038568b2ecc8f8849335385833863475e240b18775ebd10b77de6785abf908c3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/Statement.java",
+      "sha256": "58d4840ac794a6097ea668c887a0b6428b57ab62b7e8a34df76b5925d1ae04dd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/StatementContainer.java",
+      "sha256": "030b35b45b9379e47795447ca6c7d6c75aaa10238ac184574772dfe85246fd93"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractAssignmentExpression.java",
+      "sha256": "e1882d486f08eb0350fc4fd1f0f13019e12c83f70d807c8b548cf55e2cb80382"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractConstructorInvokation.java",
+      "sha256": "f70b6290e4bddbd8f4812897066c772bca1a7e7b9ed1a61ad23ce9673287eae0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractExpression.java",
+      "sha256": "b80a46b66c9c3eb43ac68d28cce5ceb98b8c11475ba2368f54e0a316784d44b4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractFunctionInvokation.java",
+      "sha256": "00396f83f37a562737aeb05e927d71b80a0dfb5b1fb0283b62e5ba72da833145"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractFunctionInvokationExplicit.java",
+      "sha256": "016a2a9d9a6ce3fa100d7b3ad3faa6ba24091d8b98f384f776369b09cc375b6f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractMemberFunctionInvokation.java",
+      "sha256": "689b3c8a3bbf1a1e7f297aad4289401a3960de0c4c8f973ffdaa31d0fb6ed464"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractMutatingAssignmentExpression.java",
+      "sha256": "7ae9c0cfd69497360b95f2ff235adff294ed3e62ed073088f075dbe5d209a6bb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AbstractNewArray.java",
+      "sha256": "1f3882649cdcb6defc06239c967163eb3dd976ab41baedc06ed5be94282b0883"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArithOp.java",
+      "sha256": "3a7dcb1673c1b646797290e98549394e6b59c34ec61e6b8bc022c050f0c91c0f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArithmeticMonOperation.java",
+      "sha256": "487725d5491ba2ecac7d30b36149a7a8036f050b460df27413826a5981970ace"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArithmeticMutationOperation.java",
+      "sha256": "d6dd2713ef3e892e754ac96cef46b1e5ddf179df01ad2912a2d141c261d2b640"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArithmeticOperation.java",
+      "sha256": "5ce690b19c1ab6d35aa13db08015ba15ee1b13c97d397633960c85012a75a66b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArithmeticPostMutationOperation.java",
+      "sha256": "dced2f05e2921fe9f43e4403a1b7ee1b886be8102ca4a28495553e8d1e77393a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArithmeticPreMutationOperation.java",
+      "sha256": "b41e92be27276b50e5e010f8205be588a23716cd9a5478898e66a18bb2861778"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArrayIndex.java",
+      "sha256": "00310aa5488ef582965af48a96cbdeaf5084df24a0649c982ee3f9fb8831c782"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ArrayLength.java",
+      "sha256": "b07eea50dae7c4c6beac98d5b0d7049565bdd23f3bb0ac9a5e291e4c526c64e3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/AssignmentExpression.java",
+      "sha256": "9dc318b214ed879f7f703277318e11950b1e6d79dbcae8887eb57145b2bae9f0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/BoolOp.java",
+      "sha256": "3b5a8844ea4fbb02914046e33eb008b016d0474deb80e7efdaace4a99d9f1902"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/BooleanExpression.java",
+      "sha256": "e6a055d10edba00f7ae09515bb1adef4cb46828a27790f50f53c1d592f939108"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/BooleanOperation.java",
+      "sha256": "aec2d63b4bcb0a7868d3b163209859eef8ba031d868271550e0f1e3e8f21c820"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/CastExpression.java",
+      "sha256": "73d698586e5167b6572806b2719c4cc38a9364d3a9acadc65e0b6d97cce56bf6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/CompOp.java",
+      "sha256": "f63e618ef4e4705632e4ed65871139d88b4388b702d92eb1189c7fc983f0170a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ComparisonOperation.java",
+      "sha256": "3c66a83d2b764be81a69d40c5310579eb0e0940c383292d9a7ddce03f63a7deb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ConditionalExpression.java",
+      "sha256": "8d816b6a0cf4a31e02a5d8614a644d274fc1b912606bcfd6951b742c89491803"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ConstructorInvokationAnonymousInner.java",
+      "sha256": "70725446bf446e5f6c317d3f3f2dfaa89a86327035e102e0a0c2e7f5300563ac"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ConstructorInvokationExplicit.java",
+      "sha256": "75fcb73a8663d482abd23da130ca768b9af7c0825b1d0070373d135b5339ceb3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/ConstructorInvokationSimple.java",
+      "sha256": "15379be4b6f97a496ce454fd367a3e412e26896952eab2166473ed6ae6357585"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/DynamicConstExpression.java",
+      "sha256": "2096ebcdccb43c7a95a6b0d5dcfb5ba4fb4b3a449b74941fc5f2ec681103bab4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/DynamicInfoEvaluation.java",
+      "sha256": "0f1ebdb3b1189e22f5a5322930afa020432b1b1cb9005be090dc3e08a234e486"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/DynamicInvokation.java",
+      "sha256": "2eb45194f5848da193f1f085f23afd88c4de8ad8244a7f222c154be61977cf8d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/InstanceOfExpression.java",
+      "sha256": "360e0014f8d90deedf7648f64e808193584df7d267cd0172db8e86b521e8779d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/InstanceOfExpressionDefining.java",
+      "sha256": "199d4a1f8f0fb0c99a039c0742e28444b1b93a42cc94e2f9acfadc22ed007112"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/LValueExpression.java",
+      "sha256": "e8153304ebb8adb4a08ed46a255e39259c64d74d51133c3d5925b8a364a59392"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/LambdaExpression.java",
+      "sha256": "a284ee7231c9d7dd38f505b75185a488238caa62b4377c1750b3ceefb6e4d8b9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/LambdaExpressionCommon.java",
+      "sha256": "8e142cb13be0846542b5aab6a90c9f00108961943901af69698260966b335e3d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/LambdaExpressionFallback.java",
+      "sha256": "8d2950aa279058c1d84ca5e26eb0edad3d409acd6f01616d42a9c13a9ceec52a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/LambdaExpressionNewArray.java",
+      "sha256": "938418efca95bc1f30d6a289b542fa5a1c16c9adf80b5a77f1947c676c5820e1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/Literal.java",
+      "sha256": "daf8bb8bf7f01eadcc1efe506550e8d28ccdeaa55c886b4195b82c441482738e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/LiteralHex.java",
+      "sha256": "459e8c230a47823ec1dcf3abef1f44482a8a8a6c3f2c72e4b4b5b301192b400a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/MemberFunctionInvokation.java",
+      "sha256": "ec33f3b76c60cf8e75793108fc1bebd4683b91df0b2a5a8b3ae779e880939c38"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/MemberFunctionInvokationExplicit.java",
+      "sha256": "7bddd6194525ca1164aea6883b8e3627e995374cbc614f7ba7a5f658c78f9975"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/MethodHandlePlaceholder.java",
+      "sha256": "3e03a44269177b25b9aed505f3c2c5b974aa27dbcc30ace4a213826bbdd4e381"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/NewAnonymousArray.java",
+      "sha256": "402017bc117a640c0a514f8d3a557ce00c8fab8de8d4f3cdad75bc769a5fc255"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/NewObject.java",
+      "sha256": "c8b1b71679f55c05fe9a4daca04c3faa77b6bae47398478b5db7576850144a54"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/NewObjectArray.java",
+      "sha256": "5a0a3ca54498e8751cc52fbe4c584616085652da51d130c2b971603ee197143b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/NewPrimitiveArray.java",
+      "sha256": "a2d20275e35b31d3bc3a9915a79a5dfde9c51d090d953f544b9766cea6b0df69"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/NotOperation.java",
+      "sha256": "8572a4c7653ad3bbc4ab8f36926c84331f9025ab68b990926ec4e22d4987ad5b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/StackValue.java",
+      "sha256": "4c2645632d6963ee416c30cc1cd48ada245479e31ec49bceece4c3ac9eafe955"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/StaticFunctionInvokation.java",
+      "sha256": "68dce3a10f095759cd018d1899501b49ef63e4a4b31eb073b4dce8a22ec315aa"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/StaticFunctionInvokationExplicit.java",
+      "sha256": "7b0d95d341921ddef28224f1cadb8683763505c1b9e25e907b3fc8a5be65eca7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/SuperFunctionInvokation.java",
+      "sha256": "c335edd3ffce0a9126bed3f15f2050493bf2095524cdfa40cd18947adf607f8c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/SwitchExpression.java",
+      "sha256": "af56da343f5dcda450ca5161ec2312400ecdc09674e24567f4dc1bf783a1edd1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/TernaryExpression.java",
+      "sha256": "e54b03bc6e9bbb1b78cb6a8107a4f7a0636d59c247c5b4ce65deb97084587dc3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/misc/Precedence.java",
+      "sha256": "eb523899aaa378e76ce25429323b055925b24345ab33c85bceb716c300ac9da5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/rewriteinterface/BoxingProcessor.java",
+      "sha256": "5995125127acbcde7d983f48757b480c6a10e23e605843d7aaf44f055d2c36af"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/expression/rewriteinterface/FunctionProcessor.java",
+      "sha256": "84e667eb462cf42e0cc03854717a802fb6d846a1abdce006ce39fbfba095c8ee"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/literal/LiteralFolding.java",
+      "sha256": "4fb1c4bdb6d55fd71454cbb514b5905138bd1f59a2572ec6c118ca54a1d7a0c3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/literal/TypedLiteral.java",
+      "sha256": "ac9ff78f37f6a902583f6e13cd980b08f97af72e872dcb9877152af178756923"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/AbstractFieldVariable.java",
+      "sha256": "1ec8b1f840babc89c8d4187e4285ae44db858242a562a58d8ea204fff5dad02a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/AbstractLValue.java",
+      "sha256": "9f07e179c6e2e4fb7b10e0b188b9f1ac7d435cd78953eb0566ca977e01c4b766"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/ArrayVariable.java",
+      "sha256": "de2e63e9efda07afb078bf057b55de6c0c3184f76b1b0e163466eaabab58a494"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/FieldVariable.java",
+      "sha256": "513f70408d170806ff9f3d2795d6993169f0991856b4292e596136b989eea83f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/LocalVariable.java",
+      "sha256": "608e6fd1ccb74a6d29d58e81de1a3f267aea1a43ec35d5aff8c4fad5a488135f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/SentinelLocalClassLValue.java",
+      "sha256": "14b6ebf1ff0f8a5ac6df6736bcb04bb6fb01d65166c00e5b05c618777fb1f364"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/StackSSALabel.java",
+      "sha256": "93c85eff24970d08bf0be230c43a3b4879076f628752e746b816e3724f3d3d10"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/lvalue/StaticVariable.java",
+      "sha256": "ed38304b0a726c3f07e5943d3f259c1dd865d6548cf023fb8f3949b773ca7ae7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/pattern/RecordPattern.java",
+      "sha256": "48df86762896ab787c4a059531007d92bbc5815036646079eb540e23dac19ecd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/pattern/TypePattern.java",
+      "sha256": "abb74adc7cdf1a16073bd49075aff540fe1b42a3e00393de5726d1045ddc5f83"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/pattern/WildcardPattern.java",
+      "sha256": "5808b59a87706125019bf844b2dcda47ea702a4fee48d67c840d48b3481a7b19"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/AbstractExpressionRewriter.java",
+      "sha256": "32f34634402268402155bc0c6479b6486661606aa10cb201bd9cfc7fb3d2e84c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/AbstractExpressionVisitor.java",
+      "sha256": "b7a6742fbc6bebb40caca15833324d5fcc682be349b655c0a764e7ff11e9fb7a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/AccountingRewriter.java",
+      "sha256": "098922b3f6ee99382aaf8ea8e268a54bcb82cc821804e71f3531f617be7ad711"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/CloneHelper.java",
+      "sha256": "d39c1ae582533f259de67ef52ef485bca0281fe96b8760c75bd33801943cbd9b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ConditionalSimplifyingRewriter.java",
+      "sha256": "b913eff631cb197f0bed6d4386204417f3653e3faf0be9bba33b37e337b45411"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ConstantFoldingRewriter.java",
+      "sha256": "ff61eb30bdb680d179304c506da83f0a78a5d86488593ddf1ff5434f66339b5c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/DeepCloneable.java",
+      "sha256": "0347ba75327cf958d6772ac6ac0d2d707f52937fac740bdd48be2462dcc05eea"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ExplicitTypeCallRewriter.java",
+      "sha256": "79a533e2084e815da05ea6e9467a63b8d56ab1b7c03b72f954e2640fe6e0cd4b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ExpressionRewriter.java",
+      "sha256": "aa5d08a05e0522bc4031b9bb0f5a7ba25f12bc13985ae642ef482790a2fbb2a4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ExpressionRewriterFlags.java",
+      "sha256": "74d311cb8dbf9578eb94f0eeac6c49765b62eac9c404f4b95df5006bdf6c917c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ExpressionRewriterHelper.java",
+      "sha256": "cab36cbad7b3200fa3b45ae6ea2d3efb373b5d32c8f6de74941dc99897ba1163"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/ExpressionVisitor.java",
+      "sha256": "91ee77a9d919c8e7fac931c58b0d5edec8f667ffb46ec7ce6b464d94f0ebaaf7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/LiteralRewriter.java",
+      "sha256": "201f4ae043b2a913e0a1240cc6fe9e0a0b02a712d72143ee54565f570e910295"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/StackVarToLocalRewriter.java",
+      "sha256": "fee578b5d4832b11c9bb20bd89b92aad0e43c1376ebf2befbb0fe62d92564813"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/StringBuilderRewriter.java",
+      "sha256": "79f2fbae055a3bd013c9d37937c3e8a8045b6d252314295b5f74ea7b943f7dc3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/rewriters/XorRewriter.java",
+      "sha256": "22af70c429e2049e1a272f9a801cca83d3a4b2f94ca76bf3e60fbb95f9866695"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/AbstractAssignment.java",
+      "sha256": "6b8480db4bac5392495d6de7350fd26d3d4c82ff70a9331c695e56957265d3e1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/AbstractStatement.java",
+      "sha256": "d9a40b56b4a1e356d9805e7663aa0043c5f09d78dfc700688b6d239b39211ba1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/AnonBreakTarget.java",
+      "sha256": "c3863a9431131f57274f0e0662760729a5cc734f9e9f8c4e2cc7255d05b00b96"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/AssignmentPreMutation.java",
+      "sha256": "73933a1444ce6a798ebddbdc181171145546928ce60e898b9bee3943c6d71e65"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/AssignmentSimple.java",
+      "sha256": "98ce408ec41c3953e314cf807a67df1f5f460acd4fdafb12217c2d5eb22683b4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/CaseStatement.java",
+      "sha256": "3e2152c6c71efc34fb764e66a91486d28c3ff2db87e084d79c97e6791dd627fd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/CatchStatement.java",
+      "sha256": "46439f797bd607e8044ad1c13fa8343a4ceb935424a01a3038a255257b4c934b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/CommentStatement.java",
+      "sha256": "4cfcc31beec7fcbff15dbba8f160237ff3136421ff4e1f5ed363a0965f3913fa"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/CompoundStatement.java",
+      "sha256": "07dc58a037f827d86807725c8c81f7bbc7c03d491768944cff5bee6bdeec5b9a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ConstructorStatement.java",
+      "sha256": "05d37b6e2194f34a2bc55d1bf2533b4dfd6fb79f7f2f244a21f7c361b48f0a95"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/DoStatement.java",
+      "sha256": "a187a7539991c179b792408049d4eddfc3878ad6f997acde931e529672b47ee3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ExpressionStatement.java",
+      "sha256": "0f9c2539414505c95436fdfb4265171eaa80d71e224beecefa6ec0a84103cd04"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/FinallyStatement.java",
+      "sha256": "f5b05e014dc83670c99c5d119466e239f392d35105b376df309b2400b8615e0f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ForIterStatement.java",
+      "sha256": "fb80cca94b075a5bdfacf1d354d96483d58ab85abd890f1cf5cd7c79b14221a2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ForStatement.java",
+      "sha256": "771c71eaea5f11a433676fd1792c5dcfceb295f53530d2486b879ec01029f495"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/GotoStatement.java",
+      "sha256": "621aa4bfd55c14c0029e1db8a5cc6e054b550705786694407ae78ce6dc7ff254"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/IfExitingStatement.java",
+      "sha256": "fc3528c6534f8a66d24130078d0ce31bfbb7ad7e400b0e249a4589f7a7f8e50f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/IfStatement.java",
+      "sha256": "aaf3897892fd34cc14c322b4abf58a226af8f716e032a5915e6743396ce95272"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/JSRCallStatement.java",
+      "sha256": "f963bfafe66cf1522bdca372b92771ce68ffa0d83e9f7391584b62084991139c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/JSRRetStatement.java",
+      "sha256": "0e59c580cd381b90071dc24bd27ae7ca8572ed132e3c4c1d82f21969337f3cb7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/JumpingStatement.java",
+      "sha256": "b789f98d5ccbd85f3e8c0c56019848cc071a67405d25728b0d081585a66c4e55"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/MonitorEnterStatement.java",
+      "sha256": "798eb9c922b4800bd1492d10d9a51ca10a3b64b51ce4e26e3531aa632439c682"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/MonitorExitStatement.java",
+      "sha256": "0498789a9f1478452df3ab1360d9fb0db7a972e5728cbe07e05b380fe3105da2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/MonitorStatement.java",
+      "sha256": "f17f19d999d9d724b4acb0104f32ea0e8456a838f4f9713cf813e8d4f958991d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/Nop.java",
+      "sha256": "9494346103a2e56da6aeb758eeb7b9727838fa57fe01bac3edd342256f33b58e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/RawSwitchStatement.java",
+      "sha256": "4c0dea690561166ff2563998cb5bd6ec3f0564b672fb68a5a2e159de100d9842"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ReturnNothingStatement.java",
+      "sha256": "005bc5587e98b594e0d9aed03c550e0026fa0fbcf6a01acb65c24e6317e32dc6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ReturnStatement.java",
+      "sha256": "c8f11ec744832d4be140e4030d1fb9fe9077eff3f9641667d5c49c2239864558"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ReturnValueStatement.java",
+      "sha256": "00ba197fbfbbc2f1e1ad7c2b939ca5f2aed6f6800b38c4cc8faf6639d0253325"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/SwitchStatement.java",
+      "sha256": "947679a593664550413d93c08b1dc260728ffc0641e51a8c7f925e36da5246a8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/ThrowStatement.java",
+      "sha256": "3cef223d1f1b70043449edd86b12100f8c95354898b0532ef85248cc1535ad06"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/TryStatement.java",
+      "sha256": "25209f3f8235206f62475e1b1e5814912cda3008d146c235d4a2f6cb1a593026"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/statement/WhileStatement.java",
+      "sha256": "1ef929479addea025bc94e2707cff75a8b03074a575cc5269a34797013d5c5c3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/ArrayType.java",
+      "sha256": "00aaee99e5fa63a561565aa6009f040ee7f08b7de7a2877b01bde976f821bf11"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/BlockIdentifier.java",
+      "sha256": "94d64a1a4a9a7f4385ebd2181249beca810bdbc63e30665e850df3ab96cd563f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/BlockIdentifierFactory.java",
+      "sha256": "f08d4cf2d49dbe4346e59d5975118f33c7b67eb3bd31aab33425a8ef3250944c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/BlockType.java",
+      "sha256": "4a0660b757355bb4672d0f26021bd0d197ae7f49c7704e0c4580376fb404bef4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/ComparableUnderEC.java",
+      "sha256": "ad728b98c6849ac656a8dc3ead9ad9be83542020e47c3c5274d12f6a326cf19a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/ConditionalUtils.java",
+      "sha256": "cc0d61b887fd73bf76270b531cf5e2177ce18523ea9957a065dd54fb388feb9c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/CreationCollector.java",
+      "sha256": "c5f9a8f25733176304cc1d5f77844c49b093f7efb22ce520915efd1442f01db9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/DefaultEquivalenceConstraint.java",
+      "sha256": "b2439b179c584712f04ce9501070709eb7a3d585f8437c3e9259c8046bcbd722"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/EquivalenceConstraint.java",
+      "sha256": "413ab01a3b611a5dfd2610d775f84baa995b9e7089ec4bb89d3ac3757be1ece2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/JumpType.java",
+      "sha256": "3dd31bbc1c1802a1ef4fd65b624674459ebf63bfaa5c38724f4338f2844ead3f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueAssignmentAndAliasCondenser.java",
+      "sha256": "8d847d68582d6c66fd5029d5067ba8c3d2fc4db5845833b0a8e20ce951e42a0b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueAssignmentCollector.java",
+      "sha256": "5168400af48fdd8f023bdf8c0ead08ccdf6d7a6a6713a9fa51c392cf06311d28"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueAssignmentExpressionRewriter.java",
+      "sha256": "209288097f47d8944cc7d05619bb8f09e6d102a0243d4a60f98bed613cfea125"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueRewriter.java",
+      "sha256": "a8fe73b27e7c422831113c4ffa6bec71aadf9296ad3572dbfc17b9b06d98770e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueUsageCollector.java",
+      "sha256": "7a556f7b99b87be973df9e31f2b087d80287ce74445bf1db5cf0bf0afab1305d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueUsageCollectorSimple.java",
+      "sha256": "32e9dc4bf89e67f04ce19d0a2377ab100efb5c73d84e92f4ab526f4cfac57912"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/LValueUsageCollectorSimpleRW.java",
+      "sha256": "f73e523bad1ff9407f456bfeeb95d35ca3f78fef0d5fd51ec55d40bf6fcd1825"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/Pair.java",
+      "sha256": "c1e105915e4c351de948cf4c042c2989ac1f60e0bd12a5e64a8147d3d0734a41"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/QuotingUtils.java",
+      "sha256": "dc0eb2761cd5b904043fdf1551ef624f3a4cbcd1cfda2367fdc9aa4fb1f1137e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/ReadWrite.java",
+      "sha256": "728facf87e69154888643dc8984706cbe7d2743f311b7e7a3339ee5c85ce0c8e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/SSAIdent.java",
+      "sha256": "cd99bdce53a220657be817eb85cac88b1ffb1e95a52f680be62a7e3a97ecc97e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/SSAIdentifierFactory.java",
+      "sha256": "4011f1f3e4346d79516309c39c397b6e8a1d77a861eee5d485987a7691a5b590"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/SSAIdentifierUtils.java",
+      "sha256": "db1029a46095d0177cac6b9b4c6e3f1ad723ede442a089db2e59a20936337a7e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/SSAIdentifiers.java",
+      "sha256": "aca76013e1903282cf9c40e8ef3628f4f5b2545c2d0f1affd81db8112eba3459"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/Triplet.java",
+      "sha256": "14a9ff517d9f84541015074fd35daeb5015284e2c6e8854f47a5ffad6bc2eeb5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/finalhelp/CompositeBlockIdentifierKey.java",
+      "sha256": "8022240d8eb23e38f421451ed478659febb5dfe53e504e18c7c0401ce0094bf7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/finalhelp/FinalAnalyzer.java",
+      "sha256": "3e5af9a608d4629faef2e539667923e22b2ff35f67ced211896947395099df37"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/finalhelp/FinallyCatchBody.java",
+      "sha256": "bbf44402853c4e6a624b212cd7b8b2e571dcc33daf1e6dcd430582770e28b7ca"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/finalhelp/FinallyGraphHelper.java",
+      "sha256": "f967af64fc3ba8dee3755532e1e02c1e29b543ded97f3f9f30f3b3d513a89bb5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/finalhelp/PeerTries.java",
+      "sha256": "e8b09001f472a330594c724db01168814998cd7522588e075b3508c5df5a8546"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/finalhelp/Result.java",
+      "sha256": "5d09e18c0c7af7c86601bd3fd36f05d881ac3aa214defdfdf88660fafca09a80"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/scope/AbstractLValueScopeDiscoverer.java",
+      "sha256": "cb3ad01769899817ce6b3188d47bb7eb7b58647176af56ade8bc351eebeffdd2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/scope/LValueScopeDiscoverImpl.java",
+      "sha256": "e1662452068f75f4f697ccdec7e02a014e6692c59e68b3c4fbef85f4b34e648e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/scope/LValueScopeDiscoverer.java",
+      "sha256": "bb34d863153bad8c65eac65cb65cbc81c0278cb84045f3cdfebd4c2b522c6459"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/scope/LocalClassScopeDiscoverImpl.java",
+      "sha256": "40246767abbe1a772a9e9769d41eeb2315e717c13e26c64208b5d218d4c3620b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/utils/scope/ScopeDiscoverInfoCache.java",
+      "sha256": "4aac070415e7f1c546e02ad7a8c70337b66ad8d6068d56cf1ba7f7ed867c174a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/wildcard/OptionalMatch.java",
+      "sha256": "4ba205f766196ccac6ea63ffb66f4e8ce8568270e95dcda0e369b9c6fe9728de"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/wildcard/Wildcard.java",
+      "sha256": "a8f09c72648db71fab6b5a7adae92463fe4908d02de1c904e7cbca32a3cc8626"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/parse/wildcard/WildcardMatch.java",
+      "sha256": "ba87862943cc03037ba596d11a1aead139412694d47d8e1b3713c43113eb8068"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/stack/StackDelta.java",
+      "sha256": "164d511595cab8d0ce1f91d6a8843b440ce8a5d91377fd196cbd35438e0f3baa"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/stack/StackDeltaImpl.java",
+      "sha256": "a2eff11c64eae0b91958226b48e5a709c5858ef52d741aeb523529c003622052"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/stack/StackEntry.java",
+      "sha256": "37b6bca82fd2d1277348277bb97e92636485689a76207b88f105adaa276f7714"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/stack/StackEntryHolder.java",
+      "sha256": "9e0bca728e4d6ced1e70c81b7c2e903a3f802553bda99ba8a0e60a9baf2c1d70"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/stack/StackSim.java",
+      "sha256": "b641a0f80f25f2b3e43b215b8bda2ef7c2ebac84d0861705f4e2029d481fa992"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/StructuredScope.java",
+      "sha256": "85041a5aabac700c486b0adadfae03acc68fbf7c9c10822f588ff5bbdf0315b7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/StructuredStatement.java",
+      "sha256": "c613bb538c1f6b2c3aa54f951e17dad54c1a592cb0b1f58a8ed7c24c04e4f864"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/expression/StructuredCaseDefinitionExpression.java",
+      "sha256": "d459148213205d02183f850dfaf8a8f20030bca0eccffab50cae5308d56f155b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/expression/StructuredCaseUnassignedExpression.java",
+      "sha256": "7a354731b119858f86bd7e4e8ba8d168ff4a9da7e4236e2c4d5d2b90e4527381"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/expression/StructuredStatementExpression.java",
+      "sha256": "1253136d62d54d86db6d36ef3c66242c91238159e80e8b870095a37d004c7000"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/AbstractStructuredBlockStatement.java",
+      "sha256": "87917ae4354c7e09d00eb8b3d2e2f0ab11a7fcd0d7cf53e88f637abc5e2ebc5a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/AbstractStructuredConditionalLoopStatement.java",
+      "sha256": "15302693930782022ba9a405c29f8fb80de4fddfa079fd30f31e1fbabb0bce71"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/AbstractStructuredContinue.java",
+      "sha256": "aad529c1f881d4f0194b36e89e1ae7166427e5c062ff16a06ad804cd4785974c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/AbstractStructuredStatement.java",
+      "sha256": "e922953a339ac6199c280cfffa2a6dff5a80ebf1ee9b862d31d3dcd2fb2c0caa"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/AbstractUnStructuredStatement.java",
+      "sha256": "ee694f19137c563dc075c6ab4ded7a2100a3b876c2ab184aa6e1b479a2564985"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/Block.java",
+      "sha256": "58830d544e159d961f488b804549306d25d5ff94807a41f506a900557e821241"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/InstanceofFlowScope.java",
+      "sha256": "2f0582d44ff93b9bf20d290cd5b5902446003e0dcc5ad03533392cb8b1f91c8b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredAssert.java",
+      "sha256": "ef49bc8de92dc13953c9b8bde3bdf2a5c3411b7ad38e367bdd58fc6d64536a58"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredAssignment.java",
+      "sha256": "77d83671e6aaa19e5581414889c756c254e7011be9d497a4043b90dc11634c3d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredBreak.java",
+      "sha256": "55522e251a0ff879a1843dc696309ce94cea764c1b776288464c357e0b45720b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredCase.java",
+      "sha256": "f7e047e991273345cbcebd0820c1cdf5a58fcad38b15bf3cca231d3d3e943e5e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredCatch.java",
+      "sha256": "c7523867bfd4800fb5d623b0cc20a8382a624ab6c786e0485372087c27dc1dd0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredComment.java",
+      "sha256": "673044883f151f2d6e7827c1ca90d3dd2477aa827e56b4e14c0ae4e763d857ae"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredContinue.java",
+      "sha256": "31041542f85b35b3c54467e9f4a21cb2a9c331f67b4c2039cfe647d0b5987ec5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredDefinition.java",
+      "sha256": "0effbbb481f5d2c096df6fd9965ff423490dd4dee90bae60fc8bbe5e65587711"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredDo.java",
+      "sha256": "86d7ab9728e47f23df12fdee409a57d525ed2741e788fe5e756648d63c09f898"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredExpressionStatement.java",
+      "sha256": "c89e723a96583a948941b44e56b92d53c50da8ca6e2164c54552ca5e96a94e35"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredExpressionYield.java",
+      "sha256": "ba830c55bcc96dd206d32e9da65f655729a951807379abbebc07e20021e35238"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredFakeDecompFailure.java",
+      "sha256": "7e2bc0b91a79d6405f7dd839472cc13f6a98f7bdd2acc5a9ddf71497e7e9cb31"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredFinally.java",
+      "sha256": "53c0de9e6e331e93fead413e4d75b3b3cf74fab560ae0fbcb125cdac6573dd5b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredFor.java",
+      "sha256": "3ce273549f5d641ca70d8e4898f1edad0f7f63711f2e5130e052179b90677533"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredIf.java",
+      "sha256": "5cd4c725a12f6e9c96f97048dd8d5aa0b37d62461a889e831f5892d77a59353c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredIter.java",
+      "sha256": "bf5f17f3321758aa19b0d0a3ca9ce4700c6f352171e6476f0eadfc32d9d086be"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredReturn.java",
+      "sha256": "ffdb1829b5be554c263ddb1692786851b0520fadbddf316d1587e55fa04d7984"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredScopeEnvelope.java",
+      "sha256": "6141c2b7e7ad83f2c55cf04fbeeb64440dd7b569e88ca23f5a968b1b0e92bb71"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredSwitch.java",
+      "sha256": "6eb92b2ae7ae0fb86bf9e9782e80818dca58388ada8ca246466c2bf3b7321689"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredSynchronized.java",
+      "sha256": "71f6508998f8407a6dbfccc8069d308f83036e87d414079ea8f5009900f3df82"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredThrow.java",
+      "sha256": "df41b904cb99f5cee506310bb365b94e28476096c8c0b6d0f6d6bdac680248fc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredTry.java",
+      "sha256": "1d8d2b06f44f8bcec399e72b9a86e6e8020dc251e579b71006be2ce3cf7628ce"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/StructuredWhile.java",
+      "sha256": "092f14f95e3bc5403373285ad06785dbaf7f2df5fd60aacd9e7822f5f0e469c4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredAnonBreakTarget.java",
+      "sha256": "a2ce0f6212e6eecd43dc80df67571d9b377e66f5e42959ca1ca1f3a601ad7a60"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredAnonymousBreak.java",
+      "sha256": "3cb8d840a08ff6da14076a3ad057c2cd68561e20c7132f935c5715f26cad6902"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredBreak.java",
+      "sha256": "214944e0cfaff5198490617c669faebe14833d4e2c088b8decc742b8da01077b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredCase.java",
+      "sha256": "a9544ec26e537a3a78de1389588d87036d32f0a03baa2edda2b8f1330399c180"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredCatch.java",
+      "sha256": "24fece7d7ce1fb54a4b0c8b26c6e0929b2b2b767402f6eb3df9128543577e65b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredContinue.java",
+      "sha256": "ce9c47c95d894363a367a4bf9af5f48c8d79b82f41dbf445583c561a3058c6fb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredDo.java",
+      "sha256": "71af1984d2a0312c3bf5d764f2717c72fb861726381dbe673ddef7c64f5e18d1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredFinally.java",
+      "sha256": "a52fee409472525f7fb02a8296d43f0856d69d1271d297736b42266150596483"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredFor.java",
+      "sha256": "934a5cbb49d4fb5c769756fd60f3a9c0875befc09a641f93df50e6d9cb2c6cd0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredGoto.java",
+      "sha256": "598b7140d210dbe2552402dcf4be5d297dee05740d969a6468e9e3cd56393a2a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredIf.java",
+      "sha256": "4d9d4aa5e2bbdd7d28e43f9561f8388d53215ba0b82835b447d50558a2501814"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredIter.java",
+      "sha256": "bfc50623bdf649e2be1bac31a965ea54bd6d124956dddd10640197b822e05fc8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredSwitch.java",
+      "sha256": "9dc56aa6039acd4747c95b90a254c4a04ff70c80808405b5509cf6aaaab61852"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredSynchronized.java",
+      "sha256": "4a5f7f936fcd70c352f25fb68aa089f096a7a57c63aaf094f9c6046b38d1b951"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredTry.java",
+      "sha256": "f3de1d33ec2105a2350d56f15c408af00dfd30af7fe9b138621c50e3e15b2d6e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/UnstructuredWhile.java",
+      "sha256": "ab235ae2b485623c6d4ce592763650efcae8b5a0e26846da3c317c0731d45b64"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/placeholder/AbstractPlaceholder.java",
+      "sha256": "7b49ff27e24064f45c1113efb06bfe757d4fe19cc943f1669a103035f4515f3d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/placeholder/BeginBlock.java",
+      "sha256": "4295b7438d03891fdaa43dcc39593c2d9c09dd923c7132db898978f87b136c52"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/placeholder/ElseBlock.java",
+      "sha256": "df25aaa651848ac5fc4dabd4bf25eca06ba86957dc4e101ecde3693062bd27ae"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/structured/statement/placeholder/EndBlock.java",
+      "sha256": "026aac673bfc2cd391ec2531e3b03fa22c3a55a9da394805eed41fffe25ae3b2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/BindingSuperContainer.java",
+      "sha256": "a6ef785c13c5e55aed728d4c87aa251ff8a338393d65d54b1e33bbdf9814c8f3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/BoundSuperCollector.java",
+      "sha256": "f3896e6143d4c3025ecd394d290289a807a2931e040e85e30a5319ec820f1b48"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/ClassNameUtils.java",
+      "sha256": "f70191fbb68a0a300b3ab0384d19c068d907a0d7af9443ee1f1ade405076283d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/ClassSignature.java",
+      "sha256": "4c3423be68fd97e539f52becf1d3e2f0ef845ed822060a61277965e4757cd07a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/DeclarationAnnotationHelper.java",
+      "sha256": "a52e981530bf29c4f890e9428e467e316fccb74c04c9354cbc24557e2f6a0d43"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/DynamicInvokeType.java",
+      "sha256": "b18b02bb73a6a5484b8f8d8a8d28bfe0c42c23bcfc8878a70d7fcf6f3e8bab5d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/FormalTypeParameter.java",
+      "sha256": "1a55f1a7d46f8fd2abdc73a0f135edd646aa52b1145bd5dfd68f0d4972450ff7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/GenericTypeBinder.java",
+      "sha256": "075eb9f8257d453f5e39a04bd5cd37c07d0a7f271a3ed4edbd631baeac6ec351"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/InnerClassInfo.java",
+      "sha256": "067eeed42cd3f58eb41aac63668aba834dc381fde593fa67500db64b9172bb1c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/InnerClassInfoUtils.java",
+      "sha256": "fd97a8108b94ed23c9860745d6fb3a19404b8c112ee156aca8c0862e0609a9b8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaAnnotatedTypeIterator.java",
+      "sha256": "60387310954d6e5e9bea98ea9701a66dc7ef49085273a243e0e4532d5611ba6d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaArrayTypeInstance.java",
+      "sha256": "33ce9856247f73e1c6913db5a679f09e0283c96faaf693e2c7a2e89c7b8f0fa6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaGenericBaseInstance.java",
+      "sha256": "ebfa0dd1205f45dff1a2998ad4b10ca8049f14c03baf7436094eec09ef3ce8b8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaGenericPlaceholderTypeInstance.java",
+      "sha256": "b1209bf757ddeb17e77e0e135053b2f3742e34b6c30dbf073e695281b4b7563f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaGenericRefTypeInstance.java",
+      "sha256": "368a9b14b36260a0ebe64a2e4e95232e763fecb39f5e1d300296549b6986f116"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaIntersectionTypeInstance.java",
+      "sha256": "8ef530d51703b8810f20ebd3a784388a781c439374adae98367db94807ca96a9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaRefTypeInstance.java",
+      "sha256": "5a59b4db66ebd379aea44f0d2d2dab817f62ba1819165f43355ee0e1d7227d53"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaTypeInstance.java",
+      "sha256": "d14da29d01e78be54dde2e57ec55ff16ebdc90d7689268bed83e5b7654d700ff"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/JavaWildcardTypeInstance.java",
+      "sha256": "51140b8a98050e70b50b7bb323bf637ceb8f89d04ebd10d368dff3c0f7142ddc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/MethodPrototype.java",
+      "sha256": "5ce805fdd8e97a89f84d9331f99719f1daa01c3671ca0bfd76561ee66afa028e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/MethodPrototypeAnnotationsHelper.java",
+      "sha256": "64fc8aa145cd79a3f4c53bfd5299c81c445734c822d9f3a3bd448702a57ed86f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/MiscAnnotations.java",
+      "sha256": "662e35d74328662d2aa32c64b33ceb10c96afbcb0a61e5d4b218d328590431f2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/RawJavaType.java",
+      "sha256": "46cf8e618c2703ec9be359ae6b76bd57958f93038275ed57de8a3a0fef064493"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/StackType.java",
+      "sha256": "e7d83807d37c11cdf8ca47c08d272834ed4956f0f076273d57d5988a0276ae77"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/StackTypes.java",
+      "sha256": "3676793e4ec624cb4ac9e7ba4e0cc922ed459c25c4f094cea62da33c4405be69"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/TypeAnnotationHelper.java",
+      "sha256": "15170881ef348018e55cdc6e61680afaa6a9272ece62116e735b0bdc2709bc70"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/TypeConstants.java",
+      "sha256": "1255632291718b57642b9b2ddd54182d3eb4735a1a6c144e537875f4564a7e02"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/WildcardType.java",
+      "sha256": "29fea81830fcb32d8d1bf7d213781ed30c8647fe5373f055208a8641f4c2060b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/annotated/JavaAnnotatedTypeInstance.java",
+      "sha256": "24d642aad0b75fd878f56198e1eaad0009b76221abdf2294192109fda26decf3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/discovery/CastAction.java",
+      "sha256": "e452b1625daa8a28d86ebdeb54d35eadc45c6eb5ea8f62b17a2ea79ea6ed7f48"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/types/discovery/InferredJavaType.java",
+      "sha256": "76a0a51ab44b3f62cff07069d1f85f6dc0a96705276c401a12197583a0e57897"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/Ident.java",
+      "sha256": "be4e038bfcf61334bd4e87a1d082040a3b6e6b0ca5c41a231013c206a773cead"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/Keywords.java",
+      "sha256": "b5a03283d69f8741f67ddc403b03112f6652475241793933bd439ef083d0babb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/NamedVariable.java",
+      "sha256": "b58c2c701b7ed65448e60025243635b93d3ad9efe5d0e897122fca0744b9ae2e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/NamedVariableDefault.java",
+      "sha256": "ce1ba3a8ed9700dd7a62e2f6f66ea699ac74669fe937db981753826a068e8157"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/NamedVariableFromHint.java",
+      "sha256": "b1a7092cafdc05e20c5dadb912ff7fdca8280e2f68c97cb7b07c0fbab4c765f5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/Slot.java",
+      "sha256": "2a49276533c457cbb0aea60e6a809a2cdfc05b16e14a864c8dbf504cb711b778"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/VariableFactory.java",
+      "sha256": "225c4716b99321dbb11a4e19f3e7b0849f028464484fba016e3b6220b887d38b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/VariableNamer.java",
+      "sha256": "aca6aeef71eca512bc1296657437dc981fc8a71e1d3a852abaa495796ddea1ed"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/VariableNamerDefault.java",
+      "sha256": "a8383e9d1159f2621f0b908a4aeacba18d656859d26665cf74459799f927c32e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/VariableNamerFactory.java",
+      "sha256": "25724535f6b3cd7c534549e728a3116bb8c65078fec685347417b9e01b3ab389"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/analysis/variables/VariableNamerHinted.java",
+      "sha256": "a0db0cf06cdab6e3db4848c2bf9c2258bb03abb822eefcb1f5dde933e25ead3b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/DecodedLookupSwitch.java",
+      "sha256": "4d0f03a0c37593e435ca3c45050f147a84cf78f4ce5325a2876954414fd64023"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/DecodedSwitch.java",
+      "sha256": "b55d6a4f9ff2880b0f5011c1004c31c6396c2e92b61c9ff1088e2657ec34028d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/DecodedSwitchEntry.java",
+      "sha256": "22184d5c3ac66f06f550e3e418aadd6b77531669c8959ca63574b590deb30487"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/DecodedTableSwitch.java",
+      "sha256": "4a15e362d8b03b235bf2b311cc19a89f8cb4b9f25d70e9bf67edd9dbca12ca1b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/JVMInstr.java",
+      "sha256": "c6b81812da01a76da3525d589a111e422cb8f8360d0a2cc07822f32de82f278a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactory.java",
+      "sha256": "c78bf0aa9e83b7fe0aeb0d12c0a9426cfc551307c85cb9f9b6aea48e6f730502"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryCPEntry.java",
+      "sha256": "b18006e9125d25510118a92e5c8eceb44f2c8d64d404a0151ca2422a86adff7c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryCPEntryW.java",
+      "sha256": "9c4eb40c4cec0c07596863278ff22ef088115b8faa8733b4950591e9c1326e1f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryConditionalJump.java",
+      "sha256": "585d74b4127e98a2fe4fa1c9c9051aad0608e3821d12fc3c269d1598f85fc9a5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDefault.java",
+      "sha256": "3f09a9a0b99ebd906bc9ea676dd9b4f486e8510e027206107623bd8b89db4757"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDup.java",
+      "sha256": "efe4f8a0bf42f43e545a979b7da83037178cb1bcde9741897f4309289d26a319"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDup2.java",
+      "sha256": "6857d4dd20c49b2f2fa5cce2f8ba9cb2009336c8cc97249d1332bddab2707ce0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDup2X1.java",
+      "sha256": "d52c8c95abbf739d6c67f11a2606c3a6ef13605a5bb381854299c19c3986b8f1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDup2X2.java",
+      "sha256": "bab8301414bc10318c33d77bb69aab59bd6188015ee4d76a6766cb7327dd6bff"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDupBase.java",
+      "sha256": "ada86f386fd48df8b1aad59fe084ee7ac992ad4bdb5c3e260e3688fbcb57bbc4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDupX1.java",
+      "sha256": "3636310fd6a7ae918b15aca84707c72e9a8edcd1dcea56c040654c518c37496c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryDupX2.java",
+      "sha256": "e4060e5347b390877265aef654c73e987e6c81a5c68c3ad83a150bc79d654fee"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryFakeCatch.java",
+      "sha256": "5e89925066226f95e3039c3dea0f6c3b98e9febcdf0f8857bf7ae3173dbd8e47"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryGetField.java",
+      "sha256": "43c870508d3b58e1f4296c7aac3602448cd7c0a4372a7295a7d97e8b2e023f63"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryGetStatic.java",
+      "sha256": "72bba4d6c9224ab2057641856731ef9d13fc0c82e9a08a304e1866f07fd4c940"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryGoto.java",
+      "sha256": "0c90901ad857093b8b9e201b1c3ef3ecea8243dd82990af478f4006897f8ba8b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryGotoW.java",
+      "sha256": "10fb169d15b66762c2bad693c561798e90c909f31398a7889216d4c9bdf23303"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryInvoke.java",
+      "sha256": "16efba6f7e3d6532606ba819517eb19e4e9a66491448f535d674d5500b9e6779"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryInvokeDynamic.java",
+      "sha256": "0961b6e274b87d60894486a931182964e1c7c98a4e25502e9c16bb27c6ec8349"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryInvokeInterface.java",
+      "sha256": "1d1db2c0ef076038bf37f39a52b34c8975e32e408614f98095f8cf577b5ed4e3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryLDC.java",
+      "sha256": "96bdf245e4c4613a29a0e8a95035df993af8c1ab506eea37ef10c7d3632adf76"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryLDC2W.java",
+      "sha256": "f83c01413c97f23498a6c9ad59d37e1fe4d540fb7b34a30ece17772a41a9c05f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryLDCW.java",
+      "sha256": "9ab1aa4a80e67fa487a625187941d50f2778aec6aeda7fc808b44d2108c81c15"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryLookupSwitch.java",
+      "sha256": "7163c3081813ad4fdd7d78793fdaaabe2aa47a345b4d43481612a90f5a7e72ea"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryMultiANewArray.java",
+      "sha256": "55121042015a2b979705df66ed28eee63896f42755965d0b57e5676833635c28"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryNew.java",
+      "sha256": "74fc985cecbb7e66e31f25b04296fee74628cce25572cb75de411688f8a4d4c0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryPop.java",
+      "sha256": "d53953d441b2dc2d4e0ea6c5bbdeef86f1c16990b9e1511716eb23e48439a063"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryPop2.java",
+      "sha256": "2b1cd3c513ad1c49cf537aa9cd77a351e0fdb5545e8a28528445284e4dcf7de4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryPutField.java",
+      "sha256": "fafc0980de29a6ce3b4cd4e51a35e3912b7d57a7d6bcf62cb71f21111e31a286"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryPutStatic.java",
+      "sha256": "50cffb22b5759ea5c605ec222a08cbfd73f2269c6041326f2024c38ecc9445c0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryReturn.java",
+      "sha256": "cbb06baef97cd86425a0601e1141a3ae502178a6524d55c594d96b28774a63b1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactorySwap.java",
+      "sha256": "99ee527bd7ecb0d1e9728a1b0f5f915383851d730eb705abe3fad735c850865a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryTableSwitch.java",
+      "sha256": "84d80e093bccdce154c8a1f7dc3bc7867cd22fbfd07622ca9571c70f5c64fb11"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryThrow.java",
+      "sha256": "36dc4d33ab941a38521e9ea19930435c3317b5dd21785b9897de2de06e344d50"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/bytecode/opcode/OperationFactoryWide.java",
+      "sha256": "4b194ebb9de4ed27c8bb806335bc93aee8b5d912ed3ac5f37afb019f1af050d4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/AbstractConstantPoolEntry.java",
+      "sha256": "5394089850891f043e782ce65c965114f013aacbda5287cd5c988529871484b1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/AccessFlag.java",
+      "sha256": "c9d854bd0d20397e26a24766d82e4cb4ca3c44370c366a75efd0ba3a417a519c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/AccessFlagMethod.java",
+      "sha256": "105f94b5ef78e913a3dc5589fb0732655c2c2d2ef959db7b02a79118ee3555bc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/ClassFile.java",
+      "sha256": "8c663e34d7f051d1c127e715ca436c2b7877463ec1fa6a6c4812baf3736d9d39"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/ClassFileField.java",
+      "sha256": "f3261ced6c0ba2d7a244b0dec836a53d75b05c9756ce829895bfa0c22e4b6b25"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/FakeMethod.java",
+      "sha256": "3aeafae893c9df5940d8b46718d989455b90e5ad46985a45fefb1fbd9e62a041"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/FakeMethods.java",
+      "sha256": "8e08c8d1f3afee32505c2fe163c0c8cb212d9f74d6c590659503e175c047c010"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/Field.java",
+      "sha256": "59dd5b3a4a564e919a0083bb5a553477682b7ad8b3cfc422fde8153950c4b69c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/Method.java",
+      "sha256": "0925e1478bf0297ccd5796b1fb185c60920801e3180fcb5b2bb2f730b287dabd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/MethodOrdering.java",
+      "sha256": "1b62ea7a956d2f0185f159f15f837a54be52b4e74a0330b72e477bfb3e1192ef"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/AnnotationTableEntry.java",
+      "sha256": "fc99b3bd60f91476cf1c7ca5e06e68be5bf9078f7912555749b14645a1315ac5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/AnnotationTableTypeEntry.java",
+      "sha256": "b1ab7eb5c50d8096412e9eea401d08413eadb0eedb81d528a869801ef3d0a36e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/ElementValue.java",
+      "sha256": "af23893fd551e816c0223cb2b034483153a70ff5eb14361c64cfe2b69c7521f8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/ElementValueAnnotation.java",
+      "sha256": "075473565d3899f3a33bd9062b922a2234f83f80b97b413906dfca3e5aa9a6f7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/ElementValueArray.java",
+      "sha256": "b42c06b0d889cf14e8d3e303a2b0c68bb9bfc3f8631445b735f02a958519c3e2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/ElementValueClass.java",
+      "sha256": "0170de8976ad899fb512671e7a358e941189bcc07ef745d88ea34e1a3fa66140"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/ElementValueConst.java",
+      "sha256": "795cf1e9032f57b9908b6359ab6fa645087225e182df8f729e15e9f374802368"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/annotations/ElementValueEnum.java",
+      "sha256": "8defc48782e9bfc2be55f3eaecf04ded17aaa4f6bfe9a68e4baa9a5c0ab2ad71"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AnnotationHelpers.java",
+      "sha256": "25f1a760045eabf0280c227eca62bc975f5064ff718c0f7f7822abe70c059fa3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/Attribute.java",
+      "sha256": "f56f3957c3768acf8822a551e5d202b91db794547e71c878886966406bd056ae"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeAnnotationDefault.java",
+      "sha256": "6a016861ea3b0f8339d57d072a1339aa8b00c0e11e526f239a8c25e8236483de"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeAnnotations.java",
+      "sha256": "9250a67014b04791b9bdb8649374d6caf3f4221d7d77533d063b399ea53f7fbb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeBootstrapMethods.java",
+      "sha256": "fd9fe9104e4c279cf066578d16906349f5ea8128012bc76261256bebd036d2a4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeCode.java",
+      "sha256": "4f1c2b1eea425c0dcd57a53b13d99f4b48683ecc4283aba6d6d60172e7dcf61b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeConstantValue.java",
+      "sha256": "79013e5530fa57e2d141055ce11f9d626e4c8ec9bcf0abfe92f3c0eb5a8c30cd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeDeprecated.java",
+      "sha256": "50f16a3a7850d946478e7a5ce0949ed63908b7a885db8217c2d5b0bb434c6cb6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeEnclosingMethod.java",
+      "sha256": "205dd044ff25a31c2ecda11caafd7fcd27c4e66925b8205ff80eb17fc6e27888"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeExceptions.java",
+      "sha256": "bd9b7ac04daf70e86a7f09c1efd31b4cfc8476f1b7375c3e6d2c9d8f78a73fdd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeInnerClasses.java",
+      "sha256": "f4aaab6cfbdb37c794fde60a2b04e4ee0e216a6032434a5d7d1f98f99c17d98f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeLineNumberTable.java",
+      "sha256": "ccd123bb4f88ab33db650b8a184e537f2bbfccd53c6994004fa05c20e54aafff"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeLocalVariableTable.java",
+      "sha256": "b46fc5c5f66b6d3c2a67218cb137508ae409fc48c094b116bd53fe2478020dce"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeLocalVariableTypeTable.java",
+      "sha256": "45c203957a6576ec74b624bfd1265db39be083450b79ad6d69f727e8a2e15d86"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeMap.java",
+      "sha256": "7cdac86ef802f25cad0822823cc5b6d4bad76a89afafd6f7cf05d7ef2c0078e8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeModule.java",
+      "sha256": "749cfd898023dcb308ea22c27f6c5599054917eddaa118b1068f3879fd063d7b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeModuleClassMain.java",
+      "sha256": "a68e56cab8a4e327ea3b4f21940ff06e5c44cf24efb0e3415adca969fb3bba20"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeModulePackages.java",
+      "sha256": "1a6f302e075f82e4af04aedf4437f1257e5cfaa802228f0eb0997740c6738151"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeParameterAnnotations.java",
+      "sha256": "f940f6581cd8ec5c5d7d530577f8face5e025a51e07fc5de5fbb7846463a34d1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributePermittedSubclasses.java",
+      "sha256": "98b166ea322e2df3c7a597337b35ae19026692ac4e6d688560e8ca8979a41f77"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRecord.java",
+      "sha256": "71122d438ee016aa6b2853017f30429ac77653e8c9577d18f937f62a0e46793d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRuntimeInvisibleAnnotations.java",
+      "sha256": "0850cd165f90f98b511a0a7f9ede51e88c717dd37e6945d50474fcf5e79f7908"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRuntimeInvisibleParameterAnnotations.java",
+      "sha256": "94d85787e0ee17b2f262aa7e382444c62bbc3d653013f3de00e57443eda2e670"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRuntimeInvisibleTypeAnnotations.java",
+      "sha256": "b788a58e2f6230605c90ae43e55cbffbd7564c56669b39a51c11287a2b9e787d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRuntimeVisibleAnnotations.java",
+      "sha256": "df6ee1e32c5308b35e98fee4649dd555fa148d62e3972446b55f7fbfcb8e93e6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRuntimeVisibleParameterAnnotations.java",
+      "sha256": "d732446da428c34945a9fb5b2302ce9af204b3753a95da42aaf19f0b97c6061c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeRuntimeVisibleTypeAnnotations.java",
+      "sha256": "716a4e36a1c6de252dc426606f884686adafc7d661451635601fb04fd353ab30"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeScala.java",
+      "sha256": "2784d2aed53941ca4e54dadc227080df2ec8cdafa9807303b3b101dce9032969"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeScalaSig.java",
+      "sha256": "ec00f52bfff3fef187a9676bf25b78be475fef1a94f21440bbd82df21473f374"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeSignature.java",
+      "sha256": "3e5ffd18e82f3ba10ff8ab85da84bacce37624265a47f9bf4d9a651765e6e424"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeSourceFile.java",
+      "sha256": "7feda93d32749df49d09cef2816eba6051e7200d33923d964c500397e6eb7001"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeStackMapTable.java",
+      "sha256": "d85488bb21a8e79430c16e02556b819d7967c4e8ecc72aae7bcfae5584ef2c1b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeSynthetic.java",
+      "sha256": "1f262bbc00f03079807c85060f0e204d96e61b5d3316ed15f2abcc2aff9ac3a8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeTypeAnnotations.java",
+      "sha256": "62cda6ea5dee8284890104e5e5b41bbe2d74e5232d4eaee3e42148040e6500c1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/AttributeUnknown.java",
+      "sha256": "a3c3b8b79c111dba9e066f4b3834de1bafb3d017b1de3a63a44a95b01dd427d3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/BadAttributeException.java",
+      "sha256": "941bf07c58e95b2ac11e452ea2422a9537e702c552c380cd0cfd2d9bc9aabfa9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/LocalVariableEntry.java",
+      "sha256": "71f7d32e4cac3f421afa82c91a7864d865b43869aa85e434cd53c151aecca840"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypeAnnotationEntryKind.java",
+      "sha256": "eaa8465d4c007078d3c1732adc8d1da7dd2ecf1a31af9fc118683de098941ce0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypeAnnotationEntryValue.java",
+      "sha256": "b6ce598ddfeda9c4162d25a43430353cbfa98faeae53f46ec927efad7d13f4df"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypeAnnotationLocation.java",
+      "sha256": "878fb9919b86bb178f9a8edbd469395b0e5c9dc6a38e51d8bd9ddab219a78e51"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypeAnnotationTargetInfo.java",
+      "sha256": "92c8bd22d57b791481d760ae432a0b5139a186c64e5db65d536c912d56876e1d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePath.java",
+      "sha256": "41851b2856cb2ff5f245a544ddf564c40eaf201a65946b78da56d9d407ed7fa0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePathAccessor.java",
+      "sha256": "5f9257840fb672addb5193d202abad43201faad9e6e4bc92f2953641d0865ec5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePathPart.java",
+      "sha256": "87fe68145eba6a73719ae86f2063716542dd4074c30838b6e27b27ce7c45aba9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePathPartArray.java",
+      "sha256": "14ff92e13c38403ae37a6d816312fcc078c1fb138ea10e168f8c63becf66f270"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePathPartBound.java",
+      "sha256": "9acefa146ce6ba0542507915f7017b75258097556c221e8d6a93867ad95385f0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePathPartNested.java",
+      "sha256": "20c3a55927077563b7bc2a908c9645c92cfd50080f46dc08a0ae5fe02cd9e9db"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/attributes/TypePathPartParameterized.java",
+      "sha256": "1a035dc111ea5bf1f701fdbfeb4f4d1652658dda11286fd4cb23a2ac88a60901"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/bootstrap/BootstrapMethodInfo.java",
+      "sha256": "b5cca969b28a123f5371da834c914050252cffbd2922f472e20d4fecd8c44cc8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/bootstrap/KnownBootstraps.java",
+      "sha256": "df52076ee8ed71b624b5be14f96f6e8d1988784e8603d8a5b0071b5d8fb23637"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/bootstrap/MethodHandleBehaviour.java",
+      "sha256": "1face3e3ef161a21df3bcc8bcfa74f27358bf0770c78a32c7c110a2a4188f834"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/AbstractClassFileDumper.java",
+      "sha256": "0be6eb6950e992daca7f132a6d51ff7543a463e38fa96a62b9cd60391ee7394d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumper.java",
+      "sha256": "13fdf6cc6b3c3b1cf1b10ff027045ccd5ea21959d8f21b2f139ac2f94eeb4797"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperAnnotation.java",
+      "sha256": "59515fc8cc4ac2daef66942d96b4ad5df9d65f09c6c414c4a7033e0938435eb2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperAnonymousInner.java",
+      "sha256": "0b40d72c9d6d262e9b0ba84a75eff3b17f57bd2cbf8e1dbfbfd82afe5b0d9729"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperEnum.java",
+      "sha256": "a3bf3ff6fd23b99a667226389d3d955687c60b0daa60f5872c096f716b785f03"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperInterface.java",
+      "sha256": "cc80d3f108d6d462109a7f3b79415e946d49fd68e2b8f3279913ca325e904c16"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperModule.java",
+      "sha256": "456529537a816034d66de7b69437caff9676b84e061bbb33125c2f4f1be2bfc9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperNormal.java",
+      "sha256": "93ff7066a7b3795403448b1e8588e37f67583a6bf570ae34f980d1298e890071"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ClassFileDumperRecord.java",
+      "sha256": "459ba2ffb95e30a35c19a9b62aa4872f2bad6a4e7ece7a5adcfe6e57a2ba3902"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/ConstantLinks.java",
+      "sha256": "dd12883c315819722b15ff6a2b168f59da5790ea810b38e001dd6209ab9e4fb4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/OverloadMethodSet.java",
+      "sha256": "6ec68f430bd4e6e0ef47533c483e94ce69d0195960c45fa574c1ba47f6334818"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/SwitchClassHelper.java",
+      "sha256": "02aca87cc6f56841552dd1a78b8ecdc1e46177eb8beccb3010f750a85f3f8a86"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/classfilehelpers/VisibilityHelper.java",
+      "sha256": "a2648ece16d920bef8da0b7a007924db4267e233a5323a7eb34637bdcbd8a4de"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPool.java",
+      "sha256": "d24e6625748ace8677ed48f3aa8fc778692b9a426bbb219621fc70b48e0acc7c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntry.java",
+      "sha256": "9e351379d717cb5fa334f2bb81be0744a6cc490822255a869eff4044edc5eeb6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryClass.java",
+      "sha256": "9fe96c7dfc59fa2a6b7f465e62b2a303e69d38775bd0c5b38c1f8fd85cb0c06a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryDouble.java",
+      "sha256": "e99b5b67bfa0a95a1cc6f963593a865343ccee8573eb19ff5fd5a8da1b0ee0ae"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryDynamicInfo.java",
+      "sha256": "1ea73211687c29bdbc198dfad87cd534120317356aaef7d2b75988b793bce7da"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryFieldRef.java",
+      "sha256": "b65a38f42e321eb1c18bc26c7829a18a67a3ffbb6eae4e4b791e6231e3f30da2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryFloat.java",
+      "sha256": "4f02485e4a2cd7f68f57f08ccdc89faf4784d7241fd822e0f8c26c4e2f663c0f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryInteger.java",
+      "sha256": "3d5a7ba742358a91cee75447280a31e956c017af28bf13eb51be953ab0830af4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryInvokeDynamic.java",
+      "sha256": "3be3cc5e56c16eb7a9307cca72b25cec9196645591a3f3997e2e1fd46d9619dd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryLiteral.java",
+      "sha256": "59fc166160c1c3977db4524618cb72a3b0fd4fc92e3b3b8b5143bf142cdabe30"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryLong.java",
+      "sha256": "4336dd7d221a663310a47052bd6200973259e8174ef4ea4f3c4c967d717e6a3c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryMethodHandle.java",
+      "sha256": "afcec5aac11a7c031112d64e80e019626f594b6b6ea143cb815cf98f368b680e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryMethodRef.java",
+      "sha256": "675b196b1f50149ed81353202be7866a4f46bbee778164f30050f5b03f2ec01e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryMethodType.java",
+      "sha256": "4d649e5466b0904844ebd3b20ed3e0e841766332279abb31ce861f777d7dc854"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryModuleInfo.java",
+      "sha256": "7d42e1eeafaed4fcb38cf8500ce4e104e751c0d477c115fdea244f5290f16a0a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryNameAndType.java",
+      "sha256": "45bb8f012255b6b0b55a31063f8094d1126470d79257dcca53598162f7c8a90d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryPackageInfo.java",
+      "sha256": "29b290dcc0e2fc45fb34783d5247fd9fdbccc8c3b9ea62e492095c2d538d7513"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryString.java",
+      "sha256": "797956238192723e4d65e3e5ebb177295be682780d63caac8a0d4173e77a2f35"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolEntryUTF8.java",
+      "sha256": "73aa45d41541d764a0d14ddc403a7fac3e82672a9ae054b92bdb7a23120bf61a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/constantpool/ConstantPoolUtils.java",
+      "sha256": "45d5e3fba179a5feb242553dff9b8d14051a1fb529978875e65f9b42b646fa61"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/BasicExceptions.java",
+      "sha256": "fa112d1f5dfa8fce8d79c1523061ece557dcfabaa7e8337ab1b619c3f91f1ba1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ClosedIdxExceptionEntry.java",
+      "sha256": "1924d91f4f1be5d3a8e742994760b9ef815f7b52ae44dbe64de5323d03e6c3dd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ExceptionAggregator.java",
+      "sha256": "f9805e7f0577be72c148c4cdd4784737ef46b5dc445a7678b43c417fad044e93"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ExceptionCheck.java",
+      "sha256": "51b9f0570947df2aca788cf8bfa342c4ad3175009be516043b86693f954a7b30"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ExceptionCheckImpl.java",
+      "sha256": "b209c649eb7c2b77e8ceacd0b0cb8027ac79a6db9bfaccbddf5328148ba31f9d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ExceptionCheckSimple.java",
+      "sha256": "2f7f685a235cc22e772679c154b6cb8c8fda53bed97b18e60a07af9bf1137e86"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ExceptionGroup.java",
+      "sha256": "afbfde4b22c21c5e40322a88d7f1e4b2356d6cc1b8e9dfdae3d08168c24197f7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/ExceptionTableEntry.java",
+      "sha256": "96b24d521efc1fd61bd28712ee7dc38635a66973deefad8c3def38f9329b1b8d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/IntervalCollisionRemover.java",
+      "sha256": "fdb58c8005ca2f53a63a781ceddefed837b64e4094c1f670f7954ca5fb3a6d1c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/IntervalCount.java",
+      "sha256": "ab438698f3a791c6734b4fb77a86fc6be7e32109fc69be4fc03a938e143ce986"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/exceptions/IntervalOverlapper.java",
+      "sha256": "42230f0b4167a804e2aee7c87058a1fb6a533e2206c330dd1a303cf998ce8fa2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entities/innerclass/InnerClassAttributeInfo.java",
+      "sha256": "b75e12c80526f7ce9e9443f852b5a70c85bcacd0231a6e0e3c59871df3d2245e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entityfactories/AttributeFactory.java",
+      "sha256": "255c962d12d278901798f184f0bf1c8a8d3831b6d185c241b655dd884d400034"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/entityfactories/ContiguousEntityFactory.java",
+      "sha256": "d85db533669e56d984517eec900b91228b1af84c4f4ef7fdd16816ff9a7b1991"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/ClassMapping.java",
+      "sha256": "656cb2d3628fc10648f9627ceaa7e7b53b06df4412bd972632cac677773435c9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/FieldMapping.java",
+      "sha256": "f1a1503549985b2771a8a0688b9f7ed1b4fee13b63d52bfd912cdac6abc4efcb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/Mapping.java",
+      "sha256": "8962dac768682aa61e8594e42cec853bcc1c3632080bcb375e1ccd33ada3122e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/MappingFactory.java",
+      "sha256": "a8fa76330ea8a730ab6c22ef0f685c39111c9b7bd86dbfb0879c300e416545dc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/MethodMapping.java",
+      "sha256": "1f675985b43b3a311c8314b4951a8ab7949803f39ac9fb6625ddc8002bb8d61e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/NullMapping.java",
+      "sha256": "66696ae2f8c97eff40a0b00cb77e16b731cebed6b87a2b3c5524516367df2ea6"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/mapping/ObfuscationMapping.java",
+      "sha256": "7029f73396aa34f78b2e44e63952e11d9a66b6e5bbe2317a82113c7d6565ffb9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/package-info.java",
+      "sha256": "d23160dd76fe228937bb2a7218026deca5f990ec9d8e4899647098c921c2e994"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/relationship/MemberNameResolver.java",
+      "sha256": "a28c46e0b22f7bd24a9862a77c6501b82f0e0dc47d70958868e9c67e14dcc8f2"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/AbstractTypeUsageCollector.java",
+      "sha256": "4c572dabd5080e58cf12a858bce42f1076c469e273f87f4d908f519c0a49af2b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassCache.java",
+      "sha256": "391d4138e6f00472b57a3f96b1aa5c2c4ea59f8f18b10795ef33c2095451b8eb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassFileRelocator.java",
+      "sha256": "7cbc82e8df0618bfc6379e4b51b98ee729cad709c55414174c6230d12862658c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassFileSourceChained.java",
+      "sha256": "edc630b3d306f62af459baffbb62c8c90c3012511acdd00281cc3e88eab64bd0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassFileSourceImpl.java",
+      "sha256": "c3aff52b5a3223023e35db8d54e7891c9da9623364617986a4ba9e8ad4055c0e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassFileSourceWrapper.java",
+      "sha256": "6357bf98e11cb1493ff4bef296e830cc535f2e80cf4655633ec149963fc5df7d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassNameFunction.java",
+      "sha256": "3cdeba2853361a5377ac349115cc0aec631ecb60dae899406fe0dffda3958d15"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassNameFunctionCase.java",
+      "sha256": "bc69f9a5cdcc6d5c64d26d70a464ef9ff781c6861157345949ebd7f3392333bc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassNameFunctionInvalid.java",
+      "sha256": "cc66be14edb9c86fe463bc1cb8086505c50b8bd19fd3f8eded50597b529be23f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ClassRenamer.java",
+      "sha256": "e11281f95cb40350866fecf10b607a93c30ea371f0ff10e84d9d044e15977f87"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/DCCommonState.java",
+      "sha256": "32286a05a266c7f5046a74772b55854219dcf2a40251d5c7aae079a5ea366da4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/DetectedStaticImport.java",
+      "sha256": "5082c997710ed4a7d34d4a31a10e224a80d0c8233fb1350030ba4ee37282878e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/InnerClassTypeUsageInformation.java",
+      "sha256": "07a661d1afd0e7f21dab72eb9fa1dc3f3e0506445901971c7cb171b4240e7b39"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/JarContentImpl.java",
+      "sha256": "7416dc1a48d7f719f4b5f8d5ad7e11938096146d7d74779c0c3a0581e5bdf32b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/LocalClassAwareTypeUsageInformation.java",
+      "sha256": "4c14a5fdd64df88a17cb3fe0b12f8009ebe1012d31b8b36ebfd91b64969b6ddd"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ObfuscationRewriter.java",
+      "sha256": "7b05ae5c3d85c06a8bde8e675e297f2b257e88e3b15640117fb6830ecf873307"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/ObfuscationTypeMap.java",
+      "sha256": "ad3284f0ac879b3efdd659758bc826c102b27a9580daae7a9a9fb62bc30eec02"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/OsInfo.java",
+      "sha256": "57b1d9966a6a13cc04d12542e0790adee2adcef99c8b6442392848cb6ec32539"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/OverloadMethodSetCache.java",
+      "sha256": "f74bfbd5ea35801bf15bca43065a0c704975f8cbc787ad7f771bfb723f39e6e3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/TypeUsageCollectingDumper.java",
+      "sha256": "b8c86c9b6394a7a27dbf8cd47a95d76a89231445313029ddd58b5f5d600fef9e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/TypeUsageCollector.java",
+      "sha256": "15f0839f3e95abcff1cd9ae253698dd953538a44a10905b8c3757163d75fc0f9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/TypeUsageInformation.java",
+      "sha256": "10633889542330e112dbcb5b20d335b2376c3825c9cd7c050a4dedf11621bf75"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/TypeUsageInformationEmpty.java",
+      "sha256": "96f544216526501887454cfea5a6859868069124b0f19e31f86cbfefbb81bb61"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/TypeUsageInformationImpl.java",
+      "sha256": "b43c9dcb8800ea5a04aa0a04c497a0b0b06256d52743e5ed9efe1b0ccfb075db"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/state/TypeUsageUtils.java",
+      "sha256": "4e337dcbc37d619adf36c3b4dd62e44f37fda22f44874926ece7ee4c15e409fb"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/AnalysisType.java",
+      "sha256": "d4b682b77a09a2443207b6be985c87da3e6f403cfb706d016bfe489345d6d9ae"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/BoolPair.java",
+      "sha256": "6154154d72a83623e4656c5b19e87a7b14721282c7d3295448b0922138993ca5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/CannotLoadClassException.java",
+      "sha256": "c9fe2b1bba412163f2e2f213b8fbfad091349091f2683f71ed6c785a225c3b8b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/CannotPerformDecode.java",
+      "sha256": "adcc91cb0c2b9b1b5ac8c8374e4f95b4854aa1db01f7640ef4cd851b176046f0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/ClassFileVersion.java",
+      "sha256": "5b96c3bc17fc7409b2430e4f65684cd7c2884a1e3096407a1789543236813a7e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/ConfusedCFRException.java",
+      "sha256": "1d6fba1a3870745c07b4fc182fdc78fbe7bd236d13b6f3ea65c2d85f280babff"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/DecompilerComment.java",
+      "sha256": "530a6adffc1c88f756c7dc53f0b47ef4af98b474e9b9127ea495fbe00c22eba0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/DecompilerCommentSource.java",
+      "sha256": "1d13d4fa7b3a328d2dac67b79c44d81d97c6f2e9c1fc110c4bc71903056da9fe"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/DecompilerComments.java",
+      "sha256": "6d6ddffbabfd3d390103eafe1bb9fe3593cc67527c3814797eb0a8d51664362b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/KnowsRawName.java",
+      "sha256": "3348cc6123cdb58025055c81b6cbfe99d98e035e475c609ee4f077f04e536a1d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/KnowsRawSize.java",
+      "sha256": "c61525ff2eea8c416fcfe82772ca54052c68440e578d158a30bdac0dd39b347d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/MalformedPrototypeException.java",
+      "sha256": "8ff9554c78f18a9d2f1d063328de7f63a587ca67eae178cf37830445bc122589"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/MiscConstants.java",
+      "sha256": "9c84c289af4d2818d2a5c2aad67ba2cc980cffa38ea570a2ba6feb49c0e56fba"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/MiscUtils.java",
+      "sha256": "c75a20ed763205738d04228b36157fc9d615f2334f8e00489bcb26eb15a7aa98"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/Optional.java",
+      "sha256": "ca76ccfd339fd7b628f3653d5aa26c7f960cda24c881478bb3643a179a57a3a0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/StringUtils.java",
+      "sha256": "3eb33851b8ab684fee48b950da899a2e10766864646977712b4a438050d241ac"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/Troolean.java",
+      "sha256": "f5294d2935c2f6d5e76e2b2f96852e1450d45b193c405519f2f3a733b5419155"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/TypeUsageCollectable.java",
+      "sha256": "a9fa0546910db6a8d00d3ff1ce425b2d72391ea8511bbeb4f58f7e822584c15c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/UnverifiableJumpException.java",
+      "sha256": "801c08e671c0146c0c023ad8e8e96791d7511b684a4b04817cba92009ddd1260"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/annotation/Nullable.java",
+      "sha256": "b26b8cf02f456d9b001409766f8375e50c08171a5ee4273b88878755c4ddae25"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/bytestream/AbstractBackedByteData.java",
+      "sha256": "dee2d69ab6d668073454e602104eb5c362f9a8d518d3543156824aa1add05270"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/bytestream/BaseByteData.java",
+      "sha256": "39d1a11f4cbaa450d47bade700909f0684129e81fb974dd7ed8a06ae132cc5d1"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/bytestream/ByteData.java",
+      "sha256": "418be8bd729071ec7f08cb3f7353821acc24b4f38fe71c95119058dacf8bd898"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/bytestream/OffsetBackedByteData.java",
+      "sha256": "d96721c67da5f3e4e846308248b3d45f81c6926d43b9b58ab5b75298a502524c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/bytestream/OffsettingBackedByteData.java",
+      "sha256": "1c87a66cd7a2cb58aa570a91cea560dcbfb795a370e160006b54fef1415d90b9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/bytestream/OffsettingByteData.java",
+      "sha256": "2bf359ddfa1c9a6fee2c1ef683ad325c44bd437c1496cac644092a296d39a577"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/CollectionUtils.java",
+      "sha256": "66b7b0c08abcf477ad54cf9b8d50d71691ef68140c758769aac7083aca528359"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/Functional.java",
+      "sha256": "c2f0f38cf2b6dd44bf3ddf150f1c9eadd9b096b4b90f8103ec5e7d316f2db317"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/LazyExceptionRetainingMap.java",
+      "sha256": "e6dc6b1acb74c356b7869af7a5b5be13ff105abdf44eb7a1e7a8017000e01db9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/LazyMap.java",
+      "sha256": "e7d3aa352cffd6447f4a9cbc6552f09e13b57caf671dfb6be741ffa89c18dc86"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/ListFactory.java",
+      "sha256": "4a7bc7e9de3ba4a3b720c1e4982ce90cf6cb8416bb388c8f71e2ba9d29f47db7"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/MapFactory.java",
+      "sha256": "b0786c60b185ba7795e13b7cb53d796cb395f55598fa1a05d20f6d14c412ea45"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/SetFactory.java",
+      "sha256": "601f04c425173a8cf14bb985d70e2148e7a4b477675f8248cfbad051667d4f64"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/SetUtil.java",
+      "sha256": "23b1599e56888a31d9d3000427ae4420ca0b66700193ed0316fbb937f48f0049"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/StackFactory.java",
+      "sha256": "0d934b2991967c4705a88ee4dc75bfbe619863e05856b5e292526c7657cb232c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/collections/UniqueSeenQueue.java",
+      "sha256": "e8df23aec3dd72a8b53175c7c4497f5f79fc97f5cc9861102483f79639a80365"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/BinaryFunction.java",
+      "sha256": "366299a35451e55fafacdae84484723034e4fa261dde085a179befc2ede2f1cf"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/BinaryPredicate.java",
+      "sha256": "3e1a99f261b3049003c559c373cd4191b6a96d2b045c8b6135fb7d48d92d07d4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/BinaryProcedure.java",
+      "sha256": "fe9c6458aac4ed041c46cd6da5593de39f98fbf146dbfee31904d851ed5f6a42"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/NonaryFunction.java",
+      "sha256": "a787792bed50a051e608dc845d60400b9549416b43ae13a57ba69787c2dfc18b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/Predicate.java",
+      "sha256": "2781837602420f2c9fd21ea7634ce4cd8e96cf93fc86ae04da9297106b466900"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/TrinaryFunction.java",
+      "sha256": "5a1e0724674bb069b5038da1e2bd2d0c8672bc121df924ab081d32f85e48b969"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/UnaryFunction.java",
+      "sha256": "fc525a702d027a694d89b04e0a3425fe3c789ef8517b28d3083c38ec1ab4136e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/functors/UnaryProcedure.java",
+      "sha256": "a07b17e7a6d9d9a64ecf69072cadf8d9f9af5c008c3fc58bd6c5c3cc61c59755"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/BadParametersException.java",
+      "sha256": "6b059647972a076bfdb0cb7d4d270188d6387445847a8176c42155b11f334623"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/GetOptParser.java",
+      "sha256": "697327e808250feea3ee027e47dbab1eb0b95857a6ff2c8df725aa7522396bd9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/GetOptSinkFactory.java",
+      "sha256": "ea33f53ab4a6d58067232457aded0dc351d0ddecba2cdbb2eb8b4e26102a458f"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/MutableOptions.java",
+      "sha256": "b9feb8c1a9890b7271801de0bf66931aa83a49a4414b30e84f7080d4f46f2abc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/OptionDecoder.java",
+      "sha256": "c2ffe720d3646e49ff79a04713e03792d331bcd1232f71cee09e7780c047a520"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/OptionDecoderParam.java",
+      "sha256": "612e473c651877672a6bef2eef88c3652d38fe1da597eb262df0ce192e0a0381"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/Options.java",
+      "sha256": "90c564eca9bf2c4bf77a74fe9047d0d2f2faed5f4aad892095119eb0325e1db9"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/OptionsImpl.java",
+      "sha256": "a6ec4c7b4ee48ae2cd45d65275668303291fee031043e0da89f4a7d8f3757ec0"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/getopt/PermittedOptionProvider.java",
+      "sha256": "a5070e0d67431cb4149929fdbbdddacccfc94d94174536258b41317683300a40"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/graph/AbstractGraphVisitorFI.java",
+      "sha256": "3fb58ca7421d0fd4b554d74d9da701d1e509fbf97442a213cb4858534de10ef3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/graph/GraphVisitor.java",
+      "sha256": "91b7064ae355eb90c56786090a9443f8dde2f54ab24243938e543e5fccf82982"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/graph/GraphVisitorDFS.java",
+      "sha256": "b503f33176ead56fb73c05c3c4d634a8f5a713885cf6285b344eff0d8610b3b3"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/graph/GraphVisitorFIFO.java",
+      "sha256": "685e337d9d53ce8610e0e025e74a8500c1d76e6b47b6854afb516d4540687577"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/lambda/LambdaUtils.java",
+      "sha256": "e1f8e9c7fe7dcb1ac75f2d2634237d780b5b2e0fb7f38acf41bf06305982fa75"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/AbstractDumper.java",
+      "sha256": "9f728c2eb7b9fbf29702005c020d13bb0deb458a5e8dd3b7f0d6a1702fcd551a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/BlockCommentState.java",
+      "sha256": "389514a1c9fecbf821af2b62f3f440b0774084e54c19d1352e3b8c2d28f4905b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/BytecodeDumpConsumer.java",
+      "sha256": "389d8dd0b909961884bc260598814f78945044d618b58b8acfcb1823cc44a76e"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/BytecodeTrackingDumper.java",
+      "sha256": "5cd325fef979ead144890df21aeeeb0cb70dd0e02de77ad2c3850674aa98c204"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/DelegatingDumper.java",
+      "sha256": "5f051e80eab3ccae6962bc5296149dc743d7ae9b7e66a1e866785603917a59a5"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/Dumpable.java",
+      "sha256": "4d4d30ce48289e155beb5aafba7a6b5e9d63e55badee44c42abe9a47b75333bc"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/DumpableWithPrecedence.java",
+      "sha256": "76f6a4de58dc3a50765a2daa2ff7e93af94492f27b0c5d39994e6d79492dbe1a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/Dumper.java",
+      "sha256": "6893d091d6630af9aa5a0add0112c59c054e5c10405dac07679b3bd96cd77caf"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/DumperFactory.java",
+      "sha256": "65b31ac9577a38b3c12a0e3ce80b5b0fb8a3e8a7ad1cb6c65d2da2ab6dd8530c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/ExceptionDumper.java",
+      "sha256": "d751a79901e06c09c10f277e9f815a44fa672fd3381a9c1c5f2568a6288e498d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/FileDumper.java",
+      "sha256": "395525b3db4633bec4f9e15fd7a6514d0ef54ad8519cee9d3c3992e826a938b4"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/FileSummaryDumper.java",
+      "sha256": "dd47f6680c05ba72bc4e42a92933f9ac70f3080fe1fe2a270977a048c2337c36"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/IllegalIdentifierDump.java",
+      "sha256": "c8891cd45051f701620edd7e82fc385015965501cb85b206f456a0739c50b8af"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/IllegalIdentifierReplacement.java",
+      "sha256": "9527b3e2f0e0db8b0c7f6979e049a0a72d9f8ec4e4fd1a9c8c60485d0ef45817"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/InternalDumperFactoryImpl.java",
+      "sha256": "7f3131d34f253034fc82b50d3a85286244673136c6f0d459014e7712edb89944"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/LogFormatter.java",
+      "sha256": "e0fe23178c338a61208d20103c327275ef3dd67c0c7d01dc2c251ba8c0a60570"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/LoggerFactory.java",
+      "sha256": "9f8cfec6496cf0e7b3d983ae99ef69ec2ce0079b6a83a925e7297e0d4f20fe02"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/MethodErrorCollector.java",
+      "sha256": "e5dced6c4d3bffb4c1f5e653cfed4068076bd8f4f857eddb655dfc5480ba273a"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/MovableDumperContext.java",
+      "sha256": "d390d884aaef2e8a9ffabde0be7557047cdac9ab107a845c93d142f5935c1512"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/NopSummaryDumper.java",
+      "sha256": "b95fc82e914eaef3f267348cdfefbcac4edfce47b40353546984299a945b72e8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/ProgressDumper.java",
+      "sha256": "7c47e6d50a5ce99184b621f940857cdb02372865021b487628f6667a6f3e0757"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/ProgressDumperNop.java",
+      "sha256": "79052c979015829db42d36c3815ce976fe93e773e179e9855618af2659ed0935"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/ProgressDumperStdErr.java",
+      "sha256": "07a1764202483535c33bd6d389e1c23d02c3eac65866c9f0a9b9de009c74d806"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/SinkDumperFactory.java",
+      "sha256": "d1fd53713427624b7805393ee75556feba25fa32b112013440b66cfda91b404c"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/SinkSummaryDumper.java",
+      "sha256": "855632081feabed449a71f1904f8e6c9598a4b89dcd6e2a4d35957e8ca668b3b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/StdErrExceptionDumper.java",
+      "sha256": "fe5bbc3382fef8fa7c77f1c6afbb01b42f6d54c9e932c196a54584d490841aaf"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/StdIODumper.java",
+      "sha256": "a61a9e1d6459cd5a242a1139cda6b6bc1bf1566a991c4f5872357ebfdf2d29de"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/StreamDumper.java",
+      "sha256": "80cbc6138a30a11e4fbc7efb9ed7cd68a6395e9e712db28dc9a3320986e1e476"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/StringStreamDumper.java",
+      "sha256": "a32f91109903bfb8ed497580ae07971fd8535ec25e0d9a18216f174347cecdf8"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/SummaryDumper.java",
+      "sha256": "7e04a50cb0e2971c5bc0cbf37d7e26f76e4037f1ebc87cd7a6b408f689f64f92"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/ToStringDumper.java",
+      "sha256": "7988a455dc2d56a291bf9808ad205d24b8938acb2b388a88b4adccffccd2b586"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/TokenStreamDumper.java",
+      "sha256": "0a329275390288304199bab503ce59b128cd752f8d98b3a1dac5fc6acf51b92b"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/TypeContext.java",
+      "sha256": "04b2f441b7bfc3ec6a12843174bb4b3139b79efec0d25797e398aa80c220058d"
+    },
+    {
+      "path": "src/org/benf/cfr/reader/util/output/TypeOverridingDumper.java",
+      "sha256": "ca43c7f9a4e8fe3dfcf4cfe7066dd13c62ab0472e5cb4f1172b25eaeca03801c"
+    },
+    {
+      "path": "src-templates/org/benf/cfr/reader/util/CfrVersionInfo.java",
+      "sha256": "7e6dc5d05a245649687c42ca717fb26887aa77c9abd39332e65b39d14698738d"
+    }
+  ],
+  "generated": {
+    "path": "task_support/generated/org/benf/cfr/reader/util/CfrVersionInfo.java",
+    "template": "src-templates/org/benf/cfr/reader/util/CfrVersionInfo.java",
+    "sha256": "8d20b93abd25cf035918454af4b464869ac691a66eb1b8cc75b0298d2bbac30d",
+    "substitutions": {
+      "project.version": "0.153-SNAPSHOT",
+      "git.commit.id.abbrev": "c4145259",
+      "git.dirty": "false"
+    }
+  },
+  "excluded": [
+    {
+      "path": ".gitmodules",
+      "reason": "上游只声明可选decompilation-test/test-data；synthetic源码导出不使用子模块"
+    },
+    {
+      "path": "decompilation-test",
+      "reason": "JUnit/Maven黄金测试及缺省测试数据子模块不参与直接javac生产构建；用自有良性素材"
+    },
+    {
+      "path": "pom.xml",
+      "reason": "Maven插件网络依赖不参与运行，等效javac直接编译完整src"
+    }
+  ]
+}
