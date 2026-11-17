@@ -2,6 +2,7 @@
 #define IK_CONSTRAINT_H
 
 #include "ik/config.h"
+#include "ik/vec3.h"
 
 C_BEGIN
 
@@ -30,6 +31,30 @@ struct ik_constraint_t
     struct ik_node_t* node;
     ik_constraint_apply_func apply;
     enum ik_constraint_type_e type;
+
+    /*!
+     * @brief Cone constraint parameters (type == IK_CONE).
+     *
+     * The constraint is attached to the child node but limits the swing of
+     * the bone segment entering that child, i.e. the segment between the
+     * constraint node and its parent.
+     *
+     * cone_axis is the cone's centre axis, expressed as a unit vector in the
+     * PARENT node's local coordinate space at bind time. It is re-bound every
+     * time ik_solver_rebuild() is called; solving or moving effector targets
+     * never re-binds it. During solving the axis is carried along with the
+     * solved orientation of the parent frame, so animating the root or any
+     * ancestor rotates and translates the limit with the skeleton.
+     *
+     * cone_angle is the cone's half-angle in radians, in the range [0, pi].
+     * The default value is pi, which disables the directional restriction.
+     *
+     * Both values are validated by ik_solver_rebuild(): a zero/non-finite
+     * axis or a non-finite/out-of-range angle makes rebuild fail with
+     * IK_INVALID_CONSTRAINT, and no partial solver state is left behind.
+     */
+    ik_vec3_t cone_axis;
+    ikreal_t cone_angle;
 };
 
 IK_INTERFACE(constraint_interface)

@@ -1,8 +1,10 @@
 #include "ik/solver_base.h"
+#include "ik/cone.h"
 
 IK_IMPLEMENT(solver_FABRIK, solver_base)
 {
     IK_OVERRIDE(type_size)
+    IK_OVERRIDE(rebuild)
     IK_CONSTRUCTOR(construct)
     IK_BEFORE(destruct)
     IK_AFTER(solve)

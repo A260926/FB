@@ -3,6 +3,7 @@
 #include "ik/memory.h"
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 /* ------------------------------------------------------------------------- */
 /* Constraint implementations */
@@ -39,12 +40,32 @@ apply_hinge(struct ik_node_t* node)
 static int
 apply_cone(struct ik_node_t* node)
 {
+    /*
+     * Cone constraints are enforced inside the FABRIK backward pass rather
+     * than through this callback. It remains as a no-op so that a constraint
+     * object never carries a NULL function pointer.
+     */
     return 0;
 }
 
 /* ------------------------------------------------------------------------- */
 /* Constraint API */
 /* ------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------------- */
+static void
+set_cone_defaults(struct ik_constraint_t* constraint)
+{
+    /*
+     * A half-angle of pi means "no directional restriction". The default axis
+     * is the parent local +Z direction and is a valid unit vector, so the
+     * constraint passes rebuild() validation until the user customizes it.
+     */
+    constraint->cone_axis.x = 0.0;
+    constraint->cone_axis.y = 0.0;
+    constraint->cone_axis.z = 1.0;
+    constraint->cone_angle = 3.14159265358979323846;
+}
 
 /* ------------------------------------------------------------------------- */
 ikret_t
@@ -66,6 +87,7 @@ ik_constraint_base_set_type(struct ik_constraint_t* constraint, enum ik_constrai
 
         case IK_CONE:
             constraint->apply = apply_cone;
+            set_cone_defaults(constraint);
             break;
 
         case IK_CUSTOM:

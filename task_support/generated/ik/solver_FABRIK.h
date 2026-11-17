@@ -7,10 +7,12 @@
 C_BEGIN
 
 #include "ik/solver_base.h"
+#include "ik/cone.h"
 
 IK_PRIVATE_API uintptr_t ik_solver_FABRIK_type_size(void);
 IK_PRIVATE_API ikret_t ik_solver_FABRIK_construct(struct ik_solver_t* solver);
 IK_PRIVATE_API void ik_solver_FABRIK_destruct(struct ik_solver_t* solver);
+IK_PRIVATE_API ikret_t ik_solver_FABRIK_rebuild(struct ik_solver_t* solver);
 IK_PRIVATE_API ikret_t ik_solver_FABRIK_solve(struct ik_solver_t* solver);
 static inline ikret_t ik_solver_FABRIK_harness_solve_return_value(ikret_t, ikret_t);
 #define IK_SOLVER_FABRIK_IMPL \
@@ -19,7 +21,7 @@ static inline ikret_t ik_solver_FABRIK_harness_solve_return_value(ikret_t, ikret
     ik_solver_base_destroy, \
     ik_solver_FABRIK_harness_construct, \
     ik_solver_FABRIK_harness_destruct, \
-    ik_solver_base_rebuild, \
+    ik_solver_FABRIK_rebuild, \
     ik_solver_base_update_distances, \
     ik_solver_FABRIK_harness_solve, \
     ik_solver_base_set_tree, \
