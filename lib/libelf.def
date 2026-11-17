@@ -14,6 +14,9 @@ EXPORTS
 	elf_flagphdr
 	elf_flagscn
 	elf_flagshdr
+	elf_fatselect
+	elf_getfatnum
+	elf_getfatrecord
 	elf_getarhdr
 	elf_getarsym
 	elf_getbase

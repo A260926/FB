@@ -33,6 +33,10 @@ elf_next(Elf *elf) {
 	return ELF_C_NULL;
     }
     elf_assert(elf->e_parent->e_magic == ELF_MAGIC);
+    if (elf->e_parent->e_kind == ELF_K_FAT) {
+	/* advance the FatELF cursor past this record */
+	return _elf_fat_next(elf);
+    }
     elf_assert(elf->e_parent->e_kind == ELF_K_AR);
     elf->e_parent->e_off = elf->e_next;
     if (elf->e_next == elf->e_parent->e_size) {

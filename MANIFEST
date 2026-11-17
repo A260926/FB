@@ -37,6 +37,7 @@
 1037 lib/errno.c
 6222 lib/errors.h
 8107 lib/ext_types.h
+9569 lib/fat.c
 997 lib/fill.c
 2400 lib/flag.c
 5103 lib/gelf.h

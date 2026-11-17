@@ -134,6 +134,11 @@ struct Elf {
     size_t	e_symlen;		/* length of archive symbol table */
     char*	e_strtab;		/* archive string table */
     size_t	e_strlen;		/* length of archive string table */
+    /* FatELF containers */
+    Elf_FatRecord* e_fat_records;	/* parsed record table */
+    size_t	e_fat_count;		/* number of records */
+    size_t	e_fat_next;		/* index of next record to open */
+    size_t	e_fat_index;		/* record index (FatELF members) */
     /* ELF files */
     unsigned	e_class;		/* ELF class */
     unsigned	e_encoding;		/* ELF data encoding */
@@ -154,6 +159,7 @@ struct Elf {
     unsigned	e_free_syms : 1;	/* e_symtab is malloc'ed */
     unsigned	e_unmap_data : 1;	/* e_data is mmap'ed */
     unsigned	e_memory : 1;		/* created by elf_memory() */
+    unsigned	e_fat_member : 1;	/* member of a FatELF container */
     /* magic number for debugging */
     long	e_magic;
 };
@@ -180,6 +186,10 @@ struct Elf {
     /* e_symlen */	0,\
     /* e_strtab */	NULL,\
     /* e_strlen */	0,\
+    /* e_fat_records */	NULL,\
+    /* e_fat_count */	0,\
+    /* e_fat_next */	0,\
+    /* e_fat_index */	0,\
     /* e_class */	ELFCLASSNONE,\
     /* e_encoding */	ELFDATANONE,\
     /* e_version */	EV_NONE,\
@@ -198,6 +208,7 @@ struct Elf {
     /* e_free_syms */	0,\
     /* e_unmap_data */	0,\
     /* e_memory */	0,\
+    /* e_fat_member */	0,\
     /* e_magic */	ELF_MAGIC\
 }
 
@@ -310,6 +321,14 @@ extern size_t _elf32_xltsize __P((const Elf_Data *__src, unsigned __dv, unsigned
 extern size_t _elf64_xltsize __P((const Elf_Data *__src, unsigned __dv, unsigned __encode, int __tof));
 extern int _elf_update_shnum(Elf *__elf, size_t __shnum);
 extern Elf_Scn *_elf_first_scn(Elf *__elf);
+
+/*
+ * FatELF containers
+ */
+extern int _elf_fat_recognize __P((const void*, size_t));
+extern int _elf_fat_init __P((Elf*));
+extern Elf *_elf_fat_begin __P((Elf*, Elf_Cmd));
+extern Elf_Cmd _elf_fat_next __P((Elf*));
 
 /*
  * Special translators

@@ -84,7 +84,8 @@ elf_end(Elf *elf) {
     }
     if (elf->e_parent) {
 	elf_assert(elf->e_parent->e_magic == ELF_MAGIC);
-	elf_assert(elf->e_parent->e_kind == ELF_K_AR);
+	elf_assert(elf->e_parent->e_kind == ELF_K_AR
+		|| elf->e_parent->e_kind == ELF_K_FAT);
 	siblings = &elf->e_parent->e_members;
 	while (*siblings) {
 	    if (*siblings == elf) {
@@ -94,7 +95,9 @@ elf_end(Elf *elf) {
 	    siblings = &(*siblings)->e_link;
 	}
 	elf_end(elf->e_parent);
-	_elf_free(elf->e_arhdr);
+	if (!elf->e_fat_member) {
+	    _elf_free(elf->e_arhdr);
+	}
     }
 #if HAVE_MMAP
     else if (elf->e_unmap_data) {
@@ -111,6 +114,7 @@ elf_end(Elf *elf) {
     if (elf->e_free_syms) {
 	_elf_free(elf->e_symtab);
     }
+    _elf_free(elf->e_fat_records);
     _elf_free(elf->e_ehdr);
     _elf_free(elf->e_phdr);
     free(elf);

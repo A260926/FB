@@ -23,6 +23,7 @@
 #define _LIBELF_H
 
 #include <stddef.h>	/* for size_t */
+#include <stdint.h>	/* for uint64_t */
 #include <sys/types.h>
 
 #if __LIBELF_INTERNAL__
@@ -84,6 +85,7 @@ typedef enum {
     ELF_K_AR,
     ELF_K_COFF,
     ELF_K_ELF,
+    ELF_K_FAT,		/* FatELF container */
     ELF_K_NUM		/* must be last */
 } Elf_Kind;
 
@@ -144,6 +146,23 @@ typedef struct {
     off_t		ar_size;
     char*		ar_rawname;
 } Elf_Arhdr;
+
+/*
+ * FatELF v1 record (host representation)
+ *
+ * A FatELF container stores one ELF image per target.  word_size and
+ * byte_order use the ELF class and data encoding values (1 = ELFCLASS32 /
+ * ELFDATA2LSB, 2 = ELFCLASS64 / ELFDATA2MSB).
+ */
+typedef struct {
+    unsigned	machine;	/* ELF e_machine */
+    unsigned	osabi;		/* ELF e_ident[EI_OSABI] */
+    unsigned	osabi_version;	/* ELF e_ident[EI_ABIVERSION] */
+    unsigned	word_size;	/* 1 = 32-bit, 2 = 64-bit */
+    unsigned	byte_order;	/* 1 = little endian, 2 = big endian */
+    uint64_t	offset;		/* offset of the image in the container */
+    uint64_t	size;		/* size of the image */
+} Elf_FatRecord;
 
 /*
  * Archive symbol table
@@ -265,6 +284,20 @@ DEPRECATED extern int elf_getshstrndx __P((Elf *__elf, size_t *__resultp));
 extern int elf_getphdrnum __P((Elf *__elf, size_t *__resultp));
 extern int elf_getshdrnum __P((Elf *__elf, size_t *__resultp));
 extern int elf_getshdrstrndx __P((Elf *__elf, size_t *__resultp));
+
+/*
+ * FatELF containers
+ *
+ * elf_getfatnum() and elf_fatselect() return 0 on success, -1 on failure.
+ * elf_getfatrecord() returns its result argument, or NULL on failure.
+ * Record indices start at zero.  Selection only changes which record the
+ * next elf_begin(fd, ELF_C_READ, container) will open; it does not open
+ * anything by itself.
+ */
+extern int elf_getfatnum __P((Elf *__elf, size_t *__resultp));
+extern Elf_FatRecord *elf_getfatrecord __P((Elf *__elf, size_t __index,
+	Elf_FatRecord *__resultp));
+extern int elf_fatselect __P((Elf *__elf, size_t __index));
 
 /*
  * Convenience functions

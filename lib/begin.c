@@ -23,6 +23,10 @@
 static const char rcsid[] = "@(#) $Id: begin.c,v 1.21 2008/05/23 08:15:34 michael Exp $";
 #endif /* lint */
 
+#if HAVE_MMAP
+#include <sys/mman.h>
+#endif /* HAVE_MMAP */
+
 #if HAVE_AR_H
 #include <ar.h>
 #else /* HAVE_AR_H */
@@ -226,7 +230,7 @@ _elf_arhdr(Elf *arf) {
     return arhdr;
 }
 
-static void
+static int
 _elf_check_type(Elf *elf, size_t size) {
     elf->e_idlen = size;
     if (size >= EI_NIDENT && !memcmp(elf->e_data, ELFMAG, SELFMAG)) {
@@ -238,6 +242,57 @@ _elf_check_type(Elf *elf, size_t size) {
     }
     else if (size >= SARMAG && !memcmp(elf->e_data, ARMAG, SARMAG)) {
 	_elf_init_ar(elf);
+    }
+    else if (_elf_fat_recognize(elf->e_data, size)) {
+	/*
+	 * FatELF metadata is validated as part of the open call:
+	 * malformed containers must not yield a half-usable descriptor.
+	 */
+	if (!_elf_fat_init(elf)) {
+	    return 0;
+	}
+    }
+    return 1;
+}
+
+static void
+_elf_free_image(Elf *elf) {
+#if HAVE_MMAP
+    if (elf->e_unmap_data) {
+	munmap(elf->e_data, elf->e_size);
+	return;
+    }
+#endif /* HAVE_MMAP */
+    if (!elf->e_memory) {
+	free(elf->e_data);
+    }
+}
+
+/*
+ * Undo a partially constructed descriptor after a failed open.
+ */
+static void
+_elf_begin_fail(Elf *elf, Elf *ref) {
+    if (elf->e_parent) {
+	Elf **siblings = &elf->e_parent->e_members;
+
+	/* the image is shared with the parent, so don't free it */
+	while (*siblings) {
+	    if (*siblings == elf) {
+		*siblings = elf->e_link;
+		break;
+	    }
+	    siblings = &(*siblings)->e_link;
+	}
+	free(elf->e_arhdr);
+	free(elf->e_fat_records);
+	free(elf);
+	elf_end(ref);
+    }
+    else {
+	free(elf->e_fat_records);
+	_elf_free_image(elf);
+	free(elf);
     }
 }
 
@@ -268,6 +323,29 @@ elf_begin(int fd, Elf_Cmd cmd, Elf *ref) {
 	if (!ref->e_readable || (cmd == ELF_C_RDWR && !ref->e_writable)) {
 	    seterr(ERROR_CMDMISMATCH);
 	    return NULL;
+	}
+	if (ref->e_kind == ELF_K_FAT) {
+	    /*
+	     * A FatELF container opens one record per call.  Write
+	     * access is not supported at all.
+	     */
+	    if (cmd != ELF_C_READ) {
+		seterr(ERROR_MEMBERWRITE);
+		return NULL;
+	    }
+	    if (ref->e_memory) {
+		fd = ref->e_fd;
+	    }
+	    else if (!ref->e_disabled && fd != ref->e_fd) {
+		/*
+		 * The container image is already in memory when the
+		 * descriptor was disabled, so the caller's descriptor
+		 * number is no longer meaningful.
+		 */
+		seterr(ERROR_FDMISMATCH);
+		return NULL;
+	    }
+	    return _elf_fat_begin(ref, cmd);
 	}
 	if (ref->e_kind != ELF_K_AR) {
 	    ref->e_count++;
@@ -404,7 +482,16 @@ elf_begin(int fd, Elf_Cmd cmd, Elf *ref) {
 	}
     }
 
-    _elf_check_type(elf, size);
+    if (!_elf_check_type(elf, size)) {
+	_elf_begin_fail(elf, ref);
+	return NULL;
+    }
+    if (elf->e_kind == ELF_K_FAT && cmd != ELF_C_READ) {
+	/* FatELF containers are read-only */
+	seterr(ERROR_MEMBERWRITE);
+	_elf_begin_fail(elf, ref);
+	return NULL;
+    }
     return elf;
 }
 
@@ -433,7 +520,10 @@ elf_memory(char *image, size_t size) {
     elf->e_disabled = 1;
     elf->e_memory = 1;
 
-    _elf_check_type(elf, size);
+    if (!_elf_check_type(elf, size)) {
+	free(elf);
+	return NULL;
+    }
     return elf;
 }
 

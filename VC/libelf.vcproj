@@ -239,6 +239,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\lib\fat.c"
+				>
+			</File>
+			<File
 				RelativePath="..\lib\fill.c"
 				>
 			</File>

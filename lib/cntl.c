@@ -53,6 +53,19 @@ elf_cntl(Elf *elf, Elf_Cmd cmd) {
 	    }
 	}
     }
+    else if (elf->e_kind == ELF_K_FAT) {
+	/*
+	 * A FatELF container image is read in full when the descriptor is
+	 * created, so disabling its file descriptor cannot lose data.
+	 * Propagate the state to records that are already open.
+	 */
+	for (child = elf->e_members; child; child = child->e_link) {
+	    elf_assert(elf == child->e_parent);
+	    if (elf_cntl(child, cmd)) {
+		return -1;
+	    }
+	}
+    }
     else if (elf->e_kind == ELF_K_ELF && cmd == ELF_C_FDREAD) {
 	if (!elf->e_ehdr && !_elf_cook(elf)) {
 	    return -1;
