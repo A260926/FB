@@ -1,5 +1,6 @@
 
 #include "libinjection_xss.h"
+#include "libinjection_xss_internal.h"
 #include "libinjection.h"
 #include "libinjection_html5.h"
 
@@ -7,16 +8,20 @@
 
 #define IS_HEX_ENTITY_PREFIX(src) (*(src + 2) == 'x' || *(src + 2) == 'X')
 
-typedef enum attribute {
-    TYPE_NONE,
-    TYPE_BLACK,    /* ban always */
-    TYPE_ATTR_URL, /* attribute value takes a URL-like object */
-    TYPE_STYLE,
-    TYPE_ATTR_INDIRECT /* attribute *name* is given in *value* */
-} attribute_t;
+/*
+ * The category constants are defined once in libinjection_xss_internal.h
+ * (xss_attr_type_t) so both the one-shot and stream paths share one
+ * classification routine.
+ */
+typedef xss_attr_type_t attribute_t;
+#define TYPE_NONE XSS_ATTR_NONE
+#define TYPE_BLACK XSS_ATTR_BLACK
+#define TYPE_ATTR_URL XSS_ATTR_URL
+#define TYPE_STYLE XSS_ATTR_STYLE
+#define TYPE_ATTR_INDIRECT XSS_ATTR_INDIRECT
 
-static attribute_t is_black_attr(const char *s, size_t len);
-static int is_black_tag(const char *s, size_t len);
+attribute_t libinjection_xss_lookup_attr(const char *s, size_t len);
+int libinjection_xss_lookup_tag(const char *s, size_t len);
 static int is_black_url(const char *s, size_t len);
 static int cstrcasecmp_with_null(const char *a, const char *b, size_t n);
 static int html_decode_char_at(const char *src, size_t len, size_t *consumed);
@@ -950,20 +955,12 @@ static int htmlencode_startswith(const char *a, const char *b, size_t n) {
     return (*a == 0) ? 1 : 0;
 }
 
-static int is_black_tag(const char *s, size_t len) {
-    const char **black;
-
+int libinjection_xss_lookup_tag(const char *s, size_t len) {
+    if (libinjection_xss_blacktag_table(s, len)) {
+        return 1;
+    }
     if (len < 3) {
         return 0;
-    }
-
-    black = BLACKTAG;
-    while (*black != NULL) {
-        if (cstrcasecmp_with_null(*black, s, len) == 0) {
-            /* printf("Got black tag %s\n", *black); */
-            return 1;
-        }
-        black += 1;
     }
 
     /* anything SVG related */
@@ -983,7 +980,31 @@ static int is_black_tag(const char *s, size_t len) {
     return 0;
 }
 
-static attribute_t is_black_attr(const char *s, size_t len) {
+/*
+ * Table-only part of the tag check.  The incremental matcher needs the
+ * BLACKTAG comparison (which skips embedded NULs via
+ * cstrcasecmp_with_null) without the raw-position SVG/XSL rule, because
+ * that rule reads the original token bytes -- NULs included -- and the
+ * matcher's folded view deliberately strips NULs.  The matcher applies
+ * the SVG/XSL rule itself against its raw head instead.
+ */
+int libinjection_xss_blacktag_table(const char *s, size_t len) {
+    const char **black;
+
+    if (len < 3) {
+        return 0;
+    }
+    black = BLACKTAG;
+    while (*black != NULL) {
+        if (cstrcasecmp_with_null(*black, s, len) == 0) {
+            return 1;
+        }
+        black += 1;
+    }
+    return 0;
+}
+
+attribute_t libinjection_xss_lookup_attr(const char *s, size_t len) {
     stringtype_t *black;
 
     if (len < 2) {
@@ -1033,6 +1054,144 @@ static attribute_t is_black_attr(const char *s, size_t len) {
     return TYPE_NONE;
 }
 
+/*
+ * Incremental name matcher.  The folded view is exactly what
+ * cstrcasecmp_with_null() compares against: NUL bytes are skipped and
+ * ASCII letters are upper-cased.  Keeping it bounded is sound because
+ * no table entry is longer than XSS_NAME_MAX - 1 bytes, so a longer
+ * name cannot match anything.
+ */
+void libinjection_xss_name_matcher_init(xss_name_matcher_t *m) {
+    m->raw_len = 0;
+    m->folded_len = 0;
+    m->folded_total = 0;
+}
+
+void libinjection_xss_name_matcher_byte(xss_name_matcher_t *m,
+                                        unsigned char b) {
+    unsigned char up = b;
+
+    if (m->raw_len < XSS_NAME_MAX) {
+        m->raw[m->raw_len++] = (char)b;
+    } else if (m->raw_len == XSS_NAME_MAX) {
+        m->raw_len += 1; /* saturate: remember the head is incomplete */
+    }
+
+    if (b == 0) {
+        return;
+    }
+    m->folded_total += 1;
+    if (up >= 'a' && up <= 'z') {
+        up = (unsigned char)(up - 0x20);
+    }
+    if (m->folded_len < XSS_NAME_MAX) {
+        m->folded[m->folded_len++] = (char)up;
+    }
+}
+
+int libinjection_xss_name_matcher_is_tag(xss_name_matcher_t *m) {
+    /* is_black_tag()'s SVG/XSL rules inspect the first three RAW token
+     * bytes and fire at any name length (NULs are not skipped there);
+     * the bounded raw head always retains those bytes */
+    if (m->raw_len >= 3) {
+        unsigned char r0 = (unsigned char)m->raw[0];
+        unsigned char r1 = (unsigned char)m->raw[1];
+        unsigned char r2 = (unsigned char)m->raw[2];
+        if (((r0 == 's' || r0 == 'S') && (r1 == 'v' || r1 == 'V') &&
+             (r2 == 'g' || r2 == 'G')) ||
+            ((r0 == 'x' || r0 == 'X') && (r1 == 's' || r1 == 'S') &&
+             (r2 == 'l' || r2 == 'L'))) {
+            return 1;
+        }
+    }
+
+    if (m->folded_total < 3 || m->folded_total > XSS_NAME_MAX) {
+        return 0;
+    }
+    /* folded has no embedded NULs and the length is exact; this is the
+     * BLACKTAG table comparison alone (the raw SVG/XSL rule was already
+     * applied above against the true token head). */
+    return libinjection_xss_blacktag_table(m->folded, m->folded_total);
+}
+
+xss_attr_type_t
+libinjection_xss_name_matcher_attr(xss_name_matcher_t *m) {
+    size_t len = m->folded_total;
+
+    if (len < 2) {
+        return TYPE_NONE;
+    }
+
+    if (len >= 5 && m->folded[0] == 'O' && m->folded[1] == 'N') {
+        /* JavaScript on.* event handlers.  The original rule is a
+         * prefix match (it compares only the shorter of the two
+         * lengths), so any name starting with "on" plus a table entry
+         * fires; the same BLACKATTREVENT table and the same comparison
+         * routine are used.  Entries are at most 44 bytes, so only the
+         * bounded head of folded is ever read. */
+        stringtype_t *black = BLACKATTREVENT;
+        const char *rest = m->folded + 2;
+        size_t rest_len = len - 2;
+        while (black->name != NULL) {
+            size_t name_len = strlen(black->name);
+            size_t max_len = rest_len < name_len ? rest_len : name_len;
+            if (cstrcasecmp_with_null(black->name, rest, max_len) == 0) {
+                return black->atype;
+            }
+            black += 1;
+        }
+    }
+
+    /* the remaining rules all demand an exact match, impossible once
+     * the name is longer than every table entry */
+    if (len > XSS_NAME_MAX) {
+        return TYPE_NONE;
+    }
+    return libinjection_xss_lookup_attr(m->folded, len);
+}
+
+/*
+ * The shared TAG_COMMENT rule.  The stream path records a backtick
+ * anywhere in the comment and keeps only the six head bytes, which is
+ * every byte this rule ever reads.
+ */
+injection_result_t libinjection_xss_classify_comment(const char *token_start,
+                                                     size_t token_len,
+                                                     int backtick) {
+    /* IE uses a "`" as a tag ending char */
+    if (backtick) {
+        return LIBINJECTION_RESULT_TRUE;
+    }
+
+    /* IE conditional comment */
+    if (token_len > 3) {
+        if (token_start[0] == '[' &&
+            (token_start[1] == 'i' || token_start[1] == 'I') &&
+            (token_start[2] == 'f' || token_start[2] == 'F')) {
+            return LIBINJECTION_RESULT_TRUE;
+        }
+        if ((token_start[0] == 'x' || token_start[0] == 'X') &&
+            (token_start[1] == 'm' || token_start[1] == 'M') &&
+            (token_start[2] == 'l' || token_start[2] == 'L')) {
+            return LIBINJECTION_RESULT_TRUE;
+        }
+    }
+
+    if (token_len > 5) {
+        /*  IE <?import pseudo-tag */
+        if (cstrcasecmp_with_null("IMPORT", token_start, 6) == 0) {
+            return LIBINJECTION_RESULT_TRUE;
+        }
+
+        /*  XML Entity definition */
+        if (cstrcasecmp_with_null("ENTITY", token_start, 6) == 0) {
+            return LIBINJECTION_RESULT_TRUE;
+        }
+    }
+
+    return LIBINJECTION_RESULT_FALSE;
+}
+
 static int is_black_url(const char *s, size_t len) {
 
     static const char *data_url = "DATA";
@@ -1075,93 +1234,96 @@ static int is_black_url(const char *s, size_t len) {
     return 0;
 }
 
+/*
+ * Shared classification rule for one fully emitted h5 token.
+ *
+ * Both the one-shot path (libinjection_is_xss) and the incremental
+ * stream path (libinjection_xss_stream.c) call this, so the blacklists
+ * and every special case below exist in exactly one place.
+ *
+ * *attr carries the pending attribute category across the
+ * ATTR_NAME/ATTR_VALUE token pair; initialize it to TYPE_NONE for each
+ * new parse.
+ */
+injection_result_t libinjection_xss_classify_token(enum html5_type token_type,
+                                                    const char *token_start,
+                                                    size_t token_len,
+                                                    xss_attr_type_t *attrp) {
+    attribute_t attr = (attribute_t)*attrp;
+
+    if (token_type != ATTR_VALUE) {
+        attr = TYPE_NONE;
+    }
+
+    if (token_type == DOCTYPE) {
+        return LIBINJECTION_RESULT_TRUE;
+    } else if (token_type == TAG_NAME_OPEN) {
+        if (libinjection_xss_lookup_tag(token_start, token_len)) {
+            return LIBINJECTION_RESULT_TRUE;
+        }
+    } else if (token_type == ATTR_NAME) {
+        attr = libinjection_xss_lookup_attr(token_start, token_len);
+    } else if (token_type == ATTR_VALUE) {
+        /*
+         * IE6,7,8 parsing works a bit differently so
+         * a whole <script> or other black tag might be hiding
+         * inside an attribute value under HTML 5 parsing
+         * See http://html5sec.org/#102
+         * to avoid doing a full reparse of the value, just
+         * look for "<".  This probably need adjusting to
+         * handle escaped characters
+         */
+        /*
+          if (memchr(token_start, '<', token_len) != NULL) {
+          return 1;
+          }
+        */
+
+        switch (attr) {
+        case TYPE_NONE:
+            break;
+        case TYPE_BLACK:
+            return LIBINJECTION_RESULT_TRUE;
+        case TYPE_ATTR_URL:
+            if (is_black_url(token_start, token_len)) {
+                return LIBINJECTION_RESULT_TRUE;
+            }
+            break;
+        case TYPE_STYLE:
+            return LIBINJECTION_RESULT_TRUE;
+        case TYPE_ATTR_INDIRECT:
+            /* an attribute name is specified in a _value_ */
+            if (libinjection_xss_lookup_attr(token_start, token_len)) {
+                return LIBINJECTION_RESULT_TRUE;
+            }
+            break;
+        }
+        attr = TYPE_NONE;
+    } else if (token_type == TAG_COMMENT) {
+        int backtick = memchr(token_start, '`', token_len) != NULL;
+        injection_result_t comment_result = libinjection_xss_classify_comment(
+            token_start, token_len, backtick);
+        if (comment_result != LIBINJECTION_RESULT_FALSE) {
+            return comment_result;
+        }
+    }
+
+    *attrp = (xss_attr_type_t)attr;
+    return LIBINJECTION_RESULT_FALSE;
+}
+
 injection_result_t libinjection_is_xss(const char *s, size_t len, int flags) {
     h5_state_t h5;
-    attribute_t attr = TYPE_NONE;
+    xss_attr_type_t attr = XSS_ATTR_NONE;
     injection_result_t parser_result;
 
     libinjection_h5_init(&h5, s, len, (enum html5_flags)flags);
     while ((parser_result = libinjection_h5_next(&h5)) ==
            LIBINJECTION_RESULT_TRUE) {
-        if (h5.token_type != ATTR_VALUE) {
-            attr = TYPE_NONE;
-        }
-
-        if (h5.token_type == DOCTYPE) {
-            return LIBINJECTION_RESULT_TRUE;
-        } else if (h5.token_type == TAG_NAME_OPEN) {
-            if (is_black_tag(h5.token_start, h5.token_len)) {
-                return LIBINJECTION_RESULT_TRUE;
-            }
-        } else if (h5.token_type == ATTR_NAME) {
-            attr = is_black_attr(h5.token_start, h5.token_len);
-        } else if (h5.token_type == ATTR_VALUE) {
-            /*
-             * IE6,7,8 parsing works a bit differently so
-             * a whole <script> or other black tag might be hiding
-             * inside an attribute value under HTML 5 parsing
-             * See http://html5sec.org/#102
-             * to avoid doing a full reparse of the value, just
-             * look for "<".  This probably need adjusting to
-             * handle escaped characters
-             */
-            /*
-              if (memchr(h5.token_start, '<', h5.token_len) != NULL) {
-              return 1;
-              }
-            */
-
-            switch (attr) {
-            case TYPE_NONE:
-                break;
-            case TYPE_BLACK:
-                return LIBINJECTION_RESULT_TRUE;
-            case TYPE_ATTR_URL:
-                if (is_black_url(h5.token_start, h5.token_len)) {
-                    return LIBINJECTION_RESULT_TRUE;
-                }
-                break;
-            case TYPE_STYLE:
-                return LIBINJECTION_RESULT_TRUE;
-            case TYPE_ATTR_INDIRECT:
-                /* an attribute name is specified in a _value_ */
-                if (is_black_attr(h5.token_start, h5.token_len)) {
-                    return LIBINJECTION_RESULT_TRUE;
-                }
-                break;
-            }
-            attr = TYPE_NONE;
-        } else if (h5.token_type == TAG_COMMENT) {
-            /* IE uses a "`" as a tag ending char */
-            if (memchr(h5.token_start, '`', h5.token_len) != NULL) {
-                return LIBINJECTION_RESULT_TRUE;
-            }
-
-            /* IE conditional comment */
-            if (h5.token_len > 3) {
-                if (h5.token_start[0] == '[' &&
-                    (h5.token_start[1] == 'i' || h5.token_start[1] == 'I') &&
-                    (h5.token_start[2] == 'f' || h5.token_start[2] == 'F')) {
-                    return LIBINJECTION_RESULT_TRUE;
-                }
-                if ((h5.token_start[0] == 'x' || h5.token_start[0] == 'X') &&
-                    (h5.token_start[1] == 'm' || h5.token_start[1] == 'M') &&
-                    (h5.token_start[2] == 'l' || h5.token_start[2] == 'L')) {
-                    return LIBINJECTION_RESULT_TRUE;
-                }
-            }
-
-            if (h5.token_len > 5) {
-                /*  IE <?import pseudo-tag */
-                if (cstrcasecmp_with_null("IMPORT", h5.token_start, 6) == 0) {
-                    return LIBINJECTION_RESULT_TRUE;
-                }
-
-                /*  XML Entity definition */
-                if (cstrcasecmp_with_null("ENTITY", h5.token_start, 6) == 0) {
-                    return LIBINJECTION_RESULT_TRUE;
-                }
-            }
+        parser_result = libinjection_xss_classify_token(
+            h5.token_type, h5.token_start, h5.token_len, &attr);
+        if (parser_result != LIBINJECTION_RESULT_FALSE) {
+            return parser_result;
         }
     }
     return parser_result;
