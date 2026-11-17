@@ -1,0 +1,14 @@
+Pingo.pro.user
+
+build
+.vscode
+.cache
+.vs/
+
+CMakeSettings.json
+
+CMakeLists.txt.user
+
+toolchain-mingw64.cmake
+
+.claude/
