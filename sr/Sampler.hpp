@@ -29,6 +29,8 @@ namespace sr
         AddressMode addressModeX = AddressMode::clamp;
         AddressMode addressModeY = AddressMode::clamp;
         Filter filter = Filter::point;
+        Filter mipFilter = Filter::point;
+        float lod = 0.0F;
     };
 }
 

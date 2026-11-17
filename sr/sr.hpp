@@ -16,6 +16,7 @@
 #include "Shader.hpp"
 #include "Size.hpp"
 #include "Texture.hpp"
+#include "TextureView.hpp"
 #include "Vector.hpp"
 #include "Vertex.hpp"
 
