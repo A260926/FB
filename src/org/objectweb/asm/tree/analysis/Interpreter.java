@@ -33,6 +33,7 @@ import java.util.List;
 
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 
 /**
  * A semantic bytecode interpreter. More precisely, this interpreter only
@@ -69,6 +70,32 @@ public abstract class Interpreter<V extends Value> {
      *         value must be equal to the size of the given type.
      */
     public abstract V newValue(Type type);
+
+    /**
+     * Creates the initial value of a local variable of the analyzed method.
+     * This method is called by {@link Analyzer} for the method parameters
+     * (including <code>this</code>, if any) and for the remaining local
+     * variable slots, with a <tt>null</tt> type for the slots reserved by
+     * long and double values and for the unused slots. The default
+     * implementation delegates to {@link #newValue(Type)}.
+     *
+     * @param type
+     *            a primitive or reference type, or <tt>null</tt> to represent
+     *            an uninitialized slot.
+     * @param owner
+     *            the internal name of the class to which the analyzed method
+     *            belongs.
+     * @param m
+     *            the analyzed method.
+     * @param local
+     *            the index of the local variable to be initialized.
+     * @return a value that represents the given type. The size of the
+     *         returned value must be equal to the size of the given type.
+     */
+    public V newEntryValue(final Type type, final String owner,
+            final MethodNode m, final int local) {
+        return newValue(type);
+    }
 
     /**
      * Interprets a bytecode instruction without arguments. This method is
@@ -189,6 +216,37 @@ public abstract class Interpreter<V extends Value> {
      */
     public abstract V naryOperation(AbstractInsnNode insn,
             List<? extends V> values) throws AnalyzerException;
+
+    /**
+     * Interprets a method invocation instruction, with access to the frame on
+     * which the instruction is executed. This method is called for the
+     * following opcodes:
+     *
+     * INVOKEVIRTUAL, INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE
+     *
+     * It is called after the arguments of the invocation have been popped
+     * from the frame, and, for non void invocations, its result is pushed on
+     * the frame's stack. The default implementation delegates to
+     * {@link #naryOperation(AbstractInsnNode, List)} and does not modify the
+     * frame.
+     *
+     * @param insn
+     *            the bytecode instruction to be interpreted.
+     * @param values
+     *            the arguments of the instruction to be interpreted,
+     *            including the receiver for instance method invocations.
+     * @param frame
+     *            the frame on which the instruction is executed, after the
+     *            arguments of the invocation have been popped from it.
+     * @return the result of the interpretation of the given instruction.
+     * @throws AnalyzerException
+     *             if an error occured during the interpretation.
+     */
+    public V invokeOperation(final AbstractInsnNode insn,
+            final List<? extends V> values, final Frame<V> frame)
+            throws AnalyzerException {
+        return naryOperation(insn, values);
+    }
 
     /**
      * Interprets a bytecode return instruction. This method is called for the

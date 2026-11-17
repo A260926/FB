@@ -162,16 +162,24 @@ public class Analyzer<V extends Value> implements Opcodes {
         int local = 0;
         if ((m.access & ACC_STATIC) == 0) {
             Type ctype = Type.getObjectType(owner);
-            current.setLocal(local++, interpreter.newValue(ctype));
+            current.setLocal(local, interpreter.newEntryValue(ctype, owner, m,
+                    local));
+            local++;
         }
         for (int i = 0; i < args.length; ++i) {
-            current.setLocal(local++, interpreter.newValue(args[i]));
+            current.setLocal(local, interpreter.newEntryValue(args[i], owner,
+                    m, local));
+            local++;
             if (args[i].getSize() == 2) {
-                current.setLocal(local++, interpreter.newValue(null));
+                current.setLocal(local, interpreter.newEntryValue(null, owner,
+                        m, local));
+                local++;
             }
         }
         while (local < m.maxLocals) {
-            current.setLocal(local++, interpreter.newValue(null));
+            current.setLocal(local, interpreter.newEntryValue(null, owner, m,
+                    local));
+            local++;
         }
         merge(0, current, null);
 

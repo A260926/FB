@@ -60,6 +60,14 @@ for (int i = 0; i < methods.size(); ++i) {
 </pre>
 
 <p>
+Other interpreters provide other value abstractions: SourceInterpreter
+tracks the instructions that produce each value, and
+InitializationInterpreter tracks how object references are allocated and
+initialized, distinguishing uninitialized NEW references and the
+uninitialized <i>this</i> of constructors from initialized values.
+</p>
+
+<p>
 @since ASM 1.4.3
 </p>
 

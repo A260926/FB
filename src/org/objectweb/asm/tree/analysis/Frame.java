@@ -193,6 +193,25 @@ public class Frame<V extends Value> {
     }
 
     /**
+     * Sets the value of the given operand stack slot.
+     *
+     * @param i
+     *            the index of an operand stack slot.
+     * @param value
+     *            the new value of the corresponding operand stack slot.
+     * @throws IndexOutOfBoundsException
+     *             if the operand stack slot does not exist.
+     */
+    public void setStack(final int i, final V value)
+            throws IndexOutOfBoundsException {
+        if (i >= top) {
+            throw new IndexOutOfBoundsException(
+                    "Trying to access an inexistant stack slot");
+        }
+        values[i + locals] = value;
+    }
+
+    /**
      * Clears the operand stack of this frame.
      */
     public void clearStack() {
@@ -605,9 +624,9 @@ public class Frame<V extends Value> {
                 values.add(0, pop());
             }
             if (Type.getReturnType(desc) == Type.VOID_TYPE) {
-                interpreter.naryOperation(insn, values);
+                interpreter.invokeOperation(insn, values, this);
             } else {
-                push(interpreter.naryOperation(insn, values));
+                push(interpreter.invokeOperation(insn, values, this));
             }
             break;
         }

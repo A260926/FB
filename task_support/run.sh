@@ -11,7 +11,7 @@ find task_support -name '*.java' ! -name 'InitializationContract.java' > .task-b
 if [[ $mode == target ]]; then echo task_support/InitializationContract.java >> .task-build/sources; fi
 javac --release 17 -cp .task-build/classes -d .task-build/classes @.task-build/sources
 if [[ $mode == target ]]; then
- output_log=$(mktemp)
+ output_log=$(mktemp "${TMPDIR:-/tmp}/task-target.XXXXXXXX")
  trap 'rm -f "$output_log"' EXIT
  set +e
  java -ea -cp .task-build/classes task.TaskCheck >"$output_log" 2>&1
