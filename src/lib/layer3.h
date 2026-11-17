@@ -135,6 +135,32 @@ unsigned char *shine_encode_buffer(shine_t s, int16_t **data, int *written);
 unsigned char *shine_encode_buffer_interleaved(shine_t s, int16_t *data,
                                                int *written);
 
+/* Masked variants of the encoding entry points above.
+ *
+ * `ratios` holds caller supplied per-band noise thresholds for one frame,
+ * laid out as [granule][channel][22 long scalefactor bands]; granule 0
+ * comes first and channels follow the encoder's channel order. For mono
+ * the array has 22*2 entries, for stereo 22*4. Every value must be finite
+ * and in the open-closed range (0, 1]. A band may exhibit normalized
+ * reconstruction noise D/(ratios*E) of at most 1.0 before its threshold
+ * is considered violated.
+ *
+ * The masked path only supports MPEG-1 at 32, 44.1 or 48 kHz, in mono or
+ * plain (non joint) stereo, with long blocks. Passing NULL with
+ * ratio_count == 0 is exactly equivalent to the corresponding non-masked
+ * entry point and produces byte-identical output. Any other invalid
+ * request (unsupported format, wrong count, non-finite or out-of-range
+ * value, NULL with a non-zero count) returns NULL with *written set to -1
+ * before any analysis state is advanced, so the next call still encodes
+ * normally. */
+unsigned char *shine_encode_buffer_masked(shine_t s, int16_t **data,
+                                          const double *ratios,
+                                          int ratio_count, int *written);
+
+unsigned char *shine_encode_buffer_interleaved_masked(
+    shine_t s, int16_t *data, const double *ratios, int ratio_count,
+    int *written);
+
 /* Flush all data currently in the encoding buffer. Should be used before
  * closing the encoder, to make all encoded data has been written. */
 unsigned char *shine_flush(shine_t s, int *written);

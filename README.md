@@ -39,6 +39,82 @@ write(written, data);
 shine_close(s);
 ```
 
+### Caller supplied noise thresholds
+
+The standard entry points above only do capacity-limited quantization:
+every long scalefactor band is transmitted with a scalefactor of zero and
+the global step size alone controls the bit usage. Two additional entry
+points let an upstream analysis stage protect selected bands through real
+per-band scalefactors, while the global step size keeps the frame inside
+the same CBR capacity:
+
+```c
+unsigned char *shine_encode_buffer_masked(shine_t s, int16_t **data,
+                                          const double *ratios,
+                                          int ratio_count, int *written);
+
+unsigned char *shine_encode_buffer_interleaved_masked(
+    shine_t s, int16_t *data, const double *ratios,
+    int ratio_count, int *written);
+```
+
+`ratios` is the maximum allowed normalized reconstruction noise
+`D / (ratios * E)` per long scalefactor band, where the band energy `E`
+and the squared reconstruction error `D` are computed on the natural
+spectrum scale (`mdct_freq / 2^31`). The array covers one frame and is
+laid out as granule, then channel, then the 22 long bands:
+
+```c
+enum { LONG_BANDS = 22 };
+int granules = 2;                  /* MPEG-1 Layer III always has 2 */
+int channels = 2;                  /* 1 for mono, 2 for stereo */
+int ratio_count = granules * channels * LONG_BANDS; /* 44 or 88 */
+
+double ratios[88];
+for (int gr = 0; gr < 2; gr++)
+  for (int ch = 0; ch < channels; ch++)
+    for (int sfb = 0; sfb < LONG_BANDS; sfb++) {
+      /* Tight protection on the low bands, looser thresholds up top.
+       * Every value must be finite and in the open-closed range (0, 1]. */
+      double v = sfb < 6  ? 0.01   /* SCFSI group 0 (bands 0..5)   */
+               : sfb < 11 ? 0.03   /* SCFSI group 1 (bands 6..10)  */
+               : sfb < 16 ? 0.15   /* SCFSI group 2 (bands 11..15) */
+               :            0.60;  /* SCFSI group 3 (bands 16..20);
+                                      band 21 is always implicit zero */
+      ratios[(gr * channels + ch) * LONG_BANDS + sfb] = v;
+    }
+
+int written;
+unsigned char *frame =
+    shine_encode_buffer_masked(s, buffer, ratios, ratio_count, &written);
+```
+
+The encoder raises the scalefactors (0..7) of the noisiest bands, lowers
+the global step size to compensate, re-selects `scalefac_compress` and
+SCFSI for the factors actually transmitted, and re-checks the Huffman
+capacity including the scalefactor bits. When the budget cannot satisfy
+every threshold, the best legal candidate found is emitted and its worst
+normalized noise is never higher than that of the all-zero-factor
+candidate the legacy path would have produced.
+
+Applicability and semantics:
+
+* Only MPEG-1 Layer III at 32, 44.1 and 48 kHz is supported, in mono or
+  plain stereo (no joint stereo), with long blocks. No short blocks,
+  cross-frame reservoirs or joint stereo are introduced.
+* `preflag` and `scalefac_scale` are always zero; the first 21 long bands
+  carry scalefactors 0..7 and the last band keeps its format-implicit zero
+  while still participating fully in quantization and the bitstream.
+* Passing `NULL` with `ratio_count == 0` is exactly equivalent to the
+  corresponding non-masked entry point and produces byte-identical
+  output.
+* Any other invalid request (unsupported format, wrong count, non-finite
+  value or a value outside `(0, 1]`, `NULL` with a non-zero count) returns
+  `NULL` with `*written == -1` before any analysis state is advanced, so
+  the following call still encodes normally.
+* Frame size and padding remain determined solely by the configured
+  sample rate and bit rate.
+
 How fast is it?
 ---------------
 

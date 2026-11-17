@@ -24,17 +24,18 @@ static int bin_search_StepSize(int desired_rate, int ix[GRANULE_SIZE],
                                gr_info *cod_info, shine_global_config *config);
 static int count_bit(int ix[GRANULE_SIZE], unsigned int start, unsigned int end,
                      unsigned int table);
-static int bigv_bitcount(int ix[GRANULE_SIZE], gr_info *gi);
+/* Non-static: reused by the caller supplied threshold path in masked.c. */
+int bigv_bitcount(int ix[GRANULE_SIZE], gr_info *gi);
 static int new_choose_table(int ix[GRANULE_SIZE], unsigned int begin,
                             unsigned int end);
-static void bigv_tab_select(int ix[GRANULE_SIZE], gr_info *cod_info);
-static void subdivide(gr_info *cod_info, shine_global_config *config);
-static int count1_bitcount(int ix[GRANULE_SIZE], gr_info *cod_info);
-static void calc_runlen(int ix[GRANULE_SIZE], gr_info *cod_info);
+void bigv_tab_select(int ix[GRANULE_SIZE], gr_info *cod_info);
+void subdivide(gr_info *cod_info, shine_global_config *config);
+int count1_bitcount(int ix[GRANULE_SIZE], gr_info *cod_info);
+void calc_runlen(int ix[GRANULE_SIZE], gr_info *cod_info);
 static void calc_xmin(shine_psy_ratio_t *ratio, gr_info *cod_info,
                       shine_psy_xmin_t *l3_xmin, int gr, int ch);
-static int quantize(int ix[GRANULE_SIZE], int stepsize,
-                    shine_global_config *config);
+int quantize(int ix[GRANULE_SIZE], int stepsize,
+             shine_global_config *config);
 
 /*
  * shine_inner_loop:

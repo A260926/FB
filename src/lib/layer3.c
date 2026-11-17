@@ -6,6 +6,7 @@
 #include "l3loop.h"
 #include "l3mdct.h"
 #include "l3subband.h"
+#include "masked.h"
 #include "tables.h"
 #include "types.h"
 
@@ -148,7 +149,18 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
 }
 
 static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
-                                                   int *written, int stride) {
+                                                   int *written, int stride,
+                                                   const double *ratios,
+                                                   int ratio_count) {
+  /* Invalid masked requests fail before the analysis history (subband
+   * window, MDCT overlap samples, slot lag) is advanced. */
+  if (ratios != NULL || ratio_count != 0) {
+    if (shine_masked_validate(config, ratios, ratio_count) < 0) {
+      *written = -1;
+      return NULL;
+    }
+  }
+
   if (config->mpeg.frac_slots_per_frame) {
     config->mpeg.padding =
         (config->mpeg.slot_lag <= (config->mpeg.frac_slots_per_frame - 1.0));
@@ -165,10 +177,18 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
   shine_mdct_sub(config, stride);
 
   /* bit and noise allocation */
-  shine_iteration_loop(config);
+  if (ratios != NULL)
+    shine_masked_iteration_loop(config, ratios);
+  else
+    shine_iteration_loop(config);
 
   /* write the frame to the bitstream */
   shine_format_bitstream(config);
+
+#ifdef SHINE_TEST_HOOKS
+  if (ratios != NULL)
+    shine_test_hook_post_format(config);
+#endif
 
   /* Return data. */
   *written = config->bs.data_position;
@@ -183,7 +203,7 @@ unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
   if (config->wave.channels == 2)
     config->buffer[1] = data[1];
 
-  return shine_encode_buffer_internal(config, written, 1);
+  return shine_encode_buffer_internal(config, written, 1, NULL, 0);
 }
 
 unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
@@ -192,7 +212,32 @@ unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
   if (config->wave.channels == 2)
     config->buffer[1] = data + 1;
 
-  return shine_encode_buffer_internal(config, written, config->wave.channels);
+  return shine_encode_buffer_internal(config, written,
+                                      config->wave.channels, NULL, 0);
+}
+
+unsigned char *shine_encode_buffer_masked(shine_global_config *config,
+                                          int16_t **data,
+                                          const double *ratios, int ratio_count,
+                                          int *written) {
+  config->buffer[0] = data[0];
+  if (config->wave.channels == 2)
+    config->buffer[1] = data[1];
+
+  return shine_encode_buffer_internal(config, written, 1, ratios,
+                                      ratio_count);
+}
+
+unsigned char *shine_encode_buffer_interleaved_masked(
+    shine_global_config *config, int16_t *data, const double *ratios,
+    int ratio_count, int *written) {
+  config->buffer[0] = data;
+  if (config->wave.channels == 2)
+    config->buffer[1] = data + 1;
+
+  return shine_encode_buffer_internal(config, written,
+                                      config->wave.channels, ratios,
+                                      ratio_count);
 }
 
 unsigned char *shine_flush(shine_global_config *config, int *written) {
