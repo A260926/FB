@@ -40,6 +40,10 @@ ExpertEncoder::ExpertEncoder(const Mesh& mesh)
 
 Status ExpertEncoder::EncodeToBuffer(EncoderBuffer* out_buffer) {
   encode_stats_.Clear();
+  // Diagnostics always describe the most recent call, so a failed encode never
+  // leaves stale numbers behind.
+  topology_preserving_quantization_stats_ =
+      MeshTopologyPreservingQuantizationStats();
   if (point_cloud_ == nullptr) {
     return Status(Status::DRACO_ERROR, "Invalid input geometry.");
   }
@@ -55,6 +59,10 @@ Status ExpertEncoder::EncodeToBuffer(EncoderBuffer* out_buffer) {
 Status ExpertEncoder::EncodePointCloudToBuffer(const PointCloud& pc,
                                                EncoderBuffer* out_buffer) {
 #ifdef DRACO_POINT_CLOUD_COMPRESSION_SUPPORTED
+  if (mesh_topology_preserving_quantization_) {
+    return Status(Status::INVALID_PARAMETER,
+                  "Mesh topology preserving quantization requires a mesh.");
+  }
 #ifdef DRACO_TRANSCODER_SUPPORTED
   // Apply DracoCompressionOptions associated with the point cloud.
   DRACO_RETURN_IF_ERROR(ApplyCompressionOptions(pc));
@@ -142,9 +150,13 @@ Status ExpertEncoder::EncodeMeshToBuffer(const Mesh& m,
     encoder = std::unique_ptr<MeshEncoder>(new MeshSequentialEncoder());
   }
   encoder->SetMesh(m);
+  encoder->SetMeshTopologyPreservingQuantization(
+      mesh_topology_preserving_quantization_);
 
   DRACO_RETURN_IF_ERROR(encoder->Encode(options(), out_buffer));
   encode_stats_ = encoder->encode_stats();
+  topology_preserving_quantization_stats_ =
+      encoder->topology_preserving_quantization_stats();
 
   set_num_encoded_points(encoder->num_encoded_points());
   set_num_encoded_faces(encoder->num_encoded_faces());
@@ -153,11 +165,15 @@ Status ExpertEncoder::EncodeMeshToBuffer(const Mesh& m,
 
 void ExpertEncoder::Reset(const EncoderOptions& options) {
   encode_stats_.Clear();
+  topology_preserving_quantization_stats_ =
+      MeshTopologyPreservingQuantizationStats();
   Base::Reset(options);
 }
 
 void ExpertEncoder::Reset() {
   encode_stats_.Clear();
+  topology_preserving_quantization_stats_ =
+      MeshTopologyPreservingQuantizationStats();
   Base::Reset();
 }
 
@@ -207,6 +223,10 @@ Status ExpertEncoder::SetAttributePredictionScheme(
   options().SetAttributeInt(attribute_id, "prediction_scheme",
                             prediction_scheme_method);
   return status;
+}
+
+void ExpertEncoder::SetMeshTopologyPreservingQuantization(bool enabled) {
+  mesh_topology_preserving_quantization_ = enabled;
 }
 
 #ifdef DRACO_TRANSCODER_SUPPORTED

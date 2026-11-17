@@ -23,6 +23,14 @@ enum AttributeTransformType {
   ATTRIBUTE_NO_TRANSFORM = 0,
   ATTRIBUTE_QUANTIZATION_TRANSFORM = 1,
   ATTRIBUTE_OCTAHEDRON_TRANSFORM = 2,
+  // Quantization transform that additionally carries the exact position
+  // exceptions of the mesh topology preserving quantization mode. The ordinary
+  // quantization parameters come first and the exception payload is appended
+  // (see attribute_quantization_transform_extension.h). A stream that uses this
+  // transform is not a legacy stream: its mesh bitstream version is bumped so
+  // that older decoders reject it instead of silently returning quantized
+  // positions.
+  ATTRIBUTE_QUANTIZATION_TOPOLOGY_TRANSFORM = 3,
 };
 
 }  // namespace draco

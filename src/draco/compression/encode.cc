@@ -22,17 +22,29 @@ Encoder::Encoder() = default;
 
 Status Encoder::EncodePointCloudToBuffer(const PointCloud& pc,
                                          EncoderBuffer* out_buffer) {
+  if (mesh_topology_preserving_quantization_) {
+    return Status(Status::INVALID_PARAMETER,
+                  "Mesh topology preserving quantization requires a mesh.");
+  }
   ExpertEncoder encoder(pc);
   encoder.Reset(CreateExpertEncoderOptions(pc));
   return encoder.EncodeToBuffer(out_buffer);
 }
 
 Status Encoder::EncodeMeshToBuffer(const Mesh& m, EncoderBuffer* out_buffer) {
+  topology_preserving_quantization_stats_ =
+      MeshTopologyPreservingQuantizationStats();
   ExpertEncoder encoder(m);
   encoder.Reset(CreateExpertEncoderOptions(m));
+  // Reset() replaces the options; the protection flag lives on the encoder, so
+  // it has to be applied after the reset.
+  encoder.SetMeshTopologyPreservingQuantization(
+      mesh_topology_preserving_quantization_);
   DRACO_RETURN_IF_ERROR(encoder.EncodeToBuffer(out_buffer));
   set_num_encoded_points(encoder.num_encoded_points());
   set_num_encoded_faces(encoder.num_encoded_faces());
+  topology_preserving_quantization_stats_ =
+      encoder.topology_preserving_quantization_stats();
   return OkStatus();
 }
 
@@ -91,6 +103,10 @@ Status Encoder::SetAttributePredictionScheme(GeometryAttribute::Type type,
   options().SetAttributeInt(type, "prediction_scheme",
                             prediction_scheme_method);
   return status;
+}
+
+void Encoder::SetMeshTopologyPreservingQuantization(bool enabled) {
+  mesh_topology_preserving_quantization_ = enabled;
 }
 
 }  // namespace draco

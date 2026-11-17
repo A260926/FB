@@ -16,6 +16,7 @@
 #define DRACO_COMPRESSION_MESH_MESH_ENCODER_H_
 
 #include "draco/compression/attributes/mesh_attribute_indices_encoding_data.h"
+#include "draco/compression/attributes/topology_preserving_quantization.h"
 #include "draco/compression/point_cloud/point_cloud_encoder.h"
 #include "draco/mesh/mesh.h"
 #include "draco/mesh/mesh_attribute_corner_table.h"
@@ -60,8 +61,32 @@ class MeshEncoder : public PointCloudEncoder {
 
   const Mesh* mesh() const { return mesh_; }
 
+  // Optional mesh topology preserving position quantization (see
+  // attributes/topology_preserving_quantization.h). When enabled, the encoder
+  // validates the mesh, computes the fixed point of exact position
+  // restorations and stores the exceptions in the real compressed stream. The
+  // option defaults to off; when off, encoding is byte-for-byte identical to
+  // the legacy encoder.
+  void SetMeshTopologyPreservingQuantization(bool enabled) {
+    topology_preserving_quantization_ = enabled;
+  }
+  bool mesh_topology_preserving_quantization() const {
+    return topology_preserving_quantization_;
+  }
+  // Diagnostics of the most recent successful encode with the feature enabled.
+  const MeshTopologyPreservingQuantizationStats&
+  topology_preserving_quantization_stats() const {
+    return topology_preserving_quantization_stats_;
+  }
+
  protected:
+  Status PrepareEncode() override;
   Status EncodeGeometryData() override;
+
+  // Computes and installs the topology preserving plan when the feature is
+  // enabled. Returns a descriptive error for invalid input instead of falling
+  // back to the legacy mode.
+  Status InitializeTopologyPreservingQuantization();
 
   // Needs to be implemented by the derived classes.
   virtual Status EncodeConnectivity() = 0;
@@ -77,6 +102,9 @@ class MeshEncoder : public PointCloudEncoder {
  private:
   const Mesh* mesh_;
   size_t num_encoded_faces_;
+  bool topology_preserving_quantization_ = false;
+  MeshTopologyPreservingQuantizationStats
+      topology_preserving_quantization_stats_;
 };
 
 }  // namespace draco

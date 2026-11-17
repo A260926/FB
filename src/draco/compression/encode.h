@@ -16,6 +16,7 @@
 #define DRACO_COMPRESSION_ENCODE_H_
 
 #include "draco/compression/config/compression_shared.h"
+#include "draco/compression/attributes/topology_preserving_quantization.h"
 #include "draco/compression/config/encoder_options.h"
 #include "draco/compression/encode_base.h"
 #include "draco/core/encoder_buffer.h"
@@ -84,6 +85,20 @@ class Encoder
                                         int quantization_bits, int num_dims,
                                         const float* origin, float range);
 
+  // Enables or disables the optional mesh position reconstruction protection
+  // (default: disabled). When enabled, a mesh encode first runs the ordinary
+  // position quantizer and detects faces whose reconstructed normal no longer
+  // agrees with the original normal; the position values of those faces are
+  // restored exactly in the compressed stream and the set is grown to its least
+  // fixed point. The option requires a FLOAT32 three-component POSITION
+  // attribute, position quantization bits in [1, 30], and a finite, positive
+  // area, oriented 2-manifold triangle mesh; invalid input makes
+  // EncodeMeshToBuffer() fail with an error instead of silently using the
+  // legacy mode. When disabled, the produced bytes are identical to the legacy
+  // encoder. See
+  // compression/attributes/topology_preserving_quantization.h for details.
+  void SetMeshTopologyPreservingQuantization(bool enabled);
+
   // Sets the desired prediction method for a given attribute. By default,
   // prediction scheme is selected automatically by the encoder using other
   // provided options (such as speed) and input geometry type (mesh, point
@@ -132,6 +147,21 @@ class Encoder
   // Creates encoder options for the expert encoder used during the actual
   // encoding.
   EncoderOptions CreateExpertEncoderOptions(const PointCloud& pc) const;
+
+  // Diagnostics of the most recent successful EncodeMeshToBuffer() with the
+  // topology preserving quantization option enabled. All counters are zero
+  // when the option is disabled.
+  const MeshTopologyPreservingQuantizationStats&
+  topology_preserving_quantization_stats() const {
+    return topology_preserving_quantization_stats_;
+  }
+
+ private:
+  // Optional mesh position protection flag; propagated to the ExpertEncoder
+  // used internally.
+  bool mesh_topology_preserving_quantization_ = false;
+  MeshTopologyPreservingQuantizationStats
+      topology_preserving_quantization_stats_;
 };
 
 }  // namespace draco

@@ -95,6 +95,8 @@ list(
          "${draco_src_root}/attributes/attribute_octahedron_transform.h"
          "${draco_src_root}/attributes/attribute_quantization_transform.cc"
          "${draco_src_root}/attributes/attribute_quantization_transform.h"
+         "${draco_src_root}/attributes/attribute_quantization_transform_extension.cc"
+         "${draco_src_root}/attributes/attribute_quantization_transform_extension.h"
          "${draco_src_root}/attributes/attribute_transform.cc"
          "${draco_src_root}/attributes/attribute_transform.h"
          "${draco_src_root}/attributes/attribute_transform_data.h"
@@ -148,6 +150,8 @@ list(
     "${draco_src_root}/compression/attributes/sequential_normal_attribute_encoder.h"
     "${draco_src_root}/compression/attributes/sequential_quantization_attribute_encoder.cc"
     "${draco_src_root}/compression/attributes/sequential_quantization_attribute_encoder.h"
+    "${draco_src_root}/compression/attributes/topology_preserving_quantization.cc"
+    "${draco_src_root}/compression/attributes/topology_preserving_quantization.h"
 )
 
 

@@ -23,6 +23,13 @@ namespace draco {
 
 // Decoder for attribute values encoded with the
 // SequentialQuantizationAttributeEncoder.
+//
+// When the stream carries the optional topology preserving position
+// quantization extension, the extension payload that follows the ordinary
+// quantization parameters is decoded together with them and the exact FLOAT32
+// position values are applied after the regular dequantization. Truncated,
+// duplicated or out-of-range records make the decode fail; a partially valid
+// mesh is never returned.
 class SequentialQuantizationAttributeDecoder
     : public SequentialIntegerAttributeDecoder {
  public:
@@ -45,6 +52,9 @@ class SequentialQuantizationAttributeDecoder
 
  private:
   AttributeQuantizationTransform quantization_transform_;
+  // Number of portable values decoded so far (used to validate exception
+  // record indices).
+  uint32_t num_portable_values_ = 0;
 };
 
 }  // namespace draco

@@ -24,6 +24,14 @@ class MeshEncoder;
 
 // Attribute encoder that quantizes floating point attribute values. The
 // quantized values can be optionally compressed using an entropy coding.
+//
+// When the parent mesh encoder has the optional topology preserving position
+// quantization plan (see topology_preserving_quantization.h), this encoder
+// augments the ordinary quantized stream for the POSITION attribute with the
+// exact FLOAT32 values of the protected positions. Those values are associated
+// with the *encoded* attribute value order through point_ids, so they stay
+// correct across Edgebreaker reordering, duplicated points and per-corner
+// attribute values.
 class SequentialQuantizationAttributeEncoder
     : public SequentialIntegerAttributeEncoder {
  public:
@@ -43,8 +51,17 @@ class SequentialQuantizationAttributeEncoder
                      int num_points) override;
 
  private:
+  // Translates the input-value-indexed plan mask into the encoded attribute
+  // value order given by |point_ids| and installs the exact exception records
+  // on the quantization transform.
+  bool InstallTopologyPreservingExactValues(
+      const std::vector<PointIndex>& point_ids);
   // Used for the quantization.
   AttributeQuantizationTransform attribute_quantization_transform_;
+
+  // Set when this encoder is the POSITION encoder of a mesh that uses the
+  // optional protection.
+  const TopologyPreservingQuantizationPlan* topology_plan_ = nullptr;
 };
 
 }  // namespace draco

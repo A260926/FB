@@ -15,6 +15,7 @@
 #ifndef DRACO_COMPRESSION_EXPERT_ENCODE_H_
 #define DRACO_COMPRESSION_EXPERT_ENCODE_H_
 
+#include "draco/compression/attributes/topology_preserving_quantization.h"
 #include "draco/compression/config/compression_shared.h"
 #include "draco/compression/config/encoder_options.h"
 #include "draco/compression/encode_base.h"
@@ -138,6 +139,19 @@ class ExpertEncoder : public EncoderBase<EncoderOptions> {
   Status SetAttributePredictionScheme(int32_t attribute_id,
                                       int prediction_scheme_method);
 
+  // Enables or disables the optional mesh position reconstruction protection
+  // (default: disabled). See Encoder::SetMeshTopologyPreservingQuantization()
+  // for the exact requirements and semantics. This encoder can be used to
+  // encode a mesh only; enabling the option for a point cloud is an error.
+  void SetMeshTopologyPreservingQuantization(bool enabled);
+
+  // Diagnostics of the most recent successful EncodeToBuffer() with the
+  // topology preserving quantization option enabled.
+  const MeshTopologyPreservingQuantizationStats&
+  topology_preserving_quantization_stats() const {
+    return topology_preserving_quantization_stats_;
+  }
+
 #ifdef DRACO_TRANSCODER_SUPPORTED
   // Applies grid quantization to position attribute in point cloud |pc| at
   // |attribute_index| with a given grid |spacing|.
@@ -160,6 +174,9 @@ class ExpertEncoder : public EncoderBase<EncoderOptions> {
   const PointCloud* point_cloud_;
   const Mesh* mesh_;
   PointCloudEncodeStats encode_stats_;
+  bool mesh_topology_preserving_quantization_ = false;
+  MeshTopologyPreservingQuantizationStats
+      topology_preserving_quantization_stats_;
 };
 
 }  // namespace draco

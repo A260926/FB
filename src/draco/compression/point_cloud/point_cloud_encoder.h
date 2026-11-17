@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "draco/compression/attributes/attributes_encoder.h"
+#include "draco/compression/attributes/topology_preserving_quantization.h"
 #include "draco/compression/config/compression_shared.h"
 #include "draco/compression/config/encoder_options.h"
 #include "draco/compression/point_cloud/point_cloud_encode_stats.h"
@@ -112,10 +113,31 @@ class PointCloudEncoder {
   const EncoderOptions* options() const { return options_; }
   const PointCloud* point_cloud() const { return point_cloud_; }
 
+  // Optional mesh position protection. |plan| is null when the feature is off
+  // (or not applicable to the encoder). Only mesh encoders with the option
+  // enabled set it; the POSITION quantization attribute encoder consumes it.
+  void set_topology_preserving_quantization_plan(
+      std::shared_ptr<const TopologyPreservingQuantizationPlan> plan) {
+    topology_preserving_quantization_plan_ = std::move(plan);
+  }
+  const std::shared_ptr<const TopologyPreservingQuantizationPlan>&
+  topology_preserving_quantization_plan() const {
+    return topology_preserving_quantization_plan_;
+  }
+  bool has_topology_preserving_quantization_plan() const {
+    return topology_preserving_quantization_plan_ != nullptr;
+  }
+
  protected:
   // Can be implemented by derived classes to perform any custom initialization
   // of the encoder. Called in the Encode() method.
   virtual bool InitializeEncoder() { return true; }
+
+  // Called at the very beginning of Encode(), before the Draco header is
+  // written. Derived encoders can use it to prepare data that affects the
+  // header (e.g. the optional topology preserving quantization plan changes
+  // the mesh minor version).
+  virtual Status PrepareEncode() { return OkStatus(); }
 
   // Should be used to encode any encoder-specific data.
   virtual bool EncodeEncoderData() { return true; }
@@ -189,6 +211,10 @@ class PointCloudEncoder {
   const EncoderOptions* options_;
 
   size_t num_encoded_points_;
+
+  // Set only by mesh encoders when the optional position protection is active.
+  std::shared_ptr<const TopologyPreservingQuantizationPlan>
+      topology_preserving_quantization_plan_;
 
   PointCloudEncodeStats encode_stats_;
 };

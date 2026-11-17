@@ -28,8 +28,14 @@ bool AttributeQuantizationTransform::InitFromAttribute(
     const PointAttribute& attribute) {
   const AttributeTransformData* const transform_data =
       attribute.GetAttributeTransformData();
-  if (!transform_data ||
-      transform_data->transform_type() != ATTRIBUTE_QUANTIZATION_TRANSFORM) {
+  if (!transform_data) {
+    return false;  // Wrong transform type.
+  }
+  const bool has_extension =
+      transform_data->transform_type() ==
+      ATTRIBUTE_QUANTIZATION_TOPOLOGY_TRANSFORM;
+  if (transform_data->transform_type() != ATTRIBUTE_QUANTIZATION_TRANSFORM &&
+      !has_extension) {
     return false;  // Wrong transform type.
   }
   int32_t byte_offset = 0;
@@ -41,18 +47,47 @@ bool AttributeQuantizationTransform::InitFromAttribute(
     byte_offset += 4;
   }
   range_ = transform_data->GetParameterValue<float>(byte_offset);
+  byte_offset += 4;
+  exact_values_.clear();
+  num_encoded_values_ = 0;
+  extension_enabled_ = has_extension;
+  if (has_extension) {
+    // The exception payload starts right after the ordinary parameters.
+    AttributeTransformData remainder;
+    remainder.set_transform_type(ATTRIBUTE_QUANTIZATION_TOPOLOGY_TRANSFORM);
+    const int64_t payload_size = transform_data->data_size() - byte_offset;
+    if (payload_size < 0) {
+      return false;
+    }
+    std::vector<uint8_t> payload(static_cast<size_t>(payload_size));
+    if (payload_size > 0) {
+      transform_data->GetBytes(byte_offset, payload.data(), payload_size);
+      remainder.AppendBytes(payload.data(), payload_size);
+    }
+    uint32_t num_values = 0;
+    if (!LoadTopologyPreservingQuantizationExtension(
+            &remainder, &num_values, &exact_values_)) {
+      exact_values_.clear();
+      return false;
+    }
+    num_encoded_values_ = num_values;
+  }
   return true;
 }
 
 // Copy parameter values into the provided AttributeTransformData instance.
 void AttributeQuantizationTransform::CopyToAttributeTransformData(
     AttributeTransformData* out_data) const {
-  out_data->set_transform_type(ATTRIBUTE_QUANTIZATION_TRANSFORM);
+  out_data->set_transform_type(Type());
   out_data->AppendParameterValue(quantization_bits_);
   for (int i = 0; i < min_values_.size(); ++i) {
     out_data->AppendParameterValue(min_values_[i]);
   }
   out_data->AppendParameterValue(range_);
+  if (extension_enabled_) {
+    StoreTopologyPreservingQuantizationExtension(
+        num_encoded_values_, exact_values_, out_data);
+  }
 }
 
 bool AttributeQuantizationTransform::TransformAttribute(
@@ -64,6 +99,50 @@ bool AttributeQuantizationTransform::TransformAttribute(
   } else {
     GeneratePortableAttribute(attribute, point_ids, target_attribute->size(),
                               target_attribute);
+  }
+  return true;
+}
+
+void AttributeQuantizationTransform::SetExactValues(
+    std::vector<TopologyPreservingExactValue> exact_values) {
+  exact_values_ = std::move(exact_values);
+  extension_enabled_ = true;
+}
+
+bool AttributeQuantizationTransform::ApplyExactValues(
+    PointAttribute* target_attribute) const {
+  if (exact_values_.empty()) {
+    return true;
+  }
+  if (target_attribute == nullptr ||
+      target_attribute->data_type() != DT_FLOAT32 ||
+      target_attribute->num_components() != 3) {
+    return false;
+  }
+  // The target attribute is indexed in the portable (encoded) attribute value
+  // order, exactly the order the exception records use. In the regular decoder
+  // this buffer holds one entry per encoded value; in the skip-transform path
+  // the caller builds an equally sized float attribute from the returned
+  // portable integer attribute. Either way a record always lands on the same
+  // decoded value regardless of how points were renumbered or reordered.
+  const int64_t stride = target_attribute->byte_stride();
+  for (const TopologyPreservingExactValue& record : exact_values_) {
+    if (record.encoded_value_index >= target_attribute->size()) {
+      return false;
+    }
+    for (int c = 0; c < 3; ++c) {
+      if (!std::isfinite(record.value[c])) {
+        return false;
+      }
+    }
+    const int64_t byte_pos =
+        static_cast<int64_t>(record.encoded_value_index) * stride;
+    if (byte_pos + static_cast<int64_t>(sizeof(float) * 3) >
+        static_cast<int64_t>(target_attribute->buffer()->data_size())) {
+      return false;
+    }
+    target_attribute->buffer()->Write(byte_pos, record.value,
+                                      sizeof(float) * 3);
   }
   return true;
 }
@@ -102,7 +181,8 @@ bool AttributeQuantizationTransform::InverseTransformAttribute(
     target_attribute->buffer()->Write(out_byte_pos, att_val.get(), entry_size);
     out_byte_pos += entry_size;
   }
-  return true;
+  // Overwrite the exception entries with their exact original FLOAT32 bits.
+  return ApplyExactValues(target_attribute);
 }
 
 bool AttributeQuantizationTransform::IsQuantizationValid(
@@ -193,6 +273,10 @@ bool AttributeQuantizationTransform::EncodeParameters(
                            sizeof(float) * min_values_.size());
     encoder_buffer->Encode(range_);
     encoder_buffer->Encode(static_cast<uint8_t>(quantization_bits_));
+    if (extension_enabled_) {
+      return EncodeTopologyPreservingQuantizationExtension(
+          num_encoded_values_, exact_values_, encoder_buffer);
+    }
     return true;
   }
   return false;
@@ -216,6 +300,25 @@ bool AttributeQuantizationTransform::DecodeParameters(
     return false;
   }
   quantization_bits_ = quantization_bits;
+  exact_values_.clear();
+  num_encoded_values_ = 0;
+  extension_enabled_ = false;
+  return true;
+}
+
+bool AttributeQuantizationTransform::DecodeParametersWithExtension(
+    const PointAttribute& attribute, uint32_t expected_num_values,
+    DecoderBuffer* decoder_buffer) {
+  if (!DecodeParameters(attribute, decoder_buffer)) {
+    return false;
+  }
+  if (!DecodeTopologyPreservingQuantizationExtension(
+          expected_num_values, &exact_values_, decoder_buffer)) {
+    exact_values_.clear();
+    return false;
+  }
+  num_encoded_values_ = expected_num_values;
+  extension_enabled_ = true;
   return true;
 }
 

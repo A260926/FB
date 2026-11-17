@@ -61,6 +61,25 @@ class AttributeTransformData {
     SetParameterValue(static_cast<int>(buffer_.data_size()), in_data);
   }
 
+  // Number of parameter bytes stored so far (including any opaque payload
+  // appended with AppendBytes()).
+  int64_t data_size() const { return static_cast<int64_t>(buffer_.data_size()); }
+
+  // Appends a raw opaque payload (e.g. an optional transform extension).
+  void AppendBytes(const void* in_data, int64_t size) {
+    const int64_t offset = data_size();
+    if (offset + size > static_cast<int64_t>(buffer_.data_size())) {
+      buffer_.Resize(offset + size);
+    }
+    buffer_.Write(offset, in_data, static_cast<size_t>(size));
+  }
+
+  // Copies |size| raw bytes starting at |byte_offset| into |out_data|. The
+  // caller must ensure the range is within data_size().
+  void GetBytes(int64_t byte_offset, void* out_data, int64_t size) const {
+    buffer_.Read(byte_offset, out_data, static_cast<size_t>(size));
+  }
+
  private:
   AttributeTransformType transform_type_;
   DataBuffer buffer_;

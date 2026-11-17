@@ -23,6 +23,38 @@ void MeshEncoder::SetMesh(const Mesh& m) {
   SetPointCloud(m);
 }
 
+Status MeshEncoder::InitializeTopologyPreservingQuantization() {
+  // Every encode starts from a clean slate: a failed or disabled run must not
+  // leave a stale plan behind (it would otherwise influence the header version
+  // and the POSITION quantizer of the next run).
+  set_topology_preserving_quantization_plan(nullptr);
+  topology_preserving_quantization_stats_ =
+      MeshTopologyPreservingQuantizationStats();
+  if (!topology_preserving_quantization_) {
+    return OkStatus();
+  }
+  if (mesh_ == nullptr) {
+    return Status(Status::DRACO_ERROR,
+                  "Topology preserving quantization requires a mesh.");
+  }
+  std::shared_ptr<const TopologyPreservingQuantizationPlan> plan;
+  const Status status =
+      BuildTopologyPreservingQuantizationPlan(*mesh_, *options(), &plan);
+  if (!status.ok()) {
+    return status;
+  }
+  topology_preserving_quantization_stats_ = plan->stats;
+  set_topology_preserving_quantization_plan(std::move(plan));
+  return OkStatus();
+}
+
+Status MeshEncoder::PrepareEncode() {
+  // The plan must exist before the Draco header is written (it selects the
+  // mesh bitstream version) and before the attribute encoders are initialized
+  // (the POSITION quantizer takes its parameters from it).
+  return InitializeTopologyPreservingQuantization();
+}
+
 Status MeshEncoder::EncodeGeometryData() {
   DRACO_RETURN_IF_ERROR(EncodeConnectivity());
   if (options()->GetGlobalBool("store_number_of_encoded_faces", false)) {

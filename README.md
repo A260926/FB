@@ -21,6 +21,20 @@ versioned release.
 * Fixed missing `HEAP*` exports and `wasmBinary` support in JavaScript and WASM
   builds (https://github.com/google/draco/issues/1251).
 * Bug fixes.
+* Optional mesh position reconstruction protection:
+  `Encoder::SetMeshTopologyPreservingQuantization(bool)` and
+  `ExpertEncoder::SetMeshTopologyPreservingQuantization(bool)`. Off by default;
+  when off the produced bytes are unchanged. When on, faces that the ordinary
+  position quantizer would collapse or flip (dot product of reconstructed and
+  original normal <= 0) have their position values restored exactly in the
+  compressed stream, grown to the least fixed point. Requires a FLOAT32
+  three-component POSITION attribute, 1-30 position quantization bits and a
+  finite, positive-area, oriented 2-manifold triangle mesh; invalid input is
+  reported as an error. The extension is carried in a versioned attribute
+  transform payload (mesh bitstream version 2.3), defaults to off, and is
+  available through the ordinary decoder,
+  `Decoder::SetSkipAttributeTransform()`, and
+  `AttributeQuantizationTransform::InverseTransformAttribute()`.
 
 ### Version 1.5.8 release:
 * Using the versioned www.gstatic.com WASM and Javascript decoders continues

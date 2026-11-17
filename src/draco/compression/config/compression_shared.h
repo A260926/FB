@@ -26,7 +26,21 @@ namespace draco {
 static constexpr uint8_t kDracoPointCloudBitstreamVersionMajor = 2;
 static constexpr uint8_t kDracoPointCloudBitstreamVersionMinor = 3;
 static constexpr uint8_t kDracoMeshBitstreamVersionMajor = 2;
+// Default mesh bitstream version written by encoders that do not use the mesh
+// topology preserving position quantization extension. Keeping this at 2.2
+// makes the output of the unmodified encoder byte-for-byte identical to the
+// legacy encoder.
 static constexpr uint8_t kDracoMeshBitstreamVersionMinor = 2;
+// Mesh bitstream version used exclusively for streams that carry the topology
+// preserving position quantization extension (see
+// attributes/attribute_quantization_transform_extension.h). Decoders accept
+// both 2.2 and 2.3; an older decoder that only knows 2.2 rejects 2.3 through
+// its normal version check instead of silently decoding plain quantized
+// positions.
+static constexpr uint8_t kDracoMeshTopologyBitstreamVersionMinor = 3;
+// Highest mesh bitstream version understood by this decoder.
+static constexpr uint8_t kDracoMeshMaxBitstreamVersionMinor =
+    kDracoMeshTopologyBitstreamVersionMinor;
 
 // Concatenated latest bit-stream version.
 static constexpr uint16_t kDracoPointCloudBitstreamVersion =

@@ -56,6 +56,15 @@ Status PointCloudEncoder::Encode(const EncoderOptions& options,
     return Status(Status::DRACO_ERROR, "Invalid output buffer.");
   }
   const size_t initial_buffer_size = out_buffer->size();
+  // Prepare the encoder before the header is written; some encoders need this
+  // to select the bitstream version.
+  {
+    const Status prepare_status = PrepareEncode();
+    if (!prepare_status.ok()) {
+      encode_stats_.Clear();
+      return prepare_status;
+    }
+  }
   const Status status = EncodeInternal(initial_buffer_size);
   if (!status.ok()) {
     encode_stats_.Clear();
@@ -107,9 +116,18 @@ Status PointCloudEncoder::EncodeHeader() {
   version_major = encoder_type == POINT_CLOUD
                       ? kDracoPointCloudBitstreamVersionMajor
                       : kDracoMeshBitstreamVersionMajor;
-  version_minor = encoder_type == POINT_CLOUD
-                      ? kDracoPointCloudBitstreamVersionMinor
-                      : kDracoMeshBitstreamVersionMinor;
+  if (encoder_type == POINT_CLOUD) {
+    version_minor = kDracoPointCloudBitstreamVersionMinor;
+  } else {
+    // Mesh streams that carry the topology preserving position quantization
+    // extension use a dedicated (newer) minor version so that decoders that do
+    // not know the extension reject the stream instead of silently returning
+    // the plain quantized positions. All other mesh streams keep the legacy
+    // version and stay byte-for-byte identical.
+    version_minor = has_topology_preserving_quantization_plan()
+                        ? kDracoMeshTopologyBitstreamVersionMinor
+                        : kDracoMeshBitstreamVersionMinor;
+  }
 
   buffer_->Encode(version_major);
   buffer_->Encode(version_minor);

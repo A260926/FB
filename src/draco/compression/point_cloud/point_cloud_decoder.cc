@@ -86,8 +86,9 @@ Status PointCloudDecoder::Decode(const DecoderOptions& options,
       header.encoder_type == POINT_CLOUD ? kDracoPointCloudBitstreamVersionMajor
                                          : kDracoMeshBitstreamVersionMajor;
   const uint8_t max_supported_minor_version =
-      header.encoder_type == POINT_CLOUD ? kDracoPointCloudBitstreamVersionMinor
-                                         : kDracoMeshBitstreamVersionMinor;
+      header.encoder_type == POINT_CLOUD
+          ? kDracoPointCloudBitstreamVersionMinor
+          : kDracoMeshMaxBitstreamVersionMinor;
 
   // Check for version compatibility.
 #ifdef DRACO_BACKWARDS_COMPATIBILITY_SUPPORTED
@@ -102,7 +103,14 @@ Status PointCloudDecoder::Decode(const DecoderOptions& options,
   if (version_major_ != max_supported_major_version) {
     return Status(Status::UNKNOWN_VERSION, "Unsupported major version.");
   }
-  if (version_minor_ != max_supported_minor_version) {
+  if (header.encoder_type == POINT_CLOUD) {
+    if (version_minor_ != max_supported_minor_version) {
+      return Status(Status::UNKNOWN_VERSION, "Unsupported minor version.");
+    }
+  } else if (version_minor_ != kDracoMeshBitstreamVersionMinor &&
+             version_minor_ != kDracoMeshTopologyBitstreamVersionMinor) {
+    // Mesh streams are accepted in the legacy version (no topology preserving
+    // extension) and in the extension version.
     return Status(Status::UNKNOWN_VERSION, "Unsupported minor version.");
   }
 #endif

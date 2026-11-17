@@ -14,6 +14,7 @@
 //
 #include "draco/compression/attributes/sequential_quantization_attribute_decoder.h"
 
+#include "draco/compression/config/compression_shared.h"
 #include "draco/core/quantization_utils.h"
 
 namespace draco {
@@ -43,6 +44,7 @@ bool SequentialQuantizationAttributeDecoder::DecodeIntegerValues(
     return false;
   }
 #endif
+  num_portable_values_ = static_cast<uint32_t>(point_ids.size());
   return SequentialIntegerAttributeDecoder::DecodeIntegerValues(point_ids,
                                                                 in_buffer);
 }
@@ -51,8 +53,27 @@ bool SequentialQuantizationAttributeDecoder::
     DecodeDataNeededByPortableTransform(
         const std::vector<PointIndex>& point_ids, DecoderBuffer* in_buffer) {
   if (decoder()->bitstream_version() >= DRACO_BITSTREAM_VERSION(2, 0)) {
-    // Decode quantization data here only for files with bitstream version 2.0+
-    if (!DecodeQuantizedDataInfo()) {
+    // Decode quantization data here only for files with bitstream version 2.0+.
+    // Mesh streams that carry the topology preserving extension use a newer
+    // mesh minor version; their POSITION parameters are followed by the
+    // extension payload. Only POSITION may carry it (valid input has a single
+    // POSITION attribute), so other quantized attributes keep using the plain
+    // parameter block even in a 2.3 stream. Legacy-version streams never
+    // contain the payload and the legacy decoder path is left untouched.
+    const bool has_extension =
+        decoder()->GetGeometryType() == TRIANGULAR_MESH &&
+        decoder()->bitstream_version() ==
+            DRACO_BITSTREAM_VERSION(kDracoMeshBitstreamVersionMajor,
+                                    kDracoMeshTopologyBitstreamVersionMinor) &&
+        attribute()->attribute_type() == GeometryAttribute::POSITION;
+    if (has_extension) {
+      const PointAttribute* const portable = GetPortableAttribute();
+      const PointAttribute& source = portable != nullptr ? *portable : *attribute();
+      if (!quantization_transform_.DecodeParametersWithExtension(
+              source, num_portable_values_, decoder()->buffer())) {
+        return false;
+      }
+    } else if (!DecodeQuantizedDataInfo()) {
       return false;
     }
   }
