@@ -46,24 +46,29 @@ private:
     void outPointerPair(DisInsn &insn, StrBuffer &out) const;
     void outControlReg(DisInsn &insn, StrBuffer &out) const;
     void outImmediateData(DisInsn &insn, StrBuffer &out, OprSize eaSize) const;
-    void outEffectiveAddr(
-            DisInsn &insn, StrBuffer &out, AddrMode mode, RegName reg, OprSize size) const;
+    void outEffectiveAddr(DisInsn &insn, StrBuffer &out, AddrMode mode, RegName reg, OprSize size,
+            uint8_t operandIndex) const;
 #if !defined(LIBASM_MC68000_NOFPU)
     StrBuffer &outExtendedReal(StrBuffer &buf, const ExtendedReal &v) const;
     StrBuffer &outDecimalString(StrBuffer &buf, const DecimalString &v) const;
 #endif
-    Config::uintptr_t readDisplacement(DisInsn &insn, RegName base, uint_fast8_t bdSize) const;
+    int32_t readSignedDisplacement(DisInsn &insn, uint_fast8_t bdSize) const;
     const char *outDisplacement(DisInsn &insn, StrBuffer &out, RegName base, Config::uintptr_t disp,
             uint_fast8_t bdSize, const char *delim) const;
     const char *outIndexReg(StrBuffer &out, uint16_t ext, const char *delim) const;
-    void decodeBriefExtension(DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base) const;
-    void decodeFullExtension(
-            DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base, OprSize size) const;
+    void fillIndexOperand(MemoryOperand &op, uint16_t ext, bool suppressed) const;
+    void decodeBriefExtension(DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base,
+            OprSize size, uint8_t operandIndex) const;
+    void decodeFullExtension(DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base, OprSize size,
+            uint8_t operandIndex) const;
     void decodeRelative(DisInsn &insn, StrBuffer &out, AddrMode mode) const;
     void decodeOperand(DisInsn &insn, StrBuffer &out, AddrMode mode, OprPos pos, OprSize size,
-            uint16_t opr16 = 0, Error opr16Error = OK) const;
+            uint8_t operandIndex, uint16_t opr16 = 0, Error opr16Error = OK) const;
     char decodeInsnSize(const DisInsn &insn, OprSize size) const;
     bool isFloatOpOnSameFpreg(const DisInsn &insn) const;
+    // FPU/PMMU instructions keep text output but are excluded from the
+    // structured integer memory operand model.
+    bool isFpuPmmuInsn(const DisInsn &insn) const;
 
     Error decodeImpl(DisMemory &memory, Insn &insn, StrBuffer &out) const override;
     const ConfigBase &config() const override { return *this; }

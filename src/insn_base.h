@@ -20,10 +20,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <vector>
 #include "config_base.h"
 #include "dis_memory.h"
 #include "error_reporter.h"
 #include "float80.h"
+#include "memory_operand.h"
 #include "str_buffer.h"
 
 namespace libasm {
@@ -50,6 +52,24 @@ struct Insn final : ErrorAt {
     // re-displays the same bytes/address (e.g. a TMS320 parallel pair).
     uint8_t continueOffset() const { return _continueOffset; }
     void setContinueOffset(uint8_t offset) { _continueOffset = offset; }
+
+    /**
+     * Structured memory operands produced by the last decode. The
+     * entries are owned by this Insn and stay valid until the Insn is
+     * reset or another instruction is decoded into it. Register and
+     * immediate operands produce no entry; a result with no memory
+     * operand returns null and memoryOperandCount() returns zero.
+     */
+    const MemoryOperand *memoryOperands() const {
+        return _memoryOperands.empty() ? nullptr : &_memoryOperands[0];
+    }
+    size_t memoryOperandCount() const { return _memoryOperands.size(); }
+
+    /** Append a structured memory operand during disassembly. */
+    void addMemoryOperand(const MemoryOperand &op) { _memoryOperands.push_back(op); }
+
+    /** Discard all structured memory operands. */
+    void clearMemoryOperands() { _memoryOperands.clear(); }
 
     /** No copy constructor. */
     Insn(Insn const &) = delete;
@@ -200,6 +220,9 @@ private:
      */
     alignas(uintptr_t) uint8_t _stateBuf[sizeof(uintptr_t)] = {};
     void (*_stateDestroyer)(void *) = nullptr;
+
+    /** Owned structured memory operands of the last decoded instruction. */
+    std::vector<MemoryOperand> _memoryOperands;
 
     void *statePtr() const {
         void *p;

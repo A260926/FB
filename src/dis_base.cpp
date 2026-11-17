@@ -161,6 +161,8 @@ Error Disassembler::setOption(const char *name, const char *text) {
 Error Disassembler::decode(
         DisMemory &memory, Insn &insn, char *operands, size_t size, SymbolTable *symtab) {
     _symtab = symtab;
+    // Structured memory operands are per-decode: start every decode empty.
+    insn.clearMemoryOperands();
     // This setError also reset error of Disassembler.
     if (insn.setError(config().checkAddr(insn.address())))
         return insn.getError();
@@ -169,6 +171,10 @@ Error Disassembler::decode(
     decodeImpl(memory, insn, out);
     if (insn.isOK())
         insn.setError(out);
+    // On failure keep the error, consumed bytes and diagnostics, but drop
+    // any partial model so a failed decode leaves no memory operands.
+    if (insn.getError() != OK)
+        insn.clearMemoryOperands();
     return insn.getError();
 }
 

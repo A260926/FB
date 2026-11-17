@@ -315,11 +315,56 @@ StrBuffer &DisMc68000::outDecimalString(StrBuffer &out, const DecimalString &v) 
 
 #endif
 
+namespace {
+
+// Full extension displacement sizes: base code 1 (and outer codes 0/1)
+// encode null, 2 word and 3 long; code 0 is reserved and never reached.
+MemoryOperand::DisplacementSize fullDispSize(uint_fast8_t code) {
+    if (code == 2)
+        return MemoryOperand::DISP_WORD;
+    if (code == 3)
+        return MemoryOperand::DISP_LONG;
+    return MemoryOperand::DISP_NULL;
+}
+
+uint8_t elementBytes(OprSize size) {
+    switch (size) {
+    case SZ_BYTE:
+        return 1;
+    case SZ_WORD:
+        return 2;
+    default:
+        // SZ_LONG and unspecified element sizes (e.g. MOVE16) are long.
+        return 4;
+    }
+}
+
+}  // namespace
+
 void DisMc68000::decodeBriefExtension(
-        DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base) const {
+        DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base, OprSize size,
+        uint8_t operandIndex) const {
     if (firstGen() && (ext & 0x0700))
         insn.setErrorIf(out, UNKNOWN_POSTBYTE);
     const auto disp8 = static_cast<int8_t>(ext & 0xFF);
+    const auto indexScale = (ext >> 9) & 3;
+    if (!isFpuPmmuInsn(insn)) {
+        MemoryOperand op;
+        op.operandIndex = operandIndex;
+        op.elementSize = elementBytes(size);
+        op.kind = (base == REG_PC) ? MemoryOperand::PC_INDEXED : MemoryOperand::INDEXED;
+        op.baseRegister = base;
+        op.pcBase = (base == REG_PC);
+        op.indexRegister = decodeGeneralReg(ext >> 12);
+        op.indexSize = (ext & 0x800) ? MemoryOperand::INDEX_LONG : MemoryOperand::INDEX_WORD;
+        op.indexScale = 1;
+        if (indexScale && !firstGen())
+            op.indexScale = 1 << indexScale;
+        op.baseDispSize = MemoryOperand::DISP_BYTE;
+        op.baseDisp = disp8;
+        insn.insnBase().addMemoryOperand(op);
+    }
+
     out.letter('(');
     if (base == REG_PC) {
         const Config::uintptr_t target =
@@ -331,7 +376,6 @@ void DisMc68000::decodeBriefExtension(
     outReg(out.letter(','), base);
     outReg(out.letter(','), decodeGeneralReg(ext >> 12));
     outOprSize(out, (ext & 0x800) ? SZ_LONG : SZ_WORD);
-    const auto indexScale = (ext >> 9) & 3;
     if (indexScale && !firstGen()) {
         const auto scale = 1 << indexScale;
         out.letter('*').int16(scale);
@@ -351,21 +395,18 @@ const char *DisMc68000::outIndexReg(StrBuffer &out, uint16_t ext, const char *de
     return PSTR_COMMA;
 }
 
-Config::uintptr_t DisMc68000::readDisplacement(
-        DisInsn &insn, RegName base, uint_fast8_t bdSize) const {
-    if (base == REG_PC) {
-        Config::uintptr_t target = insn.address() + insn.length() - 2;
-        if (bdSize == 2) {
-            target += static_cast<int16_t>(insn.readUint16());
-        } else if (bdSize == 3) {
-            target += static_cast<int32_t>(insn.readUint32());
-        }
-        return target;
-    }
+/**
+ * Read the raw signed displacement of a full extension word. Base
+ * sizes 0/1 encode null (no word follows); outer sizes 0/1 encode null.
+ * Sizes 2 and 3 read a signed word or long word respectively. This
+ * never resolves a PC-relative target; it returns the encoded signed
+ * value that the structured model stores.
+ */
+int32_t DisMc68000::readSignedDisplacement(DisInsn &insn, uint_fast8_t bdSize) const {
     if (bdSize == 2)
-        return insn.readUint16();
+        return static_cast<int16_t>(insn.readUint16());
     if (bdSize == 3)
-        return insn.readUint32();
+        return static_cast<int32_t>(insn.readUint32());
     return 0;
 }
 
@@ -392,18 +433,66 @@ const char *DisMc68000::outDisplacement(DisInsn &insn, StrBuffer &out, RegName b
     return delim;
 }
 
-void DisMc68000::decodeFullExtension(
-        DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base, OprSize size) const {
+/**
+ * Populate the index-related fields of |op| from a full extension word.
+ * |suppressed| maps the extension's index-suppress bit.
+ */
+void DisMc68000::fillIndexOperand(MemoryOperand &op, uint16_t ext, bool suppressed) const {
+    if (suppressed) {
+        op.indexSuppressed = true;
+        op.indexRegister = -1;
+        op.indexSize = MemoryOperand::INDEX_NONE;
+        op.indexScale = 1;
+        return;
+    }
+    op.indexRegister = decodeGeneralReg(ext >> 12);
+    op.indexSize = (ext & 0x800) ? MemoryOperand::INDEX_LONG : MemoryOperand::INDEX_WORD;
+    const auto indexScale = (ext >> 9) & 3;
+    op.indexScale = indexScale ? (1 << indexScale) : 1;
+}
+
+void DisMc68000::decodeFullExtension(DisInsn &insn, StrBuffer &out, uint16_t ext, RegName base,
+        OprSize size, uint8_t operandIndex) const {
     if (ext & 8)
         insn.setErrorIf(out, UNKNOWN_POSTBYTE);
     const auto bdSize = (ext >> 4) & 3;
     if (bdSize == 0)
         insn.setErrorIf(out, UNKNOWN_POSTBYTE);
-    if (ext & 0x80)  // base suppress; a suppressed PC still reads program space
-        base = (base == REG_PC) ? REG_ZPC : REG_UNDEF;
+    // The PC base position is the extension word itself; remember it
+    // before base suppression rewrites the register used for text output.
+    const auto pcBase = (base == REG_PC);
+    const auto pcBaseAddress = insn.address() + insn.length() - 2;
+    const auto baseSuppressed = (ext & 0x80) != 0;
+    if (baseSuppressed)  // a suppressed PC still reads program space
+        base = pcBase ? REG_ZPC : REG_UNDEF;
+
+    // Read the encoded base displacement once; both the structured model
+    // and the text path consume this single read.
+    const auto baseDisp = readSignedDisplacement(insn, bdSize);
+    // An active PC resolves the target at the extension word; a suppressed
+    // PC (REG_ZPC) keeps the raw displacement instead.
+    Config::uintptr_t disp = static_cast<Config::uintptr_t>(baseDisp);
+    if (pcBase && !baseSuppressed)
+        disp = pcBaseAddress + baseDisp;
+
+    MemoryOperand op;
+    const bool model = !isFpuPmmuInsn(insn);
+    op.operandIndex = operandIndex;
+    op.elementSize = elementBytes(size);
+    op.baseDispSize = fullDispSize(bdSize);
+    op.baseDisp = baseDisp;
+    op.pcBase = pcBase;
+    op.baseSuppressed = baseSuppressed;
+    op.baseRegister = baseSuppressed ? -1 : base;
+
     if ((ext & 7) == 0) {
-        const auto disp = readDisplacement(insn, base, bdSize);
-        if ((ext & 0xC0) == 0xC0 || (base == REG_PC && (ext & 0x40) != 0)) {
+        // No memory indirection: B + bd + I (or bd + I when base suppressed).
+        op.kind = pcBase ? MemoryOperand::PC_INDEXED : MemoryOperand::INDEXED;
+        fillIndexOperand(op, ext, (ext & 0x40) != 0);
+        if (model)
+            insn.insnBase().addMemoryOperand(op);
+
+        if ((ext & 0xC0) == 0xC0 || (pcBase && (ext & 0x40) != 0)) {
             if (size != SZ_BYTE && disp % 2)
                 insn.setErrorIf(out, OPERAND_NOT_ALIGNED);
         }
@@ -420,11 +509,17 @@ void DisMc68000::decodeFullExtension(
         const auto iis = (ext & 0107);
         if (iis == 4 || iis >= 0104)
             insn.setErrorIf(out, UNKNOWN_POSTBYTE);
-        const auto disp = readDisplacement(insn, base, bdSize);
-        if ((ext & 0xC0) == 0xC0 || (base == REG_PC && (ext & 0x40) != 0)) {
+        const auto preIndex = (iis < 4);  // index participates in the inner address
+        op.kind = preIndex ? MemoryOperand::MEMORY_PREINDEXED
+                           : MemoryOperand::MEMORY_POSTINDEXED;
+        // The index-suppress bit (IS) directly marks an absent index, both
+        // for post-indexed forms and reserved encodings that print none.
+        fillIndexOperand(op, ext, (ext & 0x40) != 0);
+        if ((ext & 0xC0) == 0xC0 || (pcBase && (ext & 0x40) != 0)) {
             if (disp % 2)
                 insn.setErrorIf(out, OPERAND_NOT_ALIGNED);
         }
+
         out.letter('(').letter('[');
         auto delim = outDisplacement(insn, out, base, disp, bdSize, TEXT_null);
         if (base != REG_UNDEF) {
@@ -439,13 +534,21 @@ void DisMc68000::decodeFullExtension(
         delim = PSTR_COMMA;
         if (iis >= 4 && iis < 8)
             delim = outIndexReg(out, ext, delim);
-        const auto outer = readDisplacement(insn, REG_UNDEF, ext & 3);
-        outDisplacement(insn, out, REG_UNDEF, outer, ext & 3, delim);
+        // Read the outer displacement at the same textual point the original
+        // path did, so a truncated stream keeps its error at position.
+        const auto odSize = ext & 3;
+        const auto outerDisp = readSignedDisplacement(insn, odSize);
+        op.outerDispSize = fullDispSize(odSize);
+        op.outerDisp = outerDisp;
+        if (model)
+            insn.insnBase().addMemoryOperand(op);
+        outDisplacement(insn, out, REG_UNDEF, static_cast<Config::uintptr_t>(outerDisp), odSize,
+                delim);
     }
 }
 
-void DisMc68000::outEffectiveAddr(
-        DisInsn &insn, StrBuffer &out, AddrMode mode, RegName reg, OprSize size) const {
+void DisMc68000::outEffectiveAddr(DisInsn &insn, StrBuffer &out, AddrMode mode, RegName reg,
+        OprSize size, uint8_t operandIndex) const {
     if (mode == M_DREG || mode == M_AREG) {
 #if !defined(LIBASM_MC68000_NOPMMU)
         if (insn.src() == M_PREG || insn.dst() == M_PREG) {
@@ -461,37 +564,88 @@ void DisMc68000::outEffectiveAddr(
         return;
     }
 
+    // FPU/PMMU instructions keep their text path but get no structured
+    // memory operand in this model.
+    const bool model = !isFpuPmmuInsn(insn);
+    MemoryOperand op;
+    op.operandIndex = operandIndex;
+    op.elementSize = elementBytes(size);
+
     if (mode == M_PDEC)
         out.letter('-');
     if (mode == M_DISP || mode == M_PCDSP) {
         const auto base = (mode == M_DISP) ? reg : REG_PC;
         const auto val16 = insn.readUint16();
+        const auto disp16 = static_cast<int16_t>(val16);
         if (mode == M_PCDSP) {
             const Config::uintptr_t target =
-                    insn.address() + insn.length() - 2 + static_cast<int16_t>(val16);
+                    insn.address() + insn.length() - 2 + disp16;
             if (size != SZ_BYTE && (target % 2) != 0)
                 insn.setErrorIf(out, OPERAND_NOT_ALIGNED);
             outRelAddr(out.letter('('), target, insn.address(), 16);
+            if (model) {
+                op.kind = MemoryOperand::PC_DISPLACEMENT;
+                op.baseRegister = REG_PC;
+                op.pcBase = true;
+                op.baseDispSize = MemoryOperand::DISP_WORD;
+                op.baseDisp = disp16;
+                insn.insnBase().addMemoryOperand(op);
+            }
         } else {
             outHex(out.letter('('), val16, -16);
+            if (model) {
+                op.kind = MemoryOperand::DISPLACEMENT;
+                op.baseRegister = base;
+                op.baseDispSize = MemoryOperand::DISP_WORD;
+                op.baseDisp = disp16;
+                insn.insnBase().addMemoryOperand(op);
+            }
         }
         out.letter(',');
         outReg(out, base);
     } else if (mode == M_AIND || mode == M_PINC || mode == M_PDEC) {
         outReg(out.letter('('), reg);
+        if (model) {
+            if (mode == M_AIND)
+                op.kind = MemoryOperand::INDIRECT;
+            if (mode == M_PINC) {
+                op.kind = MemoryOperand::POSTINCREMENT;
+                op.postincrement = true;
+            }
+            if (mode == M_PDEC) {
+                op.kind = MemoryOperand::PREDECREMENT;
+                op.predecrement = true;
+            }
+            op.baseRegister = reg;
+            insn.insnBase().addMemoryOperand(op);
+        }
     } else if (mode == M_AWORD || mode == M_ALONG) {
-        const Config::uintptr_t target =
-                (mode == M_AWORD) ? static_cast<int16_t>(insn.readUint16()) : insn.readUint32();
+        int32_t address;
+        if (mode == M_AWORD) {
+            // Absolute short: the 16-bit value is sign extended to 32 bits.
+            address = static_cast<int16_t>(insn.readUint16());
+        } else {
+            address = static_cast<int32_t>(insn.readUint32());
+        }
+        const auto target = static_cast<Config::uintptr_t>(address);
         if (size != SZ_BYTE && (target % 2) != 0)
             insn.setErrorIf(out, OPERAND_NOT_ALIGNED);
         outAbsAddr(out.letter('('), target, _gnuAs ? 16 : 0);
+        if (model) {
+            op.kind = MemoryOperand::ABSOLUTE;
+            op.absoluteShort = (mode == M_AWORD);
+            op.baseDispSize =
+                    (mode == M_AWORD) ? MemoryOperand::DISP_WORD : MemoryOperand::DISP_LONG;
+            op.baseDisp = address;
+            insn.insnBase().addMemoryOperand(op);
+        }
     } else if (mode == M_INDX || mode == M_PCIDX) {
         const auto base = (mode == M_INDX) ? reg : REG_PC;
         const auto ext = insn.readUint16();
         if (firstGen() || (ext & 0x0100) == 0) {
-            decodeBriefExtension(insn, out, ext, base);
+            decodeBriefExtension(insn, out, ext, base, size, operandIndex);
         } else {
-            decodeFullExtension(insn, out, ext, base, size);
+            decodeFullExtension(insn, out, ext, base, size, operandIndex);
         }
     }
     out.letter(')');
@@ -775,8 +929,42 @@ bool DisMc68000::isFloatOpOnSameFpreg(const DisInsn &insn) const {
     return false;
 }
 
+bool DisMc68000::isFpuPmmuInsn(const DisInsn &insn) const {
+    const auto coproc = [](AddrMode mode) {
+        switch (mode) {
+#if !defined(LIBASM_MC68000_NOFPU)
+        case M_IMFLT:
+        case M_FPREG:
+        case M_FPMLT:
+        case M_FCMLT:
+        case M_FSICO:
+        case M_KDREG:
+        case M_KFACT:
+        case M_FPCR:
+        case M_FPSR:
+        case M_FPIAR:
+        case M_IMROM:
+#endif
+#if !defined(LIBASM_MC68000_NOPMMU)
+        case M_IMFC:
+        case M_IMFM:
+        case M_IMLV:
+        case M_PFC:
+        case M_PREG:
+        case M_PVAL:
+        case M_MROOT:
+        case M_PADDR:
+#endif
+            return true;
+        default:
+            return false;
+        }
+    };
+    return coproc(insn.src()) || coproc(insn.dst()) || coproc(insn.ex1()) || coproc(insn.ex2());
+}
+
 void DisMc68000::decodeOperand(DisInsn &insn, StrBuffer &out, AddrMode type, OprPos pos,
-        OprSize size, uint16_t opr16, Error opr16Error) const {
+        OprSize size, uint8_t operandIndex, uint16_t opr16, Error opr16Error) const {
     const auto m = modeVal(insn, pos);
     const auto r = regVal(insn, pos);
     const auto mode = decodeAddrMode(m, r);
@@ -788,20 +976,20 @@ void DisMc68000::decodeOperand(DisInsn &insn, StrBuffer &out, AddrMode type, Opr
 #endif
     switch (type) {
     case M_DREG:
-        outEffectiveAddr(insn, out, type, decodeDataReg(r), size);
+        outEffectiveAddr(insn, out, type, decodeDataReg(r), size, operandIndex);
         break;
     case M_AREG:
     case M_AIND:
     case M_PDEC:
     case M_PINC:
     case M_DISP:
-        outEffectiveAddr(insn, out, type, decodeAddrReg(r), size);
+        outEffectiveAddr(insn, out, type, decodeAddrReg(r), size, operandIndex);
         break;
     case M_GREG:
         outReg(out, decodeGeneralReg(r));
         break;
     case M_ALONG:
-        outEffectiveAddr(insn, out, type, REG_UNDEF, SZ_NONE);
+        outEffectiveAddr(insn, out, type, REG_UNDEF, SZ_NONE, operandIndex);
         break;
     case M_RADDR:
     case M_WADDR:
@@ -820,7 +1008,7 @@ void DisMc68000::decodeOperand(DisInsn &insn, StrBuffer &out, AddrMode type, Opr
     case M_MROOT:
     case M_BITFR:
     case M_BITFW:
-        outEffectiveAddr(insn, out, mode, decodeRegNo(m, r), size);
+        outEffectiveAddr(insn, out, mode, decodeRegNo(m, r), size, operandIndex);
         break;
     case M_IM3:
         if (pos == OP__3) {
@@ -1053,7 +1241,10 @@ Error DisMc68000::decodeImpl(DisMemory &memory, Insn &_insn, StrBuffer &out) con
     const auto opr16 = (dst == M_MULT || dst == M_IMDSP) ? insn.readUint16() : 0;
     const auto opr16Error = insn.getError();
 
-    decodeOperand(insn, out, insn.src(), insn.srcPos(), osize);
+    // Semantic operand positions follow the printed operand order
+    // (source, destination, ...), not the byte read order; e.g. a MOVEM
+    // register mask read before an effective-address word keeps its place.
+    decodeOperand(insn, out, insn.src(), insn.srcPos(), osize, 0);
     if (dst != M_NONE
 #if !defined(LIBASM_MC68000_NOFPU)
             && !isFloatOpOnSameFpreg(insn)
@@ -1061,7 +1252,7 @@ Error DisMc68000::decodeImpl(DisMemory &memory, Insn &_insn, StrBuffer &out) con
     ) {
         if (dst != M_BITOW)
             out.comma();
-        decodeOperand(insn, out, dst, insn.dstPos(), osize, opr16, opr16Error);
+        decodeOperand(insn, out, dst, insn.dstPos(), osize, 1, opr16, opr16Error);
     }
     const auto ex1 = insn.ex1();
     if (ex1 != M_NONE) {
@@ -1071,11 +1262,11 @@ Error DisMc68000::decodeImpl(DisMemory &memory, Insn &_insn, StrBuffer &out) con
 #endif
                 ex1 != M_BITOW)
             out.comma();
-        decodeOperand(insn, out, ex1, insn.ex1Pos(), osize);
+        decodeOperand(insn, out, ex1, insn.ex1Pos(), osize, 2);
     }
     const auto ex2 = insn.ex2();
     if (ex2 != M_NONE)
-        decodeOperand(insn, out.comma(), ex2, insn.ex2Pos(), osize);
+        decodeOperand(insn, out.comma(), ex2, insn.ex2Pos(), osize, 3);
     return _insn.setError(insn);
 }
 

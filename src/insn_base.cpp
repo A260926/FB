@@ -35,6 +35,9 @@ void Insn::reset(uint32_t addr, uint8_t length) {
     _continueOffset = 0;
     memset(_bytes + length, 0, sizeof(_bytes) - length);
     _buffer.reset();
+    // The opaque continuation state has its own lifetime and is intentionally
+    // not cleared here; only the per-decode memory operands are.
+    _memoryOperands.clear();
 }
 
 uint32_t Insn::align(uint8_t step) {
