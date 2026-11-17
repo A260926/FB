@@ -335,13 +335,115 @@ void GMesh::update_string_ptr(unique_ptr<char[]>& ss, const char* key, const cha
   if (arnew) ss = std::move(arnew);
 }
 
-void GMesh::update_string(Vertex v, const char* key, const char* val) { update_string_ptr(v->_string, key, val); }
+void GMesh::update_string(Vertex v, const char* key, const char* val) {
+  update_string_ptr(v->_string, key, val);
+  if (_os) {
+    *_os << "MStrV " << vertex_id(v);
+    if (v->_string) *_os << " {" << v->_string.get() << '}';
+    *_os << '\n';
+  }
+}
 
-void GMesh::update_string(Face f, const char* key, const char* val) { update_string_ptr(f->_string, key, val); }
+void GMesh::update_string(Face f, const char* key, const char* val) {
+  update_string_ptr(f->_string, key, val);
+  if (_os) {
+    *_os << "MStrF " << face_id(f);
+    if (f->_string) *_os << " {" << f->_string.get() << '}';
+    *_os << '\n';
+  }
+}
 
-void GMesh::update_string(Edge e, const char* key, const char* val) { update_string_ptr(e->_string, key, val); }
+void GMesh::update_string(Edge e, const char* key, const char* val) {
+  update_string_ptr(e->_string, key, val);
+  if (_os) {
+    *_os << "MStrE " << vertex_id(vertex1(e)) << ' ' << vertex_id(vertex2(e));
+    if (e->_string) *_os << " {" << e->_string.get() << '}';
+    *_os << '\n';
+  }
+}
 
-void GMesh::update_string(Corner c, const char* key, const char* val) { update_string_ptr(c->_string, key, val); }
+void GMesh::update_string(Corner c, const char* key, const char* val) {
+  update_string_ptr(c->_string, key, val);
+  if (_os) {
+    *_os << "MStrC " << vertex_id(corner_vertex(c)) << ' ' << face_id(corner_face(c));
+    if (c->_string) *_os << " {" << c->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+// Full-string replacements, recorded (when active) as the same "MStr*" edit lines used by update_string().
+
+void GMesh::set_string(Vertex v, const char* s) {
+  v->_string = make_unique_c_string(s);
+  if (_os) {
+    *_os << "MStrV " << vertex_id(v);
+    if (v->_string) *_os << " {" << v->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Face f, const char* s) {
+  f->_string = make_unique_c_string(s);
+  if (_os) {
+    *_os << "MStrF " << face_id(f);
+    if (f->_string) *_os << " {" << f->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Edge e, const char* s) {
+  e->_string = make_unique_c_string(s);
+  if (_os) {
+    *_os << "MStrE " << vertex_id(vertex1(e)) << ' ' << vertex_id(vertex2(e));
+    if (e->_string) *_os << " {" << e->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Corner c, const char* s) {
+  c->_string = make_unique_c_string(s);
+  if (_os) {
+    *_os << "MStrC " << vertex_id(corner_vertex(c)) << ' ' << face_id(corner_face(c));
+    if (c->_string) *_os << " {" << c->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Vertex v, unique_ptr<char[]> s) {
+  v->_string = std::move(s);
+  if (_os) {
+    *_os << "MStrV " << vertex_id(v);
+    if (v->_string) *_os << " {" << v->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Face f, unique_ptr<char[]> s) {
+  f->_string = std::move(s);
+  if (_os) {
+    *_os << "MStrF " << face_id(f);
+    if (f->_string) *_os << " {" << f->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Edge e, unique_ptr<char[]> s) {
+  e->_string = std::move(s);
+  if (_os) {
+    *_os << "MStrE " << vertex_id(vertex1(e)) << ' ' << vertex_id(vertex2(e));
+    if (e->_string) *_os << " {" << e->_string.get() << '}';
+    *_os << '\n';
+  }
+}
+
+void GMesh::set_string(Corner c, unique_ptr<char[]> s) {
+  c->_string = std::move(s);
+  if (_os) {
+    *_os << "MStrC " << vertex_id(corner_vertex(c)) << ' ' << face_id(corner_face(c));
+    if (c->_string) *_os << " {" << c->_string.get() << '}';
+    *_os << '\n';
+  }
+}
 
 // I/O
 
@@ -481,6 +583,66 @@ void GMesh::read_line(char* sline) {
         if (sinfo) set_string(v, sinfo);
         return;
       }
+      if (const char* s = after_prefix(sline, "MBevV ")) {
+        // Bevel edit: create a vertex and set its point.
+        Point p;
+        for_int(c, 3) p[c] = float_from_chars(s);
+        assert_no_more_chars(s);
+        Vertex v = create_vertex_private(_vertexnum);
+        v->_point = p;
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MBevF ")) {
+        // Bevel edit: create a polygon face with its info string.
+        InlinedArray<Vertex, 8> va;
+        for (;;) {
+          while (std::isspace(static_cast<unsigned char>(*s))) s++;
+          if (!*s || *s == '{') break;
+          va.push(id_vertex(int_from_chars(s)));
+        }
+        assertx(va.num() >= 3 && legal_create_face(va));
+        Face f = create_face_private(_facenum, va);
+        if (const char* sinfo = get_sinfo(s)) set_string(f, sinfo);
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MBevDF ")) {
+        // Bevel edit: destroy an original face.
+        const int fi = int_from_chars(s);
+        assert_no_more_chars(s);
+        destroy_face(id_face(fi));
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MBevDV ")) {
+        // Bevel edit: destroy an original vertex whose id is being reused by a new vertex.
+        const int vi = int_from_chars(s);
+        assert_no_more_chars(s);
+        destroy_vertex(id_vertex(vi));
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MStrV ")) {
+        const int vi = int_from_chars(s);
+        const char* sinfo = get_sinfo(s);
+        set_string(id_vertex(vi), sinfo);  // A missing info string clears the element's string.
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MStrF ")) {
+        const int fi = int_from_chars(s);
+        const char* sinfo = get_sinfo(s);
+        set_string(id_face(fi), sinfo);
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MStrE ")) {
+        const int vi1 = int_from_chars(s), vi2 = int_from_chars(s);
+        const char* sinfo = get_sinfo(s);
+        set_string(edge(id_vertex(vi1), id_vertex(vi2)), sinfo);
+        return;
+      }
+      if (const char* s = after_prefix(sline, "MStrC ")) {
+        const int vi = int_from_chars(s), fi = int_from_chars(s);
+        const char* sinfo = get_sinfo(s);
+        set_string(corner(id_vertex(vi), id_face(fi)), sinfo);  // A missing info string clears the corner string.
+        return;
+      }
       break;
     case 'D':
       if (const char* s = after_prefix(sline, "DVertex ")) {
@@ -500,7 +662,8 @@ void GMesh::read_line(char* sline) {
 bool GMesh::recognize_line(std::string_view line) {
   static constexpr auto k_prefixes =
       to_Vec<std::string_view>({"Vertex ", "Face ", "Corner ", "Edge ", "MVertex ", "CVertex ", "DVertex ", "DFace ",
-                                "Ecol ", "Eswa ", "Espl ", "Vspl ", "Vmerge "});
+                                "Ecol ", "Eswa ", "Espl ", "Vspl ", "Vmerge ", "MBevV ", "MBevF ", "MBevDF ",
+                                "MBevDV ", "MStrV ", "MStrF ", "MStrE ", "MStrC "});
   return ranges::any_of(k_prefixes, [&](std::string_view prefix) { return line.starts_with(prefix); });
 }
 
@@ -625,6 +788,122 @@ std::ostream* GMesh::record_changes(std::ostream* pos) {
   std::ostream* oos = _os;
   _os = pos;
   return oos;
+}
+
+// Protected hooks used by bevel_edges() (in MeshBevel.cpp).  The change stream is silenced while the operation runs;
+//  the whole edit is then written as one ordered "MBev*" script so that id reuse (a destroyed original vertex id
+//  reassigned to a junction vertex) replays correctly.
+
+Vertex GMesh::create_bevel_vertex(const Point& p) {
+  Vertex v = Mesh::create_vertex_private(_vertexnum);  // Bypass the "CVertex" record of the GMesh override.
+  v->_point = p;
+  return v;
+}
+
+void GMesh::destroy_bevel_vertex(Vertex v) {
+  Mesh::destroy_vertex(v);  // Bypass the "DVertex" record of the GMesh override.
+}
+
+void GMesh::set_bevel_corner(Corner c, const char* sinfo) { c->_string = make_unique_c_string(sinfo); }
+
+int64_t GMesh::bevel_edge_key(int id1, int id2) {
+  const int64_t lo = min(id1, id2), hi = max(id1, id2);
+  return (lo << 32) | (hi & 0xffffffffLL);
+}
+
+void GMesh::bevel_detach_face(Face f, const Set<int64_t>& keep_edges, Map<int64_t, Edge>& kept_edges) {
+  // Tear down the face like Mesh::destroy_face(), but preserve (detach rather than delete) the MEdge objects whose
+  //  endpoint-id key is in keep_edges, collecting them in kept_edges for bevel_create_face().  Their strings/flags
+  //  and their identity therefore survive the bevel.
+  Array<HEdge> hedges;
+  for (HEdge he = herep(f);; he = he->_next) {
+    hedges.push(he);
+    if (he->_next == herep(f)) break;
+  }
+  for (HEdge he : hedges) {
+    const Vertex vsrc = he->_prev->_vert;
+    const Edge e = he->_edge;
+    const HEdge hes = he->_sym;
+    const int64_t key = bevel_edge_key(vsrc->_id, he->_vert->_id);
+    if (keep_edges.contains(key)) {
+      // Preserve the edge: detach this hedge but keep the MEdge (its flags and strings survive).  When the opposite
+      //  face was detached first, hes is already null and the edge is already in kept_edges.
+      if (hes) {
+        hes->_sym = nullptr;
+        e->_herep = hes;  // The surviving opposite hedge remains the edge's representative.
+      } else {
+        e->_herep = nullptr;  // Both faces detached; reattached when the first new face claims the edge.
+      }
+      he->_sym = nullptr;
+      he->_edge = nullptr;
+      if (!kept_edges.contains(key)) kept_edges.enter(key, e);
+    } else {
+      if (hes) {
+        hes->_sym = nullptr;
+        if (e->_herep == he) e->_herep = hes;
+      } else {
+        --_nedges;
+        delete e;
+      }
+    }
+    assertx(vsrc->_arhe.remove_unordered(he));
+    delete he;
+  }
+  assertx(_id2face.remove(f->_id));
+  delete f;
+}
+
+Face GMesh::bevel_create_face(CArrayView<Vertex> va, Map<int64_t, Edge>& kept_edges, const char* sinfo) {
+  // Recreate a face, reattaching the detached MEdge objects kept by bevel_detach_face() whenever possible.
+  assertx(va.num() >= 3);
+  Face f = new MFace(_facenum);
+  _id2face.enter(_facenum, f);
+  HEdge he_prev = nullptr;
+  const int nv = va.num();
+  for_int(i, nv) {
+    const Vertex vsrc = va[i];
+    const Vertex vdst = va[i + 1 == nv ? 0 : i + 1];
+    HEdge he = new MHEdge;
+    he->_prev = he_prev;
+    he->_vert = vdst;
+    vsrc->_arhe.push(he);
+    const HEdge hes = query_hedge(vdst, vsrc);
+    he->_sym = hes;
+    if (hes) {
+      hes->_sym = he;
+      const Edge e = hes->_edge;
+      he->_edge = e;
+      if (vdst->_id > vsrc->_id) e->_herep = he;
+    } else {
+      const int64_t key = bevel_edge_key(vsrc->_id, vdst->_id);
+      Edge e;
+      if (Edge* pe = kept_edges.find_ptr(key)) {  // Reuse an edge detached by bevel_detach_face().
+        e = *pe;
+        kept_edges.remove(key);
+        e->_herep = he;
+      } else {  // A genuinely new edge of the beveled mesh.
+        ++_nedges;
+        e = new MEdge(he);
+      }
+      he->_edge = e;
+    }
+    he->_face = f;
+    he_prev = he;
+  }
+  assertx(he_prev);
+  HEdge he_last = he_prev;
+  for (;;) {
+    HEdge he_prev_prev = he_prev->_prev;
+    if (!he_prev_prev) break;
+    he_prev_prev->_next = he_prev;
+    he_prev = he_prev_prev;
+  }
+  he_prev->_prev = he_last;
+  he_last->_next = he_prev;
+  f->_herep = he_last;
+  _facenum = max(_facenum, f->_id + 1);
+  if (sinfo) f->_string = make_unique_c_string(sinfo);
+  return f;
 }
 
 Vertex GMesh::create_vertex_private(int id) {

@@ -7,6 +7,7 @@
 
 #include "libHh/Mesh.h"
 #include "libHh/Polygon.h"
+#include "libHh/Set.h"
 
 #if 0
 {
@@ -62,6 +63,10 @@ class GMesh : public Mesh {
   Edge remove_vertex_between_edges(Vertex vr) override;
   Array<Vertex> fix_vertex(Vertex v) override;
 
+  // Bevel the selected manifold edges of a closed, strictly convex triangular mesh by intersecting it with one
+  //  half-space per edge (see MeshBevel.cpp).  Throws std::invalid_argument on invalid arguments or unsupported widths.
+  void bevel_edges(CArrayView<Edge> edges, float width);
+
   // ** Geometry:
   [[nodiscard]] const Point& point(Vertex v) const { return v->_point; }
   void set_point(Vertex v, const Point& p);
@@ -85,15 +90,15 @@ class GMesh : public Mesh {
   [[nodiscard]] static const char* string_key(string& str, const char* ss, const char* key);
   [[nodiscard]] const char* corner_key(string& str, Corner c, const char* key) const;  // Corner | Vertex
   bool parse_corner_key_vec(Corner c, const char* key, ArrayView<float> ar) const;     // Corner | Vertex
-  // Copies the string.
-  void set_string(Vertex v, const char* s) { v->_string = make_unique_c_string(s); }
-  void set_string(Face f, const char* s) { f->_string = make_unique_c_string(s); }
-  void set_string(Edge e, const char* s) { e->_string = make_unique_c_string(s); }
-  void set_string(Corner c, const char* s) { c->_string = make_unique_c_string(s); }
-  void set_string(Vertex v, unique_ptr<char[]> s) { v->_string = std::move(s); }
-  void set_string(Face f, unique_ptr<char[]> s) { f->_string = std::move(s); }
-  void set_string(Edge e, unique_ptr<char[]> s) { e->_string = std::move(s); }
-  void set_string(Corner c, unique_ptr<char[]> s) { c->_string = std::move(s); }
+  // String replacements are recorded as "MStr ..." edit lines when record_changes() is active (nullptr clears them).
+  void set_string(Vertex v, const char* s);
+  void set_string(Face f, const char* s);
+  void set_string(Edge e, const char* s);
+  void set_string(Corner c, const char* s);
+  void set_string(Vertex v, unique_ptr<char[]> s);
+  void set_string(Face f, unique_ptr<char[]> s);
+  void set_string(Edge e, unique_ptr<char[]> s);
+  void set_string(Corner c, unique_ptr<char[]> s);
   [[nodiscard]] static string string_update(const string& s, const char* key, const char* val);
   void update_string(Vertex v, const char* key, const char* val);
   void update_string(Face f, const char* key, const char* val);
@@ -123,6 +128,19 @@ class GMesh : public Mesh {
   friend void swap(GMesh& l, GMesh& r) noexcept;
 
   void show_keys(Vertex v) const;
+
+ protected:
+  // Hooks used by bevel_edges() (in MeshBevel.cpp) so that its topological edits are replayed through read().
+  Vertex create_bevel_vertex(const Point& p);
+  void destroy_bevel_vertex(Vertex v);
+  void set_bevel_corner(Corner c, const char* sinfo);
+  // Low-level edge-preserving rebuild: detach a face while keeping the MEdge objects whose endpoint-id key is in
+  //  keep_edges (they are collected in kept_edges for reuse), then recreate faces reusing those detached edges.
+  void bevel_detach_face(Face f, const Set<int64_t>& keep_edges, Map<int64_t, Edge>& kept_edges);
+  [[nodiscard]] Face bevel_create_face(CArrayView<Vertex> va, Map<int64_t, Edge>& kept_edges, const char* sinfo);
+  [[nodiscard]] static int64_t bevel_edge_key(int id1, int id2);
+  [[nodiscard]] std::ostream* change_stream() const { return _os; }
+  void set_change_stream(std::ostream* pos) { _os = pos; }
 
  private:
   std::ostream* _os{nullptr};  // For record_changes().

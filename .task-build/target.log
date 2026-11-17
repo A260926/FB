@@ -1,0 +1,14 @@
+CASE bevel_geometry tetra_actual_width checks=65
+CASE bevel_geometry halfspace_definition_and_polygons checks=13
+CASE bevel_geometry geometry_order_independence checks=1
+GROUP bevel_geometry cases=3 checks=79 COMPLETE
+CASE junction_topology three_edges_share_a_vertex checks=93
+CASE junction_topology untouched_handles_survive checks=108
+GROUP junction_topology cases=2 checks=201 COMPLETE
+CASE attributes_replay uv_seam_and_replay checks=71
+CASE attributes_replay bevel_then_attribute_edits_replay checks=30
+GROUP attributes_replay cases=2 checks=101 COMPLETE
+CASE compatibility invalid_arguments_rejected checks=7
+CASE compatibility line_recognition_and_old_text checks=13
+GROUP compatibility cases=2 checks=20 COMPLETE
+TARGET_COMPLETE cases=9
