@@ -1,0 +1,5 @@
+{
+  "repo": "pixaranimationstudios/opensubdiv",
+  "commit": "86b1a462e50e25017c6e5b23fada23d42d644d62",
+  "excluded": "unneeded upstream programs, optional tests/docs/assets; production library code retained"
+}
