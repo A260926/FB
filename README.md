@@ -38,6 +38,58 @@ A lossless audio codec which aims to be as simple as possible while still having
 
 To understand the core algorithm, see code in frame namespace, frame namespace utilizes maths which is implemented in lpc and rice namespaces.
 
+### Channel forest coding (multi-channel correlation)
+
+By default each channel is encoded independently, except for the legacy
+two-channel case where the second channel may be difference coded against
+the first. Passing `channelForest = true` turns on optimal channel forest
+coding, which exploits correlation between any pair of channels:
+
+- `frame::FrameEncoder(const data::WavFrame& wavFrame, bool channelForest = false)`
+- `sela::Encoder(std::ifstream& ifStream, bool channelForest = false)`
+
+Both arguments default to `false`, so existing call sites compile and
+produce byte-identical output without changes. The file-level encoder
+forwards the setting to every worker thread.
+
+For each channel the encoder really runs the existing LPC and Rice
+pipeline on (a) the channel itself and (b) the `parent - child`
+difference against every other channel, then measures each candidate by
+its actual subframe size: 12 fixed header bytes plus 4 bytes per 32-bit
+word in the reflection-coefficient and residue arrays. Every channel
+selects exactly one incoming edge - an independent root or one parent
+channel - and a minimum arborescence search
+(`src/frame/channel_forest.cpp`, Chu-Liu/Edmonds) picks the globally
+cheapest acyclic forest. On equal total cost the parent vector is
+compared lexicographically from channel 0, with an independent root
+recorded as the channel count. The coefficients, residues and parent
+field written to disk always belong to the winning candidates.
+
+Requirements while the mode is enabled: 1 to 8 channels, 16-bit signed
+PCM, 2048 samples per channel per frame; a file may contain any number of
+complete frames. Invalid input raises `data::Exception`.
+
+The decoder needs no flag. Before reconstruction it verifies that
+subframe channel numbers cover `0 .. N-1` exactly once, that every
+subframe type is legal, that every referenced parent exists and differs
+from the channel itself, that parent and child carry the same sample
+count, and that the dependency graph is acyclic; any violation raises
+`data::Exception`. Channels are then restored along parent links, so
+arbitrary multi-level forests decode correctly even when the subframes
+are stored out of order, and the output is always ordered by channel
+number. File-level decoding hands worker failures back to the caller
+instead of terminating the process. Old independent files and legacy
+stereo difference files remain readable.
+
+A complete call example lives in
+[`examples/channel_forest_example.cpp`](examples/channel_forest_example.cpp):
+
+```sh
+c++ -std=c++11 -O2 -pthread -I. examples/channel_forest_example.cpp \
+    .task-build/libsela.a -o channel_forest_example
+./channel_forest_example demo.wav demo.sela
+```
+
 ### References
 - Linear Prediction
   - [Wikipedia](https://en.wikipedia.org/wiki/Linear_prediction)

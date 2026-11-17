@@ -2,7 +2,10 @@
 #include "../include/data/exception.hpp"
 #include "../include/frame.hpp"
 
+#include <exception>
+#include <mutex>
 #include <thread>
+#include <vector>
 
 namespace sela {
 class LoopThrough {
@@ -10,24 +13,39 @@ public:
     const size_t begin;
     const size_t end;
     const std::vector<data::WavFrame>& wavFrames;
-    LoopThrough(size_t begin, size_t end, const std::vector<data::WavFrame>& wavFrames)
+    const bool channelForest;
+    std::mutex& errorMutex;
+    std::vector<std::exception_ptr>& errors;
+    LoopThrough(size_t begin, size_t end, const std::vector<data::WavFrame>& wavFrames, bool channelForest,
+        std::mutex& errorMutex, std::vector<std::exception_ptr>& errors)
         : begin(begin)
         , end(end)
         , wavFrames(wavFrames)
+        , channelForest(channelForest)
+        , errorMutex(errorMutex)
+        , errors(errors)
     {
     }
     void process(std::vector<data::SelaFrame>& selaFrames)
     {
-        if ((begin >= end) || (end > selaFrames.size())) {
-            const std::string exceptionMessage = "Something is wrong";
-            data::Exception(std::move(exceptionMessage));
-        }
-        selaFrames.reserve(end - begin);
+        try {
+            // Empty ranges are normal when there are fewer frames than
+            // worker threads; such a worker simply contributes nothing.
+            if (begin >= end || end > wavFrames.size()) {
+                return;
+            }
+            selaFrames.reserve(end - begin);
 
-        for (size_t i = begin; i < end; i++) {
-            frame::FrameEncoder encoder = frame::FrameEncoder(wavFrames[i]);
-            data::SelaFrame selaFrame = encoder.process();
-            selaFrames.push_back(selaFrame);
+            for (size_t i = begin; i < end; i++) {
+                frame::FrameEncoder encoder = frame::FrameEncoder(wavFrames[i], channelForest);
+                data::SelaFrame selaFrame = encoder.process();
+                selaFrames.push_back(selaFrame);
+            }
+        } catch (...) {
+            // Hand the failure back to the joining thread instead of
+            // terminating the whole process inside this worker.
+            std::lock_guard<std::mutex> lock(errorMutex);
+            errors.push_back(std::current_exception());
         }
     }
 };
@@ -42,6 +60,9 @@ void Encoder::processFrames(std::vector<data::SelaFrame>& encodedSelaFrames)
     // Get number of threads supported by hardware
     size_t numThreads = std::thread::hardware_concurrency();
     encodedSelaFrames.reserve(wavFile.wavChunk.dataSubChunk.wavFrames.size());
+
+    std::mutex errorMutex;
+    std::vector<std::exception_ptr> errors;
 
     if (numThreads > 0) {
         //Initialize ThreadPool
@@ -62,7 +83,8 @@ void Encoder::processFrames(std::vector<data::SelaFrame>& encodedSelaFrames)
 
         for (size_t i = 0; i < numThreads; i++) {
             //Create worker object
-            LoopThrough data = LoopThrough(begin, end, wavFile.wavChunk.dataSubChunk.wavFrames);
+            LoopThrough data = LoopThrough(begin, end, wavFile.wavChunk.dataSubChunk.wavFrames, channelForest,
+                errorMutex, errors);
 
             //Start thread object and push thread to threadpool
             threadPool.push_back(std::thread(&LoopThrough::process, data, std::ref(selaFrameSegments[i])));
@@ -77,6 +99,10 @@ void Encoder::processFrames(std::vector<data::SelaFrame>& encodedSelaFrames)
             threadPool[i].join();
         }
 
+        if (!errors.empty()) {
+            std::rethrow_exception(errors[0]);
+        }
+
         for (std::vector<data::SelaFrame> segment : selaFrameSegments) {
             for (data::SelaFrame selaFrame : segment) {
                 encodedSelaFrames.push_back(selaFrame);
@@ -84,7 +110,7 @@ void Encoder::processFrames(std::vector<data::SelaFrame>& encodedSelaFrames)
         }
     } else {
         for (data::WavFrame wavFrame : wavFile.wavChunk.dataSubChunk.wavFrames) {
-            frame::FrameEncoder encoder = frame::FrameEncoder(wavFrame);
+            frame::FrameEncoder encoder = frame::FrameEncoder(wavFrame, channelForest);
             data::SelaFrame selaFrame = encoder.process();
             encodedSelaFrames.push_back(selaFrame);
         }

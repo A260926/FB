@@ -12,10 +12,12 @@ private:
     void processFrames(std::vector<data::SelaFrame>& encodedSelaFrames);
     std::ifstream& ifStream;
     file::WavFile wavFile;
+    const bool channelForest;
 
 public:
-    explicit Encoder(std::ifstream& ifStream)
+    explicit Encoder(std::ifstream& ifStream, bool channelForest = false)
         : ifStream(ifStream)
+        , channelForest(channelForest)
     {
     }
     file::SelaFile process();
