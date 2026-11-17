@@ -464,12 +464,17 @@ SplineSurface* LRSplineSurface::asSplineSurface()
        it != surf->basisFunctionsEnd(); ++it)
     {
       Point cf = it->second->Coef();
-      coefs.insert(coefs.end(), cf.begin(), cf.end());
       if (rational_)
 	{
-	  double wgt = it->second->weight();
+	  // The rational SplineSurface constructor expects homogeneous
+	  // coefficients (w*P, w), not the geometric control points.
+	  const double wgt = it->second->weight();
+	  for (int c = 0; c < dimension(); ++c)
+	    coefs.push_back(wgt*cf[c]);
 	  coefs.push_back(wgt);
 	}
+      else
+	coefs.insert(coefs.end(), cf.begin(), cf.end());
     }
 
   // Make spline surface
@@ -1524,39 +1529,91 @@ void LRSplineSurface::expandToFullTensorProduct()
 {
   //std::wcout << "LRSplineSurface::ExpandToFullTensorProduct() - copying mesh..." << std::endl;
   Mesh2D tensor_mesh = mesh_;
-  
+
   //std::wcout << "LRSplineSurface::ExpandToFullTensorProduct() - setting uniform meshlines..." << std::endl;
-  const vector<int> xmults = LRSplineUtils::set_uniform_meshlines(XFIXED, 
+  const vector<int> xmults = LRSplineUtils::set_uniform_meshlines(XFIXED,
 								  tensor_mesh);
-  const vector<int> ymults = LRSplineUtils::set_uniform_meshlines(YFIXED, 
+  const vector<int> ymults = LRSplineUtils::set_uniform_meshlines(YFIXED,
 								  tensor_mesh);
 
 
   BSplineMap tensor_bsplines;
   //std::wcout << "LRSplineSurface::ExpandToFullTensorProduct() - identify elements from mesh..." << std::endl;
   ElementMap emap = LRSplineUtils::identify_elements_from_mesh(tensor_mesh);
-  //std::wcout << "Size of emap: " << emap.size() << std::endl;
+
+  // Rational surfaces are expanded in homogeneous coordinates: each rational
+  // LR B-spline (geometric coefficient c, weight w) becomes a non-rational
+  // B-spline with the homogeneous coefficient (w*c, w).  The ordinary,
+  // exact tensor subdivision then applies to the four coordinate functions,
+  // and the rational representation is restored afterwards.  Expanding the
+  // geometric coordinates directly would subdivide the numerator without the
+  // accompanying weight function and change the surface.
+  const int geom_dim = dimension();
+  BSplineMap homogeneous_bsplines;
+  if (rational_)
+    {
+      for (auto b = bsplines_.begin(); b != bsplines_.end(); ++b)
+	{
+	  const LRBSpline2D* old = b->second.get();
+	  const Point& cg = old->coefTimesGamma();
+	  const double w = old->weight();
+	  Point h(geom_dim + 1);
+	  for (int c = 0; c < geom_dim; ++c)
+	    h[c] = w*cg[c];
+	  h[geom_dim] = w;
+	  unique_ptr<LRBSpline2D> hb(new LRBSpline2D(h, 1.0,
+						    old->getUnivariate(XFIXED),
+						    old->getUnivariate(YFIXED),
+						    old->gamma(), false));
+	  homogeneous_bsplines.insert(std::make_pair(b->first, std::move(hb)));
+	}
+    }
+  BSplineMap& source_bsplines = rational_ ? homogeneous_bsplines : bsplines_;
+
   //std::wcout << "LRSplineSurface::ExpandToFullTensorProduct() - splitting up basis functions..." << std::endl;
   // splitting up basis functions
-  for (auto b = bsplines_.begin(); b != bsplines_.end(); ++b) {
-    LRSplineUtils::tensor_split(b->second, 
-				xmults, 
-				ymults, 
+  for (auto b = source_bsplines.begin(); b != source_bsplines.end(); ++b) {
+    LRSplineUtils::tensor_split(b->second,
+				xmults,
+				ymults,
 				tensor_mesh,
 				bsplinesuni1_,
 				bsplinesuni2_,
 				tensor_bsplines);
   }
 
+  if (rational_)
+    {
+      // Restore the rational representation from the homogeneous tensor
+      // coefficients.  All weights are strictly positive for a surface in the
+      // supported finite-positive-weight class.
+      BSplineMap rational_bsplines;
+      for (auto b = tensor_bsplines.begin(); b != tensor_bsplines.end(); ++b)
+	{
+	  const LRBSpline2D* hb = b->second.get();
+	  const Point& h = hb->coefTimesGamma();
+	  const double w = h[geom_dim];
+	  Point cg(geom_dim);
+	  for (int c = 0; c < geom_dim; ++c)
+	    cg[c] = h[c] / w;
+	  unique_ptr<LRBSpline2D> rb(new LRBSpline2D(cg, w,
+						     hb->getUnivariate(XFIXED),
+						     hb->getUnivariate(YFIXED),
+						     hb->gamma(), true));
+	  rational_bsplines.insert(std::make_pair(b->first, std::move(rb)));
+	}
+      tensor_bsplines.swap(rational_bsplines);
+    }
+
   // registering all the produced functions with the elements
   //std::wcout << "LRSplineSurface::ExpandToFullTensorProduct() - registering produced functions..." << std::endl;
-  //std::wcout << "Number of basis functions: " << tensor_bsplines.size() << std::endl;
-  //std::wcout << "Number of elements: "<< tensor_mesh.numDistinctKnots(XFIXED)-1 << " x " ;
-  //std::wcout << tensor_mesh.numDistinctKnots(YFIXED)-1 << std::endl;
+  //std::cout << "Number of basis functions: " << tensor_bsplines.size() << std::endl;
+  //std::cout << "Number of elements: "<< tensor_mesh.numDistinctKnots(XFIXED)-1 << " x " ;
+  //std::cout << tensor_mesh.numDistinctKnots(YFIXED)-1 << std::endl;
 
   // @@@ VSK. Use information in the LRB-splines or regenerate all elements ?
   for (auto b = tensor_bsplines.begin(); b != tensor_bsplines.end(); ++b)  {
-    LRSplineUtils::update_elements_with_single_bspline(b->second.get(), emap, 
+    LRSplineUtils::update_elements_with_single_bspline(b->second.get(), emap,
 						       tensor_mesh, false);
   }
 

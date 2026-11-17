@@ -1,0 +1,9 @@
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/sisl.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/core.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/lr.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/lrmesh.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/lr_baseline.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/target.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/lr_coarsen_obj.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/.task-build/CMakeFiles/rebuild_cache.dir

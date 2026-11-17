@@ -1790,10 +1790,18 @@ SplineSurface* LRSplineUtils::fullTensorProductSurface(const LRSplineSurface& lr
   vector<double> sf_coefs;
   while (iter != full_tp_sf->basisFunctionsEnd())
     {
-      Point coef = iter->second->coefTimesGamma();//Coef();
-      sf_coefs.insert(sf_coefs.end(), coef.begin(), coef.end());
+      Point coef = iter->second->coefTimesGamma();
       if (rational)
-	sf_coefs.insert(sf_coefs.end(), iter->second->weight());
+	{
+	  // Homogeneous coefficients (w*P, w) are required by the rational
+	  // SplineSurface constructor.
+	  const double wgt = iter->second->weight();
+	  for (int c = 0; c < dim; ++c)
+	    sf_coefs.push_back(wgt*coef[c]);
+	  sf_coefs.push_back(wgt);
+	}
+      else
+	sf_coefs.insert(sf_coefs.end(), coef.begin(), coef.end());
 
       ++iter;
     }

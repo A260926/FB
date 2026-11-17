@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/lr_baseline.dir/baseline.cpp.o -o lr_baseline  liblrmesh.a liblr.a libcore.a libsisl.a

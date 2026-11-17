@@ -1,0 +1,2 @@
+/usr/bin/ar qc liblrmesh.a CMakeFiles/lrmesh.dir/Volumes/UserFBWorkspace/questions/FS46043563F7DEU17732/attempts/20261117T161832973835Z/repo/viewlib/src/vol_and_lr/LRSurfaceTesselator.C.o
+/usr/bin/ranlib liblrmesh.a

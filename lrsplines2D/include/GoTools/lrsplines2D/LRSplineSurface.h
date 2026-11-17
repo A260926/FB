@@ -675,9 +675,29 @@ namespace Go
   /// as it is more optimized than the next method
   void refine(const Refinement2D& ref, bool absolute=false);
 
-  /// Insert a batch of refinements simultaneously.  The 'absolute' argument works as in the two 
+  /// Insert a batch of refinements simultaneously.  The 'absolute' argument works as in the two
   /// preceding refine() methods.
   void refine(const std::vector<Refinement2D>& refs, bool absolute=false);
+
+  /// Attempt to coarsen the LR mesh by removing mesh line segments.
+  /// The Refinement2D entries reuse the semantics of refine(): 'd' gives the
+  /// direction of the meshrectangle (XFIXED for a line with constant u, i.e.
+  /// parallel to the v-axis), 'kval' its fixed parameter value, and
+  /// 'start'/'end' the interval of the other parameter covered by the
+  /// segment.  Here 'multiplicity' is interpreted as the number of times the
+  /// multiplicity of each covered meshrectangle is decreased.  Overlapping
+  /// requests in the batch are accumulated segment by segment.
+  /// Only internal, currently existing meshrectangles can be removed; the
+  /// outer boundary is never modified, and no multiplicity is allowed to
+  /// become negative.  The whole batch is applied as a single edit: if the
+  /// current surface cannot be represented losslessly on the coarsened mesh
+  /// (or the candidate coarsened basis is linearly dependent), the function
+  /// returns false and leaves the surface, its basis, mesh, element support
+  /// and query state completely unchanged.  An empty request succeeds without
+  /// modifying the object.  Illegal arguments result in std::invalid_argument.
+  /// \return true if the surface was coarsened, false if the requested
+  /// coarsening would change the geometry.
+  bool tryCoarsen(const std::vector<Refinement2D>& requests);
 
 #if 0
   // @@@ VSK. Index or iterator? Must define how the elements or bsplines 
