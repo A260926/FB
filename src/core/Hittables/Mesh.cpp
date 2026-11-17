@@ -317,6 +317,7 @@ Mesh::Mesh(void)
 	this->_material = std::make_shared<Lambertian>(Color(0.6, 0.6, 0.6));
 	this->_legacyBVH = BVHNode();
 	this->_totalArea = 0.0;
+	this->_geometryRevision = 0;
 	this->_usesPackedTriangles = false;
 }
 
@@ -327,6 +328,7 @@ Mesh::Mesh(Vector3 position, std::shared_ptr<Material> material, BVHNode bvh)
 	this->_material = material;
 	this->_legacyBVH = bvh;
 	this->_totalArea = 0.0;
+	this->_geometryRevision = 0;
 	this->_usesPackedTriangles = false;
 }
 
@@ -336,6 +338,7 @@ Mesh::Mesh(Vector3 position, std::shared_ptr<Material> material, std::vector<std
 	this->_position = position;
 	this->_material = material;
 	this->_totalArea = 0.0;
+	this->_geometryRevision = 0;
 	this->_usesPackedTriangles = false;
 
 	if (this->_trySetPackedTriangles(triangles))
@@ -353,6 +356,7 @@ Mesh::Mesh(Vector3 position, std::shared_ptr<Material> material, std::vector<Tri
 	this->_position = position;
 	this->_material = material;
 	this->_totalArea = 0.0;
+	this->_geometryRevision = 0;
 	this->_usesPackedTriangles = false;
 	this->_setPackedTriangles(std::move(triangles));
 }
@@ -549,6 +553,138 @@ void	Mesh::_computeLegacyTriangleAreas(void)
 		}
 		this->_triangleAreaPrefixSums.push_back(this->_totalArea);
 	}
+}
+
+namespace
+{
+	bool	isFiniteTriangle(const Triangle& triangle)
+	{
+		const Vector3* const vertices[3] = {
+			&triangle.getVertex0(),
+			&triangle.getVertex1(),
+			&triangle.getVertex2()
+		};
+
+		for (const Vector3* vertex : vertices)
+		{
+			if (
+				!std::isfinite(vertex->getX())
+				|| !std::isfinite(vertex->getY())
+				|| !std::isfinite(vertex->getZ())
+			)
+			{
+				return (false);
+			}
+		}
+
+		const double area = triangle.area();
+		return (std::isfinite(area) && area > 0.0);
+	}
+}
+
+// Replaces packed triangle data in place, keeping the existing packed BVH topology
+bool	Mesh::refitTriangles(const std::vector<Triangle>& replacement)
+{
+	if (!this->_usesPackedTriangles)
+	{
+		return (false);
+	}
+	if (replacement.size() != this->_triangles.size())
+	{
+		return (false);
+	}
+	for (const Triangle& triangle : replacement)
+	{
+		if (!isFiniteTriangle(triangle))
+		{
+			return (false);
+		}
+	}
+
+	this->_triangles = replacement;
+	this->_refitPackedBVH();
+	this->_computePackedTriangleAreas();
+	this->_triangleCentroids.clear();
+	this->_geometryRevision++;
+	return (true);
+}
+
+std::uint64_t	Mesh::geometryRevision(void) const
+{
+	return (this->_geometryRevision);
+}
+
+void	Mesh::_refitPackedBVH(void)
+{
+	const std::size_t triangleCount = this->_triangles.size();
+
+	if (this->_packedBVHNodes.empty())
+	{
+		return;
+	}
+
+	this->_triangleBoundingBoxes.assign(triangleCount, AABB());
+	for (std::size_t index = 0; index < triangleCount; index++)
+	{
+		this->_triangles[index].createBoundingBox(this->_triangleBoundingBoxes[index]);
+	}
+
+	this->_refitPackedBVHNode(0);
+	this->_boundingBox = this->_packedBVHNodes[0].boundingBox;
+	std::vector<AABB>().swap(this->_triangleBoundingBoxes);
+}
+
+// Post-order refresh of the existing node graph: leaves re-merge their face boxes and parents
+// re-merge their children, so topology indices, leaf ranges and face order stay untouched.
+void	Mesh::_refitPackedBVHNode(std::size_t nodeIndex)
+{
+	PackedBVHNode& node = this->_packedBVHNodes[nodeIndex];
+
+	if (!node.isLeaf)
+	{
+		this->_refitPackedBVHNode(node.left);
+		this->_refitPackedBVHNode(node.right);
+		node.boundingBox = mergeBoxes(
+			this->_packedBVHNodes[node.left].boundingBox,
+			this->_packedBVHNodes[node.right].boundingBox
+		);
+		return;
+	}
+
+	node.boundingBox = boundingBoxForRange(
+		this->_triangleBoundingBoxes,
+		this->_triangleIndices,
+		node.start,
+		node.start + node.count
+	);
+}
+
+Mesh::PackedGeometryLayout	Mesh::packedGeometryLayout(void) const
+{
+	PackedGeometryLayout layout;
+
+	layout.packed = this->_usesPackedTriangles;
+	layout.triangleCount = this->_triangles.size();
+	layout.nodeCount = this->_packedBVHNodes.size();
+	layout.left.reserve(layout.nodeCount);
+	layout.right.reserve(layout.nodeCount);
+	layout.start.reserve(layout.nodeCount);
+	layout.count.reserve(layout.nodeCount);
+	layout.isLeaf.reserve(layout.nodeCount);
+	layout.minimum.reserve(layout.nodeCount);
+	layout.maximum.reserve(layout.nodeCount);
+	for (const PackedBVHNode& node : this->_packedBVHNodes)
+	{
+		layout.left.push_back(node.left);
+		layout.right.push_back(node.right);
+		layout.start.push_back(node.start);
+		layout.count.push_back(node.count);
+		layout.isLeaf.push_back(node.isLeaf ? 1 : 0);
+		layout.minimum.push_back(node.boundingBox.getMinimum());
+		layout.maximum.push_back(node.boundingBox.getMaximum());
+	}
+	layout.triangleIndices = this->_triangleIndices;
+	return (layout);
 }
 
 const Triangle*	Mesh::_surfaceTriangle(std::size_t index) const

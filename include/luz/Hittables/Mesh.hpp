@@ -4,12 +4,30 @@
 #include "Hittables/BVHNode.hpp"
 #include "Hittables/Triangle.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <vector>
 
 class	Mesh : public Hittable
 {
 	public:
+		// Read-only diagnostic snapshot of the packed BVH: node connectivity, leaf ranges, face
+		// order and node bounds. `refitTriangles` refreshes bounds but never changes the topology.
+		struct	PackedGeometryLayout
+		{
+			bool	packed = false;
+			std::size_t	triangleCount = 0;
+			std::size_t	nodeCount = 0;
+			std::vector<std::size_t>	left;
+			std::vector<std::size_t>	right;
+			std::vector<std::size_t>	start;
+			std::vector<std::size_t>	count;
+			std::vector<unsigned char>	isLeaf;
+			std::vector<std::size_t>	triangleIndices;
+			std::vector<Vector3>	minimum;
+			std::vector<Vector3>	maximum;
+		};
+
 		Mesh(void);
 		Mesh(Vector3 position, std::shared_ptr<Material> material, BVHNode bvh);
 		Mesh(Vector3 position, std::shared_ptr<Material> material, std::vector<std::shared_ptr<Hittable>> triangles);
@@ -32,6 +50,9 @@ class	Mesh : public Hittable
 		) const;
 		bool			sampleSurface(Vector3& position, Vector3& normal) const;
 		bool			sampleSurfaceElement(std::size_t index, Vector3& position, Vector3& normal) const;
+		bool			refitTriangles(const std::vector<Triangle>& replacement);
+		std::uint64_t	geometryRevision(void) const;
+		PackedGeometryLayout	packedGeometryLayout(void) const;
 
 	private:
 		struct	PackedBVHNode
@@ -50,6 +71,8 @@ class	Mesh : public Hittable
 		std::size_t	_buildPackedBVHNode(std::size_t start, std::size_t end);
 		void	_computePackedTriangleAreas(void);
 		void	_computeLegacyTriangleAreas(void);
+		void	_refitPackedBVH(void);
+		void	_refitPackedBVHNode(std::size_t nodeIndex);
 		const Triangle*	_surfaceTriangle(std::size_t index) const;
 
 		Vector3 _position;
@@ -64,5 +87,6 @@ class	Mesh : public Hittable
 		std::vector<double>	_triangleAreaPrefixSums;
 		AABB	_boundingBox;
 		double	_totalArea;
+		std::uint64_t	_geometryRevision;
 		bool	_usesPackedTriangles;
 };

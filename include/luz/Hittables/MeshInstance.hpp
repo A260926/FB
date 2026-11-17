@@ -5,8 +5,9 @@
 #include "Hittables/Mesh.hpp"
 #include "Materials/Material.hpp"
 #include "Vector3.hpp"
+#include <cstdint>
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 class	MeshInstance : public Hittable
@@ -42,9 +43,7 @@ class	MeshInstance : public Hittable
 			double	sinY = 0.0;
 			double	cosZ = 1.0;
 			double	sinZ = 0.0;
-			double	uniformAreaScale = 1.0;
 			bool	invertible = true;
-			bool	uniformArea = true;
 
 			InstanceTransform(Vector3 position, Vector3 rotationDegrees, Vector3 scale);
 			Vector3	rotate(Vector3 vector) const;
@@ -58,7 +57,9 @@ class	MeshInstance : public Hittable
 		double	_surfaceArea(void) const;
 		const std::vector<double>&	_transformedAreaPrefixSums(void) const;
 		bool	_sampleSurface(Vector3& position, Vector3& normal, double& area) const;
-		bool	_computeBoundingBox(void);
+		bool	_computeBoundingBox(void) const;
+		bool	_refreshCaches(std::uint64_t geometryRevision) const;
+		bool	_ensureCaches(void) const;
 		bool	_localRay(const Ray& ray, Ray& localRay, double& localDistanceScale) const;
 		void	_transformHitRecord(
 			const Ray& worldRay,
@@ -70,10 +71,11 @@ class	MeshInstance : public Hittable
 		std::shared_ptr<const Mesh>	_geometry;
 		std::shared_ptr<Material>	_material;
 		InstanceTransform	_transform;
-		AABB	_boundingBox;
-		bool	_hasBoundingBox = false;
+		mutable AABB	_boundingBox;
+		mutable bool	_hasBoundingBox = false;
 		mutable double	_surfaceAreaCache = 0.0;
-		mutable std::once_flag	_surfaceAreaOnce;
 		mutable std::vector<double>	_transformedAreaPrefixCache;
-		mutable std::once_flag	_transformedAreaPrefixOnce;
+		mutable std::uint64_t	_cachedGeometryRevision = 0;
+		mutable bool	_cachesInitialized = false;
+		mutable std::shared_mutex	_cacheMutex;
 };

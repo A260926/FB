@@ -414,6 +414,40 @@ bool	BVHNode::createBoundingBox(AABB& outputBoundingBox) const
 	return (true);
 }
 
+// Refreshes the existing child boxes and the node's own box without replacing children.
+// Children are refitted bottom-up so nested nodes (e.g. instanced meshes) see updated geometry.
+bool	BVHNode::refit(void)
+{
+	if (this->_childBoundingBoxes.size() != this->_childs.size())
+	{
+		return (false);
+	}
+	if (this->_childs.empty())
+	{
+		return (true);
+	}
+
+	for (std::size_t i = 0; i < this->_childs.size(); i++)
+	{
+		BVHNode* const childNode = dynamic_cast<BVHNode*>(this->_childs[i].get());
+
+		if (childNode != nullptr && !childNode->refit())
+		{
+			return (false);
+		}
+
+		AABB childBoundingBox;
+		if (!this->_childs[i]->createBoundingBox(childBoundingBox))
+		{
+			return (false);
+		}
+		this->_childBoundingBoxes[i] = childBoundingBox;
+	}
+
+	this->_boundingBox = Utilities::mergeBoundingBoxes(this->_childBoundingBoxes);
+	return (true);
+}
+
 // Returns an empty Material (this function only exists because it must be implemented since the Hittable class has it)
 Material*	BVHNode::getMaterial(void) const
 {

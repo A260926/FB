@@ -8,7 +8,7 @@ cmake --build .task-build/core --target luz_core -j2
 c++ -std=c++20 -O2 -pthread -I. -Iinclude/luz task_support/baseline.cpp .task-build/core/libluz_core.a -o .task-build/baseline
 if [[ $mode == target ]]; then
   c++ -std=c++20 -O2 -pthread -I. -Iinclude/luz -x c++ task_support/driver.c task_support/deform_tests.cpp -x none .task-build/core/libluz_core.a -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/luz-target.XXXXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
