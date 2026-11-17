@@ -1,0 +1,15 @@
+{
+  "repo": "https://github.com/ifduyue/musl.git",
+  "commit": "7813e9119eb5fe681b6750b8a033a0490bca0941",
+  "license": "MIT",
+  "files": {
+    "elf.h": {
+      "upstream_path": "include/elf.h",
+      "sha256": "d62fe51eb318a17d5d6a6669172eb7ba522dad03698a9b521265af3b6b23b489"
+    },
+    "MUSL-COPYRIGHT": {
+      "upstream_path": "COPYRIGHT",
+      "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
+    }
+  }
+}
