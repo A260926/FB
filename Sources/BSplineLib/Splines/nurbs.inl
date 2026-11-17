@@ -226,6 +226,12 @@ Multiplicity Nurbs<para_dim>::RemoveKnot(Dimension const& dimension,
                                          Tolerance const& tolerance) const {
   using std::get;
 
+  if (Base_::parameter_space_->IsSharedRefinementEnabled()) {
+    throw std::logic_error(
+        "BSplineLib::splines::Nurbs::RemoveKnot - knot removal is not "
+        "allowed while shared refinement is enabled.");
+  }
+
   auto const& [maximum_distance_from_origin, minimum_weight] =
       weighted_vector_space_
           ->DetermineMaximumDistanceFromOriginAndMinimumWeight();
@@ -253,6 +259,11 @@ bool Nurbs<para_dim>::ReduceDegree(Dimension const& dimension,
                                    Tolerance const& tolerance_removal,
                                    Multiplicity const& multiplicity,
                                    Tolerance const& tolerance) const {
+  if (Base_::parameter_space_->IsSharedRefinementEnabled()) {
+    throw std::logic_error(
+        "BSplineLib::splines::Nurbs::ReduceDegree - degree reduction is not "
+        "allowed while shared refinement is enabled.");
+  }
   // bound checks in parameter space
   return homogeneous_b_spline_->ReduceDegree(dimension,
                                              tolerance_removal,

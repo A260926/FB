@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <utility>
 
 #include "BSplineLib/Splines/spline.hpp"
+#include "BSplineLib/Splines/shared_refinement.hpp"
 #include "BSplineLib/Utilities/containers.hpp"
 #include "BSplineLib/Utilities/error_handling.hpp"
 #include "BSplineLib/Utilities/index.hpp"
@@ -69,9 +70,9 @@ public:
   BSpline(SharedPointer<ParameterSpace_> parameter_space,
           SharedPointer<VectorSpace_> vector_space);
   BSpline(BSpline const& other);
-  BSpline(BSpline&& other) noexcept = default;
+  BSpline(BSpline&& other) noexcept;
   BSpline& operator=(BSpline const& rhs);
-  BSpline& operator=(BSpline&& rhs) noexcept = default;
+  BSpline& operator=(BSpline&& rhs) noexcept;
   ~BSpline() override = default;
 
   virtual int Dim() const override { return vector_space_->Dim(); };
@@ -121,8 +122,10 @@ public:
   /// @param from
   /// @param to
   virtual void ShareMembers(std::shared_ptr<BSpline>& from) {
+    LeaveSharedRefinementGroup();
     vector_space_ = from->vector_space_;
     Base_::parameter_space_ = from->parameter_space_;
+    JoinSharedRefinementGroup();
   };
 
 protected:
@@ -138,9 +141,51 @@ private:
   using Knots_ = typename Base_::Knots_;
   using BinomialRatio_ = typename BinomialRatios_::value_type;
   using KnotRatio_ = typename KnotRatios_::value_type;
+  using Registry_ = SharedRefinementRegistry;
 
   BezierInformation_ MakeBezier(Dimension const& dimension,
                                 Tolerance const& tolerance = kEpsilon) const;
+
+  // Shape-preserving edits operating on this spline only.  The public
+  // InsertKnot/ElevateDegree wrappers dispatch these to the whole refinement
+  // group when shared refinement is enabled; the knot re-insertion and knot
+  // removal performed inside degree elevation (see MakeBezier) call the
+  // public wrappers while the reentrancy guard is active.
+  void InsertKnotImpl(Dimension const& dimension,
+                      Knot_ knot,
+                      Multiplicity const& multiplicity,
+                      Tolerance const& tolerance) const;
+  Multiplicity RemoveKnotImpl(Dimension const& dimension,
+                              Knot_ const& knot,
+                              Tolerance const& tolerance_removal,
+                              Multiplicity const& multiplicity,
+                              Tolerance const& tolerance) const;
+  void ElevateDegreeImpl(Dimension const& dimension,
+                         Multiplicity const& multiplicity,
+                         Tolerance const& tolerance) const;
+  bool ReduceDegreeImpl(Dimension const& dimension,
+                        Tolerance const& tolerance_reduction,
+                        Multiplicity const& multiplicity,
+                        Tolerance const& tolerance) const;
+
+  // Refinement group membership.  The observer token unregisters this wrapper
+  // on destruction; it is not copied by the copy constructor, since copies get
+  // an independent parameter space with shared refinement disabled.
+  void JoinSharedRefinementGroup();
+  void LeaveSharedRefinementGroup();
+  void ApplySharedEdit(Registry_::Edit const& edit) const;
+  void ApplyEditGuarded(Registry_::Edit const& edit) const;
+  void DispatchEditLocally(Registry_::EditKind kind,
+                           Dimension const& dimension,
+                           Knot_ knot,
+                           Multiplicity const& multiplicity,
+                           Tolerance const& tolerance) const;
+
+  std::shared_ptr<void> shared_refinement_token_{};
+  // True while this wrapper is executing an edit of its own group, so the
+  // auxiliary InsertKnot/RemoveKnot calls of ElevateDegree stay local instead
+  // of re-entering the dispatch.
+  mutable bool shared_refinement_active_{false};
 };
 
 #include "BSplineLib/Splines/b_spline.inl"

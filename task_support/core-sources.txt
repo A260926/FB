@@ -1,5 +1,6 @@
 Sources/BSplineLib/ParameterSpaces/knot_vector.cpp
 Sources/BSplineLib/Splines/spline_item.cpp
+Sources/BSplineLib/Splines/shared_refinement.cpp
 Sources/BSplineLib/Utilities/math_operations.cpp
 Sources/BSplineLib/Utilities/string_operations.cpp
 Sources/BSplineLib/Utilities/system_operations.cpp

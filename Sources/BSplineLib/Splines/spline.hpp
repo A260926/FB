@@ -106,7 +106,11 @@ protected:
   Spline& operator=(Spline const& rhs);
   Spline& operator=(Spline&& rhs) noexcept = default;
 
-  SharedPointer<ParameterSpace_> parameter_space_;
+  // Mutable so that the const editing entry points can temporarily bind a
+  // private pre-edit snapshot of the parameter space while replaying a shared
+  // refinement on a peer's control net; the shared space object itself is
+  // never replaced.
+  mutable SharedPointer<ParameterSpace_> parameter_space_;
 };
 
 #include "BSplineLib/Splines/spline.inl"

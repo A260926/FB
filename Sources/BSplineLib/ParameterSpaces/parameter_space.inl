@@ -19,7 +19,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 template<int para_dim>
 ParameterSpace<para_dim>::ParameterSpace(ParameterSpace const& other)
-    : degrees_{other.degrees_} {
+    : degrees_{other.degrees_}
+// shared_refinement_registry_ intentionally stays empty: copies are
+// independent parameter spaces and start with shared refinement disabled.
+{
   CopyKnotVectors(other.knot_vectors_);
 }
 
@@ -28,7 +31,17 @@ ParameterSpace<para_dim>&
 ParameterSpace<para_dim>::operator=(ParameterSpace const& rhs) {
   CopyKnotVectors(rhs.knot_vectors_);
   degrees_ = rhs.degrees_;
+  // An existing group must not be replaced (it can only be created once), and
+  // assignment from a copied space never enables shared refinement.
   return *this;
+}
+
+template<int para_dim>
+void ParameterSpace<para_dim>::EnableSharedRefinement() {
+  if (shared_refinement_registry_ == nullptr) {
+    shared_refinement_registry_ =
+        std::make_shared<splines::SharedRefinementRegistry>();
+  }
 }
 
 template<int para_dim>

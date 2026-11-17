@@ -42,17 +42,46 @@ BSpline<para_dim>::BSpline(SharedPointer<ParameterSpace_> parameter_space,
           "bsplinelib::splines::BSpline::BSpline");
 #endif
   vector_space_ = std::move(vector_space);
+  JoinSharedRefinementGroup();
 }
 
 template<int para_dim>
 BSpline<para_dim>::BSpline(BSpline const& other)
     : Base_(other),
-      vector_space_{std::make_shared<VectorSpace_>(*other.vector_space_)} {}
+      vector_space_{std::make_shared<VectorSpace_>(*other.vector_space_)} {
+  // The copy owns a fresh parameter space with shared refinement disabled, so
+  // it must not register with the source's refinement group.
+}
 
 template<int para_dim>
 BSpline<para_dim>& BSpline<para_dim>::operator=(BSpline const& rhs) {
+  LeaveSharedRefinementGroup();
   Base_::operator=(rhs),
   vector_space_ = std::make_shared<VectorSpace_>(*rhs.vector_space_);
+  return *this;
+}
+
+template<int para_dim>
+BSpline<para_dim>::BSpline(BSpline&& other) noexcept
+    : Base_(std::move(other)),
+      vector_space_(std::move(other.vector_space_)) {
+  // The moved-from wrapper's observer still points at its own (now stale)
+  // callback: detach it and let the new object take over the participation.
+  other.LeaveSharedRefinementGroup();
+  JoinSharedRefinementGroup();
+}
+
+template<int para_dim>
+BSpline<para_dim>&
+BSpline<para_dim>::operator=(BSpline&& rhs) noexcept {
+  if (this == &rhs) {
+    return *this;
+  }
+  LeaveSharedRefinementGroup();
+  Base_::operator=(std::move(rhs));
+  vector_space_ = std::move(rhs.vector_space_);
+  rhs.LeaveSharedRefinementGroup();
+  JoinSharedRefinementGroup();
   return *this;
 }
 
@@ -136,10 +165,10 @@ BSpline<para_dim>::operator()(const Type_* parametric_coordinate,
 
 // Cf. NURBS book Eq. (5.15).
 template<int para_dim>
-void BSpline<para_dim>::InsertKnot(Dimension const& dimension,
-                                   Knot_ knot,
-                                   Multiplicity const& multiplicity,
-                                   Tolerance const& tolerance) const {
+void BSpline<para_dim>::InsertKnotImpl(Dimension const& dimension,
+                                       Knot_ knot,
+                                       Multiplicity const& multiplicity,
+                                       Tolerance const& tolerance) const {
   using utilities::containers::Add, utilities::containers::Multiply;
 
   // bound checks are all done in parametric space
@@ -217,11 +246,12 @@ void BSpline<para_dim>::InsertKnot(Dimension const& dimension,
 }
 
 template<int para_dim>
-Multiplicity BSpline<para_dim>::RemoveKnot(Dimension const& dimension,
-                                           Knot_ const& knot,
-                                           Tolerance const& tolerance_removal,
-                                           Multiplicity const& multiplicity,
-                                           Tolerance const& tolerance) const {
+Multiplicity BSpline<para_dim>::RemoveKnotImpl(
+    Dimension const& dimension,
+    Knot_ const& knot,
+    Tolerance const& tolerance_removal,
+    Multiplicity const& multiplicity,
+    Tolerance const& tolerance) const {
   using utilities::containers::Divide, utilities::containers::Multiply,
       utilities::containers::Subtract;
 
@@ -298,9 +328,9 @@ Multiplicity BSpline<para_dim>::RemoveKnot(Dimension const& dimension,
 
 // Cf. NURBS book Eq. (5.36).
 template<int para_dim>
-void BSpline<para_dim>::ElevateDegree(Dimension const& dimension,
-                                      Multiplicity const& multiplicity,
-                                      Tolerance const& tolerance) const {
+void BSpline<para_dim>::ElevateDegreeImpl(Dimension const& dimension,
+                                          Multiplicity const& multiplicity,
+                                          Tolerance const& tolerance) const {
   using utilities::containers::AddAndAssignToFirst,
       utilities::containers::GetBack, utilities::containers::Multiply;
 
@@ -404,10 +434,11 @@ void BSpline<para_dim>::ElevateDegree(Dimension const& dimension,
 }
 
 template<int para_dim>
-bool BSpline<para_dim>::ReduceDegree(Dimension const& dimension,
-                                     Tolerance const& tolerance_reduction,
-                                     Multiplicity const& multiplicity,
-                                     Tolerance const& tolerance) const {
+bool BSpline<para_dim>::ReduceDegreeImpl(
+    Dimension const& dimension,
+    Tolerance const& tolerance_reduction,
+    Multiplicity const& multiplicity,
+    Tolerance const& tolerance) const {
   using std::for_each, utilities::containers::GetBack,
       utilities::containers::Multiply,
       utilities::containers::SubtractAndAssignToFirst;
@@ -535,4 +566,191 @@ BSpline<para_dim>::MakeBezier(Dimension const& dimension,
                                                               tolerance);
   Base_::RefineKnots(dimension, std::get<1>(bezier_information));
   return bezier_information;
+}
+
+// ---------------------------------------------------------------------------
+// Shared refinement.
+//
+// A public edit (InsertKnot, RefineKnots via InsertKnot, ElevateDegree) on a
+// participating spline is executed locally first - updating the single shared
+// ParameterSpace together with this spline's own control net - and the same
+// shape-preserving edit is then replayed on every other distinct control net
+// of the group.  Knot re-insertion and knot removal inside degree elevation
+// go through the public wrappers as well; the reentrancy guard makes sure
+// those auxiliary steps stay local to the ongoing elevation.
+// ---------------------------------------------------------------------------
+
+template<int para_dim>
+void BSpline<para_dim>::JoinSharedRefinementGroup() {
+  if (Base_::parameter_space_ == nullptr
+      || !Base_::parameter_space_->IsSharedRefinementEnabled()) {
+    return;
+  }
+  auto const& registry =
+      Base_::parameter_space_->GetSharedRefinementRegistry();
+  shared_refinement_token_ = registry->RegisterNet(
+      vector_space_,
+      [this](Registry_::Edit const& edit) { this->ApplySharedEdit(edit); });
+}
+
+template<int para_dim>
+void BSpline<para_dim>::LeaveSharedRefinementGroup() {
+  shared_refinement_token_.reset();
+  shared_refinement_active_ = false;
+}
+
+template<int para_dim>
+void BSpline<para_dim>::ApplySharedEdit(Registry_::Edit const& edit) const {
+  // Peer replay: run the unchanged shape-preserving algorithm against a
+  // private copy of the parameter space as it was before the edit.  Every
+  // peer needs its own copy, since the algorithms mutate their parameter space
+  // in place; the one shared parameter space is only updated by the
+  // initiating member.
+  SharedPointer<ParameterSpace_> const current_parameter_space =
+      Base_::parameter_space_;
+  auto replay_parameter_space = std::make_shared<ParameterSpace_>(
+      *std::static_pointer_cast<ParameterSpace_>(
+          edit.pre_edit_parameter_space));
+  Base_::parameter_space_ = replay_parameter_space;
+  bool const was_active = shared_refinement_active_;
+  shared_refinement_active_ = true;
+  try {
+    if (edit.kind == Registry_::EditKind::kInsertKnot) {
+      InsertKnotImpl(edit.dimension,
+                     edit.knot,
+                     edit.multiplicity,
+                     edit.tolerance);
+    } else {
+      ElevateDegreeImpl(edit.dimension, edit.multiplicity, edit.tolerance);
+    }
+  } catch (...) {
+    shared_refinement_active_ = was_active;
+    Base_::parameter_space_ = current_parameter_space;
+    throw;
+  }
+  shared_refinement_active_ = was_active;
+  Base_::parameter_space_ = current_parameter_space;
+}
+
+template<int para_dim>
+void BSpline<para_dim>::ApplyEditGuarded(
+    Registry_::Edit const& edit) const {
+  // Initiating member: update the one shared parameter space together with
+  // this spline's own control net.
+  bool const was_active = shared_refinement_active_;
+  shared_refinement_active_ = true;
+  try {
+    if (edit.kind == Registry_::EditKind::kInsertKnot) {
+      InsertKnotImpl(edit.dimension,
+                     edit.knot,
+                     edit.multiplicity,
+                     edit.tolerance);
+    } else {
+      ElevateDegreeImpl(edit.dimension, edit.multiplicity, edit.tolerance);
+    }
+  } catch (...) {
+    shared_refinement_active_ = was_active;
+    throw;
+  }
+  shared_refinement_active_ = was_active;
+}
+
+template<int para_dim>
+void BSpline<para_dim>::DispatchEditLocally(
+    Registry_::EditKind kind,
+    Dimension const& dimension,
+    Knot_ knot,
+    Multiplicity const& multiplicity,
+    Tolerance const& tolerance) const {
+  auto const& registry =
+      Base_::parameter_space_->GetSharedRefinementRegistry();
+  if (registry == nullptr || shared_refinement_token_ == nullptr
+      || shared_refinement_active_) {
+    // Shared refinement off, this wrapper not in a group, or an auxiliary
+    // step of an ongoing joint edit: behave exactly as the standalone path.
+    Registry_::Edit const local_edit{kind,
+                                     dimension,
+                                     knot,
+                                     multiplicity,
+                                     tolerance,
+                                     nullptr};
+    ApplyEditGuarded(local_edit);
+    return;
+  }
+  // Snapshot the parameter space before the initiating member changes it;
+  // every peer replays against this snapshot.
+  Registry_::Edit const edit{
+      kind,
+      dimension,
+      knot,
+      multiplicity,
+      tolerance,
+      std::make_shared<ParameterSpace_>(*Base_::parameter_space_)};
+  registry->DispatchEdit(
+      edit,
+      static_cast<void*>(vector_space_.get()),
+      [this](Registry_::Edit const& dispatched_edit) {
+        this->ApplyEditGuarded(dispatched_edit);
+      });
+}
+
+template<int para_dim>
+void BSpline<para_dim>::InsertKnot(Dimension const& dimension,
+                                   Knot_ knot,
+                                   Multiplicity const& multiplicity,
+                                   Tolerance const& tolerance) const {
+  DispatchEditLocally(Registry_::EditKind::kInsertKnot,
+                      dimension,
+                      knot,
+                      multiplicity,
+                      tolerance);
+}
+
+template<int para_dim>
+Multiplicity BSpline<para_dim>::RemoveKnot(
+    Dimension const& dimension,
+    Knot_ const& knot,
+    Tolerance const& tolerance_removal,
+    Multiplicity const& multiplicity,
+    Tolerance const& tolerance) const {
+  if (!shared_refinement_active_ && Base_::parameter_space_ != nullptr
+      && Base_::parameter_space_->IsSharedRefinementEnabled()) {
+    throw std::logic_error(
+        "BSplineLib::splines::BSpline::RemoveKnot - knot removal is not "
+        "allowed while shared refinement is enabled.");
+  }
+  return RemoveKnotImpl(dimension,
+                        knot,
+                        tolerance_removal,
+                        multiplicity,
+                        tolerance);
+}
+
+template<int para_dim>
+void BSpline<para_dim>::ElevateDegree(Dimension const& dimension,
+                                      Multiplicity const& multiplicity,
+                                      Tolerance const& tolerance) const {
+  DispatchEditLocally(Registry_::EditKind::kElevateDegree,
+                      dimension,
+                      Knot_{},
+                      multiplicity,
+                      tolerance);
+}
+
+template<int para_dim>
+bool BSpline<para_dim>::ReduceDegree(
+    Dimension const& dimension,
+    Tolerance const& tolerance_reduction,
+    Multiplicity const& multiplicity,
+    Tolerance const& tolerance) const {
+  if (!shared_refinement_active_ && Base_::parameter_space_ != nullptr
+      && Base_::parameter_space_->IsSharedRefinementEnabled()) {
+    throw std::logic_error(
+        "BSplineLib::splines::BSpline::ReduceDegree - degree reduction is "
+        "not allowed while shared refinement is enabled.");
+  }
+  return ReduceDegreeImpl(dimension,
+                          tolerance_reduction,
+                          multiplicity,
+                          tolerance);
 }

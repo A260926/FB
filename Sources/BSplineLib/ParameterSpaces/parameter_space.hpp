@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <utility>
 
 #include "BSplineLib/ParameterSpaces/knot_vector.hpp"
+#include "BSplineLib/Splines/shared_refinement.hpp"
 #include "BSplineLib/Utilities/containers.hpp"
 #include "BSplineLib/Utilities/error_handling.hpp"
 #include "BSplineLib/Utilities/index.hpp"
@@ -232,6 +233,25 @@ public:
   virtual OutputInformation_
   Write(Precision const& precision = kPrecision) const;
 
+  /// @brief Enables shared refinement: every BSpline/Nurbs constructed from
+  /// this parameter space afterwards joins one refinement group, so that an
+  /// InsertKnot, RefineKnots or ElevateDegree call on any member performs the
+  /// very same shape-preserving edit on all members.  Once enabled it cannot
+  /// be disabled; copied parameter spaces start with shared refinement off.
+  void EnableSharedRefinement();
+
+  /// @brief Returns whether shared refinement has been enabled.
+  bool IsSharedRefinementEnabled() const {
+    return shared_refinement_registry_ != nullptr;
+  }
+
+  /// @brief Returns the refinement group of this parameter space (nullptr if
+  /// shared refinement has not been enabled).
+  SharedPointer<splines::SharedRefinementRegistry> const&
+  GetSharedRefinementRegistry() const {
+    return shared_refinement_registry_;
+  }
+
 #ifndef NDEBUG
   virtual void ThrowIfParametricCoordinateIsOutsideScope(
       Dimension const& dimension,
@@ -296,6 +316,13 @@ protected:
   Degrees_ degrees_;
 
 private:
+  // Created lazily by EnableSharedRefinement() and intentionally not copied by
+  // the copy constructor/assignment: copies form an independent parameter
+  // space with shared refinement disabled.  The address of this object is the
+  // identity of the refinement group, never the knot values.
+  SharedPointer<splines::SharedRefinementRegistry>
+      shared_refinement_registry_{};
+
   void CopyKnotVectors(KnotVectors_ const& knot_vectors);
 
   // Number of non-zero basis functions is equal to p+1 - see NURBS book P2.2.
