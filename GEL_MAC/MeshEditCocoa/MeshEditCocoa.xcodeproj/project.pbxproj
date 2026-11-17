@@ -1,0 +1,458 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0D52EBBD197D19ED002C7150 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D52EBB9197D19ED002C7150 /* AppDelegate.m */; };
+		0D52EBBE197D19ED002C7150 /* BasicOpenGLView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0D52EBBB197D19ED002C7150 /* BasicOpenGLView.mm */; };
+		0D52EBBF197D19ED002C7150 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D52EBBC197D19ED002C7150 /* main.m */; };
+		0D9823BD198BB580004E3CC9 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0DF694FA1940F85A008F1E8C /* OpenGL.framework */; };
+		0D9823BE198BB588004E3CC9 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0DF694B41940EDF6008F1E8C /* Cocoa.framework */; };
+		0D9823C2198BB5CB004E3CC9 /* GEL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D9823BC198BB567004E3CC9 /* GEL.framework */; };
+		0DF694BF1940EDF6008F1E8C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0DF694BD1940EDF6008F1E8C /* InfoPlist.strings */; };
+		0DF694C51940EDF6008F1E8C /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 0DF694C31940EDF6008F1E8C /* Credits.rtf */; };
+		0DF694CB1940EDF6008F1E8C /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 0DF694C91940EDF6008F1E8C /* MainMenu.xib */; };
+		0DF694CD1940EDF6008F1E8C /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0DF694CC1940EDF6008F1E8C /* Images.xcassets */; };
+		0DF694F91940F84C008F1E8C /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0DF694F81940F84C008F1E8C /* Accelerate.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0D9823BB198BB567004E3CC9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0D9823B7198BB567004E3CC9 /* GEL.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 0D859993193D01B6009DB071;
+			remoteInfo = GEL;
+		};
+		0D9823BF198BB590004E3CC9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0D9823B7198BB567004E3CC9 /* GEL.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = 0D859992193D01B6009DB071;
+			remoteInfo = GEL;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0D333E07198BB1AD00B93484 /* GEL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GEL.framework; path = ../build/Debug/GEL.framework; sourceTree = "<group>"; };
+		0D333E09198BB36200B93484 /* GEL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GEL.framework; path = "../../../Library/Developer/Xcode/DerivedData/GEL_demo_test-ezxpkjlweyvkijeztdclqgyglrjd/Build/Products/Release/GEL.framework"; sourceTree = "<group>"; };
+		0D52EBB8197D19ED002C7150 /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = ../../../src/demo/MeshEditCocoa/AppDelegate.h; sourceTree = "<group>"; };
+		0D52EBB9197D19ED002C7150 /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AppDelegate.m; path = ../../../src/demo/MeshEditCocoa/AppDelegate.m; sourceTree = "<group>"; };
+		0D52EBBA197D19ED002C7150 /* BasicOpenGLView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BasicOpenGLView.h; path = ../../../src/demo/MeshEditCocoa/BasicOpenGLView.h; sourceTree = "<group>"; };
+		0D52EBBB197D19ED002C7150 /* BasicOpenGLView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BasicOpenGLView.mm; path = ../../../src/demo/MeshEditCocoa/BasicOpenGLView.mm; sourceTree = "<group>"; };
+		0D52EBBC197D19ED002C7150 /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = ../../../src/demo/MeshEditCocoa/main.m; sourceTree = "<group>"; };
+		0D52EBC0197D1B77002C7150 /* GEL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GEL.framework; path = "../../../Library/Developer/Xcode/DerivedData/GEL-bvshujpzghydbagznpheiutqilzk/Build/Products/Debug/GEL.framework"; sourceTree = "<group>"; };
+		0D945D1E198B850C00B78450 /* GEL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GEL.framework; path = "../../../Library/Developer/Xcode/DerivedData/GEL-bvshujpzghydbagznpheiutqilzk/Build/Products/Release/GEL.framework"; sourceTree = "<group>"; };
+		0D9823B7198BB567004E3CC9 /* GEL.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = GEL.xcodeproj; path = ../GEL.xcodeproj; sourceTree = "<group>"; };
+		0DF694B11940EDF6008F1E8C /* MeshEditCocoa.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeshEditCocoa.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0DF694B41940EDF6008F1E8C /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		0DF694B71940EDF6008F1E8C /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		0DF694B81940EDF6008F1E8C /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
+		0DF694B91940EDF6008F1E8C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		0DF694BC1940EDF6008F1E8C /* MeshEditCocoa-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MeshEditCocoa-Info.plist"; sourceTree = "<group>"; };
+		0DF694BE1940EDF6008F1E8C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		0DF694C21940EDF6008F1E8C /* MeshEditCocoa-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MeshEditCocoa-Prefix.pch"; sourceTree = "<group>"; };
+		0DF694C41940EDF6008F1E8C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = en; path = en.lproj/Credits.rtf; sourceTree = "<group>"; };
+		0DF694CA1940EDF6008F1E8C /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		0DF694CC1940EDF6008F1E8C /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
+		0DF694D31940EDF6008F1E8C /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+		0DF694F81940F84C008F1E8C /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		0DF694FA1940F85A008F1E8C /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0DF694AE1940EDF6008F1E8C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D9823C2198BB5CB004E3CC9 /* GEL.framework in Frameworks */,
+				0D9823BE198BB588004E3CC9 /* Cocoa.framework in Frameworks */,
+				0D9823BD198BB580004E3CC9 /* OpenGL.framework in Frameworks */,
+				0DF694F91940F84C008F1E8C /* Accelerate.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0D9823B8198BB567004E3CC9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0D9823BC198BB567004E3CC9 /* GEL.framework */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0DF694A81940EDF6008F1E8C = {
+			isa = PBXGroup;
+			children = (
+				0D9823B7198BB567004E3CC9 /* GEL.xcodeproj */,
+				0DF694BA1940EDF6008F1E8C /* MeshEditCocoa */,
+				0DF694B31940EDF6008F1E8C /* Frameworks */,
+				0DF694B21940EDF6008F1E8C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0DF694B21940EDF6008F1E8C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0DF694B11940EDF6008F1E8C /* MeshEditCocoa.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0DF694B31940EDF6008F1E8C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0D333E09198BB36200B93484 /* GEL.framework */,
+				0D333E07198BB1AD00B93484 /* GEL.framework */,
+				0D945D1E198B850C00B78450 /* GEL.framework */,
+				0D52EBC0197D1B77002C7150 /* GEL.framework */,
+				0DF694FA1940F85A008F1E8C /* OpenGL.framework */,
+				0DF694F81940F84C008F1E8C /* Accelerate.framework */,
+				0DF694B41940EDF6008F1E8C /* Cocoa.framework */,
+				0DF694D31940EDF6008F1E8C /* XCTest.framework */,
+				0DF694B61940EDF6008F1E8C /* Other Frameworks */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		0DF694B61940EDF6008F1E8C /* Other Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0DF694B71940EDF6008F1E8C /* AppKit.framework */,
+				0DF694B81940EDF6008F1E8C /* CoreData.framework */,
+				0DF694B91940EDF6008F1E8C /* Foundation.framework */,
+			);
+			name = "Other Frameworks";
+			sourceTree = "<group>";
+		};
+		0DF694BA1940EDF6008F1E8C /* MeshEditCocoa */ = {
+			isa = PBXGroup;
+			children = (
+				0D52EBB8197D19ED002C7150 /* AppDelegate.h */,
+				0D52EBB9197D19ED002C7150 /* AppDelegate.m */,
+				0D52EBBA197D19ED002C7150 /* BasicOpenGLView.h */,
+				0D52EBBB197D19ED002C7150 /* BasicOpenGLView.mm */,
+				0D52EBBC197D19ED002C7150 /* main.m */,
+				0DF694C91940EDF6008F1E8C /* MainMenu.xib */,
+				0DF694CC1940EDF6008F1E8C /* Images.xcassets */,
+				0DF694BB1940EDF6008F1E8C /* Supporting Files */,
+			);
+			path = MeshEditCocoa;
+			sourceTree = "<group>";
+		};
+		0DF694BB1940EDF6008F1E8C /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				0DF694BC1940EDF6008F1E8C /* MeshEditCocoa-Info.plist */,
+				0DF694BD1940EDF6008F1E8C /* InfoPlist.strings */,
+				0DF694C21940EDF6008F1E8C /* MeshEditCocoa-Prefix.pch */,
+				0DF694C31940EDF6008F1E8C /* Credits.rtf */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0DF694B01940EDF6008F1E8C /* MeshEditCocoa */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0DF694E21940EDF6008F1E8C /* Build configuration list for PBXNativeTarget "MeshEditCocoa" */;
+			buildPhases = (
+				0DF694AD1940EDF6008F1E8C /* Sources */,
+				0DF694AE1940EDF6008F1E8C /* Frameworks */,
+				0DF694AF1940EDF6008F1E8C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0D9823C0198BB590004E3CC9 /* PBXTargetDependency */,
+			);
+			name = MeshEditCocoa;
+			productName = MeshEditCocoa;
+			productReference = 0DF694B11940EDF6008F1E8C /* MeshEditCocoa.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0DF694A91940EDF6008F1E8C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1200;
+				ORGANIZATIONNAME = "J. Andreas Bærentzen";
+			};
+			buildConfigurationList = 0DF694AC1940EDF6008F1E8C /* Build configuration list for PBXProject "MeshEditCocoa" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 0DF694A81940EDF6008F1E8C;
+			productRefGroup = 0DF694B21940EDF6008F1E8C /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 0D9823B8198BB567004E3CC9 /* Products */;
+					ProjectRef = 0D9823B7198BB567004E3CC9 /* GEL.xcodeproj */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				0DF694B01940EDF6008F1E8C /* MeshEditCocoa */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXReferenceProxy section */
+		0D9823BC198BB567004E3CC9 /* GEL.framework */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.framework;
+			path = GEL.framework;
+			remoteRef = 0D9823BB198BB567004E3CC9 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+/* End PBXReferenceProxy section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0DF694AF1940EDF6008F1E8C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0DF694BF1940EDF6008F1E8C /* InfoPlist.strings in Resources */,
+				0DF694CD1940EDF6008F1E8C /* Images.xcassets in Resources */,
+				0DF694C51940EDF6008F1E8C /* Credits.rtf in Resources */,
+				0DF694CB1940EDF6008F1E8C /* MainMenu.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0DF694AD1940EDF6008F1E8C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D52EBBE197D19ED002C7150 /* BasicOpenGLView.mm in Sources */,
+				0D52EBBF197D19ED002C7150 /* main.m in Sources */,
+				0D52EBBD197D19ED002C7150 /* AppDelegate.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0D9823C0198BB590004E3CC9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = GEL;
+			targetProxy = 0D9823BF198BB590004E3CC9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		0DF694BD1940EDF6008F1E8C /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0DF694BE1940EDF6008F1E8C /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		0DF694C31940EDF6008F1E8C /* Credits.rtf */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0DF694C41940EDF6008F1E8C /* en */,
+			);
+			name = Credits.rtf;
+			sourceTree = "<group>";
+		};
+		0DF694C91940EDF6008F1E8C /* MainMenu.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0DF694CA1940EDF6008F1E8C /* Base */,
+			);
+			name = MainMenu.xib;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		0DF694E01940EDF6008F1E8C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = NO;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		0DF694E11940EDF6008F1E8C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = NO;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		0DF694E31940EDF6008F1E8C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL-girpjowuwxphleewpuevkjrfaitq/Build/Products/Debug",
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL-bvshujpzghydbagznpheiutqilzk/Build/Products/Debug",
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL-bvshujpzghydbagznpheiutqilzk/Build/Products/Release",
+					/Users/jab/GEL/GEL_MAC/build/Debug,
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL_demo_test-ezxpkjlweyvkijeztdclqgyglrjd/Build/Products/Release",
+				);
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "MeshEditCocoa/MeshEditCocoa-Prefix.pch";
+				INFOPLIST_FILE = "MeshEditCocoa/MeshEditCocoa-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "DTU-Compute.${PRODUCT_NAME:rfc1034identifier}";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = app;
+			};
+			name = Debug;
+		};
+		0DF694E41940EDF6008F1E8C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL-girpjowuwxphleewpuevkjrfaitq/Build/Products/Debug",
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL-bvshujpzghydbagznpheiutqilzk/Build/Products/Debug",
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL-bvshujpzghydbagznpheiutqilzk/Build/Products/Release",
+					/Users/jab/GEL/GEL_MAC/build/Debug,
+					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/GEL_demo_test-ezxpkjlweyvkijeztdclqgyglrjd/Build/Products/Release",
+				);
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "MeshEditCocoa/MeshEditCocoa-Prefix.pch";
+				INFOPLIST_FILE = "MeshEditCocoa/MeshEditCocoa-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "DTU-Compute.${PRODUCT_NAME:rfc1034identifier}";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = app;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0DF694AC1940EDF6008F1E8C /* Build configuration list for PBXProject "MeshEditCocoa" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0DF694E01940EDF6008F1E8C /* Debug */,
+				0DF694E11940EDF6008F1E8C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0DF694E21940EDF6008F1E8C /* Build configuration list for PBXNativeTarget "MeshEditCocoa" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0DF694E31940EDF6008F1E8C /* Debug */,
+				0DF694E41940EDF6008F1E8C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0DF694A91940EDF6008F1E8C /* Project object */;
+}

@@ -1,0 +1,15 @@
+include VERSION
+include CMakeLists.txt
+include LICENSE.md
+include README.md
+include pyproject.toml
+recursive-include cmake *
+recursive-include src/GEL *
+recursive-include src/PyGEL *.cpp *.h *.py
+
+global-exclude *.pyc
+global-exclude libPyGEL.so libPyGEL.dylib PyGEL.dll
+global-exclude .DS_Store
+prune **/__pycache__
+prune **/.ipynb_checkpoints
+prune **/*.egg-info

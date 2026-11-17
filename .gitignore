@@ -1,0 +1,54 @@
+## Ignore Visual Studio temporary files
+
+# User-specific files
+*.suo
+*.user
+*.sln.docstates
+*.tlog
+*.log
+*.idb
+*.pdb
+*.vc120.*
+*.sdf
+*.opensdf
+.DS_Store
+
+# obj files not in data.
+/GEL_WIN/*/*/*.obj
+
+
+# .lib
+GEL_WIN/Debug/*
+GEL_WIN/Release/*
+!GEL_WIN/Debug/clapackDB.lib
+!GEL_WIN/Release/clapack.lib
+
+# buildsystem files
+.idea/
+build/
+cmake-build-*/
+GEL_UNIX/.deps
+GEL_UNIX/fabricate.pyc
+
+# documentation files
+doc/intro.aux
+doc/intro.idx
+doc/intro.out
+doc/intro.pdf
+doc/intro.synctex.gz
+doc/intro.toc
+doc/html/
+doc/site/                          
+
+# scikit-build files
+_skbuild/
+dist/
+src/PyGEL3D.egg-info/
+*.egg-info/
+
+# Native library copies produced while building the Python package
+src/PyGEL/pygel3d/libPyGEL.so
+src/PyGEL/pygel3d/libPyGEL.dylib
+src/PyGEL/pygel3d/PyGEL.dll
+
+

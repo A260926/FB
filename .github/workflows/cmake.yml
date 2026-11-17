@@ -1,0 +1,64 @@
+name: CMake
+
+on: [push, pull_request]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxi-dev libxcursor-dev libxinerama-dev libxrandr-dev libgl-dev libglu-dev
+
+      - name: Install coverage tools
+        if: matrix.os == 'ubuntu-24.04'
+        run: sudo apt-get install -y lcov
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          extra=()
+          if [[ "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
+            extra+=(-DCMAKE_CXX_FLAGS=--coverage -DCMAKE_EXE_LINKER_FLAGS=--coverage)
+          fi
+          cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build" \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" "${extra[@]}"
+
+      - name: Build
+        shell: bash
+        run: cmake --build "$GITHUB_WORKSPACE/build" --config "$BUILD_TYPE" -j 3
+
+      - name: Test
+        working-directory: ${{ github.workspace }}/build
+        shell: bash
+        run: ctest -C "$BUILD_TYPE" -j 2 --output-on-failure
+
+      - name: Generate coverage report
+        if: matrix.os == 'ubuntu-24.04'
+        working-directory: ${{ github.workspace }}/build
+        run: |
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-24.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-ubuntu-24.04
+          path: ${{ github.workspace }}/build/coverage.info

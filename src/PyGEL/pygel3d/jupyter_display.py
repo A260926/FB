@@ -1,0 +1,77 @@
+""" This is a module with a function, display, that provides functionality for displaying a
+    Manifold or a Graph as an interactive 3D model in a Jupyter Notebook. It is based on 
+    plotly. """
+
+from numpy.typing import ArrayLike
+from pygel3d.hmesh import Manifold, triangulate
+from pygel3d.graph import Graph
+from numpy import array
+import plotly.graph_objs as go
+
+def set_export_mode(_exp_mode: bool = True):
+    """ Deprecated and no longer needed. display now always returns a plain
+    go.Figure, which renders correctly in Jupyter (regardless of position in
+    a cell), in Marimo, and when a notebook is exported to HTML. This function
+    is kept only for backwards compatibility and does nothing.
+    """
+
+def display(m: Manifold | Graph, wireframe: bool = True, smooth: bool = True, data: ArrayLike | None = None):
+    """ The display function shows an interactive presentation of the Manifold, m, inside
+        a Jupyter Notebook. wireframe=True means that a wireframe view of the mesh is
+        superimposed on the 3D model. If smooth=True, the mesh is rendered with vertex
+        normals. Otherwise, the mesh is rendered with face normals. If data=None, the
+        mesh is shown in a light grey color. If data contains an array of scalar values
+        per vertex, these are mapped to colors used to color the mesh. Finally, note that
+        m can also be a Graph. In that case the display function just draws the edges as
+        black lines. """
+    mesh_data = []
+    if isinstance(m, Manifold):
+        xyz = array([ p for p in m.positions()])
+        m_tri = Manifold(m)
+        triangulate(m_tri, clip_ear=False)
+        ijk = array([[ idx for idx in m_tri.circulate_face(f,'v')] for f in m_tri.faces()])
+        mesh = go.Mesh3d(x=xyz[:,0],y=xyz[:,1],z=xyz[:,2],
+                i=ijk[:,0],j=ijk[:,1],k=ijk[:,2],color='#dddddd',flatshading=not smooth)
+        if data is not None:
+            mesh['intensity'] = data
+            mesh['contour'] = {'show': True, 'color': '#ff0000'}
+        mesh_data += [mesh]
+        if wireframe:
+            pos = m.positions()
+            xyze = []
+            for h in m.halfedges():
+                if h < m.opposite_halfedge(h):
+                    p0 = pos[m.incident_vertex(m.opposite_halfedge(h))]
+                    p1 = pos[m.incident_vertex(h)]
+                    xyze.append(array(p0))
+                    xyze.append(array(p1))
+                    xyze.append(array([None, None, None]))
+            xyze = array(xyze)
+            trace1=go.Scatter3d(x=xyze[:,0],y=xyze[:,1],z=xyze[:,2],
+                       mode='lines',
+                       line=dict(color='rgb(125,0,0)', width=1),
+                       hoverinfo='none')
+            mesh_data += [trace1]
+    elif isinstance(m, Graph):
+        pos = m.positions()
+        xyze = []
+        for v in m.nodes():
+            for w in m.neighbors(v):
+                if v < w:
+                    p0 = pos[v]
+                    p1 = pos[w]
+                    xyze.append(array(p0))
+                    xyze.append(array(p1))
+                    xyze.append(array([None, None, None]))
+        xyze = array(xyze)
+        trace1=go.Scatter3d(x=xyze[:,0],y=xyze[:,1],z=xyze[:,2],
+                   mode='lines',
+                   line=dict(color='rgb(0,0,0)', width=1),
+                   hoverinfo='none')
+        mesh_data += [trace1]
+
+        
+    lyt = go.Layout(width=850,height=800)
+    lyt.scene.aspectmode="data"
+    return go.Figure(mesh_data,lyt)
+
