@@ -1,0 +1,569 @@
+{
+  "repo": "stseelig/libttaR",
+  "commit": "40d9f973322fcd15fc19efbaaab5364f736f58b4",
+  "gitlinks": [],
+  "gitmodules": false,
+  "included": [
+    {
+      "path": "LICENSE.GPL3",
+      "mode": "100644",
+      "git_blob": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "binary": false
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "6f62ee632dcf5de40166971a6a18763ad09db08a",
+      "sha256": "56c04bb494c9b6512079eecc4f595ea7066bf9fe83ce3075b7ed61577c236ed9",
+      "binary": false
+    },
+    {
+      "path": "src/build_lib.c",
+      "mode": "100644",
+      "git_blob": "c086e50cdd8da6974fa3057d3398a1ef47ef018d",
+      "sha256": "586341a6af6a91d83238f38b1d40a3877c47ba7cf229afff125205b9a558f3ec",
+      "binary": false
+    },
+    {
+      "path": "src/lib/0-0_info.c",
+      "mode": "100644",
+      "git_blob": "380c7d795277893d04336194625a52e059f542f0",
+      "sha256": "ee2ebbc8ec93197fe6e4541cd680020a9df5c149343802c8fc8992e8e7db46a4",
+      "binary": false
+    },
+    {
+      "path": "src/lib/0-1_tables_rice24.c",
+      "mode": "100644",
+      "git_blob": "c16adf7e97e7555b3809cf8e148657d2ddee2a3f",
+      "sha256": "3eae0dacc6747e007aaf398945199d6848729d33868fe54eb11184d8844b08f1",
+      "binary": false
+    },
+    {
+      "path": "src/lib/0-2_tables_rice24_dec.c",
+      "mode": "100644",
+      "git_blob": "e2a2ad5014e2d6b3fbfbc97e8abe56e0393c865e",
+      "sha256": "5e7356a4ebf3d07e86f8352ed6f58f167a80a98ace2af6f3d0e32470cb09bd6e",
+      "binary": false
+    },
+    {
+      "path": "src/lib/0-3_tables_crc32.c",
+      "mode": "100644",
+      "git_blob": "d2b4f7098a6927d989e506d3492dfbced0741f20",
+      "sha256": "45f68a49723c6b5d8de37dabb3ac7561b8db6ed3444c8200078c7a5a47ab057f",
+      "binary": false
+    },
+    {
+      "path": "src/lib/1-0_test_nchan.c",
+      "mode": "100644",
+      "git_blob": "2cd632b9195b2a7722290619565d1fa11b94c269",
+      "sha256": "349511908dfffe78ecd3a9cf05ba0501786bc237580c856f27eb4266c842dfed",
+      "binary": false
+    },
+    {
+      "path": "src/lib/1-1_nsamples_perframe_tta1.c",
+      "mode": "100644",
+      "git_blob": "4cb00a63d2e2bbd03098467ae8f4b4a0d367ded7",
+      "sha256": "fe2c3f7dd54f5a98e544a763b228ccbafa447f6295b87dfa7b5f407427e6a4fa",
+      "binary": false
+    },
+    {
+      "path": "src/lib/1-2_ttabuf_safety_margin.c",
+      "mode": "100644",
+      "git_blob": "29220bcfde2031a4900123653ef882126dc0a53c",
+      "sha256": "e3f72ad0487d531f28c8bce54340b8db5b9d45ea94c1bac8d047d54484c4e143",
+      "binary": false
+    },
+    {
+      "path": "src/lib/1-3_codecstate_priv_size.c",
+      "mode": "100644",
+      "git_blob": "56fdd8d7551f75d1d6bc590caa8cd8c17d3e8971",
+      "sha256": "c910cf8e8c16678a1557106c435b1316a195163d330525db41b76784ba162c27",
+      "binary": false
+    },
+    {
+      "path": "src/lib/1-4_crc32.c",
+      "mode": "100644",
+      "git_blob": "84ebe15bfce97c57b51b424c03e2588266479aea",
+      "sha256": "89b13a16b763f0aa5b4ff76990465b498863feb5baa2901c985b58c821999d0d",
+      "binary": false
+    },
+    {
+      "path": "src/lib/2-0_pcm_read.c",
+      "mode": "100644",
+      "git_blob": "af0736e43e405c7b4559d40916bce9adc3eb3b6b",
+      "sha256": "45605681cceb494c3a2d2a56779ad97d483b1524ffc433d2990c62d4faa5d6e7",
+      "binary": false
+    },
+    {
+      "path": "src/lib/2-1_pcm_write.c",
+      "mode": "100644",
+      "git_blob": "9f87348cf667259b524eb3b55d765d477d00a1df",
+      "sha256": "a8920d70b111fe402b1facd833c70fbd72d20369e175f8f2f81dc118ec0c0a28",
+      "binary": false
+    },
+    {
+      "path": "src/lib/3-0_tta_enc.c",
+      "mode": "100644",
+      "git_blob": "5bad5f5a52c3f2a4e1b2d93681673829556d8d23",
+      "sha256": "50ad79326d24e406f3be379fa0d6bd494914934047cdce9242fbd528e979dcad",
+      "binary": false
+    },
+    {
+      "path": "src/lib/3-1_tta_dec.c",
+      "mode": "100644",
+      "git_blob": "43d6031824925d9cbea445e1136f2f3d7480638f",
+      "sha256": "a9131dae320fbab60555c6a33ba2a835200077c65e7aa5c0cc88861517ee024c",
+      "binary": false
+    },
+    {
+      "path": "src/lib/common.h",
+      "mode": "100644",
+      "git_blob": "eb8c24d5d9471ffd22608c481c91879e9b570b8e",
+      "sha256": "a99bc372a5cbe7b858496a1d81e24342ee47c557b2eea8f54207af097b82570b",
+      "binary": false
+    },
+    {
+      "path": "src/lib/crc32.h",
+      "mode": "100644",
+      "git_blob": "8220648f26e85365ba9b3aaf6fa37a02ae186308",
+      "sha256": "c85cfcf9acf88f415abafd1bf4819841df07a54a88afb91af0e1a898809b030e",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter.h",
+      "mode": "100644",
+      "git_blob": "94318119d11cd352ef262f8c0f2bc0e0a2b074e5",
+      "sha256": "d3a4fc6344cc9eac7ba531f85f347dd3366b8953b180edcbe0efd249370d167e",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter/asserts.h",
+      "mode": "100644",
+      "git_blob": "19bf0da77c1ec3260595d7f9c541f276d71d89f6",
+      "sha256": "b1b4a5e17e8b3e06d10b50ccc283e1eb3f4ea07113de083788a2d1e7a7f1a67b",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter/filter._C.h",
+      "mode": "100644",
+      "git_blob": "ad6ca4b6b2e32eee4afa00b318c981784a79eadc",
+      "sha256": "8e4cc3750204f9db5a978e5235a81803c7fb27a3d762a1a11923b4108346846d",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter/filter.arm.h",
+      "mode": "100644",
+      "git_blob": "7fcb62b2842850ffbfacfd52a036adbce1943bbd",
+      "sha256": "f3cc19887e0a20b00a0cd450d02b40af19d245f01db21ded2110f33eddaf9f3a",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter/filter.ppc.h",
+      "mode": "100644",
+      "git_blob": "798a5ee771cdb0e0d5997556d000964ef7f58fef",
+      "sha256": "8d752b0cb657e2463fdec3b4ec3a67c0e94580e695c19f24d8b7de9dec13d982",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter/filter.x86.h",
+      "mode": "100644",
+      "git_blob": "480e031d746eda33ec5b91b51cbea4843ea95ee7",
+      "sha256": "9a6b83f6af20c473258b0ee65edb79c489f36cf0db492bbb5d29d2e0f65f59e7",
+      "binary": false
+    },
+    {
+      "path": "src/lib/filter/struct.h",
+      "mode": "100644",
+      "git_blob": "3c667d789c5402adb18d3060bf296dbe78745553",
+      "sha256": "b3cf2fd71eb17a94f58bc623bfe14c94a0c44ea5f50f808e6ad2d1853e72b9e4",
+      "binary": false
+    },
+    {
+      "path": "src/lib/overflow.h",
+      "mode": "100644",
+      "git_blob": "4d459e46d0340f4b15b4faca5a5edc9113d15ce0",
+      "sha256": "97cc8ff74a064ea44cd07b5958d7c0dec4132bd843ae636eee8ca175775d0f30",
+      "binary": false
+    },
+    {
+      "path": "src/lib/rice24.h",
+      "mode": "100644",
+      "git_blob": "101ecad0a6f080d0bf0e026e345affa17ec7c9a3",
+      "sha256": "c945a6524e660ec675c715d72e9d38ef10b3f3726cca9a94efbf343c545699b5",
+      "binary": false
+    },
+    {
+      "path": "src/lib/tta.h",
+      "mode": "100644",
+      "git_blob": "ff404040d7226e202d0d943b8daed1f9b5c2ceae",
+      "sha256": "12250123b699673a0b4a85f679627d01831cb6b7ebb361db27053f549387b675",
+      "binary": false
+    },
+    {
+      "path": "src/lib/tta_dec.h",
+      "mode": "100644",
+      "git_blob": "8833d2ebd592e6b7ec688dbc2624d5ded50d6015",
+      "sha256": "4c1a8f0c90ba064836c4742b1ed154d544bcd38f8583311cbf6b564dcc586bd3",
+      "binary": false
+    },
+    {
+      "path": "src/lib/tta_enc.h",
+      "mode": "100644",
+      "git_blob": "98886764506162f05d943f50fb27d6949157e7d7",
+      "sha256": "d6c7778daefb40acaa596577b5bc7302e9e1fcce3cc807766d4d7f2acbba7c2f",
+      "binary": false
+    },
+    {
+      "path": "src/lib/tta_state.h",
+      "mode": "100644",
+      "git_blob": "2d26bfea5b61e50c61b439eb1d3da1e1116b7545",
+      "sha256": "9debb07ce7b04dd469675b7b6281fafde608d5fab237d2e4ca63b846a3536884",
+      "binary": false
+    },
+    {
+      "path": "src/lib/types.h",
+      "mode": "100644",
+      "git_blob": "325af79bf7d553e2ec2cfda46ee910e6e17d4dcd",
+      "sha256": "f87248e00992d9372e83839b4923d47d31c367d315c6d4549034dbca32e355ee",
+      "binary": false
+    },
+    {
+      "path": "src/libttaR.h",
+      "mode": "100644",
+      "git_blob": "538ad14e7e7929b9873eb34f1f048dbc8e1dc8dc",
+      "sha256": "e944de2e723db142f713d55e452d52e334ecf9336fc546fda66ea5f360a3dabc",
+      "binary": false
+    },
+    {
+      "path": "src/version.h",
+      "mode": "100644",
+      "git_blob": "0d285e95af992663c8181d31117a76c863ad89ab",
+      "sha256": "ccd54fabff6e516ebb46bc987378c29718c6a310725a70b2ffd973e88237165f",
+      "binary": false
+    }
+  ],
+  "excluded_unused": [
+    {
+      "path": "CHANGELOG",
+      "mode": "100644",
+      "git_blob": "98a7be536a62d254626c28b47cd1a21fa795410d"
+    },
+    {
+      "path": "make.sh",
+      "mode": "100755",
+      "git_blob": "d6fc8faa975ecc9010a518fc06894f85ade6036e"
+    },
+    {
+      "path": "man/libttaR_crc32.3",
+      "mode": "100644",
+      "git_blob": "b9c951a48cb2c7aeac74f6e9cff80e00ec67b2a9"
+    },
+    {
+      "path": "man/libttaR_misc.3",
+      "mode": "100644",
+      "git_blob": "ba94a1f632dde5e04c3682fab9bd9e3970286a02"
+    },
+    {
+      "path": "man/libttaR_pcm_read.3",
+      "mode": "100644",
+      "git_blob": "ba22fe7071f1dd5dae49cfb96dba12aedda49e07"
+    },
+    {
+      "path": "man/libttaR_pcm_write.3",
+      "mode": "120000",
+      "git_blob": "299db053176e5f47a058a083b865d381a51df7f7"
+    },
+    {
+      "path": "man/libttaR_tta_decode.3",
+      "mode": "120000",
+      "git_blob": "0bd71534b00b28404e2a36a8cb37c385b1e6daac"
+    },
+    {
+      "path": "man/libttaR_tta_encode.3",
+      "mode": "100644",
+      "git_blob": "605359259b7fab190f3d30b0253ed51330818d5e"
+    },
+    {
+      "path": "man/ttaR.1",
+      "mode": "100644",
+      "git_blob": "9e589d16532d32a269779364ff85f9eee394d4bf"
+    },
+    {
+      "path": "src/build_cli.c",
+      "mode": "100644",
+      "git_blob": "fec8a50a261873f3560a3db3d757e23677549ec7"
+    },
+    {
+      "path": "src/cli/alloc.c",
+      "mode": "100644",
+      "git_blob": "0c8aaaf4a9597c08e10e24e0c36f3132ea7e89e3"
+    },
+    {
+      "path": "src/cli/alloc.h",
+      "mode": "100644",
+      "git_blob": "426374f60e2f629b056896e6fd0bf2cc67f1bb18"
+    },
+    {
+      "path": "src/cli/ascii-literals.h",
+      "mode": "100644",
+      "git_blob": "68822c356e33ec5c668d1de26695abdc73124748"
+    },
+    {
+      "path": "src/cli/byteswap.h",
+      "mode": "100644",
+      "git_blob": "6d6026ce2562c67cd1c2c48208d373f7904bf086"
+    },
+    {
+      "path": "src/cli/cli.c",
+      "mode": "100644",
+      "git_blob": "121f3ba74316569feb9ee2bbc790e76abca0b97f"
+    },
+    {
+      "path": "src/cli/cli.h",
+      "mode": "100644",
+      "git_blob": "ad87de085e42296c3113fccecbee9bae3803fad0"
+    },
+    {
+      "path": "src/cli/common.h",
+      "mode": "100644",
+      "git_blob": "8a53281af8f44691624ac068d5905f88414717cb"
+    },
+    {
+      "path": "src/cli/debug.c",
+      "mode": "100644",
+      "git_blob": "0ccb9dd355b34c890c230191448a738fe38447c5"
+    },
+    {
+      "path": "src/cli/debug.h",
+      "mode": "100644",
+      "git_blob": "c4c34ec56b9b0aaba66e748f4f2824d099cdb1a1"
+    },
+    {
+      "path": "src/cli/formats.h",
+      "mode": "100644",
+      "git_blob": "6786d82096f9903d2868cf561599b4ba91ef4579"
+    },
+    {
+      "path": "src/cli/formats/guid.c",
+      "mode": "100644",
+      "git_blob": "c8adab950e3f9ba25849fd35d2b1b30ed588c31c"
+    },
+    {
+      "path": "src/cli/formats/guid.h",
+      "mode": "100644",
+      "git_blob": "b7f6130f58c0c9c20507f353b3ac643e49cfadd7"
+    },
+    {
+      "path": "src/cli/formats/metatags_skip.c",
+      "mode": "100644",
+      "git_blob": "2d7a3b68befd9a54b8c8fa3049da32a8372bdd7c"
+    },
+    {
+      "path": "src/cli/formats/tta.h",
+      "mode": "100644",
+      "git_blob": "6cf52a01cd54a7d2e5e03fda6990fd400959abc7"
+    },
+    {
+      "path": "src/cli/formats/tta1_check.c",
+      "mode": "100644",
+      "git_blob": "78f4da6cee026ef73029047797937e011383eabb"
+    },
+    {
+      "path": "src/cli/formats/tta_seek.c",
+      "mode": "100644",
+      "git_blob": "6381825855c6995a71046064de421f88ae81444a"
+    },
+    {
+      "path": "src/cli/formats/tta_seek_check.c",
+      "mode": "100644",
+      "git_blob": "c05ebf377e479c99de177659a66885168b8ace19"
+    },
+    {
+      "path": "src/cli/formats/tta_write.c",
+      "mode": "100644",
+      "git_blob": "170f9cd69f7e5baa3c4700f7a1c53a8ee2cf98d8"
+    },
+    {
+      "path": "src/cli/formats/w64.h",
+      "mode": "100644",
+      "git_blob": "a724decf1f6c2bb084abbbf5a01a93dea173fc2f"
+    },
+    {
+      "path": "src/cli/formats/w64_check.c",
+      "mode": "100644",
+      "git_blob": "ade0b44db908f789a19e84d41a202657d0604106"
+    },
+    {
+      "path": "src/cli/formats/w64_write.c",
+      "mode": "100644",
+      "git_blob": "24b3daafe34238cad2b56a0c4ce28c358682e163"
+    },
+    {
+      "path": "src/cli/formats/wav.h",
+      "mode": "100644",
+      "git_blob": "b36a340ec74f1c5843824f07af46e80d8c7adb27"
+    },
+    {
+      "path": "src/cli/formats/wav_check.c",
+      "mode": "100644",
+      "git_blob": "752d08e7e58ad4208a7c44741dbf15d9c343b966"
+    },
+    {
+      "path": "src/cli/formats/wav_write.c",
+      "mode": "100644",
+      "git_blob": "7c49a0769ac215f556efa42fb99048100c17ba6f"
+    },
+    {
+      "path": "src/cli/help.c",
+      "mode": "100644",
+      "git_blob": "d0903d5c1bd06acdbf2dfd06f101cca6be29f68f"
+    },
+    {
+      "path": "src/cli/help.h",
+      "mode": "100644",
+      "git_blob": "c7cb340c4384c937018e2ac1b7504bab0df9323f"
+    },
+    {
+      "path": "src/cli/main.c",
+      "mode": "100644",
+      "git_blob": "3c41e1823ee6a1808c4180ef642cddbe66c563cf"
+    },
+    {
+      "path": "src/cli/main.h",
+      "mode": "100644",
+      "git_blob": "e6a6db92a1ad2cba018e91f72d49fb2ce4ce2dc0"
+    },
+    {
+      "path": "src/cli/modes/align.h",
+      "mode": "100644",
+      "git_blob": "b3610f5696f6fc30330e5a58e17422688e82edda"
+    },
+    {
+      "path": "src/cli/modes/bufs.c",
+      "mode": "100644",
+      "git_blob": "957e01486cb327cea8af05de7f34e64e3c588920"
+    },
+    {
+      "path": "src/cli/modes/bufs.h",
+      "mode": "100644",
+      "git_blob": "1e317fbc3018064f1415561c1ef58049141eb4c4"
+    },
+    {
+      "path": "src/cli/modes/mode_decode.c",
+      "mode": "100644",
+      "git_blob": "e84b896efa2e8adda19c7e808dfabae61b8d7222"
+    },
+    {
+      "path": "src/cli/modes/mode_decode_loop.c",
+      "mode": "100644",
+      "git_blob": "5d311f48258c30ba2f453eccd9df7bedb096daa7"
+    },
+    {
+      "path": "src/cli/modes/mode_encode.c",
+      "mode": "100644",
+      "git_blob": "013699f7f2efbdd42ce5ff9427644bd6a73478c4"
+    },
+    {
+      "path": "src/cli/modes/mode_encode_loop.c",
+      "mode": "100644",
+      "git_blob": "d2390ac9689e593829fa07649d9cce0c91ead56b"
+    },
+    {
+      "path": "src/cli/modes/mt-struct.c",
+      "mode": "100644",
+      "git_blob": "6218df8d181f67e4686ae24cc8916787ed17155f"
+    },
+    {
+      "path": "src/cli/modes/mt-struct.h",
+      "mode": "100644",
+      "git_blob": "4a15bd3e52a87d85dc2feedf859b6125aa5ca901"
+    },
+    {
+      "path": "src/cli/modes/pqueue.h",
+      "mode": "100644",
+      "git_blob": "37b6aae7e9c1b5cb5dfe98c09e10de726fa5dac1"
+    },
+    {
+      "path": "src/cli/modes/threads.h",
+      "mode": "100644",
+      "git_blob": "f15da78bf55e3b252b5e8c3a85bc4d3efd88a2bf"
+    },
+    {
+      "path": "src/cli/modes/threads.posix.h",
+      "mode": "100644",
+      "git_blob": "f1255d88f64ed97bc65f2c1313844fc207789de0"
+    },
+    {
+      "path": "src/cli/modes/threads.win32.h",
+      "mode": "100644",
+      "git_blob": "e93a404e8207717c438ba4382a23a949cbdb5829"
+    },
+    {
+      "path": "src/cli/open.c",
+      "mode": "100644",
+      "git_blob": "d1d02940b68178bd4df1155445588056e3577bcb"
+    },
+    {
+      "path": "src/cli/open.h",
+      "mode": "100644",
+      "git_blob": "01ac83af8fc3989147e2cbc437fa8249f234418e"
+    },
+    {
+      "path": "src/cli/opts.h",
+      "mode": "100644",
+      "git_blob": "f8e8c976dce843c0ca7940a44232e9192dcb7312"
+    },
+    {
+      "path": "src/cli/opts/common.c",
+      "mode": "100644",
+      "git_blob": "9585995c6c80387550e689ad39f0f2f7bed0e7c7"
+    },
+    {
+      "path": "src/cli/opts/common.h",
+      "mode": "100644",
+      "git_blob": "8a1a4556cd6ea79512d1439c5f8092597c5a0413"
+    },
+    {
+      "path": "src/cli/opts/decode.c",
+      "mode": "100644",
+      "git_blob": "1838b2509a71eca8a5a340628216ef3d3cd04a56"
+    },
+    {
+      "path": "src/cli/opts/encode.c",
+      "mode": "100644",
+      "git_blob": "9cb4b9a2887be671b018000b677364475ecf7cfe"
+    },
+    {
+      "path": "src/cli/opts/optsget.c",
+      "mode": "100644",
+      "git_blob": "56a709f7624b4c41d6beae1b010f587d8bd96770"
+    },
+    {
+      "path": "src/cli/opts/optsget.h",
+      "mode": "100644",
+      "git_blob": "b75518b2b825d8501b4cb5d8a4a88ad5717929f0"
+    },
+    {
+      "path": "src/cli/splint.h",
+      "mode": "100644",
+      "git_blob": "52646eed0205bed2813f93ba97263c6c5fdd1b08"
+    },
+    {
+      "path": "src/cli/system.h",
+      "mode": "100644",
+      "git_blob": "b4838651303f397890b2a39499014f1fbbb93cdd"
+    },
+    {
+      "path": "src/cli/system.posix.h",
+      "mode": "100644",
+      "git_blob": "7e615b46d65d5ffc10b597a3f173701d0a543eb3"
+    },
+    {
+      "path": "src/cli/system.win32.h",
+      "mode": "100644",
+      "git_blob": "b21885ab9d07fcd089afcefb8f667422a2bfca3a"
+    }
+  ],
+  "selection": "Only library production source/public headers and licensing; CLI, docs and upstream build integrations unused by the standard C build are excluded."
+}
