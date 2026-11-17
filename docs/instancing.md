@@ -44,15 +44,26 @@ Frustum culling and distance/LOD selection operate on the owner's complete bound
 Use separate owners when independent visibility or movement matters.
 
 `InstanceTransform` maps prototype-local positions into owner-local space. Its
-row-major basis acts on column vectors. Supply a rigid rotation/reflection;
-arbitrary scaling and shearing are unsupported. `rotated(degrees, position)`
-constructs a rotation and translation. Bake scale before freezing, or use
-`bakeScale()` on a batch to create scaled prototypes while retaining sharing
-within that batch. `bakeRotation()` preserves instance placements.
+row-major basis acts on column vectors. Any finite, invertible 3x3 affine basis
+is accepted: rigid rotations/reflections, non-uniform scaling and shearing.
+`addInstance()` and `setInstanceTransform()` reject a non-finite or singular
+basis (returning `false` and leaving the batch unchanged). A negative
+determinant mirrors geometry; the renderer compensates triangle winding and
+uses an inverse-transpose normal so the prototype's front face and its
+lighting side are preserved under every culling mode. `rotated(degrees,
+position)` constructs a rotation and translation. Bake scale before freezing,
+or use `bakeScale()` on a batch to create scaled prototypes while retaining
+sharing within that batch. `bakeRotation()` preserves instance placements.
 
-Call `calculateBoundingBox()` after adding instances or changing local
-placements. Ordinary owner `position`/`rotation` animation requires no mesh
-rebuild. Frozen vertex positions, normals, UVs and topology must remain immutable.
+Call `calculateBoundingBox()` after adding instances or changing placements
+through the public `instances` array directly. `setInstanceTransform(index,
+transform)` is the between-frame replacement entry: call it only after the
+previous frame has finished drawing and before the next `prepareFrame()`. It
+validates the new basis, swaps just that placement, and refreshes the batch
+bounding box itself — no manual `calculateBoundingBox()`, and no per-vertex
+prototype rebuild. Ordinary owner `position`/`rotation` animation requires no
+mesh rebuild. Frozen vertex positions, normals, UVs and topology must remain
+immutable.
 
 ## Materials, lifetime and statistics
 

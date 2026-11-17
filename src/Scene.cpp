@@ -64,6 +64,33 @@ static void initBakedMat() {
     s_bakedMatInit = true;
 }
 
+#if JET_MESH_INSTANCING
+// Determinant of a row-major 3x3 basis whose rows act on column vectors.
+static inline float instanceBasisDeterminant(const float* m) {
+    return m[0] * (m[4] * m[8] - m[5] * m[7])
+         - m[1] * (m[3] * m[8] - m[5] * m[6])
+         + m[2] * (m[3] * m[7] - m[4] * m[6]);
+}
+
+// Orthonormal bases keep the legacy rotation-only fast paths (plain matrix
+// multiply for normals, transpose-based object-local light) bit-identical.
+// Scale/shear matrices opt into the inverse-transpose normal path instead.
+static inline bool instanceBasisIsOrthogonal(const float* m) {
+    constexpr float eps = 2.0e-3f;
+    for (int r = 0; r < 3; ++r) {
+        const float* a = m + r * 3;
+        if (std::fabs(a[0] * a[0] + a[1] * a[1] + a[2] * a[2] - 1.0f) > eps)
+            return false;
+        for (int s = r + 1; s < 3; ++s) {
+            const float* b = m + s * 3;
+            if (std::fabs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) > eps)
+                return false;
+        }
+    }
+    return true;
+}
+#endif // JET_MESH_INSTANCING
+
 #if LIGHTING
 // Diffuse-only Lambert shading, evaluated in whatever frame N and L
 // share (object-local for the precompute path below). Matches the
@@ -1214,6 +1241,11 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         transformedVertices.resize(vertCount);
         float composed[9], translated[3];
         const float* matrix=baseM; const float* translation=baseT;
+        // Per-placement shading state. Orthogonal placements (the legacy
+        // rotation/reflection case) keep every legacy fast path; only scale
+        // and shear opt into the inverse-transpose normal math.
+        bool mirroredInstance=false, affineInstance=false;
+        float instanceNormalBasis[9]={1,0,0,0,1,0,0,0,1};
         if (instance) {
             const auto& t=instance->transform; const float* m=t.basis;
             float billboardM[9];
@@ -1233,6 +1265,29 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
                 translated[row]=parent[row*3]*t.position.x+parent[row*3+1]*t.position.y+parent[row*3+2]*t.position.z+baseT[row];
             }
             matrix=composed; translation=translated;
+            const float det=instanceBasisDeterminant(m);
+            mirroredInstance=det<0.0f;
+            affineInstance=!instanceBasisIsOrthogonal(m);
+            // Normal basis is the inverse transpose M^-T, so a transformed
+            // normal stays perpendicular to the transformed tangent plane
+            // and points to the side the prototype normal identified (the
+            // winding compensation below keeps that side as the front face
+            // for negative determinants). Orthogonal bases satisfy M^-T == M
+            // exactly, so legacy rotations and reflections keep their exact
+            // legacy normal values and fast path.
+            if (affineInstance) {
+                // Cofactor matrix C = det(M) * M^-T; dividing by det yields
+                // M^-T itself (sign included). Per-vertex renormalization
+                // below restores FIXED_POINT_SCALE magnitude.
+                const float c[9]={
+                    m[4]*m[8]-m[5]*m[7], m[5]*m[6]-m[3]*m[8], m[3]*m[7]-m[4]*m[6],
+                    m[2]*m[7]-m[1]*m[8], m[0]*m[8]-m[2]*m[6], m[1]*m[6]-m[0]*m[7],
+                    m[1]*m[5]-m[2]*m[4], m[2]*m[3]-m[0]*m[5], m[0]*m[4]-m[1]*m[3]};
+                const float invDet=1.0f/det;
+                for (int i=0;i<9;++i) instanceNormalBasis[i]=c[i]*invDet;
+            } else {
+                for (int i=0;i<9;++i) instanceNormalBasis[i]=m[i];
+            }
         }
         const float fM00=matrix[0], fM01=matrix[1], fM02=matrix[2];
         const float fM10=matrix[3], fM11=matrix[4], fM12=matrix[5];
@@ -1249,15 +1304,28 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
 #if LIGHTING
 #if JET_MESH_INSTANCING
     // Ordinary billboard normals retain their authored orientation. Match
-    // that convention for instances: apply the instance rotation, excluding
-    // the camera-facing yaw used only by billboard positions above.
+    // that convention for instances: apply the placement's normal basis,
+    // excluding the camera-facing yaw used only by billboard positions
+    // above. Affine (scaled/sheared) placements use the inverse-transpose
+    // basis and renormalize so the normal keeps FIXED_POINT_SCALE magnitude.
     float billboardNormals[9];
     const float* normalMatrix=matrix;
-    if (isBillboard && instance) {
-        const float* m=instance->transform.basis;
-        for (int row=0;row<3;++row) for (int col=0;col<3;++col)
-            billboardNormals[row*3+col]=baseM[row*3]*m[col]+baseM[row*3+1]*m[3+col]+baseM[row*3+2]*m[6+col];
-        normalMatrix=billboardNormals;
+    bool renormalizeNormals=false;
+    if (instance) {
+        const float* m=instanceNormalBasis;
+        if (isBillboard || affineInstance) {
+            // Compose the owner/camera factor with the placement's normal
+            // basis (M for orthogonal placements, M^-T for scale/shear),
+            // excluding the billboard yaw that only positions use. For a
+            // plain rotated/reflected billboard instanceNormalBasis == M,
+            // reproducing the legacy billboard normal matrix exactly.
+            for (int row=0;row<3;++row) for (int col=0;col<3;++col)
+                billboardNormals[row*3+col]=baseM[row*3]*m[col]+baseM[row*3+1]*m[3+col]+baseM[row*3+2]*m[6+col];
+            normalMatrix=billboardNormals;
+        }
+        // Orthogonal bases (including reflections) keep unit-length normals;
+        // only scale/shear changes vector lengths and needs renormalization.
+        renormalizeNormals=affineInstance;
     }
 #endif // JET_MESH_INSTANCING
     // Object-local lighting precompute eligibility.
@@ -1305,7 +1373,18 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
     Vector3 objLightDir = {0, 0, 0};
     uint16_t objLightIntensity = 0;
     uint8_t  objDiffuseCoef = 255;
-    if (directionalLight && !unlitObject && !meshSource->triangles.empty()) {
+#if JET_MESH_INSTANCING
+    // The object-local Lambert precompute derives the mesh-local light with
+    // a transpose, which is only exact for orthogonal bases. A scaled/sheared
+    // placement instead transforms normals through the cofactor matrix and
+    // renormalizes them per vertex above, so it must use the regular
+    // view-space light path. Material overrides are re-evaluated every frame,
+    // so no precomputed result is ever carried across a material change.
+    const bool affinePlacement = instance && affineInstance;
+#else
+    constexpr bool affinePlacement = false;
+#endif
+    if (directionalLight && !unlitObject && !meshSource->triangles.empty() && !affinePlacement) {
         bool allNonSpecular = true;
         // Per-triangle material walk. Cheap — a handful of byte loads
         // per face — and exits early on the first specular material we
@@ -1371,10 +1450,16 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
             }
             if (instance) {
                 const Vector3 L=objLightDir;
-                const float* m=instance->transform.basis;
-                objLightDir={(int32_t)(m[0]*L.x+m[3]*L.y+m[6]*L.z),
-                             (int32_t)(m[1]*L.x+m[4]*L.y+m[7]*L.z),
-                             (int32_t)(m[2]*L.x+m[5]*L.y+m[8]*L.z)};
+                // Lambert with transformed normal B*n is n·(B^T L), where B
+                // is this placement's normal basis. Only orthogonal
+                // placements reach this precompute (scale/shear take the
+                // renormalized view-normal path), and for them B == M, so
+                // this is exactly the legacy M^T light transform — including
+                // reflections, whose transpose carries the side flip.
+                const float* b=instanceNormalBasis;
+                objLightDir={(int32_t)(b[0]*L.x+b[3]*L.y+b[6]*L.z),
+                             (int32_t)(b[1]*L.x+b[4]*L.y+b[7]*L.z),
+                             (int32_t)(b[2]*L.x+b[5]*L.y+b[8]*L.z)};
 #endif // JET_MESH_INSTANCING
             }
         }
@@ -1451,12 +1536,24 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         // from the untransformed mesh-local normal below.
         if (!objectLocalLight) {
             const float fnx = (float)normal.x, fny = (float)normal.y, fnz = (float)normal.z;
-            normal.assign(
 #if JET_MESH_INSTANCING
-                (int32_t)(fnx * normalMatrix[0] + fny * normalMatrix[1] + fnz * normalMatrix[2]),
-                (int32_t)(fnx * normalMatrix[3] + fny * normalMatrix[4] + fnz * normalMatrix[5]),
-                (int32_t)(fnx * normalMatrix[6] + fny * normalMatrix[7] + fnz * normalMatrix[8]));
+            float gx = fnx * normalMatrix[0] + fny * normalMatrix[1] + fnz * normalMatrix[2];
+            float gy = fnx * normalMatrix[3] + fny * normalMatrix[4] + fnz * normalMatrix[5];
+            float gz = fnx * normalMatrix[6] + fny * normalMatrix[7] + fnz * normalMatrix[8];
+            if (renormalizeNormals) {
+                // Scale/shear cofactor vectors are not unit length; restore
+                // FIXED_POINT_SCALE magnitude so Lambert and the view-facing
+                // specular sign keep their calibrated ranges. Orthogonal
+                // placements skip this and keep the legacy integer result.
+                const float len = std::sqrt(gx*gx + gy*gy + gz*gz);
+                if (len > 0.0f) {
+                    const float inv = (float)FIXED_POINT_SCALE / len;
+                    gx *= inv; gy *= inv; gz *= inv;
+                }
+            }
+            normal.assign((int32_t)gx, (int32_t)gy, (int32_t)gz);
 #else
+            normal.assign(
                 (int32_t)(fnx * fM00 + fny * fM01 + fnz * fM02),
                 (int32_t)(fnx * fM10 + fny * fM11 + fnz * fM12),
                 (int32_t)(fnx * fM20 + fny * fM21 + fnz * fM22));
@@ -1632,9 +1729,9 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
 
     // Emit a projected triangle into renderQueue (does screen-bounds + backface
     // cull). Reused by both the fast path and the clipped path.
-    auto emitTri = [&](const auto& a,
-                       const auto& b,
-                       const auto& c,
+    auto emitTri = [&](const auto& aIn,
+                       const auto& bIn,
+                       const auto& cIn,
                        Material* mat
 #if TEXTURE_MAPPING
                        , const Vector2* uvA, const Vector2* uvB, const Vector2* uvC
@@ -1643,6 +1740,36 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
                        , int32_t srcTriIdx
 #endif
                        ) {
+#if JET_MESH_INSTANCING
+        // A mirrored instance (negative basis determinant) reverses the
+        // projected winding of every face. Physically swap the last two
+        // vertices (and their UVs) so the queued triangle carries the
+        // prototype's winding instead of merely negating the cull test:
+        // the rasterizer's edge fill convention, CULL_BACKFACES/
+        // CULL_FRONTFACES/NO_CULLING and the NO_CULLING reversal then all
+        // behave exactly as for an ordinary mesh whose triangles were
+        // authored with swapped winding. Picking still reports the original
+        // prototype triangle index.
+        const auto* bPtr = &bIn;
+        const auto* cPtr = &cIn;
+#if TEXTURE_MAPPING
+        const Vector2* uvBOut = uvB;
+        const Vector2* uvCOut = uvC;
+        if (instance && mirroredInstance) {
+            std::swap(bPtr, cPtr);
+            std::swap(uvBOut, uvCOut);
+        }
+#else
+        if (instance && mirroredInstance) std::swap(bPtr, cPtr);
+#endif
+        const auto& a = aIn;
+        const auto& b = *bPtr;
+        const auto& c = *cPtr;
+#else
+        const auto& a = aIn;
+        const auto& b = bIn;
+        const auto& c = cIn;
+#endif // JET_MESH_INSTANCING
         // Inputs have been clipped to the camera's Z range. Average depth is
         // a sort/fog hint, not a visibility test for a straddling source face.
         const int32_t avgZ = (a.position.z + b.position.z + c.position.z) / 3;
@@ -1659,7 +1786,7 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         // was causing large floor triangles near the camera to vanish
         // (typically in the bottom-left quadrant where cam.x/cam.y are most
         // negative).
-        int64_t shoelaceArea = (int64_t)a.position.x * (b.position.y - c.position.y) +
+        const int64_t shoelaceArea = (int64_t)a.position.x * (b.position.y - c.position.y) +
                                (int64_t)b.position.x * (c.position.y - a.position.y) +
                                (int64_t)c.position.x * (a.position.y - b.position.y);
 
@@ -1699,8 +1826,13 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         // Fetch mesh UVs only after culling, and only for textured faces.
         if (mat && mat->diffuseMap) {
             rt.uvIndex = (uint32_t)textureQueue.size();
+#if JET_MESH_INSTANCING
+            textureQueue.push_back(reverse ? TriangleUV{*uvCOut, *uvBOut, *uvA}
+                                           : TriangleUV{*uvA, *uvBOut, *uvCOut});
+#else
             textureQueue.push_back(reverse ? TriangleUV{*uvC, *uvB, *uvA}
                                            : TriangleUV{*uvA, *uvB, *uvC});
+#endif // JET_MESH_INSTANCING
         }
 #endif
         rt.material       = mat;

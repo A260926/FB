@@ -66,14 +66,22 @@ public:
     };
 #if JET_MESH_INSTANCING
 
-    /// Rigid mesh-local to object-local transform. Matrix rows act on column
+    /// Mesh-local to object-local transform. Matrix rows act on column
     /// vectors; translation uses the same integer units as vertex positions.
-    /// Supply an orthonormal matrix (rotation/reflection), not a scale/shear.
+    /// The 3x3 basis is any finite, invertible affine matrix: rigid rotations
+    /// and reflections remain valid, and non-uniform scaling and shearing are
+    /// now supported. A non-finite entry or a singular (zero-determinant)
+    /// basis is rejected by addInstance()/setInstanceTransform(). Negative
+    /// determinants mirror geometry while preserving the prototype's
+    /// front-face convention (winding is compensated at draw time).
     struct InstanceTransform {
         float basis[9] = {1,0,0, 0,1,0, 0,0,1};
         Vector3 position = {0,0,0};
         static InstanceTransform rotated(const Vector3& degrees, const Vector3& position = {0,0,0});
     };
+    /// True when every basis entry is finite and the basis has a non-zero
+    /// determinant, i.e. it describes a finite, invertible affine map.
+    static bool validInstanceBasis(const float basis[9]);
     using SharedMesh = std::shared_ptr<const Object>;
     /// Optional immutable table indexed by the prototype's original triangle
     /// index. The table is retained; its materials are borrowed and stay live.
@@ -98,6 +106,15 @@ public:
     /// Objects or by several instances within one Object.
     bool addInstance(SharedMesh mesh, const InstanceTransform& transform,
                      Material* materialOverride = nullptr, TriangleMaterials triangleMaterials = {});
+    /// Replace one instance's placement between frames (call after the
+    /// previous frame has finished drawing, before the next prepareFrame()).
+    /// The next frame renders the new placement and the batch bounding box is
+    /// refreshed automatically; no prototype vertex/triangle data is rebuilt
+    /// or copied. Returns false (leaving the instance, bounds and material
+    /// bindings unchanged) when the index is out of range or the new basis is
+    /// non-finite or singular. Direct edits to the public instances array
+    /// still follow the old manual calculateBoundingBox() convention.
+    bool setInstanceTransform(size_t index, const InstanceTransform& transform);
     size_t vertexCount() const;
     size_t triangleCount() const;
 #endif // JET_MESH_INSTANCING

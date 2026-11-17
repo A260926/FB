@@ -44,8 +44,35 @@ namespace Renderer
                              TriangleMaterials triangleMaterials) {
         if (!mesh || mesh.get()==this || !mesh->instances.empty()) return false;
         if (triangleMaterials && triangleMaterials->size()!=mesh->triangles.size()) return false;
+        // Reject non-finite or singular placements: an uninvertible basis
+        // would collapse vertices and leave normals undefined. Existing
+        // instances, bounds and material bindings stay untouched on failure.
+        if (!validInstanceBasis(transform.basis)) return false;
         instances.push_back({std::move(mesh),transform,materialOverride,std::move(triangleMaterials)});
         return true;
+    }
+
+    bool Object::setInstanceTransform(size_t index, const InstanceTransform& transform) {
+        if (index >= instances.size()) return false;
+        if (!validInstanceBasis(transform.basis)) return false;
+        // Only the placement changes. The shared prototype, its position
+        // cache, the material override/table and every other instance are
+        // untouched; calculateBoundingBox() refreshes just the batch bounds
+        // so the next prepareFrame() culls against the new placement without
+        // the caller asking for a manual rebuild.
+        instances[index].transform = transform;
+        calculateBoundingBox();
+        return true;
+    }
+
+    bool Object::validInstanceBasis(const float basis[9]) {
+        for (int i = 0; i < 9; ++i)
+            if (!std::isfinite(basis[i])) return false;
+        const float det =
+            basis[0] * (basis[4] * basis[8] - basis[5] * basis[7]) -
+            basis[1] * (basis[3] * basis[8] - basis[5] * basis[6]) +
+            basis[2] * (basis[3] * basis[7] - basis[4] * basis[6]);
+        return std::isfinite(det) && det != 0.0f;
     }
 
     size_t Object::vertexCount() const {
