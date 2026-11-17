@@ -30,6 +30,7 @@
 #include <MachO/File.hpp>
 #include <MachO/ToString.hpp>
 #include <XS.hpp>
+#include <limits>
 #include <set>
 
 #include <MachO/LoadCommands/BuildVersion.hpp>
@@ -213,15 +214,184 @@ namespace MachO
     std::vector< std::reference_wrapper< LoadCommand > > File::loadCommands() const
     {
         std::vector< std::reference_wrapper< LoadCommand > > commands;
-        
+
         for( const auto & command: this->impl->_loadCommands )
         {
             commands.push_back( *( command ) );
         }
-        
+
         return commands;
     }
-    
+
+    std::vector< File::EntryPointSource > File::entryPoints() const
+    {
+        struct SegmentInfo
+        {
+            size_t      index;
+            std::string name;
+            uint64_t    vmAddress;
+            uint64_t    vmSize;
+            uint64_t    fileOffset;
+            uint64_t    fileSize;
+        };
+
+        auto checkedAdd = []( uint64_t a, uint64_t b, const char * what ) -> uint64_t
+        {
+            if( b > std::numeric_limits< uint64_t >::max() - a )
+            {
+                throw std::runtime_error( std::string( "Overflowing range while computing " ) + what );
+            }
+
+            return a + b;
+        };
+
+        std::vector< SegmentInfo >        segments;
+        std::vector< EntryPointSource >   sources;
+        std::vector< std::reference_wrapper< LoadCommand > > commands( this->loadCommands() );
+
+        /*
+         * Collect every segment first: a segment appearing after an entry
+         * command must still produce the same candidates.
+         */
+        for( size_t i = 0; i < commands.size(); i++ )
+        {
+            if( auto segment = dynamic_cast< LoadCommands::Segment * >( &( commands[ i ].get() ) ) )
+            {
+                segments.push_back
+                (
+                    {
+                        i,
+                        segment->name(),
+                        segment->vmAddress(),
+                        segment->vmSize(),
+                        segment->fileOffset(),
+                        segment->fileSize()
+                    }
+                );
+            }
+            else if( auto segment = dynamic_cast< LoadCommands::Segment64 * >( &( commands[ i ].get() ) ) )
+            {
+                segments.push_back
+                (
+                    {
+                        i,
+                        segment->name(),
+                        segment->vmAddress(),
+                        segment->vmSize(),
+                        segment->fileOffset(),
+                        segment->fileSize()
+                    }
+                );
+            }
+        }
+
+        for( size_t i = 0; i < commands.size(); i++ )
+        {
+            auto & command = commands[ i ].get();
+
+            if( auto main = dynamic_cast< LoadCommands::EntryPoint * >( &command ) )
+            {
+                EntryPointSource source;
+
+                source.commandIndex = i;
+                source.recordIndex  = {};
+                source.kind         = EntryPointKind::Main;
+                source.coordinate   = main->offset();
+
+                for( const auto & segment: segments )
+                {
+                    uint64_t fileEnd = checkedAdd( segment.fileOffset, segment.fileSize, "segment file range" );
+
+                    /* Half-open: fileOffset <= offset < fileOffset + fileSize. */
+                    if( source.coordinate >= segment.fileOffset && source.coordinate < fileEnd )
+                    {
+                        uint64_t displacement = source.coordinate - segment.fileOffset;
+
+                        /* The displacement must also be inside vmsize. */
+                        if( displacement < segment.vmSize )
+                        {
+                            SegmentMapping mapping;
+
+                            mapping.commandIndex      = segment.index;
+                            mapping.name              = segment.name;
+                            mapping.vmAddress         = segment.vmAddress;
+                            mapping.vmSize            = segment.vmSize;
+                            mapping.fileOffset        = segment.fileOffset;
+                            mapping.fileSize          = segment.fileSize;
+                            mapping.address           = checkedAdd( segment.vmAddress, displacement, "segment virtual address" );
+                            mapping.mappedFileOffset  = source.coordinate;
+
+                            source.segments.push_back( mapping );
+                        }
+                    }
+                }
+
+                sources.push_back( source );
+            }
+            else if( auto thread = dynamic_cast< LoadCommands::Thread * >( &command ) )
+            {
+                /* Only LC_UNIXTHREAD claims a startup entry; LC_THREAD is state only. */
+                if( command.command() != 0x05 )
+                {
+                    continue;
+                }
+
+                auto records = thread->records();
+
+                for( size_t r = 0; r < records.size(); r++ )
+                {
+                    if( records[ r ].state.has_value() == false )
+                    {
+                        continue;
+                    }
+
+                    EntryPointSource source;
+
+                    source.commandIndex = i;
+                    source.recordIndex  = r;
+                    source.kind         = EntryPointKind::UnixThread;
+                    source.coordinate   = records[ r ].state->pc();
+
+                    for( const auto & segment: segments )
+                    {
+                        uint64_t vmEnd = checkedAdd( segment.vmAddress, segment.vmSize, "segment virtual range" );
+
+                        /* Half-open: vmaddr <= PC < vmaddr + vmsize. */
+                        if( source.coordinate >= segment.vmAddress && source.coordinate < vmEnd )
+                        {
+                            uint64_t displacement = source.coordinate - segment.vmAddress;
+                            SegmentMapping mapping;
+
+                            mapping.commandIndex     = segment.index;
+                            mapping.name             = segment.name;
+                            mapping.vmAddress        = segment.vmAddress;
+                            mapping.vmSize           = segment.vmSize;
+                            mapping.fileOffset       = segment.fileOffset;
+                            mapping.fileSize         = segment.fileSize;
+                            mapping.address          = source.coordinate;
+
+                            /*
+                             * File bytes exist only when the displacement is
+                             * strictly below filesize; otherwise the PC lies
+                             * in the zero-fill tail and has no file offset.
+                             */
+                            if( displacement < segment.fileSize )
+                            {
+                                mapping.mappedFileOffset = checkedAdd( segment.fileOffset, displacement, "segment file offset" );
+                            }
+
+                            source.segments.push_back( mapping );
+                        }
+                    }
+
+                    sources.push_back( source );
+                }
+            }
+        }
+
+        return sources;
+    }
+
     std::vector< std::string > File::linkedLibraries() const
     {
         std::vector< std::string > libs;
@@ -546,8 +716,8 @@ namespace MachO
                     case 0x01: this->_loadCommands.push_back( std::make_shared< LoadCommands::Segment          >( command, size, this->_kind, stream ) ); break;
                     case 0x02: this->_loadCommands.push_back( std::make_shared< LoadCommands::SymTab           >( command, size, this->_kind, stream ) ); break;
                     case 0x03: this->_loadCommands.push_back( std::make_shared< LoadCommands::SymSeg           >( command, size, this->_kind, stream ) ); break;
-                    case 0x04: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, stream ) ); break;
-                    case 0x05: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, stream ) ); break;
+                    case 0x04: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, this->_cpu, stream ) ); break;
+                    case 0x05: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, this->_cpu, stream ) ); break;
                     case 0x06: this->_loadCommands.push_back( std::make_shared< LoadCommands::FVMLib           >( command, size, this->_kind, stream ) ); break;
                     case 0x07: this->_loadCommands.push_back( std::make_shared< LoadCommands::FVMLib           >( command, size, this->_kind, stream ) ); break;
                     case 0x08: this->_loadCommands.push_back( std::make_shared< LoadCommands::Ident            >( command, size, this->_kind, stream ) ); break;

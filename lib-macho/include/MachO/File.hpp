@@ -61,6 +61,79 @@ namespace MachO
                 BigEndian
             };
 
+            /*!
+             * How an entry source was discovered.
+             *
+             * Main       - one LC_MAIN command; coordinate() is its raw file
+             *              offset (relative to this Mach-O image).
+             * UnixThread - one decoded record of an LC_UNIXTHREAD command;
+             *              coordinate() is the record's PC.
+             *
+             * LC_THREAD records never produce entry sources; they only carry
+             * thread state.
+             */
+            enum class EntryPointKind
+            {
+                Main,
+                UnixThread
+            };
+
+            /*!
+             * One segment that maps the source coordinate.
+             *
+             * commandIndex identifies the segment load command by its position
+             * in loadCommands(). All matching segments are reported, including
+             * overlapping segments and different sources mapping the same
+             * address.
+             *
+             * address    - the virtual address corresponding to the source
+             *              coordinate. Always present.
+             * fileOffset - the corresponding file coordinate inside this
+             *              Mach-O image, or an empty optional when the
+             *              coordinate lies in the zero-fill tail of the segment
+             *              (or, for LC_MAIN, outside the segment's file
+             *              contents).
+             *
+             * All segment intervals are half-open.
+             */
+            struct SegmentMapping
+            {
+                size_t                   commandIndex;
+                std::string              name;
+                uint64_t                 vmAddress;
+                uint64_t                 vmSize;
+                uint64_t                 fileOffset;
+                uint64_t                 fileSize;
+                uint64_t                 address;
+                std::optional< uint64_t > mappedFileOffset;
+            };
+
+            /*!
+             * One startup source, in load command order.
+             *
+             * commandIndex - index of the originating load command in
+             *                loadCommands().
+             * recordIndex  - for UnixThread sources, the index of the decoded
+             *                record inside Thread::records(). Empty for Main.
+             * kind         - the source command kind.
+             * coordinate   - the raw coordinate as read from the image: the
+             *                LC_MAIN file offset, or the thread record's PC.
+             *                Preserved even when no segment maps it.
+             * segments     - every segment mapping candidate, in load command
+             *                order. Empty when no segment matches.
+             *
+             * No symbol lookup, dependency traversal or address-space
+             * allocation is performed and the image bytes are not modified.
+             */
+            struct EntryPointSource
+            {
+                size_t                            commandIndex;
+                std::optional< size_t >           recordIndex;
+                EntryPointKind                    kind;
+                uint64_t                          coordinate;
+                std::vector< SegmentMapping >     segments;
+            };
+
             #ifdef __APPLE__
             static std::optional< std::tuple< File, const void * > > fromCurrentProcess( const std::string & path );
             #endif
@@ -83,6 +156,7 @@ namespace MachO
             FileFlags                    flags()      const;
             
             std::vector< std::reference_wrapper< LoadCommand > > loadCommands()    const;
+            std::vector< EntryPointSource >                     entryPoints()     const;
             std::vector< std::string >                           linkedLibraries() const;
             std::vector< Symbol >                                symbols()         const;
             std::vector< std::string >                           strings()         const;
