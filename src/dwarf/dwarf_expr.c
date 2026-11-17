@@ -81,6 +81,8 @@ dw_eval(Arena *arena, DW_Format fmt, Arch arch, MemoryMap *memory_map, void *reg
     
     //- rjf: do pops
     DW_EvalVal popped_vals[3] = {0};
+    DW_EvalValNode *popped_nodes[3] = {0};
+    U64 actual_pop_count = 0;
     {
       pop_count = Min(pop_count, ArrayCount(popped_vals));
       for(U8 pop_idx = 0; pop_idx < pop_count; pop_idx += 1)
@@ -90,6 +92,8 @@ dw_eval(Arena *arena, DW_Format fmt, Arch arch, MemoryMap *memory_map, void *reg
           DW_EvalValNode *popped = state->top_val;
           SLLStackPop(state->top_val);
           popped_vals[pop_idx] = popped->v;
+          popped_nodes[pop_idx] = popped;
+          actual_pop_count += 1;
           SLLStackPush(state->free_val, popped);
         }
       }
@@ -133,8 +137,22 @@ dw_eval(Arena *arena, DW_Format fmt, Arch arch, MemoryMap *memory_map, void *reg
         U64 vaddr = popped_vals[0].u512.u64[0];
         U64 read_size = Min(deref_read_size, sizeof(push_vals[0].u512));
         Rng1U64 read_vaddr_range = r1u64(vaddr, vaddr+read_size);
-        if(!memory_map_read(memory_map, read_vaddr_range, &push_vals[0].u512))
+        // NOTE(rjf): a deref only completes when every requested byte is
+        // present. anything less pauses this opcode: the missed range always
+        // describes the full read, and the pops done above are undone so the
+        // stack, off, and op_idx look exactly as they did before this
+        // instruction ran. resuming after the caller adds memory re-runs the
+        // same opcode from scratch, with no duplicated pops or half-pushed
+        // values.
+        U64 bytes_read = memory_map_read(memory_map, read_vaddr_range, &push_vals[0].u512);
+        if(bytes_read != read_size)
         {
+          for(U64 pop_idx = actual_pop_count; pop_idx > 0; pop_idx -= 1)
+          {
+            DW_EvalValNode *popped = popped_nodes[pop_idx-1];
+            SLLStackPop(state->free_val);
+            SLLStackPush(state->top_val, popped);
+          }
           need_a_break = 1;
           result.status = DW_EvalStatus_FailedMemoryRead;
           result.missed_read_vaddr_range = read_vaddr_range;
@@ -372,8 +390,12 @@ dw_eval(Arena *arena, DW_Format fmt, Arch arch, MemoryMap *memory_map, void *reg
       state->off = off;
     }
     
-    //- rjf: at the end of the expression? -> set success, fill result
-    if(off == expr.size)
+    //- rjf: at the end of the expression? -> set success, fill result.
+    //
+    // a paused opcode (e.g. a deref waiting on memory) never counts as
+    // completion, even when it is the final instruction of the expression:
+    // state->off still points at this opcode, and resuming must re-run it.
+    if(!need_a_break && off == expr.size)
     {
       result.status = DW_EvalStatus_Good;
       if(state->top_val != 0)
@@ -381,9 +403,10 @@ dw_eval(Arena *arena, DW_Format fmt, Arch arch, MemoryMap *memory_map, void *reg
         result.val = state->top_val->v;
       }
     }
-    
-    //- rjf: did not advance? -> error
-    if(off == start_off)
+
+    //- rjf: did not advance? -> error (a paused opcode is expected not to
+    // advance, and keeps its FailedMemoryRead status)
+    if(!need_a_break && off == start_off)
     {
       result.status = DW_EvalStatus_Error;
       break;

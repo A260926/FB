@@ -10,38 +10,41 @@ memory_map_push(Arena *arena, MemoryMap *map, Rng1U64 vaddr_range, void *data)
   MemoryMapRangeNode *n = push_array(arena, MemoryMapRangeNode, 1);
   n->v.vaddr_range = vaddr_range;
   n->v.base = data;
+  // NOTE(rjf): newer ranges are pushed to the front of the list, so a walk
+  // from first_range visits the most recently pushed fragments first.
   SLLQueuePushFront(map->first_range, map->last_range, n);
 }
 
 internal U64
 memory_map_read(MemoryMap *map, Rng1U64 range, void *dst)
 {
-  U64 dst_vaddr = range.min;
+  // NOTE(rjf): reads walk the requested range one byte at a time. fragments
+  // are visited newest-first, so newer fragments byte-wise override older,
+  // larger fragments wherever they overlap. reading stops at the first byte
+  // not covered by any fragment, and bytes after a gap are never copied: the
+  // returned length is always the length of a contiguous, covered prefix.
+  U64 bytes_read = 0;
+  U64 read_size = dim_1u64(range);
+  for(U64 byte_idx = 0; byte_idx < read_size; byte_idx += 1)
   {
-    for(;;)
+    U64 vaddr = range.min + byte_idx;
+    B32 found = 0;
+    for(MemoryMapRangeNode *n = map->first_range; n != 0; n = n->next)
     {
-      U64 start_dst_vaddr = dst_vaddr;
-      B32 found = 0;
-      for(MemoryMapRangeNode *n = map->first_range; n != 0; n = n->next)
+      if(contains_1u64(n->v.vaddr_range, vaddr))
       {
-        if(contains_1u64(n->v.vaddr_range, dst_vaddr))
-        {
-          U64 src_off = dst_vaddr - n->v.vaddr_range.min;
-          U64 num_bytes_possible = n->v.vaddr_range.max - dst_vaddr;
-          U64 num_bytes_needed = range.max - dst_vaddr;
-          U64 num_bytes_to_read = Min(num_bytes_needed, num_bytes_possible);
-          MemoryCopy((U8 *)dst + (dst_vaddr - range.min), (U8 *)n->v.base + src_off, num_bytes_to_read);
-          dst_vaddr += num_bytes_to_read;
-          found = 1;
-        }
-      }
-      if(!found || start_dst_vaddr == dst_vaddr)
-      {
+        U64 src_off = vaddr - n->v.vaddr_range.min;
+        ((U8 *)dst)[byte_idx] = ((U8 *)n->v.base)[src_off];
+        found = 1;
         break;
       }
     }
+    if(!found)
+    {
+      break;
+    }
+    bytes_read += 1;
   }
-  U64 bytes_read = (dst_vaddr - range.min);
   return bytes_read;
 }
 
