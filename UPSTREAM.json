@@ -1,0 +1,26 @@
+{
+  "repo": "https://github.com/vinniefalco/DSPFilters",
+  "commit": "acc49170e79a94fcb9c04b8a2116e9f8dffd1c7d",
+  "git_tree_sha256": "2e5e8a9152811ef94c0b43b64c0a9b4393e4baa0ca47c06cc036b388e69f0e70",
+  "included": [
+    "shared/DSPFilters/include",
+    "shared/DSPFilters/source",
+    "shared/DSPFilters/CMakeLists.txt",
+    "README.md"
+  ],
+  "excluded": [
+    {
+      "path": "Research Papers/",
+      "reason": "unused reference PDFs"
+    },
+    {
+      "path": "shared/DSPFiltersDemo/ and shared/Juce*/",
+      "reason": "unused GUI/audio-device dependencies and binary assets"
+    },
+    {
+      "path": "user/, waf, wscript, .gitignore",
+      "reason": "unused upstream build configurations"
+    }
+  ],
+  "license_note": "LICENSE copies the MIT license retained verbatim in each production file; upstream README also retained."
+}
