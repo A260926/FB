@@ -299,3 +299,77 @@ RotateXModifier rotator =
 
 mesh.apply(rotator);
 ```
+## Doo-Sabin Modifier
+
+**Purpose:**
+
+Doo-Sabin subdivision. Refines closed meshes as well as meshes with open
+boundaries (sheets, patches with inner holes, mixed triangle/quad/n-gon
+patches).
+
+**Interface:**
+
+* `new DooSabinModifier(int subdivisions)` sets the number of iterations.
+  The default constructor performs one iteration.
+* `modify(Mesh3D)` refines the mesh in place and returns the same instance.
+  With zero iterations the mesh is returned unchanged.
+* Every original face keeps its own corner polygon. Interior edges connect
+  the corner points of the two adjacent faces. Interior vertices become
+  closed vertex faces.
+* Outer boundaries and inner holes keep their original vertices and edges.
+  Only connecting strips are added between the boundary and the corner
+  polygons. A boundary vertex with several adjacent faces connects the
+  ordered fan of its corner points; with a single adjacent face no
+  degenerate two-corner face is created. Boundary positions and the
+  connectivity of boundary loops therefore stay fixed across iterations,
+  and the result can be subdivided again directly.
+
+**Input requirements:**
+
+* Every face references at least three distinct vertex indices.
+* Every non-isolated interior vertex is adjacent to at least three faces.
+
+If a positive number of iterations is requested and the input violates
+these requirements, `modify` throws an `IllegalArgumentException` before
+the mesh is modified. Adjacency is identified by vertex index, so
+coincident but separate vertices and components are never welded together.
+
+**Example: continuous subdivision of an open surface**
+
+```java
+// A quad ring with a square hole in the middle.
+Mesh3D ring = new Mesh3D();
+ring.addVertex(0, 0, 0);
+ring.addVertex(3, 0, 0);
+ring.addVertex(3, 3, 0);
+ring.addVertex(0, 3, 0);
+ring.addVertex(1, 1, 0);
+ring.addVertex(2, 1, 0);
+ring.addVertex(2, 2, 0);
+ring.addVertex(1, 2, 0);
+ring.addFace(0, 1, 5, 4);
+ring.addFace(1, 2, 6, 5);
+ring.addFace(2, 3, 7, 6);
+ring.addFace(3, 0, 4, 7);
+
+// Three iterations, applied one after another. The outer and the inner
+// boundary loop keep their original vertices and positions every round.
+DooSabinModifier modifier = new DooSabinModifier(1);
+for (int round = 0; round < 3; round++) {
+    modifier.modify(ring);
+}
+
+// new DooSabinModifier(3).modify(ring) produces the same mesh.
+```
+
+**Traversing boundaries:**
+
+`mesh.util.TraverseHelper` exposes the topology the modifier relies on.
+`getVertexFan(int)` returns the outgoing edges around a vertex, one per
+adjacent face, ordered along `getPairNext`. Closed fans start with the
+edge whose end vertex index is smallest; open fans run from the boundary
+incoming edge to the boundary outgoing edge. `isBoundaryVertex(int)`
+tells open fans from closed ones; isolated vertices have an empty fan and
+are not boundary vertices. The helper rejects meshes with duplicate
+directed edges, edges shared by three or more faces, or several
+disconnected fans at one vertex.
