@@ -47,13 +47,14 @@ public class ConditionalRewriter {
         boolean success;
         Set<Op03SimpleStatement> ignoreTheseJumps = SetFactory.newSet();
         boolean reduceSimpleScope = options.getOption(OptionsImpl.REDUCE_COND_SCOPE) == Troolean.TRUE;
+        boolean labelledBlocks = options.getOption(OptionsImpl.LABELLED_BLOCKS);
         do {
             success = false;
             List<Op03SimpleStatement> forwardIfs = Functional.filter(statements, new IsForwardIf());
             Collections.reverse(forwardIfs);
             for (Op03SimpleStatement forwardIf : forwardIfs) {
                 if (considerAsTrivialIf(forwardIf, statements) ||
-                        considerAsSimpleIf(forwardIf, statements, blockIdentifierFactory, ignoreTheseJumps, reduceSimpleScope) ||
+                        considerAsSimpleIf(forwardIf, statements, blockIdentifierFactory, ignoreTheseJumps, reduceSimpleScope, labelledBlocks) ||
                         considerAsDexIf(forwardIf, statements)) {
                     success = true;
                 }
@@ -316,7 +317,7 @@ lbl10: // 1 sources:
     *
     * We trim that GOTO when we move from an UnstructuredIf to a StructuredIf.
     */
-    private static boolean considerAsSimpleIf(Op03SimpleStatement ifStatement, List<Op03SimpleStatement> statements, BlockIdentifierFactory blockIdentifierFactory, Set<Op03SimpleStatement> ignoreTheseJumps, boolean reduceSimpleScope) {
+    private static boolean considerAsSimpleIf(Op03SimpleStatement ifStatement, List<Op03SimpleStatement> statements, BlockIdentifierFactory blockIdentifierFactory, Set<Op03SimpleStatement> ignoreTheseJumps, boolean reduceSimpleScope, boolean labelledBlocks) {
         Op03SimpleStatement takenTarget = ifStatement.getTargets().get(1);
         Op03SimpleStatement notTakenTarget = ifStatement.getTargets().get(0);
         int idxTaken = statements.indexOf(takenTarget);
@@ -518,6 +519,17 @@ lbl10: // 1 sources:
             // If there is a NO JUMP path between takenTarget and maybeElseEnd, then that's the ELSE block
             elseBranch = ListFactory.newList();
             idxCurrent = idxTaken;
+
+            if (labelledBlocks && detectSharedEntryBypass(statements, idxTaken, maybeElseEndIdx, ifStatement, leaveIfBranchGoto)) {
+                // A forward edge from outside the conditional enters the candidate else region
+                // partway through (a shared entry).  The region cannot be a Java else block, and
+                // the if-branch's leave jump is in fact a break out of an enclosing labelled
+                // block.  Classify it as an anonymous break, leave this conditional unmarked and
+                // retry: it then settles as a plain if and the labelled block machinery wraps
+                // the region up to the break target.
+                leaveIfBranchGoto.setJumpType(JumpType.BREAK_ANONYMOUS);
+                return true;
+            }
 
             if (reduceSimpleScope) {
                 int test = Misc.getFarthestReachableInRange(statements, idxCurrent, maybeElseEndIdx);
@@ -768,6 +780,110 @@ lbl10: // 1 sources:
             Cleaner.sortAndRenumberInPlace(statements);
         }
         return true;
+    }
+
+    /*
+     * Detect a "shared entry" at the head of a candidate else region.
+     *
+     * An else block can only be entered from its own conditional.  If a statement in the
+     * candidate else region also has an incoming forward edge whose source is outside the
+     * region, that statement is a shared entry: one path reaches it through what would be the
+     * else block, another path branches around the conditional straight to it.  javac emits
+     * this shape for a break out of a labelled block which lands on shared initialisation
+     * before a loop, e.g.
+     *
+     *   done: {
+     *       if (a) { ...; break done; }   // bypass, skips the loop
+     *       sharedInit();                 // shared entry, run once on the loop path
+     *       while (c) { ... }             // back edge must not run sharedInit again
+     *   }
+     *   after();
+     *
+     * Folding the region into an else block would pull the loop into the else branch and
+     * leave the bypassing edge as an unstructured goto.  The if-branch's leave jump is in fact
+     * a break out of an enclosing labelled block, so the caller classifies it as an anonymous
+     * break and retries the conditional; the labelled block machinery then wraps the region up
+     * to the break target.
+     */
+    private static boolean detectSharedEntryBypass(List<Op03SimpleStatement> statements,
+                                                   int elseStartIdx, int elseEndIdx,
+                                                   Op03SimpleStatement ifStatement,
+                                                   GotoStatement leaveIfBranchGoto) {
+        if (leaveIfBranchGoto == null || !leaveIfBranchGoto.getJumpType().isUnknown()) return false;
+        // The shared entry guards initialisation which runs once before a loop.  Only treat
+        // the region as a shared-entry one when it actually contains a loop block; this leaves
+        // ordinary labelled-block breaks over straight-line code on their old path.
+        boolean regionContainsLoop = false;
+        for (int idx = elseStartIdx; idx < elseEndIdx; ++idx) {
+            for (BlockIdentifier block : statements.get(idx).getBlockIdentifiers()) {
+                if (block.getBlockType().isLoop()) {
+                    regionContainsLoop = true;
+                    break;
+                }
+            }
+            if (regionContainsLoop) break;
+        }
+        if (!regionContainsLoop) return false;
+        Set<Op03SimpleStatement> elseSet = SetFactory.newSet(statements.subList(elseStartIdx, elseEndIdx));
+        Op03SimpleStatement regionStart = statements.get(elseStartIdx);
+        // Defining property of this shape: the if-branch's break lands on the loop's own
+        // exit block (where the loop guard goes when it terminates).  A break over an
+        // if/else-if chain that merely contains a loop lands further out, so it stays on
+        // its previous, already-correct path.
+        Op03SimpleStatement leaveTarget = (Op03SimpleStatement) leaveIfBranchGoto.getJumpTarget().getContainer();
+        if (!isLoopExitInRegion(statements, elseStartIdx, elseEndIdx, leaveTarget)) return false;
+        // A normal if/else-if chain converges on the FIRST statement of the else region;
+        // an edge entering there is just the conditional's own fall-through.  A shared entry
+        // is entered partway through, so only look at statements after the region head.
+        for (int idx = elseStartIdx + 1; idx < elseEndIdx; ++idx) {
+            Op03SimpleStatement statement = statements.get(idx);
+            for (Op03SimpleStatement source : statement.getSources()) {
+                if (source == ifStatement || elseSet.contains(source)) continue;
+                if (source.getIndex().compareTo(regionStart.getIndex()) >= 0) continue;
+                Statement sourceStatement = source.getStatement();
+                if (!(sourceStatement instanceof JumpingStatement)) continue;
+                JumpingStatement jumpingSource = (JumpingStatement) sourceStatement;
+                if (!jumpingSource.getJumpType().isUnknown()) continue;
+                if (jumpingSource.getJumpTarget().getContainer() != statement) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /*
+     * Is `candidate` the exit block of a loop contained in the candidate else region?
+     * A back edge (a forward statement targeting an earlier header) identifies each loop.
+     * For while/for the header itself branches to its exit; for do/while the back-edge
+     * source branches to the exit.  Either way the exit target is the one that does not
+     * carry a loop block identifier.
+     */
+    private static boolean isLoopExitInRegion(List<Op03SimpleStatement> statements,
+                                              int elseStartIdx, int elseEndIdx,
+                                              Op03SimpleStatement candidate) {
+        for (int j = elseStartIdx; j < elseEndIdx; ++j) {
+            Op03SimpleStatement backEdgeSource = statements.get(j);
+            for (Op03SimpleStatement header : backEdgeSource.getTargets()) {
+                if (header.getIndex().compareTo(backEdgeSource.getIndex()) >= 0) continue;
+                if (statements.indexOf(header) < elseStartIdx) continue;
+                // do/while: the conditional at the loop end branches back or out.
+                for (Op03SimpleStatement succ : backEdgeSource.getTargets()) {
+                    if (succ != header && !carriesLoopBlock(succ) && succ == candidate) return true;
+                }
+                // while/for: the header branches into the body or out to the exit.
+                for (Op03SimpleStatement succ : header.getTargets()) {
+                    if (!carriesLoopBlock(succ) && succ == candidate) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean carriesLoopBlock(Op03SimpleStatement statement) {
+        for (BlockIdentifier block : statement.getBlockIdentifiers()) {
+            if (block.getBlockType().isLoop()) return true;
+        }
+        return false;
     }
 
 

@@ -1,0 +1,12 @@
+CASE structure shared_entry_topology checks=29
+CASE structure inverted_condition_topology checks=29
+CASE structure continue_back_edges_topology checks=33
+CASE structure ordinary_loop_unchanged checks=8
+GROUP structure cases=4 checks=99 COMPLETE
+CASE effects side_effect_path_placement_original checks=11
+CASE effects side_effect_path_placement_recompiled checks=9
+GROUP effects cases=2 checks=20 COMPLETE
+CASE compatibility main_and_api_shared_entry_recompile checks=10
+CASE compatibility all_fixtures_recompile_clean checks=20
+GROUP compatibility cases=2 checks=30 COMPLETE
+TARGET_COMPLETE cases=8

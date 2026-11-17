@@ -1,0 +1,1 @@
+FAIL task_tests/shared_entry_cases.cpp:323 noMarkers(cls)
