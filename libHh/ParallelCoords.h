@@ -1,0 +1,321 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_PARALLELCOORDS_H_
+#define MESH_PROCESSING_LIBHH_PARALLELCOORDS_H_
+
+#include "libHh/Grid.h"  // ravel_index()
+#include "libHh/Parallel.h"
+
+namespace hh {
+
+// *** Iterate over {1, 2, D}-dimensional grids, with/without parallelism,
+//    with/without function optimized for grid interior.
+
+template <std::invocable<int> Func, std::invocable<int> FuncInterior>
+void for_1dL_interior(int x0, int xn, Func func, FuncInterior func_interior) {
+  {
+    const int x = x0;
+    if (x0 < xn) func(x);
+  }
+  for_intL(x, x0 + 1, xn - 1) func_interior(x);
+  {
+    const int x = max(x0 + 1, xn - 1);
+    if (x < xn) func(x);
+  }
+}
+
+template <std::invocable<int, int> Func> void for_2d(int yn, int xn, Func func) {
+  for_int(y, yn) for_int(x, xn) func(y, x);
+}
+
+template <std::invocable<int, int> Func> void for_2dL(int y0, int yn, int x0, int xn, Func func) {
+  for_intL(y, y0, yn) for_intL(x, x0, xn) func(y, x);
+}
+
+template <std::invocable<int, int> Func> void parallel_for_2d(int yn, int xn, Func func) {
+  parallel_for(range(yn), [&](const int y) { for_int(x, xn) func(y, x); });
+}
+
+template <std::invocable<int, int> Func> void parallel_for_2dL(int y0, int yn, int x0, int xn, Func func) {
+  parallel_for(range(y0, yn), [&](const int y) { for_intL(x, x0, xn) func(y, x); });
+}
+
+template <std::invocable<int, int> Func, std::invocable<int, int> FuncInterior>
+void for_2dL_interior(int y0, int yn, int x0, int xn, Func func, FuncInterior func_interior) {
+  {
+    const int y = y0;
+    if (y < yn) for_intL(x, x0, xn) func(y, x);
+  }
+  for_intL(y, y0 + 1, yn - 1) {
+    {
+      const int x = x0;
+      if (x0 < xn) func(y, x);
+    }
+    for_intL(x, x0 + 1, xn - 1) func_interior(y, x);
+    {
+      const int x = max(x0 + 1, xn - 1);
+      if (x < xn) func(y, x);
+    }
+  }
+  {
+    const int y = max(y0 + 1, yn - 1);
+    if (y < yn) for_intL(x, x0, xn) func(y, x);
+  }
+}
+
+template <std::invocable<int, int> Func, std::invocable<int, int> FuncInterior>
+void parallel_for_2dL_interior(int y0, int yn, int x0, int xn, Func func, FuncInterior func_interior) {
+  {
+    const int y = y0;
+    if (y < yn) for_intL(x, x0, xn) func(y, x);
+  }
+  parallel_for(range(y0 + 1, yn - 1), [&](const int y) {
+    {
+      const int x = x0;
+      if (x0 < xn) func(y, x);
+    }
+    for_intL(x, x0 + 1, xn - 1) func_interior(y, x);
+    {
+      const int x = max(x0 + 1, xn - 1);
+      if (x < xn) func(y, x);
+    }
+  });
+  {
+    const int y = max(y0 + 1, yn - 1);
+    if (y < yn) for_intL(x, x0, xn) func(y, x);
+  }
+}
+
+// *** for_coords
+
+template <int D, std::invocable<const Vec<int, D>&> Func> void for_coordsL(Vec<int, D> uL, Vec<int, D> uU, Func func) {
+  for (const auto& u : range(uL, uU)) func(u);
+}
+
+template <std::invocable<const Vec1<int>&> Func> void for_coordsL(Vec1<int> uL, Vec1<int> uU, Func func) {
+  for_intL(x, uL[0], uU[0]) func(V(x));
+}
+
+template <std::invocable<const Vec2<int>&> Func> void for_coordsL(Vec2<int> uL, Vec2<int> uU, Func func) {
+  Vec2<int> yx;
+  for_intL(y, uL[0], uU[0]) {
+    yx[0] = y;
+    for_intL(x, uL[1], uU[1]) {
+      yx[1] = x;
+      func(yx);
+    }
+  }
+}
+
+template <std::invocable<const Vec3<int>&> Func> void for_coordsL(Vec3<int> uL, Vec3<int> uU, Func func) {
+  Vec3<int> u;
+  for_intL(z, uL[0], uU[0]) {
+    u[0] = z;
+    for_intL(y, uL[1], uU[1]) {
+      u[1] = y;
+      for_intL(x, uL[2], uU[2]) {
+        u[2] = x;
+        func(u);
+      }
+    }
+  }
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func> void for_coords(Vec<int, D> dims, Func func) {
+  for_coordsL(ntimes<D>(0), dims, func);
+}
+
+// *** General D
+
+template <int D, std::invocable<const Vec<int, D>&> Func>
+void parallel_for_coordsL(const ParallelOptions& options, Vec<int, D> uL, Vec<int, D> uU, Func func) {
+  const Vec<int, D> dims = uU - uL;
+  if (options.cycles_per_elem >= k_parallel_many_cycles_per_elem) {
+    parallel_for(range(size_t(product(dims))), [&](const size_t i) {
+      func(uL + unravel_index(dims, i));  // Most parallelism but with higher overhead.
+    });
+  } else if (product(dims) * options.cycles_per_elem >= k_parallel_thresh) {
+    parallel_for(range(uL[0], uU[0]), [&](const int r) {
+      for_coordsL(uL.with(0, r), uU.with(0, r + 1), func);  // Parallelism in the first dimension.
+    });
+  } else {
+    for_coordsL(uL, uU, func);  // No parallelism.
+  }
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func>
+void parallel_for_coordsL(Vec<int, D> uL, Vec<int, D> uU, Func func) {
+  parallel_for_coordsL({}, uL, uU, func);
+}
+
+// *** D = 1
+
+template <std::invocable<const Vec1<int>&> Func>
+void parallel_for_coordsL(const ParallelOptions& options, Vec1<int> uL, Vec1<int> uU, Func func) {
+  const int dim0 = uU[0] - uL[0];
+  if (dim0 * options.cycles_per_elem >= k_parallel_thresh) {
+    parallel_for(range(uL[0], uU[0]), [&](const int i) { func(V(i)); });
+  } else {
+    for_coordsL(uL, uU, func);  // No parallelism.
+  }
+}
+
+template <std::invocable<const Vec1<int>&> Func> void parallel_for_coordsL(Vec1<int> uL, Vec1<int> uU, Func func) {
+  parallel_for_coordsL({}, uL, uU, func);
+}
+
+// *** D = 2
+
+template <std::invocable<const Vec2<int>&> Func>
+void parallel_for_coordsL(const ParallelOptions& options, Vec2<int> uL, Vec2<int> uU, Func func) {
+  const Vec2<int> dims = uU - uL;
+  if (options.cycles_per_elem >= k_parallel_many_cycles_per_elem) {
+    parallel_for(range(size_t(product(dims))), [&](const size_t i) {
+      func(uL + unravel_index(dims, i));  // Most parallelism but with higher overhead.
+    });
+  } else if (dims[0] >= k_parallel_min_iterations && product(dims) * options.cycles_per_elem >= k_parallel_thresh) {
+    parallel_for(range(uL[0], uU[0]), [&](const int y) {
+      Vec2<int> yx;
+      yx[0] = y;
+      for_intL(x, uL[1], uU[1]) {  // Efficient parallelism in the first dimension.
+        yx[1] = x;
+        func(yx);
+      }
+    });
+  } else if (dims[1] * options.cycles_per_elem >= k_parallel_thresh) {
+    for_intL(y, uL[0], uU[0]) {
+      parallel_for(range(uL[1], uU[1]), [&](const int x) { func(V(y, x)); });
+    }
+  } else {
+    for_coordsL(uL, uU, func);  // No parallelism.
+  }
+}
+
+template <std::invocable<const Vec2<int>&> Func> void parallel_for_coordsL(Vec2<int> uL, Vec2<int> uU, Func func) {
+  parallel_for_coordsL({}, uL, uU, func);
+}
+
+// *** D = 3
+
+template <std::invocable<const Vec3<int>&> Func>
+void parallel_for_coordsL(const ParallelOptions& options, Vec3<int> uL, Vec3<int> uU, Func func) {
+  const Vec3<int> dims = uU - uL;
+  if (options.cycles_per_elem >= k_parallel_many_cycles_per_elem) {
+    parallel_for(range(size_t(product(dims))), [&](const size_t i) {
+      func(uL + unravel_index(dims, i));  // Most parallelism but with higher overhead.
+    });
+  } else if (dims[0] >= k_parallel_min_iterations && product(dims) * options.cycles_per_elem >= k_parallel_thresh) {
+    parallel_for(range(uL[0], uU[0]), [&](const int z) {
+      Vec3<int> u;
+      u[0] = z;
+      for_intL(y, uL[1], uU[1]) {
+        u[1] = y;
+        for_intL(x, uL[2], uU[2]) {
+          u[2] = x;
+          func(u);
+        }
+      }
+    });
+  } else if (dims[1] >= k_parallel_min_iterations &&
+             product(dims.tail<2>()) * options.cycles_per_elem >= k_parallel_thresh) {
+    for_intL(z, uL[0], uU[0]) {
+      parallel_for(range(uL[1], uU[1]), [&](const int y) {
+        Vec3<int> u(z, y, 0);
+        for_intL(x, uL[2], uU[2]) {
+          u[2] = x;
+          func(u);
+        }
+      });
+    }
+  } else if (dims[2] * options.cycles_per_elem >= k_parallel_thresh) {
+    for_intL(z, uL[0], uU[0]) for_intL(y, uL[1], uU[1]) {
+      parallel_for(range(uL[2], uU[2]), [&](const int x) { func(V(z, y, x)); });
+    }
+  } else {
+    for_coordsL(uL, uU, func);  // No parallelism.
+  }
+}
+
+template <std::invocable<const Vec3<int>&> Func> void parallel_for_coordsL(Vec3<int> uL, Vec3<int> uU, Func func) {
+  parallel_for_coordsL({}, uL, uU, func);
+}
+
+// *** Others
+
+template <int D, std::invocable<const Vec<int, D>&> Func>
+void parallel_for_coords(const ParallelOptions& options, Vec<int, D> dims, Func func) {
+  parallel_for_coordsL(options, ntimes<D>(0), dims, func);
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func> void parallel_for_coords(Vec<int, D> dims, Func func) {
+  parallel_for_coords({}, dims, func);
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func>
+void parallel_tiled_for_coordsL(const ParallelOptions& options, Vec<int, D> uL, Vec<int, D> uU, Func func) {
+  if (product(uU - uL) * options.cycles_per_elem >= k_parallel_thresh) {
+    assertnever("TODO");
+  } else {
+    for_coordsL(uL, uU, func);
+  }
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func>
+void parallel_tiled_for_coordsL(Vec<int, D> uL, Vec<int, D> uU, Func func) {
+  parallel_tiled_for_coordsL({}, uL, uU, func);
+}
+
+template <int D, std::invocable<size_t> FuncRaster>
+void for_coordsL_raster(Vec<int, D> dims, Vec<int, D> uL, Vec<int, D> uU, FuncRaster func_raster) {
+  if (min(uU - uL) < 1) return;  // To allow uL[c] == uU[c] == dims[c].
+  ASSERTX(uL.in_range(dims) && uU.in_range(dims + 1));
+  if constexpr (D == 1) {
+    for_intL(d0, uL[0], uU[0]) func_raster(d0);
+  } else if constexpr (D == 2) {
+    for_intL(d0, uL[0], uU[0]) {
+      const size_t i0 = size_t(d0) * dims[1];
+      for_intL(d1, uL[1], uU[1]) func_raster(i0 + d1);
+    }
+  } else if constexpr (D == 3) {  // Speed does not increase much.
+    for_intL(d0, uL[0], uU[0]) for_intL(d1, uL[1], uU[1]) {
+      const size_t i0 = (size_t(d0) * dims[1] + d1) * dims[2];
+      for_intL(d2, uL[2], uU[2]) func_raster(i0 + d2);
+    }
+  } else {  // This generic case is already quite fast.
+    for (const auto& u : range(uL, uU)) func_raster(ravel_index(dims, u));
+  }
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func, std::invocable<size_t> FuncInterior>
+void for_coordsL_interior(Vec<int, D> dims, Vec<int, D> uL, Vec<int, D> uU, Func func, FuncInterior func_interior) {
+  if (min(uU - uL) < 1) return;  // To allow uL[c] == uU[c] == dims[c].
+  ASSERTX(uL.in_range(dims) && uU.in_range(dims + 1));
+  // Note: not the same traversal order as for_coordsL() !
+  for_int(c, D) {
+    if (uL[c] == 0 && uL[c] < uU[c]) {
+      for_coordsL(uL, uU.with(c, 1), func);
+      uL[c] = 1;
+    }
+    if (uU[c] == dims[c] && uL[c] < uU[c]) {
+      for_coordsL(uL.with(c, dims[c] - 1), uU, func);
+      uU[c] = dims[c] - 1;
+    }
+  }
+  for_coordsL_raster(dims, uL, uU, func_interior);
+}
+
+template <int D, std::invocable<const Vec<int, D>&> Func, std::invocable<size_t> FuncInterior>
+void parallel_d0_for_coordsL_interior(Vec<int, D> dims, Vec<int, D> uL, Vec<int, D> uU, Func func,
+                                      FuncInterior func_interior) {
+  if (min(uU - uL) < 1) return;  // To allow uL[c] == uU[c] == dims[c].
+  ASSERTX(uL.in_range(dims) && uU.in_range(dims + 1));
+  int nthreads = get_max_threads(), ny = uU[0] - uL[0], ychunk = (ny - 1) / nthreads + 1;
+  nthreads = (ny + ychunk - 1) / ychunk;
+  parallel_for(range(nthreads), [&](const int thread) {
+    for_coordsL_interior(dims, uL.with(0, uL[0] + thread * ychunk),
+                         uU.with(0, min(uL[0] + (thread + 1) * ychunk, uU[0])), func, func_interior);
+  });
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_PARALLELCOORDS_H_

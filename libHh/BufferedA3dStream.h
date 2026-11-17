@@ -1,0 +1,38 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_BUFFEREDA3DSTREAM_H_
+#define MESH_PROCESSING_LIBHH_BUFFEREDA3DSTREAM_H_
+
+#include "libHh/A3dStream.h"
+#include "libHh/Buffer.h"
+
+namespace hh {
+
+// Read/write an A3dStream using a RBuffer/WBuffer.
+
+class RBufferedA3dStream : public RA3dStream {  // Read from an RBuffer.
+ public:
+  explicit RBufferedA3dStream(RBuffer& b) : _buf(b) {}
+  enum class ERecognize { parse_error, no, partial, yes };
+  [[nodiscard]] ERecognize recognize() const;
+
+ private:
+  RBuffer& _buf;
+  [[nodiscard]] bool read_line(bool& binary, char& ctype, Vec3<float>& f, string& comment) override;
+};
+
+class WBufferedA3dStream : public WA3dStream {  // Write to a WBuffer.
+ public:
+  explicit WBufferedA3dStream(WBuffer& b) : _buf(b) {}
+  ~WBufferedA3dStream() override { flush(); }
+  void flush() final { _buf.flush(); }
+
+ private:
+  WBuffer& _buf;
+  void output(bool binary, char ctype, const Vec3<float>& f) override;
+  void output_comment(const string& s) override;
+  void blank_line() override;
+};
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_BUFFEREDA3DSTREAM_H_

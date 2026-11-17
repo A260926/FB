@@ -1,0 +1,12 @@
+{
+  "source_path": "demos/data/gcanyon_4k2k.l1.srm",
+  "source_commit": "cede976894c485d552f233735952271a9529d618",
+  "source_sha256": "d252ff87d8a7997e8d93c86131334dd5c7d66a81bfd6d44abd232f25d1894885",
+  "original_splits": 732677,
+  "kept_splits": 128,
+  "source_split_byte_offset": 17422,
+  "record_size": 64,
+  "operation": "retain original base and first 128 split records; change only nvsplits header; validate each parent/face references earlier record; omit remaining records and trailer",
+  "output_sha256": "3460023ea334dd5bbe6c6acd30b7bcb1b8c66c9ce0d8f10c1accbfac3d31dd35",
+  "license": "MIT (repository LICENSE)"
+}

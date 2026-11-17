@@ -1,0 +1,389 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_VECTOR4_H_
+#define MESH_PROCESSING_LIBHH_VECTOR4_H_
+
+#if defined(HH_NO_VECTOR4_VECTORIZATION)
+// If so, do not enable vectorization.
+// MSVC defines _M_ARM (32-bit) or _M_ARM64; gcc and clang define __ARM_NEON (whereas __ARM_NEON__ is Apple-only).
+#elif (defined(_M_ARM) && _M_ARM_FP >= 40) || defined(_M_ARM64) || defined(__ARM_NEON)
+#define HH_VECTOR4_NEON
+#elif (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(_M_X64) || defined(__SSE2__)
+// (Note that _M_IX86_FP is undefined for x64.)
+#define HH_VECTOR4_SSE
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__SSE4_1__)
+#define HH_NO_SSE41
+#endif
+#elif defined(__powerpc__) || defined(__ppc__)  // Maybe __powerpc64__.
+#else
+#pragma message("warning: untested")
+#endif
+
+#if defined(HH_VECTOR4_SSE)
+#include <smmintrin.h>  // SSE4.1 and transitively SSE2 and SSE: __m128, __m128i, _mm_dp_ps(), etc.
+#elif defined(HH_VECTOR4_NEON)
+#include <arm_neon.h>
+#endif
+
+#include "libHh/Pixel.h"
+
+namespace hh {
+
+class Vector4;
+[[nodiscard]] Vector4 to_Vector4_norm(const Vec4<uint8_t>& p);  // Converts each uint8_t [0, 255] to [0.f, 1.f].
+[[nodiscard]] Vector4 to_Vector4_raw(const Vec4<uint8_t>& p);   // Converts each uint8_t [0, 255] to [0.f, 255.f].
+
+// Abstraction of a 4-float vector, hopefully accelerated by vectorized CPU instructions.
+// See also class F32vec4 in <fvec.h> in Microsoft Visual Studio, provided by Intel.
+// And also https://github.com/scoopr/vectorial/blob/master/include/vectorial/simd4f_sse.h
+//      and https://github.com/scoopr/vectorial/blob/master/include/vectorial/simd4f_neon.h
+// See ~/git/CompPhoto/ClassLibs/VisionTools/src/common/SSEonNeon.h.
+// https://gcc.gnu.org/onlinedocs/gcc-4.8.1/gcc/ARM-NEON-Intrinsics.html#ARM-NEON-Intrinsics
+class Vector4 {
+  using type = Vector4;
+
+ public:
+  Vector4() = default;  // Uninitialized.
+  explicit Vector4(float v) { fill(v); }
+  explicit Vector4(const Pixel& pixel) { *this = to_Vector4_norm(pixel); }
+  explicit Vector4(const Vec4<float>& a) { load_unaligned(a.data()); }
+  [[nodiscard]] size_t size() const noexcept { return 4; }
+  [[HH_GNU_PURE]] [[nodiscard]] auto& operator[](this auto&& self, int i) { return HH_CHECK_BOUNDS(i, 4), self._c[i]; }
+  [[nodiscard]] Vector4 with(int i, float f) const {
+    HH_CHECK_BOUNDS(i, 4);
+    Vector4 v = *this;
+    v[i] = f;
+    return v;
+  }
+  void raw_to_byte4(Vec4<uint8_t>& p) const;  // Maps from [0.f, 255.999f] to uint8 using truncation, without clamping.
+  void norm_to_byte4(Vec4<uint8_t>& p) const;  // Maps from [0.f, 1.f]      to uint8 using rounding and clamping.
+  [[nodiscard]] Pixel raw_pixel() const {
+    Pixel pixel;
+    raw_to_byte4(pixel);
+    return pixel;
+  }
+  [[nodiscard]] Pixel pixel() const {
+    Pixel pixel;
+    norm_to_byte4(pixel);
+    return pixel;
+  }
+  [[nodiscard]] friend float mag2(const Vector4& v) { return dot(v, v); }
+  [[nodiscard]] friend float dist2(const Vector4& l, const Vector4& r) { return mag2(l - r); }
+  [[nodiscard]] friend float sum(const Vector4& v) { return dot(v, Vector4(1.f)); }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& l) { return Vector4(0.f) - l; }
+  using value_type = float;
+  using iterator = const float*;
+  using const_iterator = const float*;
+  [[nodiscard]] const float* begin() const { return _c; }
+  [[nodiscard]] const float* end() const { return _c + 4; }
+  [[nodiscard]] auto* data(this auto&& self) { return self._c; }
+  friend std::ostream& operator<<(std::ostream& os, const Vector4& v) {
+    return os << "Vector4(" << v[0] << ", " << v[1] << ", " << v[2] << ", " << v[3] << ")";
+  }
+  [[nodiscard]] static bool ok(int i) { return i >= 0 && i < 4; }
+  friend Vector4 to_Vector4_raw(const Vec4<uint8_t>& p);
+
+#if defined(HH_VECTOR4_SSE)  // MMX + SSE + AVX + AVX-512 + 3DNow + XOP + FMA4 : Intel / AMD / x86-based.
+  Vector4(float x, float y, float z, float w) { _r = _mm_set_ps(w, z, y, x); }  // Note reverse ordering.
+  void load_unaligned(const float* pSrc) { _r = _mm_loadu_ps(pSrc); }
+  void store_unaligned(float* pDst) const { _mm_storeu_ps(pDst, _r); }
+  void load_aligned(const float* pSrc) { _r = _mm_load_ps(pSrc); }   // VT: vld1q_f32_ex(pSrc, 128);
+  void store_aligned(float* pDst) const { _mm_store_ps(pDst, _r); }  // VT: vst1q_f32_ex(pDst, _r, 128);
+  [[nodiscard]] friend Vector4 operator+(const Vector4& l, const Vector4& r) { return _mm_add_ps(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& l, const Vector4& r) { return _mm_sub_ps(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator*(const Vector4& l, const Vector4& r) { return _mm_mul_ps(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator/(const Vector4& l, const Vector4& r) { return _mm_div_ps(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator+(const Vector4& v, float f) { return _mm_add_ps(v._r, _mm_set_ps1(f)); }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& v, float f) { return _mm_sub_ps(v._r, _mm_set_ps1(f)); }
+  [[nodiscard]] friend Vector4 operator*(const Vector4& v, float f) { return _mm_mul_ps(v._r, _mm_set_ps1(f)); }
+  [[nodiscard]] friend Vector4 operator/(const Vector4& v, float f) { return _mm_div_ps(v._r, _mm_set_ps1(f)); }
+  void fill(float v) { _r = _mm_set_ps1(v); }  // All components set to same value.
+  // Component-wise min/max.
+  [[nodiscard]] friend Vector4 min(const Vector4& l, const Vector4& r) { return _mm_min_ps(l._r, r._r); }
+  [[nodiscard]] friend Vector4 max(const Vector4& l, const Vector4& r) { return _mm_max_ps(l._r, r._r); }
+  [[nodiscard]] friend float dot(const Vector4& v1, const Vector4& v2) {
+#if defined(HH_NO_SSE41)
+    Vector4 v = v1 * v2;
+    return (v[0] + v[1]) + (v[2] + v[3]);  // Same summation order as _mm_dp_ps().
+#else
+    const __m128 r = _mm_dp_ps(v1._r, v2._r, 0xFF);  // SSE4.1 DPPS instruction (dot product).
+    // Extracts the lower order floating point value from the parameter.
+    return _mm_cvtss_f32(r);
+    // return r.m128_f32[0];  // Less portable.
+    // float f; _mm_store_ss(&f, r); return f;  // Requires stack store and load on VC11.
+    // https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-float-vector-sum-on-x86
+#endif
+  }
+  [[nodiscard]] friend Vector4 sqrt(const Vector4& v) {  // For use in RangeOp.h mag(), rms(), dist().
+    // https://stackoverflow.com/questions/1528727/why-is-sse-scalar-sqrtx-slower-than-rsqrtx-x
+    return _mm_sqrt_ps(v._r);
+  }
+  [[nodiscard]] friend Vector4 abs(const Vector4& v) {  // For use in max_abs_element().
+    // https://stackoverflow.com/questions/3361132/flipping-sign-on-packed-sse-floats
+    static const __m128 k_sign_mask = _mm_set1_ps(-0.f);  // -0.f = 1 << 31, _mm_set1_ps() not constexpr.
+    // static const __m128 k_sign_mask = _mm_castsi128_ps(_mm_set1_epi32(0x80000000));  // Not constexpr.
+    return _mm_andnot_ps(k_sign_mask, v._r);
+  }
+  // friend Vector4 madd(const Vector4& v1, const Vector4& v2, const Vector& v3) {  // v1 * v2 + v3.
+  //   return _mm_macc_ps(v1._r, v2._r, v3._r); } // AVX FMA4 XMM instruction vfmaddps
+  //   // Intel plans to implement FMA3 in processors using its Haswell microarchitecture, due in 2013.
+  // }
+
+ private:
+  Vector4(__m128 v) : _r(v) {}
+  Vector4& operator=(const __m128& r) {
+    _r = r;
+    return *this;
+  }
+  union {
+    __m128 _r;  // This could be made public to allow mixing of above overloads and full set of SSE ops.
+    float _c[4];
+  };
+
+#elif defined(HH_VECTOR4_NEON)  // Neon + SVE + SVE2 + SME : ARM-based.
+  Vector4(float x, float y, float z, float w) {
+    float r[4] = {x, y, z, w};
+    _r = vld1q_f32(r);
+  }
+  void load_unaligned(const float* pSrc) {  // Other instruction?
+    for_int(c, 4) _c[c] = pSrc[c];
+  }
+  void store_unaligned(float* pDst) const {  // Other instruction?
+    for_int(c, 4) pDst[c] = _c[c];
+  }
+  void load_aligned(const float* pSrc) { _r = vld1q_f32(pSrc); }
+  void store_aligned(float* pDst) const { vst1q_f32(pDst, _r); }
+  [[nodiscard]] friend Vector4 operator+(const Vector4& l, const Vector4& r) { return vaddq_f32(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& l, const Vector4& r) { return vsubq_f32(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator*(const Vector4& l, const Vector4& r) { return vmulq_f32(l._r, r._r); }
+#if defined(__aarch64__) || defined(_M_ARM64)
+  // Exact (correctly rounded) division, like _mm_div_ps() in the SSE version.
+  [[nodiscard]] friend Vector4 operator/(const Vector4& l, const Vector4& r) { return vdivq_f32(l._r, r._r); }
+  [[nodiscard]] friend Vector4 operator/(const Vector4& v, float f) { return vdivq_f32(v._r, vdupq_n_f32(f)); }
+#else  // ARMv7 lacks a division instruction.
+  [[nodiscard]] friend Vector4 operator/(const Vector4& l, const Vector4& r) {
+    return vmulq_f32(l._r, recip(r._r)._r);
+  }
+  [[nodiscard]] friend Vector4 operator/(const Vector4& v, float f) { return vmulq_n_f32(v._r, 1.f / f); }
+#endif
+  [[nodiscard]] friend Vector4 operator+(const Vector4& v, float f) { return vaddq_f32(v._r, vdupq_n_f32(f)); }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& v, float f) { return vsubq_f32(v._r, vdupq_n_f32(f)); }
+  [[nodiscard]] friend Vector4 operator*(const Vector4& v, float f) { return vmulq_n_f32(v._r, f); }
+  void fill(float v) { _r = vdupq_n_f32(v); }  // All components set to same value.
+  // Component-wise min/max.
+  [[nodiscard]] friend Vector4 min(const Vector4& l, const Vector4& r) { return vminq_f32(l._r, r._r); }
+  [[nodiscard]] friend Vector4 max(const Vector4& l, const Vector4& r) { return vmaxq_f32(l._r, r._r); }
+  [[nodiscard]] friend float dot(const Vector4& v1, const Vector4& v2) {
+    Vector4 v = v1 * v2;
+    return (v[0] + v[1]) + (v[2] + v[3]);  // Same summation order as _mm_dp_ps() in the SSE version.
+  }
+  [[nodiscard]] friend Vector4 sqrt(const Vector4& v) {  // For use in RangeOp.h mag(), rms(), dist().
+    // return vrecpeq_f32(vrsqrteq_f32(v));  // Very approximate.
+    // Maybe use vrsqrteq_f32 and vrsqrtsq_f32 as in https://rcl-rs-vvg.blogspot.com/2010/08/simd-etudes.html
+    //  but unclear.
+    using std::sqrt;
+    return Vector4(sqrt(v[0]), sqrt(v[1]), sqrt(v[2]), sqrt(v[3]));
+  }
+  [[nodiscard]] friend Vector4 abs(const Vector4& v) { return vabsq_f32(v._r); }
+
+ private:
+  Vector4(float32x4_t v) : _r(v) {}
+  union {
+    float32x4_t _r;  // This could be made public to allow mixing of above overloads and full set of Neon ops.
+    float _c[4];
+  };
+  [[nodiscard]] static Vector4 recip(const Vector4& v) {
+    float32x4_t estimate = vrecpeq_f32(v._r);  // Get estimate, then apply two Newton-Raphson steps.
+    estimate = vmulq_f32(vrecpsq_f32(v._r, estimate), estimate);
+    estimate = vmulq_f32(vrecpsq_f32(v._r, estimate), estimate);
+    return estimate;
+  }
+
+#else   // Neither defined(HH_VECTOR4_SSE) nor defined(HH_VECTOR4_NEON).
+  Vector4(float x, float y, float z, float w) { _c[0] = x, _c[1] = y, _c[2] = z, _c[3] = w; }
+  void load_unaligned(const float* pSrc) { for_int(c, 4) _c[c] = pSrc[c]; }
+  void store_unaligned(float* pDst) const { for_int(c, 4) pDst[c] = _c[c]; }
+  void load_aligned(const float* pSrc) { for_int(c, 4) _c[c] = pSrc[c]; }
+  void store_aligned(float* pDst) const { for_int(c, 4) pDst[c] = _c[c]; }
+  [[nodiscard]] friend Vector4 operator+(const Vector4& l, const Vector4& r) {
+    return Vector4(l[0] + r[0], l[1] + r[1], l[2] + r[2], l[3] + r[3]);
+  }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& l, const Vector4& r) {
+    return Vector4(l[0] - r[0], l[1] - r[1], l[2] - r[2], l[3] - r[3]);
+  }
+  [[nodiscard]] friend Vector4 operator*(const Vector4& l, const Vector4& r) {
+    return Vector4(l[0] * r[0], l[1] * r[1], l[2] * r[2], l[3] * r[3]);
+  }
+  [[nodiscard]] friend Vector4 operator/(const Vector4& l, const Vector4& r) {
+    return Vector4(l[0] / r[0], l[1] / r[1], l[2] / r[2], l[3] / r[3]);
+  }
+  [[nodiscard]] friend Vector4 operator+(const Vector4& v, float f) { return v + Vector4(f); }
+  [[nodiscard]] friend Vector4 operator-(const Vector4& v, float f) { return v - Vector4(f); }
+  [[nodiscard]] friend Vector4 operator*(const Vector4& v, float f) { return v * Vector4(f); }
+  [[nodiscard]] friend Vector4 operator/(const Vector4& v, float f) { return v / Vector4(f); }  // Exact, like SSE.
+  void fill(float v) { for_int(c, 4) _c[c] = v; }
+  [[nodiscard]] friend Vector4 min(const Vector4& l, const Vector4& r) {
+    return Vector4(min(l[0], r[0]), min(l[1], r[1]), min(l[2], r[2]), min(l[3], r[3]));
+  }
+  [[nodiscard]] friend Vector4 max(const Vector4& l, const Vector4& r) {
+    return Vector4(max(l[0], r[0]), max(l[1], r[1]), max(l[2], r[2]), max(l[3], r[3]));
+  }
+  [[nodiscard]] friend float dot(const Vector4& v1, const Vector4& v2) {
+    Vector4 v = v1 * v2;
+    return (v[0] + v[1]) + (v[2] + v[3]);  // Same summation order as _mm_dp_ps() in the SSE version.
+  }
+
+  [[nodiscard]] friend Vector4 sqrt(const Vector4& v) {
+    using std::sqrt;
+    return Vector4(sqrt(v[0]), sqrt(v[1]), sqrt(v[2]), sqrt(v[3]));
+  }
+  [[nodiscard]] friend Vector4 abs(const Vector4& v) {
+    using std::abs;
+    return Vector4(abs(v[0]), abs(v[1]), abs(v[2]), abs(v[3]));
+  }
+  // [[nodiscard]] friend Vector4 madd(const Vector4& v1, const Vector4& v2, const Vector& v3) { return v1 * v2 + v3; }
+
+ private:
+  alignas(16)  // Since no __mm128 element to induce 16-byte alignment.
+      float _c[4];
+#endif  // defined(HH_VECTOR4_SSE) or defined(HH_VECTOR4_NEON)
+};
+
+//----------------------------------------------------------------------------
+
+[[nodiscard]] inline Vector4 to_Vector4_norm(const Vec4<uint8_t>& p) { return to_Vector4_raw(p) * (1.f / 255.f); }
+
+float mag2(const Vector4& v);
+float dist2(const Vector4& l, const Vector4& r);
+float sum(const Vector4& v);
+float dot(const Vector4& v1, const Vector4& v2);
+
+Vector4 operator+(const Vector4& l, const Vector4& r);
+Vector4 operator-(const Vector4& l, const Vector4& r);
+Vector4 operator*(const Vector4& l, const Vector4& r);
+Vector4 operator/(const Vector4& l, const Vector4& r);
+Vector4 operator+(const Vector4& v, float f);
+Vector4 operator-(const Vector4& v, float f);
+Vector4 operator*(const Vector4& v, float f);
+Vector4 operator/(const Vector4& v, float f);
+
+inline Vector4 operator*(float f, const Vector4& v) { return v * f; }
+inline Vector4& operator+=(Vector4& l, const Vector4& r) { return l = l + r; }
+inline Vector4& operator-=(Vector4& l, const Vector4& r) { return l = l - r; }
+inline Vector4& operator*=(Vector4& l, const Vector4& r) { return l = l * r; }
+inline Vector4& operator/=(Vector4& l, const Vector4& r) { return l = l / r; }
+inline Vector4& operator+=(Vector4& l, float f) { return l = l + f; }
+inline Vector4& operator-=(Vector4& l, float f) { return l = l - f; }
+inline Vector4& operator*=(Vector4& l, float f) { return l = l * f; }
+inline Vector4& operator/=(Vector4& l, float f) { return l = l / f; }
+
+inline Vector4 interp(const Vector4& v1, const Vector4& v2, float f1 = .5f) { return f1 * v1 + (1.f - f1) * v2; }
+
+//----------------------------------------------------------------------------
+
+#if defined(HH_VECTOR4_SSE) && !defined(HH_NO_SSE41)
+
+// _mm_packs_epi32   : pack the  8 signed 32-bit integers from a and b into signed 16-bit and saturate.
+// _mm_packus_epi16  : pack the 16 signed 16-bit from a and b into 8-bit unsigned and saturate.
+// _mm_packs_epi16   : pack the 16 signed 16-bit integers from a and b into 8-bit integers and saturate.
+// _mm_cvtepu8_epi32 : expand 4 unsigned 8-bit to 4 unsigned 32-bit (SSE4.1)
+
+inline Vector4 to_Vector4_raw(const Vec4<uint8_t>& p) {
+  // Avoids a shuffle, unlike _mm_set1_epi32(*reinterpret_cast<const int*>(p)).
+  const __m128i in = _mm_castps_si128(_mm_load_ss(reinterpret_cast<const float*>(p.data())));
+  const __m128i t1 = _mm_cvtepu8_epi32(in);  // Expand 4 unsigned 8-bit to 4 unsigned 32-bit (SSE4.1).
+  const __m128 t2 = _mm_cvtepi32_ps(t1);     // Convert four signed 32-bit to floats.
+  return t2;
+}
+inline void Vector4::raw_to_byte4(Vec4<uint8_t>& p) const {
+  for_int(c, 4) ASSERTX(_c[c] >= 0.f && _c[c] < 255.999f);
+  const __m128i t1 = _mm_cvttps_epi32(_r);     // 4 float -> 4 signed 32-bit int (truncation)  (or cvtps for rounding).
+  const __m128i t2 = _mm_packs_epi32(t1, t1);  // 8 signed 32-bit -> 8 signed 16-bit (saturation).
+  const __m128i t3 = _mm_packus_epi16(t2, t2);  // 16 signed 16-bit -> 16 unsigned 8-bit (saturation).
+  _mm_store_ss(reinterpret_cast<float*>(p.data()), _mm_castsi128_ps(t3));
+}
+inline void Vector4::norm_to_byte4(Vec4<uint8_t>& p) const {
+  Vector4 t = *this * 255.f;
+  for_int(c, 4) ASSERTX(t[c] <= 2'147'480'000.f);  // See Vector4_test.cpp.
+  const __m128i t1 = _mm_cvtps_epi32(t._r);  // 4 float -> 4 signed 32-bit int (rounding)  (or cvttps for truncation).
+  const __m128i t2 = _mm_packs_epi32(t1, t1);   // 8 signed 32-bit -> 8 signed 16-bit (saturation).
+  const __m128i t3 = _mm_packus_epi16(t2, t2);  // 16 signed 16-bit -> 16 unsigned 8-bit (saturation).
+  _mm_store_ss(reinterpret_cast<float*>(p.data()), _mm_castsi128_ps(t3));
+}
+
+#elif defined(HH_VECTOR4_NEON)
+
+inline Vector4 to_Vector4_raw(const Vec4<uint8_t>& p) {
+  // See https://stackoverflow.com/a/14506159
+  //  vmovl.u8       q3, d2    // Expand to 16-bit.
+  //  vmovl.u16      q10, d6   // Expand to 32-bit.
+  //  vmovl.u16      q11, d7
+  //  vcvt.f32.u32   q10, q10  // Convert to float.
+  //  vcvt.f32.u32   q11, q11
+  // uint8x8x2_t a = vld2_u8(p);  // uint8x8x2_t vld2_u8(uint8_t const * ptr);  // VLD2.8 {d0, d1}, [r0]
+  // uint8x8_t a0 = a.val[0];
+  // This initialization of variable "a" may be optional.
+  uint32x2_t a = vcreate_u32(0);  // uint32x2_t vcreate_u32(uint64_t a);  // VMOV d0, r0, r0
+  // uint32x2_t vld1_lane_u32(const uint32_t* ptr, uint32x2_t vec, __constrange(0, 1) int lane);  // VLD1.32
+  a = vld1_lane_u32(reinterpret_cast<const uint32_t*>(p.data()), a, 0);
+  uint8x8_t a0 = vreinterpret_u8_u32(a);  // uint8x8_t vreinterpret_u8_u32(uint32x2_t);
+  uint16x8_t b = vmovl_u8(a0);            // uint16x8_t vmovl_u8(uint8x8_t a);  // VMOVL.U8 q0, d0
+  uint16x4_t c = vget_low_u16(b);         // uint16x4_t vget_low_u16(uint16x8_t a);  // VMOV d0, d0
+  uint32x4_t d = vmovl_u16(c);            // uint32x4_t vmovl_u16(uint16x4_t a);  // VMOVL.U16 q0, d0
+  float32x4_t f = vcvtq_f32_u32(d);       // float32x4_t vcvtq_f32_u32(uint32x4_t a);  // VCVT.F32.U32 q0, q0
+  return f;
+}
+inline void Vector4::raw_to_byte4(Vec4<uint8_t>& p) const {
+  for_int(c, 4) ASSERTX(_c[c] >= 0.f && _c[c] < 255.999f);
+  uint32x4_t a = vcvtq_u32_f32(_r);   // uint32x4_t vcvt_u32_f32(float32x4_t a);  // VCVT.U32.F32 q0, q0 // Truncate.
+  uint16x4_t b = vqmovn_u32(a);       // uint16x4_t vqmovn_u32(uint32x4_t a);  // VQMOVN.I32 d0, q0 // Saturation.
+  uint16x8_t c = vcombine_u16(b, b);  // uint16x8_t vcombine_u16(uint16x4_t low, uint16x4_t high);
+  uint8x8_t d = vqmovn_u16(c);        // uint8x8_t vqmovn_u16(uint16x8_t a);  // VQMOVN.I16 d0, q0
+  uint32x2_t e = vreinterpret_u32_u8(d);                       // uint32x2_t vreinterpret_u32_u8 (uint8x8_t)
+  vst1_lane_u32(reinterpret_cast<uint32_t*>(p.data()), e, 0);  // vst1_lane_u32 (uint32_t*, uint32x2_t, int lane)
+}
+inline void Vector4::norm_to_byte4(Vec4<uint8_t>& p) const {
+  Vector4 t = *this * 255.f;
+  for_int(c, 4) ASSERTX(t[c] <= 2'147'480'000.f);  // See Vector4_test.cpp.
+#if defined(__aarch64__) || defined(_M_ARM64)
+  // Round to nearest, with ties to even, like _mm_cvtps_epi32() in the SSE version.
+  uint32x4_t a = vcvtnq_u32_f32(t._r);  // uint32x4_t vcvtnq_u32_f32(float32x4_t a);  // FCVTNU Vd.4S, Vn.4S
+#else
+  // ARMv7 lacks vcvtnq_u32_f32(), and vcvtq_u32_f32() truncates.  Adding and then subtracting 2^23 rounds to the
+  // nearest integer (with ties to even) for 0 <= t < 2^23; larger values and negative values saturate regardless.
+  // (Adding .5f and truncating would instead round ties up, and would round 0.49999997f up to 1.)
+  const float32x4_t k_2p23 = vdupq_n_f32(0x1p23f);
+  uint32x4_t a = vcvtq_u32_f32(vsubq_f32(vaddq_f32(t._r, k_2p23), k_2p23));
+#endif
+  uint16x4_t b = vqmovn_u32(a);           // uint16x4_t vqmovn_u32(uint32x4_t a);  // VQMOVN.I32 d0, q0 // Saturation.
+  uint16x8_t c = vcombine_u16(b, b);      // uint16x8_t vcombine_u16(uint16x4_t low, uint16x4_t high);
+  uint8x8_t d = vqmovn_u16(c);            // uint8x8_t vqmovn_u16(uint16x8_t a);  // VQMOVN.I16 d0, q0 // Saturation.
+  uint32x2_t e = vreinterpret_u32_u8(d);  // uint32x2_t vreinterpret_u32_u8 (uint8x8_t)
+  vst1_lane_u32(reinterpret_cast<uint32_t*>(p.data()), e, 0);  // vst1_lane_u32 (uint32_t*, uint32x2_t, int lane)
+}
+
+#else  // Neither SSE nor NEON.
+
+inline Vector4 to_Vector4_raw(const Vec4<uint8_t>& p) { return Vector4(p[0], p[1], p[2], p[3]); }
+inline void Vector4::raw_to_byte4(Vec4<uint8_t>& p) const {
+  for_int(c, 4) {
+    ASSERTX(_c[c] >= 0.f && _c[c] < 255.999f);
+    p[c] = uint8_t(_c[c]);
+  }
+}
+inline void Vector4::norm_to_byte4(Vec4<uint8_t>& p) const {
+  // Round to nearest, with ties to even, like _mm_cvtps_epi32() in the SSE version.
+  for_int(c, 4) p[c] = uint8_from_unit(_c[c]);
+}
+
+#endif  // defined(HH_VECTOR4_SSE) or defined(HH_VECTOR4_NEON)
+
+// This is required so that "Vector4 v{};" is properly zero-initialized.
+static_assert(std::is_trivially_default_constructible_v<Vector4>);
+
+// The absence of a user-declared copy constructor and of "Vector4& operator=(const Vector4& r)" enables this
+// property, which in turn allows more features (e.g., std::bit_cast<Vector4>, memcpy, relocation optimization).
+static_assert(std::is_trivially_copyable_v<Vector4>);
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_VECTOR4_H_

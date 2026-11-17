@@ -1,0 +1,224 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_STAT_H_
+#define MESH_PROCESSING_LIBHH_STAT_H_
+
+#include <fstream>  // ofstream
+
+#include "libHh/Hh.h"
+
+#if 0
+{
+  {
+    HH_STAT(Svdeg);
+    for_int(i, 10) Svdeg.enter(vdeg[i]);
+  }
+  HH_SSTAT(Svanum, va.num());
+  SHOW(Stat(V(1., 4., 5., 6.)).sdv());
+  // getenv_bool("STAT_FILES") : If true, store all entered data values in ./Stat.* files.
+  Stat::set_show_stats(-1);  // Or "export SHOW_STATS=-1": only print in showff().
+  Stat::set_show_stats(-2);  // Or "export SHOW_STATS=-2": disable printing of all statistics.
+  // getenv_bool("HH_HIDE_SUMMARIES") : If true, omit summary of statistics.
+}
+#endif
+
+namespace hh {
+
+// Accumulate statistics for a stream of arithmetic values.
+class Stat {
+ public:
+  explicit Stat(string name_ = "", bool print = false, bool is_static = false);
+  explicit Stat(const char* name_, bool print = false, bool is_static = false);
+  Stat(Stat&& s) noexcept : _print(false) { zero(), swap(*this, s); }
+  template <ranges::input_range R> requires std::is_arithmetic_v<range_value_t<R>> explicit Stat(R&& range);
+  ~Stat();
+  Stat& operator=(Stat&& s) noexcept;
+  void set_name(string name_) { _name = std::move(name_); }
+  void set_print(bool print) { _print = print; }
+  void set_rms() { _use_rms = true; }  // Show rms instead of sdv.
+  void zero();
+  void enter(float value) { enter_aux(value, 1); }
+  void enter(double value) { enter_aux(value, 1); }
+  void enter(int value) { enter(double(value)); }
+  void enter(unsigned value) { enter(double(value)); }
+  void enter_multiple(float value, int factor) { enter_aux(value, factor); }  // `factor` may be negative.
+  void remove(float value) { enter_multiple(value, -1); }
+  void add(const Stat& st);
+  Stat& thread_partial();  // Returns a per-thread accumulator that hh_clean_up() folds back into *this.
+  [[nodiscard]] const string& name() const { return _name; }
+  [[nodiscard]] int64_t num() const { return _n; }
+  [[nodiscard]] int inum() const { return narrow_cast<int>(_n); }
+  [[nodiscard]] bool empty() const { return _n == 0; }
+  [[nodiscard]] float min() const { return _min; }
+  [[nodiscard]] float max() const { return _max; }
+  [[nodiscard]] float avg() const;
+  [[nodiscard]] float var() const;  // Sample variance (rather than population variance).
+  [[nodiscard]] float sdv() const { return sqrt(var()); }
+  [[nodiscard]] float ssd() const;
+  [[nodiscard]] float sum() const { return float(_sum); }
+  [[nodiscard]] float rms() const;
+  [[nodiscard]] float max_abs() const { return std::max(abs(min()), abs(max())); }
+  [[nodiscard]] string short_string() const;  // No leading name, no trailing '\n'.
+  [[nodiscard]] string name_string() const;   // Used by operator<<().
+  friend void swap(Stat& l, Stat& r) noexcept;
+  friend std::ostream& operator<<(std::ostream& os, const Stat& st) { return os << st.name_string(); }
+
+  [[nodiscard]] static int show_stats() { return _s_show; }
+  static void set_show_stats(int val) { _s_show = val; }
+
+ private:
+  string _name;
+  bool _print;  // Print statistics in destructor.
+  bool _use_rms{false};
+  int64_t _n;
+  double _sum;
+  double _sum2;
+  float _min;
+  float _max;
+  unique_ptr<std::ofstream> _ofs;  // Defined if getenv_bool("STAT_FILES").
+  static int _s_show;
+  // If add any member variables, be sure to update member function swap().
+  friend class Stats;
+  template <typename T> requires std::is_floating_point_v<T> HH_ALWAYS_INLINE void enter_aux(T v, int factor);
+  void output(float value) const;
+  void summary_terminate();
+};
+
+template <> HH_DECLARE_OSTREAM_EOL(Stat);
+
+// Like Stat(range), but later specialized to operate on magnitude of Vector4 elements.
+template <ranges::input_range R> [[nodiscard]] Stat range_stat(const R& range);
+
+// Scale and offset a range of values such that they have mean == 0 and sdv == 1.
+// This is equivalent to converting each value to its z-score in the distribution.
+// Note that this modifies the range in-place, so use standardize(clone(range)) to preserve it.
+template <ranges::forward_range R> R standardize(R&& range);
+
+// Scale a range of values such that they have rms == 1.
+// Note that this modifies the range in-place, so use standardize_rms(clone(range)) to preserve it.
+template <ranges::forward_range R> R standardize_rms(R&& range);
+
+namespace details {
+// Creates a Stat (intentionally never deleted) that is reported at program termination; used by HH_SSTAT.
+Stat& new_static_stat(const char* name, bool use_rms);
+}  // namespace details
+
+#define HH_STAT(S) \
+  hh::Stat S { #S, true }
+#define HH_STAT_NP(S) \
+  hh::Stat S { #S, false }  // No print.
+
+// Static Stat, which gets reported at program termination (or in hh_clean_up()).
+// Values accumulate into a per-thread Stat, so that HH_SSTAT may be used within a parallel loop; the per-thread
+// accumulators are folded into the reported Stat by hh_clean_up().
+#define HH_SSTAT(S, v)                                                  \
+  do {                                                                  \
+    static hh::Stat& S##_all = hh::details::new_static_stat(#S, false); \
+    static thread_local hh::Stat& S = S##_all.thread_partial();         \
+    S.enter(v);                                                         \
+  } while (false)
+#define HH_SSTAT_RMS(S, v)                                             \
+  do {                                                                 \
+    static hh::Stat& S##_all = hh::details::new_static_stat(#S, true); \
+    static thread_local hh::Stat& S = S##_all.thread_partial();        \
+    S.enter(v);                                                        \
+  } while (false)
+
+// Range Stat.
+#define HH_RSTAT(S, range)           \
+  do {                               \
+    HH_STAT(S);                      \
+    for (auto e : range) S.enter(e); \
+  } while (false)
+#define HH_RSTAT_RMS(S, range)       \
+  do {                               \
+    HH_STAT(S);                      \
+    S.set_rms();                     \
+    for (auto e : range) S.enter(e); \
+  } while (false)
+
+//----------------------------------------------------------------------------
+
+template <ranges::input_range R> requires std::is_arithmetic_v<range_value_t<R>> Stat::Stat(R&& range) : Stat{} {
+  for (const auto& e : range) enter(e);
+}
+
+inline Stat& Stat::operator=(Stat&& s) noexcept {
+  _ofs = nullptr;
+  _print = false;
+  swap(*this, s);
+  return *this;
+}
+
+template <typename T> requires std::is_floating_point_v<T> HH_ALWAYS_INLINE void Stat::enter_aux(T v, int factor) {
+  const double d = v;
+  _n += factor;
+  _sum += d * factor;
+  _sum2 += square(d) * factor;
+  const float value = static_cast<float>(v);
+  if (value < _min) _min = value;
+  if (value > _max) _max = value;
+  if (_ofs) for_int(i, factor) output(value);
+}
+
+inline float Stat::avg() const {
+  if (!_n) {
+    Warning("avg() of empty");
+    return 0.f;
+  }
+  return float(_sum / _n);
+}
+
+inline float Stat::var() const {
+  if (_n < 2) {
+    Warning("Stat::var() of fewer than 2 elements");
+    return 0.f;
+  }
+  return float(std::max((_sum2 - _sum * _sum / _n) / (_n - 1.), 0.));
+}
+
+inline float Stat::ssd() const {
+  if (!_n) {
+    Warning("ssd() of empty");
+    return 0.f;
+  }
+  return float(std::max(_sum2 - _sum * _sum / _n, 0.));
+}
+
+inline float Stat::rms() const {
+  if (!_n) {
+    Warning("rms() of empty");
+    return 0.f;
+  }
+  return sqrt(float(_sum2 / _n));
+}
+
+// Specialized in Multigrid.h.
+template <ranges::input_range R> Stat range_stat(const R& range) { return Stat(range); }
+
+template <ranges::forward_range R> R standardize(R&& range) {
+  const Stat stat = range_stat(range);
+  const float sdv = stat.sdv();
+  if (!sdv) {
+    Warning("standardize() of range with zero sdv");
+  } else {
+    const float avg = stat.avg(), rsdv = 1.f / sdv;
+    for (float& e : range) e = (e - avg) * rsdv;
+  }
+  return std::forward<R>(range);
+}
+
+template <ranges::forward_range R> R standardize_rms(R&& range) {
+  const Stat stat = range_stat(range);
+  const float rms = stat.rms();
+  if (!rms) {
+    Warning("standardize_rms() of range with zero rms");
+  } else {
+    const float rrms = 1.f / rms;
+    for (auto& e : range) e *= rrms;
+  }
+  return std::forward<R>(range);
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_STAT_H_

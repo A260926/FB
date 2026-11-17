@@ -1,0 +1,84 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_GRAPH_H_
+#define MESH_PROCESSING_LIBHH_GRAPH_H_
+
+#include "libHh/Array.h"
+#include "libHh/Map.h"
+#include "libHh/RangeOp.h"
+
+#if 0
+{
+  Graph<int> g;
+  for (int v1 : g)
+    for (int v2 : g.edges(v1)) process_edge(v1, v2);
+}
+#endif
+
+namespace hh {
+
+// A Graph encodes a relation from a set of elements to itself, represented by a set of edge tuples (T, T).
+// The Graph allows quick iteration over outgoing edges.  Duplicate edges are not allowed.
+template <typename T> class Graph : noncopyable {
+  using type = Graph<T>;
+  using atype = Array<T>;
+  using base = Map<T, atype>;
+
+ public:
+  using vertices_range = base::keys_range;
+  using vertex_iterator = base::keys_iterator;
+  using edges_range = const atype&;
+  using edge_iterator = const atype::const_iterator;
+  Graph() = default;
+  Graph(type&& g) noexcept { swap(*this, g); }
+  type& operator=(type&& g) noexcept { return clear(), swap(*this, g), *this; }
+  void clear() { _m.clear(); }
+  [[nodiscard]] bool empty() const { return _m.empty(); }
+  // Enter and remove domain vertices.
+  void enter(T v) { _m.enter(v, atype()); }  // The vertex v must be new.
+  [[nodiscard]] bool contains(T v) const { return _m.contains(v); }
+  bool remove(T v);  // Must have 0 out_degree; returns was_there.
+  // Enter an edge.
+  void enter(T v1, T v2) { ASSERTXX(!contains(v1, v2)), _m.get(v1).push(v2); }
+  // Enter an undirected edge; v1 and v2 must be present and the edge must be new.
+  void enter_undirected(T v1, T v2) { enter(v1, v2), enter(v2, v1); }
+  [[nodiscard]] bool contains(T v1, T v2) const { return hh::contains(_m.get(v1), v2); }  // O(n), slow.
+  bool remove(T v1, T v2) { return _m.get(v1).remove_unordered(v2); }                     // O(n); returns was_there.
+  bool remove_undirected(T v1, T v2);                                                     // O(n); returns was_there.
+  [[nodiscard]] int out_degree(T v) const { return _m.get(v).num(); }
+  void add(const Graph<T>& g);
+  [[nodiscard]] vertices_range vertices() const { return _m.keys(); }
+  [[nodiscard]] edges_range edges(T v) const { return _m.get(v); }
+  friend void swap(Graph& l, Graph& r) noexcept { ranges::swap(l._m, r._m); }
+
+ private:
+  base _m;
+};
+
+//----------------------------------------------------------------------------
+
+template <typename T> bool Graph<T>::remove(T v) {
+  if (!contains(v)) return false;
+  const atype ar = _m.remove(v);
+  assertx(ar.empty());
+  return true;
+}
+
+template <typename T> bool Graph<T>::remove_undirected(T v1, T v2) {
+  const bool r1 = remove(v1, v2);
+  const bool r2 = remove(v2, v1);
+  assertx(r1 == r2);
+  return r1;
+}
+
+template <typename T> void Graph<T>::add(const Graph& g) {
+  for (const T& v1 : g.vertices()) {
+    for (const T& v2 : g.edges(v1)) {
+      atype& ar = _m.get(v1);
+      if (!hh::contains(ar, v2)) ar.push(v2);
+    }
+  }
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_GRAPH_H_

@@ -1,0 +1,113 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_GRIDPIXELOP_H_
+#define MESH_PROCESSING_LIBHH_GRIDPIXELOP_H_
+
+#include "libHh/GridOp.h"
+#include "libHh/MatrixOp.h"
+
+namespace hh {
+
+// Resize matrix of pixels to the sizes given by destination nmatrixp; views matrixp and nmatrixp must be distinct.
+inline void resize_Matrix_Pixel(CMatrixView<Pixel> matrixp, const Resizer<2>& resizer, const Pixel* cval,
+                                MatrixView<Pixel> nmatrixp) {
+  assertx(matrixp.data() != nmatrixp.data());
+  assertx(matrixp.dims() == resizer.dims() && nmatrixp.dims() == resizer.ndims());
+  // The integer fast paths apply only when no transfer function alters the values.
+  const bool identity_gamma = resizer.gamma().is_identity();
+  if (identity_gamma && resizer.filter(0).is_trivial_magnify() && resizer.filter(1).is_trivial_magnify() &&
+      nmatrixp.dims() == matrixp.dims() * 2) {
+    const int cx = matrixp.xsize();
+    parallel_for(range(nmatrixp.ysize()), [&](const int y) {
+      // for_int(x, nx) nmatrixp(y, x) = matrixp(y / 2, x / 2);
+      Pixel* __restrict an = nmatrixp[y].data();
+      const Pixel* __restrict ao = matrixp[y / 2].data();
+      for_int(x, cx) {
+        *an++ = *ao;
+        *an++ = *ao++;
+      }
+    });
+    return;
+  }
+  if (identity_gamma && resizer.filter(0).is_trivial_minify() && resizer.filter(1).is_trivial_minify() &&
+      nmatrixp.size()) {
+    if (nmatrixp.dims() * 2 == matrixp.dims()) {
+      constexpr int DS = 2, DS2 = square(DS);
+      const int nx = nmatrixp.xsize();
+      parallel_for(range(nmatrixp.ysize()), [&](const int y) {
+        Pixel* __restrict an = nmatrixp[y].data();
+        const Pixel* __restrict ao0 = matrixp[y * DS + 0].data();
+        const Pixel* __restrict ao1 = matrixp[y * DS + 1].data();
+        for_int(x, nx) {
+          for_int(z, 4) {
+            an[0][z] = narrow_cast<uint8_t>((ao0[0][z] + ao0[1][z] + ao1[0][z] + ao1[1][z] + (DS2 / 2)) / DS2);
+          }
+          an += 1, ao0 += DS, ao1 += DS;  // OPT:DS == 2
+        }
+      });
+      return;
+    }
+    if (nmatrixp.dims() * 4 == matrixp.dims()) {
+      constexpr int DS = 4, DS2 = square(DS);
+      const int nx = nmatrixp.xsize();
+      parallel_for(range(nmatrixp.ysize()), [&](const int y) {
+        Pixel* __restrict an = nmatrixp[y].data();
+        const Pixel* __restrict ao0 = matrixp[y * DS + 0].data();
+        const Pixel* __restrict ao1 = matrixp[y * DS + 1].data();
+        const Pixel* __restrict ao2 = matrixp[y * DS + 2].data();
+        const Pixel* __restrict ao3 = matrixp[y * DS + 3].data();
+        for_int(x, nx) {
+          for_int(z, 4) {
+            an[0][z] = narrow_cast<uint8_t>((ao0[0][z] + ao0[1][z] + ao0[2][z] + ao0[3][z] + ao1[0][z] + ao1[1][z] +
+                                             ao1[2][z] + ao1[3][z] + ao2[0][z] + ao2[1][z] + ao2[2][z] + ao2[3][z] +
+                                             ao3[0][z] + ao3[1][z] + ao3[2][z] + ao3[3][z] + (DS2 / 2)) /
+                                            DS2);
+          }
+          an += 1, ao0 += DS, ao1 += DS, ao2 += DS, ao3 += DS;  // OPT:DS == 4
+        }
+      });
+      return;
+    }
+    Vec2<int> Dyx = matrixp.dims() / nmatrixp.dims();
+    if (nmatrixp.dims() * Dyx == matrixp.dims()) {
+      const int Dyx2 = Dyx[0] * Dyx[1], nx = nmatrixp.xsize();
+      parallel_for(range(nmatrixp.ysize()), [&](const int y) {
+        for_int(x, nx) {
+          Vec4<int> sums = ntimes<4>(Dyx2 / 2);
+          for_int(dy, Dyx[0]) {
+            auto matrixpy = matrixp[y * Dyx[0] + dy];
+            for_int(dx, Dyx[1]) for_int(z, 4) sums[z] += matrixpy[x * Dyx[1] + dx][z];  // OPT:Dyx
+          }
+          // for_int(z, 4) nmatrixp[y, x][z] = narrow_cast<uint8_t>(sums[z] / Dyx2);
+          auto& nmatrixpyx = nmatrixp[y, x];
+          for_int(z, 4) nmatrixpyx[z] = narrow_cast<uint8_t>(sums[z] / Dyx2);
+        }
+      });
+      return;
+    }
+  }
+  resizer.apply_to(matrixp, cval, nmatrixp);
+}
+
+// Resize matrix of pixels to the sizes given by destination nmatrixp; views matrixp and nmatrixp must be distinct.
+inline void resize_Matrix_Pixel(CMatrixView<Pixel> matrixp, const ResizeOptions<2>& options, const Pixel* cval,
+                                MatrixView<Pixel> nmatrixp) {
+  assertx(matrixp.data() != nmatrixp.data());
+  const Resizer<2> resizer(matrixp.dims(), nmatrixp.dims(), options);
+  resize_Matrix_Pixel(matrixp, resizer, cval, nmatrixp);
+}
+
+// Resize 3D grid of pixels spatially (only dimensions 1 and 2) to sizes given by destination ngridp;
+//  views gridp and ngridp must be distinct.
+// Was previously in GridOp.cpp
+inline void spatially_resize_Grid3_Pixel(CGridView<3, Pixel> gridp, const ResizeOptions<2>& options, const Pixel* cval,
+                                         GridView<3, Pixel> ngridp) {
+  assertx(gridp.dim(0) == ngridp.dim(0));  // Only resize dimensions 1 and 2.
+  assertx(gridp.dim(1) > 0 && gridp.dim(2) > 0 && ngridp.dim(1) > 0 && ngridp.dim(2) > 0);
+  // The kernel weights are computed once for all the frames.
+  const Resizer<2> resizer(gridp[0].dims(), ngridp[0].dims(), options);
+  for_int(f, gridp.dim(0)) resize_Matrix_Pixel(gridp[f], resizer, cval, ngridp[f]);
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_GRIDPIXELOP_H_

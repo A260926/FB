@@ -1,0 +1,44 @@
+# For Windows g++ compiler, using GCC's libstdc++, mingw-w64 runtime + Microsoft's Universal CRT (ucrt),
+# posix winpthreads, and Win32 API.
+# It defines __GNUC__, __GLIBCXX__, and _WIN32.
+
+release ?= 1#  0=debug or 1=release (usually 1).
+
+include $(dir $(lastword $(MAKEFILE_LIST)))Makefile_base_gcc
+
+MINGW_CXX_PATTERNS ?= \
+  c:/mingw-w64/*-posix-seh-ucrt-*/mingw64/bin/$(CXX).exe \
+  c:/mingw64/bin/$(CXX).exe \
+  c:/Progra~1/mingw-w64/*-posix-seh-ucrt-*/mingw64/bin/$(CXX).exe
+# Possibly also: c:/winlibs/mingw64/bin/$(CXX).exe c:/tools/mingw64/bin/$(CXX).exe
+# Note that `sort` below unfortunately gives a lexicographic rather than numeric sort.
+MINGW_ROOT ?= $(call rawdir,$(call rawdir,$(lastword $(sort $(wildcard $(MINGW_CXX_PATTERNS))))))
+$(if $(and $(MINGW_ROOT),$(call file_exists,$(MINGW_ROOT)/bin/$(CXX).exe)),,$(error No $(CXX) compiler \
+  found for CONFIG=$(CONFIG) with MINGW_ROOT='$(MINGW_ROOT)' and MINGW_CXX_PATTERNS='$(MINGW_CXX_PATTERNS)'. \
+  Install mingw-w64 and/or set these variables in '$(MeshRoot)/Makefile_local_defs'))
+$(call prepend_PATH,$(MINGW_ROOT)/bin)
+
+graphics_libs = -lopengl32 -lwinmm -lgdi32 -lcomdlg32 -ldwmapi -luser32
+
+# Note: no <stacktrace>: libstdc++ is built without libbacktrace and g++ leaves __cpp_lib_stacktrace undefined.
+# Recheck using: echo '#include <version>' | g++ -x c++ -std=c++23 -dM -E - | grep stacktrace
+# (BTW, StackWalker as used in the past would not have been a solution here because it requires _MSC_VER.)
+last_libs += -lstdc++exp#  For the Windows console path of std::print/std::println, not for stacktrace.
+
+# Workaround for g++ 16.1.0 mingw bug: 32-byte-aligned stack stores are emitted without stack realignment.
+# Adding -mstackrealign realigns to -mpreferred-stack-boundary, which is capped to 16 bytes, so does not help.
+# (See related issue in Makefile_config_cygwin.)
+ccommon += -mno-avx
+
+# Static linking removes the need to have the compiler directory in PATH at runtime.
+LDFLAGS += -static
+
+ifneq ($(sanitize:0=),)
+  $(error CONFIG=mingw ships no sanitizer runtime; use CONFIG=unix for sanitize=$(sanitize))
+endif
+
+# Stack trace on error:
+# (export PATH=/cygdrive/c/mingw-w64/*/mingw64/bin:"$PATH"; gdb --batch -ex run -ex where --args ~/git/hh_src/bin/mingw/HTest -dividebyzero)
+
+# echo | c:/mingw-w64/*/mingw64/bin/g++ -x c++ -E -v - >/dev/null  # See tool paths.
+# echo '#include <cstdio>' | c:/mingw-w64/*/mingw64/bin/g++ -dM -E -x c++ - | grep -E '__GNUC__|__clang__|_UCRT|__MINGW32|_MSVC_STL_VERSION|__GLIBCXX__|_WIN32|__cplusplus|_MSVC_LANG|__CYGWIN'

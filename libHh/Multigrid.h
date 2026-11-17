@@ -1,0 +1,801 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_MULTIGRID_H_
+#define MESH_PROCESSING_LIBHH_MULTIGRID_H_
+
+#include "libHh/Advanced.h"  // unroll<>
+#include "libHh/Grid.h"
+#include "libHh/MathOp.h"
+#include "libHh/ParallelCoords.h"
+#include "libHh/RangeOp.h"
+#include "libHh/Set.h"
+#include "libHh/Stat.h"
+#include "libHh/Timer.h"
+#include "libHh/Vector4.h"
+
+#if 0
+{
+  Vec2<int> dims{ny, nx};
+  Multigrid<2, float> multigrid(dims);
+  fill(multigrid.initial_estimate(), 0.f);
+  multigrid.set_desired_mean(mean(value));
+  setup_rhs(grid_orig, multigrid.rhs());
+  if (optional)
+    for (const auto& u : range(dims)) multigrid.initial_estimate()[u] = some_value;
+  // Grid<2, float> grid_orig(dims); if (optional) multigrid.set_original(grid_orig);  // For convergence analysis.
+  multigrid.solve();
+  CGridView<2, float> grid_result = multigrid.result();
+  if (1) HH_RSTAT(Sresult, grid_result);
+}
+#endif
+
+namespace hh {
+
+#if !defined(HH_MULTIGRID_TIMER)  // Client can define HH_MULTIGRID_TIMER(name) as nothing to omit all the timers.
+#define HH_MULTIGRID_TIMER(name) HH_STIMER(name)
+#endif
+
+// Notes:
+//  See also precursor code test_Multigrid2D.cpp and test_Multigrid1D.cpp.
+
+// *** Helper functions
+
+// Possibly contract a vector to a scalar value by taking its norm.
+[[nodiscard]] inline float mag_e(float e) { return e; }
+[[nodiscard]] inline double mag_e(double e) { return e; }
+[[nodiscard]] inline float mag_e(const Vector4& e) { return sqrt(mag2(e)); }
+
+// Possibly contract a vector to a scalar value by taking its maximum coefficient value.
+[[nodiscard]] inline float max_e(float e) { return e; }
+[[nodiscard]] inline double max_e(double e) { return e; }
+[[nodiscard]] inline float max_e(const Vector4& e) { return max(e); }
+
+// Specialize mean() of Grid for parallelism.
+template <int D, Numeric T> [[nodiscard]] mean_type_t<T> mean(CGridView<D, T> g) {
+  static_assert(std::is_trivially_default_constructible_v<T>);
+  using MeanType = mean_type_t<T>;
+  MeanType v{};
+  const intptr_t size = g.size();
+  if (!size) {
+    Warning("Zero-size grid");
+    return v;
+  }
+  if (g.size() * 1 < k_parallel_thresh) {
+    for (const intptr_t i : range(size)) v += g.flat(i);
+  } else {
+    const int num_threads = get_max_threads();
+    Array<MeanType> sums(num_threads);
+    parallel_for_chunk(range(size), num_threads, [&](const int thread_index, auto subrange) {
+      MeanType chunk_sum{};
+      for (const intptr_t i : subrange) chunk_sum += g.flat(i);
+      sums[thread_index] = chunk_sum;
+    });
+    v = sum(sums);
+  }
+  return v * (1. / size);
+}
+template <int D, Numeric T> [[nodiscard]] mean_type_t<T> mean(GridView<D, T> g) {
+  return mean(static_cast<CGridView<D, T>>(g));
+}
+template <int D, Numeric T> [[nodiscard]] mean_type_t<T> mean(const Grid<D, T>& g) {
+  return mean(static_cast<CGridView<D, T>>(g));
+}
+
+// *** Specializations for Vector4
+
+// Specialize mean() to give sufficient precision on large Grid of Vector4 -- since missing mean_type<Vector4>.
+template <int D> [[nodiscard]] Vector4 mean(CGridView<D, Vector4> grid) {
+  Vec4<double> v;
+  fill(v, 0.);
+  for (const auto& e : grid) for_int(c, 4) v[c] += e[c];
+  v = v / double(assertx(grid.size()));
+  Vector4 vec;
+  for_int(c, 4) vec[c] = float(v[c]);
+  return vec;
+}
+template <int D> [[nodiscard]] Vector4 mean(GridView<D, Vector4> grid) {
+  return mean(static_cast<CGridView<D, Vector4>>(grid));
+}
+template <int D> [[nodiscard]] Vector4 mean(const Grid<D, Vector4>& grid) {
+  return mean(static_cast<CGridView<D, Vector4>>(grid));
+}
+
+// Specialize range_stat() to operate on magnitude of Vector4 elements.
+template <int D> [[nodiscard]] Stat range_stat(const Grid<D, Vector4>& range) {
+  Stat stat;
+  for (auto e : range) stat.enter(mag_e(e));
+  return stat;
+}
+
+// *** Multigrid solver
+
+// Domain boundary in each dimension can be periodic or Neumann.  Default is non-periodic on all dimensions.
+template <int D> struct MultigridPeriodicNone {  // Would return true if axis d were periodic.
+  bool operator()(int d) const {
+    ASSERTX(d >= 0 && d < D);
+    return false;
+  }
+};
+
+template <int D> struct MultigridPeriodicAll {
+  bool operator()(int d) const {
+    ASSERTX(d >= 0 && d < D);
+    return true;
+  }
+};
+
+// Laplacian can be anisotropic, with a transformation in each dimension.  Default is isotropic (identity).
+template <int D> struct MultigridMetricIsotropic {  // Would modify metric value v for axis d if anisotropic.
+  float operator()(float v, int d) const {
+    ASSERTX(d >= 0 && d < D);
+    return v;
+  }
+};
+
+// Solve a Poisson problem over D-dimensional domain with elements of type T using a multigrid solver,
+//  optionally with Periodic boundary conditions and with an anisotropic Metric on the Laplacian.
+template <int D, typename T, typename Periodic = MultigridPeriodicNone<D>,
+          typename Metric = MultigridMetricIsotropic<D>>
+class Multigrid : noncopyable {
+  using Precise = sum_type_t<T>;
+  static_assert(std::is_trivially_default_constructible_v<T>);  // For T{} zero-initialization.
+
+ public:
+  explicit Multigrid(const Vec<int, D>& dims) : _grid_result(dims), _grid_rhs(dims) {}  // Not zeroed!
+  void set_original(CGridView<D, T> grid_orig) {                                        // For optional error analysis.
+    _grid_orig.reinit(grid_orig);
+    assertx(same_size(_grid_orig, _grid_result));
+    _mean_orig = mean(grid_orig);
+    set_desired_mean(_mean_orig);
+  }
+  void set_desired_mean(const Precise& v) { _mean_desired = v, _have_mean_desired = true; }
+  void set_num_vcycles(int v) { _num_vcycles = v; }
+  [[nodiscard]] GridView<D, T>& rhs() { return _grid_rhs; }                  // Set right-hand-side constraints.
+  [[nodiscard]] GridView<D, T>& initial_estimate() { return _grid_result; }  // Should be set!
+  void set_verbose(bool v) { _verbose = v; }
+  void set_screening_weight(float v) { _screening_weight = v; }
+  void solve() { run_multigrid(_grid_rhs, _grid_result); }
+  void just_relax(int niter) { relax(_grid_rhs, _grid_result, niter, false); }
+  [[nodiscard]] CGridView<D, T> result() { return _grid_result; }  // Retrieve the result.
+ private:
+  Grid<D, T> _grid_result;
+  Grid<D, T> _grid_rhs;
+  CGridView<D, T> _grid_orig{nullptr, ntimes<D>(0)};  // Defined if have_orig().
+  Precise _mean_desired{BIGFLOAT};
+  bool _have_mean_desired{false};
+  Precise _mean_orig{BIGFLOAT};
+  int _num_vcycles{0};
+  bool _verbose{false};  // Include analysis of residual and error.
+  float _screening_weight{0.f};
+  Periodic _periodic;
+  Metric _metric;
+
+  static constexpr bool b_no_periodicity = std::is_same_v<Periodic, MultigridPeriodicNone<D>>;
+  static constexpr bool b_default_metric = std::is_same_v<Metric, MultigridMetricIsotropic<D>>;
+  static constexpr bool b_fastest = 0;
+  static constexpr int k_direct_solver_resolution = 2;  // = 2, 4, 8
+  static constexpr int k_num_iter_gauss_seidel = 2;     // 1, 2, 5, 10, 20, 100; note that 1 or 2 is sufficient.
+  static constexpr int k_default_num_vcycles = 0 ? 25 : std::is_same_v<T, double> ? 12 : 5;  // 5, 12, 16, 25, 50
+  static constexpr bool k_enable_specializations = b_no_periodicity && 1;
+
+  [[nodiscard]] bool have_orig() const { return !_grid_orig.empty(); }
+
+  static Vec<int, D> generate_interior_offsets(const Vec<int, D>& dims) {
+    // Each offset is the product of the subsequent dims.  (Using product(dims.slice(c + 1)) instead caused a
+    // false -Wmaybe-uninitialized from gcc 15 when it vectorized that product for AVX-512.)
+    Vec<int, D> ar_interior_offsets;
+    ar_interior_offsets[D - 1] = 1;
+    for (int c = D - 2; c >= 0; c--)
+      ar_interior_offsets[c] = assert_narrow_cast<int>(int64_t{ar_interior_offsets[c + 1]} * dims[c + 1]);
+    return ar_interior_offsets;
+  }
+  // Box filter on dual grid; dimensions are halved except along dimensions whose size is already 1.
+  Grid<D, T> dual_downsample(CGridView<D, T> grid) {
+    const Vec<int, D> dims = grid.dims();
+    assertx(max(dims) > 1);
+    const Vec<int, D> ndims = (dims + 1) / 2;
+    Grid<D, T> ngrid(ndims);
+    if constexpr (k_enable_specializations && D == 2) {
+      HH_MULTIGRID_TIMER("_downsample2");
+      assertx(!_periodic(0) && !_periodic(1));  // This case is handled by the non-specialized version below.
+      if (ndims[0] == dims[0]) {
+        for_int(y, ndims[0]) {
+          for_int(x, dims[1] / 2) ngrid[y, x] = (grid[y, x * 2 + 0] + grid[y, x * 2 + 1]) * .5f;
+          if (dims[1] % 2 == 1) ngrid[y, ndims[1] - 1] = grid[y, (ndims[1] - 1) * 2] * 1.f;  // Either .5f or 1.f.
+        }
+      } else if (ndims[1] == dims[1]) {
+        for_int(x, ndims[1]) {
+          for_int(y, dims[0] / 2) ngrid[y, x] = (grid[y * 2 + 0, x] + grid[y * 2 + 1, x]) * .5f;
+          if (dims[0] % 2 == 1) ngrid[ndims[0] - 1, x] = grid[(ndims[0] - 1) * 2, x] * 1.f;  // Either .5f or 1.f.
+        }
+      } else {
+        parallel_for({.cycles_per_elem = uint64_t(dims[1]) * 4}, range(dims[0] / 2), [&](const int y) {
+          for_int(x, dims[1] / 2) {
+            ngrid[y, x] = ((grid[y * 2 + 0, x * 2 + 0] + grid[y * 2 + 0, x * 2 + 1] + grid[y * 2 + 1, x * 2 + 0] +
+                            grid[y * 2 + 1, x * 2 + 1]) *
+                           .25f);
+          }
+        });
+        if (dims[0] % 2 == 1) {
+          const int y = ndims[0] - 1;
+          const float fac = dims[0] >= dims[1] ? .25f : .5f;  // Border-zero or reflected.
+          for_int(x, dims[1] / 2) ngrid[y, x] = (grid[y * 2, x * 2 + 0] + grid[y * 2, x * 2 + 1]) * fac;
+        }
+        if (dims[1] % 2 == 1) {
+          const int x = ndims[1] - 1;
+          const float fac = dims[1] >= dims[0] ? .25f : .5f;  // Border-zero or reflected.
+          for_int(y, dims[0] / 2) ngrid[y, x] = (grid[y * 2 + 0, x * 2] + grid[y * 2 + 1, x * 2]) * fac;
+        }
+        if (dims[0] % 2 == 1 && dims[1] % 2 == 1) {
+          const int y = ndims[0] - 1, x = ndims[1] - 1;
+          ngrid[y, x] = grid[y * 2, x * 2] * .25f;  // Either .25f or 1.f.
+        }
+      }
+    } else {
+      HH_MULTIGRID_TIMER("_downsample");
+      // Uses a box filter of width 2, except that the filter has extent 1 along dimensions whose size is already 1.
+      Vec<int, D> vrange;
+      for_int(c, D) vrange[c] = dims[c] > 1 ? 2 : 1;
+      assertx(product(vrange) > 1);
+      float fac = 1.f / product(vrange);
+      int largest_odd_size = 0, largest_other_size = 0;
+      for (int d : dims) {
+        if (d % 2 == 1 && d > largest_odd_size) std::swap(d, largest_odd_size);
+        largest_other_size = max(largest_other_size, d);
+      }
+      T cval{};
+      // Easy inside part [0, dims / 2 - 1]:
+      parallel_for_coords({.cycles_per_elem = uint64_t(product(vrange)) * 2}, dims / 2, [&](const Vec<int, D>& u) {
+        T v{};
+        for (const auto& ut : range(u * 2, u * 2 + vrange)) v += grid[ut];
+        ngrid[u] = v * fac;
+      });
+      // The optional D leftover hyperplanes [dims / 2, ndims - 1] for odd sizes.
+      Vec<Extension, D> extensions;
+      for_int(d, D) {  // These extensions were chosen because they behave well empirically.
+        extensions[d] = (_periodic(d)                             ? Extension::border
+                         : largest_odd_size >= largest_other_size ? Extension::border
+                                                                  : Extension::reflect);
+      }
+      for_int(c, D) {
+        const Vec<int, D> uL = ntimes<D>(0).with(c, dims[c] / 2);
+        const Vec<int, D> uU = ndims;
+        for (const auto& u : range(uL, uU)) {
+          T v{};
+          for (const auto& ut : range(u * 2, u * 2 + vrange)) v += grid.inside(ut, extensions, &cval);
+          ngrid[u] = v * fac;
+        }
+      }
+    }
+    return ngrid;
+  }
+  // Box filter on dual grid; each dimension becomes 2x, unless specified by destsize (which can be 2x -1).
+  Grid<D, T> dual_upsample(CGridView<D, T> grid, const Vec<int, D>* destdims = nullptr) {
+    const Vec<int, D> dims = grid.dims();
+    const Vec<int, D> ndims = destdims ? *destdims : dims * 2;
+    for_int(c, D) assertx(ndims[c] == dims[c] * 2 || ndims[c] == dims[c] * 2 - 1);
+    Grid<D, T> ngrid(ndims);
+    if constexpr (k_enable_specializations && D == 2) {
+      HH_MULTIGRID_TIMER("_upsample2");
+      // Transpose of the box filter: tensor({(1 0), (0 1)}).
+      parallel_for({.cycles_per_elem = uint64_t(ndims[1]) * 1}, range(ndims[0]), [&](const int y) {  //
+        for_int(x, ndims[1]) ngrid[y, x] = grid[y / 2, x / 2];
+      });
+    } else {
+      HH_MULTIGRID_TIMER("_upsample");
+      // Transpose of the box filter.
+      // for (const auto& u : range(ndims)) ngrid[u] = grid[u/2];
+      parallel_for_coords(ndims, [&](const Vec<int, D>& u) { ngrid[u] = grid[u / 2]; });
+    }
+    return ngrid;
+  }
+  // Returns the Laplacian weight at the given grid resolution.
+  float get_wL(const Vec<int, D>& gdims) {
+    float h = 1.f;
+    Vec<int, D> dims = _grid_rhs.dims();
+    for (;;) {
+      for_int(c, D) assertx(dims[c] >= gdims[c]);
+      if (dims == gdims) break;
+      assertx(max(dims) > 1);
+      const Vec<int, D> ndims = (dims + 1) / 2;
+      h = h * 2.f;
+      dims = ndims;
+    }
+    // 1 / h^2 due to discretization of the second derivative, as in Multigrid Tutorial.
+    const float wL = square(1.f / h);
+    return wL;
+  }
+  // Perform niter iterations of Gauss-Seidel relaxation, possibly with extra iterations near
+  //   the ends of the grid for odd grid dimensions.
+  void relax(CGridView<D, T> grid_rhs, GridView<D, T> grid_result, int niter, bool extra) {
+    assertx(same_size(grid_rhs, grid_result));
+    const Vec<int, D> dims = grid_rhs.dims();
+    if (product(dims) == 1) {
+      Warning("relax of singleton");
+      return;
+    }
+    if (0 && k_enable_specializations && D == 1) {
+      // I tried implementing this but it was no faster for mingw 4.8.1.
+    } else if constexpr (k_enable_specializations && D == 2) {
+      HH_MULTIGRID_TIMER("_relax2");
+      int ny = dims[0], nx = dims[1];
+      const float wL = get_wL(dims), rwL4 = 1.f / (4.f * wL + _screening_weight);
+      const auto func_update = [&](int y, int x) {
+        T vnei{};
+        float w, vnum = _screening_weight;  // Or 0.f.
+        w = _metric(wL, 0);
+        if (y > 0) {
+          vnei += w * grid_result[y - 1, x];
+          vnum += w;
+        } else if (_periodic(0)) {
+          vnei += w * grid_result[ny - 1, x];
+          vnum += w;
+        }
+        if (y < ny - 1) {
+          vnei += w * grid_result[y + 1, x];
+          vnum += w;
+        } else if (_periodic(0)) {
+          vnei += w * grid_result[0, x];
+          vnum += w;
+        }
+        w = _metric(wL, 1);
+        if (x > 0) {
+          vnei += w * grid_result[y, x - 1];
+          vnum += w;
+        } else if (_periodic(1)) {
+          vnei += w * grid_result[y, nx - 1];
+          vnum += w;
+        }
+        if (x < nx - 1) {
+          vnei += w * grid_result[y, x + 1];
+          vnum += w;
+        } else if (_periodic(1)) {
+          vnei += w * grid_result[y, 0];
+          vnum += w;
+        }
+        grid_result[y, x] = (vnei - grid_rhs[y, x]) / vnum;
+      };
+      const auto func_update_interior = [&](int y, int x) {
+        if (1) ASSERTX(true && b_default_metric);
+        const auto vsum = (grid_result[y - 1, x + 0] + grid_result[y + 1, x + 0] + grid_result[y + 0, x - 1] +
+                           grid_result[y + 0, x + 1]);
+        grid_result[y, x] = (vsum * wL - grid_rhs[y, x]) * rwL4;  // OPT:relax2
+      };
+      for_int(iter, niter) {
+        if (0 || (grid_rhs.size() * 10 < k_parallel_thresh && 1)) {  // A simple sequential version.
+          for_int(y, ny) for_int(x, nx) func_update(y, x);
+        } else {  // Two-stage row-based synchronization to preserve determinism.
+          int nthreads = get_max_threads();
+          const int sync_rows = 1;  // Rows per chunk to omit in the first pass to avoid synchronization issues.
+          const int ychunk = max((ny - 1) / nthreads + 1, sync_rows * 2);
+          nthreads = (ny + ychunk - 1) / ychunk;
+          parallel_for(range(nthreads), [&](const int thread) {
+            const int y0 = thread * ychunk, yn = min((thread + 1) * ychunk, ny) - sync_rows;
+            if (0) for_intL(y, y0, yn) for_int(x, nx) func_update(y, x);
+            if (1 && b_default_metric) {
+              for_2dL_interior(y0, yn, 0, nx, func_update, func_update_interior);
+            } else {
+              for_2dL(y0, yn, 0, nx, func_update);
+            }
+            // mingw 4096 4096: for_intL: 0.58 sec* for_2dL_interior: 0.64 sec  for_2dL: 0.83 sec
+            // win   4096 4096: for_intL: 1.84 sec  for_2dL_interior: 1.19 sec* for_2dL: 1.83 sec
+          });
+          const ParallelOptions parallel_options{.cycles_per_elem = uint64_t(nx * size_t{sync_rows} * 10 / nthreads)};
+          parallel_for(parallel_options, range(nthreads), [&](const int thread) {
+            const int overlap = 0;  // = {1, 2} does not seem to help much over = 0.
+            const int y0 = min((thread + 1) * ychunk, ny) - sync_rows, yn = min((thread + 1) * ychunk + overlap, ny);
+            for_2dL(y0, yn, 0, nx, func_update);
+          });
+        }
+        if (extra && 1) {  // Perform additional relaxations near the ends of dimensions with odd sizes.
+          const int extra_niter = 30;
+          const int extra_size = 6;
+          if (ny > 1 && ny % 2 == 1)
+            for_int(extra_iter, extra_niter) for_2dL(max(ny - extra_size, 0), ny, 0, nx, func_update);
+          if (nx > 1 && nx % 2 == 1)
+            for_int(extra_iter, extra_niter) for_2dL(0, ny, max(nx - extra_size, 0), nx, func_update);
+        }
+      }
+    } else {  // !constexpr (k_enable_specializations && D == 2)
+      HH_MULTIGRID_TIMER("_relax");
+      const float wL = get_wL(dims), rwLnum = 1.f / ((2.f * D * wL) + _screening_weight);
+      // const bool is_finest = same_size(grid_rhs, _grid_rhs);
+      // atomic<int64_t> g_nfast{0}, g_nslow{0};
+      const auto func_update = [&](const Vec<int, D>& u) {  // Gauss-Seidel update of the value at u.
+        // ++g_nslow;
+        T vnei{};
+        float vnum = _screening_weight;  // Or 0.f.
+        const Vec<int, D> dims2 = dims;
+        for_int(c, D) {
+          const float w = _metric(wL, c);
+          const bool b = _periodic(c);
+          if (u[c] > 0) {
+            vnei += w * grid_result[u.with(c, u[c] - 1)];
+            vnum += w;
+          } else if (b) {
+            vnei += w * grid_result[u.with(c, dims2[c] - 1)];
+            vnum += w;
+          }
+          if (u[c] < dims2[c] - 1) {
+            vnei += w * grid_result[u.with(c, u[c] + 1)];
+            vnum += w;
+          } else if (b) {
+            vnei += w * grid_result[u.with(c, 0)];
+            vnum += w;
+          }
+        }
+        grid_result[u] = (vnei - grid_rhs[u]) / vnum;
+      };
+      const Vec<int, D> ar_interior_offsets = generate_interior_offsets(dims);
+      const auto func_update_interior = [&](size_t i) {
+        // Added "true &&" to prevent taking a reference to the constexpr.
+        // Added "if (1)" to avoid warnings about unreachable code.
+        if (1) ASSERTX(true && b_default_metric);
+        // ++g_nfast;
+        T vnei{};
+        if (0) {
+          for (const int o : ar_interior_offsets) vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+        } else if constexpr (D <= 3) {
+          // Get rid of the &vnei lambda capture, which forces stack allocation on VS2013.
+          if constexpr (D > 0) {
+            const int o = ar_interior_offsets[0];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          }
+          if constexpr (D > 1) {
+            const int o = ar_interior_offsets[1];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          }
+          if constexpr (D > 2) {
+            const int o = ar_interior_offsets[2];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          }
+        } else {
+          unroll<2 * D>([&](int j) {
+            int o = ar_interior_offsets[j];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          });
+        }
+        grid_result.flat(i) = (vnei * wL - grid_rhs.flat(i)) * rwLnum;  // OPT:relax
+      };
+      // The two parallel strategies below both partition the grid into blocks along a single axis and 2-color those
+      //  blocks so that no two concurrently relaxed regions are ever adjacent.  A thread therefore never reads an
+      //  element that another thread is writing, and the result is deterministic for a given number of threads.
+      //  They differ in the shape of the 2-coloring and in their memory behavior:
+      //  - Even-odd slabs (2 <= D <= 4) splits the axis into slabs of nearly equal width, and relaxes the even slabs
+      //    and then the odd ones.  Within a slab, the remaining dimensions are traversed as cache-sized hypercolumns,
+      //    and each hypercolumn is relaxed niter times while it is still resident in cache.  Full occupancy requires
+      //    about 4 * nthreads elements along the axis, because it needs 2 * nthreads slabs of nonunit width.  Its
+      //    coloring is valid under periodic boundaries only because the number of slabs is forced to be even below.
+      //  - Body and seam (the fallback) splits dim0 into one chunk per thread, relaxes each chunk except its last
+      //    sync_rows rows, and then relaxes the omitted seams.  Full occupancy requires only 2 * nthreads rows along
+      //    dim0, and its coloring is valid under periodic boundaries for free, because a seam never falls on row 0.
+      //    However, it does no cache blocking and no local iteration, so each of the niter sweeps restreams the
+      //    entire grid from memory.
+      //  We keep both.  The fallback is the only option for D == 1 and for D > 4, where the hypercolumn width (which
+      //  shrinks as pow(cache_size, 1 / (D - 1))) becomes degenerate.  Conversely, the cache blocking and local
+      //  iteration of the even-odd version are a large win for the image and video cases that dominate.
+      for_int(iter, niter) {
+        if (0 || (grid_rhs.size() * 10 < k_parallel_thresh && 1)) {
+          if (1 && b_default_metric) {
+            for_coordsL_interior(dims, ntimes<D>(0), dims, func_update, func_update_interior);
+          } else {
+            for (const auto& u : range(dims)) func_update(u);
+          }
+        } else if (1 && D >= 2 && D <= 4) {  // Even-odd parallelism on one axis; hypercolumns on other dims; fast.
+          assertx(D <= 4);                   // Large D would make block_dims too small.
+          const int overlap = 0;             // Amount to extend each slab side to obtain overlapping Gauss-Seidel.
+          const Vec<int, D> voverlap = ntimes<D>(overlap);
+          const int nthreads = get_max_threads();
+          // We apply even-odd phasing and parallelism along a single axis, and traverse the remaining dimensions
+          //  sequentially within each slab, as cache blocking.  The innermost dimension is never selected because
+          //  slabs perpendicular to it would interleave in memory and cause false sharing.  We favor the outermost
+          //  axis for its streaming access pattern, and consider a later axis only if the current axis lacks the
+          //  extent for full parallelism and the later axis is substantially larger.
+          const int min_slab_width = 2;  // The niter local Gauss-Seidel sweeps propagate about this far.
+          const int desired_extent = nthreads * 2 * min_slab_width;
+          int axis = 0;
+          for_intL(c, 1, D - 1) if (dims[axis] < desired_extent && dims[c] > dims[axis] * 2) axis = c;
+          if (_verbose && dims[axis] < nthreads * 2) showf("Multigrid relaxation has limited parallelism\n");
+          Vec<int, D> block_dims;  // Hypercolumn dimensions, for cache blocking within a slab.
+          {
+            const int L2_cache_size = 4 * 1024 * 1024 / 8;  // Conservatively assume 4 MiB shared among 8 threads.
+            const int num_grids = 3 + 1, fudge = 4;         // 3 rows of grid_result, grid_rhs, plus some extra.
+            const int col_width =
+                int(pow(std::floor(float(L2_cache_size) / sizeof(T)) / (num_grids + fudge), 1.f / (D - 1.0001f)));
+            block_dims = ntimes<D>(col_width);
+          }
+          // A slab already spans a single extent along axis, so it holds a single block there.
+          const Vec<int, D> num_blocks = ((dims - 1) / block_dims + 1).with(axis, 1);
+          block_dims = (dims - 1) / num_blocks + 1;  // Adjust block_dims for the most uniform partition.
+          int slab_width = max((dims[axis] - 1) / (nthreads * 2) + 1, 1);
+          const int num_slab_pairs = (dims[axis] - 1) / (slab_width * 2) + 1;
+          slab_width = ((dims[axis] - 1) / num_slab_pairs + 1 - 1) / 2 + 1;  // The most uniform partition.
+          // The even-odd phases guarantee that concurrently relaxed slabs are never adjacent, but only if the last
+          //  non-empty slab has an odd index; otherwise, it is adjacent to slab 0 under periodic boundary conditions,
+          //  causing a data race.  Because slab_width is rounded up, the final odd slab is usually empty, so we force
+          //  an even number of slabs and let the last one absorb the remaining elements.
+          const int num_slabs = max(((dims[axis] - 1) / slab_width + 1) / 2 * 2, 1);
+          // SHOW(dims, axis, block_dims, num_blocks, slab_width, num_slabs);
+          const bool local_iter = true;
+          for_int(eo, 2) {  // Relax the even slabs, then the odd slabs.
+            const auto func_relax_slab = [&](const int slab_pair) {
+              const int slab = slab_pair * 2 + eo;
+              if (slab >= num_slabs) return;  // The odd slab is absent if there is a single slab.
+              const int slab_uL = min(slab * slab_width, dims[axis]);
+              const int slab_uU = slab == num_slabs - 1 ? dims[axis] : min((slab + 1) * slab_width, dims[axis]);
+              for (const auto& blocki : range(num_blocks)) {
+                Vec<int, D> uL = clamp((blocki + 0) * block_dims - voverlap, ntimes<D>(0), dims);
+                Vec<int, D> uU = clamp((blocki + 1) * block_dims + voverlap, ntimes<D>(0), dims);
+                uL[axis] = slab_uL, uU[axis] = slab_uU;
+                // { std::scoped_lock lock(s_mutex); SHOW(dims, uL, uU); }
+                for_int(iter2, local_iter ? niter : 1) {  // Implement as streaming?
+                  for_coordsL_interior(dims, uL, uU, func_update, func_update_interior);
+                }
+              }
+            };
+            parallel_for(range((num_slabs + 1) / 2), func_relax_slab);
+          }
+          if (local_iter) break;
+        } else {  // Parallelism across dim0 blocks; two-stage synchronization to preserve determinism.
+          int nthreads = get_max_threads();
+          const int sync_rows = 1;  // Rows per chunk to omit in the first pass to avoid synchronization issues.
+          int dim0 = dims[0], d0chunk = max((dims[0] - 1) / nthreads + 1, sync_rows * 2);
+          nthreads = (dim0 + d0chunk - 1) / d0chunk;
+          parallel_for(range(nthreads), [&](const int thread) {  // The k_parallel_thresh is already tested above.
+            const Vec<int, D> uL = ntimes<D>(0).with(0, thread * d0chunk);
+            const Vec<int, D> uU = dims.with(0, min((thread + 1) * d0chunk, dim0) - sync_rows);
+            if (1 && b_default_metric) {
+              // { std::scoped_lock lock(s_mutex); SHOW(dims, uL, uU); }
+              for_coordsL_interior(dims, uL, uU, func_update, func_update_interior);
+            } else {
+              for (const auto& u : range(uL, uU)) func_update(u);
+            }
+          });
+          // Parallelism is useful for small dimensions like video frames.
+          parallel_for(range(nthreads), [&](const int thread) {
+            const int overlap = 0;  // = {1, 2} does not seem to help much over = 0.
+            const Vec<int, D> uL = ntimes<D>(0).with(0, min((thread + 1) * d0chunk, dim0) - sync_rows);
+            const Vec<int, D> uU = dims.with(0, min((thread + 1) * d0chunk + overlap, dim0));
+            // for (const auto& u : range(uL, uU)) func_update(u);
+            if (b_default_metric) {
+              for_coordsL_interior(dims, uL, uU, func_update, func_update_interior);
+            } else {
+              for (const auto& u : range(uL, uU)) func_update(u);
+            }
+          });
+        }
+      }
+      if (extra && 1) {  // Perform additional relaxations near the ends of dimensions with odd sizes.
+        // We also tried using custom relaxation kernels near end boundaries but it did not work well.
+        for_int(iter, 3) {
+          int extra_niter = 30, extra_size = 6;
+          if constexpr (D == 3) {  // Reduce the computational cost on Video.
+            extra_niter = 5;
+            extra_size = 3;
+          }
+          for_int(c, D) {
+            if (!(dims[c] > 1 && dims[c] % 2 == 1)) continue;
+            for_int(extra_iter, extra_niter) {
+              const Vec<int, D> uL = ntimes<D>(0).with(c, max(dims[c] - extra_size, 0));
+              const Vec<int, D> uU = dims;
+              if (b_default_metric) {
+                for_coordsL_interior(dims, uL, uU, func_update, func_update_interior);
+              } else {
+                for (const auto& u : range(uL, uU)) func_update(u);
+              }
+            }
+          }
+        }
+      }
+      // SHOW(g_nfast, g_nslow);
+    }
+  }
+
+  // Compute the residual of the Laplacian:  grid_rhs - Laplacian * grid_result .
+  Grid<D, T> compute_residual(CGridView<D, T> grid_rhs, CGridView<D, T> grid_result) {
+    const Vec<int, D> dims = grid_rhs.dims();
+    assertx(same_size(grid_rhs, grid_result));
+    Grid<D, T> grid_residual(dims);
+    if constexpr (k_enable_specializations && D == 2) {
+      HH_MULTIGRID_TIMER("_compute_residual2");
+      int ny = dims[0], nx = dims[1];
+      const float wL = get_wL(dims), wL4 = _screening_weight + wL * 4.f;
+      const auto func = [&](int y, int x) {
+        T vnei{};
+        float w, vnum = _screening_weight;  // Or 0.f.
+        w = _metric(wL, 0);
+        if (y > 0) {
+          vnei += w * grid_result[y - 1, x];
+          vnum += w;
+        } else if (_periodic(0)) {
+          vnei += w * grid_result[ny - 1, x];
+          vnum += w;
+        }
+        if (y < ny - 1) {
+          vnei += w * grid_result[y + 1, x];
+          vnum += w;
+        } else if (_periodic(0)) {
+          vnei += w * grid_result[0, x];
+          vnum += w;
+        }
+        w = _metric(wL, 1);
+        if (x > 0) {
+          vnei += w * grid_result[y, x - 1];
+          vnum += w;
+        } else if (_periodic(1)) {
+          vnei += w * grid_result[y, nx - 1];
+          vnum += w;
+        }
+        if (x < nx - 1) {
+          vnei += w * grid_result[y, x + 1];
+          vnum += w;
+        } else if (_periodic(1)) {
+          vnei += w * grid_result[y, 0];
+          vnum += w;
+        }
+        grid_residual[y, x] = grid_rhs[y, x] - (vnei - vnum * grid_result[y, x]);
+      };
+      const auto func_interior = [grid_result, wL, wL4, grid_rhs, &grid_residual](int y, int x) {
+        if (1) ASSERTX(true && b_default_metric);
+        T vnei = (grid_result[y - 1, x + 0] + grid_result[y + 1, x + 0] + grid_result[y + 0, x - 1] +
+                  grid_result[y + 0, x + 1]);
+        grid_residual[y, x] = grid_rhs[y, x] - (wL * vnei - wL4 * grid_result[y, x]);  // OPT:resid2
+      };
+      dummy_use(func_interior);
+      // VS2012: does not inline lambda in any case; all similar; first choice is slightly better.
+      // gcc4.8.1: always produces good code (even creating func_interior() automatically).
+      if (1)
+        parallel_for({.cycles_per_elem = uint64_t(nx) * 10}, range(ny),
+                     [&](const int y) { for_int(x, nx) func(y, x); });
+      if (0) parallel_for_2dL(0, ny, 0, nx, func);
+      if (0) parallel_for_2dL_interior(0, ny, 0, nx, func, func_interior);
+    } else {
+      HH_MULTIGRID_TIMER("_compute_residual");
+      const float wL = get_wL(dims);
+      const auto func = [&](const Vec<int, D>& u) {
+        T vnei{};
+        float vnum = _screening_weight;  // Or 0.f.
+        for_int(c, D) {
+          const float w = _metric(wL, c);
+          const bool b = _periodic(c);
+          if (u[c] > 0) {
+            vnei += w * grid_result[u.with(c, u[c] - 1)];
+            vnum += w;
+          } else if (b) {
+            vnei += w * grid_result[u.with(c, dims[c] - 1)];
+            vnum += w;
+          }
+          if (u[c] < dims[c] - 1) {
+            vnei += w * grid_result[u.with(c, u[c] + 1)];
+            vnum += w;
+          } else if (b) {
+            vnei += w * grid_result[u.with(c, 0)];
+            vnum += w;
+          }
+        }
+        grid_residual[u] = grid_rhs[u] - (vnei - vnum * grid_result[u]);  // The residual of the Laplacian.
+      };
+      const Vec<int, D> ar_interior_offsets = generate_interior_offsets(dims);
+      const auto func_interior = [&](size_t i) {
+        if (1) ASSERTX(true && b_default_metric);
+        T vnei{};
+        if (0) {
+          for (const int o : ar_interior_offsets) vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+        } else {
+          if constexpr (D > 0) {
+            const int o = ar_interior_offsets[0];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          }
+          if constexpr (D > 1) {
+            const int o = ar_interior_offsets[1];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          }
+          if constexpr (D > 2) {
+            const int o = ar_interior_offsets[2];
+            vnei += grid_result.flat(i + o) + grid_result.flat(i - o);
+          }
+          static_assert(D <= 3);
+        }
+        const float vnum = _screening_weight + wL * (2.f * D);
+        grid_residual.flat(i) = grid_rhs.flat(i) - (wL * vnei - vnum * grid_result.flat(i));  // OPT:resid
+      };
+      if (0)
+        for (const auto& u : range(dims)) func(u);
+      if (1 && b_default_metric) {
+        parallel_d0_for_coordsL_interior(dims, ntimes<D>(0), dims, func, func_interior);
+      } else {
+        parallel_for_coords(dims, func);
+      }
+    }
+    return grid_residual;
+  }
+  // Creates solution with unconstrained mean.
+  void run_direct_solver(CGridView<D, T> grid_rhs, GridView<D, T> grid_result) {
+    // Just run many iterations of Gauss-Seidel.
+    assertx(grid_result.size() <= 16);
+    relax(grid_rhs, grid_result, 100, false);
+  }
+  // Print statistics at each V-cycle iteration, including error if the exact original solution is known.
+  void analyze_error(const string& s) {
+    HH_MULTIGRID_TIMER("_analyze");
+    // Stat stat(s, true); stat.set_rms(); for (auto e : grid_result - _grid_orig) stat.enter(mag_e(e));
+    const Precise mean_result = mean(_grid_result);
+    const double rms_resid = mag_e(rms(compute_residual(_grid_rhs, _grid_result)));
+    const double rms_err =
+        !have_orig() ? 0. : mag_e(rms(_grid_result - _grid_orig + static_cast<T>(_mean_orig - mean_result)));
+    const double max_abs_err =
+        (!have_orig() ? 0.
+                      : max_e(max_abs_element(_grid_result - _grid_orig + static_cast<T>(_mean_orig - mean_result))));
+    const string smean_off = !_have_mean_desired ? "" : sform(" smean_off=%-12g", mag_e(mean_result - _mean_desired));
+    showf("%9s: mean=%-12g%s rms_resid=%-12g rms_e=%-12g max_e=%g\n",  //
+          s.c_str(), mag_e(mean_result), smean_off.c_str(), rms_resid, rms_err, max_abs_err);
+  }
+  bool coarse_enough(CGridView<D, T> grid_rhs) { return max(grid_rhs.dims()) <= k_direct_solver_resolution; }
+  // Recursively perform a multigrid V-cyce.
+  void rec_vcycle(CGridView<D, T> grid_rhs, GridView<D, T> grid_result) {
+    assertx(same_size(grid_rhs, grid_result));
+    static Set<size_t> set_debug;
+    if (0 && set_debug.add(grid_rhs.size())) showf("rec_vcycle dims=%s\n", make_string(grid_rhs.dims()).c_str());
+    const bool vverbose = 0;
+    if (coarse_enough(grid_rhs)) {
+      run_direct_solver(grid_rhs, grid_result);
+      return;
+    }
+    const double rms0 = vverbose ? mag_e(rms(compute_residual(grid_rhs, grid_result))) : 0.;
+    relax(grid_rhs, grid_result, k_num_iter_gauss_seidel, false);
+    Grid<D, T> grid_newrhs;
+    double rms1;
+    {
+      const Grid<D, T> grid_residual = compute_residual(grid_rhs, grid_result);
+      rms1 = vverbose ? mag_e(rms(grid_residual)) : 0.;
+      grid_newrhs = dual_downsample(grid_residual);
+      if (0) SHOW(rms(grid_newrhs) / rms(grid_residual));
+    }
+    Grid<D, T> grid_newresult(grid_newrhs.dims(), T{0});
+    const int num_recursions = 1;  // 1 == V-cycle, 2 == W-cycle.
+    for_int(k, num_recursions) rec_vcycle(grid_newrhs, grid_newresult);
+    const Grid<D, T> grid_correction = dual_upsample(grid_newresult, &grid_result.dims());
+    {
+      HH_MULTIGRID_TIMER("_add_correction");
+      grid_result += grid_correction;
+    }
+    const double rms2 = vverbose ? mag_e(rms(compute_residual(grid_rhs, grid_result))) : 0.;
+    relax(grid_rhs, grid_result, k_num_iter_gauss_seidel, true);
+    const double rms3 = vverbose ? mag_e(rms(compute_residual(grid_rhs, grid_result))) : 0.;
+    if (vverbose)
+      showf(" resy=%-7d  rms0=%-12.7e rms1=%-12.7e   rms2=%-12.7e rms3=%-12.7e\n",  //
+            grid_rhs.dim(0), rms0, rms1, rms2, rms3);
+  }
+  // Perform a sequence of multigrid V-cycles.
+  void run_multigrid(CGridView<D, T> grid_rhs, GridView<D, T> grid_result) {
+    HH_MULTIGRID_TIMER("multigrid");
+    assertx(same_size(grid_rhs, grid_result));
+    // TODO: Implement a streaming multigrid algorithm (faster and less memory usage).
+    if (getenv_bool("MULTIGRID_VERBOSE")) _verbose = true;
+    bool is_power_of_2 = true;
+    for_int(c, D) {
+      if (!is_pow2(_grid_rhs.dim(c))) is_power_of_2 = false;
+    }
+    if (0) ASSERTX(mag_e(rms(grid_result)) == 0.);  // A good starting state for numerical accuracy?
+    if (!_num_vcycles) _num_vcycles = k_default_num_vcycles;
+    for_int(vcycle, _num_vcycles) {
+      {
+        HH_MULTIGRID_TIMER("vcycle");
+        rec_vcycle(grid_rhs, grid_result);
+      }
+      if (0) grid_result -= static_cast<T>(mean(grid_result));  // Does not help in reducing rms(err).
+      if (!b_fastest && (1 || !is_power_of_2) && _have_mean_desired) {
+        // For odd grid sizes, the mean value may drift significantly due to an inaccurate Galerkin condition.
+        grid_result += static_cast<T>(_mean_desired - mean(grid_result));
+      } else {
+        // Staying near the original mean value of zero is generally OK.
+      }
+      if (_verbose) analyze_error(sform("vcycle%-2d", vcycle + 1));  // Relatively slow.
+    }
+    if (_have_mean_desired) grid_result += static_cast<T>(_mean_desired - mean(grid_result));
+    if (_verbose) analyze_error("Finalerr");
+  }
+};
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_MULTIGRID_H_

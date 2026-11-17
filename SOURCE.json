@@ -1,0 +1,5 @@
+{
+  "repo": "hhoppe/mesh-processing-library",
+  "commit": "cede976894c485d552f233735952271a9529d618",
+  "excluded": "unneeded upstream programs, optional tests/docs/assets; production library code retained"
+}

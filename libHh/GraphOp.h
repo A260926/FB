@@ -1,0 +1,275 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_GRAPHOP_H_
+#define MESH_PROCESSING_LIBHH_GRAPHOP_H_
+
+#include "libHh/Array.h"
+#include "libHh/Geometry.h"
+#include "libHh/Graph.h"
+#include "libHh/PriorityQueue.h"
+#include "libHh/Queue.h"
+#include "libHh/RangeOp.h"  // fill(), truncate()
+#include "libHh/Set.h"
+#include "libHh/Spatial.h"
+#include "libHh/Stat.h"
+#include "libHh/UnionFind.h"
+
+namespace hh {
+
+// Add edges to a graph to make it symmetric.
+template <typename T> void graph_symmetric_closure(Graph<T>& g) {
+  for (const T& v1 : g.vertices())
+    for (const T& v2 : g.edges(v1))
+      if (!g.contains(v2, v1)) g.enter(v2, v1);
+}
+
+// Given a graph (possibly directed), return vertices in order of increasing graph distance from vs.
+// Single-pass iteration: "for (const auto& [v, dist] : dijkstra) ...".  (Vertex vs itself is the first element.)
+// The default Distance is a pointer to a function, which must then be passed to the constructor.
+template <typename T, invocable_r<float, const T&, const T&> Distance = float (*)(const T& v1, const T& v2)>
+class Dijkstra : noncopyable {
+ public:
+  explicit Dijkstra(const Graph<T>* g, T vs, Distance fdist = Distance{}) : _g(*assertx(g)), _fdist(fdist) {
+    if constexpr (std::is_pointer_v<Distance>) assertx(_fdist);
+    _pq.enter(vs, 0.f);
+    advance();  // Compute the first element, so that begin() and empty() need not do any work.
+  }
+  struct Result {
+    T vertex;
+    float dist;  // Graph distance from vs.
+  };
+  using Iterator = CursorIterator<Dijkstra>;
+  [[nodiscard]] Iterator begin() noexcept { return Iterator(*this); }
+  [[nodiscard]] std::default_sentinel_t end() const noexcept { return {}; }
+  // Also the customization point for ranges::empty(), whose begin() == end() fallback requires a forward range.
+  [[nodiscard]] bool empty() const noexcept { return _done; }
+
+ private:
+  friend CursorIterator<Dijkstra>;
+  [[nodiscard]] const Result& current() const { return _result; }
+  void advance() {
+    if (_pq.empty()) return void(_done = true);
+    const float dmin = _pq.min_priority();
+    const T vmin = _pq.remove_min();
+    _set.enter(vmin);
+    for (const T& v : _g.edges(vmin)) {
+      if (_set.contains(v)) continue;
+      const float pnd = dmin + _fdist(vmin, v);  // Possibly smaller distance.
+      _pq.enter_update_if_smaller(v, pnd);
+    }
+    _result = {vmin, dmin};
+  }
+
+  const Graph<T>& _g;
+  Distance _fdist;
+  UpdatablePriorityQueue<T> _pq;
+  Set<T> _set;
+  Result _result{};
+  bool _done{false};
+};
+
+// Template deduction guide:
+template <typename T, typename Distance> Dijkstra(const Graph<T>*, T, Distance) -> Dijkstra<T, Distance>;
+
+// *** Kruskal MST
+
+template <typename T> struct MstResult {
+  Graph<T> tree;
+  bool is_connected;
+};
+
+// Returns [gnew, is_connected] where gnew is the minimum spanning tree of undirectedg under the cost metric fdist.
+// Implementation: Kruskal's algorithm, O(e log(e)).  (Prim's is recommended when e is O(n^2); see below.)
+template <typename T, invocable_r<float, const T&, const T&> Func>
+[[nodiscard]] auto graph_mst(const Graph<T>& undirectedg, Func fdist) -> MstResult<T> {
+  MstResult<T> result;
+  Graph<T>& gnew = result.tree;
+  for (const T& v : undirectedg.vertices()) gnew.enter(v);
+  int nv = 0, nebefore = 0;
+  struct tedge {
+    T v1, v2;
+    float w;
+  };
+  Array<tedge> tedges;
+  for (const T& v1 : undirectedg.vertices()) {
+    nv++;
+    for (const T& v2 : undirectedg.edges(v1)) {
+      if (v1 < v2) continue;
+      nebefore++;
+      tedges.push(tedge{v1, v2, fdist(v1, v2)});
+    }
+  }
+  const auto by_increasing_weight = [](const tedge& a, const tedge& b) { return a.w < b.w; };
+  sort(tedges, by_increasing_weight);
+  UnionFind<T> uf;
+  int neconsidered = 0, neadded = 0;
+  for (const tedge& t : tedges) {
+    neconsidered++;
+    T v1 = t.v1, v2 = t.v2;
+    if (!uf.unify(v1, v2)) continue;
+    gnew.enter_undirected(v1, v2);
+    neadded++;
+    if (neadded == nv - 1) break;
+  }
+  showf("graph_mst: %d vertices, %d/%d edges considered, %d output\n", nv, neconsidered, nebefore, neadded);
+  result.is_connected = neadded == nv - 1;
+  return result;
+}
+
+// *** Prim MST
+
+// Returns a undirected graph that is the minimum spanning tree of the full graph
+//  between the num points, where the cost metric between two points v1 and v2 is fdist(v1, v2).
+// Implementation: Prim's algorithm, complexity O(n^2)!
+template <invocable_r<float, int, int> Func> [[nodiscard]] Graph<int> graph_mst(int num, Func fdist) {
+  assertx(num > 0);
+  const float k_inf = 1e30f;
+  Array<float> lowcost(num);
+  Array<int> closest(num);
+  Graph<int> gnew;
+  for_int(i, num) gnew.enter(i);
+  for_intL(i, 1, num) {
+    lowcost[i] = fdist(0, i);
+    closest[i] = 0;
+  }
+  for_intL(i, 1, num) {
+    const int offset = 1;
+    const int minj = arg_min(lowcost.slice(offset)) + offset;
+    const float minf = lowcost[minj];
+    assertx(minf < k_inf);
+    gnew.enter_undirected(minj, closest[minj]);
+    lowcost[minj] = k_inf;
+    for_intL(j, 1, num) {
+      if (lowcost[j] == k_inf) continue;
+      const float pnd = fdist(minj, j);
+      if (pnd < lowcost[j]) {
+        lowcost[j] = pnd;
+        closest[j] = minj;
+      }
+    }
+  }
+  return gnew;
+}
+
+// *** graph_quick_emst
+
+// Try to build the EMST of the num points pa using all edges with length less than thresh.
+// Uses modified Prim's, where only edges of length < thresh are considered.
+// Uses an UpdatablePriorityQueue because it can no longer afford to find min in O(n) time.
+// Returns an empty graph if not connected.
+[[nodiscard]] inline Graph<int> try_emst(float thresh, CArrayView<Point> pa, const PointSpatial<int>& sp) {
+  Graph<int> gnew;
+  Array<bool> inset(pa.num(), false);  // The vertices already added to the mst.
+  Array<int> closest(pa.num());        // For !inset[i], the closest inset[] so far.
+  for_int(i, pa.num()) gnew.enter(i);
+  UpdatablePriorityQueue<int> pq;
+  pq.enter(0, 0.f);
+  while (!pq.empty()) {
+    const int i = pq.remove_min();
+    ASSERTXX(pa.ok(i) && !inset[i]);
+    if (i) gnew.enter_undirected(i, closest[i]);
+    inset[i] = true;
+    SpatialSearch<int> ss(&sp, pa[i]);
+    for (const auto [j, d2] : ss) {
+      if (d2 > square(thresh)) break;
+      if (inset[j]) continue;
+      if (pq.enter_update_if_smaller(j, d2)) closest[j] = i;
+    }
+  }
+  int nfound = 0;
+  for_int(i, pa.num()) {
+    if (inset[i]) nfound++;
+  }
+  if (nfound != pa.num()) gnew.clear();
+  return gnew;
+}
+
+// Same as graph_mst() but works specifically on an array of points and tries
+// to do it more quickly by making use of a spatial data structure.
+// Implementation: Prim's MST on series of subgraphs.
+[[nodiscard]] inline Graph<int> graph_quick_emst(CArrayView<Point> pa, const PointSpatial<int>& sp) {
+  Graph<int> gnew;
+  const float initf = .02f;
+  int n = 0;
+  for (float f = initf;; f *= 1.6f) {
+    n++;
+    gnew = try_emst(f, pa, sp);
+    if (!gnew.empty()) break;
+    assertx(f < 1.f);
+  }
+  showf("GraphQuickEmst: had to do %d approximate Emst's\n", n);
+  return gnew;
+}
+
+// Returns statistics about the graph edge lengths.  If the graph is undirected, the edge stats are duplicated.
+template <typename T, invocable_r<float, const T&, const T&> Func>
+[[nodiscard]] Stat graph_edge_stats(const Graph<T>& g, Func fdist) {
+  Stat stat;
+  for (const T& v1 : g.vertices())
+    for (const T& v2 : g.edges(v1)) stat.enter(fdist(v1, v2));
+  return stat;
+}
+
+// Returns a newly allocated directed graph that connects each vertex to its
+// kcl closest neighbors (based on Euclidean distance).
+// Consider applying graph_symmetric_closure() !
+[[nodiscard]] inline Graph<int> graph_euclidean_k_closest(CArrayView<Point> pa, int kcl, const PointSpatial<int>& sp) {
+  Graph<int> gnew;
+  for_int(i, pa.num()) gnew.enter(i);
+  for_int(i, pa.num()) {
+    SpatialSearch<int> ss(&sp, pa[i]);
+    // One extra result, because the first one is the point pa[i] itself.
+    for (const auto [j, unused_d2] : ss | truncate(kcl + 1)) {
+      if (j != i) gnew.enter(i, j);
+    }
+  }
+  return gnew;
+}
+
+// *** GraphComponent
+
+// Access each connected component of a graph, as a representative vertex of each.
+// Single-pass iteration: "for (const T& v : graph_component) ...".
+template <typename T> class GraphComponent : noncopyable {
+ public:
+  explicit GraphComponent(const Graph<T>* g) : _g(*assertx(g)) {
+    auto&& r = _g.vertices();
+    _vcur = r.begin();
+    _vend = r.end();
+  }
+  using Iterator = CursorIterator<GraphComponent>;
+  [[nodiscard]] Iterator begin() noexcept { return Iterator(*this); }
+  [[nodiscard]] std::default_sentinel_t end() const noexcept { return {}; }
+  // Also the customization point for ranges::empty(), whose begin() == end() fallback requires a forward range.
+  [[nodiscard]] bool empty() const { return _vcur == _vend; }
+
+ private:
+  friend CursorIterator<GraphComponent>;
+  [[nodiscard]] const T& current() const { return *_vcur; }
+  // Mark the whole component containing *_vcur as visited, then advance _vcur to the next unvisited vertex.
+  void advance() {
+    Queue<T> queue;
+    _set.enter(*_vcur);
+    queue.enqueue(*_vcur);
+    while (!queue.empty()) {
+      T v = queue.dequeue();
+      for (const T& v2 : _g.edges(v))
+        if (_set.add(v2)) queue.enqueue(v2);
+    }
+    for (++_vcur; _vcur != _vend; ++_vcur)
+      if (!_set.contains(*_vcur)) break;
+  }
+
+  const Graph<T>& _g;
+  Graph<T>::vertex_iterator _vcur;
+  Graph<T>::vertex_iterator _vend;
+  Set<T> _set;
+};
+
+template <typename T> [[nodiscard]] int graph_num_components(const Graph<T>& g) {
+  GraphComponent<T> graph_component(&g);
+  return narrow_cast<int>(ranges::distance(graph_component));
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_GRAPHOP_H_
