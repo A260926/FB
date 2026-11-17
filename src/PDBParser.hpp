@@ -1,6 +1,7 @@
 #pragma once
 
 #include <MemPDB/MemPDB.hpp>
+#include "PDBFormat.hpp"
 
 #include <array>
 #include <cstddef>
@@ -39,6 +40,10 @@ namespace MemPDB::detail
     {
         std::vector<FunctionRecord>            functions;
         std::vector<Argument>                  arguments;
+        // Backing storage for Argument::Locations. Owned by the result (and
+        // later by PDB::Impl), so the spans stay valid after the raw PDB bytes
+        // and temporary stream buffers are released, and across a PDB move.
+        std::vector<ArgumentLocation>          argumentLocations;
         std::vector<GlobalRecord>              globals;
         std::array<uint32_t, kSymbolKindCount> globalKindCounts{}; // per-category tally
         std::vector<StructRecord>              structs;

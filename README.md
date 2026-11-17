@@ -120,6 +120,14 @@ int main()
 }
 ```
 
+Each argument also carries `Locations`: the half-open RVA ranges (and register
+or frame-pointer offset) where its value lives, decoded from modern CodeView
+`S_LOCAL` / `S_DEFRANGE` records when `ResolveArguments` is on. Legacy
+`REGREL`/`FRAMEREL` parameters keep their old positional `Offset` and report no
+locations; optimized-away parameters keep their name and type with an empty
+range list. Locations are symbolic metadata only -- register numbers and
+offsets are never converted into addresses.
+
 ### Download from a symbol server
 
 ```cpp

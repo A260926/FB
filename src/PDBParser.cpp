@@ -1,4 +1,5 @@
 #include "PDBParser.hpp"
+#include "ArgumentLocations.hpp"
 #include "BinaryReader.hpp"
 #include "MSFReader.hpp"
 #include "PDBFormat.hpp"
@@ -126,17 +127,6 @@ namespace MemPDB::detail
             default:     return 0;
             }
         }
-
-        struct SectionTable
-        {
-            std::vector<uint32_t> rvaBase;
-
-            uint32_t Resolve(uint16_t seg, uint32_t off) const noexcept
-            {
-                if (seg == 0 || seg > rvaBase.size()) return 0;
-                return rvaBase[seg - 1] + off;
-            }
-        };
 
         SectionTable ParseSectionHeaders(std::span<const std::byte> stream)
         {
@@ -577,98 +567,6 @@ namespace MemPDB::detail
             }
         }
 
-        struct ModuleArg
-        {
-            std::string_view argName;
-            uint32_t         offset;
-        };
-
-        // A proc plus the params/locals seen while it was the active scope.
-        // Args are attached during the single pass, so no name re-matching is
-        // needed afterwards (the old code paired them through a hash map).
-        struct ModuleProc
-        {
-            std::string_view        name;
-            uint32_t                typeIdx;
-            uint32_t                procLen;
-            bool                    isIdType;   // typeIdx indexes IPI, not TPI
-            std::vector<ModuleArg>  args;
-        };
-
-        struct ModuleSymData
-        {
-            std::vector<ModuleProc> procs;
-        };
-
-        ModuleSymData ParseModuleSymStream(std::span<const std::byte> stream)
-        {
-            ModuleSymData out;
-            if (stream.size() < 4) return out;
-
-            const auto body = stream.subspan(4);
-            int32_t     nestDepth = 0;
-            std::size_t curProc   = static_cast<std::size_t>(-1);
-
-            IterateSymbolRecords(body,
-                [&](uint16_t type, std::span<const std::byte> payload)
-                {
-                    if (type == kS_GPROC32 || type == kS_LPROC32 ||
-                        type == kS_GPROC32_ID || type == kS_LPROC32_ID)
-                    {
-                        if (payload.size() < sizeof(ProcSym32Payload) + 1) return;
-                        ProcSym32Payload p;
-                        std::memcpy(&p, payload.data(), sizeof(p));
-
-                        const char* namePtr =
-                            reinterpret_cast<const char*>(payload.data() + sizeof(p));
-                        const std::size_t nameLen = strnlen(namePtr, payload.size() - sizeof(p));
-
-                        const bool isId = (type == kS_GPROC32_ID || type == kS_LPROC32_ID);
-                        curProc   = out.procs.size();
-                        nestDepth = 1;
-                        out.procs.push_back(ModuleProc{
-                            std::string_view(namePtr, nameLen), p.TypeIndex, p.ProcLen, isId, {} });
-                        return;
-                    }
-
-                    if (type == kS_END || type == kS_ENDPROC)
-                    {
-                        if (nestDepth > 0 && --nestDepth == 0)
-                            curProc = static_cast<std::size_t>(-1);
-                        return;
-                    }
-
-                    if (nestDepth <= 0 || curProc == static_cast<std::size_t>(-1)) return;
-
-                    if (type == kS_REGREL32)
-                    {
-                        if (payload.size() < sizeof(RegRelSym32Payload) + 1) return;
-                        RegRelSym32Payload p;
-                        std::memcpy(&p, payload.data(), sizeof(p));
-                        const char* namePtr =
-                            reinterpret_cast<const char*>(payload.data() + sizeof(p));
-                        const std::size_t nameLen = strnlen(namePtr, payload.size() - sizeof(p));
-                        out.procs[curProc].args.push_back(
-                            { std::string_view(namePtr, nameLen), p.Offset });
-                        return;
-                    }
-
-                    if (type == kS_FRAMEREL)
-                    {
-                        if (payload.size() < sizeof(FrameRelSymPayload) + 1) return;
-                        FrameRelSymPayload p;
-                        std::memcpy(&p, payload.data(), sizeof(p));
-                        const char* namePtr =
-                            reinterpret_cast<const char*>(payload.data() + sizeof(p));
-                        const std::size_t nameLen = strnlen(namePtr, payload.size() - sizeof(p));
-                        out.procs[curProc].args.push_back(
-                            { std::string_view(namePtr, nameLen), p.Offset });
-                    }
-                });
-
-            return out;
-        }
-
         struct ModuleStreamRef
         {
             uint16_t streamIndex;
@@ -929,24 +827,73 @@ namespace MemPDB::detail
 
             std::vector<ModuleSymData> parsedMods(modSpans.size());
             ParallelFor(modSpans.size(), goParallel,
-                        [&](std::size_t i) { parsedMods[i] = ParseModuleSymStream(modSpans[i]); });
+                        [&](std::size_t i) {
+                            parsedMods[i] = ScanModuleSyms(modSpans[i], sections);
+                        });
 
             // Merge single-threaded: bind procs to function indices, fill sizes
             // and (optionally) arguments. No per-function hashing: we index the
             // sorted function table directly by binary-search position.
-            std::vector<std::vector<Argument>> argsByIdx;
-            if (opts.ResolveArguments) argsByIdx.resize(functions.size());
+            //
+            // A function is identified by name AND entry RVA: same-named publics
+            // at different addresses each bind to the proc at their own RVA, so
+            // one module proc never leaks its size/arguments into another.
+            std::vector<std::vector<Argument>>    argsByIdx;
+            std::vector<ArgumentLocation>         allArgLocs;
+            // (function index, argument index, offset in allArgLocs, count).
+            // Spans are attached after the merge, once allArgLocs is complete.
+            struct PendingLocs
+            {
+                uint32_t fn;
+                uint32_t arg;
+                uint32_t offset;
+                uint32_t count;
+            };
+            std::vector<PendingLocs> pendingLocs;
+            if (opts.ResolveArguments)
+            {
+                argsByIdx.resize(functions.size());
+                // Reserve up front for every location any proc could contribute,
+                // so the buffer never reallocates while spans are attached.
+                std::size_t locBudget = 0;
+                for (const auto& mod : parsedMods)
+                    for (const auto& proc : mod.procs)
+                        for (const auto& local : proc.locals)
+                            locBudget += local.locations.size();
+                allArgLocs.reserve(locBudget);
+            }
+
+            auto matchFunction = [&](const ModuleProc& proc) -> std::size_t
+            {
+                const auto lo = std::lower_bound(
+                    functions.begin(), functions.end(), proc.name,
+                    [](const FunctionRecord& f, std::string_view n) { return f.name < n; });
+
+                // Prefer the public at exactly the proc's entry RVA. An
+                // unknown RVA, or a name that occurs only once, unambiguously
+                // identifies the entry; a duplicated name with no address match
+                // must not be bound blindly to the first one.
+                std::size_t first = static_cast<std::size_t>(-1);
+                std::size_t sameName = 0;
+                for (auto it = lo; it != functions.end() && it->name == proc.name; ++it)
+                {
+                    if (first == static_cast<std::size_t>(-1))
+                        first = static_cast<std::size_t>(it - functions.begin());
+                    ++sameName;
+                    if (proc.rva != 0 && it->rva == proc.rva)
+                        return static_cast<std::size_t>(it - functions.begin());
+                }
+                if (sameName == 1 || proc.rva == 0) return first;
+                return static_cast<std::size_t>(-1);
+            };
 
             for (const auto& mod : parsedMods)
             {
                 for (const auto& proc : mod.procs)
                 {
                     ++result.timing.procsParsed;
-                    const auto lo = std::lower_bound(
-                        functions.begin(), functions.end(), proc.name,
-                        [](const FunctionRecord& f, std::string_view n) { return f.name < n; });
-                    if (lo == functions.end() || lo->name != proc.name) continue;
-                    const std::size_t idx = static_cast<std::size_t>(lo - functions.begin());
+                    const std::size_t idx = matchFunction(proc);
+                    if (idx == static_cast<std::size_t>(-1)) continue;
                     ++result.timing.procMatches;
 
                     if (opts.ResolveSizes && proc.procLen > 0)
@@ -956,6 +903,12 @@ namespace MemPDB::detail
 
                     auto& dst = argsByIdx[idx];
                     if (!dst.empty()) continue; // first definition wins
+
+                    // A proc described by modern records -- S_LOCAL parameters
+                    // or any S_DEFRANGE -- never falls back to positional
+                    // REGREL/FRAMEREL matching; its slots come from the
+                    // parameter locals only.
+                    const bool modern = proc.hasModernParameters || proc.sawDefRange;
 
                     // For *_ID procs the type index points into the IPI at an
                     // LF_FUNC_ID/LF_MFUNC_ID whose 2nd dword is the real TPI type.
@@ -982,15 +935,50 @@ namespace MemPDB::detail
                         dst.push_back(arg);
                     }
 
-                    // Param names/offsets are positional with the arg-list types.
-                    const std::size_t n = std::min(proc.args.size(), dst.size());
-                    for (std::size_t i = 0; i < n; ++i)
+                    // Slot i takes the i-th direct-scope CV_LVARFLAG_PARAMETER
+                    // local, in declaration order. Ordinary locals never reach
+                    // proc.locals, so they cannot consume a slot. A parameter
+                    // optimized away still occupies its slot but has no ranges.
+                    if (modern)
                     {
-                        dst[i].Name   = proc.args[i].argName;
-                        dst[i].Offset = proc.args[i].offset;
+                        const std::size_t n = std::min(proc.locals.size(), dst.size());
+                        for (std::size_t i = 0; i < n; ++i)
+                        {
+                            const ModuleLocal& local = proc.locals[i];
+                            dst[i].Name = local.name;
+                            if (!local.locations.empty())
+                            {
+                                const uint32_t off =
+                                    static_cast<uint32_t>(allArgLocs.size());
+                                for (const auto& loc : local.locations)
+                                    allArgLocs.push_back(loc);
+                                pendingLocs.push_back({ static_cast<uint32_t>(idx),
+                                                        static_cast<uint32_t>(i),
+                                                        off,
+                                                        static_cast<uint32_t>(
+                                                            local.locations.size()) });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Param names/offsets are positional with the arg-list types.
+                        const std::size_t n = std::min(proc.legacyArgs.size(), dst.size());
+                        for (std::size_t i = 0; i < n; ++i)
+                        {
+                            dst[i].Name   = proc.legacyArgs[i].name;
+                            dst[i].Offset = proc.legacyArgs[i].offset;
+                        }
                     }
                 }
             }
+
+            // Now that allArgLocs is complete, point each Argument's span at its
+            // final slice in the result-owned array.
+            for (const PendingLocs& p : pendingLocs)
+                argsByIdx[p.fn][p.arg].Locations =
+                    std::span<const ArgumentLocation>(allArgLocs.data() + p.offset,
+                                                      p.count);
 
             if (opts.ResolveArguments)
             {
@@ -1006,6 +994,8 @@ namespace MemPDB::detail
                     for (auto& x : a) allArgs.push_back(std::move(x));
                 }
             }
+
+            result.argumentLocations = std::move(allArgLocs);
         }
         const auto tMod1 = Clock::now();
 

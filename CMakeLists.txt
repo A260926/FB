@@ -54,6 +54,7 @@ add_library(MemPDB STATIC
     src/MSFReader.cpp
     src/Downloader.cpp
     src/PDBParser.cpp
+    src/ArgumentLocations.cpp
     src/SymbolServer.cpp
     src/PDB.cpp
 )
@@ -115,6 +116,10 @@ endif()
 set_property(TARGET mempdb_fixture PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
 
 add_executable(mempdb_tests tests/test_main.cpp)
+add_executable(mempdb_parameter_locations tests/parameter_locations.cpp)
+target_link_libraries(mempdb_parameter_locations PRIVATE MemPDB)
+mempdb_apply_warnings(mempdb_parameter_locations)
+mempdb_apply_release_opt(mempdb_parameter_locations)
 target_include_directories(mempdb_tests PRIVATE tests)
 target_link_libraries(mempdb_tests PRIVATE MemPDB)
 if(WIN32)

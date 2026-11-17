@@ -162,8 +162,24 @@ namespace MemPDB::detail
     inline constexpr uint16_t kS_LPROC32_ID = 0x1146;
     inline constexpr uint16_t kS_REGREL32   = 0x1111;
     inline constexpr uint16_t kS_FRAMEREL   = 0x1101;
+    inline constexpr uint16_t kS_BLOCK32    = 0x1103;
+    inline constexpr uint16_t kS_INLINESITE = 0x114D;
+    inline constexpr uint16_t kS_INLINESITE2 = 0x115D;
+    inline constexpr uint16_t kS_LOCAL      = 0x113E;
+    inline constexpr uint16_t kS_DEFRANGE_REGISTER                  = 0x1141;
+    inline constexpr uint16_t kS_DEFRANGE_FRAMEPOINTER_REL          = 0x1142;
+    inline constexpr uint16_t kS_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE = 0x1144;
+    inline constexpr uint16_t kS_DEFRANGE_REGISTER_REL              = 0x1145;
     inline constexpr uint16_t kS_END        = 0x0006;
     inline constexpr uint16_t kS_ENDPROC    = 0x114F;
+
+    // S_LOCAL flags (CV_LVARFLAGS).
+    inline constexpr uint16_t kLocalFlag_Parameter   = 0x0001;
+    inline constexpr uint16_t kLocalFlag_OptimizedOut = 0x0100;
+
+    // S_DEFRANGE_REGISTER_REL flags.
+    inline constexpr uint16_t kDefRangeRegRel_SpilledUDTMember = 0x0001;
+    inline constexpr uint16_t kDefRangeRegRel_OffsetParent     = 0x0002;
 
     inline constexpr uint16_t kLF_POINTER   = 0x1002;
     inline constexpr uint16_t kLF_PROCEDURE = 0x1008;

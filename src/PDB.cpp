@@ -34,6 +34,7 @@ namespace MemPDB
         std::vector<char>                       stringArena;
         std::vector<detail::FunctionRecord>     functions;
         std::vector<Argument>                   arguments;
+        std::vector<ArgumentLocation>           argumentLocations;
         std::vector<detail::GlobalRecord>       globals;
         std::array<uint32_t, kSymbolKindCount>  globalKindCounts{};
         std::vector<detail::StructRecord>       structs;
@@ -159,6 +160,7 @@ namespace MemPDB
         impl->streamStorage    = std::move(parsed.streamStorage);
         impl->functions        = std::move(parsed.functions);
         impl->arguments        = std::move(parsed.arguments);
+        impl->argumentLocations = std::move(parsed.argumentLocations);
         impl->globals          = std::move(parsed.globals);
         impl->globalKindCounts = parsed.globalKindCounts;
         impl->structs          = std::move(parsed.structs);
@@ -320,7 +322,8 @@ namespace MemPDB
         s.structCount   = impl_->structs.size();
         s.fieldCount    = impl_->fields.size();
         s.functionTable = impl_->functions.capacity() * sizeof(detail::FunctionRecord);
-        s.argumentTable = impl_->arguments.capacity() * sizeof(Argument);
+        s.argumentTable = impl_->arguments.capacity() * sizeof(Argument)
+                        + impl_->argumentLocations.capacity() * sizeof(ArgumentLocation);
         s.globalTable   = impl_->globals.capacity() * sizeof(detail::GlobalRecord);
         s.structTable   = impl_->structs.capacity() * sizeof(detail::StructRecord);
         s.fieldTable    = impl_->fields.capacity() * sizeof(Field);

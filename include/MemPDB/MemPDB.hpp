@@ -180,12 +180,41 @@ namespace MemPDB
         }
     };
 
+    // How an argument's value is stored over a code range.
+    //   Register              : the value lives in Register (Offset == 0)
+    //   RegisterRelative      : it lives at Register + Offset
+    //   FramePointerRelative  : it lives at the abstract frame base + Offset
+    // Locations are a purely symbolic description of DebugInfo; Register and
+    // Offset are never turned into a real machine address.
+    enum class ArgumentLocationKind : uint8_t
+    {
+        Register,
+        RegisterRelative,
+        FramePointerRelative,
+    };
+
+    // A half-open RVA range [BeginRVA, EndRVA) over which an argument's value
+    // can be found at the described location. Ranges come from CodeView
+    // S_DEFRANGE records; gaps inside a record are already removed, so a hole
+    // never spans two joined pieces.
+    struct ArgumentLocation
+    {
+        uint32_t             BeginRVA;
+        uint32_t             EndRVA;
+        ArgumentLocationKind Kind;
+        uint16_t             Register;
+        int32_t              Offset;
+    };
+
     struct Argument
     {
         std::string_view Name;
         std::string_view TypeName;
         uint32_t         Size;
         uint32_t         Offset;
+        // Detailed per-range locations from modern S_LOCAL/S_DEFRANGE records.
+        // Empty for legacy arguments and for parameters optimized away.
+        std::span<const ArgumentLocation> Locations;
     };
 
     struct Function
