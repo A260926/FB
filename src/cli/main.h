@@ -17,6 +17,7 @@
 #include "../libttaR.h"
 
 #include "./common.h"
+#include "./formats/sample_range.h"
 
 /* //////////////////////////////////////////////////////////////////////// */
 
@@ -42,6 +43,7 @@ struct GlobalFlags {
 	bool		 rawpcm;
 	enum ThreadMode	 threadmode:8u;
 	enum DecFormat	 decfmt:8u;
+	struct SampleRangeOpt	sample_range;
 };
 
 /* //////////////////////////////////////////////////////////////////////// */

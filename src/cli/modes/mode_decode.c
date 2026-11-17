@@ -35,7 +35,8 @@ BUILD_EXTERN NOINLINE void decst_loop(
 	const struct SeekTable *RESTRICT,
 	/*@out@*/ struct DecStats *RESTRICT dstat_out,
 	const struct FileStats *RESTRICT, FILE *RESTRICT outfile,
-	const char *, FILE *RESTRICT infile, const char *
+	const char *, FILE *RESTRICT infile, const char *,
+	const struct SampleRangePlan *RESTRICT
 )
 /*@globals	fileSystem,
 		internalState
@@ -55,7 +56,8 @@ BUILD_EXTERN NOINLINE void decmt_loop(
 	const struct SeekTable *RESTRICT,
 	/*@out@*/ struct DecStats *RESTRICT dstat_out,
 	const struct FileStats *RESTRICT, FILE *RESTRICT outfile,
-	const char *, FILE *RESTRICT infile, const char *, unsigned int
+	const char *, FILE *RESTRICT infile, const char *, unsigned int,
+	const struct SampleRangePlan *RESTRICT
 )
 /*@globals	fileSystem,
 		internalState
@@ -216,10 +218,14 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	/* * */
 	struct DecStats dstat;
 	struct SeekTable seektable;
+	struct SampleRangeOpt range_opt;
+	struct SampleRangePlan range;
+	const struct SampleRangePlan *range_ptr = NULL;
 	bool ignore_seektable = false;
 	timestamp_p ts_start, ts_finish;
 	union {	int		d;
 		enum FileCheck	fc;
+		enum SampleRangePlanStatus rp;
 	} result;
 	union {	size_t z; } tmp;
 
@@ -238,6 +244,14 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	}
 	fstat->endian = xENDIAN_LITTLE;	/* wav/w64 only LE */
 
+	memset(&range, 0x00, sizeof range);
+	if ( g_flag.sample_range.enabled ){
+		range_opt = g_flag.sample_range;
+		range_opt.enabled = 1;
+		range_ptr = &range;
+	}
+	else {	memset(&range_opt, 0x00, sizeof range_opt); }
+
 	/* pre-decode stats */
 	if ( ! g_flag.quiet ){
 		errprint_stats_precodec(
@@ -255,6 +269,10 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	result.fc = filecheck_tta_seektable(&seektable, tmp.z, infile);
 	if UNLIKELY ( result.fc != FILECHECK_OK ){
 		if ( result.fc == FILECHECK_CORRUPTED ){
+			if ( range_ptr != NULL ){
+				/* range needs a trustworthy seektable */
+				error_tta("%s: corrupted seektable", infile_name);
+			}
 			ignore_seektable = true;
 			warning_tta("%s: corrupted seektable", infile_name);
 		}
@@ -263,6 +281,32 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 		}
 	}
 	/* MAYBE: check that the seektable entries match the filesize */
+
+	/* resolve the sample-frame interval before any output is written */
+	if ( range_ptr != NULL ){
+		result.rp = samplerange_plan(
+			&range, &range_opt, fstat, &seektable
+		);
+		switch ( result.rp ){
+		case SAMPLERANGE_PLAN_OK:
+			break;
+		case SAMPLERANGE_PLAN_RANGE:
+			error_tta("%s: sample range [%zu, %zu) is outside "
+				"the file's %zu samples", infile_name,
+				range_opt.start, range_opt.end,
+				fstat->nsamples_enc
+			);
+			break;
+		case SAMPLERANGE_PLAN_SEEKTABLE:
+			error_tta("%s: corrupted seektable", infile_name);
+			break;
+		case SAMPLERANGE_PLAN_OFFSET:
+			error_tta("%s: frame offset is not representable",
+				infile_name
+			);
+			break;
+		}
+	}
 
 	/* open outfile */
 	outfile = fopen_check(outfile_name, "wb", FATAL);
@@ -288,8 +332,14 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	}
 
 	/* seek to TTA data
-		- already there for TTA1
+		- already there for TTA1, unless a sample range skips ahead
 	*/
+	if ( range_ptr != NULL ){
+		result.d = fseeko(infile, range.data_off, SEEK_SET);
+		if UNLIKELY ( result.d != 0 ){
+			error_sys(errno, "fseeko", infile_name);
+		}
+	}
 
 	if ( ! g_flag.quiet ){
 		timestamp_get(&ts_start);
@@ -308,19 +358,21 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	case THREADMODE_SINGLE:
 		decst_loop(
 			&seektable, &dstat, fstat, outfile, outfile_name,
-			infile, infile_name
+			infile, infile_name, range_ptr
 		);
 		break;
 	case THREADMODE_MULTI:
 decode_multi:
 		decmt_loop(
 			&seektable, &dstat, fstat, outfile, outfile_name,
-			infile, infile_name, nthreads
+			infile, infile_name, nthreads, range_ptr
 		);
 		break;
 	}
 
 	if UNLIKELY (
+		(range_ptr == NULL)
+		&&
 		(! ignore_seektable) && (dstat.nframes != seektable.nmemb)
 	){
 		warning_tta("%s: truncated file / malformed seektable",

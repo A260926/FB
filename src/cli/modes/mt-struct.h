@@ -113,6 +113,10 @@ struct MTArg_DecIO_Frames {
 	int8_t				*dec_retval;
 	/*@temp@*/
 	uint32_t			*crc_read;	/* little-endian */
+	/*@temp@*/
+	struct SampleRangeWrite		*range_write;
+	/*@temp@*/
+	size_t				*frame_index;	/* source frame number */
 };
 
 struct MTArg_Decoder_Frames {
@@ -178,6 +182,8 @@ struct MTArg_DecIO {
 	const struct SeekTable 		*seektable;
 	/*@temp@*/
 	struct DecStats			*dstat_out;
+	/*@temp@*/
+	const struct SampleRangePlan	*range;
 };
 
 struct MTArg_Decoder {
@@ -262,7 +268,8 @@ BUILD_EXTERN void decmt_state_init(
 	unsigned int, size_t, FILE *RESTRICT, const char *,
 	FILE *RESTRICT, const char *, const struct SeekTable *RESTRICT,
 	const struct DecStats *RESTRICT,
-	const struct FileStats_DecMT *RESTRICT
+	const struct FileStats_DecMT *RESTRICT,
+	const struct SampleRangePlan *RESTRICT
 )
 /*@globals	fileSystem,
 		internalState

@@ -20,6 +20,7 @@
 #include "./common.h"
 
 #include "./formats/guid.h"
+#include "./formats/sample_range.h"
 #include "./formats/tta.h"
 #include "./formats/wav.h"
 

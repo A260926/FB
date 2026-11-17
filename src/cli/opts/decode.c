@@ -48,9 +48,25 @@ opt_decode_help(
 /*@modifies	fileSystem@*/
 ;
 
+#undef argv
+static int opt_decode_samples(
+	unsigned int, unsigned int, unsigned int, char *const *argv,
+	enum OptMode
+)
+/*@globals	fileSystem,
+		internalState,
+		g_flag
+@*/
+/*@modifies	fileSystem,
+		internalState,
+		g_flag.sample_range,
+		**argv
+@*/
+;
+
 /* //////////////////////////////////////////////////////////////////////// */
 
-#define DECODE_OPTDICT_NMEMB	8u
+#define DECODE_OPTDICT_NMEMB	9u
 
 /**@var decode_optdict_longopt
  * @brief array of longopts
@@ -63,6 +79,7 @@ static const char *decode_optdict_longopt[DECODE_OPTDICT_NMEMB] = {
 	"format",
 	"outfile",
 	"quiet",
+	"samples",
 	"threads",
 	"help"
 };
@@ -78,6 +95,7 @@ static const int decode_optdict_shortopt[DECODE_OPTDICT_NMEMB] = {
 	'f',	/* format          */
 	'o',	/* outfile         */
 	'q',	/* quiet           */
+	-1,	/* samples         */
 	't',	/* threads         */
 	'?'	/* help            */
 };
@@ -93,6 +111,7 @@ static optdict_fnptr decode_optdict_fn[DECODE_OPTDICT_NMEMB] = {
 	opt_decode_format,
 	opt_common_outfile,
 	opt_common_quiet,
+	opt_decode_samples,
 	opt_common_threads,
 	opt_decode_help,
 };
@@ -185,6 +204,81 @@ opt_decode_format(
 				subopt
 			);
 		} else{;}
+	}
+	return retval;
+}
+
+/**@fn opt_decode_samples
+ * @brief sets the sample-frame interval to decode
+ *
+ * @param optind0 - index of  'argv'
+ * @param optind1 - index of *'argv'
+ * @param argc    - argument count from main()
+ * @param argv    - argument vector from main()
+ * @param mode    - short or long
+ *
+ * @return number of args used (long), or number of char's read (short)
+ *
+ * @note accepts both '--samples=START:END' and '--samples START:END'
+**/
+static int
+opt_decode_samples(
+	const unsigned int optind0, const unsigned int optind1,
+	const unsigned int argc, char *const *const argv,
+	const enum OptMode mode
+)
+/*@globals	fileSystem,
+		internalState,
+		g_flag
+@*/
+/*@modifies	fileSystem,
+		internalState,
+		g_flag.sample_range,
+		**argv
+@*/
+{
+	char *const opt = &argv[optind0][optind1];
+	/* * */
+	int retval   = 0;
+	char *subopt = NULL;
+	enum SampleRangeParseStatus status;
+
+	switch ( mode ){
+	default:
+		assert(false);
+		break;
+	case OPTMODE_SHORT:
+		/* no short option for --samples */
+		error_tta("bad shortopt: -%c", (char) -1);
+		break;
+	case OPTMODE_LONG:
+		(void) strtok(opt, "=");
+		subopt = strtok(NULL, "");
+		if ( subopt == NULL ){
+			/* argument written separately */
+			optsget_argcheck(
+				optind0, argc, 1u, "--samples"
+			);
+			subopt = argv[optind0 + 1u];
+			retval = 1;
+		}
+		break;
+	}
+	assert(subopt != NULL);
+
+	status = samplerange_parse_string(subopt, &g_flag.sample_range);
+	switch ( status ){
+	case SAMPLERANGE_PARSE_OK:
+		break;
+	case SAMPLERANGE_PARSE_SYNTAX:
+		error_tta("--samples: bad argument: %s", subopt);
+		break;
+	case SAMPLERANGE_PARSE_OVERFLOW:
+		error_tta("--samples: argument out of range: %s", subopt);
+		break;
+	case SAMPLERANGE_PARSE_ORDER:
+		error_tta("--samples: start is after end: %s", subopt);
+		break;
 	}
 	return retval;
 }

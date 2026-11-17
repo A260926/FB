@@ -36,6 +36,7 @@
 #include "./cli/debug.c"
 #include "./cli/formats/guid.c"
 #include "./cli/formats/metatags_skip.c"
+#include "./cli/formats/sample_range.c"
 #include "./cli/formats/tta1_check.c"
 #include "./cli/formats/tta_seek.c"
 #include "./cli/formats/tta_seek_check.c"

@@ -277,6 +277,7 @@ longoptget(
 			optrv = optdict->fn[i](
 				optind, 0, argc, argv, OPTMODE_LONG
 			);
+			/* >=0: number of extra separate args consumed */
 			break;
 		}
 	}

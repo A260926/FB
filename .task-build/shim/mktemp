@@ -1,0 +1,3 @@
+#!/bin/sh
+# sandbox shim: system temp dir is not writable here
+exec /usr/bin/mktemp -p /tmp/claude-501 "$@"

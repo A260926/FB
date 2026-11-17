@@ -61,7 +61,9 @@ static void decmt_state_init_allocs(
 		io->frames.user,
 		io->frames.nsamples_flat_2pad,
 		io->frames.dec_retval,
-		io->frames.crc_read
+		io->frames.crc_read,
+		io->frames.range_write,
+		io->frames.frame_index
 @*/
 /*@allocates	io->frames.navailable@*/
 ;
@@ -294,6 +296,7 @@ encmt_state_init_allocs(
  * @param seektable      - TTA seektable struct
  * @param dstat_out      - decode stats return struct
  * @param fstat          - compacted file stats struct
+ * @param range          - sample-frame interval plan, or NULL
 **/
 BUILD void
 decmt_state_init(
@@ -304,7 +307,8 @@ decmt_state_init(
 	FILE *const RESTRICT infile, const char *const infile_name,
 	const struct SeekTable *const RESTRICT seektable,
 	const struct DecStats *const RESTRICT dstat_out,
-	const struct FileStats_DecMT *const RESTRICT fstat
+	const struct FileStats_DecMT *const RESTRICT fstat,
+	const struct SampleRangePlan *const RESTRICT range
 )
 /*@globals	fileSystem,
 		internalState
@@ -355,6 +359,7 @@ decmt_state_init(
 	io->fstat		= fstat;
 	io->seektable		= (struct SeekTable *) seektable;
 	io->dstat_out		= (struct DecStats *) dstat_out;
+	io->range		= range;
 
 	/* decoder->frames */
 	spinlock_init(&decoder->frames.queue.lock);
@@ -448,12 +453,14 @@ decmt_state_init_allocs(
 		io->frames.user,
 		io->frames.nsamples_flat_2pad,
 		io->frames.dec_retval,
-		io->frames.crc_read
+		io->frames.crc_read,
+		io->frames.range_write,
+		io->frames.frame_index
 @*/
 /*@allocates	io->frames.navailable@*/
 {
 	size_t size_total = 0;
-	size_t offset[8u];
+	size_t offset[10u];
 	uintptr_t base;
 
 	/* navailable */
@@ -506,6 +513,18 @@ decmt_state_init_allocs(
 	);
 	offset[7u]  = size_total;
 	size_total += framequeue_len * (sizeof *io->frames.crc_read);
+	/* range_write */
+	size_total += ALIGN_FW_DIFF(
+		size_total, ALIGNOF(*io->frames.range_write)
+	);
+	offset[8u]  = size_total;
+	size_total += framequeue_len * (sizeof *io->frames.range_write);
+	/* frame_index */
+	size_total += ALIGN_FW_DIFF(
+		size_total, ALIGNOF(*io->frames.frame_index)
+	);
+	offset[9u]  = size_total;
+	size_total += framequeue_len * (sizeof *io->frames.frame_index);
 
 	base = (uintptr_t) calloc_check(SIZE_C(1), size_total);
 	io->frames.navailable 		= (void *)  base;
@@ -517,6 +536,8 @@ decmt_state_init_allocs(
 	io->frames.nsamples_flat_2pad	= (void *) (base + offset[5u]);
 	io->frames.dec_retval		= (void *) (base + offset[6u]);
 	io->frames.crc_read		= (void *) (base + offset[7u]);
+	io->frames.range_write		= (void *) (base + offset[8u]);
+	io->frames.frame_index		= (void *) (base + offset[9u]);
 
 	return;
 }

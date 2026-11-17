@@ -116,6 +116,9 @@ static const char help_mode_usage1[] = {
 #define OPT_DECODE_FORMAT \
 "\t"    "-f, --format=FMT\t\t"          "outfile format\n" \
 "\t\t"          "FMT: raw, [*] w64, wav\n"
+#define OPT_DECODE_SAMPLES \
+"\t"    "    --samples=START:END\t\t"   "decode the half-open sample-frame\n" \
+"\t\t"          "range [START, END)\n"
 
 
 /*@unchecked@*/
@@ -145,6 +148,7 @@ OPT_COMMON_DELETE_SRC
 OPT_DECODE_FORMAT
 OPT_COMMON_OUTFILE
 OPT_COMMON_QUIET
+OPT_DECODE_SAMPLES
 OPT_COMMON_THREADS
 };
 

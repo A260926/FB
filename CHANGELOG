@@ -165,6 +165,16 @@ next:-------------------------------------------------------------------------
 
 # ttaR #######################################################################
 
+next:-------------------------------------------------------------------------
+
+	- decode: added --samples=START:END to decode a half-open
+	  sample-frame interval
+		- seeks with the seektable and only reads/decodes the
+		  intersecting frames; both the single- and multi-threaded
+		  paths are used
+		- a corrupted/unusable seektable or an unrepresentable frame
+		  offset is a fatal error before any audio is written
+
 1.1.11 (2025-12-24):----------------------------------------------------------
 
 	- updated for libttaR 2.1.0
