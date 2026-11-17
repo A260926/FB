@@ -1,0 +1,166 @@
+{
+    "nbounces": 8,
+    "rendermode": "phong",
+    "useBVH":true,
+    "camera": {
+        "type": "pinhole",
+        "width": 1920,
+        "height": 1080,
+        "position": [0.0, 1.0, -3.0],
+        "lookAt": [0.0, 0.5, 1.0],
+        "upVector": [0.0, 1.0, 0.0],
+        "fov": 50.0,
+        "exposure": 0.2
+    },
+    "scene": {
+        "backgroundcolor": [0.1, 0.1, 0.1],
+        "lightsources": [
+            {
+                "type": "pointlight",
+                "position": [2.0, 3.0, -2.0],
+                "intensity": [1.0, 1.0, 1.0]
+            },
+            {
+                "type": "pointlight",
+                "position": [-2.0, 3.0, -2.0],
+                "intensity": [1.0, 1.0, 1.0]
+            }
+        ],
+        "shapes": [
+            {
+                "type": "sphere",
+                "center": [0.0, 0.5, 1.0],
+                "radius": 0.5,
+                "material": {
+                    "ks": 0.3,
+                    "kd": 0.7,
+                    "specularexponent": 50,
+                    "diffusecolor": [0.7, 0.2, 0.2],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": true,
+                    "reflectivity": 0.8,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "sphere",
+                "center": [-1.0, 0.25, 1.5],
+                "radius": 0.25,
+                "material": {
+                    "ks": 0.2,
+                    "kd": 0.8,
+                    "specularexponent": 30,
+                    "diffusecolor": [0.2, 0.2, 0.8],
+                    "specularcolor": [0.8, 0.8, 1.0],
+                    "isreflective": true,
+                    "reflectivity": 0.5,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "cylinder",
+                "center": [1.0, 0.0, 2.0],
+                "axis": [0.0, 1.0, 0.0],
+                "radius": 0.3,
+                "height": 1.0,
+                "material": {
+                    "ks": 0.2,
+                    "kd": 0.8,
+                    "specularexponent": 20,
+                    "diffusecolor": [0.3, 0.7, 0.3],
+                    "specularcolor": [0.8, 1.0, 0.8],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": true,
+                    "refractiveindex": 1.5
+                }
+            },
+            {
+                "type": "triangle",
+                "v0": [-2.0, 0.0, 2.0],
+                "v1": [-1.5, 0.0, 3.0],
+                "v2": [-2.0, 1.0, 2.5],
+                "material": {
+                    "ks": 0.3,
+                    "kd": 0.7,
+                    "specularexponent": 15,
+                    "diffusecolor": [0.8, 0.5, 0.2],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": true,
+                    "reflectivity": 0.6,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "sphere",
+                "center": [0.0, -10.0, 0.0],
+                "radius": 10.0,
+                "material": {
+                    "ks": 0.0,
+                    "kd": 1.0,
+                    "specularexponent": 0,
+                    "diffusecolor": [0.8, 0.8, 0.8],
+                    "specularcolor": [0.0, 0.0, 0.0],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "triangle",
+                "v0": [1.5, 0.0, 3.0],
+                "v1": [2.0, 0.0, 2.5],
+                "v2": [1.75, 1.0, 2.75],
+                "material": {
+                    "ks": 0.3,
+                    "kd": 0.7,
+                    "specularexponent": 10,
+                    "diffusecolor": [0.7, 0.2, 0.7],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": true,
+                    "refractiveindex": 1.3
+                }
+            },
+            {
+                "type": "cylinder",
+                "center": [-1.5, 0.0, 1.0],
+                "axis": [1.0, 1.0, 0.0],
+                "radius": 0.2,
+                "height": 0.8,
+                "material": {
+                    "ks": 0.2,
+                    "kd": 0.8,
+                    "specularexponent": 20,
+                    "diffusecolor": [0.5, 0.3, 0.5],
+                    "specularcolor": [1.0, 0.8, 1.0],
+                    "isreflective": true,
+                    "reflectivity": 0.4,
+                    "isrefractive": false,
+                    "refractiveindex": 1.0
+                }
+            },
+            {
+                "type": "sphere",
+                "center": [1.0, 0.5, 0.5],
+                "radius": 0.2,
+                "material": {
+                    "ks": 0.1,
+                    "kd": 0.9,
+                    "specularexponent": 10,
+                    "diffusecolor": [0.5, 0.7, 1.0],
+                    "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false,
+                    "reflectivity": 0.0,
+                    "isrefractive": true,
+                    "refractiveindex": 1.2
+                }
+            }
+        ]
+    }
+}

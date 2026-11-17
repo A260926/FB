@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+
+      - name: Configure
+        run: cmake -B build -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Run tests
+        working-directory: build
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --output-on-failure --timeout 120 --no-tests=error

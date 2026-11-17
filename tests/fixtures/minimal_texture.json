@@ -1,0 +1,76 @@
+{
+    "nbounces": 2,
+    "rendermode": "phong",
+    "useBVH": true,
+    "camera": {
+        "type": "pinhole",
+        "width": 16,
+        "height": 16,
+        "position": [0.0, 0.5, -2.0],
+        "lookAt": [0.0, 0.2, 0.0],
+        "upVector": [0.0, 1.0, 0.0],
+        "fov": 50.0,
+        "exposure": 0.1
+    },
+    "scene": {
+        "backgroundcolor": [0.02, 0.02, 0.02],
+        "lightsources": [
+            {
+                "type": "pointlight",
+                "position": [1.0, 2.0, -1.0],
+                "intensity": [0.8, 0.8, 0.8]
+            },
+            {
+                "type": "pointlight",
+                "position": [-1.0, 2.0, -1.0],
+                "intensity": [0.8, 0.8, 0.8]
+            }
+        ],
+        "shapes": [
+            {
+                "type": "sphere",
+                "center": [-0.4, 0.3, 0.0],
+                "radius": 0.3,
+                "material": {
+                    "ks": 0.2, "kd": 0.8, "specularexponent": 16,
+                    "diffusecolor": [0.8, 0.8, 0.8], "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false, "reflectivity": 0.0,
+                    "isrefractive": false, "refractiveindex": 1.0,
+                    "texture": "../data/textures/face.ppm",
+                    "tile_factor_u": 2,
+                    "tile_factor_v": 2
+                }
+            },
+            {
+                "type": "cylinder",
+                "center": [0.4, 0.0, 0.0],
+                "axis": [0, 1, 0],
+                "radius": 0.15,
+                "height": 0.3,
+                "material": {
+                    "ks": 0.1, "kd": 0.9, "specularexponent": 10,
+                    "diffusecolor": [0.7, 0.7, 0.7], "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false, "reflectivity": 0.0,
+                    "isrefractive": false, "refractiveindex": 1.0,
+                    "texture": "../data/textures/leaves.ppm"
+                }
+            },
+            {
+                "type": "triangle",
+                "v0": [-0.6, 0.0, 0.8],
+                "v1": [0.6, 0.0, 0.8],
+                "v2": [0.0, 0.7, 0.8],
+                "material": {
+                    "ks": 0.2, "kd": 0.8, "specularexponent": 8,
+                    "diffusecolor": [0.8, 0.6, 0.6], "specularcolor": [1.0, 1.0, 1.0],
+                    "isreflective": false, "reflectivity": 0.0,
+                    "isrefractive": false, "refractiveindex": 1.0,
+                    "texture": "../data/textures/leaves.ppm",
+                    "uv0": [0.0, 0.0],
+                    "uv1": [1.0, 0.0],
+                    "uv2": [0.5, 1.0]
+                }
+            }
+        ]
+    }
+}
