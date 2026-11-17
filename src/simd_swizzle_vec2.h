@@ -116,24 +116,24 @@ inline vec4 vec2::yyxy() const { return { y, y, x, y }; }
 inline vec3 vec2::yyy() const { return { y, y, y }; }
 inline vec4 vec2::yyyx() const { return { y, y, y, x }; }
 inline vec4 vec2::yyyy() const { return { y, y, y, y }; }
-inline void vec2::gr(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; r = _val1; }
-inline void vec2::gr(const vec2& _val) { g = _val.x; r = _val.y; }
-inline void vec2::gr(const simdfloat& _val) { g = _val; r = _val; }
-inline void vec2::rg(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; g = _val1; }
-inline void vec2::rg(const vec2& _val) { r = _val.x; g = _val.y; }
-inline void vec2::rg(const simdfloat& _val) { r = _val; g = _val; }
-inline void vec2::st(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; t = _val1; }
-inline void vec2::st(const vec2& _val) { s = _val.s; t = _val.t; }
-inline void vec2::st(const simdfloat& _val) { s = _val; t = _val; }
-inline void vec2::ts(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; s = _val1; }
-inline void vec2::ts(const vec2& _val) { t = _val.s; s = _val.t; }
-inline void vec2::ts(const simdfloat& _val) { t = _val; s = _val; }
-inline void vec2::xy(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; y = _val1; }
-inline void vec2::xy(const vec2& _val) { x = _val.x; y = _val.y; }
-inline void vec2::xy(const simdfloat& _val) { x = _val; y = _val; }
-inline void vec2::yx(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; x = _val1; }
-inline void vec2::yx(const vec2& _val) { y = _val.x; x = _val.y; }
-inline void vec2::yx(const simdfloat& _val) { y = _val; x = _val; }
+inline void vec2::gr(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec2::gr(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec2::gr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec2::rg(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec2::rg(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec2::rg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec2::st(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec2::st(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec2::st(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec2::ts(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec2::ts(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec2::ts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec2::xy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec2::xy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec2::xy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec2::yx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec2::yx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec2::yx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
 
 #pragma endregion
 
@@ -145,19 +145,23 @@ inline vec2 vec2::operator=(const vec3& _v) { x = _v.x; y = _v.y; return *this; 
 inline vec2 vec2::operator=(const vec4& _v) { x = _v.x; y = _v.y; return *this; }
 
 // constructors for vec2
-inline vec2::vec2(const float& _f) { x = _f; y = _f; }
+inline vec2::vec2(const float& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline vec2::vec2(const simdfloat& _f) { x = _f; y = _f; }
+inline vec2::vec2(const simdfloat& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline vec2::vec2(const ivec2& _v) { x = _v.x; y = _v.y; }
+inline vec2::vec2(const ivec2& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; }
 
-inline vec2::vec2(const simdfloat& _x, const simdfloat& _y) { x = _x; y = _y; }
+inline vec2::vec2(const simdfloat& _x, const simdfloat& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec2::vec2(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; }
+vec2::vec2(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec2::vec2(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; }
+vec2::vec2(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
+
+// Full-width copy: every lane is initialized, and the r/g/s/t aliases keep
+// pointing at this object's own components (their in-class initializers).
+inline vec2::vec2(const vec2& other) : x(other.x), y(other.y) {}
 
 #endif
 

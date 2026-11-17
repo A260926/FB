@@ -32,6 +32,8 @@ without having to write SIMD code directly.
   - [Geometric](#geometric)
   - [Min and Max](#min-and-max)
 - [Conditional Statements](#conditional-statements)
+  - [Masked branches with `shader::masked`](#masked-branches-with-shadermasked)
+  - [Loops with per-lane termination](#loops-with-per-lane-termination)
 - [Displaying Data](#displaying-data)
 - [Full Shader Examples](#full-shader-examples)
 - [Building Samples](#building-samples)
@@ -437,6 +439,84 @@ vec4 colorB = vec4(0.0f, 0.0f, 1.0f, 1.0f); // blue
 
 // works on vectors too  (assuming colorA and colorB are defined somewhere)
 vec4 selected = blendv(colorA, colorB, mask);
+```
+
+### Masked branches with `shader::masked`
+
+`blendv` still requires you to mask every write by hand. The scalar CPU
+backends (`USE_PACKED_SCALAR` and `USE_SCALAR`) also provide
+`shader::masked(mask, body)`, which remembers an *active lane domain* for the
+current thread: every plain or compound assignment, `++`/`--`, component or
+alias write, and writable swizzle inside `body` only touches the active lanes,
+while the other lanes keep their previous value.
+
+```cpp
+vec4 color(0.0f);
+simdint iterations(0);
+simdmask active = fragX > 0.5f;
+
+shader::masked(active, [&] {
+    color = vec4(1.0f, 0.0f, 0.0f, 1.0f); // only active lanes are rewritten
+    color.g += 0.25f;                     // compound assignment is masked too
+    ++iterations;
+});
+// leaving the scope restores the previous (all-lane) domain
+```
+
+The mask may be a `simdmask` or a `simdimask`; either one drives both float and
+integer writes. On entry the given mask is intersected with the outer domain,
+and on exit the outer domain is restored, including when the body throws. The
+host always calls `body` exactly once, even when every lane is inactive, so
+ordinary host-variable side effects still run once. Scopes nest, work across
+functions and translation units, and are thread-local, so threads processing
+different image rows never interfere.
+
+Reads are not masked: construction, copy construction, arithmetic,
+comparisons and swizzle reads always produce complete full-width values, even
+inside an all-false branch. A newly constructed vector is initialized on every
+lane, and a copied vector's `r/g/b/a` and `s/t/p/q` aliases refer to the
+copy's own components. Only writes into an already existing object are
+controlled by the active domain. Direct `value[]` access and
+`simd_load`/`simd_store` keep their original full-width behavior.
+
+Writable swizzles capture all right-hand values before storing anything, so
+overlapping writes behave like the GLSL version:
+
+```cpp
+vec2 v(1.0f, 2.0f);
+v.yx(v);              // swap: v becomes (2, 1) on every active lane
+v.xy(v.y, v.x);       // same swap, component-argument form
+```
+
+### Loops with per-lane termination
+
+The same mechanism implements the GLSL pattern where each pixel stops at its
+own iteration: keep a per-lane "still running" mask and wrap each iteration in
+`shader::masked`. A lane that has finished simply leaves the active domain, so
+its color and iteration count can no longer be overwritten.
+
+```cpp
+simdfloat z = fragCoord.x;
+vec3 color(0.0f);
+simdint iterations(0);
+simdint done(0);
+
+for (int step = 0; step < maxSteps; ++step)
+{
+    simdimask running = (iterations < maxSteps) && (done == simdint(0));
+    shader::masked(running, [&] {
+        simdfloat nextZ = z * 1.6f + 0.25f; // full-width temporary
+        color += vec3(z * 0.1f, z * z * 0.02f, 0.05f);
+
+        shader::masked(nextZ > 3.0f, [&] {  // nested scope
+            iterations = step;              // final count, written once
+            done = simdint(1);
+        });
+
+        z = nextZ;
+        ++iterations;
+    });
+}
 ```
 
 Execution flow is more constrained than in GLSL. You cannot stop execution for

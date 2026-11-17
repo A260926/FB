@@ -44,6 +44,17 @@
 #include <functional>
 #include <type_traits>
 
+// Forward declarations of the per-thread active-lane machinery defined in
+// simd_masked.h, so the scalar storage types can befriend it below.
+namespace shader
+{
+	namespace detail
+	{
+		class simdfloat_lane_writer;
+		class simdint_lane_writer;
+	}
+}
+
 #if !defined(USE_SCALAR) && !defined(USE_PACKED_SCALAR)
 #if defined(_WIN32) || defined(_WIN64)
 // Windows (x86/x64)
@@ -790,15 +801,30 @@ inline const void simd_store_int(int32_t* ptr, simdimask_internal _a) { vst1q_s3
 struct simdfloat;
 struct simdint;
 
+// Masked scalar stores: only lanes in the current thread's active domain are
+// overwritten, the other lanes keep their previous value. Definitions follow
+// the storage structs and the active-domain accessors in simd_masked.h.
+void masked_assign_f(simdfloat& _dst, const float& _val);
+void masked_assign_f(simdfloat& _dst, const int32_t& _val);
+void masked_assign_f(simdfloat& _dst, const double& _val);
+void masked_assign_f(simdfloat& _dst, const simdfloat& _val);
+void masked_assign_f(simdfloat& _dst, const simdint& _val);
+void masked_assign_i(simdint& _dst, const int32_t& _val);
+void masked_assign_i(simdint& _dst, const simdint& _val);
+void masked_assign_i(simdint& _dst, const simdfloat& _val);
+
 struct simdfloat {
+	friend class shader::detail::simdfloat_lane_writer;
 	alignas(SIMDWIDTH * 4) float value[SIMDWIDTH];
 	simdfloat() : value{} {}
 	simdfloat(const float& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; }
 	simdfloat(const simdint& _val);
-	simdfloat& operator=(const float& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; return *this; }
-	simdfloat& operator=(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = static_cast<float>(_val); return *this; }
-	simdfloat& operator=(const double& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = static_cast<float>(_val); return *this; }
-	simdfloat& operator=(const simdfloat& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val.value[i]; return *this; }
+	// Construction always fills every lane: a new value never carries partially
+	// uninitialized data, even when built inside an inactive region.
+	simdfloat& operator=(const float& _val) { masked_assign_f(*this, _val); return *this; }
+	simdfloat& operator=(const int32_t& _val) { masked_assign_f(*this, _val); return *this; }
+	simdfloat& operator=(const double& _val) { masked_assign_f(*this, _val); return *this; }
+	simdfloat& operator=(const simdfloat& _val) { masked_assign_f(*this, _val); return *this; }
 	simdfloat& operator=(const simdint& _val);
 };
 
@@ -811,12 +837,13 @@ struct simddouble {
 };
 
 struct simdint {
+	friend class shader::detail::simdint_lane_writer;
 	alignas(SIMDWIDTH * 4) int32_t value[SIMDWIDTH];
 	simdint() : value{} {}
 	simdint(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; }
 	simdint(const simdfloat& _val);
-	simdint& operator=(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; return *this; }
-	simdint& operator=(const simdint& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val.value[i]; return *this; }
+	simdint& operator=(const int32_t& _val) { masked_assign_i(*this, _val); return *this; }
+	simdint& operator=(const simdint& _val) { masked_assign_i(*this, _val); return *this; }
     simdint& operator=(const simdfloat& _val);
 
 };
@@ -1036,9 +1063,9 @@ inline const simdint simd_cvtps_int(const simdfloat& _a) { simdint r; for (int32
 inline const simdfloat simd_cvtepi32_float(const simdint& _a) { return simd_castsi_float(_a); }
 
 inline simdfloat::simdfloat(const simdint& _val) { simdfloat r = simd_tofloat_int(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = (r.value[i]); }
-inline simdfloat& simdfloat::operator=(const simdint& _val) { simdfloat r = simd_tofloat_int(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; return *this; }
+inline simdfloat& simdfloat::operator=(const simdint& _val) { masked_assign_f(*this, _val); return *this; }
 inline simdint::simdint(const simdfloat& _val) { simdint r = simd_toint_float(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; }
-inline simdint& simdint::operator=(const simdfloat& _val) { simdint r = simd_toint_float(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; return *this; }
+inline simdint& simdint::operator=(const simdfloat& _val) { masked_assign_i(*this, _val); return *this; }
 
 
 #undef PACKED_F64_BINARY_MATH
@@ -1266,6 +1293,10 @@ inline const simddmask_internal sse_cmp_double(const simddouble& _a, const simdd
 	default: return _mm_cmpeq_pd(_a, _b); }
 }
 #endif // defined(USE_SSE41) || defined (USE_SSE)
+
+// Active-lane domain, shader::masked() and the masked scalar stores. Included
+// here, once every backend's simdfloat/simdint storage layout is known.
+#include "simd_masked.h"
 
 // Scalar (or wrapper) to backend raw type. Raw intrinsic types (__m128, __m256, __m512, ...) have no
 // constructor from scalars, so the conversion goes through the wrapper struct which has one.

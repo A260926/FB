@@ -50,8 +50,10 @@ struct vec4
 	simdfloat& p = z;
 	simdfloat& q = w;
 
-	vec4() { x = (0.0f);	y = (0.0f);	z = (0.0f);	w = (0.0f); }
-	vec4(const vec4& other) = default;
+	vec4() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0.0f);	y = (0.0f);	z = (0.0f);	w = (0.0f); }
+	// Defined out-of-line so the r/g/b/a/s/t/p/q aliases are bound to this
+	// copy's own components instead of being rebound to the source's members.
+	vec4(const vec4& other);
 
 	vec4(const float& _f);
 

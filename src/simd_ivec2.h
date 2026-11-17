@@ -46,8 +46,10 @@ struct ivec2
 	simdint& s = x;
 	simdint& t = y;
 
-	ivec2() { x = (0);	y = (0); }
-	ivec2(const ivec2& other) = default;
+	ivec2() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0);	y = (0); }
+	// Defined out-of-line so the r/g/s/t aliases are bound to this copy's own
+	// components instead of being rebound to the source's members.
+	ivec2(const ivec2& other);
 
 	ivec2(const int32_t& _f);
 

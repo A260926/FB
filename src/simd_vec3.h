@@ -48,8 +48,10 @@ struct vec3
 	simdfloat& t = y;
 	simdfloat& p = z;
 
-	vec3() { x = (0.0f); y = (0.0f); z = (0.0f); }
-	vec3(const vec3& other) = default;
+	vec3() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0.0f); y = (0.0f); z = (0.0f); }
+	// Defined out-of-line so the r/g/b/s/t/p aliases are bound to this copy's
+	// own components instead of being rebound to the source's members.
+	vec3(const vec3& other);
 
 	vec3(const float& _f);
 

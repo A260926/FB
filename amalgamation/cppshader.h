@@ -48,6 +48,17 @@
 #include <functional>
 #include <type_traits>
 
+// Forward declarations of the per-thread active-lane machinery defined in
+// simd_masked.h, so the scalar storage types can befriend it below.
+namespace shader
+{
+	namespace detail
+	{
+		class simdfloat_lane_writer;
+		class simdint_lane_writer;
+	}
+}
+
 #if !defined(USE_SCALAR) && !defined(USE_PACKED_SCALAR)
 #if defined(_WIN32) || defined(_WIN64)
 // Windows (x86/x64)
@@ -794,15 +805,30 @@ inline const void simd_store_int(int32_t* ptr, simdimask_internal _a) { vst1q_s3
 struct simdfloat;
 struct simdint;
 
+// Masked scalar stores: only lanes in the current thread's active domain are
+// overwritten, the other lanes keep their previous value. Definitions follow
+// the storage structs and the active-domain accessors in simd_masked.h.
+void masked_assign_f(simdfloat& _dst, const float& _val);
+void masked_assign_f(simdfloat& _dst, const int32_t& _val);
+void masked_assign_f(simdfloat& _dst, const double& _val);
+void masked_assign_f(simdfloat& _dst, const simdfloat& _val);
+void masked_assign_f(simdfloat& _dst, const simdint& _val);
+void masked_assign_i(simdint& _dst, const int32_t& _val);
+void masked_assign_i(simdint& _dst, const simdint& _val);
+void masked_assign_i(simdint& _dst, const simdfloat& _val);
+
 struct simdfloat {
+	friend class shader::detail::simdfloat_lane_writer;
 	alignas(SIMDWIDTH * 4) float value[SIMDWIDTH];
 	simdfloat() : value{} {}
 	simdfloat(const float& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; }
 	simdfloat(const simdint& _val);
-	simdfloat& operator=(const float& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; return *this; }
-	simdfloat& operator=(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = static_cast<float>(_val); return *this; }
-	simdfloat& operator=(const double& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = static_cast<float>(_val); return *this; }
-	simdfloat& operator=(const simdfloat& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val.value[i]; return *this; }
+	// Construction always fills every lane: a new value never carries partially
+	// uninitialized data, even when built inside an inactive region.
+	simdfloat& operator=(const float& _val) { masked_assign_f(*this, _val); return *this; }
+	simdfloat& operator=(const int32_t& _val) { masked_assign_f(*this, _val); return *this; }
+	simdfloat& operator=(const double& _val) { masked_assign_f(*this, _val); return *this; }
+	simdfloat& operator=(const simdfloat& _val) { masked_assign_f(*this, _val); return *this; }
 	simdfloat& operator=(const simdint& _val);
 };
 
@@ -815,12 +841,13 @@ struct simddouble {
 };
 
 struct simdint {
+	friend class shader::detail::simdint_lane_writer;
 	alignas(SIMDWIDTH * 4) int32_t value[SIMDWIDTH];
 	simdint() : value{} {}
 	simdint(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; }
 	simdint(const simdfloat& _val);
-	simdint& operator=(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; return *this; }
-	simdint& operator=(const simdint& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val.value[i]; return *this; }
+	simdint& operator=(const int32_t& _val) { masked_assign_i(*this, _val); return *this; }
+	simdint& operator=(const simdint& _val) { masked_assign_i(*this, _val); return *this; }
     simdint& operator=(const simdfloat& _val);
 
 };
@@ -1040,9 +1067,9 @@ inline const simdint simd_cvtps_int(const simdfloat& _a) { simdint r; for (int32
 inline const simdfloat simd_cvtepi32_float(const simdint& _a) { return simd_castsi_float(_a); }
 
 inline simdfloat::simdfloat(const simdint& _val) { simdfloat r = simd_tofloat_int(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = (r.value[i]); }
-inline simdfloat& simdfloat::operator=(const simdint& _val) { simdfloat r = simd_tofloat_int(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; return *this; }
+inline simdfloat& simdfloat::operator=(const simdint& _val) { masked_assign_f(*this, _val); return *this; }
 inline simdint::simdint(const simdfloat& _val) { simdint r = simd_toint_float(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; }
-inline simdint& simdint::operator=(const simdfloat& _val) { simdint r = simd_toint_float(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; return *this; }
+inline simdint& simdint::operator=(const simdfloat& _val) { masked_assign_i(*this, _val); return *this; }
 
 
 #undef PACKED_F64_BINARY_MATH
@@ -1271,6 +1298,9 @@ inline const simddmask_internal sse_cmp_double(const simddouble& _a, const simdd
 }
 #endif // defined(USE_SSE41) || defined (USE_SSE)
 
+// Active-lane domain, shader::masked() and the masked scalar stores. Included
+// here, once every backend's simdfloat/simdint storage layout is known.
+
 // Scalar (or wrapper) to backend raw type. Raw intrinsic types (__m128, __m256, __m512, ...) have no
 // constructor from scalars, so the conversion goes through the wrapper struct which has one.
 // For packed/scalar backends the raw type is the wrapper itself, so this is a plain construction.
@@ -1308,7 +1338,355 @@ static const simdint SIMDITWO = 2;
 
 // ---- End: simd_definitions.h ----
 
+// ---- Begin: simd_masked.h ----
+/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#ifndef SIMD_MASKED_H
+#define SIMD_MASKED_H
+
+// Thread-local active-lane domain for the scalar CPU backends
+// (USE_PACKED_SCALAR / USE_SCALAR) and the shader::masked() scope helper.
+//
+// The active domain is held per thread in two shapes: a simdmask gates float
+// writes (simdfloat, vec2/3/4) and a simdimask gates integer writes
+// (simdint, ivec2/3/4). Both always describe the same per-lane booleans, so
+// entering shader::masked() intersects and restores both of them.
+
+
+#include <utility>
+
+namespace shader
+{
+	namespace detail
+	{
+		// The outermost domain is every lane active. thread_local keeps the
+		// domains of threads processing different image rows independent, and
+		// the inline accessor gives every translation unit the same storage.
+		inline simdmask& active_float_mask()
+		{
+			thread_local simdmask current = simdmask(1);
+			return current;
+		}
+
+		inline simdimask& active_int_mask()
+		{
+			thread_local simdimask current = simdimask(1);
+			return current;
+		}
+
+#if defined(USE_PACKED_SCALAR) || defined(USE_SCALAR)
+
+		inline simdmask intersect_masks(const simdmask& _a, const simdmask& _b)
+		{
+			simdmask result;
+			for (int32_t i = 0; i < SIMDWIDTH; ++i)
+				result.value[i] = (_a.value[i] != 0 && _b.value[i] != 0) ? 1 : 0;
+			return result;
+		}
+
+		inline simdimask intersect_masks(const simdimask& _a, const simdimask& _b)
+		{
+			simdimask result;
+			for (int32_t i = 0; i < SIMDWIDTH; ++i)
+				result.value[i] = (_a.value[i] != 0 && _b.value[i] != 0) ? 1 : 0;
+			return result;
+		}
+
+		inline simdimask mask_as_int(const simdmask& _mask)
+		{
+			simdimask result;
+			for (int32_t i = 0; i < SIMDWIDTH; ++i)
+				result.value[i] = _mask.value[i] != 0 ? 1 : 0;
+			return result;
+		}
+
+		inline simdmask mask_as_float(const simdimask& _mask)
+		{
+			simdmask result;
+			for (int32_t i = 0; i < SIMDWIDTH; ++i)
+				result.value[i] = _mask.value[i] != 0 ? 1 : 0;
+			return result;
+		}
+
+#elif defined(USE_AVX512)
+
+		inline simdmask intersect_masks(const simdmask& _a, const simdmask& _b)
+		{
+			return simdmask(static_cast<int32_t>(_a.value & _b.value));
+		}
+
+		inline simdimask intersect_masks(const simdimask& _a, const simdimask& _b)
+		{
+			return simdimask(static_cast<int32_t>(_a.value & _b.value));
+		}
+
+		inline simdimask mask_as_int(const simdmask& _mask) { return simdimask(static_cast<int32_t>(_mask.value)); }
+		inline simdmask mask_as_float(const simdimask& _mask) { return simdmask(static_cast<int32_t>(_mask.value)); }
+
+#elif defined(USE_NEON)
+
+		inline simdmask intersect_masks(const simdmask& _a, const simdmask& _b)
+		{
+			return simdmask(simd_and_float(_a, _b));
+		}
+
+		inline simdimask intersect_masks(const simdimask& _a, const simdimask& _b)
+		{
+			return simdimask(simd_and_int(_a, _b));
+		}
+
+		inline simdimask mask_as_int(const simdmask& _mask) { return simdimask(_mask.value); }
+		inline simdmask mask_as_float(const simdimask& _mask) { return simdmask(_mask.value); }
+
+#else
+
+		// SSE / AVX2: float and integer masks live in different register files.
+		inline simdmask intersect_masks(const simdmask& _a, const simdmask& _b)
+		{
+			return simdmask(simd_and_float(_a, _b));
+		}
+
+		inline simdimask intersect_masks(const simdimask& _a, const simdimask& _b)
+		{
+			return simdimask(simd_and_int(_a, _b));
+		}
+
+		inline simdimask mask_as_int(const simdmask& _mask)
+		{
+#ifdef USE_AVX2
+			return simdimask(_mm256_castps_si256(_mask.value));
+#else
+			return simdimask(_mm_castps_si128(_mask.value));
+#endif
+		}
+
+		inline simdmask mask_as_float(const simdimask& _mask)
+		{
+#ifdef USE_AVX2
+			return simdmask(_mm256_castsi256_ps(_mask.value));
+#else
+			return simdmask(_mm_castsi128_ps(_mask.value));
+#endif
+		}
+
+#endif
+
+		// Vector construction always produces a complete value: while a
+		// constructor body runs, every lane is treated as active, regardless
+		// of the surrounding masked() scope. The enclosing domain is restored
+		// when the constructor returns or throws.
+		class construction_full_scope
+		{
+		public:
+			construction_full_scope()
+				: m_savedFloat(active_float_mask()), m_savedInt(active_int_mask())
+			{
+				active_float_mask() = simdmask(1);
+				active_int_mask() = simdimask(1);
+			}
+
+			~construction_full_scope()
+			{
+				active_float_mask() = m_savedFloat;
+				active_int_mask() = m_savedInt;
+			}
+
+			construction_full_scope(const construction_full_scope&) = delete;
+			construction_full_scope& operator=(const construction_full_scope&) = delete;
+
+		private:
+			simdmask m_savedFloat;
+			simdimask m_savedInt;
+		};
+
+		// RAII scope: intersects on entry, restores on exit (also when the body
+		// throws). Both domains are always saved so either mask argument type
+		// drives float and integer writes alike.
+		class mask_scope
+		{		public:
+			explicit mask_scope(const simdmask& _mask)
+				: m_savedFloat(active_float_mask()), m_savedInt(active_int_mask())
+			{
+				active_float_mask() = intersect_masks(active_float_mask(), _mask);
+				active_int_mask() = intersect_masks(active_int_mask(), mask_as_int(_mask));
+			}
+
+			explicit mask_scope(const simdimask& _mask)
+				: m_savedFloat(active_float_mask()), m_savedInt(active_int_mask())
+			{
+				active_int_mask() = intersect_masks(active_int_mask(), _mask);
+				active_float_mask() = intersect_masks(active_float_mask(), mask_as_float(_mask));
+			}
+
+			~mask_scope()
+			{
+				active_float_mask() = m_savedFloat;
+				active_int_mask() = m_savedInt;
+			}
+
+			mask_scope(const mask_scope&) = delete;
+			mask_scope& operator=(const mask_scope&) = delete;
+
+		private:
+			simdmask m_savedFloat;
+			simdimask m_savedInt;
+		};
+	}
+
+	// Run _body once with the active domain intersected with _mask. The host
+	// always calls _body exactly once, even when every lane is inactive. The
+	// previous domain is restored when the scope ends, and exceptions propagate
+	// to the caller after the restore.
+	template<typename Callable>
+	inline void masked(const simdmask& _mask, Callable&& _body)
+	{
+		detail::mask_scope scope(_mask);
+		std::forward<Callable>(_body)();
+	}
+
+	template<typename Callable>
+	inline void masked(const simdimask& _mask, Callable&& _body)
+	{
+		detail::mask_scope scope(_mask);
+		std::forward<Callable>(_body)();
+	}
+}
+
+#if defined(USE_PACKED_SCALAR) || defined(USE_SCALAR)
+
+namespace shader
+{
+	namespace detail
+	{
+		// Narrow, befriended accessors used by the masked stores below. The
+		// public value[] array keeps its original full-width semantics for
+		// direct access and simd_load/simd_store.
+		class simdfloat_lane_writer
+		{
+		public:
+			static void set(simdfloat& _dst, int32_t _lane, float _v) { _dst.value[_lane] = _v; }
+		};
+
+		class simdint_lane_writer
+		{
+		public:
+			static void set(simdint& _dst, int32_t _lane, int32_t _v) { _dst.value[_lane] = _v; }
+		};
+	}
+}
+
+inline void masked_assign_f(simdfloat& _dst, const float& _val)
+{
+	const simdmask& active = shader::detail::active_float_mask();
+	for (int32_t i = 0; i < SIMDWIDTH; ++i)
+		if (active.value[i] != 0)
+			shader::detail::simdfloat_lane_writer::set(_dst, i, _val);
+}
+
+inline void masked_assign_f(simdfloat& _dst, const int32_t& _val)
+{
+	masked_assign_f(_dst, static_cast<float>(_val));
+}
+
+inline void masked_assign_f(simdfloat& _dst, const double& _val)
+{
+	masked_assign_f(_dst, static_cast<float>(_val));
+}
+
+inline void masked_assign_f(simdfloat& _dst, const simdfloat& _val)
+{
+	const simdmask& active = shader::detail::active_float_mask();
+	for (int32_t i = 0; i < SIMDWIDTH; ++i)
+		if (active.value[i] != 0)
+			shader::detail::simdfloat_lane_writer::set(_dst, i, _val.value[i]);
+}
+
+inline void masked_assign_f(simdfloat& _dst, const simdint& _val)
+{
+	const simdmask& active = shader::detail::active_float_mask();
+	for (int32_t i = 0; i < SIMDWIDTH; ++i)
+		if (active.value[i] != 0)
+			shader::detail::simdfloat_lane_writer::set(_dst, i, static_cast<float>(_val.value[i]));
+}
+
+inline void masked_assign_i(simdint& _dst, const int32_t& _val)
+{
+	const simdimask& active = shader::detail::active_int_mask();
+	for (int32_t i = 0; i < SIMDWIDTH; ++i)
+		if (active.value[i] != 0)
+			shader::detail::simdint_lane_writer::set(_dst, i, _val);
+}
+
+inline void masked_assign_i(simdint& _dst, const simdint& _val)
+{
+	const simdimask& active = shader::detail::active_int_mask();
+	for (int32_t i = 0; i < SIMDWIDTH; ++i)
+		if (active.value[i] != 0)
+			shader::detail::simdint_lane_writer::set(_dst, i, _val.value[i]);
+}
+
+inline void masked_assign_i(simdint& _dst, const simdfloat& _val)
+{
+	const simdimask& active = shader::detail::active_int_mask();
+	for (int32_t i = 0; i < SIMDWIDTH; ++i)
+		if (active.value[i] != 0)
+			shader::detail::simdint_lane_writer::set(_dst, i, static_cast<int32_t>(_val.value[i]));
+}
+
+#endif // USE_PACKED_SCALAR || USE_SCALAR
+
+#endif // SIMD_MASKED_H
+// ---- End: simd_masked.h ----
+
 // ---- Begin: simd_traits.h ----
+/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_TRAITS_H
+#define SIMD_TRAITS_H
 
 #include <type_traits>
 
@@ -1320,11 +1698,70 @@ struct is_any_of : std::false_type {};
 template<typename T, typename U, typename... Rest>
 struct is_any_of<T, U, Rest...> : std::conditional<std::is_same<typename std::decay<T>::type, U>::value, std::true_type, is_any_of<T, Rest...>>::type {};
 
+#endif
 // ---- End: simd_traits.h ----
 
 // ---- Begin: simd_vectors.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_VECTORS
+#define SIMD_VECTORS
+
+
+#endif
+
+
+// ---- End: simd_vectors.h ----
 
 // ---- Begin: simd_vec2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_VEC2_H
+#define SIMD_VEC2_H
 
 
 struct vec2;
@@ -1345,8 +1782,10 @@ struct vec2
 	simdfloat& s = x;
 	simdfloat& t = y;
 
-	vec2() { x = (0.0f);	y = (0.0f); }
-	vec2(const vec2& other) = default;
+	vec2() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0.0f);	y = (0.0f); }
+	// Defined out-of-line so the r/g/s/t aliases are bound to this copy's own
+	// components instead of being rebound to the source's members.
+	vec2(const vec2& other);
 
 	vec2(const float& _f);
 
@@ -1513,10 +1952,37 @@ struct vec2
 	}
 };
 
+#endif
 
 // ---- End: simd_vec2.h ----
 
 // ---- Begin: simd_vec3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_VEC3_H
+#define SIMD_VEC3_H
 
 
 struct vec2;
@@ -1539,8 +2005,10 @@ struct vec3
 	simdfloat& t = y;
 	simdfloat& p = z;
 
-	vec3() { x = (0.0f); y = (0.0f); z = (0.0f); }
-	vec3(const vec3& other) = default;
+	vec3() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0.0f); y = (0.0f); z = (0.0f); }
+	// Defined out-of-line so the r/g/b/s/t/p aliases are bound to this copy's
+	// own components instead of being rebound to the source's members.
+	vec3(const vec3& other);
 
 	vec3(const float& _f);
 
@@ -2074,10 +2542,37 @@ struct vec3
 	}
 };
 
+#endif
 
 // ---- End: simd_vec3.h ----
 
 // ---- Begin: simd_vec4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_VEC4_H
+#define SIMD_VEC4_H
 
 
 struct vec2;
@@ -2102,8 +2597,10 @@ struct vec4
 	simdfloat& p = z;
 	simdfloat& q = w;
 
-	vec4() { x = (0.0f);	y = (0.0f);	z = (0.0f);	w = (0.0f); }
-	vec4(const vec4& other) = default;
+	vec4() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0.0f);	y = (0.0f);	z = (0.0f);	w = (0.0f); }
+	// Defined out-of-line so the r/g/b/a/s/t/p/q aliases are bound to this
+	// copy's own components instead of being rebound to the source's members.
+	vec4(const vec4& other);
 
 	vec4(const float& _f);
 
@@ -3741,10 +4238,37 @@ struct vec4
 
 };
 
+#endif
 
 // ---- End: simd_vec4.h ----
 
 // ---- Begin: simd_dvec2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_DVEC2_H
+#define SIMD_DVEC2_H
 
 
 struct vec2;
@@ -3927,11 +4451,38 @@ struct dvec2
 	}
 };
 
+#endif
 
 
 // ---- End: simd_dvec2.h ----
 
 // ---- Begin: simd_dvec3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_DVEC3_H
+#define SIMD_DVEC3_H
 
 
 struct vec2;
@@ -4487,11 +5038,38 @@ struct dvec3
 	}
 };
 
+#endif
 
 
 // ---- End: simd_dvec3.h ----
 
 // ---- Begin: simd_dvec4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_DVEC4_H
+#define SIMD_DVEC4_H
 
 
 struct vec2;
@@ -6150,11 +6728,38 @@ struct dvec4
 
 };
 
+#endif
 
 
 // ---- End: simd_dvec4.h ----
 
 // ---- Begin: simd_ivec2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_IVEC2_H
+#define SIMD_IVEC2_H
 
 
 struct vec2;
@@ -6175,8 +6780,10 @@ struct ivec2
 	simdint& s = x;
 	simdint& t = y;
 
-	ivec2() { x = (0);	y = (0); }
-	ivec2(const ivec2& other) = default;
+	ivec2() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0);	y = (0); }
+	// Defined out-of-line so the r/g/s/t aliases are bound to this copy's own
+	// components instead of being rebound to the source's members.
+	ivec2(const ivec2& other);
 
 	ivec2(const int32_t& _f);
 
@@ -6336,11 +6943,38 @@ struct ivec2
 	}
 };
 
+#endif
 
 
 // ---- End: simd_ivec2.h ----
 
 // ---- Begin: simd_ivec3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_IVEC3_H
+#define SIMD_IVEC3_H
 
 
 struct vec2;
@@ -6363,8 +6997,10 @@ struct ivec3
 	simdint& t = y;
 	simdint& p = z;
 
-	ivec3() { x = (0); y = (0); z = (0); }
-	ivec3(const ivec3& other) = default;
+	ivec3() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0); y = (0); z = (0); }
+	// Defined out-of-line so the r/g/b/s/t/p aliases are bound to this copy's
+	// own components instead of being rebound to the source's members.
+	ivec3(const ivec3& other);
 
 	ivec3(const int32_t& _f);
 
@@ -6898,11 +7534,38 @@ struct ivec3
 	}
 };
 
+#endif
 
 
 // ---- End: simd_ivec3.h ----
 
 // ---- Begin: simd_ivec4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_IVEC4_H
+#define SIMD_IVEC4_H
 
 
 struct vec2;
@@ -6927,8 +7590,10 @@ struct ivec4
 	simdint& p = z;
 	simdint& q = w;
 
-	ivec4() { x = (0);	y = (0);	z = (0);	w = (0); }
-	ivec4(const ivec4& other) = default;
+	ivec4() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0);	y = (0);	z = (0);	w = (0); }
+	// Defined out-of-line so the r/g/b/a/s/t/p/q aliases are bound to this
+	// copy's own components instead of being rebound to the source's members.
+	ivec4(const ivec4& other);
 
 	ivec4(const int32_t& _f);
 
@@ -8565,18 +9230,71 @@ struct ivec4
 
 };
 
+#endif
 
 
 // ---- End: simd_ivec4.h ----
 
-
-
-
-// ---- End: simd_vectors.h ----
-
 // ---- Begin: simd_swizzle.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE
+#define SIMD_SWIZZLE
+
+
+#endif
+
+// ---- End: simd_swizzle.h ----
 
 // ---- Begin: simd_swizzle_vec2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_VEC2_H
+#define SIMD_SWIZZLE_VEC2_H
 
 
 #pragma region vec2 swizzle implementations
@@ -8665,24 +9383,24 @@ inline vec4 vec2::yyxy() const { return { y, y, x, y }; }
 inline vec3 vec2::yyy() const { return { y, y, y }; }
 inline vec4 vec2::yyyx() const { return { y, y, y, x }; }
 inline vec4 vec2::yyyy() const { return { y, y, y, y }; }
-inline void vec2::gr(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; r = _val1; }
-inline void vec2::gr(const vec2& _val) { g = _val.x; r = _val.y; }
-inline void vec2::gr(const simdfloat& _val) { g = _val; r = _val; }
-inline void vec2::rg(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; g = _val1; }
-inline void vec2::rg(const vec2& _val) { r = _val.x; g = _val.y; }
-inline void vec2::rg(const simdfloat& _val) { r = _val; g = _val; }
-inline void vec2::st(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; t = _val1; }
-inline void vec2::st(const vec2& _val) { s = _val.s; t = _val.t; }
-inline void vec2::st(const simdfloat& _val) { s = _val; t = _val; }
-inline void vec2::ts(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; s = _val1; }
-inline void vec2::ts(const vec2& _val) { t = _val.s; s = _val.t; }
-inline void vec2::ts(const simdfloat& _val) { t = _val; s = _val; }
-inline void vec2::xy(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; y = _val1; }
-inline void vec2::xy(const vec2& _val) { x = _val.x; y = _val.y; }
-inline void vec2::xy(const simdfloat& _val) { x = _val; y = _val; }
-inline void vec2::yx(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; x = _val1; }
-inline void vec2::yx(const vec2& _val) { y = _val.x; x = _val.y; }
-inline void vec2::yx(const simdfloat& _val) { y = _val; x = _val; }
+inline void vec2::gr(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec2::gr(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec2::gr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec2::rg(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec2::rg(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec2::rg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec2::st(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec2::st(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec2::st(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec2::ts(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec2::ts(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec2::ts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec2::xy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec2::xy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec2::xy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec2::yx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec2::yx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec2::yx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
 
 #pragma endregion
 
@@ -8694,25 +9412,56 @@ inline vec2 vec2::operator=(const vec3& _v) { x = _v.x; y = _v.y; return *this; 
 inline vec2 vec2::operator=(const vec4& _v) { x = _v.x; y = _v.y; return *this; }
 
 // constructors for vec2
-inline vec2::vec2(const float& _f) { x = _f; y = _f; }
+inline vec2::vec2(const float& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline vec2::vec2(const simdfloat& _f) { x = _f; y = _f; }
+inline vec2::vec2(const simdfloat& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline vec2::vec2(const ivec2& _v) { x = _v.x; y = _v.y; }
+inline vec2::vec2(const ivec2& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; }
 
-inline vec2::vec2(const simdfloat& _x, const simdfloat& _y) { x = _x; y = _y; }
+inline vec2::vec2(const simdfloat& _x, const simdfloat& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec2::vec2(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; }
+vec2::vec2(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec2::vec2(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; }
+vec2::vec2(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
 
+// Full-width copy: every lane is initialized, and the r/g/s/t aliases keep
+// pointing at this object's own components (their in-class initializers).
+inline vec2::vec2(const vec2& other) : x(other.x), y(other.y) {}
+
+#endif
 
 
 // ---- End: simd_swizzle_vec2.h ----
 
 // ---- Begin: simd_swizzle_vec3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_VEC3_H
+#define SIMD_SWIZZLE_VEC3_H
 
 
 #pragma region vec3 swizzle implementations
@@ -9070,115 +9819,115 @@ inline vec3 vec3::zzz() const { return { z, z, z }; }
 inline vec4 vec3::zzzx() const { return { z, z, z, x }; }
 inline vec4 vec3::zzzy() const { return { z, z, z, y }; }
 inline vec4 vec3::zzzz() const { return { z, z, z, z }; }
-inline void vec3::bg(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; g = _val1; }
-inline void vec3::bg(const vec2& _val) { b = _val.x; g = _val.y; }
-inline void vec3::bg(const simdfloat& _val) { b = _val; g = _val; }
-inline void vec3::bgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; g = _val1; r = _val2; }
-inline void vec3::bgr(const vec3& _val) { b = _val.x; g = _val.y; r = _val.z; }
-inline void vec3::bgr(const simdfloat& _val) { b = _val; g = _val; r = _val; }
-inline void vec3::br(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; r = _val1; }
-inline void vec3::br(const vec2& _val) { b = _val.x; r = _val.y; }
-inline void vec3::br(const simdfloat& _val) { b = _val; r = _val; }
-inline void vec3::brg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; r = _val1; g = _val2; }
-inline void vec3::brg(const vec3& _val) { b = _val.x; r = _val.y; g = _val.z; }
-inline void vec3::brg(const simdfloat& _val) { b = _val; r = _val; g = _val; }
-inline void vec3::gb(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; b = _val1; }
-inline void vec3::gb(const vec2& _val) { g = _val.x; b = _val.y; }
-inline void vec3::gb(const simdfloat& _val) { g = _val; b = _val; }
-inline void vec3::gbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; b = _val1; r = _val2; }
-inline void vec3::gbr(const vec3& _val) { g = _val.x; b = _val.y; r = _val.z; }
-inline void vec3::gbr(const simdfloat& _val) { g = _val; b = _val; r = _val; }
-inline void vec3::gr(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; r = _val1; }
-inline void vec3::gr(const vec2& _val) { g = _val.x; r = _val.y; }
-inline void vec3::gr(const simdfloat& _val) { g = _val; r = _val; }
-inline void vec3::grb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; r = _val1; b = _val2; }
-inline void vec3::grb(const vec3& _val) { g = _val.x; r = _val.y; b = _val.z; }
-inline void vec3::grb(const simdfloat& _val) { g = _val; r = _val; b = _val; }
-inline void vec3::rb(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; b = _val1; }
-inline void vec3::rb(const vec2& _val) { r = _val.x; b = _val.y; }
-inline void vec3::rb(const simdfloat& _val) { r = _val; b = _val; }
-inline void vec3::rbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; b = _val1; g = _val2; }
-inline void vec3::rbg(const vec3& _val) { r = _val.x; b = _val.y; g = _val.z; }
-inline void vec3::rbg(const simdfloat& _val) { r = _val; b = _val; g = _val; }
-inline void vec3::rg(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; g = _val1; }
-inline void vec3::rg(const vec2& _val) { r = _val.x; g = _val.y; }
-inline void vec3::rg(const simdfloat& _val) { r = _val; g = _val; }
-inline void vec3::rgb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; g = _val1; b = _val2; }
-inline void vec3::rgb(const vec3& _val) { r = _val.x; g = _val.y; b = _val.z; }
-inline void vec3::rgb(const simdfloat& _val) { r = _val; g = _val; b = _val; }
-inline void vec3::st(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; t = _val1; }
-inline void vec3::st(const vec2& _val) { s = _val.s; t = _val.t; }
-inline void vec3::st(const simdfloat& _val) { s = _val; t = _val; }
-inline void vec3::stp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; t = _val1; p = _val2; }
-inline void vec3::stp(const vec3& _val) { s = _val.s; t = _val.t; p = _val.p; }
-inline void vec3::stp(const simdfloat& _val) { s = _val; t = _val; p = _val; }
-inline void vec3::sp(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; p = _val1; }
-inline void vec3::sp(const vec2& _val) { s = _val.s; p = _val.t; }
-inline void vec3::sp(const simdfloat& _val) { s = _val; p = _val; }
-inline void vec3::spt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; p = _val1; t = _val2; }
-inline void vec3::spt(const vec3& _val) { s = _val.s; p = _val.t; t = _val.p; }
-inline void vec3::spt(const simdfloat& _val) { s = _val; p = _val; t = _val; }
-inline void vec3::ts(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; s = _val1; }
-inline void vec3::ts(const vec2& _val) { t = _val.s; s = _val.t; }
-inline void vec3::ts(const simdfloat& _val) { t = _val; s = _val; }
-inline void vec3::tsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; s = _val1; p = _val2; }
-inline void vec3::tsp(const vec3& _val) { t = _val.s; s = _val.t; p = _val.p; }
-inline void vec3::tsp(const simdfloat& _val) { t = _val; s = _val; p = _val; }
-inline void vec3::tp(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; p = _val1; }
-inline void vec3::tp(const vec2& _val) { t = _val.s; p = _val.t; }
-inline void vec3::tp(const simdfloat& _val) { t = _val; p = _val; }
-inline void vec3::tps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; p = _val1; s = _val2; }
-inline void vec3::tps(const vec3& _val) { t = _val.s; p = _val.t; s = _val.p; }
-inline void vec3::tps(const simdfloat& _val) { t = _val; p = _val; s = _val; }
-inline void vec3::ps(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; s = _val1; }
-inline void vec3::ps(const vec2& _val) { p = _val.s; s = _val.t; }
-inline void vec3::ps(const simdfloat& _val) { p = _val; s = _val; }
-inline void vec3::pst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; s = _val1; t = _val2; }
-inline void vec3::pst(const vec3& _val) { p = _val.s; s = _val.t; t = _val.p; }
-inline void vec3::pst(const simdfloat& _val) { p = _val; s = _val; t = _val; }
-inline void vec3::pt(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; t = _val1; }
-inline void vec3::pt(const vec2& _val) { p = _val.s; t = _val.t; }
-inline void vec3::pt(const simdfloat& _val) { p = _val; t = _val; }
-inline void vec3::pts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; t = _val1; s = _val2; }
-inline void vec3::pts(const vec3& _val) { p = _val.s; t = _val.t; s = _val.p; }
-inline void vec3::pts(const simdfloat& _val) { p = _val; t = _val; s = _val; }
+inline void vec3::bg(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec3::bg(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec3::bg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec3::bgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec3::bgr(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec3::bgr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec3::br(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec3::br(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec3::br(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec3::brg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec3::brg(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec3::brg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec3::gb(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec3::gb(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec3::gb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec3::gbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec3::gbr(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec3::gbr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec3::gr(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec3::gr(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec3::gr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec3::grb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec3::grb(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec3::grb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec3::rb(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec3::rb(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec3::rb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec3::rbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec3::rbg(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec3::rbg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec3::rg(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec3::rg(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec3::rg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec3::rgb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec3::rgb(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec3::rgb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec3::st(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec3::st(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec3::st(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec3::stp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec3::stp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec3::stp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec3::sp(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec3::sp(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec3::sp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec3::spt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec3::spt(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec3::spt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec3::ts(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec3::ts(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec3::ts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec3::tsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec3::tsp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec3::tsp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec3::tp(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec3::tp(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec3::tp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec3::tps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec3::tps(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec3::tps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec3::ps(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec3::ps(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec3::ps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec3::pst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec3::pst(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec3::pst(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec3::pt(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec3::pt(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec3::pt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec3::pts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec3::pts(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec3::pts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
 
-inline void vec3::xy(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; y = _val1; }
-inline void vec3::xy(const vec2& _val) { x = _val.x; y = _val.y; }
-inline void vec3::xy(const simdfloat& _val) { x = _val; y = _val; }
-inline void vec3::xyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; y = _val1; z = _val2; }
-inline void vec3::xyz(const vec3& _val) { x = _val.x; y = _val.y; z = _val.z; }
-inline void vec3::xyz(const simdfloat& _val) { x = _val; y = _val; z = _val; }
-inline void vec3::xz(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; z = _val1; }
-inline void vec3::xz(const vec2& _val) { x = _val.x; z = _val.y; }
-inline void vec3::xz(const simdfloat& _val) { x = _val; z = _val; }
-inline void vec3::xzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; z = _val1; y = _val2; }
-inline void vec3::xzy(const vec3& _val) { x = _val.x; z = _val.y; y = _val.z; }
-inline void vec3::xzy(const simdfloat& _val) { x = _val; z = _val; y = _val; }
-inline void vec3::yx(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; x = _val1; }
-inline void vec3::yx(const vec2& _val) { y = _val.x; x = _val.y; }
-inline void vec3::yx(const simdfloat& _val) { y = _val; x = _val; }
-inline void vec3::yxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; x = _val1; z = _val2; }
-inline void vec3::yxz(const vec3& _val) { y = _val.x; x = _val.y; z = _val.z; }
-inline void vec3::yxz(const simdfloat& _val) { y = _val; x = _val; z = _val; }
-inline void vec3::yz(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; z = _val1; }
-inline void vec3::yz(const vec2& _val) { y = _val.x; z = _val.y; }
-inline void vec3::yz(const simdfloat& _val) { y = _val; z = _val; }
-inline void vec3::yzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; z = _val1; x = _val2; }
-inline void vec3::yzx(const vec3& _val) { y = _val.x; z = _val.y; x = _val.z; }
-inline void vec3::yzx(const simdfloat& _val) { y = _val; z = _val; x = _val; }
-inline void vec3::zx(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; x = _val1; }
-inline void vec3::zx(const vec2& _val) { z = _val.x; x = _val.y; }
-inline void vec3::zx(const simdfloat& _val) { z = _val; x = _val; }
-inline void vec3::zxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; x = _val1; y = _val2; }
-inline void vec3::zxy(const vec3& _val) { z = _val.x; x = _val.y; y = _val.z; }
-inline void vec3::zxy(const simdfloat& _val) { z = _val; x = _val; y = _val; }
-inline void vec3::zy(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; y = _val1; }
-inline void vec3::zy(const vec2& _val) { z = _val.x; y = _val.y; }
-inline void vec3::zy(const simdfloat& _val) { z = _val; y = _val; }
-inline void vec3::zyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; y = _val1; x = _val2; }
-inline void vec3::zyx(const vec3& _val) { z = _val.x; y = _val.y; x = _val.z; }
-inline void vec3::zyx(const simdfloat& _val) { z = _val; y = _val; x = _val; }
+inline void vec3::xy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec3::xy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec3::xy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec3::xyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec3::xyz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec3::xyz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec3::xz(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec3::xz(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec3::xz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec3::xzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec3::xzy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec3::xzy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec3::yx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec3::yx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec3::yx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec3::yxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec3::yxz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec3::yxz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec3::yz(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec3::yz(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec3::yz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec3::yzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec3::yzx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec3::yzx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec3::zx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec3::zx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec3::zx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec3::zxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec3::zxy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec3::zxy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec3::zy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec3::zy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec3::zy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec3::zyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec3::zyx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec3::zyx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
 
 #pragma endregion
 
@@ -9189,37 +9938,68 @@ inline vec3 vec3::operator=(const ivec3& _v) { x = _v.x; y = _v.y; z = _v.z; ret
 inline vec3 vec3::operator=(const vec4& _v) { x = _v.x; y = _v.y; z = _v.z; return *this; }
 
 // constructors for vec3
-inline vec3::vec3(const float& _f) { x = _f; y = _f; z = _f; }
+inline vec3::vec3(const float& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; }
 
-inline vec3::vec3(const simdfloat& _f) { x = _f; y = _f; z = _f; }
+inline vec3::vec3(const simdfloat& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; }
 
-inline vec3::vec3(const ivec3& _v) { x = _v.x; y = _v.y; z = _v.z; }
+inline vec3::vec3(const ivec3& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; z = _v.z; }
 
-inline vec3::vec3(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z) { x = _x; y = _y; z = _z; }
+inline vec3::vec3(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; }
 
-inline vec3::vec3(const simdfloat& _x, const vec2& _y) { x = _x; y = _y.x; z = _y.y; }
+inline vec3::vec3(const simdfloat& _x, const vec2& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y.x; z = _y.y; }
 
-inline vec3::vec3(const vec2& _x, const simdfloat& _z) { x = _x.x; y = _x.y; z = _z; }
+inline vec3::vec3(const vec2& _x, const simdfloat& _z) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _z; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec3::vec3(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; }
+vec3::vec3(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; z = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec3::vec3(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; }
+vec3::vec3(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; z = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec2>, int>>
-vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; }
 
+// Full-width copy: every lane is initialized, and the r/g/b/s/t/p aliases
+// keep pointing at this object's own components (their in-class initializers).
+inline vec3::vec3(const vec3& other) : x(other.x), y(other.y), z(other.z) {}
+
+#endif
 
 // ---- End: simd_swizzle_vec3.h ----
 
 // ---- Begin: simd_swizzle_vec4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_VEC4_H
+#define SIMD_SWIZZLE_VEC4_H
 
 
 #pragma region vec4 swizzle implementations
@@ -10233,546 +11013,546 @@ inline vec4 vec4::zzzw() const { return { z, z, z, w }; }
 inline vec4 vec4::zzzx() const { return { z, z, z, x }; }
 inline vec4 vec4::zzzy() const { return { z, z, z, y }; }
 inline vec4 vec4::zzzz() const { return { z, z, z, z }; }
-inline void vec4::ab(const simdfloat& _val0, const simdfloat& _val1) { a = _val0; b = _val1; }
-inline void vec4::ab(const vec2& _val) { a = _val.x; b = _val.y; }
-inline void vec4::ab(const simdfloat& _val) { a = _val; b = _val; }
-inline void vec4::abg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { a = _val0; b = _val1; g = _val2; }
-inline void vec4::abg(const vec3& _val) { a = _val.x; b = _val.y; g = _val.z; }
-inline void vec4::abg(const simdfloat& _val) { a = _val; b = _val; g = _val; }
-inline void vec4::abgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { a = _val0; b = _val1; g = _val2; r = _val3; }
-inline void vec4::abgr(const vec4& _val) { a = _val.x; b = _val.y; g = _val.z; r = _val.w; }
-inline void vec4::abgr(const simdfloat& _val) { a = _val; b = _val; g = _val; r = _val; }
-inline void vec4::abr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { a = _val0; b = _val1; r = _val2; }
-inline void vec4::abr(const vec3& _val) { a = _val.x; b = _val.y; r = _val.z; }
-inline void vec4::abr(const simdfloat& _val) { a = _val; b = _val; r = _val; }
-inline void vec4::abrg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { a = _val0; b = _val1; r = _val2; g = _val3; }
-inline void vec4::abrg(const vec4& _val) { a = _val.x; b = _val.y; r = _val.z; g = _val.w; }
-inline void vec4::abrg(const simdfloat& _val) { a = _val; b = _val; r = _val; g = _val; }
-inline void vec4::ag(const simdfloat& _val0, const simdfloat& _val1) { a = _val0; g = _val1; }
-inline void vec4::ag(const vec2& _val) { a = _val.x; g = _val.y; }
-inline void vec4::ag(const simdfloat& _val) { a = _val; g = _val; }
-inline void vec4::agb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { a = _val0; g = _val1; b = _val2; }
-inline void vec4::agb(const vec3& _val) { a = _val.x; g = _val.y; b = _val.z; }
-inline void vec4::agb(const simdfloat& _val) { a = _val; g = _val; b = _val; }
-inline void vec4::agbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { a = _val0; g = _val1; b = _val2; r = _val3; }
-inline void vec4::agbr(const vec4& _val) { a = _val.x; g = _val.y; b = _val.z; r = _val.w; }
-inline void vec4::agbr(const simdfloat& _val) { a = _val; g = _val; b = _val; r = _val; }
-inline void vec4::agr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { a = _val0; g = _val1; r = _val2; }
-inline void vec4::agr(const vec3& _val) { a = _val.x; g = _val.y; r = _val.z; }
-inline void vec4::agr(const simdfloat& _val) { a = _val; g = _val; r = _val; }
-inline void vec4::agrb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { a = _val0; g = _val1; r = _val2; b = _val3; }
-inline void vec4::agrb(const vec4& _val) { a = _val.x; g = _val.y; r = _val.z; b = _val.w; }
-inline void vec4::agrb(const simdfloat& _val) { a = _val; g = _val; r = _val; b = _val; }
-inline void vec4::ar(const simdfloat& _val0, const simdfloat& _val1) { a = _val0; r = _val1; }
-inline void vec4::ar(const vec2& _val) { a = _val.x; r = _val.y; }
-inline void vec4::ar(const simdfloat& _val) { a = _val; r = _val; }
-inline void vec4::arb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { a = _val0; r = _val1; b = _val2; }
-inline void vec4::arb(const vec3& _val) { a = _val.x; r = _val.y; b = _val.z; }
-inline void vec4::arb(const simdfloat& _val) { a = _val; r = _val; b = _val; }
-inline void vec4::arbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { a = _val0; r = _val1; b = _val2; g = _val3; }
-inline void vec4::arbg(const vec4& _val) { a = _val.x; r = _val.y; b = _val.z; g = _val.w; }
-inline void vec4::arbg(const simdfloat& _val) { a = _val; r = _val; b = _val; g = _val; }
-inline void vec4::arg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { a = _val0; r = _val1; g = _val2; }
-inline void vec4::arg(const vec3& _val) { a = _val.x; r = _val.y; g = _val.z; }
-inline void vec4::arg(const simdfloat& _val) { a = _val; r = _val; g = _val; }
-inline void vec4::argb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { a = _val0; r = _val1; g = _val2; b = _val3; }
-inline void vec4::argb(const vec4& _val) { a = _val.x; r = _val.y; g = _val.z; b = _val.w; }
-inline void vec4::argb(const simdfloat& _val) { a = _val; r = _val; g = _val; b = _val; }
-inline void vec4::ba(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; a = _val1; }
-inline void vec4::ba(const vec2& _val) { b = _val.x; a = _val.y; }
-inline void vec4::ba(const simdfloat& _val) { b = _val; a = _val; }
-inline void vec4::bag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; a = _val1; g = _val2; }
-inline void vec4::bag(const vec3& _val) { b = _val.x; a = _val.y; g = _val.z; }
-inline void vec4::bag(const simdfloat& _val) { b = _val; a = _val; g = _val; }
-inline void vec4::bagr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { b = _val0; a = _val1; g = _val2; r = _val3; }
-inline void vec4::bagr(const vec4& _val) { b = _val.x; a = _val.y; g = _val.z; r = _val.w; }
-inline void vec4::bagr(const simdfloat& _val) { b = _val; a = _val; g = _val; r = _val; }
-inline void vec4::bar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; a = _val1; r = _val2; }
-inline void vec4::bar(const vec3& _val) { b = _val.x; a = _val.y; r = _val.z; }
-inline void vec4::bar(const simdfloat& _val) { b = _val; a = _val; r = _val; }
-inline void vec4::barg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { b = _val0; a = _val1; r = _val2; g = _val3; }
-inline void vec4::barg(const vec4& _val) { b = _val.x; a = _val.y; r = _val.z; g = _val.w; }
-inline void vec4::barg(const simdfloat& _val) { b = _val; a = _val; r = _val; g = _val; }
-inline void vec4::bg(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; g = _val1; }
-inline void vec4::bg(const vec2& _val) { b = _val.x; g = _val.y; }
-inline void vec4::bg(const simdfloat& _val) { b = _val; g = _val; }
-inline void vec4::bga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; g = _val1; a = _val2; }
-inline void vec4::bga(const vec3& _val) { b = _val.x; g = _val.y; a = _val.z; }
-inline void vec4::bga(const simdfloat& _val) { b = _val; g = _val; a = _val; }
-inline void vec4::bgar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { b = _val0; g = _val1; a = _val2; r = _val3; }
-inline void vec4::bgar(const vec4& _val) { b = _val.x; g = _val.y; a = _val.z; r = _val.w; }
-inline void vec4::bgar(const simdfloat& _val) { b = _val; g = _val; a = _val; r = _val; }
-inline void vec4::bgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; g = _val1; r = _val2; }
-inline void vec4::bgr(const vec3& _val) { b = _val.x; g = _val.y; r = _val.z; }
-inline void vec4::bgr(const simdfloat& _val) { b = _val; g = _val; r = _val; }
-inline void vec4::bgra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { b = _val0; g = _val1; r = _val2; a = _val3; }
-inline void vec4::bgra(const vec4& _val) { b = _val.x; g = _val.y; r = _val.z; a = _val.w; }
-inline void vec4::bgra(const simdfloat& _val) { b = _val; g = _val; r = _val; a = _val; }
-inline void vec4::br(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; r = _val1; }
-inline void vec4::br(const vec2& _val) { b = _val.x; r = _val.y; }
-inline void vec4::br(const simdfloat& _val) { b = _val; r = _val; }
-inline void vec4::bra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; r = _val1; a = _val2; }
-inline void vec4::bra(const vec3& _val) { b = _val.x; r = _val.y; a = _val.z; }
-inline void vec4::bra(const simdfloat& _val) { b = _val; r = _val; a = _val; }
-inline void vec4::brag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { b = _val0; r = _val1; a = _val2; g = _val3; }
-inline void vec4::brag(const vec4& _val) { b = _val.x; r = _val.y; a = _val.z; g = _val.w; }
-inline void vec4::brag(const simdfloat& _val) { b = _val; r = _val; a = _val; g = _val; }
-inline void vec4::brg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; r = _val1; g = _val2; }
-inline void vec4::brg(const vec3& _val) { b = _val.x; r = _val.y; g = _val.z; }
-inline void vec4::brg(const simdfloat& _val) { b = _val; r = _val; g = _val; }
-inline void vec4::brga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { b = _val0; r = _val1; g = _val2; a = _val3; }
-inline void vec4::brga(const vec4& _val) { b = _val.x; r = _val.y; g = _val.z; a = _val.w; }
-inline void vec4::brga(const simdfloat& _val) { b = _val; r = _val; g = _val; a = _val; }
-inline void vec4::ga(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; a = _val1; }
-inline void vec4::ga(const vec2& _val) { g = _val.x; a = _val.y; }
-inline void vec4::ga(const simdfloat& _val) { g = _val; a = _val; }
-inline void vec4::gab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; a = _val1; b = _val2; }
-inline void vec4::gab(const vec3& _val) { g = _val.x; a = _val.y; b = _val.z; }
-inline void vec4::gab(const simdfloat& _val) { g = _val; a = _val; b = _val; }
-inline void vec4::gabr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { g = _val0; a = _val1; b = _val2; r = _val3; }
-inline void vec4::gabr(const vec4& _val) { g = _val.x; a = _val.y; b = _val.z; r = _val.w; }
-inline void vec4::gabr(const simdfloat& _val) { g = _val; a = _val; b = _val; r = _val; }
-inline void vec4::gar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; a = _val1; r = _val2; }
-inline void vec4::gar(const vec3& _val) { g = _val.x; a = _val.y; r = _val.z; }
-inline void vec4::gar(const simdfloat& _val) { g = _val; a = _val; r = _val; }
-inline void vec4::garb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { g = _val0; a = _val1; r = _val2; b = _val3; }
-inline void vec4::garb(const vec4& _val) { g = _val.x; a = _val.y; r = _val.z; b = _val.w; }
-inline void vec4::garb(const simdfloat& _val) { g = _val; a = _val; r = _val; b = _val; }
-inline void vec4::gb(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; b = _val1; }
-inline void vec4::gb(const vec2& _val) { g = _val.x; b = _val.y; }
-inline void vec4::gb(const simdfloat& _val) { g = _val; b = _val; }
-inline void vec4::gba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; b = _val1; a = _val2; }
-inline void vec4::gba(const vec3& _val) { g = _val.x; b = _val.y; a = _val.z; }
-inline void vec4::gba(const simdfloat& _val) { g = _val; b = _val; a = _val; }
-inline void vec4::gbar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { g = _val0; b = _val1; a = _val2; r = _val3; }
-inline void vec4::gbar(const vec4& _val) { g = _val.x; b = _val.y; a = _val.z; r = _val.w; }
-inline void vec4::gbar(const simdfloat& _val) { g = _val; b = _val; a = _val; r = _val; }
-inline void vec4::gbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; b = _val1; r = _val2; }
-inline void vec4::gbr(const vec3& _val) { g = _val.x; b = _val.y; r = _val.z; }
-inline void vec4::gbr(const simdfloat& _val) { g = _val; b = _val; r = _val; }
-inline void vec4::gbra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { g = _val0; b = _val1; r = _val2; a = _val3; }
-inline void vec4::gbra(const vec4& _val) { g = _val.x; b = _val.y; r = _val.z; a = _val.w; }
-inline void vec4::gbra(const simdfloat& _val) { g = _val; b = _val; r = _val; a = _val; }
-inline void vec4::gr(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; r = _val1; }
-inline void vec4::gr(const vec2& _val) { g = _val.x; r = _val.y; }
-inline void vec4::gr(const simdfloat& _val) { g = _val; r = _val; }
-inline void vec4::gra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; r = _val1; a = _val2; }
-inline void vec4::gra(const vec3& _val) { g = _val.x; r = _val.y; a = _val.z; }
-inline void vec4::gra(const simdfloat& _val) { g = _val; r = _val; a = _val; }
-inline void vec4::grab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { g = _val0; r = _val1; a = _val2; b = _val3; }
-inline void vec4::grab(const vec4& _val) { g = _val.x; r = _val.y; a = _val.z; b = _val.w; }
-inline void vec4::grab(const simdfloat& _val) { g = _val; r = _val; a = _val; b = _val; }
-inline void vec4::grb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; r = _val1; b = _val2; }
-inline void vec4::grb(const vec3& _val) { g = _val.x; r = _val.y; b = _val.z; }
-inline void vec4::grb(const simdfloat& _val) { g = _val; r = _val; b = _val; }
-inline void vec4::grba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { g = _val0; r = _val1; b = _val2; a = _val3; }
-inline void vec4::grba(const vec4& _val) { g = _val.x; r = _val.y; b = _val.z; a = _val.w; }
-inline void vec4::grba(const simdfloat& _val) { g = _val; r = _val; b = _val; a = _val; }
-inline void vec4::ra(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; a = _val1; }
-inline void vec4::ra(const vec2& _val) { r = _val.x; a = _val.y; }
-inline void vec4::ra(const simdfloat& _val) { r = _val; a = _val; }
-inline void vec4::rab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; a = _val1; b = _val2; }
-inline void vec4::rab(const vec3& _val) { r = _val.x; a = _val.y; b = _val.z; }
-inline void vec4::rab(const simdfloat& _val) { r = _val; a = _val; b = _val; }
-inline void vec4::rabg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { r = _val0; a = _val1; b = _val2; g = _val3; }
-inline void vec4::rabg(const vec4& _val) { r = _val.x; a = _val.y; b = _val.z; g = _val.w; }
-inline void vec4::rabg(const simdfloat& _val) { r = _val; a = _val; b = _val; g = _val; }
-inline void vec4::rag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; a = _val1; g = _val2; }
-inline void vec4::rag(const vec3& _val) { r = _val.x; a = _val.y; g = _val.z; }
-inline void vec4::rag(const simdfloat& _val) { r = _val; a = _val; g = _val; }
-inline void vec4::ragb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { r = _val0; a = _val1; g = _val2; b = _val3; }
-inline void vec4::ragb(const vec4& _val) { r = _val.x; a = _val.y; g = _val.z; b = _val.w; }
-inline void vec4::ragb(const simdfloat& _val) { r = _val; a = _val; g = _val; b = _val; }
-inline void vec4::rb(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; b = _val1; }
-inline void vec4::rb(const vec2& _val) { r = _val.x; b = _val.y; }
-inline void vec4::rb(const simdfloat& _val) { r = _val; b = _val; }
-inline void vec4::rba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; b = _val1; a = _val2; }
-inline void vec4::rba(const vec3& _val) { r = _val.x; b = _val.y; a = _val.z; }
-inline void vec4::rba(const simdfloat& _val) { r = _val; b = _val; a = _val; }
-inline void vec4::rbag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { r = _val0; b = _val1; a = _val2; g = _val3; }
-inline void vec4::rbag(const vec4& _val) { r = _val.x; b = _val.y; a = _val.z; g = _val.w; }
-inline void vec4::rbag(const simdfloat& _val) { r = _val; b = _val; a = _val; g = _val; }
-inline void vec4::rbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; b = _val1; g = _val2; }
-inline void vec4::rbg(const vec3& _val) { r = _val.x; b = _val.y; g = _val.z; }
-inline void vec4::rbg(const simdfloat& _val) { r = _val; b = _val; g = _val; }
-inline void vec4::rbga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { r = _val0; b = _val1; g = _val2; a = _val3; }
-inline void vec4::rbga(const vec4& _val) { r = _val.x; b = _val.y; g = _val.z; a = _val.w; }
-inline void vec4::rbga(const simdfloat& _val) { r = _val; b = _val; g = _val; a = _val; }
-inline void vec4::rg(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; g = _val1; }
-inline void vec4::rg(const vec2& _val) { r = _val.x; g = _val.y; }
-inline void vec4::rg(const simdfloat& _val) { r = _val; g = _val; }
-inline void vec4::rga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; g = _val1; a = _val2; }
-inline void vec4::rga(const vec3& _val) { r = _val.x; g = _val.y; a = _val.z; }
-inline void vec4::rga(const simdfloat& _val) { r = _val; g = _val; a = _val; }
-inline void vec4::rgab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { r = _val0; g = _val1; a = _val2; b = _val3; }
-inline void vec4::rgab(const vec4& _val) { r = _val.x; g = _val.y; a = _val.z; b = _val.w; }
-inline void vec4::rgab(const simdfloat& _val) { r = _val; g = _val; a = _val; b = _val; }
-inline void vec4::rgb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; g = _val1; b = _val2; }
-inline void vec4::rgb(const vec3& _val) { r = _val.x; g = _val.y; b = _val.z; }
-inline void vec4::rgb(const simdfloat& _val) { r = _val; g = _val; b = _val; }
-inline void vec4::rgba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { r = _val0; g = _val1; b = _val2; a = _val3; }
-inline void vec4::rgba(const vec4& _val) { r = _val.x; g = _val.y; b = _val.z; a = _val.w; }
-inline void vec4::rgba(const simdfloat& _val) { r = _val; g = _val; b = _val; a = _val; }
-inline void vec4::qs(const simdfloat& _val0, const simdfloat& _val1) { q = _val0; s = _val1; }
-inline void vec4::qs(const vec2& _val) { q = _val.s; s = _val.t; }
-inline void vec4::qs(const simdfloat& _val) { q = _val; s = _val; }
-inline void vec4::qst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { q = _val0; s = _val1; t = _val2; }
-inline void vec4::qst(const vec3& _val) { q = _val.s; s = _val.t; t = _val.p; }
-inline void vec4::qst(const simdfloat& _val) { q = _val; s = _val; t = _val; }
-inline void vec4::qstp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { q = _val0; s = _val1; t = _val2; p = _val3; }
-inline void vec4::qstp(const vec4& _val) { q = _val.s; s = _val.t; t = _val.p; p = _val.q; }
-inline void vec4::qstp(const simdfloat& _val) { q = _val; s = _val; t = _val; p = _val; }
-inline void vec4::qsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { q = _val0; s = _val1; p = _val2; }
-inline void vec4::qsp(const vec3& _val) { q = _val.s; s = _val.t; p = _val.p; }
-inline void vec4::qsp(const simdfloat& _val) { q = _val; s = _val; p = _val; }
-inline void vec4::qspt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { q = _val0; s = _val1; p = _val2; t = _val3; }
-inline void vec4::qspt(const vec4& _val) { q = _val.s; s = _val.t; p = _val.p; t = _val.q; }
-inline void vec4::qspt(const simdfloat& _val) { q = _val; s = _val; p = _val; t = _val; }
-inline void vec4::qt(const simdfloat& _val0, const simdfloat& _val1) { q = _val0; t = _val1; }
-inline void vec4::qt(const vec2& _val) { q = _val.s; t = _val.t; }
-inline void vec4::qt(const simdfloat& _val) { q = _val; t = _val; }
-inline void vec4::qts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { q = _val0; t = _val1; s = _val2; }
-inline void vec4::qts(const vec3& _val) { q = _val.s; t = _val.t; s = _val.p; }
-inline void vec4::qts(const simdfloat& _val) { q = _val; t = _val; s = _val; }
-inline void vec4::qtsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { q = _val0; t = _val1; s = _val2; p = _val3; }
-inline void vec4::qtsp(const vec4& _val) { q = _val.s; t = _val.t; s = _val.p; p = _val.q; }
-inline void vec4::qtsp(const simdfloat& _val) { q = _val; t = _val; s = _val; p = _val; }
-inline void vec4::qtp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { q = _val0; t = _val1; p = _val2; }
-inline void vec4::qtp(const vec3& _val) { q = _val.s; t = _val.t; p = _val.p; }
-inline void vec4::qtp(const simdfloat& _val) { q = _val; t = _val; p = _val; }
-inline void vec4::qtps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { q = _val0; t = _val1; p = _val2; s = _val3; }
-inline void vec4::qtps(const vec4& _val) { q = _val.s; t = _val.t; p = _val.p; s = _val.q; }
-inline void vec4::qtps(const simdfloat& _val) { q = _val; t = _val; p = _val; s = _val; }
-inline void vec4::qp(const simdfloat& _val0, const simdfloat& _val1) { q = _val0; p = _val1; }
-inline void vec4::qp(const vec2& _val) { q = _val.s; p = _val.t; }
-inline void vec4::qp(const simdfloat& _val) { q = _val; p = _val; }
-inline void vec4::qps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { q = _val0; p = _val1; s = _val2; }
-inline void vec4::qps(const vec3& _val) { q = _val.s; p = _val.t; s = _val.p; }
-inline void vec4::qps(const simdfloat& _val) { q = _val; p = _val; s = _val; }
-inline void vec4::qpst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { q = _val0; p = _val1; s = _val2; t = _val3; }
-inline void vec4::qpst(const vec4& _val) { q = _val.s; p = _val.t; s = _val.p; t = _val.q; }
-inline void vec4::qpst(const simdfloat& _val) { q = _val; p = _val; s = _val; t = _val; }
-inline void vec4::qpt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { q = _val0; p = _val1; t = _val2; }
-inline void vec4::qpt(const vec3& _val) { q = _val.s; p = _val.t; t = _val.p; }
-inline void vec4::qpt(const simdfloat& _val) { q = _val; p = _val; t = _val; }
-inline void vec4::qpts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { q = _val0; p = _val1; t = _val2; s = _val3; }
-inline void vec4::qpts(const vec4& _val) { q = _val.s; p = _val.t; t = _val.p; s = _val.q; }
-inline void vec4::qpts(const simdfloat& _val) { q = _val; p = _val; t = _val; s = _val; }
-inline void vec4::sq(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; q = _val1; }
-inline void vec4::sq(const vec2& _val) { s = _val.s; q = _val.t; }
-inline void vec4::sq(const simdfloat& _val) { s = _val; q = _val; }
-inline void vec4::sqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; q = _val1; t = _val2; }
-inline void vec4::sqt(const vec3& _val) { s = _val.s; q = _val.t; t = _val.p; }
-inline void vec4::sqt(const simdfloat& _val) { s = _val; q = _val; t = _val; }
-inline void vec4::sqtp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { s = _val0; q = _val1; t = _val2; p = _val3; }
-inline void vec4::sqtp(const vec4& _val) { s = _val.s; q = _val.t; t = _val.p; p = _val.q; }
-inline void vec4::sqtp(const simdfloat& _val) { s = _val; q = _val; t = _val; p = _val; }
-inline void vec4::sqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; q = _val1; p = _val2; }
-inline void vec4::sqp(const vec3& _val) { s = _val.s; q = _val.t; p = _val.p; }
-inline void vec4::sqp(const simdfloat& _val) { s = _val; q = _val; p = _val; }
-inline void vec4::sqpt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { s = _val0; q = _val1; p = _val2; t = _val3; }
-inline void vec4::sqpt(const vec4& _val) { s = _val.s; q = _val.t; p = _val.p; t = _val.q; }
-inline void vec4::sqpt(const simdfloat& _val) { s = _val; q = _val; p = _val; t = _val; }
-inline void vec4::st(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; t = _val1; }
-inline void vec4::st(const vec2& _val) { s = _val.s; t = _val.t; }
-inline void vec4::st(const simdfloat& _val) { s = _val; t = _val; }
-inline void vec4::stq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; t = _val1; q = _val2; }
-inline void vec4::stq(const vec3& _val) { s = _val.s; t = _val.t; q = _val.p; }
-inline void vec4::stq(const simdfloat& _val) { s = _val; t = _val; q = _val; }
-inline void vec4::stqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { s = _val0; t = _val1; q = _val2; p = _val3; }
-inline void vec4::stqp(const vec4& _val) { s = _val.s; t = _val.t; q = _val.p; p = _val.q; }
-inline void vec4::stqp(const simdfloat& _val) { s = _val; t = _val; q = _val; p = _val; }
-inline void vec4::stp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; t = _val1; p = _val2; }
-inline void vec4::stp(const vec3& _val) { s = _val.s; t = _val.t; p = _val.p; }
-inline void vec4::stp(const simdfloat& _val) { s = _val; t = _val; p = _val; }
-inline void vec4::stpq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { s = _val0; t = _val1; p = _val2; q = _val3; }
-inline void vec4::stpq(const vec4& _val) { s = _val.s; t = _val.t; p = _val.p; q = _val.q; }
-inline void vec4::stpq(const simdfloat& _val) { s = _val; t = _val; p = _val; q = _val; }
-inline void vec4::sp(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; p = _val1; }
-inline void vec4::sp(const vec2& _val) { s = _val.s; p = _val.t; }
-inline void vec4::sp(const simdfloat& _val) { s = _val; p = _val; }
-inline void vec4::spq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; p = _val1; q = _val2; }
-inline void vec4::spq(const vec3& _val) { s = _val.s; p = _val.t; q = _val.p; }
-inline void vec4::spq(const simdfloat& _val) { s = _val; p = _val; q = _val; }
-inline void vec4::spqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { s = _val0; p = _val1; q = _val2; t = _val3; }
-inline void vec4::spqt(const vec4& _val) { s = _val.s; p = _val.t; q = _val.p; t = _val.q; }
-inline void vec4::spqt(const simdfloat& _val) { s = _val; p = _val; q = _val; t = _val; }
-inline void vec4::spt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; p = _val1; t = _val2; }
-inline void vec4::spt(const vec3& _val) { s = _val.s; p = _val.t; t = _val.p; }
-inline void vec4::spt(const simdfloat& _val) { s = _val; p = _val; t = _val; }
-inline void vec4::sptq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { s = _val0; p = _val1; t = _val2; q = _val3; }
-inline void vec4::sptq(const vec4& _val) { s = _val.s; p = _val.t; t = _val.p; q = _val.q; }
-inline void vec4::sptq(const simdfloat& _val) { s = _val; p = _val; t = _val; q = _val; }
-inline void vec4::tq(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; q = _val1; }
-inline void vec4::tq(const vec2& _val) { t = _val.s; q = _val.t; }
-inline void vec4::tq(const simdfloat& _val) { t = _val; q = _val; }
-inline void vec4::tqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; q = _val1; s = _val2; }
-inline void vec4::tqs(const vec3& _val) { t = _val.s; q = _val.t; s = _val.p; }
-inline void vec4::tqs(const simdfloat& _val) { t = _val; q = _val; s = _val; }
-inline void vec4::tqsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { t = _val0; q = _val1; s = _val2; p = _val3; }
-inline void vec4::tqsp(const vec4& _val) { t = _val.s; q = _val.t; s = _val.p; p = _val.q; }
-inline void vec4::tqsp(const simdfloat& _val) { t = _val; q = _val; s = _val; p = _val; }
-inline void vec4::tqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; q = _val1; p = _val2; }
-inline void vec4::tqp(const vec3& _val) { t = _val.s; q = _val.t; p = _val.p; }
-inline void vec4::tqp(const simdfloat& _val) { t = _val; q = _val; p = _val; }
-inline void vec4::tqps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { t = _val0; q = _val1; p = _val2; s = _val3; }
-inline void vec4::tqps(const vec4& _val) { t = _val.s; q = _val.t; p = _val.p; s = _val.q; }
-inline void vec4::tqps(const simdfloat& _val) { t = _val; q = _val; p = _val; s = _val; }
-inline void vec4::ts(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; s = _val1; }
-inline void vec4::ts(const vec2& _val) { t = _val.s; s = _val.t; }
-inline void vec4::ts(const simdfloat& _val) { t = _val; s = _val; }
-inline void vec4::tsq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; s = _val1; q = _val2; }
-inline void vec4::tsq(const vec3& _val) { t = _val.s; s = _val.t; q = _val.p; }
-inline void vec4::tsq(const simdfloat& _val) { t = _val; s = _val; q = _val; }
-inline void vec4::tsqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { t = _val0; s = _val1; q = _val2; p = _val3; }
-inline void vec4::tsqp(const vec4& _val) { t = _val.s; s = _val.t; q = _val.p; p = _val.q; }
-inline void vec4::tsqp(const simdfloat& _val) { t = _val; s = _val; q = _val; p = _val; }
-inline void vec4::tsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; s = _val1; p = _val2; }
-inline void vec4::tsp(const vec3& _val) { t = _val.s; s = _val.t; p = _val.p; }
-inline void vec4::tsp(const simdfloat& _val) { t = _val; s = _val; p = _val; }
-inline void vec4::tspq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { t = _val0; s = _val1; p = _val2; q = _val3; }
-inline void vec4::tspq(const vec4& _val) { t = _val.s; s = _val.t; p = _val.p; q = _val.q; }
-inline void vec4::tspq(const simdfloat& _val) { t = _val; s = _val; p = _val; q = _val; }
-inline void vec4::tp(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; p = _val1; }
-inline void vec4::tp(const vec2& _val) { t = _val.s; p = _val.t; }
-inline void vec4::tp(const simdfloat& _val) { t = _val; p = _val; }
-inline void vec4::tpq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; p = _val1; q = _val2; }
-inline void vec4::tpq(const vec3& _val) { t = _val.s; p = _val.t; q = _val.p; }
-inline void vec4::tpq(const simdfloat& _val) { t = _val; p = _val; q = _val; }
-inline void vec4::tpqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { t = _val0; p = _val1; q = _val2; s = _val3; }
-inline void vec4::tpqs(const vec4& _val) { t = _val.s; p = _val.t; q = _val.p; s = _val.q; }
-inline void vec4::tpqs(const simdfloat& _val) { t = _val; p = _val; q = _val; s = _val; }
-inline void vec4::tps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; p = _val1; s = _val2; }
-inline void vec4::tps(const vec3& _val) { t = _val.s; p = _val.t; s = _val.p; }
-inline void vec4::tps(const simdfloat& _val) { t = _val; p = _val; s = _val; }
-inline void vec4::tpsq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { t = _val0; p = _val1; s = _val2; q = _val3; }
-inline void vec4::tpsq(const vec4& _val) { t = _val.s; p = _val.t; s = _val.p; q = _val.q; }
-inline void vec4::tpsq(const simdfloat& _val) { t = _val; p = _val; s = _val; q = _val; }
-inline void vec4::pq(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; q = _val1; }
-inline void vec4::pq(const vec2& _val) { p = _val.s; q = _val.t; }
-inline void vec4::pq(const simdfloat& _val) { p = _val; q = _val; }
-inline void vec4::pqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; q = _val1; s = _val2; }
-inline void vec4::pqs(const vec3& _val) { p = _val.s; q = _val.t; s = _val.p; }
-inline void vec4::pqs(const simdfloat& _val) { p = _val; q = _val; s = _val; }
-inline void vec4::pqst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { p = _val0; q = _val1; s = _val2; t = _val3; }
-inline void vec4::pqst(const vec4& _val) { p = _val.s; q = _val.t; s = _val.p; t = _val.q; }
-inline void vec4::pqst(const simdfloat& _val) { p = _val; q = _val; s = _val; t = _val; }
-inline void vec4::pqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; q = _val1; t = _val2; }
-inline void vec4::pqt(const vec3& _val) { p = _val.s; q = _val.t; t = _val.p; }
-inline void vec4::pqt(const simdfloat& _val) { p = _val; q = _val; t = _val; }
-inline void vec4::pqts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { p = _val0; q = _val1; t = _val2; s = _val3; }
-inline void vec4::pqts(const vec4& _val) { p = _val.s; q = _val.t; t = _val.p; s = _val.q; }
-inline void vec4::pqts(const simdfloat& _val) { p = _val; q = _val; t = _val; s = _val; }
-inline void vec4::ps(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; s = _val1; }
-inline void vec4::ps(const vec2& _val) { p = _val.s; s = _val.t; }
-inline void vec4::ps(const simdfloat& _val) { p = _val; s = _val; }
-inline void vec4::psq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; s = _val1; q = _val2; }
-inline void vec4::psq(const vec3& _val) { p = _val.s; s = _val.t; q = _val.p; }
-inline void vec4::psq(const simdfloat& _val) { p = _val; s = _val; q = _val; }
-inline void vec4::psqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { p = _val0; s = _val1; q = _val2; t = _val3; }
-inline void vec4::psqt(const vec4& _val) { p = _val.s; s = _val.t; q = _val.p; t = _val.q; }
-inline void vec4::psqt(const simdfloat& _val) { p = _val; s = _val; q = _val; t = _val; }
-inline void vec4::pst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; s = _val1; t = _val2; }
-inline void vec4::pst(const vec3& _val) { p = _val.s; s = _val.t; t = _val.p; }
-inline void vec4::pst(const simdfloat& _val) { p = _val; s = _val; t = _val; }
-inline void vec4::pstq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { p = _val0; s = _val1; t = _val2; q = _val3; }
-inline void vec4::pstq(const vec4& _val) { p = _val.s; s = _val.t; t = _val.p; q = _val.q; }
-inline void vec4::pstq(const simdfloat& _val) { p = _val; s = _val; t = _val; q = _val; }
-inline void vec4::pt(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; t = _val1; }
-inline void vec4::pt(const vec2& _val) { p = _val.s; t = _val.t; }
-inline void vec4::pt(const simdfloat& _val) { p = _val; t = _val; }
-inline void vec4::ptq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; t = _val1; q = _val2; }
-inline void vec4::ptq(const vec3& _val) { p = _val.s; t = _val.t; q = _val.p; }
-inline void vec4::ptq(const simdfloat& _val) { p = _val; t = _val; q = _val; }
-inline void vec4::ptqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { p = _val0; t = _val1; q = _val2; s = _val3; }
-inline void vec4::ptqs(const vec4& _val) { p = _val.s; t = _val.t; q = _val.p; s = _val.q; }
-inline void vec4::ptqs(const simdfloat& _val) { p = _val; t = _val; q = _val; s = _val; }
-inline void vec4::pts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; t = _val1; s = _val2; }
-inline void vec4::pts(const vec3& _val) { p = _val.s; t = _val.t; s = _val.p; }
-inline void vec4::pts(const simdfloat& _val) { p = _val; t = _val; s = _val; }
-inline void vec4::ptsq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { p = _val0; t = _val1; s = _val2; q = _val3; }
-inline void vec4::ptsq(const vec4& _val) { p = _val.s; t = _val.t; s = _val.p; q = _val.q; }
-inline void vec4::ptsq(const simdfloat& _val) { p = _val; t = _val; s = _val; q = _val; }
-inline void vec4::wx(const simdfloat& _val0, const simdfloat& _val1) { w = _val0; x = _val1; }
-inline void vec4::wx(const vec2& _val) { w = _val.x; x = _val.y; }
-inline void vec4::wx(const simdfloat& _val) { w = _val; x = _val; }
-inline void vec4::wxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { w = _val0; x = _val1; y = _val2; }
-inline void vec4::wxy(const vec3& _val) { w = _val.x; x = _val.y; y = _val.z; }
-inline void vec4::wxy(const simdfloat& _val) { w = _val; x = _val; y = _val; }
-inline void vec4::wxyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { w = _val0; x = _val1; y = _val2; z = _val3; }
-inline void vec4::wxyz(const vec4& _val) { w = _val.x; x = _val.y; y = _val.z; z = _val.w; }
-inline void vec4::wxyz(const simdfloat& _val) { w = _val; x = _val; y = _val; z = _val; }
-inline void vec4::wxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { w = _val0; x = _val1; z = _val2; }
-inline void vec4::wxz(const vec3& _val) { w = _val.x; x = _val.y; z = _val.z; }
-inline void vec4::wxz(const simdfloat& _val) { w = _val; x = _val; z = _val; }
-inline void vec4::wxzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { w = _val0; x = _val1; z = _val2; y = _val3; }
-inline void vec4::wxzy(const vec4& _val) { w = _val.x; x = _val.y; z = _val.z; y = _val.w; }
-inline void vec4::wxzy(const simdfloat& _val) { w = _val; x = _val; z = _val; y = _val; }
-inline void vec4::wy(const simdfloat& _val0, const simdfloat& _val1) { w = _val0; y = _val1; }
-inline void vec4::wy(const vec2& _val) { w = _val.x; y = _val.y; }
-inline void vec4::wy(const simdfloat& _val) { w = _val; y = _val; }
-inline void vec4::wyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { w = _val0; y = _val1; x = _val2; }
-inline void vec4::wyx(const vec3& _val) { w = _val.x; y = _val.y; x = _val.z; }
-inline void vec4::wyx(const simdfloat& _val) { w = _val; y = _val; x = _val; }
-inline void vec4::wyxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { w = _val0; y = _val1; x = _val2; z = _val3; }
-inline void vec4::wyxz(const vec4& _val) { w = _val.x; y = _val.y; x = _val.z; z = _val.w; }
-inline void vec4::wyxz(const simdfloat& _val) { w = _val; y = _val; x = _val; z = _val; }
-inline void vec4::wyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { w = _val0; y = _val1; z = _val2; }
-inline void vec4::wyz(const vec3& _val) { w = _val.x; y = _val.y; z = _val.z; }
-inline void vec4::wyz(const simdfloat& _val) { w = _val; y = _val; z = _val; }
-inline void vec4::wyzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { w = _val0; y = _val1; z = _val2; x = _val3; }
-inline void vec4::wyzx(const vec4& _val) { w = _val.x; y = _val.y; z = _val.z; x = _val.w; }
-inline void vec4::wyzx(const simdfloat& _val) { w = _val; y = _val; z = _val; x = _val; }
-inline void vec4::wz(const simdfloat& _val0, const simdfloat& _val1) { w = _val0; z = _val1; }
-inline void vec4::wz(const vec2& _val) { w = _val.x; z = _val.y; }
-inline void vec4::wz(const simdfloat& _val) { w = _val; z = _val; }
-inline void vec4::wzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { w = _val0; z = _val1; x = _val2; }
-inline void vec4::wzx(const vec3& _val) { w = _val.x; z = _val.y; x = _val.z; }
-inline void vec4::wzx(const simdfloat& _val) { w = _val; z = _val; x = _val; }
-inline void vec4::wzxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { w = _val0; z = _val1; x = _val2; y = _val3; }
-inline void vec4::wzxy(const vec4& _val) { w = _val.x; z = _val.y; x = _val.z; y = _val.w; }
-inline void vec4::wzxy(const simdfloat& _val) { w = _val; z = _val; x = _val; y = _val; }
-inline void vec4::wzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { w = _val0; z = _val1; y = _val2; }
-inline void vec4::wzy(const vec3& _val) { w = _val.x; z = _val.y; y = _val.z; }
-inline void vec4::wzy(const simdfloat& _val) { w = _val; z = _val; y = _val; }
-inline void vec4::wzyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { w = _val0; z = _val1; y = _val2; x = _val3; }
-inline void vec4::wzyx(const vec4& _val) { w = _val.x; z = _val.y; y = _val.z; x = _val.w; }
-inline void vec4::wzyx(const simdfloat& _val) { w = _val; z = _val; y = _val; x = _val; }
-inline void vec4::xw(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; w = _val1; }
-inline void vec4::xw(const vec2& _val) { x = _val.x; w = _val.y; }
-inline void vec4::xw(const simdfloat& _val) { x = _val; w = _val; }
-inline void vec4::xwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; w = _val1; y = _val2; }
-inline void vec4::xwy(const vec3& _val) { x = _val.x; w = _val.y; y = _val.z; }
-inline void vec4::xwy(const simdfloat& _val) { x = _val; w = _val; y = _val; }
-inline void vec4::xwyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { x = _val0; w = _val1; y = _val2; z = _val3; }
-inline void vec4::xwyz(const vec4& _val) { x = _val.x; w = _val.y; y = _val.z; z = _val.w; }
-inline void vec4::xwyz(const simdfloat& _val) { x = _val; w = _val; y = _val; z = _val; }
-inline void vec4::xwz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; w = _val1; z = _val2; }
-inline void vec4::xwz(const vec3& _val) { x = _val.x; w = _val.y; z = _val.z; }
-inline void vec4::xwz(const simdfloat& _val) { x = _val; w = _val; z = _val; }
-inline void vec4::xwzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { x = _val0; w = _val1; z = _val2; y = _val3; }
-inline void vec4::xwzy(const vec4& _val) { x = _val.x; w = _val.y; z = _val.z; y = _val.w; }
-inline void vec4::xwzy(const simdfloat& _val) { x = _val; w = _val; z = _val; y = _val; }
-inline void vec4::xy(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; y = _val1; }
-inline void vec4::xy(const vec2& _val) { x = _val.x; y = _val.y; }
-inline void vec4::xy(const simdfloat& _val) { x = _val; y = _val; }
-inline void vec4::xyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; y = _val1; w = _val2; }
-inline void vec4::xyw(const vec3& _val) { x = _val.x; y = _val.y; w = _val.z; }
-inline void vec4::xyw(const simdfloat& _val) { x = _val; y = _val; w = _val; }
-inline void vec4::xywz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { x = _val0; y = _val1; w = _val2; z = _val3; }
-inline void vec4::xywz(const vec4& _val) { x = _val.x; y = _val.y; w = _val.z; z = _val.w; }
-inline void vec4::xywz(const simdfloat& _val) { x = _val; y = _val; w = _val; z = _val; }
-inline void vec4::xyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; y = _val1; z = _val2; }
-inline void vec4::xyz(const vec3& _val) { x = _val.x; y = _val.y; z = _val.z; }
-inline void vec4::xyz(const simdfloat& _val) { x = _val; y = _val; z = _val; }
-inline void vec4::xyzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { x = _val0; y = _val1; z = _val2; w = _val3; }
-inline void vec4::xyzw(const vec4& _val) { x = _val.x; y = _val.y; z = _val.z; w = _val.w; }
-inline void vec4::xyzw(const simdfloat& _val) { x = _val; y = _val; z = _val; w = _val; }
-inline void vec4::xz(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; z = _val1; }
-inline void vec4::xz(const vec2& _val) { x = _val.x; z = _val.y; }
-inline void vec4::xz(const simdfloat& _val) { x = _val; z = _val; }
-inline void vec4::xzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; z = _val1; w = _val2; }
-inline void vec4::xzw(const vec3& _val) { x = _val.x; z = _val.y; w = _val.z; }
-inline void vec4::xzw(const simdfloat& _val) { x = _val; z = _val; w = _val; }
-inline void vec4::xzwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { x = _val0; z = _val1; w = _val2; y = _val3; }
-inline void vec4::xzwy(const vec4& _val) { x = _val.x; z = _val.y; w = _val.z; y = _val.w; }
-inline void vec4::xzwy(const simdfloat& _val) { x = _val; z = _val; w = _val; y = _val; }
-inline void vec4::xzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; z = _val1; y = _val2; }
-inline void vec4::xzy(const vec3& _val) { x = _val.x; z = _val.y; y = _val.z; }
-inline void vec4::xzy(const simdfloat& _val) { x = _val; z = _val; y = _val; }
-inline void vec4::xzyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { x = _val0; z = _val1; y = _val2; w = _val3; }
-inline void vec4::xzyw(const vec4& _val) { x = _val.x; z = _val.y; y = _val.z; w = _val.w; }
-inline void vec4::xzyw(const simdfloat& _val) { x = _val; z = _val; y = _val; w = _val; }
-inline void vec4::yw(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; w = _val1; }
-inline void vec4::yw(const vec2& _val) { y = _val.x; w = _val.y; }
-inline void vec4::yw(const simdfloat& _val) { y = _val; w = _val; }
-inline void vec4::ywx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; w = _val1; x = _val2; }
-inline void vec4::ywx(const vec3& _val) { y = _val.x; w = _val.y; x = _val.z; }
-inline void vec4::ywx(const simdfloat& _val) { y = _val; w = _val; x = _val; }
-inline void vec4::ywxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { y = _val0; w = _val1; x = _val2; z = _val3; }
-inline void vec4::ywxz(const vec4& _val) { y = _val.x; w = _val.y; x = _val.z; z = _val.w; }
-inline void vec4::ywxz(const simdfloat& _val) { y = _val; w = _val; x = _val; z = _val; }
-inline void vec4::ywz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; w = _val1; z = _val2; }
-inline void vec4::ywz(const vec3& _val) { y = _val.x; w = _val.y; z = _val.z; }
-inline void vec4::ywz(const simdfloat& _val) { y = _val; w = _val; z = _val; }
-inline void vec4::ywzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { y = _val0; w = _val1; z = _val2; x = _val3; }
-inline void vec4::ywzx(const vec4& _val) { y = _val.x; w = _val.y; z = _val.z; x = _val.w; }
-inline void vec4::ywzx(const simdfloat& _val) { y = _val; w = _val; z = _val; x = _val; }
-inline void vec4::yx(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; x = _val1; }
-inline void vec4::yx(const vec2& _val) { y = _val.x; x = _val.y; }
-inline void vec4::yx(const simdfloat& _val) { y = _val; x = _val; }
-inline void vec4::yxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; x = _val1; w = _val2; }
-inline void vec4::yxw(const vec3& _val) { y = _val.x; x = _val.y; w = _val.z; }
-inline void vec4::yxw(const simdfloat& _val) { y = _val; x = _val; w = _val; }
-inline void vec4::yxwz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { y = _val0; x = _val1; w = _val2; z = _val3; }
-inline void vec4::yxwz(const vec4& _val) { y = _val.x; x = _val.y; w = _val.z; z = _val.w; }
-inline void vec4::yxwz(const simdfloat& _val) { y = _val; x = _val; w = _val; z = _val; }
-inline void vec4::yxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; x = _val1; z = _val2; }
-inline void vec4::yxz(const vec3& _val) { y = _val.x; x = _val.y; z = _val.z; }
-inline void vec4::yxz(const simdfloat& _val) { y = _val; x = _val; z = _val; }
-inline void vec4::yxzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { y = _val0; x = _val1; z = _val2; w = _val3; }
-inline void vec4::yxzw(const vec4& _val) { y = _val.x; x = _val.y; z = _val.z; w = _val.w; }
-inline void vec4::yxzw(const simdfloat& _val) { y = _val; x = _val; z = _val; w = _val; }
-inline void vec4::yz(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; z = _val1; }
-inline void vec4::yz(const vec2& _val) { y = _val.x; z = _val.y; }
-inline void vec4::yz(const simdfloat& _val) { y = _val; z = _val; }
-inline void vec4::yzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; z = _val1; w = _val2; }
-inline void vec4::yzw(const vec3& _val) { y = _val.x; z = _val.y; w = _val.z; }
-inline void vec4::yzw(const simdfloat& _val) { y = _val; z = _val; w = _val; }
-inline void vec4::yzwx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { y = _val0; z = _val1; w = _val2; x = _val3; }
-inline void vec4::yzwx(const vec4& _val) { y = _val.x; z = _val.y; w = _val.z; x = _val.w; }
-inline void vec4::yzwx(const simdfloat& _val) { y = _val; z = _val; w = _val; x = _val; }
-inline void vec4::yzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; z = _val1; x = _val2; }
-inline void vec4::yzx(const vec3& _val) { y = _val.x; z = _val.y; x = _val.z; }
-inline void vec4::yzx(const simdfloat& _val) { y = _val; z = _val; x = _val; }
-inline void vec4::yzxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { y = _val0; z = _val1; x = _val2; w = _val3; }
-inline void vec4::yzxw(const vec4& _val) { y = _val.x; z = _val.y; x = _val.z; w = _val.w; }
-inline void vec4::yzxw(const simdfloat& _val) { y = _val; z = _val; x = _val; w = _val; }
-inline void vec4::zw(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; w = _val1; }
-inline void vec4::zw(const vec2& _val) { z = _val.x; w = _val.y; }
-inline void vec4::zw(const simdfloat& _val) { z = _val; w = _val; }
-inline void vec4::zwx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; w = _val1; x = _val2; }
-inline void vec4::zwx(const vec3& _val) { z = _val.x; w = _val.y; x = _val.z; }
-inline void vec4::zwx(const simdfloat& _val) { z = _val; w = _val; x = _val; }
-inline void vec4::zwxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { z = _val0; w = _val1; x = _val2; y = _val3; }
-inline void vec4::zwxy(const vec4& _val) { z = _val.x; w = _val.y; x = _val.z; y = _val.w; }
-inline void vec4::zwxy(const simdfloat& _val) { z = _val; w = _val; x = _val; y = _val; }
-inline void vec4::zwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; w = _val1; y = _val2; }
-inline void vec4::zwy(const vec3& _val) { z = _val.x; w = _val.y; y = _val.z; }
-inline void vec4::zwy(const simdfloat& _val) { z = _val; w = _val; y = _val; }
-inline void vec4::zwyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { z = _val0; w = _val1; y = _val2; x = _val3; }
-inline void vec4::zwyx(const vec4& _val) { z = _val.x; w = _val.y; y = _val.z; x = _val.w; }
-inline void vec4::zwyx(const simdfloat& _val) { z = _val; w = _val; y = _val; x = _val; }
-inline void vec4::zx(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; x = _val1; }
-inline void vec4::zx(const vec2& _val) { z = _val.x; x = _val.y; }
-inline void vec4::zx(const simdfloat& _val) { z = _val; x = _val; }
-inline void vec4::zxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; x = _val1; w = _val2; }
-inline void vec4::zxw(const vec3& _val) { z = _val.x; x = _val.y; w = _val.z; }
-inline void vec4::zxw(const simdfloat& _val) { z = _val; x = _val; w = _val; }
-inline void vec4::zxwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { z = _val0; x = _val1; w = _val2; y = _val3; }
-inline void vec4::zxwy(const vec4& _val) { z = _val.x; x = _val.y; w = _val.z; y = _val.w; }
-inline void vec4::zxwy(const simdfloat& _val) { z = _val; x = _val; w = _val; y = _val; }
-inline void vec4::zxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; x = _val1; y = _val2; }
-inline void vec4::zxy(const vec3& _val) { z = _val.x; x = _val.y; y = _val.z; }
-inline void vec4::zxy(const simdfloat& _val) { z = _val; x = _val; y = _val; }
-inline void vec4::zxyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { z = _val0; x = _val1; y = _val2; w = _val3; }
-inline void vec4::zxyw(const vec4& _val) { z = _val.x; x = _val.y; y = _val.z; w = _val.w; }
-inline void vec4::zxyw(const simdfloat& _val) { z = _val; x = _val; y = _val; w = _val; }
-inline void vec4::zy(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; y = _val1; }
-inline void vec4::zy(const vec2& _val) { z = _val.x; y = _val.y; }
-inline void vec4::zy(const simdfloat& _val) { z = _val; y = _val; }
-inline void vec4::zyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; y = _val1; w = _val2; }
-inline void vec4::zyw(const vec3& _val) { z = _val.x; y = _val.y; w = _val.z; }
-inline void vec4::zyw(const simdfloat& _val) { z = _val; y = _val; w = _val; }
-inline void vec4::zywx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { z = _val0; y = _val1; w = _val2; x = _val3; }
-inline void vec4::zywx(const vec4& _val) { z = _val.x; y = _val.y; w = _val.z; x = _val.w; }
-inline void vec4::zywx(const simdfloat& _val) { z = _val; y = _val; w = _val; x = _val; }
-inline void vec4::zyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; y = _val1; x = _val2; }
-inline void vec4::zyx(const vec3& _val) { z = _val.x; y = _val.y; x = _val.z; }
-inline void vec4::zyx(const simdfloat& _val) { z = _val; y = _val; x = _val; }
-inline void vec4::zyxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { z = _val0; y = _val1; x = _val2; w = _val3; }
-inline void vec4::zyxw(const vec4& _val) { z = _val.x; y = _val.y; x = _val.z; w = _val.w; }
-inline void vec4::zyxw(const simdfloat& _val) { z = _val; y = _val; x = _val; w = _val; }
+inline void vec4::ab(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; a = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::ab(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; a = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::ab(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; a = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::abg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::abg(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::abg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::abgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::abgr(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::abgr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::abr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::abr(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::abr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::abrg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::abrg(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::abrg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::ag(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; a = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::ag(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; a = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::ag(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; a = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::agb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::agb(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::agb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::agbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::agbr(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::agbr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::agr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::agr(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::agr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::agrb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::agrb(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::agrb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::ar(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; a = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::ar(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; a = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::ar(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; a = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::arb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::arb(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::arb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::arbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::arbg(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::arbg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::arg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::arg(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::arg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::argb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::argb(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::argb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::ba(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; b = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::ba(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; b = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::ba(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; b = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::bag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::bag(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::bag(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::bagr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::bagr(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::bagr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::bar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::bar(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::bar(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::barg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::barg(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::barg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::bg(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::bg(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::bg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::bga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::bga(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::bga(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::bgar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::bgar(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::bgar(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::bgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::bgr(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::bgr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::bgra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::bgra(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::bgra(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::br(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::br(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::br(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::bra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::bra(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::bra(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::brag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::brag(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::brag(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::brg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::brg(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::brg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::brga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::brga(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::brga(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::ga(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::ga(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::ga(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::gab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::gab(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::gab(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::gabr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::gabr(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::gabr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::gar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::gar(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::gar(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::garb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::garb(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::garb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::gb(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::gb(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::gb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::gba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::gba(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::gba(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::gbar(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::gbar(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::gbar(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void vec4::gbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::gbr(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::gbr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void vec4::gbra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::gbra(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::gbra(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::gr(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::gr(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::gr(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void vec4::gra(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::gra(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::gra(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::grab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::grab(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::grab(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::grb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::grb(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::grb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::grba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::grba(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::grba(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::ra(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::ra(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::ra(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; a = cppshaderTmp1; }
+inline void vec4::rab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::rab(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::rab(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::rabg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::rabg(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::rabg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::rag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::rag(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::rag(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::ragb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::ragb(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::ragb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::rb(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::rb(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::rb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void vec4::rba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::rba(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::rba(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::rbag(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::rbag(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::rbag(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void vec4::rbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::rbg(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::rbg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void vec4::rbga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::rbga(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::rbga(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::rg(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::rg(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::rg(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void vec4::rga(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::rga(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::rga(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void vec4::rgab(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::rgab(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::rgab(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void vec4::rgb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::rgb(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::rgb(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void vec4::rgba(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::rgba(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::rgba(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void vec4::qs(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; q = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::qs(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; q = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::qs(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; q = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::qst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::qst(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::qst(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::qstp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::qstp(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::qstp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::qsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::qsp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::qsp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::qspt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::qspt(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::qspt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::qt(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; q = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::qt(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; q = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::qt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; q = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::qts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::qts(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::qts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::qtsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::qtsp(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::qtsp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::qtp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::qtp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::qtp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::qtps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::qtps(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::qtps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::qp(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; q = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::qp(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; q = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::qp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; q = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::qps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::qps(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::qps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::qpst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::qpst(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::qpst(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::qpt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::qpt(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::qpt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::qpts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::qpts(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::qpts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::sq(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::sq(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::sq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::sqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::sqt(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::sqt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::sqtp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::sqtp(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::sqtp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::sqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::sqp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::sqp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::sqpt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::sqpt(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::sqpt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::st(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::st(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::st(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::stq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::stq(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::stq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::stqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::stqp(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::stqp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::stp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::stp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::stp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::stpq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::stpq(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::stpq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::sp(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::sp(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::sp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::spq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::spq(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::spq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::spqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::spqt(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::spqt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::spt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::spt(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::spt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::sptq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::sptq(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::sptq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::tq(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::tq(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::tq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::tqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::tqs(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::tqs(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::tqsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::tqsp(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::tqsp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::tqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::tqp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::tqp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::tqps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::tqps(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::tqps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::ts(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::ts(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::ts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::tsq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::tsq(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::tsq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::tsqp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::tsqp(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::tsqp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void vec4::tsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::tsp(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::tsp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void vec4::tspq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::tspq(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::tspq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::tp(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::tp(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::tp(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void vec4::tpq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::tpq(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::tpq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::tpqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::tpqs(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::tpqs(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::tps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::tps(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::tps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::tpsq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::tpsq(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::tpsq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::pq(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; p = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::pq(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; p = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::pq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; p = cppshaderTmp0; q = cppshaderTmp1; }
+inline void vec4::pqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::pqs(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::pqs(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::pqst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::pqst(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::pqst(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::pqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::pqt(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::pqt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::pqts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::pqts(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::pqts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::ps(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::ps(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::ps(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void vec4::psq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::psq(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::psq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::psqt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::psqt(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::psqt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void vec4::pst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::pst(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::pst(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void vec4::pstq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::pstq(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::pstq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::pt(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::pt(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::pt(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void vec4::ptq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::ptq(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::ptq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void vec4::ptqs(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::ptqs(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::ptqs(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void vec4::pts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::pts(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::pts(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void vec4::ptsq(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::ptsq(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.s; const simdfloat cppshaderTmp1 = _val.t; const simdfloat cppshaderTmp2 = _val.p; const simdfloat cppshaderTmp3 = _val.q; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::ptsq(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void vec4::wx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; w = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::wx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; w = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::wx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; w = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::wxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::wxy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::wxy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::wxyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::wxyz(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::wxyz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::wxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::wxz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::wxz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::wxzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::wxzy(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::wxzy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::wy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; w = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::wy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; w = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::wy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; w = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::wyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::wyx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::wyx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::wyxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::wyxz(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::wyxz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::wyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::wyz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::wyz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::wyzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::wyzx(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::wyzx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::wz(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; w = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::wz(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; w = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::wz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; w = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::wzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::wzx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::wzx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::wzxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::wzxy(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::wzxy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::wzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::wzy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::wzy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::wzyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::wzyx(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::wzyx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::xw(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::xw(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::xw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::xwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::xwy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::xwy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::xwyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::xwyz(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::xwyz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::xwz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::xwz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::xwz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::xwzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::xwzy(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::xwzy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::xy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::xy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::xy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::xyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::xyw(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::xyw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::xywz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::xywz(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::xywz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::xyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::xyz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::xyz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::xyzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::xyzw(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::xyzw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::xz(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::xz(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::xz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::xzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::xzw(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::xzw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::xzwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::xzwy(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::xzwy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::xzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::xzy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::xzy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::xzyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::xzyw(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::xzyw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::yw(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::yw(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::yw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::ywx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::ywx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::ywx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::ywxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::ywxz(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::ywxz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::ywz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::ywz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::ywz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::ywzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::ywzx(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::ywzx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::yx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::yx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::yx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::yxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::yxw(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::yxw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::yxwz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::yxwz(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::yxwz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void vec4::yxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::yxz(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::yxz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void vec4::yxzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::yxzw(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::yxzw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::yz(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::yz(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::yz(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void vec4::yzw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::yzw(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::yzw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::yzwx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::yzwx(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::yzwx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::yzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::yzx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::yzx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::yzxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::yzxw(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::yzxw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::zw(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; z = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::zw(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; z = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::zw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; z = cppshaderTmp0; w = cppshaderTmp1; }
+inline void vec4::zwx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::zwx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::zwx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::zwxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::zwxy(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::zwxy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::zwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::zwy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::zwy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::zwyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::zwyx(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::zwyx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::zx(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::zx(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::zx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void vec4::zxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::zxw(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::zxw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::zxwy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::zxwy(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::zxwy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void vec4::zxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::zxy(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::zxy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void vec4::zxyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::zxyw(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::zxyw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::zy(const simdfloat& _val0, const simdfloat& _val1) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::zy(const vec2& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::zy(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void vec4::zyw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::zyw(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::zyw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void vec4::zywx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::zywx(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::zywx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void vec4::zyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::zyx(const vec3& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::zyx(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void vec4::zyxw(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2, const simdfloat& _val3) { const simdfloat cppshaderTmp0 = _val0; const simdfloat cppshaderTmp1 = _val1; const simdfloat cppshaderTmp2 = _val2; const simdfloat cppshaderTmp3 = _val3; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::zyxw(const vec4& _val) { const simdfloat cppshaderTmp0 = _val.x; const simdfloat cppshaderTmp1 = _val.y; const simdfloat cppshaderTmp2 = _val.z; const simdfloat cppshaderTmp3 = _val.w; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void vec4::zyxw(const simdfloat& _val) { const simdfloat cppshaderTmp0 = _val; const simdfloat cppshaderTmp1 = _val; const simdfloat cppshaderTmp2 = _val; const simdfloat cppshaderTmp3 = _val; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
 
 #pragma endregion
 
@@ -10780,49 +11560,81 @@ inline void vec4::zyxw(const simdfloat& _val) { z = _val; y = _val; x = _val; w 
 inline vec4 vec4::operator=(const ivec4& _v) { x = _v.x; y = _v.y; z = _v.z; w = _v.w; return *this; }
 
 // constructors for vec4
-inline vec4::vec4(const float& _f) { x = _f; y = _f; z = _f; w = _f; }
+inline vec4::vec4(const float& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; w = _f; }
 
-inline vec4::vec4(const simdfloat& _f) { x = _f; y = _f; z = _f; w = _f; }
+inline vec4::vec4(const simdfloat& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; w = _f; }
 
-inline vec4::vec4(const ivec4& _v) { x = _v.x; y = _v.y; z = _v.z; w = _v.w; }
+inline vec4::vec4(const ivec4& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; z = _v.z; w = _v.w; }
 
-inline vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const simdfloat& _w) { x = _x; y = _y; z = _z; w = _w; }
+inline vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const simdfloat& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _w; }
 
-inline vec4::vec4(const simdfloat& _x, const vec2& _y, const simdfloat& _w) { x = _x; y = _y.x; z = _y.y; w = _w; }
+inline vec4::vec4(const simdfloat& _x, const vec2& _y, const simdfloat& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y.x; z = _y.y; w = _w; }
 
-inline vec4::vec4(const simdfloat& _x, const simdfloat& _y, const vec2& _z) { x = _x; y = _y; z = _z.x; w = _z.y; }
+inline vec4::vec4(const simdfloat& _x, const simdfloat& _y, const vec2& _z) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z.x; w = _z.y; }
 
-inline vec4::vec4(const vec2& _x, const simdfloat& _z, const simdfloat& _w) { x = _x.x; y = _x.y; z = _z; w = _w; }
+inline vec4::vec4(const vec2& _x, const simdfloat& _z, const simdfloat& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _z; w = _w; }
 
-inline vec4::vec4(const vec3& _x, const simdfloat& _w) { x = _x.x; y = _x.y; z = _x.z; w = _w; }
+inline vec4::vec4(const vec3& _x, const simdfloat& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _x.z; w = _w; }
 
-inline vec4::vec4(const simdfloat& _x, const vec3& _y) { x = _x; y = _y.x; z = _y.y; w = _y.z; }
+inline vec4::vec4(const simdfloat& _x, const vec3& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y.x; z = _y.y; w = _y.z; }
 
-inline vec4::vec4(const vec2& _x, const vec2& _y) { x = _x.x; y = _x.y; z = _y.x; w = _y.y; }
+inline vec4::vec4(const vec2& _x, const vec2& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _y.x; w = _y.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec4::vec4(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; w = _v.z; }
+vec4::vec4(const simdfloat& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; z = _v.y; w = _v.z; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec4::vec4(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; w = _v.y; }
+vec4::vec4(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; w = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec4::vec4(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; w = _v.y; }
+vec4::vec4(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; w = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec2>, int>>
-vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
+vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
+vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
+vec4::vec4(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _v.x; }
 
+// Full-width copy: every lane is initialized, and the r/g/b/a/s/t/p/q
+// aliases keep pointing at this object's own components (their in-class
+// initializers).
+inline vec4::vec4(const vec4& other) : x(other.x), y(other.y), z(other.z), w(other.w) {}
+
+#endif
 
 
 // ---- End: simd_swizzle_vec4.h ----
 
 // ---- Begin: simd_swizzle_dvec2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_DVEC2_H
+#define SIMD_SWIZZLE_DVEC2_H
 
 
 #pragma region dvec2 swizzle implementations
@@ -10950,12 +11762,39 @@ template<typename V, std::enable_if_t<std::is_same_v<V, dvec4>, int>>
 dvec2::dvec2(const simddouble& _x, const V& _v) { x = _x; y = _v.x; }
 
 
+#endif
 
 
 
 // ---- End: simd_swizzle_dvec2.h ----
 
 // ---- Begin: simd_swizzle_dvec3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_DVEC3_H
+#define SIMD_SWIZZLE_DVEC3_H
 
 
 #pragma region dvec3 swizzle implementations
@@ -11452,12 +12291,39 @@ template<typename V, std::enable_if_t<std::is_same_v<V, dvec4>, int>>
 dvec3::dvec3(const simddouble& _x, const simddouble& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
 
 
+#endif
 
 
 
 // ---- End: simd_swizzle_dvec3.h ----
 
 // ---- Begin: simd_swizzle_dvec4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_DVEC4_H
+#define SIMD_SWIZZLE_DVEC4_H
 
 
 #pragma region dvec4 swizzle implementations
@@ -13050,12 +13916,39 @@ dvec4::dvec4(const simddouble& _x, const simddouble& _y, const simddouble& _z, c
 template<typename V, std::enable_if_t<std::is_same_v<V, dvec4>, int>>
 dvec4::dvec4(const simddouble& _x, const simddouble& _y, const simddouble& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
 
+#endif
 
 
 
 // ---- End: simd_swizzle_dvec4.h ----
 
 // ---- Begin: simd_swizzle_ivec2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_IVEC2_H
+#define SIMD_SWIZZLE_IVEC2_H
 
 
 #pragma region ivec2 swizzle implementations
@@ -13144,24 +14037,24 @@ inline ivec4 ivec2::yyxy() const { return { y, y, x, y }; }
 inline ivec3 ivec2::yyy() const { return { y, y, y }; }
 inline ivec4 ivec2::yyyx() const { return { y, y, y, x }; }
 inline ivec4 ivec2::yyyy() const { return { y, y, y, y }; }
-inline void ivec2::gr(const simdint& _val0, const simdint& _val1) { g = _val0; r = _val1; }
-inline void ivec2::gr(const ivec2& _val) { g = _val.x; r = _val.y; }
-inline void ivec2::gr(const simdint& _val) { g = _val; r = _val; }
-inline void ivec2::rg(const simdint& _val0, const simdint& _val1) { r = _val0; g = _val1; }
-inline void ivec2::rg(const ivec2& _val) { r = _val.x; g = _val.y; }
-inline void ivec2::rg(const simdint& _val) { r = _val; g = _val; }
-inline void ivec2::st(const simdint& _val0, const simdint& _val1) { s = _val0; t = _val1; }
-inline void ivec2::st(const ivec2& _val) { s = _val.s; t = _val.t; }
-inline void ivec2::st(const simdint& _val) { s = _val; t = _val; }
-inline void ivec2::ts(const simdint& _val0, const simdint& _val1) { t = _val0; s = _val1; }
-inline void ivec2::ts(const ivec2& _val) { t = _val.s; s = _val.t; }
-inline void ivec2::ts(const simdint& _val) { t = _val; s = _val; }
-inline void ivec2::xy(const simdint& _val0, const simdint& _val1) { x = _val0; y = _val1; }
-inline void ivec2::xy(const ivec2& _val) { x = _val.x; y = _val.y; }
-inline void ivec2::xy(const simdint& _val) { x = _val; y = _val; }
-inline void ivec2::yx(const simdint& _val0, const simdint& _val1) { y = _val0; x = _val1; }
-inline void ivec2::yx(const ivec2& _val) { y = _val.x; x = _val.y; }
-inline void ivec2::yx(const simdint& _val) { y = _val; x = _val; }
+inline void ivec2::gr(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec2::gr(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec2::gr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec2::rg(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec2::rg(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec2::rg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec2::st(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec2::st(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec2::st(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec2::ts(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec2::ts(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec2::ts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec2::xy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec2::xy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec2::xy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec2::yx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec2::yx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec2::yx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
 
 #pragma endregion
 
@@ -13173,26 +14066,57 @@ inline ivec2 ivec2::operator=(const ivec3& _v) { x = _v.x; y = _v.y; return *thi
 inline ivec2 ivec2::operator=(const ivec4& _v) { x = _v.x; y = _v.y; return *this; }
 
 // constructors for ivec2
-inline ivec2::ivec2(const int32_t& _f) { x = _f; y = _f; }
+inline ivec2::ivec2(const int32_t& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline ivec2::ivec2(const simdint& _f) { x = _f; y = _f; }
+inline ivec2::ivec2(const simdint& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline ivec2::ivec2(const vec2& _v) { x = _v.x; y = _v.y; }
+inline ivec2::ivec2(const vec2& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; }
 
-inline ivec2::ivec2(const simdint& _x, const simdint& _y) { x = _x; y = _y; }
+inline ivec2::ivec2(const simdint& _x, const simdint& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec2::ivec2(const simdint& _x, const V& _v) { x = _x; y = _v.x; }
+ivec2::ivec2(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec2::ivec2(const simdint& _x, const V& _v) { x = _x; y = _v.x; }
+ivec2::ivec2(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
 
+// Full-width copy: every lane is initialized, and the r/g/s/t aliases keep
+// pointing at this object's own components (their in-class initializers).
+inline ivec2::ivec2(const ivec2& other) : x(other.x), y(other.y) {}
+
+#endif
 
 
 
 // ---- End: simd_swizzle_ivec2.h ----
 
 // ---- Begin: simd_swizzle_ivec3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_IVEC3_H
+#define SIMD_SWIZZLE_IVEC3_H
 
 
 #pragma region ivec3 swizzle implementations
@@ -13549,114 +14473,114 @@ inline ivec3 ivec3::zzz() const { return { z, z, z }; }
 inline ivec4 ivec3::zzzx() const { return { z, z, z, x }; }
 inline ivec4 ivec3::zzzy() const { return { z, z, z, y }; }
 inline ivec4 ivec3::zzzz() const { return { z, z, z, z }; }
-inline void ivec3::bg(const simdint& _val0, const simdint& _val1) { b = _val0; g = _val1; }
-inline void ivec3::bg(const ivec2& _val) { b = _val.x; g = _val.y; }
-inline void ivec3::bg(const simdint& _val) { b = _val; g = _val; }
-inline void ivec3::bgr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; g = _val1; r = _val2; }
-inline void ivec3::bgr(const ivec3& _val) { b = _val.x; g = _val.y; r = _val.z; }
-inline void ivec3::bgr(const simdint& _val) { b = _val; g = _val; r = _val; }
-inline void ivec3::br(const simdint& _val0, const simdint& _val1) { b = _val0; r = _val1; }
-inline void ivec3::br(const ivec2& _val) { b = _val.x; r = _val.y; }
-inline void ivec3::br(const simdint& _val) { b = _val; r = _val; }
-inline void ivec3::brg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; r = _val1; g = _val2; }
-inline void ivec3::brg(const ivec3& _val) { b = _val.x; r = _val.y; g = _val.z; }
-inline void ivec3::brg(const simdint& _val) { b = _val; r = _val; g = _val; }
-inline void ivec3::gb(const simdint& _val0, const simdint& _val1) { g = _val0; b = _val1; }
-inline void ivec3::gb(const ivec2& _val) { g = _val.x; b = _val.y; }
-inline void ivec3::gb(const simdint& _val) { g = _val; b = _val; }
-inline void ivec3::gbr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; b = _val1; r = _val2; }
-inline void ivec3::gbr(const ivec3& _val) { g = _val.x; b = _val.y; r = _val.z; }
-inline void ivec3::gbr(const simdint& _val) { g = _val; b = _val; r = _val; }
-inline void ivec3::gr(const simdint& _val0, const simdint& _val1) { g = _val0; r = _val1; }
-inline void ivec3::gr(const ivec2& _val) { g = _val.x; r = _val.y; }
-inline void ivec3::gr(const simdint& _val) { g = _val; r = _val; }
-inline void ivec3::grb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; r = _val1; b = _val2; }
-inline void ivec3::grb(const ivec3& _val) { g = _val.x; r = _val.y; b = _val.z; }
-inline void ivec3::grb(const simdint& _val) { g = _val; r = _val; b = _val; }
-inline void ivec3::rb(const simdint& _val0, const simdint& _val1) { r = _val0; b = _val1; }
-inline void ivec3::rb(const ivec2& _val) { r = _val.x; b = _val.y; }
-inline void ivec3::rb(const simdint& _val) { r = _val; b = _val; }
-inline void ivec3::rbg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; b = _val1; g = _val2; }
-inline void ivec3::rbg(const ivec3& _val) { r = _val.x; b = _val.y; g = _val.z; }
-inline void ivec3::rbg(const simdint& _val) { r = _val; b = _val; g = _val; }
-inline void ivec3::rg(const simdint& _val0, const simdint& _val1) { r = _val0; g = _val1; }
-inline void ivec3::rg(const ivec2& _val) { r = _val.x; g = _val.y; }
-inline void ivec3::rg(const simdint& _val) { r = _val; g = _val; }
-inline void ivec3::rgb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; g = _val1; b = _val2; }
-inline void ivec3::rgb(const ivec3& _val) { r = _val.x; g = _val.y; b = _val.z; }
-inline void ivec3::rgb(const simdint& _val) { r = _val; g = _val; b = _val; }
-inline void ivec3::st(const simdint& _val0, const simdint& _val1) { s = _val0; t = _val1; }
-inline void ivec3::st(const ivec2& _val) { s = _val.s; t = _val.t; }
-inline void ivec3::st(const simdint& _val) { s = _val; t = _val; }
-inline void ivec3::stp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; t = _val1; p = _val2; }
-inline void ivec3::stp(const ivec3& _val) { s = _val.s; t = _val.t; p = _val.p; }
-inline void ivec3::stp(const simdint& _val) { s = _val; t = _val; p = _val; }
-inline void ivec3::sp(const simdint& _val0, const simdint& _val1) { s = _val0; p = _val1; }
-inline void ivec3::sp(const ivec2& _val) { s = _val.s; p = _val.t; }
-inline void ivec3::sp(const simdint& _val) { s = _val; p = _val; }
-inline void ivec3::spt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; p = _val1; t = _val2; }
-inline void ivec3::spt(const ivec3& _val) { s = _val.s; p = _val.t; t = _val.p; }
-inline void ivec3::spt(const simdint& _val) { s = _val; p = _val; t = _val; }
-inline void ivec3::ts(const simdint& _val0, const simdint& _val1) { t = _val0; s = _val1; }
-inline void ivec3::ts(const ivec2& _val) { t = _val.s; s = _val.t; }
-inline void ivec3::ts(const simdint& _val) { t = _val; s = _val; }
-inline void ivec3::tsp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; s = _val1; p = _val2; }
-inline void ivec3::tsp(const ivec3& _val) { t = _val.s; s = _val.t; p = _val.p; }
-inline void ivec3::tsp(const simdint& _val) { t = _val; s = _val; p = _val; }
-inline void ivec3::tp(const simdint& _val0, const simdint& _val1) { t = _val0; p = _val1; }
-inline void ivec3::tp(const ivec2& _val) { t = _val.s; p = _val.t; }
-inline void ivec3::tp(const simdint& _val) { t = _val; p = _val; }
-inline void ivec3::tps(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; p = _val1; s = _val2; }
-inline void ivec3::tps(const ivec3& _val) { t = _val.s; p = _val.t; s = _val.p; }
-inline void ivec3::tps(const simdint& _val) { t = _val; p = _val; s = _val; }
-inline void ivec3::ps(const simdint& _val0, const simdint& _val1) { p = _val0; s = _val1; }
-inline void ivec3::ps(const ivec2& _val) { p = _val.s; s = _val.t; }
-inline void ivec3::ps(const simdint& _val) { p = _val; s = _val; }
-inline void ivec3::pst(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; s = _val1; t = _val2; }
-inline void ivec3::pst(const ivec3& _val) { p = _val.s; s = _val.t; t = _val.p; }
-inline void ivec3::pst(const simdint& _val) { p = _val; s = _val; t = _val; }
-inline void ivec3::pt(const simdint& _val0, const simdint& _val1) { p = _val0; t = _val1; }
-inline void ivec3::pt(const ivec2& _val) { p = _val.s; t = _val.t; }
-inline void ivec3::pt(const simdint& _val) { p = _val; t = _val; }
-inline void ivec3::pts(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; t = _val1; s = _val2; }
-inline void ivec3::pts(const ivec3& _val) { p = _val.s; t = _val.t; s = _val.p; }
-inline void ivec3::pts(const simdint& _val) { p = _val; t = _val; s = _val; }
-inline void ivec3::xy(const simdint& _val0, const simdint& _val1) { x = _val0; y = _val1; }
-inline void ivec3::xy(const ivec2& _val) { x = _val.x; y = _val.y; }
-inline void ivec3::xy(const simdint& _val) { x = _val; y = _val; }
-inline void ivec3::xyz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; y = _val1; z = _val2; }
-inline void ivec3::xyz(const ivec3& _val) { x = _val.x; y = _val.y; z = _val.z; }
-inline void ivec3::xyz(const simdint& _val) { x = _val; y = _val; z = _val; }
-inline void ivec3::xz(const simdint& _val0, const simdint& _val1) { x = _val0; z = _val1; }
-inline void ivec3::xz(const ivec2& _val) { x = _val.x; z = _val.y; }
-inline void ivec3::xz(const simdint& _val) { x = _val; z = _val; }
-inline void ivec3::xzy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; z = _val1; y = _val2; }
-inline void ivec3::xzy(const ivec3& _val) { x = _val.x; z = _val.y; y = _val.z; }
-inline void ivec3::xzy(const simdint& _val) { x = _val; z = _val; y = _val; }
-inline void ivec3::yx(const simdint& _val0, const simdint& _val1) { y = _val0; x = _val1; }
-inline void ivec3::yx(const ivec2& _val) { y = _val.x; x = _val.y; }
-inline void ivec3::yx(const simdint& _val) { y = _val; x = _val; }
-inline void ivec3::yxz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; x = _val1; z = _val2; }
-inline void ivec3::yxz(const ivec3& _val) { y = _val.x; x = _val.y; z = _val.z; }
-inline void ivec3::yxz(const simdint& _val) { y = _val; x = _val; z = _val; }
-inline void ivec3::yz(const simdint& _val0, const simdint& _val1) { y = _val0; z = _val1; }
-inline void ivec3::yz(const ivec2& _val) { y = _val.x; z = _val.y; }
-inline void ivec3::yz(const simdint& _val) { y = _val; z = _val; }
-inline void ivec3::yzx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; z = _val1; x = _val2; }
-inline void ivec3::yzx(const ivec3& _val) { y = _val.x; z = _val.y; x = _val.z; }
-inline void ivec3::yzx(const simdint& _val) { y = _val; z = _val; x = _val; }
-inline void ivec3::zx(const simdint& _val0, const simdint& _val1) { z = _val0; x = _val1; }
-inline void ivec3::zx(const ivec2& _val) { z = _val.x; x = _val.y; }
-inline void ivec3::zx(const simdint& _val) { z = _val; x = _val; }
-inline void ivec3::zxy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; x = _val1; y = _val2; }
-inline void ivec3::zxy(const ivec3& _val) { z = _val.x; x = _val.y; y = _val.z; }
-inline void ivec3::zxy(const simdint& _val) { z = _val; x = _val; y = _val; }
-inline void ivec3::zy(const simdint& _val0, const simdint& _val1) { z = _val0; y = _val1; }
-inline void ivec3::zy(const ivec2& _val) { z = _val.x; y = _val.y; }
-inline void ivec3::zy(const simdint& _val) { z = _val; y = _val; }
-inline void ivec3::zyx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; y = _val1; x = _val2; }
-inline void ivec3::zyx(const ivec3& _val) { z = _val.x; y = _val.y; x = _val.z; }
-inline void ivec3::zyx(const simdint& _val) { z = _val; y = _val; x = _val; }
+inline void ivec3::bg(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec3::bg(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec3::bg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec3::bgr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec3::bgr(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec3::bgr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec3::br(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec3::br(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec3::br(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec3::brg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec3::brg(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec3::brg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec3::gb(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec3::gb(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec3::gb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec3::gbr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec3::gbr(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec3::gbr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec3::gr(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec3::gr(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec3::gr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec3::grb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec3::grb(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec3::grb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec3::rb(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec3::rb(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec3::rb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec3::rbg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec3::rbg(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec3::rbg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec3::rg(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec3::rg(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec3::rg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec3::rgb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec3::rgb(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec3::rgb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec3::st(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec3::st(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec3::st(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec3::stp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec3::stp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec3::stp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec3::sp(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec3::sp(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec3::sp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec3::spt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec3::spt(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec3::spt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec3::ts(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec3::ts(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec3::ts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec3::tsp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec3::tsp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec3::tsp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec3::tp(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec3::tp(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec3::tp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec3::tps(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec3::tps(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec3::tps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec3::ps(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec3::ps(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec3::ps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec3::pst(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec3::pst(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec3::pst(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec3::pt(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec3::pt(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec3::pt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec3::pts(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec3::pts(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec3::pts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec3::xy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec3::xy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec3::xy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec3::xyz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec3::xyz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec3::xyz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec3::xz(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec3::xz(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec3::xz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec3::xzy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec3::xzy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec3::xzy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec3::yx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec3::yx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec3::yx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec3::yxz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec3::yxz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec3::yxz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec3::yz(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec3::yz(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec3::yz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec3::yzx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec3::yzx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec3::yzx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec3::zx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec3::zx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec3::zx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec3::zxy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec3::zxy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec3::zxy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec3::zy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec3::zy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec3::zy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec3::zyx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec3::zyx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec3::zyx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
 
 #pragma endregion
 
@@ -13666,39 +14590,70 @@ inline ivec3 ivec3::operator=(const vec3& _v) { x = _v.x; y = _v.y; z = _v.z; re
 inline ivec3 ivec3::operator=(const ivec4& _v) { x = _v.x; y = _v.y; z = _v.z; return *this; }
 
 // constructors for ivec3
-inline ivec3::ivec3(const int32_t& _f) { x = _f; y = _f; z = _f; }
+inline ivec3::ivec3(const int32_t& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; }
 
-inline ivec3::ivec3(const simdint& _f) { x = _f; y = _f; z = _f; }
+inline ivec3::ivec3(const simdint& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; }
 
-inline ivec3::ivec3(const vec3& _v) { x = _v.x; y = _v.y; z = _v.z; }
+inline ivec3::ivec3(const vec3& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; z = _v.z; }
 
-inline ivec3::ivec3(const simdint& _x, const simdint& _y, const simdint& _z) { x = _x; y = _y; z = _z; }
+inline ivec3::ivec3(const simdint& _x, const simdint& _y, const simdint& _z) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; }
 
-inline ivec3::ivec3(const simdint& _x, const ivec2& _y) { x = _x; y = _y.x; z = _y.y; }
+inline ivec3::ivec3(const simdint& _x, const ivec2& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y.x; z = _y.y; }
 
-inline ivec3::ivec3(const ivec2& _x, const simdint& _z) { x = _x.x; y = _x.y; z = _z; }
+inline ivec3::ivec3(const ivec2& _x, const simdint& _z) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _z; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec3::ivec3(const simdint& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; }
+ivec3::ivec3(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; z = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec3::ivec3(const simdint& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; }
+ivec3::ivec3(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; z = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec2>, int>>
-ivec3::ivec3(const simdint& _x, const simdint& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+ivec3::ivec3(const simdint& _x, const simdint& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec3::ivec3(const simdint& _x, const simdint& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+ivec3::ivec3(const simdint& _x, const simdint& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec3::ivec3(const simdint& _x, const simdint& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+ivec3::ivec3(const simdint& _x, const simdint& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; }
 
+// Full-width copy: every lane is initialized, and the r/g/b/s/t/p aliases
+// keep pointing at this object's own components (their in-class initializers).
+inline ivec3::ivec3(const ivec3& other) : x(other.x), y(other.y), z(other.z) {}
+
+#endif
 
 
 
 // ---- End: simd_swizzle_ivec3.h ----
 
 // ---- Begin: simd_swizzle_ivec4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_SWIZZLE_IVEC4_H
+#define SIMD_SWIZZLE_IVEC4_H
 
 
 #pragma region ivec4 swizzle implementations
@@ -14712,546 +15667,546 @@ inline ivec4 ivec4::zzzw() const { return { z, z, z, w }; }
 inline ivec4 ivec4::zzzx() const { return { z, z, z, x }; }
 inline ivec4 ivec4::zzzy() const { return { z, z, z, y }; }
 inline ivec4 ivec4::zzzz() const { return { z, z, z, z }; }
-inline void ivec4::ab(const simdint& _val0, const simdint& _val1) { a = _val0; b = _val1; }
-inline void ivec4::ab(const ivec2& _val) { a = _val.x; b = _val.y; }
-inline void ivec4::ab(const simdint& _val) { a = _val; b = _val; }
-inline void ivec4::abg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { a = _val0; b = _val1; g = _val2; }
-inline void ivec4::abg(const ivec3& _val) { a = _val.x; b = _val.y; g = _val.z; }
-inline void ivec4::abg(const simdint& _val) { a = _val; b = _val; g = _val; }
-inline void ivec4::abgr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { a = _val0; b = _val1; g = _val2; r = _val3; }
-inline void ivec4::abgr(const ivec4& _val) { a = _val.x; b = _val.y; g = _val.z; r = _val.w; }
-inline void ivec4::abgr(const simdint& _val) { a = _val; b = _val; g = _val; r = _val; }
-inline void ivec4::abr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { a = _val0; b = _val1; r = _val2; }
-inline void ivec4::abr(const ivec3& _val) { a = _val.x; b = _val.y; r = _val.z; }
-inline void ivec4::abr(const simdint& _val) { a = _val; b = _val; r = _val; }
-inline void ivec4::abrg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { a = _val0; b = _val1; r = _val2; g = _val3; }
-inline void ivec4::abrg(const ivec4& _val) { a = _val.x; b = _val.y; r = _val.z; g = _val.w; }
-inline void ivec4::abrg(const simdint& _val) { a = _val; b = _val; r = _val; g = _val; }
-inline void ivec4::ag(const simdint& _val0, const simdint& _val1) { a = _val0; g = _val1; }
-inline void ivec4::ag(const ivec2& _val) { a = _val.x; g = _val.y; }
-inline void ivec4::ag(const simdint& _val) { a = _val; g = _val; }
-inline void ivec4::agb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { a = _val0; g = _val1; b = _val2; }
-inline void ivec4::agb(const ivec3& _val) { a = _val.x; g = _val.y; b = _val.z; }
-inline void ivec4::agb(const simdint& _val) { a = _val; g = _val; b = _val; }
-inline void ivec4::agbr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { a = _val0; g = _val1; b = _val2; r = _val3; }
-inline void ivec4::agbr(const ivec4& _val) { a = _val.x; g = _val.y; b = _val.z; r = _val.w; }
-inline void ivec4::agbr(const simdint& _val) { a = _val; g = _val; b = _val; r = _val; }
-inline void ivec4::agr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { a = _val0; g = _val1; r = _val2; }
-inline void ivec4::agr(const ivec3& _val) { a = _val.x; g = _val.y; r = _val.z; }
-inline void ivec4::agr(const simdint& _val) { a = _val; g = _val; r = _val; }
-inline void ivec4::agrb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { a = _val0; g = _val1; r = _val2; b = _val3; }
-inline void ivec4::agrb(const ivec4& _val) { a = _val.x; g = _val.y; r = _val.z; b = _val.w; }
-inline void ivec4::agrb(const simdint& _val) { a = _val; g = _val; r = _val; b = _val; }
-inline void ivec4::ar(const simdint& _val0, const simdint& _val1) { a = _val0; r = _val1; }
-inline void ivec4::ar(const ivec2& _val) { a = _val.x; r = _val.y; }
-inline void ivec4::ar(const simdint& _val) { a = _val; r = _val; }
-inline void ivec4::arb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { a = _val0; r = _val1; b = _val2; }
-inline void ivec4::arb(const ivec3& _val) { a = _val.x; r = _val.y; b = _val.z; }
-inline void ivec4::arb(const simdint& _val) { a = _val; r = _val; b = _val; }
-inline void ivec4::arbg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { a = _val0; r = _val1; b = _val2; g = _val3; }
-inline void ivec4::arbg(const ivec4& _val) { a = _val.x; r = _val.y; b = _val.z; g = _val.w; }
-inline void ivec4::arbg(const simdint& _val) { a = _val; r = _val; b = _val; g = _val; }
-inline void ivec4::arg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { a = _val0; r = _val1; g = _val2; }
-inline void ivec4::arg(const ivec3& _val) { a = _val.x; r = _val.y; g = _val.z; }
-inline void ivec4::arg(const simdint& _val) { a = _val; r = _val; g = _val; }
-inline void ivec4::argb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { a = _val0; r = _val1; g = _val2; b = _val3; }
-inline void ivec4::argb(const ivec4& _val) { a = _val.x; r = _val.y; g = _val.z; b = _val.w; }
-inline void ivec4::argb(const simdint& _val) { a = _val; r = _val; g = _val; b = _val; }
-inline void ivec4::ba(const simdint& _val0, const simdint& _val1) { b = _val0; a = _val1; }
-inline void ivec4::ba(const ivec2& _val) { b = _val.x; a = _val.y; }
-inline void ivec4::ba(const simdint& _val) { b = _val; a = _val; }
-inline void ivec4::bag(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; a = _val1; g = _val2; }
-inline void ivec4::bag(const ivec3& _val) { b = _val.x; a = _val.y; g = _val.z; }
-inline void ivec4::bag(const simdint& _val) { b = _val; a = _val; g = _val; }
-inline void ivec4::bagr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { b = _val0; a = _val1; g = _val2; r = _val3; }
-inline void ivec4::bagr(const ivec4& _val) { b = _val.x; a = _val.y; g = _val.z; r = _val.w; }
-inline void ivec4::bagr(const simdint& _val) { b = _val; a = _val; g = _val; r = _val; }
-inline void ivec4::bar(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; a = _val1; r = _val2; }
-inline void ivec4::bar(const ivec3& _val) { b = _val.x; a = _val.y; r = _val.z; }
-inline void ivec4::bar(const simdint& _val) { b = _val; a = _val; r = _val; }
-inline void ivec4::barg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { b = _val0; a = _val1; r = _val2; g = _val3; }
-inline void ivec4::barg(const ivec4& _val) { b = _val.x; a = _val.y; r = _val.z; g = _val.w; }
-inline void ivec4::barg(const simdint& _val) { b = _val; a = _val; r = _val; g = _val; }
-inline void ivec4::bg(const simdint& _val0, const simdint& _val1) { b = _val0; g = _val1; }
-inline void ivec4::bg(const ivec2& _val) { b = _val.x; g = _val.y; }
-inline void ivec4::bg(const simdint& _val) { b = _val; g = _val; }
-inline void ivec4::bga(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; g = _val1; a = _val2; }
-inline void ivec4::bga(const ivec3& _val) { b = _val.x; g = _val.y; a = _val.z; }
-inline void ivec4::bga(const simdint& _val) { b = _val; g = _val; a = _val; }
-inline void ivec4::bgar(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { b = _val0; g = _val1; a = _val2; r = _val3; }
-inline void ivec4::bgar(const ivec4& _val) { b = _val.x; g = _val.y; a = _val.z; r = _val.w; }
-inline void ivec4::bgar(const simdint& _val) { b = _val; g = _val; a = _val; r = _val; }
-inline void ivec4::bgr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; g = _val1; r = _val2; }
-inline void ivec4::bgr(const ivec3& _val) { b = _val.x; g = _val.y; r = _val.z; }
-inline void ivec4::bgr(const simdint& _val) { b = _val; g = _val; r = _val; }
-inline void ivec4::bgra(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { b = _val0; g = _val1; r = _val2; a = _val3; }
-inline void ivec4::bgra(const ivec4& _val) { b = _val.x; g = _val.y; r = _val.z; a = _val.w; }
-inline void ivec4::bgra(const simdint& _val) { b = _val; g = _val; r = _val; a = _val; }
-inline void ivec4::br(const simdint& _val0, const simdint& _val1) { b = _val0; r = _val1; }
-inline void ivec4::br(const ivec2& _val) { b = _val.x; r = _val.y; }
-inline void ivec4::br(const simdint& _val) { b = _val; r = _val; }
-inline void ivec4::bra(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; r = _val1; a = _val2; }
-inline void ivec4::bra(const ivec3& _val) { b = _val.x; r = _val.y; a = _val.z; }
-inline void ivec4::bra(const simdint& _val) { b = _val; r = _val; a = _val; }
-inline void ivec4::brag(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { b = _val0; r = _val1; a = _val2; g = _val3; }
-inline void ivec4::brag(const ivec4& _val) { b = _val.x; r = _val.y; a = _val.z; g = _val.w; }
-inline void ivec4::brag(const simdint& _val) { b = _val; r = _val; a = _val; g = _val; }
-inline void ivec4::brg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { b = _val0; r = _val1; g = _val2; }
-inline void ivec4::brg(const ivec3& _val) { b = _val.x; r = _val.y; g = _val.z; }
-inline void ivec4::brg(const simdint& _val) { b = _val; r = _val; g = _val; }
-inline void ivec4::brga(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { b = _val0; r = _val1; g = _val2; a = _val3; }
-inline void ivec4::brga(const ivec4& _val) { b = _val.x; r = _val.y; g = _val.z; a = _val.w; }
-inline void ivec4::brga(const simdint& _val) { b = _val; r = _val; g = _val; a = _val; }
-inline void ivec4::ga(const simdint& _val0, const simdint& _val1) { g = _val0; a = _val1; }
-inline void ivec4::ga(const ivec2& _val) { g = _val.x; a = _val.y; }
-inline void ivec4::ga(const simdint& _val) { g = _val; a = _val; }
-inline void ivec4::gab(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; a = _val1; b = _val2; }
-inline void ivec4::gab(const ivec3& _val) { g = _val.x; a = _val.y; b = _val.z; }
-inline void ivec4::gab(const simdint& _val) { g = _val; a = _val; b = _val; }
-inline void ivec4::gabr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { g = _val0; a = _val1; b = _val2; r = _val3; }
-inline void ivec4::gabr(const ivec4& _val) { g = _val.x; a = _val.y; b = _val.z; r = _val.w; }
-inline void ivec4::gabr(const simdint& _val) { g = _val; a = _val; b = _val; r = _val; }
-inline void ivec4::gar(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; a = _val1; r = _val2; }
-inline void ivec4::gar(const ivec3& _val) { g = _val.x; a = _val.y; r = _val.z; }
-inline void ivec4::gar(const simdint& _val) { g = _val; a = _val; r = _val; }
-inline void ivec4::garb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { g = _val0; a = _val1; r = _val2; b = _val3; }
-inline void ivec4::garb(const ivec4& _val) { g = _val.x; a = _val.y; r = _val.z; b = _val.w; }
-inline void ivec4::garb(const simdint& _val) { g = _val; a = _val; r = _val; b = _val; }
-inline void ivec4::gb(const simdint& _val0, const simdint& _val1) { g = _val0; b = _val1; }
-inline void ivec4::gb(const ivec2& _val) { g = _val.x; b = _val.y; }
-inline void ivec4::gb(const simdint& _val) { g = _val; b = _val; }
-inline void ivec4::gba(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; b = _val1; a = _val2; }
-inline void ivec4::gba(const ivec3& _val) { g = _val.x; b = _val.y; a = _val.z; }
-inline void ivec4::gba(const simdint& _val) { g = _val; b = _val; a = _val; }
-inline void ivec4::gbar(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { g = _val0; b = _val1; a = _val2; r = _val3; }
-inline void ivec4::gbar(const ivec4& _val) { g = _val.x; b = _val.y; a = _val.z; r = _val.w; }
-inline void ivec4::gbar(const simdint& _val) { g = _val; b = _val; a = _val; r = _val; }
-inline void ivec4::gbr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; b = _val1; r = _val2; }
-inline void ivec4::gbr(const ivec3& _val) { g = _val.x; b = _val.y; r = _val.z; }
-inline void ivec4::gbr(const simdint& _val) { g = _val; b = _val; r = _val; }
-inline void ivec4::gbra(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { g = _val0; b = _val1; r = _val2; a = _val3; }
-inline void ivec4::gbra(const ivec4& _val) { g = _val.x; b = _val.y; r = _val.z; a = _val.w; }
-inline void ivec4::gbra(const simdint& _val) { g = _val; b = _val; r = _val; a = _val; }
-inline void ivec4::gr(const simdint& _val0, const simdint& _val1) { g = _val0; r = _val1; }
-inline void ivec4::gr(const ivec2& _val) { g = _val.x; r = _val.y; }
-inline void ivec4::gr(const simdint& _val) { g = _val; r = _val; }
-inline void ivec4::gra(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; r = _val1; a = _val2; }
-inline void ivec4::gra(const ivec3& _val) { g = _val.x; r = _val.y; a = _val.z; }
-inline void ivec4::gra(const simdint& _val) { g = _val; r = _val; a = _val; }
-inline void ivec4::grab(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { g = _val0; r = _val1; a = _val2; b = _val3; }
-inline void ivec4::grab(const ivec4& _val) { g = _val.x; r = _val.y; a = _val.z; b = _val.w; }
-inline void ivec4::grab(const simdint& _val) { g = _val; r = _val; a = _val; b = _val; }
-inline void ivec4::grb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { g = _val0; r = _val1; b = _val2; }
-inline void ivec4::grb(const ivec3& _val) { g = _val.x; r = _val.y; b = _val.z; }
-inline void ivec4::grb(const simdint& _val) { g = _val; r = _val; b = _val; }
-inline void ivec4::grba(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { g = _val0; r = _val1; b = _val2; a = _val3; }
-inline void ivec4::grba(const ivec4& _val) { g = _val.x; r = _val.y; b = _val.z; a = _val.w; }
-inline void ivec4::grba(const simdint& _val) { g = _val; r = _val; b = _val; a = _val; }
-inline void ivec4::ra(const simdint& _val0, const simdint& _val1) { r = _val0; a = _val1; }
-inline void ivec4::ra(const ivec2& _val) { r = _val.x; a = _val.y; }
-inline void ivec4::ra(const simdint& _val) { r = _val; a = _val; }
-inline void ivec4::rab(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; a = _val1; b = _val2; }
-inline void ivec4::rab(const ivec3& _val) { r = _val.x; a = _val.y; b = _val.z; }
-inline void ivec4::rab(const simdint& _val) { r = _val; a = _val; b = _val; }
-inline void ivec4::rabg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { r = _val0; a = _val1; b = _val2; g = _val3; }
-inline void ivec4::rabg(const ivec4& _val) { r = _val.x; a = _val.y; b = _val.z; g = _val.w; }
-inline void ivec4::rabg(const simdint& _val) { r = _val; a = _val; b = _val; g = _val; }
-inline void ivec4::rag(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; a = _val1; g = _val2; }
-inline void ivec4::rag(const ivec3& _val) { r = _val.x; a = _val.y; g = _val.z; }
-inline void ivec4::rag(const simdint& _val) { r = _val; a = _val; g = _val; }
-inline void ivec4::ragb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { r = _val0; a = _val1; g = _val2; b = _val3; }
-inline void ivec4::ragb(const ivec4& _val) { r = _val.x; a = _val.y; g = _val.z; b = _val.w; }
-inline void ivec4::ragb(const simdint& _val) { r = _val; a = _val; g = _val; b = _val; }
-inline void ivec4::rb(const simdint& _val0, const simdint& _val1) { r = _val0; b = _val1; }
-inline void ivec4::rb(const ivec2& _val) { r = _val.x; b = _val.y; }
-inline void ivec4::rb(const simdint& _val) { r = _val; b = _val; }
-inline void ivec4::rba(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; b = _val1; a = _val2; }
-inline void ivec4::rba(const ivec3& _val) { r = _val.x; b = _val.y; a = _val.z; }
-inline void ivec4::rba(const simdint& _val) { r = _val; b = _val; a = _val; }
-inline void ivec4::rbag(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { r = _val0; b = _val1; a = _val2; g = _val3; }
-inline void ivec4::rbag(const ivec4& _val) { r = _val.x; b = _val.y; a = _val.z; g = _val.w; }
-inline void ivec4::rbag(const simdint& _val) { r = _val; b = _val; a = _val; g = _val; }
-inline void ivec4::rbg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; b = _val1; g = _val2; }
-inline void ivec4::rbg(const ivec3& _val) { r = _val.x; b = _val.y; g = _val.z; }
-inline void ivec4::rbg(const simdint& _val) { r = _val; b = _val; g = _val; }
-inline void ivec4::rbga(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { r = _val0; b = _val1; g = _val2; a = _val3; }
-inline void ivec4::rbga(const ivec4& _val) { r = _val.x; b = _val.y; g = _val.z; a = _val.w; }
-inline void ivec4::rbga(const simdint& _val) { r = _val; b = _val; g = _val; a = _val; }
-inline void ivec4::rg(const simdint& _val0, const simdint& _val1) { r = _val0; g = _val1; }
-inline void ivec4::rg(const ivec2& _val) { r = _val.x; g = _val.y; }
-inline void ivec4::rg(const simdint& _val) { r = _val; g = _val; }
-inline void ivec4::rga(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; g = _val1; a = _val2; }
-inline void ivec4::rga(const ivec3& _val) { r = _val.x; g = _val.y; a = _val.z; }
-inline void ivec4::rga(const simdint& _val) { r = _val; g = _val; a = _val; }
-inline void ivec4::rgab(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { r = _val0; g = _val1; a = _val2; b = _val3; }
-inline void ivec4::rgab(const ivec4& _val) { r = _val.x; g = _val.y; a = _val.z; b = _val.w; }
-inline void ivec4::rgab(const simdint& _val) { r = _val; g = _val; a = _val; b = _val; }
-inline void ivec4::rgb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { r = _val0; g = _val1; b = _val2; }
-inline void ivec4::rgb(const ivec3& _val) { r = _val.x; g = _val.y; b = _val.z; }
-inline void ivec4::rgb(const simdint& _val) { r = _val; g = _val; b = _val; }
-inline void ivec4::rgba(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { r = _val0; g = _val1; b = _val2; a = _val3; }
-inline void ivec4::rgba(const ivec4& _val) { r = _val.x; g = _val.y; b = _val.z; a = _val.w; }
-inline void ivec4::rgba(const simdint& _val) { r = _val; g = _val; b = _val; a = _val; }
-inline void ivec4::qs(const simdint& _val0, const simdint& _val1) { q = _val0; s = _val1; }
-inline void ivec4::qs(const ivec2& _val) { q = _val.s; s = _val.t; }
-inline void ivec4::qs(const simdint& _val) { q = _val; s = _val; }
-inline void ivec4::qst(const simdint& _val0, const simdint& _val1, const simdint& _val2) { q = _val0; s = _val1; t = _val2; }
-inline void ivec4::qst(const ivec3& _val) { q = _val.s; s = _val.t; t = _val.p; }
-inline void ivec4::qst(const simdint& _val) { q = _val; s = _val; t = _val; }
-inline void ivec4::qstp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { q = _val0; s = _val1; t = _val2; p = _val3; }
-inline void ivec4::qstp(const ivec4& _val) { q = _val.s; s = _val.t; t = _val.p; p = _val.q; }
-inline void ivec4::qstp(const simdint& _val) { q = _val; s = _val; t = _val; p = _val; }
-inline void ivec4::qsp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { q = _val0; s = _val1; p = _val2; }
-inline void ivec4::qsp(const ivec3& _val) { q = _val.s; s = _val.t; p = _val.p; }
-inline void ivec4::qsp(const simdint& _val) { q = _val; s = _val; p = _val; }
-inline void ivec4::qspt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { q = _val0; s = _val1; p = _val2; t = _val3; }
-inline void ivec4::qspt(const ivec4& _val) { q = _val.s; s = _val.t; p = _val.p; t = _val.q; }
-inline void ivec4::qspt(const simdint& _val) { q = _val; s = _val; p = _val; t = _val; }
-inline void ivec4::qt(const simdint& _val0, const simdint& _val1) { q = _val0; t = _val1; }
-inline void ivec4::qt(const ivec2& _val) { q = _val.s; t = _val.t; }
-inline void ivec4::qt(const simdint& _val) { q = _val; t = _val; }
-inline void ivec4::qts(const simdint& _val0, const simdint& _val1, const simdint& _val2) { q = _val0; t = _val1; s = _val2; }
-inline void ivec4::qts(const ivec3& _val) { q = _val.s; t = _val.t; s = _val.p; }
-inline void ivec4::qts(const simdint& _val) { q = _val; t = _val; s = _val; }
-inline void ivec4::qtsp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { q = _val0; t = _val1; s = _val2; p = _val3; }
-inline void ivec4::qtsp(const ivec4& _val) { q = _val.s; t = _val.t; s = _val.p; p = _val.q; }
-inline void ivec4::qtsp(const simdint& _val) { q = _val; t = _val; s = _val; p = _val; }
-inline void ivec4::qtp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { q = _val0; t = _val1; p = _val2; }
-inline void ivec4::qtp(const ivec3& _val) { q = _val.s; t = _val.t; p = _val.p; }
-inline void ivec4::qtp(const simdint& _val) { q = _val; t = _val; p = _val; }
-inline void ivec4::qtps(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { q = _val0; t = _val1; p = _val2; s = _val3; }
-inline void ivec4::qtps(const ivec4& _val) { q = _val.s; t = _val.t; p = _val.p; s = _val.q; }
-inline void ivec4::qtps(const simdint& _val) { q = _val; t = _val; p = _val; s = _val; }
-inline void ivec4::qp(const simdint& _val0, const simdint& _val1) { q = _val0; p = _val1; }
-inline void ivec4::qp(const ivec2& _val) { q = _val.s; p = _val.t; }
-inline void ivec4::qp(const simdint& _val) { q = _val; p = _val; }
-inline void ivec4::qps(const simdint& _val0, const simdint& _val1, const simdint& _val2) { q = _val0; p = _val1; s = _val2; }
-inline void ivec4::qps(const ivec3& _val) { q = _val.s; p = _val.t; s = _val.p; }
-inline void ivec4::qps(const simdint& _val) { q = _val; p = _val; s = _val; }
-inline void ivec4::qpst(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { q = _val0; p = _val1; s = _val2; t = _val3; }
-inline void ivec4::qpst(const ivec4& _val) { q = _val.s; p = _val.t; s = _val.p; t = _val.q; }
-inline void ivec4::qpst(const simdint& _val) { q = _val; p = _val; s = _val; t = _val; }
-inline void ivec4::qpt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { q = _val0; p = _val1; t = _val2; }
-inline void ivec4::qpt(const ivec3& _val) { q = _val.s; p = _val.t; t = _val.p; }
-inline void ivec4::qpt(const simdint& _val) { q = _val; p = _val; t = _val; }
-inline void ivec4::qpts(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { q = _val0; p = _val1; t = _val2; s = _val3; }
-inline void ivec4::qpts(const ivec4& _val) { q = _val.s; p = _val.t; t = _val.p; s = _val.q; }
-inline void ivec4::qpts(const simdint& _val) { q = _val; p = _val; t = _val; s = _val; }
-inline void ivec4::sq(const simdint& _val0, const simdint& _val1) { s = _val0; q = _val1; }
-inline void ivec4::sq(const ivec2& _val) { s = _val.s; q = _val.t; }
-inline void ivec4::sq(const simdint& _val) { s = _val; q = _val; }
-inline void ivec4::sqt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; q = _val1; t = _val2; }
-inline void ivec4::sqt(const ivec3& _val) { s = _val.s; q = _val.t; t = _val.p; }
-inline void ivec4::sqt(const simdint& _val) { s = _val; q = _val; t = _val; }
-inline void ivec4::sqtp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { s = _val0; q = _val1; t = _val2; p = _val3; }
-inline void ivec4::sqtp(const ivec4& _val) { s = _val.s; q = _val.t; t = _val.p; p = _val.q; }
-inline void ivec4::sqtp(const simdint& _val) { s = _val; q = _val; t = _val; p = _val; }
-inline void ivec4::sqp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; q = _val1; p = _val2; }
-inline void ivec4::sqp(const ivec3& _val) { s = _val.s; q = _val.t; p = _val.p; }
-inline void ivec4::sqp(const simdint& _val) { s = _val; q = _val; p = _val; }
-inline void ivec4::sqpt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { s = _val0; q = _val1; p = _val2; t = _val3; }
-inline void ivec4::sqpt(const ivec4& _val) { s = _val.s; q = _val.t; p = _val.p; t = _val.q; }
-inline void ivec4::sqpt(const simdint& _val) { s = _val; q = _val; p = _val; t = _val; }
-inline void ivec4::st(const simdint& _val0, const simdint& _val1) { s = _val0; t = _val1; }
-inline void ivec4::st(const ivec2& _val) { s = _val.s; t = _val.t; }
-inline void ivec4::st(const simdint& _val) { s = _val; t = _val; }
-inline void ivec4::stq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; t = _val1; q = _val2; }
-inline void ivec4::stq(const ivec3& _val) { s = _val.s; t = _val.t; q = _val.p; }
-inline void ivec4::stq(const simdint& _val) { s = _val; t = _val; q = _val; }
-inline void ivec4::stqp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { s = _val0; t = _val1; q = _val2; p = _val3; }
-inline void ivec4::stqp(const ivec4& _val) { s = _val.s; t = _val.t; q = _val.p; p = _val.q; }
-inline void ivec4::stqp(const simdint& _val) { s = _val; t = _val; q = _val; p = _val; }
-inline void ivec4::stp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; t = _val1; p = _val2; }
-inline void ivec4::stp(const ivec3& _val) { s = _val.s; t = _val.t; p = _val.p; }
-inline void ivec4::stp(const simdint& _val) { s = _val; t = _val; p = _val; }
-inline void ivec4::stpq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { s = _val0; t = _val1; p = _val2; q = _val3; }
-inline void ivec4::stpq(const ivec4& _val) { s = _val.s; t = _val.t; p = _val.p; q = _val.q; }
-inline void ivec4::stpq(const simdint& _val) { s = _val; t = _val; p = _val; q = _val; }
-inline void ivec4::sp(const simdint& _val0, const simdint& _val1) { s = _val0; p = _val1; }
-inline void ivec4::sp(const ivec2& _val) { s = _val.s; p = _val.t; }
-inline void ivec4::sp(const simdint& _val) { s = _val; p = _val; }
-inline void ivec4::spq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; p = _val1; q = _val2; }
-inline void ivec4::spq(const ivec3& _val) { s = _val.s; p = _val.t; q = _val.p; }
-inline void ivec4::spq(const simdint& _val) { s = _val; p = _val; q = _val; }
-inline void ivec4::spqt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { s = _val0; p = _val1; q = _val2; t = _val3; }
-inline void ivec4::spqt(const ivec4& _val) { s = _val.s; p = _val.t; q = _val.p; t = _val.q; }
-inline void ivec4::spqt(const simdint& _val) { s = _val; p = _val; q = _val; t = _val; }
-inline void ivec4::spt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { s = _val0; p = _val1; t = _val2; }
-inline void ivec4::spt(const ivec3& _val) { s = _val.s; p = _val.t; t = _val.p; }
-inline void ivec4::spt(const simdint& _val) { s = _val; p = _val; t = _val; }
-inline void ivec4::sptq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { s = _val0; p = _val1; t = _val2; q = _val3; }
-inline void ivec4::sptq(const ivec4& _val) { s = _val.s; p = _val.t; t = _val.p; q = _val.q; }
-inline void ivec4::sptq(const simdint& _val) { s = _val; p = _val; t = _val; q = _val; }
-inline void ivec4::tq(const simdint& _val0, const simdint& _val1) { t = _val0; q = _val1; }
-inline void ivec4::tq(const ivec2& _val) { t = _val.s; q = _val.t; }
-inline void ivec4::tq(const simdint& _val) { t = _val; q = _val; }
-inline void ivec4::tqs(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; q = _val1; s = _val2; }
-inline void ivec4::tqs(const ivec3& _val) { t = _val.s; q = _val.t; s = _val.p; }
-inline void ivec4::tqs(const simdint& _val) { t = _val; q = _val; s = _val; }
-inline void ivec4::tqsp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { t = _val0; q = _val1; s = _val2; p = _val3; }
-inline void ivec4::tqsp(const ivec4& _val) { t = _val.s; q = _val.t; s = _val.p; p = _val.q; }
-inline void ivec4::tqsp(const simdint& _val) { t = _val; q = _val; s = _val; p = _val; }
-inline void ivec4::tqp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; q = _val1; p = _val2; }
-inline void ivec4::tqp(const ivec3& _val) { t = _val.s; q = _val.t; p = _val.p; }
-inline void ivec4::tqp(const simdint& _val) { t = _val; q = _val; p = _val; }
-inline void ivec4::tqps(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { t = _val0; q = _val1; p = _val2; s = _val3; }
-inline void ivec4::tqps(const ivec4& _val) { t = _val.s; q = _val.t; p = _val.p; s = _val.q; }
-inline void ivec4::tqps(const simdint& _val) { t = _val; q = _val; p = _val; s = _val; }
-inline void ivec4::ts(const simdint& _val0, const simdint& _val1) { t = _val0; s = _val1; }
-inline void ivec4::ts(const ivec2& _val) { t = _val.s; s = _val.t; }
-inline void ivec4::ts(const simdint& _val) { t = _val; s = _val; }
-inline void ivec4::tsq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; s = _val1; q = _val2; }
-inline void ivec4::tsq(const ivec3& _val) { t = _val.s; s = _val.t; q = _val.p; }
-inline void ivec4::tsq(const simdint& _val) { t = _val; s = _val; q = _val; }
-inline void ivec4::tsqp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { t = _val0; s = _val1; q = _val2; p = _val3; }
-inline void ivec4::tsqp(const ivec4& _val) { t = _val.s; s = _val.t; q = _val.p; p = _val.q; }
-inline void ivec4::tsqp(const simdint& _val) { t = _val; s = _val; q = _val; p = _val; }
-inline void ivec4::tsp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; s = _val1; p = _val2; }
-inline void ivec4::tsp(const ivec3& _val) { t = _val.s; s = _val.t; p = _val.p; }
-inline void ivec4::tsp(const simdint& _val) { t = _val; s = _val; p = _val; }
-inline void ivec4::tspq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { t = _val0; s = _val1; p = _val2; q = _val3; }
-inline void ivec4::tspq(const ivec4& _val) { t = _val.s; s = _val.t; p = _val.p; q = _val.q; }
-inline void ivec4::tspq(const simdint& _val) { t = _val; s = _val; p = _val; q = _val; }
-inline void ivec4::tp(const simdint& _val0, const simdint& _val1) { t = _val0; p = _val1; }
-inline void ivec4::tp(const ivec2& _val) { t = _val.s; p = _val.t; }
-inline void ivec4::tp(const simdint& _val) { t = _val; p = _val; }
-inline void ivec4::tpq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; p = _val1; q = _val2; }
-inline void ivec4::tpq(const ivec3& _val) { t = _val.s; p = _val.t; q = _val.p; }
-inline void ivec4::tpq(const simdint& _val) { t = _val; p = _val; q = _val; }
-inline void ivec4::tpqs(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { t = _val0; p = _val1; q = _val2; s = _val3; }
-inline void ivec4::tpqs(const ivec4& _val) { t = _val.s; p = _val.t; q = _val.p; s = _val.q; }
-inline void ivec4::tpqs(const simdint& _val) { t = _val; p = _val; q = _val; s = _val; }
-inline void ivec4::tps(const simdint& _val0, const simdint& _val1, const simdint& _val2) { t = _val0; p = _val1; s = _val2; }
-inline void ivec4::tps(const ivec3& _val) { t = _val.s; p = _val.t; s = _val.p; }
-inline void ivec4::tps(const simdint& _val) { t = _val; p = _val; s = _val; }
-inline void ivec4::tpsq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { t = _val0; p = _val1; s = _val2; q = _val3; }
-inline void ivec4::tpsq(const ivec4& _val) { t = _val.s; p = _val.t; s = _val.p; q = _val.q; }
-inline void ivec4::tpsq(const simdint& _val) { t = _val; p = _val; s = _val; q = _val; }
-inline void ivec4::pq(const simdint& _val0, const simdint& _val1) { p = _val0; q = _val1; }
-inline void ivec4::pq(const ivec2& _val) { p = _val.s; q = _val.t; }
-inline void ivec4::pq(const simdint& _val) { p = _val; q = _val; }
-inline void ivec4::pqs(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; q = _val1; s = _val2; }
-inline void ivec4::pqs(const ivec3& _val) { p = _val.s; q = _val.t; s = _val.p; }
-inline void ivec4::pqs(const simdint& _val) { p = _val; q = _val; s = _val; }
-inline void ivec4::pqst(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { p = _val0; q = _val1; s = _val2; t = _val3; }
-inline void ivec4::pqst(const ivec4& _val) { p = _val.s; q = _val.t; s = _val.p; t = _val.q; }
-inline void ivec4::pqst(const simdint& _val) { p = _val; q = _val; s = _val; t = _val; }
-inline void ivec4::pqt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; q = _val1; t = _val2; }
-inline void ivec4::pqt(const ivec3& _val) { p = _val.s; q = _val.t; t = _val.p; }
-inline void ivec4::pqt(const simdint& _val) { p = _val; q = _val; t = _val; }
-inline void ivec4::pqts(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { p = _val0; q = _val1; t = _val2; s = _val3; }
-inline void ivec4::pqts(const ivec4& _val) { p = _val.s; q = _val.t; t = _val.p; s = _val.q; }
-inline void ivec4::pqts(const simdint& _val) { p = _val; q = _val; t = _val; s = _val; }
-inline void ivec4::ps(const simdint& _val0, const simdint& _val1) { p = _val0; s = _val1; }
-inline void ivec4::ps(const ivec2& _val) { p = _val.s; s = _val.t; }
-inline void ivec4::ps(const simdint& _val) { p = _val; s = _val; }
-inline void ivec4::psq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; s = _val1; q = _val2; }
-inline void ivec4::psq(const ivec3& _val) { p = _val.s; s = _val.t; q = _val.p; }
-inline void ivec4::psq(const simdint& _val) { p = _val; s = _val; q = _val; }
-inline void ivec4::psqt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { p = _val0; s = _val1; q = _val2; t = _val3; }
-inline void ivec4::psqt(const ivec4& _val) { p = _val.s; s = _val.t; q = _val.p; t = _val.q; }
-inline void ivec4::psqt(const simdint& _val) { p = _val; s = _val; q = _val; t = _val; }
-inline void ivec4::pst(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; s = _val1; t = _val2; }
-inline void ivec4::pst(const ivec3& _val) { p = _val.s; s = _val.t; t = _val.p; }
-inline void ivec4::pst(const simdint& _val) { p = _val; s = _val; t = _val; }
-inline void ivec4::pstq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { p = _val0; s = _val1; t = _val2; q = _val3; }
-inline void ivec4::pstq(const ivec4& _val) { p = _val.s; s = _val.t; t = _val.p; q = _val.q; }
-inline void ivec4::pstq(const simdint& _val) { p = _val; s = _val; t = _val; q = _val; }
-inline void ivec4::pt(const simdint& _val0, const simdint& _val1) { p = _val0; t = _val1; }
-inline void ivec4::pt(const ivec2& _val) { p = _val.s; t = _val.t; }
-inline void ivec4::pt(const simdint& _val) { p = _val; t = _val; }
-inline void ivec4::ptq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; t = _val1; q = _val2; }
-inline void ivec4::ptq(const ivec3& _val) { p = _val.s; t = _val.t; q = _val.p; }
-inline void ivec4::ptq(const simdint& _val) { p = _val; t = _val; q = _val; }
-inline void ivec4::ptqs(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { p = _val0; t = _val1; q = _val2; s = _val3; }
-inline void ivec4::ptqs(const ivec4& _val) { p = _val.s; t = _val.t; q = _val.p; s = _val.q; }
-inline void ivec4::ptqs(const simdint& _val) { p = _val; t = _val; q = _val; s = _val; }
-inline void ivec4::pts(const simdint& _val0, const simdint& _val1, const simdint& _val2) { p = _val0; t = _val1; s = _val2; }
-inline void ivec4::pts(const ivec3& _val) { p = _val.s; t = _val.t; s = _val.p; }
-inline void ivec4::pts(const simdint& _val) { p = _val; t = _val; s = _val; }
-inline void ivec4::ptsq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { p = _val0; t = _val1; s = _val2; q = _val3; }
-inline void ivec4::ptsq(const ivec4& _val) { p = _val.s; t = _val.t; s = _val.p; q = _val.q; }
-inline void ivec4::ptsq(const simdint& _val) { p = _val; t = _val; s = _val; q = _val; }
-inline void ivec4::wx(const simdint& _val0, const simdint& _val1) { w = _val0; x = _val1; }
-inline void ivec4::wx(const ivec2& _val) { w = _val.x; x = _val.y; }
-inline void ivec4::wx(const simdint& _val) { w = _val; x = _val; }
-inline void ivec4::wxy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { w = _val0; x = _val1; y = _val2; }
-inline void ivec4::wxy(const ivec3& _val) { w = _val.x; x = _val.y; y = _val.z; }
-inline void ivec4::wxy(const simdint& _val) { w = _val; x = _val; y = _val; }
-inline void ivec4::wxyz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { w = _val0; x = _val1; y = _val2; z = _val3; }
-inline void ivec4::wxyz(const ivec4& _val) { w = _val.x; x = _val.y; y = _val.z; z = _val.w; }
-inline void ivec4::wxyz(const simdint& _val) { w = _val; x = _val; y = _val; z = _val; }
-inline void ivec4::wxz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { w = _val0; x = _val1; z = _val2; }
-inline void ivec4::wxz(const ivec3& _val) { w = _val.x; x = _val.y; z = _val.z; }
-inline void ivec4::wxz(const simdint& _val) { w = _val; x = _val; z = _val; }
-inline void ivec4::wxzy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { w = _val0; x = _val1; z = _val2; y = _val3; }
-inline void ivec4::wxzy(const ivec4& _val) { w = _val.x; x = _val.y; z = _val.z; y = _val.w; }
-inline void ivec4::wxzy(const simdint& _val) { w = _val; x = _val; z = _val; y = _val; }
-inline void ivec4::wy(const simdint& _val0, const simdint& _val1) { w = _val0; y = _val1; }
-inline void ivec4::wy(const ivec2& _val) { w = _val.x; y = _val.y; }
-inline void ivec4::wy(const simdint& _val) { w = _val; y = _val; }
-inline void ivec4::wyx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { w = _val0; y = _val1; x = _val2; }
-inline void ivec4::wyx(const ivec3& _val) { w = _val.x; y = _val.y; x = _val.z; }
-inline void ivec4::wyx(const simdint& _val) { w = _val; y = _val; x = _val; }
-inline void ivec4::wyxz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { w = _val0; y = _val1; x = _val2; z = _val3; }
-inline void ivec4::wyxz(const ivec4& _val) { w = _val.x; y = _val.y; x = _val.z; z = _val.w; }
-inline void ivec4::wyxz(const simdint& _val) { w = _val; y = _val; x = _val; z = _val; }
-inline void ivec4::wyz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { w = _val0; y = _val1; z = _val2; }
-inline void ivec4::wyz(const ivec3& _val) { w = _val.x; y = _val.y; z = _val.z; }
-inline void ivec4::wyz(const simdint& _val) { w = _val; y = _val; z = _val; }
-inline void ivec4::wyzx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { w = _val0; y = _val1; z = _val2; x = _val3; }
-inline void ivec4::wyzx(const ivec4& _val) { w = _val.x; y = _val.y; z = _val.z; x = _val.w; }
-inline void ivec4::wyzx(const simdint& _val) { w = _val; y = _val; z = _val; x = _val; }
-inline void ivec4::wz(const simdint& _val0, const simdint& _val1) { w = _val0; z = _val1; }
-inline void ivec4::wz(const ivec2& _val) { w = _val.x; z = _val.y; }
-inline void ivec4::wz(const simdint& _val) { w = _val; z = _val; }
-inline void ivec4::wzx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { w = _val0; z = _val1; x = _val2; }
-inline void ivec4::wzx(const ivec3& _val) { w = _val.x; z = _val.y; x = _val.z; }
-inline void ivec4::wzx(const simdint& _val) { w = _val; z = _val; x = _val; }
-inline void ivec4::wzxy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { w = _val0; z = _val1; x = _val2; y = _val3; }
-inline void ivec4::wzxy(const ivec4& _val) { w = _val.x; z = _val.y; x = _val.z; y = _val.w; }
-inline void ivec4::wzxy(const simdint& _val) { w = _val; z = _val; x = _val; y = _val; }
-inline void ivec4::wzy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { w = _val0; z = _val1; y = _val2; }
-inline void ivec4::wzy(const ivec3& _val) { w = _val.x; z = _val.y; y = _val.z; }
-inline void ivec4::wzy(const simdint& _val) { w = _val; z = _val; y = _val; }
-inline void ivec4::wzyx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { w = _val0; z = _val1; y = _val2; x = _val3; }
-inline void ivec4::wzyx(const ivec4& _val) { w = _val.x; z = _val.y; y = _val.z; x = _val.w; }
-inline void ivec4::wzyx(const simdint& _val) { w = _val; z = _val; y = _val; x = _val; }
-inline void ivec4::xw(const simdint& _val0, const simdint& _val1) { x = _val0; w = _val1; }
-inline void ivec4::xw(const ivec2& _val) { x = _val.x; w = _val.y; }
-inline void ivec4::xw(const simdint& _val) { x = _val; w = _val; }
-inline void ivec4::xwy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; w = _val1; y = _val2; }
-inline void ivec4::xwy(const ivec3& _val) { x = _val.x; w = _val.y; y = _val.z; }
-inline void ivec4::xwy(const simdint& _val) { x = _val; w = _val; y = _val; }
-inline void ivec4::xwyz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { x = _val0; w = _val1; y = _val2; z = _val3; }
-inline void ivec4::xwyz(const ivec4& _val) { x = _val.x; w = _val.y; y = _val.z; z = _val.w; }
-inline void ivec4::xwyz(const simdint& _val) { x = _val; w = _val; y = _val; z = _val; }
-inline void ivec4::xwz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; w = _val1; z = _val2; }
-inline void ivec4::xwz(const ivec3& _val) { x = _val.x; w = _val.y; z = _val.z; }
-inline void ivec4::xwz(const simdint& _val) { x = _val; w = _val; z = _val; }
-inline void ivec4::xwzy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { x = _val0; w = _val1; z = _val2; y = _val3; }
-inline void ivec4::xwzy(const ivec4& _val) { x = _val.x; w = _val.y; z = _val.z; y = _val.w; }
-inline void ivec4::xwzy(const simdint& _val) { x = _val; w = _val; z = _val; y = _val; }
-inline void ivec4::xy(const simdint& _val0, const simdint& _val1) { x = _val0; y = _val1; }
-inline void ivec4::xy(const ivec2& _val) { x = _val.x; y = _val.y; }
-inline void ivec4::xy(const simdint& _val) { x = _val; y = _val; }
-inline void ivec4::xyw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; y = _val1; w = _val2; }
-inline void ivec4::xyw(const ivec3& _val) { x = _val.x; y = _val.y; w = _val.z; }
-inline void ivec4::xyw(const simdint& _val) { x = _val; y = _val; w = _val; }
-inline void ivec4::xywz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { x = _val0; y = _val1; w = _val2; z = _val3; }
-inline void ivec4::xywz(const ivec4& _val) { x = _val.x; y = _val.y; w = _val.z; z = _val.w; }
-inline void ivec4::xywz(const simdint& _val) { x = _val; y = _val; w = _val; z = _val; }
-inline void ivec4::xyz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; y = _val1; z = _val2; }
-inline void ivec4::xyz(const ivec3& _val) { x = _val.x; y = _val.y; z = _val.z; }
-inline void ivec4::xyz(const simdint& _val) { x = _val; y = _val; z = _val; }
-inline void ivec4::xyzw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { x = _val0; y = _val1; z = _val2; w = _val3; }
-inline void ivec4::xyzw(const ivec4& _val) { x = _val.x; y = _val.y; z = _val.z; w = _val.w; }
-inline void ivec4::xyzw(const simdint& _val) { x = _val; y = _val; z = _val; w = _val; }
-inline void ivec4::xz(const simdint& _val0, const simdint& _val1) { x = _val0; z = _val1; }
-inline void ivec4::xz(const ivec2& _val) { x = _val.x; z = _val.y; }
-inline void ivec4::xz(const simdint& _val) { x = _val; z = _val; }
-inline void ivec4::xzw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; z = _val1; w = _val2; }
-inline void ivec4::xzw(const ivec3& _val) { x = _val.x; z = _val.y; w = _val.z; }
-inline void ivec4::xzw(const simdint& _val) { x = _val; z = _val; w = _val; }
-inline void ivec4::xzwy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { x = _val0; z = _val1; w = _val2; y = _val3; }
-inline void ivec4::xzwy(const ivec4& _val) { x = _val.x; z = _val.y; w = _val.z; y = _val.w; }
-inline void ivec4::xzwy(const simdint& _val) { x = _val; z = _val; w = _val; y = _val; }
-inline void ivec4::xzy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { x = _val0; z = _val1; y = _val2; }
-inline void ivec4::xzy(const ivec3& _val) { x = _val.x; z = _val.y; y = _val.z; }
-inline void ivec4::xzy(const simdint& _val) { x = _val; z = _val; y = _val; }
-inline void ivec4::xzyw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { x = _val0; z = _val1; y = _val2; w = _val3; }
-inline void ivec4::xzyw(const ivec4& _val) { x = _val.x; z = _val.y; y = _val.z; w = _val.w; }
-inline void ivec4::xzyw(const simdint& _val) { x = _val; z = _val; y = _val; w = _val; }
-inline void ivec4::yw(const simdint& _val0, const simdint& _val1) { y = _val0; w = _val1; }
-inline void ivec4::yw(const ivec2& _val) { y = _val.x; w = _val.y; }
-inline void ivec4::yw(const simdint& _val) { y = _val; w = _val; }
-inline void ivec4::ywx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; w = _val1; x = _val2; }
-inline void ivec4::ywx(const ivec3& _val) { y = _val.x; w = _val.y; x = _val.z; }
-inline void ivec4::ywx(const simdint& _val) { y = _val; w = _val; x = _val; }
-inline void ivec4::ywxz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { y = _val0; w = _val1; x = _val2; z = _val3; }
-inline void ivec4::ywxz(const ivec4& _val) { y = _val.x; w = _val.y; x = _val.z; z = _val.w; }
-inline void ivec4::ywxz(const simdint& _val) { y = _val; w = _val; x = _val; z = _val; }
-inline void ivec4::ywz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; w = _val1; z = _val2; }
-inline void ivec4::ywz(const ivec3& _val) { y = _val.x; w = _val.y; z = _val.z; }
-inline void ivec4::ywz(const simdint& _val) { y = _val; w = _val; z = _val; }
-inline void ivec4::ywzx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { y = _val0; w = _val1; z = _val2; x = _val3; }
-inline void ivec4::ywzx(const ivec4& _val) { y = _val.x; w = _val.y; z = _val.z; x = _val.w; }
-inline void ivec4::ywzx(const simdint& _val) { y = _val; w = _val; z = _val; x = _val; }
-inline void ivec4::yx(const simdint& _val0, const simdint& _val1) { y = _val0; x = _val1; }
-inline void ivec4::yx(const ivec2& _val) { y = _val.x; x = _val.y; }
-inline void ivec4::yx(const simdint& _val) { y = _val; x = _val; }
-inline void ivec4::yxw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; x = _val1; w = _val2; }
-inline void ivec4::yxw(const ivec3& _val) { y = _val.x; x = _val.y; w = _val.z; }
-inline void ivec4::yxw(const simdint& _val) { y = _val; x = _val; w = _val; }
-inline void ivec4::yxwz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { y = _val0; x = _val1; w = _val2; z = _val3; }
-inline void ivec4::yxwz(const ivec4& _val) { y = _val.x; x = _val.y; w = _val.z; z = _val.w; }
-inline void ivec4::yxwz(const simdint& _val) { y = _val; x = _val; w = _val; z = _val; }
-inline void ivec4::yxz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; x = _val1; z = _val2; }
-inline void ivec4::yxz(const ivec3& _val) { y = _val.x; x = _val.y; z = _val.z; }
-inline void ivec4::yxz(const simdint& _val) { y = _val; x = _val; z = _val; }
-inline void ivec4::yxzw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { y = _val0; x = _val1; z = _val2; w = _val3; }
-inline void ivec4::yxzw(const ivec4& _val) { y = _val.x; x = _val.y; z = _val.z; w = _val.w; }
-inline void ivec4::yxzw(const simdint& _val) { y = _val; x = _val; z = _val; w = _val; }
-inline void ivec4::yz(const simdint& _val0, const simdint& _val1) { y = _val0; z = _val1; }
-inline void ivec4::yz(const ivec2& _val) { y = _val.x; z = _val.y; }
-inline void ivec4::yz(const simdint& _val) { y = _val; z = _val; }
-inline void ivec4::yzw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; z = _val1; w = _val2; }
-inline void ivec4::yzw(const ivec3& _val) { y = _val.x; z = _val.y; w = _val.z; }
-inline void ivec4::yzw(const simdint& _val) { y = _val; z = _val; w = _val; }
-inline void ivec4::yzwx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { y = _val0; z = _val1; w = _val2; x = _val3; }
-inline void ivec4::yzwx(const ivec4& _val) { y = _val.x; z = _val.y; w = _val.z; x = _val.w; }
-inline void ivec4::yzwx(const simdint& _val) { y = _val; z = _val; w = _val; x = _val; }
-inline void ivec4::yzx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { y = _val0; z = _val1; x = _val2; }
-inline void ivec4::yzx(const ivec3& _val) { y = _val.x; z = _val.y; x = _val.z; }
-inline void ivec4::yzx(const simdint& _val) { y = _val; z = _val; x = _val; }
-inline void ivec4::yzxw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { y = _val0; z = _val1; x = _val2; w = _val3; }
-inline void ivec4::yzxw(const ivec4& _val) { y = _val.x; z = _val.y; x = _val.z; w = _val.w; }
-inline void ivec4::yzxw(const simdint& _val) { y = _val; z = _val; x = _val; w = _val; }
-inline void ivec4::zw(const simdint& _val0, const simdint& _val1) { z = _val0; w = _val1; }
-inline void ivec4::zw(const ivec2& _val) { z = _val.x; w = _val.y; }
-inline void ivec4::zw(const simdint& _val) { z = _val; w = _val; }
-inline void ivec4::zwx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; w = _val1; x = _val2; }
-inline void ivec4::zwx(const ivec3& _val) { z = _val.x; w = _val.y; x = _val.z; }
-inline void ivec4::zwx(const simdint& _val) { z = _val; w = _val; x = _val; }
-inline void ivec4::zwxy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { z = _val0; w = _val1; x = _val2; y = _val3; }
-inline void ivec4::zwxy(const ivec4& _val) { z = _val.x; w = _val.y; x = _val.z; y = _val.w; }
-inline void ivec4::zwxy(const simdint& _val) { z = _val; w = _val; x = _val; y = _val; }
-inline void ivec4::zwy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; w = _val1; y = _val2; }
-inline void ivec4::zwy(const ivec3& _val) { z = _val.x; w = _val.y; y = _val.z; }
-inline void ivec4::zwy(const simdint& _val) { z = _val; w = _val; y = _val; }
-inline void ivec4::zwyx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { z = _val0; w = _val1; y = _val2; x = _val3; }
-inline void ivec4::zwyx(const ivec4& _val) { z = _val.x; w = _val.y; y = _val.z; x = _val.w; }
-inline void ivec4::zwyx(const simdint& _val) { z = _val; w = _val; y = _val; x = _val; }
-inline void ivec4::zx(const simdint& _val0, const simdint& _val1) { z = _val0; x = _val1; }
-inline void ivec4::zx(const ivec2& _val) { z = _val.x; x = _val.y; }
-inline void ivec4::zx(const simdint& _val) { z = _val; x = _val; }
-inline void ivec4::zxw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; x = _val1; w = _val2; }
-inline void ivec4::zxw(const ivec3& _val) { z = _val.x; x = _val.y; w = _val.z; }
-inline void ivec4::zxw(const simdint& _val) { z = _val; x = _val; w = _val; }
-inline void ivec4::zxwy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { z = _val0; x = _val1; w = _val2; y = _val3; }
-inline void ivec4::zxwy(const ivec4& _val) { z = _val.x; x = _val.y; w = _val.z; y = _val.w; }
-inline void ivec4::zxwy(const simdint& _val) { z = _val; x = _val; w = _val; y = _val; }
-inline void ivec4::zxy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; x = _val1; y = _val2; }
-inline void ivec4::zxy(const ivec3& _val) { z = _val.x; x = _val.y; y = _val.z; }
-inline void ivec4::zxy(const simdint& _val) { z = _val; x = _val; y = _val; }
-inline void ivec4::zxyw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { z = _val0; x = _val1; y = _val2; w = _val3; }
-inline void ivec4::zxyw(const ivec4& _val) { z = _val.x; x = _val.y; y = _val.z; w = _val.w; }
-inline void ivec4::zxyw(const simdint& _val) { z = _val; x = _val; y = _val; w = _val; }
-inline void ivec4::zy(const simdint& _val0, const simdint& _val1) { z = _val0; y = _val1; }
-inline void ivec4::zy(const ivec2& _val) { z = _val.x; y = _val.y; }
-inline void ivec4::zy(const simdint& _val) { z = _val; y = _val; }
-inline void ivec4::zyw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; y = _val1; w = _val2; }
-inline void ivec4::zyw(const ivec3& _val) { z = _val.x; y = _val.y; w = _val.z; }
-inline void ivec4::zyw(const simdint& _val) { z = _val; y = _val; w = _val; }
-inline void ivec4::zywx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { z = _val0; y = _val1; w = _val2; x = _val3; }
-inline void ivec4::zywx(const ivec4& _val) { z = _val.x; y = _val.y; w = _val.z; x = _val.w; }
-inline void ivec4::zywx(const simdint& _val) { z = _val; y = _val; w = _val; x = _val; }
-inline void ivec4::zyx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { z = _val0; y = _val1; x = _val2; }
-inline void ivec4::zyx(const ivec3& _val) { z = _val.x; y = _val.y; x = _val.z; }
-inline void ivec4::zyx(const simdint& _val) { z = _val; y = _val; x = _val; }
-inline void ivec4::zyxw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { z = _val0; y = _val1; x = _val2; w = _val3; }
-inline void ivec4::zyxw(const ivec4& _val) { z = _val.x; y = _val.y; x = _val.z; w = _val.w; }
-inline void ivec4::zyxw(const simdint& _val) { z = _val; y = _val; x = _val; w = _val; }
+inline void ivec4::ab(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; a = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::ab(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; a = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::ab(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; a = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::abg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::abg(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::abg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::abgr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::abgr(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::abgr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; a = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::abr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::abr(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::abr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::abrg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::abrg(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::abrg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; a = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::ag(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; a = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::ag(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; a = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::ag(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; a = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::agb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::agb(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::agb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::agbr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::agbr(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::agbr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; a = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::agr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::agr(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::agr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::agrb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::agrb(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::agrb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; a = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::ar(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; a = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::ar(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; a = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::ar(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; a = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::arb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::arb(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::arb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::arbg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::arbg(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::arbg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; a = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::arg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::arg(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::arg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::argb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::argb(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::argb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; a = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::ba(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; b = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::ba(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; b = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::ba(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; b = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::bag(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::bag(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::bag(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::bagr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::bagr(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::bagr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; b = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::bar(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::bar(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::bar(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::barg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::barg(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::barg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; b = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::bg(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::bg(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::bg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; b = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::bga(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::bga(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::bga(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::bgar(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::bgar(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::bgar(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; b = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::bgr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::bgr(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::bgr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::bgra(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::bgra(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::bgra(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; b = cppshaderTmp0; g = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::br(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::br(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::br(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; b = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::bra(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::bra(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::bra(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::brag(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::brag(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::brag(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; b = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::brg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::brg(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::brg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::brga(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::brga(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::brga(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; b = cppshaderTmp0; r = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::ga(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::ga(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::ga(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::gab(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::gab(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::gab(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::gabr(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::gabr(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::gabr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; g = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::gar(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::gar(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::gar(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::garb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::garb(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::garb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; g = cppshaderTmp0; a = cppshaderTmp1; r = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::gb(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::gb(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::gb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::gba(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::gba(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::gba(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::gbar(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::gbar(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::gbar(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; g = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; r = cppshaderTmp3; }
+inline void ivec4::gbr(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::gbr(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::gbr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; }
+inline void ivec4::gbra(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::gbra(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::gbra(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; g = cppshaderTmp0; b = cppshaderTmp1; r = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::gr(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::gr(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::gr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec4::gra(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::gra(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::gra(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::grab(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::grab(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::grab(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; g = cppshaderTmp0; r = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::grb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::grb(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::grb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::grba(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::grba(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::grba(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; g = cppshaderTmp0; r = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::ra(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::ra(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::ra(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; a = cppshaderTmp1; }
+inline void ivec4::rab(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::rab(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::rab(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::rabg(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::rabg(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::rabg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; r = cppshaderTmp0; a = cppshaderTmp1; b = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::rag(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::rag(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::rag(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::ragb(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::ragb(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::ragb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; r = cppshaderTmp0; a = cppshaderTmp1; g = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::rb(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::rb(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::rb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; b = cppshaderTmp1; }
+inline void ivec4::rba(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::rba(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::rba(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::rbag(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::rbag(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::rbag(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; r = cppshaderTmp0; b = cppshaderTmp1; a = cppshaderTmp2; g = cppshaderTmp3; }
+inline void ivec4::rbg(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::rbg(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::rbg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; }
+inline void ivec4::rbga(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::rbga(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::rbga(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; r = cppshaderTmp0; b = cppshaderTmp1; g = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::rg(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::rg(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::rg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec4::rga(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::rga(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::rga(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; }
+inline void ivec4::rgab(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::rgab(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::rgab(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; r = cppshaderTmp0; g = cppshaderTmp1; a = cppshaderTmp2; b = cppshaderTmp3; }
+inline void ivec4::rgb(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::rgb(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::rgb(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; }
+inline void ivec4::rgba(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::rgba(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::rgba(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; r = cppshaderTmp0; g = cppshaderTmp1; b = cppshaderTmp2; a = cppshaderTmp3; }
+inline void ivec4::qs(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; q = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::qs(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; q = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::qs(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; q = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::qst(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::qst(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::qst(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::qstp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::qstp(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::qstp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; q = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::qsp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::qsp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::qsp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::qspt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::qspt(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::qspt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; q = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::qt(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; q = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::qt(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; q = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::qt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; q = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::qts(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::qts(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::qts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::qtsp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::qtsp(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::qtsp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; q = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::qtp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::qtp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::qtp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::qtps(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::qtps(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::qtps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; q = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::qp(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; q = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::qp(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; q = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::qp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; q = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::qps(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::qps(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::qps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::qpst(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::qpst(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::qpst(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; q = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::qpt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::qpt(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::qpt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::qpts(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::qpts(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::qpts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; q = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::sq(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::sq(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::sq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::sqt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::sqt(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::sqt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::sqtp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::sqtp(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::sqtp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; s = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::sqp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::sqp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::sqp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::sqpt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::sqpt(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::sqpt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; s = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::st(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::st(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::st(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::stq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::stq(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::stq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::stqp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::stqp(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::stqp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; s = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::stp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::stp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::stp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::stpq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::stpq(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::stpq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; s = cppshaderTmp0; t = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::sp(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::sp(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::sp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::spq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::spq(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::spq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::spqt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::spqt(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::spqt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; s = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::spt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::spt(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::spt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::sptq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::sptq(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::sptq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; s = cppshaderTmp0; p = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::tq(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::tq(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::tq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::tqs(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::tqs(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::tqs(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::tqsp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::tqsp(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::tqsp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; t = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::tqp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::tqp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::tqp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::tqps(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::tqps(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::tqps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; t = cppshaderTmp0; q = cppshaderTmp1; p = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::ts(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::ts(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::ts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::tsq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::tsq(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::tsq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::tsqp(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::tsqp(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::tsqp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; t = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; p = cppshaderTmp3; }
+inline void ivec4::tsp(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::tsp(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::tsp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; }
+inline void ivec4::tspq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::tspq(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::tspq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; t = cppshaderTmp0; s = cppshaderTmp1; p = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::tp(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::tp(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::tp(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; p = cppshaderTmp1; }
+inline void ivec4::tpq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::tpq(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::tpq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::tpqs(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::tpqs(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::tpqs(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; t = cppshaderTmp0; p = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::tps(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::tps(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::tps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::tpsq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::tpsq(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::tpsq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; t = cppshaderTmp0; p = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::pq(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; p = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::pq(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; p = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::pq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; p = cppshaderTmp0; q = cppshaderTmp1; }
+inline void ivec4::pqs(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::pqs(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::pqs(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::pqst(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::pqst(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::pqst(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; p = cppshaderTmp0; q = cppshaderTmp1; s = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::pqt(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::pqt(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::pqt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::pqts(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::pqts(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::pqts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; p = cppshaderTmp0; q = cppshaderTmp1; t = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::ps(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::ps(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::ps(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; p = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec4::psq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::psq(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::psq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::psqt(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::psqt(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::psqt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; p = cppshaderTmp0; s = cppshaderTmp1; q = cppshaderTmp2; t = cppshaderTmp3; }
+inline void ivec4::pst(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::pst(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::pst(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; }
+inline void ivec4::pstq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::pstq(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::pstq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; p = cppshaderTmp0; s = cppshaderTmp1; t = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::pt(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::pt(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::pt(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; p = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec4::ptq(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::ptq(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::ptq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; }
+inline void ivec4::ptqs(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::ptqs(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::ptqs(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; p = cppshaderTmp0; t = cppshaderTmp1; q = cppshaderTmp2; s = cppshaderTmp3; }
+inline void ivec4::pts(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::pts(const ivec3& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::pts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; }
+inline void ivec4::ptsq(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::ptsq(const ivec4& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; const simdint cppshaderTmp2 = _val.p; const simdint cppshaderTmp3 = _val.q; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::ptsq(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; p = cppshaderTmp0; t = cppshaderTmp1; s = cppshaderTmp2; q = cppshaderTmp3; }
+inline void ivec4::wx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; w = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::wx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; w = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::wx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; w = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::wxy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::wxy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::wxy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::wxyz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::wxyz(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::wxyz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; w = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::wxz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::wxz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::wxz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::wxzy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::wxzy(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::wxzy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; w = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::wy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; w = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::wy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; w = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::wy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; w = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::wyx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::wyx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::wyx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::wyxz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::wyxz(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::wyxz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; w = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::wyz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::wyz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::wyz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::wyzx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::wyzx(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::wyzx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; w = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::wz(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; w = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::wz(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; w = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::wz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; w = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::wzx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::wzx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::wzx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::wzxy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::wzxy(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::wzxy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; w = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::wzy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::wzy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::wzy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::wzyx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::wzyx(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::wzyx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; w = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::xw(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::xw(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::xw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::xwy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::xwy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::xwy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::xwyz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::xwyz(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::xwyz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; x = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::xwz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::xwz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::xwz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::xwzy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::xwzy(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::xwzy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; x = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::xy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::xy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::xy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::xyw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::xyw(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::xyw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::xywz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::xywz(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::xywz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; x = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::xyz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::xyz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::xyz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::xyzw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::xyzw(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::xyzw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; x = cppshaderTmp0; y = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::xz(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::xz(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::xz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::xzw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::xzw(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::xzw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::xzwy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::xzwy(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::xzwy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; x = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::xzy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::xzy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::xzy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::xzyw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::xzyw(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::xzyw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; x = cppshaderTmp0; z = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::yw(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::yw(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::yw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::ywx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::ywx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::ywx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::ywxz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::ywxz(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::ywxz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; y = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::ywz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::ywz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::ywz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::ywzx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::ywzx(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::ywzx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; y = cppshaderTmp0; w = cppshaderTmp1; z = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::yx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::yx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::yx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::yxw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::yxw(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::yxw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::yxwz(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::yxwz(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::yxwz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; y = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; z = cppshaderTmp3; }
+inline void ivec4::yxz(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::yxz(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::yxz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; }
+inline void ivec4::yxzw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::yxzw(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::yxzw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; y = cppshaderTmp0; x = cppshaderTmp1; z = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::yz(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::yz(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::yz(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; z = cppshaderTmp1; }
+inline void ivec4::yzw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::yzw(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::yzw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::yzwx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::yzwx(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::yzwx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; y = cppshaderTmp0; z = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::yzx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::yzx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::yzx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::yzxw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::yzxw(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::yzxw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; y = cppshaderTmp0; z = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::zw(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; z = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::zw(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; z = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::zw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; z = cppshaderTmp0; w = cppshaderTmp1; }
+inline void ivec4::zwx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::zwx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::zwx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::zwxy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::zwxy(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::zwxy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; z = cppshaderTmp0; w = cppshaderTmp1; x = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::zwy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::zwy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::zwy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::zwyx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::zwyx(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::zwyx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; z = cppshaderTmp0; w = cppshaderTmp1; y = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::zx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::zx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::zx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; z = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec4::zxw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::zxw(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::zxw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::zxwy(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::zxwy(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::zxwy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; z = cppshaderTmp0; x = cppshaderTmp1; w = cppshaderTmp2; y = cppshaderTmp3; }
+inline void ivec4::zxy(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::zxy(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::zxy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; }
+inline void ivec4::zxyw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::zxyw(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::zxyw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; z = cppshaderTmp0; x = cppshaderTmp1; y = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::zy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::zy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::zy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; z = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec4::zyw(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::zyw(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::zyw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; }
+inline void ivec4::zywx(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::zywx(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::zywx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; z = cppshaderTmp0; y = cppshaderTmp1; w = cppshaderTmp2; x = cppshaderTmp3; }
+inline void ivec4::zyx(const simdint& _val0, const simdint& _val1, const simdint& _val2) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::zyx(const ivec3& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::zyx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; }
+inline void ivec4::zyxw(const simdint& _val0, const simdint& _val1, const simdint& _val2, const simdint& _val3) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; const simdint cppshaderTmp2 = _val2; const simdint cppshaderTmp3 = _val3; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::zyxw(const ivec4& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; const simdint cppshaderTmp2 = _val.z; const simdint cppshaderTmp3 = _val.w; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
+inline void ivec4::zyxw(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; const simdint cppshaderTmp2 = _val; const simdint cppshaderTmp3 = _val; z = cppshaderTmp0; y = cppshaderTmp1; x = cppshaderTmp2; w = cppshaderTmp3; }
 
 #pragma endregion
 
@@ -15259,54 +16214,112 @@ inline void ivec4::zyxw(const simdint& _val) { z = _val; y = _val; x = _val; w =
 inline ivec4 ivec4::operator=(const vec4& _v) { x = _v.x; y = _v.y; z = _v.z; w = _v.w; return *this; }
 
 // constructors for ivec4
-inline ivec4::ivec4(const int32_t& _f) { x = _f; y = _f; z = _f; w = _f; }
+inline ivec4::ivec4(const int32_t& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; w = _f; }
 
-inline ivec4::ivec4(const simdint& _f) { x = _f; y = _f; z = _f; w = _f; }
+inline ivec4::ivec4(const simdint& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; z = _f; w = _f; }
 
-inline ivec4::ivec4(const vec4& _v) { x = _v.x; y = _v.y; z = _v.z; w = _v.w; }
+inline ivec4::ivec4(const vec4& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; z = _v.z; w = _v.w; }
 
-inline ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const simdint& _w) { x = _x; y = _y; z = _z; w = _w; }
+inline ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const simdint& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _w; }
 
-inline ivec4::ivec4(const simdint& _x, const ivec2& _y, const simdint& _w) { x = _x; y = _y.x; z = _y.y; w = _w; }
+inline ivec4::ivec4(const simdint& _x, const ivec2& _y, const simdint& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y.x; z = _y.y; w = _w; }
 
-inline ivec4::ivec4(const simdint& _x, const simdint& _y, const ivec2& _z) { x = _x; y = _y; z = _z.x; w = _z.y; }
+inline ivec4::ivec4(const simdint& _x, const simdint& _y, const ivec2& _z) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z.x; w = _z.y; }
 
-inline ivec4::ivec4(const ivec2& _x, const simdint& _z, const simdint& _w) { x = _x.x; y = _x.y; z = _z; w = _w; }
+inline ivec4::ivec4(const ivec2& _x, const simdint& _z, const simdint& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _z; w = _w; }
 
-inline ivec4::ivec4(const ivec3& _x, const simdint& _w) { x = _x.x; y = _x.y; z = _x.z; w = _w; }
+inline ivec4::ivec4(const ivec3& _x, const simdint& _w) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x.x; y = _x.y; z = _x.z; w = _w; }
 
-inline ivec4::ivec4(const simdint& _x, const ivec3& _y) { x = _x; y = _y.x; z = _y.y; w = _y.z; }
+inline ivec4::ivec4(const simdint& _x, const ivec3& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y.x; z = _y.y; w = _y.z; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec4::ivec4(const simdint& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; w = _v.z; }
+ivec4::ivec4(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; z = _v.y; w = _v.z; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec4::ivec4(const simdint& _x, const simdint& _y, const V& _v) { x = _x; y = _y; z = _v.x; w = _v.y; }
+ivec4::ivec4(const simdint& _x, const simdint& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; w = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec4::ivec4(const simdint& _x, const simdint& _y, const V& _v) { x = _x; y = _y; z = _v.x; w = _v.y; }
+ivec4::ivec4(const simdint& _x, const simdint& _y, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _v.x; w = _v.y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec2>, int>>
-ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
+ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
+ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const V& _v) { x = _x; y = _y; z = _z; w = _v.x; }
+ivec4::ivec4(const simdint& _x, const simdint& _y, const simdint& _z, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; z = _z; w = _v.x; }
 
+// Full-width copy: every lane is initialized, and the r/g/b/a/s/t/p/q
+// aliases keep pointing at this object's own components (their in-class
+// initializers).
+inline ivec4::ivec4(const ivec4& other) : x(other.x), y(other.y), z(other.z), w(other.w) {}
+
+#endif
 
 
 
 // ---- End: simd_swizzle_ivec4.h ----
 
-
-
-// ---- End: simd_swizzle.h ----
-
 // ---- Begin: simd_matrix.h ----
+/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_MAT
+#define SIMD_MAT
+
+
+#endif
+// ---- End: simd_matrix.h ----
 
 // ---- Begin: simd_mat2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_MAT2
+#define SIMD_MAT2
 
 
 struct mat2
@@ -15380,10 +16393,37 @@ struct mat2
 	mat2& operator=(const vec4& _val) { *this = mat2(_val); return *this; }
 };
 
+#endif
 
 // ---- End: simd_mat2.h ----
 
 // ---- Begin: simd_mat3.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_MAT3
+#define SIMD_MAT3
 
 
 struct mat3
@@ -15452,10 +16492,37 @@ struct mat3
 	mat3& operator=(const simdfloat_internal& _val) { *this = mat3(_val); return *this; }
 };
 
+#endif
 
 // ---- End: simd_mat3.h ----
 
 // ---- Begin: simd_mat4.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_MAT4
+#define SIMD_MAT4
 
 
 struct mat4
@@ -15531,10 +16598,37 @@ struct mat4
 	mat4& operator=(const simdfloat_internal& _val) { *this = mat4(_val); return *this; }
 };
 
+#endif
 
 // ---- End: simd_mat4.h ----
 
 // ---- Begin: simd_dmat2.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_DMAT2
+#define SIMD_DMAT2
 
 
 struct dmat2
@@ -15608,10 +16702,37 @@ struct dmat2
 	dmat2& operator=(const dvec4& _val) { *this = dmat2(_val); return *this; }
 };
 
+#endif
 
 // ---- End: simd_dmat2.h ----
 
 // ---- Begin: simd_dmat3.h ----
+/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_DMAT3
+#define SIMD_DMAT3
 
 
 struct dmat3
@@ -15680,9 +16801,36 @@ struct dmat3
 	dmat3& operator=(const simddouble_internal& _val) { *this = dmat3(_val); return *this; }
 };
 
+#endif
 // ---- End: simd_dmat3.h ----
 
 // ---- Begin: simd_dmat4.h ----
+/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_DMAT4
+#define SIMD_DMAT4
 
 
 struct dmat4
@@ -15758,12 +16906,36 @@ struct dmat4
 	dmat4& operator=(const simddouble_internal& _val) { *this = dmat4(_val); return *this; }
 };
 
+#endif
 // ---- End: simd_dmat4.h ----
 
-
-// ---- End: simd_matrix.h ----
-
 // ---- Begin: simd_operators.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_OPERATORS
+#define SIMD_OPERATORS
 
 
 #pragma region float operators
@@ -18331,10 +19503,37 @@ inline std::ostream& operator<<(std::ostream& _os, const ivec4& _v)
 #pragma endregion
 #pragma endregion int32_t operators
 
+#endif
 
 // ---- End: simd_operators.h ----
 
 // ---- Begin: simd_functions.h ----
+﻿/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_FUNCTIONS
+#define SIMD_FUNCTIONS
 
 
 #pragma region float functions
@@ -28847,10 +30046,37 @@ inline int32_t maskNone(const simdimask& _mask)
 
 #pragma endregion testmask functions
 
+#endif
 
 // ---- End: simd_functions.h ----
 
 // ---- Begin: simd_undef.h ----
+/*
+ * MIT License
+ *
+ * Copyright 2026 Pierre GEISSLER
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining _a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to USE, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR _a PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+ 
+#ifndef SIMD_UNDEF
+#define SIMD_UNDEF
 
 // undefining symbols that aren't USEd outside of this file
 #undef	simd_set1_float
@@ -28960,6 +30186,7 @@ inline int32_t maskNone(const simdimask& _mask)
 
 
 
+#endif
 // ---- End: simd_undef.h ----
 
 #endif // _CPP_SHADER__H

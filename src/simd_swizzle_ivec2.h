@@ -116,24 +116,24 @@ inline ivec4 ivec2::yyxy() const { return { y, y, x, y }; }
 inline ivec3 ivec2::yyy() const { return { y, y, y }; }
 inline ivec4 ivec2::yyyx() const { return { y, y, y, x }; }
 inline ivec4 ivec2::yyyy() const { return { y, y, y, y }; }
-inline void ivec2::gr(const simdint& _val0, const simdint& _val1) { g = _val0; r = _val1; }
-inline void ivec2::gr(const ivec2& _val) { g = _val.x; r = _val.y; }
-inline void ivec2::gr(const simdint& _val) { g = _val; r = _val; }
-inline void ivec2::rg(const simdint& _val0, const simdint& _val1) { r = _val0; g = _val1; }
-inline void ivec2::rg(const ivec2& _val) { r = _val.x; g = _val.y; }
-inline void ivec2::rg(const simdint& _val) { r = _val; g = _val; }
-inline void ivec2::st(const simdint& _val0, const simdint& _val1) { s = _val0; t = _val1; }
-inline void ivec2::st(const ivec2& _val) { s = _val.s; t = _val.t; }
-inline void ivec2::st(const simdint& _val) { s = _val; t = _val; }
-inline void ivec2::ts(const simdint& _val0, const simdint& _val1) { t = _val0; s = _val1; }
-inline void ivec2::ts(const ivec2& _val) { t = _val.s; s = _val.t; }
-inline void ivec2::ts(const simdint& _val) { t = _val; s = _val; }
-inline void ivec2::xy(const simdint& _val0, const simdint& _val1) { x = _val0; y = _val1; }
-inline void ivec2::xy(const ivec2& _val) { x = _val.x; y = _val.y; }
-inline void ivec2::xy(const simdint& _val) { x = _val; y = _val; }
-inline void ivec2::yx(const simdint& _val0, const simdint& _val1) { y = _val0; x = _val1; }
-inline void ivec2::yx(const ivec2& _val) { y = _val.x; x = _val.y; }
-inline void ivec2::yx(const simdint& _val) { y = _val; x = _val; }
+inline void ivec2::gr(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec2::gr(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec2::gr(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; g = cppshaderTmp0; r = cppshaderTmp1; }
+inline void ivec2::rg(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec2::rg(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec2::rg(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; r = cppshaderTmp0; g = cppshaderTmp1; }
+inline void ivec2::st(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec2::st(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec2::st(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; s = cppshaderTmp0; t = cppshaderTmp1; }
+inline void ivec2::ts(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec2::ts(const ivec2& _val) { const simdint cppshaderTmp0 = _val.s; const simdint cppshaderTmp1 = _val.t; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec2::ts(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; t = cppshaderTmp0; s = cppshaderTmp1; }
+inline void ivec2::xy(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec2::xy(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec2::xy(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; x = cppshaderTmp0; y = cppshaderTmp1; }
+inline void ivec2::yx(const simdint& _val0, const simdint& _val1) { const simdint cppshaderTmp0 = _val0; const simdint cppshaderTmp1 = _val1; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec2::yx(const ivec2& _val) { const simdint cppshaderTmp0 = _val.x; const simdint cppshaderTmp1 = _val.y; y = cppshaderTmp0; x = cppshaderTmp1; }
+inline void ivec2::yx(const simdint& _val) { const simdint cppshaderTmp0 = _val; const simdint cppshaderTmp1 = _val; y = cppshaderTmp0; x = cppshaderTmp1; }
 
 #pragma endregion
 
@@ -145,19 +145,23 @@ inline ivec2 ivec2::operator=(const ivec3& _v) { x = _v.x; y = _v.y; return *thi
 inline ivec2 ivec2::operator=(const ivec4& _v) { x = _v.x; y = _v.y; return *this; }
 
 // constructors for ivec2
-inline ivec2::ivec2(const int32_t& _f) { x = _f; y = _f; }
+inline ivec2::ivec2(const int32_t& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline ivec2::ivec2(const simdint& _f) { x = _f; y = _f; }
+inline ivec2::ivec2(const simdint& _f) { shader::detail::construction_full_scope cppshaderCtorScope; x = _f; y = _f; }
 
-inline ivec2::ivec2(const vec2& _v) { x = _v.x; y = _v.y; }
+inline ivec2::ivec2(const vec2& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _v.x; y = _v.y; }
 
-inline ivec2::ivec2(const simdint& _x, const simdint& _y) { x = _x; y = _y; }
+inline ivec2::ivec2(const simdint& _x, const simdint& _y) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _y; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec2::ivec2(const simdint& _x, const V& _v) { x = _x; y = _v.x; }
+ivec2::ivec2(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec2::ivec2(const simdint& _x, const V& _v) { x = _x; y = _v.x; }
+ivec2::ivec2(const simdint& _x, const V& _v) { shader::detail::construction_full_scope cppshaderCtorScope; x = _x; y = _v.x; }
+
+// Full-width copy: every lane is initialized, and the r/g/s/t aliases keep
+// pointing at this object's own components (their in-class initializers).
+inline ivec2::ivec2(const ivec2& other) : x(other.x), y(other.y) {}
 
 #endif
 

@@ -29,5 +29,6 @@
 #include "simd_functions.h"
 #include "simd_operators.h"
 #include "simd_swizzle.h"
+#include "simd_masked.h"
 
 #endif

@@ -48,8 +48,10 @@ struct ivec3
 	simdint& t = y;
 	simdint& p = z;
 
-	ivec3() { x = (0); y = (0); z = (0); }
-	ivec3(const ivec3& other) = default;
+	ivec3() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0); y = (0); z = (0); }
+	// Defined out-of-line so the r/g/b/s/t/p aliases are bound to this copy's
+	// own components instead of being rebound to the source's members.
+	ivec3(const ivec3& other);
 
 	ivec3(const int32_t& _f);
 

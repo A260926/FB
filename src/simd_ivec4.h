@@ -50,8 +50,10 @@ struct ivec4
 	simdint& p = z;
 	simdint& q = w;
 
-	ivec4() { x = (0);	y = (0);	z = (0);	w = (0); }
-	ivec4(const ivec4& other) = default;
+	ivec4() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0);	y = (0);	z = (0);	w = (0); }
+	// Defined out-of-line so the r/g/b/a/s/t/p/q aliases are bound to this
+	// copy's own components instead of being rebound to the source's members.
+	ivec4(const ivec4& other);
 
 	ivec4(const int32_t& _f);
 

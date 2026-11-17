@@ -46,8 +46,10 @@ struct vec2
 	simdfloat& s = x;
 	simdfloat& t = y;
 
-	vec2() { x = (0.0f);	y = (0.0f); }
-	vec2(const vec2& other) = default;
+	vec2() { shader::detail::construction_full_scope cppshaderCtorScope; x = (0.0f);	y = (0.0f); }
+	// Defined out-of-line so the r/g/s/t aliases are bound to this copy's own
+	// components instead of being rebound to the source's members.
+	vec2(const vec2& other);
 
 	vec2(const float& _f);
 
