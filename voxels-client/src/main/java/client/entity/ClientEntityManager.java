@@ -1,0 +1,95 @@
+package client.entity;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import client.player.RemotePlayer;
+import client.rendering.RemotePlayerRenderer;
+import client.world.ClientWorld;
+import common.game.block.BlockType;
+import engine.rendering.Graphics;
+import math.Vector3f;
+
+public class ClientEntityManager {
+
+  private static final Map<Long, ClientItemEntity> items = new ConcurrentHashMap<>();
+
+  private final Map<UUID, RemotePlayer> remotePlayers = new HashMap<>();
+
+  private final ClientWorld world;
+
+  public ClientEntityManager(ClientWorld world) {
+    this.world = world;
+  }
+
+  public void updateRemotePlayer(UUID uuid, float x, float y, float z, float yaw, float pitch) {
+    RemotePlayer player = remotePlayers.get(uuid);
+
+    if (player == null) {
+      return;
+    }
+    player.setTargetPosition(x, y, z);
+    player.setTargetRotation(yaw, pitch);
+  }
+
+  public void addRemotePlayer(UUID uuid, String name, float x, float y, float z) {
+    if (!remotePlayers.containsKey(uuid)) {
+      RemotePlayer newPlayer = new RemotePlayer(uuid);
+      newPlayer.setTargetPosition(x, y, z);
+      remotePlayers.put(uuid, newPlayer);
+      System.out.println("[Client] Player spawned correctly: " + name);
+    }
+  }
+
+  public void removeRemotePlayer(UUID uuid) {
+    remotePlayers.remove(uuid);
+    System.out.println("[Client] Player removed: " + uuid);
+  }
+
+  public void spawnItem(
+      long id, BlockType type, float x, float y, float z, float velX, float velY, float velZ) {
+    ClientItemEntity item =
+        new ClientItemEntity(
+            id, type, new Vector3f(x, y, z), new Vector3f(velX, velY, velZ), world);
+    items.put(id, item);
+  }
+
+  public void removeItem(long id) {
+    items.remove(id);
+  }
+
+  public void renderAll(Graphics g, Vector3f camPos) {
+    renderItems(g);
+    renderPlayers(g, camPos);
+  }
+
+  public void update(float tpf) {
+    updatePlayers(tpf);
+  }
+
+  private void updatePlayers(float tpf) {
+    for (RemotePlayer player : remotePlayers.values()) {
+      player.update(tpf);
+    }
+  }
+
+  private void renderPlayers(Graphics g, Vector3f camPos) {
+
+    for (RemotePlayer player : remotePlayers.values()) {
+      renderRemotePlayer(g, player, camPos);
+    }
+  }
+
+  private void renderItems(Graphics g) {
+    for (ClientItemEntity item : items.values()) {
+      item.update();
+      item.render(g);
+    }
+  }
+
+  private void renderRemotePlayer(Graphics g, RemotePlayer player, Vector3f camPos) {
+    RemotePlayerRenderer.render(g, player, camPos);
+  }
+}

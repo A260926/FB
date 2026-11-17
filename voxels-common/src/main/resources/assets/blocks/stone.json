@@ -1,0 +1,12 @@
+{
+  "id": 1,
+  "name": "core:stone",
+  "solid": true,
+  "opaque": true,
+  "shape": "CUBE",
+  "color": {
+    "r": 134,
+    "g": 134,
+    "b": 134
+  }
+}

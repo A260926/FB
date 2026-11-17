@@ -1,0 +1,48 @@
+package server.adapters;
+
+import server.config.ServerConfig;
+import server.gateways.ConfigGateway;
+
+public class ConfigAdapter implements ConfigGateway {
+
+  private ServerConfig config;
+
+  public ConfigAdapter(ServerConfig config) {
+    this.config = config;
+  }
+
+  @Override
+  public int getMaxPlayers() {
+    return config.getMaxPlayers();
+  }
+
+  @Override
+  public int getMaxChatMessageLength() {
+    return config.getMaxChatMessageLength();
+  }
+
+  @Override
+  public String getChatFormat() {
+    return config.getChatFormat();
+  }
+
+  @Override
+  public String getMotd() {
+    return config.getMotd();
+  }
+
+  @Override
+  public int getPort() {
+    return config.getPort();
+  }
+
+  @Override
+  public int getViewDistance() {
+    return config.getViewDistance();
+  }
+
+  @Override
+  public String getServerPrefix() {
+    return config.getServerPrefix();
+  }
+}

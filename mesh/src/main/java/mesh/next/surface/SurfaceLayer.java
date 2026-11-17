@@ -1,0 +1,61 @@
+package mesh.next.surface;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import math.Vector2f;
+
+public class SurfaceLayer {
+
+  private final List<Vector2f> uvs = new ArrayList<>();
+
+  private final List<int[]> faceUvIndices = new ArrayList<>();
+
+  public void addUV(float u, float v) {
+    uvs.add(new Vector2f(u, v));
+  }
+
+  public void ensureFaceCapacity(int faceCount) {
+    while (faceUvIndices.size() < faceCount) {
+      faceUvIndices.add(null);
+    }
+  }
+
+  public void setFaceUVIndices(int faceIndex, int[] uvIndices) {
+    ensureFaceCapacity(faceIndex + 1);
+    faceUvIndices.set(faceIndex, uvIndices.clone());
+  }
+
+  public Vector2f getUvAt(int index) {
+    return uvs.get(index);
+  }
+
+  public int[] getFaceUVIndices(int faceIndex) {
+    if (faceIndex < 0 || faceIndex >= faceUvIndices.size()) return null;
+    return faceUvIndices.get(faceIndex);
+  }
+
+  public int getUVCount() {
+    return uvs.size();
+  }
+
+  public SurfaceLayer copy() {
+    SurfaceLayer copy = new SurfaceLayer();
+
+    // Deep copy UVs
+    for (Vector2f uv : this.uvs) {
+      copy.uvs.add(new Vector2f(uv));
+    }
+
+    // Deep copy face UV indices
+    for (int[] indices : this.faceUvIndices) {
+      if (indices == null) {
+        copy.faceUvIndices.add(null);
+      } else {
+        copy.faceUvIndices.add(indices.clone());
+      }
+    }
+
+    return copy;
+  }
+}
