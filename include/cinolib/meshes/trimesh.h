@@ -100,6 +100,10 @@ class Trimesh : public AbstractPolygonMesh<M,V,E,P>
 
         uint              edge_opposite_to                 (const uint pid, const uint vid) const;
         int               edge_collapse                    (const uint eid, const double lambda = 0.5, const bool topologic_check = true, const bool geometric_check = true);
+        // same collapse, but every poly add/removal and poly/vert/edge id swap
+        // performed internally is recorded into report. The legacy overload is
+        // unchanged; on failure the report is empty and nothing is modified.
+        int               edge_collapse                    (const uint eid, const double lambda, const bool topologic_check, const bool geometric_check, ElementRewriteReport & report);
         bool              edge_is_collapsible              (const uint eid, const double lambda) const;
         bool              edge_is_geometrically_collapsible(const uint eid, const double lambda) const;
         bool              edge_is_topologically_collapsible(const uint eid) const;

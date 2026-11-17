@@ -44,6 +44,29 @@
 namespace cinolib
 {
 
+// Sink for local element rewrite events. When a report is attached to a mesh,
+// every poly/vert/edge creation, removal and id-swap that mutates the mesh is
+// recorded into it. This allows keeping external index structures in sync with
+// local information only, without rescanning the whole mesh. When no report is
+// attached (the default) the legacy behavior is unchanged.
+struct ElementRewriteReport
+{
+    std::vector<uint>                 poly_adds;            // pids returned by poly_add
+    std::vector<uint>                 poly_removed;         // pids passed to poly_remove (pre compaction)
+    std::vector<std::pair<uint,uint>> poly_id_swaps;        // (pid0,pid1) as in poly_switch_id
+    std::vector<std::pair<uint,uint>> vert_id_swaps;        // (vid0,vid1) as in vert_switch_id
+    std::vector<std::pair<uint,uint>> edge_id_swaps;        // (eid0,eid1) as in edge_switch_id
+
+    void clear()
+    {
+        poly_adds.clear();
+        poly_removed.clear();
+        poly_id_swaps.clear();
+        vert_id_swaps.clear();
+        edge_id_swaps.clear();
+    }
+};
+
 template<class M = Mesh_std_attributes,
          class V = Vert_std_attributes,
          class E = Edge_std_attributes,
@@ -55,10 +78,18 @@ class AbstractPolygonMesh : public AbstractMesh<M,V,E,P>
         std::vector<std::vector<uint>> poly_triangles; // triangles covering each quad. Useful for
                                                        // robust normal estimation and rendering
 
+        ElementRewriteReport * rewrite_report = nullptr; // optional local rewrite sink
+
     public:
 
         explicit AbstractPolygonMesh() : AbstractMesh<M,V,E,P>() {}
         ~AbstractPolygonMesh() {}
+
+        // attach/detach a local rewrite report. The caller owns the report and
+        // is in charge of clearing it before the batch of operations of interest.
+        void attach_rewrite_report(ElementRewriteReport & report) { rewrite_report = &report; }
+        void detach_rewrite_report()                                { rewrite_report = nullptr; }
+        bool has_rewrite_report() const                             { return (rewrite_report != nullptr); }
 
         //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 

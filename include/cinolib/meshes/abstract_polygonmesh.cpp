@@ -1006,6 +1006,8 @@ void AbstractPolygonMesh<M,V,E,P>::vert_switch_id(const uint vid0, const uint vi
             if (vid == vid1) vid = vid0;
         }
     }
+
+    if(rewrite_report) rewrite_report->vert_id_swaps.emplace_back(vid0, vid1);
 }
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -1187,6 +1189,8 @@ void AbstractPolygonMesh<M,V,E,P>::edge_switch_id(const uint eid0, const uint ei
             if (eid == eid1) eid = eid0;
         }
     }
+
+    if(rewrite_report) rewrite_report->edge_id_swaps.emplace_back(eid0, eid1);
 }
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -1470,6 +1474,8 @@ void AbstractPolygonMesh<M,V,E,P>::poly_switch_id(const uint pid0, const uint pi
             if (pid == pid1) pid = pid0;
         }
     }
+
+    if(rewrite_report) rewrite_report->poly_id_swaps.emplace_back(pid0, pid1);
 }
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -1535,6 +1541,7 @@ uint AbstractPolygonMesh<M,V,E,P>::poly_add(const std::vector<uint> & vlist)
     this->poly_triangles.push_back(std::vector<uint>());
     update_p_tessellation(pid);
 
+    if(rewrite_report) rewrite_report->poly_adds.push_back(pid);
     return pid;
 }
 
@@ -1560,6 +1567,8 @@ CINO_INLINE
 void AbstractPolygonMesh<M,V,E,P>::poly_remove(const uint pid)
 {
     // [28 Aug 2017] Tested on progressive random removal until almost no polys are left: PASSED
+
+    if(rewrite_report) rewrite_report->poly_removed.push_back(pid);
 
     std::set<uint,std::greater<uint>> dangling_verts; // higher ids first
     std::set<uint,std::greater<uint>> dangling_edges; // higher ids first

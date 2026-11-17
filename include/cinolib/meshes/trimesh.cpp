@@ -320,6 +320,19 @@ int Trimesh<M,V,E,P>::edge_collapse(const uint eid, const double lambda, const b
 
 template<class M, class V, class E, class P>
 CINO_INLINE
+int Trimesh<M,V,E,P>::edge_collapse(const uint eid, const double lambda, const bool topologic_check, const bool geometric_check, ElementRewriteReport & report)
+{
+    report.clear();
+    this->attach_rewrite_report(report);
+    int vert_to_keep = edge_collapse(eid, lambda, topologic_check, geometric_check);
+    this->detach_rewrite_report();
+    return vert_to_keep;
+}
+
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+template<class M, class V, class E, class P>
+CINO_INLINE
 uint Trimesh<M,V,E,P>::edge_split(const uint eid, const double lambda)
 {
     vec3d split_point = this->edge_sample_at(eid,lambda);
