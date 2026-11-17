@@ -871,6 +871,7 @@ INPUT                  = ../coffi \
                          ../docs/get_started.md \
                          ../docs/examples.md \
                          ../docs/extdoc.md \
+                         ../docs/selection.md \
                          ../docs/api.md
 
 # This tag can be used to specify the character encoding of the source files

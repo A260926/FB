@@ -13,5 +13,6 @@ replacebyfile ../README.md
   - @ref get_started
   - @ref examples
   - @ref extdoc
+  - @ref selection
   - @ref api
   - [**Files**](files.html)

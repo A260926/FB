@@ -31,5 +31,6 @@ The full library documentation can be found in *[COFFI - Tutorial and User Manua
   - @ref get_started
   - @ref examples
   - @ref extdoc
+  - @ref selection
   - @ref api
   - [**Files**](files.html)

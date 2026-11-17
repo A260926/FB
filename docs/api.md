@@ -7,6 +7,17 @@
 See also @ref accessors.
 
 - @ref COFFI::coffi                        "coffi":                        @copybrief COFFI::coffi
+- COMDAT selection analysis (see also @ref selection):
+  - @ref COFFI::analyze_coffi_selection     "analyze_coffi_selection":     @copybrief COFFI::analyze_coffi_selection
+  - @ref COFFI::selection_report            "selection_report":            @copybrief COFFI::selection_report
+  - @ref COFFI::selection_section_record    "selection_section_record":    @copybrief COFFI::selection_section_record
+  - @ref COFFI::selection_symbol_record     "selection_symbol_record":     @copybrief COFFI::selection_symbol_record
+  - @ref COFFI::root_group                  "root_group":                  @copybrief COFFI::root_group
+  - @ref COFFI::root_candidate              "root_candidate":              @copybrief COFFI::root_candidate
+  - @ref COFFI::association_record          "association_record":          @copybrief COFFI::association_record
+  - @ref COFFI::reference_record            "reference_record":            @copybrief COFFI::reference_record
+  - @ref COFFI::external_candidate          "external_candidate":          @copybrief COFFI::external_candidate
+  - @ref COFFI::selection_diagnostic        "selection_diagnostic":        @copybrief COFFI::selection_diagnostic
 
 - File headers:
   - @ref COFFI::dos_header                   "dos_header":                   @copybrief COFFI::dos_header

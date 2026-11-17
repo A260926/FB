@@ -1079,6 +1079,8 @@ class coffi : public coffi_strings,
 
 } // namespace COFFI
 
+#include <coffi/coffi_selection.hpp>
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
