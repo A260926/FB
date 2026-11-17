@@ -1,0 +1,57 @@
+#pragma once
+
+#include <string>
+#include "Point3D.h"
+#include "Vector3D.h"
+#include "Material.h"
+#include "RGBColor.h"
+#include <math.h>       /* sin */
+
+#define PI 3.14159265
+
+const Point3D   CAMERA_POS = Point3D(0, 200, -400);
+const Point3D   CAMERA_TARGET = Point3D(0, 0, 0);
+
+const int IMAGE_WIDTH = 800;
+const int IMAGE_HEIGHT = 600;
+const std::string IMAGE_NAME = "output.bmp";
+
+namespace Colors {
+  const RGBColor WHITE = RGBColor(1.0, 1.0, 1.0);
+  const RGBColor BLACK = RGBColor(0.0, 0.0, 0.0);
+  const RGBColor RED = RGBColor(1.0, 0.0, 0.0);
+  const RGBColor GREEN = RGBColor(0.0, 1.0, 0.0);
+  const RGBColor BLUE = RGBColor(0.0, 0.0, 1.0);
+  const RGBColor GREY = RGBColor(0.5, 0.5, 0.5);
+  const RGBColor YELLOW = RGBColor(1.0, 1.0, 0.0);
+  const RGBColor PURPLE = RGBColor(1.0, 0.0, 1.0);
+  const RGBColor CYAN = RGBColor(0.0, 1.0, 1.0);
+}
+
+namespace Materials {
+  Material* FLAT_PLASTIC = new FlatMaterial(RGBColor(0.4), 0.4, 1);
+
+  Material* DEFAULT = new TexturedMaterial(
+    "../assets/default_DIFF.bmp",
+    "../assets/default_SPEC.bmp",
+    "../assets/default_NRM.bmp",
+    10.0
+  );
+
+  Material* BOX = new TexturedMaterial(
+    "../assets/box_DIFF.bmp",
+    "../assets/box_SPEC.bmp",
+    "../assets/box_NRM.bmp",
+    5.0
+  );
+
+  Material* BRICK = new TexturedMaterial(
+    "../assets/brick_DIFF.bmp",
+    "../assets/brick_SPEC.bmp",
+    "../assets/brick_NRM.bmp",
+    1
+  );
+
+}
+
+

@@ -1,0 +1,35 @@
+{
+  "repository": "https://github.com/mtrebi/Rasterizer",
+  "commit": "75ade449cd873552ededb86af62b2f867410d08d",
+  "dependency": {
+    "repo": "https://github.com/g-truc/glm",
+    "commit": "bf71a834948186f4097caa076cd2663c69a10e1e",
+    "version": "0.9.9.8",
+    "license": "MIT or Happy Bunny (copying.txt preserved)",
+    "path": "task_support/vendor/glm"
+  },
+  "portability_only": [
+    "src/DirectionalLight.cpp",
+    "src/ForwardRasterizer.cpp",
+    "src/Rasterizer.cpp",
+    "src/ShadowMap.cpp",
+    "src/Vector2D.cpp",
+    "src/main.cpp",
+    "src/DeferredRasterizer.cpp",
+    "src/PerspectiveCamera.cpp",
+    "includes/PointLight.h",
+    "includes/GeometryObject.h",
+    "includes/Material.h",
+    "includes/Constants.h",
+    "includes/RGBColor.h",
+    "includes/Triangle.h",
+    "includes/Point2D.h",
+    "includes/ForwardRasterizer.h",
+    "includes/DeferredRasterizer.h"
+  ],
+  "excluded_from_build": [
+    "src/main.cpp (upstream scene demo)",
+    "upstream CMake network/system dependency discovery"
+  ],
+  "gitlinks": []
+}
