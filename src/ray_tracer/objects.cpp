@@ -1,0 +1,319 @@
+#include "objects.hpp"
+
+namespace {
+
+// Moller-Trumbore ray-triangle intersection against raw vertices.
+// Shared by Triangle and Quad (which is two triangles) so no Triangle
+// temporaries are constructed in the hot path.
+// ref: web.engr.oregonstate.edu/~mjb/vulkan/Handouts/RayTriangleIntersection.1pp.pdf
+HitRecord RayTriangleIntersect(const Ray& ray,
+                               const Vec3f& v0,
+                               const Vec3f& v1,
+                               const Vec3f& v2) {
+  Vec3f edge1 = v1 - v0;
+  Vec3f edge2 = v2 - v0;
+  // solve the system [edge1 | edge2 | -ray.dir]^T[u | v | t] = 
+  //                  [ray.origin | -v0] 
+  // using Cramer's method and the properties of mixed product
+  Vec3f h = ray.dir.Cross(edge2);
+  float det = edge1.Dot(h);
+  if (std::abs(det) < eps)
+    return {}; // ray is parallel to triangle
+
+  float det_inv = 1.0f / det;
+  Vec3f s = ray.origin - v0;
+  // barycentric coordinate 0..1 of a point along edge 1
+  float u = det_inv * s.Dot(h);
+  if (u < 0 || u > 1)
+    return {};
+
+  Vec3f q = s.Cross(edge1);
+  // barycentric coordinate 0..1 of a point along edge 2
+  float v = det_inv * ray.dir.Dot(q);
+  if (v < 0 || u + v > 1)
+    return {};
+  float t = det_inv * edge2.Dot(q);
+  if (t > 0) { // ray intersection
+    return {ray.At(t), true, t};
+  } else { // intersection lies behind the ray's origin 
+    return {};
+  }
+}
+
+} // namespace
+
+Triangle::Triangle(const Vec3f& a, const Vec3f& b, const Vec3f& c,
+                   const Material& mat) : v0(a), v1(b), v2(c) {
+  center = (v0 + v1 + v2) / 3.0f;
+  material = mat;
+  normal = (v1 - v0).Cross(v2 - v0).Unit();
+  bounds.Expand(v0);
+  bounds.Expand(v1);
+  bounds.Expand(v2);
+  bounds.Inflate(eps);
+}
+
+Vec3f Triangle::NormalAt(const Vec3f& /*at*/) const {
+  // constant normal across the surface, precomputed in the constructor
+  return normal;
+}
+
+HitRecord Triangle::Intersects(const Ray& ray) const {
+  return RayTriangleIntersect(ray, v0, v1, v2);
+}
+
+Quad::Quad(const Vec3f& a, const Vec3f& b, const Vec3f& c, const Vec3f& d,
+           const Material& mat) : v0(a), v1(b), v2(c), v3(d) {
+  center = (v0 + v1 + v2 + v3) / 4.0f;
+  material = mat;
+  normal = (v1 - v0).Cross(v2 - v0).Unit();
+  bounds.Expand(v0);
+  bounds.Expand(v1);
+  bounds.Expand(v2);
+  bounds.Expand(v3);
+  bounds.Inflate(eps);
+}
+
+Vec3f Quad::NormalAt(const Vec3f& /*at*/) const {
+  // constant normal across the surface, precomputed in the constructor
+  return normal;
+}
+
+HitRecord Quad::Intersects(const Ray& ray) const {
+  HitRecord h0 = RayTriangleIntersect(ray, v0, v1, v2);
+  HitRecord h1 = RayTriangleIntersect(ray, v0, v2, v3);
+  if (h0.is_hit && h1.is_hit)
+    return (h0.t < h1.t ? h0 : h1);
+  return h0.is_hit ? h0 : h1;
+}
+
+Sphere::Sphere(const Vec3f& c, float r, const Material& mat) {
+  center = c;
+  radius = r;
+  material = mat;
+  bounds.min = Vec3f{c.x - r, c.y - r, c.z - r};
+  bounds.max = Vec3f{c.x + r, c.y + r, c.z + r};
+  bounds.Inflate(eps);
+}
+
+// assuming it's on the sphere
+Vec3f Sphere::NormalAt(const Vec3f &at) const {
+  return (at - center).Unit();
+}
+
+bool Sphere::IsInside(const Vec3f &point) const {
+  return (point - center).Dot(point - center) < radius * radius;
+}
+
+void Sphere::SetTexture(const std::shared_ptr<Image>& tex,
+                        int repeat_u,
+                        int repeat_v) {
+  texture = tex;
+  this->repeat_u = std::max(1, repeat_u);
+  this->repeat_v = std::max(1, repeat_v);
+}
+
+Vec3u8 Sphere::SampleColor(const Vec3f& /*at*/, const Vec3f& normal) const {
+  if (!texture)
+    return material.color;
+  // `normal` is the surface normal already computed at the hit point
+  const Vec3f& N = normal;
+  // spherical angles - latitude (theta) and longitude (phi)
+  float theta = std::atan2(N.z, N.x); // [-pi, pi]
+  float phi = std::acos(N.y);         // [0, pi] assuming N normalized
+  // equirectangular mapping but for spherical coords
+  float u = theta / (2.0f * static_cast<float>(M_PI)) + 0.5f;
+  float v = phi / static_cast<float>(M_PI);
+  // flip so v=0 is top row in image coordinates
+  v = 1.0f - v;
+  // apply repeats and wrapping
+  u = std::fmod(u * repeat_u, 1.0f);
+  v = std::fmod(v * repeat_v, 1.0f);
+  if (u < 0) u += 1.0f;
+  if (v < 0) v += 1.0f;
+  unsigned tw = texture->width, th = texture->height;
+  unsigned x = std::min(tw ? tw - 1 : 0, static_cast<unsigned>(u * tw));
+  unsigned y = std::min(th ? th - 1 : 0, static_cast<unsigned>(v * th));
+  return texture->at(y, x);
+}
+
+HitRecord Sphere::Intersects(const Ray& ray) const {
+  HitRecord ret; // empty by default (no intersection)
+  // notation of ray-sphere intersection formula
+  auto C = center;
+  auto r = radius;
+  auto L = ray.origin - C;
+  float a = ray.dir.Dot(ray.dir);
+  float b = 2 * ray.dir.Dot(L);
+  float c = L.Dot(L) - r * r;
+
+  float discriminant = b*b - 4*a*c;
+  if (discriminant <= 0)
+    return ret; // no real intersection
+
+  float sqrt_disc = std::sqrt(discriminant);
+  float t1 = (-b - sqrt_disc) / (2 * a);
+  float t2 = (-b + sqrt_disc) / (2 * a);
+
+  // nearest intersection in front of the ray origin; one of t1/t2 is
+  // > 0 here (otherwise the sphere lies entirely behind the ray)
+  float t = (t1 > 0 && t2 > 0) ? std::min(t1, t2) :
+            (t1 > 0 ? t1 : t2);
+  if (t <= 0)
+    return ret; // sphere entirely behind the ray origin
+
+  ret.is_hit = true;
+  ret.t = t;
+  ret.where = ray.At(t);
+  return ret;
+}
+
+Block::Block(Vec3f center, float half_x, float half_y, float half_z,
+             const Mat3x3& mrot)
+  : Block(center, half_x, half_y, half_z, mrot, Material{}) {}
+
+Block::Block(Vec3f center, float half_x, float half_y, float half_z,
+             const Mat3x3& mrot,
+             const Material& mat) : half_w(half_x),
+                                    half_h(half_y),
+                                    half_d(half_z),
+                                    rot(mrot),
+                                    rot_t(mrot.Transpose()) {
+  this->center = center;
+  // CCW normalized vertices
+  const int v[8][3] = {
+    {-1, -1, -1}, { 1, -1, -1}, { 1,  1, -1}, {-1,  1, -1},
+    {-1, -1,  1}, { 1, -1,  1}, { 1,  1,  1}, {-1,  1,  1},
+  };
+  for (std::size_t i{}; i < 8; ++i) {
+    Vec3f vscaled(v[i][0] * half_x, v[i][1] * half_y, v[i][2] * half_z);
+    vertices[i] = center + rot * vscaled;
+    bounds.Expand(vertices[i]);
+  }
+  bounds.Inflate(eps);
+  axisx = (rot * Vec3f{1,0,0}).Unit();
+  axisy = (rot * Vec3f{0,1,0}).Unit();
+  axisz = (rot * Vec3f{0,0,1}).Unit();
+  material = mat;
+}
+
+Vec3f Block::NormalAt(const Vec3f& at) const {
+  // align with origin and unrotate
+  Vec3f local = rot_t * (at - center);
+  // determine the face: find axis with maximum normalized absolute distance
+  float ax = std::abs(local.x) / half_w;
+  float ay = std::abs(local.y) / half_h;
+  float az = std::abs(local.z) / half_d;
+
+  // face normals are the precomputed, unit-length world-space axes;
+  // `rot` is a pure rotation so `rot * unit_axis` is already unit
+  if (ax >= ay && ax >= az) {
+      // closest to +-x face
+      return (local.x >= 0.f) ? axisx : -axisx;
+  } else if (ay >= ax && ay >= az) {
+      // closest to +-y face
+      return (local.y >= 0.f) ? axisy : -axisy;
+  } else {
+      // closest to +-z face
+      return (local.z >= 0.f) ? axisz : -axisz;
+  }
+}
+
+bool Block::IsInside(const Vec3f& point) const {
+  // convert to block-local coordinates
+  Vec3f local = rot_t * (point - center);
+
+  return (std::abs(local.x) <= half_w + eps) &&
+         (std::abs(local.y) <= half_h + eps) &&
+         (std::abs(local.z) <= half_d + eps);
+}
+
+HitRecord Block::Intersects(const Ray& ray) const {
+  /* Ray/box intersection slab method instead of checking each
+   * face individually. Explanation:
+   * https://www.cs.cornell.edu/courses/cs4620/2013fa/lectures/03raytracing1.pdf
+   */
+  const Mat3x3& rot_t = this->rot_t;
+  const Vec3f o = rot_t * (ray.origin - center);
+  const Vec3f d = rot_t * ray.dir;
+
+  const float oa[3] = {o.x, o.y, o.z};
+  const float da[3] = {d.x, d.y, d.z};
+  const float half[3] = {half_w, half_h, half_d};
+
+  float tmin = -std::numeric_limits<float>::infinity();
+  float tmax = std::numeric_limits<float>::infinity();
+  for (int i = 0; i < 3; ++i) {
+    if (std::abs(da[i]) < eps) {
+      // ray is parallel to this slab - it can only hit if already inside
+      if (oa[i] < -half[i] || oa[i] > half[i]) return {};
+      continue;
+    }
+    const float inv_d = 1.0f / da[i];
+    float t1 = (-half[i] - oa[i]) * inv_d;
+    float t2 = (half[i] - oa[i]) * inv_d;
+    if (t1 > t2) std::swap(t1, t2);
+    tmin = std::max(tmin, t1);
+    tmax = std::min(tmax, t2);
+    if (tmin > tmax) return {};
+  }
+  // nearest positive intersection with the box surface
+  const float t = tmin > 0.0f ? tmin : tmax;
+  if (t <= 0.0f) return {};
+
+  HitRecord ret;
+  ret.is_hit = true;
+  ret.t = t;
+  ret.where = ray.At(t);
+  return ret;
+}
+
+void Block::SetTexture(const std::shared_ptr<Image>& tex,
+                       int repeatx,
+                       int repeaty) {
+  texture = tex;
+  this->repeatx = std::max(1, repeatx);
+  this->repeaty = std::max(1, repeaty);
+}
+
+Vec3u8 Block::SampleColor(const Vec3f& at, const Vec3f& /*normal*/) const {
+  if (!texture)
+    return material.color;
+  // at the origin and unrotated 
+  Vec3f local = rot_t * (at - center);
+  // find dominant orientation (axis) to identify face
+  // the maximum of these distances corresponds to face that was hit
+  float ax = std::abs(local.x) / half_w;
+  float ay = std::abs(local.y) / half_h;
+  float az = std::abs(local.z) / half_d;
+  // texture normalized coordinates - they'll later map to a pixel
+  float u = 0, v = 0;
+  if (ax >= ay && ax >= az) { // +-X faces -> use (z,y)
+    u = (local.z / (2*half_d)) + 0.5f;
+    v = (local.y / (2*half_h)) + 0.5f;
+    if (local.x < 0)
+      u = 1 - u; // flip for -x to keep continuity
+  } else if (ay >= ax && ay >= az) { // +-Y faces -> use (x,z)
+    u = (local.x / (2*half_w)) + 0.5f;
+    v = (local.z / (2*half_d)) + 0.5f;
+    if (local.y < 0)
+      v = 1 - v; // flip for -y
+  } else { // +-Z faces -> use (x,y)
+    u = (local.x / (2*half_w)) + 0.5f;
+    v = (local.y / (2*half_h)) + 0.5f;
+    if (local.z < 0)
+      u = 1 - u; // flip for -z
+  }
+  // repeat pattern - multiply and keep the fractional part of u, v
+  u = std::fmod(u*repeatx, 1.0f);
+  v = std::fmod(v*repeaty, 1.0f);
+  if (u < 0)
+    u += 1;
+  if (v < 0)
+    v += 1;
+  unsigned tx = std::min(texture->width - 1,
+                         static_cast<unsigned>(u * texture->width));
+  unsigned ty = std::min(texture->height - 1,
+                         static_cast<unsigned>(v * texture->height));
+  return texture->at(ty, tx);
+}
