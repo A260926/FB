@@ -1,0 +1,8 @@
+{
+  "repo": "https://github.com/webmproject/libvpx",
+  "commit": "6f4dbb1bc6803cbcdb7f54bd1c11a6228b717705",
+  "license": "BSD-3-Clause; PATENTS grant",
+  "production_files_unmodified": true,
+  "manifest_sha256": "87e3a9f949853ff90d70ba14e4894cfbef51c2f33152b398d18bb442e1312a58",
+  "exclusions": "Optional upstream fixtures/docs/test tooling"
+}
