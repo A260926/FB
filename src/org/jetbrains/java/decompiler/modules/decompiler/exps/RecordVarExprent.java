@@ -21,6 +21,7 @@ public class RecordVarExprent extends VarExprent {
     if (v.isClassDef()) {
       throw new UnsupportedOperationException("Expect only var definition");
     }
+    addLocalTypeAnnotationsFrom(v);
   }
 
   @Override
@@ -81,6 +82,7 @@ public class RecordVarExprent extends VarExprent {
     this.setIndex(varExprent.getIndex());
     this.setVersion(varExprent.getVersion());
     this.setLVTEntry(varExprent.getLVTEntry());
+    addLocalTypeAnnotationsFrom(varExprent);
     return true;
   }
 

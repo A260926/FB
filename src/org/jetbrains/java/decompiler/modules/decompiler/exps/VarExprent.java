@@ -13,6 +13,8 @@ import org.jetbrains.java.decompiler.main.extern.IFernflowerPreferences;
 import org.jetbrains.java.decompiler.main.rels.MethodWrapper;
 import org.jetbrains.java.decompiler.modules.decompiler.ExprProcessor;
 import org.jetbrains.java.decompiler.modules.decompiler.stats.Statement;
+import org.jetbrains.java.decompiler.modules.decompiler.typeann.TypeAnnotation;
+import org.jetbrains.java.decompiler.modules.decompiler.typeann.TypeAnnotationWriteHelper;
 import org.jetbrains.java.decompiler.modules.decompiler.vars.CheckTypesResult;
 import org.jetbrains.java.decompiler.modules.decompiler.vars.VarProcessor;
 import org.jetbrains.java.decompiler.modules.decompiler.vars.VarVersion;
@@ -32,7 +34,7 @@ import org.jetbrains.java.decompiler.util.TextBuffer;
 import org.jetbrains.java.decompiler.util.TextUtil;
 
 import java.util.BitSet;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -51,6 +53,8 @@ public class VarExprent extends Exprent {
   private LocalVariable lvtEntry = null;
   private @Nullable VarType inferredType = null;
   private boolean insideLVT = false;
+  // LOCAL_VARIABLE type annotations attached to the declaration of this variable.
+  private final List<TypeAnnotation> localTypeAnnotations = new ArrayList<>();
 
   public VarExprent(int index, VarType varType, VarProcessor processor) {
     this(index, varType, processor, null);
@@ -104,6 +108,7 @@ public class VarExprent extends Exprent {
     var.setStack(stack);
     var.setLVTEntry(lvtEntry);
     var.setInsideLVT(insideLVT);
+    var.localTypeAnnotations.addAll(localTypeAnnotations);
     return var;
   }
 
@@ -200,7 +205,31 @@ public class VarExprent extends Exprent {
   }
 
   void appendDefinitionType(TextBuffer buffer) {
-    buffer.append(ExprProcessor.getCastTypeName(getDefinitionType(), Collections.emptyList()));
+    buffer.append(ExprProcessor.getCastTypeName(getDefinitionType(), TypeAnnotationWriteHelper.create(localTypeAnnotations)));
+  }
+
+  /**
+   * Attaches a LOCAL_VARIABLE type annotation to this variable's declaration, unless an equal one
+   * is already present (an annotation may cover several bytecode ranges of the same variable).
+   */
+  public void addLocalTypeAnnotation(TypeAnnotation annotation) {
+    if (!localTypeAnnotations.contains(annotation)) {
+      localTypeAnnotations.add(annotation);
+    }
+  }
+
+  /**
+   * Copies the declaration type annotations of another variable expression, skipping entries
+   * already present.
+   */
+  public void addLocalTypeAnnotationsFrom(VarExprent other) {
+    for (TypeAnnotation annotation : other.localTypeAnnotations) {
+      addLocalTypeAnnotation(annotation);
+    }
+  }
+
+  public boolean hasLocalTypeAnnotations() {
+    return !localTypeAnnotations.isEmpty();
   }
 
   @Override

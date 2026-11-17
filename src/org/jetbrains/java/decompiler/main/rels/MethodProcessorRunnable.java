@@ -38,6 +38,7 @@ import org.jetbrains.java.decompiler.modules.decompiler.exps.VarExprent;
 import org.jetbrains.java.decompiler.modules.decompiler.stats.RootStatement;
 import org.jetbrains.java.decompiler.modules.decompiler.stats.Statement;
 import org.jetbrains.java.decompiler.modules.decompiler.stats.SynchronizedStatement;
+import org.jetbrains.java.decompiler.modules.decompiler.vars.LocalTypeAnnotationHelper;
 import org.jetbrains.java.decompiler.modules.decompiler.vars.VarProcessor;
 import org.jetbrains.java.decompiler.struct.StructClass;
 import org.jetbrains.java.decompiler.struct.StructMethod;
@@ -261,6 +262,10 @@ public class MethodProcessorRunnable implements Runnable {
     cleanSynchronizedVar(root);
 
     varProc.setVarDefinitions(root);
+
+    // Attach Code-level LOCAL_VARIABLE type annotations after declarations have been merged,
+    // split and lifted, so every remaining declaration keeps the annotations of its own lifetime.
+    LocalTypeAnnotationHelper.attachDeclarations(root, varProc);
 
     cancellationManager.checkCanceled();
     SecondaryFunctionsHelper.updateAssignments(root);

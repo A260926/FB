@@ -34,6 +34,7 @@ import org.jetbrains.java.decompiler.util.FastSparseSetFactory.FastSparseSet;
 import org.jetbrains.java.decompiler.util.SFormsFastMapDirect;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -327,6 +328,10 @@ public final class StackVarsProcessor {
         return new int[]{index + 1, 1};
       }
       else if (right.type == Exprent.EXPRENT_VAR) {
+        if (isProtectedAnnotatedLocal(exprent, left)) {
+          // e.g. an annotated alias "T a = b;" must keep its declaration and its annotation
+          return new int[]{-1, changed};
+        }
         lstExprents.remove(index);
         return new int[]{index, 1};
       }
@@ -406,6 +411,11 @@ public final class StackVarsProcessor {
     */
 
     if (isSelfReference && vernotreplaced) {
+      return new int[]{-1, changed};
+    }
+    else if (isProtectedAnnotatedLocal(exprent, left)) {
+      // The assignment holds a local whose declaration carries a Code-level type annotation;
+      // removing or fully inlining it would lose that declaration.
       return new int[]{-1, changed};
     }
     else {
@@ -731,5 +741,42 @@ public final class StackVarsProcessor {
     }
 
     return map;
+  }
+
+  /**
+   * A non-stack local variable whose slot is annotated in the Code attribute must not have its
+   * defining assignment removed or fully inlined, otherwise the annotated declaration disappears.
+   */
+  private static boolean isProtectedAnnotatedLocal(Exprent assignment, VarExprent left) {
+    if (left.isStack()) {
+      return false;
+    }
+    VarProcessor processor = left.getProcessor();
+    if (processor == null || !processor.hasLocalTypeAnnotations()) {
+      return false;
+    }
+    // Before the first setVarVersions call the indices are still the original bytecode slots.
+    Integer originalSlot = processor.getVarOriginalIndex(left.getIndex());
+    if (originalSlot == null) {
+      originalSlot = left.getIndex();
+    }
+    if (!processor.isAnnotatedLocalSlot(originalSlot)) {
+      return false;
+    }
+    BitSet footprint = assignment.bytecode;
+    if (footprint == null || footprint.isEmpty()) {
+      footprint = left.bytecode;
+    }
+    if (footprint == null || footprint.isEmpty()) {
+      return true; // annotated slot, but no offsets to narrow down on: keep the declaration
+    }
+    if (!processor.annotationsCovering(originalSlot, footprint).isEmpty()) {
+      return true;
+    }
+    // javac starts the local variable range on the instruction after the store; treat the
+    // annotated lifetime as covered when it begins immediately after this assignment.
+    BitSet widened = (BitSet)footprint.clone();
+    widened.set(footprint.length());
+    return !processor.annotationsCovering(originalSlot, widened).isEmpty();
   }
 }

@@ -10,10 +10,12 @@ import org.jetbrains.java.decompiler.code.InstructionSequence;
 import org.jetbrains.java.decompiler.main.DecompilerContext;
 import org.jetbrains.java.decompiler.main.extern.IFernflowerPreferences;
 import org.jetbrains.java.decompiler.main.extern.IVariableNameProvider;
+import org.jetbrains.java.decompiler.modules.decompiler.typeann.TypeAnnotation;
 import org.jetbrains.java.decompiler.struct.attr.StructCodeAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructGeneralAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructGenericSignatureAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructLocalVariableTableAttribute;
+import org.jetbrains.java.decompiler.struct.attr.StructTypeAnnotationAttribute;
 import org.jetbrains.java.decompiler.struct.consts.ConstantPool;
 import org.jetbrains.java.decompiler.struct.gen.MethodDescriptor;
 import org.jetbrains.java.decompiler.struct.gen.Type;
@@ -24,6 +26,7 @@ import org.jetbrains.java.decompiler.util.VBStyleCollection;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -123,7 +126,17 @@ public class StructMethod extends StructMember {
     Map<String, StructGeneralAttribute> attributes = readAttributes(in, pool);
     StructCodeAttribute code = (StructCodeAttribute)attributes.remove(StructGeneralAttribute.ATTRIBUTE_CODE.name);
     if (code != null) {
-      attributes.putAll(code.codeAttributes);
+      // Code attributes are kept separate from the method's own attributes. In particular the
+      // RuntimeVisibleTypeAnnotations/RuntimeInvisibleTypeAnnotations attributes exist at both
+      // levels and must never overwrite each other or leak Code-level targets (local variables,
+      // resources, catch clauses, expressions) into the method-level type annotation reads.
+      for (Map.Entry<String, StructGeneralAttribute> entry : code.codeAttributes.entrySet()) {
+        if (StructGeneralAttribute.ATTRIBUTE_RUNTIME_VISIBLE_TYPE_ANNOTATIONS.name.equals(entry.getKey()) ||
+            StructGeneralAttribute.ATTRIBUTE_RUNTIME_INVISIBLE_TYPE_ANNOTATIONS.name.equals(entry.getKey())) {
+          continue;
+        }
+        attributes.putIfAbsent(entry.getKey(), entry.getValue());
+      }
     }
 
     GenericMethodDescriptor signature = null;
@@ -148,6 +161,7 @@ public class StructMethod extends StructMember {
   private final int localVariables;
   private final int codeLength;
   private final int codeFullLength;
+  private final StructCodeAttribute codeAttribute;
   private InstructionSequence seq = null;
   private boolean expanded = false;
   private final String classQualifiedName;
@@ -167,6 +181,7 @@ public class StructMethod extends StructMember {
     this.name = name;
     this.descriptor = descriptor;
     this.bytecodeVersion = bytecodeVersion;
+    this.codeAttribute = code;
     if (code != null) {
       this.localVariables = code.localVariables;
       this.codeLength = code.codeLength;
@@ -432,6 +447,31 @@ public class StructMethod extends StructMember {
 
   public StructLocalVariableTableAttribute getLocalVariableAttr() {
     return getAttribute(StructGeneralAttribute.ATTRIBUTE_LOCAL_VARIABLE_TABLE);
+  }
+
+  /**
+   * Returns the type annotations stored in the {@code Code} attribute of this method (local variable,
+   * resource variable, catch clause and expression targets), limited to the requested visibility.
+   * Method-level type annotations (return type, receiver, formal parameters, throws) are never mixed
+   * in; those remain available through {@link #getAttribute} / {@link TypeAnnotation#listFrom}.
+   * The entries keep their original order, {@code target_info}, type path and annotation values.
+   *
+   * @param runtimeVisible {@code true} for {@code RuntimeVisibleTypeAnnotations},
+   *                       {@code false} for {@code RuntimeInvisibleTypeAnnotations}
+   * @return the Code-level type annotations of the requested visibility, or an empty list
+   */
+  public List<TypeAnnotation> getCodeTypeAnnotations(boolean runtimeVisible) {
+    if (codeAttribute == null || codeAttribute.codeAttributes == null) {
+      return Collections.emptyList();
+    }
+    StructGeneralAttribute.Key<StructTypeAnnotationAttribute> key = runtimeVisible
+      ? StructGeneralAttribute.ATTRIBUTE_RUNTIME_VISIBLE_TYPE_ANNOTATIONS
+      : StructGeneralAttribute.ATTRIBUTE_RUNTIME_INVISIBLE_TYPE_ANNOTATIONS;
+    StructTypeAnnotationAttribute attribute = (StructTypeAnnotationAttribute)codeAttribute.codeAttributes.get(key.name);
+    if (attribute == null) {
+      return Collections.emptyList();
+    }
+    return attribute.getAnnotations();
   }
 
   @Override

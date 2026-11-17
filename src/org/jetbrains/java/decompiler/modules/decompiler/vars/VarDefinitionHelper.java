@@ -783,6 +783,11 @@ public class VarDefinitionHelper {
         if (toType != null && VarType.VARTYPE_OBJECT.equals(toType) && !VarType.VARTYPE_OBJECT.equals(merged)) {
           continue;
         }
+        // Reject merge if the two lifetimes carry different local type annotations. Each
+        // annotated lifetime needs its own declaration so annotations stay attached to it.
+        if (!varproc.canShareAnnotatedDeclaration(from, to)) {
+          continue;
+        }
 
         var.setIndex(to.var);
         var.setVersion(to.version);

@@ -10,6 +10,8 @@ import org.jetbrains.java.decompiler.modules.decompiler.exps.VarExprent;
 import org.jetbrains.java.decompiler.modules.decompiler.sforms.DirectGraph;
 import org.jetbrains.java.decompiler.modules.decompiler.stats.RootStatement;
 import org.jetbrains.java.decompiler.modules.decompiler.stats.Statement;
+import org.jetbrains.java.decompiler.modules.decompiler.typeann.TargetInfo;
+import org.jetbrains.java.decompiler.modules.decompiler.typeann.TypeAnnotation;
 import org.jetbrains.java.decompiler.struct.StructClass;
 import org.jetbrains.java.decompiler.struct.StructMethod;
 import org.jetbrains.java.decompiler.struct.attr.StructLocalVariableTableAttribute.LocalVariable;
@@ -18,13 +20,14 @@ import org.jetbrains.java.decompiler.struct.gen.VarType;
 import org.jetbrains.java.decompiler.util.StatementIterator;
 import org.jetbrains.java.decompiler.util.TextUtil;
 
-import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -53,6 +56,13 @@ public class VarProcessor {
   private final int firstParameterVarIndex;
   private final int firstParameterPosition;
   private final Set<VarVersion> hasNotInsideLVT = new HashSet<>();
+  // Local variable type annotations read from the Code attribute, keyed by the original
+  // bytecode slot they apply to. Both RuntimeVisible and RuntimeInvisible entries are kept.
+  private final Map<Integer, List<TypeAnnotation>> localTypeAnnotations = new HashMap<>();
+  // Annotations matched to each current SSA version based on the bytecode offsets the version
+  // covers. Recomputed whenever the versions are renumbered, so later optimization passes can
+  // tell whether merging or removing a variable would drop an annotated declaration.
+  private final Map<VarVersion, Set<TypeAnnotation>> versionAnnotations = new HashMap<>();
 
   public VarProcessor(StructClass cl, StructMethod mt, MethodDescriptor md) {
     method = mt;
@@ -61,12 +71,148 @@ public class VarProcessor {
     boolean isEnumInit = isEnum && CodeConstants.INIT_NAME.equals(mt.getName());
     firstParameterVarIndex = isEnumInit ? 3 : !mt.hasModifier(CodeConstants.ACC_STATIC) ? 1 : 0;
     firstParameterPosition = isEnumInit ? 2 : 0;
+
+    for (boolean runtimeVisible : new boolean[]{true, false}) {
+      for (TypeAnnotation annotation : mt.getCodeTypeAnnotations(runtimeVisible)) {
+        if (annotation.getTargetType() != TypeAnnotation.LOCAL_VARIABLE) {
+          continue; // resource variables, catch clauses and expression targets are not attached to local declarations
+        }
+        TargetInfo targetInfo = annotation.getTargetInfo();
+        if (targetInfo instanceof TargetInfo.LocalvarTarget localvarTarget) {
+          // A single annotation can cover several ranges (and repeat the same slot); record it only once.
+          for (TargetInfo.LocalvarTarget.Offsets offset : localvarTarget.getTable()) {
+            List<TypeAnnotation> annotations = localTypeAnnotations.computeIfAbsent(offset.getIndex(), key -> new ArrayList<>());
+            if (!annotations.contains(annotation)) {
+              annotations.add(annotation);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * @return whether the given original bytecode slot carries one or more LOCAL_VARIABLE type
+   * annotations (either RuntimeVisible or RuntimeInvisible) in the Code attribute
+   */
+  public boolean isAnnotatedLocalSlot(Integer originalIndex) {
+    return originalIndex != null && localTypeAnnotations.containsKey(originalIndex);
+  }
+
+  /**
+   * @return the LOCAL_VARIABLE type annotations recorded for the given original bytecode slot
+   */
+  public List<TypeAnnotation> getLocalTypeAnnotations(int originalIndex) {
+    return localTypeAnnotations.getOrDefault(originalIndex, Collections.emptyList());
+  }
+
+  /**
+   * @return whether any LOCAL_VARIABLE type annotation is present in the method's Code attribute
+   */
+  public boolean hasLocalTypeAnnotations() {
+    return !localTypeAnnotations.isEmpty();
   }
 
   public void setVarVersions(RootStatement root) {
     VarVersionsProcessor oldProcessor = varVersions;
     varVersions = new VarVersionsProcessor(method, methodDescriptor);
     varVersions.setVarVersions(root, oldProcessor);
+    refreshVersionAnnotations(root);
+  }
+
+  private void refreshVersionAnnotations(RootStatement root) {
+    versionAnnotations.clear();
+    if (localTypeAnnotations.isEmpty()) {
+      return;
+    }
+    StatementIterator.iterate(root, new DirectGraph.ExprentIterator() {
+      @Override
+      public int processExprent(Exprent exprent) {
+        if (exprent.type == Exprent.EXPRENT_VAR) {
+          VarExprent var = (VarExprent)exprent;
+          Integer originalIndex = getVarOriginalIndex(var.getIndex());
+          if (originalIndex == null) {
+            return 0;
+          }
+          Set<TypeAnnotation> matched = new HashSet<>();
+          for (TypeAnnotation annotation : getLocalTypeAnnotations(originalIndex)) {
+            if (coversVersion(annotation, originalIndex, var.bytecode)) {
+              matched.add(annotation);
+            }
+          }
+          if (!matched.isEmpty()) {
+            versionAnnotations.computeIfAbsent(var.getVarVersion(), key -> new HashSet<>()).addAll(matched);
+          }
+        }
+        return 0;
+      }
+    });
+  }
+
+  private static boolean coversVersion(TypeAnnotation annotation, int originalIndex, BitSet footprint) {
+    if (footprint == null || footprint.isEmpty()) {
+      return false;
+    }
+    TargetInfo targetInfo = annotation.getTargetInfo();
+    if (!(targetInfo instanceof TargetInfo.LocalvarTarget localvarTarget)) {
+      return false;
+    }
+    for (TargetInfo.LocalvarTarget.Offsets offsets : localvarTarget.getTable()) {
+      if (offsets.getIndex() != originalIndex) {
+        continue;
+      }
+      int endPc = offsets.getStartPc() + offsets.getLength();
+      for (int offset = footprint.nextSetBit(offsets.getStartPc()); offset >= 0 && offset < endPc; offset = footprint.nextSetBit(offset + 1)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * @return the LOCAL_VARIABLE type annotations covering the given SSA version
+   */
+  public Set<TypeAnnotation> getVersionAnnotations(VarVersion version) {
+    return versionAnnotations.getOrDefault(version, Collections.emptySet());
+  }
+
+  /**
+   * Decides whether two SSA versions can share one local declaration without moving an
+   * annotation onto the wrong lifetime. Versions carrying different annotations need separate
+   * declarations.
+   */
+  public boolean canShareAnnotatedDeclaration(VarVersion first, VarVersion second) {
+    return getVersionAnnotations(first).equals(getVersionAnnotations(second));
+  }
+
+  /**
+   * Returns the LOCAL_VARIABLE annotations whose live range intersects the given bytecode
+   * footprint of an original slot. This is independent of SSA numbering, so it stays valid while
+   * the stack-variable passes temporarily renumber versions.
+   */
+  public Set<TypeAnnotation> annotationsCovering(int originalSlot, BitSet footprint) {
+    if (footprint == null || footprint.isEmpty()) {
+      return Collections.emptySet();
+    }
+    Set<TypeAnnotation> result = new LinkedHashSet<>();
+    for (TypeAnnotation annotation : getLocalTypeAnnotations(originalSlot)) {
+      TargetInfo targetInfo = annotation.getTargetInfo();
+      if (!(targetInfo instanceof TargetInfo.LocalvarTarget localvarTarget)) {
+        continue;
+      }
+      for (TargetInfo.LocalvarTarget.Offsets offsets : localvarTarget.getTable()) {
+        if (offsets.getIndex() != originalSlot) {
+          continue;
+        }
+        int endPc = offsets.getStartPc() + offsets.getLength();
+        if (footprint.nextSetBit(offsets.getStartPc()) >= 0
+            && footprint.nextSetBit(offsets.getStartPc()) < endPc) {
+          result.add(annotation);
+          break;
+        }
+      }
+    }
+    return result;
   }
 
   public void setVarDefinitions(Statement root) {
