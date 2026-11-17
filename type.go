@@ -541,7 +541,7 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 	}
 	addressSize := r.AddressSize()
 	if e == nil || e.Offset != off {
-		return nil, DecodeError{name, off, "no type at offset"}
+		return nil, DecodeError{name, off, "no type at offset", nil}
 	}
 
 	// If this is the root of the recursion, prepare to resolve
@@ -581,7 +581,7 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 				return nil
 			}
 			if kid == nil {
-				err = DecodeError{name, r.offset(), "unexpected end of DWARF entries"}
+				err = DecodeError{name, r.offset(), "unexpected end of DWARF entries", nil}
 				return nil
 			}
 			if kid.Tag == 0 {
@@ -659,7 +659,7 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 				}
 				dims = append(dims, count)
 			case TagEnumerationType:
-				err = DecodeError{name, kid.Offset, "cannot handle enumeration type as array bound"}
+				err = DecodeError{name, kid.Offset, "cannot handle enumeration type as array bound", nil}
 				goto Error
 			}
 		}
@@ -688,12 +688,12 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 		name, _ := e.Val(AttrName).(string)
 		enc, ok := e.Val(AttrEncoding).(int64)
 		if !ok {
-			err = DecodeError{name, e.Offset, "missing encoding attribute for " + name}
+			err = DecodeError{name, e.Offset, "missing encoding attribute for " + name, nil}
 			goto Error
 		}
 		switch enc {
 		default:
-			err = DecodeError{name, e.Offset, "unrecognized encoding attribute value"}
+			err = DecodeError{name, e.Offset, "unrecognized encoding attribute value", nil}
 			goto Error
 
 		case encAddress:
@@ -735,7 +735,7 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 		t.BitOffset, haveBitOffset = e.Val(AttrBitOffset).(int64)
 		t.DataBitOffset, haveDataBitOffset = e.Val(AttrDataBitOffset).(int64)
 		if haveBitOffset && haveDataBitOffset {
-			err = DecodeError{name, e.Offset, "duplicate bit offset attributes"}
+			err = DecodeError{name, e.Offset, "duplicate bit offset attributes", nil}
 			goto Error
 		}
 
@@ -786,7 +786,7 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 				// unit here, not unknownFormat.
 				b := makeBuf(d, unknownFormat{}, "location", 0, loc)
 				if b.uint8() != opPlusUconst {
-					err = DecodeError{name, kid.Offset, "unexpected opcode"}
+					err = DecodeError{name, kid.Offset, "unexpected opcode", nil}
 					goto Error
 				}
 				f.ByteOffset = int64(b.uint())
@@ -805,7 +805,7 @@ func (d *Data) readType(name string, r typeReader, off Offset, typeCache map[Off
 			f.BitOffset, haveBitOffset = kid.Val(AttrBitOffset).(int64)
 			f.DataBitOffset, haveDataBitOffset = kid.Val(AttrDataBitOffset).(int64)
 			if haveBitOffset && haveDataBitOffset {
-				err = DecodeError{name, e.Offset, "duplicate bit offset attributes"}
+				err = DecodeError{name, e.Offset, "duplicate bit offset attributes", nil}
 				goto Error
 			}
 			f.BitSize, _ = kid.Val(AttrBitSize).(int64)

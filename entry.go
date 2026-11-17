@@ -404,7 +404,44 @@ func (e *Entry) AttrField(a Attr) *Field {
 
 // An Offset represents the location of an [Entry] within the DWARF info.
 // (See [Reader.Seek].)
-type Offset uint32
+//
+// Offset is a full 64-bit section offset. It keeps the high bits on
+// source-backed data, so two DIEs that happen to share their low 32
+// bits remain distinct identities.
+type Offset uint64
+
+// readString returns the NUL-terminated string at absolute offset off
+// in the named string section. When the section is source-backed the
+// bytes are fetched on demand and the returned string does not alias
+// any reusable read window.
+func (d *Data) readString(section string, off Offset) (string, error) {
+	if src := d.sectionSource(section); src != nil {
+		b := makeSrcBuf(d, unknownFormat{}, section, off, src)
+		s := b.string()
+		if b.err != nil {
+			return "", b.err
+		}
+		return s, nil
+	}
+	var data []byte
+	switch section {
+	case "str":
+		data = d.str
+	case "line_str":
+		data = d.lineStr
+	default:
+		return "", DecodeError{section, off, "unknown string section", nil}
+	}
+	if off >= Offset(len(data)) {
+		return "", DecodeError{section, off, "string offset out of range", nil}
+	}
+	b := makeBuf(d, unknownFormat{}, section, off, data[off:])
+	s := b.string()
+	if b.err != nil {
+		return "", b.err
+	}
+	return s, nil
+}
 
 // Entry reads a single entry from buf, decoding
 // according to the given abbreviation table.
@@ -445,14 +482,12 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 			b.err = b1.err
 			return ""
 		}
-		if uint64(int(off)) != off {
-			b.error("DW_FORM_strx indirect offset out of range")
-		}
-		b1 = makeBuf(b.dwarf, b.format, "str", 0, b.dwarf.str)
-		b1.skip(int(off))
-		val := b1.string()
-		if b1.err != nil {
-			b.err = b1.err
+		val, err := b.dwarf.readString("str", Offset(off))
+		if err != nil {
+			if b.err == nil {
+				b.err = err
+			}
+			return ""
 		}
 		return val
 	}
@@ -571,6 +606,12 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 			val = true
 
 		// reference to other entry
+		//
+		// DW_FORM_ref_addr is an absolute info-section offset whose
+		// width depends on the DWARF32/64 format; ref1/ref2/ref4/
+		// ref8/ref_udata are fixed-width (or LEB) values relative to
+		// the owning unit header, so their byte consumption does not
+		// change just because Offset is now 64 bits.
 		case formRefAddr:
 			vers := b.format.version()
 			if vers == 0 {
@@ -601,32 +642,46 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 		// string
 		case formString:
 			val = b.string()
-		case formStrp, formLineStrp:
+		case formStrp:
 			var off uint64 // offset into .debug_str
 			is64, known := b.format.dwarf64()
 			if !known {
-				b.error("unknown size for DW_FORM_strp/line_strp")
+				b.error("unknown size for DW_FORM_strp")
+			} else if is64 {
+				off = b.uint64()
+			} else {
+				off = uint64(b.uint32())
+			}
+			if b.err != nil {
+				return nil
+			}
+			s, strErr := b.dwarf.readString("str", Offset(off))
+			if strErr != nil {
+				b.err = strErr
+				return nil
+			}
+			val = s
+		case formLineStrp:
+			var off uint64 // offset into .debug_line_str
+			is64, known := b.format.dwarf64()
+			if !known {
+				b.error("unknown size for DW_FORM_line_strp")
 			} else if is64 {
 				off = b.uint64()
 			} else {
 				off = uint64(b.uint32())
 			}
 			if uint64(int(off)) != off {
-				b.error("DW_FORM_strp/line_strp offset out of range")
+				b.error("DW_FORM_line_strp offset out of range")
 			}
 			if b.err != nil {
 				return nil
 			}
-			var b1 buf
-			if fmt == formStrp {
-				b1 = makeBuf(b.dwarf, b.format, "str", 0, b.dwarf.str)
-			} else {
-				if len(b.dwarf.lineStr) == 0 {
-					b.error("DW_FORM_line_strp with no .debug_line_str section")
-					return nil
-				}
-				b1 = makeBuf(b.dwarf, b.format, "line_str", 0, b.dwarf.lineStr)
+			if len(b.dwarf.lineStr) == 0 {
+				b.error("DW_FORM_line_strp with no .debug_line_str section")
+				return nil
 			}
+			b1 := makeBuf(b.dwarf, b.format, "line_str", 0, b.dwarf.lineStr)
 			b1.skip(int(off))
 			val = b1.string()
 			if b1.err != nil {
@@ -771,7 +826,7 @@ func (r *Reader) Seek(off Offset) {
 		}
 		u := &d.unit[0]
 		r.unit = 0
-		r.b = makeBuf(r.d, u, "info", u.off, u.data)
+		r.b = d.infoBuf(u, u, u.off)
 		r.collectDwarf5BaseOffsets(u)
 		r.cu = nil
 		return
@@ -787,22 +842,32 @@ func (r *Reader) Seek(off Offset) {
 	}
 	u := &d.unit[i]
 	r.unit = i
-	r.b = makeBuf(r.d, u, "info", off, u.data[off-u.off:])
+	r.b = d.infoBuf(u, u, off)
 	r.collectDwarf5BaseOffsets(u)
 }
 
 // maybeNextUnit advances to the next unit if this one is finished.
 func (r *Reader) maybeNextUnit() {
-	for len(r.b.data) == 0 && r.unit+1 < len(r.d.unit) {
+	for r.bufEmpty() && r.unit+1 < len(r.d.unit) {
 		r.nextUnit()
 	}
+}
+
+// bufEmpty reports whether the reader's buffer has no unread bytes.
+// Source-backed buffers report their position against the unit end
+// instead of an in-memory window.
+func (r *Reader) bufEmpty() bool {
+	if r.b.src != nil {
+		return r.b.off >= r.d.unit[r.unit].end
+	}
+	return len(r.b.data) == 0
 }
 
 // nextUnit advances to the next unit.
 func (r *Reader) nextUnit() {
 	r.unit++
 	u := &r.d.unit[r.unit]
-	r.b = makeBuf(r.d, u, "info", u.off, u.data)
+	r.b = r.d.infoBuf(u, u, u.off)
 	r.cu = nil
 	r.collectDwarf5BaseOffsets(u)
 }
@@ -826,7 +891,7 @@ func (r *Reader) Next() (*Entry, error) {
 		return nil, r.err
 	}
 	r.maybeNextUnit()
-	if len(r.b.data) == 0 {
+	if r.bufEmpty() {
 		return nil, nil
 	}
 	u := &r.d.unit[r.unit]
@@ -919,7 +984,7 @@ func (r *Reader) SeekPC(pc uint64) (*Entry, error) {
 		r.unit = unit
 		r.cu = nil
 		u := &r.d.unit[unit]
-		r.b = makeBuf(r.d, u, "info", u.off, u.data)
+		r.b = r.d.infoBuf(u, u, u.off)
 		r.collectDwarf5BaseOffsets(u)
 		e, err := r.Next()
 		if err != nil {
@@ -1094,7 +1159,7 @@ func (d *Data) baseAddressForEntry(e *Entry) (*Entry, uint64, error) {
 			return nil, 0, errors.New("no unit for entry")
 		}
 		u := &d.unit[i]
-		b := makeBuf(d, u, "info", u.off, u.data)
+		b := d.infoBuf(u, u, u.off)
 		cu = b.entry(nil, u)
 		if b.err != nil {
 			return nil, 0, b.err

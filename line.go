@@ -191,7 +191,7 @@ func (r *LineReader) readHeader(compDir string) error {
 	unitLength, dwarf64 := buf.unitLength()
 	r.endOffset = buf.off + unitLength
 	if r.endOffset > buf.off+Offset(len(buf.data)) {
-		return DecodeError{"line", hdrOffset, fmt.Sprintf("line table end %d exceeds section size %d", r.endOffset, buf.off+Offset(len(buf.data)))}
+		return DecodeError{"line", hdrOffset, fmt.Sprintf("line table end %d exceeds section size %d", r.endOffset, buf.off+Offset(len(buf.data))), nil}
 	}
 	r.version = buf.uint16()
 	if buf.err == nil && (r.version < 2 || r.version > 5) {
@@ -200,7 +200,7 @@ func (r *LineReader) readHeader(compDir string) error {
 		// the middle of the header in new versions, so we're
 		// picky about only supporting known line table
 		// versions.
-		return DecodeError{"line", hdrOffset, fmt.Sprintf("unknown line table version %d", r.version)}
+		return DecodeError{"line", hdrOffset, fmt.Sprintf("unknown line table version %d", r.version), nil}
 	}
 	if r.version >= 5 {
 		r.addrsize = int(buf.uint8())
@@ -217,7 +217,7 @@ func (r *LineReader) readHeader(compDir string) error {
 	}
 	programOffset := buf.off + headerLength
 	if programOffset > r.endOffset {
-		return DecodeError{"line", hdrOffset, fmt.Sprintf("malformed line table: program offset %d exceeds end offset %d", programOffset, r.endOffset)}
+		return DecodeError{"line", hdrOffset, fmt.Sprintf("malformed line table: program offset %d exceeds end offset %d", programOffset, r.endOffset), nil}
 	}
 	r.programOffset = programOffset
 	r.minInstructionLength = int(buf.uint8())
@@ -236,10 +236,10 @@ func (r *LineReader) readHeader(compDir string) error {
 		return buf.err
 	}
 	if r.maxOpsPerInstruction == 0 {
-		return DecodeError{"line", hdrOffset, "invalid maximum operations per instruction: 0"}
+		return DecodeError{"line", hdrOffset, "invalid maximum operations per instruction: 0", nil}
 	}
 	if r.lineRange == 0 {
-		return DecodeError{"line", hdrOffset, "invalid line range: 0"}
+		return DecodeError{"line", hdrOffset, "invalid line range: 0", nil}
 	}
 
 	// Read standard opcode length table. This table starts with opcode 1.
@@ -255,7 +255,7 @@ func (r *LineReader) readHeader(compDir string) error {
 	}
 	for i, length := range r.opcodeLengths {
 		if known, ok := knownOpcodeLengths[i]; ok && known != length {
-			return DecodeError{"line", hdrOffset, fmt.Sprintf("opcode %d expected to have length %d, but has length %d", i, known, length)}
+			return DecodeError{"line", hdrOffset, fmt.Sprintf("opcode %d expected to have length %d, but has length %d", i, known, length), nil}
 		}
 	}
 
@@ -352,19 +352,24 @@ func (r *LineReader) readLNCT(s []lnctForm, dwarf64 bool) (path string, mtime ui
 				off = uint64(r.buf.uint32())
 			}
 			if uint64(int(off)) != off {
-				return "", 0, 0, DecodeError{"line", r.buf.off, "strp/line_strp offset out of range"}
+				return "", 0, 0, DecodeError{"line", r.buf.off, "strp/line_strp offset out of range", nil}
 			}
-			var b1 buf
+			var resolved string
 			if lf.form == formStrp {
-				b1 = makeBuf(r.buf.dwarf, r.buf.format, "str", 0, r.str)
+				s, err := r.buf.dwarf.readString("str", Offset(off))
+				if err != nil {
+					return "", 0, 0, DecodeError{"line", r.buf.off, err.Error(), nil}
+				}
+				resolved = s
 			} else {
-				b1 = makeBuf(r.buf.dwarf, r.buf.format, "line_str", 0, r.lineStr)
+				b1 := makeBuf(r.buf.dwarf, r.buf.format, "line_str", 0, r.lineStr)
+				b1.skip(int(off))
+				resolved = b1.string()
+				if b1.err != nil {
+					return "", 0, 0, DecodeError{"line", r.buf.off, b1.err.Error(), nil}
+				}
 			}
-			b1.skip(int(off))
-			str = b1.string()
-			if b1.err != nil {
-				return "", 0, 0, DecodeError{"line", r.buf.off, b1.err.Error()}
-			}
+			return resolved, 0, 0, nil
 		case formStrpSup:
 			// Supplemental sections not yet supported.
 			if dwarf64 {
@@ -404,7 +409,7 @@ func (r *LineReader) readLNCT(s []lnctForm, dwarf64 bool) (path string, mtime ui
 			path = str
 		case lnctDirectoryIndex:
 			if val >= uint64(len(r.directories)) {
-				return "", 0, 0, DecodeError{"line", r.buf.off, "directory index out of range"}
+				return "", 0, 0, DecodeError{"line", r.buf.off, "directory index out of range", nil}
 			}
 			dir = r.directories[val]
 		case lnctTimestamp:
@@ -438,7 +443,7 @@ func (r *LineReader) readFileEntry() (bool, error) {
 	dirIndex := int(r.buf.uint())
 	if !pathIsAbs(name) {
 		if dirIndex >= len(r.directories) {
-			return false, DecodeError{"line", off, "directory index too large"}
+			return false, DecodeError{"line", off, "directory index too large", nil}
 		}
 		name = pathJoin(r.directories[dirIndex], name)
 	}
@@ -564,7 +569,7 @@ func (r *LineReader) step(entry *LineEntry) bool {
 				r.buf.err = err
 				return false
 			} else if done {
-				r.buf.err = DecodeError{"line", startOff, "malformed DW_LNE_define_file operation"}
+				r.buf.err = DecodeError{"line", startOff, "malformed DW_LNE_define_file operation", nil}
 				return false
 			}
 			r.updateFile()

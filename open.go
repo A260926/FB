@@ -78,12 +78,12 @@ func New(abbrev, aranges, frame, info, line, pubnames, ranges, str []byte) (*Dat
 	// 32-bit DWARF: 4 byte length, 2 byte version.
 	// 64-bit DWARf: 4 bytes of 0xff, 8 byte length, 2 byte version.
 	if len(d.info) < 6 {
-		return nil, DecodeError{"info", Offset(len(d.info)), "too short"}
+		return nil, DecodeError{"info", Offset(len(d.info)), "too short", nil}
 	}
 	offset := 4
 	if d.info[0] == 0xff && d.info[1] == 0xff && d.info[2] == 0xff && d.info[3] == 0xff {
 		if len(d.info) < 14 {
-			return nil, DecodeError{"info", Offset(len(d.info)), "too short"}
+			return nil, DecodeError{"info", Offset(len(d.info)), "too short", nil}
 		}
 		offset = 12
 	}
@@ -91,7 +91,7 @@ func New(abbrev, aranges, frame, info, line, pubnames, ranges, str []byte) (*Dat
 	x, y := d.info[offset], d.info[offset+1]
 	switch {
 	case x == 0 && y == 0:
-		return nil, DecodeError{"info", 4, "unsupported version 0"}
+		return nil, DecodeError{"info", 4, "unsupported version 0", nil}
 	case x == 0:
 		d.bigEndian = true
 		d.order = binary.BigEndian
@@ -99,7 +99,80 @@ func New(abbrev, aranges, frame, info, line, pubnames, ranges, str []byte) (*Dat
 		d.bigEndian = false
 		d.order = binary.LittleEndian
 	default:
-		return nil, DecodeError{"info", 4, "cannot determine byte order"}
+		return nil, DecodeError{"info", 4, "cannot determine byte order", nil}
+	}
+
+	u, err := d.parseUnits()
+	if err != nil {
+		return nil, err
+	}
+	d.unit = u
+	return d, nil
+}
+
+// NewReaderAt returns a Data object whose .debug_info and .debug_str
+// sections are read lazily from [io.ReaderAt] sources instead of being
+// held entirely in memory. This makes it possible to inspect DWARF
+// whose section offsets exceed 4 GiB without allocating the sections up
+// front: construction reads only each unit header (enough to determine
+// byte order and build the unit directory), and DIE bodies plus the
+// whole string section are fetched on demand as [Reader], [Reader.Seek],
+// [Reader.SkipChildren] and [Data.Type] need them.
+//
+// The abbrev slice is the full .debug_abbrev section. The info Section
+// represents .debug_info and the str Section represents .debug_str;
+// every other section, when needed, must still be supplied through
+// [Data.AddSection] and the other slice-based entry points.
+//
+// Offsets reported and accepted by the returned Data are absolute
+// offsets into the logical sections and may use the full 64-bit range;
+// the high bits are preserved rather than compacted away. The caller
+// retains ownership of both Section readers: the package does not close
+// them.
+func NewReaderAt(abbrev []byte, info, str Section) (*Data, error) {
+	infoSrc, err := newSource("info", info)
+	if err != nil {
+		return nil, err
+	}
+	strSrc, err := newSource("str", str)
+	if err != nil {
+		return nil, err
+	}
+	d := &Data{
+		abbrev:      abbrev,
+		abbrevCache: make(map[uint64]abbrevTable),
+		typeCache:   make(map[Offset]Type),
+		typeSigs:    make(map[uint64]*typeUnit),
+		hashes:      make(map[string]*Hash),
+	}
+	registerBackends(d, infoSrc, strSrc)
+
+	// Sniff the byte order from the first unit header without
+	// materializing the section.
+	head := make([]byte, 4)
+	if _, err := infoSrc.readAt(head, 0); err != nil {
+		return nil, err
+	}
+	versOff := Offset(4)
+	if head[0] == 0xff && head[1] == 0xff && head[2] == 0xff && head[3] == 0xff {
+		versOff = 12
+	}
+	vers := make([]byte, 2)
+	if _, err := infoSrc.readAt(vers, versOff); err != nil {
+		return nil, err
+	}
+	x, y := vers[0], vers[1]
+	switch {
+	case x == 0 && y == 0:
+		return nil, DecodeError{"info", versOff, "unsupported version 0", nil}
+	case x == 0:
+		d.bigEndian = true
+		d.order = binary.BigEndian
+	case y == 0:
+		d.bigEndian = false
+		d.order = binary.LittleEndian
+	default:
+		return nil, DecodeError{"info", versOff, "cannot determine byte order", nil}
 	}
 
 	u, err := d.parseUnits()

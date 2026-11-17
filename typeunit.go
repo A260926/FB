@@ -64,11 +64,13 @@ func (d *Data) parseTypes(name string, types []byte) error {
 		}
 
 		boff := b.off
+		body := b.bytes(int(n - (b.off - hdroff)))
 		d.typeSigs[sig] = &typeUnit{
 			unit: unit{
 				base:   base,
 				off:    boff,
-				data:   b.bytes(int(n - (b.off - hdroff))),
+				end:    b.off,
+				data:   body,
 				atable: atable,
 				asize:  int(asize),
 				vers:   vers,
@@ -116,11 +118,11 @@ type typeUnitReader struct {
 // Seek to a new position in the type unit.
 func (tur *typeUnitReader) Seek(off Offset) {
 	tur.err = nil
-	doff := off - tur.tu.off
-	if doff < 0 || doff >= Offset(len(tur.tu.data)) {
-		tur.err = fmt.Errorf("%s: offset %d out of range; max %d", tur.tu.name, doff, len(tur.tu.data))
+	if off < tur.tu.off || off >= tur.tu.off+Offset(len(tur.tu.data)) {
+		tur.err = fmt.Errorf("%s: offset %d out of range; max %d", tur.tu.name, off, tur.tu.off+Offset(len(tur.tu.data)))
 		return
 	}
+	doff := off - tur.tu.off
 	tur.b = makeBuf(tur.d, tur.tu, tur.tu.name, off, tur.tu.data[doff:])
 }
 
