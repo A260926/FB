@@ -17,6 +17,8 @@ rasterizer_cfg::rasterizer_cfg()
 {
   dispatches=0;
   max_dispatches=0;
+  tile_passes=0;
+  max_tile_passes=0;
   pso_store=0;
   pso_store_size=0;
   max_pso_state_size=0;
@@ -32,6 +34,13 @@ void rasterizer_cfg::set_dispatches(rasterizer_dispatch *dispatches_, rasterizer
 {
   dispatches=dispatches_;
   max_dispatches=max_dispatches_;
+}
+//----
+
+void rasterizer_cfg::set_tile_passes(rasterizer_tile_pass *tile_passes_, rasterizer_tile_pass_index_t max_tile_passes_)
+{
+  tile_passes=tile_passes_;
+  max_tile_passes=max_tile_passes_;
 }
 //----
 
@@ -98,6 +107,32 @@ void rasterizer_callback_base::rasterize_tiles(rasterizer &rasterizer_, const re
     rasterizer_.rasterize_tile(rt_cfg_, *tiles_, 0);
   } while(++tiles_<tile_end);
 }
+//----
+
+void rasterizer_callback_base::exec_tile_pass(const rasterizer_tile_pass &pass_, const render_target_cfg &rt_cfg_, uint16_t tile_x_, uint16_t tile_y_, uint16_t tile_width_, uint16_t tile_height_, size_t tile_buffer_pixel_offset_, uint16_t thread_idx_)
+{
+  (void)thread_idx_;
+  // setup tile-local pass context
+  rasterizer_tile_pass_context ctx;
+  ctx.x=tile_x_;
+  ctx.y=tile_y_;
+  ctx.width=tile_width_;
+  ctx.height=tile_height_;
+  ctx.pitch=rt_cfg_.tile_pitch;
+  for(uint8_t rt_idx=0; rt_idx<rasterizer_max_rts; ++rt_idx)
+  {
+    uint8_t px_size=rt_cfg_.rt_pixel_sizes[rt_idx];
+    ctx.rt_pixel_sizes[rt_idx]=px_size;
+    ctx.rts[rt_idx]=px_size?(uint8_t*)rt_cfg_.rts[rt_idx]+tile_buffer_pixel_offset_*px_size:0;
+  }
+  ctx.depth.format=rt_cfg_.depth.format;
+  ctx.depth.data=rt_cfg_.depth.format!=depthfmt_none && rt_cfg_.depth.data
+    ?(void*)((uint8_t*)rt_cfg_.depth.data+tile_buffer_pixel_offset_*depth_format_pixel_size(rt_cfg_.depth.format))
+    :0;
+  // Hi-Z data is internal to the rasterizer and must not be touched by passes
+  ctx.depth.hiz_data=0;
+  pass_.exec(pass_.data, ctx);
+}
 //----------------------------------------------------------------------------
 
 
@@ -122,6 +157,7 @@ void rasterizer::init(const rasterizer_cfg &cfg_, const rasterizer_tiling_cfg &t
   m_tiling.init(tcfg_);
   m_cfg=cfg_;
   m_num_dispatches=0;
+  m_num_tile_passes=0;
   m_num_clusters=0;
   m_pso_write_pos=0;
   EGL_ASSERT_MSG(((size_t)cfg_.pso_store&(psc_mem_align-1))==0, "PSO store not properly aligned.\r\n");
@@ -200,6 +236,7 @@ void rasterizer::commit()
   rt_cfg.depth=m_cfg.depth;
   rt_cfg.rts=m_cfg.rts;
   rt_cfg.tile_pitch=m_tiling.tile_width();
+  mem_copy(rt_cfg.rt_pixel_sizes, m_cfg.rt_pixel_sizes, sizeof(rt_cfg.rt_pixel_sizes));
 
 #if EGL_BUILDOP_RASTERIZER_STATS==1
   // update stats
@@ -213,6 +250,7 @@ void rasterizer::commit()
   m_callback->rasterize_tiles(*this, rt_cfg, m_tiling.tiles(), m_tiling.num_tiles());
   m_tiling.clear();
   m_num_dispatches=0;
+  m_num_tile_passes=0;
   m_num_clusters=0;
   m_pso_write_pos=0;
 }
@@ -248,6 +286,10 @@ void rasterizer::rasterize_tile(const render_target_cfg &rt_cfg_, rasterizer_til
   e_hiz_mode current_hiz_mode=m_clear_depth==cleardepth_max?hizmode_max:hizmode_min;
   const psc_wrapper_base *psc_wrapper=0;
   void *pso_state_buffer=EGL_STACK_MALLOC(m_cfg.max_pso_state_size);
+
+  // tile passes execute in submission order, interleaved with the geometry
+  rasterizer_tile_pass_index_t next_pass_idx=0;
+  const size_t tile_buffer_pixel_offset=size_t(num_tile_pixels)*thread_idx_;
   while(num_tile_clusters)
   {
     // rasterize cluster strip
@@ -259,6 +301,16 @@ void rasterizer::rasterize_tile(const render_target_cfg &rt_cfg_, rasterizer_til
     {
       // check for dispatch change
       const rasterizer_cluster &cluster=m_tiling.cluster(*global_cluster_idx);
+
+      // execute the tile passes submitted before this cluster
+      while(next_pass_idx<cluster.pass_count)
+      {
+        const rasterizer_tile_pass &pass=m_cfg.tile_passes[next_pass_idx++];
+        m_callback->exec_tile_pass(pass, rt_cfg_, tile_x, tile_y, tile_width, tile_height, tile_buffer_pixel_offset, thread_idx_);
+        if(pass.writes_depth)
+          invalidate_hiz(rt_cfg_, tile_width, tile_height, thread_idx_, current_hiz_mode);
+      }
+
       if(cur_dispatch_idx!=cluster.dispatch_idx)
       {
         // pick PSO for the dispatch
@@ -375,6 +427,23 @@ void rasterizer::rasterize_tile(const render_target_cfg &rt_cfg_, rasterizer_til
   m_stats.max_pso_state_size=max(res.max_pso_state_size, m_stats.max_pso_state_size);
   m_stats.tmp_ptv_buffer_size=max(res.max_ptv_buffer_size, m_stats.tmp_ptv_buffer_size);
 #endif
+
+  // execute the tile passes submitted after the last cluster of this tile
+  while(next_pass_idx<m_num_tile_passes)
+  {
+    const rasterizer_tile_pass &pass=m_cfg.tile_passes[next_pass_idx++];
+    m_callback->exec_tile_pass(pass, rt_cfg_, tile_x, tile_y, tile_width, tile_height, tile_buffer_pixel_offset, thread_idx_);
+    if(pass.writes_depth)
+      invalidate_hiz(rt_cfg_, tile_width, tile_height, thread_idx_, current_hiz_mode);
+  }
+
+  // tile passes can touch any pixel of the valid tile region, so a frame with
+  // passes always submits the whole valid tile
+  if(m_num_tile_passes)
+  {
+    res.tile_min.set(0, 0);
+    res.tile_end.set(tile_width, tile_height);
+  }
 
   // calculate tile update region and submit tile
   vec2u16 update_region_min=min(res.tile_min, vec2u16(tile_.tile_min.x, tile_.tile_min.y));
@@ -614,5 +683,63 @@ void rasterizer::update_hiz(const rasterizer::result &res_, e_hiz_mode hiz_mode_
       hiz_buf+=zbuf_tile_scan_pitch/rasterizer_hiz_tile_width;
     } while(hiz_buf<hiz_buf_end);
   }
+}
+//----------------------------------------------------------------------------
+
+void rasterizer::invalidate_hiz(const render_target_cfg&, uint16_t tile_width_, uint16_t tile_height_, uint16_t thread_idx_, e_hiz_mode hiz_mode_)
+{
+#if EGL_BUILDOP_RASTERIZER_HIZ==1
+  if(!m_cfg.depth.hiz_data || m_cfg.depth.format==depthfmt_none)
+    return;
+
+  // a tile pass rewrote depth, so the cached hi-z bounds are stale. recompute
+  // the hi-z of the valid tile region from the actual depth values in the mode
+  // the following occlusion tests use, so geometry isn't culled against bounds
+  // that no longer reflect the depth buffer.
+  bool max_mode=hiz_mode_!=hizmode_min;
+  switch(m_cfg.depth.format)
+  {
+    case depthfmt_uint8: invalidate_hiz_impl<uint8_t>(tile_width_, tile_height_, thread_idx_, max_mode); break;
+    case depthfmt_uint16: invalidate_hiz_impl<uint16_t>(tile_width_, tile_height_, thread_idx_, max_mode); break;
+    case depthfmt_float32: invalidate_hiz_impl<float32_t>(tile_width_, tile_height_, thread_idx_, max_mode); break;
+    default: EGL_ERROR("Unsupported depth format.\r\n");
+  }
+#endif
+}
+//----------------------------------------------------------------------------
+
+template<typename T>
+void rasterizer::invalidate_hiz_impl(uint16_t tile_width_, uint16_t tile_height_, uint16_t thread_idx_, bool max_mode_)
+{
+#if EGL_BUILDOP_RASTERIZER_HIZ==1
+  // recompute hi-z cells covering the valid tile region, ignoring the padding
+  // outside of it so that edge tiles don't get bounds from uninitialized pixels
+  unsigned num_tile_pixels=m_tiling.tile_width()*m_tiling.tile_height();
+  const T *zbuf=(const T*)m_cfg.depth.data+size_t(thread_idx_)*num_tile_pixels;
+  uint16_t hiz_pitch=m_tiling.tile_width()/rasterizer_hiz_tile_width;
+  uint16_t *hiz_buf=m_cfg.depth.hiz_data+size_t(thread_idx_)*num_tile_pixels/rasterizer_hiz_tile_pixels;
+  uint16_t num_cells_x=(tile_width_+rasterizer_hiz_tile_width-1)/rasterizer_hiz_tile_width;
+  uint16_t num_cells_y=(tile_height_+rasterizer_hiz_tile_width-1)/rasterizer_hiz_tile_width;
+  for(uint16_t cy=0; cy<num_cells_y; ++cy)
+  {
+    uint16_t y0=uint16_t(cy*rasterizer_hiz_tile_width);
+    uint16_t y1=min<uint16_t>(y0+rasterizer_hiz_tile_width, tile_height_);
+    for(uint16_t cx=0; cx<num_cells_x; ++cx)
+    {
+      uint16_t x0=uint16_t(cx*rasterizer_hiz_tile_width);
+      uint16_t x1=min<uint16_t>(x0+rasterizer_hiz_tile_width, tile_width_);
+      T value=zbuf[x0+y0*m_tiling.tile_width()];
+      for(uint16_t y=y0; y<y1; ++y)
+      {
+        const T *scan=zbuf+x0+y*m_tiling.tile_width(), *scan_end=zbuf+x1+y*m_tiling.tile_width();
+        do
+        {
+          value=max_mode_?max(value, *scan):min(value, *scan);
+        } while(++scan<scan_end);
+      }
+      hiz_buf[cx+cy*hiz_pitch]=hiz_value(value);
+    }
+  }
+#endif
 }
 //----------------------------------------------------------------------------

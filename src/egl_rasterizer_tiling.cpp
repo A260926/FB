@@ -100,6 +100,7 @@ rasterizer_tiling::rasterizer_tiling()
   m_tiled_height=0;
   m_num_clusters=0;
   m_num_cluster_strips=0;
+  m_pass_count=0;
 }
 //----
 
@@ -169,6 +170,7 @@ void rasterizer_tiling::init(const rasterizer_tiling_cfg &cfg_)
       cfg_.tile_map[tile->x+tile->y*m_tiled_width]=uint16_t(tile-cfg_.tiles);
   } while(++tile<tile_end);
   clear();
+  m_pass_count=0;
 }
 //----
 
@@ -184,6 +186,7 @@ void rasterizer_tiling::clear()
   } while(++tile<tile_end);
   m_num_clusters=0;
   m_num_cluster_strips=0;
+  m_pass_count=0;
 }
 //----------------------------------------------------------------------------
 
@@ -231,6 +234,7 @@ void rasterizer_tiling::add_cluster(const vec3f &bbox_min_, const vec3f &bbox_ma
   rasterizer_global_cluster_index_t global_cluster_idx=m_num_clusters++;
   rasterizer_cluster &cluster=m_cfg.clusters[global_cluster_idx];
   cluster.dispatch_idx=dispatch_idx_;
+  cluster.pass_count=m_pass_count;
   if(twidth==1 && theight==1)
     local_cluster_idx_|=rasterizer_max_local_clusters;
   cluster.local_cluster_idx=local_cluster_idx_;

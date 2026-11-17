@@ -41,6 +41,45 @@ The shaders can be combined in flexible yet efficient ways for high reuse of the
 
 The shaders can be written so that any post-transform attributes that are unused by pixel shaders are eliminated along with the associated vertex shader code, thus enabling efficient composition of shaders. Unavailable vertex input attributes fetched by vertex shaders return zero values thus enables writing more generic vertex shaders. Also, if the vertex shader doesn't export vertex attributes required by the combined pixel shader, a C++ compilation error occurs informing programmer early about invalid combinations.
 
+## Tile Passes
+The final tile shader runs once per tile after all the geometry of the frame has been rasterized. Some techniques, however, need to run over the whole tile buffer between two geometry stages: reducing the visible depth of a tile and adjusting its colour accordingly, then continuing to draw geometry against the modified depth. For this, the rasterizer supports **tile passes**, submitted with `graphics_device::dispatch_tile_pass()` in the same way as PSOs, in the middle of a frame:
+
+```cpp
+struct my_tile_pass
+{
+  enum {writes_depth=false}; // set true if exec() modifies the depth buffer
+  void exec(rasterizer_tile_pass_context &ctx_) const;
+};
+
+device.dispatch_pso(psc_stage_a);          // geometry before the pass
+device.dispatch_tile_pass(my_tile_pass{}); // ordered between the stages
+device.dispatch_pso(psc_stage_b);          // geometry after the pass
+device.commit();                           // optional final tile shader
+```
+
+A tile pass object is trivially copyable. Like a PSO, its value is copied into the frame memory when it is submitted, so pointers it holds must reference objects that stay alive until `commit()` returns. The callback is not executed at submission time; it runs during `commit()`.
+
+Within a tile, geometry and passes execute strictly in submission order. Every pass runs exactly once on every valid tile in the commit, including tiles that have no geometry cluster binned to them. The ordering is preserved even for tiles with no geometry, and consecutive passes are neither merged nor skipped. Tiles do not have to reach the same stage simultaneously, and callbacks must not recursively submit more draws.
+
+The pass receives a [`rasterizer_tile_pass_context`](src/egl_rasterizer_target.h) that describes the current tile buffer:
+
+| field | meaning |
+| --- | --- |
+| `x`, `y` | screen-space origin of the tile |
+| `width`, `height` | valid (in-bounds) size of the tile region |
+| `pitch` | allocated row stride of the tile buffer in pixels |
+| `rts[4]` | tile-local pointers to the configured render targets, null if not configured |
+| `rt_pixel_sizes[4]` | bytes per pixel of each render target, 0 if not configured |
+| `depth` | tile-local depth target; `depth.data`/`depth.format` describe the depth buffer |
+
+All buffer pointers are relative to the local origin of the current tile, so the pixel at tile-relative `(x, y)` lives at offset `x+y*pitch`. Configured colour attachments may be read and written in place, in the format of the attachment. When `writes_depth` is true, the pass may also rewrite `depth.data` within the valid region in the format given by `depth.format` (uint8, uint16 or float32); the Hi-Z data is internal to the rasterizer and must not be touched. Unconfigured attachments are null, and the depth target is null when the device has no depth buffer.
+
+A pass observes everything submitted before it in the same tile: pixels not yet drawn have zero colour and the depth set by the most recent `clear_depth()`. A frame that contains only passes still produces output, since the final tile shader runs after all stages. Reusing the tile buffers on the next frame or the next tile must not leak attachments or depth written by an earlier pass: the rasterizer clears the tile buffers between commits.
+
+When a pass sets `writes_depth`, the rasterizer invalidates the cached Hi-Z for that tile and recomputes it from the modified depth buffer before the next occlusion test. This keeps the depth-test results of subsequent LESS/LEQUAL geometry identical to a configuration with Hi-Z disabled, without defeating the Hi-Z acceleration for read-only passes and the pure geometry path. After a depth write, the stale hierarchical bounds are never used to reject geometry.
+
+The capacity of the tile pass stage follows `rasterizer_memory`: `max_tile_passes` sets the number of passes per commit (`0` disables the stage) and the pass objects are stored alongside the PSO state in the existing `pso_store_size` frame memory. Both linear and Morton tile orders are supported, and the existing `dispatch_pso()`, `commit()` and final tile shader interfaces continue to work unchanged. See [`examples/09_TilePass`](examples/09_TilePass/) for a headless example.
+
 ## Textures
 EmberGL currently supports 2D textures in various texture formats that can be sampled for example during triangle rasterization. Source textures stored as PNG/JPG/TGA/DDS/etc. file format can be converted to [PTX format](https://github.com/JarkkoPFC/ptx_converter/blob/main/doc/file_format_ptx.xlsx) with [PTX Texture Converter](https://github.com/JarkkoPFC/ptx_converter) tool, which can be used with [`texture`](src/egl_texture.h) class. Like the P3G format, the PTX format has been designed so that the data can be loaded as a binary blob to memory and requires no post-load processing for sampling, which on MCU's enables storing and sampling textures straight from the flash memory saving RAM.
 

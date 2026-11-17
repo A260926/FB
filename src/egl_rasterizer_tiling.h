@@ -34,6 +34,7 @@ struct rasterizer_cluster
 {
   rasterizer_dispatch_index_t dispatch_idx;
   rasterizer_local_cluster_index_t local_cluster_idx;
+  rasterizer_tile_pass_index_t pass_count; // number of tile passes submitted before this cluster
 #if EGL_BUILDOP_RASTERIZER_HIZ==1
   uint8_t hiz_x, hiz_y;
   uint8_t hiz_width, hiz_height;
@@ -152,6 +153,7 @@ private:
   uint8_t m_tiled_width, m_tiled_height;
   rasterizer_global_cluster_index_t m_num_clusters;
   rasterizer_cluster_strip_index_t m_num_cluster_strips;
+  rasterizer_tile_pass_index_t m_pass_count; // tile passes submitted before the next binned cluster
 };
 //----------------------------------------------------------------------------
 

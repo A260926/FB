@@ -15,10 +15,12 @@
 //============================================================================
 // external
 #include "egl_pixel.h"
+#include "egl_rasterizer_config.h"
 EGL_NAMESPACE_BEGIN
 
 // new
 struct rasterizer_depth_target;
+struct rasterizer_tile_pass_context;
 template<class PSC> class rasterizer_pixel_out;
 //----------------------------------------------------------------------------
 
@@ -36,6 +38,7 @@ enum e_depth_format
 //----
 
 template<e_depth_format> struct depth_format_traits     {typedef void depth_format_t;      enum {type_size=0};};
+template<> struct depth_format_traits<depthfmt_none>    {typedef uint8_t depth_format_t;   enum {type_size=0};};
 template<> struct depth_format_traits<depthfmt_uint8>   {typedef uint8_t depth_format_t;   enum {type_size=1};};
 template<> struct depth_format_traits<depthfmt_uint16>  {typedef uint16_t depth_format_t;  enum {type_size=2};};
 template<> struct depth_format_traits<depthfmt_float32> {typedef float32_t depth_format_t; enum {type_size=4};};
@@ -51,6 +54,25 @@ struct rasterizer_depth_target
   void *data;
   uint16_t *hiz_data;
   e_depth_format format;
+};
+//----------------------------------------------------------------------------
+
+
+//============================================================================
+// rasterizer_tile_pass_context
+//============================================================================
+// Describes the tile buffer a tile pass operates on. All pointers reference the
+// local origin of the current tile, so pixel (x,y) of the pass' valid region is
+// at offset x+y*pitch. Attachments that weren't configured are null. The pass
+// must not touch the Hi-Z data.
+struct rasterizer_tile_pass_context
+{
+  uint16_t x, y;             // screen-space origin of the tile
+  uint16_t width, height;    // valid (in-bounds) tile size in pixels
+  uint16_t pitch;            // allocated tile row stride in pixels
+  void *rts[rasterizer_max_rts];
+  uint8_t rt_pixel_sizes[rasterizer_max_rts];
+  rasterizer_depth_target depth;
 };
 //----------------------------------------------------------------------------
 

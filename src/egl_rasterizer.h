@@ -21,6 +21,7 @@
 #include "egl_fast_math.h"
 #include "egl_pixel.h"
 #include "egl_meta.h"
+#include <type_traits>
 EGL_NAMESPACE_BEGIN
 
 // new
@@ -29,10 +30,12 @@ typedef vec2<int32_t> vec2i32;
 typedef vec3<int32_t> vec3i32;
 struct rasterizer_depth_target;
 struct rasterizer_dispatch;
+struct rasterizer_tile_pass;
 struct rasterizer_stats;
 struct rasterizer_cfg;
 class rasterizer_callback_base;
 class rasterizer;
+template<class Pass> EGL_INLINE void tile_pass_exec_thunk(const void*, rasterizer_tile_pass_context&);
 #define EGL_RT_BLENDFUNC(rt_idx__, blendfunc__) template<e_pixel_format rt_fmt, e_pixel_format src_fmt> static EGL_INLINE void blend_rt##rt_idx__(pixel<rt_fmt> &res_, const pixel<rt_fmt> &dst_, const pixel<src_fmt> &src_) {blendfunc__(res_, dst_, src_);}
 template<e_pixel_format dst_fmt, e_pixel_format src_fmt> EGL_INLINE void blendfunc_opaque(pixel<dst_fmt> &res_, const pixel<dst_fmt> &dst_, const pixel<src_fmt> &src_);
 template<e_pixel_format dst_fmt, e_pixel_format src_fmt> EGL_INLINE void blendfunc_add(pixel<dst_fmt> &res_, const pixel<dst_fmt> &dst_, const pixel<src_fmt> &src_);
@@ -47,6 +50,32 @@ struct rasterizer_dispatch
 {
   size_t psc_wrapper[2];
 };
+//----------------------------------------------------------------------------
+
+
+//============================================================================
+// rasterizer_tile_pass
+//============================================================================
+// type-erased record of a submitted tile pass. The pass object itself is
+// copied to the frame memory (PSO store) and referenced by data_offset.
+struct rasterizer_tile_pass
+{
+  void (*exec)(const void*, rasterizer_tile_pass_context&);
+  const void *data;
+  bool writes_depth;
+};
+//----------------------------------------------------------------------------
+
+
+//============================================================================
+// tile_pass_exec_thunk
+//============================================================================
+template<class Pass>
+EGL_INLINE void tile_pass_exec_thunk(const void *data_, rasterizer_tile_pass_context &ctx_)
+{
+  EGL_STATIC_ASSERT_MSG(std::is_trivially_copyable<Pass>::value, tile_pass_must_be_trivially_copyable);
+  static_cast<const Pass*>(data_)->exec(ctx_);
+}
 //----------------------------------------------------------------------------
 
 
@@ -82,7 +111,8 @@ struct rasterizer_memory_cfg_base
   enum {rt3_fmt=pixfmt_none};
   // config
   enum {max_dispatches=64};                // max PSO dispatches per commit
-  enum {pso_store_size=16384};             // total PSO store per commit
+  enum {max_tile_passes=0};                // max ordered tile passes per commit (0 disables)
+  enum {pso_store_size=16384};             // total PSO/pass store per commit
   enum {max_pso_state_size=256};           // max PSO state size
   enum {tile_width=64, tile_height=64};    // tile size in pixels
   enum {tile_order=tileorder_morton};      // tile render order
@@ -124,9 +154,9 @@ struct rasterizer_memory
   pixel<e_pixel_format(Cfg::rt1_fmt)> rtile1[Cfg::rt1_fmt?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
   pixel<e_pixel_format(Cfg::rt2_fmt)> rtile2[Cfg::rt2_fmt?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
   pixel<e_pixel_format(Cfg::rt3_fmt)> rtile3[Cfg::rt3_fmt?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
-  EGL_STATIC_ASSERT_MSG(rasterizer_max_rts==4, render_tiles_only_for_4_rts);
-  // PSO dispatching
+  EGL_STATIC_ASSERT_MSG(rasterizer_max_rts==4, render_tiles_only_for_4_rts);  // PSO dispatching
   rasterizer_dispatch dispatches[Cfg::max_dispatches];
+  rasterizer_tile_pass tile_passes[Cfg::max_tile_passes?Cfg::max_tile_passes:1];
   size_t pso_store[Cfg::pso_store_size/sizeof(size_t)];
   // frame buffer tiling
   uint16_t tile_map[Cfg::tile_order==int(tileorder_linear)?1:num_rt_tiles];
@@ -173,12 +203,15 @@ struct rasterizer_cfg
   // construction & setup
   rasterizer_cfg();
   void set_dispatches(rasterizer_dispatch*, rasterizer_dispatch_index_t max_dispatches_);
+  void set_tile_passes(rasterizer_tile_pass*, rasterizer_tile_pass_index_t max_tile_passes_);
   void set_pso_store(void *pso_store_, size_t pso_store_size_, uint16_t max_pso_state_size_);
   void set_tile_buffers(void *const*rts_, void *depth_buf_, uint16_t *hiz_buf_, e_depth_format, uint16_t num_tile_buffers_);
   //--------------------------------------------------------------------------
 
   rasterizer_dispatch *dispatches;
   rasterizer_dispatch_index_t max_dispatches;
+  rasterizer_tile_pass *tile_passes;
+  rasterizer_tile_pass_index_t max_tile_passes;
   void *pso_store;
   size_t pso_store_size;
   rasterizer_depth_target depth;
@@ -200,6 +233,7 @@ struct render_target_cfg
   uint16_t tile_pitch;
   rasterizer_depth_target depth;
   void *const*rts;
+  uint8_t rt_pixel_sizes[rasterizer_max_rts];
 };
 //----------------------------------------------------------------------------
 
@@ -213,6 +247,9 @@ public:
   // callback interface
   virtual void rasterize_tiles(rasterizer&, const render_target_cfg&, rasterizer_tile *tiles_, size_t num_tiles_);
   virtual void submit_tile(uint8_t tx_, uint8_t ty_, const vec2u16 &reg_min_, const vec2u16 &reg_end_, uint16_t thread_idx_)=0;
+  // called for each submitted tile pass on each tile, in submission order and
+  // interleaved with geometry. the context refers to the current tile buffer.
+  virtual void exec_tile_pass(const rasterizer_tile_pass&, const render_target_cfg&, uint16_t tile_x_, uint16_t tile_y_, uint16_t tile_width_, uint16_t tile_height_, size_t tile_buffer_pixel_offset_, uint16_t thread_idx_);
   //--------------------------------------------------------------------------
 
 protected:
@@ -316,6 +353,7 @@ public:
   // rasterization
   void clear_depth(e_clear_depth);
   template<class PSC, class HWDevice> void dispatch_pso(const PSC&, HWDevice&);
+  template<class Pass> void dispatch_tile_pass(const Pass&);
   void commit();
   void rasterize_tile(const render_target_cfg&, rasterizer_tile&, uint16_t thread_idx_);
   //--------------------------------------------------------------------------
@@ -344,6 +382,8 @@ private:
   rasterizer(const rasterizer&); // not implemented
   void operator=(const rasterizer&); // not implemented
   template<typename> void update_hiz(const result&, e_hiz_mode, uint16_t thread_idx_);
+  void invalidate_hiz(const render_target_cfg&, uint16_t tile_width_, uint16_t tile_height_, uint16_t thread_idx_, e_hiz_mode);
+  template<typename> void invalidate_hiz_impl(uint16_t tile_width_, uint16_t tile_height_, uint16_t thread_idx_, bool max_mode_);
   static EGL_INLINE int32_t cross2d(const vec2i32& a_, const vec2i32& b_, const vec2i32& c_)  {return (b_.x-a_.x)*(c_.y-a_.y)-(b_.y-a_.y)*(c_.x-a_.x);}
   template<int> static EGL_INLINE float read_depth(const void *dbuf_, uint32_t offs_);
   template<int> static EGL_INLINE void write_depth(const void *dbuf_, uint32_t offs_, float z_);
@@ -407,6 +447,7 @@ private:
   rasterizer_cfg m_cfg;
   rasterizer_tiling m_tiling;
   rasterizer_dispatch_index_t m_num_dispatches;
+  rasterizer_tile_pass_index_t m_num_tile_passes;
   rasterizer_global_cluster_index_t m_num_clusters;
   size_t m_pso_write_pos;
   // state
@@ -479,6 +520,7 @@ void rasterizer_memory<HWDevice, Cfg>::init(HWDevice &dev_)
   // setup rasterizer config
   rasterizer_cfg rcfg;
   rcfg.set_dispatches(dispatches, Cfg::max_dispatches);
+  rcfg.set_tile_passes(tile_passes, Cfg::max_tile_passes);
   rcfg.set_pso_store(pso_store, sizeof(pso_store), Cfg::max_pso_state_size);
   rts[0]=Cfg::rt0_fmt?rtile0:0;
   rcfg.rt_pixel_sizes[0]=Cfg::rt0_fmt?sizeof(pixel<e_pixel_format(Cfg::rt0_fmt)>):0;
@@ -579,6 +621,8 @@ rasterizer::e_hiz_mode rasterizer::psc_wrapper<PSC, HWDevice>::hiz_mode() const
     return hizmode_none;
   switch((e_rstate_depth_func)PSC::depth_func)
   {
+    case rstate_depthfunc_always:
+    case rstate_depthfunc_never: return hizmode_none;
     case rstate_depthfunc_equal:
     case rstate_depthfunc_not_equal: return hizmode_any;
     case rstate_depthfunc_less:
@@ -893,6 +937,33 @@ void rasterizer::dispatch_pso(const PSC &pso_, HWDevice&)
     pso->bin_cluster(m_tiling, pso_state, m_num_dispatches, cidx);
   m_num_clusters+=num_clusters;
   ++m_num_dispatches;
+}
+//----
+
+template<class Pass>
+void rasterizer::dispatch_tile_pass(const Pass &pass_)
+{
+  // prepare tile pass record
+  EGL_STATIC_ASSERT_MSG(std::is_trivially_copyable<Pass>::value, tile_pass_must_be_trivially_copyable);
+  EGL_ASSERT_MSG(m_cfg.tile_passes, "Tile passes not configured for the rasterizer.\r\n");
+  EGL_ASSERT_MSG(m_num_tile_passes<m_cfg.max_tile_passes, "Exceeding max tile pass count (%i).\r\n", (int)m_cfg.max_tile_passes);
+  EGL_ASSERT_MSG(m_pso_write_pos+sizeof(Pass)<=m_cfg.pso_store_size, "Out of PSO/tile pass store memory (%u bytes).\r\n", (unsigned)m_cfg.pso_store_size);
+  rasterizer_tile_pass &tile_pass=m_cfg.tile_passes[m_num_tile_passes];
+
+  // copy the pass by value to the frame memory. external objects the pass points
+  // to must be kept alive by the caller until commit() returns. the callback is
+  // not executed at submission time.
+  Pass *pass=(Pass*)((uint8_t*)m_cfg.pso_store+m_pso_write_pos);
+  mem_copy(pass, &pass_, sizeof(pass_));
+  tile_pass.exec=tile_pass_exec_thunk<Pass>;
+  tile_pass.data=pass;
+  tile_pass.writes_depth=!!Pass::writes_depth;
+  m_pso_write_pos+=(sizeof(pass_)+sizeof(size_t)-1)&-psc_mem_align;
+
+  // record the pass for the ordering with respect to the subsequently binned
+  // geometry. passes are replayed per tile in submission order at commit time.
+  ++m_num_tile_passes;
+  ++m_tiling.m_pass_count;
 }
 //----------------------------------------------------------------------------
 

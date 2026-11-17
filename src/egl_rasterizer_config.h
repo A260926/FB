@@ -30,6 +30,7 @@ typedef uint16_t rasterizer_local_cluster_index_t;   // clusters for single PSO 
 typedef uint16_t rasterizer_global_cluster_index_t;  // clusters for all PSO dispatches in a frame
 typedef uint16_t rasterizer_cluster_strip_index_t;   // cluster strips in a frame
 typedef uint16_t rasterizer_dispatch_index_t;        // dispatch calls in a frame
+typedef uint16_t rasterizer_tile_pass_index_t;       // tile pass calls in a frame
 typedef uint8_t rasterizer_tile_size_t;              // tile size
 enum {rasterizer_subpixel_bits=4};                   // rasterization sub-pixel precision
 enum {rasterizer_hiz_tile_width=16};                 // hi-z tile size
