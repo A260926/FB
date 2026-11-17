@@ -60,6 +60,24 @@ void freeInnerHeaderData(HeaderData* hd)
     hd->code_regions_capacity = 0;
     hd->code_regions_size = 0;
 
+    for ( i = 0; i < hd->macho_references_size; i++ )
+    {
+        if ( hd->macho_references[i].segment_name )
+            free(hd->macho_references[i].segment_name);
+        if ( hd->macho_references[i].section_name )
+            free(hd->macho_references[i].section_name);
+        if ( hd->macho_references[i].symbol_name )
+            free(hd->macho_references[i].symbol_name);
+        if ( hd->macho_references[i].library_path )
+            free(hd->macho_references[i].library_path);
+    }
+
+    free(hd->macho_references);
+    hd->macho_references = NULL;
+
+    hd->macho_references_size = 0;
+    hd->macho_references_status = MACHO_REFERENCES_NONE;
+
     // java allocates machine string
     if ( hd->headertype == HEADER_TYPE_JAVA_CLASS )
         free((char*)hd->Machine);

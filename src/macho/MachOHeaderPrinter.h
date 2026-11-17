@@ -41,6 +41,7 @@ static void MachO_printLinkedItDataCommand(LinkedItDataCommand* c, size_t offset
 static void MachO_printDyldInfoCommand(DyldInfoCommand* c, size_t offset);
 static void MachO_printSourceVersionCommand(SourceVersionCommand* c, size_t offset);
 static void MachO_printBuildVersionCommand(BuildVersionCommand* c, size_t offset);
+static void MachO_printReferences(const PHeaderData hd);
 
 static void MachO_printLUhd(char* label, size_t struct_offset, size_t file_offset, uint64_t value);
 static void MachO_printUhd(char* label, size_t struct_offset, size_t file_offset, uint32_t value);
@@ -671,6 +672,62 @@ void MachO_parseV32(uint32_t value, Version32* v32)
     v32->v0 = (uint16_t) (value>>16u);
     v32->v1 = (uint8_t)(value>>8u);
     v32->v2 = (uint8_t) value;
+}
+
+void MachO_printReferences(const PHeaderData hd)
+{
+    size_t i;
+    const char* status = "none";
+
+    if ( hd->macho_references_status == MACHO_REFERENCES_OK )
+        status = "ok";
+    else if ( hd->macho_references_status == MACHO_REFERENCES_ERROR )
+        status = "error";
+
+    printf("MachO References (%zu, status: %s):\n", hd->macho_references_size, status);
+    for ( i = 0; i < hd->macho_references_size; i++ )
+    {
+        const MachOReferenceData* r = &hd->macho_references[i];
+
+        printf(" (%zu/%zu):\n", i + 1, hd->macho_references_size);
+        printf(" - segment[%u]: %s\n", r->segment_index, (r->segment_name) ? r->segment_name : "");
+        printf(" - section[%u]: %s\n", r->section_index, (r->section_name) ? r->section_name : "");
+        printf(" - section type: 0x%x\n", r->section_type);
+        printf(" - slot: %"PRIu64"\n", r->slot_index);
+        printf(" - address: 0x%"PRIx64"\n", r->slot_address);
+        printf(" - image offset: 0x%"PRIx64"\n", r->slot_image_offset);
+        printf(" - file offset: 0x%"PRIx64"\n", r->slot_file_offset);
+        printf(" - indirect[%"PRIu64"]: 0x%x\n", r->indirect_index, r->indirect_value);
+        switch ( r->kind )
+        {
+            case MACHO_REFERENCE_SYMBOL:
+                printf(" - symbol[%u]: %s\n", r->symbol_index, (r->symbol_name) ? r->symbol_name : "");
+                printf("   - type: 0x%x, sect: %u, desc: 0x%x, value: 0x%"PRIx64"\n",
+                       r->symbol_type, r->symbol_sect, r->symbol_desc, r->symbol_value);
+                if ( r->library_ordinal == 0 )
+                    printf("   - library: self (ordinal 0)\n");
+                else if ( r->library_ordinal == 0xfe )
+                    printf("   - library: dynamic lookup (ordinal 0xfe)\n");
+                else if ( r->library_ordinal == 0xff )
+                    printf("   - library: executable (ordinal 0xff)\n");
+                else
+                    printf("   - library[%u]: %s\n", r->library_ordinal, (r->library_path) ? r->library_path : "");
+                break;
+            case MACHO_REFERENCE_LOCAL:
+                printf(" - local symbol (INDIRECT_SYMBOL_LOCAL)\n");
+                break;
+            case MACHO_REFERENCE_ABS:
+                printf(" - absolute symbol (INDIRECT_SYMBOL_ABS)\n");
+                break;
+            case MACHO_REFERENCE_LOCAL_ABS:
+                printf(" - local absolute symbol (INDIRECT_SYMBOL_LOCAL|INDIRECT_SYMBOL_ABS)\n");
+                break;
+            default:
+                printf(" - unresolved (raw symbol index %u)\n", r->symbol_index);
+                break;
+        }
+    }
+    printf("\n");
 }
 
 #endif

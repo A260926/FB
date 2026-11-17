@@ -14,6 +14,7 @@
 #include "MachOFileHeader.h"
 #include "MachOHeaderOffsets.h"
 #include "MachOHeaderPrinter.h"
+#include "MachOReferenceParser.h"
 
 
 static
@@ -263,6 +264,11 @@ void parseMachOHeader(PHeaderData hd, PGlobalParams gp)
     hd->i_bitness = arch->bitness;
 
     MachO_readCommands(mach_header.ncmds, &gp->file.abs_offset, gp->file.size, gp->info_level, hd, gp->file.handle, gp->data.block_main);
+
+    MachO_buildReferences(hd, gp);
+
+    if ( gp->info_level >= INFO_LEVEL_EXTENDED )
+        MachO_printReferences(hd);
 }
 
 void MachO_fillHeaderDataWithMagic(PHeaderData hd,

@@ -303,6 +303,96 @@ if ( data )
 freePEHeaderData(data);
 ```
 
+### Mach-O references
+For thin Mach-O images (32/64 bit, both endians) `getBasicHeaderParserInfo` additionally resolves
+the indirect symbol references: each slot of the `S_NON_LAZY_SYMBOL_POINTERS`,
+`S_LAZY_SYMBOL_POINTERS` and `S_SYMBOL_STUBS` sections is linked through the indirect symbol
+table to its nlist symbol and - via the library ordinal in `n_desc` - to the path of the
+referencing dylib load command. Only the static structure of the image is analyzed:
+no dependency file is opened and nothing is loaded, executed or modified.
+
+The result is stored in `HeaderData`:
+```c
+MachOReferenceData* macho_references;  // array, owned by HeaderData
+size_t macho_references_size;          // number of entries
+uint8_t macho_references_status;       // MACHO_REFERENCES_NONE | _OK | _ERROR
+```
+`macho_references_status` is `MACHO_REFERENCES_NONE` (0) when the image has no indirect
+reference sections (empty array), `MACHO_REFERENCES_OK` (1) when the table is complete,
+and `MACHO_REFERENCES_ERROR` (2) on structural errors (zero stub width, a section size that
+is not a multiple of the slot width, or an indirect table range that does not cover the
+sections). On error the incomplete table is dropped, so it cannot be mistaken for a complete
+result; the basic header info stays readable. The extended print (`-i 2`) shows the same
+relations.
+
+One array entry (`MachOReferenceData`, indexes are 0 based counts, addresses/offsets are bytes):
+| field | unit / meaning |
+|---|---|
+| `segment_index` | physical index of the owning segment command in load command order |
+| `section_index` | physical index of the owning section among all sections |
+| `segment_name` / `section_name` | owned name strings (max 16 chars) |
+| `section_type` | `S_NON_LAZY_SYMBOL_POINTERS`, `S_LAZY_SYMBOL_POINTERS` or `S_SYMBOL_STUBS` |
+| `slot_index` | index of the slot within the section |
+| `slot_address` | virtual address of the slot in bytes |
+| `slot_image_offset` | byte offset relative to the image start |
+| `slot_file_offset` | byte offset relative to the whole file (`slot_image_offset` + the `start` argument) |
+| `indirect_index` | index into the indirect symbol table |
+| `indirect_value` | raw indirect symbol table entry |
+| `kind` | `MACHO_REFERENCE_UNRESOLVED` (0), `MACHO_REFERENCE_SYMBOL` (1), `MACHO_REFERENCE_LOCAL` (2), `MACHO_REFERENCE_ABS` (3), `MACHO_REFERENCE_LOCAL_ABS` (4) |
+| `symbol_index` | raw nlist index for plain entries, 0 for LOCAL/ABS |
+| `symbol_name` | owned symbol name, NULL unless `kind == MACHO_REFERENCE_SYMBOL` |
+| `symbol_type` / `symbol_sect` / `symbol_desc` / `symbol_value` | raw nlist `n_type` / `n_sect` / `n_desc` / `n_value` (0 when no nlist entry could be read) |
+| `library_ordinal` | ordinal from `n_desc`: 0 = self, 0xfe = dynamic lookup, 0xff = executable, 1..0xfd = 1 based index into the load class dylib commands |
+| `library_path` | owned dylib path for normal ordinals, NULL for self/dynamic_lookup/executable and unresolved entries |
+
+Notes:
+* Entries are ordered by physical section order first and slot order second; they are not
+  merged by name, so slots referencing equally named symbols keep their own identity.
+* Pointer slot widths follow the image bitness (4/8 bytes), stub widths are taken from the
+  section's `reserved2` field, `reserved1` is the start index into the indirect symbol table.
+* `INDIRECT_SYMBOL_LOCAL`, `INDIRECT_SYMBOL_ABS` and their combination are reported as kinds,
+  never as nlist indexes.
+* Only load class dylib commands count for the ordinal mapping (`LC_LOAD_DYLIB`,
+  `LC_LOAD_WEAK_DYLIB`, `LC_REEXPORT_DYLIB`, `LC_LOAD_UPWARD_DYLIB`, `LC_LAZY_LOAD_DYLIB`
+  in load command order); `LC_ID_DYLIB` is not counted.
+* When the indirect table is readable but a single symbol index, string offset or library
+  ordinal cannot be resolved, the slot keeps its raw numbers and is marked
+  `MACHO_REFERENCE_UNRESOLVED`; no name is made up.
+* When `getBasicHeaderParserInfo` is called with a non zero `start`, `symoff`, `stroff`,
+  `indirectsymoff` and the section offsets are taken relative to the image start, and
+  `slot_file_offset` includes that `start`.
+* The array and all strings are owned by the `HeaderData` object and stay valid after the
+  file has been closed or deleted and after other images have been parsed.
+  `freeHeaderData` releases them.
+
+```c
+// include
+#include "src/HeaderData.h"
+#include "src/headerParserLib.h"
+...
+// use library
+HeaderData* data = getBasicHeaderParserInfo("a/macho.file", 0, FORCE_NONE);
+if ( data )
+{
+    size_t i;
+    if ( data->macho_references_status == MACHO_REFERENCES_OK )
+    {
+        for ( i = 0; i < data->macho_references_size; i++ )
+        {
+            MachOReferenceData* r = &data->macho_references[i];
+            if ( r->kind == MACHO_REFERENCE_SYMBOL )
+                printf("%s,%s slot %llu -> %s from %s\n",
+                       r->segment_name, r->section_name,
+                       (unsigned long long)r->slot_index,
+                       r->symbol_name,
+                       (r->library_path) ? r->library_path : "self");
+        }
+    }
+}
+// clean up
+freeHeaderData(data);
+```
+
 ### Python
 Using the library is the preferred usage in python.  
 On the python side, use [header_parser.py](src/header_parser.py).

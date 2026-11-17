@@ -1,0 +1,21 @@
+CASE identity base_layout checks=21
+CASE identity ordinals_map_load_order checks=39
+CASE identity abs_local_kinds checks=22
+CASE identity unresolved_slots checks=19
+CASE identity same_name_symbols checks=16
+CASE identity reordered_commands_same_relations checks=26
+GROUP identity cases=6 checks=143 COMPLETE
+CASE coordinates slot_coordinates_64 checks=17
+CASE coordinates prefix_start_offset checks=10
+CASE coordinates stubs32_widths checks=40
+CASE coordinates big_endian_64 checks=13
+CASE coordinates big_endian_32 checks=14
+CASE coordinates physical_section_order checks=17
+CASE coordinates tables_far_from_commands checks=7
+CASE coordinates structural_errors checks=33
+CASE coordinates no_indirect_sections checks=6
+GROUP coordinates cases=9 checks=157 COMPLETE
+CASE ownership results_survive_file_removal_and_reparse checks=21
+CASE ownership two_objects_independent checks=11
+GROUP ownership cases=2 checks=32 COMPLETE
+TARGET_COMPLETE cases=17
