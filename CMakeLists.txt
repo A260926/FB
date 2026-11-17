@@ -101,3 +101,8 @@ option(LIBNURBS_BUILD_BENCHMARK "Build Benchmark" OFF)
 if (LIBNURBS_BUILD_BENCHMARK)
     add_subdirectory(Benchmark)
 endif()
+
+option(LIBNURBS_BUILD_EXAMPLES "Build examples" OFF)
+if (LIBNURBS_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()

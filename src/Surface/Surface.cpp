@@ -761,42 +761,68 @@ Surface Surface::InsertKnotV(std::span<Numeric> knots_to_insert) const
     return result;
 }
 
+namespace
+{
+    // Shared implementation of Surface::RemoveKnotU / RemoveKnotV.
+    // Works in homogeneous coordinates so the rational denominator involves
+    // every control row at once.
+    std::tuple<Surface, int> RemoveKnotOnSurface(const Surface& source,
+                                                 Numeric knot_remove,
+                                                 int times,
+                                                 Numeric tolerance,
+                                                 bool along_v)
+    {
+        const int degree = along_v ? source.DegreeV : source.DegreeU;
+        const int count_u = source.ControlPoints.UCount;
+        const int count_v = source.ControlPoints.VCount;
+        const int row_length = along_v ? count_v : count_u;
+        const auto& knots = along_v ? source.KnotsV : source.KnotsU;
+
+        if (degree < 1 || times <= 0) return {source, 0};
+        if (static_cast<int>(knots.Values().size()) != row_length + degree + 1) return {source, 0};
+
+        std::vector<Vec4> net(static_cast<size_t>(count_u) * count_v);
+        for (int v = 0; v < count_v; ++v)
+        {
+            for (int u = 0; u < count_u; ++u)
+            {
+                net[static_cast<size_t>(v) * count_u + u] = ToHomo(source.ControlPoints.Get(u, v));
+            }
+        }
+
+        std::vector<Numeric> reduced_knots = knots.Values();
+        const int removed = detail::RemoveKnotTensor(reduced_knots, net, count_u, count_v,
+                                                     degree, along_v, knot_remove, times, tolerance);
+
+        // Zero removals must produce an identical, fully independent surface.
+        if (removed == 0) return {source, 0};
+
+        Surface result{source};
+        result.KnotsU.Values() = along_v ? source.KnotsU.Values() : reduced_knots;
+        result.KnotsV.Values() = along_v ? reduced_knots : source.KnotsV.Values();
+
+        const int new_count_u = along_v ? count_u : count_u - removed;
+        const int new_count_v = along_v ? count_v - removed : count_v;
+        result.ControlPoints = ControlPointGrid{new_count_u, new_count_v};
+        for (int v = 0; v < new_count_v; ++v)
+        {
+            for (int u = 0; u < new_count_u; ++u)
+            {
+                result.ControlPoints.Get(u, v) = FromHomo(net[static_cast<size_t>(v) * new_count_u + u]);
+            }
+        }
+        return {result, removed};
+    }
+}
+
 std::tuple<Surface, int> Surface::RemoveKnotU(Numeric knot_remove, int times, Numeric tolerance) const
 {
-    Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount - times, points_ref.VCount};
-    int t = 0;
-    for (int it_v = 0; it_v < ControlPoints.VCount; ++it_v)
-    {
-        auto knots = result.KnotsU;
-        auto points = this->ControlPoints.GetV(it_v);
-        int t_tmp = KnotRemoval(knots, points, result.DegreeU, knot_remove, times, tolerance);
-        if (t_tmp == 0 || it_v != 0 && t != t_tmp) return {*this, 0};
-        if (it_v == ControlPoints.VCount - 1) result.KnotsU = knots;
-        points_ref.SetV(it_v, points);
-        t = t_tmp;
-    }
-    return {result, t};
+    return RemoveKnotOnSurface(*this, knot_remove, times, tolerance, false);
 }
 
 std::tuple<Surface, int> Surface::RemoveKnotV(Numeric knot_remove, int times, Numeric tolerance) const
 {
-    Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount, points_ref.VCount - times};
-    int t = 0;
-    for (int it_u = 0; it_u < ControlPoints.UCount; ++it_u)
-    {
-        auto knots = result.KnotsV;
-        auto points = this->ControlPoints.GetU(it_u);
-        int t_tmp = KnotRemoval(knots, points, result.DegreeV, knot_remove, times, tolerance);
-        if (t_tmp == 0 || it_u != 0 && t != t_tmp) return {*this, 0};
-        if (it_u == ControlPoints.UCount - 1) result.KnotsV = knots;
-        points_ref.SetU(it_u, points);
-        t = t_tmp;
-    }
-    return {result, t};
+    return RemoveKnotOnSurface(*this, knot_remove, times, tolerance, true);
 }
 
 Surface Surface::ElevateDegreeU(int times) const

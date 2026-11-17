@@ -1,0 +1,2 @@
+add_executable(libnurbs_example_surface_knot_removal surface_knot_removal.cpp)
+target_link_libraries(libnurbs_example_surface_knot_removal PRIVATE libnurbs)

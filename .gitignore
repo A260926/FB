@@ -353,3 +353,5 @@ FodyWeavers.xsd
 /cmake-build-*
 /CMakeUserPresets.json
 .DS_Store
+# Task build artifacts
+/.task-build/
