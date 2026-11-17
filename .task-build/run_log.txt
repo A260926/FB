@@ -1,0 +1,6 @@
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/solo/pro/UserFB/workspace/FS9EAD0D64B3DBU9861/attempts/20261117T161610210424Z/repo/.task-build/optimizer
+[100%] Built target glsl_optimizer
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+mktemp: mkstemp failed on /var/folders/p2/zw2ndsdj6mz28tl3pxkctzy80000gn/T/tmp.jTFJ9C4VSp: Operation not permitted

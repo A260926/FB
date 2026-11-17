@@ -43,6 +43,10 @@ protected:
    std::vector<BT> type;
    std::vector<std::string> expr;    // expression if folded
    std::vector<std::string> name;    // variable name if materialized
+   // component mask that a glslopt_precise marker protects on this def
+   std::vector<unsigned short> precise_mask;
+   // registers that carry a precise value across control flow
+   std::set<unsigned> precise_regs;
    // what a folded expression reads that later statements could change
    struct value_deps {
       bool mem = false;           // memory that stores/atomics/barriers can modify
@@ -66,6 +70,8 @@ protected:
    virtual std::string type_decl(const glsl_type* t, unsigned prec, const std::string& nm) = 0;
    // qualifier prefix for a declared temporary of the given precision
    virtual std::string decl_prec(unsigned prec, BT bt) = 0;
+   // GLSL precise qualifier on declarations; empty on dialects without it
+   virtual std::string precise_qualifier() const { return ""; }
    virtual std::string var_ref(nir_variable* v) = 0;
    virtual std::string fn(const char* glsl_name) { return glsl_name; }
    virtual std::string alu_dialect(nir_alu_instr*) { return ""; }
@@ -193,6 +199,9 @@ protected:
    std::string masked_value(nir_src& val, unsigned mask, unsigned total, BT want, unsigned want_prec);
    void emit_instr(nir_instr* instr);
    void emit_intrinsic(nir_intrinsic_instr* in);
+   // registers that need a precise declaration because a precise value is
+   // stored into them (loop/branch merge points)
+   void collect_precise_regs(nir_function_impl* impl);
    static const char* atomic_name(nir_atomic_op op);
 
    // ------------------------------------------------------------------

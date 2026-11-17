@@ -212,6 +212,7 @@ typedef enum {
    nir_intrinsic_global_atomic_swap_nv,
    nir_intrinsic_global_atomic_swap_pco,
    nir_intrinsic_glslopt_precision,
+   nir_intrinsic_glslopt_precise,
    nir_intrinsic_ignore_ray_intersection,
    nir_intrinsic_imadsp_nv,
    nir_intrinsic_image_atomic,

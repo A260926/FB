@@ -821,7 +821,13 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
       }
    }
 
-   glslopt_optimize_nir(nir);
+   // precise propagation is supported only for desktop OpenGL GLSL 450 core
+   // vertex/fragment shaders; other targets keep their language capabilities.
+   const bool precise_support =
+      ctx->target == kGlslTargetOpenGL && !metal && !info.es && info.version >= 450 &&
+      (type == kGlslOptShaderVertex || type == kGlslOptShaderFragment);
+
+   glslopt_optimize_nir(nir, precise_support);
    // aggregate copies print as one assignment where the dialect can express them
    glslopt_combine_copies(nir, [&](nir_deref_instr* dst, nir_deref_instr* src) {
       nir_variable* dv = nir_deref_instr_get_variable(dst);

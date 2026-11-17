@@ -3493,6 +3493,31 @@ const nir_intrinsic_info nir_intrinsic_infos[nir_num_intrinsics] = {
    .flags = NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER,
 },
 {
+   /* glsl-optimizer change: identity marking the components of a float value
+    * that a GLSL precise qualifier protects. BASE holds the component mask.
+    * Survives the optimization passes (they only rewrite its use, never the
+    * instruction) and is consumed by the precise propagation pass and the
+    * GLSL printer. */
+   .name = "glslopt_precise",
+   .num_srcs = 1,
+   .src_components = {
+      0
+   },
+   .has_dest = true,
+   .dest_components = 0,
+   .dest_bit_sizes = 0x0,
+   .bit_size_src = 0,
+   .num_indices = 1,
+   .num_index_slots = 1,
+   .indices = {
+      NIR_INTRINSIC_BASE,
+   },
+   .index_map = {
+      [NIR_INTRINSIC_BASE] = 1,
+    },
+   .flags = NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER,
+},
+{
    .name = "ignore_ray_intersection",
    .num_srcs = 0,
    .has_dest = false,

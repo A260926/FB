@@ -304,12 +304,18 @@ void glslopt_lower_nir(nir_shader* nir)
    NIR_PASS(_, nir, nir_lower_compute_system_values, &csv);
 }
 
-void glslopt_optimize_nir(nir_shader* nir)
+void glslopt_optimize_nir(nir_shader* nir, bool precise_support)
 {
    insert_precision_markers(nir);
 
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    NIR_PASS(_, nir, nir_lower_continue_constructs);
+
+   // Precise constraints must be on the arithmetic before any algebraic
+   // transform can change the rounding steps. Locals still have their derefs
+   // here, so the pass can follow stores, arrays and inlined parameters.
+   if (precise_support)
+      glslopt_propagate_precise(nir);
 
    nir_opt_peephole_select_options peep = {};
    peep.limit = 8;
@@ -340,6 +346,7 @@ void glslopt_optimize_nir(nir_shader* nir)
       NIR_PASS(progress, nir, nir_opt_combine_stores, nir_var_all);
       NIR_PASS(progress, nir, nir_opt_loop_unroll);
       NIR_PASS(progress, nir, opt_precision_markers);
+      NIR_PASS(progress, nir, glslopt_opt_precise_markers);
       NIR_PASS(progress, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
    } while (progress && ++iter < 50);
 

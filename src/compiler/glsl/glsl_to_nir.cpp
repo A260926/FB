@@ -455,6 +455,8 @@ nir_visitor::visit(ir_variable *ir)
    var->data.how_declared = get_nir_how_declared(ir->data.how_declared);
    var->data.invariant = ir->data.invariant;
    var->data.explicit_invariant = ir->data.explicit_invariant;
+   /* glsl-optimizer change: keep the precise qualifier for the propagation pass. */
+   var->data.precise = ir->data.precise;
    var->data.location = ir->data.location;
    var->data.must_be_shader_input = ir->data.must_be_shader_input;
    var->data.stream = ir->data.stream;

@@ -16,7 +16,19 @@ void glslopt_init_nir_options(nir_shader_compiler_options* options, unsigned max
 void glslopt_lower_nir(nir_shader* nir);
 
 // Full optimization pipeline; ends out of SSA (registers) for printing.
-void glslopt_optimize_nir(nir_shader* nir);
+// precise_support enables GLSL precise propagation; only the OpenGL GLSL 450
+// vertex/fragment path turns it on, other targets keep their language rules.
+void glslopt_optimize_nir(nir_shader* nir, bool precise_support = false);
+
+// Propagate GLSL precise qualifiers from variables onto the float32 ALU that
+// actually computes their values, and insert glslopt_precise boundaries. Runs
+// before the arithmetic-changing optimization passes.
+void glslopt_propagate_precise(nir_shader* nir);
+
+// Remove glslopt_precise markers whose boundary became trivial (constants,
+// nested markers); called as part of the optimization loop. Returns whether
+// anything changed.
+bool glslopt_opt_precise_markers(nir_shader* nir);
 
 // Turn runs of leaf-by-leaf copies (store_deref(d.x, load_deref(s.x)) for
 // every leaf x of an aggregate) back into copy_deref(d, s), so they print as

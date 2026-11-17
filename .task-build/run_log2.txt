@@ -1,0 +1,61 @@
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/solo/pro/UserFB/workspace/FS9EAD0D64B3DBU9861/attempts/20261117T161610210424Z/repo/.task-build/optimizer
+[100%] Built target glsl_optimizer
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+CASE propagation basic_chain checks=5
+CASE propagation partial_component checks=4
+CASE propagation independent_output_kept_fast checks=6
+CASE propagation temporaries_and_swizzle checks=4
+CASE propagation local_array_constant_index checks=3
+CASE propagation local_array_dynamic_index checks=5
+CASE propagation helper_parameters checks=3
+CASE propagation helper_inout checks=3
+CASE propagation branch_join checks=4
+CASE propagation loop_carried_for checks=3
+CASE propagation loop_carried_while checks=4
+CASE propagation explicit_fma_not_extended checks=3
+CASE propagation integer_not_extended checks=3
+CASE propagation vertex_stage checks=3
+GROUP propagation cases=14 checks=53 COMPLETE
+CASE emission keyword_and_boundaries checks=4
+CASE emission recompile_preserves_chain checks=4
+CASE emission recompile_loop checks=4
+CASE emission precise_output_qualifier checks=4
+CASE emission numeric_distribution_preserved checks=6
+CASE emission numeric_contraction_preserved checks=5
+CASE emission numeric_negation_chain checks=5
+GROUP emission cases=7 checks=32 COMPLETE
+CASE compat no_precise_unchanged checks=5
+CASE compat reflection_unchanged checks=4
+CASE compat metal_target_unchanged checks=2
+CASE compat compute_stage_unchanged checks=4
+CASE compat dead_precise_leaves_no_trace checks=3
+CASE compat interleaved_context_isolation checks=4
+CASE compat qualifier_sample_still_works checks=2
+GROUP compat cases=7 checks=24 COMPLETE
+TARGET_COMPLETE cases=28
+normal status=1 precise_keyword=0
+#version 450
+uniform vec4 a;
+uniform vec4 b;
+uniform vec4 c;
+layout(location = 0) out vec4 color;
+void main ()
+{
+  color = ((a * b) + c);
+}
+
+precise status=1 precise_keyword=1
+#version 450
+uniform vec4 a;
+uniform vec4 b;
+uniform vec4 c;
+layout(location = 0) out vec4 color;
+void main ()
+{
+  precise vec4 t0 = (a * b);
+  precise vec4 t1 = (t0 + c);
+  color = t1;
+}
+

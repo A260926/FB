@@ -1,0 +1,3 @@
+/Users/solo/pro/UserFB/workspace/FS9EAD0D64B3DBU9861/attempts/20261117T161610210424Z/repo/.task-build/optimizer/CMakeFiles/glsl_optimizer.dir
+/Users/solo/pro/UserFB/workspace/FS9EAD0D64B3DBU9861/attempts/20261117T161610210424Z/repo/.task-build/optimizer/CMakeFiles/edit_cache.dir
+/Users/solo/pro/UserFB/workspace/FS9EAD0D64B3DBU9861/attempts/20261117T161610210424Z/repo/.task-build/optimizer/CMakeFiles/rebuild_cache.dir

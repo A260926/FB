@@ -1951,6 +1951,12 @@ intrinsic("optimization_barrier_sgpr_amd", dest_comp=0, src_comp=[0],
 intrinsic("glslopt_precision", src_comp=[0], dest_comp=0, bit_sizes=src0,
           indices=[BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# glsl-optimizer change: GLSL precise boundary. Identity on its source; BASE is
+# the component mask of the value the precise qualifier protects. Inserted by
+# the precise propagation pass and consumed by the GLSL printer.
+intrinsic("glslopt_precise", src_comp=[0], dest_comp=0, bit_sizes=src0,
+          indices=[BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # These are no-op intrinsics used as a simple source and user of SSA defs for testing.
 intrinsic("unit_test_output", src_comp=[0], indices=[BASE])
 intrinsic("unit_test_uniform_input", dest_comp=0, indices=[BASE])

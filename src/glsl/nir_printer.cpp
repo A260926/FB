@@ -33,6 +33,9 @@ std::string nir_printer::print()
    expr.assign(impl->ssa_alloc, "");
    name.assign(impl->ssa_alloc, "");
    deps.assign(impl->ssa_alloc, value_deps());
+   precise_mask.assign(impl->ssa_alloc, 0);
+   precise_regs.clear();
+   collect_precise_regs(impl);
 
    // registers
    int regn = 0;
@@ -42,7 +45,8 @@ std::string nir_printer::print()
       name[decl->def.index] = nm;
       unsigned p = nir_intrinsic_bit_size(decl) == 16 ? GLSL_PRECISION_MEDIUM : eff(pi.regprec[decl->def.index]);
       BT bt = type[decl->def.index];
-      pre_decl(decl_prec(p, bt) + vec_type(bt, nc, p) + " " + nm + local_initializer(bt) + ";");
+      std::string pq = precise_regs.count(decl->def.index) ? precise_qualifier() : "";
+      pre_decl(pq + decl_prec(p, bt) + vec_type(bt, nc, p) + " " + nm + local_initializer(bt) + ";");
    }
    // function-temp variables that survived; inlining leaves duplicate and
    // compiler-generated names, so give them unique valid ones
@@ -57,7 +61,8 @@ std::string nir_printer::print()
       unsigned p = eff(v->data.precision);
       const glsl_type* bare = glsl_without_array(v->type);
       std::string q = glsl_type_is_struct(bare) || glsl_type_is_boolean(bare) ? "" : decl_prec(p, bt_from_glsl(v->type));
-      pre_decl(q + type_decl(v->type, v->data.precision, local_names[v]) + ";");
+      std::string pq = v->data.precise ? precise_qualifier() : "";
+      pre_decl(pq + q + type_decl(v->type, v->data.precision, local_names[v]) + ";");
    }
 
    out.clear();
@@ -233,7 +238,8 @@ nir_printer::BT nir_printer::use_type(nir_src* src)
          return bt_from_glsl(nir_src_as_deref(in->src[0])->type);
       if (in->intrinsic == nir_intrinsic_store_reg && src == &in->src[0])
          return type[in->src[1].ssa->index];
-      if (in->intrinsic == nir_intrinsic_glslopt_precision)
+      if (in->intrinsic == nir_intrinsic_glslopt_precision ||
+          in->intrinsic == nir_intrinsic_glslopt_precise)
          return type[in->def.index];
       if (in->intrinsic == nir_intrinsic_deref_atomic || in->intrinsic == nir_intrinsic_deref_atomic_swap)
          return bt_from_glsl(nir_src_as_deref(in->src[0])->type);
@@ -304,7 +310,8 @@ nir_printer::BT nir_printer::producer_type(nir_def* def)
       nir_intrinsic_instr* ii = nir_instr_as_intrinsic(in);
       if (ii->intrinsic == nir_intrinsic_load_reg)
          return type[ii->src[0].ssa->index];
-      if (ii->intrinsic == nir_intrinsic_glslopt_precision)
+      if (ii->intrinsic == nir_intrinsic_glslopt_precision ||
+          ii->intrinsic == nir_intrinsic_glslopt_precise)
          return type[ii->src[0].ssa->index];
       if (ii->intrinsic == nir_intrinsic_decl_reg) {
          nir_foreach_use(u, def) {
@@ -1447,7 +1454,9 @@ std::string nir_printer::new_temp(nir_def* def, const std::string& e)
    std::string nm = fmt("t%d", tmp_counter++);
    name[def->index] = nm;
    unsigned p = prec_of(def);
-   std::string decl = decl_prec(p, type[def->index]) + def_type(def);
+   std::string pq = (def->index < precise_mask.size() && precise_mask[def->index])
+                    ? precise_qualifier() : "";
+   std::string decl = pq + decl_prec(p, type[def->index]) + def_type(def);
    if (escapes_scope(def)) {
       pre_decl(decl + " " + nm + local_initializer(type[def->index]) + ";");
       line(nm + " = " + e + ";");
@@ -1630,6 +1639,22 @@ void nir_printer::emit_intrinsic(nir_intrinsic_instr* in)
    case nir_intrinsic_load_reg:
       define(&in->def, name[in->src[0].ssa->index], false, true);
       return;
+   case nir_intrinsic_glslopt_precise: {
+      // GLSL precise boundary: keep the protected components in a declared
+      // precise temporary so a recompile of the emitted source preserves the
+      // same dependency chain. On dialects without precise the marker is an
+      // identity and prints as the underlying value.
+      unsigned mask = (unsigned)nir_intrinsic_base(in);
+      precise_mask[in->def.index] = mask;
+      if (precise_qualifier().empty()) {
+         define(&in->def, src_full(in->src[0], BT_UNK, prec_of(&in->def)), false, false);
+         return;
+      }
+      // A precise value must not be folded into another expression: that
+      // would move the rounding boundary out of the precise declaration.
+      define(&in->def, src_full(in->src[0], BT_UNK, prec_of(&in->def)), false, false, true);
+      return;
+   }
    case nir_intrinsic_store_reg: {
       nir_def* reg = in->src[1].ssa;
       unsigned mask = nir_intrinsic_write_mask(in);
@@ -1674,6 +1699,45 @@ void nir_printer::emit_intrinsic(nir_intrinsic_instr* in)
          line(e + ";");
       return;
    }
+   }
+}
+
+void nir_printer::collect_precise_regs(nir_function_impl* impl)
+{
+   if (precise_qualifier().empty())
+      return;
+   // A register gets a precise declaration when a precise value is stored
+   // into it; follow register-to-register copies to a fixpoint (loop phis).
+   bool changed = true;
+   for (unsigned pass = 0; changed && pass < 32; pass++) {
+      changed = false;
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr* st = nir_instr_as_intrinsic(instr);
+            if (st->intrinsic != nir_intrinsic_store_reg)
+               continue;
+            nir_def* reg = st->src[1].ssa;
+            if (precise_regs.count(reg->index))
+               continue;
+            bool precise = false;
+            nir_def* v = st->src[0].ssa;
+            nir_instr* vi = nir_def_instr(v);
+            if (vi->type == nir_instr_type_intrinsic) {
+               nir_intrinsic_instr* intr = nir_instr_as_intrinsic(vi);
+               if (intr->intrinsic == nir_intrinsic_glslopt_precise)
+                  precise = true;
+               else if (intr->intrinsic == nir_intrinsic_load_reg &&
+                        precise_regs.count(intr->src[0].ssa->index))
+                  precise = true;
+            }
+            if (precise) {
+               precise_regs.insert(reg->index);
+               changed = true;
+            }
+         }
+      }
    }
 }
 

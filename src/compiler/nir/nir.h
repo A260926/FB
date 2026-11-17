@@ -512,6 +512,16 @@ typedef struct nir_variable {
       unsigned explicit_invariant:1;
 
       /**
+       * Was a 'precise' qualifier set on the source variable?
+       *
+       * glsl-optimizer change: upstream NIR has no precise bit (its backends
+       * rely on fp_math_ctrl instead). We keep the GLSL qualifier on variables
+       * so a pre-optimization pass can propagate it onto the float operations
+       * that actually contribute to the precise value.
+       */
+      unsigned precise : 1;
+
+      /**
        * Is the variable a ray query?
        */
       unsigned ray_query : 1;

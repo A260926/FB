@@ -58,6 +58,12 @@ private:
 
    std::string decl_prec(unsigned p, BT bt) override { return bt == BT_BOOL ? "" : prec_name(p); }
 
+   // GLSL 4.00+ desktop has the precise qualifier; ES output never emits it.
+   std::string precise_qualifier() const override
+   {
+      return !info.es && info.version >= 400 ? "precise " : "";
+   }
+
    // precision of a declaration from its declared qualifier (types that take one)
    std::string var_prec(const glsl_type* t, unsigned p)
    {
@@ -560,7 +566,8 @@ private:
             std::string l = location_layout(v);
             if (!l.empty()) q.push_back(l);
             std::string inv = v->data.explicit_invariant ? "invariant " : "";
-            globals += layout(q) + inv + interp_qualifiers(v->data.interpolation, v->data.centroid, v->data.sample) +
+            std::string pre = v->data.precise ? precise_qualifier() : "";
+            globals += layout(q) + inv + pre + interp_qualifiers(v->data.interpolation, v->data.centroid, v->data.sample) +
                        in_out_keyword(v) + var_prec(v->type, v->data.precision) +
                        type_decl(v->type, v->data.precision, v->name) + ";\n";
             break;

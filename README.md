@@ -93,6 +93,10 @@ Language Support
   and `320 es`. The desktop OpenGL target accepts ES 3.00 input only.
 * Supported shader stages are vertex, fragment, and compute.
 * Subgroup (wave) operations: all of `GL_KHR_shader_subgroup_*`.
+* `precise` qualifier: the desktop OpenGL target preserves `precise` on GLSL
+  4.50 vertex and fragment shaders, keeping the exact rounding steps of the
+  float32 operations that contribute to a precise value. See
+  [Precise qualifier support](#precise-qualifier-support) for the scope.
 
 #### Limitations
 
@@ -185,6 +189,42 @@ uint32_t sizes[] = {0, bytesForBuffer1, 0, bytesForBuffer3};
 ```
 
 
+Precise qualifier support
+-------------------------
+
+The `precise` qualifier (GLSL 4.00+) tells the compiler which float values must
+keep the rounding steps written in the source: no reassociation, no multiply-add
+contraction, and no algebraic rule that assumes NaN or Inf behavior. Support is
+scoped to the **desktop OpenGL target** on **GLSL 4.50 `core` vertex and
+fragment shaders**. Other targets (Metal, OpenGL ES) and the compute stage keep
+their existing language behavior and never emit a `precise` keyword.
+
+* The qualifier is read on local variables, function parameters and shader
+  inputs/outputs, including `precise` redeclarations and the `precise out` form.
+* A pre-optimization propagation pass finds every float32 operation that
+  actually contributes to a precise value and marks it with exact floating
+  point controls before any arithmetic-changing NIR pass runs. The constraint
+  flows through temporary assignments, local arrays (constant and dynamic
+  indices), inlined helper `in`/`out`/`inout` parameters, branch joins, and
+  loop carried values. Component tracking means an unrelated vector component
+  or a separate output keeps its normal optimizations; consumers that truly
+  share one computation are protected together.
+* Covered operations are float32 scalar and vector add, subtract, multiply,
+  divide, negation, and the constructors/swizzles that route protected
+  components. Integer arithmetic, boolean control conditions, texture
+  operations, atomics and explicit `fma`/`fmaEXT` builtins are not extended:
+  the precise chain stops at the float boundary rather than changing them.
+* The GLSL output declares precise temporaries (and the precise register that
+  merges values across loop back-edges) at legal scope, so recompiling the
+  generated source with this library keeps the same dependency chain. It never
+  emits a trailing statement-level annotation.
+* Dead code elimination, copy propagation and other meaning-preserving passes
+  still run; deleting a precise output removes its whole chain and leaves no
+  state behind, and precise state never leaks between compiles in one context.
+* No public API changed: a shader without `precise` produces the same output and
+  reflection as before.
+
+
 Tests
 -----
 
@@ -267,6 +307,11 @@ frontend, `glsl_to_nir`, NIR with the passes we run, and the util code they need
 - `nir_optimize.cpp`: the NIR pipeline (inlining, optimization loop, out of SSA),
   the GLSL ES precision analysis that the pipeline and printers share, and
   regrouping of field-by-field copies back into aggregate copies for printing.
+- `nir_precise.cpp`: GLSL `precise` propagation. A fixpoint over deref
+  stores/loads and SSA values puts exact floating point controls on the float32
+  operations that contribute to a precise value, and inserts the
+  `glslopt_precise` identity boundaries the GLSL printer turns back into legal
+  `precise` declarations. Runs before the arithmetic-changing passes.
 - `nir_printer.cpp`: printing core shared by GLSL and Metal: typing of NIR values,
   folding single-use values into expressions, and print-time recovery of shapes NIR
   lowered (matrix multiplies, `normalize`/`length`/`clamp`/..., `for`/`while`/`do` loops).
@@ -279,6 +324,9 @@ frontend, `glsl_to_nir`, NIR with the passes we run, and the util code they need
   different precision, i.e. the source's precision conversions.
 - `glslopt_precision` NIR intrinsic: marks such precision conversions so they
   survive NIR optimization and get printed as properly qualified temporaries.
+- `glslopt_precise` NIR intrinsic: identity carrying the component mask of a
+  value protected by a GLSL `precise` qualifier; emitted by the precise
+  propagation pass in `nir_precise.cpp` and printed as a precise boundary.
 - Frontend changes (marked in the Mesa sources): a compile entry point that can skip
   the preprocessor and hands out the parse state (version, extensions) for printing;
   `texture()`/`textureProj()` bias overloads for external textures in fragment shaders;

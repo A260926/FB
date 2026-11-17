@@ -157,6 +157,7 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
                return false;
             FALLTHROUGH;
          case nir_intrinsic_glslopt_precision: /* glsl-optimizer change */
+         case nir_intrinsic_glslopt_precise:   /* glsl-optimizer change */
          case nir_intrinsic_load_uniform:
          case nir_intrinsic_load_preamble:
          case nir_intrinsic_load_scalar_arg_amd:

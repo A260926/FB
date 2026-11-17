@@ -1083,6 +1083,13 @@ do_assignment(ir_exec_list *instructions, struct _mesa_glsl_parse_state *state,
       if (!error_emitted) {
          ir_variable *var = new(state->linalloc) ir_variable(rhs->type, "assignment_tmp",
                                                  ir_var_temporary);
+         /* glsl-optimizer change: a declaration with an initializer lowers to
+          * tmp = rhs; lhs = tmp; through this temporary. Copy the lhs precise
+          * constraint so the operations of rhs are marked exact instead of
+          * only the plain copy into the real variable.
+          */
+         if (lhs_var && lhs_var->data.precise)
+            var->data.precise = true;
          instructions->push_tail(var);
          instructions->push_tail(assign(var, rhs));
 

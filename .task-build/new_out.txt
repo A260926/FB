@@ -1,0 +1,36 @@
+@@@v
+#version 450
+layout(location = 0) in vec4 a;
+layout(location = 1) in vec4 b;
+void main ()
+{
+  gl_Position = ((a * b) + a);
+}
+
+@@@f
+#version 450
+uniform vec4 a;
+uniform vec4 b;
+uniform vec4 c;
+layout(location = 0) out vec4 o;
+void main ()
+{
+  o = (a * (b + c));
+}
+
+@@@loop
+#version 450
+uniform float a;
+uniform int n;
+layout(location = 0) out float o;
+void main ()
+{
+  int r0;
+  float r1;
+  r1 = 0.0;
+  for (r0 = 0; (r0 < n); r0++) {
+    r1 = (r1 + a);
+  }
+  o = r1;
+}
+

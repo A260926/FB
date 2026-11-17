@@ -2842,6 +2842,10 @@ struct _nir_glslopt_precision_indices {
    int _; /* exists to avoid empty initializers */
    int base;
 };
+struct _nir_glslopt_precise_indices {
+   int _; /* exists to avoid empty initializers */
+   int base;
+};
 struct _nir_imadsp_nv_indices {
    int _; /* exists to avoid empty initializers */
    unsigned flags;
@@ -7420,6 +7424,20 @@ _nir_build_glslopt_precision(nir_builder *build, nir_def *src0, struct _nir_glsl
 {
    nir_intrinsic_instr *intrin = nir_intrinsic_instr_create(
       build->shader, nir_intrinsic_glslopt_precision);
+
+   intrin->num_components = src0->num_components;
+      nir_def_init(&intrin->instr, &intrin->def, intrin->num_components, src0->bit_size);
+   intrin->src[0] = nir_src_for_ssa(src0);
+   nir_intrinsic_set_base(intrin, indices.base);
+
+   nir_builder_instr_insert(build, &intrin->instr);
+   return &intrin->def;
+}
+static inline nir_def *
+_nir_build_glslopt_precise(nir_builder *build, nir_def *src0, struct _nir_glslopt_precise_indices indices)
+{
+   nir_intrinsic_instr *intrin = nir_intrinsic_instr_create(
+      build->shader, nir_intrinsic_glslopt_precise);
 
    intrin->num_components = src0->num_components;
       nir_def_init(&intrin->instr, &intrin->def, intrin->num_components, src0->bit_size);
@@ -18651,6 +18669,13 @@ _nir_build_glslopt_precision(build, src0, _nir_glslopt_precision_indices{0, __VA
 #else
 #define nir_glslopt_precision(build, src0, ...) \
 _nir_build_glslopt_precision(build, src0, (struct _nir_glslopt_precision_indices){0, __VA_ARGS__})
+#endif
+#ifdef __cplusplus
+#define nir_glslopt_precise(build, src0, ...) \
+_nir_build_glslopt_precise(build, src0, _nir_glslopt_precise_indices{0, __VA_ARGS__})
+#else
+#define nir_glslopt_precise(build, src0, ...) \
+_nir_build_glslopt_precise(build, src0, (struct _nir_glslopt_precise_indices){0, __VA_ARGS__})
 #endif
 #define nir_ignore_ray_intersection _nir_build_ignore_ray_intersection
 #ifdef __cplusplus
