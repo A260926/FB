@@ -45,6 +45,13 @@ elf_getbase(Elf *e)
 	if (e->e_parent == NULL)
 		return ((off_t) 0);
 
+	/*
+	 * A thin archive member holds a private copy of the external
+	 * object, which has no position inside the parent archive.
+	 */
+	if (e->e_flags & LIBELF_F_ELF_EXTERNAL)
+		return ((off_t) 0);
+
 	return ((off_t) ((uintptr_t) e->e_rawfile -
 	    (uintptr_t) e->e_parent->e_rawfile));
 }

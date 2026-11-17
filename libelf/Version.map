@@ -59,6 +59,7 @@ global:
 	elf_rawdata;
 	elf_rawfile;
 	elf_setshstrndx;
+	elf_set_archive_resolver;
 	elf_strptr;
 	elf_update;
 	elf_version;

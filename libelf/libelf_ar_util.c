@@ -207,6 +207,75 @@ _libelf_ar_get_translated_name(const struct ar_hdr *arh, Elf *ar)
 }
 
 /*
+ * Return the translated name for a member of a GNU thin archive.
+ *
+ * Thin archive members are named through the archive's long name
+ * table.  Unlike plain SVR4 names, these names may contain directory
+ * separators: in a thin archive the '/' that terminates a long name
+ * table entry is the trailing one, immediately followed by the entry
+ * padding (a newline) or by the end of the table.  Interior '/'
+ * characters belong to the member path and must be preserved.
+ */
+char *
+_libelf_ar_get_thin_name(const struct ar_hdr *arh, Elf *ar)
+{
+	char *s;
+	size_t len, offset;
+	const unsigned char *p, *q, *r;
+
+	assert(arh != NULL);
+	assert(ar->e_kind == ELF_K_AR);
+	assert((ar->e_flags & LIBELF_F_AR_THIN) != 0);
+
+	if (arh->ar_name[0] == '/' && arh->ar_name[1] >= '0' &&
+	    arh->ar_name[1] <= '9') {
+		if (_libelf_ar_get_number((const char *) (arh->ar_name + 1),
+		    sizeof(arh->ar_name) - 1, 10, &offset) == 0 ||
+		    offset > ar->e_u.e_ar.e_rawstrtabsz) {
+			LIBELF_SET_ERROR(ARCHIVE, 0);
+			return (NULL);
+		}
+
+		p = q = ar->e_u.e_ar.e_rawstrtab + offset;
+		r = ar->e_u.e_ar.e_rawstrtab +
+		    ar->e_u.e_ar.e_rawstrtabsz;
+
+		while (p < r && *p != '\0' && *p != '\n') {
+			if (*p == '/' &&
+			    (p + 1 == r || p[1] == '\n' || p[1] == '\0'))
+				break;	/* Entry terminator. */
+			p++;
+		}
+
+		len = (size_t) (p - q);
+	} else {
+		/*
+		 * A short, directly embedded name: trim the trailing
+		 * blanks and, if present, the single terminating '/'.
+		 */
+		q = (const unsigned char *) arh->ar_name;
+		r = q + sizeof(arh->ar_name);
+		for (p = r; p > q && p[-1] == ' '; p--)
+			;
+		r = p;
+		if (r > q && r[-1] == '/')
+			r--;
+		len = (size_t) (r - q);
+		p = r;
+	}
+
+	if ((s = malloc(len + 1)) == NULL) {
+		LIBELF_SET_ERROR(RESOURCE, 0);
+		return (NULL);
+	}
+
+	(void) memcpy(s, q, len);
+	s[len] = '\0';
+
+	return (s);
+}
+
+/*
  * Return the raw name for an archive member, inclusive of any
  * formatting characters.
  */
@@ -241,6 +310,15 @@ _libelf_ar_open(Elf *e, int reporterror)
 
 	e->e_u.e_ar.e_nchildren = 0;
 	e->e_u.e_ar.e_next = (off_t) -1;
+
+	/*
+	 * Remember GNU thin archives: their regular members have no
+	 * in-archive payload and are reached through the resolver
+	 * callback instead.
+	 */
+	if (strncmp((const char *) e->e_rawfile, LIBELF_AR_THIN_MAGIC,
+	    (size_t) LIBELF_AR_THIN_MAGIC_SIZE) == 0)
+		e->e_flags |= LIBELF_F_AR_THIN;
 
 	/*
 	 * Look for special members.

@@ -52,9 +52,21 @@ elf_next(Elf *e)
 
 	assert(parent->e_kind == ELF_K_AR);
 	assert(parent->e_cmd == ELF_C_READ);
-	assert(e->e_rawfile > parent->e_rawfile);
 
-	next = e->e_rawfile - parent->e_rawfile + (off_t) e->e_rawsize;
+	/*
+	 * For thin archive members the object bytes live outside the
+	 * parent archive, so the cursor must advance from the member's
+	 * physical ar(1) header inside the parent rather than from the
+	 * member's in-memory image.  Regular members keep their
+	 * original behaviour.
+	 */
+	if ((e->e_flags & LIBELF_F_ELF_EXTERNAL) != 0) {
+		next = e->e_arhdroff + (off_t) sizeof(struct ar_hdr);
+	} else {
+		assert(e->e_rawfile > parent->e_rawfile);
+		next = e->e_rawfile - parent->e_rawfile +
+		    (off_t) e->e_rawsize;
+	}
 	next = (next + 1) & ~1;	/* round up to an even boundary */
 
 	/*

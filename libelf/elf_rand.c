@@ -50,8 +50,16 @@ elf_rand(Elf *ar, off_t offset)
 
 	offset_of_member = offset + (off_t) sizeof(struct ar_hdr);
 
+	/*
+	 * In a GNU thin archive the final member header may end
+	 * exactly at end of file because regular members carry no
+	 * in-archive payload.  Regular archives must still contain the
+	 * member's data, so they keep the stricter original check.
+	 */
 	if (offset_of_member <= 0 || /* Numeric overflow. */
-	    offset_of_member >= ar->e_rawsize) {
+	    offset_of_member > ar->e_rawsize ||
+	    ((ar->e_flags & LIBELF_F_AR_THIN) == 0 &&
+	    offset_of_member == ar->e_rawsize)) {
 		LIBELF_SET_ERROR(ARGUMENT, 0);
 		return 0;
 	}

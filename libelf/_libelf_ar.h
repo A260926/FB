@@ -36,6 +36,13 @@
 
 #include <ar.h>
 
+/*
+ * GNU thin archives use the magic "!<thin>\n" instead of the regular
+ * SVR4 "!<arch>\n" magic.  Both are SARMAG bytes long.
+ */
+#define	LIBELF_AR_THIN_MAGIC	"!<thin>\n"
+#define	LIBELF_AR_THIN_MAGIC_SIZE 8
+
 #define	LIBELF_AR_BSD_EXTENDED_NAME_PREFIX	"#1/"
 #define	LIBELF_AR_BSD_SYMTAB_NAME		"__.SYMDEF"
 #define	LIBELF_AR_BSD_EXTENDED_NAME_PREFIX_SIZE	\
@@ -50,6 +57,7 @@
 unsigned char *_libelf_ar_get_string(const char *_buf, size_t _sz,
     unsigned int _rawname, int _svr4names);
 char	*_libelf_ar_get_raw_name(const struct ar_hdr *_arh);
+char	*_libelf_ar_get_thin_name(const struct ar_hdr *_arh, Elf *_ar);
 char	*_libelf_ar_get_translated_name(const struct ar_hdr *_arh, Elf *_ar);
 int	_libelf_ar_get_number(const char *_buf, size_t _sz,
     unsigned int _base, size_t *_ret);

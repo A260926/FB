@@ -35,6 +35,8 @@
 
 #include "_elftc.h"
 
+struct ar_hdr;	/* Defined in <ar.h>. */
+
 /*
  * Library-private data structures.
  */
@@ -79,6 +81,8 @@ extern struct _libelf_globals _libelf;
 #define	LIBELF_F_RAWFILE_MMAP	0x100000U /* whether e_rawfile was mmap'ed */
 #define	LIBELF_F_SHDRS_LOADED	0x200000U /* whether all shdrs were read in */
 #define	LIBELF_F_SPECIAL_FILE	0x400000U /* non-regular file */
+#define	LIBELF_F_AR_THIN	0x800000U /* GNU thin archive */
+#define	LIBELF_F_ELF_EXTERNAL	0x01000000U /* thin member, bytes copied */
 
 struct _Elf {
 	int		e_activations;	/* activation count */
@@ -92,6 +96,7 @@ struct _Elf {
 	unsigned char	*e_rawfile;	/* uninterpreted bytes */
 	off_t		e_rawsize;	/* size of uninterpreted bytes */
 	unsigned int	e_version;	/* file version */
+	off_t		e_arhdroff;	/* parent offset of member ar header */
 
 	/*
 	 * Header information for archive members.  See the
@@ -112,6 +117,8 @@ struct _Elf {
 			size_t	e_rawsymtabsz;
 			Elf_Arsym *e_symtab;
 			size_t	e_symtabsz;
+			Elf_Archive_Resolver e_resolver; /* thin archives */
+			void	*e_resolver_ctx;
 		} e_ar;
 		struct {		/* regular ELF files */
 			union {
@@ -206,6 +213,8 @@ Elf_Scn	*_libelf_allocate_scn(Elf *_e, size_t _ndx);
 Elf_Arhdr *_libelf_ar_gethdr(Elf *_e);
 Elf	*_libelf_ar_open(Elf *_e, int _reporterror);
 Elf	*_libelf_ar_open_member(int _fd, Elf_Cmd _c, Elf *_ar);
+Elf	*_libelf_ar_open_thin_member(int _fd, Elf_Cmd _c, Elf *_ar,
+			struct ar_hdr *_arh, off_t _hdroff);
 Elf_Arsym *_libelf_ar_process_bsd_symtab(Elf *_ar, size_t *_dst);
 Elf_Arsym *_libelf_ar_process_svr4_symtab(Elf *_ar, size_t *_dst);
 long	 _libelf_checksum(Elf *_e, int _elfclass);

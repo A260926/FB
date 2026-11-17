@@ -32,6 +32,7 @@
 #include <libelf.h>
 
 #include "_libelf.h"
+#include "_libelf_ar.h"
 
 ELFTC_VCSID("$Id$");
 
@@ -93,7 +94,9 @@ _libelf_memory(unsigned char *image, size_t sz, int reporterror)
 			e->e_version = e_version;
 		}
 	} else if (sz >= SARMAG &&
-	    strncmp((const char *) image, ARMAG, (size_t) SARMAG) == 0)
+	    (strncmp((const char *) image, ARMAG, (size_t) SARMAG) == 0 ||
+	    strncmp((const char *) image, LIBELF_AR_THIN_MAGIC,
+	    (size_t) LIBELF_AR_THIN_MAGIC_SIZE) == 0))
 		return (_libelf_ar_open(e, reporterror));
 
 	return (e);

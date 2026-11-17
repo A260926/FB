@@ -148,14 +148,27 @@ _libelf_ar_gethdr(Elf *e)
 
 	eh->ar_name = eh->ar_rawname = NULL;
 
-	if ((eh->ar_name = _libelf_ar_get_translated_name(arh, parent)) ==
-	    NULL)
+	if ((e->e_flags & LIBELF_F_ELF_EXTERNAL) != 0) {
+		/*
+		 * Thin archive member: keep the complete member path
+		 * from the GNU long name table.
+		 */
+		if ((eh->ar_name = _libelf_ar_get_thin_name(arh, parent)) ==
+		    NULL)
+			goto error;
+	} else if ((eh->ar_name =
+	    _libelf_ar_get_translated_name(arh, parent)) == NULL)
 		goto error;
 
 	if (_libelf_ar_get_number(arh->ar_uid, sizeof(arh->ar_uid), 10,
 	    &n) == 0)
 		goto error;
 	eh->ar_uid = (uid_t) n;
+
+	if (_libelf_ar_get_number(arh->ar_date, sizeof(arh->ar_date), 10,
+	    &n) == 0)
+		goto error;
+	eh->ar_date = (time_t) n;
 
 	if (_libelf_ar_get_number(arh->ar_gid, sizeof(arh->ar_gid), 10,
 	    &n) == 0)
@@ -207,6 +220,26 @@ _libelf_ar_gethdr(Elf *e)
 	return (NULL);
 }
 
+/*
+ * Return non-zero for the archive members whose payload always lives
+ * inside the archive, even in a GNU thin archive: the SVR4 symbol
+ * table ("/ "), the GNU long name table ("// ") and the 64 bit symbol
+ * table ("/SYM64/ ").  A long name reference such as "/0" is not a
+ * special member and therefore resolves to an external object.
+ */
+static int
+_libelf_ar_is_inline_special(const struct ar_hdr *arh)
+{
+
+	if (arh->ar_name[0] != '/')
+		return (0);
+
+	if (arh->ar_name[1] == ' ' || arh->ar_name[1] == '/')
+		return (1);
+
+	return (strncmp(arh->ar_name, "/SYM64/", 7) == 0);
+}
+
 Elf *
 _libelf_ar_open_member(int fd, Elf_Cmd c, Elf *elf)
 {
@@ -252,6 +285,16 @@ _libelf_ar_open_member(int fd, Elf_Cmd c, Elf *elf)
 	}
 
 	/*
+	 * GNU thin archives carry no in-archive payload for their
+	 * regular members; the member bytes are supplied externally
+	 * through the registered resolver.  The inline symbol and name
+	 * tables still use the ordinary in-archive path.
+	 */
+	if ((elf->e_flags & LIBELF_F_AR_THIN) != 0 &&
+	    !_libelf_ar_is_inline_special(arh))
+		return (_libelf_ar_open_thin_member(fd, c, elf, arh, next));
+
+	/*
 	 * Check if the archive member that follows will fit in the
 	 * containing archive.
 	 */
@@ -287,9 +330,135 @@ _libelf_ar_open_member(int fd, Elf_Cmd c, Elf *elf)
 	e->e_fd = fd;
 	e->e_cmd = c;
 	e->e_hdr.e_rawhdr = (unsigned char *) arh;
+	e->e_arhdroff = next;
 
 	elf->e_u.e_ar.e_nchildren++;
 	e->e_parent = elf;
+
+	return (e);
+}
+
+/*
+ * Open a regular member of a GNU thin archive.
+ *
+ * The member's ar(1) header still lives inside the parent archive, but
+ * its payload does not: the ar_size field describes the length of the
+ * external object.  A caller-registered resolver hands back the object
+ * bytes, which are copied here so that the child descriptor owns a
+ * stable image (the resolver only guarantees its bytes until its next
+ * invocation) and remains readable after the parent descriptor is
+ * closed.
+ *
+ * Failure leaves the parent's 'e_next' cursor untouched, so the same
+ * member can be retried after installing a corrected resolver.
+ */
+Elf *
+_libelf_ar_open_thin_member(int fd, Elf_Cmd c, Elf *elf,
+    struct ar_hdr *arh, off_t hdroff)
+{
+	Elf *e;
+	char *name;
+	size_t arsize, rsize;
+	const unsigned char *bytes;
+	unsigned char *copy;
+
+	assert((elf->e_flags & LIBELF_F_AR_THIN) != 0);
+	assert((uintptr_t) arh == (uintptr_t) (elf->e_rawfile + hdroff));
+
+	if (_libelf_ar_get_number(arh->ar_size, sizeof(arh->ar_size), 10,
+	    &arsize) == 0) {
+		LIBELF_SET_ERROR(ARCHIVE, 0);
+		return (NULL);
+	}
+
+	/*
+	 * GNU thin archives may reference a member of another archive
+	 * with a name of the form "/offset:memberoffset".  Only direct
+	 * references to object files are supported.
+	 */
+	if (memchr(arh->ar_name, ':', sizeof(arh->ar_name)) != NULL) {
+		LIBELF_SET_ERROR(UNIMPL, 0);
+		return (NULL);
+	}
+
+	/*
+	 * Recover the original member path from the GNU long name
+	 * table.  Directory separators are part of the name.
+	 */
+	if ((name = _libelf_ar_get_thin_name(arh, elf)) == NULL)
+		return (NULL);
+
+	if (strchr(name, ':') != NULL) {
+		free(name);
+		LIBELF_SET_ERROR(UNIMPL, 0);
+		return (NULL);
+	}
+
+	if (elf->e_u.e_ar.e_resolver == NULL) {
+		free(name);
+		LIBELF_SET_ERROR(ARCHIVE, 0);
+		return (NULL);
+	}
+
+	bytes = NULL;
+	rsize = 0;
+	if ((*elf->e_u.e_ar.e_resolver)(name,
+	    elf->e_u.e_ar.e_resolver_ctx, &bytes, &rsize) != 0 ||
+	    bytes == NULL || rsize == 0) {
+		free(name);
+		LIBELF_SET_ERROR(ARCHIVE, 0);
+		return (NULL);
+	}
+
+	/* The resolved object must be exactly as long as the header says. */
+	if (rsize != arsize) {
+		free(name);
+		LIBELF_SET_ERROR(ARCHIVE, 0);
+		return (NULL);
+	}
+
+	if ((copy = malloc(rsize)) == NULL) {
+		free(name);
+		LIBELF_SET_ERROR(RESOURCE, 0);
+		return (NULL);
+	}
+	(void) memcpy(copy, bytes, rsize);
+
+	/*
+	 * Parse the private copy as an ELF image.  On failure the
+	 * copy is released by the caller below; on success the
+	 * descriptor takes ownership of it.
+	 */
+	if ((e = _libelf_memory(copy, rsize, 1)) == NULL) {
+		free(name);
+		free(copy);
+		return (NULL);
+	}
+
+	e->e_flags |= LIBELF_F_RAWFILE_MALLOC | LIBELF_F_ELF_EXTERNAL;
+	e->e_fd = fd;
+	e->e_cmd = c;
+	e->e_hdr.e_rawhdr = (unsigned char *) arh;
+	e->e_arhdroff = hdroff;
+
+	elf->e_u.e_ar.e_nchildren++;
+	e->e_parent = elf;
+
+	/*
+	 * Translate the member header eagerly and cache it on the
+	 * child.  After the parent descriptor is closed its archive
+	 * image may have been released, so the child must not need to
+	 * dereference the parent's header later.  On failure abandon
+	 * the half-built child, including its private object copy;
+	 * elf_end() also undoes the parent's child count.
+	 */
+	if (_libelf_ar_gethdr(e) == NULL) {
+		free(name);
+		(void) elf_end(e);
+		return (NULL);
+	}
+
+	free(name);
 
 	return (e);
 }

@@ -142,6 +142,20 @@ typedef struct {
 } Elf_Arsym;
 
 /*
+ * Resolver callback for members of GNU thin archives.
+ *
+ * The callback receives the member name translated from the archive's
+ * long name table (directory separators preserved), together with the
+ * caller supplied context.  On success it must set '*bytes' to the
+ * complete, in-memory external object and '*size' to its length, and
+ * return 0.  The returned bytes only need to remain valid until the
+ * next resolver invocation; libelf copies what an opened member needs.
+ * A non-zero return indicates that the member could not be resolved.
+ */
+typedef int	(*Elf_Archive_Resolver)(const char *_name, void *_ctx,
+			const unsigned char **_bytes, size_t *_size);
+
+/*
  * Error numbers.
  */
 
@@ -220,6 +234,8 @@ off_t		elf_rand(Elf *_elf, off_t _off);
 Elf_Data	*elf_rawdata(Elf_Scn *_scn, Elf_Data *_data);
 char		*elf_rawfile(Elf *_elf, size_t *_size);
 int		elf_setshstrndx(Elf *_elf, size_t _shnum);
+int		elf_set_archive_resolver(Elf *_elf,
+			Elf_Archive_Resolver _resolver, void *_context);
 char		*elf_strptr(Elf *_elf, size_t _section, size_t _offset);
 off_t		elf_update(Elf *_elf, Elf_Cmd _cmd);
 unsigned int	elf_version(unsigned int _version);

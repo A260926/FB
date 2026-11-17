@@ -23,6 +23,7 @@ SRCS=	elf.c							\
 	elf_open.c						\
 	elf_rand.c						\
 	elf_rawfile.c						\
+	elf_set_archive_resolver.c				\
 	elf_phnum.c						\
 	elf_shnum.c						\
 	elf_shstrndx.c						\
