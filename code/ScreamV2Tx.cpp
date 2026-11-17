@@ -435,6 +435,33 @@ void ScreamV2Tx::newMediaFrame(uint32_t time_ntp, uint32_t ssrc, int bytesRtp, b
 */
 float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
     if (!isInitialized) initialize(time_ntp);
+
+    /*
+    * Frame deadline sweep over all enabled streams. It is performed before
+    * stream selection so that stale frame suffixes are removed even when
+    * they belong to a stream that is not currently prioritized, and also
+    * when the prefix of the expired frame was already transmitted and the
+    * queue is momentarily empty.
+    */
+    float currTime = time_ntp * ntp2SecScaleFactor;
+    for (int n = 0; n < nStreams; n++) {
+        Stream* tmp = streams[n];
+        if (!tmp->frameDeadlineEnabled) {
+            continue;
+        }
+        tmp->rtpQueue->expireFrameDeadlines(currTime);
+        if (tmp->rtpQueue->consumeFrameDeadlineEvent()) {
+            /*
+            * Request a video refresh via the existing getTargetBitrate()
+            * -1 signal. The queue raises the event at most once per
+            * expired frame so the same frame never triggers repeated
+            * refresh requests. Expired packets are not counted as network
+            * loss and bytesInFlight is left untouched.
+            */
+            tmp->rtpQueueDiscard = true;
+        }
+    }
+
     /*
     * Update rate estimated
     */
@@ -1061,6 +1088,36 @@ void ScreamV2Tx::setTargetPriority(uint32_t ssrc, float priority) {
     Stream* stream = getStream(ssrc, id);
     stream->targetPriority = priority;
     stream->targetPriorityInv = 1.0f / priority;
+}
+
+bool ScreamV2Tx::setFrameDeadline(uint32_t ssrc, float maxAgeSeconds) {
+    /*
+    * Negative or non-finite values are rejected without changing anything.
+    * 0.0 disables the feature, positive finite values enable it.
+    */
+    if (!std::isfinite(maxAgeSeconds) || maxAgeSeconds < 0.0f) {
+        return false;
+    }
+    int id;
+    Stream* stream = getStream(ssrc, id);
+    if (stream == 0) {
+        /*
+        * Unknown SSRC.
+        */
+        return false;
+    }
+    if (!stream->rtpQueue->frameDeadlineSupported()) {
+        /*
+        * The registered queue does not implement the frame deadline
+        * capability, external RtpQueueIface implementations keep working.
+        */
+        return false;
+    }
+    if (!stream->rtpQueue->setFrameDeadline(maxAgeSeconds)) {
+        return false;
+    }
+    stream->frameDeadlineEnabled = maxAgeSeconds > 0.0f;
+    return true;
 }
 
 void ScreamV2Tx::getLogHeader(char* s) {

@@ -104,6 +104,8 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	isMaxrate = false;
 
 	rtpQueueDelay = 0.0f;
+
+	frameDeadlineEnabled = false;
 }
 
 /*
@@ -266,12 +268,18 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	}
 
 	float rtpQueueDelay = rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
-	if (rtpQueueDelay > maxRtpQueueDelay &&
+	if (!frameDeadlineEnabled &&
+		rtpQueueDelay > maxRtpQueueDelay &&
 		(time_ntp - lastRtpQueueDiscardT_ntp > kMinRtpQueueDiscardInterval_ntp)) {
 		/*
 		* RTP queue is cleared as it is becoming too large,
 		* Function is however disabled initially as there is no reliable estimate of the
 		* throughput in the initial phase.
+		*
+		* When the per-frame deadline strategy is enabled, the whole-queue
+		* congestion clear is replaced by per-frame eviction performed in
+		* RtpQueue::expireFrameDeadlines(). The base-delay refresh clear in
+		* ScreamV2Tx::newMediaFrame() is unaffected.
 		*/
 		int seqNrOfNextRtp = rtpQueue->seqNrOfNextRtp();
 		int seqNrOfLastRtp = rtpQueue->seqNrOfLastRtp();

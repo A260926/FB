@@ -336,6 +336,17 @@ extern "C" {
         void setTargetPriority(uint32_t ssrc, float aPriority);
 
         /*
+        * Enable the optional per-frame deadline for the video stream with SSRC.
+        * Call before the first packet of a stream is enqueued.
+        * A positive finite maxAgeSeconds enables frame deadline handling,
+        * 0.0 disables it and restores the whole-queue discard strategy.
+        * Returns false, without changing the configuration, for negative or
+        * non-finite values, unknown SSRC or queues that do not support the
+        * capability.
+        */
+        bool setFrameDeadline(uint32_t ssrc, float maxAgeSeconds);
+
+        /*
         * Set maxTotalBitrate
         * This featire is useful if it is known that for instance a cellular modem does not support a higher uplink bitrate
         * than e.g. 50Mbps. When maxTotalBitrate is set to 50Mbps, then unnecessary bandwidth probing beyond this bitrate
@@ -684,6 +695,13 @@ extern "C" {
             bool isMaxrate;
 
             float rtpQueueDelay;
+
+            /*
+            * True when the optional per-frame deadline strategy is active
+            * for this stream. When set, frame deadline eviction replaces the
+            * maxRtpQueueDelay congestion clear of the RTP queue.
+            */
+            bool frameDeadlineEnabled;
         };
 
         /*

@@ -204,6 +204,60 @@ A few support classes for experimental use are implemented in:
 
 For more information on how to use the code in multimedia clients or in experimental platforms, please see [https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx](https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx?raw=true)
 
+### Optional per-frame RTP deadline
+
+The head-of-queue delay cannot tell how old a video frame is once the first
+RTP packets of the frame have been transmitted and the queue has momentarily
+drained: a late suffix of the same, still unfinished frame then looks like a
+brand new packet. An optional per-frame deadline strategy removes such stale
+suffixes from the send window while fresh frames and the other SSRCs keep
+their transmission opportunity.
+
+Enabling it, per stream, before the first packet of the stream is enqueued:
+
+```cpp
+bool ok = screamTx.setFrameDeadline(ssrc, maxAgeSeconds);
+```
+
+- A positive finite `maxAgeSeconds` enables the strategy, `0.0` disables it
+  and restores the legacy whole-queue discard. Negative or non-finite values,
+  an unknown SSRC, or a queue that does not implement the capability make the
+  call return `false` and leave the existing configuration unchanged.
+- A frame is the run of consecutive packets with the same RTP timestamp. A
+  marker bit ends the frame, and a changed timestamp also ends the previous
+  frame. Timestamps are compared for equality only, so the check is safe
+  across the 32 bit wrap-around.
+- The frame age starts at the push time of its first packet and is not reset
+  by pops; it is retained even when the prefix has been sent and the queue is
+  temporarily empty.
+- When the age reaches the deadline, all not-yet-sent packets of the frame are
+  evicted once. Later pushes that still belong to the dead frame return
+  `false` until the marker or the next frame boundary; their ownership stays
+  with the caller.
+- While enabled, per-frame eviction replaces the `maxRtpQueueDelay`
+  congestion-triggered whole-queue clear. The deliberate clear used to refresh
+  the base network delay estimate is unchanged.
+- Every `isOkToTransmit()` call checks all enabled streams before selecting a
+  stream, not only the currently prioritized one. A newly expired frame
+  requests a video refresh once through the existing `getTargetBitrate()`
+  `-1` signal, including frames whose prefix was already sent. Evicted packets
+  are not counted as network loss, the transmitted-packet feedback records are
+  left intact and `bytesInFlight` is not adjusted for them.
+
+Packet ownership:
+
+- A successful `push()` transfers ownership of the packet to the queue.
+- A normal `pop()` hands ownership back to the caller.
+- A packet evicted at its deadline, or removed by `clear()`, is released
+  exactly once by the queue through `packet_free()`.
+- A `push()` that returns `false` (dead frame suffix or full queue) never takes
+  ownership; the caller is responsible for releasing the packet.
+
+External `RtpQueueIface` implementations keep compiling: the new
+`setFrameDeadline()`, `frameDeadlineSupported()`, `expireFrameDeadlines()` and
+`consumeFrameDeadlineEvent()` methods have default implementations that report
+the capability as unsupported.
+
 ### Feedback format
 The feedback format is according to [9]. The feedback interval depends heavily on the media bitrate.
 
