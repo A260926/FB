@@ -17,10 +17,18 @@ static unsigned module_info(unsigned char *p,unsigned stream,unsigned symbytes,c
  u32(p+36,symbytes);u32(p+44,12);
  memcpy(p+64,name,strlen(name)+1);memcpy(p+64+strlen(name)+1,obj,strlen(obj)+1);return n;
 }
-static unsigned reference(unsigned char *p,int local,unsigned module){
+static unsigned reference_to(unsigned char *p,int local,unsigned module,unsigned ibsym){
  const char *name="shared_name";unsigned n=align4(14+(unsigned)strlen(name)+1);
- memset(p,0,n);u16(p,n-2);u16(p+2,local?0x1127:0x1125);u32(p+8,4);u16(p+12,module);
+ memset(p,0,n);u16(p,n-2);u16(p+2,local?0x1127:0x1125);u32(p+8,ibsym);u16(p+12,module);
  memcpy(p+14,name,strlen(name)+1);return n;
+}
+static unsigned reference_kind(unsigned char *p,unsigned kind,unsigned module,unsigned ibsym){
+ const char *name="shared_name";unsigned n=align4(14+(unsigned)strlen(name)+1);
+ memset(p,0,n);u16(p,n-2);u16(p+2,(uint16_t)kind);u32(p+8,ibsym);u16(p+12,module);
+ memcpy(p+14,name,strlen(name)+1);return n;
+}
+static unsigned reference(unsigned char *p,int local,unsigned module){
+ return reference_to(p,local,module,4);
 }
 static unsigned public_record(unsigned char *p){
  const char *name="public_marker";unsigned n=align4(14+(unsigned)strlen(name)+1);
@@ -34,25 +42,45 @@ static unsigned name_hash(const char *s){
  if(n-i)h^=(unsigned char)s[i];h|=0x20202020;h^=h>>11;return (h^(h>>16))%4096;
 }
 int task_make_image(struct task_image *out,int mode){
- unsigned char streams[11][2048]={{0}};unsigned sizes[11]={0};unsigned symbytes[2];
- memset(out,0,sizeof(*out));if(mode<0||mode>2)return 1;
+ unsigned char streams[11][2048]={{0}};unsigned sizes[11]={0};unsigned symbytes[2]={0,0};
+ memset(out,0,sizeof(*out));if(mode<0||mode>4)return 1;
  u32(streams[1],20000404);u32(streams[1]+8,7);u32(streams[1]+36,1);sizes[1]=48;
  for(int i=0;i<2;i++){
   unsigned char *s=streams[8+i];u32(s,4);unsigned n=procedure(s+4,i,0x20+i*0x60);
-  u16(s+4+n,2);u16(s+6+n,6);symbytes[i]=4+n+4;
+  unsigned pos=4+n;
+  if(i==1){
+   /* An unrecognized record kind must still occupy its slot in the view. */
+   u16(s+pos,6);u16(s+pos+2,0x7777);u32(s+pos+4,0x11223344);pos+=8;
+  }
+  u16(s+pos,2);u16(s+pos+2,6);symbytes[i]=pos+4;
   u32(s+symbytes[i],0xf3);u32(s+symbytes[i]+4,4);s[symbytes[i]+9]='A';
   sizes[8+i]=symbytes[i]+12+4;out->procedure_offsets[i]=4;
  }
  unsigned char *d=streams[3];u32(d,0xffffffff);u32(d+4,19990903);u32(d+8,7);
  u16(d+12,mode?0xffff:10);u16(d+16,mode?0xffff:6);u16(d+20,mode==2?0xffff:5);
- unsigned modsize=module_info(d+64,8,symbytes[0],"dirA/same.obj");
- modsize+=module_info(d+64+modsize,9,symbytes[1],"dirB/same.obj");
+ unsigned modsize=0;
+ if(mode!=4){
+  /* Mode 4 declares no modules at all; every other mode has two. */
+  modsize=module_info(d+64,8,symbytes[0],"dirA/same.obj");
+  modsize+=module_info(d+64+modsize,9,symbytes[1],"dirB/same.obj");
+ }
  u32(d+24,modsize);u32(d+32,4);u32(d+48,22);u16(d+58,0x8664);
  unsigned debug=64+modsize+4;for(int i=0;i<11;i++)u16(d+debug+i*2,0xffff);u16(d+debug+10,7);
  sizes[3]=debug+22;
  unsigned first=reference(streams[5],0,1);out->reference_offsets[0]=0;out->reference_offsets[1]=first;
  unsigned puboff=first+reference(streams[5]+first,1,2);
- sizes[5]=mode==2?0:puboff+public_record(streams[5]+puboff);
+ unsigned afterpub=puboff+public_record(streams[5]+puboff);
+ sizes[5]=mode==2?0:afterpub;
+ if(mode==3){
+  /* Malformed identity references appended after the valid records. */
+  unsigned r=afterpub;
+  out->bad_reference_offsets[0]=r;r+=reference_kind(streams[5]+r,0x1125,3,4); /* bad module */
+  out->bad_reference_offsets[1]=r;r+=reference_kind(streams[5]+r,0x1127,1,5); /* mid-record */
+  out->bad_reference_offsets[2]=r;r+=reference_kind(streams[5]+r,0x1125,1,symbytes[0]); /* C13 */
+  out->bad_reference_offsets[3]=r;r+=reference_kind(streams[5]+r,0x1125,1,56); /* S_END, not a proc */
+  out->bad_reference_offsets[4]=r;r+=reference_kind(streams[5]+r,0x1125,1,4); /* valid, after errors */
+  sizes[5]=r;
+ }
  /* One public symbol in the ordinary PSI; no dependence on a target resolver. */
  sizes[6]=mode?0:572;u32(streams[6],544);u32(streams[6]+28,0xffffffff);
  u32(streams[6]+32,0xf12f091a);u32(streams[6]+36,8);u32(streams[6]+40,520);

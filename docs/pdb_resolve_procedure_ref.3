@@ -1,0 +1,93 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_RESOLVE_PROCEDURE_REF 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_resolve_procedure_ref \- resolve a procedure reference to its definition
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "int pdb_resolve_procedure_ref(void *" context ,
+.BI "    uint32_t " global_record_offset ", struct pdb_procedure *" out );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_resolve_procedure_ref ()
+resolves the S_PROCREF or S_LPROCREF record that begins at
+.I global_record_offset
+in the global symbol record stream.
+The offset must be the first byte of a record.
+References carry a one-based module index and an unbiassed module stream
+offset
+.RI ( ibSym );
+the offset is measured from the first byte of the module stream, including
+its four-byte signature.
+The referenced module and record are therefore required to exist, and the
+record at
+.I ibSym
+must itself be the start of a symbol.
+Identical offsets or names in other modules are not treated as identity.
+.PP
+S_PROCREF resolves to an S_GPROC32 record and S_LPROCREF resolves to an
+S_LPROC32 record. The
+.Fn _ID
+and older ST record forms are not supported.
+.PP
+.nf
+struct pdb_procedure {
+    uint32_t module_index;     /* zero-based */
+    uint32_t symbol_offset;    /* offset of the definition in its module stream */
+    const char *name;          /* borrowed */
+    uint16_t section;
+    uint32_t address_offset;
+    uint32_t code_size;
+    uint32_t type_index;       /* not resolved */
+    bool is_local;
+};
+.fi
+.PP
+.I type_index
+is returned as stored; the type it names is not parsed by this call.
+.I name
+is borrowed from
+.I context
+and remains valid until
+.BR pdb_reset_context (3),
+a subsequent
+.BR pdb_load (3),
+or
+.BR pdb_destroy_context (3).
+
+.SH RETURN VALUE
+Returns 0 on success, or -1 on error. Outputs are cleared on failure.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+.I out
+was NULL.
+.TP
+.B EPDB_NOT_FOUND
+The PDB has no global record stream, so no procedure reference exists.
+.TP
+.B EPDB_UNSUPPORTED_VERSION
+The record is not an S_PROCREF or S_LPROCREF, or its target is not an
+S_GPROC32 or S_LPROC32.
+.TP
+.B EPDB_PARSE_ERROR
+The offset is not a record boundary, the module index is invalid, or the
+referenced offset does not begin a supported definition inside the module's
+symbol region.
+
+.SH SEE ALSO
+.BR pdb_get_modules (3),
+.BR pdb_get_symbols (3),
+.BR pdb_errno (3)

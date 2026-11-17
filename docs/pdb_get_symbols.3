@@ -116,6 +116,25 @@ There was an error parsing the file.
 Parsing of the symbol stream is delayed until the first call to a symbol
 related API.
 .PP
+If the PDB has a global record stream but no public symbol stream (PSI),
+.BR pdb_get_symbols ()
+and
+.BR pdb_get_public_symbols ()
+still enumerate the records actually present, and
+.BR pdb_get_nr_public_symbols ()
+counts the S_PUB32 records in that stream.
+.BR pdb_lookup_public_symbol (3)
+then falls back to a linear scan.
+If there is no global record stream either, both enumerations are empty and
+.BR pdb_lookup_public_symbol (3)
+returns EPDB_NOT_FOUND.
+.PP
+Module symbols are a separate view; use
+.BR pdb_get_modules (3)
+and
+.BR pdb_get_module_symbols (3),
+which do not require any of the optional global tables.
+.PP
 libpdb performs validation of the symbol stream during parsing, but validation
 of internal symbol data is left to the caller.
 .PP
@@ -166,6 +185,8 @@ void print_symbols(void *pdb_context)
 
 .SH SEE ALSO
 .BR pdb_load (3),
+.BR pdb_get_modules (3),
+.BR pdb_resolve_procedure_ref (3),
 .BR pdb_lookup_public_symbol (3),
 .BR pdb_convert_section_offset_to_rva (3),
 .BR pdb_errno (3)

@@ -95,6 +95,67 @@ PDB_EXPORT int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
 PDB_EXPORT int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols);
 PDB_EXPORT int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols);
 
+/*
+ * Normalized module information from the DBI ModInfo substream. The module
+ * index namespace follows the physical order of the substream, starting at 0.
+ * A stream_index of 0xffff means the module has no associated module stream.
+ * The name, object_name, and symbol/procedure strings are borrowed from the
+ * context and remain valid until the context is reset, reloaded, or destroyed.
+ */
+struct pdb_module {
+    uint32_t index;
+    const char *name;
+    const char *object_name;
+    uint16_t stream_index;
+    uint32_t symbol_bytes;
+    uint32_t c11_bytes;
+    uint32_t c13_bytes;
+};
+
+/*
+ * A record from a module stream's symbol region. offset and size are measured
+ * from the first byte of the module stream (the four-byte CodeView signature
+ * is included in the offsets but is not itself enumerated). size includes the
+ * record length and kind fields.
+ */
+struct pdb_module_symbol {
+    uint32_t offset;
+    uint32_t size;
+    uint16_t kind;
+    const unsigned char *data;
+};
+
+/*
+ * The target of an S_PROCREF or S_LPROCREF record resolved into a module's
+ * procedure definition. symbol_offset is the offset of the S_GPROC32 or
+ * S_LPROC32 record in the target module stream.
+ */
+struct pdb_procedure {
+    uint32_t module_index;
+    uint32_t symbol_offset;
+    const char *name;
+    uint16_t section;
+    uint32_t address_offset;
+    uint32_t code_size;
+    uint32_t type_index;
+    bool is_local;
+};
+
+/* Enumerate the DBI module registry (physical order) */
+PDB_EXPORT int pdb_get_modules(
+    void *context, const struct pdb_module **modules, uint32_t *count);
+
+/* Enumerate the symbols belonging to a module stream's symbol region */
+PDB_EXPORT int pdb_get_module_symbols(
+    void *context,
+    uint32_t module_index,
+    const struct pdb_module_symbol **symbols,
+    uint32_t *count);
+
+/* Resolve an S_PROCREF/S_LPROCREF record to its procedure definition */
+PDB_EXPORT int pdb_resolve_procedure_ref(
+    void *context, uint32_t global_record_offset, struct pdb_procedure *out);
+
 /* Find a public symbol by hash */
 PDB_EXPORT const PUBSYM32 *pdb_lookup_public_symbol(
     void *context, const char *name, bool case_sensitive);

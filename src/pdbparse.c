@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -142,6 +143,12 @@ void print_public_symbols(void *pdb)
         return;
     }
 
+    if (nr_symbols == 0) {
+        puts("");
+        puts("Public stream contains 0 symbols:");
+        return;
+    }
+
     const PUBSYM32 **symbols = calloc(nr_symbols, sizeof(void *));
     if (symbols == NULL) {
         fprintf(stderr, "Couldn't allocate memory for %d symbols\n", nr_symbols);
@@ -150,6 +157,7 @@ void print_public_symbols(void *pdb)
 
     if (pdb_get_public_symbols(pdb, symbols) < 0) {
         fprintf(stderr, "Error getting symbols: %s\n", pdb_strerror(pdb));
+        free(symbols);
         return;
     }
 
@@ -218,6 +226,128 @@ void print_public_symbols(void *pdb)
     free(symbols);
 }
 
+void print_modules(void *pdb)
+{
+    const struct pdb_module *modules = NULL;
+    uint32_t nr_modules = 0;
+    if (pdb_get_modules(pdb, &modules, &nr_modules) < 0) {
+        fprintf(stderr, "Error getting modules: %s\n", pdb_strerror(pdb));
+        exit(EXIT_FAILURE);
+    }
+
+    puts("");
+    printf("Modules (%u):\n", nr_modules);
+    for (uint32_t i = 0; i < nr_modules; i++) {
+        const struct pdb_module *m = &modules[i];
+        printf(
+            "  [%u] name=%s object=%s stream=%u sym_bytes=%u c11_bytes=%u c13_bytes=%u\n", m->index,
+            m->name, m->object_name, m->stream_index, m->symbol_bytes, m->c11_bytes,
+            m->c13_bytes);
+
+        const struct pdb_module_symbol *module_symbols = NULL;
+        uint32_t nr_module_symbols = 0;
+        if (pdb_get_module_symbols(pdb, i, &module_symbols, &nr_module_symbols) < 0) {
+            fprintf(stderr, "Error getting symbols for module %u: %s\n", i, pdb_strerror(pdb));
+            exit(EXIT_FAILURE);
+        }
+
+        for (uint32_t j = 0; j < nr_module_symbols; j++) {
+            const struct pdb_module_symbol *sym = &module_symbols[j];
+            printf(
+                "      symbol offset=0x%x size=%u kind=0x%x\n", sym->offset, sym->size,
+                sym->kind);
+        }
+    }
+
+    /*
+     * Collect every global procedure reference, expressed as a byte offset in
+     * the global record stream. pdb_get_symbols yields pointers into that
+     * stream, so subtracting the stream base recovers the record offsets.
+     */
+    uint32_t nr_refs = 0;
+    if (pdb_get_nr_symbols(pdb, &nr_refs) < 0) {
+        fprintf(stderr, "Error parsing symbol stream: %s\n", pdb_strerror(pdb));
+        exit(EXIT_FAILURE);
+    }
+
+    uint32_t *ref_offsets = calloc(nr_refs > 0 ? nr_refs : 1, sizeof(uint32_t));
+    const SYMTYPE **symbols = calloc(nr_refs > 0 ? nr_refs : 1, sizeof(SYMTYPE *));
+    if (ref_offsets == NULL || symbols == NULL) {
+        fprintf(stderr, "Couldn't allocate memory for %u symbols\n", nr_refs);
+        free(ref_offsets);
+        free(symbols);
+        exit(EXIT_FAILURE);
+    }
+
+    if (nr_refs > 0 && pdb_get_symbols(pdb, symbols) < 0) {
+        fprintf(stderr, "Error getting symbols: %s\n", pdb_strerror(pdb));
+        free(ref_offsets);
+        free(symbols);
+        exit(EXIT_FAILURE);
+    }
+
+    const unsigned char *stream_base = NULL;
+    if (nr_refs > 0) {
+        /* Locate the record stream through any of the returned record pointers. */
+        uint32_t nr_streams = pdb_get_nr_streams(pdb);
+        uintptr_t sym_addr = (uintptr_t)(const void *)symbols[0];
+        for (uint32_t idx = 0; idx < nr_streams; idx++) {
+            uint32_t size = 0;
+            const unsigned char *data = pdb_get_stream(pdb, idx, &size);
+            uintptr_t base = (uintptr_t)(const void *)data;
+            if (data != NULL && sym_addr >= base && sym_addr - base < size) {
+                stream_base = data;
+                break;
+            }
+        }
+    }
+
+    uint32_t nr_proc_refs = 0;
+    for (uint32_t i = 0; i < nr_refs; i++) {
+        if (symbols[i]->rectyp == S_PROCREF || symbols[i]->rectyp == S_LPROCREF) {
+            if (stream_base == NULL) {
+                /* Records exist but their stream base is unknown: bail out. */
+                fprintf(stderr, "Error locating the global record stream\n");
+                free(ref_offsets);
+                free(symbols);
+                exit(EXIT_FAILURE);
+            }
+            ref_offsets[nr_proc_refs] =
+                (uint32_t)((const unsigned char *)symbols[i] - stream_base);
+            nr_proc_refs++;
+        }
+    }
+
+    int status = 0;
+    puts("");
+    puts("Global procedure references:");
+    for (uint32_t i = 0; i < nr_proc_refs; i++) {
+        struct pdb_procedure proc;
+        if (pdb_resolve_procedure_ref(pdb, ref_offsets[i], &proc) < 0) {
+            fprintf(
+                stderr,
+                "Error resolving procedure reference at record offset 0x%x: %s\n",
+                ref_offsets[i], pdb_strerror(pdb));
+            status = -1;
+            continue;
+        }
+
+        printf(
+            "  ref offset=0x%x module=%u symbol_offset=0x%x name=%s locality=%s "
+            "section:offset=%u:0x%x size=%u type=0x%x\n",
+            ref_offsets[i], proc.module_index, proc.symbol_offset, proc.name,
+            proc.is_local ? "local" : "global", proc.section, proc.address_offset,
+            proc.code_size, proc.type_index);
+    }
+
+    free(ref_offsets);
+    free(symbols);
+
+    if (status < 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
 void print_version(void)
 {
     puts(PROGRAM_NAME " " PROGRAM_VERSION);
@@ -234,6 +364,8 @@ void print_usage(FILE *stream)
     fputs("     --sections          An alias for --section-headers\n", stream);
     fputs("  -s --syms              Display the public symbol table\n", stream);
     fputs("     --symbols           An alias for --syms\n", stream);
+    fputs("     --modules           Display modules, their symbols, and global\n", stream);
+    fputs("                         procedure reference resolutions\n", stream);
     fputs("  -h --help              Display this information\n", stream);
     fputs("  -v --version           Display the version number of " PROGRAM_NAME "\n", stream);
 }
@@ -243,6 +375,7 @@ int main(int argc, char **argv)
     bool show_header = 0;
     bool show_sections = 0;
     bool show_syms = 0;
+    bool show_modules = 0;
 
     /* clang-format off */
     static struct option long_options[] = {
@@ -251,6 +384,7 @@ int main(int argc, char **argv)
         {"sections",        no_argument, 0, 'S'},
         {"syms",            no_argument, 0, 's'},
         {"symbols",         no_argument, 0, 's'},
+        {"modules",         no_argument, 0, 'm'},
         {"help",            no_argument, 0, 'h'},
         {"version",         no_argument, 0, 'v'},
     };
@@ -258,7 +392,7 @@ int main(int argc, char **argv)
 
     while (true) {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "fSshv", long_options, &option_index);
+        int c = getopt_long(argc, argv, "fSsmhv", long_options, &option_index);
         if (c == -1) {
             break;
         }
@@ -274,6 +408,10 @@ int main(int argc, char **argv)
 
         case 's':
             show_syms = true;
+            break;
+
+        case 'm':
+            show_modules = true;
             break;
 
         case 'h':
@@ -294,7 +432,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!show_header && !show_sections && !show_syms) {
+    if (!show_header && !show_sections && !show_syms && !show_modules) {
         fputs(PROGRAM_NAME ": Warning: Nothing to do\n", stderr);
         print_usage(stderr);
         exit(EXIT_FAILURE);
@@ -329,6 +467,10 @@ int main(int argc, char **argv)
 
     if (show_syms) {
         print_public_symbols(pdb);
+    }
+
+    if (show_modules) {
+        print_modules(pdb);
     }
 
     close_pdb_file(pdb);

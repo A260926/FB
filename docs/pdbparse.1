@@ -13,6 +13,8 @@ pdbparse \- Display information about a PDB file
 .br
 .RB [ \-s | \-\-syms | \-\-symbols ]
 .br
+.RB [ \-\-modules ]
+.br
 .RB [ \-h | \-\-help ]
 .br
 .RB [ \-v | \-\-version ]
@@ -42,6 +44,24 @@ Display information about an executable's sections.
 Display all public symbols present in the PDB file, including their name
 and relative virtual address (RVA).
 Note that all names are in their mangled form.
+.TP
+.B \-\-modules
+Display the DBI module registry by physical module index, including each
+module's name, object file path, and symbol entries.
+Each symbol entry is shown with its module-stream offset, size, and record
+kind.
+This option also lists each global procedure reference together with the
+record offset where it was found, the target module index, the target symbol
+offset, and the target's
+.IR section : offset .
+If a reference cannot be resolved, the failing record offset is reported and
+\fBpdbparse\fR exits with a nonzero status.
+This option works on PDB files that lack a PSI, GSI, or global record stream,
+and may be combined with
+.BR \-f ,
+.BR \-s ,
+and
+.BR \-S .
 .TP
 .B \-h, \-\-help
 Show summary of options.

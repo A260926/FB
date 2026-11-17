@@ -10,11 +10,13 @@ install(
     pdb_create_context.3
     pdb_errno.3
     pdb_get_header.3
+    pdb_get_modules.3
     pdb_get_sections.3
     pdb_get_stream.3
     pdb_get_symbols.3
     pdb_load.3
     pdb_lookup_public_symbol.3
+    pdb_resolve_procedure_ref.3
     pdb_sig_match.3
     pdb_strerror.3
   DESTINATION

@@ -29,6 +29,20 @@
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(*(array)))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
+/* The CodeView encodings this library consumes are little-endian and 32-bit. */
+#define PDB_INVALID_STREAM 0xffff
+
+static uint16_t read_u16(const unsigned char *p)
+{
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
+static uint32_t read_u32(const unsigned char *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+        ((uint32_t)p[3] << 24);
+}
+
 /*
  * Declare these inline functions from cvinfo.h as extern, otherwise they will
  * not be included in our static library and link errors will result.
@@ -95,6 +109,13 @@ struct sym_hashtable {
     struct sym_hashrec *hashrecs;
 };
 
+/* Lazily-built symbol view for a single module stream */
+struct module_symbols_cache {
+    struct pdb_module_symbol *symbols;
+    uint32_t count;
+    bool parsed;
+};
+
 struct pdb_context {
     /* User-supplied memory alloc/free functions */
     malloc_fn malloc;
@@ -127,6 +148,11 @@ struct pdb_context {
     uint32_t nr_symbols;
     uint32_t nr_public_symbols;
     struct sym_hashtable pubsym_hashtab;
+
+    /* DBI module registry, published in physical ModInfo order */
+    struct pdb_module *modules;
+    uint32_t nr_modules;
+    struct module_symbols_cache *module_symbols;
 };
 
 static const char *errstrings[] = {
@@ -165,6 +191,21 @@ static void cleanup_pdb_context(struct pdb_context *ctx)
     if (ctx->pubsym_hashtab.hashrecs != NULL) {
         ctx->free(ctx->pubsym_hashtab.hashrecs);
         ctx->pubsym_hashtab.hashrecs = NULL;
+    }
+
+    if (ctx->module_symbols != NULL) {
+        for (uint32_t i = 0; i < ctx->nr_modules; i++) {
+            if (ctx->module_symbols[i].symbols != NULL) {
+                ctx->free(ctx->module_symbols[i].symbols);
+            }
+        }
+        ctx->free(ctx->module_symbols);
+        ctx->module_symbols = NULL;
+    }
+
+    if (ctx->modules != NULL) {
+        ctx->free(ctx->modules);
+        ctx->modules = NULL;
     }
 
     memset(ctx, 0, sizeof(*ctx));
@@ -397,6 +438,144 @@ static int parse_pdb_stream(struct pdb_context *ctx)
     return 0;
 }
 
+/*
+ * Layout of a DBI ModInfo record (all multi-byte fields little-endian):
+ *
+ *   0x00  fixed header, 64 bytes
+ *   0x22  uint16_t module stream index (0xffff if absent)
+ *   0x24  uint32_t SymByteSize (includes the four-byte CodeView signature)
+ *   0x28  uint32_t C11 line info byte size
+ *   0x2c  uint32_t C13 line info byte size
+ *   0x40  NUL-terminated module name
+ *   ....  NUL-terminated object file name
+ *   ....  zero padding up to a four-byte boundary
+ *
+ * Records are concatenated with no explicit length; the length is implied by
+ * the two strings. Only the fields above are meaningful to libpdb; the rest of
+ * the fixed header is preserved by the producer but not interpreted.
+ */
+#define MODINFO_FIXED_HEADER_SIZE 64
+#define MODINFO_STREAM_INDEX_OFFSET 34
+#define MODINFO_SYM_BYTES_OFFSET 36
+#define MODINFO_C11_BYTES_OFFSET 40
+#define MODINFO_C13_BYTES_OFFSET 44
+
+static int parse_dbi_module_info(
+    struct pdb_context *ctx, const unsigned char *modinfo, uint32_t modinfo_size)
+{
+    uint32_t offset = 0;
+    uint32_t nr_modules = 0;
+
+    /* First pass: validate every record and count them in physical order. */
+    while (offset < modinfo_size) {
+        uint32_t remaining = modinfo_size - offset;
+        if (remaining < MODINFO_FIXED_HEADER_SIZE) {
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+
+        const unsigned char *rec = modinfo + offset;
+        const unsigned char *name = rec + MODINFO_FIXED_HEADER_SIZE;
+        uint32_t name_space = remaining - MODINFO_FIXED_HEADER_SIZE;
+        uint32_t name_len = 0;
+        while (name_len < name_space && name[name_len] != '\0') {
+            name_len++;
+        }
+        if (name_len >= name_space) {
+            /* Unterminated module name */
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+
+        uint32_t object_space = name_space - (name_len + 1);
+        uint32_t object_len = 0;
+        while (object_len < object_space && name[name_len + 1 + object_len] != '\0') {
+            object_len++;
+        }
+        if (object_len >= object_space) {
+            /* Unterminated object file name */
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+
+        uint16_t stream_index = read_u16(rec + MODINFO_STREAM_INDEX_OFFSET);
+        uint32_t sym_bytes = read_u32(rec + MODINFO_SYM_BYTES_OFFSET);
+        uint32_t c11_bytes = read_u32(rec + MODINFO_C11_BYTES_OFFSET);
+        uint32_t c13_bytes = read_u32(rec + MODINFO_C13_BYTES_OFFSET);
+        if (stream_index != PDB_INVALID_STREAM) {
+            if (stream_index >= ctx->nr_streams) {
+                ctx->error = EPDB_PARSE_ERROR;
+                return -1;
+            }
+            const struct stream *module_stream = &ctx->streams[stream_index];
+            if (sym_bytes > module_stream->size ||
+                c11_bytes > module_stream->size - sym_bytes ||
+                c13_bytes > module_stream->size - sym_bytes - c11_bytes) {
+                /* Declared regions extend past the end of the module stream */
+                ctx->error = EPDB_PARSE_ERROR;
+                return -1;
+            }
+        }
+
+        nr_modules++;
+
+        uint32_t record_size = MODINFO_FIXED_HEADER_SIZE + name_len + 1 + object_len + 1;
+        uint32_t advance = (record_size + 3u) & ~3u;
+        if (advance > remaining) {
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+        offset += advance;
+    }
+
+    if (nr_modules == 0) {
+        return 0;
+    }
+
+    struct pdb_module *modules = ctx->malloc(nr_modules * sizeof(*modules));
+    struct module_symbols_cache *caches =
+        ctx->malloc(nr_modules * sizeof(*caches));
+    if (modules == NULL || caches == NULL) {
+        if (modules != NULL) {
+            ctx->free(modules);
+        }
+        if (caches != NULL) {
+            ctx->free(caches);
+        }
+        ctx->error = EPDB_ALLOCATION_FAILURE;
+        return -1;
+    }
+    memset(modules, 0, nr_modules * sizeof(*modules));
+    memset(caches, 0, nr_modules * sizeof(*caches));
+
+    /* Second pass: publish descriptors in physical order. */
+    offset = 0;
+    for (uint32_t i = 0; i < nr_modules; i++) {
+        const unsigned char *rec = modinfo + offset;
+        const char *name = (const char *)rec + MODINFO_FIXED_HEADER_SIZE;
+        size_t name_len = strlen(name);
+        size_t object_len = strlen(name + name_len + 1);
+
+        modules[i].index = i;
+        modules[i].name = name;
+        modules[i].object_name = name + name_len + 1;
+        modules[i].stream_index = read_u16(rec + MODINFO_STREAM_INDEX_OFFSET);
+        modules[i].symbol_bytes = read_u32(rec + MODINFO_SYM_BYTES_OFFSET);
+        modules[i].c11_bytes = read_u32(rec + MODINFO_C11_BYTES_OFFSET);
+        modules[i].c13_bytes = read_u32(rec + MODINFO_C13_BYTES_OFFSET);
+
+        uint32_t record_size =
+            MODINFO_FIXED_HEADER_SIZE + (uint32_t)name_len + 1 + (uint32_t)object_len + 1;
+        offset += (record_size + 3u) & ~3u;
+    }
+
+    ctx->modules = modules;
+    ctx->nr_modules = nr_modules;
+    ctx->module_symbols = caches;
+
+    return 0;
+}
+
 static int parse_dbi_stream(struct pdb_context *ctx)
 {
     if (DBI_STREAM_IDX >= ctx->nr_streams) {
@@ -419,9 +598,19 @@ static int parse_dbi_stream(struct pdb_context *ctx)
         return -1;
     }
 
-    if (hdr->global_stream_index >= ctx->nr_streams ||
-        hdr->public_stream_index >= ctx->nr_streams || hdr->sym_record_stream >= ctx->nr_streams ||
-        hdr->mfc_type_server_index >= ctx->nr_streams) {
+    /*
+     * The global stream index, public stream index, and symbol record stream
+     * index may be 0xffff to indicate that the corresponding table or stream
+     * is absent.
+     */
+    if ((hdr->global_stream_index != PDB_INVALID_STREAM &&
+         hdr->global_stream_index >= ctx->nr_streams) ||
+        (hdr->public_stream_index != PDB_INVALID_STREAM &&
+         hdr->public_stream_index >= ctx->nr_streams) ||
+        (hdr->sym_record_stream != PDB_INVALID_STREAM &&
+         hdr->sym_record_stream >= ctx->nr_streams) ||
+        (hdr->mfc_type_server_index != PDB_INVALID_STREAM &&
+         hdr->mfc_type_server_index >= ctx->nr_streams)) {
         /* Malformed PDB - bad stream index */
         ctx->error = EPDB_PARSE_ERROR;
         return -1;
@@ -436,8 +625,11 @@ static int parse_dbi_stream(struct pdb_context *ctx)
         return -1;
     }
 
-    /* TODO: Parse module info substream */
-    const void *mihdr = stream->data + sizeof(struct dbi_stream_header);
+    /* Parse the module info substream (variable-length, 4-byte aligned records) */
+    const unsigned char *mihdr = stream->data + sizeof(struct dbi_stream_header);
+    if (parse_dbi_module_info(ctx, mihdr, hdr->mod_info_size) < 0) {
+        return -1;
+    }
 
     /* TODO: Parse section contribution substream */
     const void *schdr = (char *)mihdr + hdr->mod_info_size;
@@ -532,8 +724,8 @@ static int parse_pubsym_hashtable(struct pdb_context *ctx, const struct gsi_hash
 
     /* Get the symbol record stream so we can convert offsets to pointers */
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
-    if (symbols_stream_idx >= ctx->nr_streams) {
-        /* Invalid stream index */
+    if (symbols_stream_idx == PDB_INVALID_STREAM || symbols_stream_idx >= ctx->nr_streams) {
+        /* A public hash table cannot exist without its referenced records */
         ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
@@ -714,6 +906,13 @@ err_pdb_corrupt:
 static int parse_public_symbol_stream(struct pdb_context *ctx)
 {
     uint16_t public_symbols_idx = ctx->dbi_header->public_stream_index;
+    if (public_symbols_idx == PDB_INVALID_STREAM) {
+        /*
+         * No public symbol stream. Public enumeration still inspects the
+         * global record stream, and name lookup falls back to a linear scan.
+         */
+        return 0;
+    }
     if (public_symbols_idx >= ctx->nr_streams) {
         ctx->error = EPDB_PARSE_ERROR;
         return -1;
@@ -755,6 +954,12 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
 static int parse_symbol_record_stream(struct pdb_context *ctx)
 {
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
+    if (symbols_stream_idx == PDB_INVALID_STREAM) {
+        /* No global record stream: all symbol enumerations are empty. */
+        ctx->nr_symbols = 0;
+        ctx->nr_public_symbols = 0;
+        return 0;
+    }
     if (symbols_stream_idx >= ctx->nr_streams) {
         /* Invalid stream index */
         ctx->error = EPDB_PARSE_ERROR;
@@ -808,8 +1013,15 @@ static int parse_symbol_streams(struct pdb_context *ctx)
         return -1;
     }
 
-    if (parse_public_symbol_stream(ctx) < 0) {
-        return -1;
+    /*
+     * A public hash table indexes records in the global record stream. When
+     * that stream is absent there is nothing for PSI to reference, so public
+     * enumeration and lookup report an empty result set instead of erroring.
+     */
+    if (ctx->dbi_header->sym_record_stream != PDB_INVALID_STREAM) {
+        if (parse_public_symbol_stream(ctx) < 0) {
+            return -1;
+        }
     }
 
     /*
@@ -831,6 +1043,11 @@ static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool p
 {
     PDB_ASSERT(ctx->symbol_streams_parsed);
 
+    if (ctx->dbi_header->sym_record_stream == PDB_INVALID_STREAM) {
+        /* No records to enumerate */
+        return;
+    }
+
     /* parse_symbol_stream has already performed symbol stream validation */
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
     const struct stream *stream = &ctx->streams[symbols_stream_idx];
@@ -848,6 +1065,295 @@ static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool p
 
         sym = NextSym(sym);
     }
+}
+
+/**
+ * Build (or return) the lazily-created symbol view for a single module stream.
+ *
+ * Only records fully contained in the module's SymByteSize region are
+ * enumerated. That region starts with a four-byte CodeView signature, which is
+ * included in the offsets but is not a symbol itself. C11/C13 line information
+ * and any trailing reference records live past SymByteSize and are not part of
+ * this view.
+ */
+static int parse_module_symbol_cache(
+    struct pdb_context *ctx, uint32_t module_index, struct module_symbols_cache *cache)
+{
+    if (cache->parsed) {
+        return 0;
+    }
+
+    const struct pdb_module *module = &ctx->modules[module_index];
+    if (module->stream_index == PDB_INVALID_STREAM || module->symbol_bytes == 0) {
+        cache->parsed = true;
+        cache->symbols = NULL;
+        cache->count = 0;
+        return 0;
+    }
+
+    if (module->stream_index >= ctx->nr_streams || module->symbol_bytes < 4) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    const struct stream *stream = &ctx->streams[module->stream_index];
+    if (module->symbol_bytes > stream->size ||
+        module->c11_bytes > stream->size - module->symbol_bytes ||
+        module->c13_bytes > stream->size - module->symbol_bytes - module->c11_bytes) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    const unsigned char *data = stream->data;
+    if (read_u32(data) != (uint32_t)CV_SIGNATURE_C13) {
+        ctx->error = EPDB_UNSUPPORTED_VERSION;
+        return -1;
+    }
+
+    /* First pass: validate record boundaries and count. */
+    uint32_t offset = 4;
+    uint32_t count = 0;
+    while (offset < module->symbol_bytes) {
+        if (module->symbol_bytes - offset < 4) {
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+
+        uint32_t reclen = read_u16(data + offset);
+        if (reclen < 2) {
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+        uint32_t record_size = 2 + reclen;
+        if (record_size > module->symbol_bytes - offset) {
+            ctx->error = EPDB_PARSE_ERROR;
+            return -1;
+        }
+
+        offset += record_size;
+        count++;
+    }
+
+    struct pdb_module_symbol *symbols = NULL;
+    if (count > 0) {
+        symbols = ctx->malloc(count * sizeof(*symbols));
+        if (symbols == NULL) {
+            ctx->error = EPDB_ALLOCATION_FAILURE;
+            return -1;
+        }
+    }
+
+    /* Second pass: publish the records, including unrecognized kinds. */
+    offset = 4;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t reclen = read_u16(data + offset);
+        uint32_t record_size = 2 + reclen;
+
+        symbols[i].offset = offset;
+        symbols[i].size = record_size;
+        symbols[i].kind = read_u16(data + offset + 2);
+        symbols[i].data = data + offset;
+
+        offset += record_size;
+    }
+
+    cache->symbols = symbols;
+    cache->count = count;
+    cache->parsed = true;
+
+    return 0;
+}
+
+int pdb_get_modules(void *context, const struct pdb_module **modules, uint32_t *count)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+
+    PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
+    PDB_ASSERT_PDB_LOADED(ctx, -1);
+    PDB_ASSERT_PARAMETER(ctx, -1, modules != NULL && count != NULL);
+
+    *modules = ctx->nr_modules > 0 ? ctx->modules : NULL;
+    *count = ctx->nr_modules;
+
+    return 0;
+}
+
+int pdb_get_module_symbols(
+    void *context,
+    uint32_t module_index,
+    const struct pdb_module_symbol **symbols,
+    uint32_t *count)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+
+    PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
+    PDB_ASSERT_PDB_LOADED(ctx, -1);
+    PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL && count != NULL);
+
+    *symbols = NULL;
+    *count = 0;
+
+    if (module_index >= ctx->nr_modules) {
+        ctx->error = EPDB_INVALID_PARAMETER;
+        return -1;
+    }
+
+    struct module_symbols_cache *cache = &ctx->module_symbols[module_index];
+    if (!cache->parsed) {
+        if (parse_module_symbol_cache(ctx, module_index, cache) < 0) {
+            return -1;
+        }
+    }
+
+    *symbols = cache->count > 0 ? cache->symbols : NULL;
+    *count = cache->count;
+
+    return 0;
+}
+
+/*
+ * Confirm that byte_offset is the start of a well-formed record in the given
+ * stream and report the total size of that record.
+ */
+static int find_record_at(const struct stream *stream, uint32_t byte_offset, uint32_t *record_size)
+{
+    uint32_t offset = 0;
+    while (offset < stream->size) {
+        if (stream->size - offset < 4) {
+            return -1;
+        }
+
+        uint32_t reclen = read_u16(stream->data + offset);
+        if (reclen < 2) {
+            return -1;
+        }
+        uint32_t size = 2 + reclen;
+        if (size > stream->size - offset) {
+            return -1;
+        }
+
+        if (offset == byte_offset) {
+            *record_size = size;
+            return 0;
+        }
+
+        offset += size;
+    }
+
+    return -1;
+}
+
+int pdb_resolve_procedure_ref(
+    void *context, uint32_t global_record_offset, struct pdb_procedure *out)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+
+    PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
+    PDB_ASSERT_PDB_LOADED(ctx, -1);
+    PDB_ASSERT_PARAMETER(ctx, -1, out != NULL);
+
+    memset(out, 0, sizeof(*out));
+
+    if (ctx->dbi_header->sym_record_stream == PDB_INVALID_STREAM) {
+        /* An absent global record stream cannot contain references. */
+        ctx->error = EPDB_NOT_FOUND;
+        return -1;
+    }
+    if (ctx->dbi_header->sym_record_stream >= ctx->nr_streams) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    const struct stream *record_stream = &ctx->streams[ctx->dbi_header->sym_record_stream];
+    uint32_t ref_size = 0;
+    if (find_record_at(record_stream, global_record_offset, &ref_size) < 0) {
+        /* Offset is not the start of a record in the global record stream. */
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    const unsigned char *ref = record_stream->data + global_record_offset;
+    uint16_t ref_kind = read_u16(ref + 2);
+    if (ref_kind != S_PROCREF && ref_kind != S_LPROCREF) {
+        /* Only the modern procedure reference records are supported. */
+        ctx->error = EPDB_UNSUPPORTED_VERSION;
+        return -1;
+    }
+
+    if (ref_size < 14) {
+        /* Too small to hold a REFSYM2 fixed portion. */
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    uint32_t ib_sym = read_u32(ref + 8);
+    uint16_t imod = read_u16(ref + 12); /* one-based module index */
+
+    if (imod == 0 || imod > ctx->nr_modules) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+    uint32_t module_index = (uint32_t)imod - 1;
+    const struct pdb_module *module = &ctx->modules[module_index];
+    if (module->stream_index == PDB_INVALID_STREAM) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    struct module_symbols_cache *cache = &ctx->module_symbols[module_index];
+    if (!cache->parsed) {
+        if (parse_module_symbol_cache(ctx, module_index, cache) < 0) {
+            return -1;
+        }
+    }
+
+    /*
+     * The referenced offset must land exactly on a record start within the
+     * symbol region. An offset in the middle of a record or past SymByteSize
+     * (for example in the C11/C13 line information) is not an identity.
+     */
+    const struct pdb_module_symbol *target = NULL;
+    for (uint32_t i = 0; i < cache->count; i++) {
+        if (cache->symbols[i].offset == ib_sym) {
+            target = &cache->symbols[i];
+            break;
+        }
+    }
+    if (target == NULL) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    uint16_t expected_kind = ref_kind == S_PROCREF ? S_GPROC32 : S_LPROC32;
+    if (target->kind != expected_kind) {
+        /* _ID and old-style ST procedure records are not supported. */
+        ctx->error = EPDB_UNSUPPORTED_VERSION;
+        return -1;
+    }
+
+    /* PROCSYM32 fixed fields, then a NUL-terminated name. */
+    if (target->size < 40) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+    const unsigned char *proc = target->data;
+    const char *name = (const char *)proc + 39;
+    uint32_t name_space = target->size - 39;
+    if (memchr(name, '\0', name_space) == NULL) {
+        ctx->error = EPDB_PARSE_ERROR;
+        return -1;
+    }
+
+    out->module_index = module_index;
+    out->symbol_offset = target->offset;
+    out->name = name;
+    out->section = read_u16(proc + 36);
+    out->address_offset = read_u32(proc + 32);
+    out->code_size = read_u32(proc + 16);
+    out->type_index = read_u32(proc + 28);
+    out->is_local = target->kind == S_LPROC32;
+
+    return 0;
 }
 
 /**
@@ -1103,6 +1609,12 @@ int pdb_get_symbols(void *context, const SYMTYPE **symbols)
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
+    if (!ctx->symbol_streams_parsed) {
+        if (parse_symbol_streams(ctx) < 0) {
+            return -1;
+        }
+    }
+
     get_symbols(ctx, symbols, false);
 
     return 0;
@@ -1134,6 +1646,12 @@ int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
     PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
+
+    if (!ctx->symbol_streams_parsed) {
+        if (parse_symbol_streams(ctx) < 0) {
+            return -1;
+        }
+    }
 
     get_symbols(ctx, (const SYMTYPE **)symbols, true);
 
@@ -1175,6 +1693,42 @@ const PUBSYM32 *pdb_lookup_public_symbol(void *context, const char *name, bool c
 
     int (*strcmp_fn)(const char *, const char *);
     strcmp_fn = case_sensitive ? strcmp : strcasecmp;
+
+    /*
+     * Without a public hash table (no PSI), fall back to scanning the actual
+     * global record stream, preserving the requested case sensitivity. With
+     * neither a PSI nor a record stream there is nothing to find.
+     */
+    if (ctx->dbi_header->public_stream_index == PDB_INVALID_STREAM ||
+        ctx->dbi_header->sym_record_stream == PDB_INVALID_STREAM) {
+        if (ctx->dbi_header->sym_record_stream == PDB_INVALID_STREAM) {
+            ctx->error = EPDB_NOT_FOUND;
+            return NULL;
+        }
+
+        const struct stream *stream = &ctx->streams[ctx->dbi_header->sym_record_stream];
+        uint32_t offset = 0;
+        while (offset + sizeof(SYMTYPE) <= stream->size) {
+            const SYMTYPE *sym = (const SYMTYPE *)(stream->data + offset);
+            uint32_t sym_size = sizeof(uint16_t) + sym->reclen;
+            if (sym_size < sizeof(SYMTYPE) || sym_size > stream->size - offset) {
+                ctx->error = EPDB_PARSE_ERROR;
+                return NULL;
+            }
+
+            if (sym->rectyp == S_PUB32) {
+                const PUBSYM32 *pub = (const PUBSYM32 *)sym;
+                if (strcmp_fn(name, (const char *)pub->name) == 0) {
+                    return pub;
+                }
+            }
+
+            offset += sym_size;
+        }
+
+        ctx->error = EPDB_NOT_FOUND;
+        return NULL;
+    }
 
     /* Hash the symbol and get its bucket from the hashtable */
     uint16_t hash = hash_mod((unsigned char *)name, strlen(name), NR_HASH_BUCKETS);

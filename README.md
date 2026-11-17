@@ -11,6 +11,8 @@ libpdb currently has the following major features:
 * Retrieve PDB header information, including the guid and age of the target binary.
 * Retrieve section header information.
 * Enumerate symbols (public and global).
+* Enumerate DBI modules and the local symbols of each module, and resolve
+  global procedure references to their definitions.
 * Lookup a symbol directly by its name. This functionality is very fast, as it
   uses an embedded hashtable in the PDB file.
 
@@ -77,6 +79,31 @@ int main(int argc, char **argv)
 }
 ```
 
+An example that walks the module registry, lists each module's local
+symbols, and resolves global procedure references is provided in
+`examples/module_procedures.c`.
+
+```C
+const struct pdb_module *modules = NULL;
+uint32_t nr_modules = 0;
+if (pdb_get_modules(ctx, &modules, &nr_modules) == 0) {
+    for (uint32_t i = 0; i < nr_modules; i++) {
+        const struct pdb_module_symbol *symbols = NULL;
+        uint32_t nr_symbols = 0;
+        (void)pdb_get_module_symbols(ctx, i, &symbols, &nr_symbols);
+        printf("%u: %s (%s), %u symbols\n", modules[i].index,
+               modules[i].name, modules[i].object_name, nr_symbols);
+    }
+}
+
+struct pdb_procedure proc;
+/* global_record_offset is the byte offset of an S_PROCREF/S_LPROCREF record */
+if (pdb_resolve_procedure_ref(ctx, offset, &proc) == 0) {
+    printf("%s -> module %u symbol 0x%x\n", proc.name, proc.module_index,
+           proc.symbol_offset);
+}
+```
+
 
 ## Roadmap
 
@@ -86,7 +113,8 @@ There a number of planned features. These currently include:
 - [ ] Integrate a symbol name demangler into pdbparse for an alternate public
   symbol view
 - [ ] Parse type information
-- [ ] Parse module information, local symbols, and line number information.
+- [x] Parse module information and local symbols.
+- [ ] Parse line number information.
 - [ ] Add cross-compilation support for Windows and big-endian Unix machines
 - [ ] Add support for building libpdb without libc in order to support alternative
   execution environments, such as embedded targets or kernel mode

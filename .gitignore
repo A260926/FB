@@ -1,6 +1,7 @@
 # Project files
 .vscode/
 build/
+.task-build/
 
 # Prerequisites
 *.d

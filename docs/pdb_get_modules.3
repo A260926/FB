@@ -1,0 +1,144 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_GET_MODULES 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_get_modules, pdb_get_module_symbols \- enumerate DBI modules and their symbols
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "int pdb_get_modules(void *" context ", const struct pdb_module **" modules ,
+.BI "                    uint32_t *" count );
+.PP
+.BI "int pdb_get_module_symbols(void *" context ", uint32_t " module_index ,
+.BI "                           const struct pdb_module_symbol **" symbols ,
+.BI "                           uint32_t *" count );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_get_modules ()
+publishes the DBI module registry, in physical ModInfo order, through
+.IR modules .
+The caller does not free the returned array; it is borrowed from
+.I context
+and remains valid until
+.BR pdb_reset_context (3),
+a subsequent
+.BR pdb_load (3),
+or
+.BR pdb_destroy_context (3).
+Module indices start at zero and follow the physical order of the substream;
+modules with identical names are never merged.
+.PP
+.nf
+struct pdb_module {
+    uint32_t index;
+    const char *name;          /* borrowed */
+    const char *object_name;   /* borrowed */
+    uint16_t stream_index;
+    uint32_t symbol_bytes;
+    uint32_t c11_bytes;
+    uint32_t c13_bytes;
+};
+.fi
+.PP
+.I stream_index
+is the module stream index, or 0xffff when the module has no stream.
+.I symbol_bytes
+is the SymByteSize of the module stream and includes the four-byte CodeView
+signature.
+.I c11_bytes
+and
+.I c13_bytes
+are the declared C11 and C13 line information sizes.
+.PP
+.BR pdb_get_module_symbols ()
+enumerates the records in the symbol region of module
+.IR module_index .
+The returned view is built lazily on first use, is borrowed from
+.IR context ,
+and is stable across repeated queries.
+Only records fully contained in the first
+.I symbol_bytes
+bytes of the module stream are enumerated; the leading signature and the
+C11/C13 line information are not part of the view.
+.PP
+.nf
+struct pdb_module_symbol {
+    uint32_t offset;               /* from the stream start, signature included */
+    uint32_t size;                 /* record length and kind fields included */
+    uint16_t kind;
+    const unsigned char *data;     /* borrowed */
+};
+.fi
+.PP
+Every record occupies a slot, including kinds this library does not
+interpret. The four-byte codeview signature at offset zero is not a symbol.
+
+.SH RETURN VALUE
+Both functions return 0 on success, or -1 on error. Empty module or symbol
+lists succeed with
+.I count
+set to zero and the pointer set to NULL. On failure, outputs are cleared.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_ALLOCATION_FAILURE
+There was an internal error allocating memory.
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required output parameter was NULL, or
+.I module_index
+was out of range.
+.TP
+.B EPDB_UNSUPPORTED_VERSION
+The module's symbol region does not begin with the C13 signature.
+.TP
+.B EPDB_PARSE_ERROR
+The module registry or symbol region is malformed.
+
+.SH NOTES
+Module access does not depend on the public or global symbol parsers, so it
+works on PDBs that have no GSI, PSI, or global record stream.
+
+.SH EXAMPLE
+.nf
+void print_modules(void *pdb_context)
+{
+    const struct pdb_module *modules = NULL;
+    uint32_t nr_modules = 0;
+    if (pdb_get_modules(pdb_context, &modules, &nr_modules) < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    for (uint32_t i = 0; i < nr_modules; i++) {
+        printf("[%u] %s (%s)\\n", modules[i].index, modules[i].name,
+               modules[i].object_name);
+
+        const struct pdb_module_symbol *symbols = NULL;
+        uint32_t nr_symbols = 0;
+        if (pdb_get_module_symbols(pdb_context, i, &symbols, &nr_symbols) < 0) {
+            exit(EXIT_FAILURE);
+        }
+
+        for (uint32_t j = 0; j < nr_symbols; j++) {
+            printf("    offset=0x%x size=%u kind=0x%x\\n", symbols[j].offset,
+                   symbols[j].size, symbols[j].kind);
+        }
+    }
+}
+.fi
+
+.SH SEE ALSO
+.BR pdb_load (3),
+.BR pdb_resolve_procedure_ref (3),
+.BR pdb_get_symbols (3),
+.BR pdb_errno (3)
