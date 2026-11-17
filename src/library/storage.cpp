@@ -478,6 +478,365 @@ namespace Cubiquity
 		return nodeIndex;
 	}
 
+	namespace
+	{
+		// The compressed tree covers signed 32-bit voxel coordinates. In the
+		// tree's unsigned encoding the root cell is exactly this interval, and
+		// the root node has height 32 (its children are height 31, etc).
+		constexpr i64 TranslatedRootLower = -(INT64_C(1) << 31);
+		constexpr int TranslatedRootHeight = 32;
+
+		// A node's height is implicit in where it is referenced, so nodes can only
+		// be reused for other subtrees of the same height. Two nodes with equal
+		// contents but different heights would otherwise be confused.
+		struct TranslatedNodeKey
+		{
+			int height;
+			Node node;
+			bool operator==(const TranslatedNodeKey& other) const
+			{
+				return height == other.height && node == other.node;
+			}
+		};
+
+		struct TranslatedNodeKeyHasher
+		{
+			size_t operator()(const TranslatedNodeKey& key) const noexcept
+			{
+				return static_cast<size_t>(
+					Internals::hash_combine(NodeHasher{}(key.node),
+						static_cast<u64>(static_cast<u32>(key.height))));
+			}
+		};
+
+		struct TranslatedCombineContext
+		{
+			NodeStore& targetStore;
+			const NodeStore& sourceStore;
+			u32 sourceRootNode;
+			std::array<i64, 3> delta;
+			const MaterialCombiner& combiner;
+			CombineStats stats;
+			// Nodes created during this call, keyed by height and content so that
+			// repeated subgraphs in the source are imported only once.
+			std::unordered_map<TranslatedNodeKey, u32, TranslatedNodeKeyHasher> createdNodes;
+		};
+
+		// Adds a node to the destination store, collapsing uniform nodes to the
+		// corresponding material node and reusing identical nodes created earlier
+		// during this same call.
+		u32 translated_append_node(TranslatedCombineContext& context, const Node& node, int height)
+		{
+			if (isMaterialNode(node)) {
+				return node[0];
+			}
+
+			const TranslatedNodeKey key{ height, node };
+			const auto existing = context.createdNodes.find(key);
+			if (existing != context.createdNodes.end()) {
+				return existing->second;
+			}
+
+			const u32 nodeIndex = context.targetStore.appendNode(node);
+			context.createdNodes.emplace(key, nodeIndex);
+			context.stats.allocated_nodes++;
+			return nodeIndex;
+		}
+
+		// Determines whether the source subtree rooted at 'nodeIndex' has a single
+		// material throughout the (axis aligned, non-empty) box [boxLower, boxUpper).
+		// The box must be contained in the cell [cellLower, cellLower + 2^cellHeight).
+		// Returns true and sets 'material' if so. Uniform source nodes terminate the
+		// recursion immediately, which is what keeps solid regions cheap.
+		bool query_source_uniform(TranslatedCombineContext& context, u32 nodeIndex,
+			const std::array<i64, 3>& cellLower, int cellHeight,
+			const std::array<i64, 3>& boxLower, const std::array<i64, 3>& boxUpper,
+			MaterialId& material)
+		{
+			if (isMaterialNode(nodeIndex)) {
+				material = static_cast<MaterialId>(nodeIndex);
+				return true;
+			}
+
+			// Valid stores always have material nodes at height zero.
+			assert(cellHeight > 0 && "Internal node at leaf height");
+
+			const Node node = context.sourceStore[nodeIndex];
+
+			const i64 cellSize = INT64_C(1) << cellHeight;
+			bool boxIsWholeCell = true;
+			for (int axis = 0; axis < 3; axis++) {
+				if (boxLower[axis] != cellLower[axis] ||
+					boxUpper[axis] != cellLower[axis] + cellSize) {
+					boxIsWholeCell = false;
+				}
+			}
+
+			// If the box covers the whole cell then the node itself has to be
+			// uniform. Compressed trees normally represent such a cell by a
+			// material node, but edits such as setVoxel() can also leave an
+			// uncompressed-but-uniform internal node, so check for that too.
+			if (boxIsWholeCell) {
+				if (isMaterialNode(nodeIndex)) {
+					material = static_cast<MaterialId>(nodeIndex);
+					return true;
+				}
+				// Not collapsed by the store, but an internal node whose eight
+				// children are all the same material is still uniform.
+				if (isMaterialNode(node)) {
+					material = static_cast<MaterialId>(node[0]);
+					return true;
+				}
+				return false;
+			}
+
+			const i64 childSize = cellSize >> 1;
+			bool foundMaterial = false;
+			for (u32 childId = 0; childId < 8; childId++) {
+				std::array<i64, 3> childLower;
+				bool overlaps = true;
+				for (int axis = 0; axis < 3; axis++) {
+					childLower[axis] = cellLower[axis] +
+						(((childId >> axis) & 0x1) ? childSize : 0);
+					if (!(childLower[axis] < boxUpper[axis] &&
+						boxLower[axis] < childLower[axis] + childSize)) {
+						overlaps = false;
+					}
+				}
+				if (!overlaps) {
+					continue;
+				}
+
+				MaterialId childMaterial = 0;
+				if (!query_source_uniform(context, node[childId], childLower,
+					cellHeight - 1, boxLower, boxUpper, childMaterial)) {
+					return false;
+				}
+
+				if (!foundMaterial) {
+					material = childMaterial;
+					foundMaterial = true;
+				}
+				else if (material != childMaterial) {
+					return false;
+				}
+			}
+
+			return foundMaterial;
+		}
+
+		// Builds a replacement for the destination subtree 'nodeIndex' (which covers
+		// 'cellLower' at 'cellHeight') with the translated source combined in over
+		// [regionLower, regionUpper), which is the intersection of the requested
+		// region with this cell. Voxels outside the region keep their old value.
+		//
+		// 'knownSourceMaterial', when non-null, states that the source is uniform
+		// over this whole cell (with the given value), letting descendants skip
+		// repeated source queries.
+		u32 build_translated_region(TranslatedCombineContext& context, u32 nodeIndex,
+			const std::array<i64, 3>& cellLower, int cellHeight,
+			const std::array<i64, 3>& regionLower, const std::array<i64, 3>& regionUpper,
+			const MaterialId* knownSourceMaterial = nullptr)
+		{
+			context.stats.region_visits++;
+
+			const i64 cellSize = INT64_C(1) << cellHeight;
+
+			std::array<i64, 3> sourceLower;
+			std::array<i64, 3> sourceUpper;
+			bool regionIsWholeCell = true;
+			for (int axis = 0; axis < 3; axis++) {
+				if (regionLower[axis] != cellLower[axis] ||
+					regionUpper[axis] != cellLower[axis] + cellSize) {
+					regionIsWholeCell = false;
+				}
+				// Computed in 64-bit because the source box of a translated region
+				// can lie outside the signed 32-bit coordinate range.
+				sourceLower[axis] = regionLower[axis] - context.delta[axis];
+				sourceUpper[axis] = regionUpper[axis] - context.delta[axis];
+			}
+
+			if (regionIsWholeCell) {
+				MaterialId sourceMaterial = 0;
+				bool sourceIsUniform = false;
+				if (knownSourceMaterial) {
+					sourceMaterial = *knownSourceMaterial;
+					sourceIsUniform = true;
+				}
+				else {
+					const std::array<i64, 3> rootLower = {
+						TranslatedRootLower, TranslatedRootLower, TranslatedRootLower };
+					sourceIsUniform = query_source_uniform(context,
+						context.sourceRootNode, rootLower, TranslatedRootHeight,
+						sourceLower, sourceUpper, sourceMaterial);
+				}
+
+				if (sourceIsUniform) {
+					if (isMaterialNode(nodeIndex)) {
+						return context.combiner(
+							static_cast<MaterialId>(nodeIndex), sourceMaterial);
+					}
+
+					// The destination is not uniform, but the source is. Each of
+					// its children still combines with the same source material.
+					const Node node = context.targetStore[nodeIndex];
+					const i64 childSize = cellSize >> 1;
+					Node result;
+					bool changed = false;
+					for (u32 childId = 0; childId < 8; childId++) {
+						const std::array<i64, 3> childLower = {
+							cellLower[0] + (((childId >> 0) & 0x1) ? childSize : 0),
+							cellLower[1] + (((childId >> 1) & 0x1) ? childSize : 0),
+							cellLower[2] + (((childId >> 2) & 0x1) ? childSize : 0) };
+						const std::array<i64, 3> childUpper = {
+							childLower[0] + childSize,
+							childLower[1] + childSize,
+							childLower[2] + childSize };
+
+						const u32 childNodeIndex = node[childId];
+						u32 newChildNodeIndex = childNodeIndex;
+						if (isMaterialNode(childNodeIndex)) {
+							newChildNodeIndex = context.combiner(
+								static_cast<MaterialId>(childNodeIndex), sourceMaterial);
+						}
+						else {
+							newChildNodeIndex = build_translated_region(context,
+								childNodeIndex, childLower, cellHeight - 1,
+								childLower, childUpper, &sourceMaterial);
+						}
+
+						result[childId] = newChildNodeIndex;
+						changed = changed || (newChildNodeIndex != childNodeIndex);
+					}
+
+					return changed ? translated_append_node(context, result, cellHeight) : nodeIndex;
+				}
+
+				// A single destination voxel's source region is one source voxel,
+				// so it is always uniform. Valid stores cannot get here.
+				assert(cellHeight > 0 && "Source region over a single voxel must be uniform");
+				if (cellHeight == 0) {
+					return nodeIndex;
+				}
+			}
+
+			const i64 childSize = cellSize >> 1;
+			const Node node = isMaterialNode(nodeIndex)
+				? make_node(nodeIndex)
+				: context.targetStore[nodeIndex];
+
+			Node result;
+			bool changed = false;
+			for (u32 childId = 0; childId < 8; childId++) {
+				const std::array<i64, 3> childLower = {
+					cellLower[0] + (((childId >> 0) & 0x1) ? childSize : 0),
+					cellLower[1] + (((childId >> 1) & 0x1) ? childSize : 0),
+					cellLower[2] + (((childId >> 2) & 0x1) ? childSize : 0) };
+				const std::array<i64, 3> childUpper = {
+					childLower[0] + childSize,
+					childLower[1] + childSize,
+					childLower[2] + childSize };
+
+				std::array<i64, 3> clippedLower;
+				std::array<i64, 3> clippedUpper;
+				bool overlaps = true;
+				for (int axis = 0; axis < 3; axis++) {
+					clippedLower[axis] = std::max(regionLower[axis], childLower[axis]);
+					clippedUpper[axis] = std::min(regionUpper[axis], childUpper[axis]);
+					if (clippedLower[axis] >= clippedUpper[axis]) {
+						overlaps = false;
+					}
+				}
+
+				const u32 childNodeIndex = node[childId];
+				u32 newChildNodeIndex = childNodeIndex;
+				if (overlaps) {
+					newChildNodeIndex = build_translated_region(context,
+						childNodeIndex, childLower, cellHeight - 1,
+						clippedLower, clippedUpper);
+				}
+
+				result[childId] = newChildNodeIndex;
+				changed = changed || (newChildNodeIndex != childNodeIndex);
+			}
+
+			return changed ? translated_append_node(context, result, cellHeight) : nodeIndex;
+		}
+	}
+
+	void Volume::combineTranslated(const Volume& sourceVolume,
+		const std::array<i64, 3>& lower,
+		const std::array<i64, 3>& upper,
+		const std::array<i64, 3>& delta,
+		const MaterialCombiner& combiner,
+		CombineStats* stats)
+	{
+		CombineStats localStats;
+		CombineStats& resultStats = stats ? *stats : localStats;
+		resultStats = CombineStats(); // Every call counts from zero.
+
+		// Clip the source box to the voxels whose translated position is still a
+		// valid signed 32-bit target coordinate. Everything is computed in 64-bit
+		// because 'delta' alone may span [-2^32, 2^32] and lo/hi may reach 2^31.
+		constexpr i64 MinTargetCoord = INT32_MIN;
+		constexpr i64 MaxTargetCoord = INT32_MAX;
+
+		std::array<i64, 3> sourceLower;
+		std::array<i64, 3> sourceUpper;
+		std::array<i64, 3> targetLower;
+		std::array<i64, 3> targetUpper;
+		bool empty = false;
+		for (int axis = 0; axis < 3; axis++) {
+			// Smallest/largest source coordinate whose target position is valid.
+			const i64 minSourceCoord = MinTargetCoord - delta[axis];
+			const i64 maxSourceCoord = MaxTargetCoord - delta[axis]; // Inclusive
+
+			sourceLower[axis] = std::max(lower[axis], minSourceCoord);
+			sourceUpper[axis] = std::min(upper[axis], maxSourceCoord + 1);
+			if (sourceLower[axis] >= sourceUpper[axis]) {
+				empty = true;
+			}
+
+			// These are guaranteed to lie within the signed 32-bit target range.
+			targetLower[axis] = sourceLower[axis] + delta[axis];
+			targetUpper[axis] = sourceUpper[axis] + delta[axis];
+		}
+
+		if (empty) {
+			return; // Empty box (or entirely clipped away): nothing changes.
+		}
+
+		TranslatedCombineContext context{
+			mNodeStore,
+			sourceVolume.mNodeStore,
+			sourceVolume.rootNodeIndex(),
+			delta,
+			combiner,
+			CombineStats(),
+			{} };
+
+		const std::array<i64, 3> rootLower = {
+			TranslatedRootLower, TranslatedRootLower, TranslatedRootLower };
+
+		const u32 oldRootNodeIndex = rootNodeIndex();
+		const u32 newRootNodeIndex = build_translated_region(context,
+			oldRootNodeIndex, rootLower, TranslatedRootHeight,
+			targetLower, targetUpper);
+
+		if (newRootNodeIndex != oldRootNodeIndex) {
+			setRootNodeIndex(newRootNodeIndex);
+		}
+
+		// Nodes created by this call may be referenced from several places in the
+		// new tree. Mark every node as shared so later in-place edits take the
+		// copy-on-write path and cannot corrupt a shared subgraph.
+		if (context.stats.allocated_nodes > 0) {
+			mNodeStore.markAllNodesShared();
+		}
+
+		resultStats = context.stats;
+	}
+
 	MaterialId Volume::voxel(i32 x, i32 y, i32 z) const
 	{
 		// TODO: Consider starting from split point instead of root

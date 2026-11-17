@@ -103,6 +103,14 @@ namespace Cubiquity
 
 			u32 cloneRoot(u32 rootIndex);
 
+			// Appends a node to the store. Exposed for algorithms (such as combineTranslated)
+			// which build new nodes functionally rather than mutating existing ones in place.
+			u32 appendNode(const Node& node) { return append(node); }
+
+			// Marks every node currently in the store as potentially shared. Subsequent
+			// setNodeChild() calls will copy-on-write instead of modifying nodes in place.
+			void markAllNodesShared() { mSharedNodesEnd = mNodeVector.size(); }
+
 			void print(std::ostream& os);
 
 		private:
@@ -132,6 +140,16 @@ namespace Cubiquity
 
 	typedef std::function<MaterialId(MaterialId, MaterialId)> MaterialCombiner;
 
+	// Diagnostics returned by Volume::combineTranslated(). Both counters are reset
+	// at the start of every call and describe what actually happened during it.
+	struct CombineStats
+	{
+		// Number of destination regions (octree cells) the recursion actually visited.
+		u64 region_visits = 0;
+		// Number of new nodes actually appended to the destination NodeStore.
+		u64 allocated_nodes = 0;
+	};
+
 	class Volume
 	{
 	public:
@@ -145,7 +163,7 @@ namespace Cubiquity
 
 		// FIXME - Default move constructor doesn't work, I think because there
 		// is no move constructor on NodeStore (which manages a raw pointer) and
-		// so it falls back on the copy constructor. 
+		// so it falls back on the copy constructor.
 		// But moveable (defaulted)
 		//Volume(Volume&& vol) = default;
 		//Volume& operator=(Volume&& vol) = default;
@@ -167,6 +185,21 @@ namespace Cubiquity
 
 		void combine(const Volume& rhsVolume, const MaterialCombiner& combiner);
 		u32 combine(const Volume& rhsVolume, u32 rhsNodeIndex, u32 nodeIndex, const MaterialCombiner& combiner);
+
+		// Copies a (possibly translated) region of 'sourceVolume' into this volume. The
+		// half-open source box [lower, upper) is expressed in source voxel coordinates;
+		// source voxel q is written to target voxel q + delta. Voxels which map outside
+		// the target's signed 32-bit coordinate range are clipped away (they never wrap).
+		// For every participating target voxel the new value is combiner(oldTarget, oldSource),
+		// including when the source material is zero. Voxels outside the box are untouched.
+		// Source and target may be the same Volume; all source reads observe the values as
+		// they were when the call started.
+		void combineTranslated(const Volume& sourceVolume,
+			const std::array<i64, 3>& lower,
+			const std::array<i64, 3>& upper,
+			const std::array<i64, 3>& delta,
+			const MaterialCombiner& combiner,
+			CombineStats* stats = nullptr);
 
 		template <typename ArrayType>
 		MaterialId voxel(const ArrayType& position) const;
