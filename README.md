@@ -16,6 +16,8 @@ It is not physically based as it uses the Phong lighting model and some easy to 
 * Phong lighting model (ambient, diffuse, specular light)
 * Shadows with softness heuristics
 * Reflection and  refraction
+* Optional single-sphere lens: point-light air -> sphere -> air
+  connections solved directly from Snell's law (`SetPointRefractor`)
 * Various solids and shapes (sphere, block, quad, triangle)
 * Texture mapping
 * Moving camera
@@ -142,6 +144,57 @@ ignore the fancy T (tint) operator).
 </details>
 
 More technical information in `docs/tutorials`.
+
+## Sphere lens connections for point lights
+
+`Lights::SetPointRefractor(const Sphere*)` enables an optional single-sphere
+lens for point lights. When enabled, an opaque receiver outside the sphere
+gets the sum of:
+
+* the unobstructed straight connection (only while the open segment stays
+  out of the lens sphere), and
+* every valid air -> sphere -> air connection
+  `P -> entry -> exit -> L` that refracts twice on the sphere with no
+  internal reflection. One pair of endpoints can admit several
+  connections; all of them are returned.
+
+`ConnectSphere` (in `src/light/sphere_connection.hpp`) does the geometric
+solve in `double` using Snell's law at both interfaces and interval-based
+root isolation over the whole feasible emission-angle domain, so no
+connection is missed. Each result carries the world-space `entry`/`exit`
+points and a `transmission` equal to the material `transparency` squared
+times the exact unpolarized Fresnel transmittance of both interfaces.
+Each visible path is shaded using its own first-segment direction and its
+transmission as the path weight. Ambient and directional lights, and the
+renderer when the mode is off, behave exactly as before.
+
+```cpp
+#include "light.hpp"
+#include "sphere_connection.hpp"
+
+// 1. Put a refractive sphere in the scene as usual.
+Material glass;
+glass.transparency = 1.0f;
+glass.refractive_index = 1.5f;
+Sphere& lens = tracer.AddObject<Sphere>(Vec3f{0, 0, 0}, 1.0f, glass);
+
+// 2. Point light, then enable the lens connection (nullptr disables it;
+//    the sphere may also be replaced between renders).
+Lights lights;
+lights.AddPoint(1.0f, 2.5f, 0.01f, 0.0f);
+lights.SetPointRefractor(&lens);
+
+// ColorAt/TraceRay now sum the straight and all refracted connections,
+// checking each of the three open segments for occluders separately.
+
+// You can also query the geometry directly:
+std::vector<SphereConnection> paths =
+    ConnectSphere(lens, Vec3f{-3, 0, 0}, Vec3f{2.5f, 0.01f, 0});
+for (const SphereConnection& c : paths) {
+  // c.entry, c.exit: world-space surface points
+  // c.transmission:   transparency^2 * Fresnel(T1) * Fresnel(T2)
+}
+```
 
 ## Demo scenes
 
