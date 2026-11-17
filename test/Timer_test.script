@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Run Timer_test with its stdout and stderr captured separately, and mask the host information and all the
+# timing values (starting at the first number with a decimal point on each line).
+perlcmd=(perl -pe 'BEGIN { binmode(STDOUT); }
+  s/Timing on .*\)/Timing on ...)/;
+  s/Summary of timers \(.*\)/Summary of timers (...)/;
+  s/ *[0-9]+\.[0-9].*//;
+')
+
+cout=Timer_test.cout
+cerr=Timer_test.cerr
+
+Timer_test >$cout 2>$cerr
+
+echo '** cerr:'
+cat $cerr | "${perlcmd[@]}"
+echo '** cout:'
+cat $cout | "${perlcmd[@]}"
+
+rm -f $cout $cerr

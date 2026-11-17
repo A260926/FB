@@ -1,0 +1,293 @@
+%!PS-Adobe-2.0 EPSF-1.2
+%%Orientation: Portrait
+%%DocumentFonts:
+%%Creator: hps
+%%CreationDate: yyyy-mm-dd hh:mm:ss
+%%LanguageLevel: 1
+%%Pages: 1
+%%BoundingBox: 20 112 582 674
+%%EndComments
+%%BeginPreview: 16 16 1 16
+% FFFF
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% FFFF
+%%EndPreview
+%%BeginProlog
+%%EndProlog
+%%Page: 1 1
+%%BeginPageSetup
+15 dict begin
+/pagelevel save def
+% Setup CTM
+[0.01872 0  0 0.01872  20 112.2] concat
+%%EndPageSetup
+% Created from class PostscriptPlot in libHh
+% Initialize procedures
+/m { moveto } bind def
+/l { lineto } bind def
+/s { stroke } bind def
+/p { wpoint 0.5 mul  0 360 arc  fill } bind def
+
+% Setup variables
+/wborder 20 def
+/wline 20 def
+/wpoint 80 def
+/drawborder false def
+
+% Begin drawing
+newpath
+1 setlinecap
+1 setlinejoin
+drawborder {
+  wborder setlinewidth
+  0 0 moveto 0 30000 lineto 30000 30000 lineto 30000 0 lineto 
+  closepath stroke
+} if
+
+newpath
+wpoint setlinewidth
+6000 3000 p
+9000 3000 p
+12000 3600 p
+wline setlinewidth
+18000 6000 m
+18000 18000 l
+s
+18000 6000 m
+24000 6000 l
+24000 6900 l
+23100 6900 l
+s
+0 4125 m
+6600 0 l
+s
+wpoint setlinewidth
+12000 4500 p
+
+pagelevel restore
+end
+showpage
+
+%%Trailer
+%TightBoundingBox: 20 112  469 449
+%!PS-Adobe-2.0 EPSF-1.2
+%%Orientation: Landscape
+%%DocumentFonts:
+%%Creator: hps
+%%CreationDate: yyyy-mm-dd hh:mm:ss
+%%LanguageLevel: 1
+%%Pages: 1
+%%BoundingBox: 20 15 582 771
+%%EndComments
+%%BeginPreview: 16 16 1 16
+% FFFF
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% FFFF
+%%EndPreview
+%%BeginProlog
+%%EndProlog
+%%Page: 1 1
+%%BeginPageSetup
+15 dict begin
+/pagelevel save def
+% Setup CTM
+[0 0.0252  -0.0168 0  563.2 15] concat
+%%EndPageSetup
+% Created from class PostscriptPlot in libHh
+% Initialize procedures
+/m { moveto } bind def
+/l { lineto } bind def
+/s { stroke } bind def
+/p { wpoint 0.5 mul  0 360 arc  fill } bind def
+
+% Setup variables
+/wborder 20 def
+/wline 20 def
+/wpoint 80 def
+/drawborder false def
+
+% Begin drawing
+newpath
+1 setlinecap
+1 setlinejoin
+drawborder {
+  wborder setlinewidth
+  0 0 moveto 0 30000 lineto 30000 30000 lineto 30000 0 lineto 
+  closepath stroke
+} if
+
+newpath
+wline setlinewidth
+3000 3000 m
+27000 3000 l
+27000 27000 l
+15000 15000 l
+s
+6000 9000 m
+12000 9000 l
+s
+0 15000 m
+30000 15000 l
+s
+0 9000 m
+15000 12000 l
+s
+15000 15000 m
+16000 30000 l
+s
+14000 0 m
+15000 15000 l
+s
+wpoint setlinewidth
+15000 15000 p
+wline setlinewidth
+wline 2 mul setlinewidth
+s
+6000 24000 m
+24000 24000 l
+s
+% A comment.
+wline setlinewidth
+wline setlinewidth
+s
+6000 21000 m
+24000 21000 l
+s
+
+pagelevel restore
+end
+showpage
+
+%%Trailer
+%TightBoundingBox: 59 15  563 771
+%!PS-Adobe-2.0 EPSF-1.2
+%%Orientation: Portrait
+%%DocumentFonts:
+%%Creator: hps
+%%CreationDate: yyyy-mm-dd hh:mm:ss
+%%LanguageLevel: 1
+%%Pages: 1
+%%BoundingBox: 20 15 582 771
+%%EndComments
+%%BeginPreview: 16 16 1 16
+% FFFF
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% 8001
+% FFFF
+%%EndPreview
+%%BeginProlog
+%%EndProlog
+%%Page: 1 1
+%%BeginPageSetup
+15 dict begin
+/pagelevel save def
+% Setup CTM
+[0.0126 0  0 0.0252  111.8 15] concat
+%%EndPageSetup
+% Created from class PostscriptPlot in libHh
+% Initialize procedures
+/m { moveto } bind def
+/l { lineto } bind def
+/s { stroke } bind def
+/p { wpoint 0.5 mul  0 360 arc  fill } bind def
+
+% Setup variables
+/wborder 20 def
+/wline 20 def
+/wpoint 80 def
+/drawborder false def
+
+% Begin drawing
+newpath
+1 setlinecap
+1 setlinejoin
+drawborder {
+  wborder setlinewidth
+  0 0 moveto 0 30000 lineto 30000 30000 lineto 30000 0 lineto 
+  closepath stroke
+} if
+
+newpath
+
+pagelevel restore
+end
+showpage
+
+%%Trailer
+%TightBoundingBox: 20 112  582 674
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+<!-- Created from class SvgPlot in libHh -->
+<rect width="200" height="200" fill="white"/>
+<g fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="40.00" cy="180.00" r="2" fill="black" stroke="none"/>
+<circle cx="60.00" cy="180.00" r="2" fill="black" stroke="none"/>
+<circle cx="80.00" cy="176.00" r="2" fill="black" stroke="none"/>
+<path d="M 120.00 160.00 L 120.00 80.00"/>
+<path d="M 120.00 160.00 L 160.00 160.00 L 160.00 154.00 L 154.00 154.00"/>
+<path d="M 0.00 172.50 L 44.00 200.00"/>
+<circle cx="80.00" cy="170.00" r="2" fill="black" stroke="none"/>
+</g>
+</svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+<!-- Created from class SvgPlot in libHh -->
+<rect width="300" height="200" fill="white"/>
+<g fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+<path d="M 30.00 180.00 L 270.00 180.00 L 270.00 20.00 L 150.00 100.00"/>
+<path d="M 60.00 140.00 L 120.00 140.00"/>
+<path d="M 0.00 100.00 L 300.00 100.00"/>
+<path d="M 0.00 140.00 L 150.00 120.00"/>
+<path d="M 150.00 100.00 L 160.00 0.00"/>
+<path d="M 140.00 200.00 L 150.00 100.00"/>
+<circle cx="150.00" cy="100.00" r="2" fill="black" stroke="none"/>
+<path stroke-width="2" d="M 60.00 40.00 L 240.00 40.00"/>
+<!-- A comment. -->
+<path d="M 60.00 60.00 L 240.00 60.00"/>
+</g>
+</svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="200" viewBox="0 0 100 200">
+<!-- Created from class SvgPlot in libHh -->
+<rect width="100" height="200" fill="white"/>
+<g fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+</g>
+</svg>

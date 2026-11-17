@@ -1,0 +1,43 @@
+# Reference values for the files that the create scripts write into results/, read by check_created_outputs.sh
+# (using ../bin/check_reference_values): per-channel "mean sd" for an image or video, the errors "dL2 nL2 dLi nLi"
+# of MeshDistance output, else the file size in bytes, each optionally followed by a tolerance "tol=...".
+# Update them with "check_created_outputs.sh --update".
+# The sizes of the *.sub0.m and *.sub2limit.m files are proportional to the face count of the mesh fitted by
+# Subdivfit, whose stochastic optimization reaches different face counts across configurations (up to 22% apart).
+mannequin.recon.m 707265
+mannequin.opt.m 70804
+mannequin.sub0.m 47337 tol=0.35
+mannequin.sub2limit.m 660005 tol=0.35
+distcap.recon.m 520136
+distcap.opt.m 69542
+distcap.sub0.m 59972 tol=0.35
+distcap.sub2limit.m 788584 tol=0.35
+curve1.opt.a3d 3560
+curve1.joined.a3d 5421
+curve1.recon.a3d 10880
+blob5.meshopt.simplified.m 186352
+gaudipark.orig.m 4683456
+gaudipark.pm 2561536
+cessna.pm 391574
+57chevy.pm 841634
+standingblob.geomorphs 4717324
+bunny.outer_hull.pm 2231632
+bunny.inner_hull.pm 2231082
+bunny.outer_hull.approximation_error.txt 0.0416 0.08564 0.2659 0.6792
+office.nf80000.orig.m 7140990
+office.nf80000.sr.pm 2311530
+gcanyon_sq129_b44.l-1.stitched.pm 909799
+gcanyon_sq129_b44.l0.stitched.pm 642222
+gcanyon_sq129_b44.l1.stitched.pm 624178
+gcanyon_sq129_b44.l1t.stitched.pm 365635
+gcanyon_sq129_b44.l2.pm 621066
+office.nf200000.mincycles.m 17956675
+bunny.vertexcache.m 10979171
+bunny.for_sphereparam.pm 1813154
+bunny.sphparam.octaflat.m 8288179
+bunny.sphparam.lonlat.m 7804993
+octaflat_eg128.uv.sphparam.m 2873389
+bunny.spheresample.octaflat.unrotated.normalmap.png 126.18 69.02 130.38 75.55 123.24 75.89
+bunny.spheresample.lonlat.unrotated.normalmap.png 127.49 63.33 117.24 81.36 120.55 74.00
+bunny.octaflat.pm 2260944
+bunny.lonlat.pm 2132211

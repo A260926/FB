@@ -1,0 +1,249 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_PARALLEL_H_
+#define MESH_PROCESSING_LIBHH_PARALLEL_H_
+
+#include <atomic>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+#include "libHh/Array.h"
+
+#if 0
+{
+  // To disable parallelism, set OMP_NUM_THREADS=1.  (Admittedly a confusing variable because we do not use OpenMP.)
+  parallel_for(range(n), [&](const int i) { func(i); });
+
+  const int num_threads = get_max_threads();
+  Array<double> sums(num_threads);
+  parallel_for_chunk(range(n), num_threads, [&](const int thread_index, auto subrange) {
+    sums[thread_index] = sum(subrange);
+  });
+  const double mean = sum(sums) / n;
+
+  parallel_for_chunk(g_mesh.vertices(), [&](auto subrange) {
+    for (Vertex v : subrange) g_mesh.set_point(v, g_mesh.point(v) + Vector(1.f, 2.f, 3.f));
+  });
+}
+#endif
+
+namespace hh {
+
+[[nodiscard]] inline int get_max_threads() {
+  constexpr int k_uninitialized = -99;
+  static int s_value = k_uninitialized;
+  if (s_value == k_uninitialized) {
+    const int default_value = max(int(std::thread::hardware_concurrency()), 1);
+    s_value = getenv_int("OMP_NUM_THREADS", default_value);
+  }
+  return s_value;
+}
+
+constexpr uint64_t k_parallel_thresh = 100'000;  // Number of instruction cycles above which to parallelize a loop.
+constexpr uint64_t k_parallel_many_cycles_per_elem = 400;  // Num of instr. cycles for larger-overhead parallelism.
+constexpr int k_parallel_min_iterations = 8;               // Sufficient number of loop iterations for parallelism.
+
+namespace details {
+
+// Launches a set of threads whose number matches the hardware parallelism, and terminates these threads upon
+// destruction.  The member function execute(num_tasks, task_function) allows parallel execution of an indexed task,
+// i.e. calling task_function(0), ..., task_function(num_tasks-1) and waiting for all these calls to finish.
+// The function execute() can be called successively on different tasks with low overhead as it reuses the
+// same set of threads.
+class ThreadPoolIndexedTask : noncopyable {
+ public:
+  using Task = std::function<void(int)>;
+  ThreadPoolIndexedTask() {
+    const int num_threads = get_max_threads();
+    _threads.reserve(num_threads);
+    for_int(i, num_threads) _threads.emplace_back(&ThreadPoolIndexedTask::worker_main, this);
+  }
+  ~ThreadPoolIndexedTask() {
+    {
+      std::unique_lock<std::mutex> lock(_mutex);
+      assertx(_running);
+      assertx(!_num_remaining_tasks);
+      assertx(_task_index == _num_tasks);
+      _running = false;
+      _task_index = 0;
+      _num_tasks = 1;
+      _condition_variable_worker.notify_all();
+    }
+    for (auto& thread : _threads) thread.join();
+  }
+  [[nodiscard]] int num_threads() const { return int(_threads.size()); }
+  // Detect nested execution, i.e., a call from within a task, or a concurrent call from another thread.
+  [[nodiscard]] bool already_active() const {
+    // This lock-free read is atomic; execute() tests _num_remaining_tasks again while holding the lock.
+    return _num_remaining_tasks.load(std::memory_order_relaxed) != 0;
+  }
+  void execute(int num_tasks, const Task& task_function) {
+    std::unique_lock<std::mutex> lock(_mutex);
+    // Testing and claiming the thread pool under the same lock ensures that concurrent calls cannot both claim it.
+    if (_num_remaining_tasks) {
+      lock.unlock();
+      Warning("Nested execution of ThreadPoolIndexedTask is run serially");
+      for_int(i, num_tasks) task_function(i);
+    } else {
+      _task_function = task_function;
+      _num_tasks = num_tasks;
+      _num_remaining_tasks = num_tasks;
+      _task_index = 0;
+      _condition_variable_worker.notify_all();
+      _condition_variable_main.wait(lock, [this] { return !_num_remaining_tasks; });
+    }
+  }
+  [[nodiscard]] static ThreadPoolIndexedTask& default_threadpool() {
+    static unique_ptr<ThreadPoolIndexedTask> thread_pool;
+    // This is safe because thread_pool is nullptr only in the main thread before any other thread is launched.
+    if (!thread_pool) thread_pool = make_unique<ThreadPoolIndexedTask>();
+    return *thread_pool;
+  }
+
+ private:
+  std::mutex _mutex;
+  bool _running = true;
+  std::vector<std::thread> _threads;
+  Task _task_function;
+  int _num_tasks = 0;
+  std::atomic<int> _num_remaining_tasks{0};  // Modified only while holding the lock.
+  int _task_index = 0;
+  std::condition_variable _condition_variable_worker;
+  std::condition_variable _condition_variable_main;
+
+  void worker_main() {
+    std::unique_lock<std::mutex> lock(_mutex);
+    // Consider: https://stackoverflow.com/questions/233127/how-can-i-propagate-exceptions-between-threads .
+    // However, rethrowing the exception in the main thread loses the stack state, so not useful for debugging.
+    for (;;) {
+      _condition_variable_worker.wait(lock, [this] { return _task_index < _num_tasks; });
+      if (!_running) break;
+      while (_task_index < _num_tasks) {
+        const int i = _task_index++;
+        lock.unlock();
+        _task_function(i);
+        lock.lock();
+        assertx(_num_remaining_tasks > 0);
+        if (!--_num_remaining_tasks) _condition_variable_main.notify_all();
+      }
+    }
+  }
+};
+
+}  // namespace details
+
+struct ParallelOptions {
+  // Estimated number of CPU cycles required to process each element in the parallel loop.
+  // If the total number of cycles across all range elements is estimated to be lower than `k_parallel_thresh`,
+  // the loop is executed sequentially to avoid the overhead of synchronizing parallel threads.
+  // With the default value, the loop is always executed in parallel.
+  uint64_t cycles_per_elem = k_parallel_thresh;
+};
+
+// Divide `range` into `num_threads` chunks (i.e., subranges) and call `process_chunk(thread_index, subrange)` in
+// parallel over the different chunks using a cached thread pool.  The range must be a sized forward range; the
+// chunk boundaries are precomputed in O(num_threads) for a random-access range, and otherwise require a single
+// sequential traversal of the range in the calling thread.
+// If range is a mutable (non-const) range, the subranges yield non-const references and process_chunk() may
+// modify the elements in place.
+// The process_chunk function object must be const-callable, because the same object is invoked concurrently from
+// all threads; any shared mutable state within it must be synchronized by the caller.
+// Parallelism is disabled if the estimated cost `options.cycles_per_elem * size(range)` is less than some
+// internal threshold, or if we are already executing (nested) within another parallel_for_*() loop.
+// Exceptions within process_chunk() cause program termination as they are not caught.  One drawback over OpenMP
+// is that if an exception or abort occurs within process_chunk(), the stack trace will not include the functions
+// that called parallel_for_chunk() because these lie in the stack frames of a different thread.
+// Environment variable OMP_NUM_THREADS overrides the default parallelism (even though OpenMP is not used).
+template <ranges::forward_range R, typename ProcessChunk>
+requires ranges::sized_range<R> && std::invocable<const ProcessChunk&, int, ranges::subrange<ranges::iterator_t<R>>>
+void parallel_for_chunk(const ParallelOptions& options, R&& range, int num_threads,
+                        const ProcessChunk& process_chunk) {
+  if (num_threads < 1) assertnever(SSHOW(num_threads));
+  // Note: we access `range` as an lvalue; ranges::begin() on an rvalue non-borrowed range would be ill-formed.
+  const auto begin_range = ranges::begin(range);
+  const auto num_elements = ranges::size(range);
+  using Size = ranges::range_size_t<R>;
+  using Difference = ranges::range_difference_t<R>;
+  using Subrange = ranges::subrange<ranges::iterator_t<R>>;
+  const uint64_t total_num_cycles = num_elements * options.cycles_per_elem;
+  const bool desire_parallelism = num_threads > 1 && total_num_cycles >= k_parallel_thresh;
+  details::ThreadPoolIndexedTask* const thread_pool =
+      desire_parallelism ? &details::ThreadPoolIndexedTask::default_threadpool() : nullptr;
+  const bool use_parallelism = thread_pool && !thread_pool->already_active();
+  if (!use_parallelism) {
+    // Process the entire range as a single chunk.
+    const int thread_index = 0;
+    process_chunk(thread_index, Subrange(begin_range, ranges::next(begin_range, Difference(num_elements))));
+  } else {
+    // Process the chunks in parallel.
+    const auto chunk_size = (num_elements + Size(num_threads) - 1) / Size(num_threads);
+    // Precompute the chunk boundaries; ranges::next() is O(1) for a random-access iterator.
+    InlinedArray<Subrange, 64> subranges(num_threads);
+    auto iterator = begin_range;
+    Size offset = 0;
+    for_int(i, num_threads) {
+      const Size next_offset = std::min((Size(i) + 1) * chunk_size, num_elements);
+      const auto next_iterator = ranges::next(iterator, Difference(next_offset - offset));
+      subranges[i] = Subrange(iterator, next_iterator);
+      iterator = next_iterator;
+      offset = next_offset;
+    }
+    // Note: subranges lives on this thread's stack across the blocking execute(), including its serial
+    // nested-execution fallback, so capturing it by reference is safe.
+    const auto func = [&subranges, &process_chunk](int thread_index) {
+      process_chunk(thread_index, subranges[thread_index]);
+    };
+    thread_pool->execute(num_threads, func);
+  }
+}
+
+// See previous function.
+template <ranges::forward_range R, typename ProcessChunk>
+requires ranges::sized_range<R> && std::invocable<const ProcessChunk&, int, ranges::subrange<ranges::iterator_t<R>>>
+void parallel_for_chunk(R&& range, int num_threads, const ProcessChunk& process_chunk) {
+  parallel_for_chunk({}, std::forward<R>(range), num_threads, process_chunk);
+}
+
+// See previous function.
+template <ranges::forward_range R, typename ProcessChunk>
+requires ranges::sized_range<R> && std::invocable<const ProcessChunk&, ranges::subrange<ranges::iterator_t<R>>>
+void parallel_for_chunk(R&& range, const ProcessChunk& process_chunk) {
+  parallel_for_chunk(std::forward<R>(range), get_max_threads(), [&](int, auto subrange) { process_chunk(subrange); });
+}
+
+// Evaluates process_element(element) for each element in range by parallelizing across chunks of elements using
+// a cached thread pool.  The range must be a sized random-access range.  If range is a mutable (non-const)
+// range, process_element() receives non-const references and may modify the elements in place.
+// The process_element function object must be const-callable, because the same object is invoked concurrently
+// from all threads; any shared mutable state within it must be synchronized by the caller.
+// Parallelism is disabled if the estimated cost (options.cycles_per_elem * size(range)) is less than some
+// internal threshold, or if we are already executing (nested) within another parallel_for_*() loop.
+// Exceptions within process_element() cause program termination as they are not caught.  One drawback over OpenMP
+// is that if an exception or abort occurs within process_element(), the stack trace will not include the functions
+// that called parallel_for() because these lie in the stack frames of a different thread.
+// Environment variable OMP_NUM_THREADS overrides the default parallelism (even though OpenMP is not used).
+template <ranges::forward_range R, typename ProcessElement>
+requires ranges::sized_range<R> && std::invocable<const ProcessElement&, ranges::range_reference_t<R>>
+void parallel_for(const ParallelOptions& options, R&& range, const ProcessElement& process_element) {
+  const auto num_elements = ranges::size(range);
+  if (num_elements == 0) return;
+  const int max_num_threads = get_max_threads();
+  const int num_threads = int(std::min<std::uintmax_t>(max_num_threads, num_elements));
+  const auto process_chunk = [&](int, auto subrange) {
+    for (auto&& element : subrange) process_element(element);
+  };
+  parallel_for_chunk(options, std::forward<R>(range), num_threads, process_chunk);
+}
+
+// See previous function.
+template <ranges::forward_range R, typename ProcessElement>
+requires ranges::sized_range<R> && std::invocable<const ProcessElement&, ranges::range_reference_t<R>>
+void parallel_for(R&& range, const ProcessElement& process_element) {
+  parallel_for({}, std::forward<R>(range), process_element);
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_PARALLEL_H_

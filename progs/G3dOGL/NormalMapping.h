@@ -1,0 +1,26 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_G3DOGL_NORMALMAPPING_H_
+#define MESH_PROCESSING_G3DOGL_NORMALMAPPING_H_
+
+#include "libHh/Geometry.h"
+#include "libHh/Pixel.h"
+
+namespace hh {
+
+class NormalMapping {
+ public:
+  virtual ~NormalMapping() = default;
+  [[nodiscard]] virtual string name() const = 0;
+  [[nodiscard]] virtual bool is_supported() const = 0;
+  virtual void init() = 0;
+  virtual void set_parameters(const Vector& lightdirmodel, const Vector& eyedirmodel, float lambient,
+                              float lightsource, const Pixel& meshcolor_s) = 0;
+  virtual void activate() = 0;
+  virtual void deactivate() = 0;
+
+  [[nodiscard]] static NormalMapping* get();
+};
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_G3DOGL_NORMALMAPPING_H_

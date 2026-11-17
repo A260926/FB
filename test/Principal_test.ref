@@ -1,0 +1,26 @@
+round_elements(eimag) = Array<float>(2) {
+  1.58114
+  0.96825
+}
+round_elements(mo) = Matrix<float>(2, 2) {
+  0.89443 0.44721
+  -0.44721 0.89443
+}
+round_elements(eimag) = Array<float>(2) {
+  1.51108
+  0.8452
+}
+round_elements(mo) = Matrix<float>(2, 2) {
+  0.90583 0.42364
+  -0.42364 0.90583
+}
+round_elements(eimag) = Array<float>(2) {
+  1.58114
+  0.96825
+}
+round_elements(mo) = Matrix<float>(2, 2) {
+  0.89443 0.44721
+  -0.44721 0.89443
+}
+Synthetic 300x6 data: the principal components are verified.
+round_elements(clone(eimag.head<2>()), 1e4f) = [2.1213, 0.7071]

@@ -1,0 +1,146 @@
+#!/bin/bash
+# Creates the images of the README pages (in .github/images/) by rendering demo data and results using G3dOGL and
+# assembling the renderings using Filterimage.  Each image is created in a light variant (NAME.jpg) and in a dark
+# variant (NAME_dark.jpg) using the dark theme of G3dOGL.
+#
+# Usage: .github/scripts/create_readme_images [--check DIR | --update DIR]
+#  --check DIR: instead create the images in DIR, using the renderer of the reference values of the platform (Mesa's
+#    llvmpipe on Linux, or macOS) in .github/scripts/readme_images_reference_PLATFORM.txt, and check them against
+#    these values (using bin/check_reference_values).
+#  --update DIR: likewise create the images in DIR, and update these reference values.
+#
+# The programs must be built (any CONFIG), and the demos create_reconstruction_mannequin, create_spherical_param_bunny,
+# and create_progressive_mesh_57chevy must have been run (e.g., using "make -C demos create").
+
+set -e -o pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+for dir in unix cygwin clang mingw win msbuild; do PATH=$PWD/bin/$dir:$PATH; done; PATH=$PWD/bin:$PATH
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+images=.github/images
+mode=
+if [[ ${1-} == --check || ${1-} == --update ]]; then
+  mode=$1; images=${2:?"Usage: $0 [--check DIR | --update DIR]"}; mkdir -p "$images"
+  case $(uname -s) in
+    # Rather than any GPU, and without multisampling, which depends on the visuals of the X server.
+    Linux) platform=linux; export GALLIUM_DRIVER=llvmpipe MULTISAMPLE=1 ;;
+    Darwin) platform=macos ;;
+    *) echo "$0: there are no reference values for platform $(uname -s)." >&2; exit 1 ;;
+  esac
+  reference=.github/scripts/readme_images_reference_$platform.txt
+fi
+height=600  # Height of the tiles within a row.
+width=1760  # Width of each row (and of the images).
+gap=8       # Half the spacing between tiles.
+export ASSERTW_IGNORE='fl,fr._matid ignored|Isolated vertex has undefined normal|Display lists should be off'
+export JPG_QUALITY=88
+export G3D_NO_S3DNAME=1  # Report any state file that a locally installed s3dname would supply.
+data=demos/data; results=demos/results
+# The remesh of the bunny, sampled from its spherical parameterization over the octahedral domain, whose texture
+# coordinates address the octaflat normal map.
+SphereSample -domain octaflat -egrid 128 -sample_map $results/octaflat_eg128.uv.sphparam.m \
+  -param $results/bunny.sphparam.octaflat.m -rot $data/bunny.s3d -keys imageuv -remesh 2>/dev/null |
+  Filtermesh -renamekey v imageuv uv >"$tmp/bunny_remesh.m" 2>/dev/null
+
+# render name geometry [args...] : render a view into $tmp/name.png, cropped to its content and scaled to $height,
+# with a margin of $gap pixels (horizontally $hgap if set).
+render() {
+  local name=$1 geometry=$2; shift 2
+  G3dOGL "$@" -noinfo 1 $viewer_args -geom "$geometry" -offscreen "$tmp/$name.raw.png" >&/dev/null </dev/null
+  Filterimage "$tmp/$name.raw.png" -color $rgb 255 -cropmatte -scaletoy $height -boundary border \
+    -cropsides -${hgap:-$gap} -${hgap:-$gap} -$gap -$gap -to png >"$tmp/$name.png" 2>/dev/null
+}
+
+# row name tiles... : assemble the tiles (centering shorter ones on the background) into a row of width $row_width
+# (default $width) in $tmp/name.png.
+row() {
+  local name=$1; shift
+  (cd "$tmp" && Filterimage -nostdin -color $rgb 255 -assemble $# 1 "${@/%/.png}" -scaletox ${row_width:-$width} \
+    -to png >"$name.png" 2>/dev/null)
+}
+
+for variant in light dark; do
+  if [[ $variant == dark ]]; then
+    suffix=_dark; rgb='36 36 36'; foreground='.85 .85 .85'; viewer_args='-theme dark'
+  else
+    suffix=''; rgb='255 255 255'; foreground='0 0 0'; viewer_args=''
+  fi
+
+  # Surface reconstruction: points, initial mesh, optimized mesh, fitted subdivision control mesh, and its limit
+  # surface.
+  Filtera3d $data/mannequin.pts -diff $foreground 2>/dev/null >"$tmp/mannequin.a3d"
+  render mannequin_points 640x960 "$tmp/mannequin.a3d" -st $data/mannequin.s3d
+  render mannequin_recon 640x960 $results/mannequin.recon.m -st $data/mannequin.s3d -key DmDe
+  render mannequin_subdiv 640x960 $results/mannequin.sub2limit.m -st $data/mannequin.s3d
+  hgap=40 render mannequin_points_wide 640x960 "$tmp/mannequin.a3d" -st $data/mannequin.s3d
+  hgap=40 render mannequin_recon_wide 640x960 $results/mannequin.recon.m -st $data/mannequin.s3d -key DmDe
+  hgap=40 render mannequin_opt_wide 640x960 $results/mannequin.opt.m -st $data/mannequin.s3d -key DmDe
+  hgap=40 render mannequin_sub0_wide 640x960 $results/mannequin.sub0.m -st $data/mannequin.s3d -key DmDe
+  hgap=40 render mannequin_subdiv_wide 640x960 $results/mannequin.sub2limit.m -st $data/mannequin.s3d
+  # Progressive mesh at several levels of detail, each showing its edges.
+  for nf in 1500 3000 5000 6000; do
+    FilterPM $results/57chevy.pm -nf $nf -outmesh >"$tmp/chevy_$nf.m" 2>/dev/null
+    render chevy_edges_$nf 1280x960 "$tmp/chevy_$nf.m" -st $data/57chevy.s3d -key De -lightambient .4
+  done
+  FilterPM $results/57chevy.pm -finest -outmesh >"$tmp/chevy_full.m" 2>/dev/null
+  render chevy_edges_full 1280x960 "$tmp/chevy_full.m" -st $data/57chevy.s3d -key De -lightambient .4
+  # For the overview, the cars abut one another, with some space before the terrain to their right.
+  for nf in 1500 5000 full; do
+    hgap=0 render chevy_tight_$nf 1280x960 "$tmp/chevy_$nf.m" -st $data/57chevy.s3d -key De -lightambient .4
+  done
+  Filterimage "$tmp/chevy_tight_full.png" -color $rgb 255 -boundary border -cropsides 0 -40 0 0 -to png \
+    >"$tmp/chevy_tight_full_spaced.png" 2>/dev/null
+  # View-dependent refinement of a terrain, textured and as a mesh.
+  canyon="-eyeob $data/unit_frustum.a3d -sr_mode $data/gcanyon_4k2k.l1.srm -texturemap $data/gcanyon_color_4k2k.png
+    -sr_screen_thresh 0.003846 -lightambient .7 -st $data/gcanyon_4k2k_fly2.s3d"
+  render canyon_tex 1280x960 $canyon -key Dt
+  render canyon_mesh 1280x960 $canyon -key De
+  # For the overview, the textured terrain with the mesh shown on its left half.
+  read -r w _ < <(Filterimage "$tmp/canyon_mesh.png" -sizes -nooutput)
+  Filterimage "$tmp/canyon_mesh.png" -cropr $((w - w / 2)) -to png >"$tmp/canyon_mesh_left.png" 2>/dev/null
+  Filterimage "$tmp/canyon_tex.png" -overlayimage 0 0 "$tmp/canyon_mesh_left.png" -to png >"$tmp/canyon_split.png" \
+    2>/dev/null
+  # Spherical parameterization: original bunny, its parameterization on the sphere (shaded using the original
+  # normals), the remesh, the normal-mapped remesh, and the normal map itself.
+  render bunny_orig 1100x1100 $data/bunny.orig.m -st $data/bunny.s3d
+  Filtermesh $results/bunny.sphparam.lonlat.m -renamekey v sph P \
+    -normaltransf "$(Filterframe $data/bunny.s3d -snap_to_axes -inverse 2>/dev/null)" >"$tmp/bunny_sphere.m" \
+    2>/dev/null
+  render bunny_sphere 1100x1100 "$tmp/bunny_sphere.m" -st $data/unitsphere_ang.s3d
+  render bunny_remesh 1100x1100 "$tmp/bunny_remesh.m" -st $data/bunny.s3d -key DmDe
+  normalmap=$results/bunny.spheresample.octaflat.unrotated.normalmap.png
+  render bunny_normalmap 1100x1100 "$tmp/bunny_remesh.m" -st $data/bunny.s3d \
+    -texturemap $normalmap -texturenormal 1 -key Dt
+  side=$((height * 9 / 10)); pad=$(((height - side) / 2))  # The normal map, as a square slightly smaller.
+  Filterimage $normalmap -filter lanczos3 -scaletoy $side -color $rgb 255 -boundary border \
+    -cropsides -$gap -$gap -$pad -$pad -to png >"$tmp/normalmap.png" 2>/dev/null
+  # Progressive simplicial complex at a coarse level, at level 1500 of 17921 (for the overview), and at its full
+  # resolution.
+  for lod in 0.05 0.08373 1.0; do
+    PSC_LOD_LEVEL=$lod render drumset_$lod 1280x960 -psc_mode $data/drumset_trunc.psc \
+      -st $data/drumset.s3d -lightambient .4
+  done
+
+  row overview1 mannequin_points mannequin_recon mannequin_subdiv bunny_sphere drumset_0.08373
+  row overview2 chevy_tight_1500 chevy_tight_5000 chevy_tight_full_spaced canyon_split
+  Filterimage -assemble 1 2 "$tmp/overview1.png" "$tmp/overview2.png" -to jpg >$images/overview$suffix.jpg 2>/dev/null
+  row reconstruction mannequin_points_wide mannequin_recon_wide mannequin_opt_wide mannequin_sub0_wide \
+    mannequin_subdiv_wide
+  row progressive_mesh chevy_edges_1500 chevy_edges_3000 chevy_edges_6000 chevy_edges_full
+  row terrain canyon_tex canyon_mesh
+  row spherical bunny_orig bunny_sphere bunny_remesh bunny_normalmap normalmap
+  row simplicial_complex drumset_0.05 drumset_1.0
+  for name in reconstruction progressive_mesh terrain spherical simplicial_complex; do
+    Filterimage "$tmp/$name.png" -to jpg >$images/$name$suffix.jpg 2>/dev/null
+  done
+done
+# The hidden-line-removed figure of the G3dVec example in progs/README.md, as an SVG image.
+FilterPM $data/spheretext.pm -nf 4000 -outmesh 2>/dev/null | Filtermesh -proc sharp_from_wid -mark 2>/dev/null |
+  G3dVec -st $data/spheretext_closeup.s3d -thicksharp 3 -plotfile $images/spheretext.svg -key hDP \
+    -hidden -hwdelay 1 -hwkey '\2\c' >&/dev/null
+if [[ $mode == --check ]]; then
+  check_reference_values $reference "$images"
+elif [[ $mode == --update ]]; then
+  check_reference_values --update $reference "$images"
+else
+  ls -l $images/*.jpg $images/*.svg | grep -vE '\.red\.jpg'
+fi

@@ -1,0 +1,1049 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_HH_H_
+#define MESH_PROCESSING_LIBHH_HH_H_
+
+//       1         2         3         4         5         6         7         8         9        10        11
+// 45678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+
+// *** Pre-header
+
+// This macro definition has no effect if `#include "libHh/Hh.h"` lies after `#include <Windows.h>`.
+#if defined(_WIN32)
+// If later include <windef.h>, disable macros min and max, e.g. which interfere with std::numeric_limits<T>::max().
+#if !defined(NOMINMAX)
+#define NOMINMAX  // Prevent min() and max() macros in <windows.h>.
+#endif
+// If already defined, undefine them.
+#undef min
+#undef max
+#endif
+
+#if defined(_MSC_VER) && !defined(__clang__)
+// Disable some nitpicky level4 warnings (for -W4).
+#pragma warning(disable : 4127)  // Conditional expression is constant, e.g. "if (0)", "if (1)".
+#pragma warning(disable : 4324)  // Structure was padded due to alignment specifier.
+#pragma warning(disable : 4459)  // Flawed detection of local name hiding global name in different module.
+#pragma warning(disable : 4464)  // Allow #include paths containing ".." relative folders (e.g. "../libHh/Video.h").
+#pragma warning(disable : 4547)  // Operator before comma: false positive with __cpp_multidimensional_subscript.
+#pragma warning(disable : 4548)  // Expression before comma: false positive with __cpp_multidimensional_subscript.
+// Code analysis:
+#pragma warning(disable : 6237)   // <zero> && <expression> is always zero.
+#pragma warning(disable : 6286)   // <non-zero constant> || <expression> is always a non-zero constant.
+#pragma warning(disable : 26437)  // Do not slice.
+#pragma warning(disable : 26444)  // Avoid unnamed objects with custom construction and destruction.
+#pragma warning(disable : 26495)  // Always initialize a member variable.
+#endif
+
+#if defined(_DEBUG) || defined(DEBUG) || (!(defined(_MSC_VER) && !defined(__clang__)) && !defined(NDEBUG))
+#define HH_DEBUG
+#endif
+
+// *** Standard headers
+
+#include <algorithm>  // min(), max()
+#include <cmath>      // sqrt(), cos(), pow(), etc.
+#include <compare>    // is_eq(), weak_ordering, etc.
+#include <concepts>   // integral, convertible_to, same_as
+#include <cstdint>    // int64_t, uint64_t, int32_t, etc.
+#include <iostream>   // ostream, cout, operator<<(ostream&), etc.
+#include <limits>     // numeric_limits<>
+#include <memory>     // unique_ptr<>
+#include <optional>   // optional
+#include <ranges>     // ranges, views::iota()
+#include <sstream>    // stringstream
+#include <stdexcept>  // runtime_error
+#include <string>     // string
+#include <tuple>      // tuple
+#include <utility>    // swap(), forward(), move(), declval<>, pair<>, index_sequence<>
+
+// *** Variadic macros
+
+#include "libHh/VariadicMacros.h"  // HH_MAP_REDUCE()
+
+// *** Language portability
+
+#define HH_EAT_SEMICOLON static_assert(true)  // Redundant declaration to swallow subsequent semicolon.
+
+#define HH_IGNORE(identifier) HH_EAT_SEMICOLON  // Macro used just for documentation; ignores `identifier`.
+
+// Safest to indirect once through these.  https://www.parashift.com/c++-faq-lite/macros-with-token-pasting.html
+#define HH_STR(e) #e                // Results in "e" (no variable expansion).
+#define HH_STR2(e) HH_STR(e)        // Macro-expands the token `e` before converting the expansion to a string.
+#define HH_CAT(a, b) a##b           // Results in `ab` (no variable expansion).
+#define HH_CAT2(a, b) HH_CAT(a, b)  // Macro-expands the tokens `a` and `b` before concatenating the expansions.
+
+#define HH_PRAGMA(...) _Pragma(HH_STR(__VA_ARGS__))
+
+#if defined(_MSVC_STL_VERSION)
+#define HH_POSIX(x) _##x  // On Windows, Unix functions like open(), read(), dup() have a leading underscore.
+#else
+#define HH_POSIX(x) x
+#endif
+
+#if defined(_MSC_VER) && !defined(HH_NO_LIB_REFERENCES)
+#define HH_REFERENCE_LIB(libstring) HH_PRAGMA(comment(lib, libstring))  // E.g.: HH_REFERENCE_LIB("user32.lib");
+#else
+#define HH_REFERENCE_LIB(libstring) HH_EAT_SEMICOLON
+#endif
+
+#if defined(__clang__)
+#define HH_PRINTF_ATTRIBUTE(...) __attribute__((format(printf, __VA_ARGS__)))
+#elif defined(__GNUC__)
+#define HH_PRINTF_ATTRIBUTE(...) __attribute__((format(gnu_printf, __VA_ARGS__)))
+#else
+#define HH_PRINTF_ATTRIBUTE(...)
+#endif
+
+#if 0
+#define HH_ASSUME(...) [[assume(__VA_ARGS__)]]  // C++23, but cannot be used within an expression.
+#elif defined(__clang__) && 0
+// Clang ignores any __builtin_assume(...) containing calls, including trivial ones like `ar.num()` and `ar[i]`
+// (unless marked with [[HH_GNU_PURE]]), so it is not so useful.  Also, we must disable the associated warnings.
+// #pragma clang diagnostic ignored "-Wassume"  // "assumption is ignored because it contains (potential) side-effects"
+#define HH_ASSUME(...) __builtin_assume(__VA_ARGS__)
+#elif defined(__clang__)
+#define HH_ASSUME(...) ((__VA_ARGS__) ? void(0) : __builtin_unreachable())
+#elif defined(__GNUC__)
+#define HH_ASSUME(...) ((__VA_ARGS__) ? void(0) : __builtin_unreachable())  // GCC has no expression-form assume.
+#elif defined(_MSC_VER)
+#define HH_ASSUME(...) __assume(__VA_ARGS__)  // Implies __analysis_assume() but is expression rather than statement.
+#else
+#define HH_ASSUME(...) (void(0))
+#endif
+
+// (Abandoned) attempt at helping clang look into functions when evaluating __builtin_assume(...).
+#if defined(__GNUC__) || defined(__clang__)
+#define HH_GNU_PURE gnu::pure
+#else
+#define HH_GNU_PURE
+#endif
+
+#if defined(__clang__)
+#define HH_LIFETIMEBOUND clang::lifetimebound  // Primarily for clang-tidy.
+#else
+#define HH_LIFETIMEBOUND
+#endif
+
+#if defined(__cpp_lib_unreachable)
+#define HH_UNREACHABLE std::unreachable()  // C++23.
+#elif defined(_MSC_VER) && !defined(__clang__)
+#define HH_UNREACHABLE __assume(false)  // This path is never taken.
+#else
+#define HH_UNREACHABLE __builtin_unreachable()
+#endif
+
+#define HH_ID(x) HH_CAT(_hh_id_, x)  // Private identifier in a macro definition.
+#define HH_UNIQUE_ID(x) HH_CAT2(HH_CAT2(HH_CAT2(_hh_id_, __COUNTER__), _), x)
+
+// [[HH_NO_DANGLING]] suppresses gcc -Wdangling-reference false positives on funcs returning a view of their argument.
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 14
+#define HH_NO_DANGLING gnu::no_dangling
+#else
+#define HH_NO_DANGLING
+#endif
+
+// Force inlining even when a function has several call sites; used where out-of-lining would change codegen.
+#if defined(_MSC_VER) && !defined(__clang__)
+#define HH_ALWAYS_INLINE __forceinline
+#else
+#define HH_ALWAYS_INLINE inline __attribute__((always_inline))
+#endif
+
+#if !defined(__has_feature)
+#define __has_feature(x) 0  // Shim for MSVC and GCC < 14.
+#endif
+
+// AddressSanitizer detection: gcc predefines a macro, whereas clang reports a feature instead.
+#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+#define HH_HAS_ASAN 1
+#else
+#define HH_HAS_ASAN 0
+#endif
+
+// MSVC has ASAN but not LSAN.
+#if HH_HAS_ASAN && __has_include(<sanitizer/lsan_interface.h>)
+#define HH_HAS_LSAN 1
+#else
+#define HH_HAS_LSAN 0
+#endif
+
+// ThreadSanitizer detection: gcc predefines a macro, whereas older clang reports a feature instead.
+#if defined(__SANITIZE_THREAD__) || __has_feature(thread_sanitizer)
+#define HH_HAS_TSAN 1
+#else
+#define HH_HAS_TSAN 0
+#endif
+
+#if defined(HH_SANITIZE)
+constexpr bool k_sanitize = true;
+#else
+constexpr bool k_sanitize = false;
+#endif
+// NOLINTNEXTLINE(misc-redundant-expression): both macros may be zero.
+static_assert(k_sanitize || !(HH_HAS_ASAN || HH_HAS_TSAN), "Sanitizer active but HH_SANITIZE undefined.");
+
+// *** Syntactic sugar
+
+#define for_int(index, stop) for ([[maybe_unused]] const int index : hh::range<int>(stop))
+#define for_intL(index, start, stop) for ([[maybe_unused]] const int index : hh::range<int>(start, stop))
+
+// *** Check for identifier conflicts
+
+// Test using:
+// make cppinc='-DTEST_IF_MY_IDENTIFIERS_CONFLICT_WITH_STD_NAMESPACE=1 -D_HAS_STD_BYTE=0' -C ~/git/hh_src -j12 both
+// (We use "_HAS_STD_BYTE=0" to overcome WIN32 name collision on "byte" between <urlmon.h> and std.)
+#if defined(TEST_IF_MY_IDENTIFIERS_CONFLICT_WITH_STD_NAMESPACE)
+#include <any>
+#include <array>
+#include <atomic>
+#include <bit>
+#include <bitset>
+#include <charconv>
+#include <chrono>
+#include <complex>
+#include <condition_variable>
+#include <coroutine>
+#include <deque>
+#include <expected>
+#include <filesystem>
+#include <format>
+#include <forward_list>
+#include <fstream>
+#include <functional>
+#include <future>
+#include <iomanip>
+#include <iterator>
+#include <latch>
+#include <list>
+#include <map>
+#include <memory_resource>
+#include <mutex>
+#include <numbers>
+#include <numeric>
+#include <optional>
+#include <print>
+#include <queue>
+#include <random>
+#include <regex>
+#include <semaphore>
+#include <set>
+#include <shared_mutex>
+#include <source_location>
+#include <span>
+#include <stack>
+#include <stop_token>
+#include <string_view>
+#include <system_error>
+#include <thread>
+#include <typeindex>
+#include <unordered_map>
+#include <unordered_set>
+#include <valarray>
+#include <variant>
+#include <vector>
+// Headers that are absent from some of the supported standard libraries (e.g., libstdc++ 14 or libc++ 18).
+#if __has_include(<flat_map>)
+#include <flat_map>
+#endif
+#if __has_include(<flat_set>)
+#include <flat_set>
+#endif
+#if __has_include(<generator>)
+#include <generator>
+#endif
+#if __has_include(<mdspan>)
+#include <mdspan>
+#endif
+#if __has_include(<spanstream>)
+#include <spanstream>
+#endif
+#if __has_include(<stacktrace>)
+#include <stacktrace>
+#endif
+#if __has_include(<syncstream>)
+#include <syncstream>
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wheader-hygiene"
+#endif
+using namespace std;
+namespace hh {}
+using namespace hh;
+#endif
+
+// *** Ensure hh::details::hh_init() is called
+
+#if !defined(HH_NO_HH_INIT)
+#include "libHh/Hh_init.h"  // NOLINT(misc-header-include-cycle): it includes Hh.h to be self-contained.
+#endif
+
+// *** Begin namespace
+
+namespace hh {
+
+// *** Import some standard C++ names into the hh namespace
+
+// Common types:
+using std::make_unique;
+using std::size_t;  // (It may be already imported.)
+using std::string;  // Almost a new fundamental type.
+using std::unique_ptr;
+// Useful general functions:
+using std::clamp;
+// Math functions that are overloaded for vectors:
+using std::abs;  // From <cmath>; else non-templated defined only for int from <cstdlib>; abs(1.5) == 1 is too scary.
+using std::ceil;
+using std::floor;
+using std::max;  // Avoid fmax().
+using std::min;  // Avoid fmin().
+// Other common math functions:
+using std::pow;
+using std::sqrt;
+
+// Disallow unqualified calls to the remaining C math functions; write `std::cos(x)` instead of `cos(x)`.  With
+// libstdc++, an unqualified `cos(x)` resolves to the C function `double ::cos(double)` even for a `float` argument,
+// whereas with the MSVC STL it resolves to `float cos(float)`, so results can differ across configurations.  These
+// deleted declarations make such a call fail to compile, either as a call to a deleted function (within namespace hh)
+// or as an ambiguous call (after `using namespace hh`).
+#define HH_DELETE_MATH1(f) void f(double) = delete
+#define HH_DELETE_MATH2(f) void f(double, double) = delete
+HH_MAP_REDUCE((HH_DELETE_MATH1, ;, acos, asin, atan, cos, sin, tan, acosh, asinh, atanh, cosh, sinh, tanh));
+HH_MAP_REDUCE((HH_DELETE_MATH1, ;, exp, exp2, expm1, log, log10, log1p, log2, logb, ilogb, cbrt, fabs));
+HH_MAP_REDUCE((HH_DELETE_MATH1, ;, erf, erfc, lgamma, tgamma, round, lround, llround, trunc, nearbyint, rint));
+HH_MAP_REDUCE((HH_DELETE_MATH1, ;, lrint, llrint, isnan, isinf, isfinite, isnormal, signbit, fpclassify));
+HH_MAP_REDUCE((HH_DELETE_MATH2, ;, atan2, hypot, fmod, remainder, copysign, nextafter, fdim, fmax, fmin));
+#undef HH_DELETE_MATH1
+#undef HH_DELETE_MATH2
+void ldexp(double, int) = delete;
+void frexp(double, int*) = delete;
+void modf(double, double*) = delete;
+void fma(double, double, double) = delete;
+
+namespace ranges = std::ranges;
+template <typename R> using range_value_t = ranges::range_value_t<R>;
+namespace views = std::views;
+
+// *** Useful type abbreviations
+
+using uchar = unsigned char;
+using ushort = unsigned short;
+
+// *** Forward declaration of implementation details
+
+namespace details { template <typename T> struct sum_type; }
+
+// *** Generalized casting
+
+// For use in upcasting to a base class, converting nullptr, or declaring type in ternary operand.
+template <typename Dest>
+[[nodiscard]] constexpr Dest implicit_cast(std::type_identity_t<Dest> t [[HH_LIFETIMEBOUND]]) {
+  return t;
+}
+
+// For use in downcasting to a derived class.
+template <typename Dest, typename Src> [[nodiscard]] constexpr Dest down_cast(Src* f) {
+  static_assert(std::is_base_of_v<Src, std::remove_pointer_t<Dest>>);
+  return static_cast<Dest>(f);
+}
+
+// Conversion with bounds-checking in Debug configuration.
+template <typename Target, typename Source> [[nodiscard]] constexpr Target narrow_cast(Source v);
+
+// Bounds-safe conversion, checked even in Release configuration.
+template <typename Target, typename Source> [[nodiscard]] constexpr Target assert_narrow_cast(Source v);
+
+namespace details {
+// The default index type of enumerate(): the type of num() for a range that has it (e.g., int for an Array), else the
+// difference type of the range.
+template <typename R> constexpr auto enumerate_default_index() {
+  if constexpr (requires(R& r) { r.num(); })
+    return decltype(std::declval<R&>().num()){};
+  else
+    return ranges::range_difference_t<R>{};
+}
+}  // namespace details
+
+// Pairs of (index, element) of a range, as in `for (const auto [i, element] : enumerate(range))`.  The index has the
+// type of the range's num() if it has one (e.g., int for an Array, so that it indexes the Array without a narrowing
+// conversion), else its difference type; another type may be given, as in `enumerate<int>(range)`.  It is like the
+// C++23 std::views::enumerate (which libc++, as of LLVM 21 and Xcode 26, still lacks), except for this choice of
+// index type and that it does not support the form `range | enumerate`.
+template <typename Index = void, ranges::viewable_range R> [[nodiscard]] constexpr auto enumerate(R&& range) {
+  using I = std::conditional_t<std::is_void_v<Index>, decltype(details::enumerate_default_index<R>()), Index>;
+  if constexpr (ranges::sized_range<R>) {
+    const I n = narrow_cast<I>(ranges::size(range));
+    return views::zip(views::iota(I{0}, n), std::forward<R>(range));
+  } else {
+    return views::zip(views::iota(I{0}), std::forward<R>(range));
+  }
+}
+
+// Type conversion, but avoiding a warning in the case that Source is already of the same type as Target.
+template <typename Target, typename Source> [[nodiscard]] constexpr Target possible_cast(Source v) {
+  return static_cast<Target>(v);
+}
+
+// The type U given the constness of the type, reference, or pointer From, e.g. copy_const_t<const T*, Vec<T, s>>.
+template <typename From, typename U>
+using copy_const_t =
+    std::conditional_t<std::is_const_v<std::remove_pointer_t<std::remove_reference_t<From>>>, const U, U>;
+
+// *** Constants
+
+constexpr float BIGFLOAT = 1e30f;                // Note: different from FLT_MAX or (INFINITY == HUGE_VALF).
+constexpr float TAU = 6.2831853071795864769f;    // Mathematica: N[2 Pi, 20]; see https://tauday.com/
+constexpr double D_TAU = 6.2831853071795864769;  // Mathematica: N[2 Pi, 20]; see https://tauday.com/
+// #undef PI  // Instead, use TAU / 2.
+
+// *** Concepts
+
+// Type that behaves like a number; specialize for any custom scalar type.
+template <typename T> inline constexpr bool is_numeric_v = std::is_arithmetic_v<T>;
+template <typename T>
+concept Numeric = is_numeric_v<T>;
+
+// Element type that a container can copy into its storage (containers assign rather than construct in place).
+template <typename T>
+concept Copyable = std::is_copy_assignable_v<T>;
+
+// Type T can be hashed by Hash and compared by Equal, as required by the hash-based containers (e.g., Map, Set).
+template <typename T, typename Hash = std::hash<T>, typename Equal = std::equal_to<T>>
+concept Hashable = requires(const Hash& hash, const Equal& equal, const T& e) {
+  { hash(e) } -> std::convertible_to<size_t>;
+  { equal(e, e) } -> std::convertible_to<bool>;
+};
+
+// Callable F that accepts arguments Args and returns a result convertible to R (any result if R is void); it is the
+// concept counterpart of std::is_invocable_r_v, just as std::invocable is that of std::is_invocable_v.
+template <typename F, typename R, typename... Args>
+concept invocable_r = std::invocable<F, Args...> && std::is_invocable_r_v<R, F, Args...>;
+
+// Hash of a pointer by its address, for a container that is never iterated (e.g. a lookup table); the iteration
+// order of a container using it depends on the memory layout.  Unlike a hash that reads the element (e.g. the
+// std::hash of a mesh element, which uses its id), it is also valid for a stale key whose element was destroyed.
+struct hash_address {
+  [[nodiscard]] size_t operator()(const void* p) const noexcept { return std::hash<const void*>{}(p); }
+};
+
+// Range whose elements are readable as T (accepts proxies, conversions).
+template <typename R, typename T>
+concept input_range_to = ranges::input_range<R> && std::convertible_to<ranges::range_reference_t<R>, T>;
+
+// Range that supports O(1) indexing and O(1) size.
+template <typename R>
+concept indexable_range = ranges::random_access_range<R> && ranges::sized_range<R>;
+
+// Specialize to true for a container that owns its elements, or declare a member `using owns_elements = void;`.
+template <typename T>
+inline constexpr bool enable_cloneable =
+    requires { typename T::owns_elements; } ||  // My containers opt in with this member marker.
+    requires { typename T::allocator_type; };   // Any allocator-aware container (std::vector, std::string, ...).
+
+// A type that clone() can duplicate into an object independent of the original.
+template <typename T>
+concept cloneable = std::constructible_from<T, const T&> && enable_cloneable<T>;
+
+// *** Utility classes
+
+// Derive from this class to disable copy constructor and copy assignment.
+struct noncopyable;
+
+// *** Assertions, warnings, errors, debug
+
+#if defined(HH_DEBUG)
+constexpr bool k_debug = true;  // Convenience variable to avoid introducing "#if defined(HH_DEBUG)".
+#else
+constexpr bool k_debug = false;  // Convenience variable to avoid introducing "#if defined(HH_DEBUG)".
+#endif
+
+// Whether it is safe to skip destruction and process-termination handlers for a fast exit.
+constexpr bool k_fast_exit = !k_debug && !k_sanitize;
+
+// Value used to prevent compiler optimizations; it is always zero but unknown to the compiler.
+extern int g_unoptimized_zero;
+
+#define HH_FL " in line " HH_STR2(__LINE__) " of file " __FILE__
+
+// Always abort.
+#define assertnever(...) hh::details::assertnever_aux((__VA_ARGS__), HH_FL)
+
+// Always abort; omit warning about any subsequent unreachable code.
+#define assertnever_ret(...) (hh::g_unoptimized_zero ? void() : hh::details::assertnever_aux((__VA_ARGS__), HH_FL))
+
+// If !expr, exit the program (abort); otherwise return expr.
+#define assertx(...) hh::details::assertx_aux((__VA_ARGS__), "assertx(" #__VA_ARGS__ ")" HH_FL)
+
+// If !expr, throw std::runtime_error exception; otherwise return expr.
+#define assertt(...) hh::details::assertt_aux((__VA_ARGS__), "assertt(" #__VA_ARGS__ ")" HH_FL)
+
+// The environment variable ASSERTW_IGNORE may contain a regular expression; matching warnings are not reported,
+// either when they occur or in the summary of warnings at program exit.
+
+// If !expr, report warning once.  Returns expr.
+#define assertw(...) hh::details::assertw_aux((__VA_ARGS__), "assertw(" #__VA_ARGS__ ")" HH_FL)
+
+// Reports string expr as warning once.  Returns true if this is the first time the warning is reported.
+#define Warning(...) hh::details::assertw_aux2(__VA_ARGS__ HH_FL)
+
+// ASSERTX(...):  In release build, do not evaluate the expression.
+// ASSERTXX(...): In release build, do not even see the expression -- maximum optimization.
+#if defined(HH_DEBUG)
+#define ASSERTX(...) assertx(__VA_ARGS__)
+#define ASSERTXX(...) assertx(__VA_ARGS__)
+#define HH_CHECK_BOUNDS(i, n) ((i >= 0 && i < n) ? (void(0)) : hh::details::assert_bounds_aux(i, n, HH_FL))
+#elif defined(__clang_analyzer__)
+#define ASSERTX(...) (assertx(__VA_ARGS__), HH_ASSUME(__VA_ARGS__))
+#define ASSERTXX(...) (assertx(__VA_ARGS__), HH_ASSUME(__VA_ARGS__))
+#define HH_CHECK_BOUNDS(i, n) ((i >= 0 && i < n) ? (void(0)) : hh::details::assert_bounds_aux(i, n, HH_FL))
+#else
+#define ASSERTX(...) ((false ? void(__VA_ARGS__) : void(0)), HH_ASSUME(__VA_ARGS__))
+#define ASSERTXX(...) (void(0))
+#define HH_CHECK_BOUNDS(i, n) (void(0))
+#endif
+
+// *** Output functions
+
+#if 0
+{
+  showf("%s: Argument '%s' ambiguous, '%s' assumed\n", argv[0], arg.c_str(), assumed.c_str());
+  std::cerr << sform(" Endprogram: %dgons %dlines\n", ngons, nlines);
+  SHOW(x, y, x * y);
+  Point point2 = SHOW_PRECISE(point + vector);  // Show value with greater precision.
+  SHOWL;                                        // Show current filename and line number.
+  assertnever("Unexpected " + SSHOW(point, vector));
+}
+#endif
+
+// With one expression `expr1`, show "expr1 = value1\n" on std::cerr and return expr.
+// With multiple expressions, show "expr1=value1 expr2=value2 ...\n" on std::cerr and return void.
+#define SHOW(...) HH_PRIMITIVE_CAT((HH_SHOW_, HH_GT1_ARGS(__VA_ARGS__)))(#__VA_ARGS__, false, __VA_ARGS__)
+
+// Show expression(s) on std::cerr like SHOW(...) but with more digits of floating-point precision.
+#define SHOW_PRECISE(...) HH_PRIMITIVE_CAT((HH_SHOW_, HH_GT1_ARGS(__VA_ARGS__)))(#__VA_ARGS__, true, __VA_ARGS__)
+
+// SSHOW(expr1, ...) returns a string "expr1 = value1" (single arg) or "expr1=value1 expr2=value2 ..." (multiple args).
+// All the *SHOW*() macros may require extra inner parentheses, e.g., SSHOW((ntimes<3>(1))).
+#define SSHOW(...) HH_PRIMITIVE_CAT((HH_SSHOW_, HH_GT1_ARGS(__VA_ARGS__)))(#__VA_ARGS__, false, __VA_ARGS__)
+
+// Returns a string like SSHOW(...) but with more digits of floating-point precision.
+#define SSHOW_PRECISE(...) HH_PRIMITIVE_CAT((HH_SSHOW_, HH_GT1_ARGS(__VA_ARGS__)))(#__VA_ARGS__, true, __VA_ARGS__)
+
+// Show current file and line number on std::cerr.
+#define SHOWL \
+  hh::details::show_cerr_and_debug(hh::details::forward_slash("Now in " __FILE__ " at line " HH_STR2(__LINE__) "\n"))
+
+// Write formatted string to std::cerr.
+HH_PRINTF_ATTRIBUTE(1, 2) void showf(const char* format, ...);
+
+// Write formatted string (with g_comment_prefix_string == "# ") to std::cerr and possibly to std::cout.
+HH_PRINTF_ATTRIBUTE(1, 2) void showdf(const char* format, ...);
+
+// Write formatted string (with g_comment_prefix_string == "# ") to std::cout only if it is a file or pipe.
+HH_PRINTF_ATTRIBUTE(1, 2) void showff(const char* format, ...);
+
+// C-string prefix for formatted std::cout output in showdf() and showff(); default is "# ".
+extern const char* g_comment_prefix_string;
+
+// Override "char*" output to detect nullptr in C-string.
+inline std::ostream& operator<<(std::ostream& os, const char* s);
+
+// Nice formatted output of a std::pair<> of objects.
+template <typename A, typename B> std::ostream& operator<<(std::ostream& os, const std::pair<A, B>& p) {
+  return os << "[" << p.first << ", " << p.second << "]";
+}
+
+// Nice formatted output of a std::tuple<>.
+template <typename... Types> std::ostream& operator<<(std::ostream& os, const std::tuple<Types...>& tu) {
+  const auto write_elements = [&]<size_t... Is>(std::index_sequence<Is...>) {
+    ((os << (Is ? ", " : "") << std::get<Is>(tu)), ...);
+  };
+  os << "tuple<";
+  write_elements(std::index_sequence_for<Types...>());
+  return os << ">";
+}
+
+// Formatted output of three-way comparison result; strong_ordering and weak_ordering convert to partial_ordering.
+inline std::ostream& operator<<(std::ostream& os, std::partial_ordering c) {
+  return os << (c == 0 ? "0" : c < 0 ? "-1" : c > 0 ? "1" : "unordered");
+}
+
+// By default, assume that types do not end their stream output with a newline character.
+template <typename T> constexpr bool has_ostream_eol_aux_v = false;
+
+// Declares that the specified type ends its stream output with a newline character; must be placed in namespace hh.
+#define HH_DECLARE_OSTREAM_EOL(...) inline constexpr bool has_ostream_eol_aux_v<__VA_ARGS__> = true
+
+// Identifies if a type T ends its stream output (i.e. operator<<(std::ostream)) with a newline character '\n'.
+template <typename T> constexpr bool has_ostream_eol_v = has_ostream_eol_aux_v<std::remove_cvref_t<T>>;
+
+// For the specified container type, define an ostream operator<<() that iterates over the container's range.
+#define HH_DECLARE_OSTREAM_RANGE(...)                                                                    \
+  std::ostream& operator<<(std::ostream& os, const __VA_ARGS__& c) { return os << hh::stream_range(c); } \
+  HH_EAT_SEMICOLON
+
+// *** Inline definitions
+
+// Avoid warnings of unused variables.
+template <typename... A> constexpr void dummy_use(const A&...) {}
+
+// Pretend to modify variables, e.g. to keep a by-value parameter that must match a required signature from being
+//  reported by clang-tidy as copied but used only as a const reference.
+template <typename... A> constexpr void dummy_mutate(A&...) {}
+// Note: any compilation errors about redefinition of dummy_use(), etc. on win _MSC_VER may be due to the current
+// directory being different from that in precompiled header due to symbol links,
+// or to an explicit MeshRoot environment variable that does not match the current tree.
+
+// Avoid warnings of uninitialized variables.
+template <typename... T> void dummy_init(T&... variable) { ((variable = T{}), ...); }
+
+// Returns a copy of the iterator prior to advancing it; used to define the postfix operators.
+template <typename Iterator> Iterator postfix_increment(Iterator& iter) {
+  const Iterator old = iter;
+  return ++iter, old;
+}
+template <typename Iterator> Iterator postfix_decrement(Iterator& iter) {
+  const Iterator old = iter;
+  return --iter, old;
+}
+
+// Adapt a cursor exposing "bool empty() const", "current()" and "void advance()" into a single-pass iterator
+// whose end is std::default_sentinel_t.
+template <typename Cursor> class CursorIterator;
+
+// Returns T{-1} or T{+1} based on sign of expression.
+template <typename T> [[nodiscard]] constexpr T sign(const T& e) { return e >= T{0} ? T{1} : T{-1}; }
+
+// Returns { T{-1}, T{0}, T{+1} } based on sign of expression.
+template <typename T> [[nodiscard]] constexpr T signz(const T& e) { return e > T{0} ? T{1} : e < T{0} ? T{-1} : T{0}; }
+
+// Returns a value times itself.
+template <typename T> [[nodiscard]] constexpr T square(const T& e) { return e * e; }
+
+// Like clamp() but slightly less efficient; however, it works on values like Vector4.
+template <typename T> [[nodiscard]] constexpr T general_clamp(const T& v, const T& a, const T& b) {
+  return min(max(v, a), b);
+}
+
+// Linearly interpolate between two values (f == 1.f returns v1; f == 0.f returns v2).
+[[nodiscard]] constexpr float interp(float v1, float v2, float f = 0.5f);
+
+// Linearly interpolate between two values (f == 1. returns v1; f == 0. returns v2).
+[[nodiscard]] constexpr double interp(double v1, double v2, double f = 0.5);
+
+// Returns v clamped to range [0, 255].
+[[nodiscard]] constexpr uint8_t clamp_to_uint8(int v);
+
+// Returns 255 * v rounded to the nearest integer (with ties to even, like Vector4::pixel()), for v clamped to [0, 1].
+[[nodiscard]] uint8_t uint8_from_unit(float v);
+
+// Returns j%3 (where j is in [0, 5]).
+[[nodiscard]] constexpr int mod3(int j);
+
+// Rounds floating-point value v to the nearest 1/fac increment (by default, fac == 1e5f).
+template <typename T> [[nodiscard]] constexpr T round_fraction_digits(T v, T fac = 1e5f) {
+  return floor(v * fac + .5f) / fac;
+}
+
+// Higher-precision type to represent the sum of a set of elements.
+template <typename T> using sum_type_t = details::sum_type<T>::type;
+
+// Range of integers as in Python range(start, stop):  e.g.: for (const int i : range(2, 5)) { SHOW(i); } gives 2..4 .
+template <typename T> [[nodiscard]] constexpr auto range(T start, T stop) {
+  return views::iota(start, max(start, stop));
+}
+
+// Range of integers as in Python range(stop):  e.g.: for (const int i : range(5)) { SHOW(i); } gives 0..4 .
+template <typename T> [[nodiscard]] constexpr auto range(T stop) { return range(T{0}, stop); }
+
+// Create an optional object if and only if condition is true.
+template <typename T, typename... Args>
+[[nodiscard]] std::optional<T> make_optional_if(bool condition, Args&&... args) {
+  if (condition) return std::make_optional<T>(std::forward<Args>(args)...);
+  return {};
+}
+
+// Create an independent copy of a container, e.g. round_elements(clone(array)).
+template <typename T> [[nodiscard]] std::decay_t<T> clone(T&& v) {
+  static_assert(cloneable<std::decay_t<T>>,
+                "clone() requires a container that owns its elements; add `using owns_elements = void;` "
+                "to the class, or specialize hh::enable_cloneable.  For a view, use Array(view) instead.");
+  return std::decay_t<T>(std::forward<T>(v));  // The cast is necessary for an explicit copy constructor.
+}
+
+// *** Functions defined in Hh.cpp
+
+// Register a function to be called by hh_clean_up(); used by timers, statistics, and warnings.
+void hh_at_clean_up(void (*function)());
+
+// Flush summaries of timers, statistics, and warnings before program termination -- perhaps before output.
+void hh_clean_up();
+
+#if defined(_WIN32)
+// Convert Windows UTF-16 std::wstring to UTF-8 std::string.
+[[nodiscard]] std::string utf8_from_utf16(const std::wstring& wstr);
+
+// Convert UTF-8 std::string to Windows UTF-16 std::wstring.
+[[nodiscard]] std::wstring utf16_from_utf8(const std::string& str);
+#endif
+
+// E.g. SHOW(type_name<T>()); await C++26 reflection.
+template <typename T> [[nodiscard]] string type_name();
+template <typename T> [[nodiscard]] string type_name(const T&) { return type_name<T>(); }
+
+// Write an object e to its string representation using operator<<(ostream&, const T&).
+template <typename T> [[nodiscard]] string make_string(const T& e);
+
+// Format a string like sprintf() but directly return an adaptively-sized std::string.
+[[nodiscard]] HH_PRINTF_ATTRIBUTE(1, 2) string sform(const char* format, ...);
+
+// Format a string like sform() but disable warnings concerning a non-literal format string.
+[[nodiscard]] string sform_nonliteral(const char* format, ...);
+
+// Format a string like sprintf() but directly to a reused adaptively-resized output buffer named str.
+HH_PRINTF_ATTRIBUTE(2, 3) const string& ssform(string& str, const char* format, ...);
+
+// Shortcut for ssform(str, format, ...).c_str(); like sprintf() but using an adaptively resized buffer str.
+[[nodiscard]] HH_PRINTF_ATTRIBUTE(2, 3) const char* csform(string& str, const char* format, ...);
+
+// Allocate a duplicate of a C "char*" string, using make_unique<char[]>.
+[[nodiscard]] unique_ptr<char[]> make_unique_c_string(const char* s);
+
+// If line begins with prefix string, return remaining string.
+[[nodiscard]] const char* after_prefix(const char* sline, const char* prefix);
+
+// Eat up whitespace, parse an integer from the string, and advance `s` to the next character beyond, or die.
+[[nodiscard]] int int_from_chars(const char*& s);
+
+// Eat up whitespace, parse an unsigned from the string, and advance `s` to the next character beyond, or die.
+[[nodiscard]] unsigned uint_from_chars(const char*& s);
+
+// Eat up whitespace, parse a float from the string, and advance `s` to the next character beyond, or die.
+[[nodiscard]] float float_from_chars(const char*& s);
+
+// Eat up whitespace, parse a double from the string, and advance `s` to the next character beyond, or die.
+[[nodiscard]] double double_from_chars(const char*& s);
+
+// Eat up whitespace and assert that there are not more remaining characters.
+void assert_no_more_chars(const char* s);
+
+// Convert string to integer value, or crash if invalid.
+[[nodiscard]] int to_int(const char* s);
+
+// Convert string to integer value, or crash if invalid.
+[[nodiscard]] inline int to_int(const string& s) { return to_int(s.c_str()); }
+
+// Convert string to unsigned value, or crash if invalid.
+[[nodiscard]] unsigned to_uint(const char* s);
+
+// Convert string to unsigned value, or crash if invalid.
+[[nodiscard]] inline unsigned to_uint(const string& s) { return to_uint(s.c_str()); }
+
+// Convert string to float value, or crash if invalid.
+[[nodiscard]] float to_float(const char* s);
+
+// Convert string to float value, or crash if invalid.
+[[nodiscard]] inline float to_float(const string& s) { return to_float(s.c_str()); }
+
+// Convert string to double value, or crash if invalid.
+[[nodiscard]] double to_double(const char* s);
+
+// Convert string to double value, or crash if invalid.
+[[nodiscard]] inline double to_double(const string& s) { return to_double(s.c_str()); }
+
+// Allocate an aligned memory block (returns nullptr if fails).  Portable std::aligned_alloc().
+[[nodiscard]] void* aligned_malloc(size_t alignment, size_t size);
+
+// Deallocate an aligned memory block previously created by aligned_malloc().  Portable std::free().
+void aligned_free(void* p);
+
+// Read a line of input (trailing '\n' is discarded).
+std::istream& my_getline(std::istream& is, string& line, bool dos_eol_warnings = true);
+
+// Set an environment variable; the variable is removed from the environment if value == "".
+void my_setenv(const string& name, const string& value);
+
+// Returns vdefault if the environment variable `name` is not defined, false if "0" or "false", true if "", "1", or
+// "true", else aborts.
+[[nodiscard]] bool getenv_bool(const string& name, bool vdefault = false, bool warn = false);
+
+// Returns vdefault if the environment variable `name` is not defined, 1 if "", its value if integer, else aborts.
+[[nodiscard]] int getenv_int(const string& name, int vdefault = 0, bool warn = false);
+
+// Returns vdefault if the environment variable `name` is not defined, its value if float, else aborts.
+[[nodiscard]] float getenv_float(const string& name, float vdefault, bool warn = false);
+
+// Returns the string value of the environment variable `name`, or vdefault if it is not defined.
+[[nodiscard]] string getenv_string(const string& name, const string& vdefault = "", bool warn = false);
+
+// Returns the typed value of the environment variable `name`, or vdefault if it is not defined.
+template <typename T> [[nodiscard]] T getenv_type(const string& name, T vdefault, bool warn = false) {
+  if constexpr (std::is_same_v<T, bool>)
+    return getenv_bool(name, vdefault, warn);
+  else if constexpr (std::is_same_v<T, int>)
+    return getenv_int(name, vdefault, warn);
+  else if constexpr (std::is_same_v<T, float>)
+    return getenv_float(name, vdefault, warn);
+  else if constexpr (std::is_same_v<T, string>)
+    return getenv_string(name, vdefault, warn);
+  else
+    static_assert(false, "getenv_type<T>: unsupported type T.");
+}
+
+// Show any Win32 error if on _WIN32.
+void show_possible_win32_error();
+
+// Show the call stack if possible.
+void show_call_stack();
+
+// For Unix _exit(code).
+[[noreturn]] void exit_immediately(int code);
+
+// *** Hh_main.cpp
+
+// Returns the absolute time, in seconds (with an accuracy of at least ~.001).
+[[nodiscard]] double get_precise_time();
+
+// Returns the absolute time, in cycle counts.
+[[nodiscard]] int64_t get_precise_counter();
+
+// Returns the number of seconds per counter cycle.
+[[nodiscard]] double get_seconds_per_counter();
+
+// Delay for some number of seconds; a nonzero tolerable delay lets the system coalesce this wakeup with others.
+void my_sleep(double sec);
+
+// Delay for some number of seconds.
+void my_precise_sleep(double sec);
+
+// Get number of bytes of available memory (min of free virtual and physical space), or 0 if unavailable.
+[[nodiscard]] size_t available_memory();
+
+// Returns the current directory.
+[[nodiscard]] string get_current_directory();
+
+// Returns a string of the form "2016-02-15 18:02:28".
+[[nodiscard]] string get_current_datetime();
+
+// Returns the machine name, in lowercase.
+[[nodiscard]] string get_host_name();
+
+// Returns a string with date, time, machine, build parameters.
+[[nodiscard]] string get_header_info();
+
+// On Windows, replace the command-line argv with a new one that contains UTF-8 encoded strings; else do nothing.
+void ensure_utf8_encoding(int& argc, const char**& argv);
+
+// Use fcntl() to make read() calls non-blocking; returns false if failure.
+[[nodiscard]] bool set_fd_no_delay(int fd, bool nodelay);
+
+//----------------------------------------------------------------------------
+
+// HH_REFERENCE_LIB("libHh.lib");
+
+namespace details {
+
+[[nodiscard]] string forward_slash(const string& s);
+
+[[noreturn]] void assertx_aux2(const char* s) noexcept;
+
+[[noreturn]] inline void assertx_aux2(const std::string& s) noexcept { assertx_aux2(s.c_str()); }
+
+bool assertw_aux2(const char* s);
+
+[[nodiscard]] inline string add_fl(const string& s, const char* file_line) { return s + file_line; }
+
+// The message string is formed inside this noexcept function so that the caller has no exception edge.
+template <typename T> [[noreturn]] void assertnever_aux(T&& s, const char* file_line) noexcept {
+  assertx_aux2(add_fl(std::forward<T>(s), file_line));
+}
+
+// Likewise, so that bounds-checked accessors can themselves be declared noexcept.
+[[noreturn]] inline void assert_bounds_aux(int i, int n, const char* file_line) noexcept {
+  assertx_aux2(add_fl(sform("bounds i=%d n=%d", i, n), file_line));
+}
+
+template <typename T> constexpr T assertx_aux(T&& val, const char* s) {
+  if (!val) assertx_aux2(s);
+  return std::forward<T>(val);
+}
+
+template <typename T> T assertt_aux(T&& val, const char* s) {
+  if (!val) throw std::runtime_error(forward_slash(s));
+  return std::forward<T>(val);
+}
+
+template <typename T> T assertw_aux(T&& val, const char* s) {
+  if (!val) assertw_aux2(s);
+  return std::forward<T>(val);
+}
+
+void show_cerr_and_debug(const string& s);
+
+class MyOStringStream {
+ public:
+  MyOStringStream(bool high_precision) {
+    if (high_precision) _oss.precision(std::numeric_limits<double>::max_digits10);
+  }
+  template <typename T> MyOStringStream& append(const T& value) {
+    _oss << value;
+    return *this;
+  }
+  [[nodiscard]] std::string str() const { return _oss.str(); }
+
+ private:
+  std::ostringstream _oss;
+};
+
+#define HH_SHOW_0(sargs, high_precision, arg1) \
+  hh::details::show_aux(sargs, arg1, hh::has_ostream_eol_v<decltype(arg1)>, high_precision)
+
+#define HH_SHOW_1(sargs, high_precision, ...) \
+  hh::details::show_cerr_and_debug(HH_SSHOW_1(sargs, high_precision, __VA_ARGS__) + '\n')
+
+#define HH_SSHOW_0(sargs, high_precision, arg1) \
+  hh::details::MyOStringStream{high_precision}.append(sargs " = ").append(arg1).str()
+
+#define HH_SSHOW_1(sargs, high_precision, ...) \
+  hh::details::MyOStringStream{high_precision} HH_MAP_REDUCE((HH_SSHOW_M, .append(' '), __VA_ARGS__)).str()
+
+#define HH_SSHOW_M(expr) .append(#expr[0] == '"' ? "" : #expr "=").append(expr)
+
+template <typename T> T show_aux(string str, T&& val, bool has_eol, bool high_precision) {
+  std::ostringstream oss;
+  if (high_precision) oss.precision(std::numeric_limits<double>::max_digits10);
+  oss << (str[0] == '"' ? "" : str + " = ") << val << (has_eol ? "" : "\n");
+  // Single write for better behavior under parallelism.  For guaranteed atomic write, use std::scoped_lock.
+  show_cerr_and_debug(assertx(oss).str());
+  return std::forward<T>(val);
+}
+
+string extract_function_type_name(string s);
+
+template <typename T> struct TypeNameAux {
+#if defined(__GNUC__) || defined(__clang__)
+  // https://www.gamedev.net/forums/topic/608203-c-get-type-name-without-rtti/
+  // https://stackoverflow.com/questions/4384765/whats-the-difference-between-pretty-function-function-func
+  static string name() { return extract_function_type_name(__PRETTY_FUNCTION__); }
+#elif defined(_MSC_VER)
+  static string name() { return extract_function_type_name(__FUNCTION__); }  // Also __FUNCSIG__, __FUNCDNAME__.
+#else
+  static string name() { return extract_function_type_name(__func__); }  // C++11 (C99); unadorned so likely to fail!
+#endif
+};
+
+template <typename T> struct sum_type {
+  using type = std::conditional_t<!std::is_arithmetic_v<T>, T,
+                                  std::conditional_t<std::is_floating_point_v<T>, double,
+                                                     std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>>>;
+};
+
+}  // namespace details
+
+// All the traversal state lives in the cursor rather than in the iterator, so begin() is free and may be called
+// repeatedly; "*cursor.begin()" reads the current element without consuming it, and only operator++ advances.
+// The cursor models an input_range by defining, publicly:
+//   using Iterator = CursorIterator<Cursor>;
+//   Iterator begin() noexcept { return Iterator(*this); }
+//   std::default_sentinel_t end() const noexcept { return {}; }
+//   bool empty() const;  // Also the customization point for ranges::empty().
+// and, privately, "current()" and "void advance()" together with "friend CursorIterator<Cursor>;".
+template <typename Cursor> class CursorIterator {
+  using type = CursorIterator<Cursor>;
+
+ public:
+  using iterator_concept = std::input_iterator_tag;
+  using value_type = std::remove_cvref_t<decltype(std::declval<const Cursor&>().current())>;
+  using difference_type = std::ptrdiff_t;
+  explicit CursorIterator(Cursor& cursor) : _cursor(&cursor) {}
+  CursorIterator() = default;
+  [[nodiscard]] bool operator==(std::default_sentinel_t) const { return _cursor->empty(); }
+  [[nodiscard]] decltype(auto) operator*() const { return assertx(!_cursor->empty()), _cursor->current(); }
+  type& operator++() { return _cursor->advance(), *this; }
+  void operator++(int) { _cursor->advance(); }  // Single-pass, so the prior value cannot be returned.
+
+ private:
+  Cursor* _cursor{};
+};
+
+template <typename Target, typename Source> constexpr Target narrow_cast(Source v) {
+  Target v2 = static_cast<Target>(v);
+  ASSERTXX(static_cast<Source>(v2) == v);
+  return v2;
+}
+
+template <typename Target, typename Source> constexpr Target assert_narrow_cast(Source v) {
+  Target v2 = static_cast<Target>(v);
+  assertx(static_cast<Source>(v2) == v);
+  return v2;
+}
+
+struct noncopyable {
+  noncopyable(const noncopyable&) = delete;
+  noncopyable& operator=(const noncopyable&) = delete;
+
+ protected:
+  noncopyable() = default;
+};
+
+inline std::ostream& operator<<(std::ostream& os, const char* s) { return std::operator<<(os, s ? s : "<nullptr>"); }
+
+// User-defined ostream manipulator, which is constructed from a container and writes out its elements.
+template <typename C> class stream_range {
+ public:
+  explicit stream_range(const C& c) : _c(c) {}
+  friend std::ostream& operator<<(std::ostream& os, const stream_range& sc) {
+    os << type_name<C>() << "={\n";
+    for (const auto& e : sc._c) os << "  " << e << (has_ostream_eol_v<decltype(e)> ? "" : "\n");
+    return os << "}\n";
+  }
+
+ private:
+  const C& _c;
+};
+
+// Template deduction guide:
+template <typename C> stream_range(const C&) -> stream_range<C>;
+
+constexpr float interp(float v1, float v2, float f) {
+  return f * v1 + (1.f - f) * v2;  // Equivalently, v2 + (v1 - v2) * f.
+}
+
+constexpr double interp(double v1, double v2, double f) {
+  return f * v1 + (1. - f) * v2;  // Equivalently, v2 + (v1 - v2) * f.
+}
+
+constexpr uint8_t clamp_to_uint8(int v) {
+  // return clamp(v, 0, 255);
+  // https://codereview.stackexchange.com/questions/6502/fastest-way-to-clamp-an-integer-to-the-range-0-255
+  v &= -(v >= 0);
+  return uint8_t(v | ((255 - v) >> 31));
+}
+
+inline uint8_t uint8_from_unit(float v) {
+  v = v > 0.f ? std::min(v, 1.f) : 0.f;  // (A NaN gives 0.)
+  return uint8_t(std::nearbyint(v * 255.f));
+}
+
+constexpr int mod3(int j) {
+  ASSERTX(j >= 0 && j < 6);
+  return j < 3 ? j : j - 3;
+}
+
+template <typename T> string type_name() { return details::TypeNameAux<std::decay_t<T>>::name(); }
+
+template <typename T> string make_string(const T& e) {
+  std::ostringstream oss;
+  oss << e;
+  return assertx(oss).str();
+}
+
+inline const char* after_prefix(const char* sline, const char* prefix) {
+  for (;;) {
+    if (!*prefix) return sline;
+    if (*sline++ != *prefix++) return nullptr;
+  }
+}
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_HH_H_

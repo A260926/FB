@@ -1,0 +1,44 @@
+# See https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+# clang-format -style=google -dump-config
+# clang-format -i `allC`
+
+BasedOnStyle: Google
+
+ColumnLimit: 119                            # Default is 80; Google default is 80.
+
+Language: Cpp                               # Default is Cpp; Google default is Cpp; keep to reject other file types.
+BreakTemplateDeclarations: MultiLine        # Default is MultiLine; Google default is Yes.
+AllowShortCaseLabelsOnASingleLine: true     # Default is false; Google default is false.
+AllowShortNamespacesOnASingleLine: true     # Default is false; Google default is false.
+ReflowComments: false                       # Default is Always; Google default is Always.
+IncludeBlocks: Preserve                     # Default is Preserve; Google default is Regroup.
+RequiresClausePosition: SingleLine          # Default is OwnLine; Google default is OwnLine.
+DerivePointerAlignment: false               # Default is false; Google default is false (true before v21, e.g. VS).
+
+# AttributeMacros: Default is ['__capability']; Google default appends 'absl_nonnull', 'absl_nullable', and
+# 'absl_nullability_unknown'.  The list below replaces only the first entry of Google's list, so the absl
+# entries remain.
+AttributeMacros: ['_Inout_']                # Keeps the space in "_Inout_ ::Name".
+
+# ForEachMacros: ['for_int', 'for_intL']
+# # But then avoid 'for_int (' using the following:
+# SpaceBeforeParens: Custom
+# SpaceBeforeParensOptions:
+#   AfterControlStatements: true
+#   AfterForeachMacros: false
+#   AfterIfMacros: true
+# # However, "for_int(y, ny) for_int(x, nx)" no longer fits on one line, so I give up on this approach.
+
+# AllowShortBlocksOnASingleLine: Always     # Default is Never; Google default is Never.
+
+# ForEachMacros: ['foreach', 'Q_FOREACH', 'BOOST_FOREACH']
+# SpaceBeforeParens: Custom
+# SpaceBeforeParensOptions:
+#   AfterForeachMacros: false
+
+# AllowShortFunctionsOnASingleLine: Inline  # Default is All; Google default is All.
+# CommentPragmas: '^///'                    # Default is '^ IWYU pragma:'; however, it still indents it.
+# Standard: Latest                          # Default is Latest; Google default is Auto (fine).
+
+# StatementMacros: ['Q_UNUSED', 'QT_REQUIRE_VERSION']
+# MaxEmptyLinesToKeep: 1

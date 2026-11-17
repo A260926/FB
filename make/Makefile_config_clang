@@ -1,0 +1,65 @@
+# For Windows clang++ compiler, using MSVC STL as C++ library, vcruntime + Microsoft's Universal CRT (ucrt),
+# Win32 threads, and Win32 API.
+# It defines __clang__, _MSC_VER, _MSVC_STL_VERSION, _WIN32, but not __GNUC__!
+
+release ?= 1#  0=debug or 1=release (usually 1).
+
+include $(dir $(lastword $(MAKEFILE_LIST)))Makefile_base_clang
+
+# 2025-10-28 LLVM-20.1.8-win64.exe from https://github.com/llvm/llvm-project/releases
+# 2026-09-15 https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.1/LLVM-23.1.1-win64.msi
+# LLVM_ROOT = C:/Program Files/LLVM
+
+# Possibly consider: C:/Program Files/Microsoft Visual Studio/2022/*/VC/Tools/Llvm/x64/bin/$(CXX).exe, but full
+# compiler is an optional install and the spaces in the path are super-complicated with $(wildcard multi pattern)!
+LLVM_CXX_PATTERNS ?= \
+  c:/Progra~1/LLVM*/bin/$(CXX).exe \
+  c:/LLVM*/bin/$(CXX).exe
+# Note that `sort` below unfortunately gives a lexicographic rather than numeric sort.
+LLVM_ROOT ?= $(call rawdir,$(call rawdir,$(lastword $(sort $(wildcard $(LLVM_CXX_PATTERNS))))))
+$(if $(and $(LLVM_ROOT),$(call file_exists,$(LLVM_ROOT)/bin/$(CXX).exe)),,$(error No $(CXX) compiler \
+  found for CONFIG=$(CONFIG) with LLVM_ROOT='$(LLVM_ROOT)' and LLVM_CXX_PATTERNS='$(LLVM_CXX_PATTERNS)'. \
+  Install LLVM and/or set these variables in '$(MeshRoot)/Makefile_local_defs'))
+$(call prepend_PATH,$(LLVM_ROOT)/bin)
+
+# Clang has no thread or memory sanitizer for the x86_64-pc-windows-msvc target.
+ifneq ($(filter thread memory,$(subst $(comma), ,$(sanitize))),)
+  $(error CONFIG=clang has no thread or memory sanitizer; use CONFIG=unix for sanitize=$(sanitize))
+endif
+
+# The sanitizer runtimes are in the Clang resource directory.
+# (The `sort` caveat noted above applies to the version directories.)
+ifneq ($(sanitize:0=),)
+  clang_rt_dir := $(call rawdir,$(lastword $(sort \
+    $(wildcard $(LLVM_ROOT)/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib))))
+  $(if $(clang_rt_dir),,$(error No sanitizer runtimes found under '$(LLVM_ROOT)/lib/clang'))
+endif
+# Programs built with the address sanitizer load its runtime DLL, which also contains the UBSan runtime.
+ifneq ($(filter address,$(subst $(comma), ,$(sanitize))),)
+  $(if $(wildcard $(clang_rt_dir)/clang_rt.asan_dynamic-x86_64.dll),,$(error No ASan runtime DLL in '$(clang_rt_dir)'))
+  $(call prepend_PATH,$(clang_rt_dir))
+else ifneq ($(filter undefined,$(subst $(comma), ,$(sanitize))),)
+  # The driver names the standalone UBSan runtime without a path, and the linker then finds the incompatible
+  #  copy that Visual Studio ships (in MSVC/*/lib/x64), whose directory precedes the Clang resource directory.
+  ccommon += -fno-rtlib-defaultlib
+  # Clang's copy mixes C runtimes: ubsan_standalone_cxx requires the static one, yet ubsan_standalone imports
+  #  CRT functions such as _errno, which lld then resolves locally but reports as LNK4217.
+  LDFLAGS += -Wl,-ignore:4217 $(foreach s,standalone standalone_cxx,$(clang_rt_dir)/clang_rt.ubsan_$(s)-x86_64.lib)
+endif
+
+AR = llvm-ar
+RANLIB = llvm-ranlib
+
+LDFLAGS += -fuse-ld=lld#  Use the (faster) linker from the LLVM toolchain; implies "-Wl,-incremental:no".
+LDFLAGS += -Wl,-debug#  Write a *.pdb file (adjacent to *.exe) to enable stacktrace.
+
+cxxall += -D_CRT_SECURE_NO_WARNINGS#  Because the C++ library is _MSVC_STL_VERSION.
+
+graphics_libs ?= -lopengl32 -lwinmm -lgdi32 -lcomdlg32 -ldwmapi -luser32
+
+# c:/Progra~1/LLVM/bin/clang++ --version:
+#  Target: x86_64-pc-windows-msvc
+#  Thread model: posix
+
+# echo | c:/Progra~1/LLVM/bin/clang++ -x c++ -E -v - >/dev/null  # See tool paths.
+# echo '#include <cstdio>' | c:/Progra~1/LLVM/bin/clang++ -dM -E -x c++ - | grep -E '__GNUC__|__clang__|_UCRT|__MINGW32|_MSVC_STL_VERSION|__GLIBCXX__|_WIN32|__cplusplus|_MSVC_LANG|__CYGWIN'

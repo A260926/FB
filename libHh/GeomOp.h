@@ -1,0 +1,109 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_GEOMOP_H_
+#define MESH_PROCESSING_LIBHH_GEOMOP_H_
+
+#include "libHh/Geometry.h"
+#include "libHh/Polygon.h"
+
+#if 0
+{
+  Vec3<float> ang = euler_angles_from_frame(frame);
+  Frame frame = frame_from_euler_angles(ang, frame);
+}
+#endif
+
+namespace hh {
+
+// *** Radii
+
+// Compute the circumscribed radius of the 3 points p0, p1, p2.
+[[nodiscard]] float circum_radius(const Point& p0, const Point& p1, const Point& p2);
+
+// Compute the inscribed radius of the 3 points p0, p1, p2.
+[[nodiscard]] float inscribed_radius(const Point& p0, const Point& p1, const Point& p2);
+
+[[nodiscard]] float aspect_ratio(const Point& p0, const Point& p1, const Point& p2);
+
+// *** Angles
+
+// Returns the cosine of the signed angle away from "flatness" (== the exterior angle).
+// Range -1.f .. 1.f  (1.f if flat, -1.f if foldover inwards/outwards)  (or -2.f if a triangle is degenerate).
+[[nodiscard]] float dihedral_angle_cos(const Point& p1, const Point& p2, const Point& po1, const Point& po2);
+
+// Returns the angle from -TAU / 2 to TAU / 2 (negative is concave), or -10.f if degenerate.
+// (== exterior angle)  (cos(signed_dihedral_angle()) == dihedral_angle_cos()).
+[[nodiscard]] float signed_dihedral_angle(const Point& p1, const Point& p2, const Point& po1, const Point& po2);
+
+// Compute the solid angle at p surrounded by the ordered loop pa[].
+// The range is 0 .. TAU * 2.
+[[nodiscard]] float solid_angle(const Point& p, CArrayView<Point> pa);
+
+// Returns the cosine of the signed angle away from "flatness" (== the exterior angle).
+// The range is -1 .. 1  (or -2 if an edge is degenerate).
+[[nodiscard]] float angle_cos(const Point& p1, const Point& p2, const Point& p3);
+
+// *** Frames and Euler angles
+
+// Check if the three vectors of `frame` are nearly orthogonal.
+[[nodiscard]] bool nearly_orthogonal(const Frame& frame, float tolerance);
+
+// Check if the three vectors of `frame` are nearly orthogonal and unit length.
+[[nodiscard]] bool nearly_orthonormal(const Frame& frame, float tolerance);
+
+// Make the three vectors of `frame` be orthogonal (but keep their magnitudes).
+[[nodiscard]] Frame orthogonalized(const Frame& frame);
+
+// Make the three vectors of `frame` be orthogonal and unit length.
+[[nodiscard]] Frame orthonormalized(const Frame& frame);
+
+// Returns the frame orthonormalized() or orthogonalized() if it is nearly so, else the frame unchanged.
+[[nodiscard]] Frame normalized_frame(const Frame& frame, float tolerance = 1e-4f);
+
+// Compute Euler angles of frame.
+[[nodiscard]] Vec3<float> euler_angles_from_frame(const Frame& frame);
+
+// Modify frame by setting v[0..2] according to Euler angles, keeping origin and axes scaling of prev_frame.
+[[nodiscard]] Frame frame_from_euler_angles(const Vec3<float>& ang, const Frame& prev_frame);
+
+// Modify frame so that its x axis points along direction v and its y axis is horizontal (zero roll);
+// frame.p() is ignored and unchanged.
+void frame_aim_at(Frame& frame, const Vector& v);
+
+// Modify frame so that its y axis lies in the xy plane.
+[[nodiscard]] Frame make_level(const Frame& frame);
+
+// Modify frame so that its x and y axes lie in the xy plane.
+[[nodiscard]] Frame make_horiz(const Frame& frame);
+
+// Affinely broaden the triangle about its centroid by the factor 1.f + 1.5f * eps.
+[[nodiscard]] Vec3<Point> widen_triangle(const Vec3<Point>& triangle, float eps);
+
+// *** Intersections
+
+// Returns the intersection point of a line with a plane, or none if they are parallel.
+[[nodiscard]] std::optional<Point> intersect_line_with_plane(const Line& line, const Plane& plane);
+
+// Returns the intersection point of a segment (p1, p2) with a plane, if it exists.
+[[nodiscard]] std::optional<Point> intersect_segment_with_plane(const Point& p1, const Point& p2, const Plane& plane);
+
+// Returns the intersection point of a line with a triangle.
+[[nodiscard]] std::optional<Point> intersect_line_with_triangle(const Line& line, const Vec3<Point>& triangle);
+
+// Returns the intersection point of a segment (p1, p2) with a triangle.
+[[nodiscard]] std::optional<Point> intersect_segment_with_triangle(const Point& p1, const Point& p2,
+                                                                   const Vec3<Point>& triangle);
+
+// *** Other
+
+// Returns the signed volume of a tetrahedron (positive if p4 is in the direction cross(p1, p2, p3)).
+[[nodiscard]] float signed_volume(const Point& p1, const Point& p2, const Point& p3, const Point& p4);
+
+// Returns the (longitude, latitude) of a point on the unit sphere.
+[[nodiscard]] Uv lonlat_from_sph(const Point& sph);
+
+// Returns the point on the unit sphere given its (longitude, latitude).
+[[nodiscard]] Point sph_from_lonlat(const Uv& lonlat);
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_GEOMOP_H_

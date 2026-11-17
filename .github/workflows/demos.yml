@@ -1,0 +1,128 @@
+# Build all programs and run the demos: create their results, check these against reference statistics, and run
+# the viewing demos without showing any window; run the examples of progs/README.md, checking the statistics of
+# their screenshots; and recreate the README images, checking theirs.  This is slow, so it runs nightly and on
+# demand, not on every push.
+name: Demos
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Daily at 09:00 UTC.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read  # For the query of previous runs.
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # A scheduled run is skipped if this commit already passed this workflow, except on Sundays, whose run also
+  # detects any changes in the runner images and packages.
+  check:
+    runs-on: ubuntu-26.04
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          needed=true
+          if [[ $GITHUB_EVENT_NAME == schedule && $(date -u +%u) != 7 ]]; then
+            n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow "$GITHUB_WORKFLOW" --commit "$GITHUB_SHA" \
+              --status success --json databaseId -q length)
+            if ((n > 0)); then needed=false; fi
+          fi
+          echo "needed=$needed" | tee -a "$GITHUB_OUTPUT"
+
+  demos:
+    needs: check
+    if: needs.check.outputs.needed == 'true'
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-demos
+            os: ubuntu-26.04
+          - name: macos-demos
+            os: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      # Xvfb and the Mesa drivers provide an X display with software OpenGL, xfonts-base the fonts used by the viewers,
+      # and ffmpeg video I/O.
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make clang libgl-dev libx11-dev libjpeg-dev libpng-dev zlib1g-dev \
+            ffmpeg xvfb libgl1-mesa-dri xfonts-base
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --cask xquartz && brew install ffmpeg
+
+      # The rendering demos need an X server with OpenGL, even when drawing offscreen.  On macOS, the Xvfb of XQuartz
+      # lacks OpenGL, so we use the XQuartz server itself, and because the hosted runners have no GPU, the software
+      # renderer of Apple's OpenGL.
+      - name: Start an X server
+        run: |
+          if [[ $RUNNER_OS == macOS ]]; then
+            export LIBGL_ALWAYS_SOFTWARE=1
+            echo LIBGL_ALWAYS_SOFTWARE=1 >>"$GITHUB_ENV"
+            # Register the newly installed XQuartz.app with LaunchServices.  Otherwise, the Xquartz launcher often
+            # cannot yet find it ("Unable to find application for org.xquartz.X11") and exits with status 10.
+            /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+              -f /Applications/Utilities/XQuartz.app
+            /opt/X11/bin/Xquartz :99 -nolisten tcp &
+            # The server accepts connections after a few seconds.
+            is_up() { DISPLAY=:99 /opt/X11/bin/xset q >/dev/null 2>&1; }
+            for i in {1..30}; do is_up && break; sleep 1; done
+            is_up
+          else
+            Xvfb :99 -screen 0 1920x1080x24 &
+          fi
+          echo DISPLAY=:99 >>"$GITHUB_ENV"
+
+      - name: Build
+        id: build
+        run: make -j"$(getconf _NPROCESSORS_ONLN)" progs 2>&1 | tee build.log
+
+      - name: Create and check the demo results
+        run: make -k -j"$(getconf _NPROCESSORS_ONLN)" -C demos create check 2>&1 | tee demos.log
+
+      # Run these even if some results could not be created, but only after a successful build.
+      - name: Run the viewing demos without windows
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: DEMOS_HIDDEN=1 make -C demos view 2>&1 | tee view.log
+
+      # Run the examples of progs/README.md (which use the demo results), saving a sheet of their screenshots.
+      - name: Run the README examples
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          .github/scripts/run_readme_examples.py --screenshots readme_examples.jpg --dir readme_examples 2>&1 |
+            tee examples.log
+
+      # Recreate the images of the README pages (in readme_images/) and check their statistics.
+      - name: Check the README images
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: .github/scripts/create_readme_images --check readme_images 2>&1 | tee images.log
+
+      - name: Upload results and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}-results
+          path: |
+            *.log
+            readme_examples.jpg
+            readme_examples/screenshots/
+            !readme_examples/screenshots/*.tile.png
+            readme_images/
+            demos/results/
+          if-no-files-found: ignore

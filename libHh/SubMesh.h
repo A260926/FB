@@ -1,0 +1,121 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_SUBMESH_H_
+#define MESH_PROCESSING_LIBHH_SUBMESH_H_
+
+#include "libHh/Array.h"
+#include "libHh/Combination.h"
+#include "libHh/GMesh.h"
+#include "libHh/Homogeneous.h"
+
+namespace hh {
+
+// Weighted combination of vertices and a homogeneous coordinate.
+struct Combvh {
+  Homogeneous h;  // Placed first because it may need 16-alignment if Vector4.
+  Combination<Vertex> c;
+  [[nodiscard]] bool is_combination() const;
+  [[nodiscard]] Point evaluate(const GMesh& mesh) const;
+  HH_POOL_ALLOCATION(Combvh);
+};
+
+HH_INITIALIZE_POOL(Combvh);
+
+// We previously used unique_ptr<Combvh> rather than Combvh because of alignment problems due to __m128 in Combvh::h
+// See ~/git/hh_src/test/native/unordered_map_of_m128.cpp
+
+class Mvcvh : public Map<Vertex, Combvh> {
+ public:
+  [[nodiscard]] bool is_convolution() const;               // Check that the combination is affine.
+  [[nodiscard]] Combvh compose_c(const Combvh& ci) const;  // Returns co = ci * this.
+  // Compose two maps to produce one; die unless mconv.is_convolution().
+  void compose(const Mvcvh& mconv);  // this = mconv * this
+};
+
+// Subdivide a mesh and maintain relationships between subdivided mesh and original base mesh.
+class SubMesh {
+ public:
+  explicit SubMesh(GMesh& mesh);
+  void clear();
+  // Destroy some faces of mesh() and any vertices thereby isolated, also removing them from the maps of the SubMesh.
+  // (Their keys must not remain in these maps, whose hash function reads the id of a mesh element.)
+  void destroy_faces(CArrayView<Face> faces);
+  static const FlagMask vflag_variable;  // An MVertex flag bit.
+  // mesh() may be modified if no more SubMesh operations will be done.
+  [[nodiscard]] auto& mesh(this auto&& self) { return self._m; }
+  [[nodiscard]] auto orig_mesh(this auto&& self) -> copy_const_t<decltype(self), GMesh>& { return self._omesh; }
+
+  // Subdivide (makes use of refine(), create_conv(), convolve_self(), ...):
+  void subdivide(float cosang = 1.f);
+  void subdivide_n(int nsubdiv, int limit, float cosang = 1.f, bool triang = true);
+
+  // Combinations:
+  // Get a combination (expressing v of mesh() in terms of orig_mesh()).
+  [[nodiscard]] const Combvh& combination(Vertex v) const;
+  // Compose c1 with _cmvcvh to get combination in terms of orig. verts.
+  [[nodiscard]] Combvh compose_c_mvcvh(const Combvh& ci) const;
+
+  // Update vertex positions on mesh() according to its mask:
+  void update_vertex_position(Vertex v);
+  void update_vertex_positions();
+
+  // Misc:
+  void mask_parameters(bool s222, float weighta) {
+    _s222 = s222;
+    _weighta = weighta;
+  }
+
+  // The omesh to and from mesh:
+  [[nodiscard]] Face orig_face(Face f) const;
+  void orig_face_index(Face fi, Face& of, int& pindex) const;
+  [[nodiscard]] Face get_face(Face of, int index) const;
+
+  // Split and compute splitting masks:
+  void refine(Mvcvh& mconv);  // A 1-to-4 split at edge midpoints.
+  // Refine near creases, and refine edges with cosdihedral < cosang.
+  void selectively_refine(Mvcvh& mconv, float cosang);
+
+  // Compute averaging masks:
+  using FVMASK = void (SubMesh::*)(Vertex v, Combvh& comb) const;
+  void create_conv(Mvcvh& mconv, FVMASK f);  // Use a subdivision mask.
+
+  // The masks:
+  void averaging_mask(Vertex v, Combvh& comb) const;
+  void limit_mask(Vertex v, Combvh& comb) const;
+
+  // Triangulate:
+  void triangulate_quads(Mvcvh& mconv);  // A 1-to-4 split at centroids.
+
+  // Apply a convolution:
+  void convolve_self(const Mvcvh& mconv);  // _cmvcvh = mconv * _cmvcvh
+
+  // Debug:
+  void show_mvcvh(const Mvcvh& mvcvh) const;
+  void show_cmvcvh() const;
+
+ private:
+  GMesh& _omesh;
+  GMesh _m;
+  Mvcvh _cmvcvh;                  // Maps vertices of _m to Combvh of _omesh.
+  Map<Face, Face> _mforigf;       // Face of _m -> face of _omesh.
+  Map<Face, int> _mfindex;        // Face of _m -> index within origf.
+  Map<Face, Array<Face>> _mofif;  // Face of _omesh -> (int -> face of _m).
+  bool _allvvar;                  // Whether all vertices are vflag_variable.
+  bool _isquad;
+
+  bool _s222{false};
+  float _weighta{0.f};
+  bool _selrefine{false};  // No longer used.
+
+  bool sharp(Edge e) const;
+  int nume(Vertex v) const;
+  int num_sharp_edges(Vertex v) const;
+  Edge opp_sharp_edge(Vertex v, Edge e) const;
+  Vertex opp_sharp_vertex(Vertex v, Vertex v2) const;
+  void subdivide_aux(float cosang, Mvcvh* mconv);
+  void crease_averaging_mask(Vertex v, Combvh& comb) const;
+  bool extraordinary_crease_vertex(Vertex v) const;
+};
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_SUBMESH_H_

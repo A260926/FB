@@ -1,0 +1,126 @@
+MeshRoot = ..
+orig_CONFIG := $(CONFIG)#  If null on Windows, we use the executables in $(MeshRoot)/bin/msbuild.
+include $(MeshRoot)/make/Makefile_defs
+
+ifneq ($(CONFIG),all)  # For the rest of this file.
+
+ifeq ($(orig_CONFIG)$(is_mswin),1)  # Elsewhere, CONFIG defaults to unix.
+  # undefine CONFIG#  Recent feature of make.
+  CONFIG :=
+  unexport CONFIG
+  $(call assert_prepend_PATH,$(MeshRoot)/bin/msbuild)
+else
+  $(call assert_prepend_PATH,$(MeshRoot)/bin/$(CONFIG))
+endif
+
+$(call assert_prepend_PATH,$(MeshRoot)/bin)  # The scripts (e.g., mesh_to_pm) take precedence over the executables.
+
+$(call assert_prepend_PATH,$(MeshRoot)/demos)  # Allow running bash scripts in local directory.
+
+create_scripts = \
+  create_reconstruction_mannequin.sh \
+  create_reconstruction_animated.sh \
+  create_reconstruction_polygon.sh \
+  create_simplified_using_meshopt.sh \
+  create_progressive_mesh_gaudipark.sh \
+  create_progressive_mesh_cessna.sh \
+  create_progressive_mesh_57chevy.sh \
+  create_geomorphs.sh \
+  create_progressive_hulls_bunny.sh \
+  determine_approximation_error.sh \
+  create_selectively_refined_office.sh \
+  create_terrain_hierarchy.sh \
+  create_topologically_simplified.sh \
+  create_vertex_cached_bunny.sh \
+  create_spherical_param_bunny.sh \
+
+view_scripts = \
+  view_reconstruction_mannequin.sh \
+  view_reconstruction_animated.sh \
+  view_reconstruction_polygon.sh \
+  view_simplified_using_meshopt.sh \
+  view_progressive_mesh_gaudipark.sh \
+  view_progressive_mesh_cessna.sh \
+  view_progressive_mesh_57chevy.sh \
+  view_geomorphs.sh \
+  view_progressive_hulls_bunny.sh \
+  view_selectively_refined_office.sh \
+  view_terrain_hierarchy.sh \
+  view_gcanyon_frames.sh \
+  view_psc_drumset.sh \
+  view_topologically_simplified.sh \
+  view_vertex_cached_bunny.sh \
+  view_spherical_param_bunny.sh \
+  view_hidden_line_removed.sh \
+
+all:
+	Filterimage --version   # Show build information.
+	@status=0; \
+	$(MAKE) -k create || status=$$?; \
+	$(MAKE) check || status=$$?; \
+	ls -alt results; \
+	$(MAKE) view || status=$$?; \
+	exit $$status
+
+# Similar to all_demos_create_results.sh but with parallel execution.
+create: $(create_scripts)
+
+$(create_scripts):
+	$(@)
+
+# Check that the created outputs look reasonable (see results_reference.txt).
+# If create is also a goal, wait for it to complete.
+check: | $(filter create,$(MAKECMDGOALS))
+	./check_created_outputs.sh
+
+# Just in case these are specified individually.
+$(view_scripts):
+	$(@)
+
+depend $(make_dep):
+
+# Any build-order dependencies.
+determine_approximation_error.sh: create_progressive_hulls_bunny.sh
+
+# Similar to all_demos_view_results.sh.  With DEMOS_HIDDEN, the demos run concurrently (no window is mapped, so they
+# do not interfere), each with its output collected and then shown in order; otherwise they run sequentially.
+# Run every demo even if some fail, and report the last failing status.
+# Export DEMOS_HIDDEN so that it also works when given as a make variable rather than in the environment.
+# Its viewers quit on their own, so bound any demo that instead hangs before its window would be created
+# (e.g. within the graphics driver) and therefore never processes its -hwkey.  The timeout command is absent from
+# macOS (without GNU coreutils), in which case the demos run unbounded.
+export DEMOS_HIDDEN
+
+view:
+	@status=0; \
+	timeout=; if [[ -n "$$DEMOS_HIDDEN" ]] && type -P timeout >/dev/null; then timeout='timeout 300'; fi; \
+	if [[ -n "$$DEMOS_HIDDEN" ]]; then \
+	  logs=$$(mktemp -d); \
+	  for i in $(view_scripts); do \
+	    { $$timeout $$i >$$logs/$$i.log 2>&1; echo $$? >$$logs/$$i.status; } & \
+	  done; \
+	  wait; \
+	  for i in $(view_scripts); do \
+	    echo '**' $$i; cat $$logs/$$i.log; \
+	    [[ -z $$(tail -c 1 $$logs/$$i.log) ]] || echo; s=$$(cat $$logs/$$i.status); \
+	    if ((s != 0)); then echo "*** $$i exited with status $$s." >&2; status=$$s; fi; \
+	  done; \
+	  rm -rf $$logs; \
+	else \
+	  for i in $(view_scripts); do \
+	    echo '**' $$i; \
+	    $$timeout $$i || { s=$$?; echo "*** $$i exited with status $$s." >&2; status=$$s; }; \
+	  done; \
+	fi; \
+	exit $$status
+
+mostlyclean clean deepclean:
+# (Use a relative pathname because prepend_PATH does not update PATH when make goal is clean.)
+	./all_demos_clean.sh
+
+debug:
+	which Recon
+
+.PHONY: all create check view mostlyclean clean deepclean $(create_scripts) $(view_scripts) debug depend $(make_dep)
+
+endif  # ifneq ($(CONFIG),all)

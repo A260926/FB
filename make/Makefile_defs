@@ -1,0 +1,408 @@
+## Note: this file is included into all other Makefiles.
+# It sets default variables, functions, and rules.
+# (The "Possible configuration settings" below can be adjusted.)
+
+ifeq ($(defs_loaded),1)   # An include guard; should be checked to avoid loading this file more than once.
+  $(error This file is loaded more than once; MAKEFILE_LIST=[$(MAKEFILE_LIST)])
+endif
+defs_loaded = 1
+
+# From http://blog.jgc.org/2007/06/escaping-comma-and-space-in-gnu-make.html
+space := $() $()
+comma := ,
+# $(warning Have defined space=[$(space)] comma=[$(comma)])
+
+wildcard_sp = $(wildcard $(subst $(space),\$(space),$(1)))#  Like $(wildcard), but the pattern may contain spaces.
+file_exists = $(if $(call wildcard_sp,$(1)),1)
+
+rawdir = $(patsubst %/,%,$(dir $1))#  Remove the trailing slash.
+
+# Concatenate the words of $1 with no separator; each component must be free of spaces.
+# Useful to split a long concatenation over several lines, because a backslash-newline
+#  outside a recipe always collapses to a single space.
+concat = $(subst $(space),,$(strip $1))
+
+# Identify the build system.
+is_mswin ?= $(if $(WINDIR)$(windir),1)#  Check environment variable WINDIR (e.g. C:\\Windows) for Microsoft Windows.
+# MAKE_HOST (GNU make 4.0+) names the platform of the make binary, independent of any mounted directories.  MSYS2
+#  make reports x86_64-pc-cygwin (formerly x86_64-pc-msys), so the MSYSTEM variable of MSYS2 shells tells it apart.
+is_posix_host := $(if $(findstring -cygwin,$(MAKE_HOST))$(findstring -msys,$(MAKE_HOST)),1)
+is_msys := $(if $(is_posix_host),$(if $(MSYSTEM),1))#  Running under Msys make?
+is_cygwin := $(if $(is_posix_host),$(if $(is_msys),,1))#  Running under Cygwin make?
+is_mac := $(call file_exists,/System/Library/CoreServices/SystemVersion.plist)#  Running on macOS?
+
+ifeq ($(MeshRoot),)
+  MeshRoot ?= ..#  If not already set, best guess is "1 directory above the project file", e.g. for libHh.
+  $(warning MeshRoot variable not set; setting it to a default value of '$(MeshRoot)')
+endif
+$(if $(call file_exists,$(MeshRoot)/mesh_processing.sln),, \
+  $(warning MeshRoot='$(MeshRoot)' does not point to the mesh_processing repo root))
+
+$(if $(rel),$(error Variable 'rel' was renamed to 'release'))
+
+# Machine-specific settings (e.g. toolchain paths, or a reduced build_configs), read early so that
+#  they also apply when CONFIG=all.
+-include $(MeshRoot)/Makefile_local_defs
+
+# Define the set of possible CONFIG configurations.
+ifeq ($(is_mswin),1)
+  # We place "win" last so that the last-built libraries are for the default config.
+  configs ?= mingw clang cygwin win
+else
+  configs ?= unix
+endif
+build_configs ?= $(configs)#  Set for "make makeall" or "make CONFIG=all"; may be reduced in Makefile_local_defs.
+# Set CONFIG to a default if not already set.
+# export CONFIG ?= $(word 1,$(build_configs))# Select the first config as default.
+export CONFIG ?= $(word $(words $(build_configs)),$(build_configs))# Select the last config as default.
+$(if $(filter $(CONFIG),all $(configs)),,$(error CONFIG=$(CONFIG) is not recognized among [all $(configs)]))
+
+is_win32 ?= $(if $(and $(is_mswin:0=),$(filter-out cygwin,$(CONFIG))),1)#  Hopefully equivalent to defined(_WIN32).
+is_unix_like ?= $(if $(filter cygwin unix,$(CONFIG)),1)#  Configs where libjpeg/libpng and POSIX libs are built-in.
+
+SHELL = bash#   sh is standard ("for i in $var; do; done"); bash is necessary for "shopt nullglob", [[ ]], etc.
+
+# Convert "/cygdrive/c/dir" to "c:/dir".
+cygdrive_path = $(call cygdrive_path_aux,$(firstword $(subst /, ,$(1:/cygdrive/%=%))),$(1:/cygdrive/%=%))
+cygdrive_path_aux = $1:$(patsubst $1%,%,$2)
+# Under MSYS or Cygwin make (if it mounts /c), the drive letter of an absolute path "/c/dir"; otherwise empty.
+drive_letters := a b c d e f g h i j k l m n o p q r s t u v w x y z
+msys_drive = $(if $(is_posix_shell),$(if $(filter /%,$1),$(filter $(drive_letters),$(firstword $(subst /, ,$1)))))
+# Convert an MSYS-style "/c/dir" path to "c:/dir", or else prefix an absolute path with $(absdrive).
+msys_path = $(call cygdrive_path_aux,$(call msys_drive,$1),$(1:/%=%))
+msys_or_absdrive = $(if $(call msys_drive,$1),$(call msys_path,$1),$(patsubst /%,$(absdrive)/%,$1))
+# Convert a Cygwin "/cygdrive/c/dir" or MSYS-style "/c/dir" path to "c:/dir", or else prefix an absolute path with
+#  $(absdrive).  Use $(call add_drive,...) to invoke this macro.
+add_drive = $(foreach f,$(1),$(if $(filter /cygdrive/%,$(f)),$(call cygdrive_path,$(f)),$(call msys_or_absdrive,$(f))))
+
+drive_abspath = $(call add_drive,$(abspath $(1)))#  Use $(call drive_abspath,...) to invoke this macro.
+
+ifeq ($(is_msys),1)  # Fix PATH for msys make.
+  PATH := $(subst :/hh/,:/c/hh/,$(PATH))
+  # Disable the MSYS conversion of POSIX-like arguments to Windows programs, which corrupts paths such as
+  #  "-Fpd:/a/dir" into "-Fpd:A:/dir"; add_drive already provides Windows paths.
+  export MSYS2_ARG_CONV_EXCL := *
+endif
+
+# Print out useful information, if uncommented.
+# $(info VER=$(MAKE_VERSION) goals=$(MAKECMDGOALS) is_mswin=$(is_mswin) is_cygwin=$(is_cygwin) is_msys=$(is_msys) is_win32=$(is_win32) is_unix_like=$(is_unix_like) CONFIG=$(CONFIG) PATH=$(PATH))
+# $(info .VARIABLES=$(.VARIABLES))
+
+# http://stackoverflow.com/questions/35516996/gnu-make-prepend-a-recursively-expanded-variable/
+# Expand a variable, properly escaping '$' characters.
+expand = $(if $(findstring simple,$(flavor $1)),$(subst $$,$$$$,$($1)),$(value $1))
+
+# Prepend to a variable, preserving flavor.
+# Usage:
+# $(call prepend,VARIABLE,text)           # Prepend text to a recursively expanded $(VARIABLE).
+# $(call prepend,list,add some words )    # Remember to add any trailing separator character (e.g. space).
+prepend = \
+  $(if $(findstring simple,$(flavor $1)), \
+    $(eval $1 := $2$(call expand,$1)), \
+    $(eval $1 = $2$(call expand,$1)))
+
+# Function to prepend a directory to the current PATH.  This complicated code verifies the existence of the directory,
+#  removes any drive letter, adds a /c/ or /cygdrive/c/ prefix, and/or replaces "/" by "\".
+# e.g.: $(call prepend_PATH,c:/Program Files (x86)/Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6 Tools/x64/)
+# Non-empty when the recipe shell expects POSIX-style paths (Cygwin or MSYS).
+is_posix_shell = $(is_cygwin:0=)$(is_msys:0=)
+# The drive letter of a path such as "c:/dir"; empty if the path has no drive letter.
+path_drive = $(word 1,$(subst :,$(space),$1))
+# The remainder of such a path after the drive letter, e.g. "/dir".
+path_tail = $(wordlist 2,$(words $(subst :,$(space),$1)),$(subst :,$(space),$1))
+# The path rewritten for a Cygwin or MSYS shell, e.g. "/cygdrive/c/dir" or "/c/dir".
+path_unix = $(if $(is_cygwin:0=),/cygdrive)/$(call path_drive,$1)$(call path_tail,$1)
+# The path with its drive letter dropped and its separators turned into backslashes.
+path_win = $(subst /,\,$(call path_tail,$1))
+# The path in the form expected by the PATH variable of the recipe shell.
+path_for_PATH = $(if $(findstring :,$1),$(if $(is_posix_shell),$(call path_unix,$1),$(call path_win,$1)),$1)
+prepend_PATH = $(call prepend,PATH,$(call path_for_PATH,$1):)
+
+assert_prepend_PATH = $(if $(call file_exists,$(1)),$(call prepend_PATH,$(1)), \
+  $(error Directory '$(1)' does not exist, so cannot be added to PATH))
+try_prepend_PATH = $(if $(call file_exists,$(1)),$(call prepend_PATH,$(1)))
+
+MAKEFLAGS += --no-print-directory#  Because print-directory is ugly and ineffective with "-j" (see main.el).
+
+## Possible configuration settings:
+cppinc += -D_UNICODE -DUNICODE#  (Useful for alternative testing since my msbuild *.vcxproj does not set it.)
+# cppinc += -DHH_HAVE_LAPACK#  By default we no longer use lapack.
+# cppinc += -DHH_HAVE_VIDEO_LOOP
+# cppinc += -DHH_NO_EXCEPTION_HOOKS
+# cppinc += -DHH_NO_TIMERS_CLASS
+# cppinc += -DHH_NO_SSE41
+# cppinc += -DHH_NO_IMAGE_WIC#  Option for CONFIG=win/clang.
+# cppinc += -DHH_IMAGE_LIBS_TOO#  Option for CONFIG=win/clang; default is to just use WIC.
+# cppinc += -DHH_NO_VECTOR4_VECTORIZATION#  Otherwise enable SSE / NEON instructions.
+# cppinc += -DHH_NO_LIB_REFERENCES
+# cppinc += -DHH_NO_HH_INIT
+
+# Also update '-std=' in .clang-tidy, LanguageStandard in make/hhmain.props (maybe LoopAPILib.vcxproj),
+# build_and_test_using_*, the gnu++ conversion in Makefile_config_cygwin, and c++latest in Makefile_base_win.
+CXX_STD ?= c++23
+
+# PEDANTIC ?= 1
+
+ifneq ($(is_unix_like),1)  # If not cygwin/unix (with built-in libjpg and libpng), just use ffmpeg for image/video IO.
+  cppinc += -DHH_NO_IMAGE_LIBS
+endif
+
+cppinc += $(if $(is_win32:0=),-DNOMINMAX)#  Prevent min() and max() macros in <windows.h>.
+
+ignore_compile_warnings ?= 1
+
+have_lapack = $(if $(filter -DHH_HAVE_LAPACK,$(cppinc)),1)
+have_image_libs = $(if $(filter -DHH_NO_IMAGE_LIBS,$(cppinc)),,1)
+
+# A goal that names no target but does name an existing file makes gmake print "Nothing to be done" rather
+# than fail; on a case-insensitive filesystem this silently hides typos like "Htest" rather than "HTest".
+# Each makefile lists its valid goals in phony_targets, and any file-like goals in goal_patterns.
+unknown_goals = $(filter-out $(phony_targets) $(goal_patterns),$(MAKECMDGOALS))
+check_goals = $(if $(unknown_goals), \
+  $(error No rule to make target(s): $(unknown_goals) [$(phony_targets) $(goal_patterns)]))
+
+# Use CONFIG=all as a way to run gmake successively on all $(build_configs).
+# Note two possible issues:
+# (1) If the default goal is already defined before this file, a recipe redefinition warning is issued (but it is OK).
+# (2) If we forget to hide the subsequent recipe after this file, this later wrong recipe will run.
+# (Modifying the variable $(MAKECMDGOALS) would be a solution, but the variable is read-only.)
+# Sleep is added to prevent synchronization bugs when using "-j" on successive make invocations in the same directory.
+
+ifeq ($(CONFIG),all)  # There is an else clause below.
+
+# These targets set CONFIG themselves, so CONFIG=all on the command line is redundant and re-iterates.
+config_setting_goals = everything makeall cleanall
+ifneq ($(filter $(config_setting_goals),$(MAKECMDGOALS)),)
+  $(error CONFIG=all is redundant for: $(filter $(config_setting_goals),$(MAKECMDGOALS)))
+endif
+
+override_goal := $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(if $(.DEFAULT_GOAL),$(.DEFAULT_GOAL),dummy_all))
+# $(info have CONFIG=all override_goal=$(override_goal))
+# Non-empty when the requested goals are only cleaning targets.
+cleaning = $(filter mostlyclean clean deepclean,$(MAKECMDGOALS))
+# The configurations to iterate over for the current goals.
+recurse_configs = $(if $(cleaning),$(configs),$(build_configs))
+# The shell text that builds one configuration and accumulates its exit status.
+# $(foreach) supplies the separating space between successive expansions.
+recurse_config = $(if $(cleaning),,echo "**** CONFIG=$1"; )$(MAKE) CONFIG=$1 $(MAKECMDGOALS); \
+  RESULT=$$((RESULT + $$?)); sleep $(if $(cleaning),0,0.8);
+
+$(override_goal):
+# The '+' marks this as a recursive make recipe, which is otherwise not detected because GNU make scans
+#  the unexpanded recipe text for a literal "$(MAKE)", now hidden inside $(recurse_config).
+	+@RESULT=0; $(foreach a,$(recurse_configs),$(call recurse_config,$(a))) (exit $$RESULT)
+
+.PHONY: $(override_goal)
+
+else  # ifeq ($(CONFIG),all)  # For the rest of this file.
+
+# Add ./bin so that the script hcheck is in path.
+$(call assert_prepend_PATH,$(abspath $(MeshRoot))/bin)
+
+dummy_goal:  # Introduce a dummy goal so that we can reset the .DEFAULT_GOAL below.
+
+.PHONY: dummy_all dummy_goal *.exe cleanall makeall
+
+# Note that the C++ compile command $(CXX) (e.g. "cl", "g++", or "clang++") is also used for all program linking.
+# Must appear before rule "%.obj : %.cpp" to take precedence.
+# The prefix '@' character (which hides the executed command line) is optional.
+# (Use 'make -n' to see these hidden '@' command lines.)
+# The "rm -f $@" is introduced to delete any Unix executable "$@" in the same location if building "$@.exe", to avoid
+# having that Unix executable being considered when running a *_test.script.
+% : %.cpp
+	$(if $(want_plain_compiler:0=)$(DEBUG_MAKE),,@)$(if $(is_mswin:0=),rm -f $@; )$(CXX) \
+	  $(LDOUTPUT) $(CXXFLAGS) $(CPPFLAGS) $(cxxexe) $(TARGET_ARCH) \
+	  $(call add_drive,$(foreach f,$<,$(abspath $(f))) $(LDLIBS)) $(LDFLAGS)
+
+% : %.c
+	$(if $(want_plain_compiler:0=)$(DEBUG_MAKE),,@)$(if $(is_mswin:0=),rm -f $@; )$(CC) \
+	  $(LDOUTPUT) $(CFLAGS) $(CPPFLAGS) $(cxxexe) $(TARGET_ARCH) \
+	  $(call add_drive,$(foreach f,$<,$(abspath $(f))) $(LDLIBS)) $(LDFLAGS)
+
+# Avoid setting per-CONFIG variables (especially LIB) at a cross-config stage.
+ifeq ($(filter $(config_setting_goals),$(MAKECMDGOALS)),)
+  -include $(MeshRoot)/../hh_src/Makefile_local_defs
+  include $(MeshRoot)/make/Makefile_config_$(CONFIG)
+endif
+
+*.exe:
+	@echo 'Avoid *.exe "$@" as makefile target; use "$(@:%.exe=%)" instead.' && exit 1
+
+cleanall:
+	$(MAKE) CONFIG=all -s deepclean
+
+makeall:
+	$(MAKE) CONFIG=all
+
+debug_path:  # For debugging.
+	echo PATH:$$PATH; which $(CXX)
+
+ifeq ($(.DEFAULT_GOAL),dummy_goal)  # Reset unless previously set.
+  .DEFAULT_GOAL :=
+endif
+
+dot_quoted_target = .\$$(extobj)#  This variable is cleared in ./Makefile_progs (also included in ./test/Makefile).
+make_dep ?= Makefile.dep#   This was Makefile_$(CONFIG).dep but is now independent of CONFIG.
+# We need "-DMAKEFILE_DEP" for defined() in precompiled_libHh.h.
+# We omit "-march=native": it only affects the inclusion of system headers, which "-MM" excludes anyway, and on some
+#  CPUs, GCC warns about the flag itself (e.g., "'-mavx10.1' is aliased to 512 bit" on Intel Granite Rapids).
+# The "-x c++" makes explicit that *.c files are C++; clang warns if it is implicit.
+# The perl script converts CRLF to LF and path separators '\' to '/' (e.g., from mingw g++ and Windows clang).
+# The gcc and clang configs use their own compiler; others (i.e., cl in CONFIG=win) default to g++, and if it is
+#  absent, the build proceeds without tracking the header dependencies, and $(make_dep) warns about it on every run.
+# Any failure of the compiler (thanks to pipefail) removes the incomplete $(make_dep), and because $(make_dep) is
+#  included with "include" rather than "-include", the build then fails.
+makedep_cxx ?= g++
+cmd_makedep = @echo Creating $(make_dep); \
+  if [[ -z "$(strip $(src))" ]]; then \
+    : >$(make_dep); \
+  elif ! command -v $(makedep_cxx) >/dev/null; then \
+    echo '$$(warning Warning: header dependencies are not tracked because $(makedep_cxx) is not found;' \
+      'after installing it, delete $(make_dep))' >$(make_dep); \
+  else \
+    set -o pipefail; \
+    $(makedep_cxx) -MM -DMAKEFILE_DEP $(CPPFLAGS) -x c++ $(src_c) -x none -std=$(CXX_STD) $(src_cpp) | \
+    perl -pe 'BEGIN { binmode(STDOUT); } s/\r$$//; s@\\(?=\S)@/@g;' \
+      -e 's/\.o:/$(dot_quoted_target):/g; s@ \.\./include/\S+@@g;' >$(make_dep) \
+    || { rm -f $(make_dep); exit 1; }; \
+  fi
+
+ifneq ($(want_plain_compiler),1)
+  includes += -I$(MeshRoot)
+endif
+
+include_make_dep = $(if $(filter depend mostlyclean clean deepclean cleanall,$(MAKECMDGOALS)),,1)
+
+absdrive ?= $(if $(is_mswin:0=),c:)
+
+src_cpp ?= $(wildcard *.cpp)
+src_c ?= $(wildcard *.c)
+src ?= $(src_cpp) $(src_c)
+obj ?= $(strip $(src_cpp:%.cpp=%.$(extobj)) $(src_c:%.c=%.$(extobj)))
+
+# Identify all settings that affect the compiled objects, so that changing any one forces a rebuild.
+build_variant = $(call concat, \
+  $(CONFIG)- \
+  $(notdir $(CC))- \
+  $(subst +,p,$(CXX_STD))- \
+  $(if $(release:0=),release,debug) \
+  $(if $(wholeopt:0=),-wholeopt) \
+  $(if $(PEDANTIC:0=),-pedantic) \
+  $(build_variant_extra))#  Compiler-specific axes, e.g. sanitize & machine_arch in Makefile_base_either_gcc_or_clang.
+
+# Assembly listings are created only on demand, so they get their own sentinel; it is never built unless
+# some *.$(extasm) file is requested as a goal.
+asm ?= $(strip $(src_cpp:%.cpp=%.$(extasm)) $(src_c:%.c=%.$(extasm)))
+prev_goal := $(.DEFAULT_GOAL)
+$(asm): built_as.$(extasm).$(build_variant)
+built_as.$(extasm).$(build_variant):
+	@rm -f $(asm) built_as.$(extasm).*
+	@touch built_as.$(extasm).$(build_variant)
+.DEFAULT_GOAL := $(prev_goal)#  The rule above must not become the default goal.
+
+# libHh/Makefile adds this dependency itself, naming the object without the ../libHh/ prefix.  Here that second
+#  name would be a distinct make target for the same file, built concurrently and without -Yc (error C1854).
+ifeq ($(use_pch)$(is_win_base)$(filter libHh,$(notdir $(CURDIR))),11)
+  # Objects compiled with -Yu reference the type information in the PCH object.  If that object is newer,
+  # the linker reports LNK4206 and discards their debug info.  We let all obj files (except precompiled_libHh.obj)
+  # depend on precompiled_libHh.obj.  The $(wildcard) allows it to not exist (for a from-scratch build).
+  prev_goal := $(.DEFAULT_GOAL)
+  $(filter-out %precompiled_libHh.$(extobj),$(obj)) : $(wildcard $(pch_root).$(extobj))
+  .DEFAULT_GOAL := $(prev_goal)#  The rule above must not become the default goal.
+endif
+
+# Problem: if we use (notdir obj), then it compiles using (notdir src), and emacs is confused,
+#         but if use full dir obj, then gmake ignores file modification times.
+#         Compilation directory tracking in emacs does not work with "-j".
+# Solution: avoid "c:" paths in makefiles; add "c:" in compiler rules for CONFIG=win.
+
+CPPFLAGS = $(strip $(cppinc) $(includes))
+CXXFLAGS = $(strip $(cxxall) $(if $(release:0=),$(cxxrel),$(cxxdbg)))
+CFLAGS = $(strip $(c-all) $(if $(release:0=),$(crel),$(cdbg)))
+
+# Note: lib$(Hw) must be added as prefix to LDLIBS because lib$(Hw)/Hw.cpp references Image and Buffer in libHh.
+ifeq ($(is_win32:0=),1)
+  Hw = HwWindows
+else
+  Hw = HwX
+endif
+
+my_libs ?= Hh#  This can be replaced by an empty value to omit inclusion of libHh.
+# Subdirectory (with trailing "/") holding the Visual Studio import libraries, else empty.
+vs_lib_subdir = $(if $(or $(extlib:lib=),$(if $(use_vs_libs:0=),,1)),,x64/$(if $(release:0=),ReleaseMD,DebugMD)/)
+LDLIBS += $(foreach n,$(my_libs),$(MeshRoot)/lib$(n)/$(vs_lib_subdir)lib$(n).$(extlib))
+
+ifeq ($(is_unix_like),1)
+  system_libs += $(strip $(if $(have_image_libs:0=),jpeg png z) $(if $(have_lapack:0=),lapack))
+  LDLIBS += $(foreach n,$(system_libs),-l$(n))
+endif
+
+LDLIBS += $(other_libs)#  Optionally defined externally.
+LDLIBS += $(last_libs)#  Optionally defined in ./Makefile_config_$(CONFIG).
+
+ifeq ($(have_lapack),1)
+  # The file <lapacke.h> is in either /usr/include/ or /usr/include/lapacke/.
+  ifeq ($(call file_exists,/usr/include/lapacke),1)
+    includes += -I/usr/include/lapacke
+  endif
+endif
+
+# Invoke $< which is the first prerequisite (either $(@:%.ou=%) in ./test or $(@:%.ou=%.script) in ./progtest).
+# Note: GNU make version 3.81 cannot have an " =" at the end of the next line; strange.
+# Also, generally it appears unsafe to embed comments within a define..endef definition.
+# A failing test is marked by its %.diff file, which hcheck removes once the test passes.  If hcheck fails without
+# writing one (e.g., a missing test), a one-line %.diff is created as the marker.  The recipe itself succeeds so that
+# all tests run; cmd_diffs_summary then fails while any %.diff exists.  On failure, %.ou is kept (for ediff) but
+# backdated, so that the test reruns next time even if the cause lies outside its prerequisites.
+define cmd_hcheck
+  @hcheck $< >/dev/null; status=$$?; if [[ $$status -ne 0 ]]; then echo "$@:1:1: error: hcheck $< exit $$status"; fi; \
+  if [[ $$status -ne 0 && ! -e $(@:%.ou=%.diff) ]]; then \
+    echo "hcheck $< exit $$status, without an output difference" >$(@:%.ou=%.diff); \
+  fi; \
+  if [ ! -e $(@:%.ou=%.diff) ]; then \
+    echo "$@"; \
+  else \
+    if [[ -e $@ ]]; then echo "$@:1:1: error: test output differs:  ediff $(@:%.ou=%).{ref,ou}"; fi; \
+    if [[ `cat $(@:%.ou=%.diff) | wc -l` -le 30 ]]; then \
+      cat $(@:%.ou=%.diff); \
+    elif [[ -e $@ ]] && [[ `cat $@ | wc -l` -le 30 ]]; then \
+      cat $@; \
+    fi; \
+    if [[ -e $@ ]]; then touch -d "1988-01-01 01:01" $@; fi; \
+  fi
+endef
+
+# Test the program % by saving its output into %.ou and then comparing it with the reference output in %.ref.
+%.ou : % %.ref
+	$(cmd_hcheck)
+
+# If the reference output file %.ref does not exist, assume the output should be empty.  Note that if this the case,
+#  %.ref is automatically deleted at the end of make.  Nice.
+%.ref :
+	touch $@
+# .PRECIOUS: %.ref  # Setting this would avoid deleting a temporarily created %.ref.
+
+define cmd_diffs_summary
+  @if ls *.diff >&/dev/null; then \
+    echo '** Summary of diffs'; \
+    for i in *.diff; do \
+      echo "* $$i"; \
+      if [[ `cat $$i | wc -l` -gt 100 ]]; then echo "Long diff **"; else cat $$i; fi; \
+    done; \
+    exit 1; \
+  fi
+endef
+
+# Not used, although it could be useful:
+# makefile0 ?= $(firstword $(MAKEFILE_LIST))
+
+# Note: one may split the execution into non-parallel (for release) and parallel (for the rest targets) phases.
+# ifneq ($(filter release,$(MAKECMDGOALS)),)
+#   .NOTPARALLEL:
+# endif
+# release: clean
+#     $(MAKE) test1
+# Note: .NOTPARALLEL target will suppress parallel execution if release target is mentioned in the command line.
+#  The release target itself will rerun Make after cleaning and build test1 in parallel.
+
+endif  # ifneq ($(CONFIG),all)

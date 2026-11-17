@@ -1,0 +1,157 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_FILEIO_H_
+#define MESH_PROCESSING_LIBHH_FILEIO_H_
+
+#include "libHh/Array.h"  // CArrayView
+
+namespace hh {
+
+// Create a read stream (FILE and istream) from a file, compressed file, URL, or input pipe command.
+// Supports "-" (std::cin), ".Z", ".gz", "https://...", and "command args... |".
+// A command that may read stdin should redirect it: "command </dev/null ... |" (or ffmpeg -nostdin).
+// The exit status of a pipe command is meaningful only if its output was read to the end, because a reader that
+//  stops early may make the command fail with a broken pipe.  Given that, the failure of a command that RFile runs
+//  itself (to decompress ".gz" or ".Z", or to download "https://..." using wget) is a fatal error when the stream
+//  is closed.  For "command args... |", call close() to check that the command succeeded.
+class RFile : noncopyable {
+ public:
+  explicit RFile(string filename);
+  ~RFile();
+  [[nodiscard]] std::istream& operator()() const { return *_is; }
+  [[nodiscard]] FILE* cfile() { return _file; }
+  // Close the stream, which must not be used afterward.  If it was read to the end of the output of a command that
+  //  failed, throw std::runtime_error.
+  // A failed download has a message starting with "Network failure" if the server could not be reached, or else
+  //  "Failed to download".
+  void close();
+
+ private:
+  bool _file_isstd{false};
+  bool _file_ispipe{false};
+  bool _check_command{false};  // The failure of the pipe command is fatal (if the output was read to the end).
+  string _command;             // The pipe command, for error messages.
+  string _url;                 // The downloaded URL, for error messages.
+  FILE* _file{nullptr};
+  [[nodiscard]] string close_internal(bool check_command);
+  class Implementation;
+  unique_ptr<Implementation> _impl;
+  std::istream* _is{nullptr};
+};
+
+// Create a write stream (FILE and ostream) to a file, compressed file, or output pipe command.
+// Supports "-" (std::cout), ".Z", ".gz", and "| command args...".
+class WFile : noncopyable {
+ public:
+  explicit WFile(string filename);
+  ~WFile();
+  [[nodiscard]] std::ostream& operator()() const { return *_os; }
+  [[nodiscard]] FILE* cfile() { return _file; }
+
+ private:
+  bool _file_isstd{false};
+  bool _file_ispipe{false};
+  FILE* _file{nullptr};
+  class Implementation;
+  unique_ptr<Implementation> _impl;
+  std::ostream* _os{nullptr};
+};
+
+// Read the lines of a file in reverse order, without holding the whole file in memory.
+// The file must be seekable, so "-", pipes, and compressed files are unsupported.
+class ReversedLinesReader : noncopyable {
+ public:
+  explicit ReversedLinesReader(const string& filename);
+  // Like my_getline(), omits the terminating '\n' and any preceding '\r'.  Returns false after the first line.
+  bool getline(string& line);
+
+ private:
+  RFile _rfile;       // Only its FILE* is used.
+  int64_t _pos{0};    // File offset of the start of _buf.
+  string _buf;        // File contents [_pos, _pos + _buf.size()) whose lines have not yet been returned.
+  bool _done{false};  // All lines have been returned.
+  void read_chunk();  // Prepend to _buf the file contents preceding it.
+};
+
+// Assert that we have read to the end-of-file.
+inline void assert_reached_eof(std::istream& is) {
+  char ch;
+  is.get(ch);
+  assertx(!is);
+}
+
+// Check if a file already exists.
+[[nodiscard]] bool file_exists(const string& name);
+
+// Check if a folder already exists.
+[[nodiscard]] bool directory_exists(const string& name);
+
+// Check if filename refers to a pipe command ("command |" or "| command").
+[[nodiscard]] bool is_pipe(const string& name);
+
+// Check if filename is a URL ("https://" or "http://").
+[[nodiscard]] bool is_url(const string& name);
+
+// Check if filename would be read using a pipe stream ("-", ".Z", ".gz", "| command", "command |", "https://").
+[[nodiscard]] bool file_requires_pipe(const string& name);
+
+// Retrieve size of file in bytes, or -1 if it does not exist.
+[[nodiscard]] int64_t get_file_size(const string& name);
+
+// Retrieve modification time of file or directory.
+[[nodiscard]] uint64_t get_path_modification_time(const string& name);
+
+// Set modification time of file or directory; return: success.
+bool set_path_modification_time(const string& name, uint64_t time);
+
+// Returns an unsorted list of the files in a directory (prefix each by "directory + '/'" to get its full path).
+[[nodiscard]] Array<string> get_files_in_directory(const string& directory);
+
+// Returns an unsorted list of the directories in a directory (prefix each by "directory + '/'" to get its full
+// path).
+[[nodiscard]] Array<string> get_directories_in_directory(const string& directory);
+
+// Check if my_sh() would find this command in the current PATH.
+[[nodiscard]] bool command_exists_in_path(const string& name);
+
+// Returns success.
+bool remove_file(const string& name);
+
+// Delete a file or directory by moving it to the Recycle Bin / Trash if possible.  Returns success.
+bool recycle_path(const string& pathname);
+
+// Create the name for a temporary file, and delete the file when going out of scope.
+class TmpFile : noncopyable {
+ public:
+  TmpFile(const string& suffix = "");
+  TmpFile(const string& suffix, std::istream& is);  // Create the temporary file with the contents of the input stream.
+  ~TmpFile();
+  [[nodiscard]] string filename() const { return _filename; }
+  void write_to(std::ostream& os) const;  // Write the temporary file into the output stream.
+ private:
+  string _filename;
+};
+
+// For sh/bash argument.
+[[nodiscard]] string quote_arg_for_sh(const string& s);
+
+// For sh/bash/cmd argument.
+[[nodiscard]] string quote_arg_for_shell(const string& s);
+
+// Returns -1 on a spawn error, else the exit code (for wait == true) or the pid (for wait == false).
+intptr_t my_spawn(CArrayView<string> sargv, bool wait);
+
+// Run command s (already properly quoted) using shell sh or cmd, in that order.
+// (The quoting in s may be fragile if we must resort to shell cmd.)
+// Returns -1 on a spawn error, else the exit code (for wait == true) or the pid (for wait == false).
+intptr_t my_sh(const string& command, bool wait = true);
+
+// Run command words sargv (after quoting them) using shell sh or cmd, in that order.
+// Returns -1 on a spawn error, else the exit code (for wait == true) or the pid (for wait == false).
+intptr_t my_sh(CArrayView<string> sargv, bool wait = true);
+
+// Null output stream (which silently gobbles up all output).
+extern std::ostream cnull;
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_FILEIO_H_

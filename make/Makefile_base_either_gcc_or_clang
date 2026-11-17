@@ -1,0 +1,108 @@
+# Note: this file sets up variables for both gcc and clang compilers, as they have similar command-line arguments.
+# (It is included by both ./Makefile_base_gcc and ./Makefile_base_clang.)
+
+use_pch ?= 1#  (Usually 1; use precompiled headers.)
+
+extobj = o
+extlib = a
+extasm = s
+CRUMBS ?= *.$(extasm) tmp_*.$(extobj) *.stackdump *.h.gch *.h.pch
+LDOUTPUT ?= -o $@
+no_warnings = -w
+
+gcc_or_clang = 1
+makedep_cxx = $(CXX)#  The compiler itself generates the header dependencies (see cmd_makedep in ./Makefile_defs).
+
+machine_arch = -march=native#  Fastest code on the local machine.
+# machine_arch = -march=corei7#  To be able to run the same executable on more machines.
+
+# For debugging, echo complete compiler commands:
+# ccommon += -v
+
+# LDFLAGS += $(if $(omit_omp:0=),,-fopenmp)#  For OpenMP.
+
+ifneq ($(want_plain_compiler),1)
+  cpedantic = $(if $(ignore_compile_warnings:0=),,-Werror) \
+    -Wall -Wextra -Wformat=2 -pedantic -Wswitch-default -Wdisabled-optimization \
+    -Wmissing-declarations -Wpointer-arith -Wcast-align -Wredundant-decls \
+    -Wshadow
+  cxxwarnings = -Woverloaded-virtual -Winvalid-constexpr
+  #  -Winline -Wconversion
+  # (-pedantic-errors == -Werror -Wpedantic)
+  # ccommon += $(if $(omit_omp:0=),,-fopenmp)#  For OpenMP.
+  # We omit "-mfpmath=sse", which is the x86-64 default (identical code for clang 21 and gcc 15) and fails on ARM.
+  ccommon += $(machine_arch)#  Had: -ffast-math
+  ccommon += $(if $(PEDANTIC:0=),$(cpedantic))
+  cxxall += -fno-rtti
+  cxxwarnings += -Wno-strict-overflow#  Even #pragma in Grid.h does not disable this.
+  commonrel += -O3 -DNDEBUG#  -O3 enables -fomit-frame-pointer -finline-functions.  Consider -fno-trapping-math.
+  commonrel += -g1#  For stacktrace; does not affect code generation; unlike -g, -g1 omits variables.
+  commondbg += -g
+  commondbg += -Og#  debug-friendly optimization (~ -O0.8; == -O1 on clang); ASan traces match -O0 but run ~5x faster.
+  commondbg += -D_GLIBCXX_DEBUG#  Enable checking of containers if using libstdc++; ignored otherwise.
+  cxxexe +=
+  cxxrel += $(commonrel) $(if $(PEDANTIC:0=),$(cxxwarnings))
+  cxxdbg += $(commondbg) $(if $(PEDANTIC:0=),$(cxxwarnings))
+endif
+
+# Runtime instrumentation; only gcc and clang support this, so it is defined here rather than in
+#  Makefile_defs.  Some sanitizers are mutually exclusive: at most one of address, thread, or memory,
+#  each optionally combined with undefined.  gcc lacks memory; it is available only in clang.
+# e.g. make CONFIG=unix release=0 sanitize=address,undefined
+sanitize ?= 0#  0=none, or a -fsanitize= list such as `address,undefined` or `thread`.
+ifneq ($(sanitize:0=),)
+  # -fno-omit-frame-pointer is a no-op at -O0 but yields usable stack traces in release builds;
+  #  it helps address, thread, and memory equally, and undefined with print_stacktrace=1.
+  ccommon += -fsanitize=$(sanitize) -fno-omit-frame-pointer -DHH_SANITIZE='"$(sanitize)"'
+  LDFLAGS += -fsanitize=$(sanitize)
+  # Extend build_variant so that the built_ob sentinel forces a rebuild when this axis changes.
+  build_variant_extra := -san_$(subst $(comma),_,$(sanitize))
+endif
+# Likewise for an overridden machine_arch (e.g. make machine_arch=-march=x86-64-v3), whose change must also
+#  rebuild the libHh precompiled header.
+build_variant_extra += $(if $(filter-out -march=native,$(machine_arch)),$(subst =,_,$(machine_arch)))
+# See HH_HAS_ASAN and __lsan in code files for behavior overrides.
+
+ccommon += -m64
+cxxall += $(strip $(if $(CXX_STD),-std=$(CXX_STD)) $(ccommon))
+c-all += -std=c11 $(ccommon)#  or -std=c99
+crel += $(commonrel)
+cdbg += $(commondbg)
+
+cxx_disable_all_warnings = -w
+
+# Force use of C++ (rather than C) standard library by explicitly specifying CXX.
+# % : %.o
+#	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+% : %.o
+	$(CXX) $(LDOUTPUT) $(cxxexe) $(TARGET_ARCH) $(call add_drive,$^ $(LDLIBS)) $(LDFLAGS)
+
+# Use absolute pathnames for source files, to get these in warnings and errors.
+# %.o : %.cpp
+#	$(COMPILE.cpp) $(OUTPUT_OPTION) $<
+%.o : %.cpp
+#	@echo $(CXX) $<
+	$(if $(want_plain_compiler:0=)$(DEBUG_MAKE),,@)$(COMPILE.cpp) -o $@ $(foreach f,$<,$(call drive_abspath,$(f)))
+
+# Use absolute pathnames for source files, to get these in warnings and errors.
+# %.o : %.c
+#	$(COMPILE.c) $(OUTPUT_OPTION) $<
+%.o : %.c
+#	@echo $(CXX) $<
+	$(if $(want_plain_compiler:0=)$(DEBUG_MAKE),,@)$(COMPILE.c) -o $@ $(foreach f,$<,$(call drive_abspath,$(f)))
+
+## Machine architectures:
+# Found using: http://stackoverflow.com/questions/5470257/how-to-see-which-flags-march-native-will-activate
+# (set path=( c:/Program\ Files/mingw-w64/x86_64-5.2.0-posix-seh-rt_v4-rev0/mingw64/bin $path:q); gcc -### -E - -march=native |& sed -r '/cc1/\!d; s/(")|(^.* - )|( -mno-[^\ ]+)//g')
+# or also:
+#  (set path=( c:/Program\ Files/mingw-w64/x86_64-5.2.0-posix-seh-rt_v4-rev0/mingw64/bin $path:q); gcc -march=native -Q -v --help=target)
+#  (set path=( c:/Program\ Files/mingw-w64/x86_64-5.2.0-posix-seh-rt_v4-rev0/mingw64/bin $path:q); gcc -### -E -march=native ~/git/mesh_processing/libHh/Hh.h |& cat)
+# hhopped old: -march:native -mcx16 -msahf -mpopcnt -msse4.2 --param l1-cache-size=32 --param l1-cache-line-size=64 \
+#   --param l2-cache-size=8192 -mtune=core2)
+# hhopped: -march=nehalem -mmmx -msse -msse2 -msse3 -mssse3 -mcx16 -msahf -mpopcnt -msse4.2 -msse4.1 -mfxsr --param
+#  l1-cache-size=32 --param l1-cache-line-size=64 --param l2-cache-size=8192 -mtune=nehalem
+# hhoppew: -march=haswell -mmmx -msse -msse2 -msse3 -mssse3 -mcx16 -msahf -mmovbe -maes -mpclmul -mpopcnt -mabm -mfma
+#  -mbmi -mbmi2 -mavx -mavx2 -msse4.2 -msse4.1 -mlzcnt -mrdrnd -mf16c -mfsgsbase -mfxsr -mxsave -mxsaveopt --param
+#  l1-cache-size=32 --param l1-cache-line-size=64 --param l2-cache-size=20480 -mtune=haswell
+#   -march=nehalem is not recognized even though it was used in hhopped; core2 missing SSE4; unlisted corei7 works.
+# https://gcc.gnu.org/onlinedocs/gcc-5.2.0/gcc/x86-Options.html

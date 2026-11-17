@@ -1,0 +1,44 @@
+CXX = g++
+CC = gcc
+AR = ar
+RANLIB = ranlib
+
+include $(dir $(lastword $(MAKEFILE_LIST)))Makefile_base_either_gcc_or_clang
+
+ifneq ($(want_plain_compiler),1)
+  cpedantic += -Wtrampolines -Wlogical-op -Wvector-operation-performance -Wno-double-promotion
+  # libstdc++ implements partial_ordering::equivalent as a nullptr and gives false-positive warnings,
+  # so we omit -Wzero-as-null-pointer-constant in the next line.
+  cxxwarnings += -Wold-style-cast -Wuseless-cast -fsized-deallocation -Wsized-deallocation
+endif
+
+ifneq ($(sanitize:0=),)
+  cxxwarnings += -Wno-maybe-uninitialized#  Silence two stray warnings in <bits/std_function.h>
+  ccommon += --param max-gcse-memory=1000000#  For complex functions in Hh_test, SphereSample, VideoViewer, HTest.
+endif
+
+# Note that -g does not affect generated code; it only annotates it.
+%.$(extasm) : %.cpp
+	$(COMPILE.cpp) -g -masm=intel -fverbose-asm -Wa,-acdhln $< -o tmp_$*.$(extobj) >$@
+	@rm -f tmp_$*.$(extobj)
+
+%.h.gch : %.h
+	@echo Making $(@) from $<
+	@$(COMPILE.cpp) $<
+
+ifeq ($(use_pch),1)
+  # Force-include the precompiled header into every *.cpp file.
+  cxxall += -include $(MeshRoot)/libHh/precompiled_libHh.h -Winvalid-pch
+endif
+
+## Precompiled headers:
+# https://gcc.gnu.org/onlinedocs/gcc/Precompiled-Headers.html
+# This also works with -include.  So yet another way to use precompiled headers, good for projects not designed
+# with precompiled header files in mind, is to simply take most of the header files used by a project, include
+# them from another header file, precompile that header file, and -include the precompiled header.  If the
+# header files have guards against multiple inclusion, they are skipped because they've already been included
+# (in the precompiled header).
+
+## Static linking:
+# Use "-static" or "-Wl,-Bdynamic -lsomelibIwantshared -Wl,-Bstatic -lsomelibIwantstatic".
+# http://stackoverflow.com/questions/13768515/how-to-do-static-linking-of-libwinpthread-1-dll-in-mingw

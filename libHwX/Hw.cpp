@@ -1,0 +1,1218 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#include "Hw.h"
+
+#include <sys/select.h>  // fd_set, select()
+#include <sys/time.h>    // setitimer(), struct itimerval, struct timeval.
+
+extern "C" {
+#include <X11/Xatom.h>  // XA_STRING
+#include <X11/Xos.h>
+#include <X11/cursorfont.h>
+#include <X11/keysym.h>
+}
+
+#include <cerrno>
+#include <csignal>  // signal()
+#include <cstring>  // strlen(), strerror()
+
+#include "Hw.xbm"
+#include "libHh/Args.h"
+#include "libHh/Image.h"
+
+#if HH_HAS_LSAN
+#if defined(__linux__)
+#include <dlfcn.h>  // dlopen()
+#include <link.h>   // dl_iterate_phdr()
+#endif
+#include <sanitizer/lsan_interface.h>
+using LeakDisabler = __lsan::ScopedDisabler;
+#else
+struct LeakDisabler {};  // No-op unless AddressSanitizer is enabled.
+#endif
+
+#if HH_HAS_LSAN
+// Symbolizing the graphics-driver modules (libgallium, libnvwgf2umx, libnvidia-gpucomp; together
+//  a few hundred MB) costs about 90 seconds during the exit-time leak scan, which dwarfs the run
+//  itself.  symbolize is a flag shared by all the sanitizers, so this also strips source locations
+//  from AddressSanitizer error reports; re-run with ASAN_OPTIONS=symbolize=1 to recover them, which
+//  is cheap for an error because it aborts before the leak scan.  The module-name suppressions
+//  below still match without symbolization, but a function-name pattern would silently not.
+extern "C" const char* __lsan_default_options() { return "symbolize=0:print_suppressions=0"; }
+
+// Allocations made by X11, Mesa, and the graphics driver that are held until process exit and are
+//  therefore reported by LeakSanitizer.  Most are one-time initialization; the entries under
+//  glCallLists() in draw_text_ogl() instead accumulate per frame and are released only when the GLX
+//  context is destroyed, which never happens because the process exits with the window still open.
+//  Under WSL, libd3d12core and libnvwgf2umx call the unversioned pthread_cond_wait(), which binds to the
+//  glibc 2.2.5 compatibility version; it allocates a 48-byte pthread_cond_t on the first wait on each
+//  condition variable and never frees it.  These suppressions match only because Hw::open() pins the modules.
+extern "C" const char* __lsan_default_suppressions() {
+  return (
+      ""
+      // "leak:libX11.so\n"
+      // "leak:libGLX_mesa\n"
+      "leak:libgallium\n"
+      "leak:libnvwgf2umx\n"
+      "leak:libd3d12core\n"
+      // "leak:*dlerror*\n"
+  );
+}
+#endif  // HH_HAS_LSAN
+
+namespace hh {
+
+namespace {
+string from_nullptr_or_cstring(const char* s) { return !s ? "" : s; }
+const char* to_nullptr_or_cstring(const string& s) { return s == "" ? nullptr : s.c_str(); }
+}  // namespace
+
+void set_keyintr(Hw& hw) { hw.set_keyintr(); }
+
+const string k_font_name = "6x13";
+
+static Hw* g_hw;  // Assumes single-window model; fine.
+
+Hw::Hw() {
+#if defined(HH_OGLX)
+  _oglx = true;
+#endif
+}
+
+// Print the screen dimensions, the work area (which excludes panels and docks), the window frame (left, top, right,
+//  bottom) around the client area, and the offset from a "-geom" position to the frame, in pixels.  The frame comes
+//  from the window manager's answer for a window that is never mapped (_NET_REQUEST_FRAME_EXTENTS); it is zero if
+//  the window manager does not support that request (e.g., WSLg).  The offset is zero because a window manager
+//  places the frame at the "-geom" position (ICCCM NorthWestGravity).
+// The frame request is untested, as no window manager that supports it was available.
+static void print_hwquery(Display* display, int screen) {
+  const Window root = RootWindow(display, screen);
+  // Return the first n values of a window property of the given type, or an empty array if they are absent.
+  const auto get_property = [&](Window window, const char* name, Atom type, int n) {
+    Array<long> values;
+    Atom actual_type;
+    int actual_format;
+    unsigned long nitems, bytes_after;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(display, window, XInternAtom(display, name, False), 0, n, False, type, &actual_type,
+                           &actual_format, &nitems, &bytes_after, &data) == Success &&
+        data) {
+      if (actual_format == 32) {
+        const long* p = reinterpret_cast<const long*>(data);  // Format-32 data is returned as an array of long.
+        values.push_array(CArrayView<long>(p, int(nitems)));
+      }
+      XFree(data);
+    }
+    return values;
+  };
+  const int screen_width = DisplayWidth(display, screen), screen_height = DisplayHeight(display, screen);
+  Array<long> work_area = get_property(root, "_NET_WORKAREA", XA_CARDINAL, 4);  // X, Y, width, height.
+  if (work_area.num() != 4) work_area = {0, 0, screen_width, screen_height};
+  Array<long> frame = {0, 0, 0, 0};  // Left, right, top, bottom, as in _NET_FRAME_EXTENTS.
+  const Atom request_atom = XInternAtom(display, "_NET_REQUEST_FRAME_EXTENTS", False);
+  if (contains(get_property(root, "_NET_SUPPORTED", XA_ATOM, 1000), long(request_atom))) {
+    const Window window = XCreateSimpleWindow(display, root, 0, 0, 400, 400, 0, 0, 0);
+    XEvent event = {};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = window;
+    event.xclient.message_type = request_atom;
+    event.xclient.format = 32;
+    assertx(XSendEvent(display, root, False, SubstructureNotifyMask | SubstructureRedirectMask, &event));
+    // Wait up to one second for the window manager to set the property.
+    for_int(i, 100) {
+      if (Array<long> extents = get_property(window, "_NET_FRAME_EXTENTS", XA_CARDINAL, 4); extents.num() == 4) {
+        frame = std::move(extents);
+        break;
+      }
+      my_sleep(0.01);
+    }
+    XDestroyWindow(display, window);
+  }
+  std::cout << sform("screen %d %d workarea %ld %ld %ld %ld frame %ld %ld %ld %ld offset 0 0\n", screen_width,
+                     screen_height, work_area[0], work_area[1], work_area[2], work_area[3], frame[0], frame[2],
+                     frame[1], frame[3])
+            << std::flush;
+}
+
+bool Hw::init_aux(Array<string>& aargs) {
+  assertx(_state == EState::uninit);
+  _state = EState::init;
+  string display_name;
+  bool iconic = false;
+  bool minimize = false;
+  bool hwquery = false;
+  ParseArgs args(aargs, "Hw");
+  args.p("-disp[lay", display_name, "name : set DISPLAY");
+  args.p("-geom[etry", _user_geometry, "geom : set window geometry (e.g. 640x480)");
+  args.f("-hwquery", hwquery, ": print the screen, work area, and window frame sizes, and exit");
+  args.f("-icon[ic", iconic, ": set initial window state");
+  args.p("-back[ground", _backcolor, "color : set backcolor (e.g. white or #5987B3)");
+  args.p("-fore[ground", _forecolor, "color : set forecolor (e.g. black)");
+  args.p("-theme", _theme, "name : select default colors (auto, light, or dark)");
+  args.p("-hwdebug", _hwdebug, "val : set debug level");
+  args.p("-hwkey", _hwkey, "string : simulate keys");
+  args.p("-hwdelay", _hwdelay, "secs : delay between keys");
+  args.f("-bigfont", _bigfont, ": use larger font");
+  args.f("-minimize", minimize, ": same as -iconic");
+  args.f("-maximize", _maximize, ": set initial window state");
+  args.f("-fullscreen", _fullscreen, ": set initial window state");
+  args.p("-offscreen", _offscreen, "imagefilename : save image");
+  args.f("-hidden", _hidden, ": render without any visible window (e.g. to save images or videos)");
+  args.f("-nosetforeground", _nosetforeground, ": do not ask that window receive focus");
+  args.f("-forceforeground", _forceforeground, ": ignored (Windows only)");
+  args.other_args_ok();
+  args.other_options_ok();
+  args.disallow_prefixes();
+  if (!args.parse_and_extract(aargs)) {
+    _state = EState::uninit;
+    return false;
+  }
+  assertx(aargs.num());
+  if (_offscreen != "") _hidden = true;  // It renders a single frame without any visible window.
+  verify_theme();
+  _argv0 = aargs[0];
+  if (minimize) iconic = true;
+  g_hw = this;
+#if defined(__CYGWIN__)
+  // Under Cygwin's X server (XWin), request software OpenGL rendering unless LIBGL_ALWAYS_SOFTWARE is already set
+  //  (e.g., LIBGL_ALWAYS_SOFTWARE=0 restores the default hardware path).  Mesa reads this variable when it loads its
+  //  driver during the first GLX call, so it must be set before glXChooseVisual() in open().
+  // Findings (2026-09, XWin -multiwindow, Mesa 23.3.6, libX11 1.8.13, NVIDIA driver 610.74):
+  //  - By default, Mesa renders directly through the native Windows OpenGL driver (glXIsDirect() == 1 and
+  //    GL_VERSION == "4.6.0 NVIDIA ...").  Within the same GLX context, this path intermittently loses the OpenGL
+  //    objects created before a glXSwapBuffers(): a display list compiled without error (glIsList() == 1) no
+  //    longer exists on the next frame (glIsList() == 0), with no X event in between.  An extra swap before
+  //    creating any objects only postpones the loss to a later frame.  The failure is timing-dependent; e.g.,
+  //    running with -hwdebug 1 often hides it.
+  //  - As a result, G3dOGL windows turn all white (only the background is drawn once its display lists are gone;
+  //    G3D_NO_DL=1 mostly avoids that), and VideoViewer windows turn all black (presumably lost textures).
+  //    A build from before 2026-09-13 behaves the same, so the cause lies in Cygwin, Mesa, or the driver.
+  //  - Indirect rendering through the X server (LIBGL_ALWAYS_INDIRECT=1) fails in glXCreateContext() unless XWin
+  //    is started with +iglx, and with +iglx VideoViewer fails with GL_INVALID_VALUE.
+  //  - Software rendering (LIBGL_ALWAYS_SOFTWARE=1) renders correctly, although more slowly for large scenes.
+  if (getenv_string("LIBGL_ALWAYS_SOFTWARE") == "") my_setenv("LIBGL_ALWAYS_SOFTWARE", "1");
+#endif
+
+  _pwmhints = assertx(XAllocWMHints());
+  // _pwmhints->flags = 0;  // Unnecessary.
+  if (iconic) {
+    _pwmhints->initial_state = IconicState;
+    _pwmhints->flags |= StateHint;
+  }
+  if (!(_display = XOpenDisplay(to_nullptr_or_cstring(display_name)))) {
+    showf("Hw: cannot connect to X server '%s'\n", XDisplayName(to_nullptr_or_cstring(display_name)));
+    _state = EState::uninit;
+    return false;
+  }
+  _screen = DefaultScreen(_display);
+  if (hwquery) print_hwquery(_display, _screen), std::exit(0);
+  _depth = DisplayPlanes(_display, _screen);
+  if (_hwdebug) SHOW(_screen, _depth, XDisplayCells(_display, _screen));
+  _cmap = DefaultColormap(_display, _screen);
+
+  set_window_title(_argv0);
+  set_double_buffering(true);
+  return true;
+}
+
+static int my_io_error_handler(Display* display) {
+  dummy_use(display);
+  // This handler is called when the window close button is pressed, so there is nothing unusual.
+  // SHOW("X server connection is lost");
+  hh_clean_up(), exit_immediately(0);  // IE error handler is unfortunately required to exit.
+  // Ideally, CYGWIN would send a DestroyWindow event when user clicks "X" button, but it does not seem to.
+  return 0;
+}
+
+void Hw::get_color(string color_name, unsigned long& pixel, Pixel& color) {
+  if (color_name == "hhblue") color_name = "#5987B3";
+  XColor xcolor;
+  if (!XParseColor(_display, _cmap, color_name.c_str(), &xcolor)) assertnever("color '" + color_name + "' not found");
+  assertx(XAllocColor(_display, _cmap, &xcolor));
+  pixel = xcolor.pixel;
+  // The red, green, blue color fields in XColor are in range [0, 65535].
+  color = Pixel(xcolor.red / 256, xcolor.green / 256, xcolor.blue / 256);
+}
+
+void Hw::open() {
+  assertx(_state == EState::init);
+  _state = EState::open;
+  if (_hwdebug) SHOW("hw: open");
+  Visual* visual = DefaultVisual(_display, _screen);
+  unsigned border_width = 1;
+#if defined(HH_OGLX)
+  GLXContext glcx;
+  dummy_init(glcx);
+  if (_oglx) {
+    // static const int multisample = getenv_int("GLX_MULTISAMPLE");
+    _multisample = getenv_int("MULTISAMPLE", 4, true);
+    // The graphics driver allocates a 64 KB aligned buffer during initialization and never releases it.
+    // LeakSanitizer reported it with its allocating frame as "<unknown module>", which no module or function
+    // suppression can match.  The only pattern that would match is the interceptor frame
+    // "leak:aligned_alloc", which would also hide leaks of our own Pool chunks and Sac objects,
+    // both of which allocate through hh::aligned_malloc().  We find it sufficient to disable LeakSanitizer for
+    // just the region below.
+    // The likely cause of the unknown module is that the driver unloads its modules during exit, before the
+    // leak scan; the pinning of modules after this region now prevents that under Linux.  Under the WSL d3d12
+    // driver and Mesa's llvmpipe and softpipe, the region was then found unnecessary (2026-09-25), and the
+    // 64 KB buffer no longer appeared at all.  The region is kept because, unlike the suppressions, it names
+    // no library: it covers the initialization allocations of any other driver and of non-Linux platforms.
+    std::optional<LeakDisabler> leak_disabler(std::in_place);
+    XVisualInfo* visinfo;
+    const int orig_multisample = _multisample;
+    for (;;) {
+      Array<int> attributelist = {
+          GLX_RGBA,  // (for TrueColor and DirectColor instead of PseudoColor; there is no "RGB")
+          GLX_RED_SIZE,
+          8,  // Could be just "1".
+          GLX_DEPTH_SIZE,
+          24,  // Could be just "1"; 24 is arbitrary.
+          // Found necessary for Chrome Remote Desktop and "//third_party/mesa:GL",
+          //  else ALPHA_SIZE == 0 and somehow the rendered window is mostly transparent.
+          GLX_ALPHA_SIZE,
+          8,
+      };
+      if (_hwdebug) SHOW("hw: open", _is_glx_dbuf);
+      if (_is_glx_dbuf) attributelist.push(GLX_DOUBLEBUFFER);
+      if (_multisample > 1) {
+        // Warning("Turning on GLX_SAMPLES_SGIS");
+        attributelist.push_array(V(GLX_SAMPLES_SGIS, _multisample));
+        // Then becomes enabled by default.
+        // Note: inf_reality balrog has _multisample <= 8.
+        // Note: may want to disable multisampling manually before drawing anti-aliased lines.  Actually,
+        //  anti-aliased lines look rather poor on inf_reality (too thick); we prefer multisampled aliased lines.
+        // Note: do we need glEnable(GL_POLYGON_SMOOTH)? No, it seems that it is an old way of anti-aliasing
+        //  using alpha planes.
+      }
+      attributelist.push(None);
+      // Note: on my Octane, this chooses VisualId 0x37: `glxinfo`:
+      //     visual  x  bf lv rg d st  r  g  b a  ax dp st accum buffs  ms
+      //   id dep cl sp sz l  ci b ro sz sz sz sz bf th cl  r  g  b  a ns b
+      //  0x37 24 tc  . 36  . r  y  . 12 12 12  .  . 24  8 16 16 16 16  . .
+      // which has 12bits/channel (even though only 4 were requested); not bad.
+      // Note: on cygwin, it selects: VisualId 396 (0x18c)
+      //     visual  x   bf lv rg d st  colorbuffer  sr ax dp st accumbuffer  ms  cav
+      //   id dep cl sp  sz l  ci b ro  r  g  b  a F gb bf th cl  r  g  b  a ns b eat
+      // 0x18c 24 tc  0  32  0 r  y .   8  8  8  8 .  .  0 24  0 16 16 16 16  0 0 None
+      visinfo = glXChooseVisual(_display, _screen, attributelist.data());
+      if (visinfo) break;
+      if (_multisample > 1) {
+        _multisample /= 2;  // Try the next lower number of samples.
+        continue;
+      }
+      assertnever("Could not successfully call glXChooseVisual()");
+    }
+    if (_multisample != orig_multisample) showf("Hw: had to downgrade to multisample=%d\n", _multisample);
+    leak_disabler.reset();
+#if HH_HAS_LSAN && defined(__linux__)
+    {
+      // Under WSL, libd3d12 unloads libd3d12core and libnvwgf2umx during exit, before the leak scan, so their
+      // frames would appear as "<unknown module>" and their suppressions could not match.  Pin every module
+      // loaded so far; the names are gathered first because dlopen() must not run inside dl_iterate_phdr().
+      Array<string> names;
+      dl_iterate_phdr(
+          [](dl_phdr_info* info, size_t, void* data) {
+            if (info->dlpi_name[0]) static_cast<Array<string>*>(data)->push(info->dlpi_name);
+            return 0;
+          },
+          &names);
+      for (const string& name : names) dlopen(name.c_str(), RTLD_LAZY | RTLD_NOLOAD | RTLD_NODELETE);
+    }
+#endif
+    _depth = visinfo->depth;  // (number of bits in RGBA; unrelated to GLX_DEPTH_SIZE)
+    _screen = visinfo->screen;
+    visual = visinfo->visual;
+    if (_hwdebug) {
+      SHOW(_depth, _screen, visinfo->visualid, visinfo->bits_per_rgb);
+#define E(attrib)                                              \
+  {                                                            \
+    int value;                                                 \
+    assertx(!glXGetConfig(_display, visinfo, attrib, &value)); \
+    SHOW(#attrib, value);                                      \
+  }                                                            \
+  HH_EAT_SEMICOLON
+      E(GLX_USE_GL);
+      E(GLX_BUFFER_SIZE);
+      E(GLX_LEVEL);
+      E(GLX_RGBA);
+      E(GLX_DOUBLEBUFFER);
+      E(GLX_STEREO);
+      E(GLX_RED_SIZE);
+      E(GLX_ALPHA_SIZE);
+      E(GLX_DEPTH_SIZE);
+      E(GLX_STENCIL_SIZE);
+      E(GLX_ACCUM_RED_SIZE);
+      E(GLX_ACCUM_ALPHA_SIZE);
+#undef E
+    }
+    // If glXCreateContext fails when launching client over "ssh -Y", it may be because X server
+    //  was launched without "+iglx" option.
+    GLXContext share_list = nullptr;  // No shared display lists.
+    Bool direct = 1;                  // Direct connection to graphics system if possible.
+    // Note: "It may not be possible to render to a GLX pixmap with a direct rendering context".
+    glcx = assertx(glXCreateContext(_display, visinfo, share_list, direct));
+    if (_hwdebug) SHOW(glXIsDirect(_display, glcx));
+    _cmap = XCreateColormap(_display, RootWindow(_display, _screen), visual, AllocNone);
+    // The XVisualInfo returned by glXChooseVisual() must be released by the caller.  Its `visual`
+    //  member, saved above, stays valid because Visual structures are owned by the Display.
+    XFree(visinfo);
+    border_width = 0;
+    // ? XSetErrorHandler(0);
+  }
+#endif  // defined(HH_OGLX)
+  {
+    if (_backcolor == "") _backcolor = from_nullptr_or_cstring(XGetDefault(_display, _argv0.c_str(), "background"));
+    if (_forecolor == "") _forecolor = from_nullptr_or_cstring(XGetDefault(_display, _argv0.c_str(), "foreground"));
+    assign_default_colors();
+    get_color(_backcolor, _pixel_background, _color_background);
+    get_color(_forecolor, _pixel_foreground, _color_foreground);
+  }
+  Pixel dummy_color_border;
+  get_color("black", _pixel_border, dummy_color_border);
+  if (_user_geometry == "")
+    _user_geometry = from_nullptr_or_cstring(XGetDefault(_display, _argv0.c_str(), "geometry"));
+  XFontStruct* font_info;
+  if (!(font_info = XLoadQueryFont(_display, k_font_name.c_str()))) {
+    showf("Hw: cannot open font '%s'\n", k_font_name.c_str());
+    return;
+  }
+  XSizeHints* pxsh = assertx(XAllocSizeHints());
+  {
+    pxsh->flags = PPosition | PSize | PMinSize;
+    pxsh->x = 0, pxsh->y = 0;  // (the x, y, width, and height members are now obsolete)
+    pxsh->width = _win_dims[1];
+    pxsh->height = _win_dims[0];
+    pxsh->min_width = 0;
+    pxsh->min_height = 0;
+  }
+  const int bitmask =
+      XWMGeometry(_display, _screen, to_nullptr_or_cstring(_user_geometry), to_nullptr_or_cstring(_default_geometry),
+                  1, pxsh, &pxsh->x, &pxsh->y, &pxsh->width, &pxsh->height, &pxsh->win_gravity);
+#if defined(__CYGWIN__)
+  // Adjustment for window borders (ideally, only if relative to upper and left boundaries).
+  pxsh->x += 3;
+  pxsh->y += 22;
+#endif
+  if (bitmask & (XValue | YValue)) pxsh->flags |= USPosition;
+  if (bitmask & (WidthValue | HeightValue)) pxsh->flags |= USSize;
+  _win_dims = V(pxsh->height, pxsh->width);
+  {
+    XSetWindowAttributes swa = {};
+    swa.colormap = _cmap;
+    swa.border_pixel = _pixel_border;
+    swa.background_pixel = _pixel_background;
+    if (_fbefore_window) _fbefore_window();
+    _win = XCreateWindow(_display, RootWindow(_display, _screen), pxsh->x, pxsh->y, pxsh->width, pxsh->height,
+                         border_width, _depth, InputOutput, visual, CWColormap | CWBorderPixel | CWBackPixel, &swa);
+  }
+  const Pixmap icon_pixmap = assertx(XCreateBitmapFromData(_display, _win, hw_bits, hw_width, hw_height));
+  _pwmhints->flags |= IconPixmapHint;
+  _pwmhints->icon_pixmap = icon_pixmap;
+  XClassHint* pxclasshint = assertx(XAllocClassHint());
+  pxclasshint->res_name = const_cast<char*>(_argv0.c_str());
+  pxclasshint->res_class = const_cast<char*>("Hw");
+  Vec2<const char*> largv = {_argv0.c_str(), nullptr};
+  const int largc = 1;
+  const string icon_name = _argv0;
+  XmbSetWMProperties(_display, _win, _window_title.c_str(), icon_name.c_str(), const_cast<char**>(largv.data()), largc,
+                     pxsh, _pwmhints, pxclasshint);
+  // XmbSetWMProperties() has copied these structures, so the client-side copies can be released.
+  //  (XFree() releases only the structures; the res_name and res_class strings are not owned by them.)
+  XFree(pxsh);
+  XFree(pxclasshint);
+  XFree(_pwmhints), _pwmhints = nullptr;
+  XStoreName(_display, _win, _window_title.c_str());  // Necessary to set window title in CYGWIN.
+  const Cursor cursor = XCreateFontCursor(_display, XC_crosshair);
+  XDefineCursor(_display, _win, cursor);
+  XSelectInput(_display, _win,
+               ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask | StructureNotifyMask);
+  if (0)
+    XSelectInput(_display, _win,
+                 ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask | StructureNotifyMask |
+                     EnterWindowMask | LeaveWindowMask | FocusChangeMask | PropertyChangeMask | VisibilityChangeMask |
+                     SubstructureNotifyMask);
+  if (_oglx) {
+    // Should not use X font because of double-buffering problem.
+    XFreeFont(_display, font_info);  // Unused here, so unload it rather than hold it for the process life.
+  } else {
+    _gc = XCreateGC(_display, _win, 0UL, &_gcvalues);
+    XSetFont(_display, _gc, font_info->fid);
+    // Avoid generating NoExpose events when doing XCopyArea().
+    XSetGraphicsExposures(_display, _gc, 0);
+    XSetBackground(_display, _gc, _pixel_background);
+    XSetForeground(_display, _gc, _pixel_foreground);
+  }
+  if (0) {  // This fails With Cinnamon: it prevents window close and we don't receive any ClientMessage event.
+    _wmDeleteMessage = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+    XSetWMProtocols(_display, _win, &_wmDeleteMessage, 1);
+  }
+  if (!_hidden) XMapWindow(_display, _win);
+  if (_maximize) {
+    _maximize = false;
+    // (Note that make_fullscreen(true) is different from maximize.)
+    XEvent event;
+    event.type = ClientMessage;
+    event.xclient.display = _display;
+    event.xclient.window = _win;
+    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = 1;  // _NET_WM_STATE_ADD
+    event.xclient.data.l[1] = XInternAtom(_display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
+    event.xclient.data.l[2] = XInternAtom(_display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
+    assertx(XSendEvent(_display, XDefaultRootWindow(_display), False, SubstructureNotifyMask, &event));
+  }
+  if (_fullscreen) {
+    _fullscreen = false;
+    make_fullscreen(true);
+  }
+  if (_oglx) {
+#if defined(HH_OGLX)
+    glXMakeCurrent(_display, _win, glcx);
+    _hidden_samples = _multisample > 1 ? _multisample : 0;
+    // 2026-08-03: On WSL, I attempted to cap the framerate to the max display refresh, but it was not possible.
+    // Under WSLg / XWayland, glXQueryExtensionsString() reports no swap_control, video_sync, or OML_sync_control,
+    // and glXSwapIntervalMESA() returns GLX_BAD_CONTEXT even with a current direct context, so vsync is unavailable.
+    // Note that "glxinfo | grep swap_control" matches the client-only list and is misleading; the effective
+    // per-screen list is what matters.  One workaround might be frame pacing in draw_it().
+    if (_hwdebug) SHOW(glGetString(GL_VERSION));
+    if (_hwdebug) SHOW(gl_extensions_string());
+    {
+      const string regular_font_name = (
+          // "9x15bold"
+          // iris13 (close to IrisGL default font)
+          // "-*-iris-medium-r-normal--*-130-*-*-m-*-iso8859-1" // Latest on SGI.
+          // "-*-courier-*-r-*-*-*-100-*-*-*-*-*-*" // Works on CYGWIN; has width=9.
+          // "-*-courier-*-r-*-*-*-190-*-*-*-*-*-*" // Looks like width16 on SGI.
+          // "fixed"
+          "9x15bold");
+      const string big_font_name = (
+          // "12x24" // Yuck.
+          "-misc-fixed-medium-r-normal--20-200-75-75-c-100-iso8859-1"  // Not all that large.
+      );
+      string font_name = _bigfont ? big_font_name : regular_font_name;
+      XFontStruct* font_info2;
+      font_info2 = XLoadQueryFont(_display, font_name.c_str());
+      if (!font_info2) {
+        showf("XLoadQueryFont failed on font '%s', so reverting to font 'fixed'\n", font_name.c_str());
+        font_name = "fixed";  // == "6x13"
+        font_info2 = assertx(XLoadQueryFont(_display, font_name.c_str()));
+      }
+      const Font id = font_info2->fid;
+      const int first = font_info2->min_char_or_byte2;
+      const int last = font_info2->max_char_or_byte2;
+      if (0) SHOW(first, last);  // Shows: first=0 last=255.
+      _listbase_font = assertx(glGenLists(last + 1));
+      assertx(!gl_report_errors());
+      glXUseXFont(id, first, last - first + 1, _listbase_font + first);
+      {
+        const GLenum v = glGetError();
+        if (v) {
+          assertx(v == GL_OUT_OF_MEMORY);  // Unexpected behavior under WSL after glXUseXFont().
+          Warning("Got GL_OUT_OF_MEMORY after glXUseXFont(); ignoring");
+          assertx(!glGetError());
+        }
+      }
+      assertx(!gl_report_errors());
+      // glXUseXFont() copies the glyph bitmaps into the display lists, so the font is no longer needed.
+      XFreeFont(_display, font_info2);
+      if (font_name == "fixed") {
+        _font_dims = V(13 + 2, 6);
+      } else if (!_bigfont) {
+        _font_dims = V(15 + 3, 9);  // (to be compatible with IrisGL)
+      } else {
+        _font_dims = V(38, 16);  // 16x38 from CourierBold20 of IrisGL fm.
+        _font_dims = V(28, 16);  // Reduce line-spacing.
+      }
+      if (_hwdebug) SHOW(_font_dims);
+    }
+    if (_multisample > 1) {  // Likely unnecessary because the default value for GL_MULTISAMPLE is GL_TRUE.
+      glEnable(GL_MULTISAMPLE);
+      assertw(!gl_report_errors());
+      if (_hwdebug) {
+        int sample_buffers;
+        glGetIntegerv(GL_SAMPLE_BUFFERS, &sample_buffers);
+        SHOW(sample_buffers);
+        int samples;
+        glGetIntegerv(GL_SAMPLES, &samples);
+        SHOW(samples);
+      }
+    }
+#endif
+  }
+  _draw = _win;
+  // TODO: Implement HwBase::drag_and_drop().
+  int force_first_draws = 0;
+#if defined(__CYGWIN__)
+  force_first_draws = 3;  // For some unknown reason, first couple draws are corrupt on __CYGWIN__.
+#endif
+  if (1) {
+    // Avoid error message upon pressing close window button, e.g.:
+    //  XIO:  fatal IO error 11 (Resource temporarily unavailable) on X server ":0"
+    XSetIOErrorHandler(my_io_error_handler);
+  }
+  if (_hidden) {
+    // An unmapped window receives no MapNotify or Expose events, so begin drawing without them.
+    _exposed = true;
+    if (_hwkey != "") start_hwkey();
+    redraw_later();
+  }
+  if (_offscreen == "") {
+    for (int i = 0;;) {
+      if (loop()) break;
+      if (++i <= force_first_draws) redraw_later();
+    }
+  } else {
+    assertx(_oglx);
+#if defined(HH_OGLX)
+    // The first frame can contain just the background (e.g., G3dOGL reads its input during that frame).
+    draw_it();
+    draw_it();
+    hidden_write_image(_offscreen);
+#endif
+  }
+#if defined(HH_OGLX)
+  assertw(!gl_report_errors());
+#endif
+  _state = EState::uninit;
+  // Cleanup.
+  XCloseDisplay(_display);
+}
+
+bool Hw::loop() {
+  for (;;) {
+    // Handle all possible types of events.
+    if (_update == EUpdate::quit) return true;
+    handle_events();
+    if (_update == EUpdate::quit) return true;
+    handle_keyintr();
+    if (_update == EUpdate::quit) return true;
+    if (!got_event() && !_is_keyintr) {
+      // No more events, so possibly blocked.
+      if (_update != EUpdate::nothing) break;
+      // Later found: https://stackoverflow.com/questions/8592292/how-to-quit-the-blocking-of-xlibs-xnextevent
+      fd_set fdr;
+      const int fd = ConnectionNumber(_display);
+      FD_ZERO(&fdr);
+      FD_SET(fd, &fdr);
+      if (_watch_fd0) FD_SET(0, &fdr);
+      struct timeval tv;
+      tv.tv_sec = 0;
+      tv.tv_usec = 30'000;  // .03sec; introduced to support wake_up()
+      struct timeval* ptv = 1 ? &tv : nullptr;
+      if (select(fd + 1, &fdr, implicit_cast<fd_set*>(nullptr), implicit_cast<fd_set*>(nullptr), ptv) == -1) {
+        if (errno == EBADF) {
+          assertx(_watch_fd0);
+          _watch_fd0 = false;
+          continue;
+        }
+        if (errno == EINTR) continue;
+        std::cerr << "Hw: error in select(): " << std::strerror(errno) << "\n";
+        return true;
+      }
+      if (_watch_fd0 && FD_ISSET(0, &fdr)) input_received();
+    }
+  }
+  // No more events but redraw has been requested.
+  draw_it();
+  return false;
+}
+
+void Hw::handle_events() {
+  while (got_event() && _update != EUpdate::quit) handle_event();
+}
+
+void Hw::handle_event() {
+  _gotevent = false;
+  if (_hwdebug) SHOW(_event.type);
+  switch (_event.type) {
+    case MapNotify:
+      if (_hwdebug) SHOW("MapNotify");
+      if (!_exposed) {
+        _exposed = true;
+        if (_hwdebug) SHOW("window now exposed");
+        if (_hwkey != "") start_hwkey();
+      }
+      break;
+    case UnmapNotify:
+      if (_hwdebug) SHOW("UnmapNotify");
+      // Possibly we could somehow force the redraws to stop.
+      break;
+    case Expose:
+      if (_hwdebug) SHOW("Expose", _exposed);
+      if (!_exposed) return;
+      while (XCheckTypedEvent(_display, Expose, &_event));
+      redraw_now();
+      break;
+    case ConfigureNotify: {
+      _win_pos = V(_event.xconfigure.y, _event.xconfigure.x);
+      _win_dims = V(_event.xconfigure.height, _event.xconfigure.width);
+      const bool send_event = _event.xconfigure.send_event;
+      if (_hwdebug) SHOW("configure", _win_pos, _win_dims, send_event, _exposed, _oglx);
+      if (send_event) return;  // WM has moved window.
+      if (!_exposed && _oglx) return;
+      redraw_now();
+      soft_discard();
+      if (_oglx) {
+#if defined(HH_OGLX)
+        glViewport(0, 0, _win_dims[1], _win_dims[0]);
+        {
+          const Vector4 v(_color_background.with(3, 255));
+          glClearColor(v[0], v[1], v[2], v[3]);
+        }
+        if (!_hidden) glDrawBuffer(GL_FRONT_AND_BACK);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        if (_is_glx_dbuf && !_hidden) glDrawBuffer(GL_BACK);
+        set_color_to_foreground();
+#endif
+      } else if (_is_pixbuf) {
+        const bool draw_was_bbuf = _draw == _bbuf;
+        XFreePixmap(_display, _bbuf);
+        _bbuf = XCreatePixmap(_display, _win, _win_dims[1], _win_dims[0], _depth);
+        if (draw_was_bbuf) _draw = _bbuf;
+        XClearWindow(_display, _win);
+      } else {
+        XClearWindow(_display, _win);
+      }
+      while (XCheckTypedEvent(_display, Expose, &_event));
+      break;
+    }
+    case KeyPress:
+      if (_hwdebug) SHOW("KeyPress");
+      handle_key();
+      break;
+    case ButtonPress:
+    case ButtonRelease: {
+      if (_hwdebug) SHOW("Button");
+      int butnum = _event.xbutton.button;
+      const bool pressed = _event.type == ButtonPress;
+      const bool shift = (_event.xbutton.state & ShiftMask) != 0;
+      dummy_use(shift);
+      if (butnum == 4 || butnum == 5) {
+        if (pressed) wheel_turn(butnum == 4 ? +1.f : -1.f);
+      } else {
+        if (butnum == 8) butnum = 4;  // Back button.
+        if (butnum == 9) butnum = 5;  // Forward button.
+        button_press(butnum, pressed, V(_event.xbutton.y, _event.xbutton.x));
+      }
+      break;
+    }
+    case MappingNotify:
+      if (_hwdebug) SHOW("MappingNotify");
+      XRefreshKeyboardMapping(&_event.xmapping);
+      break;
+    // case ClientMessage:
+    //    SHOWL;
+    //    if (_event.xclient.data.l[0] == _wmDeleteMessage) {
+    //        SHOWL;
+    //        // Receive message from window manager before it kills the window.
+    //        _update = EUpdate::quit;
+    //    }
+    //    break;
+    default:
+      if (_hwdebug) SHOW("ignoring unknown event");
+  }
+}
+
+bool Hw::got_event() {
+  // If connection to X server is lost, XCheckMaskEvent generates an IO error here.
+  if (!_gotevent && XCheckMaskEvent(_display, 0xfffffff, &_event)) _gotevent = true;
+  return _gotevent;
+}
+
+bool Hw::suggests_stop() {
+  assertx(_state == EState::open);
+  if (got_event() && _update != EUpdate::quit) handle_events();
+  if (_is_keyintr) handle_keyintr();
+  return _update == EUpdate::quit || _update == EUpdate::redrawnow;
+}
+
+static void handle_alarm(int) {
+  signal(SIGALRM, handle_alarm);  // For ATT unix.
+  set_keyintr(*g_hw);
+}
+
+void Hw::start_hwkey() {
+  struct itimerval ti;
+  struct timeval tv;
+  signal(SIGALRM, handle_alarm);
+  _hwdelay = max(_hwdelay, .01f);  // As in libHwWindows; a zero interval would disarm the timer.
+  const int64_t usec = int(_hwdelay * 1'000'000.f + .5f);
+  tv.tv_sec = int(usec / 1'000'000);
+  tv.tv_usec = int(usec % 1'000'000);
+  ti.it_value = tv;
+  ti.it_interval = tv;
+  if (setitimer(ITIMER_REAL, &ti, implicit_cast<struct itimerval*>(nullptr)))
+    std::cerr << "Hw: setitimer: " << std::strerror(errno) << "\n";
+}
+
+void Hw::end_hwkey() {
+  struct itimerval ti;
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = 0;
+  ti.it_value = tv;
+  ti.it_interval = tv;
+  if (setitimer(ITIMER_REAL, &ti, implicit_cast<struct itimerval*>(nullptr)))
+    std::cerr << "Hw: setitimer2: " << std::strerror(errno) << "\n";
+  // SIGALRM is not reset to SIG_DFL, just to be sure.
+  // signal(SIGALRM, SIG_DFL);
+}
+
+void Hw::handle_key() {
+  string s;
+  {
+    Vec<char, 20> buf;
+    KeySym keysym;
+    const int nchar =
+        XLookupString(&_event.xkey, buf.data(), buf.num() - 1, &keysym, implicit_cast<XComposeStatus*>(nullptr));
+    assertx(buf.ok(nchar));
+    buf[nchar] = 0;
+    s = buf.data();
+    if (keysym >= XK_F1 && keysym <= XK_F12) {
+      s = sform("<f%d>", int(keysym - XK_F1 + 1));
+    } else if (keysym >= XK_0 && keysym <= XK_9) {  // So that control-2, .. control-9 are interpreted correctly.
+      assertx(XK_0 == '0');
+      s = sform("%c", narrow_cast<char>(keysym));
+    } else {
+      switch (keysym) {
+        case XK_Left: s = "<left>"; break;
+        case XK_Right: s = "<right>"; break;
+        case XK_Up: s = "<up>"; break;
+        case XK_Down: s = "<down>"; break;
+        case XK_Home: s = "<home>"; break;
+        case XK_End: s = "<end>"; break;
+        case XK_Prior: s = "<prior>"; break;
+        case XK_Next: s = "<next>"; break;
+        case XK_Insert: s = "<insert>"; break;
+        case XK_Delete: s = "<delete>"; break;
+        default: void();
+      }
+    }
+    if (_hwdebug) SHOW(keysym, s, s.size(), convert<int>(convert<uchar>(CArrayView<char>(s.data(), s.size()))));
+  }
+  // (keysym >= XK_space && keysym <= XK_asciitilde)
+  if (s == "") return;  // E.g. 'shift' key
+  if (_query) {
+    query_keypress(s);
+  } else if (key_press(s)) {
+    // Client has handled key press.
+  } else if (s == "\033") {  // <esc> key (== uchar{27})
+    quit();
+  } else {
+    beep();
+  }
+}
+
+void Hw::draw_it() {
+  _update = EUpdate::nothing;
+  if (!_exposed) return;  // User events before X expose event.
+  if (_hwdebug) SHOW("draw_it", _win_dims);
+  if (_need_toggle_buffering) {
+    _need_toggle_buffering = false;
+    toggle_buffering();
+  }
+  _async = true;
+  if (_query) {
+    clear_window();
+    draw_text(_query_yx, _query_prompt + _query_buffer + "_");
+  } else {
+    // 2014-12-13
+    glEnable(GL_BLEND);
+    // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  // For non-premultiplied alpha.
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  // Since 2017-02-23, source is assumed to have premultiplied alpha.
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();  // glLoadMatrixf(to_Matrix(Frame::identity()).const_grid_view().data());
+    if (0) {
+      glOrtho(-.5, _win_dims[1] - .5, _win_dims[0] - .5, -.5, -1., 1.);  // Multiplies GL_PROJECTION; reverse y.
+    } else {
+      // Since 2015-01-08, pixels are centered at half-integers.
+      glOrtho(0., _win_dims[1] - 0., _win_dims[0] - 0., 0., -1., 1.);  // Multiplies GL_PROJECTION; reverse y.
+    }
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    draw_window(_win_dims);
+  }
+  _async = false;
+  if (_update == EUpdate::quit) return;
+  if (_update == EUpdate::nothing || _update == EUpdate::redrawlater) {
+    soft_flush();
+  } else {
+    soft_discard();
+  }
+  if (_oglx) {
+#if defined(HH_OGLX)
+    if (_update == EUpdate::nothing || _update == EUpdate::redrawlater) {
+      const bool vista = true;
+      if (!vista) glDrawBuffer(GL_FRONT);
+      if (_is_glx_dbuf && !_hidden) {
+        if (_hwdebug) SHOW("glxSwapBuffers1");
+        if (0) {
+          if (_hwdebug) SHOW("glxSwapBuffers1b");
+          glFinish();
+          if (_hwdebug) SHOW("glxSwapBuffers1c");
+        }
+        if (0) {
+          SHOW("before_swap");
+          sleep(1);
+        }
+        if (0) glFinish();  // Does not help.
+        // 2015-02-04 cygwin new bug: Swapping the buffers causes the window to blink to background.
+        glXSwapBuffers(_display, _win);
+        // 2015-07-27 cygwin: "VideoViewer ~/data/image/lake.png" causes segmentation fault in line above.
+        if (0) {
+          SHOW("after_swap");
+          sleep(1);
+        }
+        if (_hwdebug) SHOW("glxSwapBuffers2");
+      } else {
+        hard_flush();
+      }
+    }
+#endif
+  } else if (_is_pixbuf) {
+    if (_update == EUpdate::nothing || _update == EUpdate::redrawlater)
+      XCopyArea(_display, _bbuf, _win, _gc, 0, 0, _win_dims[1], _win_dims[0], 0, 0);
+    _draw = _win;
+  } else {
+    hard_flush();
+  }
+#if 1 || defined(__CYGWIN__)
+  // This synchronization was necessary with cygwin to avoid having GLX build a buffer of many frames of rendering.
+  // 2016-03-17 this also became necessary with iglx over ssh under Unix,
+  //   E.g.: ./bin/cygwin/G3dOGL ./demos/data/cessna.orig.m -key J
+  if (1) XSync(_display, 0);
+#endif
+}
+
+void Hw::clear_window() {
+  soft_discard();
+  if (_oglx) {
+#if defined(HH_OGLX)
+    clear_window_ogl();
+#endif
+  } else {
+    XSetForeground(_display, _gc, _pixel_background);
+    if (_is_pixbuf) _draw = _bbuf;
+    XFillRectangle(_display, _draw, _gc, 0, 0, _win_dims[1], _win_dims[0]);
+    XSetForeground(_display, _gc, _pixel_foreground);
+  }
+}
+
+void Hw::toggle_buffering() {
+  assertx(!_async && _state == EState::open && !_oglx);
+  if (!_is_pixbuf) {
+    allocate_buf();
+  } else {
+    deallocate_buf();
+  }
+}
+
+void Hw::allocate_buf() {
+  assertx(!_is_pixbuf && !_oglx);
+  if (_hwdebug) SHOW("allocating double buffer", _depth);
+  _bbuf = XCreatePixmap(_display, _win, _win_dims[1], _win_dims[0], _depth);
+  _is_pixbuf = true;
+}
+
+void Hw::deallocate_buf() {
+  assertx(_is_pixbuf);
+  if (_hwdebug) SHOW("deallocating double buffer");
+  XFreePixmap(_display, _bbuf);
+  _draw = _win;
+  _is_pixbuf = false;
+}
+
+void Hw::beep() {
+  assertx(_state != EState::uninit);
+  XBell(_display, 0);
+}
+
+void Hw::set_double_buffering(bool newstate) {
+  if (_oglx) {
+    if (!assertw(_state == EState::init)) return;
+    _is_glx_dbuf = newstate;
+    // If !_is_glx_dbuf, do not call glXSwapBuffers(), glDrawBuffer(GL_BACK).
+    if (_hwdebug) SHOW(_is_glx_dbuf);
+    return;
+  }
+  const bool ostate = _is_pixbuf ^ _need_toggle_buffering;
+  if (newstate != ostate) {
+    if (_async || _state != EState::open) {
+      assertx(!_need_toggle_buffering);
+      _need_toggle_buffering = true;
+    } else {
+      toggle_buffering();
+    }
+  }
+}
+
+std::optional<Vec2<int>> Hw::get_pointer() {
+  assertx(_state == EState::open);
+  int rx, ry;
+  unsigned mask;
+  Window rw, cw;
+  Vec2<int> yx;
+  if (!XQueryPointer(_display, _win, &rw, &cw, &rx, &ry, &yx[1], &yx[0], &mask)) return {};
+  return {yx};
+}
+
+bool Hw::get_key_modifier(EModifier modifier) {
+  if ((modifier == EModifier::control && _simulated_control) || (modifier == EModifier::shift && _simulated_shift) ||
+      (modifier == EModifier::alt && _simulated_alt))
+    return true;
+  Vec<char, 32> keys;
+  XQueryKeymap(_display, keys.data());
+  const auto key_pressed = [&](KeySym keysym) {
+    const int keycode = XKeysymToKeycode(_display, keysym);
+    return !!(keys[keycode / 8] & (1 << (keycode % 8)));
+  };
+  switch (modifier) {
+    case EModifier::shift: return key_pressed(XK_Shift_L) || key_pressed(XK_Shift_R);
+    case EModifier::control: return key_pressed(XK_Control_L) || key_pressed(XK_Control_R);
+    case EModifier::alt: return key_pressed(XK_Alt_L) || key_pressed(XK_Alt_R);
+    default: assertnever("");
+  }
+}
+
+void Hw::set_color_to_foreground() {
+  assertx(_state == EState::open);
+  if (_oglx) {
+#if defined(HH_OGLX)
+    glColor3ubv(_color_foreground.data());
+#endif
+  } else {
+    XSetForeground(_display, _gc, _pixel_foreground);
+  }
+}
+
+void Hw::set_color(const Pixel& pixel) {
+  assertx(_state == EState::open);
+  if (_oglx) {
+#if defined(HH_OGLX)
+    glColor4ubv(pixel.data());
+#endif
+  } else {
+    XColor xcolor;
+    xcolor.red = pixel[0] * 256;
+    xcolor.green = pixel[1] * 256;
+    xcolor.blue = pixel[2] * 256;
+    xcolor.flags = DoRed | DoGreen | DoBlue;
+    XAllocColor(_display, _cmap, &xcolor);
+    XSetForeground(_display, _gc, xcolor.pixel);
+  }
+}
+
+void Hw::draw_text_internal(const Vec2<int>& yx, const string& s) {
+  assertx(_state == EState::open);
+  if (_oglx) {
+    draw_text_ogl(yx, s);
+  } else {
+    XDrawImageString(_display, _draw, _gc, yx[1], yx[0], s.c_str(), narrow_cast<int>(s.size()));
+  }
+}
+
+void Hw::fill_polygon(CArrayView<Vec2<float>> points) {
+  assertx(_state == EState::open);
+  if (_oglx) {
+    fill_polygon_ogl(points);
+  } else {
+    Array<XPoint> xpoints(points.num());
+    for_int(i, points.num()) {
+      xpoints[i].x = int(floor(points[i][1]));
+      xpoints[i].y = int(floor(points[i][0]));
+    }
+    // Shape is: Convex, Nonconvex, or Complex.
+    XFillPolygon(_display, _draw, _gc, xpoints.data(), xpoints.num(), Convex, CoordModeOrigin);
+  }
+}
+
+void Hw::set_window_title(string ps) {
+  assertx(_state == EState::init || _state == EState::open);
+  _window_title = std::move(ps);
+  if (_state == EState::open) {
+    if (1) XStoreName(_display, _win, _window_title.c_str());
+    if (0) {
+      XTextProperty prop;
+      if (0) {
+        prop.value = reinterpret_cast<uchar*>(const_cast<char*>(_window_title.c_str()));
+        prop.encoding = XA_STRING;
+        prop.format = 8;
+        prop.nitems = strlen(reinterpret_cast<char*>(prop.value));
+      } else {
+        Vec1<char*> ar(const_cast<char*>(_window_title.c_str()));
+        XStringListToTextProperty(ar.data(), ar.num(), &prop);
+      }
+      XSetWMName(_display, _win, &prop);
+    }
+    if (0) {
+      // https://stackoverflow.com/questions/23273292/how-to-change-net-wm-name-x-library
+      XChangeProperty(_display, _win, XInternAtom(_display, "_NET_WM_NAME", False),
+                      XInternAtom(_display, "UTF8_STRING", False), 8, PropModeReplace,
+                      reinterpret_cast<uchar*>(const_cast<char*>(_window_title.c_str())), _window_title.size());
+    }
+    XFlush(_display);
+  }
+}
+
+Vec2<int> Hw::get_max_window_dims() {
+  XWindowAttributes attribs;
+  assertx(XGetWindowAttributes(_display, DefaultRootWindow(_display), &attribs));
+  // Cygwin: ignores taskbar and returns V(1600, 2560).
+  // SHOW(attribs.x, attribs.y, attribs.height, attribs.width);
+  // SHOW(DisplayWidth(_display, _screen), DisplayHeight(_display, _screen));  // Same.
+  // Vec2<int> window_borders = V(55, 0);  // Taskbar at bottom in Ubuntu Cinnamon.
+  const Vec2<int> window_borders = V(55, 0);  // Taskbar at bottom in Debian Linux Cinnamon (Window borders Albatross).
+  return V(attribs.height, attribs.width) - window_borders;
+}
+
+void Hw::resize_window(const Vec2<int>& yx) {
+  assertx(_state == EState::open);
+  if (_hwdebug) SHOW("Hw resize", yx);
+  XResizeWindow(_display, _win, yx[1], yx[0]);
+  // XMoveResizeWindow(_display, _win, new_left, new_top, yx[1], yx[0])
+}
+
+bool Hw::is_fullscreen() { return _is_fullscreen; }
+
+void Hw::make_fullscreen(bool b) {
+  if (b == _is_fullscreen) return;
+  _is_fullscreen = b;
+#if defined(__CYGWIN__) || defined(__APPLE__)
+  const bool use_change_property = true;
+#else
+  const bool use_change_property = false;  // Linux.
+#endif
+  if (use_change_property) {
+    // https://stackoverflow.com/questions/9083273/x11-fullscreen-window-opengl
+    // https://specifications.freedesktop.org/wm-spec/1.3/ar01s05.html
+    // Under cygwin, it seems to detect _NET_WM_STATE_FULLSCREEN only the first time it is set.
+    // On Mac, it doesn't seem to do anything.
+    static Vec2<int> bu_dims;
+    if (b) {
+      bu_dims = _win_dims;
+      Vec1<Atom> atoms = {XInternAtom(_display, "_NET_WM_STATE_FULLSCREEN", False)};
+      XChangeProperty(_display, _win, XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace,
+                      reinterpret_cast<uchar*>(atoms.data()), atoms.num());
+      // The second time this property is set with cygwin, the window size does not change.
+    } else {
+      Vec0<Atom> atoms = {};  // Was: { None };
+      XChangeProperty(_display, _win, XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace,
+                      reinterpret_cast<uchar*>(atoms.data()), atoms.num());
+      // Cygwin ignores the fact that the property is gone above?
+      resize_window(bu_dims);
+      bu_dims = twice(0);
+    }
+  } else {
+    // https://mail.gnome.org/archives/metacity-devel-list/2010-February/msg00000.html
+    // This does not work under cygwin.
+    // On Mac, it makes window fullscreen but leads to OpenGL error and shows black until later refresh
+    //  the first time fullscreen is invoked.  Now on Sierra 10.12.4 XQuartz 2.7.11 it hangs badly.
+    XEvent event;
+    event.type = ClientMessage;
+    event.xclient.display = _display;
+    event.xclient.window = _win;
+    // event.xclient.serial = 0;
+    // event.xclient.send_event = True;
+    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = b ? 1 : 0;  // 0 == unset, 1 == set, 2 == toggle
+    event.xclient.data.l[1] = XInternAtom(_display, "_NET_WM_STATE_FULLSCREEN", False);
+    event.xclient.data.l[2] = 0;
+    const long mask = SubstructureRedirectMask | SubstructureNotifyMask;
+    assertx(XSendEvent(_display, XDefaultRootWindow(_display), False, mask, &event));
+    XFlush(_display);
+  }
+}
+
+void Hw::flush_seg() {
+  if (!_ar_seg.num()) return;
+  if (_oglx) {
+#if defined(HH_OGLX)
+    flush_seg_ogl();
+#endif
+  } else {
+    Array<XSegment> ar_xseg(_ar_seg.num());
+    for_int(i, _ar_seg.num()) {
+      ar_xseg[i].x1 = int(floor(_ar_seg[i][0][1]));
+      ar_xseg[i].y1 = int(floor(_ar_seg[i][0][0]));
+      ar_xseg[i].x2 = int(floor(_ar_seg[i][1][1]));
+      ar_xseg[i].y2 = int(floor(_ar_seg[i][1][0]));
+    }
+    XDrawSegments(_display, _draw, _gc, ar_xseg.data(), ar_xseg.num());
+    _ar_seg.init(0);
+  }
+}
+
+void Hw::flush_point() {
+  if (!_ar_point.num()) return;
+  if (_oglx) {
+#if defined(HH_OGLX)
+    flush_point_ogl();
+#endif
+  } else {
+    Array<XPoint> ar_xpoint(_ar_point.num());
+    for_int(i, _ar_point.num()) {
+      ar_xpoint[i].x = int(floor(_ar_point[i][1]));
+      ar_xpoint[i].y = int(floor(_ar_point[i][0]));
+    }
+    XDrawPoints(_display, _draw, _gc, ar_xpoint.data(), ar_xpoint.num(), CoordModeOrigin);
+    _ar_point.init(0);
+  }
+}
+
+void Hw::hard_flush() {
+  assertx(_state == EState::open);
+  soft_flush();
+  if (_oglx) {
+#if defined(HH_OGLX)
+    if (_hidden) hidden_resolve_framebuffer();
+    glXWaitGL();
+#endif
+  }
+  XFlush(_display);
+}
+
+void Hw::begin_draw_visible() {
+  assertx(_state == EState::open);
+  soft_flush();
+  if (_oglx) {
+#if defined(HH_OGLX)
+    if (!_hidden) glDrawBuffer(GL_FRONT);
+#endif
+  } else if (_is_pixbuf) {
+    _draw = _win;
+  }
+}
+
+void Hw::end_draw_visible() {
+  assertx(_state == EState::open);
+  soft_flush();
+  if (_oglx) {
+#if defined(HH_OGLX)
+    if (_is_glx_dbuf && !_hidden) glDrawBuffer(GL_BACK);
+#endif
+  } else if (_is_pixbuf) {
+    _draw = _bbuf;
+  }
+}
+
+void Hw::wake_up() {
+  // Warning("untested");
+  // https://stackoverflow.com/questions/10785491/how-to-allow-a-worker-thread-to-updata-an-x11-window
+  // https://ubuntuforums.org/archive/index.php/t-570702.html
+  // https://stackoverflow.com/questions/8592292/how-to-quit-the-blocking-of-xlibs-xnextevent
+  if (!_exposed) return;
+  if (0) {
+    // "Xlib is not threadsafe and calling its functions from more than one thread may be dangerous!"
+    // "For some reason it works stably if the two threads both call XOpenDisplay and use separate
+    //   display* structures."
+    XEvent event = {};
+    event.type = Expose;
+    event.xexpose.window = _win;
+    XSendEvent(_display, _win, False, ExposureMask, &event);
+    XFlush(_display);
+  }
+  // Instead, rely on timeout within select() call in Hw::loop().
+  redraw_later();
+}
+
+}  // namespace hh

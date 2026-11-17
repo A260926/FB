@@ -1,0 +1,21 @@
+order = Array<int>(8) {
+  7
+  1
+  3
+  5
+  2
+  0
+  6
+  4
+}
+sum=16394250 dist.last()=18649
+pq.num() = 22
+pq.num() = 104
+pq.num() = 104
+ar = Array<int>(5) {
+  7
+  5
+  4
+  2
+  1
+}

@@ -1,0 +1,46 @@
+# For Cygwin-native (default g++) compiler, using Cygwin GCC's libstdc++, newlib cygwin1.dll runtime,
+# Cygwin pthreads, Cygwin POSIX packages, and graphics using X11.
+# It defines __GNUC__, __GLIBCXX__, __unix__, and __CYGWIN__, but no _WIN32!
+
+release ?= 1#  0=debug or 1=release  (usually 1)
+
+# Strict -std=c++NN defines __STRICT_ANSI__, which hides POSIX/BSD declarations in Cygwin's headers
+# (popen, pclose, usleep, gethostname, setenv, putenv); gnu++NN keeps them visible.
+override CXX_STD := $(CXX_STD:c++%=gnu++%)
+
+ifeq ($(CC),clang)              # make CONFIG=cygwin CC=clang ...
+  include $(dir $(lastword $(MAKEFILE_LIST)))Makefile_base_clang
+else                            # default is gcc compiler
+  include $(dir $(lastword $(MAKEFILE_LIST)))Makefile_base_gcc
+  # GCC on Cygwin has a long-standing stack alignment problem that makes AVX unusable.
+  # https://stackoverflow.com/questions/55054592/avx-load-instruction-fails-on-cygwin
+  # https://www.mail-archive.com/cygwin@cygwin.com/msg174673.html
+  # (See related issue in Makefile_config_mingw.)
+  ccommon += -mno-avx
+  # Hide a few false positives (including in Filterimage.cpp) due to this older gcc compiler.
+  ccommon += -Wno-stringop-overflow
+endif
+
+$(if $(is_cygwin:0=),,$(error Requesting CONFIG=cygwin but not running Make in Cygwin.))
+$(if $(call file_exists,/usr/bin/$(CXX)),,$(error Compiler /usr/bin/$(CXX) not found for CONFIG=$(CONFIG).))
+$(call prepend_PATH,/usr/bin)
+
+ifneq ($(sanitize:0=),)
+  $(error CONFIG=cygwin ships no sanitizer runtime; use CONFIG=unix for sanitize=$(sanitize))
+endif
+
+graphics_libs ?= -lGL -lX11 -lopengl32
+
+last_libs += -lstdc++exp#  For stacktrace.
+
+# Stack dump:
+# gdb --batch -ex run -ex where --args ~/git/hh_src/bin/cygwin/HTest -dividebyzero
+
+# "The default during compilation is to produce a console application. It you are writing a GUI program, you
+# should either compile with -mwindows as explained above, or add the string "-Wl,--subsystem,windows" to the
+# GCC command line."
+
+# See ~/bin/stackdump, a script I wrote to parse the hex values in *.stackdump and gather info using gdb
+
+# echo | g++ -x c++ -E -v - >/dev/null  # See tool paths.
+# echo '#include <cstdio>' | g++ -dM -E -x c++ - | grep -E '__GNUC__|__clang__|_UCRT|__MINGW32|_MSVC_STL_VERSION|__GLIBCXX__|_WIN32|__cplusplus|_MSVC_LANG|__CYGWIN'

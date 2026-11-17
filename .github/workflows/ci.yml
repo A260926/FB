@@ -1,0 +1,200 @@
+# Build all programs and run all unit tests, with compiler warnings treated as errors.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run of an older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicit bash gives -eo pipefail, so that a failing make is not masked by tee.
+    shell: bash
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each entry names its compiler package and command, and any extra make arguments.
+        include:
+          - name: ubuntu-clang
+            os: ubuntu-26.04
+            compiler: clang
+            cxx: clang++
+          - name: ubuntu-gcc
+            os: ubuntu-26.04
+            compiler: g++
+            cxx: g++
+            make_args: CC=gcc
+          - name: ubuntu-arm-clang
+            os: ubuntu-26.04-arm
+            compiler: clang
+            cxx: clang++
+          # The oldest clang that supports the code: clang 18 lacks CTAD for alias templates (e.g., Array(...)), and
+          # clang 19 and 20 with libstdc++ 14 reject std::forward_like<decltype(self)>() in Vec::get().
+          - name: ubuntu-clang-20
+            os: ubuntu-26.04
+            compiler: clang-20
+            cxx: clang++-20
+            make_args: CXX=clang++-20
+          - name: macos-clang
+            os: macos-26
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v7
+
+      # The packages are listed explicitly, as the record of what a fresh installation needs.
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make ${{ matrix.compiler }} libgl-dev libx11-dev libjpeg-dev libpng-dev zlib1g-dev
+
+      # XQuartz provides the X11 headers and libraries in /opt/X11, and ffmpeg provides image I/O (see make/README.md).
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --cask xquartz && brew install ffmpeg
+
+      - name: Show tool versions
+        run: |
+          ${{ matrix.cxx }} --version
+          make --version | sed -n 1p
+
+      # The option -k reports the failures of all directories in one run.
+      # The macOS /bin/bash (version 3.2) does not support '|&'.
+      - name: Build and test
+        run: |
+          make -k -j"$(getconf _NPROCESSORS_ONLN)" ${{ matrix.make_args }} PEDANTIC=1 ignore_compile_warnings=0 2>&1 |
+            tee build.log
+
+      # Warnings that -Werror does not cover (e.g., from the linker) also count as failures, except for the notice of
+      # GCC 14.3 to 15.x that "'-mavx10.1' is aliased to 512 bit", which -march=native triggers on the runners whose
+      # CPU has AVX10.1 (and which GCC 16 drops).
+      - name: Check the log for warnings
+        run: |
+          if grep -n -i -E 'warning|error' build.log | grep -v -F 'is aliased to 512 bit'; then exit 1; fi
+
+      - name: Show test differences
+        if: failure()
+        run: |
+          shopt -s nullglob
+          for f in test/*.diff; do echo "== $f"; cat "$f"; done
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}-logs
+          path: |
+            build.log
+            test/*.diff
+            test/*.ou
+          if-no-files-found: ignore
+
+  # Build the Docker image (which builds all programs and runs the unit tests), and run a viewer demo inside it
+  # (without mapping its window).
+  docker:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the image
+        run: docker build -f make/Dockerfile -t mesh-processing .
+
+      - name: Run a demo in the container
+        timeout-minutes: 10
+        run: docker run --init --rm -e DEMOS_HIDDEN=1 mesh-processing xvfb-run -a make -C demos view_psc_drumset.sh
+
+  # The Windows jobs use VS 2026.  Windows 10 with VS 2022 (runs-on: windows-2022, although that is Windows Server)
+  # is omitted because it is the primary development environment, where every change is already built and tested.
+
+  # Build the Visual Studio solution (without running the unit tests, which require make and bash).
+  windows-msbuild:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # Locate the 64-bit MSBuild of the newest Visual Studio installation.
+      - name: Build
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild `
+            -find 'MSBuild/**/Bin/amd64/MSBuild.exe' | Select-Object -First 1
+          & $msbuild -version
+          & $msbuild mesh_processing.sln -nologo -maxCpuCount -verbosity:minimal -warnAsError `
+            -p:Configuration=ReleaseMD -p:Platform=x64
+          exit $LASTEXITCODE
+
+  # Build with the makefiles (CONFIG=win, i.e., the Microsoft compiler) and run the unit tests, under MSYS2.
+  windows-make-test:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The MSYS2 packages provide GNU make, bash utilities, perl, and g++ (for the header dependencies only).
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          release: false
+          install: make perl gcc diffutils
+          path-type: inherit
+
+      - name: Show tool versions
+        run: |
+          make --version | sed -n 1p
+          g++ --version | sed -n 1p
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          make -k -j"$(nproc)" CONFIG=win PEDANTIC=1 ignore_compile_warnings=0 2>&1 | tee build.log
+
+      - name: Check the log for warnings
+        run: |
+          if grep -n -i -E 'warning|error' build.log; then exit 1; fi
+
+      - name: Show test differences
+        if: failure()
+        run: |
+          shopt -s nullglob
+          for f in test/*.diff; do echo "== $f"; cat "$f"; done
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-make-test-logs
+          path: |
+            build.log
+            test/*.diff
+            test/*.ou
+          if-no-files-found: ignore
+
+  # Check that the relative links and anchors of the README.md pages resolve.
+  readme-links:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the README links
+        run: .github/scripts/check_readme_links.py

@@ -1,0 +1,185 @@
+// -*- C++ -*-  Copyright (c) Microsoft Corporation; see LICENSE.
+#ifndef MESH_PROCESSING_LIBHH_NONLINEAROPTIMIZATION_H_
+#define MESH_PROCESSING_LIBHH_NONLINEAROPTIMIZATION_H_
+
+#include <functional>  // std::function
+
+#include "libHh/Array.h"
+#include "libHh/MathOp.h"  // my_mod()
+#include "libHh/Matrix.h"
+
+namespace hh {
+
+// Nonlinear optimization: find the n-dimensional vector x that minimizes a function f(x) : R^n -> R.
+// Given:
+//  - a container vector x,
+//  - a function eval that evaluates both f(x) and \grad f(x) == (df / dx_1, df / dx_2, ..., df / dx_n);
+//     its signature is: double eval(ArrayView<double> ret_grad), where the return value is f(x).
+// The member function solve() iteratively calls eval to minimize f, starting from some initial guess x_0
+//  provided in x, and places the obtained minimum in x.  It returns false if the solution fails to converge.
+// The optimization iterates until machine-precision convergence, or until a maximum number of evaluations
+//  provided using set_max_neval().
+// Eval = double (&)(ArrayView<double>)
+template <typename Eval> class NonlinearOptimization : noncopyable {
+ public:
+  explicit NonlinearOptimization(ArrayView<double> x, Eval eval = Eval()) : NonlinearOptimization(nullptr, x, eval) {
+    _debug = getenv_int("NLOPT_DEBUG");
+  }
+  void set_max_neval(int max_neval) { _max_neval = max_neval; }  // Default is -1, which signifies infinity.
+  // Also stop when the function value decreases by less than the fraction tol of its magnitude over the last window
+  //  iterations (successful line searches), i.e. when f_{k-window} - f_k < tol * |f_k|.  This criterion suits
+  //  functions whose minimum is far from zero, and it is disabled by the default tol == 0.
+  void set_min_relative_decrease(double tol, int window) {
+    assertx(tol >= 0. && window > 0);
+    _min_relative_decrease = tol;
+    _relative_decrease_window = window;
+  }
+  // Set a function called after each successful line search, when _x holds the new iterate; the most recent call
+  //  to eval was at that _x.  It is not called for the trial points rejected by the line search.
+  void set_iteration_callback(std::function<void()> callback) { _iteration_callback = std::move(callback); }
+  [[nodiscard]] bool solve() { return solve_i(); }  // Returns success.
+ private:
+  // ** Approach-independent:
+  ArrayView<double> _x;  // View of the user-supplied vector; stores the initial estimate and final solution.
+  const int _n;          // _x.num().
+  const Eval _eval;      // Callback function to evaluate both the value f and the gradient _grad at _x.
+  int _max_neval{-1};    // Here, -1 is infinity.
+  int _debug;            // 0 == no_output, 1 == show_final, 2 == show_each_iteration.
+  std::function<void()> _iteration_callback;
+  double _min_relative_decrease{0.};
+  int _relative_decrease_window{1};
+  void show_debug(const string& s, int iter, int neval, double f, double magg) {
+    showf("NonlinearOptimization %s iter=%-3d neval=%-3d f=%.12g mag(g)=%.12g\n", s.c_str(), iter, neval, f, magg);
+  }
+
+  // ** Approach-dependent:
+  // Simple version of Limited-memory Broyden-Fletcher-Goldfarb-Shanno algorithm.
+  // See: https://en.wikipedia.org/wiki/Limited-memory_BFGS
+  // Liu, D. C.; Nocedal, J. (1989). "On the limited memory method for large scale optimization".
+  //  Mathematical Programming B 45 (3): 503-528.  doi:10.1007/BF01589116.
+  // Nocedal (1980).  "Updating quasi-Newton matrices with limited storage".
+  //  Mathematics of Computation 35(151), 773-782.  doi:10.1090/S0025-5718-1980-0572855-7.
+  // Useful: https://web.archive.org/web/20231002054213/https://aria42.com/blog/2014/12/understanding-lbfgs
+  // (e.g. fortran implementation in https://users.iems.northwestern.edu/~nocedal/lbfgs.html
+  //   and threadsafe C version in https://github.com/chokkan/liblbfgs )
+  // (_m not constexpr because V() later accesses it as a const reference)
+  const int _m = 6;          // Number of stored prior gradients and differences; recommended range 3..7.
+  const double _eps = 1e-6;  // mag(_g) < _eps*max(1., mag(_x)); default 1e-5 in github.com/chokkan/liblbfgs.
+  Array<double> _g;          // The current gradient.
+  Array<double> _tmp;        // Temporary storage.
+  Array<double> _xinit;      // Value of _x at the start of the line search.
+  Array<double> _rho;        // Scalars \rho from [Nocedal 1980].
+  Array<double> _alphak;     // Used in the formula that computes H * g.
+  Matrix<double> _as;        // Last _m search step          (s_k = x_k - x_{k-1}).
+  Matrix<double> _ay;        // Last _m gradient differences (y_k = g_k - g_{k-1}).
+  NonlinearOptimization(void*, ArrayView<double> x, Eval eval)
+      : _x(std::move(x)),
+        _n(_x.num()),
+        _eval(eval),
+        _g(_n),
+        _tmp(_n),
+        _xinit(_n),
+        _rho(_m),
+        _alphak(_m),
+        _as(V(_m, _n)),
+        _ay(V(_m, _n)) {
+    assertx(_n > 0 && _m > 0);
+  }
+  // Backtracking line search to find approximate minimum of f=_eval() along direction p,
+  //  with initial step size alpha.  Updates number of evaluations neval.  Returns success.
+  [[nodiscard]] bool line_search(double& f, CArrayView<double> p, double& alpha, int& neval, int iter) {
+    // https://en.wikipedia.org/wiki/Backtracking_line_search
+    const double finit = f;  // The initial f.
+    _xinit.assign(_x);       // The initial _x.
+    const double c = .5;     // Factor for the Armijo-Goldstein condition.
+    const double tau = .5;   // Backtracking factor (used in a geometric sequence on alpha).
+    const double m = dot(_g, p);
+    assertx(m < 0.);  // Must be a descent direction.
+    for (;;) {
+      for_int(i, _n) _x[i] = _xinit[i] + alpha * p[i];
+      f = _eval(_g);  // Evaluate both the objective f and its gradient _g at _x.
+      neval++;
+      if (_debug >= 2) show_debug("", iter, neval, f, mag(_g));
+      if (finit - f >= -alpha * (c * m)) return true;  // The Armijo-Goldstein condition is satisfied.
+      alpha *= tau;
+      if (alpha < 1e-10) {
+        Warning("line_search fails to converge");
+        return false;
+      }
+    }
+  }
+  bool solve_i() {
+    int ic = 0;            // Index into the circular buffers _as, _ay.
+    int npairs = 0;        // Number of pairs (s_k, y_k) stored in the circular buffers, at most _m.
+    double f = _eval(_g);  // Evaluate both the objective f and its gradient _g at _x.
+    int neval = 1;         // Number of times that _eval is called.
+    if (mag(_g) / max(mag(_x), 1.) <= _eps) {  // Already converged, e.g. at a stationary point?
+      if (_debug >= 1) show_debug("converged", 0, neval, f, mag(_g));
+      return true;
+    }
+    for_int(i, _n) _as[ic, i] = -_g[i];  // The initial line search direction.
+    double alpha = 1. / mag(_g);         // The initial step size.
+    double gamma = alpha;                // Scale of the initial inverse Hessian; then set from the latest stored pair.
+    Array<double> fs{f};                 // The function value at the start and after each iteration.
+    for_int(iter, 1000) {
+      _tmp.assign(_g);  // Archive the current gradient.
+      if (!line_search(f, _as[ic], alpha, neval, iter)) {
+        if (_debug >= 1) show_debug("line_search_failed", iter, neval, f, mag(_g));
+        return false;
+      }
+      if (_iteration_callback) _iteration_callback();
+      if (_max_neval >= 0 && neval >= _max_neval) {  // Reached the maximum number of function evaluations?
+        if (_debug >= 1) show_debug("max_neval", iter, neval, f, mag(_g));
+        return true;
+      }
+      if (mag(_g) / max(mag(_x), 1.) <= _eps) {  // Numerically converged?
+        if (_debug >= 1) show_debug("converged", iter, neval, f, mag(_g));
+        return true;
+      }
+      fs.push(f);
+      if (_min_relative_decrease && fs.num() > _relative_decrease_window &&
+          fs[fs.num() - 1 - _relative_decrease_window] - f < _min_relative_decrease * abs(f)) {
+        if (_debug >= 1) show_debug("small_decrease", iter, neval, f, mag(_g));
+        return true;
+      }
+      _as[ic] *= alpha;                             // Record the search step.
+      for_int(i, _n) _ay[ic, i] = _g[i] - _tmp[i];  // Record the gradient difference.
+      const double ys = dot(_ay[ic], _as[ic]);
+      const double yy = dot(_ay[ic], _ay[ic]);
+      // The backtracking line search does not enforce the curvature condition (dot(y, s) > 0), so keep the new pair
+      // only if it satisfies it; otherwise the updated Hessian approximation would not be positive definite, and the
+      // new search direction need not be a descent direction.
+      if (ys > 1e-10 * std::sqrt(yy * mag2(_as[ic]))) {
+        _rho[ic] = 1. / ys;
+        gamma = ys / yy;
+        ic = my_mod(ic + 1, _m);  // Roll the circular buffers.
+        npairs = min(npairs + 1, _m);
+      } else if (_debug >= 2) {
+        showf("NonlinearOptimization iter=%-3d skips the update with dot(y, s)=%g\n", iter, ys);
+      }
+      // Compute -H*_g using [Nocedal 1980].
+      for_int(i, _n) _tmp[i] = -_g[i];
+      for_int(i, npairs) {
+        ic = my_mod(ic - 1, _m);
+        _alphak[ic] = _rho[ic] * dot(_as[ic], _tmp);
+        _tmp += -_alphak[ic] * _ay[ic];
+      }
+      _tmp *= gamma;
+      for_int(i, npairs) {
+        const double beta = _alphak[ic] - _rho[ic] * dot(_ay[ic], _tmp);
+        _tmp += beta * _as[ic];
+        ic = my_mod(ic + 1, _m);
+      }
+      _as[ic].assign(_tmp);  // The new search direction.
+      alpha = 1.;            // The new step size.
+    }
+    assertnever("NonlinearOptimization fails unexpectedly");
+  }
+};
+
+// Template deduction guide:
+template <typename Eval> NonlinearOptimization(ArrayView<double>, Eval) -> NonlinearOptimization<Eval>;
+
+}  // namespace hh
+
+#endif  // MESH_PROCESSING_LIBHH_NONLINEAROPTIMIZATION_H_

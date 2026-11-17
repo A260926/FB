@@ -1,0 +1,22 @@
+hlr.draw_point(Point(.1f, .5f, .5f)) = 1
+hlr.draw_point(Point(.6f, .45f, .5f)) = 0
+hlr.draw_point(Point(.9f, .1f, .1f)) = 1
+hlr.draw_point(Point(.20f, .25f, .3f)) = 1
+hlr.draw_point(Point(.35f, .25f, .3f)) = 0
+hlr.draw_point(Point(.45f, .25f, .3f)) = 0
+1
+Segment between:
+p1 = [0.1, 0.4, 0.4]
+p2 = [0.289474, 0.423684, 0.423684]
+2
+Segment between:
+p1 = [0.887671, 0.330137, 0.626027]
+p2 = [0.9, 0.25, 0.7]
+Segment between:
+p1 = [0.8, 0.9, 0.1]
+p2 = [0.864, 0.484, 0.484]
+num_tested=1996 num_visible=1586
+g_num_drawn > 50 = 1
+g_num_drawn = 0
+g_num_drawn=1 abs(g_drawn_length - dist(Point(.1f, .1f, .1f), Point(.1f, .9f, .9f))) < 1e-6=1
+g_num_drawn=1 round_fraction_digits(g_drawn_length, 1e4)=0.2

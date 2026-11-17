@@ -1,0 +1,31 @@
+#!/bin/bash
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+PATH=.:$PATH # allow running bash scripts in local directory
+
+set -v
+
+create_reconstruction_mannequin.sh
+create_reconstruction_animated.sh
+create_reconstruction_polygon.sh
+
+create_simplified_using_meshopt.sh
+
+create_progressive_mesh_gaudipark.sh
+create_progressive_mesh_cessna.sh
+create_progressive_mesh_57chevy.sh
+
+create_geomorphs.sh
+create_progressive_hulls_bunny.sh
+determine_approximation_error.sh
+
+create_selectively_refined_office.sh
+
+create_terrain_hierarchy.sh
+
+create_topologically_simplified.sh
+
+create_vertex_cached_bunny.sh
+
+create_spherical_param_bunny.sh
