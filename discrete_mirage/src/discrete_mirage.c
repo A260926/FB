@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "discrete_mirage.h"
 
@@ -246,6 +247,7 @@ typedef DMirGeometry Geometry;
 typedef DMirEffects Effects;
 typedef DMirAffineInfo AffineInfo;
 typedef DMirVoxelRef VoxelRef;
+typedef DMirMotionInput MotionInput;
 
 typedef DMirFramebuffer Framebuffer;
 typedef DMirBatcher Batcher;
@@ -298,6 +300,11 @@ typedef struct GridStackItem {
     AffineID affine_id;
     SInt is_behind;
     SInt is_cube;
+    // Root-local [0,1]^3 center and half-size of this node.
+    // Tracked through cage subdivision (which is trilinear in
+    // root-local coordinates) so motion samples stay exact.
+    Vector3F motion_center;
+    float motion_half;
 } GridStackItem;
 
 typedef struct OrthoStackItem {
@@ -312,6 +319,10 @@ typedef struct OrthoStackItem {
     uint32_t queue;
     SInt level;
     SInt is_cube;
+    // Root-local [0,1]^3 coordinates of this node's center and
+    // its half-size (used only for motion vector calculation).
+    Vector3F motion_center;
+    float motion_half;
 } OrthoStackItem;
 
 typedef struct Fragment {
@@ -319,7 +330,34 @@ typedef struct Fragment {
     int32_t y;
     Depth z;
     Address data_ref;
+    float motion_x;
+    float motion_y;
+    uint8_t motion_valid;
 } Fragment;
+
+// A copy of the projection parameters derived from a viewport and
+// a frustum. This mirrors what dmir_batcher_reset calculates, but
+// can also be used for the previous frame's parameters.
+typedef struct ProjectionParams {
+    float scale_xy;
+    float scale_c;
+    float scale_z;
+    float offset_x;
+    float offset_y;
+    float clamp_z;
+    float min_depth;
+    float max_depth;
+    Bool valid;
+} ProjectionParams;
+
+// Per-submission temporal information. Everything is copied from
+// the caller, so the caller is free to reuse its input buffers.
+typedef struct MotionSource {
+    float cage[CAGE_SIZE*3];
+    float previous_cage[CAGE_SIZE*3];
+    ProjectionParams current;
+    ProjectionParams previous;
+} MotionSource;
 
 typedef struct Subtree {
     AffineID affine_id;
@@ -330,6 +368,7 @@ typedef struct Subtree {
     Effects effects;
     Bounds bounds;
     Rect rect;
+    SInt motion_id;
     SInt next;
 } Subtree;
 
@@ -456,11 +495,14 @@ typedef struct BatcherInternal {
     Batcher api;
     AffineInfo* affine;
     Subtree* subtrees;
+    MotionSource* motions;
     GridStackItem* stack;
     SInt affine_size;
     SInt subtrees_size;
+    SInt motions_size;
     SInt affine_count;
     SInt subtrees_count;
+    SInt motions_count;
     SInt sorted_head;
     float scale_xy;
     float scale_c;
@@ -600,6 +642,108 @@ static inline void project(ProjectedVertex* vertex, BatcherInternal* batcher) {
     vertex->projection.y = batcher->offset_y + vertex->position.y * vertex->scale;
     // If not valid, assign NaN afterwards so that it's ignored in max scale calculations
     if (vertex->position.z <= batcher->clamp_z) vertex->scale = NAN;
+}
+
+// Copy the current batcher's projection parameters into an
+// independently usable struct.
+static void projection_params_from_reset(BatcherInternal* batcher, ProjectionParams* dst) {
+    dst->scale_xy = batcher->scale_xy;
+    dst->scale_c = batcher->scale_c;
+    dst->scale_z = batcher->scale_z;
+    dst->offset_x = batcher->offset_x;
+    dst->offset_y = batcher->offset_y;
+    dst->clamp_z = batcher->clamp_z;
+    dst->min_depth = batcher->api.frustum.min_depth;
+    dst->max_depth = batcher->api.frustum.max_depth;
+    dst->valid = (batcher->api.viewport.max_x >= batcher->api.viewport.min_x) &
+        (batcher->api.viewport.max_y >= batcher->api.viewport.min_y);
+}
+
+// Derive projection parameters from a viewport and a frustum.
+// This intentionally mirrors dmir_batcher_reset's calculations.
+static void projection_params_calculate(Rect viewport, Frustum frustum, ProjectionParams* dst) {
+    dst->min_depth = frustum.min_depth;
+    dst->max_depth = frustum.max_depth;
+    dst->valid = (viewport.max_x >= viewport.min_x) & (viewport.max_y >= viewport.min_y);
+
+    if (!dst->valid) {
+        dst->scale_xy = 0;
+        dst->scale_c = 1;
+        dst->scale_z = 0;
+        dst->offset_x = 0;
+        dst->offset_y = 1;
+        dst->clamp_z = 0;
+        return;
+    }
+
+    float viewport_size_x = viewport.max_x - viewport.min_x + 1;
+    float viewport_size_y = viewport.max_y - viewport.min_y + 1;
+    float half_x = viewport_size_x * 0.5f;
+    float half_y = viewport_size_y * 0.5f;
+
+    dst->scale_xy = ((half_x > half_y) ? half_x : half_y) / frustum.focal_extent;
+    dst->scale_c = 1 - frustum.perspective;
+    dst->scale_z = frustum.perspective / frustum.focal_depth;
+
+    dst->offset_x = viewport.min_x + half_x + frustum.offset_x;
+    dst->offset_y = viewport.min_y + half_y + frustum.offset_y;
+
+    float eye_z = -dst->scale_c / dst->scale_z;
+    dst->clamp_z = eye_z + MAX(-eye_z, 1) * 1e-8f;
+}
+
+// Trilinearly interpolate a cage at root-local [0,1]^3 coordinates.
+// "cage" is the same layout as the dmir_batcher_add cage argument:
+// 8 corners ordered by (x, y, z) bits.
+static inline void cage_interpolate(const float* cage, float tx, float ty, float tz, Vector3F* dst) {
+    dst->x = 0;
+    dst->y = 0;
+    dst->z = 0;
+    for (SInt corner = 0; corner < 8; corner++) {
+        float wx = (corner & 0b001) ? tx : (1.0f - tx);
+        float wy = (corner & 0b010) ? ty : (1.0f - ty);
+        float wz = (corner & 0b100) ? tz : (1.0f - tz);
+        float weight = wx * wy * wz;
+        dst->x += cage[3*corner+0] * weight;
+        dst->y += cage[3*corner+1] * weight;
+        dst->z += cage[3*corner+2] * weight;
+    }
+}
+
+// Project a view-space point the same way the renderer does for the
+// current frame (i.e. with z clamped at the eye plane).
+static inline Bool project_point_clamped(ProjectionParams* params, Vector3F* position, Vector2F* dst) {
+    if (!params->valid) return FALSE;
+
+    float clamped_z = MAX(position->z, params->clamp_z);
+    float denominator = params->scale_c + params->scale_z * clamped_z;
+    if (!isfinite(denominator)) return FALSE;
+    if (fabsf(denominator) <= 1e-20f) return FALSE;
+    float scale = params->scale_xy / denominator;
+    if (!isfinite(scale)) return FALSE;
+
+    dst->x = params->offset_x + position->x * scale;
+    dst->y = params->offset_y + position->y * scale;
+    return isfinite(dst->x) & isfinite(dst->y);
+}
+
+// Project a view-space point with arbitrary parameters, requiring the
+// point to lie within the valid view-depth range. Returns FALSE if the
+// point is outside that range (or otherwise cannot be projected).
+static inline Bool project_point_in_range(ProjectionParams* params, Vector3F* position, Vector2F* dst) {
+    if (!params->valid) return FALSE;
+    if (position->z < params->min_depth) return FALSE;
+    if (position->z > params->max_depth) return FALSE;
+
+    float denominator = params->scale_c + params->scale_z * position->z;
+    if (!isfinite(denominator)) return FALSE;
+    if (fabsf(denominator) <= 1e-20f) return FALSE;
+    float scale = params->scale_xy / denominator;
+    if (!isfinite(scale)) return FALSE;
+
+    dst->x = params->offset_x + position->x * scale;
+    dst->y = params->offset_y + position->y * scale;
+    return isfinite(dst->x) & isfinite(dst->y);
 }
 
 #define GRID_CENTER(grid, component) (grid[GRID3(1,1,1)].component)
@@ -865,18 +1009,30 @@ void calculate_screen_bounds(ProjectedVertex* grid, Bounds* bounds, float* max_s
 )
 
 static inline void write_pixel(FramebufferInternal* framebuffer, SInt i,
-    AffineID affine_id, Address data_ref)
+    AffineID affine_id, Address data_ref, float motion_x, float motion_y, uint8_t motion_valid)
 {
     STAT_INCREMENT(framebuffer, DMIR_FRAGMENTS_WRITTEN);
     framebuffer->api.voxel[i].affine_id = affine_id;
     framebuffer->api.voxel[i].voxel_id = data_ref;
+    if (framebuffer->api.motion) {
+        framebuffer->api.motion[2*i] = motion_valid ? motion_x : 0.0f;
+        framebuffer->api.motion[2*i+1] = motion_valid ? motion_y : 0.0f;
+    }
+    if (framebuffer->api.motion_valid) {
+        framebuffer->api.motion_valid[i] = motion_valid;
+    }
 }
 
-static inline void add_fragment(Fragment** fragments, SInt x, SInt y, Depth depth, Address data_ref) {
+static inline void add_fragment(Fragment** fragments, SInt x, SInt y, Depth depth, Address data_ref,
+    float motion_x, float motion_y, uint8_t motion_valid)
+{
     fragments[0]->x = x;
     fragments[0]->y = y;
     fragments[0]->z = depth;
     fragments[0]->data_ref = data_ref;
+    fragments[0]->motion_x = motion_x;
+    fragments[0]->motion_y = motion_y;
+    fragments[0]->motion_valid = motion_valid;
     fragments[0]++;
 }
 
@@ -899,24 +1055,24 @@ static inline void add_fragment(Fragment** fragments, SInt x, SInt y, Depth dept
 
 #ifdef DMIR_USE_SPLAT_DEFERRED
 #if STENCIL_BITS > 0
-#define SPLAT(framebuffer, fragments, x, y, depth, affine_id, data_ref, stop) {\
+#define SPLAT(framebuffer, fragments, x, y, depth, affine_id, data_ref, mx, my, mvalid, stop) {\
     STAT_INCREMENT(framebuffer, DMIR_FRAGMENTS_ADDED);\
-    add_fragment(&(fragments), x, y, depth, data_ref);\
+    add_fragment(&(fragments), x, y, depth, data_ref, mx, my, mvalid);\
 }
 #else
-#define SPLAT(framebuffer, fragments, x, y, depth, affine_id, data_ref, stop) {\
+#define SPLAT(framebuffer, fragments, x, y, depth, affine_id, data_ref, mx, my, mvalid, stop) {\
     STAT_INCREMENT(framebuffer, DMIR_FRAGMENTS_ADDED);\
     CHECK_AND_WRITE_DEPTH(framebuffer, x, y, depth, stop);\
-    add_fragment(&(fragments), x, y, depth, data_ref);\
+    add_fragment(&(fragments), x, y, depth, data_ref, mx, my, mvalid);\
 }
 #endif
 #else
-#define SPLAT(framebuffer, fragments, x, y, depth, affine_id, data_ref, stop) {\
+#define SPLAT(framebuffer, fragments, x, y, depth, affine_id, data_ref, mx, my, mvalid, stop) {\
     STAT_INCREMENT(framebuffer, DMIR_FRAGMENTS_ADDED);\
     CHECK_AND_WRITE_DEPTH(framebuffer, x, y, depth, stop);\
     {\
         SInt i = PIXEL_INDEX(framebuffer, x, y);\
-        write_pixel(framebuffer, i, affine_id, data_ref);\
+        write_pixel(framebuffer, i, affine_id, data_ref, mx, my, mvalid);\
     }\
 }
 #endif
@@ -1211,6 +1367,7 @@ typedef struct LocalVariables {
     FramebufferInternal* framebuffer;
     Fragment* fragments;
     Geometry* geometry;
+    MotionSource* motion_source;
     Queue* queues_forward;
     MapInfo map;
     Stencil* local_stencil;
@@ -1234,6 +1391,10 @@ typedef struct LocalVariables {
     int32_t octant;
     uint32_t map_traversals_exist;
     Traversal map_traversals[9];
+    // Root-local [0,1]^3 center and half-size of the node currently
+    // being processed. Used only to derive motion vector samples.
+    Vector3F motion_center;
+    float motion_half;
 } LocalVariables;
 
 typedef struct CircleParams {
@@ -1245,6 +1406,65 @@ typedef struct CircleParams {
     Coord step_add_2;
     Coord distance_2_y;
 } CircleParams;
+
+// Calculate the screen-space motion (previous position minus current
+// position, in pixels) for a sample located at root-local [0,1]^3
+// coordinates. Both cages are trilinearly interpolated at the same
+// local coordinates and projected with their own parameters.
+// When no valid previous projection exists, the vector is zeroed and
+// marked invalid.
+static inline void motion_from_local(LocalVariables* v, const Vector3F* local,
+    float* out_x, float* out_y, uint8_t* out_valid)
+{
+    *out_x = 0.0f;
+    *out_y = 0.0f;
+    *out_valid = 0;
+
+    // This extension only covers rectangle splats; other shapes keep
+    // their original behaviour (and produce no valid motion).
+    if (v->shape != DMIR_SHAPE_RECT) return;
+
+    MotionSource* source = v->motion_source;
+    if (!source) return;
+    if (!source->previous.valid) return;
+
+    Vector3F current_position, previous_position;
+    cage_interpolate(source->cage, local->x, local->y, local->z, &current_position);
+    cage_interpolate(source->previous_cage, local->x, local->y, local->z, &previous_position);
+
+    Vector2F current_projection, previous_projection;
+    if (!project_point_clamped(&source->current, &current_position, &current_projection)) return;
+    if (!project_point_in_range(&source->previous, &previous_position, &previous_projection)) return;
+
+    *out_x = previous_projection.x - current_projection.x;
+    *out_y = previous_projection.y - current_projection.y;
+    *out_valid = (isfinite(*out_x) & isfinite(*out_y)) ? 1 : 0;
+}
+
+// Compute the root-local [0,1]^3 center and half-size of an octree
+// node given by its NodeBox.
+static inline void motion_from_node_box(const NodeBox* node_box, Vector3F* center, float* half) {
+    float scale = ldexpf(1.0f, -(int)node_box->level);
+    center->x = (node_box->x + 0.5f) * scale;
+    center->y = (node_box->y + 0.5f) * scale;
+    center->z = (node_box->z + 0.5f) * scale;
+    *half = 0.5f * scale;
+}
+
+// Offset a root-local center by half of the given half-size along
+// the signed axes selected by an octant index.
+static inline void motion_child(const Vector3F* center, float half, SInt octant, Vector3F* dst) {
+    float offset = half * 0.5f;
+    dst->x = center->x + ((octant & 0b001) ? offset : -offset);
+    dst->y = center->y + ((octant & 0b010) ? offset : -offset);
+    dst->z = center->z + ((octant & 0b100) ? offset : -offset);
+}
+
+static inline void motion_from_center(LocalVariables* v, const Vector3F* center,
+    float* out_x, float* out_y, uint8_t* out_valid)
+{
+    motion_from_local(v, center, out_x, out_y, out_valid);
+}
 
 static inline void calc_circle_params(CircleParams* c,
     Vector3S* position, Vector3S* extent, SInt min_x, SInt min_y)
@@ -1286,41 +1506,49 @@ static inline void calc_circle_params(CircleParams* c,
 static void draw_circle(LocalVariables* v, OrthoStackItem* stack) {
     CircleParams c;
     calc_circle_params(&c, &v->position, &stack->extent, v->rect.min_x, v->rect.min_y);
-    
+
+    float motion_x, motion_y;
+    uint8_t motion_valid;
+    motion_from_center(v, &v->motion_center, &motion_x, &motion_y, &motion_valid);
+
     for (SInt y = v->rect.min_y; y <= v->rect.max_y; y++) {
         Coord distance_2 = c.distance_2_y, row_dx = c.start_dx;
-        
+
         for (SInt x = v->rect.min_x; x <= v->rect.max_x; x++) {
             SInt is_inside = (distance_2 <= c.radius2);
             distance_2 += row_dx + c.step_add_2;
             row_dx += c.step_add;
-            
+
             if (!is_inside) continue;
-            
+
             if (v->local_stencil) {
                 Stencil stencil_mask = ((Stencil)1) << x;
                 if (!(v->local_stencil[y] & stencil_mask)) continue;
                 v->local_stencil[y] &= ~stencil_mask;
             }
-            
+
             SInt abs_x = x + v->offset_x;
             SInt abs_y = y + v->offset_y;
             CHECK_AND_WRITE_STENCIL(v->framebuffer, abs_x, abs_y, continue);
             SPLAT(v->framebuffer, v->fragments, abs_x, abs_y, v->position.z,
-                v->affine_id, v->data_ref, continue);
+                v->affine_id, v->data_ref, motion_x, motion_y, motion_valid, continue);
         }
-        
+
         c.distance_2_y += c.start_dy + c.step_add_2;
         c.start_dy += c.step_add;
     }
 }
 
 static inline void draw_splat(LocalVariables* v, OrthoStackItem* stack) {
+    float motion_x, motion_y;
+    uint8_t motion_valid;
+    motion_from_center(v, &v->motion_center, &motion_x, &motion_y, &motion_valid);
+
     if (v->size_max == 0) {
         STAT_INCREMENT(v->framebuffer, DMIR_SPLATS_1PX);
     } else {
         STAT_INCREMENT(v->framebuffer, DMIR_SPLATS_LEAF);
-        
+
         if (v->shape == DMIR_SHAPE_CIRCLE) {
             RECT_CLIP(v->rect, v->clip_rect);
             draw_circle(v, stack);
@@ -1333,19 +1561,19 @@ static inline void draw_splat(LocalVariables* v, OrthoStackItem* stack) {
             }
         }
     }
-    
+
     RECT_CLIP(v->rect, v->clip_rect);
-    
+
     for (SInt y = v->rect.min_y; y <= v->rect.max_y; y++) {
         for (SInt x = v->rect.min_x; x <= v->rect.max_x; x++) {
             SInt abs_x = x + v->offset_x;
             SInt abs_y = y + v->offset_y;
             CHECK_AND_WRITE_STENCIL(v->framebuffer, abs_x, abs_y, continue);
             SPLAT(v->framebuffer, v->fragments, abs_x, abs_y, v->position.z,
-                v->affine_id, v->data_ref, continue);
+                v->affine_id, v->data_ref, motion_x, motion_y, motion_valid, continue);
         }
     }
-    
+
     if (v->local_stencil) {
         for (; v->rect.min_y <= v->rect.max_y; v->rect.min_y++) {
             v->local_stencil[v->rect.min_y] &= ~v->row_mask;
@@ -1386,7 +1614,7 @@ static void draw_map8(LocalVariables* v, OrthoStackItem* stack) {
             
             uint32_t octant = v->queues_forward[mask_xy].octants & 7;
             Depth z = v->position.z + stack->deltas[octant].z;
-            
+
             if (!v->is_cube) {
                 if (!v->map_traversals_exist) {
                     if (!v->geometry->traverse_next(
@@ -1396,9 +1624,19 @@ static void draw_map8(LocalVariables* v, OrthoStackItem* stack) {
                 }
                 v->data_ref = v->map_traversals[8].data[octant];
             }
-            
+
+            // The voxel reference comes from the map-selected child
+            // octant, so the motion sample must be that child's center.
+            Vector3F motion_center = v->motion_center;
+            float motion_x = 0.0f, motion_y = 0.0f;
+            uint8_t motion_valid = 0;
+            if (!v->is_cube) {
+                motion_child(&v->motion_center, v->motion_half, octant, &motion_center);
+            }
+            motion_from_center(v, &motion_center, &motion_x, &motion_y, &motion_valid);
+
             SPLAT(v->framebuffer, v->fragments, abs_x, abs_y, z,
-                v->affine_id, v->data_ref, continue);
+                v->affine_id, v->data_ref, motion_x, motion_y, motion_valid, continue);
         }
     }
 }
@@ -1464,10 +1702,17 @@ static void draw_map64(LocalVariables* v, OrthoStackItem* stack) {
             SInt octant64 = (v->map.full_queue >> (queue_item << 2)) & 7;
             
             Depth z = v->position.z + stack->deltas[octant64].z;
-            
+
+            // Determine which node actually supplied the voxel reference
+            // (the child octant, or one of its children if suboctant maps
+            // are in use), so motion is sampled at that node's center.
+            Vector3F motion_center = v->motion_center;
+            SInt motion_octant = octant64;
+            SInt motion_suboctant = -1;
+
             if (!v->is_cube) {
                 v->data_ref = v->map_traversals[8].data[octant64];
-                
+
                 if (use_suboctants) {
                     uint8_t sub_mask_full = v->map_traversals[8].mask[octant64];
                     if (sub_mask_full != 0) {
@@ -1481,12 +1726,23 @@ static void draw_map64(LocalVariables* v, OrthoStackItem* stack) {
                         uint32_t octant = v->queues_forward[sub_mask].octants & 7;
                         z += DEPTH_HALVE(stack->deltas[octant].z);
                         v->data_ref = v->map_traversals[octant64].data[octant];
+                        motion_suboctant = octant;
                     }
                 }
             }
-            
+
+            float motion_x = 0.0f, motion_y = 0.0f;
+            uint8_t motion_valid = 0;
+            if (!v->is_cube) {
+                motion_child(&v->motion_center, v->motion_half, motion_octant, &motion_center);
+                if (motion_suboctant >= 0) {
+                    motion_child(&motion_center, v->motion_half * 0.5f, motion_suboctant, &motion_center);
+                }
+            }
+            motion_from_center(v, &motion_center, &motion_x, &motion_y, &motion_valid);
+
             SPLAT(v->framebuffer, v->fragments, abs_x, abs_y, z,
-                v->affine_id, v->data_ref, continue);
+                v->affine_id, v->data_ref, motion_x, motion_y, motion_valid, continue);
         }
     }
 }
@@ -1608,7 +1864,9 @@ static void initialize_ortho_local(LocalVariables* v, OrthoStackItem* stack) {
 }
 #endif
 
-Bool initialize_ortho(LocalVariables* v, OrthoStackItem* stack, ProjectedVertex* grid, Effects* effects) {
+Bool initialize_ortho(LocalVariables* v, OrthoStackItem* stack, ProjectedVertex* grid, Effects* effects,
+    const Vector3F* motion_center, float motion_half)
+{
     Vector3S matrix[4];
     SInt octant_order, starting_octant;
     SInt max_level = calculate_ortho_matrix(v->batcher, grid, matrix, &octant_order, &starting_octant);
@@ -1654,10 +1912,16 @@ Bool initialize_ortho(LocalVariables* v, OrthoStackItem* stack, ProjectedVertex*
     }
     
     v->position = (Vector3S){.x = matrix[3].x, .y = matrix[3].y, .z = matrix[3].z};
-    
+
     stack->rect = v->renderer->api.rect;
-    
+
     stack->is_cube = v->is_cube;
+
+    // The ortho traversal selects child nodes by octant index only, so
+    // the root-local position of each node is derivable from its octant
+    // path. Propagate the subtree's local center/half-size into level 0.
+    stack->motion_center = *motion_center;
+    stack->motion_half = motion_half;
     
     if (v->geometry->evaluate != NULL) {
         stack->traversal.mask[0] = 255;
@@ -1722,7 +1986,9 @@ Framebuffer* dmir_framebuffer_make(uint32_t size_x, uint32_t size_y) {
     if (framebuffer) {
         framebuffer->api.depth = NULL;
         framebuffer->api.voxel = NULL;
-        
+        framebuffer->api.motion = NULL;
+        framebuffer->api.motion_valid = NULL;
+
         framebuffer->stencil_tiles = NULL;
         framebuffer->stencil_x_base = NULL;
         framebuffer->stencil_y_base = NULL;
@@ -1738,6 +2004,8 @@ Framebuffer* dmir_framebuffer_make(uint32_t size_x, uint32_t size_y) {
 void framebuffer_free_channels(FramebufferInternal* framebuffer) {
     if (framebuffer->api.depth) free(framebuffer->api.depth);
     if (framebuffer->api.voxel) free(framebuffer->api.voxel);
+    if (framebuffer->api.motion) free(framebuffer->api.motion);
+    if (framebuffer->api.motion_valid) free(framebuffer->api.motion_valid);
     if (framebuffer->stencil_tiles) free(framebuffer->stencil_tiles);
     if (framebuffer->stencil_x_base) free(framebuffer->stencil_x_base);
     if (framebuffer->stencil_y_base) free(framebuffer->stencil_y_base);
@@ -1779,6 +2047,8 @@ void dmir_framebuffer_resize(Framebuffer* framebuffer_ptr, uint32_t size_x, uint
     buffer_size = MAX(buffer_size, 1); // safeguard if width or height is 0
     framebuffer->api.depth = malloc(buffer_size * sizeof(Depth));
     framebuffer->api.voxel = malloc(buffer_size * sizeof(VoxelRef));
+    framebuffer->api.motion = malloc(buffer_size * 2 * sizeof(float));
+    framebuffer->api.motion_valid = malloc(buffer_size * sizeof(uint8_t));
     
     #if STENCIL_BITS > 0
     framebuffer->api.stencil_size_x = STENCIL_SIZE_X;
@@ -1818,9 +2088,14 @@ void dmir_framebuffer_clear(Framebuffer* framebuffer_ptr) {
     for (SInt y = 0; y < framebuffer->api.size_y; y++) {
         Depth* depth_row = framebuffer->api.depth + PIXEL_INDEX(framebuffer, 0, y);
         VoxelRef* voxel_row = framebuffer->api.voxel + PIXEL_INDEX(framebuffer, 0, y);
+        float* motion_row = framebuffer->api.motion + PIXEL_INDEX(framebuffer, 0, y) * 2;
+        uint8_t* valid_row = framebuffer->api.motion_valid + PIXEL_INDEX(framebuffer, 0, y);
         for (SInt x = 0; x < framebuffer->api.size_x; x++) {
             depth_row[x] = DMIR_MAX_DEPTH;
             voxel_row[x] = voxel;
+            motion_row[2*x] = 0.0f;
+            motion_row[2*x+1] = 0.0f;
+            valid_row[x] = 0;
         }
     }
     
@@ -1856,7 +2131,10 @@ Batcher* dmir_batcher_make() {
         
         batcher->subtrees_size = 2048;
         batcher->subtrees = malloc(batcher->subtrees_size * sizeof(Subtree));
-        
+
+        batcher->motions_size = 256;
+        batcher->motions = malloc(batcher->motions_size * sizeof(MotionSource));
+
         batcher->stack = malloc(MAX_STACK_DEPTH * sizeof(GridStackItem));
         
         batcher->api.split_factor = INFINITY;
@@ -1875,7 +2153,9 @@ void dmir_batcher_free(Batcher* batcher_ptr) {
     if (batcher->affine) free(batcher->affine);
     
     if (batcher->subtrees) free(batcher->subtrees);
-    
+
+    if (batcher->motions) free(batcher->motions);
+
     if (batcher->stack) free(batcher->stack);
     
     free(batcher);
@@ -1886,6 +2166,7 @@ void dmir_batcher_reset(Batcher* batcher_ptr, Rect viewport, Frustum frustum) {
     
     batcher->affine_count = 0;
     batcher->subtrees_count = 0;
+    batcher->motions_count = 0;
     batcher->sorted_head = -1;
     
     batcher->api.viewport = viewport;
@@ -1971,22 +2252,51 @@ Subtree* batcher_add_subtree(BatcherInternal* batcher) {
         batcher->subtrees_size *= 2;
         batcher->subtrees = realloc(batcher->subtrees, batcher->subtrees_size * sizeof(Subtree));
     }
-    
+
     Subtree* subtree = batcher->subtrees + batcher->subtrees_count;
     subtree->next = -1;
+    subtree->motion_id = -1;
     batcher->subtrees_count++;
     return subtree;
 }
 
-void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
-    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects)
+// Copies the caller's motion input into the batcher. Returns the index
+// of the new motion source, or -1 if there's no motion input. Copying
+// makes the batcher independent of the caller's buffers.
+SInt batcher_add_motion_source(BatcherInternal* batcher, const MotionInput* motion) {
+    if (!motion) return -1;
+
+    if (batcher->motions_count == batcher->motions_size) {
+        batcher->motions_size *= 2;
+        batcher->motions = realloc(batcher->motions, batcher->motions_size * sizeof(MotionSource));
+    }
+
+    MotionSource* source = batcher->motions + batcher->motions_count;
+    memcpy(source->previous_cage, motion->previous_cage, sizeof(source->previous_cage));
+    projection_params_calculate(motion->previous_viewport, motion->previous_frustum, &source->previous);
+
+    return batcher->motions_count++;
+}
+
+void batcher_add_impl(BatcherInternal* batcher, FramebufferInternal* framebuffer,
+    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects,
+    const MotionInput* motion)
 {
-    BatcherInternal* batcher = (BatcherInternal*)batcher_ptr;
-    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
-    
     GridStackItem* stack_start = batcher->stack;
     GridStackItem* stack = stack_start;
-    
+
+    // Snapshot the current cage and projection before any other state
+    // may change, then attach matching previous-frame data (if any).
+    SInt motion_id = -1;
+    if (motion) {
+        motion_id = batcher_add_motion_source(batcher, motion);
+        if (motion_id >= 0) {
+            MotionSource* source = batcher->motions + motion_id;
+            memcpy(source->cage, cage_ptr, sizeof(source->cage));
+            projection_params_from_reset(batcher, &source->current);
+        }
+    }
+
     initialize_grid(stack->grid, (Vector3F*)cage_ptr, batcher);
     
     float max_scale;
@@ -2150,6 +2460,7 @@ void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
                 subtree->effects = effects;
                 subtree->effects.max_level -= stack->level;
                 subtree->effects.dilation_rel *= (1 << stack->level);
+                subtree->motion_id = motion_id;
                 
                 RECT_EXPAND(batcher->api.rect, rect);
                 continue;
@@ -2188,6 +2499,21 @@ void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
         Queue* queues_forward = lookups.sparse + (((octant_order << 3) | (starting_octant)) << 8);
         stack->queue = queues_forward[mask].octants;
     } while (stack > stack_start);
+}
+
+void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
+    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects)
+{
+    batcher_add_impl((BatcherInternal*)batcher_ptr, (FramebufferInternal*)framebuffer_ptr,
+        group, cage_ptr, geometry, root, effects, NULL);
+}
+
+void dmir_batcher_add_motion(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
+    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects,
+    const MotionInput* motion)
+{
+    batcher_add_impl((BatcherInternal*)batcher_ptr, (FramebufferInternal*)framebuffer_ptr,
+        group, cage_ptr, geometry, root, effects, motion);
 }
 
 void dmir_batcher_sort(Batcher* batcher_ptr) {
@@ -2312,6 +2638,10 @@ static inline void tile_depth_update(FramebufferInternal* framebuffer,
     
     SInt min_x = tx, max_x = tx + STENCIL_SIZE_X - 1;
     SInt min_y = ty, max_y = ty + STENCIL_SIZE_Y - 1;
+    // A stencil tile can extend past the framebuffer's edges; clamp to
+    // the actual buffer to avoid reading out of bounds.
+    MIN_UPDATE(max_x, (SInt)framebuffer->api.size_x - 1);
+    MIN_UPDATE(max_y, (SInt)framebuffer->api.size_y - 1);
     for (SInt y = min_y; y <= max_y; y++) {
         SInt i = PIXEL_INDEX(framebuffer, min_x, y);
         for (SInt x = min_x; x <= max_x; x++, i++) {
@@ -2376,7 +2706,8 @@ void write_fragments(RendererInternal* renderer, FramebufferInternal* framebuffe
         
         {
             SInt i = PIXEL_INDEX(framebuffer, fragment->x, fragment->y);
-            write_pixel(framebuffer, i, affine_id, fragment->data_ref);
+            write_pixel(framebuffer, i, affine_id, fragment->data_ref,
+                fragment->motion_x, fragment->motion_y, fragment->motion_valid);
         }
     }
     
@@ -2425,39 +2756,48 @@ void clear_self_stencil(FramebufferInternal* framebuffer, Rect* rect) {
 void render_cage(LocalVariables* v, Subtree* subtree) {
     v->affine_id = subtree->affine_id;
     v->geometry = v->batcher->affine[v->affine_id].geometry;
-    
+    v->motion_source = (subtree->motion_id >= 0)
+        ? (v->batcher->motions + subtree->motion_id) : NULL;
+
     Effects effects = subtree->effects;
     v->shape = effects.shape;
-    
+
     GridStackItem* stack_start = v->renderer->stack;
     GridStackItem* stack = stack_start;
-    
+
     grid_from_cage(stack->grid, subtree->cage);
-    
+
     float max_scale = 0;
     Bounds bounds = subtree->bounds;
-    
+
     Rect viewport = v->batcher->api.viewport;
     Bounds frustum_bounds = v->batcher->frustum_bounds;
-    
+
     RECT_CLIP(viewport, v->renderer->api.rect);
     frustum_bounds.min_x = viewport.min_x;
     frustum_bounds.max_x = viewport.max_x + 1;
     frustum_bounds.min_y = viewport.min_y;
     frustum_bounds.max_y = viewport.max_y + 1;
-    
+
     SInt viewport_size_x = viewport.max_x - viewport.min_x + 1;
     SInt viewport_size_y = viewport.max_y - viewport.min_y + 1;
     SInt max_splat_size = MAX(viewport_size_x, viewport_size_y) / 2;
     float max_splat_distortion = max_splat_size * 0.25f;
-    
+
     stack->level = 0;
     stack->rect = viewport;
     stack->is_behind = (bounds.min_z <= v->batcher->eye_z);
     stack->is_cube = FALSE;
-    
+
     v->node_ref = subtree->node_ref;
     v->data_ref = subtree->data_ref;
+
+    // The subtree's cage covers this node's box. Track its root-local
+    // center and half-size so every descendant's motion sample can be
+    // expressed in the submitted root's [0,1]^3 coordinates.
+    motion_from_node_box(&subtree->node_box, &v->motion_center, &v->motion_half);
+    stack->motion_center = v->motion_center;
+    stack->motion_half = v->motion_half;
     
     if (v->geometry->evaluate != NULL) {
         stack->traversal.mask[0] = 255;
@@ -2496,6 +2836,8 @@ void render_cage(LocalVariables* v, Subtree* subtree) {
         node_box_child(&stack->node_box, v->octant, &v->node_box);
         initialize_subgrid(stack->grid, (stack-1)->grid, v->octant);
         calculate_screen_bounds(stack->grid, &bounds, &max_scale);
+        motion_child(&stack->motion_center, stack->motion_half, v->octant, &v->motion_center);
+        v->motion_half = stack->motion_half * 0.5f;
         
         skip_initialization:;
         
@@ -2604,7 +2946,8 @@ void render_cage(LocalVariables* v, Subtree* subtree) {
             v->data_ref = stack->traversal.data[v->octant];
             
             OrthoStackItem* ortho_stack = (OrthoStackItem*)(stack+1);
-            if (initialize_ortho(v, ortho_stack, stack->grid, &sub_effects)) {
+            if (initialize_ortho(v, ortho_stack, stack->grid, &sub_effects,
+                &v->motion_center, v->motion_half)) {
                 if (v->geometry->evaluate != NULL) {
                     render_ortho_eval(v, ortho_stack, local_stencil, FALSE, FALSE);
                 } else {
@@ -2631,6 +2974,8 @@ void render_cage(LocalVariables* v, Subtree* subtree) {
         stack->node_box = v->node_box;
         stack->is_behind = intersects_eye_plane;
         stack->is_cube = v->is_cube;
+        stack->motion_center = v->motion_center;
+        stack->motion_half = v->motion_half;
         
         if (v->is_cube | (v->geometry->evaluate != NULL)) {
             v->data_ref = (stack-1)->traversal.data[v->octant];

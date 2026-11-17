@@ -8,6 +8,7 @@
 * [Version "proto-1.1.2"](#version-proto-112)
 * [Version "1.2.0"](#version-120)
 * [Version "2.0.0"](#version-200)
+* [Temporal motion vectors](#temporal-motion-vectors)
 
 ## Version "proto-1.0.0"
 
@@ -142,3 +143,32 @@ In the demo, the following examples are implemented:
 * SSVDAGs (symmetry-aware sparse voxel directed acyclic graphs)
 
 Though please note that these examples are simply for demonstration purposes and do not actually correspond to any established file formats. Still, now that the algorithm is generalized, supporting additional variants (such as streaming/out-of-core octrees and compressed voxel data) should be at least feasible :-)
+
+## Temporal motion vectors
+
+To support temporal reprojection, `dmir_batcher_add_motion` can be used
+instead of `dmir_batcher_add`. It takes the same arguments plus a
+`DMirMotionInput` describing where the same instance was in the previous
+frame: the previous view-space cage, viewport and frustum. The batcher
+copies the input, so the caller's buffers can be reused right away.
+
+For every pixel, the motion vector is sampled at the center of the
+*spatial* node that supplied the voxel reference. The node's center is
+expressed in the submitted root's `[0,1]^3` coordinates, trilinearly
+interpolated into both the current and previous cages, and projected with
+the corresponding parameters. Because the sampling uses spatial node
+positions (not `data_ref`), spatially distinct nodes that share a data
+reference still get distinct motion vectors. The motion is sampled along
+the exact path that produced the voxel: cage subdivision (including
+non-affine deformation), the orthographic traversal, and the 2x2 / 3x3 /
+4x4 map paths all carry the selected node's local center.
+
+If the previously projected point falls outside the previous
+`[min_depth, max_depth]` range, the pixel's motion is marked invalid and
+zeroed. Previous-frame occlusion is not considered. Motion is written
+together with depth and voxel data by the same winning fragment (including
+in the deferred-write path), and a plain submission overwriting a
+motion-enabled pixel clears the stale motion. `dmir_framebuffer_clear`,
+`dmir_framebuffer_resize` and `dmir_batcher_reset` all reset the motion
+channels. The extension covers `DMIR_SHAPE_RECT` splats; other shapes keep
+their original behavior and produce no valid motion.

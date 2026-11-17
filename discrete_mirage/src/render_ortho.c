@@ -15,9 +15,11 @@ static void RENDER_ORTHO(MODE)(LocalVariables* v, OrthoStackItem* stack,
         stack_start--;
     } else {
         v->octant = 0;
+        v->motion_center = stack->motion_center;
+        v->motion_half = stack->motion_half;
         goto skip_initialization;
     }
-    
+
     do {
         if (stack->queue == 0) {
             stack--;
@@ -28,6 +30,8 @@ static void RENDER_ORTHO(MODE)(LocalVariables* v, OrthoStackItem* stack,
         v->position.x = stack->center.x + stack->deltas[v->octant].x;
         v->position.y = stack->center.y + stack->deltas[v->octant].y;
         v->position.z = stack->center.z + stack->deltas[v->octant].z;
+        motion_child(&stack->motion_center, stack->motion_half, v->octant, &v->motion_center);
+        v->motion_half = stack->motion_half * 0.5f;
         #if defined(MODE_TREE)
         v->node_ref = stack->traversal.node[v->octant];
         #elif defined(MODE_EVAL)
@@ -133,6 +137,8 @@ static void RENDER_ORTHO(MODE)(LocalVariables* v, OrthoStackItem* stack,
         stack->node_box = v->node_box;
         stack->center = v->position;
         stack->is_cube = v->is_cube;
+        stack->motion_center = v->motion_center;
+        stack->motion_half = v->motion_half;
         
         #if defined(MODE_TREE)
         if (v->is_cube) {

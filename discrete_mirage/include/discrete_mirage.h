@@ -291,6 +291,23 @@ typedef struct DMirEffects {
     int32_t shape;
 } DMirEffects;
 
+// Optional per-submission temporal information (see
+// dmir_batcher_add_motion). The values describe how
+// the same geometry instance was positioned and projected
+// in the previous frame:
+// * previous_cage: view-space coordinates of the 8 corners
+//   of the cage used in the previous frame (same layout
+//   as the "cage" argument of dmir_batcher_add).
+// * previous_viewport: viewport rectangle used previously.
+// * previous_frustum: frustum parameters used previously.
+// The batcher copies all of these values, so the caller may
+// modify or free them immediately after the call.
+typedef struct DMirMotionInput {
+    float previous_cage[24];
+    DMirRect previous_viewport;
+    DMirFrustum previous_frustum;
+} DMirMotionInput;
+
 // Each batched geometry may be split into one or more
 // of these structs (depending on the cage deformation).
 // * group: same value that was passed to dmir_batcher_add(...)
@@ -334,12 +351,21 @@ enum DMirStats {
 // None of its fields are supposed to be changed manually.
 // * size_x, size_y: buffer's width and height.
 // * row_shift: used when DMIR_ROW_POW2 is enabled.
+// * motion: per-pixel motion vector (dx, dy), laid out with
+//   the same row stride as the other channels (2 floats per
+//   pixel, in pixel units). Only meaningful where motion_valid
+//   is non-zero; motion is zeroed wherever it's invalid.
+// * motion_valid: per-pixel flag telling whether the motion
+//   vector is valid (i.e. the pixel was produced by a geometry
+//   submission that supplied previous-frame information).
 // * stencil-related fields: if doing multi-threaded rendering,
 //   work should be split into regions that don't overlap
 //   the same stencil tiles.
 typedef struct DMirFramebuffer {
     DMirDepth* depth;
     DMirVoxelRef* voxel;
+    float* motion;
+    uint8_t* motion_valid;
     uint32_t size_x;
     uint32_t size_y;
     uint32_t row_shift;
@@ -421,6 +447,8 @@ const struct DMirFrustum DMIR_FRUSTUM_DEFAULT = {
 //   3. for each batch that you want to render:
 //      3.1. for each object in the batch:
 //           * dmir_batcher_add(...)
+//             (or dmir_batcher_add_motion(...) to also
+//             fill in the per-pixel motion channel)
 //      3.2. dmir_batcher_sort(...)
 //      3.3. for each renderer of this batch:
 //           * dmir_renderer_draw(...)
@@ -438,6 +466,17 @@ const struct DMirFrustum DMIR_FRUSTUM_DEFAULT = {
 // to the cage's corner vertices. The "group" argument can be
 // useful if multiple geometries belong to one logical "object".
 
+// Some additional remarks regarding dmir_batcher_add_motion:
+// it behaves like dmir_batcher_add, but also records per-pixel
+// motion vectors for the pixels produced by this submission.
+// The motion input is copied, so the caller may modify or free
+// it right after the call. A submission may be added several
+// times with independent motion data, and group values are not
+// required to be unique across submissions. Motion is sampled
+// at the center of the spatial node that supplied each pixel's
+// voxel reference (root-local [0,1]^3 coordinates, trilinearly
+// interpolated into both cages). Only RECT splats are covered.
+
 extern DMirLookups dmir_lookups;
 
 void dmir_lookups_initialize(void);
@@ -452,6 +491,17 @@ void dmir_batcher_free(DMirBatcher* batcher);
 void dmir_batcher_reset(DMirBatcher* batcher, DMirRect viewport, DMirFrustum frustum);
 void dmir_batcher_add(DMirBatcher* batcher, DMirFramebuffer* framebuffer,
     uint32_t group, float* cage, DMirGeometry* geometry, DMirAddress root, DMirEffects effects);
+// Same as dmir_batcher_add, but additionally supplies previous-frame
+// cage and projection parameters for this particular submission.
+// The batcher copies the motion input (the caller may modify or free
+// it right after the call). Pixels produced by this submission get a
+// valid per-pixel motion vector; pixels from plain dmir_batcher_add
+// submissions are marked as having no valid motion. The same geometry
+// (and even the same root) may be submitted multiple times with
+// independent motion data; groups are not required to be unique.
+void dmir_batcher_add_motion(DMirBatcher* batcher, DMirFramebuffer* framebuffer,
+    uint32_t group, float* cage, DMirGeometry* geometry, DMirAddress root, DMirEffects effects,
+    const DMirMotionInput* motion);
 void dmir_batcher_sort(DMirBatcher* batcher);
 void dmir_batcher_affine_get(DMirBatcher* batcher, DMirAffineInfo** affine_infos, uint32_t* count);
 
