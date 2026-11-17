@@ -1,0 +1,43 @@
+#ifndef QAWS_STATUS_H
+#define QAWS_STATUS_H
+
+/* (precision-free itself; included first by most headers, it also brings
+   the current precision's names before anything is declared) */
+#include "qaws_platform.h"
+
+typedef enum qaws_status
+{
+	QAWS_STATUS_OK = 0,
+	QAWS_STATUS_INVALID_ARGUMENT,
+	QAWS_STATUS_INVALID_DIMENSION,
+	QAWS_STATUS_INVALID_DEGREE,
+	QAWS_STATUS_INVALID_CONTROL_POINT_COUNT,
+	QAWS_STATUS_INVALID_KNOT_COUNT,
+	QAWS_STATUS_INVALID_KNOT_VECTOR,
+	QAWS_STATUS_INVALID_WEIGHT_COUNT,
+	QAWS_STATUS_INVALID_PARAMETER_RANGE,
+	QAWS_STATUS_OUT_OF_RANGE,
+	QAWS_STATUS_UNSUPPORTED_OPERATION,
+	QAWS_STATUS_DEGENERATE_CURVE,
+	QAWS_STATUS_NUMERICAL_FAILURE,
+	QAWS_STATUS_BUFFER_TOO_SMALL,
+	QAWS_STATUS_ALLOCATION_FAILURE,
+	QAWS_STATUS_INTERNAL_ERROR,
+	/* exact kernel: operation outside the rational domain, integer budget
+	   exceeded, exact spaces that do not match, sign not certified */
+	QAWS_STATUS_EXACT_UNSUPPORTED,
+	QAWS_STATUS_EXACT_RANGE_EXCEEDED,
+	QAWS_STATUS_EXACT_INCOMPATIBLE_SPACE,
+	QAWS_STATUS_CERTIFICATION_FAILED,
+	/* a result defined at convergence asked for before it (repulsive
+	   solution derivatives) */
+	QAWS_STATUS_NOT_CONVERGED,
+	/* a mesh edit refused by its validity checks (the mesh is unchanged) */
+	QAWS_STATUS_INVALID_TOPOLOGY,
+	/* stopped by the host's cancel callback (outputs as the operation documents) */
+	QAWS_STATUS_CANCELLED
+} qaws_status;
+
+char const* qaws_status_to_string(qaws_status status);
+
+#endif /* QAWS_STATUS_H */

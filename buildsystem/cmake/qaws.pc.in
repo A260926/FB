@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: qaws
+Description: Qaws curve evaluation and traversal library (C11)
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lqaws
+Libs.private: @_QAWS_PKGCONFIG_LIBS_PRIVATE@
+Cflags: -I${includedir} -DQAWS_SCALAR_IS_FLOAT=@_QAWS_SCALAR_IS_FLOAT_VALUE@

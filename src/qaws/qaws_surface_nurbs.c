@@ -1,0 +1,478 @@
+#include "qaws_surface_nurbs.h"
+#include "internal/qaws_internal_surface.h"
+#include "internal/qaws_internal_diff.h"
+#include "internal/qaws_internal_basis.h"
+#include "internal/qaws_internal_curve.h"
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include "qaws_platform.h"
+
+/* Evaluate a tensor-product NURBS surface at (u,v) using the quotient rule.
+   S(u,v) = A(u,v) / W(u,v), where:
+     A(u,v) = sum_ij N_i(u) N_j(v) w_ij P_ij
+     W(u,v) = sum_ij N_i(u) N_j(v) w_ij
+   Derivatives use the quotient rule:
+     dS/du = (dA/du - S * dW/du) / W  etc. */
+static qaws_status nurbs_surface_eval(
+	qaws_surface const* surface,
+	qaws_scalar u,
+	qaws_scalar v,
+	unsigned int eval_flags,
+	qaws_surface_eval_result* out_result)
+{
+	qaws_surface_nurbs_impl const* impl =
+		(qaws_surface_nurbs_impl const*)surface->impl;
+	unsigned int ud = surface->u_degree;
+	unsigned int vd = surface->v_degree;
+	unsigned int uc = impl->u_count;
+	unsigned int vc = impl->v_count;
+	qaws_scalar const* cp = impl->control_points;
+	qaws_scalar const* wt = impl->weights;
+	unsigned int u_order = ud + 1;
+	unsigned int v_order = vd + 1;
+
+	unsigned int u_span, v_span;
+	unsigned int max_u_deriv = 0, max_v_deriv = 0;
+
+	/* Determine derivative orders needed */
+	if (eval_flags & (QAWS_SURFACE_EVAL_DU | QAWS_SURFACE_EVAL_DUU))
+		max_u_deriv = (eval_flags & QAWS_SURFACE_EVAL_DUU) ? 2 : 1;
+	if (eval_flags & (QAWS_SURFACE_EVAL_DV | QAWS_SURFACE_EVAL_DVV))
+		max_v_deriv = (eval_flags & QAWS_SURFACE_EVAL_DVV) ? 2 : 1;
+	if (eval_flags & QAWS_SURFACE_EVAL_DUV)
+	{
+		if (max_u_deriv < 1) max_u_deriv = 1;
+		if (max_v_deriv < 1) max_v_deriv = 1;
+	}
+	if (max_u_deriv > ud) max_u_deriv = ud;
+	if (max_v_deriv > vd) max_v_deriv = vd;
+
+	/* Find knot spans */
+	u_span = qaws_internal_find_knot_span(
+		impl->u_knots, impl->u_knot_count, ud, uc, u);
+	v_span = qaws_internal_find_knot_span(
+		impl->v_knots, impl->v_knot_count, vd, vc, v);
+
+	{
+		qaws_scalar u_ders[3 * 64];
+		qaws_scalar v_ders[3 * 64];
+		unsigned int ku, kv, i, j;
+		/* A[ku][kv] = weighted point accumulator, W[ku][kv] = weight accumulator */
+		qaws_scalar A[3][3][3];
+		qaws_scalar W[3][3];
+		qaws_scalar inv_w0;
+		qaws_vec3 S00; /* position */
+		qaws_vec3 Su, Sv; /* first partials */
+		qaws_vec3 Suu, Svv, Suv; /* second partials */
+
+		qaws_internal_bspline_basis_derivs(
+			u_ders, impl->u_knots,
+			impl->u_knot_count, ud, u_span, u, max_u_deriv);
+		qaws_internal_bspline_basis_derivs(
+			v_ders, impl->v_knots,
+			impl->v_knot_count, vd, v_span, v, max_v_deriv);
+
+		memset(A, 0, sizeof(A));
+		memset(W, 0, sizeof(W));
+
+		for (ku = 0; ku <= max_u_deriv; ku++)
+		{
+			for (kv = 0; kv <= max_v_deriv; kv++)
+			{
+				for (i = 0; i < u_order; i++)
+				{
+					unsigned int ci = u_span - ud + i;
+					qaws_scalar Nu = u_ders[ku * u_order + i];
+					for (j = 0; j < v_order; j++)
+					{
+						unsigned int cj = v_span - vd + j;
+						qaws_scalar Nv = v_ders[kv * v_order + j];
+						qaws_scalar w = wt[ci * vc + cj];
+						qaws_scalar Nw = Nu * Nv * w;
+						unsigned int cp_idx = (ci * vc + cj) * 3;
+						W[ku][kv] += Nw;
+						A[ku][kv][0] += Nw * cp[cp_idx + 0];
+						A[ku][kv][1] += Nw * cp[cp_idx + 1];
+						A[ku][kv][2] += Nw * cp[cp_idx + 2];
+					}
+				}
+			}
+		}
+
+		/* Check for degenerate weight */
+		if (W[0][0] < QAWS_LITERAL(1e-15) && W[0][0] > -QAWS_LITERAL(1e-15))
+			return QAWS_STATUS_DEGENERATE_CURVE;
+
+		inv_w0 = QAWS_ONE / W[0][0];
+
+		/* Position: S = A[0][0] / W[0][0] */
+		S00.x = A[0][0][0] * inv_w0;
+		S00.y = A[0][0][1] * inv_w0;
+		S00.z = A[0][0][2] * inv_w0;
+
+		if (eval_flags & QAWS_SURFACE_EVAL_POSITION)
+		{
+			out_result->position = S00;
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_POSITION;
+		}
+
+		/* First partial du: Su = (A[1][0] - S * W[1][0]) / W[0][0] */
+		Su.x = Su.y = Su.z = 0;
+		if (max_u_deriv >= 1)
+		{
+			Su.x = (A[1][0][0] - S00.x * W[1][0]) * inv_w0;
+			Su.y = (A[1][0][1] - S00.y * W[1][0]) * inv_w0;
+			Su.z = (A[1][0][2] - S00.z * W[1][0]) * inv_w0;
+		}
+		if (eval_flags & QAWS_SURFACE_EVAL_DU)
+		{
+			out_result->du = Su;
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_DU;
+		}
+
+		/* First partial dv: Sv = (A[0][1] - S * W[0][1]) / W[0][0] */
+		Sv.x = Sv.y = Sv.z = 0;
+		if (max_v_deriv >= 1)
+		{
+			Sv.x = (A[0][1][0] - S00.x * W[0][1]) * inv_w0;
+			Sv.y = (A[0][1][1] - S00.y * W[0][1]) * inv_w0;
+			Sv.z = (A[0][1][2] - S00.z * W[0][1]) * inv_w0;
+		}
+		if (eval_flags & QAWS_SURFACE_EVAL_DV)
+		{
+			out_result->dv = Sv;
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_DV;
+		}
+
+		/* Second partial duu: Suu = (A[2][0] - 2*Su*W[1][0] - S*W[2][0]) / W[0][0] */
+		Suu.x = Suu.y = Suu.z = 0;
+		if (eval_flags & QAWS_SURFACE_EVAL_DUU)
+		{
+			Suu.x = (A[2][0][0] - QAWS_LITERAL(2.0) * Su.x * W[1][0] - S00.x * W[2][0]) * inv_w0;
+			Suu.y = (A[2][0][1] - QAWS_LITERAL(2.0) * Su.y * W[1][0] - S00.y * W[2][0]) * inv_w0;
+			Suu.z = (A[2][0][2] - QAWS_LITERAL(2.0) * Su.z * W[1][0] - S00.z * W[2][0]) * inv_w0;
+			out_result->duu = Suu;
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_DUU;
+		}
+
+		/* Second partial dvv: Svv = (A[0][2] - 2*Sv*W[0][1] - S*W[0][2]) / W[0][0] */
+		Svv.x = Svv.y = Svv.z = 0;
+		if (eval_flags & QAWS_SURFACE_EVAL_DVV)
+		{
+			Svv.x = (A[0][2][0] - QAWS_LITERAL(2.0) * Sv.x * W[0][1] - S00.x * W[0][2]) * inv_w0;
+			Svv.y = (A[0][2][1] - QAWS_LITERAL(2.0) * Sv.y * W[0][1] - S00.y * W[0][2]) * inv_w0;
+			Svv.z = (A[0][2][2] - QAWS_LITERAL(2.0) * Sv.z * W[0][1] - S00.z * W[0][2]) * inv_w0;
+			out_result->dvv = Svv;
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_DVV;
+		}
+
+		/* Mixed partial duv: Suv = (A[1][1] - Su*W[0][1] - Sv*W[1][0] - S*W[1][1]) / W[0][0] */
+		Suv.x = Suv.y = Suv.z = 0;
+		if ((eval_flags & QAWS_SURFACE_EVAL_DUV) && max_u_deriv >= 1 && max_v_deriv >= 1)
+		{
+			Suv.x = (A[1][1][0] - Su.x * W[0][1] - Sv.x * W[1][0] - S00.x * W[1][1]) * inv_w0;
+			Suv.y = (A[1][1][1] - Su.y * W[0][1] - Sv.y * W[1][0] - S00.y * W[1][1]) * inv_w0;
+			Suv.z = (A[1][1][2] - Su.z * W[0][1] - Sv.z * W[1][0] - S00.z * W[1][1]) * inv_w0;
+			out_result->duv = Suv;
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_DUV;
+		}
+
+		/* Normal */
+		if (eval_flags & QAWS_SURFACE_EVAL_NORMAL)
+		{
+			qaws_internal_surface_normal(&out_result->normal, out_result->du, out_result->dv);
+			out_result->valid_flags |= QAWS_SURFACE_EVAL_NORMAL;
+		}
+	}
+
+	return QAWS_STATUS_OK;
+}
+
+static void nurbs_surface_destroy(void* impl, qaws_allocator const* allocator)
+{
+	qaws_surface_nurbs_impl* ni = (qaws_surface_nurbs_impl*)impl;
+	if (ni)
+	{
+		qaws_internal_dealloc(ni->control_points, allocator);
+		qaws_internal_dealloc(ni->weights, allocator);
+		qaws_internal_dealloc(ni->u_knots, allocator);
+		qaws_internal_dealloc(ni->v_knots, allocator);
+		qaws_internal_dealloc(ni, allocator);
+	}
+}
+
+static int nurbs_surface_is_rational(qaws_surface const* s)
+{
+	(void)s;
+	return 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Differential rules: rational in the control net and weights               */
+/* -------------------------------------------------------------------------- */
+
+#define NURBS_SURFACE_DIFF_CAPS (QAWS_CAP_TANGENT | QAWS_CAP_ADJOINT | QAWS_CAP_TANGENT2 | \
+	QAWS_CAP_LOCAL_SUPPORT)
+
+static unsigned int nurbs_surface_describe_fields(qaws_surface const* surface,
+	qaws_field_desc* out, unsigned int capacity)
+{
+	qaws_surface_nurbs_impl const* impl = (qaws_surface_nurbs_impl const*)surface->impl;
+	unsigned int count = impl->u_count * impl->v_count;
+	if (capacity >= 1)
+		out[0] = qaws_internal_field_desc(QAWS_FIELD_CONTROL_POINTS, QAWS_VALUE_VEC3,
+			count, QAWS_DOMAIN_POSITION, QAWS_CONSTRAINT_NONE,
+			QAWS_DIFF_SMOOTH, NURBS_SURFACE_DIFF_CAPS);
+	if (capacity >= 2)
+		out[1] = qaws_internal_field_desc(QAWS_FIELD_WEIGHTS, QAWS_VALUE_SCALAR,
+			count, QAWS_DOMAIN_WEIGHT, QAWS_CONSTRAINT_POSITIVE,
+			QAWS_DIFF_SMOOTH, NURBS_SURFACE_DIFF_CAPS);
+	if (capacity >= 3)
+		out[2] = qaws_internal_field_desc(QAWS_FIELD_U_KNOTS, QAWS_VALUE_SCALAR,
+			impl->u_knot_count, QAWS_DOMAIN_PARAMETRIC, QAWS_CONSTRAINT_MONOTONIC,
+			QAWS_DIFF_PIECEWISE_SMOOTH, QAWS_CAP_TANGENT | QAWS_CAP_ADJOINT | QAWS_CAP_TANGENT2);
+	if (capacity >= 4)
+		out[3] = qaws_internal_field_desc(QAWS_FIELD_V_KNOTS, QAWS_VALUE_SCALAR,
+			impl->v_knot_count, QAWS_DOMAIN_PARAMETRIC, QAWS_CONSTRAINT_MONOTONIC,
+			QAWS_DIFF_PIECEWISE_SMOOTH, QAWS_CAP_TANGENT | QAWS_CAP_ADJOINT | QAWS_CAP_TANGENT2);
+	return 4;
+}
+
+static qaws_status nurbs_surface_primal_field(qaws_surface const* surface, qaws_diff_field field,
+	qaws_scalar const** out_data, unsigned int* out_count, unsigned int* out_components)
+{
+	qaws_surface_nurbs_impl const* impl = (qaws_surface_nurbs_impl const*)surface->impl;
+	switch (field)
+	{
+	case QAWS_FIELD_CONTROL_POINTS:
+		*out_data = impl->control_points;
+		*out_count = impl->u_count * impl->v_count;
+		*out_components = 3;
+		return QAWS_STATUS_OK;
+	case QAWS_FIELD_WEIGHTS:
+		*out_data = impl->weights;
+		*out_count = impl->u_count * impl->v_count;
+		*out_components = 1;
+		return QAWS_STATUS_OK;
+	case QAWS_FIELD_U_KNOTS:
+		*out_data = impl->u_knots;
+		*out_count = impl->u_knot_count;
+		*out_components = 1;
+		return QAWS_STATUS_OK;
+	case QAWS_FIELD_V_KNOTS:
+		*out_data = impl->v_knots;
+		*out_count = impl->v_knot_count;
+		*out_components = 1;
+		return QAWS_STATUS_OK;
+	default:
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	}
+}
+
+/* Homogeneous tensor-product basis: the engine applies the quotient rule. */
+static qaws_status nurbs_surface_linear_support(qaws_surface const* surface,
+	qaws_scalar u, qaws_scalar v, unsigned int order, qaws_surface_support* out)
+{
+	qaws_surface_nurbs_impl const* impl = (qaws_surface_nurbs_impl const*)surface->impl;
+	qaws_scalar nu[(QAWS_DIFF_MAX_ORDER + 1) * QAWS_DIFF_MAX_SUPPORT];
+	qaws_scalar nv[(QAWS_DIFF_MAX_ORDER + 1) * QAWS_DIFF_MAX_SUPPORT];
+	unsigned int ud = surface->u_degree, vd = surface->v_degree, r, i;
+	unsigned int u_span, v_span;
+
+	if (ud + 1 > QAWS_DIFF_MAX_SUPPORT || vd + 1 > QAWS_DIFF_MAX_SUPPORT || order > QAWS_DIFF_MAX_ORDER)
+		return QAWS_STATUS_UNSUPPORTED_OPERATION;
+
+	u_span = qaws_internal_find_knot_span(impl->u_knots, impl->u_knot_count, ud, impl->u_count, u);
+	v_span = qaws_internal_find_knot_span(impl->v_knots, impl->v_knot_count, vd, impl->v_count, v);
+	qaws_internal_bspline_basis_derivs_any(nu, impl->u_knots, impl->u_knot_count, ud, u_span, u, order);
+	qaws_internal_bspline_basis_derivs_any(nv, impl->v_knots, impl->v_knot_count, vd, v_span, v, order);
+
+	out->kind = QAWS_SUPPORT_LOCAL;
+	out->field = QAWS_FIELD_CONTROL_POINTS;
+	out->u_first = u_span - ud;
+	out->u_count = ud + 1;
+	out->v_first = v_span - vd;
+	out->v_count = vd + 1;
+	out->u_stride = impl->v_count;
+	out->v_stride = 1;
+	out->on_boundary =
+		(u_span > ud && u == impl->u_knots[u_span]) ||
+		(v_span > vd && v == impl->v_knots[v_span]);
+	out->weight_field = QAWS_FIELD_WEIGHTS;
+	out->has_weights = 1;
+	out->order = order;
+	for (r = 0; r <= order; r++)
+	{
+		for (i = 0; i <= ud; i++)
+			out->u_weights[r][i] = nu[r * (ud + 1) + i];
+		for (i = 0; i <= vd; i++)
+			out->v_weights[r][i] = nv[r * (vd + 1) + i];
+	}
+	return QAWS_STATUS_OK;
+}
+
+static qaws_surface_diff_vtable const nurbs_surface_diff_vtable = {
+	NURBS_SURFACE_DIFF_CAPS,
+	QAWS_DIFF_PIECEWISE_SMOOTH,
+	nurbs_surface_describe_fields,
+	nurbs_surface_primal_field,
+	nurbs_surface_linear_support,
+	NULL,
+	NULL,
+	NULL,
+	NULL
+};
+
+static qaws_surface_vtable const nurbs_surface_vtable = {
+	nurbs_surface_eval,
+	nurbs_surface_destroy,
+	nurbs_surface_is_rational,
+	&nurbs_surface_diff_vtable
+};
+
+qaws_status qaws_surface_create_nurbs_ex(
+	qaws_surface** out_surface,
+	qaws_surface_nurbs_desc const* desc,
+	qaws_allocator const* allocator)
+{
+	qaws_surface* surface;
+	qaws_surface_nurbs_impl* impl;
+	size_t cp_size;
+	qaws_range u_range, v_range;
+	qaws_scalar* u_knots = NULL;
+	qaws_scalar* v_knots = NULL;
+	unsigned int u_knot_count, v_knot_count;
+	unsigned int total;
+
+	if (!desc || !out_surface) return QAWS_STATUS_INVALID_ARGUMENT;
+	if (desc->u_degree < 1 || desc->v_degree < 1 || desc->u_degree > QAWS_INTERNAL_BASIS_MAX_DEGREE || desc->v_degree > QAWS_INTERNAL_BASIS_MAX_DEGREE)
+		return QAWS_STATUS_INVALID_DEGREE;
+	if (desc->u_point_count < desc->u_degree + 1)
+		return QAWS_STATUS_INVALID_CONTROL_POINT_COUNT;
+	if (desc->v_point_count < desc->v_degree + 1)
+		return QAWS_STATUS_INVALID_CONTROL_POINT_COUNT;
+	/* u * v * 3 indexes the flat control points in unsigned int (also keeps count + degree + 1 from wrapping) */
+	if (desc->u_point_count > 0xFFFFFFFFu / 3 / desc->v_point_count)
+		return QAWS_STATUS_INVALID_CONTROL_POINT_COUNT;
+	if (!desc->control_points || !desc->weights)
+		return QAWS_STATUS_INVALID_ARGUMENT;
+
+	total = desc->u_point_count * desc->v_point_count;
+
+	/* Generate or copy U knots */
+	if (desc->u_knot_count == 0 || !desc->u_knots)
+	{
+		u_knot_count = desc->u_point_count + desc->u_degree + 1;
+		u_knots = (qaws_scalar*)qaws_internal_alloc(qaws_internal_mul2(sizeof(qaws_scalar), u_knot_count), allocator);
+		if (!u_knots) return QAWS_STATUS_ALLOCATION_FAILURE;
+		qaws_internal_surface_uniform_knots(
+			u_knots, u_knot_count, desc->u_degree, desc->u_point_count);
+	}
+	else
+	{
+		u_knot_count = desc->u_knot_count;
+		if (u_knot_count != desc->u_point_count + desc->u_degree + 1)
+			return QAWS_STATUS_INVALID_KNOT_VECTOR;
+		u_knots = (qaws_scalar*)qaws_internal_alloc(qaws_internal_mul2(sizeof(qaws_scalar), u_knot_count), allocator);
+		if (!u_knots) return QAWS_STATUS_ALLOCATION_FAILURE;
+		memcpy(u_knots, desc->u_knots, sizeof(qaws_scalar) * u_knot_count);
+	}
+
+	/* Generate or copy V knots */
+	if (desc->v_knot_count == 0 || !desc->v_knots)
+	{
+		v_knot_count = desc->v_point_count + desc->v_degree + 1;
+		v_knots = (qaws_scalar*)qaws_internal_alloc(qaws_internal_mul2(sizeof(qaws_scalar), v_knot_count), allocator);
+		if (!v_knots) { qaws_internal_dealloc(u_knots, allocator); return QAWS_STATUS_ALLOCATION_FAILURE; }
+		qaws_internal_surface_uniform_knots(
+			v_knots, v_knot_count, desc->v_degree, desc->v_point_count);
+	}
+	else
+	{
+		v_knot_count = desc->v_knot_count;
+		if (v_knot_count != desc->v_point_count + desc->v_degree + 1)
+		{
+			qaws_internal_dealloc(u_knots, allocator);
+			return QAWS_STATUS_INVALID_KNOT_VECTOR;
+		}
+		v_knots = (qaws_scalar*)qaws_internal_alloc(qaws_internal_mul2(sizeof(qaws_scalar), v_knot_count), allocator);
+		if (!v_knots) { qaws_internal_dealloc(u_knots, allocator); return QAWS_STATUS_ALLOCATION_FAILURE; }
+		memcpy(v_knots, desc->v_knots, sizeof(qaws_scalar) * v_knot_count);
+	}
+
+	/* Domain range */
+	u_range.min_value = u_knots[desc->u_degree];
+	u_range.max_value = u_knots[desc->u_point_count];
+	v_range.min_value = v_knots[desc->v_degree];
+	v_range.max_value = v_knots[desc->v_point_count];
+
+	surface = qaws_internal_surface_alloc_ex(
+		QAWS_SURFACE_KIND_NURBS,
+		desc->u_degree, desc->v_degree,
+		u_range, v_range,
+		&nurbs_surface_vtable,
+		allocator);
+	if (!surface)
+	{
+		qaws_internal_dealloc(u_knots, allocator); qaws_internal_dealloc(v_knots, allocator);
+		return QAWS_STATUS_ALLOCATION_FAILURE;
+	}
+
+	impl = (qaws_surface_nurbs_impl*)qaws_internal_alloc(sizeof(qaws_surface_nurbs_impl), allocator);
+	if (!impl)
+	{
+		qaws_internal_dealloc(u_knots, allocator); qaws_internal_dealloc(v_knots, allocator);
+		qaws_internal_surface_free(surface);
+		return QAWS_STATUS_ALLOCATION_FAILURE;
+	}
+
+	cp_size = qaws_internal_mul3((size_t)total, 3, sizeof(qaws_scalar));
+	impl->control_points = (qaws_scalar*)qaws_internal_alloc(cp_size, allocator);
+	if (!impl->control_points)
+	{
+		qaws_internal_dealloc(u_knots, allocator); qaws_internal_dealloc(v_knots, allocator); qaws_internal_dealloc(impl, allocator);
+		qaws_internal_surface_free(surface);
+		return QAWS_STATUS_ALLOCATION_FAILURE;
+	}
+
+	/* Copy control points from vec3 to flat scalar array */
+	{
+		unsigned int k;
+		for (k = 0; k < total; k++)
+		{
+			impl->control_points[k * 3 + 0] = desc->control_points[k].x;
+			impl->control_points[k * 3 + 1] = desc->control_points[k].y;
+			impl->control_points[k * 3 + 2] = desc->control_points[k].z;
+		}
+	}
+
+	/* Copy weights */
+	impl->weights = (qaws_scalar*)qaws_internal_alloc(qaws_internal_mul2(sizeof(qaws_scalar), total), allocator);
+	if (!impl->weights)
+	{
+		qaws_internal_dealloc(impl->control_points, allocator);
+		qaws_internal_dealloc(u_knots, allocator); qaws_internal_dealloc(v_knots, allocator); qaws_internal_dealloc(impl, allocator);
+		qaws_internal_surface_free(surface);
+		return QAWS_STATUS_ALLOCATION_FAILURE;
+	}
+	memcpy(impl->weights, desc->weights, sizeof(qaws_scalar) * total);
+
+	impl->u_count = desc->u_point_count;
+	impl->v_count = desc->v_point_count;
+	impl->u_knots = u_knots;
+	impl->u_knot_count = u_knot_count;
+	impl->v_knots = v_knots;
+	impl->v_knot_count = v_knot_count;
+
+	surface->impl = impl;
+	*out_surface = surface;
+	return QAWS_STATUS_OK;
+}
+
+qaws_status qaws_surface_create_nurbs(
+	qaws_surface** out_surface,
+	qaws_surface_nurbs_desc const* desc)
+{
+	return qaws_surface_create_nurbs_ex(out_surface, desc, NULL);
+}
