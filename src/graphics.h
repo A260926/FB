@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 /* Vec3 */
 
@@ -433,27 +434,62 @@ static inline uint32_t luminance_alpha_to_rgba32(uint8_t l, uint8_t a) {
     return (a << 24) | (l << 16) | (l << 8) | l;
 }
 
+/* Per-vertex material snapshot.
+ *
+ * glMaterial / GL_COLOR_MATERIAL only affect vertices submitted afterwards,
+ * so every submitted vertex carries the front and back material that were
+ * current when it was emitted. Vertices created by clipping inherit their
+ * materials through interpolation and never re-read the current state. */
+typedef struct {
+    color_t ambient;
+    color_t diffuse;
+    color_t specular;
+    color_t emission;
+    float shininess;
+} vertex_material_t;
+
+typedef struct {
+    vertex_material_t front;
+    vertex_material_t back;
+} vertex_materials_t;
+
 /* Vertex - interleaved attributes for rasterization */
 
 typedef struct vertex_t {
     vec4_t position;      /* Clip-space position */
-    color_t color;        /* Vertex color (lit for Gouraud, unlit for Phong) */
+    color_t color;        /* Front-face vertex color (lit for Gouraud, unlit for Phong) */
+    color_t color_back;   /* Back-face Gouraud color (two-sided lighting) */
     vec2_t texcoord;
     vec3_t normal;        /* Object-space normal (for Phong: eye-space) */
     float eye_z;          /* Eye-space Z for fog */
     vec3_t eye_pos;       /* Eye-space position (for Phong shading) */
     vec3_t eye_normal;    /* Eye-space normal (for Phong shading) */
+    vertex_materials_t materials; /* Front/back material at submission time */
 } vertex_t;
+
+static inline vertex_material_t vertex_material_lerp(vertex_material_t a,
+                                                     vertex_material_t b, float t)
+{
+    vertex_material_t out;
+    out.ambient   = color_lerp(a.ambient, b.ambient, t);
+    out.diffuse   = color_lerp(a.diffuse, b.diffuse, t);
+    out.specular  = color_lerp(a.specular, b.specular, t);
+    out.emission  = color_lerp(a.emission, b.emission, t);
+    out.shininess = lerpf(a.shininess, b.shininess, t);
+    return out;
+}
 
 static inline vertex_t vertex_full(vec4_t pos, color_t col, vec2_t tex, vec3_t norm, float ez) {
     vertex_t v;
     v.position = pos;
     v.color = col;
+    v.color_back = col;
     v.texcoord = tex;
     v.normal = norm;
     v.eye_z = ez;
     v.eye_pos = vec3(0, 0, 0);
     v.eye_normal = vec3(0, 0, 1);
+    memset(&v.materials, 0, sizeof(v.materials));
     return v;
 }
 
@@ -466,11 +502,16 @@ static inline vertex_t vertex_lerp(vertex_t *a, vertex_t *b, float t) {
     vertex_t v;
     v.position   = vec4_lerp(a->position, b->position, t);
     v.color      = color_lerp(a->color, b->color, t);
+    v.color_back = color_lerp(a->color_back, b->color_back, t);
     v.texcoord   = vec2_lerp(a->texcoord, b->texcoord, t);
     v.normal     = vec3_lerp(a->normal, b->normal, t);
     v.eye_z      = lerpf(a->eye_z, b->eye_z, t);
     v.eye_pos    = vec3_lerp(a->eye_pos, b->eye_pos, t);
     v.eye_normal = vec3_lerp(a->eye_normal, b->eye_normal, t);
+    /* New clip-space vertices inherit their materials from the clipped
+     * edge; they must never re-read the current material state. */
+    v.materials.front = vertex_material_lerp(a->materials.front, b->materials.front, t);
+    v.materials.back  = vertex_material_lerp(a->materials.back,  b->materials.back,  t);
     return v;
 }
 

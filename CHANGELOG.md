@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed - Per-vertex material ownership
+- `glMaterial` / `GL_COLOR_MATERIAL` changes now affect only subsequently
+  submitted vertices instead of being re-applied to the whole primitive at
+  `glEnd`. Each vertex snapshots the front and back material (ambient,
+  diffuse, specular, emission, shininess) current at submission time.
+- Applies to filled `GL_TRIANGLES`, `GL_TRIANGLE_STRIP` and
+  `GL_TRIANGLE_FAN`, through immediate mode, `glDrawArrays`,
+  `glDrawElements` and display-list replay.
+- Two-sided Gouraud shading now computes the back-face light color at each
+  original vertex (flipped normal, back material) instead of recomputing
+  lighting per fragment with the stale current material.
+- `GL_FLAT` keeps the color of the original triangle's provoking vertex
+  even when that vertex is clipped away or the clipped polygon is split
+  into fan pieces.
+- `GL_PHONG` interpolates material coefficients, eye-space position and
+  normal per fragment with perspective-correct weights (screen
+  barycentrics scaled by per-vertex `1/w` and renormalized); normal
+  renormalization still follows `GL_NORMALIZE`.
+- Clip-generated vertices inherit interpolated materials from the clipped
+  edge and never re-read current material state.
+
+### Added
+- Regression suite `task_tests/materials.c` (capture, lighting and
+  clipping groups) with an independent lighting/interpolation reference.
+
 ## [0.5.0] - 2025-12-06
 
 ### Added - OpenGL 1.5 VBO Support

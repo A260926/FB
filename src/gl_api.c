@@ -259,6 +259,24 @@ GLState *gl_get_current_context(void)
     return ctx;
 }
 
+/* Snapshot the current front/back material state for a vertex being
+ * submitted. Material changes made after this point must not affect it. */
+static vertex_materials_t snapshot_vertex_materials(GLState *c)
+{
+    vertex_materials_t out;
+    out.front.ambient   = c->material_front.ambient;
+    out.front.diffuse   = c->material_front.diffuse;
+    out.front.specular  = c->material_front.specular;
+    out.front.emission  = c->material_front.emission;
+    out.front.shininess = c->material_front.shininess;
+    out.back.ambient    = c->material_back.ambient;
+    out.back.diffuse    = c->material_back.diffuse;
+    out.back.specular   = c->material_back.specular;
+    out.back.emission   = c->material_back.emission;
+    out.back.shininess  = c->material_back.shininess;
+    return out;
+}
+
 /* Helper to build vertex from current state */
 static void emit_vertex(float x, float y, float z, float w)
 {
@@ -281,7 +299,9 @@ static void emit_vertex(float x, float y, float z, float w)
     /* Get base vertex color */
     color_t vert_color = ctx->current_color;
 
-    /* Apply color material if enabled */
+    /* Apply color material if enabled. The tracking face/parameter follow
+     * glColorMaterial; the update only changes the current state, which the
+     * snapshot below binds to this particular vertex. */
     if ((ctx->flags & FLAG_LIGHTING) && (ctx->flags & FLAG_COLOR_MATERIAL)) {
         GLenum mode = ctx->color_material_mode;
         GLenum face = ctx->color_material_face;
@@ -311,13 +331,28 @@ static void emit_vertex(float x, float y, float z, float w)
         }
     }
 
-    /* Compute per-vertex lighting for GL_FLAT and GL_SMOOTH (Gouraud shading) */
-    /* For GL_PHONG, lighting is computed per-fragment in the rasterizer */
-    /* Note: Two-sided lighting for Gouraud shading is handled per-fragment
-     * since we don't know the face orientation at vertex time. The front material
-     * is used here; back-face lighting is applied during rasterization. */
+    /* Bind the materials current at submission time to this vertex.
+     * Later glMaterial calls (including the ones before glEnd) must not
+     * retroactively change this vertex. */
+    vertex_materials_t materials = snapshot_vertex_materials(ctx);
+
+    /* Per-vertex (Gouraud) lighting for GL_FLAT and GL_SMOOTH.
+     * The front color uses the front material; the back color flips the
+     * normal and uses the back material when two-sided lighting is on,
+     * otherwise both faces share the front result. GL_PHONG defers all
+     * lighting to the rasterizer, which interpolates these materials. */
+    color_t back_color = vert_color;
     if ((ctx->flags & FLAG_LIGHTING) && ctx->shade_model != GL_PHONG) {
-        vert_color = compute_lighting(ctx, eye_pos, eye_normal, &ctx->material_front);
+        material_t front_mat = material_from_vertex_material(materials.front);
+        vert_color = compute_lighting(ctx, eye_pos, eye_normal, &front_mat);
+
+        if (ctx->light_model_two_side) {
+            material_t back_mat = material_from_vertex_material(materials.back);
+            vec3_t flipped = vec3_scale(eye_normal, -1.0f);
+            back_color = compute_lighting(ctx, eye_pos, flipped, &back_mat);
+        } else {
+            back_color = vert_color;
+        }
     }
 
     /* Full transform for clip-space position */
@@ -343,6 +378,9 @@ static void emit_vertex(float x, float y, float z, float w)
     vert.eye_z = eye_z;
     vert.eye_pos = eye_pos;
     vert.eye_normal = eye_normal;
+    vert.materials = materials;
+    /* Back-face Gouraud color; equals the front color when one-sided. */
+    vert.color_back = back_color;
 
     vertex_buffer_push(ctx, vert);
 }

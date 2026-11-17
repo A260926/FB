@@ -41,6 +41,19 @@ static inline void material_init(material_t *mat)
     mat->shininess = 0;
 }
 
+/* Materialize a per-vertex material snapshot into the standalone
+ * material_t used by the lighting routine. */
+static inline material_t material_from_vertex_material(vertex_material_t m)
+{
+    material_t out;
+    out.ambient   = m.ambient;
+    out.diffuse   = m.diffuse;
+    out.specular  = m.specular;
+    out.emission  = m.emission;
+    out.shininess = m.shininess;
+    return out;
+}
+
 /*
  * Compute lighting for a single vertex/fragment.
  *

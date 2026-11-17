@@ -9,7 +9,7 @@ for source_file in src/*.c; do cc -std=c99 -O1 -I. -Iinclude -Isrc -c "$source_f
 cc -std=c99 -O1 -I. -Iinclude -Isrc task_support/baseline.c .task-build/*.o -lm -o .task-build/baseline
 if [[ $mode == target ]]; then
   cc -std=c99 -O1 -I. -Iinclude -Isrc task_tests/materials.c task_support/driver.c .task-build/*.o -lm -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/mtgl-run.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
