@@ -40,6 +40,7 @@
 #include "version.h"
 #include "scarletbook.h"
 #include "dsf.h"
+#include "dsd_window.h"
 
 #define DSF_HEADER_FOOTER_SIZE 2048
 
@@ -57,6 +58,8 @@ typedef struct
 
     uint8_t buffer[MAX_CHANNEL_COUNT][SACD_BLOCK_SIZE_PER_CHANNEL];
     uint8_t *buffer_ptr[MAX_CHANNEL_COUNT];
+
+    dsd_window_t window;
 
 } dsf_handle_t;
 
@@ -135,7 +138,12 @@ static int dsf_create_header(scarletbook_output_format_t *ft)
         fmt_chunk->channel_count            = htole32(area_toc->channel_count);
         fmt_chunk->sample_frequency         = htole32(SACD_SAMPLING_FREQUENCY);
         fmt_chunk->bits_per_sample          = htole32(SACD_BITS_PER_SAMPLE);
-        fmt_chunk->sample_count             = htole64(handle->sample_count / area_toc->channel_count * 8);
+        if (ft->sample_window_enabled)
+            /* Only the actually selected bit samples count; block padding bits
+               are physical storage, never samples. */
+            fmt_chunk->sample_count         = htole64(ft->sample_window_end - ft->sample_window_begin);
+        else
+            fmt_chunk->sample_count         = htole64(handle->sample_count / area_toc->channel_count * 8);
         fmt_chunk->block_size_per_channel   = htole32(SACD_BLOCK_SIZE_PER_CHANNEL);
         fmt_chunk->reserved                 = 0;
 
@@ -177,6 +185,13 @@ static int dsf_create(scarletbook_output_format_t *ft)
 {
     dsf_handle_t *handle = (dsf_handle_t *)ft->priv;
 
+    /* Validate before touching the file so a rejected window leaves no header. */
+    if (dsd_window_validate(ft, DSD_WINDOW_DSF) != 0)
+        return -1;
+
+    if (ft->sample_window_enabled)
+        dsd_window_init(&handle->window, ft);
+
     int rez = dsf_create_header(ft);
 
     ////// BUG - buffer_ptr[] where not initialized at all in original code!!!!!  Now initialized here!
@@ -211,6 +226,8 @@ static int dsf_create(scarletbook_output_format_t *ft)
     return rez;
 }
 
+static int dsf_window_store_byte(scarletbook_output_format_t *ft, dsf_handle_t *handle, int channel, uint8_t sample_byte);
+
 static int dsf_close(scarletbook_output_format_t *ft)
 {
     dsf_handle_t *handle = (dsf_handle_t *)ft->priv;
@@ -219,9 +236,52 @@ static int dsf_close(scarletbook_output_format_t *ft)
 	size_t bytes_w;
 	int result=0;
 
-    // Save the remaining samples in the buffer to be attached to the beginning of the next track.  // This is mindset idea with nopad option !! Thank you!
-    // This is needed for padding-less DSF generation.  This is for players that cannot handle zero-padding properly.
-    if (sb_handle->dsf_nopad && ft->track < sb_handle->area[ft->area].area_toc->track_count - 1)
+    if (ft->sample_window_enabled)
+    {
+        /* The window must have been received in full on every channel. */
+        if (!dsd_window_complete(&handle->window))
+        {
+            if (handle->header)
+                free(handle->header);
+            if (handle->footer)
+                free(handle->footer);
+            return -1;
+        }
+
+        /* Close the final partial byte (zero high bits) and flush the
+           remaining per-channel buffers as full 4096-byte storage blocks. */
+        for (i = 0; i < handle->channel_count; i++)
+        {
+            uint8_t tail;
+            if (dsd_window_flush_partial(&handle->window, i, &tail))
+            {
+                /* Guarded like every other store: flush the full block first
+                   if the full bytes exactly filled it. */
+                if (dsf_window_store_byte(ft, handle, i, tail) != 0)
+                {
+                    free(handle->header);
+                    free(handle->footer);
+                    return -1;
+                }
+            }
+
+            if (handle->buffer_ptr[i] > handle->buffer[i])
+            {
+                bytes_w = fwrite(handle->buffer[i], 1, SACD_BLOCK_SIZE_PER_CHANNEL, ft->fd);
+                if (bytes_w != SACD_BLOCK_SIZE_PER_CHANNEL)
+                {
+                    LOG(lm_main, LOG_ERROR, ("dsf_close(): error writing last buffer %s", ft->filename));
+                    free(handle->header);
+                    free(handle->footer);
+                    return -1;
+                }
+                handle->audio_data_size += SACD_BLOCK_SIZE_PER_CHANNEL;
+            }
+        }
+    }
+    /* Save the remaining samples in the buffer to be attached to the beginning of the next track.  // This is mindset idea with nopad option !! Thank you!
+    // This is needed for padding-less DSF generation.  This is for players that cannot handle zero-padding properly. */
+    else if (sb_handle->dsf_nopad && ft->track < sb_handle->area[ft->area].area_toc->track_count - 1)
     {
         if(sb_handle->concatenate ==0)
         {
@@ -309,6 +369,32 @@ static int dsf_close(scarletbook_output_format_t *ft)
     return result;
 }
 
+static int dsf_window_store_byte(scarletbook_output_format_t *ft, dsf_handle_t *handle, int channel, uint8_t sample_byte)
+{
+    uint8_t *buffer_row_start_ptr = &handle->buffer[channel][0];
+
+    *handle->buffer_ptr[channel] = bit_reverse_table[sample_byte];
+    handle->buffer_ptr[channel]++;
+
+    /* Eager flush the moment a block fills, so blocks leave in the same
+       channel-interleaved order the DSF data chunk expects (all channels of
+       block k before block k+1), even when a block fills on the last byte
+       received before stopwrite. */
+    if (handle->buffer_ptr[channel] == buffer_row_start_ptr + SACD_BLOCK_SIZE_PER_CHANNEL)
+    {
+        size_t bytes_w = fwrite(buffer_row_start_ptr, 1, SACD_BLOCK_SIZE_PER_CHANNEL, ft->fd);
+        if (bytes_w != SACD_BLOCK_SIZE_PER_CHANNEL)
+        {
+            LOG(lm_main, LOG_ERROR, ("dsf_write_frame(): error writting buffer in file: %s", ft->filename));
+            return -1;
+        }
+        handle->audio_data_size += SACD_BLOCK_SIZE_PER_CHANNEL;
+        memset(buffer_row_start_ptr, 0x00, SACD_BLOCK_SIZE_PER_CHANNEL);
+        handle->buffer_ptr[channel] = buffer_row_start_ptr;
+    }
+    return 0;
+}
+
 static int dsf_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, size_t len)
 {
     dsf_handle_t *handle = (dsf_handle_t *) ft->priv;
@@ -317,6 +403,26 @@ static int dsf_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, 
     uint64_t prev_audio_data_size = handle->audio_data_size;
     int i;
     uint8_t *buffer_row_start_ptr;
+
+    if (ft->sample_window_enabled)
+    {
+        /* The engine re-interleaves the selected bit sequence; only bytes that
+           complete a window output byte reach the per-channel storage blocks. */
+        while (buf_ptr < buf_end_ptr)
+        {
+            int out_channel;
+            uint8_t sample_byte;
+
+            if (dsd_window_feed(&handle->window, *buf_ptr, &out_channel, &sample_byte))
+            {
+                if (dsf_window_store_byte(ft, handle, out_channel, sample_byte) != 0)
+                    return -1;
+            }
+            buf_ptr++;
+        }
+
+        return (int) (handle->audio_data_size - prev_audio_data_size);
+    }
 
     while(buf_ptr < buf_end_ptr)
     {
