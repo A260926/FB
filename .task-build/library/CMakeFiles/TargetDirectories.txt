@@ -1,0 +1,4 @@
+/Volumes/UserFBWorkspace/questions/FSFE62A8330A20U13055/attempts/20261117T221227611386Z/repo/.task-build/library/CMakeFiles/qaws.dir
+/Volumes/UserFBWorkspace/questions/FSFE62A8330A20U13055/attempts/20261117T221227611386Z/repo/.task-build/library/CMakeFiles/amalgamate.dir
+/Volumes/UserFBWorkspace/questions/FSFE62A8330A20U13055/attempts/20261117T221227611386Z/repo/.task-build/library/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSFE62A8330A20U13055/attempts/20261117T221227611386Z/repo/.task-build/library/CMakeFiles/rebuild_cache.dir

@@ -10,7 +10,7 @@ for task_precision in 0 1; do
  ${CC:-cc} -std=c11 -O0 -g0 -DQAWS_SCALAR_IS_FLOAT=$task_precision -I. -Isrc/qaws -c src/qaws/qaws_sweep_rmf.c -o .task-build/rmf_$task_precision.o
 done
 ${CC:-cc} -std=c11 -O0 -g0 -DQAWS_SCALAR_IS_FLOAT=0 -I. -Isrc/qaws task_support/driver.c tests/sweep_rmf_task.c .task-build/rmf_0.o .task-build/rmf_1.o .task-build/library/libqaws.a -lm -pthread -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/qaws-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

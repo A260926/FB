@@ -35,4 +35,18 @@ qaws_status qaws_surface_create_pipe(
 	qaws_surface** out_surface,
 	qaws_surface_pipe_desc const* desc);
 
+/* Rebuild the pipe's frame field at angular_tolerance (radians, 1e-3 .. 1e-7):
+   a span-adaptive Bishop field that subdivides every knot span of the path on
+   its own, so a narrow span cannot skip a turn (the fixed table a pipe used to
+   carry did). A new pipe already runs such a field at 1e-5; this call replaces
+   it. initial_normal is projected onto the normal plane of the start tangent;
+   NULL keeps the pipe's original starting direction. angular_tolerance == 0
+   releases the adaptive field and falls back to the pipe's original fixed
+   table. A rejected call changes nothing. Only call when no other thread is
+   evaluating the surface. */
+qaws_status qaws_surface_pipe_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance);
+
 #endif /* QAWS_SURFACE_PIPE_H */

@@ -40,4 +40,24 @@ qaws_status qaws_surface_create_swept(
 	qaws_surface** out_surface,
 	qaws_surface_swept_desc const* desc);
 
+/* Replace the swept surface's Frenet frame with a span-adaptive Bishop
+   (rotation-minimizing, parallel-transport) frame field built along its
+   borrowed path. Every real knot span is subdivided on its own until the
+   transported normal meets angular_tolerance (radians, 1e-3 .. 1e-7), so a
+   turn compressed into a narrow span is not skipped; the normal has no spin
+   about the tangent and stays defined through straight pieces and curvature
+   zeros. initial_normal is projected onto the normal plane of the start
+   tangent; NULL keeps the frame the surface currently starts from. A positive
+   tolerance rebuilds (or first enables) the field, replacing any earlier one.
+   angular_tolerance == 0 releases the field and restores the original Frenet
+   behavior. The surface keeps its identity and its borrowed path/profile;
+   the field's cache is allocated and freed through the surface's allocator.
+   A rejected call (an out-of-range or non-finite tolerance, a zero-speed
+   path, a normal parallel to the tangent) changes nothing: the previous mode
+   stays in force. Only call when no other thread is evaluating the surface. */
+qaws_status qaws_surface_swept_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance);
+
 #endif /* QAWS_SURFACE_SWEPT_H */

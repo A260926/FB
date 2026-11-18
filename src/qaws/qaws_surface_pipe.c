@@ -3,6 +3,7 @@
 #include "qaws_inspect.h"
 #include "internal/qaws_internal_surface.h"
 #include "internal/qaws_internal_curve.h"
+#include "internal/qaws_internal_rmf.h"
 #include "core/qaws_frame_core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -17,12 +18,16 @@ typedef struct qaws_surface_pipe_impl
 	qaws_range path_range;
 	qaws_scalar radius_x;
 	qaws_scalar radius_y;
-	/* rotation-minimizing frames at uniform u samples, by double reflection (Wang et al. 2008): the path's point and unit
+	/* the pipe's original starting direction (the fixed table's first normal); NULL initial_normal keeps it */
+	qaws_vec3 start_normal;
+	/* the fixed table the pipe used to carry, still the fallback once RMF is switched off: the path's point and unit
 	   tangent there, the frame's normal and binormal */
 	qaws_vec3 frame_P[PIPE_FRAME_SAMPLES + 1];
 	qaws_vec3 frame_T[PIPE_FRAME_SAMPLES + 1];
 	qaws_vec3 frame_N[PIPE_FRAME_SAMPLES + 1];
 	qaws_vec3 frame_B[PIPE_FRAME_SAMPLES + 1];
+	/* the span-adaptive Bishop field; non-NULL from creation (1e-5) until qaws_surface_pipe_set_rmf switches it off */
+	qaws_rmf_field* rmf;
 } qaws_surface_pipe_impl;
 
 /* ------------------------------------------------------------------ */
@@ -114,19 +119,27 @@ static void precompute_frames(qaws_surface_pipe_impl* impl)
 		impl->frame_P[i] = c.position;
 		impl->frame_T[i] = T;
 		if (i == 0)
+		{
 			build_frame(T, &impl->frame_N[0], &impl->frame_B[0]);
+			impl->start_normal = impl->frame_N[0];
+		}
 		else
 			pipe_reflect(impl->frame_P[i - 1], impl->frame_T[i - 1], impl->frame_N[i - 1], c.position, T, &impl->frame_N[i], &impl->frame_B[i]);
 	}
 }
 
-/* the frame at u: one double reflection from the sample at or below u, so it meets the samples and is smooth between */
-static void pipe_frame(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_eval_result_3d* c, qaws_vec3* T, qaws_vec3* N, qaws_vec3* B)
+/* the frame at u from the active field: the span-adaptive Bishop field when enabled, else the fixed table */
+static qaws_status pipe_frame(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_eval_result_3d* c, qaws_vec3* T, qaws_vec3* N, qaws_vec3* B)
 {
-	qaws_scalar ui = u * (qaws_scalar)PIPE_FRAME_SAMPLES;
-	unsigned int i = ui <= QAWS_ZERO ? 0 : ui >= (qaws_scalar)PIPE_FRAME_SAMPLES ? PIPE_FRAME_SAMPLES - 1 : (unsigned int)ui;
-	pipe_path(impl, u, impl->frame_T[i], c, T);
-	pipe_reflect(impl->frame_P[i], impl->frame_T[i], impl->frame_N[i], c->position, *T, N, B);
+	if (impl->rmf)
+		return qaws_rmf_field_frame(impl->rmf, u, c, T, N, B);
+	{
+		qaws_scalar ui = u * (qaws_scalar)PIPE_FRAME_SAMPLES;
+		unsigned int i = ui <= QAWS_ZERO ? 0 : ui >= (qaws_scalar)PIPE_FRAME_SAMPLES ? PIPE_FRAME_SAMPLES - 1 : (unsigned int)ui;
+		pipe_path(impl, u, impl->frame_T[i], c, T);
+		pipe_reflect(impl->frame_P[i], impl->frame_T[i], impl->frame_N[i], c->position, *T, N, B);
+		return QAWS_STATUS_OK;
+	}
 }
 
 /* dS/du at (u, cos and sin of the angle), and the frame's rates in u: a rotation-minimizing frame turns with the tangent
@@ -136,29 +149,38 @@ static void pipe_du(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_scal
 {
 	qaws_scalar s_path = impl->path_range.max_value - impl->path_range.min_value;
 	qaws_eval_result_3d c;
-	qaws_vec3 T, N, B, dt = { 0, 0, 0 }, dn, db;
-	qaws_scalar sp, kn, kb;
+	qaws_vec3 T, N, B, dn, db;
 	pipe_frame(impl, u, &c, &T, &N, &B);
-	sp = v3_len(c.d1);
-	if (sp > QAWS_LITERAL(1e-15))
+	if (impl->rmf)
 	{
-		qaws_scalar a = v3_dot_l(c.d2, T);
-		dt.x = (c.d2.x - a * T.x) / sp;
-		dt.y = (c.d2.y - a * T.y) / sp;
-		dt.z = (c.d2.z - a * T.z) / sp;
+		qaws_vec3 dn_t, db_t;
+		/* the helper gives the rates in the path parameter; scale to the surface's normalized u once */
+		qaws_rmf_frame_rates(&c, T, N, B, &dn_t, &db_t);
+		dn.x = dn_t.x * s_path; dn.y = dn_t.y * s_path; dn.z = dn_t.z * s_path;
+		db.x = db_t.x * s_path; db.y = db_t.y * s_path; db.z = db_t.z * s_path;
 	}
-	kn = v3_dot_l(dt, N);
-	kb = v3_dot_l(dt, B);
-	dn.x = -kn * T.x * s_path; dn.y = -kn * T.y * s_path; dn.z = -kn * T.z * s_path;
-	db.x = -kb * T.x * s_path; db.y = -kb * T.y * s_path; db.z = -kb * T.z * s_path;
+	else
+	{
+		qaws_vec3 dt = { 0, 0, 0 };
+		qaws_scalar sp = v3_len(c.d1), kn, kb;
+		if (sp > QAWS_LITERAL(1e-15))
+		{
+			qaws_scalar a = v3_dot_l(c.d2, T);
+			dt.x = (c.d2.x - a * T.x) / sp;
+			dt.y = (c.d2.y - a * T.y) / sp;
+			dt.z = (c.d2.z - a * T.z) / sp;
+		}
+		kn = v3_dot_l(dt, N);
+		kb = v3_dot_l(dt, B);
+		dn.x = -kn * T.x * s_path; dn.y = -kn * T.y * s_path; dn.z = -kn * T.z * s_path;
+		db.x = -kb * T.x * s_path; db.y = -kb * T.y * s_path; db.z = -kb * T.z * s_path;
+	}
+	/* the DUU central difference asks only for dS/du, so the rate outputs are optional */
+	if (out_dn) *out_dn = dn;
+	if (out_db) *out_db = db;
 	out_du->x = s_path * c.d1.x + impl->radius_x * ca * dn.x + impl->radius_y * sa * db.x;
 	out_du->y = s_path * c.d1.y + impl->radius_x * ca * dn.y + impl->radius_y * sa * db.y;
 	out_du->z = s_path * c.d1.z + impl->radius_x * ca * dn.z + impl->radius_y * sa * db.z;
-	if (out_dn)
-	{
-		*out_dn = dn;
-		*out_db = db;
-	}
 }
 
 /* ------------------------------------------------------------------ */
@@ -167,7 +189,7 @@ static void pipe_du(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_scal
 
 /* Pipe surface: S(u,v) = P(u) + rx * cos(theta) * N(u) + ry * sin(theta) * B(u)
    where theta = 2 * pi * v.
-   N(u), B(u) are a rotation-minimizing frame (pipe_frame).
+   N(u), B(u) are the active rotation-minimizing frame (pipe_frame).
    u follows the path, v parameterizes the circular/elliptical cross-section.
 
    dS/dv, dS/du and the mixed derivative are analytic (pipe_du); duu is the central difference of the analytic dS/du. */
@@ -272,8 +294,11 @@ static qaws_status pipe_surface_eval(
 	return QAWS_STATUS_OK;
 }
 
-static void pipe_surface_destroy(void* impl, qaws_allocator const* allocator)
+static void pipe_surface_destroy(void* impl_p, qaws_allocator const* allocator)
 {
+	qaws_surface_pipe_impl* impl = (qaws_surface_pipe_impl*)impl_p;
+	if (impl->rmf)
+		qaws_rmf_field_free(impl->rmf, allocator);
 	qaws_internal_dealloc(impl, allocator);
 }
 
@@ -289,6 +314,49 @@ static qaws_surface_vtable const pipe_surface_vtable = {
 	pipe_surface_is_rational,
 	NULL /* diff */
 };
+
+qaws_status qaws_surface_pipe_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance)
+{
+	qaws_surface_pipe_impl* impl;
+	qaws_rmf_field* next = NULL;
+	qaws_vec3 const* start;
+	qaws_status st;
+
+	if (!surface || surface->kind != QAWS_SURFACE_KIND_PIPE)
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	if (!isfinite(angular_tolerance))
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	impl = (qaws_surface_pipe_impl*)surface->impl;
+
+	/* 0: release the adaptive field and restore the fixed table */
+	if (angular_tolerance == QAWS_ZERO)
+	{
+		if (impl->rmf)
+		{
+			qaws_rmf_field_free(impl->rmf, surface->allocator);
+			impl->rmf = NULL;
+		}
+		return QAWS_STATUS_OK;
+	}
+
+	st = qaws_rmf_validate_tolerance(angular_tolerance);
+	if (st != QAWS_STATUS_OK)
+		return st;
+
+	/* NULL: the pipe's original starting direction */
+	start = initial_normal ? initial_normal : &impl->start_normal;
+	st = qaws_rmf_field_build(&next, impl->path, impl->path_range,
+		start, angular_tolerance, surface->allocator);
+	if (st != QAWS_STATUS_OK)
+		return st;
+	if (impl->rmf)
+		qaws_rmf_field_free(impl->rmf, surface->allocator);
+	impl->rmf = next;
+	return QAWS_STATUS_OK;
+}
 
 qaws_status qaws_surface_create_pipe_ex(
 	qaws_surface** out_surface,
@@ -322,14 +390,25 @@ qaws_status qaws_surface_create_pipe_ex(
 		qaws_internal_surface_free(surface);
 		return QAWS_STATUS_ALLOCATION_FAILURE;
 	}
+	memset(impl, 0, sizeof *impl);
 
 	impl->path = desc->path;
 	impl->path_range = qaws_curve_get_parameter_range(desc->path);
 	impl->radius_x = desc->radius_x;
 	impl->radius_y = ry;
+	impl->rmf = NULL;
 
-	/* rotation-minimizing frames along the path */
+	/* the fixed table first: it is the fallback after set_rmf(.., 0) and fixes the original starting direction */
 	precompute_frames(impl);
+
+	/* pipes default to the span-adaptive field at 1e-5; a curve the field cannot serve keeps the fixed table */
+	{
+		qaws_rmf_field* field = NULL;
+		qaws_status st = qaws_rmf_field_build(&field, impl->path, impl->path_range,
+			&impl->start_normal, QAWS_RMF_DEFAULT_TOLERANCE, surface->allocator);
+		if (st == QAWS_STATUS_OK)
+			impl->rmf = field;
+	}
 
 	surface->impl = impl;
 	*out_surface = surface;

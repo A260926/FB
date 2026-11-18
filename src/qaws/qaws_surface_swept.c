@@ -3,6 +3,7 @@
 #include "qaws_inspect.h"
 #include "internal/qaws_internal_surface.h"
 #include "internal/qaws_internal_curve.h"
+#include "internal/qaws_internal_rmf.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -15,42 +16,70 @@ typedef struct qaws_surface_swept_impl
 	qaws_scalar scale;
 	qaws_range path_range;
 	qaws_range prof_range;
+	/* when non-NULL, the span-adaptive Bishop field replaces the Frenet frame */
+	qaws_rmf_field* rmf;
 } qaws_surface_swept_impl;
 
-/* dS/du at u for the profile point (px, py) (scaled), and the frame's rates N', B' in u: the Frenet-Serret formulas in the
-   path parameter t, N' = |C'| (-k T + t B), B' = -|C'| t N (k, t: curvature and torsion, from D1 to D3); where D1 x D2
-   vanishes the frame is the constant one qaws_curve_compute_frenet_frame_3d picks, so it does not turn */
+/* the frame at u: the span-adaptive rotation-minimizing field when enabled, else the Frenet frame */
+static qaws_status swept_frame(qaws_surface_swept_impl const* impl, qaws_scalar u,
+	qaws_eval_result_3d* c, qaws_vec3* T, qaws_vec3* N, qaws_vec3* B)
+{
+	qaws_scalar s_path = impl->path_range.max_value - impl->path_range.min_value;
+	qaws_scalar t_path = impl->path_range.min_value + u * s_path;
+	qaws_status st;
+	memset(c, 0, sizeof *c);
+	if (impl->rmf)
+		return qaws_rmf_field_frame(impl->rmf, u, c, T, N, B);
+	st = qaws_curve_evaluate_3d(c, impl->path, t_path,
+		QAWS_EVAL_FLAG_POSITION | QAWS_EVAL_FLAG_D1 | QAWS_EVAL_FLAG_D2 | QAWS_EVAL_FLAG_D3);
+	if (st != QAWS_STATUS_OK)
+		return st;
+	return qaws_curve_compute_frenet_frame_3d(T, N, B, impl->path, t_path);
+}
+
+/* dS/du at u for the profile point (px, py) (scaled), and the frame's rates N', B' in u.
+   Frenet mode: the Frenet-Serret formulas from D1..D3. RMF mode: the frame turns with the tangent only
+   (qaws_rmf_frame_rates), so the section normal carries no spin about it. */
 static qaws_status swept_du(qaws_surface_swept_impl const* impl, qaws_scalar u, qaws_scalar px, qaws_scalar py, qaws_vec3* out_du,
 	qaws_vec3* out_dn, qaws_vec3* out_db)
 {
 	qaws_scalar s_path = impl->path_range.max_value - impl->path_range.min_value;
-	qaws_scalar t_path = impl->path_range.min_value + u * s_path;
 	qaws_eval_result_3d c;
 	qaws_vec3 T, N, B, dn = { 0, 0, 0 }, db = { 0, 0, 0 };
 	double x[3], xl2, sp, kappa_s, tau;
 	qaws_status st;
-	memset(&c, 0, sizeof c);
-	if ((st = qaws_curve_evaluate_3d(&c, impl->path, t_path, QAWS_EVAL_FLAG_D1 | QAWS_EVAL_FLAG_D2 | QAWS_EVAL_FLAG_D3)) != QAWS_STATUS_OK)
+
+	st = swept_frame(impl, u, &c, &T, &N, &B);
+	if (st != QAWS_STATUS_OK)
 		return st;
-	if ((st = qaws_curve_compute_frenet_frame_3d(&T, &N, &B, impl->path, t_path)) != QAWS_STATUS_OK)
-		return st;
-	x[0] = (double)c.d1.y * c.d2.z - (double)c.d1.z * c.d2.y;
-	x[1] = (double)c.d1.z * c.d2.x - (double)c.d1.x * c.d2.z;
-	x[2] = (double)c.d1.x * c.d2.y - (double)c.d1.y * c.d2.x;
-	xl2 = x[0] * x[0] + x[1] * x[1] + x[2] * x[2];
-	sp = sqrt((double)c.d1.x * c.d1.x + (double)c.d1.y * c.d1.y + (double)c.d1.z * c.d1.z);
-	/* the threshold of qaws_curve_compute_frenet_frame_3d */
-	if (sqrt(xl2) >= 1.0e-12 && sp > 0)
+
+	if (impl->rmf)
 	{
-		kappa_s = sqrt(xl2) / (sp * sp);      /* |C'| k */
-		tau = (x[0] * c.d3.x + x[1] * c.d3.y + x[2] * c.d3.z) / xl2;
-		dn.x = (qaws_scalar)(-kappa_s * T.x + sp * tau * B.x);
-		dn.y = (qaws_scalar)(-kappa_s * T.y + sp * tau * B.y);
-		dn.z = (qaws_scalar)(-kappa_s * T.z + sp * tau * B.z);
-		db.x = (qaws_scalar)(-sp * tau * N.x);
-		db.y = (qaws_scalar)(-sp * tau * N.y);
-		db.z = (qaws_scalar)(-sp * tau * N.z);
+		/* the frame's rates in the path parameter (the range chain is applied below, once) */
+		qaws_rmf_frame_rates(&c, T, N, B, &dn, &db);
 	}
+	else
+	{
+		x[0] = (double)c.d1.y * c.d2.z - (double)c.d1.z * c.d2.y;
+		x[1] = (double)c.d1.z * c.d2.x - (double)c.d1.x * c.d2.z;
+		x[2] = (double)c.d1.x * c.d2.y - (double)c.d1.y * c.d2.x;
+		xl2 = x[0] * x[0] + x[1] * x[1] + x[2] * x[2];
+		sp = sqrt((double)c.d1.x * c.d1.x + (double)c.d1.y * c.d1.y + (double)c.d1.z * c.d1.z);
+		/* the threshold of qaws_curve_compute_frenet_frame_3d */
+		if (sqrt(xl2) >= 1.0e-12 && sp > 0)
+		{
+			kappa_s = sqrt(xl2) / (sp * sp);      /* |C'| k */
+			tau = (x[0] * c.d3.x + x[1] * c.d3.y + x[2] * c.d3.z) / xl2;
+			dn.x = (qaws_scalar)(-kappa_s * T.x + sp * tau * B.x);
+			dn.y = (qaws_scalar)(-kappa_s * T.y + sp * tau * B.y);
+			dn.z = (qaws_scalar)(-kappa_s * T.z + sp * tau * B.z);
+			db.x = (qaws_scalar)(-sp * tau * N.x);
+			db.y = (qaws_scalar)(-sp * tau * N.y);
+			db.z = (qaws_scalar)(-sp * tau * N.z);
+		}
+	}
+
+	/* dn, db are the rates in the path parameter t; dS/du = s_path (dP/dt + px dN/dt + py dB/dt) */
 	out_du->x = s_path * (c.d1.x + px * dn.x + py * db.x);
 	out_du->y = s_path * (c.d1.y + px * dn.y + py * db.y);
 	out_du->z = s_path * (c.d1.z + px * dn.z + py * db.z);
@@ -63,11 +92,11 @@ static qaws_status swept_du(qaws_surface_swept_impl const* impl, qaws_scalar u, 
 }
 
 /* Swept surface: S(u,v) = P(u) + scale * [profile_x(v) * N(u) + profile_y(v) * B(u)]
-   u follows the path, v follows the profile cross-section.
-   N, B are Frenet normal and binormal of the path curve.
+   u follows the path, v follows the profile cross-section. N, B are the Frenet frame, or the
+   span-adaptive Bishop frame once qaws_surface_swept_set_rmf enabled one.
 
-   dS/dv, dS/du and the mixed derivative are analytic (swept_du); duu is the central difference of the analytic dS/du
-   (the torsion's rate would need the path's fourth derivative). */
+   dS/dv, dS/du and the mixed derivative are analytic (swept_du); duu is the central difference of the
+   analytic dS/du (the torsion's rate would need the path's fourth derivative). */
 static qaws_status swept_surface_eval(
 	qaws_surface const* surface,
 	qaws_scalar u,
@@ -77,9 +106,7 @@ static qaws_status swept_surface_eval(
 {
 	qaws_surface_swept_impl const* impl =
 		(qaws_surface_swept_impl const*)surface->impl;
-	qaws_scalar s_path = impl->path_range.max_value - impl->path_range.min_value;
 	qaws_scalar s_prof = impl->prof_range.max_value - impl->prof_range.min_value;
-	qaws_scalar t_path = impl->path_range.min_value + u * s_path;
 	qaws_scalar t_prof = impl->prof_range.min_value + v * s_prof;
 	qaws_scalar scale = impl->scale;
 
@@ -88,18 +115,9 @@ static qaws_status swept_surface_eval(
 	qaws_vec3 T, N, B, pos;
 	qaws_scalar px, py;
 
-	/* Evaluate path position */
-	memset(&path_r, 0, sizeof(path_r));
+	/* Get the active frame at the path point (the field eval also gives the path position and derivatives) */
 	{
-		qaws_status s = qaws_curve_evaluate_3d(&path_r, impl->path,
-			t_path, QAWS_EVAL_FLAG_POSITION);
-		if (s != QAWS_STATUS_OK) return s;
-	}
-
-	/* Get Frenet frame at path point */
-	{
-		qaws_status s = qaws_curve_compute_frenet_frame_3d(
-			&T, &N, &B, impl->path, t_path);
+		qaws_status s = swept_frame(impl, u, &path_r, &T, &N, &B);
 		if (s != QAWS_STATUS_OK) return s;
 	}
 
@@ -205,8 +223,11 @@ static qaws_status swept_surface_eval(
 	return QAWS_STATUS_OK;
 }
 
-static void swept_surface_destroy(void* impl, qaws_allocator const* allocator)
+static void swept_surface_destroy(void* impl_p, qaws_allocator const* allocator)
 {
+	qaws_surface_swept_impl* impl = (qaws_surface_swept_impl*)impl_p;
+	if (impl->rmf)
+		qaws_rmf_field_free(impl->rmf, allocator);
 	qaws_internal_dealloc(impl, allocator);
 }
 
@@ -222,6 +243,47 @@ static qaws_surface_vtable const swept_surface_vtable = {
 	swept_surface_is_rational,
 	NULL /* diff */
 };
+
+qaws_status qaws_surface_swept_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance)
+{
+	qaws_surface_swept_impl* impl;
+	qaws_rmf_field* next = NULL;
+	qaws_status st;
+
+	if (!surface || surface->kind != QAWS_SURFACE_KIND_SWEPT)
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	if (!isfinite(angular_tolerance))
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	impl = (qaws_surface_swept_impl*)surface->impl;
+
+	/* 0: release the field and restore the Frenet behavior */
+	if (angular_tolerance == QAWS_ZERO)
+	{
+		if (impl->rmf)
+		{
+			qaws_rmf_field_free(impl->rmf, surface->allocator);
+			impl->rmf = NULL;
+		}
+		return QAWS_STATUS_OK;
+	}
+
+	st = qaws_rmf_validate_tolerance(angular_tolerance);
+	if (st != QAWS_STATUS_OK)
+		return st;
+
+	/* build before the swap: a rejected build leaves the current mode in place */
+	st = qaws_rmf_field_build(&next, impl->path, impl->path_range,
+		initial_normal, angular_tolerance, surface->allocator);
+	if (st != QAWS_STATUS_OK)
+		return st;
+	if (impl->rmf)
+		qaws_rmf_field_free(impl->rmf, surface->allocator);
+	impl->rmf = next;
+	return QAWS_STATUS_OK;
+}
 
 qaws_status qaws_surface_create_swept_ex(
 	qaws_surface** out_surface,
@@ -259,6 +321,7 @@ qaws_status qaws_surface_create_swept_ex(
 	impl->scale = (desc->scale > 0) ? desc->scale : QAWS_ONE;
 	impl->path_range = qaws_curve_get_parameter_range(desc->path);
 	impl->prof_range = qaws_curve_get_parameter_range(desc->profile);
+	impl->rmf = NULL;   /* a swept surface keeps its Frenet behavior until RMF is enabled */
 
 	surface->impl = impl;
 	*out_surface = surface;
