@@ -449,6 +449,172 @@ PJ_DECL(void) pjmedia_rtp_session_update2(pjmedia_rtp_session *ses,
                                           pj_bool_t check_pt);
 
 
+/**
+ * @defgroup PJMED_RTP_SPLICE RTP Source Splice
+ * @ingroup PJMED_RTP
+ * @brief Timed continuation between two RTP sources.
+ * @{
+ *
+ * The splice object accepts complete RTP packets that are already in
+ * memory and a caller-driven microsecond clock.  It does not use sockets
+ * or threads.  Packets from a current source are queued in logical slots;
+ * another source can be armed as a candidate and atomically takes over at
+ * a caller selected slot.
+ *
+ * All functions that return an int return a POSIX errno value: zero on
+ * success, and one of EINVAL, ENOENT, ENOBUFS, ETIMEDOUT, EBADMSG, EAGAIN,
+ * ENODATA or ENOMEM on failure.
+ */
+
+/**
+ * Splice configuration.
+ */
+typedef struct pjmedia_rtp_splice_cfg
+{
+    pj_uint32_t init_ssrc;   /**< SSRC of the initial media source.        */
+    pj_uint32_t out_ssrc;    /**< SSRC written to output packets.          */
+    pj_uint32_t pt;          /**< Payload type, 0..127.                    */
+    pj_uint32_t clock_rate;  /**< Clock rate in Hz, greater than zero.     */
+    pj_uint32_t frame_ticks; /**< Timestamp ticks per packet, > 0.         */
+    pj_int64_t  delay_us;    /**< Playout delay in microseconds, >= 0.     */
+    pj_uint32_t window;      /**< Slot window, 4..512.                     */
+    pj_uint16_t out_seq;     /**< Sequence number of output slot zero.     */
+    pj_uint32_t out_ts;      /**< Timestamp of output slot zero.           */
+} pjmedia_rtp_splice_cfg;
+
+/**
+ * Opaque splice object.
+ */
+typedef struct pjmedia_rtp_splice pjmedia_rtp_splice;
+
+/**
+ * Allocate a splice object.
+ *
+ * @param obj   Upon return, points to the new splice object.
+ * @param cfg   Splice configuration.
+ *
+ * @return      Zero on success, EINVAL for an invalid configuration, or
+ *              ENOMEM when allocation fails.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_alloc(pjmedia_rtp_splice **obj,
+                                      const pjmedia_rtp_splice_cfg *cfg);
+
+/**
+ * Destroy a splice object and release every packet it still holds.
+ *
+ * @param obj   The splice object.
+ */
+PJ_DECL(void) pjmedia_rtp_splice_destroy(pjmedia_rtp_splice *obj);
+
+/**
+ * Submit a complete RTP packet.  The packet bytes are copied, so the caller
+ * may reuse or free its buffer immediately.  The first packet accepted for a
+ * given source and slot wins; later packets for the same slot are ignored.
+ *
+ * The first valid packet of the initial source establishes slot zero using
+ * its sequence number, timestamp and arrival time.
+ *
+ * @param obj   The splice object.
+ * @param pkt   Complete RTP packet.
+ * @param len   Packet length in bytes.
+ * @param now   Current time in microseconds, non-negative and monotonic.
+ *
+ * @return      Zero on success, ENOENT when the slot is too old or the SSRC
+ *              is unknown, ENOBUFS when the slot is beyond the window,
+ *              ETIMEDOUT when the slot deadline has passed, EBADMSG for an
+ *              invalid packet, or EINVAL for invalid arguments.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_push(pjmedia_rtp_splice *obj,
+                                     const void *pkt, pj_size_t len,
+                                     pj_uint64_t now);
+
+/**
+ * Pop the packet for the current head slot once its deadline has arrived.
+ *
+ * Before a stream starts, or before the head slot deadline, EAGAIN is
+ * returned and nothing is advanced.  Otherwise exactly one slot is
+ * consumed: zero is returned when a packet was available and ENODATA when
+ * the slot was empty.  Both outcomes advance the head slot.
+ *
+ * On success, *pkt points to an independently allocated buffer owned by the
+ * caller, who must free() it, and *len receives its size.  The buffer keeps
+ * the complete original packet and only the SSRC, sequence number and
+ * timestamp are rewritten with the configured output identity.
+ *
+ * @param obj       The splice object.
+ * @param now       Current time in microseconds.
+ * @param pkt       Upon success, receives the output packet buffer.
+ * @param len       Upon success, receives the output packet length.
+ *
+ * @return          Zero on success, EAGAIN when not due yet, ENODATA when a
+ *                  due slot was empty, or EINVAL for invalid arguments.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_pop(pjmedia_rtp_splice *obj, pj_uint64_t now,
+                                    void **pkt, pj_size_t *len);
+
+/**
+ * Arm a candidate source that may take over at logical slot @a cut.
+ *
+ * The object must already have an anchor, @a cut must be at least the head
+ * slot, cut + 2 must be inside the current window, and @a ssrc must differ
+ * from the current source.  The first valid candidate packet maps to
+ * @a cut and establishes the candidate's sequence/timestamp coordinates.
+ * Slots cut, cut + 1 and cut + 2 must all be received for the candidate to
+ * be ready.
+ *
+ * Arming replaces a previous candidate.  A failed call leaves the previous
+ * candidate untouched.
+ *
+ * @param obj   The splice object.
+ * @param ssrc  Candidate SSRC.
+ * @param cut   Logical slot where the candidate may take over.
+ *
+ * @return      Zero on success or EINVAL for invalid arguments.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_arm(pjmedia_rtp_splice *obj,
+                                    pj_uint32_t ssrc, pj_uint64_t cut);
+
+/**
+ * Cancel the current candidate without disturbing packets already queued
+ * for the current source.
+ *
+ * @param obj   The splice object.
+ */
+PJ_DECL(void) pjmedia_rtp_splice_cancel(pjmedia_rtp_splice *obj);
+
+/**
+ * Reset the splice object: release all queued packets and any candidate,
+ * clear the clock and head slot, and restore the configured initial source
+ * and output origin.
+ *
+ * @param obj   The splice object.
+ */
+PJ_DECL(void) pjmedia_rtp_splice_reset(pjmedia_rtp_splice *obj);
+
+/**
+ * Get the current head slot number.
+ *
+ * @param obj   The splice object.
+ *
+ * @return      The head slot, or zero when the object is NULL.
+ */
+PJ_DECL(pj_uint64_t) pjmedia_rtp_splice_head(const pjmedia_rtp_splice *obj);
+
+/**
+ * Get the SSRC of the currently active source.
+ *
+ * @param obj   The splice object.
+ *
+ * @return      The active SSRC; before the first packet this is the
+ *              configured initial SSRC.
+ */
+PJ_DECL(pj_uint32_t) pjmedia_rtp_splice_active(
+                                        const pjmedia_rtp_splice *obj);
+
+/**
+ * @}
+ */
+
 /*
  * INTERNAL:
  */

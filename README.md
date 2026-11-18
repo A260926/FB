@@ -66,3 +66,67 @@ Table of contents:
   - [PJNATH](https://docs.pjsip.org/en/latest/api/pjnath/index.html) - NAT traversal helper
   - [PJLIB-UTIL](https://docs.pjsip.org/en/latest/api/pjlib-util/index.html) - utilities
   - [PJLIB](https://docs.pjsip.org/en/latest/api/pjlib/index.html) - portable library
+
+## Manual-clock RTP source splice
+
+`pjmedia_rtp_splice` (declared in `pjmedia/include/pjmedia/rtp.h`,
+implemented in `pjmedia/src/pjmedia/rtp_splice.c`) continues playback
+between two RTP sources that carry the same encoding and packet duration.
+It never opens a socket or a thread: the caller feeds complete packets and
+advances a microsecond clock.
+
+```c
+#include <pjmedia/rtp.h>
+#include <stdlib.h>
+
+static pjmedia_rtp_splice_cfg cfg = {
+    0x11111111,   /* init_ssrc: source that plays first       */
+    0x99999999,   /* out_ssrc: SSRC written to every output    */
+    96,           /* pt                                        */
+    8000,         /* clock_rate                                */
+    160,          /* frame_ticks: 20 ms at 8 kHz               */
+    100000,       /* delay_us: 100 ms playout delay            */
+    16,           /* window: slots                                 */
+    0xFFFE,       /* out_seq: sequence of output slot zero    */
+    0xFFFFF000    /* out_ts: timestamp of output slot zero    */
+};
+
+pjmedia_rtp_splice *splice;
+void *out;
+pj_size_t out_len;
+pj_uint64_t now = 0;               /* caller-owned microsecond clock */
+
+pjmedia_rtp_splice_alloc(&splice, &cfg);
+
+/* Packets are supplied exactly as received; bytes are copied. */
+pjmedia_rtp_splice_push(splice, pkt_a0, len_a0, now);
+
+/* Queue an output packet once its slot is due.  The returned buffer is
+ * malloc()ed, keeps the whole packet, and only SSRC/seq/ts are rewritten. */
+while (pjmedia_rtp_splice_pop(splice, now, &out, &out_len) == 0) {
+    send_packet(out, out_len);
+    free(out);
+}
+
+/* Hand over to 0x22222222 at logical slot 'head + 2'.  The candidate is
+ * proven by its packets for slots c, c+1 and c+2; the switch happens when
+ * pop() first advances to c.  Before that the old source still plays. */
+pjmedia_rtp_splice_arm(splice, 0x22222222,
+                       pjmedia_rtp_splice_head(splice) + 2);
+pjmedia_rtp_splice_push(splice, pkt_b0, len_b0, now);   /* maps to slot c */
+pjmedia_rtp_splice_push(splice, pkt_b1, len_b1, now);   /* c + 1           */
+pjmedia_rtp_splice_push(splice, pkt_b2, len_b2, now);   /* c + 2, ready    */
+
+/* If the proof is incomplete when the head reaches c, the candidate is
+ * dropped and the old source keeps playing.  A successful switch frees the
+ * old source from c onwards and rejects it until it is armed again.
+ * pjmedia_rtp_splice_cancel() drops only the candidate;
+ * pjmedia_rtp_splice_reset() releases everything and re-anchors the
+ * configured initial source. */
+
+pjmedia_rtp_splice_destroy(splice);
+```
+
+Run `bash task_support/run.sh baseline` for the ordinary RTP send/receive
+header path and `bash task_support/run.sh target` for the production
+implementation plus the `tests/splice.c` regression suite.
