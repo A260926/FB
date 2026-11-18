@@ -137,6 +137,18 @@ public:
     return static_cast<Sample> (out);
   }
 
+  // Read-only access to the Direct Form II delay line.  Additive API used by
+  // offline replay tools that need to snapshot / inspect the production
+  // recursion state; the processing behaviour is unchanged.
+  double getState1 () const { return m_v1; }
+  double getState2 () const { return m_v2; }
+
+  void setState (double v1, double v2)
+  {
+    m_v1 = v1;
+    m_v2 = v2;
+  }
+
 private:
   double m_v1; // v[-1]
   double m_v2; // v[-2]
