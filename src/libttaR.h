@@ -286,6 +286,53 @@ extern size_t libttaR_codecstate_priv_size(unsigned int nchan)
 /*@*/
 ;
 
+/* ------------------------------------------------------------------------ */
+
+/* streaming (fragmented) decoder for a single TTA1 audio frame */
+
+#undef nchan
+/*@external@*/ /*@unused@*/
+X_LIBTTAr_ATTRIBUTE_CONST
+extern size_t libttaR_streamdec_size(unsigned int nchan)
+/*@*/
+;
+
+#undef workspace
+#undef workspace_bytes
+#undef samplebytes
+#undef nchan
+#undef sample_frames
+#undef frame_bytes
+/*@external@*/ /*@unused@*/
+extern int libttaR_streamdec_init(
+	void *workspace, size_t workspace_bytes,
+	unsigned int samplebytes, unsigned int nchan,
+	size_t sample_frames, size_t frame_bytes
+)
+/*@modifies	*workspace@*/
+;
+
+#undef workspace
+#undef src
+#undef bytes
+#undef dst
+#undef frames
+#undef final
+/*@external@*/ /*@unused@*/
+extern int libttaR_streamdec_process(
+	void *workspace,
+	const uint8_t *src,
+	size_t *bytes,
+	int32_t *dst, size_t *frames,
+	int final
+)
+/*@modifies	*bytes,
+		*dst,
+		*frames,
+		*workspace
+@*/
+;
+
 #undef buf
 #undef size
 /*@external@*/ /*@unused@*/
