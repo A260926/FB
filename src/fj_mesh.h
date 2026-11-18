@@ -196,6 +196,7 @@ private:
   virtual void get_primitive_bounds(Index prim_id, Box *bounds) const;
   virtual void get_bounds(Box *bounds) const;
   virtual Index get_primitive_count() const;
+  virtual int GetPrimitiveType() const;
 
   int point_count_;
   int face_count_;

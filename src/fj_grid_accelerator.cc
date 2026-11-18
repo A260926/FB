@@ -310,6 +310,123 @@ const char *GridAccelerator::get_name() const
   return ACCELERATOR_NAME;
 }
 
+// Same 3D DDA walk as intersect(), but every cell the ray crosses is visited
+// instead of stopping at the first cell that holds a hit. Each referenced
+// primitive is reported as a candidate; Accelerator removes the duplicates
+// created by triangles spanning several cells.
+void GridAccelerator::intersect_all_primitives(const Ray &ray, Real time,
+    std::vector<int> *primitive_ids) const
+{
+  int NCELLS[3]    = {0, 0, 0};
+  int cell_id[3]   = {0, 0, 0};
+  int cell_step[3] = {0, 0, 0};
+  int cell_end[3]  = {0, 0, 0};
+
+  // check intersection with overall bounds
+  Real boxhit_tmin = REAL_MAX;
+  Real boxhit_tmax = REAL_MAX;
+  if (!BoxRayIntersect(bounds_, ray.orig, ray.dir, ray.tmin, ray.tmax,
+        &boxhit_tmin, &boxhit_tmax)) {
+    return;
+  }
+
+  // check if the ray shot from inside bounds
+  Vector start;
+  Real t_start = REAL_MAX;
+  Real t_end = REAL_MAX;
+
+  if (bounds_.ContainsPoint(ray.orig)) {
+    start = ray.orig;
+    t_start = 0;
+  }
+  else {
+    t_start = boxhit_tmin;
+    t_end = boxhit_tmax;
+    start = RayPointAt(ray, t_start);
+  }
+  t_end = Min(t_end, ray.tmax);
+
+  NCELLS[0] = ncells_[0];
+  NCELLS[1] = ncells_[1];
+  NCELLS[2] = ncells_[2];
+
+  const Vector &grid_min = bounds_.min;
+  const Vector &dir = ray.dir;
+  Real t_next[3]  = {0, 0, 0};
+  Real t_delta[3] = {0, 0, 0};
+
+  // setup 3D DDA
+  for (int i = 0; i < 3; i++) {
+    cell_id[i] = static_cast<int>(Floor((start[i] - grid_min[i]) / cellsize_[i]));
+    cell_id[i] = Clamp(cell_id[i], 0, NCELLS[i] - 1);
+
+    if (dir[i] > 0) {
+      t_next[i] = t_start +
+        (((cell_id[i]+1) * cellsize_[i] + grid_min[i]) - start[i]) / dir[i];
+
+      t_delta[i] = cellsize_[i] / dir[i];
+      cell_step[i] = +1;
+      cell_end[i] = NCELLS[i];
+    }
+    else if (dir[i] <0) {
+      t_next[i] = t_start +
+        ((cell_id[i] * cellsize_[i] + grid_min[i]) - start[i]) / dir[i];
+
+      t_delta[i] = -1 * cellsize_[i] / dir[i];
+      cell_step[i] = -1;
+      cell_end[i] = -1;
+    }
+    else {
+      t_next[i] = REAL_MAX;
+      t_delta[i] = 0;
+      cell_step[i] = 0;
+      cell_end[i] = -1;
+    }
+  }
+
+  // traverse every voxel the ray crosses
+  for (;;) {
+    const int id = NCELLS[0] * NCELLS[1] * cell_id[2] +
+                   NCELLS[0] * cell_id[1] + cell_id[0];
+
+    for (Cell *cell = cells_[id]; cell != NULL; cell = cell->next) {
+      primitive_ids->push_back(cell->prim_id);
+    }
+
+    // advance to the next cell
+    if ((t_next[0] < t_next[1]) && (t_next[0] < t_next[2])) {
+      if (t_end < t_next[0]) {
+        break;
+      }
+      cell_id[0] += cell_step[0];
+      if (cell_id[0] == cell_end[0]) {
+        break;
+      }
+      t_next[0] += t_delta[0];
+    }
+    else if ((t_next[2] < t_next[1])) {
+      if (t_end < t_next[2]) {
+        break;
+      }
+      cell_id[2] += cell_step[2];
+      if (cell_id[2] == cell_end[2]) {
+        break;
+      }
+      t_next[2] += t_delta[2];
+    }
+    else {
+      if (t_end < t_next[1]) {
+        break;
+      }
+      cell_id[1] += cell_step[1];
+      if (cell_id[1] == cell_end[1]) {
+        break;
+      }
+      t_next[1] += t_delta[1];
+    }
+  }
+}
+
 static Real max_component(const Vector &a)
 {
   return Max(Max(a[0], a[1]), a[2]);

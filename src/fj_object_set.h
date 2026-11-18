@@ -35,6 +35,7 @@ private:
   virtual void get_primitive_bounds(Index prim_id, Box *bounds) const;
   virtual void get_bounds(Box *bounds) const;
   virtual Index get_primitive_count() const;
+  virtual int GetPrimitiveType() const;
 
   std::vector<const ObjectInstance*> objects_;
   Box bounds_;

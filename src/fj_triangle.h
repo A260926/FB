@@ -42,6 +42,12 @@ FJ_API bool TriRayIntersect(
     const Vector &orig, const Vector &dir, int cull_backfaces,
     Real *t, Real *u, Real *v);
 
+// Debug instrumentation: counts every actual ray/triangle intersection
+// test. Accelerator construction only touches bounds and boxes, so the
+// counter measures the tests performed while rays are being traced.
+FJ_API void TriResetRayTestCount();
+FJ_API long long TriGetRayTestCount();
+
 FJ_API bool TriBoxIntersect(
     const Vector &vert0, const Vector &vert1, const Vector &vert2,
     const Vector &boxcenter, const Vector &boxhalfsize);

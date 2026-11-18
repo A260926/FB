@@ -265,6 +265,11 @@ Index Curve::get_primitive_count() const
   return GetCurveCount();
 }
 
+int Curve::GetPrimitiveType() const
+{
+  return PRIMSET_CURVE;
+}
+
 static void compute_world_to_ray_matrix(const Ray &ray, Matrix *dst)
 {
   const Real ox = ray.orig.x;

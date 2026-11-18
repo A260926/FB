@@ -11,6 +11,18 @@ namespace fj {
 
 static const Real EPSILON = 1e-6;
 
+static long long tri_ray_test_count = 0;
+
+void TriResetRayTestCount()
+{
+  tri_ray_test_count = 0;
+}
+
+long long TriGetRayTestCount()
+{
+  return tri_ray_test_count;
+}
+
 Real TriComputeArea(
     const Vector &vert0, const Vector &vert1, const Vector &vert2)
 {
@@ -83,6 +95,8 @@ bool TriRayIntersect(
     const Vector &orig, const Vector &dir, int cull_backfaces,
     Real *t, Real *u, Real *v)
 {
+  ++tri_ray_test_count;
+
   Vector edge1, edge2, tvec, pvec, qvec;
   Real det, inv_det;
 

@@ -21,6 +21,10 @@ public:
   virtual const char *get_name() const;
 
   BVHNode *root;
+
+private:
+  virtual void intersect_all_primitives(const Ray &ray, Real time,
+      std::vector<int> *primitive_ids) const;
 };
 
 } // namespace xxx

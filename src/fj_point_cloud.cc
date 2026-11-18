@@ -105,6 +105,11 @@ Index PointCloud::get_primitive_count() const
   return GetPointCount();
 }
 
+int PointCloud::GetPrimitiveType() const
+{
+  return PRIMSET_POINT_CLOUD;
+}
+
 void PointCloud::compute_bounds()
 {
   Box box;

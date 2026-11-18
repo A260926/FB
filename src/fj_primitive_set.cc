@@ -45,4 +45,9 @@ Index PrimitiveSet::GetPrimitiveCount() const
   return get_primitive_count();
 }
 
+int PrimitiveSet::GetPrimitiveType() const
+{
+  return PRIMSET_UNKNOWN;
+}
+
 } // namespace xxx

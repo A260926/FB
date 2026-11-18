@@ -13,6 +13,15 @@ class Intersection;
 class Box;
 class Ray;
 
+enum PrimitiveSetType {
+  PRIMSET_UNKNOWN = 0,
+  PRIMSET_OBJECT_SET,
+  PRIMSET_MESH,
+  PRIMSET_CURVE,
+  PRIMSET_POINT_CLOUD,
+  PRIMSET_VOLUME
+};
+
 // PrimitiveSet abstract a set of primitives that is used by Accelerator
 class FJ_API PrimitiveSet {
 public:
@@ -25,6 +34,10 @@ public:
   void GetPrimitiveBounds(Index prim_id, Box *bounds) const;
   void GetEntireBounds(Box *bounds) const;
   Index GetPrimitiveCount() const;
+
+  // Identifies the concrete geometry behind the set so callers can reject
+  // geometry they do not support (e.g. deep shadow only accepts meshes).
+  virtual int GetPrimitiveType() const;
 
 private:
   virtual bool ray_intersect(Index prim_id, const Ray &ray,

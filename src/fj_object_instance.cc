@@ -242,6 +242,51 @@ bool ObjectInstance::RayIntersect(const Ray &ray, Real time, Intersection *isect
   return true;
 }
 
+void ObjectInstance::RayIntersectAll(const Ray &ray, Real time,
+    std::vector<Intersection> *intersections) const
+{
+  if (!IsSurface()) {
+    return;
+  }
+
+  Transform transform_interp;
+  XfmLerpTransformSample(&transform_samples_, time, &transform_interp);
+
+  // transform ray to object space, exactly like RayIntersect()
+  Ray ray_object_space = ray;
+  XfmTransformPointInverse(&transform_interp, &ray_object_space.orig);
+  XfmTransformVectorInverse(&transform_interp, &ray_object_space.dir);
+
+  // candidate walk through the mesh BVH/grid; no nearest-hit re-query
+  std::vector<int> primitive_ids;
+  acc_->IntersectAllPrimitives(ray_object_space, time, &primitive_ids);
+
+  for (size_t i = 0; i < primitive_ids.size(); i++) {
+    Intersection isect;
+    const bool hit = acc_->GetPrimitiveSet()->RayIntersect(
+        primitive_ids[i], ray_object_space, time, &isect);
+    if (!hit) {
+      continue;
+    }
+
+    // transform intersection back to world space
+    XfmTransformPoint(&transform_interp, &isect.P);
+    XfmTransformVector(&transform_interp, &isect.N);
+    isect.N = Normalize(isect.N);
+
+    XfmTransformVector(&transform_interp, &isect.dPdu);
+    XfmTransformVector(&transform_interp, &isect.dPdv);
+
+    isect.object = this;
+    intersections->push_back(isect);
+  }
+}
+
+const Accelerator *ObjectInstance::GetAccelerator() const
+{
+  return acc_;
+}
+
 bool ObjectInstance::RayVolumeIntersect(const Ray &ray, Real time,
     Interval *interval) const
 {

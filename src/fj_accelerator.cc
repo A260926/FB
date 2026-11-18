@@ -3,9 +3,11 @@
 
 #include "fj_accelerator.h"
 #include "fj_primitive_set.h"
+#include "fj_intersection.h"
 #include "fj_multi_thread.h"
 #include "fj_ray.h"
 
+#include <algorithm>
 #include <iostream>
 
 namespace fj {
@@ -110,6 +112,39 @@ bool Accelerator::Intersect(const Ray &ray, Real time, Intersection *isect) cons
   }
 
   return intersect(ray, time, isect);
+}
+
+void Accelerator::IntersectAllPrimitives(const Ray &ray, Real time,
+    std::vector<int> *primitive_ids) const
+{
+  Real boxhit_tmin = 0;
+  Real boxhit_tmax = 0;
+
+  // check intersection with overall bounds, exactly like Intersect()
+  const bool hit = BoxRayIntersect(bounds_, ray.orig, ray.dir, ray.tmin, ray.tmax,
+        &boxhit_tmin, &boxhit_tmax);
+
+  if (!hit) {
+    return;
+  }
+
+  intersect_all_primitives(ray, time, primitive_ids);
+
+  // a primitive may sit in several grid cells, so de-duplicate the list
+  std::sort(primitive_ids->begin(), primitive_ids->end());
+  primitive_ids->erase(
+      std::unique(primitive_ids->begin(), primitive_ids->end()),
+      primitive_ids->end());
+}
+
+void Accelerator::intersect_all_primitives(const Ray &ray, Real time,
+    std::vector<int> *primitive_ids) const
+{
+  // default fallback: only the nearest hit is available
+  Intersection isect;
+  if (intersect(ray, time, &isect) && isect.object != NULL) {
+    primitive_ids->push_back(isect.prim_id);
+  }
 }
 
 static void build_accelerator_callback(void *data)

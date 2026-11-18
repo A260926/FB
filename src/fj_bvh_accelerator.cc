@@ -121,6 +121,43 @@ const char *BVHAccelerator::get_name() const
   return ACCELERATOR_NAME;
 }
 
+// Full BVH walk that keeps the ray range fixed: every node whose bounds are
+// crossed by the ray is opened, so every leaf that could hold a layer is
+// reached, including ones behind the nearest intersection. No nearest-hit
+// query is re-issued and no epsilon marching is involved.
+void BVHAccelerator::intersect_all_primitives(const Ray &ray, Real time,
+    std::vector<int> *primitive_ids) const
+{
+  if (root == NULL)
+    return;
+
+  std::stack<const BVHNode*> stack;
+  stack.push(root);
+
+  while (!stack.empty()) {
+    const BVHNode *node = stack.top();
+    stack.pop();
+
+    Real boxhit_tmin;
+    Real boxhit_tmax;
+    const bool hit = BoxRayIntersect(node->bounds,
+        ray.orig, ray.dir, ray.tmin, ray.tmax,
+        &boxhit_tmin, &boxhit_tmax);
+
+    if (!hit) {
+      continue;
+    }
+
+    if (node->is_leaf()) {
+      primitive_ids->push_back(node->prim_id);
+      continue;
+    }
+
+    stack.push(node->right);
+    stack.push(node->left);
+  }
+}
+
 static bool intersect_bvh_recursive(const PrimitiveSet *primset,
     const BVHNode *node, const Ray &ray, Real time,
     Intersection *isect)

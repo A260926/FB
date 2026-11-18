@@ -77,4 +77,9 @@ Index ObjectSet::get_primitive_count() const
   return GetObjectCount();
 }
 
+int ObjectSet::GetPrimitiveType() const
+{
+  return PRIMSET_OBJECT_SET;
+}
+
 } // namespace xxx

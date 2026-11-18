@@ -16,6 +16,7 @@ namespace fj {
 
 class Light;
 class Texture;
+class TraceContext;
 
 class LightSample {
 public:
@@ -60,10 +61,19 @@ public:
   Color Illuminate(const LightSample &sample, const Vector &Ps) const;
   int Preprocess();
 
+  // Deep shadow cache lookup. Lights without a cache return false so callers
+  // fall back to the regular shadow ray path.
+  virtual bool LookupShadowVisibility(const TraceContext &cxt,
+      const Vector &receiver, Real bias, Real *visibility) const;
+
 protected:
   void get_transform_sample(Transform &sample, Real time) const;
   //TODO this may not be necessary
   float get_sample_intensity() const;
+
+  // Hook invoked by every transformation entry point. A light owning a deep
+  // shadow cache overrides this to drop the now-stale cache.
+  virtual void invalidate_shadow_cache();
 
 private:
   Color color_;

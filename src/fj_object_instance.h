@@ -62,8 +62,15 @@ public:
 
   // sampling
   bool RayIntersect(const Ray &ray, Real time, Intersection *isect) const;
+  // Like RayIntersect, but reports every triangle hit inside the ray range
+  // instead of only the nearest one. Used by the deep shadow capture, which
+  // needs all translucent layers along a build ray.
+  void RayIntersectAll(const Ray &ray, Real time,
+      std::vector<Intersection> *intersections) const;
   bool RayVolumeIntersect(const Ray &ray, Real time, Interval *interval) const;
   bool GetVolumeSample(const Vector &point, Real time, VolumeSample *sample) const;
+
+  const Accelerator *GetAccelerator() const;
 
 private:
   void update_bounds();

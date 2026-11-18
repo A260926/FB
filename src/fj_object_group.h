@@ -21,6 +21,9 @@ public:
   const Accelerator *GetSurfaceAccelerator() const;
   const VolumeAccelerator *GetVolumeAccelerator() const;
 
+  const ObjectSet *GetSurfaceSet() const;
+  const ObjectSet *GetVolumeSet() const;
+
   void ComputeBounds();
 
 private:

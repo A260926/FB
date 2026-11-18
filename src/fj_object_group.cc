@@ -62,6 +62,16 @@ const VolumeAccelerator *ObjectGroup::GetVolumeAccelerator() const
   return volume_set_acc_;
 }
 
+const ObjectSet *ObjectGroup::GetSurfaceSet() const
+{
+  return &surface_set_;
+}
+
+const ObjectSet *ObjectGroup::GetVolumeSet() const
+{
+  return &volume_set_;
+}
+
 void ObjectGroup::ComputeBounds()
 {
   surface_set_.ComputeBounds();

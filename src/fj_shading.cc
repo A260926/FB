@@ -337,20 +337,33 @@ int SlIlluminance(const TraceContext *cxt, const LightSample *sample,
 
   if (cxt->cast_shadow) {
     TraceContext shad_cxt;
-    Color4 C_occl;
-    double t_hit = FLT_MAX;
-    int hit = 0;
+    const Real shadow_bias = .0001;
 
     shad_cxt = SlShadowContext(cxt, in->shaded_object);
-    hit = SlTrace(&shad_cxt, Ps, &out->Ln, .0001, out->distance, &C_occl, &t_hit);
 
-    if (hit) {
-      // return 0;
-      // TODO handle light_color for shadow ray
-      const float alpha_complement = 1 - C_occl.a;
-      light_color.r *= alpha_complement;
-      light_color.g *= alpha_complement;
-      light_color.b *= alpha_complement;
+    // deep shadow cache path: read-only, no geometry or shader evaluation
+    Real cached_visibility = 1;
+    if (sample->light->LookupShadowVisibility(
+            shad_cxt, *Ps, shadow_bias, &cached_visibility)) {
+      light_color.r *= static_cast<float>(cached_visibility);
+      light_color.g *= static_cast<float>(cached_visibility);
+      light_color.b *= static_cast<float>(cached_visibility);
+    } else {
+      Color4 C_occl;
+      double t_hit = FLT_MAX;
+      int hit = 0;
+
+      hit = SlTrace(&shad_cxt, Ps, &out->Ln, shadow_bias, out->distance,
+          &C_occl, &t_hit);
+
+      if (hit) {
+        // return 0;
+        // TODO handle light_color for shadow ray
+        const float alpha_complement = 1 - C_occl.a;
+        light_color.r *= alpha_complement;
+        light_color.g *= alpha_complement;
+        light_color.b *= alpha_complement;
+      }
     }
   }
 

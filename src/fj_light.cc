@@ -84,26 +84,31 @@ Texture *Light::GetEnvironmentMap() const
 void Light::SetTranslate(Real tx, Real ty, Real tz, Real time)
 {
   XfmPushTranslateSample(&transform_samples_, tx, ty, tz, time);
+  invalidate_shadow_cache();
 }
 
 void Light::SetRotate(Real rx, Real ry, Real rz, Real time)
 {
   XfmPushRotateSample(&transform_samples_, rx, ry, rz, time);
+  invalidate_shadow_cache();
 }
 
 void Light::SetScale(Real sx, Real sy, Real sz, Real time)
 {
   XfmPushScaleSample(&transform_samples_, sx, sy, sz, time);
+  invalidate_shadow_cache();
 }
 
 void Light::SetTransformOrder(int order)
 {
   XfmSetSampleTransformOrder(&transform_samples_, order);
+  invalidate_shadow_cache();
 }
 
 void Light::SetRotateOrder(int order)
 {
   XfmSetSampleRotateOrder(&transform_samples_, order);
+  invalidate_shadow_cache();
 }
 
 void Light::GetSamples(LightSample *samples, int max_samples) const
@@ -124,6 +129,18 @@ Color Light::Illuminate(const LightSample &sample, const Vector &Ps) const
 int Light::Preprocess()
 {
   return preprocess();
+}
+
+bool Light::LookupShadowVisibility(const TraceContext &cxt,
+    const Vector &receiver, Real bias, Real *visibility) const
+{
+  // no deep shadow cache by default: keep using shadow rays
+  return false;
+}
+
+void Light::invalidate_shadow_cache()
+{
+  // no cache to invalidate unless a derived light owns one
 }
 
 void Light::get_transform_sample(Transform &sample, Real time) const

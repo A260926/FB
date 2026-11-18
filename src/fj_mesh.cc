@@ -448,6 +448,11 @@ Index Mesh::get_primitive_count() const
   return GetFaceCount();
 }
 
+int Mesh::GetPrimitiveType() const
+{
+  return PRIMSET_MESH;
+}
+
 void MshGetFacePointPosition(const Mesh *mesh, int face_index,
     Vector *P0, Vector *P1, Vector *P2)
 {

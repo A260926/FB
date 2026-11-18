@@ -23,6 +23,8 @@ private:
   virtual int build();
   virtual bool intersect(const Ray &ray, Real time, Intersection *isect) const;
   virtual const char *get_name() const;
+  virtual void intersect_all_primitives(const Ray &ray, Real time,
+      std::vector<int> *primitive_ids) const;
 
   std::vector<Cell*> cells_;
   int ncells_[3];
