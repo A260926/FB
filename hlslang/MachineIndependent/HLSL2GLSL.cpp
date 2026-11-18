@@ -311,6 +311,9 @@ int C_DECL Hlsl2Glsl_Parse(
    GlobalPoolAllocator.push();
    compiler->infoSink.info.erase();
    compiler->infoSink.debug.erase();
+   // Diagnostics describe only this parse; a successful parse must clear a
+   // previous failure's reports.
+   compiler->GetDiagnostics().clear();
 
    if (!shaderString)
 	   return 1;
@@ -320,6 +323,7 @@ int C_DECL Hlsl2Glsl_Parse(
    GenerateBuiltInSymbolTable(compiler->infoSink, &symbolTable, compiler->getLanguage());
 
    TParseContext parseContext(symbolTable, compiler->getLanguage(), targetVersion, options, compiler->infoSink);
+   parseContext.diagnostics = &compiler->GetDiagnostics();
 
    GlobalParseContext = &parseContext;
 
@@ -432,6 +436,22 @@ const char* C_DECL Hlsl2Glsl_GetInfoLog( const ShHandle handle )
    TInfoSink* infoSink = &(base->getInfoSink());
    infoSink->info << infoSink->debug.c_str();
    return infoSink->info.c_str();
+}
+
+
+int C_DECL Hlsl2Glsl_GetDiagnosticCount( const ShHandle handle )
+{
+   if (handle == 0)
+      return 0;
+   return handle->GetDiagnostics().count();
+}
+
+
+const Hlsl2Glsl_Diagnostic* C_DECL Hlsl2Glsl_GetDiagnostic( const ShHandle handle, int index )
+{
+   if (handle == 0)
+      return 0;
+   return handle->GetDiagnostics().get(index);
 }
 
 

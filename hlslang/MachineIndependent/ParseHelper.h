@@ -9,6 +9,8 @@
 #include "SymbolTable.h"
 #include "localintermediate.h"
 
+class DiagnosticStore;
+
 //
 // The following are extra variables needed during parsing, grouped together so
 // they can be passed to the parser without needing a global.
@@ -27,6 +29,10 @@ struct TParseContext
 	, lexAfterType(false)
 	, loopNestingLevel(0)
 	, inTypeParen(false)
+	, currentFunctionType(0)
+	, functionReturnsValue(false)
+	, AfterEOF(false)
+	, diagnostics(0)
 	{
 	}
 	
@@ -100,6 +106,9 @@ public:
 	const TType* currentFunctionType;  // the return type of the function that's currently being parsed
 	bool functionReturnsValue;   // true if a non-void function has a return
 	bool AfterEOF;
+	// Structured diagnostics target (owned by the compiler handle).  Optional;
+	// the classic Parse/Translate/GetInfoLog path does not need it.
+	class DiagnosticStore* diagnostics;
 };
 
 int PaParseString(char* source, TParseContext&, Hlsl2Glsl_ParseCallbacks* = NULL);

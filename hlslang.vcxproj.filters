@@ -52,6 +52,9 @@
     <ClCompile Include="hlslang\MachineIndependent\IntermTraverse.cpp">
       <Filter>Machine Independent</Filter>
     </ClCompile>
+    <ClCompile Include="hlslang\MachineIndependent\DiagnosticStore.cpp">
+      <Filter>Machine Independent</Filter>
+    </ClCompile>
     <ClCompile Include="hlslang\MachineIndependent\ParseHelper.cpp">
       <Filter>Machine Independent</Filter>
     </ClCompile>

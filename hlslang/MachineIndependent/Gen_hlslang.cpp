@@ -3067,11 +3067,17 @@ static int cpp_get_token (hlmojo_Preprocessor* pp, char* buf, int maxSize)
 	TSourceLoc loc;
 	loc.file = fname;
 	loc.line = line;
+	loc.origin = hlmojo_preprocessor_tokenorigin (pp);
 	SetLineNumber (loc, lexlineno);
-	
+	// Every token produced by the preprocessor remembers where it was
+	// spelled; the parser copies this struct into its semantic values.
+	lexlineno.origin = loc.origin;
+
 	if (token == TOKEN_PREPROCESSING_ERROR)
 	{
-		g_parseContext->error (lexlineno, tokstr, "", "");
+		TSourceLoc errloc = lexlineno;
+		errloc.origin = loc.origin;
+		g_parseContext->error (errloc, tokstr, "", "");
 		GlobalParseContext->recover();
 		buf[0] = 0;
 	}
@@ -3187,6 +3193,7 @@ int PaParseString(char* source, TParseContext& parseContextLocal, Hlsl2Glsl_Pars
     (&parseContextLocal)->AfterEOF = false;
 	lexlineno.file = NULL;
     lexlineno.line = 1;
+	lexlineno.origin = NULL;
 	
 	int result = 0;
    

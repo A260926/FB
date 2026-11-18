@@ -1,10 +1,14 @@
 #ifndef __SOURCELOC_H
 #define __SOURCELOC_H
 
-typedef struct 
+typedef struct
 {
     const char* file;
     int line;
+    // Opaque link to the structured provenance of the token this location was
+    // taken from.  Only interpreted by the structured diagnostics machinery;
+    // NULL when the location was not produced by a preprocessed token.
+    const void* origin;
 } TSourceLoc;
 
 

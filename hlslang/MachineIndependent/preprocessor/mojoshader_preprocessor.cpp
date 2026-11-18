@@ -11,6 +11,7 @@
 
 #define __MOJOSHADER_INTERNAL__ 1
 #include "mojoshader_internal.h"
+#include <new>
 
 #if DEBUG_PREPROCESSOR
     #define print_debug_token(token, len, val) \
@@ -58,6 +59,24 @@ typedef struct Context
     MOJOSHADER_hlslang_malloc malloc;
     MOJOSHADER_hlslang_free free;
     void *malloc_data;
+
+    // Structured provenance.  'arena' owns every BufferProvenance,
+    // MacroDefineInfo and MacroArgInfo; they are released together when the
+    // preprocessor is destroyed.  'failed_origin' describes the token that
+    // produced the last TOKEN_PREPROCESSING_ERROR, and 'last_origin' the last
+    // token returned to the caller (for lasting past #undef).
+    std::vector<hlsldiag::BufferProvenance *> arena;
+    std::vector<hlsldiag::MacroDefineInfo *> define_info_arena;
+    std::vector<hlsldiag::MacroArgInfo *> arg_info_arena;
+    // Every emitted token gets its own arena slot: the parser stores these
+    // pointers in semantic values, which outlive the next token fetch.
+    std::deque<hlsldiag::TokenOrigin> origin_arena;
+    hlsldiag::TokenOrigin *failed_origin;
+    hlsldiag::TokenOrigin *last_origin;
+    hlsldiag::TokenOrigin *directive_origin;
+    int have_failed_origin;
+    int have_last_origin;
+    int have_directive_origin;
 } Context;
 
 
@@ -99,10 +118,56 @@ static inline char *StrDup(Context *ctx, const char *str)
     return retval;
 } // StrDup
 
+
+// ---------------------------------------------------------------------------
+// Structured provenance helpers.
+//
+// These run alongside the normal preprocessor token flow; they never affect
+// what token is produced, only where it is remembered as having been spelled.
+
+static void snapshot_token_origin(Context *ctx, hlmojo_IncludeState *state,
+                                  hlsldiag::TokenOrigin *out);
+
+// Snapshot the directive keyword currently pointed at by 'state'.  Used as
+// the primary location for errors that are detected after the directive line
+// has been consumed (e.g. an unterminated #if at end of file).
+static void capture_directive_origin(Context *ctx, hlmojo_IncludeState *state)
+{
+    if (state->tokenlen == 0)
+        return;  // synthesized end-of-input states have no spelling
+    ctx->origin_arena.push_back(hlsldiag::TokenOrigin());
+    snapshot_token_origin(ctx, state, &ctx->origin_arena.back());
+    ctx->directive_origin = &ctx->origin_arena.back();
+    ctx->have_directive_origin = 1;
+} // capture_directive_origin
+
+
+// Remember the origin for the error that is about to be reported.  A
+// directive keyword captured on the current line wins: it is the token the
+// user must look at, and it is the only spelling left once the directive line
+// has been consumed (an unterminated #if at end of file has no token at all).
+static void capture_failed_origin(Context *ctx)
+{
+    if (ctx->have_directive_origin)
+    {
+        ctx->failed_origin = ctx->directive_origin;
+        ctx->have_failed_origin = 1;
+        ctx->have_directive_origin = 0;
+    } // if
+    else if (ctx->include_stack != NULL)
+    {
+        ctx->origin_arena.push_back(hlsldiag::TokenOrigin());
+        snapshot_token_origin(ctx, ctx->include_stack, &ctx->origin_arena.back());
+        ctx->failed_origin = &ctx->origin_arena.back();
+        ctx->have_failed_origin = 1;
+    } // else if
+} // capture_failed_origin
+
 static void failf(Context *ctx, const char *fmt, ...) ISPRINTF(2,3);
 static void failf(Context *ctx, const char *fmt, ...)
 {
     ctx->isfail = 1;
+    capture_failed_origin(ctx);
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(ctx->failstr, sizeof (ctx->failstr), fmt, ap);
@@ -398,6 +463,10 @@ static void free_define(Context *ctx, hlmojo_Define *def)
         Free(ctx, (void *) def->identifier);
         Free(ctx, (void *) def->definition);
         Free(ctx, (void *) def->original);
+        // def->origin / def->argorigin live in the arena and are released
+        // with the preprocessor; they must survive #undef.
+        def->origin = NULL;
+        def->argorigin = NULL;
         put_define(ctx, def);
     } // if
 } // free_define
@@ -527,6 +596,238 @@ static void put_all_defines(Context *ctx)
 } // put_all_defines
 
 
+// Build a span covering bytes [offset, offset+len) of a constructed buffer,
+// spelled at 'pos' in 'includes'.
+static hlsldiag::BufferSpan make_span(unsigned int offset, const char *text,
+                                       unsigned int len, const hlsldiag::Pos &pos,
+                                       hlsldiag::Spelling spelling,
+                                       const std::vector<hlsldiag::IncludeFrame> &includes)
+{
+    hlsldiag::BufferSpan span;
+    span.begin = offset;
+    span.end = offset + len;
+    span.text.assign(text, len);
+    span.beginPos = pos;
+    span.includes = includes;
+
+    hlsldiag::Fragment fr;
+    fr.spelling = spelling;
+    fr.range.valid = true;
+    fr.range.begin = pos;
+    fr.range.end = hlsldiag::span_position(span, len);
+    fr.beginByte = 0;
+    fr.endByte = len;
+    span.fragments.push_back(fr);
+    return span;
+} // make_span
+
+
+// ---------------------------------------------------------------------------
+// Structured provenance.
+//
+// Everything below only observes the token stream; it never changes which
+// token is produced.
+
+static hlsldiag::Pos state_position(const hlmojo_IncludeState *state)
+{
+    return hlsldiag::Pos(state->filename ? state->filename : "",
+                         state->line, (int) state->column);
+} // state_position
+
+static hlsldiag::Range token_range(const hlmojo_IncludeState *state)
+{
+    hlsldiag::Range r;
+    r.valid = true;
+    r.begin = state_position(state);
+    r.end = hlsldiag::Pos(r.begin.file, r.begin.line,
+                          r.begin.column + (int) state->tokenlen);
+    return r;
+} // token_range
+
+static std::vector<hlsldiag::IncludeFrame> current_includes(const hlmojo_IncludeState *state)
+{
+    std::vector<hlsldiag::IncludeFrame> empty;
+    if (state != NULL && state->origin != NULL)
+        return state->origin->includes;
+    return empty;
+} // current_includes
+
+// Snapshot where 'state' currently points.  The snapshot is self contained
+// (all strings copied), so it survives include close callbacks and #undef.
+static void snapshot_token_origin(Context *ctx, hlmojo_IncludeState *state,
+                                  hlsldiag::TokenOrigin *out)
+{
+    (void) ctx;
+    out->fragments.clear();
+    out->expansions.clear();
+    out->includes.clear();
+    out->primary = hlsldiag::Range();
+
+    const unsigned int len = state->tokenlen;
+    unsigned int offset = 0;
+    if (state->source_base != NULL && state->token >= state->source_base &&
+        state->token <= state->source_base + state->orig_length)
+    {
+        offset = (unsigned int) (state->token - state->source_base);
+    } // if
+
+    hlsldiag::BufferProvenance *prov = state->origin;
+    if ((prov != NULL) && prov->constructed && (len > 0))
+    {
+        const unsigned int endoff = offset + len;
+        const hlsldiag::BufferSpan *firstSpan = NULL;
+        for (size_t i = 0; i < prov->spans.size(); i++)
+        {
+            const hlsldiag::BufferSpan &span = prov->spans[i];
+            const unsigned int sb = (span.begin > offset) ? span.begin : offset;
+            const unsigned int se = (span.end < endoff) ? span.end : endoff;
+            if (sb >= se)
+                continue;
+
+            if (firstSpan == NULL)
+                firstSpan = &span;
+
+            const unsigned int local = sb - span.begin;
+            hlsldiag::Range whole;
+            whole.valid = true;
+            whole.begin = hlsldiag::span_position(span, local);
+            whole.end = hlsldiag::span_position_after(span, local, se - sb);
+
+            if (span.fragments.empty())
+            {
+                hlsldiag::Fragment fr;
+                fr.range = whole;
+                fr.spelling = hlsldiag::SpellingDirect;
+                fr.chain = span.expansions;
+                fr.beginByte = 0;
+                fr.endByte = (unsigned) (se - sb);
+                out->fragments.push_back(fr);
+            } // if
+            else
+            {
+                for (size_t j = 0; j < span.fragments.size(); j++)
+                {
+                    const hlsldiag::Fragment &f = span.fragments[j];
+                    const unsigned int fb = (f.beginByte > local) ? f.beginByte : local;
+                    const unsigned int fe = (f.endByte < (local + (se - sb)))
+                                          ? f.endByte : (local + (se - sb));
+                    if (fb >= fe)
+                        continue;
+                    hlsldiag::Fragment fr;
+                    fr.spelling = f.spelling;
+                    fr.chain = f.chain;
+                    fr.range.valid = true;
+                    fr.range.begin = hlsldiag::span_position(span, fb);
+                    fr.range.end = hlsldiag::span_position_after(span, fb, fe - fb);
+                    fr.beginByte = 0;
+                    fr.endByte = fe - fb;
+                    out->fragments.push_back(fr);
+                } // for
+            } // else
+        } // for
+
+        if (firstSpan != NULL)
+        {
+            out->includes = firstSpan->includes;
+            if (!out->fragments.empty())
+                out->expansions = out->fragments[0].chain;
+            else
+                out->expansions = firstSpan->expansions;
+        } // if
+    } // if
+    else
+    {
+        hlsldiag::Fragment fr;
+        fr.range = token_range(state);
+        fr.spelling = hlsldiag::SpellingDirect;
+        fr.beginByte = offset;
+        fr.endByte = offset + len;
+        out->fragments.push_back(fr);
+        out->includes = current_includes(state);
+    } // else
+
+    if (!out->expansions.empty())
+        out->primary = out->expansions[0].invocation;
+    else if (!out->fragments.empty())
+        out->primary = out->fragments[0].range;
+    else
+    {
+        out->primary.valid = true;
+        out->primary.begin = state_position(state);
+        out->primary.end = out->primary.begin;
+    } // else
+} // snapshot_token_origin
+
+
+// Remove 'count' bytes from the front of a span table (used when a #define
+// body is normalized by dropping a leading '##').
+static void trim_spans_front(std::vector<hlsldiag::BufferSpan> *spans, unsigned int count)
+{
+    if (count == 0)
+        return;
+    std::vector<hlsldiag::BufferSpan> result;
+    for (size_t i = 0; i < spans->size(); i++)
+    {
+        hlsldiag::BufferSpan span = (*spans)[i];
+        if (span.end <= count)
+            continue;
+        if (span.begin < count)
+        {
+            const unsigned int drop = count - span.begin;
+            span.beginPos = hlsldiag::span_position(span, drop);
+            span.text.erase(0, drop);
+            // Recompute fragment offsets after the drop.
+            for (size_t j = 0; j < span.fragments.size(); j++)
+            {
+                hlsldiag::Fragment &f = span.fragments[j];
+                f.beginByte = (f.beginByte > drop) ? (f.beginByte - drop) : 0;
+                f.endByte = (f.endByte > drop) ? (f.endByte - drop) : 0;
+                f.range.begin = hlsldiag::span_position(span, f.beginByte);
+                f.range.end = hlsldiag::span_position(span, f.endByte);
+            } // for
+            span.begin = 0;
+            span.end -= count;
+        } // if
+        else
+        {
+            span.begin -= count;
+            span.end -= count;
+        } // else
+        result.push_back(span);
+    } // for
+    spans->swap(result);
+} // trim_spans_front
+
+static void trim_spans_back(std::vector<hlsldiag::BufferSpan> *spans, unsigned int newLength)
+{
+    std::vector<hlsldiag::BufferSpan> result;
+    for (size_t i = 0; i < spans->size(); i++)
+    {
+        hlsldiag::BufferSpan span = (*spans)[i];
+        if (span.begin >= newLength)
+            continue;
+        if (span.end > newLength)
+        {
+            span.text.resize(newLength - span.begin);
+            span.end = newLength;
+            for (size_t j = 0; j < span.fragments.size(); j++)
+            {
+                hlsldiag::Fragment &f = span.fragments[j];
+                if (f.endByte > (unsigned) span.text.size())
+                {
+                    f.endByte = (unsigned) span.text.size();
+                    f.range.end = hlsldiag::span_position(span, f.endByte);
+                } // if
+                if (f.beginByte > (unsigned) span.text.size())
+                    f.beginByte = (unsigned) span.text.size();
+            } // for
+        } // if
+        result.push_back(span);
+    } // for
+    spans->swap(result);
+} // trim_spans_back
+
+
 static int push_source(Context *ctx, const char *fname, const char *source,
                        unsigned int srclen, unsigned int linenum,
                        MOJOSHADER_hlslang_includeClose close_callback)
@@ -553,6 +854,10 @@ static int push_source(Context *ctx, const char *fname, const char *source,
     state->orig_length = srclen;
     state->bytes_left = srclen;
     state->line = linenum;
+    state->column = 1;
+    state->scan_pos = source;
+    state->scan_column = 1;
+    state->origin = NULL;
     state->next = ctx->include_stack;
 
     print_debug_lexing_position(state);
@@ -561,6 +866,24 @@ static int push_source(Context *ctx, const char *fname, const char *source,
 
     return 1;
 } // push_source
+
+
+// Push a plain source buffer together with its include chain.
+static int push_source_with_includes(Context *ctx, const char *fname,
+                                     const char *source, unsigned int srclen,
+                                     unsigned int linenum,
+                                     MOJOSHADER_hlslang_includeClose close_callback,
+                                     hlsldiag::BufferProvenance *includes)
+{
+    if (!push_source(ctx, fname, source, srclen, linenum, close_callback))
+        return 0;
+    if (includes != NULL)
+    {
+        ctx->arena.push_back(includes);
+        ctx->include_stack->origin = includes;
+    } // if
+    return 1;
+} // push_source_with_includes
 
 
 static void pop_source(Context *ctx)
@@ -616,11 +939,13 @@ hlmojo_Preprocessor *hlmojo_preprocessor_start(const char *fname, const char *so
     assert(m != NULL);
     assert(f != NULL);
 
-    Context *ctx = (Context *) m(sizeof (Context), d);
-    if (ctx == NULL)
+    // Context holds C++ containers (the provenance arenas), so it cannot be
+    // memset; construct it in place with the application allocator.
+    void *rawctx = m(sizeof (Context), d);
+    if (rawctx == NULL)
         return NULL;
+    Context *ctx = new (rawctx) Context();
 
-    memset(ctx, '\0', sizeof (Context));
     ctx->malloc = m;
     ctx->free = f;
     ctx->malloc_data = d;
@@ -662,14 +987,27 @@ hlmojo_Preprocessor *hlmojo_preprocessor_start(const char *fname, const char *so
         hlmojo_buffer_destroy(predefbuf);
     } // if
 
-    if ((okay) && (!push_source(ctx,fname,source,sourcelen,1,NULL)))
-        okay = 0;
+    if (okay)
+    {
+        // The root translation unit has an empty include chain.
+        hlsldiag::BufferProvenance *root = new hlsldiag::BufferProvenance();
+        if (!push_source_with_includes(ctx, fname, source, sourcelen, 1, NULL, root))
+            okay = 0;
+    } // if
 
     if ((okay) && (define_include_len > 0))
     {
         assert(define_include != NULL);
+        hlsldiag::BufferProvenance *predef = new hlsldiag::BufferProvenance();
         okay = push_source(ctx, "<predefined macros>", define_include,
                            define_include_len, 1, close_define_include);
+        if (okay)
+        {
+            ctx->arena.push_back(predef);
+            ctx->include_stack->origin = predef;
+        } // if
+        else
+            delete predef;
     } // if
 
     if (!okay)
@@ -702,6 +1040,17 @@ void hlmojo_preprocessor_end(hlmojo_Preprocessor *_ctx)
     free_conditional_pool(ctx);
     free_include_pool(ctx);
 
+    for (size_t ai = 0; ai < ctx->arena.size(); ++ai)
+        delete ctx->arena[ai];
+    for (size_t di = 0; di < ctx->define_info_arena.size(); ++di)
+        delete ctx->define_info_arena[di];
+    for (size_t gi = 0; gi < ctx->arg_info_arena.size(); ++gi)
+        delete ctx->arg_info_arena[gi];
+    ctx->arena.clear();
+    ctx->define_info_arena.clear();
+    ctx->arg_info_arena.clear();
+
+    ctx->~Context();
     Free(ctx, ctx);
 } // hlmojo_preprocessor_end
 
@@ -755,6 +1104,10 @@ static int token_to_int(hlmojo_IncludeState *state)
 static void handle_pp_include(Context *ctx)
 {
     hlmojo_IncludeState *state = ctx->include_stack;
+    // Capture the position of the #include directive before consuming its
+    // tokens; the include chain of every file it pulls in starts here.
+    const hlsldiag::Range directiveRange = token_range(state);
+    const std::vector<hlsldiag::IncludeFrame> parentIncludes = current_includes(state);
     Token token = lexer(state);
     MOJOSHADER_hlslang_includeType incltype;
     char *filename = NULL;
@@ -821,9 +1174,22 @@ static void handle_pp_include(Context *ctx)
     } // if
 
     MOJOSHADER_hlslang_includeClose callback = ctx->close_callback;
-    if (!push_source(ctx, filename, newdata, newbytes, 1, callback))
+
+    // Build the include chain for the included file.  The directive is
+    // captured before the callback has a chance to free the including file's
+    // text.
+    hlsldiag::BufferProvenance *includedOrigin = new hlsldiag::BufferProvenance();
+    includedOrigin->includes = parentIncludes;
+    hlsldiag::IncludeFrame frame;
+    frame.file = filename ? filename : "";
+    frame.directive = directiveRange;
+    includedOrigin->includes.push_back(frame);
+
+    if (!push_source_with_includes(ctx, filename, newdata, newbytes, 1, callback,
+                                   includedOrigin))
     {
         assert(ctx->out_of_memory);
+        delete includedOrigin;
         ctx->close_callback(newdata, ctx->malloc, ctx->free, ctx->malloc_data);
     } // if
 } // handle_pp_include
@@ -970,6 +1336,13 @@ static void handle_pp_define(Context *ctx)
         return;
     } // if
 
+    // Remember where the macro name was spelled, before the lexer moves on.
+    hlsldiag::MacroDefineInfo *defineInfo = new hlsldiag::MacroDefineInfo();
+    defineInfo->nameRange = token_range(state);
+    defineInfo->file = state->filename ? state->filename : "";
+    defineInfo->includes = current_includes(state);
+    ctx->define_info_arena.push_back(defineInfo);
+
     char *definition = NULL;
     char *sym = (char *) Malloc(ctx, state->tokenlen+1);
     if (sym == NULL)
@@ -1106,9 +1479,19 @@ static void handle_pp_define(Context *ctx)
             case ((Token) ' '):  // may not actually point to ' '.
                 assert(hlmojo_buffer_size(buffer) > 0);
                 hlmojo_buffer_append(buffer, &space, 1);
+                defineInfo->bodySpans.push_back(make_span(hlmojo_buffer_size(buffer) - 1,
+                                                          &space, 1,
+                                                          state_position(state),
+                                                          hlsldiag::SpellingMacroBody,
+                                                          defineInfo->includes));
                 break;
 
             default:
+                defineInfo->bodySpans.push_back(make_span(hlmojo_buffer_size(buffer),
+                                                          state->token, state->tokenlen,
+                                                          state_position(state),
+                                                          hlsldiag::SpellingMacroBody,
+                                                          defineInfo->includes));
                 hlmojo_buffer_append(buffer, state->token, state->tokenlen);
                 break;
         } // switch
@@ -1130,6 +1513,7 @@ static void handle_pp_define(Context *ctx)
         hashhash_error = 1;
         buflen -= 2;
         memmove(definition, definition + 2, buflen);
+        trim_spans_front(&defineInfo->bodySpans, 2);
     } // if
 
     if (buflen > 2)
@@ -1139,12 +1523,14 @@ static void handle_pp_define(Context *ctx)
         {
             ptr--;
             buflen--;
+            trim_spans_back(&defineInfo->bodySpans, buflen - 1);
         } // if
         if ((buflen > 2) && (ptr[0] == '#') && (ptr[-1] == '#'))
         {
             hashhash_error = 1;
             buflen -= 2;
             ptr[-1] = '\0';
+            trim_spans_back(&defineInfo->bodySpans, buflen - 1);
         } // if
     } // if
 
@@ -1155,6 +1541,19 @@ static void handle_pp_define(Context *ctx)
 
     if (!add_define(ctx, sym, definition, idents, params))
         goto handle_pp_define_failed;
+
+    // Attach provenance to the freshly-added define.
+    {
+        const uint8 hash = hash_define(sym);
+        for (hlmojo_Define *d = ctx->define_hashtable[hash]; d != NULL; d = d->next)
+        {
+            if (strcmp(d->identifier, sym) == 0)
+            {
+                d->origin = defineInfo;
+                break;
+            } // if
+        } // for
+    }
 
     return;
 
@@ -1270,8 +1669,210 @@ static inline void handle_pp_ifndef(Context *ctx)
 } // handle_pp_ifndef
 
 
+// Collect the spelling of the bytes [offset, offset+len) of the buffer that
+// 'state' points into, as zero-based spans relative to that byte range.
+// 'defaultSpelling' is used for buffers that have no finer provenance (real
+// source files).  'suffixChain' is appended to every fragment's macro chain
+// (it holds the macro currently being expanded / whose argument this is).
+static void collect_token_spans(const hlmojo_IncludeState *state,
+                                unsigned int offset, unsigned int len,
+                                hlsldiag::Spelling defaultSpelling,
+                                const std::vector<hlsldiag::Expansion> &suffixChain,
+                                std::vector<hlsldiag::BufferSpan> *out)
+{
+    const char *base = state->source_base;
+    hlsldiag::BufferProvenance *prov = state->origin;
+
+    if ((prov != NULL) && prov->constructed)
+    {
+        const unsigned int endoff = offset + len;
+        for (size_t i = 0; i < prov->spans.size(); i++)
+        {
+            const hlsldiag::BufferSpan &span = prov->spans[i];
+            const unsigned int sb = (span.begin > offset) ? span.begin : offset;
+            const unsigned int se = (span.end < endoff) ? span.end : endoff;
+            if (sb >= se)
+                continue;
+
+            hlsldiag::BufferSpan piece;
+            piece.begin = sb - offset;
+            piece.end = se - offset;
+            piece.text.assign(base + sb, se - sb);
+            piece.beginPos = hlsldiag::span_position(span, sb - span.begin);
+            piece.includes = span.includes;
+
+            if (span.fragments.empty())
+            {
+                hlsldiag::Fragment fr;
+                fr.spelling = defaultSpelling;
+                fr.range.valid = true;
+                fr.range.begin = piece.beginPos;
+                fr.range.end = hlsldiag::span_position_after(span, sb - span.begin, se - sb);
+                fr.beginByte = 0;
+                fr.endByte = se - sb;
+                fr.chain = span.expansions;
+                fr.chain.insert(fr.chain.end(), suffixChain.begin(), suffixChain.end());
+                piece.fragments.push_back(fr);
+            } // if
+            else
+            {
+                const unsigned int local = sb - span.begin;
+                const unsigned int localEnd = se - span.begin;
+                for (size_t j = 0; j < span.fragments.size(); j++)
+                {
+                    const hlsldiag::Fragment &f = span.fragments[j];
+                    const unsigned int fb = (f.beginByte > local) ? f.beginByte : local;
+                    const unsigned int fe = (f.endByte < localEnd) ? f.endByte : localEnd;
+                    if (fb >= fe)
+                        continue;
+                    hlsldiag::Fragment fr;
+                    fr.spelling = f.spelling;
+                    fr.range.valid = true;
+                    fr.range.begin = hlsldiag::span_position(span, fb);
+                    fr.range.end = hlsldiag::span_position_after(span, fb, fe - fb);
+                    fr.beginByte = fb - local;
+                    fr.endByte = fe - local;
+                    fr.chain = f.chain;
+                    fr.chain.insert(fr.chain.end(), suffixChain.begin(), suffixChain.end());
+                    piece.fragments.push_back(fr);
+                } // for
+            } // else
+
+            out->push_back(piece);
+        } // for
+    } // if
+    else
+    {
+        hlsldiag::BufferSpan piece;
+        piece.begin = 0;
+        piece.end = len;
+        if (len > 0)
+            piece.text.assign(base + offset, len);
+        piece.beginPos = state_position(state);
+        piece.includes = current_includes(state);
+
+        hlsldiag::Fragment fr;
+        fr.spelling = defaultSpelling;
+        fr.range.valid = true;
+        fr.range.begin = piece.beginPos;
+        fr.range.end = hlsldiag::Pos(fr.range.begin.file, fr.range.begin.line,
+                                     fr.range.begin.column + (int) len);
+        fr.beginByte = 0;
+        fr.endByte = len;
+        fr.chain = suffixChain;
+        piece.fragments.push_back(fr);
+        out->push_back(piece);
+    } // else
+} // collect_token_spans
+
+
+// Copy spans into a destination span table, shifted by 'base'.
+static void append_spans(std::vector<hlsldiag::BufferSpan> *dest,
+                         const std::vector<hlsldiag::BufferSpan> &src,
+                         unsigned int base)
+{
+    for (size_t i = 0; i < src.size(); i++)
+    {
+        hlsldiag::BufferSpan span = src[i];
+        span.begin += base;
+        span.end += base;
+        dest->push_back(span);
+    } // for
+} // append_spans
+
+
+static void append_spacer_span(std::vector<hlsldiag::BufferSpan> *dest,
+                               unsigned int base,
+                               const char *text, unsigned int len,
+                               const hlsldiag::Pos &pos,
+                               const std::vector<hlsldiag::IncludeFrame> &includes)
+{
+    hlsldiag::BufferSpan span;
+    span.begin = base;
+    span.end = base + len;
+    span.text.assign(text, len);
+    span.beginPos = pos;
+    span.includes = includes;
+    dest->push_back(span);
+} // append_spacer_span
+
+
+static std::vector<hlsldiag::Expansion> chain_with(const std::vector<hlsldiag::Expansion> &prefix,
+                                                   const hlsldiag::Expansion &self)
+{
+    std::vector<hlsldiag::Expansion> chain = prefix;
+    chain.push_back(self);
+    return chain;
+} // chain_with
+
+
+static hlsldiag::Expansion make_expansion(const hlmojo_Define *def,
+                                          const hlsldiag::TokenOrigin &origin)
+{
+    hlsldiag::Expansion e;
+    e.name = def->identifier ? def->identifier : "";
+    if ((def->origin != NULL) && def->origin->nameRange.valid)
+        e.definition = def->origin->nameRange;
+    if (!origin.fragments.empty())
+        e.invocation = origin.fragments[0].range;
+    else
+        e.invocation = origin.primary;
+    return e;
+} // make_expansion
+
+
+// Push a macro replacement list, carrying the given expansion chain on every
+// token it contains.  'seed' supplies the spans captured at #define time.
+static int push_macro_body(Context *ctx, const hlmojo_Define *def,
+                           const std::vector<hlsldiag::Expansion> &chain,
+                           const std::vector<hlsldiag::IncludeFrame> &includes,
+                           const char *fname, unsigned int linenum)
+{
+    hlsldiag::BufferProvenance *prov = new hlsldiag::BufferProvenance();
+    prov->constructed = 1;
+    prov->includes = includes;
+    if (def->origin != NULL)
+    {
+        for (size_t i = 0; i < def->origin->bodySpans.size(); i++)
+        {
+            hlsldiag::BufferSpan span = def->origin->bodySpans[i];
+            span.expansions = chain;
+            for (size_t j = 0; j < span.fragments.size(); j++)
+                span.fragments[j].chain = chain;
+            prov->spans.push_back(span);
+        } // for
+        if (!def->origin->includes.empty())
+            prov->includes = def->origin->includes;
+    } // if
+
+    if (!push_source(ctx, fname, def->definition, strlen(def->definition), linenum, NULL))
+    {
+        delete prov;
+        return 0;
+    } // if
+    ctx->arena.push_back(prov);
+    ctx->include_stack->origin = prov;
+    return 1;
+} // push_macro_body
+
+
+// Expansion of an object-like macro: the body is rescanned directly.
+static int expand_object_macro(Context *ctx, const hlmojo_Define *def,
+                               const hlsldiag::Expansion &self,
+                               const hlsldiag::TokenOrigin &origin)
+{
+    hlmojo_IncludeState *state = ctx->include_stack;
+    const char *fname = state->filename;
+    const unsigned int line = state->line;
+    const std::vector<hlsldiag::Expansion> chain = chain_with(origin.expansions, self);
+    return push_macro_body(ctx, def, chain, origin.includes, fname, line);
+} // expand_object_macro
+
+
 static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
-                                  const hlmojo_Define *params)
+                                  const hlmojo_Define *params,
+                                  const hlsldiag::Expansion &self,
+                                  const hlsldiag::TokenOrigin &callerOrigin)
 {
     char *final = NULL;
 
@@ -1281,13 +1882,18 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
     if (buffer == NULL)
         return 0;
 
+    std::vector<hlsldiag::BufferSpan> outSpans;
+    const std::vector<hlsldiag::Expansion> bodyChain = chain_with(callerOrigin.expansions, self);
+
     hlmojo_IncludeState *state = ctx->include_stack;
-    if (!push_source(ctx, state->filename, def->definition,
-                     strlen(def->definition), state->line, NULL))
+    if (!push_macro_body(ctx, def, bodyChain, callerOrigin.includes,
+                         state->filename, state->line))
     {
         hlmojo_buffer_destroy(buffer);
         return 0;
     } // if
+
+    const char *bodyBase = ctx->include_stack->source_base;
 
     state = ctx->include_stack;
     while (lexer(state) != TOKEN_EOI)
@@ -1306,8 +1912,11 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
         {
             if (hlmojo_buffer_size(buffer) > 0)
             {
+                const unsigned int base = (unsigned int) hlmojo_buffer_size(buffer);
                 if (!hlmojo_buffer_append(buffer, " ", 1))
                     goto replace_and_push_macro_failed;
+                append_spacer_span(&outSpans, base, " ", 1, state_position(state),
+                                   callerOrigin.includes);
             } // if
         } // else
 
@@ -1319,8 +1928,11 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
             lexer(state);
             assert(state->tokenval != TOKEN_EOI);  // we checked for this.
 
+            const unsigned int base = (unsigned int) hlmojo_buffer_size(buffer);
             if (!hlmojo_buffer_append(buffer, "\"", 1))
                 goto replace_and_push_macro_failed;
+            append_spacer_span(&outSpans, base, "\"", 1, state_position(state),
+                               callerOrigin.includes);
 
             if (state->tokenval == TOKEN_IDENTIFIER)
             {
@@ -1329,7 +1941,21 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
                 {
                     data = arg->original;
                     len = strlen(data);
+                    if (arg->argorigin != NULL)
+                    {
+                        std::vector<hlsldiag::BufferSpan> pieces = arg->argorigin->originalSpans;
+                        append_spans(&outSpans, pieces, base + 1);
+                    } // if
                 } // if
+            } // if
+
+            if (arg == NULL)
+            {
+                std::vector<hlsldiag::BufferSpan> pieces;
+                const unsigned int offset = (unsigned int) (state->token - bodyBase);
+                collect_token_spans(state, offset, len, hlsldiag::SpellingMacroBody,
+                                    std::vector<hlsldiag::Expansion>(), &pieces);
+                append_spans(&outSpans, pieces, base + 1);
             } // if
 
             if (!hlmojo_buffer_append(buffer, data, len))
@@ -1337,6 +1963,9 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
 
             if (!hlmojo_buffer_append(buffer, "\"", 1))
                 goto replace_and_push_macro_failed;
+            append_spacer_span(&outSpans, (unsigned int) hlmojo_buffer_size(buffer) - 1,
+                               "\"", 1, state_position(state),
+                               callerOrigin.includes);
 
             continue;
         } // if
@@ -1356,6 +1985,25 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
             } // if
         } // if
 
+        {
+            const unsigned int base = (unsigned int) hlmojo_buffer_size(buffer);
+            if (arg != NULL && arg->argorigin != NULL)
+            {
+                std::vector<hlsldiag::BufferSpan> pieces =
+                    wantorig ? arg->argorigin->originalSpans : arg->argorigin->definitionSpans;
+                append_spans(&outSpans, pieces, base);
+            } // if
+            else if (len > 0)
+            {
+                // The token came straight out of the replacement list.
+                std::vector<hlsldiag::BufferSpan> pieces;
+                const unsigned int offset = (unsigned int) (state->token - bodyBase);
+                collect_token_spans(state, offset, len, hlsldiag::SpellingMacroBody,
+                                    std::vector<hlsldiag::Expansion>(), &pieces);
+                append_spans(&outSpans, pieces, base);
+            } // else if
+        }
+
         if (!hlmojo_buffer_append(buffer, data, len))
             goto replace_and_push_macro_failed;
     } // while
@@ -1367,12 +2015,22 @@ static int replace_and_push_macro(Context *ctx, const hlmojo_Define *def,
     hlmojo_buffer_destroy(buffer);
     pop_source(ctx);  // ditch the macro.
     state = ctx->include_stack;
-    if (!push_source(ctx, state->filename, final, strlen(final), state->line,
-                     close_define_include))
+
     {
-        Free(ctx, final);
-        return 0;
-    } // if
+        hlsldiag::BufferProvenance *prov = new hlsldiag::BufferProvenance();
+        prov->constructed = 1;
+        prov->includes = callerOrigin.includes;
+        prov->spans = outSpans;
+        if (!push_source(ctx, state->filename, final, strlen(final), state->line,
+                         close_define_include))
+        {
+            delete prov;
+            Free(ctx, final);
+            return 0;
+        } // if
+        ctx->arena.push_back(prov);
+        ctx->include_stack->origin = prov;
+    }
 
     return 1;
 
@@ -1383,7 +2041,9 @@ replace_and_push_macro_failed:
 } // replace_and_push_macro
 
 
-static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define *def)
+static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define *def,
+                             const hlsldiag::Expansion &self,
+                             const hlsldiag::TokenOrigin &callerOrigin)
 {
     int retval = 0;
     hlmojo_IncludeState *state = ctx->include_stack;
@@ -1406,6 +2066,8 @@ static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define 
     {
         hlmojo_Buffer *buffer = hlmojo_buffer_create(128, MallocBridge, FreeBridge, ctx);
         hlmojo_Buffer *origbuffer = hlmojo_buffer_create(128, MallocBridge, FreeBridge, ctx);
+        std::vector<hlsldiag::BufferSpan> definedSpans;
+        std::vector<hlsldiag::BufferSpan> originalSpans;
 
         Token t = lexer(state);
 
@@ -1417,6 +2079,7 @@ static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define 
             unsigned int origexprlen = state->tokenlen;
             const char *expr = state->token;
             unsigned int exprlen = state->tokenlen;
+            int substituted = 0;
 
             if (t == ((Token) '('))
                 paren++;
@@ -1445,12 +2108,42 @@ static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define 
 
             else if (t == TOKEN_IDENTIFIER)
             {
-                const hlmojo_Define *def = find_define_by_token(ctx);
+                const hlmojo_Define *odef = find_define_by_token(ctx);
                 // don't replace macros with arguments so they replace correctly, later.
-                if ((def) && (def->paramcount == 0))
+                if ((odef) && (odef->paramcount == 0))
                 {
-                    expr = def->definition;
-                    exprlen = strlen(def->definition);
+                    expr = odef->definition;
+                    exprlen = strlen(odef->definition);
+                    substituted = 1;
+
+                    // Spans of the substituted object-macro body.
+                    hlsldiag::TokenOrigin nameOrigin;
+                    snapshot_token_origin(ctx, state, &nameOrigin);
+                    hlsldiag::Expansion oself = make_expansion(odef, nameOrigin);
+                    // nameOrigin.expansions already ends with 'self' (the
+                    // function macro whose argument we are parsing), so the
+                    // object macro only appends itself.
+                    std::vector<hlsldiag::Expansion> chain = nameOrigin.expansions;
+                    chain.push_back(oself);
+
+                    const unsigned int base = (unsigned int) hlmojo_buffer_size(buffer);
+                    if (odef->origin != NULL)
+                    {
+                        for (size_t si = 0; si < odef->origin->bodySpans.size(); si++)
+                        {
+                            hlsldiag::BufferSpan span = odef->origin->bodySpans[si];
+                            if (span.begin >= exprlen)
+                                continue;
+                            if (span.end > exprlen)
+                                span.end = exprlen;
+                            span.expansions = chain;
+                            for (size_t fi = 0; fi < span.fragments.size(); fi++)
+                                span.fragments[fi].chain = chain;
+                            span.begin += base;
+                            span.end += base;
+                            definedSpans.push_back(span);
+                        } // for
+                    } // if
                 } // if
             } // else if
 
@@ -1463,8 +2156,42 @@ static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define 
 
             assert(expr != NULL);
 
+            const unsigned int base = (unsigned int) hlmojo_buffer_size(buffer);
+            if ((t == ((Token) ' ')) && exprlen > 0)
+            {
+                append_spacer_span(&definedSpans, base, " ", 1, state_position(state),
+                                   current_includes(state));
+            } // if
+            else if (!substituted && exprlen > 0)
+            {
+                // Literal token of the argument: it is spelled where the
+                // argument text lives, and belongs to 'self' call.
+                std::vector<hlsldiag::BufferSpan> pieces;
+                const unsigned int offset = (unsigned int) (state->token - state->source_base);
+                collect_token_spans(state, offset, exprlen, hlsldiag::SpellingMacroArgument,
+                                    std::vector<hlsldiag::Expansion>(1, self), &pieces);
+                append_spans(&definedSpans, pieces, base);
+            } // else if
+
             if (!hlmojo_buffer_append(buffer, expr, exprlen))
                 goto handle_macro_args_failed;
+
+            // Original (unexpanded) argument text: always literal, even when
+            // the expanded copy substituted an object macro body.
+            const unsigned int obase = (unsigned int) hlmojo_buffer_size(origbuffer);
+            if ((t == ((Token) ' ')) && origexprlen > 0)
+            {
+                append_spacer_span(&originalSpans, obase, " ", 1, state_position(state),
+                                   current_includes(state));
+            } // if
+            else if (origexprlen > 0)
+            {
+                std::vector<hlsldiag::BufferSpan> pieces;
+                const unsigned int offset = (unsigned int) (origexpr - state->source_base);
+                collect_token_spans(state, offset, origexprlen, hlsldiag::SpellingMacroArgument,
+                                    std::vector<hlsldiag::Expansion>(1, self), &pieces);
+                append_spans(&originalSpans, pieces, obase);
+            } // else if
 
             if (!hlmojo_buffer_append(origbuffer, origexpr, origexprlen))
                 goto handle_macro_args_failed;
@@ -1510,9 +2237,19 @@ static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define 
                     break;
             } // for
 
+            trim_spans_back(&definedSpans, (unsigned int) deflen);
+            trim_spans_back(&originalSpans, (unsigned int) origdeflen);
+
+            hlsldiag::MacroArgInfo *argInfo = new hlsldiag::MacroArgInfo();
+            argInfo->definitionSpans = definedSpans;
+            argInfo->originalSpans = originalSpans;
+            ctx->arg_info_arena.push_back(argInfo);
+
             p->identifier = def->parameters[saw_params];
             p->definition = definition;
             p->original = origdefinition;
+            p->origin = NULL;
+            p->argorigin = argInfo;
             p->next = params;
             params = p;
         } // if
@@ -1539,7 +2276,7 @@ static int handle_macro_args(Context *ctx, const char *sym, const hlmojo_Define 
     } // if
 
     // this handles arg replacement and the '##' and '#' operators.
-    retval = replace_and_push_macro(ctx, def, params);
+    retval = replace_and_push_macro(ctx, def, params, self, callerOrigin);
 
 handle_macro_args_failed:
     while (params)
@@ -1574,11 +2311,16 @@ static int handle_pp_identifier(Context *ctx)
     const hlmojo_Define *def = find_define(ctx, sym);
     if (def == NULL)
         return 0;   // just send the token through unchanged.
-    else if (def->paramcount != 0)
-        return handle_macro_args(ctx, sym, def);
 
-    const size_t deflen = strlen(def->definition);
-    return push_source(ctx, fname, def->definition, deflen, line, NULL);
+    // Where the identifier is spelled, and the chain it already carries.
+    hlsldiag::TokenOrigin origin;
+    snapshot_token_origin(ctx, state, &origin);
+    hlsldiag::Expansion self = make_expansion(def, origin);
+
+    if (def->paramcount != 0)
+        return handle_macro_args(ctx, sym, def, self, origin);
+
+    return expand_object_macro(ctx, def, self, origin);
 } // handle_pp_identifier
 
 
@@ -2038,6 +2780,9 @@ static inline const char *_hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_c
             ctx->isfail = 0;
             *_token = TOKEN_PREPROCESSING_ERROR;
             *_len = strlen(ctx->failstr);
+            if (!ctx->have_failed_origin)
+                capture_failed_origin(ctx);
+            ctx->have_directive_origin = 0;
             return ctx->failstr;
         } // if
 
@@ -2078,36 +2823,42 @@ static inline const char *_hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_c
 
         else if (token == TOKEN_PP_IFDEF)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_ifdef(ctx);
             continue;  // get the next thing.
         } // else if
 
         else if (token == TOKEN_PP_IFNDEF)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_ifndef(ctx);
             continue;  // get the next thing.
         } // else if
 
         else if (token == TOKEN_PP_IF)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_if(ctx);
             continue;  // get the next thing.
         } // else if
 
         else if (token == TOKEN_PP_ELIF)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_elif(ctx);
             continue;  // get the next thing.
         } // else if
 
         else if (token == TOKEN_PP_ENDIF)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_endif(ctx);
             continue;  // get the next thing.
         } // else if
 
         else if (token == TOKEN_PP_ELSE)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_else(ctx);
             continue;  // get the next thing.
         } // else if
@@ -2117,7 +2868,7 @@ static inline const char *_hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_c
 			handle_pp_line(ctx);
 			continue;  // get the next thing.
 		} // else if
-		
+
         // NOTE: Conditionals and #line must be above (skipping) test.
         else if (skipping)
 		{
@@ -2126,30 +2877,35 @@ static inline const char *_hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_c
 
         else if (token == TOKEN_PP_INCLUDE)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_include(ctx);
             continue;  // will return error or use new top of include_stack.
         } // else if
 
         else if (token == TOKEN_PP_ERROR)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_error(ctx);
             continue;  // will return at top of loop.
         } // else if
 
         else if (token == TOKEN_PP_DEFINE)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_define(ctx);
             continue;  // will return at top of loop.
         } // else if
 
         else if (token == TOKEN_PP_UNDEF)
         {
+            capture_directive_origin(ctx, state);
             handle_pp_undef(ctx);
             continue;  // will return at top of loop.
         } // else if
 
         else if (token == TOKEN_PP_PRAGMA)
         {
+            capture_directive_origin(ctx, state);
 			handle_pp_pragma(ctx);
 			continue; // will return at top of loop.
         } // else if
@@ -2170,6 +2926,11 @@ static inline const char *_hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_c
         assert(!skipping);
         *_token = token;
         *_len = state->tokenlen;
+        ctx->origin_arena.push_back(hlsldiag::TokenOrigin());
+        snapshot_token_origin(ctx, state, &ctx->origin_arena.back());
+        ctx->last_origin = &ctx->origin_arena.back();
+        ctx->have_last_origin = 1;
+        ctx->have_directive_origin = 0;
         return state->token;
     } // while
 
@@ -2183,10 +2944,23 @@ static inline const char *_hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_c
 const char *hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *ctx, unsigned int *len,
                                    Token *token)
 {
+    Context *context = (Context *) ctx;
+    context->have_failed_origin = 0;
     const char *retval = _hlmojo_preprocessor_nexttoken(ctx, len, token);
     print_debug_token(retval, *len, *token);
     return retval;
 } // hlmojo_preprocessor_nexttoken
+
+
+const hlsldiag::TokenOrigin *hlmojo_preprocessor_tokenorigin(hlmojo_Preprocessor *_ctx)
+{
+    Context *ctx = (Context *) _ctx;
+    if (ctx->have_failed_origin)
+        return ctx->failed_origin;
+    if (ctx->have_last_origin)
+        return ctx->last_origin;
+    return NULL;
+} // hlmojo_preprocessor_tokenorigin
 
 
 const char *hlmojo_preprocessor_sourcepos(hlmojo_Preprocessor *_ctx, unsigned int *pos)

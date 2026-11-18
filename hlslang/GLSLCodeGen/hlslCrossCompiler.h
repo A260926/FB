@@ -8,6 +8,7 @@
 
 
 #include "../Include/Common.h"
+#include "../MachineIndependent/DiagnosticStore.h"
 
 #include "glslFunction.h"
 #include "glslStruct.h"
@@ -30,10 +31,13 @@ public:
 
    HlslLinker* GetLinker() { return linker; }
 
+   DiagnosticStore& GetDiagnostics() { return diagnostics; }
+
 private:
 	EShLanguage language;
 	bool m_ASTTransformed;
 	bool m_GlslProduced;
+	DiagnosticStore diagnostics;
 
 public:
 	HlslLinker* linker;

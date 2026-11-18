@@ -7,6 +7,12 @@
 #error Do not include this header from your applications.
 #endif
 
+// The provenance model and Context use C++ containers; pull them in before
+// opening the extern "C" block below.
+#include <deque>
+#include <vector>
+#include "provenance.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -221,6 +227,13 @@ typedef struct hlmojo_Conditional
     struct hlmojo_Conditional *next;
 } hlmojo_Conditional;
 
+// C++ only.  The structures below carry std:: containers for token
+// provenance, so they cannot live inside the extern "C" block.  Close it,
+// declare them, and reopen it for the remaining function prototypes.
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
 typedef struct hlmojo_Define
 {
     const char *identifier;
@@ -228,6 +241,8 @@ typedef struct hlmojo_Define
     const char *original;
     const char **parameters;
     int paramcount;
+    hlsldiag::MacroDefineInfo *origin;  // where the name/body were spelled
+    hlsldiag::MacroArgInfo *argorigin;  // for macro parameter temporaries
     struct hlmojo_Define *next;
 } hlmojo_Define;
 
@@ -245,12 +260,25 @@ typedef struct hlmojo_IncludeState
     unsigned int orig_length;
     unsigned int bytes_left;
     unsigned int line;
+    // 1 based, raw UTF-8 byte column of 'token' in the current physical line.
+    // Computed from the physical source bytes, so #line only changes the line
+    // number, never the column.
+    unsigned int column;
+    // Bookkeeping for the incremental column scan: where the scan has
+    // reached, and the column at that byte.
+    const char *scan_pos;
+    unsigned int scan_column;
+    hlsldiag::BufferProvenance *origin;
     hlmojo_Conditional *conditional_stack;
     MOJOSHADER_hlslang_includeClose close_callback;
     struct hlmojo_IncludeState *next;
 } hlmojo_IncludeState;
 
 Token hlmojo_preprocessor_lexer(hlmojo_IncludeState *s);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // This will only fail if the allocator fails, so it doesn't return any
 //  error code...NULL on failure.
@@ -267,6 +295,13 @@ int hlmojo_preprocessor_outofmemory(hlmojo_Preprocessor *pp);
 const char *hlmojo_preprocessor_nexttoken(hlmojo_Preprocessor *_ctx,
                                    unsigned int *_len, Token *_token);
 const char *hlmojo_preprocessor_sourcepos(hlmojo_Preprocessor *pp, unsigned int *pos);
+
+// Provenance of the token that was last returned by
+// hlmojo_preprocessor_nexttoken().  The returned structure stays valid until
+// the next call to nexttoken() or until the preprocessor is destroyed.  It is
+// also valid for TOKEN_PREPROCESSING_ERROR, where it points at the directive
+// that failed.  Returns NULL if no token has been produced yet.
+const hlsldiag::TokenOrigin *hlmojo_preprocessor_tokenorigin(hlmojo_Preprocessor *pp);
 
 
 void MOJOSHADER_hlslang_print_debug_token(const char *subsystem, const char *token,

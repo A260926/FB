@@ -355,6 +355,7 @@ TGlslOutputTraverser::TGlslOutputTraverser(TInfoSink& i, std::vector<GlslFunctio
 	TSourceLoc oneSourceLoc;
 	oneSourceLoc.file=NULL;
 	oneSourceLoc.line=1;
+	oneSourceLoc.origin=NULL;
 
 	// Add a fake "global" function for declarations & initializers happening
 	// at global scope.

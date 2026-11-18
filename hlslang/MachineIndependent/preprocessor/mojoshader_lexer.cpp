@@ -54,6 +54,50 @@ static Token update_state(hlmojo_IncludeState *s, int eoi, const uchar *cur,
         s->token = (const char *) tok;
     } // else
     s->tokenlen = (unsigned int) (s->source - s->token);
+
+    // Column of the token in raw UTF-8 bytes of the physical line.  Columns
+    // always come from the physical source bytes, so #line never changes
+    // them.  The scan is incremental so it stays linear over the file.
+    {
+        const uchar *origin = (const uchar *) s->source_base;
+        const uchar *target = (const uchar *) s->token;
+        if (target < origin || target > origin + s->orig_length)
+        {
+            s->column = 0;
+        }
+        else
+        {
+            const uchar *p = (const uchar *) s->scan_pos;
+            unsigned int col = s->scan_column;
+            if (p == NULL || p < origin || p > target)
+            {
+                p = origin;
+                col = 1;
+            }
+            while (p < target)
+            {
+                if (*p == '\r')
+                {
+                    col = 1;
+                    if ((p + 1 < target) && (p[1] == '\n'))
+                        ++p;
+                }
+                else if (*p == '\n')
+                {
+                    col = 1;
+                }
+                else
+                {
+                    ++col;
+                }
+                ++p;
+            }
+            s->column = col;
+            s->scan_pos = (const char *) target;
+            s->scan_column = col;
+        }
+    }
+
     s->tokenval = val;
     return val;
 } // update_state

@@ -62,6 +62,8 @@ set(MACHINE_INDEPENDENT_FILES
   #hlslang/MachineIndependent/parseConst.cpp
   hlslang/MachineIndependent/ParseHelper.cpp
   hlslang/MachineIndependent/ParseHelper.h
+  hlslang/MachineIndependent/DiagnosticStore.cpp
+  hlslang/MachineIndependent/DiagnosticStore.h
   hlslang/MachineIndependent/PoolAlloc.cpp
   hlslang/MachineIndependent/RemoveTree.cpp
   hlslang/MachineIndependent/RemoveTree.h

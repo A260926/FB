@@ -4,6 +4,7 @@
 
 
 #include "ParseHelper.h"
+#include "DiagnosticStore.h"
 #include "../Include/InitializeParseContext.h"
 #include "osinclude.h"
 #include <stdarg.h>
@@ -345,7 +346,7 @@ void TParseContext::recover()
 //
 // Used by flex/bison to output all syntax and parsing errors.
 //
-void C_DECL TParseContext::error(TSourceLoc nLine, const char *szReason, const char *szToken, 
+void C_DECL TParseContext::error(TSourceLoc nLine, const char *szReason, const char *szToken,
                                  const char *szExtraInfoFormat, ...)
 {
    char szExtraInfo[400];
@@ -361,6 +362,24 @@ void C_DECL TParseContext::error(TSourceLoc nLine, const char *szReason, const c
    infoSink.info << "'" << szToken <<  "' : " << szReason << " " << szExtraInfo << "\n";
 
    va_end(marker);
+
+   if (diagnostics != NULL)
+   {
+      // Keep the same message body that is written to the info log, and add
+      // the structured provenance of the token that produced the error.
+      std::string message("'");
+      message += szToken;
+      message += "' : ";
+      message += szReason;
+      message += " ";
+      message += szExtraInfo;
+
+      const hlsldiag::TokenOrigin* origin = NULL;
+      if (nLine.origin != NULL)
+         origin = static_cast<const hlsldiag::TokenOrigin*>(nLine.origin);
+
+      diagnostics->report(message, origin, nLine);
+   }
 
    ++numErrors;
 }

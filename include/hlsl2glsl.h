@@ -235,6 +235,125 @@ SH_IMPORT_EXPORT ShHandle C_DECL Hlsl2Glsl_ConstructCompiler( const EShLanguage 
 SH_IMPORT_EXPORT void C_DECL Hlsl2Glsl_DestructCompiler( ShHandle handle );
 
 
+// ---------------------------------------------------------------------------
+// Structured diagnostics
+//
+// Every preprocessing, syntax and type error reported through
+// Hlsl2Glsl_Parse also produces a Hlsl2Glsl_Diagnostic.  The diagnostic keeps
+// the original error message and adds enough provenance to jump from the
+// error back to the source text that actually produced it, even when the
+// offending token came out of a chain of nested macros and #includes.
+//
+// All positions are:
+//   * line   -- 1 based, and taken from the logical file name (so #line is
+//               honoured),
+//   * column -- 1 based, counted in raw UTF-8 bytes from the beginning of
+//               the corresponding *physical* line (so #line never changes
+//               how a column is counted),
+//   * end    -- exclusive (a half-open range).
+// A NULL file name means the position is unknown / the root translation unit.
+
+/// A single source position.
+typedef struct
+{
+	const char* file;
+	int line;
+	int column;
+} Hlsl2Glsl_SourcePosition;
+
+/// A half-open source range [begin, end).
+typedef struct
+{
+	Hlsl2Glsl_SourcePosition begin;
+	Hlsl2Glsl_SourcePosition end;
+} Hlsl2Glsl_SourceRange;
+
+/// Where the bytes of a source fragment were actually spelled.
+typedef enum
+{
+	/// Written directly in the source file.
+	Hlsl2Glsl_SourceSpellingDirect = 0,
+	/// Written in the replacement list of a macro definition.
+	Hlsl2Glsl_SourceSpellingMacroBody,
+	/// Written at a macro call site as an actual argument.
+	Hlsl2Glsl_SourceSpellingMacroArgument
+} Hlsl2Glsl_SourceSpelling;
+
+/// One ordered piece of spelling that contributed to the final token.  Most
+/// tokens have exactly one fragment; tokens produced by ## can have several,
+/// ordered left-to-right as they were pasted together.
+typedef struct
+{
+	Hlsl2Glsl_SourceRange range;
+	Hlsl2Glsl_SourceSpelling spelling;
+} Hlsl2Glsl_SourceFragment;
+
+/// One step of a macro expansion chain.  Chains are reported outer-most
+/// first (the macro call that ultimately caused the token to exist) and
+/// inner-most last.
+typedef struct
+{
+	/// Macro name.
+	const char* name;
+	/// Location of the macro name in its #define.
+	Hlsl2Glsl_SourceRange definition;
+	/// Location where this macro was invoked (spelled literally, so for a
+	/// nested expansion this points into the outer macro body or argument).
+	Hlsl2Glsl_SourceRange invocation;
+} Hlsl2Glsl_MacroExpansion;
+
+/// One #include step leading to the file that contains a diagnostic's
+/// spelling fragments.  Frames are ordered from the outermost include to the
+/// innermost one.
+typedef struct
+{
+	/// Included file.
+	const char* file;
+	/// The #include directive in the including file.
+	Hlsl2Glsl_SourceRange directive;
+} Hlsl2Glsl_IncludeFrame;
+
+/// A structured diagnostic.  All pointers are owned by the compiler handle
+/// and remain valid until the next Hlsl2Glsl_Parse on that handle, or until
+/// the handle is destroyed.  In particular they stay valid after an included
+/// file has been closed and after macros have been #undef'd.
+typedef struct
+{
+	/// The original error text, exactly as it appears in
+	/// Hlsl2Glsl_GetInfoLog (for example
+	/// "'missing_component' : no matching overloaded function found ").
+	const char* message;
+
+	/// The position the error should be reported at.  For a token produced
+	/// by macro expansion this is the *outer-most* macro invocation; for a
+	/// token that did not come from a macro it is the token itself.  Errors
+	/// raised while handling a directive (for example an unterminated #if at
+	/// end of file) point at the directive keyword.
+	Hlsl2Glsl_SourceRange primary;
+
+	/// Ordered pieces of source where the failing token is actually
+	/// spelled.  May contain more than one entry for token pasted with ##.
+	const Hlsl2Glsl_SourceFragment* fragments;
+	int fragmentCount;
+
+	/// Macro expansion chain, outer-most first.
+	const Hlsl2Glsl_MacroExpansion* expansions;
+	int expansionCount;
+
+	/// Include chain leading to the file of the first spelling fragment.
+	const Hlsl2Glsl_IncludeFrame* includes;
+	int includeCount;
+} Hlsl2Glsl_Diagnostic;
+
+/// Number of structured diagnostics produced by the most recent
+/// Hlsl2Glsl_Parse call on the handle.  Cleared at the start of every parse.
+SH_IMPORT_EXPORT int C_DECL Hlsl2Glsl_GetDiagnosticCount( const ShHandle handle );
+
+/// Retrieve one structured diagnostic; returns NULL if index is out of
+/// range.  Diagnostics are in the order the errors were reported.
+SH_IMPORT_EXPORT const Hlsl2Glsl_Diagnostic* C_DECL Hlsl2Glsl_GetDiagnostic( const ShHandle handle, int index );
+
+
 /// File read callback for #include processing.
 typedef bool (C_DECL *Hlsl2Glsl_IncludeOpenFunc)(bool isSystem, const char* fname, const char* parentfname, const char* parent, std::string& output, void* data);
 typedef void (C_DECL *Hlsl2Glsl_IncludeCloseFunc)(const char* file, void* data);

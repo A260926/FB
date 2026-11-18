@@ -225,6 +225,7 @@
     <ClCompile Include="hlslang\MachineIndependent\intermOut.cpp" />
     <ClCompile Include="hlslang\MachineIndependent\IntermTraverse.cpp" />
     <ClCompile Include="hlslang\MachineIndependent\ParseHelper.cpp" />
+    <ClCompile Include="hlslang\MachineIndependent\DiagnosticStore.cpp" />
     <ClCompile Include="hlslang\MachineIndependent\PoolAlloc.cpp" />
     <ClCompile Include="hlslang\MachineIndependent\preprocessor\mojoshader.cpp" />
     <ClCompile Include="hlslang\MachineIndependent\preprocessor\mojoshader_common.cpp" />
