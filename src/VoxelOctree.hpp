@@ -29,6 +29,7 @@ freely, subject to the following restrictions:
 #include "ChunkedAllocator.hpp"
 #include "IntTypes.hpp"
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -51,6 +52,19 @@ public:
 
     void save(const char *path);
     bool raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 &normal, float &t);
+
+    /* Overwrite every voxel cell of the half-open box [lo, hi) given on the
+     * integer brush grid of depth gridDepth. Grid coordinate k maps to the
+     * normalized scene coordinate 1 + k/2^gridDepth. A material of 0 erases,
+     * any other value is stored verbatim. The brush grid only locates the
+     * edit; it neither moves nor resamples existing cells. */
+    void paintBox(unsigned gridDepth, const std::array<uint32, 3> &lo,
+                  const std::array<uint32, 3> &hi, uint32 material);
+
+    /* Number of words the object currently owns in its descriptor array. */
+    uint64 wordCount() const {
+        return _octreeSize;
+    }
 
     Vec3 center() const {
         return _center;

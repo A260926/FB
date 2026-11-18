@@ -54,7 +54,7 @@ static const uint32 BitCount[] = {
 
 static const size_t CompressionBlockSize = 64*1024*1024;
 
-VoxelOctree::VoxelOctree(const char *path) : _voxels(0) {
+VoxelOctree::VoxelOctree(const char *path) : _octreeSize(0), _voxels(0), _center() {
     FILE *fp = fopen(path, "rb");
 
     if (fp) {
@@ -134,6 +134,10 @@ VoxelOctree::VoxelOctree(VoxelData *voxels)
     _octreeSize = octreeAllocator->size() + octreeAllocator->insertionCount();
     _octree = octreeAllocator->finalize();
     _center = _voxels->getCenter();
+    /* The source volume is only needed while building; dropping the pointer
+     * lets the tree outlive a VoxelData instance and keeps further edits from
+     * accidentally touching it. */
+    _voxels = 0;
 }
 
 uint64 VoxelOctree::buildOctree(ChunkedAllocator<uint32> &allocator, int x, int y, int z, int size, uint64 descriptorIndex) {
@@ -205,6 +209,9 @@ uint64 VoxelOctree::buildOctree(ChunkedAllocator<uint32> &allocator, int x, int 
 }
 
 bool VoxelOctree::raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 &normal, float &t) {
+    if (!_octree || !_octreeSize)
+        return false;
+
     struct StackEntry {
         uint64 offset;
         float maxT;
@@ -278,8 +285,20 @@ bool VoxelOctree::raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 
                 if (current & 0x20000)
                     childOffset = (childOffset << 32) | uint64(_octree[parent + 1]);
 
+                /* Slot rank counts occupied siblings with a lower child bit.
+                 * The leaf mask may be a strict subset of the occupancy mask
+                 * when a group mixes coarse leaves and interior nodes, so the
+                 * occupancy mask has to be used here rather than the leaf
+                 * mask. */
+                uint32 siblingCount = BitCount[((childMasks >> (8 + childShift)) << childShift) & 127];
+
+                /* Child slots are one or two words wide. */
+                uint64 childSlot = childOffset + parent + siblingCount;
+                if (current & 0x10000)
+                    childSlot += siblingCount;
+
                 if (!(childMasks & 0x80)) {
-                    normal = _octree[childOffset + parent + BitCount[((childMasks >> (8 + childShift)) << childShift) & 127]];
+                    normal = _octree[childSlot];
 
                     break;
                 }
@@ -287,10 +306,7 @@ bool VoxelOctree::raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 
                 rayStack[scale].offset = parent;
                 rayStack[scale].maxT = maxT;
 
-                uint32 siblingCount = BitCount[childMasks & 127];
-                parent += childOffset + siblingCount;
-                if (current & 0x10000)
-                    parent += siblingCount;
+                parent = childSlot;
 
                 idx = 0;
                 scale--;
