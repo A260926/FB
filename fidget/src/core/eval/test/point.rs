@@ -216,7 +216,7 @@ where
         let tape = shape.point_tape(Default::default());
         let mut eval = F::new_point_eval();
 
-        for x in [0.0, 1.0, 2.0] {
+        for x in [0.0f32, 1.0, 2.0] {
             let (r, trace) = eval.eval(&tape, &[x]).unwrap();
             assert_eq!(r[0], x.sin());
             assert!(trace.is_none());
@@ -236,7 +236,7 @@ where
         let tape = shape.point_tape(Default::default());
         let vs = bind_xy(&tape);
 
-        for (x, y) in [(0.0, 1.0), (1.0, 3.0), (2.0, 8.0)] {
+        for (x, y) in [(0.0f32, 1.0), (1.0, 3.0), (2.0, 8.0)] {
             let (r, trace) = eval.eval(&tape, &vs(x, y)).unwrap();
             assert_eq!(r[0], x.sin() + y);
             assert!(trace.is_none());

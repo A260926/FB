@@ -6,6 +6,7 @@ use super::{
     cell::{Cell, CellIndex, CellVertex, Leaf},
     codegen::CELL_TO_VERT_TO_EDGES,
     frame::Frame,
+    multipatch,
     qef::QuadraticErrorSolver,
     types::{Axis, CellMask, Corner, Edge},
 };
@@ -28,6 +29,44 @@ pub struct Octree {
     /// This is indexed by cell leaf index; the exact shape depends heavily on
     /// the number of intersections and vertices within each leaf.
     pub(crate) verts: Vec<CellVertex<3>>,
+
+    /// Cross-level connection records for leaves produced by multi-patch
+    /// coarsening
+    ///
+    /// Ordinary (single-patch) leaves have no entry here; a multi-patch leaf
+    /// owns one [`MultiPatch`], in the same order as its surface vertices in
+    /// [`Self::verts`].  Each record remembers which fine edge (of the eight
+    /// collapsed children) feeds the patch, so that dual contouring can pick
+    /// the correct coarse vertex for a sign change instead of guessing.
+    pub(crate) multi_patches: Vec<MultiPatch>,
+}
+
+/// Connection record for one surface patch of a multi-patch leaf
+///
+/// The owning leaf is anchored through [`Leaf::multi_index`]; ordinary
+/// single-patch leaves carry no records.  All edge indices use the cell's own
+/// corner frame.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct MultiPatch {
+    /// Bitset of the cell's twelve undirected edges (0-11) whose sign changes
+    /// belong to this patch; every crossing edge appears in exactly one
+    /// record of the leaf.
+    pub edge_set: u16,
+    /// Bitset of canonical fine edges (0-53) whose hermite constraints were
+    /// merged into this patch.  Each fine edge appears in at most one record
+    /// across the whole octree level.  Read by in-crate task tests.
+    #[allow(dead_code)]
+    pub fine_edges: u64,
+}
+
+/// Sentinel indicating that a leaf owns no multi-patch records
+pub(crate) const NO_MULTI_PATCH: u32 = u32::MAX;
+
+impl MultiPatch {
+    /// Returns whether the given undirected cell edge belongs to this patch
+    pub(crate) fn contains_edge(&self, edge: usize) -> bool {
+        (self.edge_set >> edge) & 1 != 0
+    }
 }
 
 impl Octree {
@@ -37,6 +76,7 @@ impl Octree {
             root: Cell::Invalid,
             cells: vec![],
             verts: vec![],
+            multi_patches: vec![],
         }
     }
 
@@ -95,10 +135,11 @@ impl Octree {
                 settings.depth,
                 &settings.cancel,
                 threads,
+                settings.multi_patch_error,
             )
         } else {
             let mut eval = RenderHandle::new(shape.clone());
-            let mut out = OctreeBuilder::new();
+            let mut out = OctreeBuilder::new(settings.multi_patch_error);
             let mut hermite = LeafHermiteData::default();
             if out.recurse(
                 &mut eval,
@@ -122,6 +163,7 @@ impl Octree {
         max_depth: u8,
         cancel: &CancelToken,
         threads: &ThreadPool,
+        multi_patch_error: Option<f32>,
     ) -> Option<Self> {
         let mut root = Octree::new();
         let mut todo = VecDeque::new();
@@ -160,7 +202,7 @@ impl Octree {
         let out = threads.run(|| {
             todo.par_iter()
                 .map_init(
-                    || (OctreeBuilder::new(), rh.clone()),
+                    || (OctreeBuilder::new(multi_patch_error), rh.clone()),
                     |(builder, eval), cell| {
                         let mut hermite = LeafHermiteData::default();
                         // Patch our cell so that it builds at index 0
@@ -195,6 +237,7 @@ impl Octree {
         // Copy hermite data into arrays, and compute cumulative offsets
         let mut cell_offsets = vec![root.cells.len()];
         let mut vert_offsets = vec![0];
+        let mut multi_offsets = vec![0];
         for o in &out {
             let (i, j) = o.cell.index.unwrap();
             hermites[i][j as usize] = o.hermite;
@@ -202,17 +245,30 @@ impl Octree {
             cell_offsets.push(c);
             let v = vert_offsets.last().unwrap() + o.octree.verts.len();
             vert_offsets.push(v);
+            let m =
+                multi_offsets.last().unwrap() + o.octree.multi_patches.len();
+            multi_offsets.push(m);
         }
         root.cells.reserve(*cell_offsets.last().unwrap());
         root.verts.reserve(*vert_offsets.last().unwrap());
+        root.multi_patches
+            .reserve(*multi_offsets.last().unwrap());
 
         for (i, o) in out.into_iter().enumerate() {
             assert_eq!(cell_offsets[i], root.cells.len());
             assert_eq!(vert_offsets[i], root.verts.len());
+            assert_eq!(multi_offsets[i], root.multi_patches.len());
+            let multi_base = multi_offsets[i] as u32;
             let remap_cell = |c| match c {
-                Cell::Leaf(Leaf { mask, index }) => Cell::Leaf(Leaf {
-                    mask,
-                    index: index + vert_offsets[i],
+                Cell::Leaf(leaf) => Cell::Leaf(Leaf {
+                    mask: leaf.mask,
+                    index: leaf.index + vert_offsets[i],
+                    patch_count: leaf.patch_count,
+                    multi_index: if leaf.multi_index == NO_MULTI_PATCH {
+                        NO_MULTI_PATCH
+                    } else {
+                        leaf.multi_index + multi_base
+                    },
                 }),
                 Cell::Branch { index } => Cell::Branch {
                     index: index + cell_offsets[i],
@@ -224,10 +280,13 @@ impl Octree {
                 o.octree.cells.into_iter().map(|cs| cs.map(remap_cell)),
             );
             root.verts.extend(o.octree.verts);
+            root.multi_patches.extend(o.octree.multi_patches);
             root[o.cell] = remap_cell(o.octree.root);
         }
 
-        // Walk back up the tree, merging cells as we go
+        // Walk back up the tree, merging cells as we go.  These upper levels
+        // only ever see merged hermite data, so multi-patch coarsening (which
+        // requires fresh finest-level data) is disabled by passing `None`.
         for (cell, index) in fixup.into_iter().rev() {
             let h = hermites[index];
             root[cell] = root.check_done(
@@ -237,6 +296,7 @@ impl Octree {
                 cell.index
                     .map(|(i, j)| &mut hermites[i][j as usize])
                     .unwrap_or(&mut LeafHermiteData::default()),
+                None,
             );
         }
         Some(root)
@@ -282,12 +342,17 @@ impl Octree {
     ///
     /// If all are empty or full, then pro-actively collapses the cells (freeing
     /// them if they're at the tail end of the array).
+    ///
+    /// `multi_patch_error` is `Some(eps)` only when the eight children are
+    /// finest-level leaves carrying fresh hermite data; this is the sole
+    /// level at which multi-patch coarsening is permitted.
     fn check_done(
         &mut self,
         cell: CellIndex<3>,
         index: usize,
         hermite_data: [LeafHermiteData; 8],
         hermite: &mut LeafHermiteData, // output
+        multi_patch_error: Option<f32>,
     ) -> Cell<3> {
         // Check out the children
         let mut full_count = 0;
@@ -315,9 +380,13 @@ impl Octree {
             Cell::Full
         } else if empty_count == 8 {
             Cell::Empty
-        } else if let Some(leaf) =
-            self.try_collapse(cell, index, hermite_data, hermite)
-        {
+        } else if let Some(leaf) = self.try_collapse(
+            cell,
+            index,
+            hermite_data,
+            hermite,
+            multi_patch_error,
+        ) {
             Cell::Leaf(leaf)
         } else {
             Cell::Branch { index }
@@ -343,15 +412,38 @@ impl Octree {
 
     /// Try to collapse the given cell
     ///
-    /// Writes to `self.verts` and returns the leaf if successful; otherwise
-    /// returns `None`.
+    /// Writes to `self.verts` (and possibly `self.multi_patches`) and returns
+    /// the leaf if successful; otherwise returns `None`.
     fn try_collapse(
         &mut self,
         cell: CellIndex<3>,
         index: usize,
         hermite_data: [LeafHermiteData; 8],
         hermite: &mut LeafHermiteData, // output
+        multi_patch_error: Option<f32>,
     ) -> Option<Leaf<3>> {
+        // The multi-patch path only runs at the finest level, where all eight
+        // children are sampling leaves (never previously collapsed leaves)
+        // and the parent corner mask contains more than one surface patch.
+        let finest =
+            hermite_data.iter().all(|h| h.level == HermiteLevel::Fresh);
+        if let (Some(eps), true) = (multi_patch_error, finest) {
+            if let Some(mask) = self.parent_mask(index) {
+                if CELL_TO_VERT_TO_EDGES[mask].len() >= 2 {
+                    let leaf = self.try_multi_patch_collapse(
+                        cell, index, &hermite_data, eps,
+                    )?;
+                    // The collapsed leaf owns its constraints through the
+                    // multi-patch records instead of merged hermite data, so
+                    // mark the output ineligible for any further merge-based
+                    // collapse.
+                    hermite.level = HermiteLevel::Merged;
+                    hermite.qef_err = QEF_ERR_INVALID;
+                    return Some(leaf);
+                }
+            }
+        }
+
         let mask = self.collapsible(index)?;
         *hermite = LeafHermiteData::merge(hermite_data)?;
 
@@ -370,8 +462,9 @@ impl Octree {
         }
         // Record the newly-collapsed leaf
         hermite.qef_err = new_err;
+        hermite.level = HermiteLevel::Merged;
 
-        let index = self.verts.len();
+        let leaf_index = self.verts.len();
         self.verts.push(pos);
 
         // Install cell intersections, of which there must only
@@ -383,7 +476,61 @@ impl Octree {
             self.verts.push(CellVertex { pos: i.pos.xyz() });
         }
 
-        Some(Leaf { mask, index })
+        Some(Leaf {
+            mask,
+            index: leaf_index,
+            patch_count: 1,
+            multi_index: NO_MULTI_PATCH,
+        })
+    }
+
+    /// Computes the parent corner mask implied by the eight child cells
+    ///
+    /// Returns `None` if any child is still a branch (so no collapse is
+    /// possible at this level).
+    fn parent_mask(&self, root: usize) -> Option<usize> {
+        let mut mask = 0usize;
+        for (i, &c) in self.cells[root].iter().enumerate() {
+            let bit = match c {
+                Cell::Leaf(leaf) => leaf.mask.index() & (1 << i) != 0,
+                Cell::Empty => false,
+                Cell::Full => true,
+                Cell::Branch { .. } | Cell::Invalid => return None,
+            };
+            if bit {
+                mask |= 1 << i;
+            }
+        }
+        Some(mask)
+    }
+
+    /// Runs the optional multi-patch collapse and installs its vertices
+    fn try_multi_patch_collapse(
+        &mut self,
+        cell: CellIndex<3>,
+        index: usize,
+        hermite_data: &[LeafHermiteData; 8],
+        eps: f32,
+    ) -> Option<Leaf<3>> {
+        let collapse = multipatch::try_multi_patch_collapse(
+            self,
+            index,
+            hermite_data,
+            &cell.bounds,
+            eps,
+        )?;
+
+        let leaf_index = self.verts.len();
+        let multi_index = self.multi_patches.len() as u32;
+        for pos in &collapse.positions {
+            self.verts.push(CellVertex { pos: *pos });
+        }
+        for pos in &collapse.intersections {
+            self.verts.push(CellVertex { pos: *pos });
+        }
+        self.multi_patches.extend(collapse.records.iter().copied());
+
+        Some(multipatch::leaf_of(&collapse, leaf_index).with_multi(multi_index))
     }
 
     /// Checks whether the set of 8 cells beginning at `root` can be collapsed.
@@ -499,6 +646,9 @@ pub(crate) struct OctreeBuilder<F: Function + RenderHints> {
     /// In-construction octree
     pub(crate) octree: Octree,
 
+    /// Optional relative error threshold for multi-patch coarsening
+    multi_patch_error: Option<f32>,
+
     eval_float_slice: ShapeBulkEval<F::FloatSliceEval>,
     eval_interval: ShapeTracingEval<F::IntervalEval>,
     eval_grad_slice: ShapeBulkEval<F::GradSliceEval>,
@@ -510,15 +660,16 @@ pub(crate) struct OctreeBuilder<F: Function + RenderHints> {
 
 impl<F: Function + RenderHints> Default for OctreeBuilder<F> {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
 impl<F: Function + RenderHints> OctreeBuilder<F> {
     /// Builds a new octree builder, which allocates data for 8 root cells
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(multi_patch_error: Option<f32>) -> Self {
         Self {
             octree: Octree::new(),
+            multi_patch_error,
             eval_float_slice: Shape::<F>::new_float_slice_eval(),
             eval_grad_slice: Shape::<F>::new_grad_slice_eval(),
             eval_interval: Shape::<F>::new_interval_eval(),
@@ -600,7 +751,13 @@ impl<F: Function + RenderHints> OctreeBuilder<F> {
                 }
 
                 // Figure out whether the children can be collapsed
-                self.octree.check_done(cell, index, hermite_child, hermite)
+                self.octree.check_done(
+                    cell,
+                    index,
+                    hermite_child,
+                    hermite,
+                    self.multi_patch_error,
+                )
             }
         };
         true
@@ -853,18 +1010,23 @@ impl<F: Function + RenderHints> OctreeBuilder<F> {
                 .map(|pos| CellVertex { pos: cell.pos(pos) }),
         );
 
-        Cell::Leaf(Leaf { mask, index })
+        Cell::Leaf(Leaf {
+            mask,
+            index,
+            patch_count: CELL_TO_VERT_TO_EDGES[mask.index()].len() as u8,
+            multi_index: NO_MULTI_PATCH,
+        })
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Copy, Clone, Default, Debug)]
-struct LeafIntersection {
+pub(crate) struct LeafIntersection {
     /// Intersection position is xyz; w is 1 if the intersection is present
-    pos: nalgebra::Vector4<f32>,
+    pub(crate) pos: nalgebra::Vector4<f32>,
     /// Gradient is xyz; w is the distance field value at this point
-    grad: nalgebra::Vector4<f32>,
+    pub(crate) grad: nalgebra::Vector4<f32>,
 }
 
 impl From<LeafIntersection> for QuadraticErrorSolver {
@@ -877,14 +1039,27 @@ impl From<LeafIntersection> for QuadraticErrorSolver {
     }
 }
 
+/// Provenance of the hermite data associated with an octree cell
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum HermiteLevel {
+    /// Produced directly by sampling at the finest tree level
+    Fresh,
+    /// Produced by merging the hermite data of eight child cells
+    Merged,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct LeafHermiteData {
-    intersections: [LeafIntersection; 12],
+    pub(crate) intersections: [LeafIntersection; 12],
     face_qefs: [QuadraticErrorSolver; 6],
     center_qef: QuadraticErrorSolver,
 
     /// Error found when solving this QEF (if positive), or a special value
     qef_err: f32,
+
+    /// Whether this data was sampled at the finest level or merged from
+    /// children; multi-patch coarsening is only valid on fresh data
+    level: HermiteLevel,
 }
 
 /// This QEF is not populated
@@ -900,6 +1075,7 @@ impl Default for LeafHermiteData {
             face_qefs: Default::default(),
             center_qef: Default::default(),
             qef_err: QEF_ERR_EMPTY,
+            level: HermiteLevel::Fresh,
         }
     }
 }
@@ -1011,6 +1187,10 @@ impl LeafHermiteData {
         for e in leafs.iter().map(|q| q.qef_err).filter(|&e| e >= 0.0) {
             out.qef_err = out.qef_err.min(e);
         }
+
+        // Merged hermite data no longer carries per-fine-edge ownership, so
+        // it is ineligible for the multi-patch coarsening path.
+        out.level = HermiteLevel::Merged;
 
         Some(out)
     }
@@ -1154,11 +1334,18 @@ mod test {
 
         // Each cell is a leaf with 4 vertices (3 edges, 1 center)
         for o in octree.cells[0].iter() {
-            let Cell::Leaf(Leaf { index, mask }) = *o else {
+            let Cell::Leaf(Leaf {
+                index,
+                mask,
+                patch_count,
+                ..
+            }) = *o
+            else {
                 panic!()
             };
             assert_eq!(mask.count_ones(), 1);
             assert_eq!(index % 4, 0);
+            assert_eq!(patch_count, 1);
         }
 
         let sphere_mesh = octree.walk_dual();

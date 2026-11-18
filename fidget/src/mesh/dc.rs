@@ -3,8 +3,9 @@
 use crate::mesh::{
     Octree,
     builder::MeshBuilder,
-    cell::{Cell, CellIndex},
+    cell::{Cell, CellIndex, Leaf},
     frame::{Frame, XYZ, YZX, ZXY},
+    octree::NO_MULTI_PATCH,
     types::{Corner, Edge, X, Y, Z},
 };
 
@@ -173,6 +174,12 @@ pub fn dc_edge<T: Frame>(
                 debug_assert_eq!(s, starting_sign);
                 debug_assert_eq!(e, !starting_sign);
                 verts[i] = leafs[i].edge(edges[i]);
+            } else if leafs[i].multi_index != NO_MULTI_PATCH {
+                // A coarse multi-patch neighbor: pick the patch that the
+                // current fine edge is connected to, rather than taking the
+                // first patch or guessing by nearest distance.
+                verts[i] =
+                    Some(multi_patch_vertex(octree, leafs[i], edges[i]));
             } else {
                 // We declare that only *manifold* leaf cells can be neighbors
                 // to smaller leaf cells.  This means that there's only one
@@ -221,6 +228,50 @@ pub fn dc_edge<T: Frame>(
                 octree.child(c, (t * i)),
                 octree.child(d, (t * i) | u),
             )
+        }
+    }
+}
+
+/// Selects the surface vertex of a coarse multi-patch leaf for one fine edge
+///
+/// `coarse_edge` is the undirected edge (in the coarse leaf's own corner
+/// frame) on which the fine-grid sign change lies.  The owning patch is found
+/// through the leaf's recorded cross-level connections, so the choice follows
+/// the actual fine edge rather than the first patch or nearest distance.
+fn multi_patch_vertex(
+    octree: &Octree,
+    leaf: Leaf<3>,
+    coarse_edge: Edge,
+) -> crate::mesh::types::Intersection {
+    let edge_index = coarse_edge.index();
+    let base = leaf.multi_index as usize;
+    let patch_count = leaf.patch_count as usize;
+
+    let mut selected = None;
+    for r in 0..patch_count {
+        let record = octree.multi_patches[base + r];
+        if record.contains_edge(edge_index) {
+            selected = Some(r);
+            break;
+        }
+    }
+
+    // The table lookup stays consistent with the leaf's vertex layout because
+    // multi-patch records are emitted in parent-table patch order.
+    let table = leaf
+        .edge(coarse_edge)
+        .expect("coarse edge crossed by a fine edge must have an intersection");
+
+    match selected {
+        Some(r) => crate::mesh::types::Intersection {
+            vert: crate::mesh::types::Offset(r as u8),
+            edge: table.edge,
+        },
+        None => {
+            // Unreachable for validated collapses; keep the manifold behavior
+            // well-defined rather than indexing out of bounds.
+            debug_assert!(false, "fine edge has no recorded coarse patch");
+            table
         }
     }
 }

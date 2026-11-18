@@ -41,12 +41,31 @@ pub struct Leaf<const D: usize> {
 
     /// Index of first vertex in [`Octree::verts`](super::octree::Octree::verts)
     pub index: usize,
+
+    /// Number of disconnected surface patches in this leaf
+    ///
+    /// This always equals the number of vertex entries in the corner-mask
+    /// table, i.e. `CELL_TO_VERT_TO_EDGES[self.mask.index()].len()`.  It is
+    /// stored explicitly so that multi-patch leaves produced by coarsening
+    /// can be distinguished without re-consulting the table.
+    pub patch_count: u8,
+
+    /// Start index into
+    /// [`Octree::multi_patches`](super::octree::Octree::multi_patches), or
+    /// [`NO_MULTI_PATCH`](super::octree::NO_MULTI_PATCH) for ordinary leaves
+    pub multi_index: u32,
 }
 
 impl<const D: usize> Leaf<D> {
     /// Returns the edge intersection for the given edge (if present)
     pub fn edge(&self, e: Edge) -> Option<Intersection> {
         CELL_TO_EDGE_TO_VERT[self.mask.index()][e.index()]
+    }
+
+    /// Attaches a multi-patch record anchor to this leaf
+    pub(crate) fn with_multi(mut self, multi_index: u32) -> Self {
+        self.multi_index = multi_index;
+        self
     }
 }
 
@@ -236,6 +255,8 @@ mod test {
         let c = Cell::<3>::Leaf(Leaf {
             mask: CellMask::new(0b00000010),
             index: 0,
+            patch_count: 1,
+            multi_index: crate::mesh::octree::NO_MULTI_PATCH,
         });
         assert!(!c.corner(Corner::new(0)));
         assert!(c.corner(Corner::new(1)));

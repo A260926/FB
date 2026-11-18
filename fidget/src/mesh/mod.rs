@@ -46,6 +46,7 @@ mod cell;
 mod codegen;
 mod dc;
 mod frame;
+mod multipatch;
 mod octree;
 mod output;
 mod qef;
@@ -92,6 +93,21 @@ pub struct Settings<'a> {
 
     /// Token to cancel rendering
     pub cancel: CancelToken,
+
+    /// Relative error threshold for optional multi-patch coarsening
+    ///
+    /// When `None`, coarsening uses the original single-patch collapse rule:
+    /// any fine leaf whose corner mask produces more than one surface patch
+    /// forces the parent cell to stay split.
+    ///
+    /// When `Some(eps)`, a parent cell may collapse even though its fine
+    /// leaves contain several disconnected surface patches, provided that
+    /// every fine-level connected component can be proven to correspond to
+    /// exactly one candidate parent patch and that the per-patch QEF error
+    /// (recomputed against all of the fine edge constraints owned by the
+    /// patch) is at most `(eps * L)^2`, where `L` is the parent cell's edge
+    /// length in tree coordinates.  `eps` must be finite and non-negative.
+    pub multi_patch_error: Option<f32>,
 }
 
 impl Default for Settings<'_> {
@@ -101,6 +117,7 @@ impl Default for Settings<'_> {
             world_to_model: View3::default().world_to_model(),
             threads: Some(&ThreadPool::Global),
             cancel: CancelToken::new(),
+            multi_patch_error: None,
         }
     }
 }
