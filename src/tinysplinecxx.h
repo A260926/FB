@@ -3,6 +3,7 @@
 #pragma once
 
 #include "tinyspline.h"
+#include "tinyspline_intersect.h"
 #include <vector>
 #include <string>
 
@@ -574,6 +575,7 @@ public:
  */
 class Morphism;
 class ChordLengths;
+class IntersectionResult;
 class TINYSPLINECXX_API BSpline {
 public:
 	enum Type { Opened, Clamped, Beziers };
@@ -667,6 +669,17 @@ public:
 	Morphism morphTo(const BSpline &other,
 	                 real eps = TS_POINT_EPSILON) const;
 
+	/* Intersection of two clamped, non-rational B-spline curves. Throws
+	 * std::runtime_error on invalid input; an exhausted work-box budget
+	 * or a precision limit is reported through the returned result rather
+	 * than an exception. */
+	IntersectionResult intersect(
+	    const BSpline &other,
+	    real spatialEpsilon = (real) 1e-7,
+	    real paramEpsilonA = (real) 1e-7,
+	    real paramEpsilonB = (real) 1e-7,
+	    size_t budget = 100000) const;
+
 	/* Debug */
 	std::string toString() const;
 
@@ -687,6 +700,110 @@ public:
 	BSpline derive1(size_t n) const { return derive(n); }
 	BSpline derive2(size_t n, real eps) const { return derive(n, eps); }
 #endif
+};
+/*! @} */
+
+
+
+/*! @name Curve Intersection
+ *
+ * Value-type wrappers around the C curve intersection result. The classes
+ * own their arrays and support copying and moving; an unresolved query is a
+ * valid, non-throwing state reported through IntersectionResult::complete().
+ *
+ * @{
+ */
+class TINYSPLINECXX_API IntersectionIsolated {
+public:
+	IntersectionIsolated();
+	IntersectionIsolated(const IntersectionIsolated &other);
+	IntersectionIsolated(IntersectionIsolated &&other);
+	explicit IntersectionIsolated(const tsIntersectionIsolated &data);
+	~IntersectionIsolated();
+
+	IntersectionIsolated & operator=(const IntersectionIsolated &other);
+	IntersectionIsolated & operator=(IntersectionIsolated &&other);
+
+	real uMin() const;
+	real uMax() const;
+	real vMin() const;
+	real vMax() const;
+	real u() const;
+	real v() const;
+	Vec3 point() const;
+	size_t intervalA() const;
+	size_t intervalB() const;
+
+private:
+	tsIntersectionIsolated m_data;
+};
+
+class TINYSPLINECXX_API IntersectionOverlap {
+public:
+	IntersectionOverlap();
+	IntersectionOverlap(const IntersectionOverlap &other);
+	IntersectionOverlap(IntersectionOverlap &&other);
+	explicit IntersectionOverlap(const tsIntersectionOverlap &data);
+	~IntersectionOverlap();
+
+	IntersectionOverlap & operator=(const IntersectionOverlap &other);
+	IntersectionOverlap & operator=(IntersectionOverlap &&other);
+
+	size_t intervalA() const;
+	size_t intervalB() const;
+	real u0() const;
+	real u1() const;
+	real v0() const;
+	real v1() const;
+	real a() const;
+	real b() const;
+
+private:
+	tsIntersectionOverlap m_data;
+};
+
+class TINYSPLINECXX_API IntersectionBox {
+public:
+	IntersectionBox();
+	IntersectionBox(const IntersectionBox &other);
+	IntersectionBox(IntersectionBox &&other);
+	explicit IntersectionBox(const tsIntersectionBox &data);
+	~IntersectionBox();
+
+	IntersectionBox & operator=(const IntersectionBox &other);
+	IntersectionBox & operator=(IntersectionBox &&other);
+
+	real uMin() const;
+	real uMax() const;
+	real vMin() const;
+	real vMax() const;
+	size_t intervalA() const;
+	size_t intervalB() const;
+	int reason() const;
+
+private:
+	tsIntersectionBox m_data;
+};
+
+class TINYSPLINECXX_API IntersectionResult {
+public:
+	IntersectionResult();
+	IntersectionResult(const IntersectionResult &other);
+	IntersectionResult(IntersectionResult &&other);
+	~IntersectionResult();
+
+	IntersectionResult & operator=(const IntersectionResult &other);
+	IntersectionResult & operator=(IntersectionResult &&other);
+
+	std::vector<IntersectionIsolated> isolated() const;
+	std::vector<IntersectionOverlap> overlaps() const;
+	std::vector<IntersectionBox> boxes() const;
+	bool complete() const;
+	size_t expanded() const;
+
+private:
+	tsIntersectionResult m_data;
+	friend class BSpline;
 };
 /*! @} */
 

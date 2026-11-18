@@ -18,6 +18,7 @@ Go, Java, Javascript, Lua, Octave, PHP, Python, R, and Ruby are provided.
   * [Pre-built Binaries](#pre-built-binaries)
   * [Compiling From Source](#compiling-from-source)
 - [Getting Started](#getting-started)
+- [Curve Intersection](#curve-intersection)
 - [Documentation](#documentation)
 - [Publications](#publications)
 - [Theoretical Backgrounds](#theoretical-backgrounds)
@@ -152,6 +153,81 @@ plt.show()
 Result:
 
 ![Getting Started](res/getting_started.png)
+
+### Curve Intersection
+
+TinySpline can intersect two clamped, non-rational B-spline curves of
+degree 1 to 3 in two or three dimensions. The query reports two kinds of
+results:
+
+- **Isolated intersections**, each stored with a small interval on both
+  original parameter axes, a representative parameter pair, the
+  back-substituted 3D position (the third component is zero for 2D curves),
+  and the lower indices of the two original non-zero knot intervals.
+- **Coincident (overlapping) ranges**, recorded as the maximal parameter
+  segment of the first curve that coincides with an arc of the second curve
+  under the affine correspondence `v = a*u + b`, including the endpoint
+  directions when the correspondence is reversed.
+
+The C entry point is `ts_bspline_intersect` and the C++ convenience method
+is `BSpline::intersect`:
+
+```cpp
+#include <tinysplinecxx.h>
+using namespace tinyspline;
+
+BSpline a(2, 2, 1, BSpline::Clamped);
+a.setControlPoints({0, 0, 4, 2});
+BSpline b(2, 2, 1, BSpline::Clamped);
+b.setControlPoints({0, 3, 4, -1});
+
+IntersectionResult r = a.intersect(b);   // spatial/param eps default 1e-7
+if (r.complete()) {
+    for (const auto &q : r.isolated())
+        // q.u(), q.v() are parameters on a and b, q.point() the position.
+        ;
+    for (const auto &o : r.overlaps())
+        // v = o.a()*u + o.b() over [o.u0(), o.u1()].
+        ;
+}
+```
+
+How the query works, and when it returns an unresolved result:
+
+1. **Conservative exclusion.** Each curve is decomposed into its Bézier
+   pieces (one per non-zero knot interval) and every working parameter box
+   is restricted to those pieces. A box is discarded only when the
+   component-wise bounding boxes of the two restricted arcs, enlarged by the
+   spatial tolerance plus a small numerical safety margin, are disjoint.
+   Bézier control points bound their curve by convex hull, so exclusion
+   never discards a box that contains a solution.
+2. **Coincidence by polynomial identity.** A candidate overlap is accepted
+   only when the two restricted arcs are identical after composing one
+   polynomial with the recovered affine map `v = a*u + b`. Both polynomials
+   are converted to the power basis and all coefficients are compared
+   component-wise; merely tangent or tolerance-close parallel curves fail
+   this check and are never reported as coincident. A geometric extent guard
+   prevents a near-constant tangency sliver from looking like an overlap.
+3. **Root existence.** Surviving boxes are bisected on their widest
+   tolerance-normalized axis. At parameter-tolerance width a multi-start,
+   constrained Gauss-Newton solve locates the minimum-distance point. A
+   point is reported as an isolated intersection only when its
+   back-substituted residual reaches machine scale relative to the point
+   magnitude; a merely small distance is never treated as proof of a root.
+4. **Stopping conditions.** `complete` is set only when the whole parameter
+   domain has either been excluded or assigned to a result. If the work-box
+   budget is exhausted, the remaining boxes are returned with reason `0`. If
+   subdivision reaches floating-point precision, the boxes that cannot be
+   resolved are returned with reason `1`. In both cases the unresolved boxes
+   cover every remaining possible solution, so an unresolved query is never
+   confused with an empty intersection.
+
+The same space point reached by two different parameter pairs (as in a
+self-intersecting curve) yields two isolated records; deduplication is on
+parameter pairs, not on world position. Points that lie on a recorded
+coincidence correspondence are suppressed so the overlap is not reported as a
+string of isolated points. A complete runnable example is in
+[`examples/cxx/intersections.cpp`](examples/cxx/intersections.cpp).
 
 ### Documentation
 
