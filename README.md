@@ -45,6 +45,52 @@ The camera lives on the `Renderer` as `camera_projection` and `camera_view`.
 Backface culling, frustum culling and early-Z are toggles on the same struct
 (`renderer_enable_*`), all on by default.
 
+### Point lights
+
+An `Entity` can carry a borrowed list of point lights, in its own local space:
+
+```c
+typedef struct PointLight {
+    Vec3f position;   // local to the entity
+    Vec3f intensity;  // non-negative linear RGB
+    float range;      // world distance, not scaled with the node
+} PointLight;
+
+int entity_set_point_lights(Entity *entity, const PointLight *lights,
+                            size_t count);
+```
+
+The list is borrowed — it must outlive rendering, and is not copied. A NULL
+pointer with a count of zero (the default for both `entity_init` entry points)
+means "no lights". A light's position goes through the node's full accumulated
+transform, including scale, and applies to that node's own model *and* every
+visible descendant. Descendants append their own lists; leaving the subtree
+drops them again. The same `Object` may be referenced by several nodes — each
+drawing uses the lights of the node currently being walked, never a list shared
+between visits.
+
+Lighting itself is off by default, so an existing scene keeps its old image.
+Turn it on with:
+
+```c
+renderer_set_point_lighting(&renderer, true, (Vec3f){0.05f, 0.05f, 0.05f});
+```
+
+The third argument is an ambient colour added to every shaded fragment. With
+lighting on, each fragment gets a world position (the screen barycentrics
+scaled by the vertices' inverse clip `w` and normalised) and its triangle a
+world-space unit normal from the winding. For each light in the effective
+list, with `d` the distance to the fragment:
+
+```
+intensity * max(dot(N, (position - P) / d), 0) * (1 - d/range)^2 / (1 + d*d)
+```
+
+only while `0 < d < range`; anything else contributes zero. The ambient plus
+all contributions is multiplied per channel by the base colour (texture or
+white with no material), clamped to the byte range and truncated, keeping the
+base alpha.
+
 ## Libraries
 
 Three libraries. Each is built by its own directory, which also holds that

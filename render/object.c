@@ -1,6 +1,7 @@
 #include "object.h"
 #include "backend.h"
 #include "depth.h"
+#include "lighting.h"
 #include "math/fun.h"
 #include "math/mat4.h"
 #include "mesh.h"
@@ -73,6 +74,25 @@ int object_render(void *this, Mat4 m, Renderer *r) {
     Vec4f a = {ver1->x, ver1->y, ver1->z, 1};
     Vec4f b = {ver2->x, ver2->y, ver2->z, 1};
     Vec4f c = {ver3->x, ver3->y, ver3->z, 1};
+
+    // World-space vertices and normal, needed by per-fragment point lighting.
+    // They come from the model matrix alone, before the view matrix is
+    // applied, so they are independent of the camera. The winding of the
+    // world-space triangle defines the normal, exactly as the old face
+    // shading derived it from the camera-space one.
+    Vec3f world_vertex[3];
+    Vec3f world_normal = {0, 0, 0};
+    if (r->point_lighting_enabled) {
+      Vec4f wa = mat4MultiplyVec4(&a, &m);
+      Vec4f wb = mat4MultiplyVec4(&b, &m);
+      Vec4f wc = mat4MultiplyVec4(&c, &m);
+      world_vertex[0] = (Vec3f){wa.x, wa.y, wa.z};
+      world_vertex[1] = (Vec3f){wb.x, wb.y, wb.z};
+      world_vertex[2] = (Vec3f){wc.x, wc.y, wc.z};
+      world_normal = vec3Normalize(vec3Cross(
+          vec3fsubV(world_vertex[0], world_vertex[1]),
+          vec3fsubV(world_vertex[0], world_vertex[2])));
+    }
 
     Mat4 vm = mat4MultiplyM(&v, &m);
 
@@ -173,11 +193,22 @@ int object_render(void *this, Mat4 m, Renderer *r) {
     // screen space and divides at the end. The previous code divided by NDC z
     // instead, which is not proportional to w, so texture coordinates barely
     // varied across a surface receding from the camera.
+    // Point lighting uses the same weights one step further: the inverse w of
+    // every clip-space vertex scales its barycentric weight, and the sum of
+    // those is normalised, so a fragment position and not a vertex colour is
+    // interpolated. The quotients are valid for every triangle, textured or
+    // not, and the texture path reuses exactly the products the light path
+    // forms.
+    const int need_inverse_w =
+        (o->material != 0 || r->point_lighting_enabled) && aw != 0 &&
+        bw != 0 && cw != 0;
     float invAw = 0, invBw = 0, invCw = 0;
-    if (o->material != 0 && aw != 0 && bw != 0 && cw != 0) {
+    if (need_inverse_w) {
       invAw = 1.0f / aw;
       invBw = 1.0f / bw;
       invCw = 1.0f / cw;
+    }
+    if (o->material != 0 && need_inverse_w) {
       tca.x *= invAw;
       tca.y *= invAw;
       tcb.x *= invBw;
@@ -216,10 +247,25 @@ int object_render(void *this, Mat4 m, Renderer *r) {
         depth_write(r->backend->getZetaBuffer(r, r->backend), pixel_index,
                     depth);
 
+        const float interpInvW = w0 * invAw + w1 * invBw + w2 * invCw;
+
+        // Point lighting: a world-space position per fragment, its weights
+        // being the screen barycentrics scaled by each vertex's inverse clip w
+        // and normalised. Nothing derived per vertex is interpolated.
+        Vec3f lit = {0, 0, 0};
+        if (r->point_lighting_enabled) {
+          Vec3f weighted = vec3fmul(world_vertex[0], w0 * invAw);
+          weighted =
+              vec3fsumV(weighted, vec3fmul(world_vertex[1], w1 * invBw));
+          weighted =
+              vec3fsumV(weighted, vec3fmul(world_vertex[2], w2 * invCw));
+          const Vec3f position = vec3fmul(weighted, 1.0f / interpInvW);
+          lit = lighting_evaluate(r->entity_lights, world_normal, position,
+                                  r->point_light_ambient);
+        }
+
         if (o->material != 0) {
           // Texture lookup
-
-          const float interpInvW = w0 * invAw + w1 * invBw + w2 * invCw;
           if (interpInvW == 0) {
             continue;
           }
@@ -230,11 +276,23 @@ int object_render(void *this, Mat4 m, Renderer *r) {
 
           Pixel text = texture_readF(o->material->texture,
                                      (Vec2f){textCoordx, textCoordy});
-          texture_draw(&r->framebuffer, (Vec2i){x, y},
-                       pixelMul(text, diffuseLight));
+
+          if (r->point_lighting_enabled) {
+            texture_draw(&r->framebuffer, (Vec2i){x, y},
+                         pixelShadeRGB(text, lit.x, lit.y, lit.z));
+          } else {
+            texture_draw(&r->framebuffer, (Vec2i){x, y},
+                         pixelMul(text, diffuseLight));
+          }
         } else {
-          texture_draw(&r->framebuffer, (Vec2i){x, y},
-                       pixelMul(pixelFromUInt8(255), diffuseLight));
+          if (r->point_lighting_enabled) {
+            texture_draw(&r->framebuffer, (Vec2i){x, y},
+                         pixelShadeRGB(pixelFromUInt8(255), lit.x, lit.y,
+                                       lit.z));
+          } else {
+            texture_draw(&r->framebuffer, (Vec2i){x, y},
+                         pixelMul(pixelFromUInt8(255), diffuseLight));
+          }
         }
       }
     }

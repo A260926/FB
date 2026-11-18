@@ -82,3 +82,15 @@ extern Pixel pixelFromUInt8(uint8_t);
 extern uint8_t pixelToUInt8(Pixel *);
 extern Pixel pixelFromRGBA(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 extern Pixel pixelMul(Pixel p, float f);
+
+/**
+ * Multiplies the colour channels of `p` by the linear RGB `r`, `g`, `b`,
+ * clamps each result to the byte range and truncates. The alpha of `p` is
+ * kept unchanged.
+ *
+ * Unlike pixelMul, which takes one factor and saturates only through the
+ * destination type, this is what point lighting uses: the light sum may be
+ * above 1, so the clamp has to happen before the cast.
+ */
+extern Pixel pixelShadeRGB(Pixel p, float r, float g, float b);
+

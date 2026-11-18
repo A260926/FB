@@ -14,6 +14,12 @@ int renderer_init(Renderer *r, Vec2i size, Backend *backend) {
   r->backend = backend;
   r->backend->init(r, r->backend, (Vec4i){0, 0, 0, 0});
 
+  // Lighting is opt-in: this is what keeps a renderer that never calls
+  // renderer_set_point_lighting() on the original face-shaded path.
+  r->point_lighting_enabled = false;
+  r->point_light_ambient = (Vec3f){0, 0, 0};
+  r->entity_lights = 0;
+
   // Initialize optimizations (enable by default for better performance)
   r->enable_backface_culling = true;
   r->enable_frustum_culling = false; // Disabled by default (can have overhead)
@@ -43,7 +49,11 @@ int renderer_render(Renderer *r) {
     memset(be->getFrameBuffer(r, be), 0, pixels * sizeof(Pixel));
   }
 
+  // A previous walk always unwinds its frames; resetting here guarantees a
+  // fresh root even if a renderable bailed out mid-tree in an earlier frame.
+  r->entity_lights = 0;
   r->root_renderable->render(r->root_renderable, mat4Identity(), r);
+  r->entity_lights = 0;
 
   be->afterRender(r, be);
 
@@ -56,6 +66,15 @@ int renderer_set_root_renderable(Renderer *renderer, Renderable *root) {
 
   renderer->root_renderable = root;
   return 0;
+}
+
+int renderer_set_point_lighting(Renderer *renderer, bool enabled,
+                                Vec3f ambient) {
+  IF_NULL_RETURN(renderer, SET_ERROR);
+
+  renderer->point_lighting_enabled = enabled;
+  renderer->point_light_ambient = ambient;
+  return OK;
 }
 
 // Optimization configuration functions
