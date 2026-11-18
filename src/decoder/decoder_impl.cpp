@@ -36,6 +36,22 @@ namespace aribcaption::internal {
 
 static constexpr float kCharScaleEpsilon = 0.01f;
 
+// Maximum assembled payload size for one reassembled linked data group
+static constexpr size_t kMaxLinkedGroupPayload = 1 * 1024 * 1024;  // 1 MiB
+
+// CRC-16/CCITT: polynomial 0x1021, initial value 0xFFFF, no reflection, no final XOR
+static uint16_t CalcCRC16(const uint8_t* data, size_t length) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < length; i++) {
+        crc ^= static_cast<uint16_t>(data[i]) << 8;
+        for (int bit = 0; bit < 8; bit++) {
+            crc = (crc & 0x8000) ? static_cast<uint16_t>((crc << 1) ^ 0x1021)
+                                 : static_cast<uint16_t>(crc << 1);
+        }
+    }
+    return crc;
+}
+
 DecoderImpl::DecoderImpl(Context& context) : log_(GetContextLogger(context)) {}
 
 DecoderImpl::~DecoderImpl() = default;
@@ -50,6 +66,7 @@ bool DecoderImpl::Initialize(EncodingScheme encoding_scheme,
     profile_ = profile;
     language_id_ = language_id;
     ResetInternalState();
+    ClearLinkGroups();
     return true;
 }
 
@@ -61,17 +78,29 @@ void DecoderImpl::SetEncodingScheme(EncodingScheme encoding_scheme) {
         if (active_encoding_ != detected_encoding) {
             active_encoding_ = detected_encoding;
             ResetInternalState();
+            ClearLinkGroups();
         }
     } else {  // encoding_scheme != kAuto
         if (active_encoding_ != encoding_scheme) {
             active_encoding_ = encoding_scheme;
             ResetInternalState();
+            ClearLinkGroups();
         }
     }
 };
 
+void DecoderImpl::SetCaptionType(CaptionType type) {
+    if (type_ != type) {
+        type_ = type;
+        ClearLinkGroups();
+    }
+}
+
 void DecoderImpl::SetProfile(Profile profile) {
-    profile_ = profile;
+    if (profile_ != profile) {
+        profile_ = profile;
+        ClearLinkGroups();
+    }
     ResetWritingFormat();
 }
 
@@ -79,6 +108,15 @@ void DecoderImpl::SwitchLanguage(LanguageId language_id) {
     if (language_id_ != language_id) {
         language_id_ = language_id;
         current_iso6392_language_code_ = QueryISO6392LanguageCode(language_id);
+        ClearLinkGroups();
+    }
+}
+
+void DecoderImpl::SetDataGroupReassemblyEnabled(bool enabled) {
+    if (data_group_reassembly_enabled_ != enabled) {
+        data_group_reassembly_enabled_ = enabled;
+        // Toggling the mode always drops in-flight groups; they cannot be resumed afterwards
+        ClearLinkGroups();
     }
 }
 
@@ -118,7 +156,6 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
     }
 
     out_result.caption.reset();
-    pts_ = pts;
     const uint8_t* data = pes_data;
 
     uint8_t data_identifier = data[0];
@@ -141,6 +178,19 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
     }
 
     size_t data_group_begin = 3 + PES_data_packet_header_length;
+
+    if (data_group_reassembly_enabled_) {
+        // Linked data group reassembly mode: each PES carries exactly one link fragment
+        if (data_group_begin >= length) {
+            // Cannot even read out the data_group_id; keep all in-flight groups
+            log_->e("DecoderImpl: pes_data length does not enough for a link fragment");
+            return DecodeStatus::kError;
+        }
+        return DecodeLinkFragment(data + data_group_begin, length - data_group_begin, pts, out_result);
+    }
+
+    pts_ = pts;
+
     if (data_group_begin + 5 > length) {
         log_->e("DecoderImpl: pes_data length does not enough for a whole data_group");
         return DecodeStatus::kError;
@@ -153,6 +203,12 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
         log_->e("DecoderImpl: pes_data length does not enough for a whole data_group");
         return DecodeStatus::kError;
     }
+
+    return DecodeDataGroup(data_group_id, data + data_group_begin + 5, data_group_size, out_result);
+}
+
+DecodeStatus DecoderImpl::DecodeDataGroup(uint8_t data_group_id, const uint8_t* data, size_t length, DecodeResult& out_result) {
+    size_t data_group_size = length;
 
     if (data_group_size == 0) {
         return DecodeStatus::kNoCaption;
@@ -175,7 +231,7 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
             return DecodeStatus::kNoCaption;
         } else {
             // Handle caption management data
-            ret = ParseCaptionManagementData(data + data_group_begin + 5, data_group_size);
+            ret = ParseCaptionManagementData(data, data_group_size);
             if (ret) {
                 // Only acknowledge a new group if the parsing was successful
                 prev_dgi_group_ = dgi_group;
@@ -188,7 +244,7 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
             return DecodeStatus::kNoCaption;
         } else {
             // Handle caption statement data
-            ret = ParseCaptionStatementData(data + data_group_begin + 5, data_group_size);
+            ret = ParseCaptionStatementData(data, data_group_size);
         }
     }
 
@@ -218,10 +274,145 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
     return DecodeStatus::kNoCaption;
 }
 
+DecodeStatus DecoderImpl::DecodeLinkFragment(const uint8_t* data, size_t length, int64_t pts, DecodeResult& out_result) {
+    // A link fragment: [0] = data_group_id(6) | version(2), [1] = link_number, [2] = last_link_number,
+    // [3..4] = payload length (big endian), then payload, then 2-byte big endian CRC-16.
+    // The CRC covers from the data_group_id/version byte up to the end of the payload.
+    if (length < 1) {
+        // Cannot read out the data_group_id; keep all in-flight groups
+        log_->e("DecoderImpl: link fragment is empty");
+        return DecodeStatus::kError;
+    }
+
+    uint8_t data_group_id = (data[0] & 0b11111100) >> 2;
+    uint8_t version = data[0] & 0b00000011;
+
+    if (length < 5) {
+        log_->e("DecoderImpl: link fragment header truncated for data_group_id %u", data_group_id);
+        link_groups_.erase(data_group_id);
+        return DecodeStatus::kError;
+    }
+
+    uint8_t link_number = data[1];
+    uint8_t last_link_number = data[2];
+    size_t payload_length = ((size_t)data[3] << 8) |
+                            ((size_t)data[4] << 0);
+
+    if (length != 5 + payload_length + 2) {
+        log_->e("DecoderImpl: link fragment length mismatch for data_group_id %u", data_group_id);
+        link_groups_.erase(data_group_id);
+        return DecodeStatus::kError;
+    }
+
+    uint16_t crc_received = ((uint16_t)data[5 + payload_length] << 8) |
+                            ((uint16_t)data[5 + payload_length + 1] << 0);
+    uint16_t crc_calculated = CalcCRC16(data, 5 + payload_length);
+    if (crc_calculated != crc_received) {
+        log_->e("DecoderImpl: link fragment CRC mismatch for data_group_id %u", data_group_id);
+        link_groups_.erase(data_group_id);
+        return DecodeStatus::kError;
+    }
+
+    const uint8_t* payload = data + 5;
+    auto iter = link_groups_.find(data_group_id);
+
+    if (link_number == 0) {
+        if (iter != link_groups_.end()) {
+            LinkGroup& group = iter->second;
+            if (group.last_received_link == 0 &&
+                    group.version == version &&
+                    group.last_link_number == last_link_number &&
+                    group.last_fragment.size() == payload_length &&
+                    (payload_length == 0 || memcmp(group.last_fragment.data(), payload, payload_length) == 0)) {
+                // Idempotent retransmission of the first fragment; keep the first fragment's PTS
+                return DecodeStatus::kNoCaption;
+            }
+            // A legal first fragment (any version) replaces the incomplete group of the same id
+            link_groups_.erase(iter);
+        }
+
+        if (last_link_number == 0) {
+            // Single-fragment group: parse it right away
+            pts_ = pts;
+            return DecodeDataGroup(data_group_id, payload, payload_length, out_result);
+        }
+
+        LinkGroup group;
+        group.version = version;
+        group.last_link_number = last_link_number;
+        group.last_received_link = 0;
+        group.first_pts = pts;
+        group.payload.assign(payload, payload + payload_length);
+        group.last_fragment.assign(payload, payload + payload_length);
+        link_groups_.emplace(data_group_id, std::move(group));
+        return DecodeStatus::kNoCaption;
+    }
+
+    // Non-first fragments require an in-flight group started by a first fragment
+    if (iter == link_groups_.end()) {
+        log_->e("DecoderImpl: link fragment %u without preceding first fragment for data_group_id %u",
+                link_number, data_group_id);
+        return DecodeStatus::kError;
+    }
+
+    LinkGroup& group = iter->second;
+
+    if (group.version != version || group.last_link_number != last_link_number) {
+        log_->e("DecoderImpl: link fragment version/last_link_number changed for data_group_id %u", data_group_id);
+        link_groups_.erase(iter);
+        return DecodeStatus::kError;
+    }
+
+    if (link_number == group.last_received_link) {
+        if (group.last_fragment.size() == payload_length &&
+                (payload_length == 0 || memcmp(group.last_fragment.data(), payload, payload_length) == 0)) {
+            // Idempotent retransmission of the most recently received fragment
+            return DecodeStatus::kNoCaption;
+        }
+        log_->e("DecoderImpl: conflicting retransmission of link %u for data_group_id %u",
+                link_number, data_group_id);
+        link_groups_.erase(iter);
+        return DecodeStatus::kError;
+    }
+
+    if (link_number != group.last_received_link + 1) {
+        log_->e("DecoderImpl: out-of-order link fragment %u for data_group_id %u",
+                link_number, data_group_id);
+        link_groups_.erase(iter);
+        return DecodeStatus::kError;
+    }
+
+    group.payload.insert(group.payload.end(), payload, payload + payload_length);
+    if (group.payload.size() > kMaxLinkedGroupPayload) {
+        log_->e("DecoderImpl: reassembled payload exceeds limit for data_group_id %u", data_group_id);
+        link_groups_.erase(iter);
+        return DecodeStatus::kError;
+    }
+    group.last_received_link = link_number;
+    group.last_fragment.assign(payload, payload + payload_length);
+
+    if (link_number == group.last_link_number) {
+        // Group completed: feed the concatenated payload into the normal data group parsing.
+        // The resulting caption carries the first fragment's PTS.
+        LinkGroup completed = std::move(group);
+        link_groups_.erase(iter);
+        pts_ = completed.first_pts;
+        return DecodeDataGroup(data_group_id, completed.payload.data(), completed.payload.size(), out_result);
+    }
+
+    return DecodeStatus::kNoCaption;
+}
+
+void DecoderImpl::ClearLinkGroups() {
+    link_groups_.clear();
+}
+
 void DecoderImpl::Flush() {
     ResetInternalState();
     // We need to accept caption management data again, if we are about to face a seek or discontinuity
     prev_dgi_group_ = -1;
+    // In-flight linked data groups cannot survive a seek or discontinuity either
+    ClearLinkGroups();
 }
 
 auto DecoderImpl::DetectEncodingScheme() -> EncodingScheme {

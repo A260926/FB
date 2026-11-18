@@ -57,6 +57,10 @@ void Decoder::SetReplaceMSZFullWidthJapanese(bool replace) {
     pimpl_->SetReplaceMSZFullWidthJapanese(replace);
 }
 
+void Decoder::SetDataGroupReassemblyEnabled(bool enabled) {
+    pimpl_->SetDataGroupReassemblyEnabled(enabled);
+}
+
 uint32_t Decoder::QueryISO6392LanguageCode(LanguageId language_id) const {
     return pimpl_->QueryISO6392LanguageCode(language_id);
 }

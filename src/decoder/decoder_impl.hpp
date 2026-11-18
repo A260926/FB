@@ -25,6 +25,7 @@
 #include <initializer_list>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include "aribcaption/caption.hpp"
 #include "aribcaption/context.hpp"
 #include "aribcaption/decoder.hpp"
@@ -43,17 +44,23 @@ public:
                     Profile profile = Profile::kDefault,
                     LanguageId language_id = LanguageId::kDefault);
     void SetEncodingScheme(EncodingScheme encoding_scheme);
-    void SetCaptionType(CaptionType type) { type_ = type; }
+    void SetCaptionType(CaptionType type);
     void SetProfile(Profile profile);
     void SwitchLanguage(LanguageId language_id);
     void SetReplaceMSZFullWidthAlphanumeric(bool replace);
     void SetReplaceMSZFullWidthJapanese(bool replace);
+    void SetDataGroupReassemblyEnabled(bool enabled);
+    [[nodiscard]]
+    bool IsDataGroupReassemblyEnabled() const { return data_group_reassembly_enabled_; }
     [[nodiscard]]
     uint32_t QueryISO6392LanguageCode(LanguageId language_id) const;
     DecodeStatus Decode(const uint8_t* pes_data, size_t length, int64_t pts, DecodeResult& out_result);
     void Flush();
 private:
     auto DetectEncodingScheme() -> EncodingScheme;
+    DecodeStatus DecodeDataGroup(uint8_t data_group_id, const uint8_t* data, size_t length, DecodeResult& out_result);
+    DecodeStatus DecodeLinkFragment(const uint8_t* data, size_t length, int64_t pts, DecodeResult& out_result);
+    void ClearLinkGroups();
     void ResetGraphicSets();
     void ResetWritingFormat();
     void ResetInternalState();
@@ -103,6 +110,17 @@ private:
         uint8_t TCS = 0;
         uint32_t iso6392_language_code = 0;
     };
+
+    // In-flight reassembly state for one linked data group (one full data_group_id).
+    // Only used when data group reassembly mode is enabled.
+    struct LinkGroup {
+        uint8_t version = 0;
+        uint8_t last_link_number = 0;
+        uint8_t last_received_link = 0;   // link_number of the most recently received fragment
+        int64_t first_pts = PTS_NOPTS;    // PTS carried by the first fragment (link_number == 0)
+        std::vector<uint8_t> payload;           // payloads concatenated in link_number order
+        std::vector<uint8_t> last_fragment;     // payload of the most recently received fragment
+    };
 private:
     std::shared_ptr<Logger> log_;
 
@@ -119,6 +137,9 @@ private:
     std::vector<LanguageInfo> language_infos_;
     uint32_t current_iso6392_language_code_ = 0;
     int prev_dgi_group_ = -1;
+
+    bool data_group_reassembly_enabled_ = false;
+    std::unordered_map<uint8_t, LinkGroup> link_groups_;  // keyed by full 6-bit data_group_id
 
     std::unique_ptr<Caption> caption_;
 

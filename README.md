@@ -150,6 +150,51 @@ gcc main.c -o main `pkg-config --cflags --libs --static libaribcaption`
 gcc main.c -o main `pkg-config --cflags --libs libaribcaption`
 ```
 
+## Decoding segmented data groups (linked fragments)
+Some broadcast / editing workflows deliver one ARIB data group split into several linked
+fragments, one fragment per PES packet. By default the decoder expects one complete data
+group per PES. Call `Decoder::SetDataGroupReassemblyEnabled(true)` (C++), or
+`aribcc_decoder_set_data_group_reassembly_enabled()` (C), to let the decoder reassemble
+the linked fragments first: `Decode()` then returns `kNoCaption` until the last fragment
+of a group has arrived, and only then parses the reassembled data group. The resulting
+caption is identical to decoding the whole data group directly, and carries the PTS of
+the group's first fragment. This is useful e.g. for previewing segmented subtitles at
+the timestamp of their first fragment:
+
+```cpp
+#include <aribcaption/aribcaption.hpp>
+using namespace aribcaption;
+
+Context context;
+Decoder decoder(context);
+decoder.Initialize(EncodingScheme::kARIB_STD_B24_UTF8);
+decoder.SetDataGroupReassemblyEnabled(true);  // reassemble linked data group fragments
+
+// Feed each PES (exactly one link fragment per packet) as it arrives.
+// Fragments of different data_group_id may be interleaved.
+DecodeResult result;
+while (next_pes_packet(&pes_data, &length, &pts)) {
+    DecodeStatus status = decoder.Decode(pes_data, length, pts, result);
+    if (status == DecodeStatus::kGotCaption) {
+        // A group completed: result.caption->pts is the PTS of its first fragment
+        PreviewCaption(*result.caption);
+    } else if (status == DecodeStatus::kNoCaption) {
+        // More fragments are needed, nothing to show yet
+    } else {
+        // DecodeStatus::kError: transport error, the affected group was dropped
+    }
+}
+```
+
+The same mode is available through the C API:
+```c
+aribcc_decoder_set_data_group_reassembly_enabled(decoder, true);
+```
+
+The switch is disabled by default. `Flush()`, re-`Initialize()`, or actually changing the
+encoding scheme / profile / caption type / language / this switch drops all incomplete
+groups in flight.
+
 ## Documents
 See the comments in [public headers](include/aribcaption), and [sample code with ffmpeg](test/ffmpeg)
 
