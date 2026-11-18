@@ -51,40 +51,44 @@ public abstract class Indenter implements Printable {
     public static final int INSTR_PREFIX_LENGTH = 7;
     public static final int STACKMAP_TYPE_PLACEHOLDER_LENGTH = 18;
     public static final int OPERAND_PLACEHOLDER_LENGTH = 17;
-    public static int TABLE_PADDING = OPERAND_PLACEHOLDER_LENGTH + INSTR_PREFIX_LENGTH + 1;
-    public static final int COMMENT_PADDING = (Options.contains(TABLE)) ? 16 : 20;
     public static final int INITIAL_COMMENT_OFFSET = 0;     // Initial offset that will be dynamically updated
 
     public static final int CIRCULAR_COMMENT_OFFSET = 25;
 
-    protected final boolean tableFormat = Options.contains(TABLE);
-    protected final boolean sysInfo = Options.contains(SYSINFO);
-    protected final boolean detailedOutput = Options.contains(DETAILED_Output);
-    protected final boolean extraDetailedOutput = Options.contains(EXTRA_DETAILED_Output);
-    protected final boolean bestEffort = Options.contains(BEST_EFFORT);
+    /**
+     * Options of the disassembler this entity belongs to.  They are fixed when the entity
+     * is constructed and are never read from the process-wide legacy option set.
+     */
+    protected final Options options;
+
+    protected boolean tableFormat;
+    protected boolean sysInfo;
+    protected boolean detailedOutput;
+    protected boolean extraDetailedOutput;
+    protected boolean bestEffort;
 
     // Discard printing attributes
-    protected final boolean dropSourceFile = Options.contains(DROP_Source);
-    protected final boolean dropClasses = Options.contains(DROP_Classes);
-    protected final boolean dropSignatures = Options.contains(DROP_Signatures);
-    protected final boolean dropCharacterRange = Options.contains(DROP_CharacterRange);
+    protected boolean dropSourceFile;
+    protected boolean dropClasses;
+    protected boolean dropSignatures;
+    protected boolean dropCharacterRange;
 
     // Extra printing instruction
-    protected final boolean printLocalVariables = Options.contains(LOCAL_VARIABLE_All, LOCAL_VARIABLE_Vars);
-    protected final boolean printLocalVariableTypes = Options.contains(LOCAL_VARIABLE_All, LOCAL_VARIABLE_Types);
-    protected final boolean printLineNumber = Options.contains(LINE_NUMBER_TABLE_Numbers, LINE_NUMBER_TABLE_Lines, LINE_NUMBER_TABLE_Table, TABLE);
+    protected boolean printLocalVariables;
+    protected boolean printLocalVariableTypes;
+    protected boolean printLineNumber;
 
     // internal references
-    protected final boolean printCPIndex = Options.contains(CP_INDEX);
-    protected final boolean skipComments = Options.contains(NO_COMMENTS);
-    protected final boolean printProgramCounter = Options.contains(PRINT_BCI);
-    protected final boolean printLabelAsIdentifiers = Options.contains(LABELS) && !printProgramCounter;
-    protected final boolean printConstantPool = Options.contains(CONSTANT_POOL);
-    protected final boolean printSourceLines = Options.contains(LINE_NUMBER_TABLE_Lines);
-    protected final boolean printLineTable = Options.contains(LINE_NUMBER_TABLE_Table);
-    protected final boolean printLineTableLines = Options.contains(LINE_NUMBER_TABLE_Lines);
-    protected final boolean printLineTableNumbers = Options.contains(LINE_NUMBER_TABLE_Numbers);
-    protected final boolean printHEX = Options.contains(HEX);
+    protected boolean printCPIndex;
+    protected boolean skipComments;
+    protected boolean printProgramCounter;
+    protected boolean printLabelAsIdentifiers;
+    protected boolean printConstantPool;
+    protected boolean printSourceLines;
+    protected boolean printLineTable;
+    protected boolean printLineTableLines;
+    protected boolean printLineTableNumbers;
+    protected boolean printHEX;
     //
     protected boolean printable = true;
     // indicated that an entity has a size in a collection
@@ -98,7 +102,7 @@ public abstract class Indenter implements Printable {
     //
     protected ToolOutput toolOutput;
     //
-    private final String LabelPrefix = printLabelAsIdentifiers ? "L" : "";
+    private String LabelPrefix;
     //
     protected int commentOffset = INITIAL_COMMENT_OFFSET;
     private int length, offset, step;
@@ -154,15 +158,77 @@ public abstract class Indenter implements Printable {
 
 
     public Indenter(ToolOutput toolOutput) {
-        this();
+        this(toolOutput, Options.getGlobalOptions());
+    }
+
+    public Indenter(ToolOutput toolOutput, Options options) {
+        this(options);
         this.toolOutput = toolOutput;
     }
 
     protected Indenter() {
+        this(Options.getGlobalOptions());
+    }
+
+    protected Indenter(Options options) {
+        this.options = (options == null) ? Options.getGlobalOptions() : options;
         this.length = 0;
         this.step = INDENT_STEP;
         this.offset = INDENT_OFFSET;
         this.fillString = INDENT_CHAR;
+        applyOptions();
+    }
+
+    /**
+     * Captures the flags this entity uses for printing from its {@link #options}.
+     * <p>
+     * The flags are intentionally snapshotted here instead of being read from a global
+     * state during printing: an entity always prints according to the options of the
+     * disassembler that created it.
+     */
+    protected final void applyOptions() {
+        this.tableFormat = options.isSet(TABLE);
+        this.sysInfo = options.isSet(SYSINFO);
+        this.detailedOutput = options.isSet(DETAILED_Output);
+        this.extraDetailedOutput = options.isSet(EXTRA_DETAILED_Output);
+        this.bestEffort = options.isSet(BEST_EFFORT);
+
+        this.dropSourceFile = options.isSet(DROP_Source);
+        this.dropClasses = options.isSet(DROP_Classes);
+        this.dropSignatures = options.isSet(DROP_Signatures);
+        this.dropCharacterRange = options.isSet(DROP_CharacterRange);
+
+        this.printLocalVariables = options.isSet(LOCAL_VARIABLE_All, LOCAL_VARIABLE_Vars);
+        this.printLocalVariableTypes = options.isSet(LOCAL_VARIABLE_All, LOCAL_VARIABLE_Types);
+        this.printLineNumber = options.isSet(LINE_NUMBER_TABLE_Numbers, LINE_NUMBER_TABLE_Lines,
+                LINE_NUMBER_TABLE_Table, TABLE);
+
+        this.printCPIndex = options.isSet(CP_INDEX);
+        this.skipComments = options.isSet(NO_COMMENTS);
+        this.printProgramCounter = options.isSet(PRINT_BCI);
+        this.printLabelAsIdentifiers = options.isSet(LABELS) && !printProgramCounter;
+        this.printConstantPool = options.isSet(CONSTANT_POOL);
+        this.printSourceLines = options.isSet(LINE_NUMBER_TABLE_Lines);
+        this.printLineTable = options.isSet(LINE_NUMBER_TABLE_Table);
+        this.printLineTableLines = options.isSet(LINE_NUMBER_TABLE_Lines);
+        this.printLineTableNumbers = options.isSet(LINE_NUMBER_TABLE_Numbers);
+        this.printHEX = options.isSet(HEX);
+
+        this.LabelPrefix = printLabelAsIdentifiers ? "L" : "";
+    }
+
+    /**
+     * @return the options of the disassembler this entity belongs to.
+     */
+    public Options getOptions() {
+        return options;
+    }
+
+    /**
+     * @return the padding used to align instruction-like records for this disassembler.
+     */
+    public int getTablePadding() {
+        return options.getTablePadding();
     }
 
     protected String getLabelPrefix() {

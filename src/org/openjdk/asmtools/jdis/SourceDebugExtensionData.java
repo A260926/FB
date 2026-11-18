@@ -43,7 +43,7 @@ public class SourceDebugExtensionData extends Indenter {
     List<String> debug_extension;
 
     public SourceDebugExtensionData(ClassData classData) {
-        super(classData.toolOutput);
+        super(classData.toolOutput, classData.options);
     }
 
     public SourceDebugExtensionData read(DataInputStream in, int attribute_length) throws IOException, ClassFormatError {

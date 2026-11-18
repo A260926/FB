@@ -93,14 +93,19 @@ public abstract class MemberData<T extends MemberData> extends Indenter {
     protected ArrayList<AttrData> attributes;
 
     public MemberData(T data) {
-        super(data.toolOutput);
+        super(data.toolOutput, data.options);
         this.environment = data.environment;
         init(data);
     }
 
     public MemberData(Environment environment) {
-        super(environment.getToolOutput());
+        super(environment.getToolOutput(), optionsOf(environment));
         this.environment = environment;
+    }
+
+    private static Options optionsOf(Environment environment) {
+        return (environment instanceof JdisEnvironment jdis) ?
+                jdis.getOptions() : Options.getGlobalOptions();
     }
 
     public void init(T data) {

@@ -38,7 +38,7 @@ import static org.openjdk.asmtools.jdis.ConstantPool.TAG.*;
  */
 public final class ModuleContent extends Indenter {
 
-    private static int MODULE_DIRECTIVE_PADDING = 9;
+    private static final int MODULE_DIRECTIVE_PADDING = 9;
     //* A module name and module_flags
     public final Header header;
     //* A service dependence's of this module
@@ -53,6 +53,7 @@ public final class ModuleContent extends Indenter {
     public final Map<Provided, Set<ModuleContent.TargetType>> provides;
 
     private ModuleContent(Builder builder) {
+        super(builder.options);
         this.header = builder.header;
         this.requires = Collections.unmodifiableSet(builder.requires);
         this.exports = Collections.unmodifiableMap(builder.exports);
@@ -271,10 +272,27 @@ public final class ModuleContent extends Indenter {
 
         // Type of constant in the constant pool
         private final ConstantPool.TAG tag;
+        // Options of the module this target type belongs to.  It is null for a detached
+        // target type that has no owner yet; such a type falls back to the legacy
+        // process-wide options only when printed as a last resort.
+        private Options options;
 
         public TargetType(ConstantPool.TAG tag, int cpIndex, String typeName) {
+            this(tag, cpIndex, typeName, null);
+        }
+
+        public TargetType(ConstantPool.TAG tag, int cpIndex, String typeName, Options options) {
             super(cpIndex, typeName);
             this.tag = tag;
+            this.options = options;
+        }
+
+        void setOptions(Options options) {
+            this.options = options;
+        }
+
+        private boolean printCPIndex() {
+            return (options != null ? options : Options.getGlobalOptions()).isSet(Options.PrintOption.CP_INDEX);
         }
 
         public String getTypeName() {
@@ -310,7 +328,7 @@ public final class ModuleContent extends Indenter {
 
         @Override
         public String toString() {
-            return (Options.contains(Options.PrintOption.CP_INDEX)) ? String.format("#%-4d /* %s */", getCPIndex(), name()) : name();
+            return printCPIndex() ? String.format("#%-4d /* %s */", getCPIndex(), name()) : name();
         }
     }
 
@@ -328,11 +346,22 @@ public final class ModuleContent extends Indenter {
         private int cpIndex;
         private String moduleName;
         private String moduleVersion;
+        private Options options;
 
         public Builder() {
+            this(Options.getGlobalOptions());
+        }
+
+        public Builder(Options options) {
+            this.options = (options == null) ? Options.getGlobalOptions() : options;
         }
 
         public Builder(int cpIndex, String moduleName, int moduleFlags, String moduleVersion) {
+            this(Options.getGlobalOptions(), cpIndex, moduleName, moduleFlags, moduleVersion);
+        }
+
+        public Builder(Options options, int cpIndex, String moduleName, int moduleFlags, String moduleVersion) {
+            this(options);
             this.cpIndex = cpIndex;
             this.moduleFlags = moduleFlags;
             this.moduleName = moduleName;
@@ -410,6 +439,21 @@ public final class ModuleContent extends Indenter {
          */
         public ModuleContent build() {
             header = new Header(cpIndex, moduleName, moduleFlags, moduleVersion);
+            header.setOptions(options);
+            requires.forEach(d -> d.setOptions(options));
+            exports.forEach((k, v) -> {
+                k.setOptions(options);
+                v.forEach(t -> t.setOptions(options));
+            });
+            opens.forEach((k, v) -> {
+                k.setOptions(options);
+                v.forEach(t -> t.setOptions(options));
+            });
+            uses.forEach(t -> t.setOptions(options));
+            provides.forEach((k, v) -> {
+                k.setOptions(options);
+                v.forEach(t -> t.setOptions(options));
+            });
             return new ModuleContent(this);
         }
 

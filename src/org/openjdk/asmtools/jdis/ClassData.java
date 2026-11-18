@@ -149,7 +149,7 @@ public class ClassData extends MemberData<ClassData> {
         super(environment);
         memberType = "ClassData";
         super.environment = environment;
-        environment.traceln("printOptions=" + Options.asShortString());
+        environment.traceln("printOptions=" + options.shortDescription());
         super.pool = new ConstantPool(this);
         super.init(this);
     }

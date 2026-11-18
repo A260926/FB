@@ -43,7 +43,7 @@ public class InnerClassData extends Element<ClassData> implements Measurable {
     int access;
 
     private int calculatedCommentOffset = 0;
-    private String jasmPrefix = Indent(PadRight(INNERCLASS.parseKey(), TABLE_PADDING));
+    private String jasmPrefix = Indent(PadRight(INNERCLASS.parseKey(), getTablePadding()));
 
     public InnerClassData(ClassData classData, Container<InnerClassData, ClassData> container) {
         super(classData, container);

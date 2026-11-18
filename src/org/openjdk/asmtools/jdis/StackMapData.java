@@ -117,11 +117,23 @@ public class StackMapData extends MemberData<CodeData> {
         decIndent();
     }
 
+    /**
+     * Returns the map entries of a frame in a stable printing order.
+     * <p>
+     * The order used to be taken from {@code Map.of}, whose iteration order is not
+     * specified and changes between JVM runs; that made otherwise identical
+     * disassemblies differ from run to run.
+     */
+    private List<Map.Entry<String, Pair<Boolean, int[]>>> frameMapEntries(String stackKey, String localsKey) {
+        return List.of(
+                Map.entry(stackKey, new Pair<>(stackMap != null, stackMap)),
+                Map.entry(localsKey, new Pair<>(lockMap != null, lockMap)));
+    }
+
     private void stackMapPrinter(int index, int size) throws IOException {
         println(enlargedIndent(intLine.formatted(BYTECODEOFFSET.parseKey(), frame_pc), getIndentStep()));
-        for (Map.Entry<String, Pair<Boolean, int[]>> entry : Map.of(
-                "%-10s".formatted(STACKMAP.parseKey()), new Pair<>(stackMap != null, stackMap),
-                "%-10s".formatted(LOCALSMAP.parseKey()), new Pair<>(lockMap != null, lockMap)).entrySet()) {
+        for (Map.Entry<String, Pair<Boolean, int[]>> entry : frameMapEntries(
+                "%-10s".formatted(STACKMAP.parseKey()), "%-10s".formatted(LOCALSMAP.parseKey()))) {
             if (entry.getValue().first) {
                 int[] map = entry.getValue().second;
                 Pair<String, String> line = getMapListAsString(map, " ");
@@ -212,9 +224,8 @@ public class StackMapData extends MemberData<CodeData> {
                 }
             }
         } else {
-            for (Map.Entry<String, Pair<Boolean, int[]>> entry : Map.of(
-                    STACKMAP.parseKey(), new Pair<>(stackMap != null, stackMap),
-                    LOCALSMAP.parseKey(), new Pair<>(lockMap != null, lockMap)).entrySet()) {
+            for (Map.Entry<String, Pair<Boolean, int[]>> entry : frameMapEntries(
+                    STACKMAP.parseKey(), LOCALSMAP.parseKey())) {
                 if (entry.getValue().first) {
                     // map found
                     int[] map = entry.getValue().second;

@@ -28,6 +28,7 @@ import org.openjdk.asmtools.common.outputs.StdoutOutput;
 import org.openjdk.asmtools.common.outputs.ToolOutput;
 import org.openjdk.asmtools.common.outputs.log.DualOutputStreamOutput;
 import org.openjdk.asmtools.common.outputs.log.DualStreamToolOutput;
+import org.openjdk.asmtools.common.outputs.log.StderrLog;
 
 import java.io.DataInputStream;
 import java.io.FileNotFoundException;
@@ -54,32 +55,81 @@ import static org.openjdk.asmtools.util.ProductInfo.FULL_VERSION;
  */
 public class Main extends JdisTool {
 
+    /**
+     * Options owned by this disassembler instance.  They are independent from the
+     * options of any other instance and from the legacy process-wide set, so creating,
+     * configuring, or running another instance cannot change them.
+     */
+    private Options options;
+
+    /**
+     * True while this instance has neither constructor arguments nor per-call arguments.
+     * Such an instance keeps the historical behaviour of the legacy static API: it
+     * follows the process-wide option set until it is given options of its own.  Even
+     * then it only ever reads a snapshot of that set.
+     */
+    private boolean followsLegacyOptions;
+
     public Main(ToolOutput toolOutput, DualStreamToolOutput log, ToolInput... toolInputs) {
-        super(toolOutput, log);
-        Collections.addAll(fileList, toolInputs);
+        this(toolOutput, log, snapshotLegacyOptions(), true, null, toolInputs, (String[]) null);
     }
 
     public Main(ToolOutput toolOutput, DualStreamToolOutput log, ToolInput toolInput) {
-        super(toolOutput, log);
-        fileList.add(toolInput);
+        this(toolOutput, log, snapshotLegacyOptions(), true, toolInput, new ToolInput[0], (String[]) null);
     }
 
     public Main(ToolOutput toolOutput, DualStreamToolOutput log, ToolInput toolInput, String... argv) {
-        super(toolOutput, log);
-        if (toolInput != null) {
-            fileList.add(toolInput);
-        }
-        parseArgs(argv);
+        this(toolOutput, log, new Options(), false, toolInput, new ToolInput[0], argv);
     }
 
     public Main(ToolOutput toolOutput, String... argv) {
-        super(toolOutput);
-        parseArgs(argv);
+        this(toolOutput, new StderrLog(), new Options(), false, null, new ToolInput[0], argv);
     }
 
     public Main(ToolOutput toolOutput, DualStreamToolOutput logger, String... argv) {
-        super(toolOutput, logger);
-        parseArgs(argv);
+        this(toolOutput, logger, new Options(), false, null, new ToolInput[0], argv);
+    }
+
+    // Internal constructor that binds a freshly created, instance-owned option set.
+    private Main(ToolOutput toolOutput, DualStreamToolOutput log, Options options, boolean followsLegacyOptions,
+                 ToolInput toolInput, ToolInput[] toolInputs, String... argv) {
+        super(toolOutput, log);
+        this.options = options;
+        this.followsLegacyOptions = followsLegacyOptions;
+        environment.setOptions(options);
+        Collections.addAll(fileList, toolInputs);
+        if (toolInput != null) {
+            fileList.add(toolInput);
+        }
+        if (argv != null) {
+            parseArgs(argv);
+        }
+    }
+
+    /**
+     * @return an independent copy of the current legacy process-wide option set.
+     */
+    private static Options snapshotLegacyOptions() {
+        return new Options(Options.getGlobalOptions());
+    }
+
+    /**
+     * Detaches this instance from the legacy process-wide option set, giving it an
+     * independent option set.  Called as soon as the instance is given its own options.
+     */
+    private void detachFromLegacyOptions() {
+        if (followsLegacyOptions) {
+            followsLegacyOptions = false;
+            this.options = snapshotLegacyOptions();
+            environment.setOptions(this.options);
+        }
+    }
+
+    /**
+     * @return the option set owned by this disassembler instance.
+     */
+    public Options getOptions() {
+        return options;
     }
 
     // jdis entry point
@@ -106,6 +156,16 @@ public class Main extends JdisTool {
     // Runs disassembler when args already parsed
     public synchronized int disasm() {
         int rc = OK;
+        if (followsLegacyOptions) {
+            // Kept for the historical constructor forms without a command line: an
+            // instance that was never given options of its own keeps using the legacy
+            // static configuration.  A snapshot is taken for this run, so that the
+            // instance can never write back into the process-wide set.  As soon as it
+            // is given arguments of its own it is detached and this branch is never
+            // taken again.
+            this.options = snapshotLegacyOptions();
+            environment.setOptions(this.options);
+        }
         for (ToolInput toolInput : fileList) {
             ClassData classData = null;
             try {
@@ -115,7 +175,7 @@ public class Main extends JdisTool {
                 try (DataInputStream dis = toolInput.getDataInputStream(Optional.of(environment))) {
                     classData.read(dis, Paths.get(toolInput.getName()));
                 }
-                environment.traceln(() -> "Options:\n%s\n".formatted(Options.getPrintOptions()));
+                environment.traceln(() -> "Options:\n%s\n".formatted(options.describe()));
                 environment.getToolOutput().startClass(classData.className, Optional.of(".jasm"), environment);
                 classData.print();
                 environment.getToolOutput().finishClass(classData.className);
@@ -174,35 +234,40 @@ public class Main extends JdisTool {
 
     @Override
     protected void parseArgs(String... argv) {
-        Options.setDefaultOutputOptions();
+        // Any per-call configuration makes this instance fully self-contained: it gets
+        // its own option set and the legacy process-wide set is left untouched.
+        detachFromLegacyOptions();
+        // Each invocation reconfigures only this instance; the options of other
+        // disassemblers are left untouched.
+        options.resetToDefaults();
         // Parse arguments
         for (int i = 0; i < argv.length; i++) {
             String arg = argv[i];
             switch (arg) {
                 case "-g":
-                    Options.setDetailedOutputOptions();
+                    options.enableDetailedOutputOptions();
                     break;
                 case "-v":
-                    Options.set(VERBOSE);
+                    options.enable(VERBOSE);
                     environment.setVerboseFlag(true);
                     break;
                 case "-sysinfo":
-                    Options.set(SYSINFO);
+                    options.enable(SYSINFO);
                     break;
                 case "-t":
-                    Options.set(VERBOSE);
-                    Options.set(TRACE);
+                    options.enable(VERBOSE);
+                    options.enable(TRACE);
                     environment.setVerboseFlag(true);
                     environment.setTraceFlag(true);
                     break;
                 case "-pc":
-                    Options.set(PRINT_BCI);
+                    options.enable(PRINT_BCI);
                     break;
                 case "-nc":
-                    Options.set(NO_COMMENTS);
+                    options.enable(NO_COMMENTS);
                     break;
                 case "-hx":
-                    Options.set(HEX);
+                    options.enable(HEX);
                     break;
                 case "-f":                                          // -f <file>
                     setFSDestination(FILE, ++i, argv);
@@ -227,14 +292,14 @@ public class Main extends JdisTool {
                     usage();
                     System.exit(OK);
                 case "-best-effort":
-                    Options.set(BEST_EFFORT);
+                    options.enable(BEST_EFFORT);
                     break;
                 case "-gg":
-                    Options.setDetailedOutputOptions();
-                    Options.set(EXTRA_DETAILED_Output);
+                    options.enableDetailedOutputOptions();
+                    options.enable(EXTRA_DETAILED_Output);
                     break;
                 case "-table":
-                    Options.set(PrintOption.TABLE);
+                    options.enable(PrintOption.TABLE);
                     break;
                 default:
                     if (arg.startsWith("-")) {
@@ -287,7 +352,7 @@ public class Main extends JdisTool {
                 environment.error("err.option.unsupported", option + ":all");
                 return false;
             }
-            blankOption.apply();
+            blankOption.apply(options);
         } else if (parameters.matches("^[:=-]+.*")) {
             parameters = parameters.substring(1);
             String[] prmArray = parameters.split(",");
@@ -300,7 +365,7 @@ public class Main extends JdisTool {
                     environment.error("err.option.unsupported", "%s:%s".formatted(option, prmArray[i]));
                     return false;
                 }
-                printOption.apply();
+                printOption.apply(options);
                 if (printOption.equals(blankOption)) { // blank options is equal to
                     return true;
                 }

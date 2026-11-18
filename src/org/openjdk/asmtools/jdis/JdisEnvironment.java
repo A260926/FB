@@ -30,11 +30,29 @@ import org.openjdk.asmtools.common.outputs.ToolOutput;
 
 public class JdisEnvironment extends Environment<DecompilerLogger> {
 
+    // Options of the disassembler this environment serves.  A configured disassembler
+    // always installs its own independent option set here.
+    private Options options = Options.getGlobalOptions();
+
     /**
      * @param builder the jdis environment builder
      */
     private JdisEnvironment(Builder<JdisEnvironment, DecompilerLogger> builder) {
         super(builder);
+    }
+
+    /**
+     * @return the options of the disassembler this environment serves.
+     */
+    public Options getOptions() {
+        return options;
+    }
+
+    /**
+     * Installs the option set of the disassembler this environment serves.
+     */
+    public void setOptions(Options options) {
+        this.options = (options == null) ? Options.getGlobalOptions() : options;
     }
 
     @Override
