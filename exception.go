@@ -520,6 +520,13 @@ func (pe *File) parseUnwindInfo(unwindInfo uint32) UnwindInfo {
 // for exception handling.
 func (pe *File) parseExceptionDirectory(rva, size uint32) error {
 
+	// ARM64 uses its own 8-byte RUNTIME_FUNCTION layout (with packed unwind
+	// data embedded in the second word). Dispatch by the COFF machine so the
+	// AMD64 three-field interpretation below stays untouched.
+	if pe.NtHeader.FileHeader.Machine == ImageFileMachineARM64 {
+		return pe.parseARM64ExceptionDirectory(rva, size)
+	}
+
 	// The target platform determines which format of the function table entry
 	// to use.
 	var exceptions []Exception
