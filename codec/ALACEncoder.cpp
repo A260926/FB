@@ -91,6 +91,17 @@ static const uint32_t	sChannelMaps[kALACMaxChannels] =
 	(ID_SCE << 21) | (ID_CPE << 15) | (ID_CPE << 9) | (ID_CPE << 3) | (ID_SCE)
 };
 
+// Expose the element layout used by the encoder so other production code (the
+// channel projection path in alacconvert) uses exactly the same arrangement.
+bool ALACGetChannelElementMap( uint32_t numChannels, uint32_t * outMap )
+{
+	if ( (numChannels < 1) || (numChannels > kALACMaxChannels) )
+		return false;
+
+	*outMap = sChannelMaps[numChannels - 1];
+	return true;
+}
+
 static const uint32_t sSupportediPodSampleRates[] =
 {
 	8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
@@ -1159,6 +1170,22 @@ int32_t ALACEncoder::Encode(AudioFormatDescription theInputFormat, AudioFormatDe
 
 Exit:
 	return status;
+}
+
+/*
+	EncodeElement()
+	- encode one ALAC element using the same routines Encode() uses
+*/
+int32_t ALACEncoder::EncodeElement( BitBuffer * bitstream, uint32_t tag, void * inputBuffer,
+                                    uint32_t stride, uint32_t channelIndex, uint32_t numSamples )
+{
+	if ( tag == ID_CPE )
+		return this->EncodeStereo( bitstream, inputBuffer, stride, channelIndex, numSamples );
+
+	if ( (tag == ID_SCE) || (tag == ID_LFE) )
+		return this->EncodeMono( bitstream, inputBuffer, stride, channelIndex, numSamples );
+
+	return kALAC_ParamError;
 }
 
 /*

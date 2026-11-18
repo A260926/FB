@@ -11,6 +11,7 @@ INCLUDES = ../codec
 
 HEADERS = \
 $(SRCDIR)/CAFFileALAC.h \
+$(SRCDIR)/ALACProjectChannels.h \
 $(CODECDIR)/EndianPortable.h \
 $(CODECDIR)/aglib.h \
 $(CODECDIR)/ALACAudioTypes.h \
@@ -23,10 +24,12 @@ $(CODECDIR)/matrixlib.h
 SOURCES = \
 $(SRCDIR)/main.cpp \
 $(SRCDIR)/CAFFileALAC.cpp \
+$(SRCDIR)/ALACProjectChannels.cpp
 
 OBJS = \
 main.o \
-CAFFileALAC.o 
+CAFFileALAC.o \
+ALACProjectChannels.o
 
 alacconvert:	$(OBJS)
 	(cd $(CODECDIR); $(MAKE))
@@ -37,6 +40,9 @@ main.o : main.cpp
 
 CAFFileALAC.o : CAFFileALAC.cpp
 	$(CC) -I $(INCLUDES) $(CFLAGS) CAFFileALAC.cpp
+
+ALACProjectChannels.o : ALACProjectChannels.cpp
+	$(CC) -I $(INCLUDES) $(CFLAGS) ALACProjectChannels.cpp
 
 clean:
 	-rm $(OBJS) alacconvert

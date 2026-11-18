@@ -1,0 +1,165 @@
+codec/dp_dec.c:57:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   57 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_dec.c:57:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   57 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_dec.c:57:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   57 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_dec.c:57:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   57 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_dec.c:58:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   58 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_dec.c:58:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   58 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_dec.c:58:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   58 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_dec.c:58:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   58 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_dec.c:108:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  108 |                 register int16_t        a0, a1, a2, a3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:108:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  108 |                 register int16_t        a0, a1, a2, a3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:108:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  108 |                 register int16_t        a0, a1, a2, a3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:108:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  108 |                 register int16_t        a0, a1, a2, a3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:109:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  109 |                 register int32_t        b0, b1, b2, b3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:109:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  109 |                 register int32_t        b0, b1, b2, b3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:109:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  109 |                 register int32_t        b0, b1, b2, b3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:109:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  109 |                 register int32_t        b0, b1, b2, b3;
+      |                 ^~~~~~~~
+codec/dp_dec.c:191:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  191 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:191:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  191 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:191:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  191 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:191:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  191 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:192:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  192 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:192:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  192 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:192:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  192 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+codec/dp_dec.c:192:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  192 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+24 warnings generated.
+codec/dp_enc.c:76:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   76 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_enc.c:76:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   76 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_enc.c:76:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   76 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_enc.c:76:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   76 |         register int16_t        a0, a1, a2, a3;
+      |         ^~~~~~~~
+codec/dp_enc.c:77:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   77 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_enc.c:77:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   77 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_enc.c:77:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   77 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_enc.c:77:2: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+   77 |         register int32_t        b0, b1, b2, b3;
+      |         ^~~~~~~~
+codec/dp_enc.c:197:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  197 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:197:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  197 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:197:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  197 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:197:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  197 |                 register int16_t        a4, a5, a6, a7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:198:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  198 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:198:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  198 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:198:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  198 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+codec/dp_enc.c:198:3: warning: 'register' storage class specifier is deprecated and incompatible with C++17 [-Wdeprecated-register]
+  198 |                 register int32_t        b4, b5, b6, b7;
+      |                 ^~~~~~~~
+16 warnings generated.
+projection slot is out of range for the input channel count
+projection slot is out of range for the input channel count
+CAF chan chunk must use a built-in layout tag
+CAF chan chunk must use a built-in layout tag
+packet 0 could not be decoded
+packet 0 could not be decoded
+packet table does not close over the data chunk
+packet 0 could not be decoded
+output file must not be the input file
+projection mode only writes ALAC/CAF output
+projection input must be ALAC
+CASE reuse whole_cpe checks=8
+CASE reuse whole_elements_reordered checks=8
+CASE reuse 24bit checks=3
+CASE reuse lfe checks=3
+GROUP reuse cases=4 checks=22 COMPLETE
+CASE repair split_cpe checks=7
+CASE repair cross_element_pair checks=3
+CASE repair swap_pair checks=9
+CASE repair uncompressed_elements checks=5
+GROUP repair cases=4 checks=24 COMPLETE
+CASE container standard_and_nonstandard checks=12
+CASE container pakt_and_short_tail checks=10
+CASE container cookie_byte_orders checks=13
+CASE container cli_and_compatibility checks=5
+GROUP container cases=4 checks=40 COMPLETE
+CASE failure list_parsing checks=6
+CASE failure out_of_range checks=5
+compressed frame too big: 228 vs. 144
+compressed frame too big: 387 vs. 240 
+compressed frame too big: 388 vs. 240 
+compressed frame too big: 228 vs. 144
+CASE failure layout_conflict checks=4
+CASE failure described_input checks=4
+CASE failure discarded_channel_corrupt checks=6
+CASE failure frame_count_mismatch checks=4
+CASE failure pakt_not_closed checks=4
+CASE failure unsupported_element checks=5
+CASE failure output_and_input checks=11
+GROUP failure cases=9 checks=49 COMPLETE
+TARGET_COMPLETE cases=21
+CLI_STEREO frames=4103 channels=2 pcm_equal=1 short_tail=7
+CODEC_MULTI frames=257 channels=6 packet_bytes=826 pcm_equal=1

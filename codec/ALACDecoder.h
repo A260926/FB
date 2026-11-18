@@ -35,6 +35,21 @@
 
 struct BitBuffer;
 
+// Description of one audio element as it was parsed from a packet.  Bit
+// offsets are relative to the start of the packet bitstream.  This is used by
+// the alacconvert channel projection path to locate exact element boundaries
+// without searching for tag values.
+struct ALACElementTrace
+{
+	uint8_t		tag;			// ID_SCE, ID_CPE or ID_LFE
+	uint8_t		instanceTag;
+	uint32_t	channelStart;	// first decoded channel slot
+	uint32_t	channelCount;	// 1 for SCE/LFE, 2 for CPE
+	uint32_t	startBit;		// position of the 3-bit element tag
+	uint32_t	endBit;			// position just past the element syntax
+	uint32_t	numSamples;		// sample frames carried by the element
+};
+
 class ALACDecoder
 {
 	public:
@@ -44,6 +59,15 @@ class ALACDecoder
 		int32_t	Init( void * inMagicCookie, uint32_t inMagicCookieSize );
 		int32_t	Decode( struct BitBuffer * bits, uint8_t * sampleBuffer, uint32_t numSamples, uint32_t numChannels, uint32_t * outNumSamples );
 
+		// Strict packet decode used by the projection path.  Unlike Decode(),
+		// this parses every element through ID_END, rejects elements other
+		// than SCE/CPE/LFE, requires the channel total to match numChannels,
+		// and requires the packet to end exactly on a byte boundary after
+		// ID_END.  Element boundaries and instance tags are reported in
+		// 'traces'.
+		int32_t	DecodePacket( struct BitBuffer * bits, uint8_t * sampleBuffer, uint32_t numSamples, uint32_t numChannels,
+							  uint32_t * outNumSamples, ALACElementTrace * traces, uint32_t maxTraces, uint32_t * outTraceCount );
+
 	public:
 		// decoding parameters (public for use in the analyzer)
 		ALACSpecificConfig		mConfig;
@@ -51,6 +75,13 @@ class ALACDecoder
 	protected:
 		int32_t	FillElement( struct BitBuffer * bits );
 		int32_t	DataStreamElement( struct BitBuffer * bits );
+
+		// Single-element decoders.  The 3-bit element tag has already been
+		// consumed; everything else including the instance tag is read here.
+		int32_t	DecodeMonoElement( struct BitBuffer * bits, uint8_t * sampleBuffer, uint32_t channelIndex,
+									   uint32_t numChannels, uint32_t * ioNumSamples, uint8_t * outInstanceTag );
+		int32_t	DecodeStereoElement( struct BitBuffer * bits, uint8_t * sampleBuffer, uint32_t channelIndex,
+									     uint32_t numChannels, uint32_t * ioNumSamples, uint8_t * outInstanceTag );
 
 		uint16_t					mActiveElements;
 

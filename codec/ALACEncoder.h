@@ -31,6 +31,11 @@
 
 struct BitBuffer;
 
+// Returns the 3-bits-per-channel element type map (SCE/CPE/LFE tags) that the
+// encoder uses for a given output channel count.  Returns false for
+// unsupported channel counts.
+bool ALACGetChannelElementMap( uint32_t numChannels, uint32_t * outMap );
+
 class ALACEncoder
 {
 	public:
@@ -40,6 +45,13 @@ class ALACEncoder
 		virtual int32_t	Encode(AudioFormatDescription theInputFormat, AudioFormatDescription theOutputFormat,
                                    unsigned char * theReadBuffer, unsigned char * theWriteBuffer, int32_t * ioNumBytes);
 		virtual int32_t	Finish( );
+
+		// Encode a single ALAC element (SCE, CPE or LFE) using the production
+		// EncodeMono()/EncodeStereo() paths.  The element tag and instance tag
+		// are written by the caller.  inputBuffer is interleaved with 'stride'
+		// channels; channelIndex selects the encoder coefficient set.
+		int32_t			EncodeElement( struct BitBuffer * bitstream, uint32_t tag, void * inputBuffer,
+									   uint32_t stride, uint32_t channelIndex, uint32_t numSamples );
 
 		void				SetFastMode( bool fast ) { mFastMode = fast; };
 

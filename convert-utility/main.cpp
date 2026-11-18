@@ -30,6 +30,10 @@
 // these are utility headers for this sample code
 #include "CAFFileALAC.h"
 #include "EndianPortable.h"
+#include "ALACProjectChannels.h"
+
+#include <string>
+#include <vector>
 
 #define kMaxBERSize 5
 #define kCAFFdataChunkEditsSize  4
@@ -65,55 +69,93 @@ enum
 };
 
 
-int32_t main (int32_t argc, char * argv[]) 
+int32_t main (int32_t argc, char * argv[])
 {
-    char * inputFileName = argv[1];
-    char * outputFileName = argv[2];
+    const char * projectOption = NULL;
+    std::vector<char *> fileNames;
+
+    bool malformed = argc < 3;
+
+    // Parse the commandline
+    for (int32_t i = 1; i < argc; ++i)
+    {
+        if (strcmp(argv[i], "-h") == 0)
+        {
+            malformed = true;
+        }
+        else if (strncmp(argv[i], "--project=", 10) == 0)
+        {
+            if (projectOption != NULL)
+            {
+                printf("duplicate option: %s\n", argv[i]);
+                malformed = true;
+            }
+            projectOption = argv[i] + 10;
+        }
+        else if (argv[i][0] == '-')
+        {
+            printf("unknown option: %s\n", argv[i]);
+            malformed = true;
+        }
+        else
+        {
+            fileNames.push_back(argv[i]);
+        }
+
+        if (malformed)
+            break;
+    }
+
+    // Channel projection path.
+    if (!malformed && projectOption != NULL)
+    {
+        if (fileNames.size() != 2)
+        {
+            fprintf(stderr, "projection requires an input and an output file\n");
+            return 1;
+        }
+
+        std::vector<uint32_t> slots;
+        const char * slotError = NULL;
+        if (ParseProjectSlots(projectOption, &slots, &slotError) != 0)
+        {
+            fprintf(stderr, "invalid --project list: %s\n", slotError ? slotError : "bad list");
+            return 1;
+        }
+
+        return RunChannelProjection(fileNames[0], fileNames[1], slots) == 0 ? 0 : 1;
+    }
+
+    if (!malformed)
+    {
+        if (fileNames.size() != 2)
+        {
+            malformed = true;
+        }
+    }
+
+    char * inputFileName = fileNames.size() > 0 ? fileNames[0] : NULL;
+    char * outputFileName = fileNames.size() > 1 ? fileNames[1] : NULL;
     FILE * inputFile = NULL;
     FILE * outputFile = NULL;
-		
-	bool malformed = argc < 2;
-	
-    // Parse the commandline and open the necessary files
-    for (int32_t i = 1; i < argc; ++i) 
-	{
-		if (strcmp (argv[i], "-h") == 0)
-		{
-			malformed = true;
-		}
-		else
-		{
-			if (argv[i][0] == '-')
-            {
-				printf ("unknown option: %s\n", argv[i]);
-				malformed = true;
-			}
-			else
-			{
-                if (inputFile == NULL) inputFile = fopen (inputFileName, "rb"); // the b is necessary for Windows -- ignored by Unix
-                if(inputFile == NULL)
-                {
-                    fprintf(stderr," Cannot open file \"%s\"\n", inputFileName);
-                    exit (1);
-                }
 
-                if (outputFile == NULL) outputFile = fopen (outputFileName, "w+b"); // the b is necessary for Windows -- ignored by Unix
-                if(outputFile == NULL)
-                {
-                    fprintf(stderr," Cannot open file \"%s\"\n", outputFileName);
-                    exit (1);
-                }
-			}
-		}
-				
-		if (malformed)
-		{
-			break;
-		}
-	}
-	
-	if (!malformed) 
-	{
+    if (!malformed)
+    {
+        inputFile = fopen (inputFileName, "rb"); // the b is necessary for Windows -- ignored by Unix
+        if(inputFile == NULL)
+        {
+            fprintf(stderr," Cannot open file \"%s\"\n", inputFileName);
+            return 1;
+        }
+
+        outputFile = fopen (outputFileName, "w+b"); // the b is necessary for Windows -- ignored by Unix
+        if(outputFile == NULL)
+        {
+            fprintf(stderr," Cannot open file \"%s\"\n", outputFileName);
+            fclose(inputFile);
+            return 1;
+        }
+
         printf("Input file: %s\n", inputFileName);
         printf("Output file: %s\n", outputFileName);
         // So at this point we have the input and output files open. Need to determine what we're dealing with
@@ -180,13 +222,19 @@ int32_t main (int32_t argc, char * argv[])
 		printf ("        alacconvert <input wav or caf file> <output caf file>\n");
 		printf ("Decode:\n");
 		printf ("        alacconvert <input caf file> <output wav or caf file>\n");
+		printf ("Project (ALAC/CAF to ALAC/CAF):\n");
+		printf ("        alacconvert --project=<slots> <input caf file> <output caf file>\n");
+		printf ("        slots is a 1-8 entry, zero based, comma separated list of input\n");
+		printf ("        channels in output order, e.g. --project=1,2\n");
 		printf ("\n");
+		if (inputFile) fclose(inputFile);
+		if (outputFile) fclose(outputFile);
 		return 1;
 	}
-	
+
     if (inputFile) fclose(inputFile);
     if (outputFile) fclose(outputFile);
-    
+
 	return 0;
 }
 

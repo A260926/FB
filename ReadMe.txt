@@ -40,5 +40,67 @@ Three project are provided to build a command line utility called alacconvert th
 
 Note: When building on Windows, if you are using a version of Visual Studio before Visual Studio 2010, <stdint.h> is not installed. You will need to acquire this file on your own. It can be put in the same directory as the project.
 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Channel projection (--project)
+
+alacconvert can keep only selected channels of a multi-channel ALAC/CAF
+recording and/or change their order, writing a new ALAC/CAF file:
+
+    alacconvert --project=<slots> <input caf file> <output caf file>
+
+<slots> is a comma separated list of zero based input channel slots, given in
+the order they should appear in the output.  For example, for a six-channel
+C/L/R/Ls/Rs/LFE recording, "--project=1,2" produces a two-channel L/R file,
+and "--project=0,3,4,1,2,5" reorders the original six-channel elements without
+re-encoding them.
+
+Properties of projection mode:
+
+1. The list holds 1 to 8 distinct slots, and every slot must exist in the
+   input.  Slots are the actual decoded channel slots of the input.
+2. Audio frames are neither truncated nor resampled.  Nothing is decoded and
+   re-encoded wholesale: only the packet directory and one packet of PCM and
+   bitstream are held in memory at a time.
+3. The output element order follows the ALAC encoder's channel map for the
+   output channel count.  A source element whose complete, contiguous channel
+   set is kept in its original order and with the same SCE/CPE/LFE type is
+   copied bit for bit; only its 4-bit element_instance_tag is renumbered
+   (per type, from zero, in output element order).  All other output elements
+   are encoded from the real PCM of the packet.
+4. The new packet contains exactly one ID_END followed by zero padding; source
+   END tags and byte padding are never copied between elements.
+5. Projection mode only accepts ALAC input in a CAF container and only writes
+   ALAC/CAF output.  The two-filename encode/decode forms are unchanged.
+6. Input support: built-in layouts with 3 to 8 channels, 16 or 24 bit, 4096
+   frames per packet, full packets except a short final packet, zero priming
+   and remainder frames, and a file smaller than 2 GiB.  Elements must be
+   SCE, CPE, LFE or END; compressed and uncompressed elements are both
+   accepted.  Channel roles come from the CAF 'chan' chunk's built-in tag,
+   falling back to the ALAC magic cookie's built-in tag; if both are present
+   they must agree and match the desc and cookie channel counts.  A legacy
+   cookie 'chan' tag written in host byte order is accepted as the same
+   built-in tag; new output always writes big-endian fields.
+7. Output desc, ALACSpecificConfig and kuki numbers match the actual output
+   packets (channels, maxFrameBytes and chan).  Channel roles are inherited
+   from the list.  Standard layouts use the built-in tag in kuki and in the
+   CAF 'chan' chunk; other layouts write CAF channel descriptions (Core Audio
+   labels L=1, R=2, C=3, LFE=4, Ls=5, Rs=6, Lc=7, Rc=8, Cs=9, zero flags and
+   coordinates) and omit the optional kuki 'chan' atom.  The pakt byte sizes
+   come from the real output packets and frame counts stay inherited; a short
+   final packet is never padded to a full one.
+8. Invalid lists, inconsistent layouts, packet frame-count mismatches and
+   unsupported elements exit non-zero without publishing a complete output.
+   A failure mid-run removes the incomplete output it created.  Using the
+   input path as the output is rejected, and the container and list are fully
+   checked before any normal output is written.
+
+The tests for this feature live in tests/project_channels.cpp.  They build
+their own multichannel ALAC/CAF inputs with the real encoder (plus one
+independently hand-built uncompressed multi-element packet), run the
+projection path, and verify the result with an independent CAF parser and an
+independent ALAC element walker.  Run them with:
+
+    bash task_support/run.sh target
+
 
 
