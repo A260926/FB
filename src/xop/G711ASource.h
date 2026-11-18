@@ -28,12 +28,18 @@ public:
 
 	virtual bool HandleFrame(MediaChannelId channel_id, AVFrame frame);
 
+	virtual bool PacketizeFrame(MediaChannelId channel_id, AVFrame frame,
+	                            const SendFrameCallback& callback);
+
 	static uint32_t GetTimestamp();
 
 private:
 	G711ASource();
 
-	uint32_t samplerate_ = 8000;   
+	bool Packetize(MediaChannelId channel_id, AVFrame& frame,
+	               const SendFrameCallback& callback);
+
+	uint32_t samplerate_ = 8000;
 	uint32_t channels_ = 1;       
 };
 

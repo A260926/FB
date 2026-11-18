@@ -35,6 +35,15 @@ public:
 	virtual void SetSendFrameCallback(const SendFrameCallback callback)
 	{ send_frame_callback_ = callback; }
 
+	/* Packetize one complete frame into RTP packets using this source's
+	 * production fragmentation logic and hand each packet to callback.  This
+	 * is the same path as HandleFrame but without any live-clock timestamp
+	 * fallback, so an explicit timestamp of 0 is preserved.  Only sources
+	 * that implement timed replay packetization return true. */
+	virtual bool PacketizeFrame(MediaChannelId channelId, AVFrame frame,
+	                            const SendFrameCallback& callback)
+	{ (void)channelId; (void)frame; (void)callback; return false; }
+
 	virtual uint32_t GetPayloadType() const
 	{ return payload_; }
 

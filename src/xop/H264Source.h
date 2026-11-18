@@ -28,10 +28,16 @@ public:
 
 	virtual bool HandleFrame(MediaChannelId channel_id, AVFrame frame);
 
+	virtual bool PacketizeFrame(MediaChannelId channel_id, AVFrame frame,
+	                            const SendFrameCallback& callback);
+
 	static uint32_t GetTimestamp();
-	
+
 private:
 	H264Source(uint32_t framerate);
+
+	bool Packetize(MediaChannelId channel_id, AVFrame& frame,
+	               const SendFrameCallback& callback);
 
 	uint32_t framerate_ = 25;
 };

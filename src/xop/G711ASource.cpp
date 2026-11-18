@@ -47,6 +47,18 @@ string G711ASource::GetAttribute()
 
 bool G711ASource::HandleFrame(MediaChannelId channel_id, AVFrame frame)
 {
+	return Packetize(channel_id, frame, send_frame_callback_);
+}
+
+bool G711ASource::PacketizeFrame(MediaChannelId channel_id, AVFrame frame,
+                                 const SendFrameCallback& callback)
+{
+	return Packetize(channel_id, frame, callback);
+}
+
+bool G711ASource::Packetize(MediaChannelId channel_id, AVFrame& frame,
+                            const SendFrameCallback& callback)
+{
 	if (frame.size > MAX_RTP_PAYLOAD_SIZE) {
 		return false;
 	}
@@ -62,8 +74,8 @@ bool G711ASource::HandleFrame(MediaChannelId channel_id, AVFrame frame)
 
 	memcpy(rtp_pkt.data.get()+RTP_TCP_HEAD_SIZE+RTP_HEADER_SIZE, frame_buf, frame_size);
 
-	if (send_frame_callback_) {
-		send_frame_callback_(channel_id, rtp_pkt);
+	if (callback) {
+		callback(channel_id, rtp_pkt);
 	}
 
 	return true;
