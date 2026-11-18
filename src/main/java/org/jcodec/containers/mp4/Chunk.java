@@ -22,6 +22,7 @@ public class Chunk {
     private int sampleDur;
     private int sampleDurs[];
     private int entry;
+    private int drefIndex;
     private ByteBuffer data;
 
     public static Chunk createSameSizeAndDuration(long offset, long tv, int sampleSize, int sampleDuration,
@@ -56,8 +57,10 @@ public class Chunk {
     }
 
     public static Chunk createFrom(Chunk other) {
-        return new Chunk(other.getOffset(), other.getStartTv(), other.getSampleCount(), other.getSampleSize(),
+        Chunk result = new Chunk(other.getOffset(), other.getStartTv(), other.getSampleCount(), other.getSampleSize(),
                 other.getSampleSizes(), other.getSampleDur(), other.getSampleDurs(), other.getEntry());
+        result.drefIndex = other.drefIndex;
+        return result;
     }
 
     public long getOffset() {
@@ -90,6 +93,18 @@ public class Chunk {
 
     public int getEntry() {
         return entry;
+    }
+
+    /**
+     * One-based index into the track's data reference table that this chunk's
+     * data should be read from. Zero means unspecified (legacy behaviour).
+     */
+    public int getDrefIndex() {
+        return drefIndex;
+    }
+
+    public void setDrefIndex(int drefIndex) {
+        this.drefIndex = drefIndex;
     }
 
     public int getDuration() {

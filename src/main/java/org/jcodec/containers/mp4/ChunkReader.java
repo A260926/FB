@@ -1,5 +1,6 @@
 package org.jcodec.containers.mp4;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,10 +39,29 @@ public class ChunkReader {
     private SampleSizesBox stsz;
     private TimeToSampleEntry[] tts;
     private SampleDescriptionBox stsd;
-    private final SeekableByteChannel input;
     private final SampleEntry[] entries;
+    private final SeekableByteChannel[] inputs;
 
+    /**
+     * Creates a reader over a single input channel. Chunks whose sample entry
+     * points to a data reference other than the first one are rejected, which
+     * preserves the historical single-source behaviour.
+     */
     public ChunkReader(TrakBox trakBox, SeekableByteChannel input) {
+        this(trakBox, new SeekableByteChannel[] { input });
+    }
+
+    /**
+     * Creates a reader over the track's data references. The <code>inputs</code>
+     * array is indexed by the zero based data reference index; a
+     * <code>null</code> entry means that reference is not resolvable and must
+     * not be used by any chunk.
+     */
+    public static ChunkReader createMultiSource(TrakBox trakBox, SeekableByteChannel[] inputs) {
+        return new ChunkReader(trakBox, inputs);
+    }
+
+    private ChunkReader(TrakBox trakBox, SeekableByteChannel[] inputs) {
         TimeToSampleBox stts = trakBox.getStts();
         tts = stts.getEntries();
         ChunkOffsetsBox stco = trakBox.getStco();
@@ -56,7 +76,7 @@ public class ChunkReader {
         sampleToChunk = stsc.getSampleToChunk();
         stsd = trakBox.getStsd();
         entries = trakBox.getSampleEntries();
-        this.input = input;
+        this.inputs = inputs;
     }
 
     public boolean hasNext() {
@@ -98,20 +118,33 @@ public class ChunkReader {
 
         int eno = sampleToChunk[s2cIndex].getEntry();
         SampleEntry se = entries[eno - 1];
-        if (se.getDrefInd() != 1)
-            throw new IOException("Multiple sample entries not supported");
+        int drefIndex = se.getDrefInd();
 
         Chunk chunk = new Chunk(chunkOffsets[curChunk], chunkTv, sampleCount, size, sizes, sampleDur, samplesDur, eno);
+        chunk.setDrefIndex(drefIndex);
 
         chunkTv += chunk.getDuration();
         sampleNo += sampleCount;
         ++curChunk;
 
-        if (input != null) {
-        	input.setPosition(chunk.getOffset());
-        	chunk.setData(NIOUtils.fetchFromChannel(input, (int) chunk.getSize()));
+        SeekableByteChannel src = sourceFor(drefIndex);
+        if (src != null) {
+        	src.setPosition(chunk.getOffset());
+        	ByteBuffer data = NIOUtils.fetchFromChannel(src, (int) chunk.getSize());
+        	if (data.remaining() < chunk.getSize())
+        	    throw new IOException("Source range exceeds data reference " + drefIndex);
+        	chunk.setData(data);
         }
         return chunk;
+    }
+
+    private SeekableByteChannel sourceFor(int drefIndex) throws IOException {
+        if (drefIndex < 1 || drefIndex > inputs.length)
+            throw new IOException("Sample entry references missing data reference " + drefIndex);
+        // A null entry means the source is intentionally not read (for example a
+        // chunk that is retained in place); the caller is responsible for the
+        // chunk data in that case.
+        return inputs[drefIndex - 1];
     }
 
     public int size() {
@@ -119,8 +152,10 @@ public class ChunkReader {
     }
 
     public List<Chunk> readAll() throws IOException {
-        if (input != null)
-            throw new IllegalStateException("Reading all chunk data to memory is costy.");
+        for (int i = 0; i < inputs.length; i++) {
+            if (inputs[i] != null)
+                throw new IllegalStateException("Reading all chunk data to memory is costy.");
+        }
         List<Chunk> result = new ArrayList<Chunk>();
         Chunk chunk = null;
         while ((chunk = next()) != null) {

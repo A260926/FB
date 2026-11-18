@@ -20,25 +20,22 @@ import org.jcodec.containers.mp4.boxes.TrakBox;
 /**
  * This class is part of JCodec ( www.jcodec.org ) This software is distributed
  * under FreeBSD License
- * 
+ *
  * @author The JCodec project
- * 
+ *
  */
 public class ChunkWriter {
     private long[] offsets;
-    private SampleEntry[] entries;
     private final SeekableByteChannel input;
     private int curChunk;
     private SeekableByteChannel out;
-    byte[] buf;
     private TrakBox trak;
     private IntArrayList sampleSizes;
     private int sampleSize;
     private int sampleCount;
+    private boolean explicitSizes;
 
     public ChunkWriter(TrakBox trak, SeekableByteChannel input, SeekableByteChannel out) {
-        this.buf = new byte[8092];
-        entries = trak.getSampleEntries();
         ChunkOffsetsBox stco = trak.getStco();
         ChunkOffsets64Box co64 = trak.getCo64();
         int size;
@@ -61,8 +58,16 @@ public class ChunkWriter {
         stbl.add(ChunkOffsets64Box.createChunkOffsets64Box(offsets));
         cleanDrefs(trak);
 
-        SampleSizesBox stsz = sampleCount != 0 ? SampleSizesBox.createSampleSizesBox(sampleSize, sampleCount)
-                : SampleSizesBox.createSampleSizesBox2(sampleSizes.toArray());
+        SampleSizesBox stsz;
+        if (explicitSizes || sampleCount == 0 || sampleSize == 0) {
+            // Zero-sized samples cannot be expressed with a default size (a
+            // default of 0 means "explicit table"), and an empty track needs
+            // an empty explicit table as well.
+            int[] sizes = explicitSizes ? sampleSizes.toArray() : new int[sampleCount];
+            stsz = SampleSizesBox.createSampleSizesBox2(sizes);
+        } else {
+            stsz = SampleSizesBox.createSampleSizesBox(sampleSize, sampleCount);
+        }
         stbl.replaceBox(stsz);
     }
 
@@ -90,11 +95,11 @@ public class ChunkWriter {
         }
     }
 
+    /**
+     * Appends the chunk's data at the current output position and records that
+     * position as the chunk's new offset.
+     */
     public void write(Chunk chunk) throws IOException {
-        SampleEntry se = entries[chunk.getEntry() - 1];
-        if (se.getDrefInd() != 1)
-            throw new IOException("Multiple sample entries not supported");
-
         long pos = out.position();
 
         ByteBuffer chunkData = chunk.getData();
@@ -106,13 +111,25 @@ public class ChunkWriter {
         out.write(chunkData);
         offsets[curChunk++] = pos;
 
+        collectSampleSizes(chunk);
+    }
+
+    /**
+     * Keeps the chunk where it already lives: no data is copied, the existing
+     * offset is preserved. Used when flattening on top of the source file and
+     * the chunk does not need rewriting.
+     */
+    public void writeInPlace(Chunk chunk) throws IOException {
+        offsets[curChunk++] = chunk.getOffset();
+        collectSampleSizes(chunk);
+    }
+
+    private void collectSampleSizes(Chunk chunk) {
         if (chunk.getSampleSize() == Chunk.UNEQUAL_SIZES) {
-            if (sampleCount != 0) {
-                unpackSampleSizes();
-            }
+            ensureExplicitSizes();
             sampleSizes.addAll(chunk.getSampleSizes());
         } else {
-            if (sampleSizes.size() != 0) {
+            if (explicitSizes) {
                 for (int i = 0; i < chunk.getSampleCount(); i++) {
                     sampleSizes.add(chunk.getSampleSize());
                 }
@@ -120,19 +137,23 @@ public class ChunkWriter {
                 if (sampleCount == 0) {
                     sampleSize = chunk.getSampleSize();
                 } else if (sampleSize != chunk.getSampleSize()) {
-                    unpackSampleSizes();
+                    ensureExplicitSizes();
                     for (int i = 0; i < chunk.getSampleCount(); i++) {
                         sampleSizes.add(chunk.getSampleSize());
                     }
+                    return;
                 }
                 sampleCount += chunk.getSampleCount();
             }
         }
     }
 
-    private void unpackSampleSizes() {
+    private void ensureExplicitSizes() {
+        if (explicitSizes)
+            return;
         sampleSizes = new IntArrayList(128);
         sampleSizes.fill(0, sampleCount, sampleSize);
         sampleCount = 0;
+        explicitSizes = true;
     }
 }
