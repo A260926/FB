@@ -91,6 +91,9 @@ oggz_new (int flags)
   oggz->run_blocksize = 1024;
   oggz->cb_next = 0;
 
+  oggz->packet_index = NULL;
+  oggz->pkt_seek_state_valid = 1;
+
   oggz->streams = oggz_vector_new ();
   if (oggz->streams == NULL) {
     goto err_oggz_new;
@@ -217,7 +220,9 @@ oggz_close (OGGZ * oggz)
 
   oggz_dlist_deliter(oggz->packet_buffer, oggz_read_free_pbuffers);
   oggz_dlist_delete(oggz->packet_buffer);
-  
+
+  oggz_pkt_index_destroy (oggz);
+
   if (oggz->metric_internal)
     oggz_free (oggz->metric_user_data);
 

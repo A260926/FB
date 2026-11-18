@@ -166,6 +166,87 @@ typedef struct {
   int * guard;
 } oggz_writer_packet_t;
 
+/*
+ * One record per physical Ogg page, kept in file order. Only framing
+ * metadata and offsets are retained; page and packet payloads are never
+ * stored in the index.
+ */
+typedef struct {
+  oggz_off_t offset;       /* byte offset of the page capture pattern */
+  long page_bytes;         /* total page size (header + body) */
+  long serialno;           /* logical bitstream this page belongs to */
+  int continued;           /* page header continuation flag */
+  int nsegs;               /* number of lacing values */
+} OggzPktIndexPage;
+
+/*
+ * One record per completed Ogg packet, per logical bitstream, in packet
+ * order. Packet numbering starts at the BOS packet (packetno 0).
+ */
+typedef struct {
+  long serialno;
+  ogg_int64_t packetno;     /* ordinal within the logical bitstream */
+  long bytes;               /* packet payload size in bytes */
+  long b_o_s;
+  long e_o_s;
+  ogg_int64_t granulepos;   /* granulepos attached to the packet */
+  long begin_page;          /* index of the page where the packet starts */
+  long end_page;            /* index of the page where the packet completes */
+} OggzPktIndexPacket;
+
+/*
+ * Per-stream packet index and the read cursor used by oggz_seek_packets().
+ * The cursor ("next packet to deliver") starts at zero and only advances
+ * when packets are actually delivered to user callbacks.
+ */
+typedef struct {
+  long serialno;
+  OggzPktIndexPacket * packets;  /* packet records, in completion order */
+  long n_packets;
+  long packets_cap;
+
+  ogg_int64_t cursor;       /* ordinal of the next packet to deliver */
+
+  long replay_index;        /* next record expected during replay */
+} OggzPktIndexStream;
+
+/*
+ * Packet-seeking state for one OGGZ read handle. The first packet seek
+ * scans the whole physical bitstream once and fills the page/packet
+ * records; later seeks re-open only the page interval required to rebuild
+ * the target and the in-flight packets of the other tracks, plus a small
+ * fixed preread. Everything is destroyed with the handle; two handles
+ * never share this state.
+ */
+typedef struct {
+  OggzPktIndexPage * pages;       /* page records, in physical order */
+  long n_pages;
+  long pages_cap;
+
+  OggzPktIndexStream * streams;   /* one record per logical bitstream */
+  long n_streams;
+  long streams_cap;
+
+  int armed;              /* suppression window of a seek is active */
+  int replay_active;      /* ordinal rewrite active until records exhaust */
+
+  long resume_page;       /* first page to feed on the next read */
+  long next_page_index;   /* index of the next page the reader will see */
+  long disarm_after_page; /* last page fed under replay control */
+
+  /* Identity of the armed target; packets completing before it (in
+   * physical page order, then per-stream order on the target page) are
+   * replayed without callbacks. */
+  ogg_int64_t target_packetno;
+  long target_end_page;
+
+  oggz_off_t resume_offset;
+  oggz_off_t saved_offset;
+
+  /* saved reader state while the resume machinery is armed */
+  long saved_current_serialno;
+} OggzPacketIndex;
+
 enum oggz_writer_state {
   OGGZ_MAKING_PACKETS = 0,
   OGGZ_WRITING_PAGES = 1
@@ -257,6 +338,15 @@ struct _OGGZ {
   } x;
 
   OggzDList * packet_buffer;
+
+  /* Lazily built page/packet index for oggz_seek_packets(); NULL until
+   * the first packet seek. Read handles only. */
+  OggzPacketIndex * packet_index;
+
+  /* Whether the live libogg packet counters still reflect sequential
+   * reading from the start of the container; cleared by byte/time seeks
+   * and purge, which reset the stream states. */
+  int pkt_seek_state_valid;
 };
 
 OGGZ * oggz_read_init (OGGZ * oggz);
@@ -330,5 +420,14 @@ int oggz_io_flush (OGGZ * oggz);
 
 /* oggz_read */
 OggzDListIterResponse oggz_read_free_pbuffers(void *elem);
+
+/* oggz_packet_seek */
+void oggz_pkt_index_destroy (OGGZ * oggz);
+void oggz_pkt_seek_note_reset (OGGZ * oggz);
+void oggz_pkt_seek_note_page (OGGZ * oggz, const ogg_page * og);
+int oggz_pkt_seek_suppress_packet (OGGZ * oggz, long serialno,
+                                   ogg_packet * op);
+int oggz_pkt_seek_ignore_hole (OGGZ * oggz);
+void oggz_pkt_seek_new_stream (OGGZ * oggz, long serialno);
 
 #endif /* __OGGZ_PRIVATE_H__ */

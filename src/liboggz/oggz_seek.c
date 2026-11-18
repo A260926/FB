@@ -119,7 +119,12 @@ oggz_seek_raw (OGGZ * oggz, oggz_off_t offset, int whence)
   ogg_sync_reset (&reader->ogg_sync);
 
   oggz_vector_foreach(oggz->streams, oggz_seek_reset_stream);
-  
+
+  /* Byte-level repositioning invalidates the packet-seek replay state
+   * and the live libogg packet counters. */
+  oggz->pkt_seek_state_valid = 0;
+  oggz_pkt_seek_note_reset (oggz);
+
   return offset_at;
 }
 
@@ -179,6 +184,11 @@ oggz_purge (OGGZ * oggz)
   }
 
   oggz_reset_streams (oggz);
+
+  /* Purging resets the libogg stream state; packet-seek cursors must be
+   * rebuilt from byte offsets rather than the libogg packet counters. */
+  oggz->pkt_seek_state_valid = 0;
+  oggz_pkt_seek_note_reset (oggz);
 
   if (oggz->file && oggz_reset (oggz, oggz->offset, -1, SEEK_SET) < 0) {
     return OGGZ_ERR_SYSTEM;
@@ -893,11 +903,7 @@ oggz_seek_byorder (OGGZ * oggz, void * target)
   return -1;
 }
 
-long
-oggz_seek_packets (OGGZ * oggz, long serialno, long packets, int whence)
-{
-  return -1;
-}
+/* oggz_seek_packets() is implemented in oggz_packet_seek.c. */
 
 #else
 
@@ -922,10 +928,7 @@ oggz_seek_byorder (OGGZ * oggz, void * target)
   return OGGZ_ERR_DISABLED;
 }
 
-long
-oggz_seek_packets (OGGZ * oggz, long serialno, long packets, int whence)
-{
-  return OGGZ_ERR_DISABLED;
-}
+/* oggz_seek_packets()'s read-disabled variant lives in
+ * oggz_packet_seek.c. */
 
 #endif

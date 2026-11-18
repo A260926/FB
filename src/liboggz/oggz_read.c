@@ -391,6 +391,15 @@ oggz_read_sync (OGGZ * oggz)
 #ifdef DEBUG
           printf ("oggz_read_sync: hole in the data\n");
 #endif
+          /* During a packet-seek replay, streams are reset and resumed
+           * mid-container, so the first page of each stream looks like
+           * a sequence gap to libogg. The container is page-continuous
+           * by contract; swallow this synthetic marker and re-fetch. */
+          if (oggz_pkt_seek_ignore_hole (oggz)) {
+            result = ogg_stream_packetout(os, op);
+            if (result == -1)
+              return OGGZ_ERR_HOLE_IN_DATA;
+          } else {
           /* We can't tolerate holes in headers, so bail out. NB. as stream->packetno
            * has not yet been incremented, the current value refers to how many packets
            * have been processed prior to this one. */
@@ -406,6 +415,7 @@ oggz_read_sync (OGGZ * oggz)
 #endif
             return OGGZ_ERR_HOLE_IN_DATA;
           }
+          }
 
           /* Reset the position of the next page. */
           reader->current_packet_pages = 1;
@@ -415,6 +425,15 @@ oggz_read_sync (OGGZ * oggz)
 
         if(result > 0){
           int content;
+
+          /* Packet-seek replay: packets completed before the seek
+           * barrier are consumed from libogg without any callback or
+           * granulepos bookkeeping, so the user-visible stream starts
+           * exactly at the target packet. */
+          if (oggz_pkt_seek_suppress_packet (oggz, serialno, op)) {
+            stream->packetno++;
+            goto prepare_position;
+          }
 
           stream->packetno++;
           
@@ -573,6 +592,11 @@ prepare_position:
         return OGGZ_ERR_OUT_OF_MEMORY;
       }
 
+      /* During a packet-seek replay a stream can be created mid-file;
+       * put the fresh libogg state into "no pages seen yet" mode so the
+       * first page does not look like a sequence-number gap. */
+      oggz_pkt_seek_new_stream (oggz, serialno);
+
       /* identify stream type */
       oggz_auto_identify_page (oggz, &og, serialno);
 
@@ -599,6 +623,10 @@ prepare_position:
        reader->current_unit = 0;
       }
     }
+
+    /* Track replay progress for packet seeking; never invokes user
+     * callbacks and disarms itself after the fixed preread window. */
+    oggz_pkt_seek_note_page (oggz, &og);
 
     if (stream->read_page) {
       cb_ret =

@@ -53,6 +53,7 @@ oggz_tell					@27
 oggz_tell_units				@28
 oggz_seek					@29
 oggz_seek_units				@30
+oggz_seek_packets				@51
 oggz_set_data_start			@31
 oggz_serialno_new			@32
 

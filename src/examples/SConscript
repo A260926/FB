@@ -8,7 +8,7 @@ if enable_read and enable_write:
 	sources += ['identity.c']
 
 if enable_read:
-	sources += ['read-file.c', 'read-io.c', 'seek-stress.c']
+	sources += ['read-file.c', 'read-io.c', 'seek-stress.c', 'packet-seek.c']
 
 if enable_write:
 	sources += ['write-feed.c', 'write-hungry.c']

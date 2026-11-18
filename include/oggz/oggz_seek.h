@@ -142,9 +142,53 @@ oggz_off_t oggz_tell (OGGZ * oggz);
  */
 oggz_off_t oggz_seek (OGGZ * oggz, oggz_off_t offset, int whence);
 
-#ifdef _UNIMPLEMENTED
-long oggz_seek_packets (OGGZ * oggz, long serialno, long packets, int whence);
-#endif
+/**
+ * Seek to a packet ordinal within one logical bitstream.
+ *
+ * Packet ordinals are counted from zero at the BOS packet of the
+ * logical bitstream identified by \a serialno; header packets are
+ * included in the count. The first packet delivered to your read
+ * callback after a successful seek is exactly the target packet, with
+ * its original payload bytes, packetno, b_o_s/e_o_s flags and
+ * granulepos preserved. Subsequent reads resume the normal physical
+ * page order across all interleaved logical bitstreams, including
+ * packets of other tracks that span the target position.
+ *
+ * Unlike oggz_seek_units(), this needs no metric and works with OGGZ
+ * handles opened without OGGZ_AUTO. It does require a seekable source:
+ * a stdio handle, or custom IO with both a seek and a tell callback.
+ *
+ * The per-stream seek cursor starts at zero and only advances when a
+ * packet is actually delivered to a read callback. On the first call
+ * the whole container is scanned once to build a page/packet index
+ * (only offsets and counts are cached, never packet payloads); later
+ * calls re-read only the page interval needed to reconstruct the
+ * target and any in-flight packets of the other tracks, plus a small
+ * fixed amount of preread. No packet or page callbacks are invoked
+ * while seeking.
+ *
+ * \param oggz An OGGZ handle previously opened for reading
+ * \param serialno Identify the logical bitstream to seek within
+ * \param packets Packet ordinal interpreted according to \a whence
+ * \param whence One of:
+ * - SEEK_SET: absolute ordinal from the BOS packet (zero based)
+ * - SEEK_CUR: offset from this stream's next packet to be delivered
+ * - SEEK_END: offset from the stream's total packet count; use -1 for
+ *   the final packet
+ * \returns The absolute ordinal of the target packet
+ * \retval -1 on failure: unknown \a serialno, a write handle, missing
+ * seek/tell IO, out-of-range or negative target, overflow, unsupported
+ * \a whence, or an indexing IO error. A failed call leaves the read
+ * position and every buffered packet unchanged, so the next read
+ * continues exactly where it would have before the call.
+ *
+ * \note This supports immutable, single-link, page-continuous Ogg
+ * containers with correct CRCs and unique serial numbers. Empty
+ * packets, several packets per page, packets spanning many pages and
+ * pages containing no complete packet are all handled.
+ */
+long oggz_seek_packets (OGGZ * oggz, long serialno, long packets,
+                        int whence);
 
 /** \}
  */

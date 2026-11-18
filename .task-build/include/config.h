@@ -1,0 +1,6 @@
+#define HAVE_STDINT_H 1
+#define HAVE_UNISTD_H 1
+#define OGGZ_CONFIG_READ 1
+#define OGGZ_CONFIG_WRITE 1
+#define OGG_H_CONST_CORRECT 1
+#define VERSION "1.1.1"
