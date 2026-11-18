@@ -270,6 +270,155 @@ public class UpdateIntegerConstantTypeVisitor extends AbstractJavaSyntaxVisitor 
         }
     }
 
+    @Override
+    public void visit(SwitchExpression expression) {
+        expression.getCondition().accept(this);
+
+        // Numeric switch results are int-sized on the stack; arm constants are
+        // narrowed to the result type exactly like ternary operator branches.
+        // A boolean switch result renders its int constants as true/false
+        // rather than 1/0. The computed type alone is ambiguous (a maybe_boolean
+        // numeric type carries the boolean flag), so confirm with the arm values.
+        Type expressionType = expression.getType();
+        Type targetType = expressionType.isPrimitiveType() ? TYPE_INT : expressionType;
+        boolean booleanResult = expressionType.isPrimitiveType()
+                && ((((PrimitiveType)expressionType).getFlags() & FLAG_BOOLEAN) != 0)
+                && switchHasOnlyBooleanValues(expression);
+
+        for (SwitchExpression.Block block : expression.getBlocks()) {
+            updateSwitchArmStatements(block.getStatements(), targetType, booleanResult);
+        }
+    }
+
+    /**
+     * A boolean switch only ever contributes constant values in {0, 1}. A
+     * numeric switch with the same maybe_boolean result type either keeps a
+     * value outside that range or yields a non-constant (e.g. a variable), both
+     * of which rule out the boolean interpretation.
+     */
+    protected boolean switchHasOnlyBooleanValues(SwitchExpression expression) {
+        boolean found = false;
+
+        for (SwitchExpression.Block block : expression.getBlocks()) {
+            Expression value = findSwitchArmValue(block.getStatements());
+
+            if (value == null) {
+                continue;
+            }
+
+            if (!value.isIntegerConstantExpression()) {
+                return false;
+            }
+
+            int v = ((IntegerConstantExpression)value).getIntegerValue();
+
+            if ((v != 0) && (v != 1)) {
+                return false;
+            }
+
+            found = true;
+        }
+
+        return found;
+    }
+
+    protected Expression findSwitchArmValue(BaseStatement body) {
+        if (body == null) {
+            return null;
+        }
+
+        if (body.isExpressionStatement()) {
+            return ((ExpressionStatement)body).getExpression();
+        }
+
+        if (body.isYieldStatement()) {
+            return ((YieldStatement)body).getExpression();
+        }
+
+        if (body.isIfElseStatement()) {
+            IfElseStatement statement = (IfElseStatement)body;
+            Expression value = findSwitchArmValue(statement.getStatements());
+
+            return value != null ? value : findSwitchArmValue(statement.getElseStatements());
+        }
+
+        if (body.isIfStatement()) {
+            return findSwitchArmValue(((IfStatement)body).getStatements());
+        }
+
+        if (body.isStatements()) {
+            for (Statement statement : (Statements)body) {
+                Expression value = findSwitchArmValue(statement);
+
+                if (value != null) {
+                    return value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Narrow the integer constants produced by a switch expression arm to the
+     * switch result type, the same way ternary operator branches are narrowed.
+     * Throwing arms contribute no value and are only traversed.
+     */
+    protected void updateSwitchArmStatements(BaseStatement body, Type targetType, boolean booleanResult) {
+        if (body == null) {
+            return;
+        }
+
+        if (body.isExpressionStatement()) {
+            ExpressionStatement statement = (ExpressionStatement)body;
+
+            if (statement.getExpression().isSwitchExpression()) {
+                // Nested switch expression: narrow it against its own result type.
+                statement.getExpression().accept(this);
+            } else {
+                statement.setExpression(updateSwitchArmValue(statement.getExpression(), targetType, booleanResult));
+            }
+        } else if (body.isYieldStatement()) {
+            YieldStatement statement = (YieldStatement)body;
+
+            if (statement.getExpression().isSwitchExpression()) {
+                statement.getExpression().accept(this);
+            } else {
+                statement.setExpression(updateSwitchArmValue(statement.getExpression(), targetType, booleanResult));
+            }
+        } else if (body.isIfElseStatement()) {
+            IfElseStatement statement = (IfElseStatement)body;
+            statement.getCondition().accept(this);
+            updateSwitchArmStatements(statement.getStatements(), targetType, booleanResult);
+            updateSwitchArmStatements(statement.getElseStatements(), targetType, booleanResult);
+        } else if (body.isIfStatement()) {
+            IfStatement statement = (IfStatement)body;
+            statement.getCondition().accept(this);
+            updateSwitchArmStatements(statement.getStatements(), targetType, booleanResult);
+        } else if (body.isStatements()) {
+            for (Statement statement : (Statements)body) {
+                updateSwitchArmStatements(statement, targetType, booleanResult);
+            }
+        } else {
+            body.accept(this);
+        }
+    }
+
+    protected Expression updateSwitchArmValue(Expression expression, Type targetType, boolean booleanResult) {
+        if (booleanResult && expression.isIntegerConstantExpression()) {
+            IntegerConstantExpression ice = (IntegerConstantExpression)expression;
+            return new BooleanExpression(ice.getLineNumber(), ice.getIntegerValue() != 0);
+        }
+
+        if (targetType.isPrimitiveType() && expression.isIntegerConstantExpression()) {
+            expression = updateExpression(targetType, expression);
+        }
+
+        expression.accept(this);
+
+        return expression;
+    }
+
     protected Type arrayVariableInitializerType;
 
     @Override

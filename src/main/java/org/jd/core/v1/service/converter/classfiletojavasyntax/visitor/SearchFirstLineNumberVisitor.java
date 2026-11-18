@@ -73,6 +73,20 @@ public class SearchFirstLineNumberVisitor extends AbstractJavaSyntaxVisitor {
     @Override public void visit(PreOperatorExpression expression) { lineNumber = expression.getLineNumber(); }
     @Override public void visit(StringConstantExpression expression) { lineNumber = expression.getLineNumber(); }
     @Override public void visit(SuperExpression expression) { lineNumber = expression.getLineNumber(); }
+    @Override public void visit(SwitchExpression expression) { lineNumber = expression.getLineNumber(); }
+    @Override public void visit(SwitchExpression.DefaultLabel expression) {}
+    @Override
+    public void visit(SwitchExpression.ExpressionLabel expression) {
+        expression.getExpression().accept(this);
+    }
+    @Override
+    public void visit(SwitchExpression.LabelBlock expression) {
+        expression.getStatements().accept(this);
+    }
+    @Override
+    public void visit(SwitchExpression.MultiLabelsBlock expression) {
+        expression.getStatements().accept(this);
+    }
     @Override public void visit(TernaryOperatorExpression expression) { lineNumber = expression.getLineNumber(); }
     @Override public void visit(ThisExpression expression) { lineNumber = expression.getLineNumber(); }
     @Override public void visit(TypeReferenceDotClassExpression expression) { lineNumber = expression.getLineNumber(); }

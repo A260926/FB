@@ -38,6 +38,9 @@ public class ExpressionVisitor extends TypeVisitor {
     public static final KeywordToken LENGTH = new KeywordToken("length");
     public static final KeywordToken NEW = new KeywordToken("new");
     public static final KeywordToken NULL = new KeywordToken("null");
+    public static final KeywordToken SWITCH = new KeywordToken("switch");
+    public static final KeywordToken CASE = new KeywordToken("case");
+    public static final KeywordToken DEFAULT = new KeywordToken("default");
     public static final KeywordToken THIS = new KeywordToken("this");
     public static final KeywordToken TRUE = new KeywordToken("true");
 
@@ -589,6 +592,126 @@ public class ExpressionVisitor extends TypeVisitor {
     }
 
     @Override
+    public void visit(SwitchExpression expression) {
+        tokens.addLineNumberToken(expression);
+        tokens.add(SWITCH);
+        tokens.add(TextToken.SPACE);
+        tokens.add(StartBlockToken.START_PARAMETERS_BLOCK);
+
+        expression.getCondition().accept(this);
+
+        tokens.add(EndBlockToken.END_PARAMETERS_BLOCK);
+        fragments.addTokensFragment(tokens);
+
+        StartBlockFragment start = JavaFragmentFactory.addStartStatementsInLambdaBlock(fragments);
+
+        tokens = new Tokens();
+
+        Iterator<SwitchExpression.Block> iterator = expression.getBlocks().iterator();
+
+        if (iterator.hasNext()) {
+            iterator.next().accept(this);
+
+            while (iterator.hasNext()) {
+                JavaFragmentFactory.addSpacerBetweenSwitchLabelBlock(fragments);
+                iterator.next().accept(this);
+            }
+        }
+
+        if (inExpressionFlag) {
+            JavaFragmentFactory.addEndStatementsInLambdaBlockInParameter(fragments, start);
+        } else {
+            JavaFragmentFactory.addEndStatementsInLambdaBlock(fragments, start);
+        }
+
+        tokens = new Tokens();
+    }
+
+    @Override
+    public void visit(SwitchExpression.DefaultLabel expression) {
+        tokens.add(DEFAULT);
+    }
+
+    @Override
+    public void visit(SwitchExpression.ExpressionLabel expression) {
+        // The 'case' keyword is emitted by the enclosing block visitor.
+        expression.getExpression().accept(this);
+    }
+
+    @Override
+    public void visit(SwitchExpression.LabelBlock expression) {
+        tokens = new Tokens();
+
+        if (expression.getLabel() instanceof SwitchExpression.DefaultLabel) {
+            tokens.add(DEFAULT);
+        } else {
+            tokens.add(CASE);
+            tokens.add(TextToken.SPACE);
+            expression.getLabel().accept(this);
+        }
+
+        tokens.add(TextToken.SPACE_ARROW_SPACE);
+        visitSwitchExpressionArmBody(expression.getStatements());
+
+        JavaFragmentFactory.addSpacerAfterSwitchBlock(fragments);
+    }
+
+    @Override
+    public void visit(SwitchExpression.MultiLabelsBlock expression) {
+        tokens = new Tokens();
+        tokens.add(CASE);
+        tokens.add(TextToken.SPACE);
+
+        Iterator<SwitchExpression.Label> iterator = expression.getLabels().iterator();
+
+        if (iterator.hasNext()) {
+            iterator.next().accept(this);
+
+            while (iterator.hasNext()) {
+                tokens.add(TextToken.COMMA_SPACE);
+                iterator.next().accept(this);
+            }
+        }
+
+        tokens.add(TextToken.SPACE_ARROW_SPACE);
+        visitSwitchExpressionArmBody(expression.getStatements());
+
+        JavaFragmentFactory.addSpacerAfterSwitchBlock(fragments);
+    }
+
+    protected void visitSwitchExpressionArmBody(BaseStatement body) {
+        if (body.isExpressionStatement()) {
+            // Direct value arm: print the expression followed by the required ';'.
+            body.getExpression().accept(this);
+            tokens.add(TextToken.SEMICOLON);
+            fragments.addTokensFragment(tokens);
+            tokens = new Tokens();
+        } else if (body.isStatements()) {
+            // Block arm: '{ ... yield value; }' or '{ ... throw ...; }'
+            fragments.addTokensFragment(tokens);
+
+            StartBlockFragment start = JavaFragmentFactory.addStartStatementsInLambdaBlock(fragments);
+
+            tokens = new Tokens();
+            body.accept(this);
+
+            if (inExpressionFlag) {
+                JavaFragmentFactory.addEndStatementsInLambdaBlockInParameter(fragments, start);
+            } else {
+                JavaFragmentFactory.addEndStatementsInLambdaBlock(fragments, start);
+            }
+
+            tokens = new Tokens();
+        } else {
+            // Single statement arm, e.g. a throw: flush the label tokens first,
+            // then the statement renders and flushes its own fragment.
+            fragments.addTokensFragment(tokens);
+            tokens = new Tokens();
+            body.accept(this);
+        }
+    }
+
+    @Override
     public void visit(TernaryOperatorExpression expression) {
         tokens.addLineNumberToken(expression.getCondition());
 
@@ -753,6 +876,11 @@ public class ExpressionVisitor extends TypeVisitor {
         @Override public void visit(StringConstantExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(SuperConstructorInvocationExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(SuperExpression expression) { ExpressionVisitor.this.visit(expression); }
+        @Override public void visit(SwitchExpression expression) { ExpressionVisitor.this.visit(expression); }
+        @Override public void visit(SwitchExpression.DefaultLabel expression) {}
+        @Override public void visit(SwitchExpression.ExpressionLabel expression) { ExpressionVisitor.this.visit(expression); }
+        @Override public void visit(SwitchExpression.LabelBlock expression) { ExpressionVisitor.this.visit(expression); }
+        @Override public void visit(SwitchExpression.MultiLabelsBlock expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(TernaryOperatorExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(ThisExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(TypeReferenceDotClassExpression expression) { ExpressionVisitor.this.visit(expression); }

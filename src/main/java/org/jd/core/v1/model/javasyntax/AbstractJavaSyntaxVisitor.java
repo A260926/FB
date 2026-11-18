@@ -397,6 +397,34 @@ public abstract class AbstractJavaSyntaxVisitor extends AbstractTypeArgumentVisi
     }
 
     @Override
+    public void visit(SwitchExpression expression) {
+        expression.getCondition().accept(this);
+        acceptListSwitchExpressionBlock(expression.getBlocks());
+    }
+
+    @Override
+    public void visit(SwitchExpression.DefaultLabel expression) {}
+
+    @Override
+    public void visit(SwitchExpression.ExpressionLabel expression) {
+        expression.getExpression().accept(this);
+    }
+
+    @Override
+    public void visit(SwitchExpression.LabelBlock expression) {
+        expression.getLabel().accept(this);
+        safeAccept(expression.getStatements());
+    }
+
+    @Override
+    public void visit(SwitchExpression.MultiLabelsBlock expression) {
+        for (SwitchExpression.Label label : expression.getLabels()) {
+            label.accept(this);
+        }
+        safeAccept(expression.getStatements());
+    }
+
+    @Override
     public void visit(ThisExpression expression) {
         BaseType type = expression.getType();
 
@@ -622,6 +650,11 @@ public abstract class AbstractJavaSyntaxVisitor extends AbstractTypeArgumentVisi
     }
 
     @Override
+    public void visit(YieldStatement statement) {
+        statement.getExpression().accept(this);
+    }
+
+    @Override
     public void visit(TypeParameter parameter) {}
 
     @Override
@@ -671,6 +704,11 @@ public abstract class AbstractJavaSyntaxVisitor extends AbstractTypeArgumentVisi
     public void acceptListStatement(List<? extends Statement> list) {
         for (Statement statement : list)
             statement.accept(this);
+    }
+
+    public void acceptListSwitchExpressionBlock(List<SwitchExpression.Block> list) {
+        for (SwitchExpression.Block block : list)
+            block.accept(this);
     }
 
     public void safeAccept(Declaration declaration) {

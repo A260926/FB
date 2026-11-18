@@ -39,6 +39,7 @@ public interface BaseStatement extends Base<Statement> {
     default boolean isThrowStatement() { return false; }
     default boolean isTryStatement() { return false; }
     default boolean isWhileStatement() { return false; }
+    default boolean isYieldStatement() { return false; }
 
     default Expression getCondition() { return NO_EXPRESSION; }
     default Expression getExpression() { return NO_EXPRESSION; }

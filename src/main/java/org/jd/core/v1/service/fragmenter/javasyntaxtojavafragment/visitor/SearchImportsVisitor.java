@@ -260,6 +260,12 @@ public class SearchImportsVisitor extends AbstractJavaSyntaxVisitor {
     }
 
     @Override
+    public void visit(SwitchExpression expression) {
+        if (maxLineNumber < expression.getLineNumber()) maxLineNumber = expression.getLineNumber();
+        super.visit(expression);
+    }
+
+    @Override
     public void visit(TernaryOperatorExpression expression) {
         if (maxLineNumber < expression.getLineNumber()) maxLineNumber = expression.getLineNumber();
         super.visit(expression);

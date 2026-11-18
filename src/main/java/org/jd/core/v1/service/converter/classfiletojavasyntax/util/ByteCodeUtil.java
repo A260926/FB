@@ -669,6 +669,117 @@ public class ByteCodeUtil {
         return minDepth;
     }
 
+    /**
+     * Read the absolute byte code offsets targeted by a tableswitch or
+     * lookupswitch instruction. The first offset is the default target.
+     */
+    public static int[] readSwitchOffsets(BasicBlock basicBlock) {
+        byte[] code = basicBlock.getControlFlowGraph().getMethod().<AttributeCode>getAttribute("Code").getCode();
+        int switchOffset = getLastInstructionOffset(basicBlock);
+        int opcode = code[switchOffset] & 255;
+        int offset = (switchOffset + 4) & 0xFFFC; // Skip padding
+        int defaultOffset = switchOffset + (((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255));
+
+        if (opcode == 170) { // TABLESWITCH
+            int low = ((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255);
+            int high = ((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255);
+            int[] offsets = new int[high - low + 2];
+            offsets[0] = defaultOffset;
+
+            for (int i = 1; i < offsets.length; i++) {
+                offsets[i] = switchOffset + (((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255));
+            }
+
+            return offsets;
+        } else { // LOOKUPSWITCH
+            int count = ((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255);
+            int[] offsets = new int[count + 1];
+            offsets[0] = defaultOffset;
+
+            for (int i = 1; i < offsets.length; i++) {
+                offset += 4; // Skip match value
+                offsets[i] = switchOffset + (((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255));
+            }
+
+            return offsets;
+        }
+    }
+
+    /**
+     * Offset of the switch instruction at the end of a block. The block length
+     * is not the instruction length, so walk the instructions from the start.
+     */
+    private static int getLastInstructionOffset(BasicBlock basicBlock) {
+        byte[] code = basicBlock.getControlFlowGraph().getMethod().<AttributeCode>getAttribute("Code").getCode();
+        int offset = basicBlock.getFromOffset();
+        int toOffset = basicBlock.getToOffset();
+        int lastOffset = offset;
+
+        while (offset < toOffset) {
+            lastOffset = offset;
+            int opcode = code[offset] & 255;
+
+            switch (opcode) {
+                case 16: case 18: // BIPUSH, LDC
+                case 21: case 22: case 23: case 24: case 25: // ILOAD, LLOAD, FLOAD, DLOAD, ALOAD
+                case 54: case 55: case 56: case 57: case 58: // ISTORE, LSTORE, FSTORE, DSTORE, ASTORE
+                case 169: // RET
+                case 188: // NEWARRAY
+                    offset++;
+                    break;
+                case 17: // SIPUSH
+                case 19: case 20: // LDC_W, LDC2_W
+                case 132: // IINC
+                case 178: case 179: case 180: case 181: // GETSTATIC, PUTSTATIC, GETFIELD, PUTFIELD
+                case 182: case 183: case 184: // INVOKEVIRTUAL, INVOKESPECIAL, INVOKESTATIC
+                case 187: case 189: // NEW, ANEWARRAY
+                case 192: // CHECKCAST
+                case 193: // INSTANCEOF
+                    offset += 2;
+                    break;
+                case 153: case 154: case 155: case 156: case 157: case 158: // IFEQ ... IFLE
+                case 159: case 160: case 161: case 162: case 163: case 164: case 165: case 166:
+                case 198: case 199: // IFNULL, IFNONNULL
+                case 167: // GOTO
+                    offset += 2;
+                    break;
+                case 185: // INVOKEINTERFACE
+                case 186: // INVOKEDYNAMIC
+                    offset += 4;
+                    break;
+                case 200: // GOTO_W
+                case 201: // JSR_W
+                    offset += 4;
+                    break;
+                case 197: // MULTIANEWARRAY
+                    offset += 3;
+                    break;
+                case 170: // TABLESWITCH
+                    offset = (offset + 4) & 0xFFFC;
+                    offset += 4;
+                    int low = ((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255);
+                    int high = ((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255);
+                    offset += 4 * (high - low + 1);
+                    break;
+                case 171: // LOOKUPSWITCH
+                    offset = (offset + 4) & 0xFFFC;
+                    offset += 4;
+                    int count = ((code[offset++] & 255) << 24) | ((code[offset++] & 255) << 16) | ((code[offset++] & 255) << 8) | (code[offset++] & 255);
+                    offset += 8 * count;
+                    break;
+                case 196: // WIDE
+                    int wideOpcode = code[offset + 1] & 255;
+                    offset += (wideOpcode == 132) ? 4 : 3;
+                    break;
+                default:
+                    offset++;
+                    break;
+            }
+        }
+
+        return lastOffset;
+    }
+
     private static int countMethodParameters(String descriptor) {
         int count = 0;
         int i = 2;

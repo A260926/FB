@@ -60,6 +60,13 @@ public class StatementMaker {
     protected MemberVisitor memberVisitor = new MemberVisitor();
     protected boolean removeFinallyStatementsFlag = false;
     protected boolean mergeTryWithResourcesStatementFlag = false;
+    // > 0 while the statements of a switch expression arm are being built:
+    // the reducer's SWITCH_BREAK marker then means "arm end", not a break.
+    protected int switchExpressionArmDepth = 0;
+
+    protected static final int ARM_INVALID = 0;
+    protected static final int ARM_THROW = 1;
+    protected static final int ARM_VALUE = 2;
 
     public StatementMaker(TypeMaker typeMaker, LocalVariableMaker localVariableMaker, ClassFileConstructorOrMethodDeclaration comd) {
         ClassFile classFile = comd.getClassFile();
@@ -155,7 +162,10 @@ public class StatementMaker {
                 parseSwitch(watchdog, basicBlock, statements, jumps);
                 break;
             case TYPE_SWITCH_BREAK:
-                statements.add(BreakStatement.BREAK);
+                // Inside a switch expression arm this marker only closes the arm.
+                if (switchExpressionArmDepth == 0) {
+                    statements.add(BreakStatement.BREAK);
+                }
                 break;
             case TYPE_TRY:
                 parseTry(watchdog, basicBlock, statements, jumps, false, false);
@@ -337,10 +347,35 @@ public class StatementMaker {
         SwitchStatement switchStatement = (SwitchStatement)statements.getLast();
         Expression condition = switchStatement.getCondition();
         Type conditionType = condition.getType();
-        List<SwitchStatement.Block> blocks = switchStatement.getBlocks();
         DefaultStack<Expression> localStack = new DefaultStack<Expression>(stack);
 
         switchCases.sort(SWITCH_CASE_COMPARATOR);
+
+        if (isSwitchExpressionPattern(basicBlock, switchCases)) {
+            // Java 14+ switch expression: every arm leaves one value on the
+            // stack or throws; values are merged on basicBlock.getNext().
+            statements.removeLast();
+
+            BasicBlock merge = basicBlock.getNext();
+            SwitchCase recoveredDefault = recoverDefaultSwitchCase(basicBlock, switchCases);
+            // A recovered default arm may target the merge block itself
+            // (typical for nested switch expressions): its byte code is then
+            // consumed by the arm and must not be traversed a second time.
+            boolean mergeConsumedAsArm = (recoveredDefault != null) && (recoveredDefault.getBasicBlock() == merge);
+
+            SwitchExpression switchExpression = makeSwitchExpression(
+                    watchdog, basicBlock, switchCases, condition, conditionType, localStack, jumps, recoveredDefault);
+
+            stack.copy(localStack);
+            stack.push(switchExpression);
+
+            if (!mergeConsumedAsArm && (merge != BasicBlock.SWITCH_BREAK)) {
+                makeStatements(watchdog, merge, statements, jumps);
+            }
+            return;
+        }
+
+        List<SwitchStatement.Block> blocks = switchStatement.getBlocks();
 
         for (int i=0, len=switchCases.size(); i<len; i++) {
             SwitchCase sc = switchCases.get(i);
@@ -385,6 +420,418 @@ public class StatementMaker {
         }
 
         makeStatements(watchdog, basicBlock.getNext(), statements, jumps);
+    }
+
+    /**
+     * A switch is a switch expression when every case target is either a block
+     * sequence that produces exactly one stacked value and jumps to the switch
+     * merge point, or a block that throws, and the merge point consumes the
+     * produced value.
+     */
+    protected boolean isSwitchExpressionPattern(BasicBlock basicBlock, List<SwitchCase> switchCases) {
+        BasicBlock merge = basicBlock.getNext();
+
+        if ((merge == BasicBlock.END) || (merge == BasicBlock.SWITCH_BREAK) || switchCases.isEmpty()) {
+            return false;
+        }
+
+        boolean valueArmFound = false;
+
+        // Each arm gets a fresh visited set: distinct labels may share the same
+        // target block and must be classified independently.
+        for (SwitchCase switchCase : switchCases) {
+            int kind = classifySwitchArmBlock(switchCase.getBasicBlock(), merge, new HashSet<BasicBlock>());
+
+            if (kind == ARM_INVALID) {
+                return false;
+            }
+
+            if (kind == ARM_VALUE) {
+                valueArmFound = true;
+            }
+        }
+
+        return valueArmFound;
+    }
+
+    /**
+     * Classify a switch arm target block. The SWITCH_BREAK marker produced by
+     * the reducer represents the switch merge point inside a switch expression.
+     */
+    protected int classifySwitchArmBlock(BasicBlock bb, BasicBlock merge, HashSet<BasicBlock> visited) {
+        if (bb == BasicBlock.END) {
+            return ARM_INVALID;
+        }
+
+        if (bb == BasicBlock.SWITCH_BREAK) {
+            // Reaching the merge point without producing a value is a statement-style break.
+            return ARM_INVALID;
+        }
+
+        // A throwing arm is valid even though TYPE_THROW belongs to GROUP_END.
+        if (bb.getType() == TYPE_THROW) {
+            return ARM_THROW;
+        }
+
+        if (bb.matchType(BasicBlock.GROUP_END)) {
+            return ARM_INVALID;
+        }
+
+        if (!visited.add(bb)) {
+            return ARM_INVALID;
+        }
+
+        switch (bb.getType()) {
+            case TYPE_GOTO_IN_TERNARY_OPERATOR:
+                // Block carries the arm value, the goto jumps to the merge point.
+                return (ByteCodeUtil.evalStackDepth(bb) == 1) ? ARM_VALUE : ARM_INVALID;
+            case TYPE_STATEMENTS:
+                if (bb.getNext() == BasicBlock.SWITCH_BREAK) {
+                    return (ByteCodeUtil.evalStackDepth(bb) == 1) ? ARM_VALUE : ARM_INVALID;
+                } else if (bb.getNext() == merge) {
+                    return (ByteCodeUtil.evalStackDepth(bb) == 1) ? ARM_VALUE : ARM_INVALID;
+                } else if (bb.getNext().getType() == TYPE_GOTO_IN_TERNARY_OPERATOR
+                        && (ByteCodeUtil.evalStackDepth(bb.getNext()) == 1)) {
+                    // Statement-only branch (e.g. an assignment) whose resulting
+                    // value is read by a following goto merge block.
+                    return ARM_VALUE;
+                } else {
+                    return classifySwitchArmBlock(bb.getNext(), merge, visited);
+                }
+            case TYPE_IF: {
+                int sub1 = classifySwitchArmBlock(bb.getSub1(), merge, visited);
+                int sub2 = classifySwitchArmBlock(bb.getNext(), merge, visited);
+
+                if ((sub1 == ARM_INVALID) || (sub2 == ARM_INVALID)) {
+                    return ARM_INVALID;
+                }
+
+                return (sub1 == ARM_VALUE || sub2 == ARM_VALUE) ? ARM_VALUE : ARM_THROW;
+            }
+            case TYPE_IF_ELSE: {
+                // 'if/else' whose branches are statements (e.g. assignments) and
+                // whose value is carried by a following goto block: valid when the
+                // branch blocks flow into a value-carrying merge block.
+                int sub1 = classifySwitchArmBlock(bb.getSub1(), merge, visited);
+                int sub2 = classifySwitchArmBlock(bb.getSub2(), merge, visited);
+
+                if ((sub1 != ARM_INVALID) && (sub2 != ARM_INVALID)) {
+                    return (sub1 == ARM_VALUE || sub2 == ARM_VALUE) ? ARM_VALUE : ARM_THROW;
+                }
+
+                BasicBlock join = bb.getNext();
+
+                if ((join != BasicBlock.END) && (join.getType() == TYPE_GOTO_IN_TERNARY_OPERATOR)
+                        && (ByteCodeUtil.evalStackDepth(join) == 1)) {
+                    return ARM_VALUE;
+                }
+
+                return ARM_INVALID;
+            }
+            case TYPE_SWITCH: {
+                // Nested switch expression: validate it against its own merge block.
+                BasicBlock nestedMerge = bb.getNext();
+
+                if (nestedMerge == BasicBlock.END) {
+                    return ARM_INVALID;
+                }
+
+                boolean nestedValueArmFound = false;
+
+                for (SwitchCase nestedCase : bb.getSwitchCases()) {
+                    int nestedKind = classifySwitchArmBlock(nestedCase.getBasicBlock(), nestedMerge, new HashSet<BasicBlock>());
+
+                    if (nestedKind == ARM_INVALID) {
+                        return ARM_INVALID;
+                    }
+
+                    if (nestedKind == ARM_VALUE) {
+                        nestedValueArmFound = true;
+                    }
+                }
+
+                return nestedValueArmFound ? ARM_VALUE : ARM_INVALID;
+            }
+            default:
+                return ARM_INVALID;
+        }
+    }
+
+    /**
+     * Build the switch expression model, one arm per distinct case target.
+     * Case labels sharing a target are grouped into a MultiLabelsBlock.
+     */
+    protected SwitchExpression makeSwitchExpression(WatchDog watchdog, BasicBlock basicBlock, List<SwitchCase> switchCases,
+                                                    Expression condition, Type conditionType,
+                                                    DefaultStack<Expression> localStack,
+                                                    Statements jumps, SwitchCase recoveredDefault) {
+        List<SwitchExpression.Block> blocks = new DefaultList<>();
+        DefaultList<Expression> armValues = new DefaultList<>();
+
+        for (int i=0, len=switchCases.size(); i<len; i++) {
+            SwitchCase sc = switchCases.get(i);
+            BasicBlock bb = sc.getBasicBlock();
+            int j = i + 1;
+
+            while ((j < len) && (bb == switchCases.get(j).getBasicBlock())) {
+                j++;
+            }
+
+            ArmResult result = buildSwitchArm(watchdog, bb, localStack, jumps);
+            armValues.addAll(result.values);
+            blocks.add(makeSwitchExpressionBlock(conditionType, result, sc, switchCases, i, j));
+            i = j - 1;
+        }
+
+        if (recoveredDefault != null) {
+            ArmResult result = buildSwitchArm(watchdog, recoveredDefault.getBasicBlock(), localStack, jumps);
+            armValues.addAll(result.values);
+            blocks.add(makeSwitchExpressionBlock(conditionType, result, recoveredDefault, switchCases, -1, -1));
+        }
+
+        Type type = null;
+
+        for (Expression armValue : armValues) {
+            if (type == null) {
+                type = armValue.getType();
+            } else if (!armValue.isNullExpression()) {
+                type = combineExpressionTypes(new NullExpression(type), armValue);
+            }
+        }
+
+        if (type == null) {
+            type = TYPE_UNDEFINED_OBJECT;
+        }
+
+        // A 'null' arm must carry the switch result type, not the undefined
+        // object type produced by aconst_null.
+        for (Expression armValue : armValues) {
+            if (armValue.isNullExpression() && TYPE_UNDEFINED_OBJECT.equals(armValue.getType())) {
+                ((NullExpression)armValue).setType(type);
+            }
+        }
+
+        return new SwitchExpression(basicBlock.getFirstLineNumber(), type, condition, blocks);
+    }
+
+    protected SwitchExpression.Block makeSwitchExpressionBlock(Type conditionType, ArmResult result,
+                                                                SwitchCase sc, List<SwitchCase> switchCases, int i, int j) {
+        BaseStatement armBody = buildSwitchArmBody(result);
+
+        if (sc.isDefaultCase()) {
+            return new SwitchExpression.LabelBlock(SwitchExpression.DefaultLabel.DEFAULT_LABEL, armBody);
+        }
+
+        if ((i >= 0) && (j - i > 1)) {
+            DefaultList<SwitchExpression.Label> labels = new DefaultList<>(j - i);
+
+            for (int k=i; k<j; k++) {
+                labels.add(new SwitchExpression.ExpressionLabel(
+                        new IntegerConstantExpression(conditionType, switchCases.get(k).getValue())));
+            }
+
+            return new SwitchExpression.MultiLabelsBlock(labels, armBody);
+        }
+
+        SwitchExpression.Label label = new SwitchExpression.ExpressionLabel(
+                new IntegerConstantExpression(conditionType, sc.getValue()));
+
+        return new SwitchExpression.LabelBlock(label, armBody);
+    }
+
+    /**
+     * Result of building one switch arm: its statements, whether it produces a
+     * value or throws, the single produced value (null for 'if' arms and throw
+     * arms) and every value contributed to the switch result (nested yields).
+     */
+    protected static class ArmResult {
+        protected Statements statements = new Statements();
+        protected int kind = ARM_INVALID;
+        protected Expression value;
+        protected DefaultList<Expression> values = new DefaultList<>();
+    }
+
+    /**
+     * Build the statements of one arm. On entry and exit the shared stack
+     * contains exactly the values stacked before the switch.
+     */
+    protected ArmResult buildSwitchArm(WatchDog watchdog, BasicBlock bb, DefaultStack<Expression> localStack, Statements jumps) {
+        ArmResult result = new ArmResult();
+
+        stack.copy(localStack);
+        localVariableMaker.pushFrame(result.statements);
+        switchExpressionArmDepth++;
+
+        try {
+            switch (bb.getType()) {
+                case TYPE_IF:
+                case TYPE_IF_ELSE:
+                    buildSwitchArmIf(watchdog, bb, localStack, result, jumps);
+                    break;
+                case TYPE_SWITCH:
+                    // Nested switch expression: its result is the arm value.
+                    parseSwitch(watchdog, bb, result.statements, jumps);
+                    result.kind = ARM_VALUE;
+                    result.value = stack.pop();
+                    result.values.add(result.value);
+                    break;
+                case TYPE_THROW:
+                    makeStatements(watchdog, bb, result.statements, jumps);
+                    result.kind = ARM_THROW;
+                    break;
+                default:
+                    makeStatements(watchdog, bb, result.statements, jumps);
+
+                    if (stack.size() > localStack.size()) {
+                        result.kind = ARM_VALUE;
+                        result.value = stack.pop();
+                        result.values.add(result.value);
+                    } else {
+                        result.kind = ARM_THROW;
+                    }
+                    break;
+            }
+        } finally {
+            switchExpressionArmDepth--;
+            localVariableMaker.popFrame();
+        }
+
+        assert stack.size() == localStack.size() : "Switch arm must not alter the shared stack";
+
+        return result;
+    }
+
+    /**
+     * Build an arm containing an 'if' (or 'if/else') whose normal exits all
+     * produce the value of the enclosing switch expression. The exits belong to
+     * the same switch, so their values become 'yield' statements rather than
+     * being merged on the stack. A throwing exit keeps its throw statement.
+     */
+    protected void buildSwitchArmIf(WatchDog watchdog, BasicBlock ifBlock, DefaultStack<Expression> localStack,
+                                    ArmResult result, Statements jumps) {
+        BasicBlock conditionBlock = ifBlock.getCondition();
+
+        makeStatements(watchdog, conditionBlock, result.statements, jumps);
+        Expression condition = stack.pop();
+
+        ArmResult thenResult = buildSwitchArm(watchdog, ifBlock.getSub1(), localStack, jumps);
+
+        result.values.addAll(thenResult.values);
+        result.kind = ARM_VALUE;
+
+        BaseStatement thenBody = buildSwitchArmBranch(thenResult);
+
+        if (ifBlock.getType() == TYPE_IF_ELSE) {
+            ArmResult elseResult = buildSwitchArm(watchdog, ifBlock.getSub2(), localStack, jumps);
+
+            result.values.addAll(elseResult.values);
+
+            BaseStatement elseBody = buildSwitchArmBranch(elseResult);
+            result.statements.add(new IfElseStatement(condition, thenBody, elseBody));
+
+            // A value-carrying goto block may follow the if/else (the merged
+            // arm result); it becomes the arm's 'yield'.
+            BasicBlock join = ifBlock.getNext();
+
+            if ((join != BasicBlock.END) && (join.getType() == TYPE_GOTO_IN_TERNARY_OPERATOR)) {
+                ArmResult joinResult = buildSwitchArm(watchdog, join, localStack, jumps);
+                result.values.addAll(joinResult.values);
+
+                if (joinResult.value != null) {
+                    result.statements.add(new YieldStatement(joinResult.value));
+                }
+            }
+        } else {
+            ArmResult elseResult = buildSwitchArm(watchdog, ifBlock.getNext(), localStack, jumps);
+
+            result.values.addAll(elseResult.values);
+
+            BaseStatement elseBody = buildSwitchArmBranch(elseResult);
+            result.statements.add(new IfStatement(condition, thenBody));
+
+            if (elseBody instanceof Statements) {
+                result.statements.addAll((Statements)elseBody);
+            } else {
+                result.statements.add((Statement)elseBody);
+            }
+        }
+    }
+
+    /**
+     * Build the body of one branch of an 'if' located inside a switch arm.
+     * Normal exits always become 'yield' statements here, throw exits keep
+     * their throw statement.
+     */
+    protected BaseStatement buildSwitchArmBranch(ArmResult branch) {
+        if (branch.kind == ARM_THROW) {
+            if (branch.statements.size() == 1) {
+                return branch.statements.getFirst();
+            }
+
+            return branch.statements;
+        }
+
+        if (branch.value != null) {
+            branch.statements.add(new YieldStatement(branch.value));
+        }
+
+        return branch.statements;
+    }
+
+    /**
+     * Convert the parsed statements of an arm into its modeled body: a bare
+     * expression for direct values, a throw statement for throwing arms, or a
+     * block ending with 'yield' for arms containing local statements or an
+     * embedded 'if'.
+     */
+    protected BaseStatement buildSwitchArmBody(ArmResult result) {
+        Statements subStatements = result.statements;
+        replacePreOperatorWithPostOperator(subStatements);
+
+        if (result.kind == ARM_THROW) {
+            if (subStatements.size() == 1) {
+                return subStatements.getFirst();
+            }
+
+            return subStatements;
+        }
+
+        // 'if' arm: the yield statements are already part of the statements.
+        if (result.value == null) {
+            return subStatements;
+        }
+
+        if (subStatements.isEmpty()) {
+            // Direct value arm: model the bare expression (printed without a semicolon).
+            return new ExpressionStatement(result.value);
+        }
+
+        subStatements.add(new YieldStatement(result.value));
+
+        return subStatements;
+    }
+
+    /**
+     * Locate the default target of a switch instruction directly from the byte
+     * code when the reducer removed the default case (it pointed at the merge).
+     */
+    protected SwitchCase recoverDefaultSwitchCase(BasicBlock basicBlock, List<SwitchCase> switchCases) {
+        for (SwitchCase switchCase : switchCases) {
+            if (switchCase.isDefaultCase()) {
+                return null;
+            }
+        }
+
+        int[] offsets = ByteCodeUtil.readSwitchOffsets(basicBlock);
+        int defaultOffset = offsets[0];
+
+        for (BasicBlock bb : basicBlock.getControlFlowGraph().getBasicBlocks()) {
+            if ((bb.getType() != BasicBlock.TYPE_DELETED) && (bb.getFromOffset() == defaultOffset)) {
+                return new SwitchCase(bb);
+            }
+        }
+
+        return null;
     }
 
     @SuppressWarnings("unchecked")
@@ -861,6 +1308,16 @@ public class StatementMaker {
     }
 
     protected TernaryOperatorExpression newTernaryOperatorExpression(int lineNumber, Expression condition, Expression expressionTrue, Expression expressionFalse) {
+        Type type = combineExpressionTypes(expressionTrue, expressionFalse);
+
+        return new TernaryOperatorExpression(lineNumber, type, condition, expressionTrue, expressionFalse);
+    }
+
+    /**
+     * Compute the type of a value merged from several expressions (ternary
+     * operator, switch expression arms).
+     */
+    protected Type combineExpressionTypes(Expression expressionTrue, Expression expressionFalse) {
         Type expressionTrueType = expressionTrue.getType();
         Type expressionFalseType = expressionFalse.getType();
         Type type;
@@ -910,7 +1367,7 @@ public class StatementMaker {
             type = TYPE_UNDEFINED_OBJECT;
         }
 
-        return new TernaryOperatorExpression(lineNumber, type, condition, expressionTrue, expressionFalse);
+        return type;
     }
 
     protected Type getTernaryOperatorExpressionType(ObjectType ot1, ObjectType ot2) {

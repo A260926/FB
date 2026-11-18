@@ -304,6 +304,11 @@ public class SingleLineStatementVisitor extends AbstractJavaSyntaxVisitor {
     @Override public void visit(PostOperatorExpression expression) { expression.getExpression().accept(this); }
     @Override public void visit(PreOperatorExpression expression) { expression.getExpression().accept(this); }
     @Override public void visit(TernaryOperatorExpression expression) { expression.getFalseExpression().accept(this); }
+    @Override
+    public void visit(SwitchExpression expression) {
+        maxLineNumber = expression.getLineNumber();
+        super.visit(expression);
+    }
 
     @Override public void visit(BooleanExpression expression) { maxLineNumber = expression.getLineNumber(); }
     @Override public void visit(ConstructorReferenceExpression expression) { maxLineNumber = expression.getLineNumber(); }

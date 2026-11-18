@@ -1,0 +1,17 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestSwitchStackMerges
+=== RUN   TestSwitchStackMerges/debug
+    check.go:29: TASK_GROUP_DONE TestSwitchStackMerges/debug checks=22
+=== RUN   TestSwitchStackMerges/nodebug
+    check.go:29: TASK_GROUP_DONE TestSwitchStackMerges/nodebug checks=22
+--- PASS: TestSwitchStackMerges (1.21s)
+    --- PASS: TestSwitchStackMerges/debug (0.65s)
+    --- PASS: TestSwitchStackMerges/nodebug (0.56s)
+=== RUN   TestSwitchTypes
+    check.go:29: TASK_GROUP_DONE TestSwitchTypes checks=8
+--- PASS: TestSwitchTypes (0.57s)
+=== RUN   TestSwitchCompatibility
+    check.go:29: TASK_GROUP_DONE TestSwitchCompatibility checks=12
+--- PASS: TestSwitchCompatibility (0.95s)
+PASS
+ok  	harness.local/jdcore/task_support	2.803s

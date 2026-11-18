@@ -255,6 +255,7 @@ public class RemoveFinallyStatementsVisitor implements StatementVisitor {
     @Override public void visit(ThrowStatement statement) {}
     @Override public void visit(TryStatement.Resource statement) {}
     @Override public void visit(TypeDeclarationStatement statement) {}
+    @Override public void visit(YieldStatement statement) {}
 
     protected void safeAccept(BaseStatement list) {
         if (list != null)

@@ -237,6 +237,38 @@ public abstract class AbstractUpdateExpressionVisitor extends AbstractJavaSyntax
     }
 
     @Override
+    public void visit(SwitchExpression expression) {
+        expression.setCondition(updateExpression(expression.getCondition()));
+        expression.getCondition().accept(this);
+        for (SwitchExpression.Block block : expression.getBlocks()) {
+            block.accept(this);
+        }
+    }
+
+    @Override
+    public void visit(SwitchExpression.DefaultLabel expression) {}
+
+    @Override
+    public void visit(SwitchExpression.ExpressionLabel expression) {
+        expression.setExpression(updateExpression(expression.getExpression()));
+        expression.getExpression().accept(this);
+    }
+
+    @Override
+    public void visit(SwitchExpression.LabelBlock expression) {
+        expression.getLabel().accept(this);
+        safeAccept(expression.getStatements());
+    }
+
+    @Override
+    public void visit(SwitchExpression.MultiLabelsBlock expression) {
+        for (SwitchExpression.Label label : expression.getLabels()) {
+            label.accept(this);
+        }
+        safeAccept(expression.getStatements());
+    }
+
+    @Override
     public void visit(ExpressionElementValue reference) {
         reference.setExpression(updateExpression(reference.getExpression()));
         reference.getExpression().accept(this);

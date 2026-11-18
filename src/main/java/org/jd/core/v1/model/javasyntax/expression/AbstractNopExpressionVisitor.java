@@ -41,6 +41,11 @@ public abstract class AbstractNopExpressionVisitor implements ExpressionVisitor 
     @Override public void visit(StringConstantExpression expression) {}
     @Override public void visit(SuperConstructorInvocationExpression expression) {}
     @Override public void visit(SuperExpression expression) {}
+    @Override public void visit(SwitchExpression expression) {}
+    @Override public void visit(SwitchExpression.DefaultLabel expression) {}
+    @Override public void visit(SwitchExpression.ExpressionLabel expression) {}
+    @Override public void visit(SwitchExpression.LabelBlock expression) {}
+    @Override public void visit(SwitchExpression.MultiLabelsBlock expression) {}
     @Override public void visit(TernaryOperatorExpression expression) {}
     @Override public void visit(ThisExpression expression) {}
     @Override public void visit(TypeReferenceDotClassExpression expression) {}
