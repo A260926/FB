@@ -16,6 +16,10 @@ add_executable(frame2 frame2.c)
 set_folder(frame2 src/bin/dwarfexample)
 target_link_libraries(frame2 PRIVATE dwarf_example)
 
+add_executable(frame_ra_state frame_ra_state.c)
+set_folder(frame_ra_state src/bin/dwarfexample)
+target_link_libraries(frame_ra_state PRIVATE dwarf_example)
+
 add_executable(findfuncbypc findfuncbypc.c)
 set_folder(findfuncbypc src/bin/dwarfexample)
 target_link_libraries(findfuncbypc PRIVATE dwarf_example)

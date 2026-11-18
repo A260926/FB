@@ -957,6 +957,13 @@ dwarf_get_fde_info_for_all_regs3_b(Dwarf_Fde fde,
         return res;
     }
     _dwarf_empty_frame_table(fde_frame_table);
+    /*  The table just used was the caller-provided one, which
+        is now released.  The memoized-row flag must not claim
+        this table is still usable: a later single-column or
+        RA-state query may then be asked for the same pc and
+        must rebuild the row from the CIE and FDE bytes. */
+    fde->fd_have_fde_frame_tab = FALSE;
+    fde->fd_fde_pc_requested = 0;
     return DW_DLV_OK;
 }
 

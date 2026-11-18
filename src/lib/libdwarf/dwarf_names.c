@@ -3673,6 +3673,14 @@ dwarf_get_CFA_name (unsigned int val,
         return DW_DLV_OK;
     /*  Skipping alternate spelling of value
         0x2d. DW_CFA_AARCH64_negate_ra_state */
+    /*  Skipping alternate spelling of value
+        0x2b. DW_CFA_AARCH64_set_ra_state_alpha */
+    case DW_CFA_AARCH64_negate_ra_state_with_pc:
+        *s_out = "DW_CFA_AARCH64_negate_ra_state_with_pc";
+        return DW_DLV_OK;
+    case DW_CFA_AARCH64_set_ra_state:
+        *s_out = "DW_CFA_AARCH64_set_ra_state";
+        return DW_DLV_OK;
     case DW_CFA_GNU_args_size:
         *s_out = "DW_CFA_GNU_args_size";
         return DW_DLV_OK;

@@ -134,5 +134,10 @@ dwarf_iterate_fde_all_regs3(Dwarf_Fde fde,
         &allreg_data,
         error);
     _dwarf_empty_frame_table(fde_frame_table);
+    /*  The table used the caller-provided register table,
+        now released.  Do not let a memoized-row flag claim
+        it remains usable. */
+    fde->fd_have_fde_frame_tab = FALSE;
+    fde->fd_fde_pc_requested = 0;
     return res;
 }

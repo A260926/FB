@@ -4,6 +4,7 @@ examples = [
   'findfuncbypc.c',
   'frame1.c',
   'frame2.c',
+  'frame_ra_state.c',
   'jitreader.c',
   'showsectiongroups.c',
   'simplereader.c'

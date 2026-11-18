@@ -122,6 +122,7 @@ _dwarf_gnu_aug_encodings(Dwarf_Debug dbg, char *augmentation,
     unsigned char *lsda_enc_out,
     unsigned char *fde_begin_enc_out,
     Dwarf_Addr * gnu_pers_addr_out,
+    Dwarf_Bool *ra_b_key_out,
     Dwarf_Error *error);
 
 static int _dwarf_read_encoded_ptr(Dwarf_Debug dbg,
@@ -729,6 +730,7 @@ _dwarf_create_cie_from_after_start(Dwarf_Debug dbg,
     unsigned char gnu_personality_handler_encoding = 0;
     unsigned char gnu_lsda_encoding = 0;
     unsigned char gnu_fde_begin_encoding = 0;
+    Dwarf_Bool ra_b_key = FALSE;
     int res = 0;
     Dwarf_Small version = 0;
 
@@ -927,6 +929,11 @@ _dwarf_create_cie_from_after_start(Dwarf_Debug dbg,
         break;
     case aug_irix_mti_v1:
         break;
+    case aug_aarch64_b:
+        /*  AADWARF64 2026Q3: no augmentation data bytes.
+            The B key selection applies to AArch64 objects;
+            for other objects it is simply ignored. */
+        break;
     case aug_irix_exception_table:{
         Dwarf_Unsigned lreg = 0;
         Dwarf_Unsigned length_of_augmented_fields;
@@ -1019,6 +1026,7 @@ _dwarf_create_cie_from_after_start(Dwarf_Debug dbg,
             &gnu_lsda_encoding,
             &gnu_fde_begin_encoding,
             &gnu_personality_handler_addr,
+            &ra_b_key,
             error);
         if (resz != DW_DLV_OK) {
             if (resz == DW_DLV_ERROR) {
@@ -1099,6 +1107,12 @@ _dwarf_create_cie_from_after_start(Dwarf_Debug dbg,
         gnu_personality_handler_addr;
     new_cie->ci_gnu_lsda_encoding = gnu_lsda_encoding;
     new_cie->ci_gnu_fde_begin_encoding = gnu_fde_begin_encoding;
+    new_cie->ci_ra_b_key = ra_b_key;
+    if (augt == aug_aarch64_b &&
+        _dwarf_object_is_aarch64(dbg)) {
+        /*  'B' marker in a .debug_frame CIE augmentation. */
+        new_cie->ci_ra_b_key = TRUE;
+    }
 
     new_cie->ci_index = cie_count;
     new_cie->ci_section_ptr = prefix->cf_section_ptr;
@@ -1357,6 +1371,9 @@ _dwarf_create_fde_from_after_start(Dwarf_Debug dbg,
         }
         break;
     case aug_armcc:
+        break;
+    case aug_aarch64_b:
+        /*  No augmentation data bytes in the CIE. */
         break;
     case aug_past_last:
         break;
@@ -1684,6 +1701,7 @@ _dwarf_gnu_aug_encodings(Dwarf_Debug dbg, char *augmentation,
     unsigned char *lsda_enc_out,
     unsigned char *fde_begin_enc_out,
     Dwarf_Addr * gnu_pers_addr_out,
+    Dwarf_Bool *ra_b_key_out,
     Dwarf_Error * error)
 {
     char *nc = 0;
@@ -1697,6 +1715,18 @@ _dwarf_gnu_aug_encodings(Dwarf_Debug dbg, char *augmentation,
         case 'z':
             /* Means that the augmentation data is present. */
             continue;
+
+        case 'B':
+            /*  AADWARF64 2026Q3: the 'B' marker means the
+                B key is used for AArch64 return address
+                signing.  It consumes no augmentation data
+                bytes, so the R, P and L fields that follow
+                keep their positions.  For a non-AArch64
+                object it is simply ignored. */
+            if (ra_b_key_out && _dwarf_object_is_aarch64(dbg)) {
+                *ra_b_key_out = TRUE;
+            }
+            break;
 
         case 'S':
             /*  Indicates this is a signal stack frame.
@@ -1995,6 +2025,12 @@ _dwarf_get_augmentation_type(Dwarf_Debug dbg,
         /*  gcc .eh_frame augmentation for egcs and gcc 2.x, at least
             for x86. */
         t = aug_eh;
+    } else if (!strcmp(ag_string, "B")) {
+        /*  AADWARF64 2026Q3: a .debug_frame CIE with only the
+            'B' marker augmentation.  The B key is used for
+            AArch64 return address signing and no augmentation
+            data bytes are present. */
+        t = aug_aarch64_b;
     } else if (!strcmp(ag_string, "armcc+")) {
         /*  Arm  uses this string to mean a bug in
             in Arm compilers was fixed, changing to the standard

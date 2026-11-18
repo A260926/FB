@@ -346,6 +346,25 @@ _dwarf_exec_frame_instr(Dwarf_Bool make_instr,
             "DW_DLE_ALLOC_FAIL: " m); \
         return DW_DLV_ERROR
 
+/*  Report an opcode we do not understand (or that is not
+    valid for this object).  Used where the set of meanings
+    depends on the target architecture, so the opcode cannot
+    be resolved with a compile-time case label alone. */
+#define UNKNOWN_OPCODE_ERR(op)                          \
+    do {                                                \
+        dwarfstring msu;                                \
+        dwarfstring_constructor(&msu);                  \
+        dwarfstring_append_printf_u(&msu,               \
+            "DW_DLE_DF_FRAME_DECODING_ERROR:  "         \
+            "instr opcode 0x%x unknown",(op));          \
+        _dwarf_error_string(dbg,error,                  \
+            DW_DLE_DF_FRAME_DECODING_ERROR,             \
+            dwarfstring_string(&msu));                  \
+        dwarfstring_destructor(&msu);                   \
+        FREELOCALMALLOC;                                \
+        return DW_DLV_ERROR;                            \
+    } while (0)
+
 #define UPDATE_STD_RULE(reg_no,offrel,valtype,          \
         regnum,result)                                  \
         localregtab[reg_no].dw_offset_relevant = offrel;\
@@ -432,6 +451,12 @@ _dwarf_exec_frame_instr(Dwarf_Bool make_instr,
     Dwarf_Unsigned i = 0;
     Dwarf_Bool local_has_more_rows = FALSE;
 
+    /*  The opcodes 0x2b, 0x2c and 0x2d only have their
+        AADWARF64 2026Q3 AArch64 return address signing
+        meanings on an AArch64 object.  For other objects
+        0x2d keeps its GNU window_save meaning. */
+    Dwarf_Bool is_aarch64 = _dwarf_object_is_aarch64(dbg);
+
     if (has_more_rows) {
         local_has_more_rows = *has_more_rows;
     }
@@ -464,12 +489,23 @@ _dwarf_exec_frame_instr(Dwarf_Bool make_instr,
             }
             *cfa_reg =
                 cie->ci_initial_table->fr_regtable->rt3_cfa_rule;
+            /*  The AArch64 return address signing state is
+                initialized from the CIE initial row along
+                with the CFA and register rules. */
+            table->fr_ra_state =
+                cie->ci_initial_table->fr_ra_state;
         } else {
             /* No cie table, so just set sensible zeros */
             _dwarf_init_reg_rules_dw3(localregtab,0,reg_count,
                 dbg->de_frame_rule_initial_value);
             _dwarf_init_reg_rules_dw3(cfa_reg,0, 1,
                 dbg->de_frame_rule_initial_value);
+        }
+        if (cie) {
+            /*  The key selection is a property of the CIE
+                and is constant across the whole FDE. */
+            table->fr_ra_state.b_key =
+                cie->ci_ra_b_key?TRUE:FALSE;
         }
     }
     /*  The idea here is that the code_alignment_factor and
@@ -1186,6 +1222,10 @@ _dwarf_exec_frame_instr(Dwarf_Bool make_instr,
                 regtab->rt3_rules[i] = localregtab[i];
             }
             regtab->rt3_cfa_rule = *cfa_reg;
+            /*  Save the AArch64 return address signing state
+                along with the register rules.  The current
+                code location is not saved or restored. */
+            stack_table->fr_ra_state = table->fr_ra_state;
             if (top_stack != NULL) {
                 stack_table->fr_next = top_stack;
             }
@@ -1209,6 +1249,10 @@ _dwarf_exec_frame_instr(Dwarf_Bool make_instr,
                 localregtab[i] = regtab->rt3_rules[i];
             }
             *cfa_reg = regtab->rt3_cfa_rule;
+            /*  Restore the AArch64 return address signing
+                state.  The current code location advances
+                normally: restore_state does not rewind it. */
+            table->fr_ra_state = stack_table->fr_ra_state;
             dwarf_dealloc(dbg, stack_table, DW_DLA_FRAME);
             if (make_instr) {
                 dfi->fi_fields = "";
@@ -1750,16 +1794,149 @@ _dwarf_exec_frame_instr(Dwarf_Bool make_instr,
 
 #ifdef DW_CFA_GNU_window_save
         case DW_CFA_GNU_window_save: {
-            /*  No information: this just tells
-                unwinder to restore
-                the window registers from the previous frame's
-                window save area */
+            /*  0x2d.  On an AArch64 object this is
+                DW_CFA_AARCH64_negate_ra_state and toggles
+                the return address signing state between
+                0 (unsigned) and 1 (signed using SP).
+                On other objects it stays the GNU
+                DW_CFA_GNU_window_save: no information,
+                it just tells the unwinder to restore the
+                window registers from the previous frame's
+                window save area. */
+            if (is_aarch64) {
+                if (table->fr_ra_state.state == 0) {
+                    table->fr_ra_state.state = 1;
+                } else if (table->fr_ra_state.state == 1) {
+                    table->fr_ra_state.state = 0;
+                } else {
+                    SERSTRING(DW_DLE_DF_FRAME_DECODING_ERROR,
+                        "DW_DLE_DF_FRAME_DECODING_ERROR: "
+                        "DW_CFA_AARCH64_negate_ra_state "
+                        "illegal state transition");
+                }
+            }
             if (make_instr) {
                 dfi->fi_fields = "";
             }
         }
         break;
 #endif
+        case DW_CFA_AARCH64_negate_ra_state_with_pc: {
+            /*  0x2c.  AADWARF64 2026Q3.  Toggles the
+                return address signing state between
+                0 (unsigned) and 2 (signed using SP and PC).
+                Entering state 2 records the current code
+                location as the signing pc; leaving state 2
+                clears it. */
+            if (!is_aarch64) {
+                UNKNOWN_OPCODE_ERR(opcode);
+            }
+            if (table->fr_ra_state.state == 0) {
+                table->fr_ra_state.state = 2;
+                table->fr_ra_state.signing_pc = current_loc;
+            } else if (table->fr_ra_state.state == 2) {
+                table->fr_ra_state.state = 0;
+                table->fr_ra_state.signing_pc = 0;
+            } else {
+                SERSTRING(DW_DLE_DF_FRAME_DECODING_ERROR,
+                    "DW_DLE_DF_FRAME_DECODING_ERROR: "
+                    "DW_CFA_AARCH64_negate_ra_state_with_pc "
+                    "illegal state transition");
+            }
+            if (make_instr) {
+                dfi->fi_fields = "";
+            }
+        }
+        break;
+        case DW_CFA_AARCH64_set_ra_state: {
+            /*  0x2b.  AADWARF64 2026Q3 (Alpha).
+                A ULEB128 state followed by a SLEB128
+                factored offset.  The state is set directly.
+                In state 2 the signing pc is the current
+                code location plus offset times
+                code_alignment_factor; otherwise zero.
+                The offset is reported unfactored in the
+                expanded instruction list ("us" fields). */
+            Dwarf_Unsigned lstate = 0;
+            Dwarf_Signed   loffset = 0;
+            int adres = 0;
+
+            if (!is_aarch64) {
+                UNKNOWN_OPCODE_ERR(opcode);
+            }
+            adres = _dwarf_leb128_uword_wrapper(dbg,
+                &instr_ptr,final_instr_ptr,
+                &lstate,error);
+            if (adres != DW_DLV_OK) {
+                FREELOCALMALLOC;
+                return adres;
+            }
+            adres = _dwarf_leb128_sword_wrapper(dbg,
+                &instr_ptr,final_instr_ptr,
+                &loffset,error);
+            if (adres != DW_DLV_OK) {
+                FREELOCALMALLOC;
+                return adres;
+            }
+            CUR_INSTR_POS;
+            if (need_augmentation) {
+                /*  The offset is factored by the code alignment
+                    factor, which requires a valid CIE. */
+                SER(DW_DLE_DF_NO_CIE_AUGMENTATION);
+            }
+            if (lstate > 2) {
+                SERSTRING(DW_DLE_DF_FRAME_DECODING_ERROR,
+                    "DW_DLE_DF_FRAME_DECODING_ERROR: "
+                    "DW_CFA_AARCH64_set_ra_state "
+                    "reserved state value");
+            }
+            table->fr_ra_state.state = lstate;
+            if (lstate == 2) {
+                Dwarf_Signed scaled = 0;
+                Dwarf_Addr   signing_pc = 0;
+
+                /*  Checked multiply, the same way the other
+                    factored offsets are computed. */
+                adres = _dwarf_int64_mult(loffset,
+                    code_alignment_factor,&scaled,dbg,error);
+                if (adres == DW_DLV_ERROR) {
+                    FREELOCALMALLOC;
+                    return adres;
+                }
+                if (scaled >= 0) {
+                    adres = _dwarf_uint64_add(current_loc,
+                        (Dwarf_Unsigned)scaled,&signing_pc);
+                    if (adres == DW_DLV_ERROR) {
+                        SERSTRING(DW_DLE_ARITHMETIC_OVERFLOW,
+                            "DW_DLE_ARITHMETIC_OVERFLOW "
+                            "add overflowed computing "
+                            "the AArch64 signing pc");
+                    }
+                } else {
+                    /*  -(scaled+1) avoids negating
+                        LLONG_MIN. */
+                    Dwarf_Unsigned mag =
+                        (Dwarf_Unsigned)(-(scaled+1)) + 1;
+
+                    if (mag > current_loc) {
+                        SERSTRING(DW_DLE_ARITHMETIC_OVERFLOW,
+                            "DW_DLE_ARITHMETIC_OVERFLOW "
+                            "negative new location "
+                            "computing the AArch64 signing pc");
+                    }
+                    signing_pc = current_loc - mag;
+                }
+                table->fr_ra_state.signing_pc = signing_pc;
+            } else {
+                table->fr_ra_state.signing_pc = 0;
+            }
+            if (make_instr) {
+                dfi->fi_fields = "us";
+                dfi->fi_u0 = lstate;
+                dfi->fi_s0 = loffset;
+            }
+        }
+        break;
 #ifdef  DW_CFA_GNU_args_size
             /*  Single uleb128 is the current arg area
                 size in bytes. No

@@ -1520,6 +1520,13 @@ most-likely-useful name. */
 /* GNU extensions. */
 #define DW_CFA_GNU_window_save               0x2d /* GNU */
 #define DW_CFA_AARCH64_negate_ra_state       0x2d
+/*  AADWARF64 2026Q3 AArch64 return address signing
+    state instructions.  These only have the meanings
+    below for an AArch64 object; for other objects
+    0x2d keeps its GNU window_save meaning. */
+#define DW_CFA_AARCH64_negate_ra_state_with_pc 0x2c
+#define DW_CFA_AARCH64_set_ra_state          0x2b
+#define DW_CFA_AARCH64_set_ra_state_alpha    0x2b
 #define DW_CFA_GNU_args_size                 0x2e /* GNU */
 #define DW_CFA_GNU_negative_offset_extended  0x2f /* GNU */
 #define DW_CFA_LLVM_def_aspace_cfa           0x30

@@ -598,6 +598,40 @@ typedef struct Dwarf_Regtable3_s {
     struct Dwarf_Regtable_Entry3_s * rt3_rules;
 } Dwarf_Regtable3;
 
+/*! @typedef Dwarf_Ra_State
+    The AArch64 return address signing state recorded
+    for one row of an FDE, as defined by AADWARF64 2026Q3.
+    This is descriptive metadata only: libdwarf does not
+    authenticate addresses and does not unwind stacks.
+
+    The fields are set by dwarf_get_fde_ra_state().
+
+    @code
+    typedef struct Dwarf_Ra_State_s {
+        Dwarf_Unsigned state;
+        Dwarf_Addr     signing_pc;
+        Dwarf_Bool     b_key;
+    } Dwarf_Ra_State;
+    @endcode
+*/
+typedef struct Dwarf_Ra_State_s {
+    /*  The return address signing state:
+        0 means unsigned,
+        1 means signed using SP,
+        2 means signed using SP and PC.
+        Initially 0.
+    */
+    Dwarf_Unsigned state;
+    /*  Meaningful only when state is 2: the code location
+        recorded when the state was entered. Zero otherwise.
+    */
+    Dwarf_Addr     signing_pc;
+    /*  TRUE if the CIE augmentation declared a 'B' key,
+        FALSE if there was no 'B' marker (the default 'A' key).
+    */
+    Dwarf_Bool     b_key;
+} Dwarf_Ra_State;
+
 /* Opaque types for Consumer Library. */
 /*! @typedef Dwarf_Error
 
@@ -6357,6 +6391,57 @@ DW_API int dwarf_get_fde_info_for_cfa_reg3_b(Dwarf_Fde dw_fde,
     Dwarf_Addr    * dw_subsequent_pc,
     Dwarf_Error   * dw_error);
 
+/*! @brief Return the AArch64 return-address signing state
+    for the frame row containing a given pc value.
+
+    This supports the return address signing metadata
+    defined by AADWARF64 2026Q3 for .debug_frame and
+    .eh_frame.  Only the description is read: libdwarf
+    performs no address authentication and no
+    actual stack unwinding.
+
+    The state is accumulated with the same CFI row model
+    (and the same memoization) used by the other
+    dwarf_get_fde_info_for_* row functions, so mixing
+    calls to those functions with calls to this one
+    does not lose the signing state.
+
+    For non-AArch64 objects the function returns
+    DW_DLV_NO_ENTRY.
+
+    New in the 2026Q3 timeframe.
+
+    @param dw_fde
+    Pass in the FDE of interest.
+    @param dw_pc_requested
+    Pass in a pc (code) address inside that FDE.
+    @param dw_ra_state
+    On success returns the Dwarf_Ra_State for the row.
+    @param dw_row_pc
+    On success returns the address of the row of
+    frame data which may be a few counts off of
+    the pc requested.
+    @param dw_has_more_rows
+    On success returns FALSE if there are no more rows,
+    otherwise returns TRUE.
+    @param dw_subsequent_pc
+    On success this returns the address of the next pc
+    for which there is a register row.
+    @param dw_error
+    The usual error detail return pointer.
+    @return
+    Returns DW_DLV_OK if the dw_pc_requested is in the
+    FDE passed in and there is an applicable row.
+    Returns DW_DLV_NO_ENTRY for a non-AArch64 object.
+*/
+DW_API int dwarf_get_fde_ra_state(Dwarf_Fde dw_fde,
+    Dwarf_Addr       dw_pc_requested,
+    Dwarf_Ra_State * dw_ra_state,
+    Dwarf_Addr     * dw_row_pc,
+    Dwarf_Bool     * dw_has_more_rows,
+    Dwarf_Addr     * dw_subsequent_pc,
+    Dwarf_Error    * dw_error);
+
 /*! @brief Get the fde given DW_AT_MIPS_fde in a DIE.
 
     This is essentially useless as only SGI/MIPS compilers
@@ -6575,9 +6660,12 @@ DW_API int dwarf_expand_frame_instructions(Dwarf_Cie dw_cie,
     The possible frame instruction formats are:
     @code
     "" "b" "r" "rb" "rr" "rsd" "rsda" "ru" "rua" "rud"
-    "sd" "u" "uc"
+    "sd" "u" "uc" "us"
     @endcode
     are the possible frame instruction formats.
+    The @c us format is used by
+    DW_CFA_AARCH64_set_ra_state: u0 is the state and s0
+    is the unfactored signed offset.
 */
 DW_API int dwarf_get_frame_instruction(
     Dwarf_Frame_Instr_Head  dw_head,

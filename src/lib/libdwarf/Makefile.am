@@ -51,6 +51,7 @@ dwarf_frame.h \
 dwarf_frame_cfa_read.c \
 dwarf_frame2.c \
 dwarf_frame_iter.c \
+dwarf_frame_ra.c \
 dwarf_gdbindex.c \
 dwarf_gdbindex.h \
 dwarf_generic_init.c \

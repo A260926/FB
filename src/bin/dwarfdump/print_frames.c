@@ -1953,6 +1953,14 @@ print_frame_inst_bytes(Dwarf_Debug dbg,
                 printf("%" DW_PR_DUu "\n",u0);
                 break;
             }
+            if (fields[1] == 's') {
+                /*  "us": an unsigned state and an unfactored
+                    signed offset, as in
+                    DW_CFA_AARCH64_set_ra_state. */
+                printf("%" DW_PR_DUu " %" DW_PR_DSd "\n",
+                    u0,s0);
+                break;
+            }
             if (fields[1] == 'c') {
                 Dwarf_Unsigned final =
                     u0*code_alignment_factor;

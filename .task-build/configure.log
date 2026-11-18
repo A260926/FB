@@ -1,0 +1,14 @@
+-- Building dwarfexample... OFF
+-- Building api tests   ... OFF
+-- HAVE_UINTPTR_T 1: uintptr_t defined in stdint.h... YES
+-- uintptr_t value considered NO 
+-- HAVE_INTPTR_T 1: intptr_t defined in stdint.h... YES
+-- intptr_t value considered NO 
+-- ENABLE_DECOMPRESSION : OFF
+-- Build with zlib and zstd: NO
+-- CMAKE_SIZEOF_VOID_P ... : 8
+-- Compiler warning options... NO
+-- Install prefix ... /usr/local
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS1D5B7381A256U13036/attempts/20261118T160549797307Z/repo/.task-build/cmake

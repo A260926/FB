@@ -211,6 +211,13 @@ struct Dwarf_Frame_s {
     Dwarf_Frame fr_next; /* For DW_CFA_remember_state,
         DW_CFA_restore_state. */
     Dwarf_Bool  fr_owns_regtable; /* To know when/not to free */
+
+    /*  AADWARF64 2026Q3 AArch64 return address signing
+        state for this row.  Saved and restored by
+        DW_CFA_remember_state / DW_CFA_restore_state
+        along with the register rules.  Descriptive
+        only: no authentication is performed. */
+    Dwarf_Ra_State fr_ra_state;
 };
 
 /* See dwarf_frame.c for the heuristics used to set the
@@ -246,6 +253,12 @@ enum Dwarf_augmentation_type {
 
     /*  HC, From http://sourceforge.net/p/elftoolchain/tickets/397/ */
     aug_metaware,
+
+    /*  AADWARF64 2026Q3: a .debug_frame CIE whose augmentation
+        is the 'B' marker.  No augmentation data follows; the
+        marker only selects the B key for AArch64 return
+        address signing. */
+    aug_aarch64_b,
 
     aug_past_last
 };
@@ -306,6 +319,12 @@ struct Dwarf_Cie_s {
         find address_size from the compilation-unit. */
     Dwarf_Half   ci_address_size;
     Dwarf_Half   ci_segment_size;
+    /*  AADWARF64 2026Q3: TRUE if the CIE augmentation
+        string contains the 'B' marker, meaning the B key
+        is used for return address signing.  FALSE means
+        the default A key.  Only meaningful for AArch64
+        objects. */
+    Dwarf_Bool   ci_ra_b_key;
 };
 
 /*
@@ -527,6 +546,11 @@ int _dwarf_get_fde_info_for_a_pc_row(Dwarf_Fde fde,
     Dwarf_Addr * subsequent_pc,
     struct Dwarf_Allreg_Args_s *iterator_data,
     Dwarf_Error * error);
+
+/*  TRUE if the object is an AArch64 object, in which case
+    the 0x2b/0x2c/0x2d frame instructions carry the
+    AADWARF64 2026Q3 return address signing meanings. */
+Dwarf_Bool _dwarf_object_is_aarch64(Dwarf_Debug dbg);
 
 /*  Simply assumes error is a Dwarf_Error * in its context */
 #define FDE_NULL_CHECKS_AND_SET_DBG(fde,dbg )          \

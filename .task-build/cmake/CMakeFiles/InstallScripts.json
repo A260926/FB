@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FS1D5B7381A256U13036/attempts/20261118T160549797307Z/repo/.task-build/cmake/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS1D5B7381A256U13036/attempts/20261118T160549797307Z/repo/.task-build/cmake/src/lib/libdwarf/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS1D5B7381A256U13036/attempts/20261118T160549797307Z/repo/.task-build/cmake/doc/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
