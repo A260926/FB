@@ -59,6 +59,11 @@ public:
     virtual BSSRDF *GetBSSRDF(const DifferentialGeometry &dg,
         const Transform &ObjectToWorld, MemoryArena &arena) const = 0;
 
+    // Replay support: lightweight type tags, false by default.
+    virtual bool ReplayIsGeometricPrimitive() const { return false; }
+    virtual bool ReplayIsTransformedPrimitive() const { return false; }
+    virtual bool ReplayIsBVHAccel() const { return false; }
+
     // Primitive Public Data
     const uint32_t primitiveId;
 protected:
@@ -84,6 +89,11 @@ public:
                   const Transform &ObjectToWorld, MemoryArena &arena) const;
     BSSRDF *GetBSSRDF(const DifferentialGeometry &dg,
                       const Transform &ObjectToWorld, MemoryArena &arena) const;
+    // Replay support: read-only accessors, do not change traversal behavior.
+    const Shape *ReplayShape() const { return shape.GetPtr(); }
+    const Material *ReplayMaterial() const { return material.GetPtr(); }
+    const AreaLight *ReplayAreaLight() const { return areaLight; }
+    bool ReplayIsGeometricPrimitive() const { return true; }
 private:
     // GeometricPrimitive Private Data
     Reference<Shape> shape;
@@ -114,6 +124,12 @@ public:
     BBox WorldBound() const {
         return WorldToPrimitive.MotionBounds(primitive->WorldBound(), true);
     }
+    // Replay support: read-only accessors, do not change traversal behavior.
+    const Primitive *ReplayChildPrimitive() const { return primitive.GetPtr(); }
+    const AnimatedTransform &ReplayWorldToPrimitive() const {
+        return WorldToPrimitive;
+    }
+    bool ReplayIsTransformedPrimitive() const { return true; }
 private:
     // TransformedPrimitive Private Data
     Reference<Primitive> primitive;

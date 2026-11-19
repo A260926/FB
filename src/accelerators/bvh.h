@@ -56,6 +56,11 @@ public:
     ~BVHAccel();
     bool Intersect(const Ray &ray, Intersection *isect) const;
     bool IntersectP(const Ray &ray) const;
+    // Replay support: read-only access to the refined leaf primitives.
+    const vector<Reference<Primitive> > &ReplayPrimitives() const {
+        return primitives;
+    }
+    bool ReplayIsBVHAccel() const { return true; }
 private:
     // BVHAccel Private Methods
     BVHBuildNode *recursiveBuild(MemoryArena &buildArena,

@@ -23,7 +23,8 @@ rm -f .task-build/replay-example/parameters.txt
 test -s .task-build/replay-example/fit.ppm
 test -s .task-build/replay-example/loss.txt
 test -s .task-build/replay-example/parameters.txt
-  output_log=$(mktemp)
+  mkdir -p .task-build/tmp
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/tmp/tasklog.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

@@ -49,6 +49,10 @@ public:
         bumpMap = bump;
     }
     BSDF *GetBSDF(const DifferentialGeometry &dgGeom, const DifferentialGeometry &dgShading, MemoryArena &arena) const;
+    // Replay support: read-only accessors.
+    const Texture<Spectrum> *ReplayKrTexture() const { return Kr.GetPtr(); }
+    const Texture<float> *ReplayBumpTexture() const { return bumpMap.GetPtr(); }
+    bool ReplayIsMirrorMaterial() const { return true; }
 private:
     // MirrorMaterial Private Data
     Reference<Texture<Spectrum> > Kr;

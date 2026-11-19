@@ -74,6 +74,9 @@ public:
         const Scene *scene, bool computeLightVisibility, float time,
         RNG &rng, Spectrum *coeffs) const;
 
+    // Replay support: lightweight type tag, false by default.
+    virtual bool ReplayIsPointLight() const { return false; }
+
     // Light Public Data
     const int nSamples;
 protected:

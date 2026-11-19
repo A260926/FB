@@ -49,6 +49,9 @@ public:
     T Evaluate(const DifferentialGeometry &) const {
         return value;
     }
+    // Replay support.
+    bool ReplayIsConstant() const { return true; }
+    T ReplayValue() const { return value; }
 private:
     T value;
 };

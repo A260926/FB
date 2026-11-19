@@ -75,6 +75,10 @@ public:
     }
     virtual float Pdf(const Point &p, const Vector &wi) const;
 
+    // Replay support: lightweight type tags, false by default.
+    virtual bool ReplayIsTriangleMesh() const { return false; }
+    virtual bool ReplayIsTriangle() const { return false; }
+
     // Shape Public Data
     const Transform *ObjectToWorld, *WorldToObject;
     const bool ReverseOrientation, TransformSwapsHandedness;

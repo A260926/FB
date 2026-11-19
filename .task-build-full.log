@@ -1,0 +1,158 @@
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/diffgeom.cpp -o .task-build/obj/src/core/diffgeom.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/intersection.cpp -o .task-build/obj/src/core/intersection.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/floatfile.cpp -o .task-build/obj/src/core/floatfile.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/memory.cpp -o .task-build/obj/src/core/memory.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/geometry.cpp -o .task-build/obj/src/core/geometry.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/scene.cpp -o .task-build/obj/src/core/scene.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/progressreporter.cpp -o .task-build/obj/src/core/progressreporter.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/camera.cpp -o .task-build/obj/src/core/camera.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/error.cpp -o .task-build/obj/src/core/error.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/rng.cpp -o .task-build/obj/src/core/rng.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/spectrum.cpp -o .task-build/obj/src/core/spectrum.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/sh.cpp -o .task-build/obj/src/core/sh.o
+src/core/error.cpp:69:9: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+   69 |         sprintf(buf, "(%d): ", line_num);
+      |         ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+1 warning generated.
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/timer.cpp -o .task-build/obj/src/core/timer.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/light.cpp -o .task-build/obj/src/core/light.o
+src/core/sh.cpp:114:24: warning: using floating point absolute value function 'fabsf' when argument is of integer type [-Wabsolute-value]
+  114 |     float fa = a, fb = fabsf(b);
+      |                        ^
+src/core/sh.cpp:114:24: note: use function 'std::abs' instead
+  114 |     float fa = a, fb = fabsf(b);
+      |                        ^~~~~
+      |                        std::abs
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/film.cpp -o .task-build/obj/src/core/film.o
+1 warning generated.
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/texture.cpp -o .task-build/obj/src/core/texture.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/sampler.cpp -o .task-build/obj/src/core/sampler.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/probes.cpp -o .task-build/obj/src/core/probes.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/paramset.cpp -o .task-build/obj/src/core/paramset.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/filter.cpp -o .task-build/obj/src/core/filter.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/montecarlo.cpp -o .task-build/obj/src/core/montecarlo.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/transform.cpp -o .task-build/obj/src/core/transform.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/shrots.cpp -o .task-build/obj/src/core/shrots.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/shape.cpp -o .task-build/obj/src/core/shape.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/integrator.cpp -o .task-build/obj/src/core/integrator.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/quaternion.cpp -o .task-build/obj/src/core/quaternion.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/reflection.cpp -o .task-build/obj/src/core/reflection.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/primitive.cpp -o .task-build/obj/src/core/primitive.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/stdafx.cpp -o .task-build/obj/src/core/stdafx.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/fileutil.cpp -o .task-build/obj/src/core/fileutil.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/material.cpp -o .task-build/obj/src/core/material.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/parser.cpp -o .task-build/obj/src/core/parser.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/renderer.cpp -o .task-build/obj/src/core/renderer.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/core/volume.cpp -o .task-build/obj/src/core/volume.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/disk.cpp -o .task-build/obj/src/shapes/disk.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/trianglemesh.cpp -o .task-build/obj/src/shapes/trianglemesh.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/heightfield.cpp -o .task-build/obj/src/shapes/heightfield.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/cylinder.cpp -o .task-build/obj/src/shapes/cylinder.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/loopsubdiv.cpp -o .task-build/obj/src/shapes/loopsubdiv.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/hyperboloid.cpp -o .task-build/obj/src/shapes/hyperboloid.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/paraboloid.cpp -o .task-build/obj/src/shapes/paraboloid.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/cone.cpp -o .task-build/obj/src/shapes/cone.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/sphere.cpp -o .task-build/obj/src/shapes/sphere.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/shapes/nurbs.cpp -o .task-build/obj/src/shapes/nurbs.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/accelerators/bvh.cpp -o .task-build/obj/src/accelerators/bvh.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/accelerators/kdtreeaccel.cpp -o .task-build/obj/src/accelerators/kdtreeaccel.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/accelerators/grid.cpp -o .task-build/obj/src/accelerators/grid.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/glass.cpp -o .task-build/obj/src/materials/glass.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/subsurface.cpp -o .task-build/obj/src/materials/subsurface.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/mirror.cpp -o .task-build/obj/src/materials/mirror.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/matte.cpp -o .task-build/obj/src/materials/matte.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/uber.cpp -o .task-build/obj/src/materials/uber.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/translucent.cpp -o .task-build/obj/src/materials/translucent.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/measured.cpp -o .task-build/obj/src/materials/measured.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/substrate.cpp -o .task-build/obj/src/materials/substrate.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/shinymetal.cpp -o .task-build/obj/src/materials/shinymetal.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/mixmat.cpp -o .task-build/obj/src/materials/mixmat.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/kdsubsurface.cpp -o .task-build/obj/src/materials/kdsubsurface.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/plastic.cpp -o .task-build/obj/src/materials/plastic.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/materials/metal.cpp -o .task-build/obj/src/materials/metal.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/igi.cpp -o .task-build/obj/src/integrators/igi.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/single.cpp -o .task-build/obj/src/integrators/single.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/emission.cpp -o .task-build/obj/src/integrators/emission.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/photonmap.cpp -o .task-build/obj/src/integrators/photonmap.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/directlighting.cpp -o .task-build/obj/src/integrators/directlighting.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/irradiancecache.cpp -o .task-build/obj/src/integrators/irradiancecache.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/useprobes.cpp -o .task-build/obj/src/integrators/useprobes.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/whitted.cpp -o .task-build/obj/src/integrators/whitted.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/ambientocclusion.cpp -o .task-build/obj/src/integrators/ambientocclusion.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/dipolesubsurface.cpp -o .task-build/obj/src/integrators/dipolesubsurface.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/path.cpp -o .task-build/obj/src/integrators/path.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/diffuseprt.cpp -o .task-build/obj/src/integrators/diffuseprt.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/replay.cpp -o .task-build/obj/src/integrators/replay.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/integrators/glossyprt.cpp -o .task-build/obj/src/integrators/glossyprt.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/goniometric.cpp -o .task-build/obj/src/lights/goniometric.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/projection.cpp -o .task-build/obj/src/lights/projection.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/point.cpp -o .task-build/obj/src/lights/point.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/distant.cpp -o .task-build/obj/src/lights/distant.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/spot.cpp -o .task-build/obj/src/lights/spot.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/infinite.cpp -o .task-build/obj/src/lights/infinite.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c src/lights/diffuse.cpp -o .task-build/obj/src/lights/diffuse.o
+c++ -DNDEBUG -DPBRT_PROBES_NONE -Isrc -Isrc/core -I. -std=c++11 -O1 -ffunction-sections -fdata-sections -MMD -MP -c task_support/runtime.cpp -o .task-build/obj/task_support/runtime.o
+ar rcs .task-build/production.tmp.a .task-build/obj/src/core/memory.o .task-build/obj/src/core/diffgeom.o .task-build/obj/src/core/intersection.o .task-build/obj/src/core/floatfile.o .task-build/obj/src/core/geometry.o .task-build/obj/src/core/scene.o .task-build/obj/src/core/progressreporter.o .task-build/obj/src/core/camera.o .task-build/obj/src/core/error.o .task-build/obj/src/core/rng.o .task-build/obj/src/core/spectrum.o .task-build/obj/src/core/sh.o .task-build/obj/src/core/timer.o .task-build/obj/src/core/light.o .task-build/obj/src/core/film.o .task-build/obj/src/core/texture.o .task-build/obj/src/core/sampler.o .task-build/obj/src/core/probes.o .task-build/obj/src/core/paramset.o .task-build/obj/src/core/filter.o .task-build/obj/src/core/montecarlo.o .task-build/obj/src/core/transform.o .task-build/obj/src/core/shrots.o .task-build/obj/src/core/shape.o .task-build/obj/src/core/integrator.o .task-build/obj/src/core/quaternion.o .task-build/obj/src/core/reflection.o .task-build/obj/src/core/primitive.o .task-build/obj/src/core/stdafx.o .task-build/obj/src/core/fileutil.o .task-build/obj/src/core/material.o .task-build/obj/src/core/parser.o .task-build/obj/src/core/renderer.o .task-build/obj/src/core/volume.o .task-build/obj/src/shapes/disk.o .task-build/obj/src/shapes/trianglemesh.o .task-build/obj/src/shapes/heightfield.o .task-build/obj/src/shapes/cylinder.o .task-build/obj/src/shapes/loopsubdiv.o .task-build/obj/src/shapes/hyperboloid.o .task-build/obj/src/shapes/paraboloid.o .task-build/obj/src/shapes/cone.o .task-build/obj/src/shapes/sphere.o .task-build/obj/src/shapes/nurbs.o .task-build/obj/src/accelerators/bvh.o .task-build/obj/src/accelerators/kdtreeaccel.o .task-build/obj/src/accelerators/grid.o .task-build/obj/src/materials/glass.o .task-build/obj/src/materials/subsurface.o .task-build/obj/src/materials/mirror.o .task-build/obj/src/materials/matte.o .task-build/obj/src/materials/uber.o .task-build/obj/src/materials/translucent.o .task-build/obj/src/materials/measured.o .task-build/obj/src/materials/substrate.o .task-build/obj/src/materials/shinymetal.o .task-build/obj/src/materials/mixmat.o .task-build/obj/src/materials/kdsubsurface.o .task-build/obj/src/materials/plastic.o .task-build/obj/src/materials/metal.o .task-build/obj/src/integrators/igi.o .task-build/obj/src/integrators/single.o .task-build/obj/src/integrators/emission.o .task-build/obj/src/integrators/photonmap.o .task-build/obj/src/integrators/directlighting.o .task-build/obj/src/integrators/irradiancecache.o .task-build/obj/src/integrators/useprobes.o .task-build/obj/src/integrators/whitted.o .task-build/obj/src/integrators/ambientocclusion.o .task-build/obj/src/integrators/dipolesubsurface.o .task-build/obj/src/integrators/path.o .task-build/obj/src/integrators/diffuseprt.o .task-build/obj/src/integrators/replay.o .task-build/obj/src/integrators/glossyprt.o .task-build/obj/src/lights/goniometric.o .task-build/obj/src/lights/projection.o .task-build/obj/src/lights/point.o .task-build/obj/src/lights/distant.o .task-build/obj/src/lights/spot.o .task-build/obj/src/lights/infinite.o .task-build/obj/src/lights/diffuse.o .task-build/obj/task_support/runtime.o
+mv .task-build/production.tmp.a .task-build/libproduction.a
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+CASE primal diffuse_direct checks=5
+CASE primal two_bounce_mirror checks=5
+CASE primal black_background_and_budget checks=3
+CASE primal reject_sphere checks=2
+CASE primal reject_glass_and_distant_light checks=1
+CASE primal reject_bad_ray_and_singular_matrix checks=2
+GROUP primal cases=6 checks=18 COMPLETE
+  P h=0.01 idx=2 analytic=-1.903603 fd=-1.894767 absErr=8.84e-03 relErr=2.33e-03
+  P h=0.01 idx=5 analytic=-0.907289 fd=-0.902486 absErr=4.80e-03 relErr=2.65e-03
+  P h=0.01 idx=8 analytic=2.969159 fd=2.951284 absErr=1.79e-02 relErr=3.02e-03
+  P h=0.001 idx=2 analytic=-1.903603 fd=-1.902625 absErr=9.79e-04 relErr=2.57e-04
+  P h=0.001 idx=5 analytic=-0.907289 fd=-0.906669 absErr=6.20e-04 relErr=3.42e-04
+  P h=0.001 idx=8 analytic=2.969159 fd=2.967600 absErr=1.56e-03 relErr=2.63e-04
+  MA h=0.01 idx=8 analytic=0.948871 fd=0.931014 absErr=1.79e-02 relErr=9.50e-03
+  MA h=0.01 idx=9 analytic=5.504811 fd=5.401342 absErr=1.03e-01 relErr=9.49e-03
+  MA h=0.01 idx=11 analytic=0.150730 fd=0.150710 absErr=2.04e-05 relErr=6.77e-05
+  MA h=0.001 idx=8 analytic=0.948871 fd=0.948157 absErr=7.14e-04 relErr=3.76e-04
+  MA h=0.001 idx=9 analytic=5.504811 fd=5.500842 absErr=3.97e-03 relErr=3.61e-04
+  MA h=0.001 idx=11 analytic=0.150730 fd=0.150565 absErr=1.65e-04 relErr=5.49e-04
+CASE adjoint single_hop_fd checks=4
+  P h=0.01 idx=2 analytic=-2.231292 fd=-2.224756 absErr=6.54e-03 relErr=1.47e-03
+  P h=0.01 idx=5 analytic=2.712248 fd=2.709976 absErr=2.27e-03 relErr=4.19e-04
+  P h=0.01 idx=8 analytic=-0.480956 fd=-0.480472 absErr=4.84e-04 relErr=5.03e-04
+  P h=0.001 idx=2 analytic=-2.231292 fd=-2.228916 absErr=2.38e-03 relErr=5.33e-04
+  P h=0.001 idx=5 analytic=2.712248 fd=2.709210 absErr=3.04e-03 relErr=5.60e-04
+  P h=0.001 idx=8 analytic=-0.480956 fd=-0.480496 absErr=4.59e-04 relErr=4.78e-04
+  MA h=0.01 idx=0 analytic=6.178562 fd=6.154799 absErr=2.38e-02 relErr=1.93e-03
+  MA h=0.01 idx=1 analytic=-3.620782 fd=-3.549179 absErr=7.16e-02 relErr=9.99e-03
+  MA h=0.01 idx=8 analytic=-6.178562 fd=-6.140430 absErr=3.81e-02 relErr=3.10e-03
+  MA h=0.01 idx=9 analytic=3.620782 fd=3.549207 absErr=7.16e-02 relErr=9.98e-03
+  MA h=0.001 idx=0 analytic=6.178562 fd=6.173292 absErr=5.27e-03 relErr=4.27e-04
+  MA h=0.001 idx=1 analytic=-3.620782 fd=-3.617360 absErr=3.42e-03 relErr=4.73e-04
+  MA h=0.001 idx=8 analytic=-6.178562 fd=-6.173047 absErr=5.52e-03 relErr=4.47e-04
+  MA h=0.001 idx=9 analytic=3.620782 fd=3.616728 absErr=4.05e-03 relErr=5.60e-04
+  MB h=0.01 idx=0 analytic=4.345253 fd=4.314584 absErr=3.07e-02 relErr=3.54e-03
+  MB h=0.01 idx=1 analytic=3.258937 fd=3.210388 absErr=4.85e-02 relErr=7.50e-03
+  MB h=0.001 idx=0 analytic=4.345253 fd=4.341091 absErr=4.16e-03 relErr=4.79e-04
+  MB h=0.001 idx=1 analytic=3.258937 fd=3.255614 absErr=3.32e-03 relErr=5.10e-04
+CASE adjoint multi_hop_fd checks=6
+  P h=0.01 idx=2 analytic=-1.903603 fd=-1.894767 absErr=8.84e-03 relErr=2.33e-03
+  P h=0.01 idx=5 analytic=-0.907289 fd=-0.902486 absErr=4.80e-03 relErr=2.65e-03
+  P h=0.01 idx=8 analytic=2.969159 fd=2.951284 absErr=1.79e-02 relErr=3.02e-03
+  P h=0.001 idx=2 analytic=-1.903603 fd=-1.902625 absErr=9.79e-04 relErr=2.57e-04
+  P h=0.001 idx=5 analytic=-0.907289 fd=-0.906669 absErr=6.20e-04 relErr=3.42e-04
+  P h=0.001 idx=8 analytic=2.969159 fd=2.967600 absErr=1.56e-03 relErr=2.63e-04
+CASE adjoint normal_only_moves_next_hit checks=5
+CASE adjoint occluder_zero_gradient checks=47
+CASE adjoint unbound_and_cross_ray_accumulation checks=16
+GROUP adjoint cases=5 checks=78 COMPLETE
+CASE lifetime record_outlives_scene checks=13
+CASE lifetime repeated_backward_starts_zero checks=70
+CASE lifetime two_records_isolated checks=21
+GROUP lifetime cases=3 checks=104 COMPLETE
+TARGET_COMPLETE cases=14
+BASELINE mesh_refine_bvh t=1.000000 mirror=0.800000 point=1.000000 finite_shadow=PASS

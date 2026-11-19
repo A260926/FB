@@ -316,6 +316,9 @@ public:
     Ray operator()(const Ray &r) const;
     BBox MotionBounds(const BBox &b, bool useInverse) const;
     bool HasScale() const { return startTransform->HasScale() || endTransform->HasScale(); }
+    // Replay support: read-only accessors for static instance validation.
+    bool ReplayActuallyAnimated() const { return actuallyAnimated; }
+    const Transform *ReplayStartTransform() const { return startTransform; }
 private:
     // AnimatedTransform Private Data
     const float startTime, endTime;

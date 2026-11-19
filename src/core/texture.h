@@ -138,6 +138,8 @@ public:
     // Texture Interface
     virtual T Evaluate(const DifferentialGeometry &) const = 0;
     virtual ~Texture() { }
+    // Replay support: constant-texture tag, false by default.
+    virtual bool ReplayIsConstant() const { return false; }
 };
 
 

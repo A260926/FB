@@ -52,6 +52,11 @@ public:
     BSDF *GetBSDF(const DifferentialGeometry &dgGeom,
                   const DifferentialGeometry &dgShading,
                   MemoryArena &arena) const;
+    // Replay support: read-only accessors.
+    const Texture<Spectrum> *ReplayKdTexture() const { return Kd.GetPtr(); }
+    const Texture<float> *ReplaySigmaTexture() const { return sigma.GetPtr(); }
+    const Texture<float> *ReplayBumpTexture() const { return bumpMap.GetPtr(); }
+    bool ReplayIsMatteMaterial() const { return true; }
 private:
     // MatteMaterial Private Data
     Reference<Texture<Spectrum> > Kd;

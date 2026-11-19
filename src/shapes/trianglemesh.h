@@ -54,6 +54,17 @@ public:
     BBox WorldBound() const;
     bool CanIntersect() const { return false; }
     void Refine(vector<Reference<Shape> > &refined) const;
+    // Replay support: read-only accessors, do not change intersection behavior.
+    int ReplayNumTriangles() const { return ntris; }
+    int ReplayNumVertices() const { return nverts; }
+    const int *ReplayVertexIndices() const { return vertexIndex; }
+    const Point *ReplayWorldPoints() const { return p; }
+    const Texture<float> *ReplayAlphaTexture() const {
+        return alphaTexture.GetPtr();
+    }
+    bool ReplayHasVertexNormals() const { return n != NULL; }
+    bool ReplayHasVertexTangents() const { return s != NULL; }
+    bool ReplayIsTriangleMesh() const { return true; }
     friend class Triangle;
     template <typename T> friend class VertexTexture;
 protected:
@@ -103,6 +114,12 @@ public:
             const DifferentialGeometry &dg,
             DifferentialGeometry *dgShading) const;
     Point Sample(float u1, float u2, Normal *Ns) const;
+    // Replay support: read-only accessors, do not change intersection behavior.
+    const TriangleMesh *ReplayMesh() const { return mesh.GetPtr(); }
+    int ReplayTriangleNumber() const {
+        return int((v - mesh->vertexIndex) / 3);
+    }
+    bool ReplayIsTriangle() const { return true; }
 private:
     // Triangle Private Data
     Reference<TriangleMesh> mesh;

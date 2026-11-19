@@ -55,6 +55,10 @@ public:
     float Pdf(const Point &, const Vector &) const;
     void SHProject(const Point &p, float pEpsilon, int lmax, const Scene *scene,
         bool computeLightVisibility, float time, RNG &rng, Spectrum *coeffs) const;
+    // Replay support: read-only accessors.
+    Point ReplayLightPosition() const { return lightPos; }
+    Spectrum ReplayIntensity() const { return Intensity; }
+    bool ReplayIsPointLight() const { return true; }
 private:
     // PointLight Private Data
     Point lightPos;

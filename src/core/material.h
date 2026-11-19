@@ -55,6 +55,9 @@ public:
     virtual ~Material();
     static void Bump(const Reference<Texture<float> > &d, const DifferentialGeometry &dgGeom,
         const DifferentialGeometry &dgShading, DifferentialGeometry *dgBump);
+    // Replay support: lightweight type tags, false by default.
+    virtual bool ReplayIsMirrorMaterial() const { return false; }
+    virtual bool ReplayIsMatteMaterial() const { return false; }
 };
 
 
