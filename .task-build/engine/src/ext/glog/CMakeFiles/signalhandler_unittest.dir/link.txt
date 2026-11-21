@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/signalhandler_unittest.dir/src/signalhandler_unittest.cc.o -o signalhandler_unittest  libglog.a

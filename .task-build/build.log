@@ -1,0 +1,906 @@
+[  1%] Building CXX object src/ext/openexr/IlmBase/Half/CMakeFiles/eLut.dir/eLut.cpp.o
+[  1%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/adler32.c.o
+[  1%] Building CXX object src/ext/openexr/IlmBase/Iex/CMakeFiles/Iex.dir/IexBaseExc.cpp.o
+[  1%] Building CXX object src/ext/openexr/IlmBase/Half/CMakeFiles/toFloat.dir/toFloat.cpp.o
+[  1%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfAttribute.cpp.o
+[  2%] Building CXX object CMakeFiles/pbrt.dir/src/core/api.cpp.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/adler32.c:65:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   65 | uLong ZEXPORT adler32(adler, buf, len)
+      |               ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/adler32.c:136:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  136 | local uLong adler32_combine_(adler1, adler2, len2)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/adler32.c:165:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  165 | uLong ZEXPORT adler32_combine(adler1, adler2, len2)
+      |               ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/adler32.c:173:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  173 | uLong ZEXPORT adler32_combine64(adler1, adler2, len2)
+      |               ^
+4 warnings generated.
+[  2%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/compress.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/compress.c:22:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   22 | int ZEXPORT compress2 (dest, destLen, source, sourceLen, level)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/compress.c:62:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   62 | int ZEXPORT compress (dest, destLen, source, sourceLen)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/compress.c:75:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   75 | uLong ZEXPORT compressBound (sourceLen)
+      |               ^
+3 warnings generated.
+[  3%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/crc32.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:204:23: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  204 | unsigned long ZEXPORT crc32(crc, buf, len)
+      |                       ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:247:21: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  247 | local unsigned long crc32_little(crc, buf, len)
+      |                     ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:287:21: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  287 | local unsigned long crc32_big(crc, buf, len)
+      |                     ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:327:21: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  327 | local unsigned long gf2_matrix_times(mat, vec)
+      |                     ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:344:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  344 | local void gf2_matrix_square(square, mat)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:355:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  355 | local uLong crc32_combine_(crc1, crc2, len2)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:411:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  411 | uLong ZEXPORT crc32_combine(crc1, crc2, len2)
+      |               ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/crc32.c:419:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  419 | uLong ZEXPORT crc32_combine64(crc1, crc2, len2)
+      |               ^
+8 warnings generated.
+[  3%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/deflate.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:201:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  201 | int ZEXPORT deflateInit_(strm, level, version, stream_size)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:213:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  213 | int ZEXPORT deflateInit2_(strm, level, method, windowBits, memLevel, strategy,
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:323:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  323 | int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:392:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  392 | int ZEXPORT deflateResetKeep (strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:427:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  427 | int ZEXPORT deflateReset (strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:439:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  439 | int ZEXPORT deflateSetHeader (strm, head)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:450:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  450 | int ZEXPORT deflatePending (strm, pending, bits)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:464:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  464 | int ZEXPORT deflatePrime (strm, bits, value)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:490:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  490 | int ZEXPORT deflateParams(strm, level, strategy)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:531:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  531 | int ZEXPORT deflateTune(strm, good_length, max_lazy, nice_length, max_chain)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:566:15: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  566 | uLong ZEXPORT deflateBound(strm, sourceLen)
+      |               ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:628:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  628 | local void putShortMSB (s, b)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:642:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  642 | local void flush_pending(strm)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:665:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  665 | int ZEXPORT deflate (strm, flush)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:979:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  979 | int ZEXPORT deflateEnd (strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1014:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1014 | int ZEXPORT deflateCopy (dest, source)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1076:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1076 | local int read_buf(strm, buf, size)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1106:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1106 | local void lm_init (s)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1148:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1148 | local uInt longest_match(s, cur_match)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1390:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1390 | local void fill_window(s)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1564:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1564 | local block_state deflate_stored(s, flush)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1628:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1628 | local block_state deflate_fast(s, flush)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1730:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1730 | local block_state deflate_slow(s, flush)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1861:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1861 | local block_state deflate_rle(s, flush)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/deflate.c:1934:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1934 | local block_state deflate_huff(s, flush)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfAttribute.cpp:66:26: warning: 'binary_function<const char *, const char *, bool>' is deprecated [-Wdeprecated-declarations]
+   66 | struct NameCompare: std::binary_function <const char *, const char *, bool>
+      |                          ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/binary_function.h:24:8: note: 'binary_function<const char *, const char *, bool>' has been explicitly marked deprecated here
+   24 | struct _LIBCPP_DEPRECATED_IN_CXX11 binary_function {
+      |        ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:528:41: note: expanded from macro '_LIBCPP_DEPRECATED_IN_CXX11'
+  528 | #    define _LIBCPP_DEPRECATED_IN_CXX11 _LIBCPP_DEPRECATED
+      |                                         ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:504:49: note: expanded from macro '_LIBCPP_DEPRECATED'
+  504 | #      define _LIBCPP_DEPRECATED __attribute__((__deprecated__))
+      |                                                 ^
+[  4%] Linking CXX executable toFloat
+[  4%] Building CXX object src/ext/openexr/IlmBase/Iex/CMakeFiles/Iex.dir/IexThrowErrnoExc.cpp.o
+[  4%] Linking CXX executable eLut
+25 warnings generated.
+[  4%] Built target toFloat
+[  5%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfBoxAttribute.cpp.o
+[  5%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/gzclose.c.o
+[  5%] Built target eLut
+[  5%] Building CXX object CMakeFiles/pbrt.dir/src/core/bssrdf.cpp.o
+1 warning generated.
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzclose.c:11:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   11 | int ZEXPORT gzclose(file)
+      |             ^
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/core/api.cpp:55:
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:181:38: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:181:38: note: explicitly cast the pointer to silence this warning
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+      |                                      (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:183:16: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:183:16: note: explicitly cast the pointer to silence this warning
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+      |                (void*)
+[  7%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/demangle.cc.o
+[  8%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/gzlib.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:75:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   75 | local void gz_reset(state)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:91:14: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   91 | local gzFile gz_open(path, fd, mode)
+      |              ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:268:16: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  268 | gzFile ZEXPORT gzopen(path, mode)
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:276:16: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  276 | gzFile ZEXPORT gzopen64(path, mode)
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:284:16: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  284 | gzFile ZEXPORT gzdopen(fd, mode)
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:314:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  314 | int ZEXPORT gzbuffer(file, size)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:339:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  339 | int ZEXPORT gzrewind(file)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:362:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  362 | z_off64_t ZEXPORT gzseek64(file, offset, whence)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:439:17: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  439 | z_off_t ZEXPORT gzseek(file, offset, whence)
+      |                 ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:451:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  451 | z_off64_t ZEXPORT gztell64(file)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:468:17: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  468 | z_off_t ZEXPORT gztell(file)
+      |                 ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:478:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  478 | z_off64_t ZEXPORT gzoffset64(file)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:501:17: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  501 | z_off_t ZEXPORT gzoffset(file)
+      |                 ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:511:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  511 | int ZEXPORT gzeof(file)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:528:22: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  528 | const char * ZEXPORT gzerror(file, errnum)
+      |                      ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:549:14: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  549 | void ZEXPORT gzclearerr(file)
+      |              ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzlib.c:575:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  575 | void ZLIB_INTERNAL gz_error(state, err, msg)
+      |                    ^
+17 warnings generated.
+[  8%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/gzread.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:20:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   20 | local int gz_load(state, buf, len, have)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:51:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   51 | local int gz_avail(state)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:86:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   86 | local int gz_look(state)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:172:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  172 | local int gz_decomp(state)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:226:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  226 | local int gz_fetch(state)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:256:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  256 | local int gz_skip(state, len)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:288:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  288 | int ZEXPORT gzread(file, buf, len)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:387:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  387 | int ZEXPORT gzgetc(file)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:416:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  416 | int ZEXPORT gzgetc_(file)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:423:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  423 | int ZEXPORT gzungetc(c, file)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:483:16: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  483 | char * ZEXPORT gzgets(file, buf, len)
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:547:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  547 | int ZEXPORT gzdirect(file)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzread.c:567:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  567 | int ZEXPORT gzclose_r(file)
+      |             ^
+13 warnings generated.
+[  8%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/gzwrite.c.o
+[  8%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/logging.cc.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:15:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   15 | local int gz_init(state)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:70:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   70 | local int gz_comp(state, flush)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:133:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  133 | local int gz_zero(state, len)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:165:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  165 | int ZEXPORT gzwrite(file, buf, len)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:245:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  245 | int ZEXPORT gzputc(file, c)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:293:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  293 | int ZEXPORT gzputs(file, str)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:465:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  465 | int ZEXPORT gzflush(file, flush)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:497:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  497 | int ZEXPORT gzsetparams(file, level, strategy)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/gzwrite.c:539:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  539 | int ZEXPORT gzclose_w(file)
+      |             ^
+9 warnings generated.
+[  8%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/inflate.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:104:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  104 | int ZEXPORT inflateResetKeep(strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:129:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  129 | int ZEXPORT inflateReset(strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:142:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  142 | int ZEXPORT inflateReset2(strm, windowBits)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:180:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  180 | int ZEXPORT inflateInit2_(strm, windowBits, version, stream_size)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:222:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  222 | int ZEXPORT inflateInit_(strm, version, stream_size)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:230:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  230 | int ZEXPORT inflatePrime(strm, bits, value)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:261:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  261 | local void fixedtables(state)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:379:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  379 | local int updatewindow(strm, end, copy)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:605:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  605 | int ZEXPORT inflate(strm, flush)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1254:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1254 | int ZEXPORT inflateEnd(strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1268:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1268 | int ZEXPORT inflateGetDictionary(strm, dictionary, dictLength)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1291:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1291 | int ZEXPORT inflateSetDictionary(strm, dictionary, dictLength)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1326:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1326 | int ZEXPORT inflateGetHeader(strm, head)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1354:16: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1354 | local unsigned syncsearch(have, buf, len)
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1377:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1377 | int ZEXPORT inflateSync(strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1428:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1428 | int ZEXPORT inflateSyncPoint(strm)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1438:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1438 | int ZEXPORT inflateCopy(dest, source)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1485:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1485 | int ZEXPORT inflateUndermine(strm, subvert)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1502:14: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1502 | long ZEXPORT inflateMark(strm)
+      |              ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inflate.c:1507:61: warning: shifting a negative signed value is undefined [-Wshift-negative-value]
+ 1507 |     if (strm == Z_NULL || strm->state == Z_NULL) return -1L << 16;
+      |                                                         ~~~ ^
+[  9%] Linking CXX static library libIex.a
+20 warnings generated.
+[  9%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfCRgbaFile.cpp.o
+[  9%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/raw_logging.cc.o
+[ 10%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/infback.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/infback.c:28:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   28 | int ZEXPORT inflateBackInit_(strm, windowBits, window, version, stream_size)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/infback.c:82:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   82 | local void fixedtables(state)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/infback.c:250:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  250 | int ZEXPORT inflateBack(strm, in, in_desc, out, out_desc)
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/infback.c:631:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  631 | int ZEXPORT inflateBackEnd(strm)
+      |             ^
+[ 10%] Built target Iex
+[ 10%] Building CXX object CMakeFiles/pbrt.dir/src/core/camera.cpp.o
+4 warnings generated.
+[ 10%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/inftrees.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inftrees.c:32:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   32 | int ZLIB_INTERNAL inflate_table(type, lens, codes, table, bits, work)
+      |                   ^
+1 warning generated.
+[ 10%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/inffast.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/inffast.c:67:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   67 | void ZLIB_INTERNAL inflate_fast(strm, start)
+      |                    ^
+1 warning generated.
+[ 11%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/trees.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/glog/src/raw_logging.cc:153:3: warning: 'syscall' is deprecated: first deprecated in macOS 10.12 - syscall(2) is unsupported; please switch to a supported interface. For SYS_kdebug_trace use kdebug_signpost(). [-Wdeprecated-declarations]
+  153 |   safe_write(STDERR_FILENO, buffer, strlen(buffer));
+      |   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/glog/src/raw_logging.cc:63:34: note: expanded from macro 'safe_write'
+   63 | # define safe_write(fd, s, len)  syscall(SYS_write, fd, s, len)
+      |                                  ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h:754:6: note: 'syscall' has been explicitly marked deprecated here
+  754 | int      syscall(int, ...);
+      |          ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:381:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  381 | void ZLIB_INTERNAL _tr_init(s)
+      |                    ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:409:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  409 | local void init_block(s)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:453:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  453 | local void pqdownheap(s, tree, k)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:488:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  488 | local void gen_bitlen(s, desc)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:575:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  575 | local void gen_codes (tree, max_code, bl_count)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:617:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  617 | local void build_tree(s, desc)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:705:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  705 | local void scan_tree (s, tree, max_code)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:750:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  750 | local void send_tree (s, tree, max_code)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:801:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  801 | local int build_bl_tree(s)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:836:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  836 | local void send_all_trees(s, lcodes, dcodes, blcodes)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:865:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  865 | void ZLIB_INTERNAL _tr_stored_block(s, buf, stored_len, last)
+      |                    ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:882:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  882 | void ZLIB_INTERNAL _tr_flush_bits(s)
+      |                    ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:892:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  892 | void ZLIB_INTERNAL _tr_align(s)
+      |                    ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:907:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  907 | void ZLIB_INTERNAL _tr_flush_block(s, buf, stored_len, last)
+      |                    ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1010:19: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1010 | int ZLIB_INTERNAL _tr_tally (s, dist, lc)
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1060:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1060 | local void compress_block(s, ltree, dtree)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1120:11: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1120 | local int detect_data_type(s)
+      |           ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1154:16: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1154 | local unsigned bi_reverse(code, len)
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1169:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1169 | local void bi_flush(s)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1186:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1186 | local void bi_windup(s)
+      |            ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/trees.c:1205:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+ 1205 | local void copy_block(s, buf, len, header)
+      |            ^
+1 warning generated.
+[ 11%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfChannelList.cpp.o
+[ 13%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/symbolize.cc.o
+In file included from /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfCRgbaFile.cpp:54:
+In file included from /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfLut.h:51:
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/IlmBase/Half/halfFunction.h:151:13: warning: first argument in call to 'memset' is a pointer to non-trivially copyable type 'half' [-Wnontrivial-memcall]
+  151 |     memset (_lut, 0 , (1<<16) * sizeof(T));
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfLut.h:178:5: note: in instantiation of function template specialization 'halfFunction<half>::halfFunction<half (*)(half)>' requested here
+  178 |     _lut(f, -HALF_MAX, HALF_MAX, half (0),
+      |     ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfCRgbaFile.cpp:1393:24: note: in instantiation of function template specialization 'Imf::RgbaLut::RgbaLut<half (*)(half)>' requested here
+ 1393 |         return (ImfLut *) new OPENEXR_IMF_INTERNAL_NAMESPACE::RgbaLut
+      |                               ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/OpenEXR/config/OpenEXRConfig.h:6:40: note: expanded from macro 'OPENEXR_IMF_INTERNAL_NAMESPACE'
+    6 | #define OPENEXR_IMF_INTERNAL_NAMESPACE Imf
+      |                                        ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/IlmBase/Half/halfFunction.h:151:13: note: explicitly cast the pointer to silence this warning
+  151 |     memset (_lut, 0 , (1<<16) * sizeof(T));
+      |             ^
+      |             (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/IlmBase/Half/halfFunction.h:151:13: warning: first argument in call to 'memset' is a pointer to non-trivially copyable type 'half' [-Wnontrivial-memcall]
+  151 |     memset (_lut, 0 , (1<<16) * sizeof(T));
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfLut.h:178:5: note: in instantiation of function template specialization 'halfFunction<half>::halfFunction<Imf::roundNBit>' requested here
+  178 |     _lut(f, -HALF_MAX, HALF_MAX, half (0),
+      |     ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfCRgbaFile.cpp:1409:24: note: in instantiation of function template specialization 'Imf::RgbaLut::RgbaLut<Imf::roundNBit>' requested here
+ 1409 |         return (ImfLut *) new OPENEXR_IMF_INTERNAL_NAMESPACE::RgbaLut
+      |                               ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/OpenEXR/config/OpenEXRConfig.h:6:40: note: expanded from macro 'OPENEXR_IMF_INTERNAL_NAMESPACE'
+    6 | #define OPENEXR_IMF_INTERNAL_NAMESPACE Imf
+      |                                        ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/IlmBase/Half/halfFunction.h:151:13: note: explicitly cast the pointer to silence this warning
+  151 |     memset (_lut, 0 , (1<<16) * sizeof(T));
+      |             ^
+      |             (void*)
+21 warnings generated.
+[ 13%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/uncompr.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/uncompr.c:24:13: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+   24 | int ZEXPORT uncompress (dest, destLen, source, sourceLen)
+      |             ^
+1 warning generated.
+[ 13%] Building C object src/ext/zlib/CMakeFiles/zlibstatic.dir/zutil.c.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/zutil.c:136:22: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  136 | const char * ZEXPORT zError(err)
+      |                      ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/zutil.c:304:22: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  304 | voidpf ZLIB_INTERNAL zcalloc (opaque, items, size)
+      |                      ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/zlib/zutil.c:314:20: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
+  314 | void ZLIB_INTERNAL zcfree (opaque, ptr)
+      |                    ^
+3 warnings generated.
+[ 13%] Generating toFloat.h
+2 warnings generated.
+[ 14%] Linking C static library libz.a
+[ 14%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfChannelListAttribute.cpp.o
+[ 14%] Built target zlibstatic
+[ 14%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/utilities.cc.o
+[ 14%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathBox.cpp.o
+[ 14%] Generating eLut.h
+[ 14%] Building CXX object CMakeFiles/pbrt.dir/src/core/efloat.cpp.o
+[ 15%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfFloatAttribute.cpp.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/glog/src/utilities.cc:254:17: warning: 'syscall' is deprecated: first deprecated in macOS 10.12 - syscall(2) is unsupported; please switch to a supported interface. For SYS_kdebug_trace use kdebug_signpost(). [-Wdeprecated-declarations]
+  254 |     pid_t tid = syscall(__NR_gettid);
+      |                 ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h:754:6: note: 'syscall' has been explicitly marked deprecated here
+  754 | int      syscall(int, ...);
+      |          ^
+[ 15%] Building CXX object src/ext/openexr/IlmBase/Half/CMakeFiles/Half.dir/half.cpp.o
+[ 15%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathRandom.cpp.o
+1 warning generated.
+[ 15%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/vlog_is_on.cc.o
+[ 16%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathColorAlgo.cpp.o
+2 warnings generated.
+[ 16%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThread.cpp.o
+[ 17%] Building CXX object CMakeFiles/pbrt.dir/src/core/error.cpp.o
+[ 17%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfFrameBuffer.cpp.o
+[ 19%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadMutex.cpp.o
+[ 19%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadMutexPosix.cpp.o
+[ 20%] Linking CXX static library libHalf.a
+[ 21%] Building CXX object src/ext/glog/CMakeFiles/glog.dir/src/signalhandler.cc.o
+[ 21%] Built target Half
+[ 21%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathShear.cpp.o
+[ 21%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexCache.cpp.o
+[ 21%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadPool.cpp.o
+[ 21%] Building CXX object CMakeFiles/pbrt.dir/src/core/fileutil.cpp.o
+[ 21%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfHeader.cpp.o
+[ 21%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathFun.cpp.o
+[ 21%] Linking CXX static library libglog.a
+[ 21%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathVec.cpp.o
+[ 21%] Built target glog
+[ 22%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexFilters.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexCache.cpp:78:
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexCache.h:289:21: warning: zero size arrays are an extension [-Wzero-length-array]
+  289 |     Mutex _mruLock; CACHE_LINE_PAD(_mruLock,Mutex);
+      |                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexPlatform.h:288:49: note: expanded from macro 'CACHE_LINE_PAD'
+  288 | #define CACHE_LINE_PAD(var,type) char var##_pad[CACHE_LINE_SIZE - sizeof(type)]
+      |                                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexPlatform.h:285:25: note: expanded from macro 'CACHE_LINE_SIZE'
+  285 | #define CACHE_LINE_SIZE 64
+      |                         ^
+[ 22%] Building CXX object CMakeFiles/pbrt.dir/src/core/film.cpp.o
+[ 22%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadPosix.cpp.o
+1 warning generated.
+[ 23%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfIO.cpp.o
+[ 25%] Building CXX object src/ext/openexr/IlmBase/Imath/CMakeFiles/Imath.dir/ImathMatrixAlgo.cpp.o
+[ 25%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexHalf.cpp.o
+[ 25%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexReader.cpp.o
+[ 26%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadSemaphore.cpp.o
+[ 26%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadSemaphorePosixCompat.cpp.o
+[ 27%] Building CXX object CMakeFiles/pbrt.dir/src/core/filter.cpp.o
+[ 27%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfInputFile.cpp.o
+[ 28%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexSeparableFilter.cpp.o
+[ 28%] Building CXX object src/ext/openexr/IlmBase/IlmThread/CMakeFiles/IlmThread.dir/IlmThreadSemaphorePosix.cpp.o
+[ 28%] Building CXX object CMakeFiles/pbrt.dir/src/core/floatfile.cpp.o
+[ 28%] Linking CXX static library libImath.a
+[ 29%] Linking CXX static library libIlmThread.a
+[ 29%] Built target Imath
+[ 29%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfIntAttribute.cpp.o
+[ 29%] Built target IlmThread
+[ 29%] Building CXX object CMakeFiles/pbrt.dir/src/core/geometry.cpp.o
+[ 30%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexSeparableKernel.cpp.o
+[ 30%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfLineOrderAttribute.cpp.o
+[ 30%] Built target CopyIlmBaseLibs
+[ 32%] Building CXX object CMakeFiles/pbrt.dir/src/core/imageio.cpp.o
+[ 32%] Building CXX object CMakeFiles/pbrt.dir/src/core/integrator.cpp.o
+[ 32%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfMatrixAttribute.cpp.o
+[ 33%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/b44ExpLogTable.dir/b44ExpLogTable.cpp.o
+[ 33%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfOpaqueAttribute.cpp.o
+[ 33%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexTriangleFilter.cpp.o
+[ 33%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/dwaLookups.dir/dwaLookups.cpp.o
+[ 33%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfOutputFile.cpp.o
+[ 33%] Linking CXX executable b44ExpLogTable
+[ 34%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfRgbaFile.cpp.o
+[ 34%] Built target b44ExpLogTable
+[ 34%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexTriangleKernel.cpp.o
+[ 35%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexUtils.cpp.o
+[ 35%] Building CXX object CMakeFiles/pbrt.dir/src/core/interaction.cpp.o
+[ 35%] Linking CXX executable dwaLookups
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexUtils.cpp:51:22: warning: result of comparison of constant 2 with expression of type 'MeshType' is always false [-Wtautological-constant-out-of-range-compare]
+   51 |     if (mt < 0 || mt >= int(sizeof(names)/sizeof(const char*)))
+      |                   ~~ ^  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexUtils.cpp:60:22: warning: result of comparison of constant 4 with expression of type 'DataType' is always false [-Wtautological-constant-out-of-range-compare]
+   60 |     if (dt < 0 || dt >= int(sizeof(names)/sizeof(const char*)))
+      |                   ~~ ^  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexUtils.cpp:77:20: warning: result of comparison of constant 2 with expression of type 'EdgeFilterMode' is always false [-Wtautological-constant-out-of-range-compare]
+   77 |     if (m < 0 || m >= int(sizeof(names)/sizeof(const char*)))
+      |                  ~ ^  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/ptex/src/ptex/PtexUtils.cpp:86:24: warning: result of comparison of constant 4 with expression of type 'EdgeId' is always false [-Wtautological-constant-out-of-range-compare]
+   86 |     if (eid < 0 || eid >= int(sizeof(names)/sizeof(const char*)))
+      |                    ~~~ ^  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[ 35%] Built target dwaLookups
+[ 35%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfStringAttribute.cpp.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:531:13: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'Rgba' [-Wnontrivial-memcall]
+  531 |     memcpy (_buf[N - 1], _buf[N - 2], _width * sizeof (Rgba));
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:531:13: note: explicitly cast the pointer to silence this warning
+  531 |     memcpy (_buf[N - 1], _buf[N - 2], _width * sizeof (Rgba));
+      |             ^
+      |             (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:539:13: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'Rgba' [-Wnontrivial-memcall]
+  539 |     memcpy (_buf[N - 1], _buf[N - 3], _width * sizeof (Rgba));
+      |             ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:539:13: note: explicitly cast the pointer to silence this warning
+  539 |     memcpy (_buf[N - 1], _buf[N - 3], _width * sizeof (Rgba));
+      |             ^
+      |             (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:547:10: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'Rgba' [-Wnontrivial-memcall]
+  547 |         memcpy (_tmpBuf, _buf[N2], _width * sizeof (Rgba));
+      |                 ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:547:10: note: explicitly cast the pointer to silence this warning
+  547 |         memcpy (_tmpBuf, _buf[N2], _width * sizeof (Rgba));
+      |                 ^
+      |                 (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:1144:10: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'Rgba' [-Wnontrivial-memcall]
+ 1144 |         memcpy (buf, _tmpBuf + N2, _width * sizeof (Rgba));
+      |                 ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfRgbaFile.cpp:1144:10: note: explicitly cast the pointer to silence this warning
+ 1144 |         memcpy (buf, _tmpBuf + N2, _width * sizeof (Rgba));
+      |                 ^
+      |                 (void*)
+[ 35%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfVecAttribute.cpp.o
+[ 35%] Building CXX object src/ext/ptex/src/ptex/CMakeFiles/Ptex_static.dir/PtexWriter.cpp.o
+4 warnings generated.
+[ 35%] Building CXX object CMakeFiles/pbrt.dir/src/core/interpolation.cpp.o
+[ 36%] Building CXX object CMakeFiles/pbrt.dir/src/core/light.cpp.o
+[ 38%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfHuf.cpp.o
+4 warnings generated.
+[ 38%] Building CXX object CMakeFiles/pbrt.dir/src/core/lightdistrib.cpp.o
+[ 38%] Building CXX object CMakeFiles/pbrt.dir/src/core/lowdiscrepancy.cpp.o
+[ 39%] Building CXX object CMakeFiles/pbrt.dir/src/core/material.cpp.o
+[ 39%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfThreading.cpp.o
+[ 39%] Linking CXX static library libPtex.a
+[ 39%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfWav.cpp.o
+[ 39%] Built target Ptex_static
+[ 39%] Building CXX object CMakeFiles/pbrt.dir/src/core/medium.cpp.o
+[ 39%] Building CXX object CMakeFiles/pbrt.dir/src/core/memory.cpp.o
+[ 40%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfLut.cpp.o
+[ 41%] Building CXX object CMakeFiles/pbrt.dir/src/core/microfacet.cpp.o
+[ 41%] Building CXX object CMakeFiles/pbrt.dir/src/core/parallel.cpp.o
+[ 41%] Building CXX object CMakeFiles/pbrt.dir/src/core/paramset.cpp.o
+[ 41%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfCompressor.cpp.o
+[ 41%] Building CXX object CMakeFiles/pbrt.dir/src/core/parser.cpp.o
+[ 41%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfRleCompressor.cpp.o
+[ 42%] Building CXX object CMakeFiles/pbrt.dir/src/core/primitive.cpp.o
+[ 42%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfZipCompressor.cpp.o
+[ 44%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfPizCompressor.cpp.o
+[ 44%] Building CXX object CMakeFiles/pbrt.dir/src/core/progressreporter.cpp.o
+[ 44%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfMisc.cpp.o
+[ 44%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfCompressionAttribute.cpp.o
+[ 44%] Building CXX object CMakeFiles/pbrt.dir/src/core/quaternion.cpp.o
+[ 45%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDoubleAttribute.cpp.o
+[ 46%] Building CXX object CMakeFiles/pbrt.dir/src/core/reflection.cpp.o
+[ 46%] Building CXX object CMakeFiles/pbrt.dir/src/core/sampler.cpp.o
+[ 46%] Building CXX object CMakeFiles/pbrt.dir/src/core/sampling.cpp.o
+[ 46%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfConvert.cpp.o
+[ 46%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfPreviewImage.cpp.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/openexr/OpenEXR/IlmImf/ImfConvert.cpp:110:31: warning: implicit conversion from 'unsigned int' to 'float' changes value from 4294967295 to 4294967296 [-Wimplicit-const-int-float-conversion]
+  110 |     if (isInfinity (f) || f > UINT_MAX)
+      |                             ~ ^~~~~~~~
+/Library/Developer/CommandLineTools/usr/lib/clang/21/include/limits.h:64:37: note: expanded from macro 'UINT_MAX'
+   64 | #define UINT_MAX  (__INT_MAX__  *2U +1U)
+      |                    ~~~~~~~~~~~~~~~~~^~~
+1 warning generated.
+[ 47%] Building CXX object CMakeFiles/pbrt.dir/src/core/scene.cpp.o
+[ 48%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfPreviewImageAttribute.cpp.o
+[ 48%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfVersion.cpp.o
+[ 48%] Building CXX object CMakeFiles/pbrt.dir/src/core/shape.cpp.o
+[ 48%] Building CXX object CMakeFiles/pbrt.dir/src/core/sobolmatrices.cpp.o
+[ 48%] Building CXX object CMakeFiles/pbrt.dir/src/core/spectrum.cpp.o
+[ 48%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfChromaticities.cpp.o
+[ 48%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfChromaticitiesAttribute.cpp.o
+[ 50%] Building CXX object CMakeFiles/pbrt.dir/src/core/stats.cpp.o
+[ 50%] Building CXX object CMakeFiles/pbrt.dir/src/core/texture.cpp.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/core/spectrum.cpp:944:21: warning: implicit conversion from 'int' to 'const Float' (aka 'const float') changes value from 299792458 to 299792448 [-Wimplicit-const-int-float-conversion]
+  944 |     const Float c = 299792458;
+      |                 ~   ^~~~~~~~~
+[ 50%] Building CXX object CMakeFiles/pbrt.dir/src/core/transform.cpp.o
+[ 51%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfKeyCode.cpp.o
+[ 51%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfKeyCodeAttribute.cpp.o
+1 warning generated.
+[ 52%] Building CXX object CMakeFiles/pbrt.dir/src/accelerators/bvh.cpp.o
+[ 52%] Building CXX object CMakeFiles/pbrt.dir/src/accelerators/kdtreeaccel.cpp.o
+[ 52%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTimeCode.cpp.o
+[ 53%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTimeCodeAttribute.cpp.o
+[ 53%] Building CXX object CMakeFiles/pbrt.dir/src/cameras/environment.cpp.o
+[ 54%] Building CXX object CMakeFiles/pbrt.dir/src/cameras/orthographic.cpp.o
+[ 54%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfRational.cpp.o
+[ 54%] Building CXX object CMakeFiles/pbrt.dir/src/cameras/perspective.cpp.o
+[ 54%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfRationalAttribute.cpp.o
+[ 54%] Building CXX object CMakeFiles/pbrt.dir/src/cameras/realistic.cpp.o
+[ 55%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfFramesPerSecond.cpp.o
+[ 55%] Building C object CMakeFiles/pbrt.dir/src/ext/ArHosekSkyModel.c.o
+[ 55%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfStandardAttributes.cpp.o
+[ 57%] Building CXX object CMakeFiles/pbrt.dir/src/ext/lodepng.cpp.o
+[ 57%] Building CXX object CMakeFiles/pbrt.dir/src/ext/rply.cpp.o
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/ext/rply.cpp:1290:5: warning: 'vsprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use vsnprintf(3) instead. [-Wdeprecated-declarations]
+ 1290 |     vsprintf(buffer, fmt, ap);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:298:1: note: 'vsprintf' has been explicitly marked deprecated here
+  298 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use vsnprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 57%] Building CXX object CMakeFiles/pbrt.dir/src/ext/targa.cpp.o
+[ 57%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfStdIO.cpp.o
+1 warning generated.
+[ 57%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfEnvmap.cpp.o
+[ 58%] Building CXX object CMakeFiles/pbrt.dir/src/filters/box.cpp.o
+[ 58%] Building CXX object CMakeFiles/pbrt.dir/src/filters/gaussian.cpp.o
+[ 58%] Building CXX object CMakeFiles/pbrt.dir/src/filters/mitchell.cpp.o
+[ 58%] Building CXX object CMakeFiles/pbrt.dir/src/filters/sinc.cpp.o
+[ 59%] Building CXX object CMakeFiles/pbrt.dir/src/filters/triangle.cpp.o
+[ 60%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfEnvmapAttribute.cpp.o
+[ 60%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/ao.cpp.o
+[ 60%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfScanLineInputFile.cpp.o
+[ 60%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTiledInputFile.cpp.o
+[ 61%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTiledMisc.cpp.o
+[ 61%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/bdpt.cpp.o
+[ 63%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/directlighting.cpp.o
+[ 63%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/mlt.cpp.o
+[ 63%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTiledOutputFile.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.cpp:34:
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:181:38: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:181:38: note: explicitly cast the pointer to silence this warning
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+      |                                      (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:183:16: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:183:16: note: explicitly cast the pointer to silence this warning
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+      |                (void*)
+[ 63%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTiledRgbaFile.cpp.o
+[ 64%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTileDescriptionAttribute.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/mlt.cpp:36:
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:181:38: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:181:38: note: explicitly cast the pointer to silence this warning
+  181 |     Vertex(const Vertex &v) { memcpy(this, &v, sizeof(Vertex)); }
+      |                                      ^
+      |                                      (void*)
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:183:16: warning: first argument in call to 'memcpy' is a pointer to non-trivially copyable type 'pbrt::Vertex' [-Wnontrivial-memcall]
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/src/integrators/bdpt.h:183:16: note: explicitly cast the pointer to silence this warning
+  183 |         memcpy(this, &v, sizeof(Vertex));
+      |                ^
+      |                (void*)
+[ 64%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/path.cpp.o
+[ 65%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/sppm.cpp.o
+[ 65%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTileOffsets.cpp.o
+2 warnings generated.
+2 warnings generated.
+[ 65%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/volpath.cpp.o
+[ 65%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfRgbaYca.cpp.o
+[ 65%] Building CXX object CMakeFiles/pbrt.dir/src/integrators/whitted.cpp.o
+[ 65%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfPxr24Compressor.cpp.o
+[ 65%] Building CXX object CMakeFiles/pbrt.dir/src/lights/diffuse.cpp.o
+[ 66%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTestFile.cpp.o
+[ 67%] Building CXX object CMakeFiles/pbrt.dir/src/lights/distant.cpp.o
+[ 67%] Building CXX object CMakeFiles/pbrt.dir/src/lights/goniometric.cpp.o
+[ 67%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfStringVectorAttribute.cpp.o
+[ 67%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfMultiView.cpp.o
+[ 69%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfAcesFile.cpp.o
+[ 69%] Building CXX object CMakeFiles/pbrt.dir/src/lights/infinite.cpp.o
+[ 70%] Building CXX object CMakeFiles/pbrt.dir/src/lights/point.cpp.o
+[ 70%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfMultiPartOutputFile.cpp.o
+[ 70%] Building CXX object CMakeFiles/pbrt.dir/src/lights/portal_distribution.cpp.o
+[ 70%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfGenericOutputFile.cpp.o
+[ 70%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfOutputPartData.cpp.o
+[ 71%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfMultiPartInputFile.cpp.o
+[ 71%] Building CXX object CMakeFiles/pbrt.dir/src/lights/projection.cpp.o
+[ 71%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfGenericInputFile.cpp.o
+[ 71%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfPartType.cpp.o
+[ 72%] Building CXX object CMakeFiles/pbrt.dir/src/lights/spot.cpp.o
+[ 72%] Building CXX object CMakeFiles/pbrt.dir/src/materials/disney.cpp.o
+[ 73%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfInputPartData.cpp.o
+[ 73%] Building CXX object CMakeFiles/pbrt.dir/src/materials/fourier.cpp.o
+[ 73%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfOutputPart.cpp.o
+[ 73%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTiledOutputPart.cpp.o
+[ 73%] Building CXX object CMakeFiles/pbrt.dir/src/materials/glass.cpp.o
+[ 75%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfInputPart.cpp.o
+[ 76%] Building CXX object CMakeFiles/pbrt.dir/src/materials/hair.cpp.o
+[ 76%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfTiledInputPart.cpp.o
+[ 76%] Building CXX object CMakeFiles/pbrt.dir/src/materials/kdsubsurface.cpp.o
+[ 76%] Building CXX object CMakeFiles/pbrt.dir/src/materials/matte.cpp.o
+[ 77%] Building CXX object CMakeFiles/pbrt.dir/src/materials/metal.cpp.o
+[ 77%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepScanLineInputPart.cpp.o
+[ 77%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepScanLineOutputPart.cpp.o
+[ 77%] Building CXX object CMakeFiles/pbrt.dir/src/materials/mirror.cpp.o
+[ 77%] Building CXX object CMakeFiles/pbrt.dir/src/materials/mixmat.cpp.o
+[ 78%] Building CXX object CMakeFiles/pbrt.dir/src/materials/plastic.cpp.o
+[ 79%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepScanLineInputFile.cpp.o
+[ 79%] Building CXX object CMakeFiles/pbrt.dir/src/materials/substrate.cpp.o
+[ 79%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepScanLineOutputFile.cpp.o
+[ 79%] Building CXX object CMakeFiles/pbrt.dir/src/materials/subsurface.cpp.o
+[ 79%] Building CXX object CMakeFiles/pbrt.dir/src/materials/translucent.cpp.o
+[ 80%] Building CXX object CMakeFiles/pbrt.dir/src/materials/uber.cpp.o
+[ 80%] Building CXX object CMakeFiles/pbrt.dir/src/media/grid.cpp.o
+[ 80%] Building CXX object CMakeFiles/pbrt.dir/src/media/homogeneous.cpp.o
+[ 80%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepTiledInputPart.cpp.o
+[ 82%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepTiledOutputPart.cpp.o
+[ 83%] Building CXX object CMakeFiles/pbrt.dir/src/samplers/halton.cpp.o
+[ 83%] Building CXX object CMakeFiles/pbrt.dir/src/samplers/maxmin.cpp.o
+[ 83%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepTiledInputFile.cpp.o
+[ 83%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepTiledOutputFile.cpp.o
+[ 83%] Building CXX object CMakeFiles/pbrt.dir/src/samplers/random.cpp.o
+[ 84%] Building CXX object CMakeFiles/pbrt.dir/src/samplers/sobol.cpp.o
+[ 85%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepFrameBuffer.cpp.o
+[ 85%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepCompositing.cpp.o
+[ 85%] Building CXX object CMakeFiles/pbrt.dir/src/samplers/stratified.cpp.o
+[ 85%] Building CXX object CMakeFiles/pbrt.dir/src/samplers/zerotwosequence.cpp.o
+[ 85%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfCompositeDeepScanLine.cpp.o
+[ 85%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfDeepImageStateAttribute.cpp.o
+[ 86%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfFastHuf.cpp.o
+[ 86%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfFloatVectorAttribute.cpp.o
+[ 86%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/cone.cpp.o
+[ 88%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/curve.cpp.o
+[ 88%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfRle.cpp.o
+[ 88%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/cylinder.cpp.o
+[ 88%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/disk.cpp.o
+[ 89%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfSystemSpecific.cpp.o
+[ 89%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf-obj.dir/ImfZip.cpp.o
+[ 90%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/heightfield.cpp.o
+[ 90%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/hyperboloid.cpp.o
+[ 90%] Built target IlmImf-obj
+[ 90%] Generating dwaLookups.h
+[ 90%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/loopsubdiv.cpp.o
+[ 91%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/nurbs.cpp.o
+ Building acceleration for DwaCompressor, 0.00 %       Building acceleration for DwaCompressor, 1.53 %       Building acceleration for DwaCompressor, 3.05 %       Building acceleration for DwaCompressor, 4.58 %      [ 92%] Generating b44ExpLogTable.h
+ Building acceleration for DwaCompressor, 6.10 %       Building acceleration for DwaCompressor, 7.63 %       Building acceleration for DwaCompressor, 9.16 %       Building acceleration for DwaCompressor, 10.68 %       Building acceleration for DwaCompressor, 12.21 %       Building acceleration for DwaCompressor, 13.73 %      [ 92%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/paraboloid.cpp.o
+ Building acceleration for DwaCompressor, 15.26 %       Building acceleration for DwaCompressor, 16.79 %       Building acceleration for DwaCompressor, 18.31 %       Building acceleration for DwaCompressor, 19.84 %      [ 92%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/plymesh.cpp.o
+ Building acceleration for DwaCompressor, 21.36 %      [ 92%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/sphere.cpp.o
+ Building acceleration for DwaCompressor, 22.89 %       Building acceleration for DwaCompressor, 24.42 %       Building acceleration for DwaCompressor, 25.94 %       Building acceleration for DwaCompressor, 27.47 %      [ 94%] Building CXX object CMakeFiles/pbrt.dir/src/shapes/triangle.cpp.o
+ Building acceleration for DwaCompressor, 28.99 %       Building acceleration for DwaCompressor, 30.52 %       Building acceleration for DwaCompressor, 32.05 %       Building acceleration for DwaCompressor, 33.57 %       Building acceleration for DwaCompressor, 35.10 %       Building acceleration for DwaCompressor, 36.62 %       Building acceleration for DwaCompressor, 38.15 %       Building acceleration for DwaCompressor, 39.68 %      [ 94%] Building CXX object CMakeFiles/pbrt.dir/src/textures/bilerp.cpp.o
+ Building acceleration for DwaCompressor, 41.20 %       Building acceleration for DwaCompressor, 42.73 %       Building acceleration for DwaCompressor, 44.25 %       Building acceleration for DwaCompressor, 45.78 %      [ 94%] Building CXX object CMakeFiles/pbrt.dir/src/textures/checkerboard.cpp.o
+ Building acceleration for DwaCompressor, 47.31 %      [ 95%] Building CXX object CMakeFiles/pbrt.dir/src/textures/constant.cpp.o
+[ 95%] Building CXX object CMakeFiles/pbrt.dir/src/textures/dots.cpp.o
+ Building acceleration for DwaCompressor, 48.83 %       Building acceleration for DwaCompressor, 50.36 %       Building acceleration for DwaCompressor, 51.88 %       Building acceleration for DwaCompressor, 53.41 %       Building acceleration for DwaCompressor, 54.94 %      [ 95%] Building CXX object CMakeFiles/pbrt.dir/src/textures/fbm.cpp.o
+ Building acceleration for DwaCompressor, 56.46 %       Building acceleration for DwaCompressor, 57.99 %       Building acceleration for DwaCompressor, 59.51 %       Building acceleration for DwaCompressor, 61.04 %      [ 96%] Building CXX object CMakeFiles/pbrt.dir/src/textures/imagemap.cpp.o
+ Building acceleration for DwaCompressor, 62.57 %      [ 96%] Building CXX object CMakeFiles/pbrt.dir/src/textures/marble.cpp.o
+ Building acceleration for DwaCompressor, 64.09 %      [ 96%] Building CXX object CMakeFiles/pbrt.dir/src/textures/mix.cpp.o
+ Building acceleration for DwaCompressor, 65.62 %      [ 96%] Building CXX object CMakeFiles/pbrt.dir/src/textures/ptex.cpp.o
+ Building acceleration for DwaCompressor, 67.14 %       Building acceleration for DwaCompressor, 68.67 %      [ 97%] Building CXX object CMakeFiles/pbrt.dir/src/textures/scale.cpp.o
+ Building acceleration for DwaCompressor, 70.20 %       Building acceleration for DwaCompressor, 71.72 %       Building acceleration for DwaCompressor, 73.25 %       Building acceleration for DwaCompressor, 74.77 %       Building acceleration for DwaCompressor, 76.30 %       Building acceleration for DwaCompressor, 77.83 %       Building acceleration for DwaCompressor, 79.35 %      [ 97%] Building CXX object CMakeFiles/pbrt.dir/src/textures/uv.cpp.o
+ Building acceleration for DwaCompressor, 80.88 %       Building acceleration for DwaCompressor, 82.41 %       Building acceleration for DwaCompressor, 83.93 %      [ 97%] Building CXX object CMakeFiles/pbrt.dir/src/textures/windy.cpp.o
+ Building acceleration for DwaCompressor, 85.46 %      [ 98%] Building CXX object CMakeFiles/pbrt.dir/src/textures/wrinkled.cpp.o
+ Building acceleration for DwaCompressor, 86.98 %       Building acceleration for DwaCompressor, 88.51 %       Building acceleration for DwaCompressor, 90.04 %       Building acceleration for DwaCompressor, 91.56 %       Building acceleration for DwaCompressor, 93.09 %       Building acceleration for DwaCompressor, 94.61 %       Building acceleration for DwaCompressor, 96.14 %       Building acceleration for DwaCompressor, 97.67 %       Building acceleration for DwaCompressor, 99.19 %      [ 98%] Linking CXX static library libpbrt.a
+[ 98%] Built target pbrt
+[ 98%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf.dir/ImfB44Compressor.cpp.o
+[100%] Building CXX object src/ext/openexr/OpenEXR/IlmImf/CMakeFiles/IlmImf.dir/ImfDwaCompressor.cpp.o
+[100%] Linking CXX static library libIlmImf.a
+[100%] Built target IlmImf
+[100%] Building CXX object CMakeFiles/pbrt_exe.dir/src/main/pbrt.cpp.o
+[100%] Linking CXX executable pbrt
+[100%] Built target pbrt_exe
+[  2%] Built target eLut
+[  2%] Built target toFloat
+[  3%] Built target Iex
+[  9%] Built target zlibstatic
+[ 10%] Built target Half
+[ 16%] Built target IlmThread
+[ 20%] Built target Imath
+[ 20%] Built target glog
+[ 23%] Built target Ptex_static
+[ 23%] Built target CopyIlmBaseLibs
+[ 24%] Built target dwaLookups
+[ 24%] Built target b44ExpLogTable
+[ 55%] Built target IlmImf-obj
+[ 57%] Built target IlmImf
+[ 98%] Built target pbrt
+[100%] Building CXX object CMakeFiles/task_baseline.dir/task_support/baseline.cpp.o
+[100%] Linking CXX executable /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/baseline
+[100%] Built target task_baseline

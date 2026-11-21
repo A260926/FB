@@ -1,0 +1,36 @@
+[  2%] Built target toFloat
+[  2%] Built target eLut
+[  8%] Built target zlibstatic
+[  9%] Built target Iex
+[ 10%] Built target Half
+[ 13%] Built target glog
+[ 16%] Built target Imath
+[ 19%] Built target IlmThread
+[ 22%] Built target Ptex_static
+[ 22%] Built target CopyIlmBaseLibs
+[ 23%] Built target b44ExpLogTable
+[ 25%] Built target dwaLookups
+[ 55%] Built target IlmImf-obj
+[ 58%] Built target IlmImf
+[ 98%] Built target pbrt
+[100%] Built target pbrt_exe
+[  5%] Built target zlibstatic
+[  7%] Built target toFloat
+[  8%] Built target eLut
+[  9%] Built target Iex
+[ 10%] Built target Half
+[ 16%] Built target Imath
+[ 16%] Built target glog
+[ 20%] Built target Ptex_static
+[ 22%] Built target IlmThread
+[ 53%] Built target IlmImf-obj
+[ 94%] Built target pbrt
+[ 94%] Built target CopyIlmBaseLibs
+[ 95%] Built target dwaLookups
+[ 96%] Built target b44ExpLogTable
+[ 98%] Built target IlmImf
+[ 98%] Building CXX object CMakeFiles/task_target.dir/src/tests/portal_sampling.cpp.o
+[100%] Building CXX object CMakeFiles/task_target.dir/task_support/driver.c.o
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+[100%] Linking CXX executable /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/target
+[100%] Built target task_target

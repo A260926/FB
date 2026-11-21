@@ -1,0 +1,23 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/zlib/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/IlmBase/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/IlmBase/Half/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/IlmBase/Iex/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/IlmBase/IexMath/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/IlmBase/Imath/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/IlmBase/IlmThread/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/OpenEXR/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/openexr/OpenEXR/IlmImf/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/glog/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/ptex/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/ptex/src/ptex/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/ptex/src/utils/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/ptex/src/tests/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/.task-build/engine/src/ext/ptex/src/doc/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

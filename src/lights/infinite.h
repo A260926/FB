@@ -45,6 +45,7 @@
 #include "shape.h"
 #include "scene.h"
 #include "mipmap.h"
+#include "lights/portal_distribution.h"
 
 namespace pbrt {
 
@@ -54,6 +55,10 @@ class InfiniteAreaLight : public Light {
     // InfiniteAreaLight Public Methods
     InfiniteAreaLight(const Transform &LightToWorld, const Spectrum &power,
                       int nSamples, const std::string &texmap);
+    InfiniteAreaLight(const Transform &LightToWorld, const Spectrum &power,
+                      int nSamples, const std::string &texmap,
+                      const std::vector<PortalRect> &portals,
+                      int portalResolution, Float portalMix);
     void Preprocess(const Scene &scene) {
         scene.WorldBound().BoundingSphere(&worldCenter, &worldRadius);
     }
@@ -69,11 +74,21 @@ class InfiniteAreaLight : public Light {
                 Float *pdfDir) const;
 
   private:
+    // InfiniteAreaLight Private Methods
+    // Original whole-map sampling and density, factored out so that the
+    // portal mixture can reuse them for its environment branch. SampleEnv
+    // sets *valid to false iff the map sample has zero density.
+    Spectrum SampleEnv(const Interaction &ref, const Point2f &u,
+                       Vector3f *wi, Float *pdf, VisibilityTester *vis,
+                       bool *valid) const;
+    Float EnvPdf(const Vector3f &w) const;
+
     // InfiniteAreaLight Private Data
     std::unique_ptr<MIPMap<RGBSpectrum>> Lmap;
     Point3f worldCenter;
     Float worldRadius;
     std::unique_ptr<Distribution2D> distribution;
+    std::unique_ptr<PortalDistribution> portalDistribution;
 };
 
 std::shared_ptr<InfiniteAreaLight> CreateInfiniteLight(

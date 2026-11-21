@@ -1,0 +1,51 @@
+pbrt version 3 (built Nov 22 2026 at 04:58:25) [Detected 10 cores]
+Copyright (c)1998-2018 Matt Pharr, Greg Humphreys, and Wenzel Jakob.
+The source code to pbrt (but *not* the book contents) is covered by the BSD License.
+See the file LICENSE.txt for the conditions of the license.
+Rendering: [                                           ] Rendering: [+++++++++++++++++++++++++++++++++++++++++++]  (0.3s)       
+Statistics:
+  BVH
+    Interior nodes                                                      8
+    Leaf nodes                                                          9
+    Primitives per leaf node                            18 /            9 (2.00x)
+  Integrator
+    Camera rays traced                                              24576
+    Path length                                                     2.784 avg [range 0 - 3]
+    Zero-radiance paths                              21121 /        68413 (30.87%)
+  Intersections
+    Regular ray intersection tests                                 161402
+    Shadow ray intersection tests                                   56288
+    Ray-triangle intersection tests                 166607 /       329981 (50.49%)
+  Memory
+    BVH tree                                                         0.86 kB
+    Film pixels                                                    192.00 kB
+    Primitives                                                       1.27 kB
+    Texture MIP maps                                                 0.02 kB
+    TransformCache                                                 260.00 kB
+    Triangle meshes                                                  1.88 kB
+  Scene
+    Lights                                                              1
+    Materials created                                                   1
+    Shapes created                                                     18
+    Probes per TransformCache lookup                                1.000 avg [range 1 - 1]
+    TransformCache hits                                  2 /            4 (50.00%)
+    Triangles per triangle mesh                         18 /            1 (18.00x)
+  Texture
+    Trilinear lookups                                               75108
+  Profile
+    Integrator::Render()                                            100.00% (   0:00:00.26)
+      Film::AddSample()                                             16.67% (   0:00:00.04)
+      SamplerIntegrator::Li()                                       66.67% (   0:00:00.17)
+        Direct lighting                                             66.67% (   0:00:00.17)
+          Accelerator::Intersect()                                  16.67% (   0:00:00.04)
+            Triangle::Intersect()                                   16.67% (   0:00:00.04)
+          Light::Pdf()                                              16.67% (   0:00:00.04)
+          Light::Sample_*()                                         16.67% (   0:00:00.04)
+  Profile (flattened)
+    Direct lighting                                                 16.67% (   0:00:00.04)
+    Film::AddSample()                                               16.67% (   0:00:00.04)
+    Integrator::Render()                                            16.67% (   0:00:00.04)
+    Light::Pdf()                                                    16.67% (   0:00:00.04)
+    Light::Sample_*()                                               16.67% (   0:00:00.04)
+    Triangle::Intersect()                                           16.67% (   0:00:00.04)
+

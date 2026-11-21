@@ -1,0 +1,33 @@
+pbrt version 3 (built Nov 22 2026 at 04:58:25) [Detected 10 cores]
+Copyright (c)1998-2018 Matt Pharr, Greg Humphreys, and Wenzel Jakob.
+The source code to pbrt (but *not* the book contents) is covered by the BSD License.
+See the file LICENSE.txt for the conditions of the license.
+Rendering: [                                           ] Rendering: [+++++++++++++++++++++++++++++++++++++++++++]  (0.3s)       
+Statistics:
+  BVH
+    Leaf nodes                                                          1
+    Primitives per leaf node                             1 /            1 (1.00x)
+  Integrator
+    Camera rays traced                                                384
+    Path length                                                     0.266 avg [range 0 - 1]
+    Zero-radiance paths                                  0 /          102 (0.00%)
+  Intersections
+    Regular ray intersection tests                                    588
+    Shadow ray intersection tests                                      56
+  Memory
+    BVH tree                                                         0.09 kB
+    Film pixels                                                      3.00 kB
+    Primitives                                                       0.07 kB
+    Texture MIP maps                                                 0.02 kB
+    TransformCache                                                 260.00 kB
+  Scene
+    Lights                                                              1
+    Materials created                                                   1
+    Shapes created                                                      1
+    Probes per TransformCache lookup                                1.000 avg [range 1 - 1]
+    TransformCache hits                                  2 /            4 (50.00%)
+  Texture
+    Trilinear lookups                                                 490
+  Profile
+  Profile (flattened)
+

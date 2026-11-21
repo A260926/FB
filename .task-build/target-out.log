@@ -1,0 +1,45 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I1122 04:59:21.495908 4023615360 imageio.cpp:425] Read PFM image /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/portal_test_black.pfm (8 x 4)
+I1122 04:59:21.498564 4023615360 imageio.cpp:425] Read PFM image /Volumes/UserFBWorkspace/questions/FSC4E0CBFBA75AU14179/attempts/20261121T181124651953Z/repo/portal_test_black.pfm (8 x 4)
+I1122 04:59:21.507525 4023615360 error.cpp:83] Error: infinite light: "portals" require a rigid LightToWorld transform.
+Error: infinite light: "portals" require a rigid LightToWorld transform.
+I1122 04:59:21.507543 4023615360 error.cpp:83] Error: infinite light: "portals" must give five values (xmin, ymin, xmax, ymax, z) per portal, got 4.
+Error: infinite light: "portals" must give five values (xmin, ymin, xmax, ymax, z) per portal, got 4.
+I1122 04:59:21.507552 4023615360 error.cpp:83] Error: infinite light: "portals" must give five values (xmin, ymin, xmax, ymax, z) per portal, got 7.
+Error: infinite light: "portals" must give five values (xmin, ymin, xmax, ymax, z) per portal, got 7.
+I1122 04:59:21.507581 4023615360 error.cpp:83] Error: infinite light: portal rectangle must have positive area.
+Error: infinite light: portal rectangle must have positive area.
+I1122 04:59:21.507591 4023615360 error.cpp:83] Error: infinite light: "portals" values must be finite.
+Error: infinite light: "portals" values must be finite.
+I1122 04:59:21.507622 4023615360 error.cpp:83] Error: infinite light: "portalresolution" must be in [2, 512], got 1.
+Error: infinite light: "portalresolution" must be in [2, 512], got 1.
+I1122 04:59:21.507628 4023615360 error.cpp:83] Error: infinite light: "portalresolution" must be in [2, 512], got 513.
+Error: infinite light: "portalresolution" must be in [2, 512], got 513.
+I1122 04:59:21.507668 4023615360 error.cpp:83] Error: infinite light: "portalresolution" must be in [2, 512], got 0.
+Error: infinite light: "portalresolution" must be in [2, 512], got 0.
+I1122 04:59:21.507695 4023615360 error.cpp:83] Error: infinite light: "portalmix" must be finite and in [0, 1), got 1.000000.
+Error: infinite light: "portalmix" must be finite and in [0, 1), got 1.000000.
+I1122 04:59:21.507702 4023615360 error.cpp:83] Error: infinite light: "portalmix" must be finite and in [0, 1), got -0.100000.
+Error: infinite light: "portalmix" must be finite and in [0, 1), got -0.100000.
+I1122 04:59:21.507737 4023615360 error.cpp:83] Error: infinite light: "portalmix" must be finite and in [0, 1), got inf.
+Error: infinite light: "portalmix" must be finite and in [0, 1), got inf.
+I1122 04:59:21.507747 4023615360 error.cpp:83] Error: infinite light: "portalmix" must be finite and in [0, 1), got nan.
+Error: infinite light: "portalmix" must be finite and in [0, 1), got nan.
+I1122 04:59:21.507803 4023615360 bvh.cpp:210] BVH created with 1 nodes for 1 primitives (0.00 MB), arena allocated 1.00 MB
+I1122 04:59:21.508021 4023615360 bvh.cpp:210] BVH created with 17 nodes for 18 primitives (0.00 MB), arena allocated 1.00 MB
+transport direct_mean: mean=0.078630 reference=0.078548 stdErr=0.000131 tol=0.000884
+I1122 04:59:21.510746 4023615360 bvh.cpp:210] BVH created with 11 nodes for 12 primitives (0.00 MB), arena allocated 1.00 MB
+CASE crop cell_weights checks=70
+CASE crop partial_mass checks=17
+CASE crop normalization checks=3
+CASE crop overlap_density checks=208
+GROUP crop cases=4 checks=298 COMPLETE
+CASE mixture pdf_formula checks=241
+CASE mixture fallback checks=334
+CASE mixture factory checks=59
+CASE mixture le_unchanged checks=41
+GROUP mixture cases=4 checks=675 COMPLETE
+CASE transport direct_mean checks=23
+CASE transport occluded_zero checks=35
+GROUP transport cases=2 checks=58 COMPLETE
+TARGET_COMPLETE cases=10
