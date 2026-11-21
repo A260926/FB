@@ -15,7 +15,7 @@ rm -f .task-build/directions.field
 .task-build/example .task-build/directions.field
 test -s .task-build/directions.field
 grep -Eq '^VECTOR_FIELD [1-9][0-9]*$' .task-build/directions.field
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || echo ".task-build/target_output.log")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

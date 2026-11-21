@@ -127,6 +127,17 @@ The full list of callbacks exposed by `GLcanvas` to interact with user events (e
 ## Other examples
 A tutorial with detailed info on how to use the library is under developement. In the meanwhile, you can explore the [**examples**](https://github.com/mlivesu/cinolib/tree/master/examples#examples)  folder, which contains a constantly growing number of sample projects that showcase the core features of the library, and will be the backbone of the forthcoming tutorial.
 
+## Four-direction fields with prescribed singularities and periods
+`cinolib::SingularityField` (in `cinolib/singularity_field.h`) computes a four-direction (cross) field on a closed, oriented, connected triangle mesh of genus 0 or 1, with prescribed singularity indices (`q[v]/4` at vertex `v`, constrained by `sum(q)=4*chi`) and prescribed integer periods (the number of quarter turns the field accumulates around each handle of the surface). The construction follows the trivial-connections approach: a Levi-Civita transport angle is associated with each dual edge, and a real correction per dual edge is computed as the unique minimizer of `sum(beta^2/2)` subject to the per-vertex singularity constraints (using the real-valued lift of the angle defect `K = 2*pi - sum of face angles`) and the per-handle period constraints. The corrected connection is then integrated from an anchor direction on face 0. See `examples/singularity_field.cpp` for a complete working example.
+
+**Direction representative vs. matching.** The output published through `field()` is a `cinolib::VectorField` containing *one unit tangent representative per face*: a single vector that selects one of the four directions of the cross. The cross field itself is the equivalence class of the representative under rotations by `k*pi/2` in the face tangent plane. Representatives alone do **not** describe how the field is glued across edges: two adjacent representatives may differ by parallel transport plus *any* integer number of quarter turns without changing the underlying cross field. That integer gluing data is the *matching*, exposed through `quarter_turns()`: for each directed dual edge `f->g` it stores the integer `quarter_turns_fg` satisfying
+
+```
+theta_g - theta_f - omega_fg - beta_fg = quarter_turns_fg * pi/2
+```
+
+where `theta` are the representative angles in the local frames, `omega_fg` is the Levi-Civita transport angle and `beta_fg` the correction. The matching is what makes the singularities and the handle periods visible at the level of representatives: summing the quarter turns around a vertex ring or around a handle yields the local index and the winding of the field (mod 4). Consequently, changing the prescribed indices or periods changes the connection, the corrections and the matching — not merely the representatives — and the anchor direction only fixes the global phase of the representatives, leaving `beta` and the matching unchanged.
+
 ## Contributors
 Marco Livesu is the creator and lead developer of the library. CinoLib has also received contributions from: Daniela Cabiddu and Tommaso Sorgente (CNR IMATI), Claudio Mancinelli and Enrico Puppo (University of Genoa), Chrystiano Araújo (UBC), Thomas Alderighi (CNR ISTI), Fabrizio Corda, Gianmarco Cherchi and Federico Meloni (University of Cagliari).
 
