@@ -1,0 +1,890 @@
+{
+  "repo": "https://github.com/mp3butcher/Cal3D",
+  "commit": "a44143dff1cd461ec05f642a9e67a20a3228e3fc",
+  "license": "LGPL-2.1-or-later; bundled TinyXML zlib notice retained in src/cal3d/tinyxml.h",
+  "files": [
+    {
+      "path": "UPSTREAM_README.md",
+      "upstream_path": "README.md",
+      "mode": "100644",
+      "blob": "5bedd65e3b3debe8b4c3deaca081d5c8657afb90",
+      "sha256": "f16453b3c81d2672b1932f117115b9b72b6a26361be083bd874472f2667b3ae3"
+    },
+    {
+      "path": "AUTHORS",
+      "upstream_path": "cal3d/AUTHORS",
+      "mode": "100644",
+      "blob": "717bd04df804ef97fe996333077229ed953772a2",
+      "sha256": "6a9e0f2a4b4dde7a88cdbffb3172f76e4cc0fc52524b474ad7631c08eee2d625"
+    },
+    {
+      "path": "COPYING",
+      "upstream_path": "cal3d/COPYING",
+      "mode": "100644",
+      "blob": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    {
+      "path": "ChangeLog",
+      "upstream_path": "cal3d/ChangeLog",
+      "mode": "100644",
+      "blob": "befac1729e62e38770b3d6842caf07ea7f5bf947",
+      "sha256": "1e4227cbcb0c47748584467e109126d6949b47aae5dbf200ba2e816104660a95"
+    },
+    {
+      "path": "README",
+      "upstream_path": "cal3d/README",
+      "mode": "100644",
+      "blob": "9d0034794263b60f51e2c68551cc068de8d9e759",
+      "sha256": "3676e397801ff702b411f4731bd98a2567b9ef5bb2fac79a9d9c07c0e104129d"
+    },
+    {
+      "path": "src/cal3d/Makefile.am",
+      "upstream_path": "cal3d/src/cal3d/Makefile.am",
+      "mode": "100644",
+      "blob": "fb89318c27f561adaf17caa5fedaa72b7aa01ce7",
+      "sha256": "0f768cbc248b8c1235999d740c49e590c2f1be2507846b39d971fc92b1cfec9f"
+    },
+    {
+      "path": "src/cal3d/SConscript",
+      "upstream_path": "cal3d/src/cal3d/SConscript",
+      "mode": "100644",
+      "blob": "f4a3b4c2cbf8d970c802274b5fa4c95f8eb25617",
+      "sha256": "1cc114cc2052c7c6c26f8f28b8836a9de13742814ef0c12ebe95676cb43a9bdf"
+    },
+    {
+      "path": "src/cal3d/animation.cpp",
+      "upstream_path": "cal3d/src/cal3d/animation.cpp",
+      "mode": "100644",
+      "blob": "00cd4f49dab951771f9a12b1d3732fcc9ed9f2dd",
+      "sha256": "c3d223b32d80273a4615db2fc33b8dd4f4c39caaf4c251a8727d7dbeaf359515"
+    },
+    {
+      "path": "src/cal3d/animation.h",
+      "upstream_path": "cal3d/src/cal3d/animation.h",
+      "mode": "100644",
+      "blob": "fd9f70029ed9d7ec34905bb7ae5e99c9ba277528",
+      "sha256": "0812a626207b19049213971a2507cdbe291da5cdb087421da2ad6fa442d7de51"
+    },
+    {
+      "path": "src/cal3d/animation_action.cpp",
+      "upstream_path": "cal3d/src/cal3d/animation_action.cpp",
+      "mode": "100644",
+      "blob": "099578eafa84c8a2ecfcfa82360bfa9f0dba5b0d",
+      "sha256": "c06af2a8d9e838eac4e6d5265e34f5999105befe106ef848e532208bc1ae23af"
+    },
+    {
+      "path": "src/cal3d/animation_action.h",
+      "upstream_path": "cal3d/src/cal3d/animation_action.h",
+      "mode": "100644",
+      "blob": "6ad204d032962677284028bce46bb246b7a8ea0b",
+      "sha256": "14dff7494474a7be66fc3608343032a57a84073f349fdffffd5d1ecd0319b684"
+    },
+    {
+      "path": "src/cal3d/animation_cycle.cpp",
+      "upstream_path": "cal3d/src/cal3d/animation_cycle.cpp",
+      "mode": "100644",
+      "blob": "a17ed03b3fe341979609ce56578b448369f6752e",
+      "sha256": "f2db7890bbaeeb131a4f38ade9d6f2235dc1af84fb69ba6ec78f3ce66abb4834"
+    },
+    {
+      "path": "src/cal3d/animation_cycle.h",
+      "upstream_path": "cal3d/src/cal3d/animation_cycle.h",
+      "mode": "100644",
+      "blob": "bc596d4757979a14129bf227c4a1152de8a72f87",
+      "sha256": "79f008bbc8fa8cba43cf33c847d6920dc74cac6b07a223fde5807ef7dd2a5347"
+    },
+    {
+      "path": "src/cal3d/animcallback.h",
+      "upstream_path": "cal3d/src/cal3d/animcallback.h",
+      "mode": "100644",
+      "blob": "e1b12049d3e72862318b9fb9cab99f12fe78b849",
+      "sha256": "0cea667b42dad420c9b849c627f5ec8377d02d05d501e14235c578070f1b709e"
+    },
+    {
+      "path": "src/cal3d/bone.cpp",
+      "upstream_path": "cal3d/src/cal3d/bone.cpp",
+      "mode": "100644",
+      "blob": "6b155d2fc11eb0d4ef8966ad92dc625c615e76f8",
+      "sha256": "5dd1c0ab0f2d073d5e66ef87d5d0443b750138cfe3b96f9f0e5b2eb3a56c2ba1"
+    },
+    {
+      "path": "src/cal3d/bone.h",
+      "upstream_path": "cal3d/src/cal3d/bone.h",
+      "mode": "100644",
+      "blob": "fa347ee109b99daa4eedaecf6216db8e0bce6bcf",
+      "sha256": "603f6ec89326c521826739857ad58c1f197c8c7a16892a9d5a6dcb11b27d2e69"
+    },
+    {
+      "path": "src/cal3d/buffersource.cpp",
+      "upstream_path": "cal3d/src/cal3d/buffersource.cpp",
+      "mode": "100644",
+      "blob": "7ce4fb5990bc63ba95a74c5d52c76d0542731251",
+      "sha256": "8d25878ce80824b3c7d959f7de18bcfc65de44d11d454ba0aad1e557338f97e9"
+    },
+    {
+      "path": "src/cal3d/buffersource.h",
+      "upstream_path": "cal3d/src/cal3d/buffersource.h",
+      "mode": "100644",
+      "blob": "f66dea4b3adef478771fa7d15af4034873488a0a",
+      "sha256": "3826941983856c24f7fda8bdf384dff98cae784e7d72cda1dfc329e9073ba28f"
+    },
+    {
+      "path": "src/cal3d/cal3d.h",
+      "upstream_path": "cal3d/src/cal3d/cal3d.h",
+      "mode": "100644",
+      "blob": "9f3792eba7a34bfaf22c91301960be96c346f1b8",
+      "sha256": "e8b9e0955f509eb16030b868a08419c632af0e70d8e23bb5412bdfb92bcc5824"
+    },
+    {
+      "path": "src/cal3d/cal3d.rc",
+      "upstream_path": "cal3d/src/cal3d/cal3d.rc",
+      "mode": "100644",
+      "blob": "3a44154c539f83bdba792a98d979837f98eab713",
+      "sha256": "908e41265ad45beede4af83d6b9439b939ccddc3e21fd6fe8901276e78c410ad"
+    },
+    {
+      "path": "src/cal3d/cal3d.vcproj",
+      "upstream_path": "cal3d/src/cal3d/cal3d.vcproj",
+      "mode": "100644",
+      "blob": "7c7d7b5cea1a2201cdfb04990b4d8acbaa5d86c4",
+      "sha256": "7e4a6ea9658a51e6265df8ca433ef2e3609626e30f71965330161d96e7ae84aa"
+    },
+    {
+      "path": "src/cal3d/cal3d_wrapper.cpp",
+      "upstream_path": "cal3d/src/cal3d/cal3d_wrapper.cpp",
+      "mode": "100644",
+      "blob": "d17a9d082147318313014c3f149276fe73186fff",
+      "sha256": "4c7fe16532838d6e09b42503ef1e693b3b199ad46ed24f585226981995d4a683"
+    },
+    {
+      "path": "src/cal3d/cal3d_wrapper.h",
+      "upstream_path": "cal3d/src/cal3d/cal3d_wrapper.h",
+      "mode": "100644",
+      "blob": "2e725c89075774f4cad436e553c8e1fec17503fa",
+      "sha256": "d7dc70f4d70ddb46c52face41acfa0819b2549891027b78ef2d632bb5c1bcfb1"
+    },
+    {
+      "path": "src/cal3d/calxmlbindings.cpp",
+      "upstream_path": "cal3d/src/cal3d/calxmlbindings.cpp",
+      "mode": "100644",
+      "blob": "181f564a9228a7693d66d6243df979bc091285d6",
+      "sha256": "54fd58772f50d74aae45638d1183b2a30d68787ad5362e238fceca4d7854875b"
+    },
+    {
+      "path": "src/cal3d/calxmlbindings.h",
+      "upstream_path": "cal3d/src/cal3d/calxmlbindings.h",
+      "mode": "100644",
+      "blob": "58a3c2429a174f673e8cd612f7b8440da916e5cf",
+      "sha256": "7d11fadc86ec16b8ea5cb2e8b9fd1d550046eeb4c5181002bd67a16a9f5380ad"
+    },
+    {
+      "path": "src/cal3d/coreanimatedmorph.cpp",
+      "upstream_path": "cal3d/src/cal3d/coreanimatedmorph.cpp",
+      "mode": "100644",
+      "blob": "53d2754a11decdf7cd069571b7736e01674a2c1c",
+      "sha256": "d49dc606531dd2debaec2cb8d18ed9a82c6187200c3540070c9370c870b2b5a5"
+    },
+    {
+      "path": "src/cal3d/coreanimatedmorph.h",
+      "upstream_path": "cal3d/src/cal3d/coreanimatedmorph.h",
+      "mode": "100644",
+      "blob": "58873623a59259d129a7377a5dc73ffc52ab2d27",
+      "sha256": "0ad02852d15d035a6c7a51bb0699738413142acdbd25bb8a5b09f7a1aa2afcc8"
+    },
+    {
+      "path": "src/cal3d/coreanimation.cpp",
+      "upstream_path": "cal3d/src/cal3d/coreanimation.cpp",
+      "mode": "100644",
+      "blob": "58220592579997c723b03fe6e6deeaf493c5ce89",
+      "sha256": "f225d9437d48b07d5a3925e773fe2fc0c2742bb5db6e80a28a3725d0b38e0cb9"
+    },
+    {
+      "path": "src/cal3d/coreanimation.h",
+      "upstream_path": "cal3d/src/cal3d/coreanimation.h",
+      "mode": "100644",
+      "blob": "a673eabe799dcb6e980e7dbc0f0665add2037292",
+      "sha256": "862e4a620959062c2bf4ef824161f8e2323eab4dfc9aa0f6abcb844e285ebf58"
+    },
+    {
+      "path": "src/cal3d/corebone.cpp",
+      "upstream_path": "cal3d/src/cal3d/corebone.cpp",
+      "mode": "100644",
+      "blob": "a3ead3891e0d7bf1ff6247d98d037411d81ec322",
+      "sha256": "5ceeb5259ba5f4258aeafda0ab11b4bc25c1c1fd81e4e84f60ec423ae07312ea"
+    },
+    {
+      "path": "src/cal3d/corebone.h",
+      "upstream_path": "cal3d/src/cal3d/corebone.h",
+      "mode": "100644",
+      "blob": "fed62b0878165b96e0fb16e46cc84a2f2b60df59",
+      "sha256": "b3f5d3b19a91978068005e67e31a64a1aa1c747327277a468f20e5307548e038"
+    },
+    {
+      "path": "src/cal3d/corekeyframe.cpp",
+      "upstream_path": "cal3d/src/cal3d/corekeyframe.cpp",
+      "mode": "100644",
+      "blob": "adf8e14f50f8dc38915c27b7583252ba6d0a6bee",
+      "sha256": "dbdf5c91586a5d0a24dbaa2d7a798d5900fe4a8de57b060a7499e98908893969"
+    },
+    {
+      "path": "src/cal3d/corekeyframe.h",
+      "upstream_path": "cal3d/src/cal3d/corekeyframe.h",
+      "mode": "100644",
+      "blob": "17d7f13d369794f757089408026441de1c265ee4",
+      "sha256": "74ae436de74735200ec0ce5f128b9a7432fe287428f0621035144fb79ac373b7"
+    },
+    {
+      "path": "src/cal3d/corematerial.cpp",
+      "upstream_path": "cal3d/src/cal3d/corematerial.cpp",
+      "mode": "100644",
+      "blob": "ad62e50971a0bfe41f65d79b463cd797e174a338",
+      "sha256": "88e2c9cc195f72e4533c0eab6a38ccf98904ab533b553f263cfe837289742cdf"
+    },
+    {
+      "path": "src/cal3d/corematerial.h",
+      "upstream_path": "cal3d/src/cal3d/corematerial.h",
+      "mode": "100644",
+      "blob": "34018cb31cc42388913b2391663706df37e7b08d",
+      "sha256": "d515e695c537100ec2c7adc798e1a1fdd33e3d84437e89187b970340b8445671"
+    },
+    {
+      "path": "src/cal3d/coremesh.cpp",
+      "upstream_path": "cal3d/src/cal3d/coremesh.cpp",
+      "mode": "100644",
+      "blob": "9c17fe4231cc1f660896614b1468e5e6373fbd4d",
+      "sha256": "933d94308ebee0e1ff965b9747536141fb114affd8f4a00319ebd1732763c716"
+    },
+    {
+      "path": "src/cal3d/coremesh.h",
+      "upstream_path": "cal3d/src/cal3d/coremesh.h",
+      "mode": "100644",
+      "blob": "ded02ff196726d8bdafbc01876551eb0da78d92b",
+      "sha256": "ea2a5359b0348e8b424e4fbd5a3e5c50e19c1a9077cfc8fd48174f1a485ea3f5"
+    },
+    {
+      "path": "src/cal3d/coremodel.cpp",
+      "upstream_path": "cal3d/src/cal3d/coremodel.cpp",
+      "mode": "100644",
+      "blob": "983c2cb96eaa7dc71b884f15fe4504cd16483570",
+      "sha256": "939a52420a07c3ecae21dfa00d460b868709640a74e248ed8f88ff5996944579"
+    },
+    {
+      "path": "src/cal3d/coremodel.h",
+      "upstream_path": "cal3d/src/cal3d/coremodel.h",
+      "mode": "100644",
+      "blob": "34133fa2b3fffede8cd393a49641457f83bcf427",
+      "sha256": "3b6a4b4a6d568e7d5001e81ca4409a25f580bea3e69f254b8e7431b843cf263c"
+    },
+    {
+      "path": "src/cal3d/coremorphkeyframe.cpp",
+      "upstream_path": "cal3d/src/cal3d/coremorphkeyframe.cpp",
+      "mode": "100644",
+      "blob": "759efa17da6bf1e5d3c4d2d852f08a60488f4b60",
+      "sha256": "c5d35d4830a2c962d9a9105db119d5ac68504423cafc95d512c22e1e72d97a59"
+    },
+    {
+      "path": "src/cal3d/coremorphkeyframe.h",
+      "upstream_path": "cal3d/src/cal3d/coremorphkeyframe.h",
+      "mode": "100644",
+      "blob": "722adc0eecfd489a950e9493cf3b48d3d03e9aaf",
+      "sha256": "15cca87e3aa913b852027b2fdadda14dc0670bafb1460c49cdd245735952753d"
+    },
+    {
+      "path": "src/cal3d/coremorphtrack.cpp",
+      "upstream_path": "cal3d/src/cal3d/coremorphtrack.cpp",
+      "mode": "100644",
+      "blob": "3fde75e403540e2e845bf35599b51aae4046ae4a",
+      "sha256": "df0dadb59cb136f03134df41b639c95caead0227194ba8fa55c836e70a9d05a1"
+    },
+    {
+      "path": "src/cal3d/coremorphtrack.h",
+      "upstream_path": "cal3d/src/cal3d/coremorphtrack.h",
+      "mode": "100644",
+      "blob": "d7bc2c7b2770d4efcdbf30b60a32cc27e180a8fc",
+      "sha256": "9da9f3dd20a461dab2043e277ef2edc57a2a82886b9c9dc12c983fc4b7ed45d9"
+    },
+    {
+      "path": "src/cal3d/coreskeleton.cpp",
+      "upstream_path": "cal3d/src/cal3d/coreskeleton.cpp",
+      "mode": "100644",
+      "blob": "89d2d93b9cee1ea3495ed94705d72edcee7ecd5d",
+      "sha256": "3da5c1e2a3a335fbe0105bf2cbfcf758ba999a7d7887d28efb01717ab33b7547"
+    },
+    {
+      "path": "src/cal3d/coreskeleton.h",
+      "upstream_path": "cal3d/src/cal3d/coreskeleton.h",
+      "mode": "100644",
+      "blob": "541b1000cbcf2726cbaaa552d274d5e0924d6013",
+      "sha256": "35cd40cf8aabebf6a28bb786e2a1df7e8cd54b7f843e1d1cfbe54911565cf0dd"
+    },
+    {
+      "path": "src/cal3d/coresubmesh.cpp",
+      "upstream_path": "cal3d/src/cal3d/coresubmesh.cpp",
+      "mode": "100644",
+      "blob": "4d06189140a75349a02e25d998d526f1bde909b2",
+      "sha256": "908dbbab1138370d9641bffc7361d050329148d7c00f8fe1b214afd300a804ee"
+    },
+    {
+      "path": "src/cal3d/coresubmesh.h",
+      "upstream_path": "cal3d/src/cal3d/coresubmesh.h",
+      "mode": "100644",
+      "blob": "6e52d73432f0c12d5d2591e4d4d303d8ad5180f2",
+      "sha256": "6f0fb1c1c864ff444ec863d5cc2ffed44653d4898162ee00c898635824298f41"
+    },
+    {
+      "path": "src/cal3d/coresubmorphtarget.cpp",
+      "upstream_path": "cal3d/src/cal3d/coresubmorphtarget.cpp",
+      "mode": "100644",
+      "blob": "db3a6bf02ba91204372a9f842110386665c3cf7b",
+      "sha256": "5b46d59519a174c93b17a8eaca26711fe57688d0a42bf1e6c06fad244479bff8"
+    },
+    {
+      "path": "src/cal3d/coresubmorphtarget.h",
+      "upstream_path": "cal3d/src/cal3d/coresubmorphtarget.h",
+      "mode": "100644",
+      "blob": "15d6dcfb304b2e6e590d43620f6e684a9643ffae",
+      "sha256": "de403e6d8d4506e707b78e7e5f1c6aad6af057935521eb3664a82c8aeb5c6935"
+    },
+    {
+      "path": "src/cal3d/coretrack.cpp",
+      "upstream_path": "cal3d/src/cal3d/coretrack.cpp",
+      "mode": "100644",
+      "blob": "3a8023464732d6f9d99630a89aa48d43b2bf8fcd",
+      "sha256": "5ff21cbb54323f769501728223e7d063fc92db952b4105e18782b315e3580f94"
+    },
+    {
+      "path": "src/cal3d/coretrack.h",
+      "upstream_path": "cal3d/src/cal3d/coretrack.h",
+      "mode": "100644",
+      "blob": "cab92c475fc85f78f19568aafe8dbc9bcbc07f97",
+      "sha256": "23e69bd8a894a0691843fe4cb3dfc84545b4973a92a03c395300f9bd40a126bc"
+    },
+    {
+      "path": "src/cal3d/datasource.h",
+      "upstream_path": "cal3d/src/cal3d/datasource.h",
+      "mode": "100644",
+      "blob": "83a61174ea624c7147a06c3674ccc8819855d42a",
+      "sha256": "6d0f56523849f255776d28c6c45f20278b08ccc792d31b394959c574a755e74a"
+    },
+    {
+      "path": "src/cal3d/dualquaternion.cpp",
+      "upstream_path": "cal3d/src/cal3d/dualquaternion.cpp",
+      "mode": "100644",
+      "blob": "c4d679b3a8b030304e91f48469c1fd19499f0391",
+      "sha256": "aedf3cc53f674173bf57282b587d19895e2e87b6b01d4aac0c3bd4b238e8d097"
+    },
+    {
+      "path": "src/cal3d/dualquaternion.h",
+      "upstream_path": "cal3d/src/cal3d/dualquaternion.h",
+      "mode": "100644",
+      "blob": "7f8455ff2340a88c1c59d1165aaec7d392aa878d",
+      "sha256": "d7b723a3ea2d8f7ac19572fb892fedd11bdd50df2805382a117e95f05ef53dda"
+    },
+    {
+      "path": "src/cal3d/error.cpp",
+      "upstream_path": "cal3d/src/cal3d/error.cpp",
+      "mode": "100644",
+      "blob": "26515f0785091483f9b9d7e13e844198bddf0e38",
+      "sha256": "78367976b25e6afde5c110ca74ab92e828a05ce360c4d1c2ec92249abac11713"
+    },
+    {
+      "path": "src/cal3d/error.h",
+      "upstream_path": "cal3d/src/cal3d/error.h",
+      "mode": "100644",
+      "blob": "9060fb9f6c9e68aff0b1fddbd3fc1d272c86aab5",
+      "sha256": "49fbbbb11da97fd4b27266bed62a6b07d4df6f6b5d3d1989bf6ff2ab71208c61"
+    },
+    {
+      "path": "src/cal3d/global.cpp",
+      "upstream_path": "cal3d/src/cal3d/global.cpp",
+      "mode": "100644",
+      "blob": "559b7b3b3a889a4d7b403998527cdb4a119677a6",
+      "sha256": "8ceb173e2fc446222fcd6fb3da5054f1d2cbe73f1966e953564dcc67d38a1802"
+    },
+    {
+      "path": "src/cal3d/global.h",
+      "upstream_path": "cal3d/src/cal3d/global.h",
+      "mode": "100644",
+      "blob": "03f2552ad0e2a8f4fc6733b2954d16256e5a037f",
+      "sha256": "949796791b25862b8db6111a90b74668a1952cec632a8f31331d08a760cc6af3"
+    },
+    {
+      "path": "src/cal3d/hardwaremodel.cpp",
+      "upstream_path": "cal3d/src/cal3d/hardwaremodel.cpp",
+      "mode": "100644",
+      "blob": "c9ce63a8dbdf42d1cb7a74bcdb5c23759f382620",
+      "sha256": "ca5dc9585c1fd0bf5417a9db7596d958abad2b085c4f097de90a53887e4bcd8e"
+    },
+    {
+      "path": "src/cal3d/hardwaremodel.h",
+      "upstream_path": "cal3d/src/cal3d/hardwaremodel.h",
+      "mode": "100644",
+      "blob": "31bbae06a21c47e30834ef7bcfc871c3a94e2d0f",
+      "sha256": "08939896b1314f899f095a1be7afaebd45791a314aa41ffe13d2e67f1d2a1396"
+    },
+    {
+      "path": "src/cal3d/loader.cpp",
+      "upstream_path": "cal3d/src/cal3d/loader.cpp",
+      "mode": "100644",
+      "blob": "f02b3fcd45687601ad11f9d0180c1a8960d054c3",
+      "sha256": "5a62045b97a601d37c27ab9a2b47602eeb6362873732b1bc37f0e7376ad00c54"
+    },
+    {
+      "path": "src/cal3d/loader.h",
+      "upstream_path": "cal3d/src/cal3d/loader.h",
+      "mode": "100644",
+      "blob": "328a87c46e0f8da8e04d5430fc3ac68a9cd1b5ec",
+      "sha256": "c0e86cc9cb757da568a3f834864dfa262ead8804e5297e0e440e6da89fe18497"
+    },
+    {
+      "path": "src/cal3d/matrix.cpp",
+      "upstream_path": "cal3d/src/cal3d/matrix.cpp",
+      "mode": "100644",
+      "blob": "c6008e969c3fb93780cacde1755dba933fe44590",
+      "sha256": "aa3269d9e36801ee27dec1b53ddeb7cdf937615de219ada6daaf3baa110c92b8"
+    },
+    {
+      "path": "src/cal3d/matrix.h",
+      "upstream_path": "cal3d/src/cal3d/matrix.h",
+      "mode": "100644",
+      "blob": "9aa15916c4903a4a65f4aff33c4e371c03a74d61",
+      "sha256": "fec94e2e93d6e9ef9f6f9c0f159c02fd2bd48cd619467f9e4fb944c3d1bdc8a6"
+    },
+    {
+      "path": "src/cal3d/mesh.cpp",
+      "upstream_path": "cal3d/src/cal3d/mesh.cpp",
+      "mode": "100644",
+      "blob": "fa596306054b715e032613f513e0711627008ba3",
+      "sha256": "21f4974b0fbf6f991fa31a68a386a9c27543aa12e3a90fb5853cd2fe69b9a0eb"
+    },
+    {
+      "path": "src/cal3d/mesh.h",
+      "upstream_path": "cal3d/src/cal3d/mesh.h",
+      "mode": "100644",
+      "blob": "927815ae6569c4336b93d2d91899cf3d3b18f036",
+      "sha256": "d746be7dd567c759a685d73d228c797604f2befb7ea45965193e4c3a17570504"
+    },
+    {
+      "path": "src/cal3d/mixer.cpp",
+      "upstream_path": "cal3d/src/cal3d/mixer.cpp",
+      "mode": "100644",
+      "blob": "415c93c720a9c7ef389fe2b1df63dd39c3fd85a0",
+      "sha256": "1a9f1b6b0608df17481950118414bada64d8282c07514df962f3c6b4a6a4b0ad"
+    },
+    {
+      "path": "src/cal3d/mixer.h",
+      "upstream_path": "cal3d/src/cal3d/mixer.h",
+      "mode": "100644",
+      "blob": "630c27b86a06ffb1bc4b1519ce4a2db82ded896d",
+      "sha256": "f8ef6e944aca2ad6ddaf719dbd9ecfb86ebcd6f7701bd4239a3473a0cd835ccb"
+    },
+    {
+      "path": "src/cal3d/model.cpp",
+      "upstream_path": "cal3d/src/cal3d/model.cpp",
+      "mode": "100644",
+      "blob": "d62c137f42024777b1ebb8bf85e1f2576e6c9842",
+      "sha256": "97160d2ae25017dfe1ed036dc028090458cb7bd8535637fef48ac75ba67df024"
+    },
+    {
+      "path": "src/cal3d/model.h",
+      "upstream_path": "cal3d/src/cal3d/model.h",
+      "mode": "100644",
+      "blob": "6f27208be1e55421fa53c075fe3019cfa6d7f9f2",
+      "sha256": "12bde0d06767f2a05ccc5df036280bd538b1838a4037bb1589766dc6140379dd"
+    },
+    {
+      "path": "src/cal3d/morphtargetmixer.cpp",
+      "upstream_path": "cal3d/src/cal3d/morphtargetmixer.cpp",
+      "mode": "100644",
+      "blob": "7d979f01e73e3791f9848d5ff0c58cacf4bf1d2d",
+      "sha256": "2cc47b39426678ea073c68c77491d914ce7dd84ae6365321e1b3fa7e4bf568d3"
+    },
+    {
+      "path": "src/cal3d/morphtargetmixer.h",
+      "upstream_path": "cal3d/src/cal3d/morphtargetmixer.h",
+      "mode": "100644",
+      "blob": "cdd5cbe91d02253663fb3b276ebe21162e35500c",
+      "sha256": "09dd9049e06af03d4a20e6221c843283a13869d3f4f0eb01a7f3e449ee08afbd"
+    },
+    {
+      "path": "src/cal3d/physique.cpp",
+      "upstream_path": "cal3d/src/cal3d/physique.cpp",
+      "mode": "100644",
+      "blob": "960e4992d2290b0c97a9a3ab39fddbf4cfbf87dc",
+      "sha256": "a4618a4f3682589d5a04ca2f48f929db5d07f4f3166edae94755aaa3a39161a3"
+    },
+    {
+      "path": "src/cal3d/physique.h",
+      "upstream_path": "cal3d/src/cal3d/physique.h",
+      "mode": "100644",
+      "blob": "c44018310fdaed4c4b9543d3d16f3053fb26865c",
+      "sha256": "38c998516df2048f5c589b0a0d0c1b3325cbbe15d3ad06ee4848bd38482d83f5"
+    },
+    {
+      "path": "src/cal3d/physiquedualquaternion.cpp",
+      "upstream_path": "cal3d/src/cal3d/physiquedualquaternion.cpp",
+      "mode": "100644",
+      "blob": "4a612885d17bf91b7ccd873ae3d39a7a83be9b61",
+      "sha256": "aa003f85b090af3b702bcbe21627d9bbe043a30065b582455458be42f7789e8f"
+    },
+    {
+      "path": "src/cal3d/physiquedualquaternion.h",
+      "upstream_path": "cal3d/src/cal3d/physiquedualquaternion.h",
+      "mode": "100644",
+      "blob": "62c2480557c519bb4b859d727c43c286d96f1fa6",
+      "sha256": "2fc92ed8a2b9d6df0baf96a8080cb8177f9286440d10611adf28d9e447c718bc"
+    },
+    {
+      "path": "src/cal3d/platform.cpp",
+      "upstream_path": "cal3d/src/cal3d/platform.cpp",
+      "mode": "100644",
+      "blob": "5ffe1de3d939f431b2b5316cb4a4d6cd1f750f06",
+      "sha256": "64cbed6e831fc071c1208165d14cb34a40ab2beabe3f35c86c160f2f09ca94bd"
+    },
+    {
+      "path": "src/cal3d/platform.h",
+      "upstream_path": "cal3d/src/cal3d/platform.h",
+      "mode": "100644",
+      "blob": "f8d0de291f3235df2f7fc02eb1919e0d15433a47",
+      "sha256": "84b075f5bae01047d4c7ed5e0a4b5d2e5ccfc3a02b5cd5f07a992b22df3dfc92"
+    },
+    {
+      "path": "src/cal3d/quaternion.cpp",
+      "upstream_path": "cal3d/src/cal3d/quaternion.cpp",
+      "mode": "100644",
+      "blob": "e284dfe9dfc238d9640d60e08bdd0ffba4fedda7",
+      "sha256": "fb7e1ba757c5aed43d29959691800e3e76bbaa64b3e9c5ebd186a9987619b4eb"
+    },
+    {
+      "path": "src/cal3d/quaternion.h",
+      "upstream_path": "cal3d/src/cal3d/quaternion.h",
+      "mode": "100644",
+      "blob": "a6b3ee3b245ba5ed83b1d483684acaa5983af64d",
+      "sha256": "ea70f1460604ed81b8b0772634914722153fe0c8aa7a30095ef8a70cbe9355de"
+    },
+    {
+      "path": "src/cal3d/refcounted.h",
+      "upstream_path": "cal3d/src/cal3d/refcounted.h",
+      "mode": "100644",
+      "blob": "152e20802d7cce022ff558b253f4586ae390c6e7",
+      "sha256": "c5396c6446d61a19484b19f4b43ebc2094f41024de1d44f51219dd2275267e0c"
+    },
+    {
+      "path": "src/cal3d/refptr.h",
+      "upstream_path": "cal3d/src/cal3d/refptr.h",
+      "mode": "100644",
+      "blob": "12391dda7ea1be394ab97e46c5f6032e13dcb9a4",
+      "sha256": "5f516c891f42472474d2e12e28e7466d75e10913947779fe2a592f7318085e43"
+    },
+    {
+      "path": "src/cal3d/renderer.cpp",
+      "upstream_path": "cal3d/src/cal3d/renderer.cpp",
+      "mode": "100644",
+      "blob": "f0fb5312204f5910056495b78143909e95d8e692",
+      "sha256": "0ae241a65e703351658860929121131eca1d9bb64e9b93b87fb4e864d3e5cfae"
+    },
+    {
+      "path": "src/cal3d/renderer.h",
+      "upstream_path": "cal3d/src/cal3d/renderer.h",
+      "mode": "100644",
+      "blob": "5ff050828e82d1c0562b737a8c3d6b44c4e3c94e",
+      "sha256": "8507405be869ab32a3f198648943915de3a7caa4f3553fd53e134b5356cfce76"
+    },
+    {
+      "path": "src/cal3d/resource.h",
+      "upstream_path": "cal3d/src/cal3d/resource.h",
+      "mode": "100644",
+      "blob": "8db873bf531828373e54ff773439896b57be7566",
+      "sha256": "23da9e93b4a79279407269f752b9e4172eae3ef1a92e3fdab0bce4e1927a499f"
+    },
+    {
+      "path": "src/cal3d/saver.cpp",
+      "upstream_path": "cal3d/src/cal3d/saver.cpp",
+      "mode": "100644",
+      "blob": "a99114eb81b2d803e23d3afeec0b40073306e474",
+      "sha256": "785d93e2388a0a4079325a0c70bc0a375776b7ddbccbc04ff83391e12d16119a"
+    },
+    {
+      "path": "src/cal3d/saver.h",
+      "upstream_path": "cal3d/src/cal3d/saver.h",
+      "mode": "100644",
+      "blob": "106f90dfd694190001fc4ce4d1f78d4f6e9897f1",
+      "sha256": "6986be987a00ce7a1f2a88f55ba694ee49278fec8ec1b69b07f034ed62ddd154"
+    },
+    {
+      "path": "src/cal3d/skeleton.cpp",
+      "upstream_path": "cal3d/src/cal3d/skeleton.cpp",
+      "mode": "100644",
+      "blob": "fef679f1ed3447d7da12481c47e91dc1e46c9b14",
+      "sha256": "ac0223210ea88a030dd63e7bbc2b0df04e9c2bb3eef016445598b259402f7bfb"
+    },
+    {
+      "path": "src/cal3d/skeleton.h",
+      "upstream_path": "cal3d/src/cal3d/skeleton.h",
+      "mode": "100644",
+      "blob": "e93c6891ee86f5d3e06880fa79b9c6e440c7fe91",
+      "sha256": "12353e270db1b6c9fcbe041f3fc9e785e2d11844b719bea88a7d906a341201da"
+    },
+    {
+      "path": "src/cal3d/springsystem.cpp",
+      "upstream_path": "cal3d/src/cal3d/springsystem.cpp",
+      "mode": "100644",
+      "blob": "16a1496c9fd386b7b79a56b545019e0d71dfce5d",
+      "sha256": "fa4e5af8e07999788c051c82975d0eebd54bbbf1c3516f1e3ecac731d617ffb7"
+    },
+    {
+      "path": "src/cal3d/springsystem.h",
+      "upstream_path": "cal3d/src/cal3d/springsystem.h",
+      "mode": "100644",
+      "blob": "eb95c659b3d9a90d174b53f1d46ba625065554ef",
+      "sha256": "261f6e6d9f0593c92a3155838af1497ece4af90ed33838750186103a5e9ee755"
+    },
+    {
+      "path": "src/cal3d/streamsource.cpp",
+      "upstream_path": "cal3d/src/cal3d/streamsource.cpp",
+      "mode": "100644",
+      "blob": "def710060cf4533427e50b91f4168736b757983d",
+      "sha256": "6d75294f4100e271419a2b85bfb04c9e134c0663cce0f3c38e2c828f0f53fd6a"
+    },
+    {
+      "path": "src/cal3d/streamsource.h",
+      "upstream_path": "cal3d/src/cal3d/streamsource.h",
+      "mode": "100644",
+      "blob": "97c57a8dcec1c459c23670dd2b3d2deb2f98732c",
+      "sha256": "7d49db2fecce73da232cd50714572820ddb1ee115ca8c1259b55b8b7f7c8fc43"
+    },
+    {
+      "path": "src/cal3d/submesh.cpp",
+      "upstream_path": "cal3d/src/cal3d/submesh.cpp",
+      "mode": "100644",
+      "blob": "dc83934dbdf033f1597acd10c02637af08e8d296",
+      "sha256": "a30f1e9459aeb82293a1cf6af9cabeb22bb04ac543138bea2f5426d9b02c006e"
+    },
+    {
+      "path": "src/cal3d/submesh.h",
+      "upstream_path": "cal3d/src/cal3d/submesh.h",
+      "mode": "100644",
+      "blob": "b03f03b66921e6af1754182967d27b61526108c7",
+      "sha256": "7427d548d77ae321ff0fc9c53a02b1f884585691b1b296206375e36a653a8f8f"
+    },
+    {
+      "path": "src/cal3d/tinybind.cpp",
+      "upstream_path": "cal3d/src/cal3d/tinybind.cpp",
+      "mode": "100644",
+      "blob": "a4a3e7f1a2b3366a7aacf1f5e0f700dfd961ea39",
+      "sha256": "7c2c591df528869d90676a351741a41498eaf761a66c98012b532e3808af785a"
+    },
+    {
+      "path": "src/cal3d/tinybind.h",
+      "upstream_path": "cal3d/src/cal3d/tinybind.h",
+      "mode": "100644",
+      "blob": "927f89657185948e1ae90144a15f80e7bb6ecdee",
+      "sha256": "e7af587ad0ad6ec971201b5e7571f0421ad7c914df5b92977d6f6f689fc70904"
+    },
+    {
+      "path": "src/cal3d/tinyxml.cpp",
+      "upstream_path": "cal3d/src/cal3d/tinyxml.cpp",
+      "mode": "100644",
+      "blob": "17ec7c3fa146c74ba08be729fb9273e1d9df7567",
+      "sha256": "7a6821e5536f1418697f285d3ae18e093dcb36cac02198717ae1bdc793996fe7"
+    },
+    {
+      "path": "src/cal3d/tinyxml.h",
+      "upstream_path": "cal3d/src/cal3d/tinyxml.h",
+      "mode": "100644",
+      "blob": "ae3ce06500e38ba75ea0ad2db647989b38e4cb1e",
+      "sha256": "657329679bd2b10a63afecbb0683c465d7b7055ae81503bc5769f01ee6182f5e"
+    },
+    {
+      "path": "src/cal3d/tinyxmlerror.cpp",
+      "upstream_path": "cal3d/src/cal3d/tinyxmlerror.cpp",
+      "mode": "100644",
+      "blob": "b73995c74b4937034730609cb8eff85d67913797",
+      "sha256": "2a88ac7273465b3a1b3ba779107db37cc529614455d0118278138de59c494d8f"
+    },
+    {
+      "path": "src/cal3d/tinyxmlparser.cpp",
+      "upstream_path": "cal3d/src/cal3d/tinyxmlparser.cpp",
+      "mode": "100644",
+      "blob": "7d9f9a9ab7d382056f62b36e6dd7fd9b68efe12f",
+      "sha256": "4cc861eb84d08cf85874c3b0e085bc09bc59139cfefae83a1974ee0687c9711a"
+    },
+    {
+      "path": "src/cal3d/transform.h",
+      "upstream_path": "cal3d/src/cal3d/transform.h",
+      "mode": "100644",
+      "blob": "a17b28eb2c4950810a4789d26c98c7bd103b03da",
+      "sha256": "022dff4cda013925e47fc6e17b551bf86206cc4227a5131d60fc454e36a8157e"
+    },
+    {
+      "path": "src/cal3d/vector.cpp",
+      "upstream_path": "cal3d/src/cal3d/vector.cpp",
+      "mode": "100644",
+      "blob": "702146f149eb4736070203fe08928f2ed765f6da",
+      "sha256": "455452d5dcc607c22158d5ff7954d6cadb9a706683b1f8675fd0f04360274c47"
+    },
+    {
+      "path": "src/cal3d/vector.h",
+      "upstream_path": "cal3d/src/cal3d/vector.h",
+      "mode": "100644",
+      "blob": "4d855eba8b3814ec35339b8472ecef23595e425f",
+      "sha256": "6389e7ba2f3f6c574ce5caf86b4eff883f7e4477c9fb64dba7c8c80adc4df988"
+    },
+    {
+      "path": "src/cal3d/xmlformat.cpp",
+      "upstream_path": "cal3d/src/cal3d/xmlformat.cpp",
+      "mode": "100644",
+      "blob": "f71a779136535f4bd9e7ed0769aee82b567e319f",
+      "sha256": "8b3260ad7d5241302decf51382eb537d60b4e6efcdca8dbdbe69a96e80731cf0"
+    },
+    {
+      "path": "src/cal3d/xmlformat.h",
+      "upstream_path": "cal3d/src/cal3d/xmlformat.h",
+      "mode": "100644",
+      "blob": "1ccfb458ab11db980414f519e460b00fbf07634c",
+      "sha256": "d8ac40ffbaa8469d0cc8fdef0faa341847ab193b03ae046f047590c8a2abcf65"
+    },
+    {
+      "path": "tests/coverage/Main.cpp",
+      "upstream_path": "cal3d/tests/coverage/Main.cpp",
+      "mode": "100644",
+      "blob": "3c5992ceefd83dc5ee2c7b6fb2f7ed8837959e4d",
+      "sha256": "8c2e6b427010aa91f1977e8d8f02e4de299e501720075b8e5945cf757c171f9c"
+    },
+    {
+      "path": "tests/coverage/Makefile.am",
+      "upstream_path": "cal3d/tests/coverage/Makefile.am",
+      "mode": "100644",
+      "blob": "62c25d14269a3ebe7f6aaf37e0180ce4ef6f62fe",
+      "sha256": "1c9bcd45a88666843e8bfd9bb4c374830818126637b7e64f52b53c675b1313d0"
+    },
+    {
+      "path": "tests/coverage/Unittest.h",
+      "upstream_path": "cal3d/tests/coverage/Unittest.h",
+      "mode": "100644",
+      "blob": "a95d5ac72ae62cf86c814424b67268caacd130c1",
+      "sha256": "9e53870e4b9fcdbcce2924c1aeef893ea1a33fbc6e9a2d2c83413ae8a4dcd940"
+    },
+    {
+      "path": "tests/coverage/animation_action_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/animation_action_test.cpp",
+      "mode": "100644",
+      "blob": "4beed4482eed34c0289a9d7b86b69be578564caa",
+      "sha256": "ba3b5cb0dc19e60e0f650a7876eaaba10afde45c274b2f67ac0e75a664ff429e"
+    },
+    {
+      "path": "tests/coverage/animation_cycle_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/animation_cycle_test.cpp",
+      "mode": "100644",
+      "blob": "09d83b7ca616440ff168f48c5c9d85560ce88a82",
+      "sha256": "26c5078db18d12e13c331a3f2fa569f58157e4c2c641c356ecb977bd6247f7f2"
+    },
+    {
+      "path": "tests/coverage/buffersource_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/buffersource_test.cpp",
+      "mode": "100644",
+      "blob": "2506679f1ca5ddd6f8110bbc72f6e309d7abf397",
+      "sha256": "4ab3bf4542b63fea84c47b0c0026a0abe68c846b0e31b9db743b6c165cb97348"
+    },
+    {
+      "path": "tests/coverage/coremesh_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/coremesh_test.cpp",
+      "mode": "100644",
+      "blob": "4df82330f194d82361616ab50ca062b80d079ea5",
+      "sha256": "fb0b85fed2655de0706317b2f028ae76840c6f487a098a50a5a565e004169f03"
+    },
+    {
+      "path": "tests/coverage/coremodel_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/coremodel_test.cpp",
+      "mode": "100644",
+      "blob": "5f25d064ab17fab5bb662f38eee4fd5fb5f01a58",
+      "sha256": "058ebc6c395b2e645b3e5d8d2c4eb634a80a7707e2d0e028b8a1f8859369f205"
+    },
+    {
+      "path": "tests/coverage/except",
+      "upstream_path": "cal3d/tests/coverage/except",
+      "mode": "100644",
+      "blob": "c0e62287601d6ff5f4cf442c5cf2882415aedaa2",
+      "sha256": "17273aec74b73f50ed1e1e168dd12f79b92f92cae5d3dc4a0410e1799d7dce51"
+    },
+    {
+      "path": "tests/coverage/hardwaremodel_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/hardwaremodel_test.cpp",
+      "mode": "100644",
+      "blob": "829de487f9bd38397697c87bb6049bcff165ab70",
+      "sha256": "9a288d17b66f35df57bd16af99af75592ccd92e588d15f06480e88974cbc4482"
+    },
+    {
+      "path": "tests/coverage/loader_saver_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/loader_saver_test.cpp",
+      "mode": "100644",
+      "blob": "249e60054b2e68d4f361d32c4d3e28a4e46900c6",
+      "sha256": "11812509963143b155953159acb98636d5e23016ba5adb6d4a8a1872d54c004f"
+    },
+    {
+      "path": "tests/coverage/mixer_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/mixer_test.cpp",
+      "mode": "100644",
+      "blob": "21591e3a79c937ebad17c286a4f4182afaaa45be",
+      "sha256": "9443977254bffca185f774e6eed4605fe3556c03811703802e299c85687b7f81"
+    },
+    {
+      "path": "tests/coverage/model_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/model_test.cpp",
+      "mode": "100644",
+      "blob": "23f4409c99544a9c8d500b02767f3d5919f03764",
+      "sha256": "9fdd6cfcdb9b61e769f8cc8c54e50ce8f6bfd6efcd7a4ec26cc0a5d1e35859ec"
+    },
+    {
+      "path": "tests/coverage/physique_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/physique_test.cpp",
+      "mode": "100644",
+      "blob": "edeec58a38de90cfc05f8d43c2eac477a2642474",
+      "sha256": "41b1c99d3d32ff7748837a1cfe89c6bd5d3ced668ffe95084ca1e5301ebf91c1"
+    },
+    {
+      "path": "tests/coverage/skeleton_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/skeleton_test.cpp",
+      "mode": "100644",
+      "blob": "f7af2d787ceebd105a4da7d3ef2528155ecf7e11",
+      "sha256": "31ce856c2e071450c6a019769a49b905c32b35c2feec5c0e44380e667b6d8621"
+    },
+    {
+      "path": "tests/coverage/springsystem_test.cpp",
+      "upstream_path": "cal3d/tests/coverage/springsystem_test.cpp",
+      "mode": "100644",
+      "blob": "1e286b7730b6e5b34978e8c1a2673fed4daab2a6",
+      "sha256": "d3c22f58dbbde1e6f4f52494bfe33b88bc01d9bd5d24b439377ced9218bc1865"
+    },
+    {
+      "path": "tests/coverage/test-coverage.in",
+      "upstream_path": "cal3d/tests/coverage/test-coverage.in",
+      "mode": "100644",
+      "blob": "c8ed001be814b31479f9a4619eff3f94037d7243",
+      "sha256": "a422fba5b2dce7d266746638e8c6d557f3a05dccea91b6858fd8833965f2c800"
+    },
+    {
+      "path": "tests/quaternion.cpp",
+      "upstream_path": "cal3d/tests/quaternion.cpp",
+      "mode": "100644",
+      "blob": "fd44324104da39e31eb4c29c50c7da2ec8d56d95",
+      "sha256": "ee3865795c331bdc9922330ed2b5d3716696e73983554c6d327045680ef27c47"
+    }
+  ],
+  "gitmodules": "present upstream, not exported; no OSS support patch used",
+  "gitlinks": [
+    {
+      "path": "cal3d/plugins/cal3d_blender_exporter/current",
+      "mode": "160000",
+      "object": "979cbfe56f8c2d56cc8443f2126f42073a7a07f4",
+      "reason": "Not in CPU library/test closure; optional plugin, submodule, viewer, platform binary, exporter or documentation"
+    },
+    {
+      "path": "imvu-cal3d",
+      "mode": "160000",
+      "object": "468cd0a0c6079f29ca135a41ec7e4dfe2459687a",
+      "reason": "Not in CPU library/test closure; optional plugin, submodule, viewer, platform binary, exporter or documentation"
+    }
+  ]
+}
