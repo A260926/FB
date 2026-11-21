@@ -1,0 +1,1 @@
+运行 bash task_support/run.sh baseline 可检查固定生产源码。target 要求题面指定的新生产文件、头、测试和示例全部存在；缺少实现时失败是预期行为。新测试包含 check.h，用 task_cases/task_case_count 注册三组具名 case，使用 TASK_CHECK，每个 case 成功返回0，不定义 main。运行支持不包含目标实现。示例参数为输出目录，文件名：view0.ppm, view1.ppm。
