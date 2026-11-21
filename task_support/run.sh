@@ -18,7 +18,7 @@ rm -f .task-build/fog-fit/before.ppm .task-build/fog-fit/after.ppm .task-build/f
 test -s .task-build/fog-fit/before.ppm
 test -s .task-build/fog-fit/after.ppm
 test -s .task-build/fog-fit/loss.txt
-  output_log=$(mktemp)
+  output_log=$(mktemp .task-build/target-output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
