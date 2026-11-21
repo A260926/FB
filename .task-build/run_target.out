@@ -1,0 +1,59 @@
+-- Shared libraries disabled
+-- compiling zlib from sources
+-- Build an import-only version of Assimp.
+-- VRML disabled
+-- tinyusdz disabled
+INFO Hunter enabled or RT-extension not found. glTF import/export will be built without Open3DGC-compression.
+-- Enabled importer formats: OBJ
+-- Disabled importer formats: AMF 3DS AC ASE ASSBIN B3D BVH COLLADA DXF CSM HMP IRRMESH IQM IRR LWO LWS MD2 MD3 MD5 MDC MDL NFF NDO OFF OGRE OPENGEX PLY MS3D COB BLEND IFC XGL FBX Q3D Q3BSP RAW SIB SMD STL TERRAGEN 3D USD X X3D GLTF 3MF MMD
+-- Configuring done (0.2s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FSEFCF35590777U14237/attempts/20261121T181302239332Z/repo/.task-build/core
+[ 16%] Built target zlibstatic
+[ 17%] Building CXX object code/CMakeFiles/assimp.dir/PostProcessing/SceneBasisProcess.cpp.o
+[ 18%] Linking CXX static library ../lib/libassimp.a
+[100%] Built target assimp
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+SceneBasis sample: one mesh shared by two instance nodes
+Basis B = [[1.25,0.35,0,2],[0,0.8,0,-1.5],[0,0,1.1,0.25],[0,0,0,1]]
+before t=  5.50 InstanceA  v0=(  0.7358   0.7019   0.0000) v1=(  1.6717   1.0542   0.0000)
+before t=  5.50 InstanceB  v0=(  1.2642  -0.7019   0.0000) v1=(  2.2001  -0.3497   0.0000)
+before t= 17.25 InstanceA  v0=(  0.3220   0.3207   0.0000) v1=(  0.7496   1.2247   0.0000)
+before t= 17.25 InstanceB  v0=(  1.6780  -0.3207   0.0000) v1=(  2.1055   0.5833   0.0000)
+after  t=  5.50 InstanceA  v0=(  3.1654  -0.9385   0.2500) v1=(  4.4586  -0.6567   0.2500)
+after  t=  5.50 InstanceB  v0=(  3.3346  -2.0615   0.2500) v1=(  4.6277  -1.7797   0.2500)
+after  t= 17.25 InstanceA  v0=(  2.5147  -1.2435   0.2500) v1=(  3.3656  -0.5203   0.2500)
+after  t= 17.25 InstanceB  v0=(  3.9853  -1.7565   0.2500) v1=(  4.8361  -1.0333   0.2500)
+CASE geometry mesh_streams_transformed_once checks=33
+CASE geometry reflection_winding checks=13
+CASE geometry shared_mesh_once checks=8
+CASE geometry identity_adds_no_nodes checks=2
+CASE geometry zero_vectors_stay_zero checks=3
+CASE geometry tiny_non_identity_basis checks=2
+GROUP geometry cases=6 checks=61 COMPLETE
+CASE animation node_world_conjugation checks=1
+CASE animation skinned_world_vertices checks=18
+CASE animation channel_keys_preserved checks=15
+CASE animation cross_animation_reuse checks=5
+CASE animation default_boundaries checks=8
+CASE animation static_nodes_conjugated_directly checks=6
+CASE animation aux_name_collisions checks=5
+CASE animation no_meshless_expansion checks=1
+GROUP animation cases=8 checks=59 COMPLETE
+CASE integration importer_basis checks=11
+CASE integration scale_process_basis checks=5
+CASE integration scale_process_disabled_legacy checks=8
+CASE integration importer_legacy_unchanged checks=4
+CASE integration importer_invalid_basis_rejected checks=2
+CASE integration importer_invalid_scale_rejected checks=2
+CASE integration invalid_inputs_preserve_scene checks=104
+CASE integration final_scene_still_plays checks=60
+CASE integration pristine_pointer_preservation checks=10
+CASE integration sibling_order_and_ancestry checks=14
+CASE integration repeated_basis_changes checks=22
+CASE integration identity_via_scale_process checks=1
+CASE integration scene_without_animations checks=1
+GROUP integration cases=13 checks=244 COMPLETE
+TARGET_COMPLETE cases=27
+LEGACY scale=3 vertex_x=3 root_x=9 bone_y=12 PASS
+LEGACY OBJ vertices=3 faces=1 scaled_x=2 PASS

@@ -1174,6 +1174,35 @@ enum aiComponent
 #   define AI_CONFIG_APP_SCALE_KEY 1.0
 #endif // AI_CONFIG_APP_SCALE_KEY
 
+/**
+ *  @brief  Enables the local-coordinate-basis variant of the global scale step.
+ *
+ *  When set to true the #aiProcess_GlobalScale step no longer applies the
+ *  legacy scalar scaling but instead changes the local coordinate basis of the
+ *  whole scene by the matrix configured with #AI_CONFIG_GLOBAL_SCALE_BASIS.
+ *  The effective basis is diag(s,s,s,1) * AI_CONFIG_GLOBAL_SCALE_BASIS, where
+ *  s is the product of the user scale (#AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY) and
+ *  the application scale (#AI_CONFIG_APP_SCALE_KEY).
+ *
+ *  Property type: Bool. Default value: false.
+ */
+#define AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED "GLOBAL_SCALE_BASIS_ENABLED"
+
+#if (!defined AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED_DEFAULT)
+#   define AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED_DEFAULT 0
+#endif // AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED_DEFAULT
+
+/**
+ *  @brief  The user supplied basis matrix used by #aiProcess_GlobalScale when
+ *  #AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED is enabled.
+ *
+ *  The matrix may contain translation, non-uniform scaling, shear and
+ *  reflections and is applied to column vectors. Default value: identity.
+ *
+ *  Property type: aiMatrix4x4. Default value: identity matrix.
+ */
+#define AI_CONFIG_GLOBAL_SCALE_BASIS "GLOBAL_SCALE_BASIS"
+
 
 // ---------- All the Build/Compile-time defines ------------
 

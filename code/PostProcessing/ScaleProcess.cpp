@@ -39,15 +39,23 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------
 */
 #include "ScaleProcess.h"
+#include "SceneBasisProcess.h"
 
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <assimp/BaseImporter.h>
+#include <assimp/Exceptional.h>
+
+#include <cmath>
 
 namespace Assimp {
 
 // ------------------------------------------------------------------------------------------------
-ScaleProcess::ScaleProcess() : BaseProcess(), mScale( AI_CONFIG_GLOBAL_SCALE_FACTOR_DEFAULT ) {
+ScaleProcess::ScaleProcess() :
+        BaseProcess(),
+        mScale( AI_CONFIG_GLOBAL_SCALE_FACTOR_DEFAULT ),
+        mBasisEnabled( false ),
+        mBasis() {
     // empty
 }
 
@@ -77,10 +85,38 @@ void ScaleProcess::SetupProperties( const Importer* pImp ) {
     // apply scale to the scale
     // helps prevent bugs with backward compatibility for anyone using normal scaling.
     mScale *= importerScale;
+
+    // Optional local coordinate basis mode. Disabled by default so that the
+    // legacy global scaling behavior is fully preserved.
+    mBasisEnabled = pImp->GetPropertyBool( AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED,
+            AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED_DEFAULT != 0 );
+    mBasis = pImp->GetPropertyMatrix( AI_CONFIG_GLOBAL_SCALE_BASIS, aiMatrix4x4() );
 }
 
 // ------------------------------------------------------------------------------------------------
 void ScaleProcess::Execute( aiScene* pScene ) {
+    if ( mBasisEnabled ) {
+        if ( nullptr == pScene ) {
+            return;
+        }
+
+        // The effective basis is diag(s,s,s,1) * U. s must be a finite,
+        // positive number; U and the resulting matrix are validated by
+        // ChangeSceneBasis, which throws on any invalid input.
+        if ( !std::isfinite( static_cast<double>( mScale ) ) || mScale <= static_cast<ai_real>( 0 ) ) {
+            throw DeadlyImportError( "ScaleProcess: GLOBAL_SCALE_BASIS_ENABLED requires a finite, positive scale." );
+        }
+
+        aiMatrix4x4 scaled;
+        scaled.a1 = static_cast<ai_real>( mScale );
+        scaled.b2 = static_cast<ai_real>( mScale );
+        scaled.c3 = static_cast<ai_real>( mScale );
+
+        const aiMatrix4x4 basis = scaled * mBasis;
+        ChangeSceneBasis( *pScene, basis );
+        return;
+    }
+
     if(mScale == 1.0f)  {
         return; // nothing to scale
     }

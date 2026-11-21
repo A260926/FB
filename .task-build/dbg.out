@@ -1,0 +1,52 @@
+RUN geometry::mesh_streams_transformed_once
+  -> 0
+RUN geometry::reflection_winding
+  -> 0
+RUN geometry::shared_mesh_once
+  -> 0
+RUN geometry::identity_adds_no_nodes
+  -> 0
+RUN geometry::zero_vectors_stay_zero
+  -> 0
+RUN geometry::tiny_non_identity_basis
+  -> 0
+RUN animation::node_world_conjugation
+  -> 0
+RUN animation::skinned_world_vertices
+  -> 0
+RUN animation::channel_keys_preserved
+  -> 0
+RUN animation::cross_animation_reuse
+  -> 0
+RUN animation::default_boundaries
+  -> 0
+RUN animation::static_nodes_conjugated_directly
+  -> 0
+RUN animation::aux_name_collisions
+  -> 0
+RUN animation::no_meshless_expansion
+  -> 0
+RUN integration::importer_basis
+  -> 0
+RUN integration::scale_process_basis
+  -> 0
+RUN integration::scale_process_disabled_legacy
+  -> 0
+RUN integration::importer_legacy_unchanged
+  -> 0
+RUN integration::importer_invalid_basis_rejected
+  -> 0
+RUN integration::importer_invalid_scale_rejected
+  -> 0
+RUN integration::invalid_inputs_preserve_scene
+  -> 0
+RUN integration::final_scene_still_plays
+  -> 0
+RUN integration::pristine_pointer_preservation
+  -> 0
+RUN integration::repeated_basis_changes
+  -> 0
+RUN integration::identity_via_scale_process
+  -> 0
+RUN integration::scene_without_animations
+  -> 0

@@ -43,6 +43,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "Common/BaseProcess.h"
 
+#include <assimp/matrix4x4.h>
+
 struct aiNode;
 
 #if (!defined AI_CONFIG_GLOBAL_SCALE_FACTOR_DEFAULT)
@@ -87,6 +89,11 @@ private:
 
 private:
     ai_real mScale;
+
+    //! True if the new local-coordinate-basis mode is selected.
+    bool mBasisEnabled;
+    //! User supplied basis matrix (AI_CONFIG_GLOBAL_SCALE_BASIS).
+    aiMatrix4x4 mBasis;
 };
 
 } // Namespace Assimp

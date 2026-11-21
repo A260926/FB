@@ -52,6 +52,72 @@ See [the complete list of supported formats](https://github.com/assimp/assimp/bl
 ## Building
 Start by reading [our build instructions](https://github.com/assimp/assimp/blob/master/Build.md). We are available in vcpkg, and our build system is CMake; if you used CMake before there is a good chance you know what to do.
 
+## Changing the scene's local coordinate basis
+
+The `aiProcess_GlobalScale` post-processing step keeps its historical scalar
+scaling behavior by default. In addition it can re-express an entire imported
+scene in a different local coordinate basis. This is useful for engines that
+store a model in a basis that differs from the one the asset was authored in
+(for example a Z-up asset that must be consumed in a Y-up, sheared or reflected
+space) while keeping skeletal animation and instanced meshes intact.
+
+Enable the mode with a boolean property and supply the basis matrix:
+
+```cpp
+#include <assimp/Importer.hpp>
+#include <assimp/config.h>
+#include <assimp/postprocess.h>
+
+Assimp::Importer importer;
+
+// Enable the basis variant of the global scale step (default: false).
+importer.SetPropertyBool(AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED, true);
+
+// The user basis matrix U (default: identity). It may contain translation,
+// non-uniform scaling, shear and reflection and is applied to column vectors.
+aiMatrix4x4 u;
+u.a2 = 0.5f;   // shear
+u.a4 = 7.0f;   // translation
+importer.SetPropertyMatrix(AI_CONFIG_GLOBAL_SCALE_BASIS, u);
+
+// The effective basis is B = diag(s,s,s,1) * U, where s is the product of the
+// user scale and the application scale.
+importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 2.0f);
+importer.SetPropertyFloat(AI_CONFIG_APP_SCALE_KEY, 1.5f);
+
+const aiScene *scene = importer.ReadFile("model.obj",
+        aiProcess_Triangulate | aiProcess_GlobalScale);
+```
+
+The same change can be applied directly to an already imported scene with
+`Assimp::ChangeSceneBasis(aiScene&, const aiMatrix4x4& B)` declared in
+`code/PostProcessing/SceneBasisProcess.h`:
+
+```cpp
+#include "PostProcessing/SceneBasisProcess.h"
+
+Assimp::ChangeSceneBasis(*scene, basis);
+```
+
+After the change every original semantic node keeps its world matrix up to the
+similarity `B * G(t) * inverse(B)` at any animation time, mesh positions become
+`B * p`, bone inverse-bind matrices become `B * O * inverse(B)`, and both rigid
+and linear-blend-skinned world vertices equal the original ones multiplied by
+`B` on the left. Mesh instances stay shared, node names and metadata are
+preserved, and animation keys are never resampled or decomposed. A reflection
+(negative determinant) also reverses each face's winding order so the front
+side continues to agree with the transformed normals.
+
+Only a finite, invertible affine basis is accepted, and scenes containing
+cameras, lights or `aiSkeleton` arrays are rejected. When called through the
+importer, invalid input makes the import fail with a descriptive error instead
+of returning a partially transformed scene.
+
+When `AI_CONFIG_GLOBAL_SCALE_BASIS_ENABLED` is `false` (the default), the step
+behaves exactly as before and only applies the scalar global scale.
+
+A small self-contained example lives in `samples/SceneBasis/main.cpp`.
+
 ## Ports
 * [Android](port/AndroidJNI/README.md)
 * [Python](port/PyAssimp/README.md)
