@@ -1,0 +1,188 @@
+{
+  "commit": "85cd62382dfea638278962690cf515023f33ed00",
+  "included": [
+    {
+      "path": ".github/workflows/build.yml",
+      "mode": "100644",
+      "source_blob": "6e0bd7fa4e534b4aa4639f92fdbd3397d591bc87",
+      "sha256": "c3c0692a55cf3588f6a861f631c93806e6ca9db9755b915446abb1414882a5f5",
+      "size": 282,
+      "binary": false
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "source_blob": "599d9341a7d681d7f68b614625c0664c949a6a90",
+      "sha256": "f619925f80ef862497aaf8e8155ef218fa6a2190055129523ca3df9119a9ba95",
+      "size": 1066,
+      "binary": false
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "source_blob": "e647ecb3189250102b590209dad9ee575f03b873",
+      "sha256": "2d0c3896305afea67de1bc06a041cea4bb9adadb506bf0b3efb0222bba8ccdc9",
+      "size": 6149,
+      "binary": false
+    },
+    {
+      "path": "cgltf.h",
+      "mode": "100644",
+      "source_blob": "316a11dfd89e1ff69348a3cacb21709ad1e29bd8",
+      "sha256": "efb169dee911696b5d35fc8e3f7ea0c56d679debc529eba9ca6aa6443ba9d5e9",
+      "size": 205754,
+      "binary": false
+    },
+    {
+      "path": "cgltf_write.h",
+      "mode": "100644",
+      "source_blob": "4c060da792a3f31f6a7ebb3a8c59eafe5791bc86",
+      "sha256": "42199ef8b43d6784dde2ac6ea70b0b1053ec6b19136670687a189ce5df840084",
+      "size": 53300,
+      "binary": false
+    },
+    {
+      "path": "fuzz/data/BadBasisU.gltf",
+      "mode": "100644",
+      "source_blob": "e108e399913a1393599108114be2acbf86601a7f",
+      "sha256": "8746a3e4ff24c99bf21589085b261ea12032b7fb89602e34d01543541885a976",
+      "size": 67,
+      "binary": false
+    },
+    {
+      "path": "fuzz/data/Box.glb",
+      "mode": "100644",
+      "source_blob": "95ec886b6b92b134291fd41d34ac9d5349306e0a",
+      "sha256": "ed52f7192b8311d700ac0ce80644e3852cd01537e4d62241b9acba023da3d54e",
+      "size": 1664,
+      "binary": true
+    },
+    {
+      "path": "fuzz/data/TriangleWithoutIndices.gltf",
+      "mode": "100644",
+      "source_blob": "06632b57e0d88cd8f403acb66a766ede616801a5",
+      "sha256": "a5cebb3f79a7fb5734a01080577a48f52d683d124553a5382319a03b605b000d",
+      "size": 841,
+      "binary": false
+    },
+    {
+      "path": "fuzz/data/WaterBottle.gltf",
+      "mode": "100644",
+      "source_blob": "9f23f3add06376ba56326a9e3a99223a304c60a5",
+      "sha256": "0596f4e61dc781439d254fdfb5e3462daf1762c18715e3e3ac13001aa8f3f547",
+      "size": 2727,
+      "binary": false
+    },
+    {
+      "path": "fuzz/gltf.dict",
+      "mode": "100644",
+      "source_blob": "f923c46e2073a0da2194b4376d87f55d569104b6",
+      "sha256": "0d8726116ec976b5921fae6c0682052fed7f04c9e28a09e91575fa8e6f26ac53",
+      "size": 3149,
+      "binary": false
+    },
+    {
+      "path": "fuzz/main.c",
+      "mode": "100644",
+      "source_blob": "e3b75d1f1f8c7bcf0ba62e167889a5f7f1785cd4",
+      "sha256": "23a6ae6cb0149b6ec1981732427c7b72e0016bedfbee0e1fa5f5991923b7ddb1",
+      "size": 493,
+      "binary": false
+    },
+    {
+      "path": "test/CMakeLists.txt",
+      "mode": "100644",
+      "source_blob": "0c93e207b1a99dc0898d536b2fd6101b5adb29c0",
+      "sha256": "5e820d70fff5323488334b06d16349692abb333841ed6fa8b9a2cb38acf3cddf",
+      "size": 3255,
+      "binary": false
+    },
+    {
+      "path": "test/main.c",
+      "mode": "100644",
+      "source_blob": "75543c19db63b93ae6afe296f4454c4b07062bb2",
+      "sha256": "0cccdc30cbd2193e7155190f6bab57d7513c0d7761c49920f343afde56cebca3",
+      "size": 703,
+      "binary": false
+    },
+    {
+      "path": "test/test_all.py",
+      "mode": "100755",
+      "source_blob": "64b89566f0a68fff385ca6ccd3e628aecd5bc052",
+      "sha256": "cb10a7d2ea7e4669811262daa3c69d4fd615a89df7f9d6777eec1e3ab64884b2",
+      "size": 2672,
+      "binary": false
+    },
+    {
+      "path": "test/test_conversion.cpp",
+      "mode": "100644",
+      "source_blob": "c00b50e94c2a7833c5d70b5d2366c7f5c09c70c5",
+      "sha256": "c20c91c032b42c8cf44836df04f825fa74c3c8a73f1dd2cc331dc2691952e2d1",
+      "size": 2949,
+      "binary": false
+    },
+    {
+      "path": "test/test_math.cpp",
+      "mode": "100644",
+      "source_blob": "84f93052a74b50315e9bc38ac024218b9e1d8de9",
+      "sha256": "097fc029a7d75fe4af84e71b3e9c910ea1cd7e56349b1c4290a75030b65e85ff",
+      "size": 1726,
+      "binary": false
+    },
+    {
+      "path": "test/test_strings.cpp",
+      "mode": "100644",
+      "source_blob": "3d63efc944c933d046a4ddee7108db70e408ac02",
+      "sha256": "1689365fc8dee4db2e9937f250566cc7c979e7e12fbf12d2f74f82d9e854cbe7",
+      "size": 1623,
+      "binary": false
+    },
+    {
+      "path": "test/test_write.cpp",
+      "mode": "100644",
+      "source_blob": "b7ee25dc5becaf9127dc742680d5e9204c6e766a",
+      "sha256": "61594c1c1155eb83ff34c7cf3ae66fb649a1c6d79cae5fa6d90c8fd9b48d7b78",
+      "size": 936,
+      "binary": false
+    },
+    {
+      "path": "test/test_write_glb.cpp",
+      "mode": "100644",
+      "source_blob": "c3c5b4430e859a01657f449ce20a950e8f731591",
+      "sha256": "6b3201b83fb048909b55bef2bfa0245eb1e17905e6ef9e0713495c69aa135030",
+      "size": 1189,
+      "binary": false
+    }
+  ],
+  "excluded": [],
+  "gitlinks": [],
+  "repo": "https://github.com/jkuhlmann/cgltf",
+  "scope": "Fixed upstream blobs with original modes; local runner support is listed separately. Future target implementation and target tests are absent.",
+  "support_files": [
+    {
+      "path": "task_support/baseline.cpp",
+      "sha256": "5fe932d8fe25276c6c9a023252d142e46a36bfd47c1491e1585db94260d1ed24",
+      "executable": false
+    },
+    {
+      "path": "task_support/cgltf_impl.cpp",
+      "sha256": "2408965d2fb730e105d596c7194f195b66d77fb64a48e56c9320ed8af364ced7",
+      "executable": false
+    },
+    {
+      "path": "task_support/check.h",
+      "sha256": "e9abf82969c20adb4d566011d8f6aeb6f80a8ea502f81877ccef63547d7a4085",
+      "executable": false
+    },
+    {
+      "path": "task_support/driver.c",
+      "sha256": "c4a54cf5812bebfb6d4c47a51adf3c380d9b66d6daa5efb046898b473e33ea00",
+      "executable": false
+    },
+    {
+      "path": "task_support/run.sh",
+      "sha256": "f91101a3ed69ea5b3133052f54a0161542cbf264223a500f6c87a0c0ce290e2c",
+      "executable": false
+    }
+  ]
+}
