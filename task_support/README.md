@@ -1,0 +1,1 @@
+Run bash task_support/run.sh baseline or target. New tests use check.h and task_cases/task_case_count; each required group must run a case with TASK_CHECK. Do not define main. Target also compiles and runs the required example. All build products go to .task-build.
