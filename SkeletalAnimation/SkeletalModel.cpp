@@ -1,14 +1,20 @@
 #include "SkeletalModel.h"
 
+#include <cmath>
+
 //////////////////////////////////////////////////////////////////////////
 // Based on: http://ogldev.atspace.co.uk/www/tutorial38/tutorial38.html //
 //////////////////////////////////////////////////////////////////////////
 
 namespace SA
 {
-	SkeletalModel::SkeletalModel() 
+	SkeletalModel::SkeletalModel()
 		: m_AnimationTime(0.0f)
+		, m_IKConfigured(false)
 	{
+		m_IKReport.Valid = false;
+		m_IKReport.Dt = 0.0f;
+		m_IKReport.AnimationTime = 0.0f;
 		Clear();
 	}
 
@@ -50,6 +56,8 @@ namespace SA
 
 		m_GlobalInverseTransform = glm::mat4x4(1);
 		m_AnimationTime = 0.0f;
+
+		DisableIK();
 	}
 
 
@@ -58,6 +66,14 @@ namespace SA
 
 	void SkeletalModel::Update(float a_Dt)
 	{
+		if (m_IKConfigured)
+		{
+			// While enabled the original Update() runs through the same strictly
+			// prioritized control path. A zero step re-samples the current action.
+			UpdateIK(a_Dt);
+			return;
+		}
+
 		m_AnimationTime = fmodf(m_AnimationTime + a_Dt * m_Animation.TicksPerSecond, m_Animation.Duration);
 		//
 

@@ -7,6 +7,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="SkeletalAnimation\DifferentialIK.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
     <ClInclude Include="SkeletalAnimation\SkeletalModel.h">
       <Filter>Source Files</Filter>
     </ClInclude>
@@ -18,6 +21,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="SkeletalAnimation\DifferentialIK.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="SkeletalAnimation\SkeletalModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Types.h"
+#include "DifferentialIK.h"
+
+#include <vector>
 
 namespace SA
 {
@@ -11,6 +14,14 @@ namespace SA
 		~SkeletalModel();
 
 		void                            Update(float a_Dt);
+
+		// Strict-priority differential IK (see DifferentialIK.h).
+		bool                            ConfigureIK(const std::vector<sIKHinge>& a_Hinges);
+		bool                            SetIKTasks(const std::vector<sIKTask>& a_Tasks);
+		bool                            UpdateIK(float a_Dt);
+		void                            DisableIK();
+		const sIKReport&                GetIKReport() const { return m_IKReport; }
+		bool                            IsIKConfigured() const { return m_IKConfigured; }
 
 		unsigned int                    GetNumMeshes() const { return m_Meshes.size(); }
 		const sAnimatedMesh&            GetMesh(unsigned int i) const { return m_Meshes[i]; }
@@ -35,9 +46,22 @@ namespace SA
 
 		float                           m_AnimationTime;
 
+		// Differential IK controller state (see DifferentialIK.cpp).
+		bool                            m_IKConfigured;
+		std::vector<sIKHinge>           m_IKHinges;
+		std::vector<sIKTask>            m_IKTasks;
+		std::vector<double>             m_IKTheta;
+		sIKReport                       m_IKReport;
+
 	private:
 		void                            ReadNodeHierarchy(float AnimationTime, sAnimation& a_Animation, sSkeleton& a_Skeleton, sBone& a_Bone, const glm::mat4x4& ParentTransform);
 		void                            TransformVertices(const sSkeleton& a_Skeleton);
+
+		// Differential IK helpers (implemented in DifferentialIK.cpp). Both take
+		// the per-hinge theta in radians and apply the correction on the right of
+		// the animated local rotation; globals are the pre-globalInverse chains.
+		void                            ComputeIKGlobals(float AnimationTime, const std::vector<double>& a_Theta, std::vector<glm::dmat4x4>& a_Globals) const;
+		void                            ApplyIKGlobals(const std::vector<glm::dmat4x4>& a_Globals);
 	};
 }
 
