@@ -1,0 +1,135 @@
+# GEL
+GEL is a C++ library of geometry processing tools mostly intended for computer graphics applications. Python bindings for GEL are found in the included PyGEL library which is also available from PyPI under the package name PyGEL3D.
+![inverse skeletonized structure created using diffusion limited aggregation](./doc/teaser.png)
+
+GEL contains 
+- a fairly mature half-edge based polygonal mesh data structure which includes functions for traversing a mesh and a rich library of methods for modifying meshes, 
+- a graph data structure which is also specialized for spatial graphs,
+- voxel grid data structures, 
+- spatial data structures for triangles and points: BSP tree, bounding box hierarchy, and a kD-Tree in particular, 
+- a linear algebra library for small vectors and matrices (2D, 3D, and 4D),
+- tools for visualization based on OpenGL and tools based on Plotly for visualization in Jupyter notebooks, and
+- various utilities.
+
+Unique functionality includes
+- Local Separator Skeletonization: our graph-based skeletonization method that works on both meshes, voxel data, and point clouds, although you need to specify the connectivity for the latter two.
+- Inverse skeletonization: Face extrusion quad meshes (FEQ) from graphs.
+- Rotation System Reconstruction: a combinatorial method for reconstruction from point clouds.
+
+There are several less unique but important features:
+- Garland-Heckbert simplification of triangle meshes, 
+- signed distance field (SDF) computation from triangle meshes, 
+- iso-surface polygonization for regular voxel grids: can produce both dual and primal connectivity, 
+- edge flipping-based optimization for triangle meshes, 
+- mesh smoothing: we include anisotropic smoothing, Taubin smoohing, and more.
+- topological analysis: a single (Python) function splits a mesh into components and analyses each.
+
+GEL requires a recent C++ compiler but has very few dependencies. For visualization, OpenGL and GLFW are required, but these dependencies can be omitted if visualization is not needed. The basic philosophy is that GEL should have few dependencies itself since it is better that projects which use GEL can choose for themselves, say, which linear algebra package to use. 
+
+### PyGEL
+PyGEL is a set of Python bindings for a _subset_ of the features in GEL. In particular, PyGEL covers almost all the mesh features. In addition PyGEL has its own viewer based on OpenGL, and PyGEL can be used from Jupyter notebooks. In this case, it is possible to visualize meshes using a plotly widget. A significant benefit here is that when the notebook is exported to HTML, the 3D view comes along. In fact, this makes PyGEL a useful tool for teaching geometry processing since work can be carried out in a Jupyter notebook and assignments submitted as HTML files. Moreover, PyGEL works in Google [colab](https://colab.research.google.com) notebooks.
+
+## DOCUMENTATION
+Some installation instructions below. But for more documentation please see the doc directory. There is a doxygen script for creating a reference manual and a latex file intro.tex which explains the basics. Please doxygen or pdflatex your documentation. A license is also found in the intro document.
+
+## INSTALLING PYGEL WITH PIP
+
+PyGEL is on PyPI and can be installed with pip. For most potential users, there is no reason to look further than:
+```
+pip install PyGEL3D
+```
+The PyPI package is called PyGEL3D and not PyGEL. pip installs a wheel for your platform:
+
+- Linux x86_64 and ARM64 (manylinux, glibc 2.28+: Ubuntu 20.04, Debian 10, RHEL 8, Fedora, Colab, and similar)
+- macOS 11+ (universal2: Intel and Apple Silicon)
+- 64-bit Windows
+
+The compiled library links against OpenGL (`libGL`). A normal desktop already has this. A minimal Linux system (container, CI, server, Colab) usually does not, and `import pygel3d` will then fail even though pip succeeded.
+
+On Ubuntu/Debian install the OpenGL runtime:
+```
+sudo apt-get install libgl1
+```
+`libgl1` is a virtual package. Apt will pull in whatever implementation the distribution ships — typically Mesa. That is not a request to use software rendering; your GPU driver still provides the actual OpenGL implementation.
+
+On Google Colab, use this as the first cell:
+```
+!apt-get install libgl1
+!pip install PyGEL3D
+```
+If there is no wheel for your platform (for example Alpine/musl), build from source as discussed below.
+
+## BUILDING AND INSTALLING GEL AND PYGEL
+
+If you need or wish to build GEL/PyGEL from source, please download or clone it from [https://github.com/janba/GEL](https://github.com/janba/GEL). Below you will find instructions for how to build and create a package for PyGEL that can be installed via pip. If you look around you will find some other build options for Windows, Mac and Linux. Since GEL is primarily developed on Mac OS, the Xcode projects are actively maintained and cover everything. **The two last build options are not actively maintained**. However, they may prove of some use and hence not removed.
+
+### Building with CMake
+If you are using a unix-like command line, build and install with
+```
+cmake -S . -B build
+cmake --build build -j 8
+cmake --install build
+```
+This installs the GEL library, headers, and a CMake package config into
+`~/.local` (`~/.local/include/GEL`, `~/.local/lib`) so other projects can
+locate GEL with `find_package(GEL)`. No sudo is required. Override the
+location with `-DCMAKE_INSTALL_PREFIX=<prefix>` if needed.
+
+Note that this process is automated by the `build_install.sh` script.
+
+### Using GEL from CMake
+After installing GEL, a consumer project only needs:
+
+```cmake
+find_package(GEL REQUIRED HINTS "$ENV{HOME}/.local")
+target_link_libraries(my_app PRIVATE GEL::GEL)
+```
+
+If GEL is not in `~/.local` or another default search path, point CMake at
+the install (or build) tree:
+
+```
+cmake -S . -B build -DCMAKE_PREFIX_PATH=<gel-install-prefix>
+```
+### Creating a PyGEL3D package and installing it
+From a source checkout, build a **platform** wheel (it compiles `libPyGEL` with CMake and tags the wheel for this OS/architecture):
+```
+python -m build --wheel
+pip install dist/pygel3d-*.whl
+```
+You need CMake ≥ 3.25, a C++20 compiler, and the Python packages `build` and `setuptools`. Isolated builds also pull in the `cmake` and `ninja` packages automatically.
+
+Alternatively,
+```
+pip install .
+```
+or the one-stop script
+```
+sh build_install.sh
+```
+builds GEL, installs the C++ library to `~/.local`, and pip-installs a local PyGEL3D wheel (replacing any previous install).
+
+PyPI releases are produced by GitHub Actions (`.github/workflows/wheels.yml`). Pushing a tag `v*` builds manylinux, macOS, and Windows wheels plus an sdist and publishes them. There is no local step of downloading binaries from CI.
+
+## Compilation of Demos and Tests
+
+GEL comes with some test scripts and also demos. You can find these in `GEL/src/test` and `GEL/src/demo`. Tests are optional and built with the main project when `BUILD_TESTING` is on.
+
+The philosophy behind the demos is that they require GEL and PyGEL3D (for the Python demos) have been installed and do not try to find header files, binaries, or Python packages in the GEL source tree.
+
+In fact, the C++ demos are standalone CMake projects. They call `find_package(GEL)` and therefore expect an installed GEL package rather than a library sitting in the source tree. After a standard install to `~/.local`:
+
+```
+cmake -S src/demo/MeshDistance -B src/demo/MeshDistance/build
+cmake --build src/demo/MeshDistance/build
+```
+
+All C++ demos can also be configured together from `src/demo` and there is a script `run_demos.py` that runs all of them. Since many are interactive, you will frequently need to hit escape or quit a program if you run this script.
+
+
+## Practical Issues
+Compiling both GEL and PyGEL requires that you have OpenGL installed unless you choose not to compile graphics support which you can do by setting `Use_GLGraphics` to `OFF` in the CMake file. GLFW is also needed, but CMake fetches GLFW from github and compiles it along with the GEL code. If you compile in some of the other ways (e.g. using XCode, Visual Studio) there is no simple way to avoid the dependency on graphics libraries. Thus, if you need to avoid the OpenGL requirements, CMake is the way to go.
+
+GEL comes with a few demo applications. In addition to the requirements above, several of these also require GLUT to be installed. Going forward, we should remove the GLUT dependency and move to GLFW for the applications.
+
+PyGEL has a module called `jupyter_display` which produces graphics suitable for Jupyter notebooks. This module is based on `plotly` which must then be installed for it to work. You will also need `numpy`. However, if you use `pip`, these required libraries will be downloaded automatically when you install PyGEL.

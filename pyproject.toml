@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=77", "cmake>=3.25", "ninja"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyGEL3D"
+dynamic = ["version"]
+description = "PyGEL 3D (Python Bindings for GEL) contains tools for polygonal mesh based geometry processing"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE.md"]
+authors = [
+    {name = "Andreas Baerentzen", email = "janba@dtu.dk"},
+]
+dependencies = [
+    "numpy",
+    "plotly>=5.24.1,<6",
+    "scipy",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Homepage = "https://github.com/janba/GEL"
+Repository = "https://github.com/janba/GEL"
+
+[tool.setuptools]
+# Do not pull package-data from MANIFEST.in: that file excludes the native
+# library from the sdist (it is compiled during the wheel build).
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[tool.setuptools.packages.find]
+where = ["src/PyGEL"]
+include = ["pygel3d*"]
+
+[tool.cibuildwheel]
+# ctypes library: one py3-none-<platform> wheel, tested on each CPython.
+build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*"]
+skip = ["cp3??t-*", "*-win32", "*-win_arm64", "*_i686", "*musllinux*"]
+build-verbosity = 1
+test-command = "python {project}/tools/cibw_smoke.py"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+before-all = "dnf install -y mesa-libGL-devel mesa-libGLU-devel libX11-devel libXcursor-devel libXi-devel libXinerama-devel libXrandr-devel libXxf86vm-devel libXfixes-devel libXrender-devel"
+# Vendor X11 helpers and libGLU; libGL must come from the system/driver.
+repair-wheel-command = "auditwheel repair --exclude libGL.so.1 -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.macos]
+archs = ["universal2"]
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
+
+[tool.cibuildwheel.windows]
+# delvewheel (cibuildwheel default) bundles extra DLLs; OpenGL32/glu32 stay system.
