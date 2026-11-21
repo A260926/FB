@@ -30,6 +30,7 @@ This is a fork of [Mozilla's vtt.js](http://github.com/mozilla/vtt.js) (which is
     - [Extended API](#extended-api-1)
         - [VTTRegion.fromJSON(json)](#vttregionfromjsonjson)
         - [VTTRegion.create(options)](#vttregioncreateoptions)
+  - [BilingualAlignment](#bilingualalignment)
 - [Browser](#browser)
   - [Building Yourself](#building-yourself)
   - [Bower](#bower)
@@ -290,6 +291,75 @@ object are the same as the properties on the VTTRegion.
 ```js
 var region = VTTRegion.create(options);
 ```
+
+## BilingualAlignment
+
+A two-track association model for reviewing bilingual subtitles: one WebVTT
+track per language, associated into groups of 1:1, 1:2, 2:1 or single-side
+skips (1:0, 0:1). It is exported from `lib/index.js` alongside `WebVTT`,
+`VTTCue` and `VTTRegion`.
+
+```js
+var vttjs = require("./lib/index.js");
+var model = vttjs.BilingualAlignment.align(left, right, options);
+```
+
+`left` and `right` are arrays of `{key, cue}` sorted by start time, where
+`key` is a non-empty string unique within its track (the original `cue.id`
+may repeat) and `cue` is a `VTTCue` from this library. The automatic
+association minimizes the total cost over both whole tracks (it never
+greedily pairs nearest neighbours), computed in integer milliseconds:
+
+```
+match(group) = |leftEnvStart - rightEnvStart| + |leftEnvEnd - rightEnvEnd|
+             + mergePenalty * (leftCount + rightCount - 2)
+skip(entry)  = gapPenalty
+```
+
+An envelope is `[min start, max end]` of the group's cues. `options` may set
+`gapPenalty` (default 2000), `mergePenalty` (default 500) and `locks`.
+`options.locks` is a list of `{left: [key], right: [key]}` blocks (1:1, 1:2
+or 2:1) that must be kept; locked blocks partition the tracks and the
+segments in between are solved independently. Invalid, crossing or unknown
+locks are rejected, never relaxed.
+
+The model exposes:
+
+- `groups` — the current association as `{left: [key], right: [key], locked}`
+  in consumption order.
+- `cost` — total cost of the current groups under the current cue times,
+  recomputed on every read.
+- `conform(groupIndex, ripple)` — affine-maps the right cues of a matched
+  group from their old envelope onto the left envelope, in exact integer
+  milliseconds, writing back through the native cue setters. With
+  `ripple = true` every later right-track entry is shifted by the end-point
+  delta. The whole edit is validated first (range, positive duration, track
+  order, no inline timestamp tags); on failure nothing changes.
+- `realign()` — re-solves the association from the current cue times,
+  keeping the manual locks.
+- `toJSON()` / `BilingualAlignment.fromJSON(value)` — persist and restore
+  the model. The versioned document stores both tracks' keys and cue
+  values, a region reference table (regions shared by identity stay shared;
+  distinct regions are never merged), the locks and the groups. Cache
+  fields (`hasBeenReset`, `displayState`) are not persisted.
+
+### Example
+
+`examples/bilingual.cjs` aligns two WebVTT files and conforms one track to
+the other, also across processes:
+
+```bash
+# Align two subtitle files into a model (keys l1, l2, ... / r1, r2, ...).
+node examples/bilingual.cjs align english.vtt chinese.vtt model.json
+
+# In another process: restore the model, conform group 0 (rippling the
+# tail of the translation track) and save the updated model.
+node examples/bilingual.cjs conform model.json 0 adjusted.json --ripple
+```
+
+The output file is only replaced once parsing, solving and serialization
+have all succeeded; on any error the command exits non-zero and an existing
+output file keeps its previous content.
 
 # Browser
 
