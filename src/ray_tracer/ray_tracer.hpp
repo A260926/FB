@@ -13,7 +13,16 @@
 #include <utility>
 #include <limits> // numeric_limits
 #include <cmath>
+#include <cstdint>
 
+
+// incremental preview (see src/incremental/ray_cache.hpp and README)
+namespace incremental {
+class Engine;
+struct SphereEdit;
+struct FrameStats;
+struct NodeInfo;
+}
 
 struct TraceRecord {
   Vec3u8 color{0, 0, 0};      // final color
@@ -27,6 +36,7 @@ struct TraceRecord {
 class RayTracer {
 public:
   RayTracer(const Camera& camera, Lights& lights);
+  ~RayTracer();
 
   // variadic template to store any object derived from Object
   // pass Args to allow constructing objects in place (c/tor with arguments)
@@ -38,6 +48,7 @@ public:
     auto obj = std::make_unique<T>(std::forward<Args>(args)...);
     T& ref = *obj;
     objects_.push_back(std::move(obj));
+    ++objects_version_;
     return ref;
   }
 
@@ -54,7 +65,27 @@ public:
   void SetBackground(uint8_t r, uint8_t g, uint8_t b) {
     has_background_ = false;
     background_color_ = {r, g, b};
+    ++background_version_;
   }
+
+  //-------------------------------------------------------------------
+  // incremental preview (optional; see README "Incremental preview")
+  //-------------------------------------------------------------------
+  // enable with a finite edit domain enclosing all objects' finite
+  // bounds; returns false (and stays disabled) if the constraint fails
+  bool EnableIncremental(const AABB& edit_domain);
+  void DisableIncremental();
+  bool IncrementalEnabled() const;
+  // atomically replace several registered spheres' center/radius/
+  // material; on rejection geometry, image and cache stay untouched
+  bool ApplySphereEdits(const std::vector<incremental::SphereEdit>& edits);
+  // per-frame work counters of the last Trace() call
+  incremental::FrameStats IncrementalStats() const;
+  // live ray records (monotonic ids, parents, children, types, slots)
+  std::vector<incremental::NodeInfo> IncrementalNodes() const;
+  bool IncrementalNodeInfo(uint64_t id, incremental::NodeInfo& out) const;
+  // ray record id of a pixel's root node (0 when nothing is recorded)
+  uint64_t IncrementalRootId(unsigned row, unsigned col) const;
 
 private:
   // get the corrent IOR (index of refraction) and normal arrangement
@@ -95,6 +126,18 @@ private:
 
   TraceRecord TraceRay(const Ray& ray, int depth, float ior_current = 1.0f) const;
 
+  // the original full-frame trace (used whenever the incremental path
+  // is disabled); kept byte-identical to the historical behavior
+  void TraceFull(int max_reflections);
+
+  // camera-plane sampling shared by the full trace and the recorder
+  struct Raster {
+    Vec3f tl, span_h, span_v;
+  };
+  Raster CurrentRaster() const;
+  Vec3u8 TracePixel(const Raster& raster, std::size_t row, std::size_t col,
+                    int max_reflections) const;
+
   // simple glow halo: add emission for rays that pass near emissive spheres
   Vec3u8 EmissiveGlow(const Ray& ray,
                       float t_max = std::numeric_limits<float>::infinity()) const;
@@ -120,6 +163,15 @@ private:
   bool has_background_{false};
   // solid background color when no background image is used
   Vec3u8 background_color_{0, 0, 0};
+  // bumped whenever the background or the object set changes, so the
+  // incremental engine can detect it and fully rebuild its cache
+  uint64_t background_version_{0};
+  uint64_t objects_version_{0};
+  // incremental preview engine (see src/incremental/ray_cache.hpp);
+  // rec_ is non-null only while the engine is recording/replaying
+  std::unique_ptr<incremental::Engine> incr_;
+  mutable incremental::Engine* rec_{nullptr};
+  friend class incremental::Engine;
 };
 
 #endif // RAY_TRACER_HPP_

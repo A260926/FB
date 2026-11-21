@@ -1,4 +1,5 @@
 #include "light.hpp"
+#include "ray_cache.hpp"
 #include <algorithm>
 #include <limits>
 
@@ -6,24 +7,31 @@ void Lights::AddAmbient(float intensity) {
   lights_.push_back(Light{.type = LightType::AMBIENT,
                           .intensity = intensity,
                           .data = std::nullopt});
+  normalized_ = false;
 }
 void Lights::AddPoint(float intensity, float posx, float posy, float posz) {
   lights_.push_back(Light{.type = LightType::POINT,
                           .intensity = intensity,
                           .data = Vec3f{posx, posy, posz}});
+  normalized_ = false;
 }
 void Lights::AddDir(float intensity, float dirx, float diry, float dirz) {
   lights_.push_back(Light{.type = LightType::DIRECTIONAL,
                           .intensity = intensity,
                           .data = Vec3f{dirx, diry, dirz}.Unit()});
+  normalized_ = false;
 }
 
 // call it having added all lights to normalize their intensities
 void Lights::Normalize() {
+  // repeated calls (e.g. one per Trace) must not rescale intensities
+  // again: keep the first normalization so frames stay comparable
+  if (normalized_) return;
   float total = 0.0;
   for (const auto &light: lights_) total += light.intensity;
   if (std::abs(total) < eps) return;
   for (auto &light: lights_) light.intensity /= total;
+  normalized_ = true;
 }
 
 // diffuse and specular light contribution at a point on an object
@@ -117,6 +125,9 @@ float Lights::ShadowFactor(const Light& light,
                            const Object& object,
                            const Vec3f& at,
                            const Vec3f& normal) {
+  // when the incremental engine is recording, it counts the intersection
+  // tests and records the full finite shadow query for this light
+  incremental::Engine* eng = incremental::g_active_engine;
   // origin is pushed off the surface per light type (below) to avoid
   // self-intersection, i.e. shadow acne
   Vec3f origin;
@@ -153,6 +164,7 @@ float Lights::ShadowFactor(const Light& light,
       // skip self-intersection
       if (obj.get() == &object) continue;
       if (!IntersectsAABB(shadow_ray, obj->bounds)) continue;
+      if (eng) eng->CountObjectTest();
       HitRecord hit = obj->Intersects(shadow_ray);
       // check if object blocks the light (0 < t < light_distance)
       // i.e. object is between surface and the point source
@@ -162,6 +174,9 @@ float Lights::ShadowFactor(const Light& light,
           t_nearest = hit.t;
       }
     }
+    // record the complete finite surface->light segment, not just the
+    // old occluder, so any object moving into it is caught later
+    if (eng) eng->RecordShadowQuery(origin, shadow_ray.dir, light_dist);
     if (!any_hit)
       return bright_max;
 
@@ -191,16 +206,21 @@ float Lights::ShadowFactor(const Light& light,
                    [&](const auto& obj) {
                      if (obj.get() == &object) return false;
                      if (!IntersectsAABB(shadow_ray, obj->bounds)) return false;
+                     if (eng) eng->CountObjectTest();
                      auto hit = obj->Intersects(shadow_ray);
                      if (!hit.is_hit || hit.t <= 0) return false;
                      // normal of the other object at intersection
                      Vec3f n_other = obj->NormalAt(hit.where);
                      // occlusion - one object is inside another
                      bool occluded = normal.Dot(shadow_ray.dir) < 0 &&
-                       n_other.Dot(shadow_ray.dir) < 0; 
+                       n_other.Dot(shadow_ray.dir) < 0;
                      if (occluded) return false;
                      return true;
                   });
+    // record the full directional shadow ray (the engine truncates it
+    // to the fixed edit domain), not just the old occluder
+    if (eng) eng->RecordShadowQuery(origin, shadow_ray.dir,
+                                    std::numeric_limits<float>::infinity());
     if (!any_hit)
       return bright_max;
 

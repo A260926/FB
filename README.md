@@ -118,6 +118,99 @@ They will write their output as PPM.
 1. If you want to gain performance at the expense of resolution
 decrease the camera's depth, or define non-reflective/non-transparent materials.
 
+## Incremental preview
+
+<details>
+<summary>Incremental API and types</summary>
+
+By default every `Trace()` re-traces the whole image. The optional
+incremental preview (only when explicitly enabled) records the ray tree
+of the last completed frame - every recursive node's incident ray,
+remaining depth, current IOR, real hit, local lighting and
+reflection/refraction children, plus the queries each node consumed
+(nearest-hit segment or miss ray, per-light shadow segments, medium
+probe points) - and, after a `SphereEdit` batch, replays only the
+queries invalidated by the edit. The produced image is always
+byte-identical to a full `Trace()` of the same scene with the
+incremental path disabled.
+
+The scene must not use textures or emissive glow (`emit_strength == 0`
+for every object); opaque, mirror and transparent materials are
+supported with their usual shadow and medium-side semantics.
+
+### Public types (in `src/incremental/ray_cache.hpp`)
+
+```cpp
+// one atomic sphere replacement; `sphere` must be owned by the RayTracer
+struct incremental::SphereEdit {
+  Sphere* sphere;
+  Vec3f center;
+  float radius;
+  Material material;
+};
+
+// per-frame work counters of the last Trace()
+struct incremental::FrameStats {
+  uint64_t index_nodes_visited;    // grid nodes touched in the reverse index
+  uint64_t object_tests;           // Object::Intersects calls (all of them)
+  uint64_t ray_nodes_replayed;     // ray nodes re-traced this frame
+  uint64_t shadow_queries_replayed;
+  uint64_t probe_queries_replayed;
+  uint64_t pixel_reductions;       // pixels not recomputed this frame
+  uint64_t created_nodes;
+  uint64_t retired_nodes;
+};
+
+enum class incremental::NodeType { Root, Reflection, Refraction };
+
+// read-only view of one recorded ray node
+struct incremental::NodeInfo {
+  uint64_t id;                // monotonic, never reused
+  uint64_t parent_id;         // consumer parent (0 for pixel roots)
+  NodeType type;
+  int object_slot;            // hit object's slot, -1 on miss
+  uint64_t reflection_child, refraction_child;
+  bool alive;
+};
+```
+
+### RayTracer entry points
+
+* `bool EnableIncremental(const AABB& edit_domain)` - enables the
+  preview. The domain must be finite and enclose the finite bounds of
+  every scene object (checked when enabling; the camera and point
+  lights may live outside). Future edits must also stay inside it.
+  Returns `false` and stays disabled when the constraint fails or the
+  scene uses emissive glow.
+* `void DisableIncremental()` / `bool IncrementalEnabled()` - toggle
+  back to the plain full trace; old calls and outputs keep working.
+* `bool ApplySphereEdits(const std::vector<incremental::SphereEdit>&)` -
+  validates the whole batch (pointer ownership, no duplicates, finite
+  values, positive radius, material ranges: `specular` finite
+  non-negative, `reflective`/`transparency`/`tint` in [0,1],
+  `refractive_index` in [1,3], `emit_strength == 0`, new bounds inside
+  the edit domain), then atomically commits it and syncs each sphere's
+  bounds. On rejection geometry, image and cache stay untouched.
+  Several batches may be issued before the next `Trace()`; they are
+  merged and judged against the last completed image.
+* `incremental::FrameStats IncrementalStats()` - counters of the last
+  frame. With no edits and no rebuild, `Trace()` performs zero
+  `Object::Intersects` calls and zero replays.
+* `std::vector<incremental::NodeInfo> IncrementalNodes()` /
+  `IncrementalNodeInfo(id, out)` / `IncrementalRootId(row, col)` -
+  inspect the live ray records.
+
+Disabling the preview, or changing the camera, lights, background,
+reflection depth or the object set (`AddObject`) triggers a full
+rebuild of the cache on the next `Trace()`. Two `RayTracer` instances
+each keep their own cache. The implementation
+(`src/incremental/ray_cache.*`, `src/incremental/query_index.*`) only
+uses the C++17 standard library - no OpenMP, display, GPU or external
+models. See `examples/incremental.cpp` for a runnable demo
+(`before.ppm` / `after.ppm`).
+
+</details>
+
 ## How this implementation works
 
 <details>

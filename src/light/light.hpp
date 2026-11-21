@@ -37,9 +37,13 @@ public:
                  const Vec3f &at,
                  const Camera &camera,
                  const Vec3f &normal) const;
+  // read-only access to the registered lights (used to detect changes)
+  const std::vector<Light>& items() const { return lights_; }
 
 private:
   std::vector<Light> lights_;
+  // Normalize() is idempotent: adding a light resets this flag
+  bool normalized_ = false;
 
   static float ShadowFactor(const Light& light,
                             const std::vector<std::unique_ptr<Object>>& objects,
