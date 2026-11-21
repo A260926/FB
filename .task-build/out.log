@@ -1,0 +1,20 @@
+CASE topology tetra_winding_and_bijection checks=138
+CASE topology pentagonal_prism_ngon_faces checks=294
+CASE topology torus_32x32_sparse_topology checks=34840
+GROUP topology cases=3 checks=35272 COMPLETE
+CASE inverse tetra_least_squares checks=138
+CASE inverse prism_least_squares checks=294
+CASE inverse torus_least_squares checks=34840
+CASE inverse sequential_inputs_source_released checks=439
+GROUP inverse cases=4 checks=35711 COMPLETE
+CASE rejection bad_twin_halfedge checks=2
+CASE rejection boundary_halfedge checks=2
+CASE rejection broken_vertex_fan checks=2
+CASE rejection all_skip_markers checks=2
+CASE rejection bad_marker_set checks=5
+CASE rejection illegal_arguments checks=6
+CASE rejection solver_iteration_cap checks=2
+CASE rejection off_image_face_point checks=3
+CASE rejection non_quad_input checks=2
+GROUP rejection cases=9 checks=26 COMPLETE
+TARGET_COMPLETE cases=16
