@@ -1,0 +1,75 @@
+{
+  "repo": "https://github.com/lzn27/smallpt",
+  "commit": "77297c43a0a89df3a6118f03877d0448b59159b0",
+  "license": "MIT",
+  "included": [
+    {
+      "path": "LICENSE.txt",
+      "git_blob": "08255c89cfa43faec4baad56b71652c07586bde6",
+      "sha256": "353e22629f961fbe053f86a05dd5026c59fa8d3ca5bced37e51a885227145c4b",
+      "mode": "100644"
+    },
+    {
+      "path": "Makefile",
+      "git_blob": "b5d7b1db6295ec56000c4525a3b9118b95dfe5c7",
+      "sha256": "1e5a25d40100d8320881e1beed70a433184a48eb785aa0920612a0803f8ed319",
+      "mode": "100644"
+    },
+    {
+      "path": "README",
+      "git_blob": "519263724b183d3e27840f216a1a0ef47c83666b",
+      "sha256": "11bbe8cb2392ad05f4fa98b71fef11ea467479aceb1d36a509b96cf80d4529d5",
+      "mode": "100644"
+    },
+    {
+      "path": "smallpt.cpp",
+      "git_blob": "61e2edad197e63f3826403e3b6404687ed25b3f7",
+      "sha256": "43fcaca577824073f2ab384c0aa0fda5acdd57b6dee5041bdaa1d99a37f69fa1",
+      "mode": "100644"
+    },
+    {
+      "path": "smallpt4k.cpp",
+      "git_blob": "5e6d8840a40718c792b5035b9b8e554a366ac688",
+      "sha256": "a107eb84c44aad5a240b5f89ef0e7bed8ae29fea4a974a6a985ddbfcabfabaa4",
+      "mode": "100644"
+    }
+  ],
+  "excluded": [
+    {
+      "path": "image.ppm",
+      "git_blob": "35f5ee33ea9efd5a9b9ef9bbb190bdd904252ae1",
+      "sha256": "15416623f6ae4970607426e2ed0fd54d4df4face960f29ae08f5c14e2c06bdf6",
+      "mode": "100644",
+      "reason": "Unused generated reference images or platform-specific prebuilt executable; never loaded by production source or adopted runner."
+    },
+    {
+      "path": "image5000.ppm",
+      "git_blob": "6479230410ab162adc80aa159b6dce5d47efaf45",
+      "sha256": "d7b9768e8d4b1eee5115e610f4f136721e386289ef705905f56123f4e1521083",
+      "mode": "100644",
+      "reason": "Unused generated reference images or platform-specific prebuilt executable; never loaded by production source or adopted runner."
+    },
+    {
+      "path": "result_25k.png",
+      "git_blob": "2844124614ddeb8a28f3811978366e397fc44eb4",
+      "sha256": "b8fb183b6e322c2ce755581dfa692c5b43adde23450d2fbbe3b0e351ee47d021",
+      "mode": "100644",
+      "reason": "Unused generated reference images or platform-specific prebuilt executable; never loaded by production source or adopted runner."
+    },
+    {
+      "path": "smallpt",
+      "git_blob": "64de6d3da7076dc2d077e29c5400bf29bd22b1f7",
+      "sha256": "9a3da9cc7458bbd61ce439a48d88e1b8de685e783a92f3a8e1e527142478cd07",
+      "mode": "100755",
+      "reason": "Unused generated reference images or platform-specific prebuilt executable; never loaded by production source or adopted runner."
+    }
+  ],
+  "gitlinks": [],
+  "gitmodules": false,
+  "symlinks": [],
+  "binary_closure": "No binary assets are used. Generated reference images and upstream executable are excluded, preserved in manifest by blob and SHA256.",
+  "runtime_dependencies": [
+    "C++17 compiler",
+    "C/C++ runtime; legacy erand48 from system libc; no OpenMP library"
+  ]
+}
