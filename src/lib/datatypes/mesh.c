@@ -1,0 +1,22 @@
+//
+//  mesh.c
+//  c-ray
+//
+//  Created by Valtteri Koskivuori on 27/04/2017.
+//  Copyright © 2017-2025 Valtteri Koskivuori. All rights reserved.
+//
+
+#include "../../includes.h"
+#include "mesh.h"
+
+#include <accelerators/bvh.h>
+#include <common/vector.h>
+
+void mesh_free(struct mesh *mesh) {
+	if (mesh) {
+		free(mesh->name);
+		v_arr_free(mesh->polygons);
+		destroy_bvh(mesh->bvh);
+		vertex_buf_free(&mesh->vbuf);
+	}
+}

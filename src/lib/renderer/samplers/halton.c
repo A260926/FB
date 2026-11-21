@@ -1,0 +1,30 @@
+//
+//  halton.c
+//  c-ray
+//
+//  Created by Valtteri on 23.4.2020.
+//  Copyright © 2020-2025 Valtteri Koskivuori. All rights reserved.
+//
+
+#include <stdint.h>
+#include "halton.h"
+
+#include "common.h"
+#include <common/cr_assert.h>
+#include <common/vector.h>
+
+static const unsigned int primesCount = 6;
+
+void initHalton(haltonSampler *s, int pass, uint32_t seed) {
+	s->rndOffset = uintToUnitReal(seed);
+	s->currPass = pass;
+	s->currPrime = 0;
+}
+
+float getHalton(haltonSampler *s) {
+	// Wrapping around trick by @lycium
+	float v = wrapAdd(radical_inverse(s->currPrime++ % primesCount, s->currPass), s->rndOffset);
+	ASSERT(v >= 0.0f);
+	ASSERT(v < 1.0f);
+	return v;
+}

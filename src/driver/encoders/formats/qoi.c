@@ -1,0 +1,28 @@
+//
+//  qoi.c
+//  c-ray
+//
+//  Created by Valtteri on 23.12.2021.
+//  Copyright © 2021-2025 Valtteri Koskivuori. All rights reserved.
+//
+
+#include <stddef.h>
+#include "qoi.h"
+#include <common/fileio.h>
+#include <common/vendored/qoi.h>
+
+void encode_qoi_from_array(const char *filename, const unsigned char *imgData, size_t width, size_t height) {
+	int encoded_bytes = 0;
+	const qoi_desc desc = (qoi_desc){
+		.width = (int)width,
+		.height = (int)height,
+		.channels = 3,
+		.colorspace = QOI_SRGB
+	};
+	unsigned char *encoded_data = qoi_encode(imgData, &desc, &encoded_bytes);
+	// FIXME: static v_arr?
+	file_data copy = { 0 };
+	v_arr_add_n(copy, encoded_data, encoded_bytes);
+	write_file(copy, filename);
+	v_arr_free(copy);
+}
