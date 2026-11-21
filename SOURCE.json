@@ -1,0 +1,2235 @@
+{
+  "repo": "https://github.com/skiriushichev/eely",
+  "commit": "f612739b7cba156746b7ad0cc4d35e7318860c3f",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "46efbb9773e58926fb108de79244603276fd886e2606a6d50d5b61286bd67f86",
+      "mode": "0o644",
+      "upstream_sha256": "46efbb9773e58926fb108de79244603276fd886e2606a6d50d5b61286bd67f86"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "338da567831cb21413e3fd93954d98a2409f1ad65e85bf665f81e7bda94c1280",
+      "mode": "0o644",
+      "upstream_sha256": "338da567831cb21413e3fd93954d98a2409f1ad65e85bf665f81e7bda94c1280"
+    },
+    {
+      "path": "README.md",
+      "sha256": "1e6fc528e0bc2496bb8308e1e13278c93419bb4149196970e6c3072f37cbe973",
+      "mode": "0o644",
+      "upstream_sha256": "1e6fc528e0bc2496bb8308e1e13278c93419bb4149196970e6c3072f37cbe973"
+    },
+    {
+      "path": "examples/01_blend/src/example_blend/app_example_blend.cpp",
+      "sha256": "aa995f6a58ffbcc155a5ed7061331434d1019e96fa21c23176c324404e9c99f4",
+      "mode": "0o644",
+      "upstream_sha256": "aa995f6a58ffbcc155a5ed7061331434d1019e96fa21c23176c324404e9c99f4"
+    },
+    {
+      "path": "examples/01_blend/src/example_blend/app_example_blend.h",
+      "sha256": "2de89ceace7a0010d223f2d1eb842a6586005caed707dc3e6c394496631e5532",
+      "mode": "0o644",
+      "upstream_sha256": "2de89ceace7a0010d223f2d1eb842a6586005caed707dc3e6c394496631e5532"
+    },
+    {
+      "path": "examples/01_blend/src/example_blend/main.cpp",
+      "sha256": "364ebb69f07f0333029a6c64dad5a4c1ea521367872b2fb50dbe022d05c54026",
+      "mode": "0o644",
+      "upstream_sha256": "364ebb69f07f0333029a6c64dad5a4c1ea521367872b2fb50dbe022d05c54026"
+    },
+    {
+      "path": "examples/02_additive/src/example_additive/app_example_additive.cpp",
+      "sha256": "bc65ffcf35ff61936c90b721153411244f1c6f1138f72d35504010784e2c1c37",
+      "mode": "0o644",
+      "upstream_sha256": "bc65ffcf35ff61936c90b721153411244f1c6f1138f72d35504010784e2c1c37"
+    },
+    {
+      "path": "examples/02_additive/src/example_additive/app_example_additive.h",
+      "sha256": "e035dc3371d426861817adf7f1027a1cd647076fa8359679e803c47c9774ab99",
+      "mode": "0o644",
+      "upstream_sha256": "e035dc3371d426861817adf7f1027a1cd647076fa8359679e803c47c9774ab99"
+    },
+    {
+      "path": "examples/02_additive/src/example_additive/main.cpp",
+      "sha256": "5b9892c00f043ebdb878d2dd366739172bbd70d5bfaf20d87bc32c82350d1cf9",
+      "mode": "0o644",
+      "upstream_sha256": "5b9892c00f043ebdb878d2dd366739172bbd70d5bfaf20d87bc32c82350d1cf9"
+    },
+    {
+      "path": "external/acl/LICENSE",
+      "sha256": "f706403ad318029b593c6acdfc98d3ba8dbdf501e61e466bc417ed68af11599e",
+      "mode": "0o644",
+      "upstream_sha256": "f706403ad318029b593c6acdfc98d3ba8dbdf501e61e466bc417ed68af11599e"
+    },
+    {
+      "path": "external/acl/include/acl/compression/compress.h",
+      "sha256": "bc64bd9b0ceea011692788475ce589faef16cdaa3198d0c1c87301c022c71777",
+      "mode": "0o644",
+      "upstream_sha256": "bc64bd9b0ceea011692788475ce589faef16cdaa3198d0c1c87301c022c71777"
+    },
+    {
+      "path": "external/acl/include/acl/compression/compression_level.h",
+      "sha256": "44f2a7af09a54e0e882af57439614613e4b57ca30c604804609c45dd87ed0a7f",
+      "mode": "0o644",
+      "upstream_sha256": "44f2a7af09a54e0e882af57439614613e4b57ca30c604804609c45dd87ed0a7f"
+    },
+    {
+      "path": "external/acl/include/acl/compression/compression_settings.h",
+      "sha256": "82917d00d76ce00006745fe94fec6cac6267a59ee8e59e4294a93e91be3ec521",
+      "mode": "0o644",
+      "upstream_sha256": "82917d00d76ce00006745fe94fec6cac6267a59ee8e59e4294a93e91be3ec521"
+    },
+    {
+      "path": "external/acl/include/acl/compression/convert.h",
+      "sha256": "830719ed4f7573b638615754695783ea8867ea6bb34b80ce171123f2a67fca3c",
+      "mode": "0o644",
+      "upstream_sha256": "830719ed4f7573b638615754695783ea8867ea6bb34b80ce171123f2a67fca3c"
+    },
+    {
+      "path": "external/acl/include/acl/compression/fwd.h",
+      "sha256": "27afd4954e55ca2008608c6f8360dde3b1ae71dbe8efbfd937048a453fb0aba0",
+      "mode": "0o644",
+      "upstream_sha256": "27afd4954e55ca2008608c6f8360dde3b1ae71dbe8efbfd937048a453fb0aba0"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/animated_track_utils.h",
+      "sha256": "eb804084b22c57faa1ced31dea82c966d38264f0555e4eb8dcfff5addf609d2d",
+      "mode": "0o644",
+      "upstream_sha256": "eb804084b22c57faa1ced31dea82c966d38264f0555e4eb8dcfff5addf609d2d"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/clip_context.h",
+      "sha256": "d328958d0c9b2e035bfe4219bb7129f144206779fee09afcf77857a07322f8f4",
+      "mode": "0o644",
+      "upstream_sha256": "d328958d0c9b2e035bfe4219bb7129f144206779fee09afcf77857a07322f8f4"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/compact_constant_streams.h",
+      "sha256": "f0f09316ddd986a5fa65849ab156dbae950df602764eec8da8264e3cd28efa86",
+      "mode": "0o644",
+      "upstream_sha256": "f0f09316ddd986a5fa65849ab156dbae950df602764eec8da8264e3cd28efa86"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/compress.database.impl.h",
+      "sha256": "4827358ce84a43b73af279a70732bd4d382182135f8b5a2c580dad7506907906",
+      "mode": "0o644",
+      "upstream_sha256": "4827358ce84a43b73af279a70732bd4d382182135f8b5a2c580dad7506907906"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/compress.impl.h",
+      "sha256": "0fdcb62574dfb80f1f7bea13fb9859727003e6c30ddf48220e3ee34f9e4e382d",
+      "mode": "0o644",
+      "upstream_sha256": "0fdcb62574dfb80f1f7bea13fb9859727003e6c30ddf48220e3ee34f9e4e382d"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/compress.scalar.impl.h",
+      "sha256": "9a81e889465194b7cb1e8e514263de4916013286ef825f9d4b191b2bfa26df8d",
+      "mode": "0o644",
+      "upstream_sha256": "9a81e889465194b7cb1e8e514263de4916013286ef825f9d4b191b2bfa26df8d"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/compress.transform.impl.h",
+      "sha256": "86ff96f23479c8098ad41216d14e78f5d4a8753de570c7fb962385c86f087d34",
+      "mode": "0o644",
+      "upstream_sha256": "86ff96f23479c8098ad41216d14e78f5d4a8753de570c7fb962385c86f087d34"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/compression_settings.impl.h",
+      "sha256": "cb579f24fe376b0dbb38371e83c19f42e103e026112c75a461d2d167b907a520",
+      "mode": "0o644",
+      "upstream_sha256": "cb579f24fe376b0dbb38371e83c19f42e103e026112c75a461d2d167b907a520"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/constant_track_impl.h",
+      "sha256": "f2b44e664815deaabf7e0b744965eeea214a7b51c708179911079a8d3b32c29a",
+      "mode": "0o644",
+      "upstream_sha256": "f2b44e664815deaabf7e0b744965eeea214a7b51c708179911079a8d3b32c29a"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/convert.impl.h",
+      "sha256": "5b2647e8dffe0c9f6c389a9131d2112557acde28bc84e865f3faff19c4c854c4",
+      "mode": "0o644",
+      "upstream_sha256": "5b2647e8dffe0c9f6c389a9131d2112557acde28bc84e865f3faff19c4c854c4"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/convert_rotation_streams.h",
+      "sha256": "373b87218704737cbc8595082ce685148de57ef663ff5b3ee4e5e5d65d20a961",
+      "mode": "0o644",
+      "upstream_sha256": "373b87218704737cbc8595082ce685148de57ef663ff5b3ee4e5e5d65d20a961"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/normalize_streams.h",
+      "sha256": "8798991ee387209f2ef1097dce28d0ac9f5c973f71d0e6ea4a98bf503a224c87",
+      "mode": "0o644",
+      "upstream_sha256": "8798991ee387209f2ef1097dce28d0ac9f5c973f71d0e6ea4a98bf503a224c87"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/normalize_track_impl.h",
+      "sha256": "b6189614a3037a3f51a3bb69e6aa27bf7c2b8648e62a650df5fb6d0c34d0912f",
+      "mode": "0o644",
+      "upstream_sha256": "b6189614a3037a3f51a3bb69e6aa27bf7c2b8648e62a650df5fb6d0c34d0912f"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/optimize_looping.h",
+      "sha256": "80788c76b8eeeca48055a39cc804ab144cd44ae41efac328ec6db4143b391b49",
+      "mode": "0o644",
+      "upstream_sha256": "80788c76b8eeeca48055a39cc804ab144cd44ae41efac328ec6db4143b391b49"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/quantize_streams.h",
+      "sha256": "7bd92f661b243e2089f4dd941d630cb8f1aead689f2bf6ad09b2be14590868b1",
+      "mode": "0o644",
+      "upstream_sha256": "7bd92f661b243e2089f4dd941d630cb8f1aead689f2bf6ad09b2be14590868b1"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/quantize_track_impl.h",
+      "sha256": "473a4c1642b8a54b4e71b5a647474b757bfdd17c658bdd79fbbd0f804e330701",
+      "mode": "0o644",
+      "upstream_sha256": "473a4c1642b8a54b4e71b5a647474b757bfdd17c658bdd79fbbd0f804e330701"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/sample_streams.h",
+      "sha256": "9d1988b193fdf6b994d0f110799c02866b81ae474f4dc55008faaec41c774fd5",
+      "mode": "0o644",
+      "upstream_sha256": "9d1988b193fdf6b994d0f110799c02866b81ae474f4dc55008faaec41c774fd5"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/segment_context.h",
+      "sha256": "806f6c36acda19161279a350b0470452f29fc60bc85481ca903edf5dac05b8c8",
+      "mode": "0o644",
+      "upstream_sha256": "806f6c36acda19161279a350b0470452f29fc60bc85481ca903edf5dac05b8c8"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/segment_streams.h",
+      "sha256": "1bc30a58eb6c5ae91471c040ee296e3d10ec5104cf7673cf03ec16e27cbed47c",
+      "mode": "0o644",
+      "upstream_sha256": "1bc30a58eb6c5ae91471c040ee296e3d10ec5104cf7673cf03ec16e27cbed47c"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track.impl.h",
+      "sha256": "f37e7d2a66187cfcafa04584a5fb592171021382c140af36c01e738260674829",
+      "mode": "0o644",
+      "upstream_sha256": "f37e7d2a66187cfcafa04584a5fb592171021382c140af36c01e738260674829"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_array.impl.h",
+      "sha256": "1e2307d79b7a38f29e346760044284f86773e03013efd2342d5ddb2be19c7876",
+      "mode": "0o644",
+      "upstream_sha256": "1e2307d79b7a38f29e346760044284f86773e03013efd2342d5ddb2be19c7876"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_bit_rate_database.h",
+      "sha256": "308507c7e0542836e164995260a7ec37b857825d6d98de1a45f5529ff19d9c67",
+      "mode": "0o644",
+      "upstream_sha256": "308507c7e0542836e164995260a7ec37b857825d6d98de1a45f5529ff19d9c67"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_error.impl.h",
+      "sha256": "04d2c124d1e45b6f6edaad187e62ec160cb0040eff9c99475bf6e5f8274b6702",
+      "mode": "0o644",
+      "upstream_sha256": "04d2c124d1e45b6f6edaad187e62ec160cb0040eff9c99475bf6e5f8274b6702"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_list_context.h",
+      "sha256": "eec9cf7f0952f2cb0b28b456a80a4b2abe88ab159c2105e5d3f8a336a4c972a2",
+      "mode": "0o644",
+      "upstream_sha256": "eec9cf7f0952f2cb0b28b456a80a4b2abe88ab159c2105e5d3f8a336a4c972a2"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_range.h",
+      "sha256": "b1d905af94d3642ff7b1accaa67f5d5b407cf9d3abceb3745831fcf01f959a8a",
+      "mode": "0o644",
+      "upstream_sha256": "b1d905af94d3642ff7b1accaa67f5d5b407cf9d3abceb3745831fcf01f959a8a"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_range_impl.h",
+      "sha256": "a221c7009c9300b5efd405d6d0d4cf62e1067005aed05040daeba384eda1bc69",
+      "mode": "0o644",
+      "upstream_sha256": "a221c7009c9300b5efd405d6d0d4cf62e1067005aed05040daeba384eda1bc69"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/track_stream.h",
+      "sha256": "8adc7305ae3d8490bcaf08cec4a7debcd6c2a8d148987ab113a59bb93f4756ce",
+      "mode": "0o644",
+      "upstream_sha256": "8adc7305ae3d8490bcaf08cec4a7debcd6c2a8d148987ab113a59bb93f4756ce"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/transform_bit_rate_permutations.h",
+      "sha256": "193637515a8837702000c25882c999accfb6aaf0e10b7720f1d8f03cb25b5768",
+      "mode": "0o644",
+      "upstream_sha256": "193637515a8837702000c25882c999accfb6aaf0e10b7720f1d8f03cb25b5768"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_compression_stats_impl.h",
+      "sha256": "eba506bff9c6c1488e9d331ce4b652fa372cced10caddc1c242dfea4fc3afa9b",
+      "mode": "0o644",
+      "upstream_sha256": "eba506bff9c6c1488e9d331ce4b652fa372cced10caddc1c242dfea4fc3afa9b"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_range_data.h",
+      "sha256": "22ea74a25a9018b7c188ade94bbc26a840184233df7743d4cab1cbcf3fdaa2ce",
+      "mode": "0o644",
+      "upstream_sha256": "22ea74a25a9018b7c188ade94bbc26a840184233df7743d4cab1cbcf3fdaa2ce"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_segment_data.h",
+      "sha256": "25e47ad916ae05cfb4cbb3efc5d8d61151dace6f403317c6cf6b206b9d50225e",
+      "mode": "0o644",
+      "upstream_sha256": "25e47ad916ae05cfb4cbb3efc5d8d61151dace6f403317c6cf6b206b9d50225e"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_stats.h",
+      "sha256": "0d532343b50906eed91f48652d1ddea29d71fd6f2ce0040e2177228c44a79c13",
+      "mode": "0o644",
+      "upstream_sha256": "0d532343b50906eed91f48652d1ddea29d71fd6f2ce0040e2177228c44a79c13"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_stream_data.h",
+      "sha256": "14580db53f5aad8839b69bfa007c49c94b00b3561cd8d5e6e7c977f3efdb8fce",
+      "mode": "0o644",
+      "upstream_sha256": "14580db53f5aad8839b69bfa007c49c94b00b3561cd8d5e6e7c977f3efdb8fce"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_sub_track_types.h",
+      "sha256": "5787fd2ce6e15e47941525175d8208420ea238c2b1a65bbaf941deb47960b422",
+      "mode": "0o644",
+      "upstream_sha256": "5787fd2ce6e15e47941525175d8208420ea238c2b1a65bbaf941deb47960b422"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_track_data_impl.h",
+      "sha256": "c4644ffa490e5d92fbd57b78ea277b73ffeee707a138f081ad123f84a892d944",
+      "mode": "0o644",
+      "upstream_sha256": "c4644ffa490e5d92fbd57b78ea277b73ffeee707a138f081ad123f84a892d944"
+    },
+    {
+      "path": "external/acl/include/acl/compression/impl/write_track_metadata.h",
+      "sha256": "2430aee673e1ba3ec433bcef0bf98b0b85e450527d5b9362528ffd4c1dbc4970",
+      "mode": "0o644",
+      "upstream_sha256": "2430aee673e1ba3ec433bcef0bf98b0b85e450527d5b9362528ffd4c1dbc4970"
+    },
+    {
+      "path": "external/acl/include/acl/compression/output_stats.h",
+      "sha256": "916628ff8a883d40a688304074cf2754e303e74b7ea402c7d1e0fcfad43d0290",
+      "mode": "0o644",
+      "upstream_sha256": "916628ff8a883d40a688304074cf2754e303e74b7ea402c7d1e0fcfad43d0290"
+    },
+    {
+      "path": "external/acl/include/acl/compression/track.h",
+      "sha256": "c815fcd56b37d468be4b4a40765d329e3cf76d0a4af7d4fd70cbb029af1974f6",
+      "mode": "0o644",
+      "upstream_sha256": "c815fcd56b37d468be4b4a40765d329e3cf76d0a4af7d4fd70cbb029af1974f6"
+    },
+    {
+      "path": "external/acl/include/acl/compression/track_array.h",
+      "sha256": "1b3aec177be15866fa6e2076c04a5b865a733512888b27b53043ed573fb3bf91",
+      "mode": "0o644",
+      "upstream_sha256": "1b3aec177be15866fa6e2076c04a5b865a733512888b27b53043ed573fb3bf91"
+    },
+    {
+      "path": "external/acl/include/acl/compression/track_error.h",
+      "sha256": "961391fd45835b6427687da55fec45ca84ba5f1b45f116cd4ad9ea8fe3d194c3",
+      "mode": "0o644",
+      "upstream_sha256": "961391fd45835b6427687da55fec45ca84ba5f1b45f116cd4ad9ea8fe3d194c3"
+    },
+    {
+      "path": "external/acl/include/acl/compression/transform_error_metrics.h",
+      "sha256": "e332ebd09192a0bb944d6778af0bb232a84767bcedb0f38633af56a31328bc50",
+      "mode": "0o644",
+      "upstream_sha256": "e332ebd09192a0bb944d6778af0bb232a84767bcedb0f38633af56a31328bc50"
+    },
+    {
+      "path": "external/acl/include/acl/compression/transform_pose_utils.h",
+      "sha256": "a7be1afe75ec20838756dbd02113fbd9d32b4a5055be60b41fe2a324230fda4f",
+      "mode": "0o644",
+      "upstream_sha256": "a7be1afe75ec20838756dbd02113fbd9d32b4a5055be60b41fe2a324230fda4f"
+    },
+    {
+      "path": "external/acl/include/acl/core/additive_utils.h",
+      "sha256": "d0d8bb034a341256e55c48d0c47da5a53da7d565500ae6810d75a211887d8336",
+      "mode": "0o644",
+      "upstream_sha256": "d0d8bb034a341256e55c48d0c47da5a53da7d565500ae6810d75a211887d8336"
+    },
+    {
+      "path": "external/acl/include/acl/core/algorithm_types.h",
+      "sha256": "b1ba8fd60cba4503e95a9f89fdecbef5417d4f1d20f41af840b74ba757e40ef7",
+      "mode": "0o644",
+      "upstream_sha256": "b1ba8fd60cba4503e95a9f89fdecbef5417d4f1d20f41af840b74ba757e40ef7"
+    },
+    {
+      "path": "external/acl/include/acl/core/ansi_allocator.h",
+      "sha256": "a2d331178c51f495fa6d1bcfa009ce7a4cc2675c086247b1e75ffbd23114cb76",
+      "mode": "0o644",
+      "upstream_sha256": "a2d331178c51f495fa6d1bcfa009ce7a4cc2675c086247b1e75ffbd23114cb76"
+    },
+    {
+      "path": "external/acl/include/acl/core/bit_manip_utils.h",
+      "sha256": "d411bcce0e90b3d4fbdfa16ca14a0caae192cba9fdf36c711e586e21c70a6172",
+      "mode": "0o644",
+      "upstream_sha256": "d411bcce0e90b3d4fbdfa16ca14a0caae192cba9fdf36c711e586e21c70a6172"
+    },
+    {
+      "path": "external/acl/include/acl/core/bitset.h",
+      "sha256": "a6e5f7ed6285965d3f9b7047f929fc55a748d85b331ff3a59177f8f598ab1031",
+      "mode": "0o644",
+      "upstream_sha256": "a6e5f7ed6285965d3f9b7047f929fc55a748d85b331ff3a59177f8f598ab1031"
+    },
+    {
+      "path": "external/acl/include/acl/core/buffer_tag.h",
+      "sha256": "11b2edff773bf0e101d7a1b12bcdb7d8841ed336a2d5c065ebeb93efd8efe4de",
+      "mode": "0o644",
+      "upstream_sha256": "11b2edff773bf0e101d7a1b12bcdb7d8841ed336a2d5c065ebeb93efd8efe4de"
+    },
+    {
+      "path": "external/acl/include/acl/core/compressed_database.h",
+      "sha256": "5c188d4fb0465ab013b85e8ed8104bc5b6e07d3bcd61894971bcabd2a10ee351",
+      "mode": "0o644",
+      "upstream_sha256": "5c188d4fb0465ab013b85e8ed8104bc5b6e07d3bcd61894971bcabd2a10ee351"
+    },
+    {
+      "path": "external/acl/include/acl/core/compressed_tracks.h",
+      "sha256": "b8a4a2945fc985f7a18d9c1f32c814580022d88f74784a79256be6078c3664f0",
+      "mode": "0o644",
+      "upstream_sha256": "b8a4a2945fc985f7a18d9c1f32c814580022d88f74784a79256be6078c3664f0"
+    },
+    {
+      "path": "external/acl/include/acl/core/compressed_tracks_version.h",
+      "sha256": "265a8661dc10f2868ed66c6a866aed87e2ea799b122639a590f2f89640fca2f6",
+      "mode": "0o644",
+      "upstream_sha256": "265a8661dc10f2868ed66c6a866aed87e2ea799b122639a590f2f89640fca2f6"
+    },
+    {
+      "path": "external/acl/include/acl/core/enum_utils.h",
+      "sha256": "d4df74df668e91100e869f8728fcfc4d7c4f3268687d556a7ee60220bf75a0ba",
+      "mode": "0o644",
+      "upstream_sha256": "d4df74df668e91100e869f8728fcfc4d7c4f3268687d556a7ee60220bf75a0ba"
+    },
+    {
+      "path": "external/acl/include/acl/core/error.h",
+      "sha256": "aaa4951dc5d752c324c1025001e443e69171a48eec971e206f4dc832eee1bb67",
+      "mode": "0o644",
+      "upstream_sha256": "aaa4951dc5d752c324c1025001e443e69171a48eec971e206f4dc832eee1bb67"
+    },
+    {
+      "path": "external/acl/include/acl/core/error_result.h",
+      "sha256": "1a004f691d05f6852b54d6eca77676cc1f0d3cee0c6168ea66eb8870b0101a96",
+      "mode": "0o644",
+      "upstream_sha256": "1a004f691d05f6852b54d6eca77676cc1f0d3cee0c6168ea66eb8870b0101a96"
+    },
+    {
+      "path": "external/acl/include/acl/core/floating_point_exceptions.h",
+      "sha256": "b516e4042f4110570fcc85551588407c4df7b7408e8ca5b871ef07a046c4c534",
+      "mode": "0o644",
+      "upstream_sha256": "b516e4042f4110570fcc85551588407c4df7b7408e8ca5b871ef07a046c4c534"
+    },
+    {
+      "path": "external/acl/include/acl/core/fwd.h",
+      "sha256": "f23755754bd1617e7561723cda5d62044935b524cdb8347a08dfefbdcc6c8bac",
+      "mode": "0o644",
+      "upstream_sha256": "f23755754bd1617e7561723cda5d62044935b524cdb8347a08dfefbdcc6c8bac"
+    },
+    {
+      "path": "external/acl/include/acl/core/hash.h",
+      "sha256": "616bf04f513d85d63490f6e2f601aaa80ec2c8eed169b5c911e60fdd43c11194",
+      "mode": "0o644",
+      "upstream_sha256": "616bf04f513d85d63490f6e2f601aaa80ec2c8eed169b5c911e60fdd43c11194"
+    },
+    {
+      "path": "external/acl/include/acl/core/iallocator.h",
+      "sha256": "98b4f79c7a092d720ac7d18b5f96b0bb31778fc50b4e93041cfec56560849945",
+      "mode": "0o644",
+      "upstream_sha256": "98b4f79c7a092d720ac7d18b5f96b0bb31778fc50b4e93041cfec56560849945"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/compiler_utils.h",
+      "sha256": "2f88fe50f1a93fa2eba9aaf3cf48090ce3ff91b76d45d3dfb30326c658e04254",
+      "mode": "0o644",
+      "upstream_sha256": "2f88fe50f1a93fa2eba9aaf3cf48090ce3ff91b76d45d3dfb30326c658e04254"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/compressed_database.impl.h",
+      "sha256": "20c72dbf741ded5182c8362be482665a9b400bbe6fef4e7d3db5d5aa4579a3f9",
+      "mode": "0o644",
+      "upstream_sha256": "20c72dbf741ded5182c8362be482665a9b400bbe6fef4e7d3db5d5aa4579a3f9"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/compressed_headers.h",
+      "sha256": "8dee3043145426b80679930e78748d574d861687f2005c4c5b02ca1691fcd43f",
+      "mode": "0o644",
+      "upstream_sha256": "8dee3043145426b80679930e78748d574d861687f2005c4c5b02ca1691fcd43f"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/compressed_tracks.impl.h",
+      "sha256": "2018f5e89c53ccbc14e951366da2f253711671b7d7e6435d4bf610c9a8951477",
+      "mode": "0o644",
+      "upstream_sha256": "2018f5e89c53ccbc14e951366da2f253711671b7d7e6435d4bf610c9a8951477"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/debug_track_writer.h",
+      "sha256": "7f4ed77641466bf11d8eea8abb04ecf01401dbed3b8de5e6b57807f40d48a7af",
+      "mode": "0o644",
+      "upstream_sha256": "7f4ed77641466bf11d8eea8abb04ecf01401dbed3b8de5e6b57807f40d48a7af"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/interpolation_utils.impl.h",
+      "sha256": "7970879d5110443080935757c1e0ffd52c3bd5cce764f691f65566d501e80012",
+      "mode": "0o644",
+      "upstream_sha256": "7970879d5110443080935757c1e0ffd52c3bd5cce764f691f65566d501e80012"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/time_utils.impl.h",
+      "sha256": "55d4b3b115dad9e7afdda8bd6c70d42a5f6ba194e25feeda3e42858adcd7eafe",
+      "mode": "0o644",
+      "upstream_sha256": "55d4b3b115dad9e7afdda8bd6c70d42a5f6ba194e25feeda3e42858adcd7eafe"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/track_desc.impl.h",
+      "sha256": "f7bea05af6cbf6cc0df2ef96aa745ec279c8e808a69cdc68c73d66ed51bd7d7c",
+      "mode": "0o644",
+      "upstream_sha256": "f7bea05af6cbf6cc0df2ef96aa745ec279c8e808a69cdc68c73d66ed51bd7d7c"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/track_formats.impl.h",
+      "sha256": "9297cffc8eb55dd8a80ad3c89c76e09248e8033c2bd9d21e71f4fcf2e8eaff6e",
+      "mode": "0o644",
+      "upstream_sha256": "9297cffc8eb55dd8a80ad3c89c76e09248e8033c2bd9d21e71f4fcf2e8eaff6e"
+    },
+    {
+      "path": "external/acl/include/acl/core/impl/variable_bit_rates.h",
+      "sha256": "3a8147a985070b77e03fb33d297a656d3491bfc2de40bf8b33e118d5718c6288",
+      "mode": "0o644",
+      "upstream_sha256": "3a8147a985070b77e03fb33d297a656d3491bfc2de40bf8b33e118d5718c6288"
+    },
+    {
+      "path": "external/acl/include/acl/core/interpolation_utils.h",
+      "sha256": "3be148c04f586332e24cd97bbb11cb77f0d6eb703e9fb967ba6e00e6b2db3157",
+      "mode": "0o644",
+      "upstream_sha256": "3be148c04f586332e24cd97bbb11cb77f0d6eb703e9fb967ba6e00e6b2db3157"
+    },
+    {
+      "path": "external/acl/include/acl/core/iterator.h",
+      "sha256": "831b3cb30e0d2c58d822a78b1a632fd409dd512460a65e1c0ead0faa7e4536da",
+      "mode": "0o644",
+      "upstream_sha256": "831b3cb30e0d2c58d822a78b1a632fd409dd512460a65e1c0ead0faa7e4536da"
+    },
+    {
+      "path": "external/acl/include/acl/core/memory_utils.h",
+      "sha256": "94878a8f9ab3576a40349581571b03f8293ba1d746343611ef1bc66821e05788",
+      "mode": "0o644",
+      "upstream_sha256": "94878a8f9ab3576a40349581571b03f8293ba1d746343611ef1bc66821e05788"
+    },
+    {
+      "path": "external/acl/include/acl/core/ptr_offset.h",
+      "sha256": "fe40ae5b2967104590faf46c198007b769961e058f1ce7c59bdc0158328c8515",
+      "mode": "0o644",
+      "upstream_sha256": "fe40ae5b2967104590faf46c198007b769961e058f1ce7c59bdc0158328c8515"
+    },
+    {
+      "path": "external/acl/include/acl/core/quality_tiers.h",
+      "sha256": "da614c1d7b4c9aca0f443c3d73d9add983cd4460a75df1f6ad889b59aa004e59",
+      "mode": "0o644",
+      "upstream_sha256": "da614c1d7b4c9aca0f443c3d73d9add983cd4460a75df1f6ad889b59aa004e59"
+    },
+    {
+      "path": "external/acl/include/acl/core/range_reduction_types.h",
+      "sha256": "15c7d623a8fed83731eba62dca56975c8cea2b909f5ea3e246c7467afc58174c",
+      "mode": "0o644",
+      "upstream_sha256": "15c7d623a8fed83731eba62dca56975c8cea2b909f5ea3e246c7467afc58174c"
+    },
+    {
+      "path": "external/acl/include/acl/core/sample_looping_policy.h",
+      "sha256": "fcddcfff602a597c1ea2c26195b77993c98b48d6fabac9b369362513dba426a2",
+      "mode": "0o644",
+      "upstream_sha256": "fcddcfff602a597c1ea2c26195b77993c98b48d6fabac9b369362513dba426a2"
+    },
+    {
+      "path": "external/acl/include/acl/core/sample_rounding_policy.h",
+      "sha256": "7ea31cdf95132492bf2e16c94efe37fb980360fb71d9fc9b61640746530a7453",
+      "mode": "0o644",
+      "upstream_sha256": "7ea31cdf95132492bf2e16c94efe37fb980360fb71d9fc9b61640746530a7453"
+    },
+    {
+      "path": "external/acl/include/acl/core/scope_profiler.h",
+      "sha256": "70890fafd423ac25ea7ba9566b4f703f5ce4d2222d9c6836baa6452ce7d8bb29",
+      "mode": "0o644",
+      "upstream_sha256": "70890fafd423ac25ea7ba9566b4f703f5ce4d2222d9c6836baa6452ce7d8bb29"
+    },
+    {
+      "path": "external/acl/include/acl/core/string.h",
+      "sha256": "307fd7d114ab56556b70488792765428848fc2a4554c6bd8ecbdd3fe941089dd",
+      "mode": "0o644",
+      "upstream_sha256": "307fd7d114ab56556b70488792765428848fc2a4554c6bd8ecbdd3fe941089dd"
+    },
+    {
+      "path": "external/acl/include/acl/core/time_utils.h",
+      "sha256": "42c4d92f729cb983ab98487d981e577a17b996c68d6cc305d2b4a13c94200dee",
+      "mode": "0o644",
+      "upstream_sha256": "42c4d92f729cb983ab98487d981e577a17b996c68d6cc305d2b4a13c94200dee"
+    },
+    {
+      "path": "external/acl/include/acl/core/track_desc.h",
+      "sha256": "86aa2d13de0d31dae78ff4b40904d7fc4b830b5b1626faf22c8cc9bcc8a03d9a",
+      "mode": "0o644",
+      "upstream_sha256": "86aa2d13de0d31dae78ff4b40904d7fc4b830b5b1626faf22c8cc9bcc8a03d9a"
+    },
+    {
+      "path": "external/acl/include/acl/core/track_formats.h",
+      "sha256": "7b163634231284074e51f3bd55e20abed0c2152f6d7f8477b2343fa5f52c9054",
+      "mode": "0o644",
+      "upstream_sha256": "7b163634231284074e51f3bd55e20abed0c2152f6d7f8477b2343fa5f52c9054"
+    },
+    {
+      "path": "external/acl/include/acl/core/track_traits.h",
+      "sha256": "0e27a17d6a5bbd9317e2201d448104c2a40640ec9783ae745b2dface35506a36",
+      "mode": "0o644",
+      "upstream_sha256": "0e27a17d6a5bbd9317e2201d448104c2a40640ec9783ae745b2dface35506a36"
+    },
+    {
+      "path": "external/acl/include/acl/core/track_types.h",
+      "sha256": "b3c93d3976c981119291009473416d11f3ff308443ba75666eb57ad09f76a31a",
+      "mode": "0o644",
+      "upstream_sha256": "b3c93d3976c981119291009473416d11f3ff308443ba75666eb57ad09f76a31a"
+    },
+    {
+      "path": "external/acl/include/acl/core/track_writer.h",
+      "sha256": "f69bc3d5ceda2a7154b3fcfa85ee4fc4ddda7e7737a6efe0c8423d6183bda5d9",
+      "mode": "0o644",
+      "upstream_sha256": "f69bc3d5ceda2a7154b3fcfa85ee4fc4ddda7e7737a6efe0c8423d6183bda5d9"
+    },
+    {
+      "path": "external/acl/include/acl/core/unique_ptr.h",
+      "sha256": "d2c7e77e32eab0e03438856f6d2f24c56ab7b4120011913a035b70064d558dc0",
+      "mode": "0o644",
+      "upstream_sha256": "d2c7e77e32eab0e03438856f6d2f24c56ab7b4120011913a035b70064d558dc0"
+    },
+    {
+      "path": "external/acl/include/acl/core/utils.h",
+      "sha256": "776f28b52ca394c0d9edc1803daf2f546c1f65a0c07ca0e3e472137593ab50cf",
+      "mode": "0o644",
+      "upstream_sha256": "776f28b52ca394c0d9edc1803daf2f546c1f65a0c07ca0e3e472137593ab50cf"
+    },
+    {
+      "path": "external/acl/include/acl/core/variable_bit_rates.h",
+      "sha256": "89d0bd4d060c1016f2d0da5fabb735a4a6365f706757004753a9dddea98fae11",
+      "mode": "0o644",
+      "upstream_sha256": "89d0bd4d060c1016f2d0da5fabb735a4a6365f706757004753a9dddea98fae11"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/database.h",
+      "sha256": "5819bdd873f963d0f77f9110c5d2bbaaa4d8424706e129b7a82a21e3d7dcb4e1",
+      "mode": "0o644",
+      "upstream_sha256": "5819bdd873f963d0f77f9110c5d2bbaaa4d8424706e129b7a82a21e3d7dcb4e1"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/database_settings.h",
+      "sha256": "8132397c04749c716b4bb141ab1f8b3e741b63e715779a579e9ff0e3584ca77a",
+      "mode": "0o644",
+      "upstream_sha256": "8132397c04749c716b4bb141ab1f8b3e741b63e715779a579e9ff0e3584ca77a"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/database_streamer.h",
+      "sha256": "d0a510b21e5d70a0e8f04aaea75c0d4b604209d41f33c5e9eb1a04c37e952012",
+      "mode": "0o644",
+      "upstream_sha256": "d0a510b21e5d70a0e8f04aaea75c0d4b604209d41f33c5e9eb1a04c37e952012"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/impl/database.impl.h",
+      "sha256": "34c0abec8f64485107b2603fdb76cacbb80ce23be28cf5a64fa37337fb4789d7",
+      "mode": "0o644",
+      "upstream_sha256": "34c0abec8f64485107b2603fdb76cacbb80ce23be28cf5a64fa37337fb4789d7"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/impl/database_context.h",
+      "sha256": "24790aef03945f0955e0629735814c237dd081b15a9d72e5873da2f19bbb413f",
+      "mode": "0o644",
+      "upstream_sha256": "24790aef03945f0955e0629735814c237dd081b15a9d72e5873da2f19bbb413f"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/impl/database_streamer.impl.h",
+      "sha256": "c253d65365a0a6bb1f5e1a08218194b569ccf4e67271d2bc74aef036f018970c",
+      "mode": "0o644",
+      "upstream_sha256": "c253d65365a0a6bb1f5e1a08218194b569ccf4e67271d2bc74aef036f018970c"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/impl/debug_database_streamer.h",
+      "sha256": "f88093cad01259fbdc943273a972fbed495177612cc371a15aafe9a32c3eb5f6",
+      "mode": "0o644",
+      "upstream_sha256": "f88093cad01259fbdc943273a972fbed495177612cc371a15aafe9a32c3eb5f6"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/database/null_database_streamer.h",
+      "sha256": "787e1551d8a1307cf3f24fc614e6cdc7e91d7267542e0eb115e04e9cb4603599",
+      "mode": "0o644",
+      "upstream_sha256": "787e1551d8a1307cf3f24fc614e6cdc7e91d7267542e0eb115e04e9cb4603599"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/decompress.h",
+      "sha256": "eead17948dbaffcafa69faecf80da939f6b8ed1d2ffbefb2bc6da2356b64f1a1",
+      "mode": "0o644",
+      "upstream_sha256": "eead17948dbaffcafa69faecf80da939f6b8ed1d2ffbefb2bc6da2356b64f1a1"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/decompression_settings.h",
+      "sha256": "ef81394021afbfff146a26119edfedc504bc56fc3085e6101edf80cb59d0097f",
+      "mode": "0o644",
+      "upstream_sha256": "ef81394021afbfff146a26119edfedc504bc56fc3085e6101edf80cb59d0097f"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/fwd.h",
+      "sha256": "b0d013e9c4196c7b1ee5de2b31f2d81ff09663a759d6b0d0d45ea44eb086227d",
+      "mode": "0o644",
+      "upstream_sha256": "b0d013e9c4196c7b1ee5de2b31f2d81ff09663a759d6b0d0d45ea44eb086227d"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/decompress.impl.h",
+      "sha256": "9c215c6af75f8ef7010faa6e05ad8b7c56f9c0bfed32892e233401cc9c328c7a",
+      "mode": "0o644",
+      "upstream_sha256": "453679feae5f3e7e6b3ba5720d6948ca7342ca28125191c8892979ac92a82a8f"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/decompression_context_selector.h",
+      "sha256": "a93f3b6165e24d9b0695c80bdfb6ba218e8cc40bd3150894c0876376c38ffc5f",
+      "mode": "0o644",
+      "upstream_sha256": "a93f3b6165e24d9b0695c80bdfb6ba218e8cc40bd3150894c0876376c38ffc5f"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/decompression_version_selector.h",
+      "sha256": "3cd1bec55b6fd15341f5c1e774cec8b50d5b98254f0fffc0e0f4bef89da0bd9b",
+      "mode": "0o644",
+      "upstream_sha256": "3cd1bec55b6fd15341f5c1e774cec8b50d5b98254f0fffc0e0f4bef89da0bd9b"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/scalar_track_decompression.h",
+      "sha256": "cc8c3e05a4324f2f9f0762c4d66cd9f9e50a4f22dd69ef6a665c949a8f8415ec",
+      "mode": "0o644",
+      "upstream_sha256": "cc8c3e05a4324f2f9f0762c4d66cd9f9e50a4f22dd69ef6a665c949a8f8415ec"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/track_cache.h",
+      "sha256": "46e4266e6596a600899ee640e7886bf6bb178a4155da8a8ae5dfa29276a15839",
+      "mode": "0o644",
+      "upstream_sha256": "46e4266e6596a600899ee640e7886bf6bb178a4155da8a8ae5dfa29276a15839"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/transform_animated_track_cache.h",
+      "sha256": "b5dee3b59894580476c6c5994374ee93f85603634c0d24c365b37c44ddbbdd35",
+      "mode": "0o644",
+      "upstream_sha256": "b5dee3b59894580476c6c5994374ee93f85603634c0d24c365b37c44ddbbdd35"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/transform_constant_track_cache.h",
+      "sha256": "dd53f9141fe567f199b041830156575308e61ba4d708eb743812ba61911c077e",
+      "mode": "0o644",
+      "upstream_sha256": "dd53f9141fe567f199b041830156575308e61ba4d708eb743812ba61911c077e"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/transform_decompression_context.h",
+      "sha256": "e80baf1dec985662eea04f1565f49c8d746a08de31296e37a56e0464e2e8f9dc",
+      "mode": "0o644",
+      "upstream_sha256": "e80baf1dec985662eea04f1565f49c8d746a08de31296e37a56e0464e2e8f9dc"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/transform_track_decompression.h",
+      "sha256": "171838e82e8b615156bbd9759c40687e2479deea6612fd3b545fed0a4cafc939",
+      "mode": "0o644",
+      "upstream_sha256": "171838e82e8b615156bbd9759c40687e2479deea6612fd3b545fed0a4cafc939"
+    },
+    {
+      "path": "external/acl/include/acl/decompression/impl/universal_track_decompression.h",
+      "sha256": "63691a89266ccaaf744192dc443128c9ed829d5996738e158203f1ac8e24bd23",
+      "mode": "0o644",
+      "upstream_sha256": "63691a89266ccaaf744192dc443128c9ed829d5996738e158203f1ac8e24bd23"
+    },
+    {
+      "path": "external/acl/include/acl/fwd.h",
+      "sha256": "f845f44eee4640bf74e11f06b4ae526bc5b0c635eef63ad2e6cbaf66a75b5a45",
+      "mode": "0o644",
+      "upstream_sha256": "f845f44eee4640bf74e11f06b4ae526bc5b0c635eef63ad2e6cbaf66a75b5a45"
+    },
+    {
+      "path": "external/acl/include/acl/io/clip_reader.h",
+      "sha256": "d2341df0de33aea322155bd01c5dcfda61bb0168545f92ccf5e11d94b06f6725",
+      "mode": "0o644",
+      "upstream_sha256": "d2341df0de33aea322155bd01c5dcfda61bb0168545f92ccf5e11d94b06f6725"
+    },
+    {
+      "path": "external/acl/include/acl/io/clip_reader_error.h",
+      "sha256": "bfb8d5b828c91ce93203f432328e4465d60b8d0f23c31f2d65ee7e7f9f12a411",
+      "mode": "0o644",
+      "upstream_sha256": "bfb8d5b828c91ce93203f432328e4465d60b8d0f23c31f2d65ee7e7f9f12a411"
+    },
+    {
+      "path": "external/acl/include/acl/io/clip_writer.h",
+      "sha256": "dcf6b04bbd76d1c406ece0292ef91ba411c0c2de12e6ac135aaa1b8d40ef7841",
+      "mode": "0o644",
+      "upstream_sha256": "dcf6b04bbd76d1c406ece0292ef91ba411c0c2de12e6ac135aaa1b8d40ef7841"
+    },
+    {
+      "path": "external/acl/include/acl/io/fwd.h",
+      "sha256": "09e703a794bca2a8730aa10c8deae50ea2cc02e5874677adf8e49d2edf20baff",
+      "mode": "0o644",
+      "upstream_sha256": "09e703a794bca2a8730aa10c8deae50ea2cc02e5874677adf8e49d2edf20baff"
+    },
+    {
+      "path": "external/acl/include/acl/math/quat_packing.h",
+      "sha256": "20373a2a5271689de8d11eac1959382bdbd472562b761cdef0100ac2ccab3a14",
+      "mode": "0o644",
+      "upstream_sha256": "20373a2a5271689de8d11eac1959382bdbd472562b761cdef0100ac2ccab3a14"
+    },
+    {
+      "path": "external/acl/include/acl/math/quatf.h",
+      "sha256": "7c58b172b5b055ea458c783a22acb7b6ccde6b5105830780fdeb62c8c7ea1ecf",
+      "mode": "0o644",
+      "upstream_sha256": "7c58b172b5b055ea458c783a22acb7b6ccde6b5105830780fdeb62c8c7ea1ecf"
+    },
+    {
+      "path": "external/acl/include/acl/math/scalar_packing.h",
+      "sha256": "a34ea2c5eec158a108bbfe7dd7126a6b2a4d9521cd9b37a08721b74776a86939",
+      "mode": "0o644",
+      "upstream_sha256": "a34ea2c5eec158a108bbfe7dd7126a6b2a4d9521cd9b37a08721b74776a86939"
+    },
+    {
+      "path": "external/acl/include/acl/math/vector4_packing.h",
+      "sha256": "35dc5ad23233f760150035059a408753d594206a528b732afdbe30359e89c7ca",
+      "mode": "0o644",
+      "upstream_sha256": "35dc5ad23233f760150035059a408753d594206a528b732afdbe30359e89c7ca"
+    },
+    {
+      "path": "external/acl/include/acl/math/vector4f.h",
+      "sha256": "329a475a65baa85dd0aea30337b7d4ce0e1cd358fc0af9c802a9562a76ee8d32",
+      "mode": "0o644",
+      "upstream_sha256": "329a475a65baa85dd0aea30337b7d4ce0e1cd358fc0af9c802a9562a76ee8d32"
+    },
+    {
+      "path": "external/acl/include/acl/version.h",
+      "sha256": "1902e536863e8ccd245545458da384391fbc9cac9bb7545b2bc5b75641fee922",
+      "mode": "0o644",
+      "upstream_sha256": "1902e536863e8ccd245545458da384391fbc9cac9bb7545b2bc5b75641fee922"
+    },
+    {
+      "path": "external/acl/include/rtm/constants.h",
+      "sha256": "20ed7b123181a9b2ed556496c7626f4fd56251f17c010047bcc3a8c87536a1a5",
+      "mode": "0o644",
+      "upstream_sha256": "20ed7b123181a9b2ed556496c7626f4fd56251f17c010047bcc3a8c87536a1a5"
+    },
+    {
+      "path": "external/acl/include/rtm/fwd.h",
+      "sha256": "64f9bb39a442cd205d895ab9e767fe03c8b37a5b8a65e7b3a85d16ca1824cec7",
+      "mode": "0o644",
+      "upstream_sha256": "64f9bb39a442cd205d895ab9e767fe03c8b37a5b8a65e7b3a85d16ca1824cec7"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/cmath.impl.h",
+      "sha256": "1ca6b6414aee135bafcaa3df29ca2fd15b085131da294ca422cf581f77125e77",
+      "mode": "0o644",
+      "upstream_sha256": "1ca6b6414aee135bafcaa3df29ca2fd15b085131da294ca422cf581f77125e77"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/compiler_utils.h",
+      "sha256": "12af63b15525c4400a3ec66e6b3fdfc744e5f321dce98232f8d92ac8f87afe0c",
+      "mode": "0o644",
+      "upstream_sha256": "12af63b15525c4400a3ec66e6b3fdfc744e5f321dce98232f8d92ac8f87afe0c"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/detect_arch.h",
+      "sha256": "9532bb206f1edb35b4f19b0c8fc9889bd11b6d4c34f95ecf4759f814e2b53c80",
+      "mode": "0o644",
+      "upstream_sha256": "9532bb206f1edb35b4f19b0c8fc9889bd11b6d4c34f95ecf4759f814e2b53c80"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/detect_compiler.h",
+      "sha256": "08185c0f2f33e4fbe613a2f0c47883a00bcd0387cc4855e7e1f5cbf4171a6a2f",
+      "mode": "0o644",
+      "upstream_sha256": "08185c0f2f33e4fbe613a2f0c47883a00bcd0387cc4855e7e1f5cbf4171a6a2f"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/detect_features.h",
+      "sha256": "97703258f9100737e4943a6996b1a01c89de87e529e05d4cfe93d41dbb328ed3",
+      "mode": "0o644",
+      "upstream_sha256": "97703258f9100737e4943a6996b1a01c89de87e529e05d4cfe93d41dbb328ed3"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/error.h",
+      "sha256": "74aa6dabe072f28a002182dfdf4f3459915098a13cd128fb42704fe07d5d8ea7",
+      "mode": "0o644",
+      "upstream_sha256": "74aa6dabe072f28a002182dfdf4f3459915098a13cd128fb42704fe07d5d8ea7"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/mask_common.h",
+      "sha256": "55dd18027b14dd27dc745be63e0e91972a7dbb8316b653c3a838da9695042462",
+      "mode": "0o644",
+      "upstream_sha256": "55dd18027b14dd27dc745be63e0e91972a7dbb8316b653c3a838da9695042462"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/matrix_affine_common.h",
+      "sha256": "c01e6085ad3d8300337284684f24ff88fb84aa17ae535ada3df23fef1ee5e3c5",
+      "mode": "0o644",
+      "upstream_sha256": "c01e6085ad3d8300337284684f24ff88fb84aa17ae535ada3df23fef1ee5e3c5"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/matrix_cast.h",
+      "sha256": "8f9ad7d19c802f6c53c517f4ce0739fc0bc66c7728c09ff1ed5006f259a86fa1",
+      "mode": "0o644",
+      "upstream_sha256": "8f9ad7d19c802f6c53c517f4ce0739fc0bc66c7728c09ff1ed5006f259a86fa1"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/matrix_common.h",
+      "sha256": "83970c89155079b5c4e8c92deb52a950ba0562630995c3aefe2884eeebb010f8",
+      "mode": "0o644",
+      "upstream_sha256": "83970c89155079b5c4e8c92deb52a950ba0562630995c3aefe2884eeebb010f8"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/memory_utils.h",
+      "sha256": "993858295d8cfadf02fae05e049a11d0e64aab6cd6a818bab29ea00dbae4b73a",
+      "mode": "0o644",
+      "upstream_sha256": "993858295d8cfadf02fae05e049a11d0e64aab6cd6a818bab29ea00dbae4b73a"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/quat_common.h",
+      "sha256": "6b3a2e53d725b5b2c6a103bd39b25601730f2526f4ab4fcadc387d5c000b1c3b",
+      "mode": "0o644",
+      "upstream_sha256": "6b3a2e53d725b5b2c6a103bd39b25601730f2526f4ab4fcadc387d5c000b1c3b"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/qvv_common.h",
+      "sha256": "1ab40ae1267ff94141fa3f9559d51576a3b4a6810bbce47e452ec20d483794ea",
+      "mode": "0o644",
+      "upstream_sha256": "1ab40ae1267ff94141fa3f9559d51576a3b4a6810bbce47e452ec20d483794ea"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/scalar_common.h",
+      "sha256": "db7438edb76f148b3f812e1998d4c74e19e2148dbb35b03c42e091a035680f5e",
+      "mode": "0o644",
+      "upstream_sha256": "db7438edb76f148b3f812e1998d4c74e19e2148dbb35b03c42e091a035680f5e"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/type_args.h",
+      "sha256": "139bbab35cbbcada123db32a524b5abba6d6ff40b9cbec7ce88f5994974fbaeb",
+      "mode": "0o644",
+      "upstream_sha256": "139bbab35cbbcada123db32a524b5abba6d6ff40b9cbec7ce88f5994974fbaeb"
+    },
+    {
+      "path": "external/acl/include/rtm/impl/vector_common.h",
+      "sha256": "7168a0d6d9f3382cd080531e820818d762cbb6b8e5151f6e6753c6fd1382e48b",
+      "mode": "0o644",
+      "upstream_sha256": "7168a0d6d9f3382cd080531e820818d762cbb6b8e5151f6e6753c6fd1382e48b"
+    },
+    {
+      "path": "external/acl/include/rtm/macros.h",
+      "sha256": "c2f58704cfe37ea8d1e6fe40446d8a34d51d9ac2a374044051c7fd2a443fc98c",
+      "mode": "0o644",
+      "upstream_sha256": "c2f58704cfe37ea8d1e6fe40446d8a34d51d9ac2a374044051c7fd2a443fc98c"
+    },
+    {
+      "path": "external/acl/include/rtm/mask4d.h",
+      "sha256": "f881db7fdcd9abfd5aabfce4867123dee55b0775f0d9c1b4fca69ef637e3b18b",
+      "mode": "0o644",
+      "upstream_sha256": "f881db7fdcd9abfd5aabfce4867123dee55b0775f0d9c1b4fca69ef637e3b18b"
+    },
+    {
+      "path": "external/acl/include/rtm/mask4f.h",
+      "sha256": "734d05c4024705f7f443b0799ee1a822b588df6e3deec81ab0fbb01a22ea9c6d",
+      "mode": "0o644",
+      "upstream_sha256": "734d05c4024705f7f443b0799ee1a822b588df6e3deec81ab0fbb01a22ea9c6d"
+    },
+    {
+      "path": "external/acl/include/rtm/mask4i.h",
+      "sha256": "4efd33850a059ed3316c0c546942dc14f54cc7973e01af720a16e923882b2580",
+      "mode": "0o644",
+      "upstream_sha256": "4efd33850a059ed3316c0c546942dc14f54cc7973e01af720a16e923882b2580"
+    },
+    {
+      "path": "external/acl/include/rtm/mask4q.h",
+      "sha256": "508a206f60c573ef39937df0f96334a4f0612d024b5be9074b67b4082ab0b7f0",
+      "mode": "0o644",
+      "upstream_sha256": "508a206f60c573ef39937df0f96334a4f0612d024b5be9074b67b4082ab0b7f0"
+    },
+    {
+      "path": "external/acl/include/rtm/math.h",
+      "sha256": "d4fd9736b5c3f629408d47d868f4b9817b2912f5ae8a78673abaee73249f9246",
+      "mode": "0o644",
+      "upstream_sha256": "d4fd9736b5c3f629408d47d868f4b9817b2912f5ae8a78673abaee73249f9246"
+    },
+    {
+      "path": "external/acl/include/rtm/matrix3x3d.h",
+      "sha256": "684700fe679f22815596ca598ea0fb5df631ca239e0b94c268962586c4daff95",
+      "mode": "0o644",
+      "upstream_sha256": "684700fe679f22815596ca598ea0fb5df631ca239e0b94c268962586c4daff95"
+    },
+    {
+      "path": "external/acl/include/rtm/matrix3x3f.h",
+      "sha256": "300dfa17c4329e5fdf1f8d55b06f7c29a2852d7df17c15596d3150faaff00110",
+      "mode": "0o644",
+      "upstream_sha256": "300dfa17c4329e5fdf1f8d55b06f7c29a2852d7df17c15596d3150faaff00110"
+    },
+    {
+      "path": "external/acl/include/rtm/matrix3x4d.h",
+      "sha256": "dacc9b5d77d2e1959bf20067136cb6a2b17f1d5be65b519b0ae69ae7c96a4c98",
+      "mode": "0o644",
+      "upstream_sha256": "dacc9b5d77d2e1959bf20067136cb6a2b17f1d5be65b519b0ae69ae7c96a4c98"
+    },
+    {
+      "path": "external/acl/include/rtm/matrix3x4f.h",
+      "sha256": "f62d30c64f4601f6cd2d0a8885a9afa938ec5a0305ba01450192d80de362075d",
+      "mode": "0o644",
+      "upstream_sha256": "f62d30c64f4601f6cd2d0a8885a9afa938ec5a0305ba01450192d80de362075d"
+    },
+    {
+      "path": "external/acl/include/rtm/matrix4x4d.h",
+      "sha256": "525652bcdda41f6e24e30e29be000a36d431420b15807e3184a6fb7255b71292",
+      "mode": "0o644",
+      "upstream_sha256": "525652bcdda41f6e24e30e29be000a36d431420b15807e3184a6fb7255b71292"
+    },
+    {
+      "path": "external/acl/include/rtm/matrix4x4f.h",
+      "sha256": "192c644e3f76dcee7144659c2885ec225996eb6495eebd471b33260dd68bf124",
+      "mode": "0o644",
+      "upstream_sha256": "192c644e3f76dcee7144659c2885ec225996eb6495eebd471b33260dd68bf124"
+    },
+    {
+      "path": "external/acl/include/rtm/packing/quatd.h",
+      "sha256": "4a9f977e04774804427b1d5a55c817b8d85b1c48f4f05158572c4d57a2cc3e24",
+      "mode": "0o644",
+      "upstream_sha256": "4a9f977e04774804427b1d5a55c817b8d85b1c48f4f05158572c4d57a2cc3e24"
+    },
+    {
+      "path": "external/acl/include/rtm/packing/quatf.h",
+      "sha256": "7a50c7cc6508748ad53f1cf333e3a0a8f65330919cd6d2a88b62ada3f8143c07",
+      "mode": "0o644",
+      "upstream_sha256": "7a50c7cc6508748ad53f1cf333e3a0a8f65330919cd6d2a88b62ada3f8143c07"
+    },
+    {
+      "path": "external/acl/include/rtm/quatd.h",
+      "sha256": "9040dcebfb9b939bc9bef8fc41740748fcc34b82ae16a7d12a9155f145865e16",
+      "mode": "0o644",
+      "upstream_sha256": "9040dcebfb9b939bc9bef8fc41740748fcc34b82ae16a7d12a9155f145865e16"
+    },
+    {
+      "path": "external/acl/include/rtm/quatf.h",
+      "sha256": "5269ff98067811c9ca7e4c26bf52dda679c42296e199c3df1c9a661083719cb7",
+      "mode": "0o644",
+      "upstream_sha256": "5269ff98067811c9ca7e4c26bf52dda679c42296e199c3df1c9a661083719cb7"
+    },
+    {
+      "path": "external/acl/include/rtm/qvvd.h",
+      "sha256": "a709c9eb3b217a3510d60be2079c9716ac00877f05c51c66a3b2639c43c5c16c",
+      "mode": "0o644",
+      "upstream_sha256": "a709c9eb3b217a3510d60be2079c9716ac00877f05c51c66a3b2639c43c5c16c"
+    },
+    {
+      "path": "external/acl/include/rtm/qvvf.h",
+      "sha256": "b31dc6d8816f0608e932444899f54ec78cf8d3bf178d427222342cab85291609",
+      "mode": "0o644",
+      "upstream_sha256": "b31dc6d8816f0608e932444899f54ec78cf8d3bf178d427222342cab85291609"
+    },
+    {
+      "path": "external/acl/include/rtm/scalard.h",
+      "sha256": "580ca600e425fa6731228c8723e658f89ab929e6eb4e4c8dea857a154b574667",
+      "mode": "0o644",
+      "upstream_sha256": "580ca600e425fa6731228c8723e658f89ab929e6eb4e4c8dea857a154b574667"
+    },
+    {
+      "path": "external/acl/include/rtm/scalarf.h",
+      "sha256": "2072ea1c262eb295abc82fedb482377831113f886364d081b23cc9cee1730cd0",
+      "mode": "0o644",
+      "upstream_sha256": "2072ea1c262eb295abc82fedb482377831113f886364d081b23cc9cee1730cd0"
+    },
+    {
+      "path": "external/acl/include/rtm/type_traits.h",
+      "sha256": "41bfdcac51b597700e345e939291650f133744c67ec731ba8f2f05736c03c993",
+      "mode": "0o644",
+      "upstream_sha256": "41bfdcac51b597700e345e939291650f133744c67ec731ba8f2f05736c03c993"
+    },
+    {
+      "path": "external/acl/include/rtm/types.h",
+      "sha256": "58dcedf624fea3ccc0fce08c84d16210f613752699cd152da141798c82d69615",
+      "mode": "0o644",
+      "upstream_sha256": "58dcedf624fea3ccc0fce08c84d16210f613752699cd152da141798c82d69615"
+    },
+    {
+      "path": "external/acl/include/rtm/vector4d.h",
+      "sha256": "184af9d09b519cf9cc773d928ee8d01fd1348d97a34460952e8d6ae99f889642",
+      "mode": "0o644",
+      "upstream_sha256": "184af9d09b519cf9cc773d928ee8d01fd1348d97a34460952e8d6ae99f889642"
+    },
+    {
+      "path": "external/acl/include/rtm/vector4f.h",
+      "sha256": "67ac28074bb79a8d8268295b163b775d9f04be5ff602d95f969ab62783389fe0",
+      "mode": "0o644",
+      "upstream_sha256": "67ac28074bb79a8d8268295b163b775d9f04be5ff602d95f969ab62783389fe0"
+    },
+    {
+      "path": "external/acl/include/rtm/version.h",
+      "sha256": "a19498ce067d57210c012aa0c051f3a5a2729ac3bdadf48eda74da9340b02f14",
+      "mode": "0o644",
+      "upstream_sha256": "a19498ce067d57210c012aa0c051f3a5a2729ac3bdadf48eda74da9340b02f14"
+    },
+    {
+      "path": "external/acl/include/sjson/error.h",
+      "sha256": "8e610ce4b7b8a382fac48b75821627ba07c72005bd098a960376d90a48b216c4",
+      "mode": "0o644",
+      "upstream_sha256": "8e610ce4b7b8a382fac48b75821627ba07c72005bd098a960376d90a48b216c4"
+    },
+    {
+      "path": "external/acl/include/sjson/fwd.h",
+      "sha256": "a57e52f33a1486ef46a243a4566b1d398988905febf0ae986e4a42411846d11c",
+      "mode": "0o644",
+      "upstream_sha256": "a57e52f33a1486ef46a243a4566b1d398988905febf0ae986e4a42411846d11c"
+    },
+    {
+      "path": "external/acl/include/sjson/impl/cstdlib.impl.h",
+      "sha256": "efb847030d5eaca80b5cbc90b7bf4df4d6ace9e7c9dff16ee01f9d2f11f66dc8",
+      "mode": "0o644",
+      "upstream_sha256": "efb847030d5eaca80b5cbc90b7bf4df4d6ace9e7c9dff16ee01f9d2f11f66dc8"
+    },
+    {
+      "path": "external/acl/include/sjson/parser.h",
+      "sha256": "649a4f772a178bb35f185b1183d7ba248ddb3b2da8bb6c55d01b42a6e8f2d3da",
+      "mode": "0o644",
+      "upstream_sha256": "649a4f772a178bb35f185b1183d7ba248ddb3b2da8bb6c55d01b42a6e8f2d3da"
+    },
+    {
+      "path": "external/acl/include/sjson/parser_error.h",
+      "sha256": "610f1f78896bb57a082d0d996f433591ef5cd2b5e66a16e78c20928d4ef86924",
+      "mode": "0o644",
+      "upstream_sha256": "610f1f78896bb57a082d0d996f433591ef5cd2b5e66a16e78c20928d4ef86924"
+    },
+    {
+      "path": "external/acl/include/sjson/parser_state.h",
+      "sha256": "30518f9e629c381889992961f70c50db5210d747f2fd911d510f397645d84533",
+      "mode": "0o644",
+      "upstream_sha256": "30518f9e629c381889992961f70c50db5210d747f2fd911d510f397645d84533"
+    },
+    {
+      "path": "external/acl/include/sjson/string_view.h",
+      "sha256": "b79d4c88e660b68a75b088114eeed5c4ae63d06284e2bb224892643fee3b10f7",
+      "mode": "0o644",
+      "upstream_sha256": "b79d4c88e660b68a75b088114eeed5c4ae63d06284e2bb224892643fee3b10f7"
+    },
+    {
+      "path": "external/acl/include/sjson/version.h",
+      "sha256": "466e5887434442d0d38c27586c72a4ecd912077c3cb09ba9ec7f8cb416badfde",
+      "mode": "0o644",
+      "upstream_sha256": "466e5887434442d0d38c27586c72a4ecd912077c3cb09ba9ec7f8cb416badfde"
+    },
+    {
+      "path": "external/acl/include/sjson/writer.h",
+      "sha256": "6d4916f70f244973f2b8dabe3c7957f6394b109b4ccfc28f0dd3518912cbf071",
+      "mode": "0o644",
+      "upstream_sha256": "6d4916f70f244973f2b8dabe3c7957f6394b109b4ccfc28f0dd3518912cbf071"
+    },
+    {
+      "path": "external/gsl/LICENSE",
+      "sha256": "4c21dc82a1c7186ea754fd59d504c00947953a3401fe8e24eaa44109ef8e2555",
+      "mode": "0o644",
+      "upstream_sha256": "4c21dc82a1c7186ea754fd59d504c00947953a3401fe8e24eaa44109ef8e2555"
+    },
+    {
+      "path": "external/gsl/include/CMakeLists.txt",
+      "sha256": "dd573307bc9a8ed795b5f60d050a5f8779efd46017f2c9bf5ba4bd46f5ce63ad",
+      "mode": "0o644",
+      "upstream_sha256": "dd573307bc9a8ed795b5f60d050a5f8779efd46017f2c9bf5ba4bd46f5ce63ad"
+    },
+    {
+      "path": "external/gsl/include/gsl/algorithm",
+      "sha256": "7ad3f5df5ae531199fa4faf276ca9999e2cf72b25c01298e857410e766263b0b",
+      "mode": "0o644",
+      "upstream_sha256": "7ad3f5df5ae531199fa4faf276ca9999e2cf72b25c01298e857410e766263b0b"
+    },
+    {
+      "path": "external/gsl/include/gsl/assert",
+      "sha256": "4a94024812aae787c01f69de4908b82cd80155af1791130ed2d053f7555f013f",
+      "mode": "0o644",
+      "upstream_sha256": "4a94024812aae787c01f69de4908b82cd80155af1791130ed2d053f7555f013f"
+    },
+    {
+      "path": "external/gsl/include/gsl/byte",
+      "sha256": "f2d68731eb4b31773a011ba36fb877b0b0f997d6109cba740e218235a30b4086",
+      "mode": "0o644",
+      "upstream_sha256": "f2d68731eb4b31773a011ba36fb877b0b0f997d6109cba740e218235a30b4086"
+    },
+    {
+      "path": "external/gsl/include/gsl/gsl",
+      "sha256": "1ead1a83430d88fe892e2fe2827c0547f0a7b8dc8dab3be81e8923ae4d618954",
+      "mode": "0o644",
+      "upstream_sha256": "1ead1a83430d88fe892e2fe2827c0547f0a7b8dc8dab3be81e8923ae4d618954"
+    },
+    {
+      "path": "external/gsl/include/gsl/narrow",
+      "sha256": "0a7c3836cb338cbd780ab1c95b4f66b8691fb8371c72fd39108724dbc22e79e3",
+      "mode": "0o644",
+      "upstream_sha256": "0a7c3836cb338cbd780ab1c95b4f66b8691fb8371c72fd39108724dbc22e79e3"
+    },
+    {
+      "path": "external/gsl/include/gsl/pointers",
+      "sha256": "6f5e7f7d97b9d051e54fa4b63c625b3dcb816f4ae8e4312ce1173ac8d3a76918",
+      "mode": "0o644",
+      "upstream_sha256": "6f5e7f7d97b9d051e54fa4b63c625b3dcb816f4ae8e4312ce1173ac8d3a76918"
+    },
+    {
+      "path": "external/gsl/include/gsl/span",
+      "sha256": "3d5e84cb61b084c25c5ba8c72ec18879a4cab4612853bc218162fa162d1d090f",
+      "mode": "0o644",
+      "upstream_sha256": "3d5e84cb61b084c25c5ba8c72ec18879a4cab4612853bc218162fa162d1d090f"
+    },
+    {
+      "path": "external/gsl/include/gsl/span_ext",
+      "sha256": "cd96126fd5ae6156f23ffef77b028263ab5eb39be74abedfd4f307c525220e65",
+      "mode": "0o644",
+      "upstream_sha256": "cd96126fd5ae6156f23ffef77b028263ab5eb39be74abedfd4f307c525220e65"
+    },
+    {
+      "path": "external/gsl/include/gsl/string_span",
+      "sha256": "99b55fc95aded85f4608cf45b46a9b9f08ac19a20c05dc45fde1cc4e459b5107",
+      "mode": "0o644",
+      "upstream_sha256": "99b55fc95aded85f4608cf45b46a9b9f08ac19a20c05dc45fde1cc4e459b5107"
+    },
+    {
+      "path": "external/gsl/include/gsl/util",
+      "sha256": "e46868d72303201c0f4858bb6428ecc03d9af30704af9d07db9eeab5a027ed4b",
+      "mode": "0o644",
+      "upstream_sha256": "e46868d72303201c0f4858bb6428ecc03d9af30704af9d07db9eeab5a027ed4b"
+    },
+    {
+      "path": "external/gsl/include/gsl/zstring",
+      "sha256": "ff84f2d74d937941991c96fc4a8697191b213cb1935a86ffa7d1b45e218ab951",
+      "mode": "0o644",
+      "upstream_sha256": "ff84f2d74d937941991c96fc4a8697191b213cb1935a86ffa7d1b45e218ab951"
+    },
+    {
+      "path": "libs/eely/CMakeLists.txt",
+      "sha256": "fc1fa5de7102b7c5483bdd993fde3f062eee2d85d31a7bf8642d3d0c0892b255",
+      "mode": "0o644",
+      "upstream_sha256": "fc1fa5de7102b7c5483bdd993fde3f062eee2d85d31a7bf8642d3d0c0892b255"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph.h",
+      "sha256": "caac16694c0ff19c519b8099f7ebc817e56f8e3d8118b4690a914e2b621b09bf",
+      "mode": "0o644",
+      "upstream_sha256": "caac16694c0ff19c519b8099f7ebc817e56f8e3d8118b4690a914e2b621b09bf"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_and.h",
+      "sha256": "35a8c738b537093e21d7da82d56c295a617ba3a5a4c9098ca053e55f4933eda7",
+      "mode": "0o644",
+      "upstream_sha256": "35a8c738b537093e21d7da82d56c295a617ba3a5a4c9098ca053e55f4933eda7"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_base.h",
+      "sha256": "f7077c9d4339174c9267cf24f843427da760c3623e00383adce3815a757a8fc0",
+      "mode": "0o644",
+      "upstream_sha256": "f7077c9d4339174c9267cf24f843427da760c3623e00383adce3815a757a8fc0"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_blend.h",
+      "sha256": "a1a753e61de165f6d1148ea4f4b50e0de25d9afcbc6ae90caa90253ba87eaaf4",
+      "mode": "0o644",
+      "upstream_sha256": "a1a753e61de165f6d1148ea4f4b50e0de25d9afcbc6ae90caa90253ba87eaaf4"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_clip.h",
+      "sha256": "b5e55431bfd19822fb1f272fa36fc6ad244dbb75f70fc453c32de83bb7f577e6",
+      "mode": "0o644",
+      "upstream_sha256": "b5e55431bfd19822fb1f272fa36fc6ad244dbb75f70fc453c32de83bb7f577e6"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_param.h",
+      "sha256": "b08772db0764dc4e67cdf0ed60930443e43c0cb13fe7899f5f3e37ba7f702639",
+      "mode": "0o644",
+      "upstream_sha256": "b08772db0764dc4e67cdf0ed60930443e43c0cb13fe7899f5f3e37ba7f702639"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_param_comparison.h",
+      "sha256": "157b4c5f4c1b5fd5fccb3575a8f8772f107ad5eff289166094af33dccd1f877a",
+      "mode": "0o644",
+      "upstream_sha256": "157b4c5f4c1b5fd5fccb3575a8f8772f107ad5eff289166094af33dccd1f877a"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_random.h",
+      "sha256": "76185dbcec908f293e4e433fe5081b2c7a2ba05db8611c54860cc61c32952d2e",
+      "mode": "0o644",
+      "upstream_sha256": "76185dbcec908f293e4e433fe5081b2c7a2ba05db8611c54860cc61c32952d2e"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_speed.h",
+      "sha256": "24f155173621bde11a547df03df3511842c4e0ed6dba87e8c5e0b51dba0ecbe1",
+      "mode": "0o644",
+      "upstream_sha256": "24f155173621bde11a547df03df3511842c4e0ed6dba87e8c5e0b51dba0ecbe1"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_state.h",
+      "sha256": "e18347c9efa68f6389d56d81d1b81aeee945331fb4ebd110f9fd67c7b6473456",
+      "mode": "0o644",
+      "upstream_sha256": "e18347c9efa68f6389d56d81d1b81aeee945331fb4ebd110f9fd67c7b6473456"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_state_condition.h",
+      "sha256": "05661a823640e87b33933d7dc04e72c1ba2bf0027ea1b001b1b8c0101440c8fc",
+      "mode": "0o644",
+      "upstream_sha256": "05661a823640e87b33933d7dc04e72c1ba2bf0027ea1b001b1b8c0101440c8fc"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_state_machine.h",
+      "sha256": "1dd5b6e562e9b7b816459710f0874d70f12aff6f1691db83d35f0e53f14473cf",
+      "mode": "0o644",
+      "upstream_sha256": "1dd5b6e562e9b7b816459710f0874d70f12aff6f1691db83d35f0e53f14473cf"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_state_transition.h",
+      "sha256": "e4cba3dd405c24c214d6cd209d19259a15c51418fe9cd77be64b95d23de8c764",
+      "mode": "0o644",
+      "upstream_sha256": "e4cba3dd405c24c214d6cd209d19259a15c51418fe9cd77be64b95d23de8c764"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_node_sum.h",
+      "sha256": "d1b261362c72e98bbe57b741b6b29725b19b9e8a3cd6dc540bce995a4966517d",
+      "mode": "0o644",
+      "upstream_sha256": "d1b261362c72e98bbe57b741b6b29725b19b9e8a3cd6dc540bce995a4966517d"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player.h",
+      "sha256": "e32d7781703f4c7711f0bf92aae67042de60b3d5b72f7caf5b10d4b0ae65bd67",
+      "mode": "0o644",
+      "upstream_sha256": "e32d7781703f4c7711f0bf92aae67042de60b3d5b72f7caf5b10d4b0ae65bd67"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_context.h",
+      "sha256": "0701daa90989eca6ce4a7eaa9da38882eeb8e6f4305a7e4f80d3694e0342e037",
+      "mode": "0o644",
+      "upstream_sha256": "0701daa90989eca6ce4a7eaa9da38882eeb8e6f4305a7e4f80d3694e0342e037"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_and.h",
+      "sha256": "97e4089305669fa522efbd14a6d11463cab098be4d2b884b6e9212cedd1a9229",
+      "mode": "0o644",
+      "upstream_sha256": "97e4089305669fa522efbd14a6d11463cab098be4d2b884b6e9212cedd1a9229"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_base.h",
+      "sha256": "1d45e456156528d688f664fe186f58027ca90bd60947083d442b86eee9cf5e16",
+      "mode": "0o644",
+      "upstream_sha256": "1d45e456156528d688f664fe186f58027ca90bd60947083d442b86eee9cf5e16"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_blend.h",
+      "sha256": "f03a18dd08f9a14db161c0e76a6eea771ae0a9802eb9c2822c506419a17bfd9d",
+      "mode": "0o644",
+      "upstream_sha256": "f03a18dd08f9a14db161c0e76a6eea771ae0a9802eb9c2822c506419a17bfd9d"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_clip.h",
+      "sha256": "75b39c442fd33e1e34c0b6bce8120d276ce4c80ced393096eaafaa9ba8c6e6d7",
+      "mode": "0o644",
+      "upstream_sha256": "75b39c442fd33e1e34c0b6bce8120d276ce4c80ced393096eaafaa9ba8c6e6d7"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_param.h",
+      "sha256": "66149a6d903a10326c0ab712be539a91a9b33b201cd79a939aec68d34567b187",
+      "mode": "0o644",
+      "upstream_sha256": "66149a6d903a10326c0ab712be539a91a9b33b201cd79a939aec68d34567b187"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_param_comparison.h",
+      "sha256": "86a0f07e99220f4fdbc9c618503f8cb80d13267bcde196ef88bdf1c60c90e3a6",
+      "mode": "0o644",
+      "upstream_sha256": "86a0f07e99220f4fdbc9c618503f8cb80d13267bcde196ef88bdf1c60c90e3a6"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_pose_base.h",
+      "sha256": "badbd2b767263d806990156c231a0167321caaa2cc004cf94456cc1dadf8c017",
+      "mode": "0o644",
+      "upstream_sha256": "badbd2b767263d806990156c231a0167321caaa2cc004cf94456cc1dadf8c017"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_random.h",
+      "sha256": "941708d32b843a1d384d550411a27ddbb9df18987915625a83aa462351a26c57",
+      "mode": "0o644",
+      "upstream_sha256": "941708d32b843a1d384d550411a27ddbb9df18987915625a83aa462351a26c57"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_speed.h",
+      "sha256": "98be5f062d0fc3fdf105ca466e089ab1851b105b2e1b254f7f6b5532ee1a4d4e",
+      "mode": "0o644",
+      "upstream_sha256": "98be5f062d0fc3fdf105ca466e089ab1851b105b2e1b254f7f6b5532ee1a4d4e"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_state.h",
+      "sha256": "1bf9e0497c4068dc039aaf2be06c0a855fcb0b204614f1629f35d1b5f6c850fd",
+      "mode": "0o644",
+      "upstream_sha256": "1bf9e0497c4068dc039aaf2be06c0a855fcb0b204614f1629f35d1b5f6c850fd"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_state_condition.h",
+      "sha256": "5eb7b958ff701e4c83ae8a0288b18f1ea7671ffca26ffc60d193b4150889e930",
+      "mode": "0o644",
+      "upstream_sha256": "5eb7b958ff701e4c83ae8a0288b18f1ea7671ffca26ffc60d193b4150889e930"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_state_machine.h",
+      "sha256": "3f927c564540d95820811e1c8a84541152adaf1aedad72a24da961bb6f201bb7",
+      "mode": "0o644",
+      "upstream_sha256": "3f927c564540d95820811e1c8a84541152adaf1aedad72a24da961bb6f201bb7"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_state_transition.h",
+      "sha256": "ab00b808597af671f0d78c0964a1181b7ec1decacf98fef887a267692890b08c",
+      "mode": "0o644",
+      "upstream_sha256": "ab00b808597af671f0d78c0964a1181b7ec1decacf98fef887a267692890b08c"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_player_node_sum.h",
+      "sha256": "de391717a831aba009c2c4b3a5e612b1aa3687dc7a1da3de1aff938b35a4b83c",
+      "mode": "0o644",
+      "upstream_sha256": "de391717a831aba009c2c4b3a5e612b1aa3687dc7a1da3de1aff938b35a4b83c"
+    },
+    {
+      "path": "libs/eely/include/eely/anim_graph/anim_graph_uncooked.h",
+      "sha256": "a7cccf4401003b67d48b63b193f3fcdcb5f037ebbdad4dd32fa41d5b655a898f",
+      "mode": "0o644",
+      "upstream_sha256": "a7cccf4401003b67d48b63b193f3fcdcb5f037ebbdad4dd32fa41d5b655a898f"
+    },
+    {
+      "path": "libs/eely/include/eely/base/assert.h",
+      "sha256": "b095bcc5e5ec8f95cefc1496dee9da45eb76fb0ef9e2f20d31a05ba3708c859d",
+      "mode": "0o644",
+      "upstream_sha256": "b095bcc5e5ec8f95cefc1496dee9da45eb76fb0ef9e2f20d31a05ba3708c859d"
+    },
+    {
+      "path": "libs/eely/include/eely/base/base_utils.h",
+      "sha256": "17988a79861d794563b16bb062f5d3369ebc9f0d02b7d489147d79d1c98a54e2",
+      "mode": "0o644",
+      "upstream_sha256": "17988a79861d794563b16bb062f5d3369ebc9f0d02b7d489147d79d1c98a54e2"
+    },
+    {
+      "path": "libs/eely/include/eely/base/bit_reader.h",
+      "sha256": "2a5651fdee05bddf296331af3daffba9b5f6b697e945a1374fa1f5539f2a47f2",
+      "mode": "0o644",
+      "upstream_sha256": "2a5651fdee05bddf296331af3daffba9b5f6b697e945a1374fa1f5539f2a47f2"
+    },
+    {
+      "path": "libs/eely/include/eely/base/bit_writer.h",
+      "sha256": "51baa1a8f5338945962a1d2787f27d3f303821529c93acdf07abc2083d05f3c1",
+      "mode": "0o644",
+      "upstream_sha256": "51baa1a8f5338945962a1d2787f27d3f303821529c93acdf07abc2083d05f3c1"
+    },
+    {
+      "path": "libs/eely/include/eely/base/graph.h",
+      "sha256": "53001fdb318bef3a2860cd394f298b7692d1358a66dd1a2445ee144d647b5c94",
+      "mode": "0o644",
+      "upstream_sha256": "53001fdb318bef3a2860cd394f298b7692d1358a66dd1a2445ee144d647b5c94"
+    },
+    {
+      "path": "libs/eely/include/eely/base/string_id.h",
+      "sha256": "4b19b548aabf29851b408dd2c55778b70e1c228b168ed2e6ad86b0758b34c0ee",
+      "mode": "0o644",
+      "upstream_sha256": "4b19b548aabf29851b408dd2c55778b70e1c228b168ed2e6ad86b0758b34c0ee"
+    },
+    {
+      "path": "libs/eely/include/eely/base/time_utils.h",
+      "sha256": "2b30b9d96fe85adece1f97fe6ce5b8d072ac21165c8fd8b25add3ded2654ed08",
+      "mode": "0o644",
+      "upstream_sha256": "2b30b9d96fe85adece1f97fe6ce5b8d072ac21165c8fd8b25add3ded2654ed08"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip.h",
+      "sha256": "4db2dce05af10640fd1b43e6bf619365f3d1ef3cf0ba5a725c4dfb6f76dcd3a5",
+      "mode": "0o644",
+      "upstream_sha256": "4db2dce05af10640fd1b43e6bf619365f3d1ef3cf0ba5a725c4dfb6f76dcd3a5"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_compression_scheme.h",
+      "sha256": "c25f977eecc0ef85a68f2178f2fa772dc9ae1d4d9b0b12d663b9f045183fc0b5",
+      "mode": "0o644",
+      "upstream_sha256": "c25f977eecc0ef85a68f2178f2fa772dc9ae1d4d9b0b12d663b9f045183fc0b5"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_cooking_none_fixed.h",
+      "sha256": "890e562a77b70c5fd6b5c3391fab55690cc6e6a3b612b03b524c955b097121ea",
+      "mode": "0o644",
+      "upstream_sha256": "890e562a77b70c5fd6b5c3391fab55690cc6e6a3b612b03b524c955b097121ea"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_cursor.h",
+      "sha256": "4f0534e25b3a875e36486feb359bf8ed6596f0fb008cc219694c8d525eb989c9",
+      "mode": "0o644",
+      "upstream_sha256": "4f0534e25b3a875e36486feb359bf8ed6596f0fb008cc219694c8d525eb989c9"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_impl_acl.h",
+      "sha256": "4d4c86f567470987dfb608b560adf68bfc335027965f90a356a67430505e614f",
+      "mode": "0o644",
+      "upstream_sha256": "4d4c86f567470987dfb608b560adf68bfc335027965f90a356a67430505e614f"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_impl_base.h",
+      "sha256": "d9eb0b79e73fdede7b8383c9d4785a48d44f47b35fdcabdb0ccab7bfe1ae1fe9",
+      "mode": "0o644",
+      "upstream_sha256": "d9eb0b79e73fdede7b8383c9d4785a48d44f47b35fdcabdb0ccab7bfe1ae1fe9"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_impl_fixed.h",
+      "sha256": "a4348501ff81858476cc7223288e26ad72c37375d37b3b72a09c6bbc24317fd6",
+      "mode": "0o644",
+      "upstream_sha256": "a4348501ff81858476cc7223288e26ad72c37375d37b3b72a09c6bbc24317fd6"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_impl_none.h",
+      "sha256": "bc7d2fb5986378d117adee59bcace98c983c3f60bdd97699b96cbb2794fc4770",
+      "mode": "0o644",
+      "upstream_sha256": "bc7d2fb5986378d117adee59bcace98c983c3f60bdd97699b96cbb2794fc4770"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_player_acl.h",
+      "sha256": "2392ab84c8f7f9bdcee3daca05385e24a0236574dec153556e39dcdc3b047dc3",
+      "mode": "0o644",
+      "upstream_sha256": "2392ab84c8f7f9bdcee3daca05385e24a0236574dec153556e39dcdc3b047dc3"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_player_base.h",
+      "sha256": "04022486167500859219a90ade2b2af1ef79172e0f0ac4393cc99d249916c17c",
+      "mode": "0o644",
+      "upstream_sha256": "04022486167500859219a90ade2b2af1ef79172e0f0ac4393cc99d249916c17c"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_player_fixed.h",
+      "sha256": "83eb6791c4ba73e9fbe6da32b71b9cfeaf63d3eb9e92fdc8fd06054a38c67d8b",
+      "mode": "0o644",
+      "upstream_sha256": "83eb6791c4ba73e9fbe6da32b71b9cfeaf63d3eb9e92fdc8fd06054a38c67d8b"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_player_none.h",
+      "sha256": "91ef5c87478ef35b1c5f9f7ed208c10ce038c323dce4cbe19c08d37077b38174",
+      "mode": "0o644",
+      "upstream_sha256": "91ef5c87478ef35b1c5f9f7ed208c10ce038c323dce4cbe19c08d37077b38174"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_uncooked.h",
+      "sha256": "99dd0ad0b5bac3ec065cbb4f56642b50dcb7eb51515f923812f0c247e300a8ba",
+      "mode": "0o644",
+      "upstream_sha256": "99dd0ad0b5bac3ec065cbb4f56642b50dcb7eb51515f923812f0c247e300a8ba"
+    },
+    {
+      "path": "libs/eely/include/eely/clip/clip_utils.h",
+      "sha256": "8beed95e1c962134a2846c48af9bc0836ac66b0118d08d5266e6c25f589994a2",
+      "mode": "0o644",
+      "upstream_sha256": "8beed95e1c962134a2846c48af9bc0836ac66b0118d08d5266e6c25f589994a2"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_add.h",
+      "sha256": "804afea34b3488f91dd178f088b42930be0fcb66f11cd8ac875e76b42cc28fcb",
+      "mode": "0o644",
+      "upstream_sha256": "804afea34b3488f91dd178f088b42930be0fcb66f11cd8ac875e76b42cc28fcb"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_base.h",
+      "sha256": "9241369b577b16507b4f8957d15f0ff44fd481f272c7141b356d953cce874a82",
+      "mode": "0o644",
+      "upstream_sha256": "9241369b577b16507b4f8957d15f0ff44fd481f272c7141b356d953cce874a82"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_blend.h",
+      "sha256": "c6f8bc4fb7b9dc61f65104aa88002bd0e3e2970c3f518e883d666ee8bfeb407c",
+      "mode": "0o644",
+      "upstream_sha256": "c6f8bc4fb7b9dc61f65104aa88002bd0e3e2970c3f518e883d666ee8bfeb407c"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_clip.h",
+      "sha256": "52d8d6af336d6aaa798361aaca24455eba47c9234a813900620b3c310239f8fd",
+      "mode": "0o644",
+      "upstream_sha256": "52d8d6af336d6aaa798361aaca24455eba47c9234a813900620b3c310239f8fd"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_queue.h",
+      "sha256": "9e58d204bf348b71233a1caeef4f59bc8b0983c025979c22537b16b4f86536c0",
+      "mode": "0o644",
+      "upstream_sha256": "9e58d204bf348b71233a1caeef4f59bc8b0983c025979c22537b16b4f86536c0"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_restore.h",
+      "sha256": "3fedb2c28204de881a9fc0396d9f103b02ef13e387c4e5404af233a9cfb74a56",
+      "mode": "0o644",
+      "upstream_sha256": "3fedb2c28204de881a9fc0396d9f103b02ef13e387c4e5404af233a9cfb74a56"
+    },
+    {
+      "path": "libs/eely/include/eely/job/job_save.h",
+      "sha256": "a03bac0ab7487bbf0ef178e337209408fb453f12686a6636783c35bf081b12a2",
+      "mode": "0o644",
+      "upstream_sha256": "a03bac0ab7487bbf0ef178e337209408fb453f12686a6636783c35bf081b12a2"
+    },
+    {
+      "path": "libs/eely/include/eely/math/ellipse.h",
+      "sha256": "3e7414027d95cc58b1b4ace9c5cafea0910c77e6e14eaa2b951feed4b7df9730",
+      "mode": "0o644",
+      "upstream_sha256": "3e7414027d95cc58b1b4ace9c5cafea0910c77e6e14eaa2b951feed4b7df9730"
+    },
+    {
+      "path": "libs/eely/include/eely/math/elliptical_cone.h",
+      "sha256": "a5376a184e0e161b9d40b6ee4502a1ae2a0565ea1e3a125ad060ca624cb9120e",
+      "mode": "0o644",
+      "upstream_sha256": "a5376a184e0e161b9d40b6ee4502a1ae2a0565ea1e3a125ad060ca624cb9120e"
+    },
+    {
+      "path": "libs/eely/include/eely/math/float2.h",
+      "sha256": "13b4316e89498c419d4c57c2187b50ca2e3425f6a06c46c814b35e310f751275",
+      "mode": "0o644",
+      "upstream_sha256": "13b4316e89498c419d4c57c2187b50ca2e3425f6a06c46c814b35e310f751275"
+    },
+    {
+      "path": "libs/eely/include/eely/math/float3.h",
+      "sha256": "71b8b15a146a932a7fee41ed51f7253ee99baeff2b545e3d02b7bf9646fcca40",
+      "mode": "0o644",
+      "upstream_sha256": "71b8b15a146a932a7fee41ed51f7253ee99baeff2b545e3d02b7bf9646fcca40"
+    },
+    {
+      "path": "libs/eely/include/eely/math/float4.h",
+      "sha256": "d3787e56d0a717bd4c8d89acf4f195e7cc0ec7685cd81cb976e8f70cda96e7fc",
+      "mode": "0o644",
+      "upstream_sha256": "d3787e56d0a717bd4c8d89acf4f195e7cc0ec7685cd81cb976e8f70cda96e7fc"
+    },
+    {
+      "path": "libs/eely/include/eely/math/math_utils.h",
+      "sha256": "956db105fc05ffd33673daa987de87914d1c456566adb62592f1110670087fd1",
+      "mode": "0o644",
+      "upstream_sha256": "956db105fc05ffd33673daa987de87914d1c456566adb62592f1110670087fd1"
+    },
+    {
+      "path": "libs/eely/include/eely/math/quantization.h",
+      "sha256": "6a476a0fc4848db1a56928fa5aa75ad7a1ef15558fcf5f29165c88a059450ba1",
+      "mode": "0o644",
+      "upstream_sha256": "6a476a0fc4848db1a56928fa5aa75ad7a1ef15558fcf5f29165c88a059450ba1"
+    },
+    {
+      "path": "libs/eely/include/eely/math/quaternion.h",
+      "sha256": "4a3f89933cdafbce9372c6e03c82db6b6ed42223c1d66f2b4f2f9def358647ea",
+      "mode": "0o644",
+      "upstream_sha256": "4a3f89933cdafbce9372c6e03c82db6b6ed42223c1d66f2b4f2f9def358647ea"
+    },
+    {
+      "path": "libs/eely/include/eely/math/transform.h",
+      "sha256": "d2bd35377905d3221a68166de35757e561b7bb0916f95aef8689d71ded8cb734",
+      "mode": "0o644",
+      "upstream_sha256": "d2bd35377905d3221a68166de35757e561b7bb0916f95aef8689d71ded8cb734"
+    },
+    {
+      "path": "libs/eely/include/eely/params/params.h",
+      "sha256": "019516fefaf073aa52b416ce240d14247e74bc0a7f07787966a4ab68935ccb48",
+      "mode": "0o644",
+      "upstream_sha256": "019516fefaf073aa52b416ce240d14247e74bc0a7f07787966a4ab68935ccb48"
+    },
+    {
+      "path": "libs/eely/include/eely/project/axis_system.h",
+      "sha256": "c4a9c75b6581546038220cba0609173f694bde168e2cfe86bbcf0c76fba783fb",
+      "mode": "0o644",
+      "upstream_sha256": "c4a9c75b6581546038220cba0609173f694bde168e2cfe86bbcf0c76fba783fb"
+    },
+    {
+      "path": "libs/eely/include/eely/project/measurement_unit.h",
+      "sha256": "24c7fb20716f6d4c5ab900250c32e2d420aca36975ff6a52a157c9dc9385fe3e",
+      "mode": "0o644",
+      "upstream_sha256": "24c7fb20716f6d4c5ab900250c32e2d420aca36975ff6a52a157c9dc9385fe3e"
+    },
+    {
+      "path": "libs/eely/include/eely/project/project.h",
+      "sha256": "41dc78f279dbf3622575e211cc344a8211f4362ec1a11e98eaf1b1989ae75ace",
+      "mode": "0o644",
+      "upstream_sha256": "41dc78f279dbf3622575e211cc344a8211f4362ec1a11e98eaf1b1989ae75ace"
+    },
+    {
+      "path": "libs/eely/include/eely/project/project_uncooked.h",
+      "sha256": "7b57d95235f04a3ea4a814760a9f9da0aeeb44a32fa72f39b9cf1505ac96821b",
+      "mode": "0o644",
+      "upstream_sha256": "7b57d95235f04a3ea4a814760a9f9da0aeeb44a32fa72f39b9cf1505ac96821b"
+    },
+    {
+      "path": "libs/eely/include/eely/project/resource.h",
+      "sha256": "2082b9a88cd170cf46972e05f9f42cdefd9838236a5fab4c2cabae4b25452e19",
+      "mode": "0o644",
+      "upstream_sha256": "2082b9a88cd170cf46972e05f9f42cdefd9838236a5fab4c2cabae4b25452e19"
+    },
+    {
+      "path": "libs/eely/include/eely/project/resource_base.h",
+      "sha256": "7985877182023ef232fcf2d4871fb3023a95ccd9eea3a943acd1049721f8cb73",
+      "mode": "0o644",
+      "upstream_sha256": "7985877182023ef232fcf2d4871fb3023a95ccd9eea3a943acd1049721f8cb73"
+    },
+    {
+      "path": "libs/eely/include/eely/project/resource_uncooked.h",
+      "sha256": "8adb1fe471717d7e71e23bf63033f42bc3ce0b34a77429ce63a303db1b58e28b",
+      "mode": "0o644",
+      "upstream_sha256": "8adb1fe471717d7e71e23bf63033f42bc3ce0b34a77429ce63a303db1b58e28b"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton/presets.h",
+      "sha256": "a5cdc38cdf6120a8b4f0376e25941ae23dcb043b42e45dbf750e9b000091887a",
+      "mode": "0o644",
+      "upstream_sha256": "a5cdc38cdf6120a8b4f0376e25941ae23dcb043b42e45dbf750e9b000091887a"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton/skeleton.h",
+      "sha256": "f0ae8b98011584e5f7592fe65e218002b277731e28ce135da506959b4e3bf6de",
+      "mode": "0o644",
+      "upstream_sha256": "f0ae8b98011584e5f7592fe65e218002b277731e28ce135da506959b4e3bf6de"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton/skeleton_pose.h",
+      "sha256": "f368bedde8a9ce6bb72d3eb4596dc6870bea42336caef014b065d402975fd185",
+      "mode": "0o644",
+      "upstream_sha256": "f368bedde8a9ce6bb72d3eb4596dc6870bea42336caef014b065d402975fd185"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton/skeleton_pose_pool.h",
+      "sha256": "7bcd23078af5c131a09ec614d3f279ffb10e9c04082ebeb7626d830fa668c4e4",
+      "mode": "0o644",
+      "upstream_sha256": "7bcd23078af5c131a09ec614d3f279ffb10e9c04082ebeb7626d830fa668c4e4"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton/skeleton_uncooked.h",
+      "sha256": "ff365b1de5d6f7c892279a922dbf6e24e4ddd0eee91c503f1146d432a903955c",
+      "mode": "0o644",
+      "upstream_sha256": "ff365b1de5d6f7c892279a922dbf6e24e4ddd0eee91c503f1146d432a903955c"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton/skeleton_utils.h",
+      "sha256": "7d10216d9dabb316251ba6a9a5ebac958e7d0aa61c07526ea76bdcf1d5f1d800",
+      "mode": "0o644",
+      "upstream_sha256": "7d10216d9dabb316251ba6a9a5ebac958e7d0aa61c07526ea76bdcf1d5f1d800"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton_mask/skeleton_mask.h",
+      "sha256": "043c68ce8651715867fefa445f518f4eabe178d555fd3a6522737c8c666e70dd",
+      "mode": "0o644",
+      "upstream_sha256": "043c68ce8651715867fefa445f518f4eabe178d555fd3a6522737c8c666e70dd"
+    },
+    {
+      "path": "libs/eely/include/eely/skeleton_mask/skeleton_mask_uncooked.h",
+      "sha256": "806ae910c4efa8101f7b58f4c57474e07261dcffbdddf02d0627e6138325f284",
+      "mode": "0o644",
+      "upstream_sha256": "806ae910c4efa8101f7b58f4c57474e07261dcffbdddf02d0627e6138325f284"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph.cpp",
+      "sha256": "55e96f7a14b17dd6d1bf564161dc152e7ac94fc350c015eb6e366252da9511d7",
+      "mode": "0o644",
+      "upstream_sha256": "55e96f7a14b17dd6d1bf564161dc152e7ac94fc350c015eb6e366252da9511d7"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_and.cpp",
+      "sha256": "22b7966c0160fcb58338a5240e42fb725af26338c3ff9855953ec3ba84e4fc82",
+      "mode": "0o644",
+      "upstream_sha256": "22b7966c0160fcb58338a5240e42fb725af26338c3ff9855953ec3ba84e4fc82"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_base.cpp",
+      "sha256": "9cbb648922da02ccec593f8dffb53f3fa95b72cac5c716469e90653e137b7a97",
+      "mode": "0o644",
+      "upstream_sha256": "9cbb648922da02ccec593f8dffb53f3fa95b72cac5c716469e90653e137b7a97"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_blend.cpp",
+      "sha256": "9e21e850014a9a21df305f3a93698ac72594731af4e23d85977b8d55c7772b37",
+      "mode": "0o644",
+      "upstream_sha256": "9e21e850014a9a21df305f3a93698ac72594731af4e23d85977b8d55c7772b37"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_clip.cpp",
+      "sha256": "6ca104dffeec3f9cdf867ffc5ba5f7310345924785e96fc26d6ebf4782c6b51d",
+      "mode": "0o644",
+      "upstream_sha256": "6ca104dffeec3f9cdf867ffc5ba5f7310345924785e96fc26d6ebf4782c6b51d"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_param.cpp",
+      "sha256": "9627bc0372f10e484492644ec4f6adb94bf248f8e706b5474f5d6d8e363a7e19",
+      "mode": "0o644",
+      "upstream_sha256": "9627bc0372f10e484492644ec4f6adb94bf248f8e706b5474f5d6d8e363a7e19"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_param_comparison.cpp",
+      "sha256": "44597189fee955b8beb0122ecf0e200fcc11aeff2c7d9365e77a6a5301f6e1bf",
+      "mode": "0o644",
+      "upstream_sha256": "44597189fee955b8beb0122ecf0e200fcc11aeff2c7d9365e77a6a5301f6e1bf"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_random.cpp",
+      "sha256": "1c945636bf9c4a0a1dafac872ddc08435122e6b75043d630effbb7d14e7f8a93",
+      "mode": "0o644",
+      "upstream_sha256": "1c945636bf9c4a0a1dafac872ddc08435122e6b75043d630effbb7d14e7f8a93"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_speed.cpp",
+      "sha256": "e537eafe6626e50458783a884200f00a14184d66f24f39fdb49941856c16807b",
+      "mode": "0o644",
+      "upstream_sha256": "e537eafe6626e50458783a884200f00a14184d66f24f39fdb49941856c16807b"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_state.cpp",
+      "sha256": "266242dbc48f80be35ff0b337e33cca2bc5a5a3f08735480cefbf54438382593",
+      "mode": "0o644",
+      "upstream_sha256": "266242dbc48f80be35ff0b337e33cca2bc5a5a3f08735480cefbf54438382593"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_state_condition.cpp",
+      "sha256": "14d21728c53c0d9acf43f032648d30f3226c8c9c95d24fc94a97c32b38e21a1a",
+      "mode": "0o644",
+      "upstream_sha256": "14d21728c53c0d9acf43f032648d30f3226c8c9c95d24fc94a97c32b38e21a1a"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_state_machine.cpp",
+      "sha256": "9e09aa46cb9f3ea440fe396d306c780986d9d5e8f741e23a5cbe222076bca1cc",
+      "mode": "0o644",
+      "upstream_sha256": "9e09aa46cb9f3ea440fe396d306c780986d9d5e8f741e23a5cbe222076bca1cc"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_state_transition.cpp",
+      "sha256": "c55325eced9cf717eb2c4adb5ce76dccf141ab6567b4ee00854fb32824cc41cd",
+      "mode": "0o644",
+      "upstream_sha256": "c55325eced9cf717eb2c4adb5ce76dccf141ab6567b4ee00854fb32824cc41cd"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_node_sum.cpp",
+      "sha256": "b69fe79bfc22ee07800058c603135fddc7150ed5dd2ae688111b8aeb66dd65ae",
+      "mode": "0o644",
+      "upstream_sha256": "b69fe79bfc22ee07800058c603135fddc7150ed5dd2ae688111b8aeb66dd65ae"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player.cpp",
+      "sha256": "e7aafd9d64324ff3fc0230c067045c6643db2da35da84fa1a60023d16803d40d",
+      "mode": "0o644",
+      "upstream_sha256": "e7aafd9d64324ff3fc0230c067045c6643db2da35da84fa1a60023d16803d40d"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_and.cpp",
+      "sha256": "3508f7f67c55a2a964475a869178c8eced66ed084e682ab38b7b63db5a8a7762",
+      "mode": "0o644",
+      "upstream_sha256": "3508f7f67c55a2a964475a869178c8eced66ed084e682ab38b7b63db5a8a7762"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_base.cpp",
+      "sha256": "4ebceaec053a2f788d1a7b6f0fa12fb227f64fd55e48c9f1d5d1c94cc8ebf12b",
+      "mode": "0o644",
+      "upstream_sha256": "4ebceaec053a2f788d1a7b6f0fa12fb227f64fd55e48c9f1d5d1c94cc8ebf12b"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_blend.cpp",
+      "sha256": "080d43f465dd10ff9c375c6d7fc693f81487ca2c6752aaad88d3aea350cdd81d",
+      "mode": "0o644",
+      "upstream_sha256": "080d43f465dd10ff9c375c6d7fc693f81487ca2c6752aaad88d3aea350cdd81d"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_clip.cpp",
+      "sha256": "ffe8bed77ef7be3bcf7030d360f36a0d9d7b9b1912aac7d297b60e314a5df246",
+      "mode": "0o644",
+      "upstream_sha256": "ffe8bed77ef7be3bcf7030d360f36a0d9d7b9b1912aac7d297b60e314a5df246"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_param.cpp",
+      "sha256": "7730cabe8e5693ce14a8d729bc0667f19e9ea253627f672c2eb4977ef089750d",
+      "mode": "0o644",
+      "upstream_sha256": "7730cabe8e5693ce14a8d729bc0667f19e9ea253627f672c2eb4977ef089750d"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_param_comparison.cpp",
+      "sha256": "46a2d417734af5573d0b10b80beff7d334f562bf4cc07f62ed4872c03214f151",
+      "mode": "0o644",
+      "upstream_sha256": "46a2d417734af5573d0b10b80beff7d334f562bf4cc07f62ed4872c03214f151"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_pose_base.cpp",
+      "sha256": "b165d2b48c92d7476cdd626ed4b6e874615c59913715de04741bba296a4284f8",
+      "mode": "0o644",
+      "upstream_sha256": "b165d2b48c92d7476cdd626ed4b6e874615c59913715de04741bba296a4284f8"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_random.cpp",
+      "sha256": "e20ab4734ea91bc1b71d88993c501fab1059c598fcc28a41c8351e5f7cfdc083",
+      "mode": "0o644",
+      "upstream_sha256": "e20ab4734ea91bc1b71d88993c501fab1059c598fcc28a41c8351e5f7cfdc083"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_speed.cpp",
+      "sha256": "6345e33b32f289fbac43eb5a244ee3a8b143b4fac9ca7346c876fb4aa1552ac2",
+      "mode": "0o644",
+      "upstream_sha256": "6345e33b32f289fbac43eb5a244ee3a8b143b4fac9ca7346c876fb4aa1552ac2"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_state.cpp",
+      "sha256": "6f3fb164edaa1bf154788f6e00e193d53b59aba5f11bf7168afb148c3e779d54",
+      "mode": "0o644",
+      "upstream_sha256": "6f3fb164edaa1bf154788f6e00e193d53b59aba5f11bf7168afb148c3e779d54"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_state_condition.cpp",
+      "sha256": "598c8695d3f2cad7a13e1ad42081ba66733a42e73b52eaaf42d2932ca108a05f",
+      "mode": "0o644",
+      "upstream_sha256": "598c8695d3f2cad7a13e1ad42081ba66733a42e73b52eaaf42d2932ca108a05f"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_state_machine.cpp",
+      "sha256": "2a9199911702b7687d9b900bdbb14ce83ad3ad991f6da6fecbcbdbb7507cba1c",
+      "mode": "0o644",
+      "upstream_sha256": "2a9199911702b7687d9b900bdbb14ce83ad3ad991f6da6fecbcbdbb7507cba1c"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_state_transition.cpp",
+      "sha256": "edc6bec38dd874f1158b1469f39718ddcf2918f64940df1e758826afa5125c78",
+      "mode": "0o644",
+      "upstream_sha256": "edc6bec38dd874f1158b1469f39718ddcf2918f64940df1e758826afa5125c78"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_player_node_sum.cpp",
+      "sha256": "e84a2304a26ecca69e3b84440478016a32b347b752c79e5374cbcf4f7028d41f",
+      "mode": "0o644",
+      "upstream_sha256": "e84a2304a26ecca69e3b84440478016a32b347b752c79e5374cbcf4f7028d41f"
+    },
+    {
+      "path": "libs/eely/src/eely/anim_graph/anim_graph_uncooked.cpp",
+      "sha256": "b06bf5e4c94733ea012673c5671cfa43fcf3d52213b4368ddb6a43af4bfef0f5",
+      "mode": "0o644",
+      "upstream_sha256": "b06bf5e4c94733ea012673c5671cfa43fcf3d52213b4368ddb6a43af4bfef0f5"
+    },
+    {
+      "path": "libs/eely/src/eely/base/base_utils.cpp",
+      "sha256": "188fbc2f90435c3114ba20cb0e8e42852bf693369fa80a3692ae19585906219a",
+      "mode": "0o644",
+      "upstream_sha256": "188fbc2f90435c3114ba20cb0e8e42852bf693369fa80a3692ae19585906219a"
+    },
+    {
+      "path": "libs/eely/src/eely/base/bit_reader.cpp",
+      "sha256": "f49a43f4fb50f98c364a0f192ac3608462156262eca1af4ce60e121e9877d245",
+      "mode": "0o644",
+      "upstream_sha256": "f49a43f4fb50f98c364a0f192ac3608462156262eca1af4ce60e121e9877d245"
+    },
+    {
+      "path": "libs/eely/src/eely/base/bit_writer.cpp",
+      "sha256": "ec5658a34ae4d1d6459d846532c2c336165a7b4d0f5b49c259d61fede9fbad5e",
+      "mode": "0o644",
+      "upstream_sha256": "ec5658a34ae4d1d6459d846532c2c336165a7b4d0f5b49c259d61fede9fbad5e"
+    },
+    {
+      "path": "libs/eely/src/eely/base/string_id.cpp",
+      "sha256": "d5f93902b7bc90845a3840ba2e3aec3963bc51b24df569c2b0ac2a70c6a11a9d",
+      "mode": "0o644",
+      "upstream_sha256": "d5f93902b7bc90845a3840ba2e3aec3963bc51b24df569c2b0ac2a70c6a11a9d"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip.cpp",
+      "sha256": "42133cd3e84c9f48eee8b6886aedbf8c6ffcd2e82812f4fbc5add3f9ef558a14",
+      "mode": "0o644",
+      "upstream_sha256": "42133cd3e84c9f48eee8b6886aedbf8c6ffcd2e82812f4fbc5add3f9ef558a14"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_cooking_none_fixed.cpp",
+      "sha256": "c4de4b1a23ddb5ba9a3eb2fd5baca2821db683e35001574e3e3256cf8ba0698e",
+      "mode": "0o644",
+      "upstream_sha256": "c4de4b1a23ddb5ba9a3eb2fd5baca2821db683e35001574e3e3256cf8ba0698e"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_cursor.cpp",
+      "sha256": "ae8228aace31c66e814e05a34377a006ef8161c9fc9a609d1bf2acbf2130eaa4",
+      "mode": "0o644",
+      "upstream_sha256": "ae8228aace31c66e814e05a34377a006ef8161c9fc9a609d1bf2acbf2130eaa4"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_impl_acl.cpp",
+      "sha256": "d6a0b9a60b78a95fbd3043678b24a5314a19acd5b8bfdfb008e2f6495ca78d6b",
+      "mode": "0o644",
+      "upstream_sha256": "7fbc1e7898443557e07df14d123bb823013de5e417efe664259d10f875edf3b1"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_impl_fixed.cpp",
+      "sha256": "dd05139dc7092c8175fc1889ea5c6fe4bfce9741f9f5bb419968b34a9fdd22f6",
+      "mode": "0o644",
+      "upstream_sha256": "dd05139dc7092c8175fc1889ea5c6fe4bfce9741f9f5bb419968b34a9fdd22f6"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_impl_none.cpp",
+      "sha256": "7515a32166431e7a34709cdaaccb8aca473c71e552e276d9efa1c77de99bc8b8",
+      "mode": "0o644",
+      "upstream_sha256": "7515a32166431e7a34709cdaaccb8aca473c71e552e276d9efa1c77de99bc8b8"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_player_acl.cpp",
+      "sha256": "ad46acadec38b0dd28795991a2bbc7583d954a92844a4ae4111849446f64c5ec",
+      "mode": "0o644",
+      "upstream_sha256": "ad46acadec38b0dd28795991a2bbc7583d954a92844a4ae4111849446f64c5ec"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_player_fixed.cpp",
+      "sha256": "69755686aeb7cd05220e30928e7b56e7f620a285b02e6ac1cc3862ba98c263ae",
+      "mode": "0o644",
+      "upstream_sha256": "69755686aeb7cd05220e30928e7b56e7f620a285b02e6ac1cc3862ba98c263ae"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_player_none.cpp",
+      "sha256": "53a2a0151c3870d2ffb854dc33905366a225aace4fdc6819d3b258323fe6e985",
+      "mode": "0o644",
+      "upstream_sha256": "53a2a0151c3870d2ffb854dc33905366a225aace4fdc6819d3b258323fe6e985"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_uncooked.cpp",
+      "sha256": "173476b8e82760bfef3528496166ccab687ef95783c5ea3d00d5224c11a24f86",
+      "mode": "0o644",
+      "upstream_sha256": "173476b8e82760bfef3528496166ccab687ef95783c5ea3d00d5224c11a24f86"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_utils.cpp",
+      "sha256": "1fca8ee097d1a65d5a95b3dbc586c3aefa05f2f3b7786d9ff3bbdc8a07bf6fe0",
+      "mode": "0o644",
+      "upstream_sha256": "1fca8ee097d1a65d5a95b3dbc586c3aefa05f2f3b7786d9ff3bbdc8a07bf6fe0"
+    },
+    {
+      "path": "libs/eely/src/eely/job/job_base.cpp",
+      "sha256": "181b61cf69b31d62fdbc0349fca7da6f79401875cb29a85d657c9bbe19d29339",
+      "mode": "0o644",
+      "upstream_sha256": "181b61cf69b31d62fdbc0349fca7da6f79401875cb29a85d657c9bbe19d29339"
+    },
+    {
+      "path": "libs/eely/src/eely/job/job_queue.cpp",
+      "sha256": "7518b3af3acd0d3d3df3576257c3312d970200673d34e416260be82b83c69935",
+      "mode": "0o644",
+      "upstream_sha256": "7518b3af3acd0d3d3df3576257c3312d970200673d34e416260be82b83c69935"
+    },
+    {
+      "path": "libs/eely/src/eely/math/ellipse.cpp",
+      "sha256": "4521bef1a7d2557f8a8892edec1591c653d3d7dc6105ca9d944364025d00879f",
+      "mode": "0o644",
+      "upstream_sha256": "4521bef1a7d2557f8a8892edec1591c653d3d7dc6105ca9d944364025d00879f"
+    },
+    {
+      "path": "libs/eely/src/eely/math/elliptical_cone.cpp",
+      "sha256": "c59852568e5347d93382a0231239d9937561e3275b0af8f77ffd3929762e1697",
+      "mode": "0o644",
+      "upstream_sha256": "c59852568e5347d93382a0231239d9937561e3275b0af8f77ffd3929762e1697"
+    },
+    {
+      "path": "libs/eely/src/eely/math/float2.cpp",
+      "sha256": "b143e40b313a98aa2275bd4de35c0cb5aab5775c1a4763bd499bd9604419bfd5",
+      "mode": "0o644",
+      "upstream_sha256": "b143e40b313a98aa2275bd4de35c0cb5aab5775c1a4763bd499bd9604419bfd5"
+    },
+    {
+      "path": "libs/eely/src/eely/math/float3.cpp",
+      "sha256": "97754a4490f21ac451b4bed182ee1fa37ae51ecc5f80586b4ac5eba0befaeb2a",
+      "mode": "0o644",
+      "upstream_sha256": "97754a4490f21ac451b4bed182ee1fa37ae51ecc5f80586b4ac5eba0befaeb2a"
+    },
+    {
+      "path": "libs/eely/src/eely/math/quantization.cpp",
+      "sha256": "01614550db3990c5a494894fbb68c4c7c9e3d69aa94691795c68cb834dd66948",
+      "mode": "0o644",
+      "upstream_sha256": "01614550db3990c5a494894fbb68c4c7c9e3d69aa94691795c68cb834dd66948"
+    },
+    {
+      "path": "libs/eely/src/eely/math/quaternion.cpp",
+      "sha256": "c6fff3cdaaeedf58f1eccf73fb3f91abeee5c400864edef27c2299c5900246b5",
+      "mode": "0o644",
+      "upstream_sha256": "c6fff3cdaaeedf58f1eccf73fb3f91abeee5c400864edef27c2299c5900246b5"
+    },
+    {
+      "path": "libs/eely/src/eely/math/transform.cpp",
+      "sha256": "f5d644207a3b74ad7e854cbb92a245c0b05c5fedd8e7d56a286a677ac6de49c5",
+      "mode": "0o644",
+      "upstream_sha256": "f5d644207a3b74ad7e854cbb92a245c0b05c5fedd8e7d56a286a677ac6de49c5"
+    },
+    {
+      "path": "libs/eely/src/eely/params/params.cpp",
+      "sha256": "6c4204191587f11dbcc451177c3e9c9ac7e691581c6eb2cdfdb5e7d2f268747f",
+      "mode": "0o644",
+      "upstream_sha256": "6c4204191587f11dbcc451177c3e9c9ac7e691581c6eb2cdfdb5e7d2f268747f"
+    },
+    {
+      "path": "libs/eely/src/eely/project/project.cpp",
+      "sha256": "9b64430a4efb6fa1b8026b1f6bc96dd690d62a0ffce939b82984e077809f5447",
+      "mode": "0o644",
+      "upstream_sha256": "9b64430a4efb6fa1b8026b1f6bc96dd690d62a0ffce939b82984e077809f5447"
+    },
+    {
+      "path": "libs/eely/src/eely/project/project_uncooked.cpp",
+      "sha256": "60b70b56fc38e713554062ac959b01e509c687d598a13bcb9087196452a67440",
+      "mode": "0o644",
+      "upstream_sha256": "60b70b56fc38e713554062ac959b01e509c687d598a13bcb9087196452a67440"
+    },
+    {
+      "path": "libs/eely/src/eely/project/resource.cpp",
+      "sha256": "6739f250af20704d091bbea8ed23c33d17bf98550efd0b211f205c593be3fae4",
+      "mode": "0o644",
+      "upstream_sha256": "6739f250af20704d091bbea8ed23c33d17bf98550efd0b211f205c593be3fae4"
+    },
+    {
+      "path": "libs/eely/src/eely/project/resource_base.cpp",
+      "sha256": "deb5dfca31b1c40db3c41442fca2b78bb2b0ad5cb9da30dedc8ca587236b22f6",
+      "mode": "0o644",
+      "upstream_sha256": "deb5dfca31b1c40db3c41442fca2b78bb2b0ad5cb9da30dedc8ca587236b22f6"
+    },
+    {
+      "path": "libs/eely/src/eely/project/resource_uncooked.cpp",
+      "sha256": "fcc4a484973135c756e8130c400a836188a6cc866441cc218366fd5dfe365062",
+      "mode": "0o644",
+      "upstream_sha256": "fcc4a484973135c756e8130c400a836188a6cc866441cc218366fd5dfe365062"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton/presets.cpp",
+      "sha256": "6016f8ab8f1a71c01e717c7284a0c286d327fb43f38ec8d4658d9eaeeb1329ff",
+      "mode": "0o644",
+      "upstream_sha256": "6016f8ab8f1a71c01e717c7284a0c286d327fb43f38ec8d4658d9eaeeb1329ff"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton/skeleton.cpp",
+      "sha256": "3bb717c873a61448806c210032bc66d53ee8daa8ca9fdfa041f0c65e982b5def",
+      "mode": "0o644",
+      "upstream_sha256": "3bb717c873a61448806c210032bc66d53ee8daa8ca9fdfa041f0c65e982b5def"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton/skeleton_pose.cpp",
+      "sha256": "90d201afe093a159591e3e23aa53ac39af9df46b236c33d9531c06c7e7e2d497",
+      "mode": "0o644",
+      "upstream_sha256": "90d201afe093a159591e3e23aa53ac39af9df46b236c33d9531c06c7e7e2d497"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton/skeleton_pose_pool.cpp",
+      "sha256": "77fd2946ba253a528b71b547c86ec028cf1a1d420b459049f0fb7e263e3fba8a",
+      "mode": "0o644",
+      "upstream_sha256": "77fd2946ba253a528b71b547c86ec028cf1a1d420b459049f0fb7e263e3fba8a"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton/skeleton_uncooked.cpp",
+      "sha256": "cd31e482de73c0d8426d1f81b8095f831cec18e25b655b4c04ec49c829458462",
+      "mode": "0o644",
+      "upstream_sha256": "cd31e482de73c0d8426d1f81b8095f831cec18e25b655b4c04ec49c829458462"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton_mask/skeleton_mask.cpp",
+      "sha256": "d5434d53a28f521282ffb12da3c5d0b0f2799d5494b7c65fbe6621758e2e5bd4",
+      "mode": "0o644",
+      "upstream_sha256": "d5434d53a28f521282ffb12da3c5d0b0f2799d5494b7c65fbe6621758e2e5bd4"
+    },
+    {
+      "path": "libs/eely/src/eely/skeleton_mask/skeleton_mask_uncooked.cpp",
+      "sha256": "9407a445f346b5505fd7afbc3d1d6c2b2c612e751255505d162621b914c38a4d",
+      "mode": "0o644",
+      "upstream_sha256": "9407a445f346b5505fd7afbc3d1d6c2b2c612e751255505d162621b914c38a4d"
+    },
+    {
+      "path": "tests/src/tests/base_utils.cpp",
+      "sha256": "d6e3ad696a2096d4cd04e4340364dc98667a09b6f0311f6871ee0f9774764bf5",
+      "mode": "0o644",
+      "upstream_sha256": "d6e3ad696a2096d4cd04e4340364dc98667a09b6f0311f6871ee0f9774764bf5"
+    },
+    {
+      "path": "tests/src/tests/bit_reader_and_bit_writer.cpp",
+      "sha256": "358ac4dff9b1d831bf7b9832979cc22ec69182b4a215ad714c3b9e54648c998e",
+      "mode": "0o644",
+      "upstream_sha256": "358ac4dff9b1d831bf7b9832979cc22ec69182b4a215ad714c3b9e54648c998e"
+    },
+    {
+      "path": "tests/src/tests/ellipse.cpp",
+      "sha256": "20a9cd4efab1ace7bed82124a0c3a1e3078175d62f05c5257d63af46345fb663",
+      "mode": "0o644",
+      "upstream_sha256": "20a9cd4efab1ace7bed82124a0c3a1e3078175d62f05c5257d63af46345fb663"
+    },
+    {
+      "path": "tests/src/tests/elliptical_cone.cpp",
+      "sha256": "39aae41a8086984730ac8ed0c1b267bfe95aaa0a080015de78b6a11b2f0d0545",
+      "mode": "0o644",
+      "upstream_sha256": "39aae41a8086984730ac8ed0c1b267bfe95aaa0a080015de78b6a11b2f0d0545"
+    },
+    {
+      "path": "tests/src/tests/float3.cpp",
+      "sha256": "ee986c62cf0c9d7acd79f2956b71a581f7f568780f1861b72b15231b37aa5d0c",
+      "mode": "0o644",
+      "upstream_sha256": "ee986c62cf0c9d7acd79f2956b71a581f7f568780f1861b72b15231b37aa5d0c"
+    },
+    {
+      "path": "tests/src/tests/graph.cpp",
+      "sha256": "4f6471c9e73d598f23c6fa5694633a3c5ced89ad06723be8c315c3ed714fb04c",
+      "mode": "0o644",
+      "upstream_sha256": "4f6471c9e73d598f23c6fa5694633a3c5ced89ad06723be8c315c3ed714fb04c"
+    },
+    {
+      "path": "tests/src/tests/math_utils.cpp",
+      "sha256": "0e80e46d08b6f2886b9ee18f3f46d2a3d06101ae98b0de023a337b09fa5e3222",
+      "mode": "0o644",
+      "upstream_sha256": "0e80e46d08b6f2886b9ee18f3f46d2a3d06101ae98b0de023a337b09fa5e3222"
+    },
+    {
+      "path": "tests/src/tests/matrix4x4.cpp",
+      "sha256": "988ac4e8afd686aa5d47304d273175398350039e54344faca98bc9caeef112aa",
+      "mode": "0o644",
+      "upstream_sha256": "988ac4e8afd686aa5d47304d273175398350039e54344faca98bc9caeef112aa"
+    },
+    {
+      "path": "tests/src/tests/quantization.cpp",
+      "sha256": "920a8aa17a111c956ff1c636532404da33021716df2ac232ec565416bc219689",
+      "mode": "0o644",
+      "upstream_sha256": "920a8aa17a111c956ff1c636532404da33021716df2ac232ec565416bc219689"
+    },
+    {
+      "path": "tests/src/tests/quaternion.cpp",
+      "sha256": "02be651dd70250e8d08637620a6fecdd9e85e07571c06da2f020bf10edb6c7a5",
+      "mode": "0o644",
+      "upstream_sha256": "02be651dd70250e8d08637620a6fecdd9e85e07571c06da2f020bf10edb6c7a5"
+    },
+    {
+      "path": "tests/src/tests/skeleton_and_clip.cpp",
+      "sha256": "48e08df60986c213eb98f2855d55ccab87e79e3641cecc405104d0721b573980",
+      "mode": "0o644",
+      "upstream_sha256": "48e08df60986c213eb98f2855d55ccab87e79e3641cecc405104d0721b573980"
+    },
+    {
+      "path": "tests/src/tests/skeleton_pose.cpp",
+      "sha256": "841ba736950493f59ad9187bb0a1394e50c6823a9c7850aeb03aa52886f0820c",
+      "mode": "0o644",
+      "upstream_sha256": "841ba736950493f59ad9187bb0a1394e50c6823a9c7850aeb03aa52886f0820c"
+    },
+    {
+      "path": "tests/src/tests/string_id.cpp",
+      "sha256": "c25bd938ec4ed6578f2d0893be0851fe549b97c11d3771e3a7b984260a98fdc6",
+      "mode": "0o644",
+      "upstream_sha256": "c25bd938ec4ed6578f2d0893be0851fe549b97c11d3771e3a7b984260a98fdc6"
+    },
+    {
+      "path": "tests/src/tests/test_utils.h",
+      "sha256": "2f8c0487c3cb784764bae342f62854e22d408d4727fb6cdd46854dbb7c5411f3",
+      "mode": "0o644",
+      "upstream_sha256": "2f8c0487c3cb784764bae342f62854e22d408d4727fb6cdd46854dbb7c5411f3"
+    },
+    {
+      "path": "tests/src/tests/transform.cpp",
+      "sha256": "c2e749c14ef6355a0882882cc8dae556d27c6cf5de752ba9f0723bddbbd7079c",
+      "mode": "0o644",
+      "upstream_sha256": "c2e749c14ef6355a0882882cc8dae556d27c6cf5de752ba9f0723bddbbd7079c"
+    }
+  ],
+  "archive_sha256": "5cf0876f417bdd862a08a1c0e63153fd3bf9f7ef02589266d92a851a7f226d81",
+  "method": "Same-commit source export, all listed hashes and modes rechecked; no target implementation",
+  "exclusions": "不使用eely_app/editor/importer、FBX/图形SDK、外部预编译库、示例FBX/GIF或GoogleTest；core全量源码与原CMake保留，CPU独立构建只依赖仓内GSL/ACL/RTM/SJSON及各许可证。",
+  "selected_paths": [
+    "LICENSE",
+    "README.md",
+    "CMakeLists.txt",
+    "libs/eely",
+    "external/acl/include",
+    "external/acl/LICENSE",
+    "external/gsl/include",
+    "external/gsl/LICENSE",
+    "tests/src/tests",
+    "examples/01_blend/src",
+    "examples/02_additive/src"
+  ],
+  "compatibility_changes": [
+    {
+      "path": "external/acl/include/acl/decompression/impl/decompress.impl.h",
+      "upstream_sha256": "453679feae5f3e7e6b3ba5720d6948ca7342ca28125191c8892979ac92a82a8f",
+      "exported_sha256": "9c215c6af75f8ef7010faa6e05ad8b7c56f9c0bfed32892e233401cc9c328c7a",
+      "purpose": "Clang/macOS编译兼容；不改变图求值或job消费逻辑"
+    },
+    {
+      "path": "libs/eely/src/eely/clip/clip_impl_acl.cpp",
+      "upstream_sha256": "7fbc1e7898443557e07df14d123bb823013de5e417efe664259d10f875edf3b1",
+      "exported_sha256": "d6a0b9a60b78a95fbd3043678b24a5314a19acd5b8bfdfb008e2f6495ca78d6b",
+      "purpose": "Clang/macOS编译兼容；不改变图求值或job消费逻辑"
+    }
+  ],
+  "gitlinks": [],
+  "gitmodules": false
+}
