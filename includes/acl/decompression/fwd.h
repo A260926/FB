@@ -59,5 +59,9 @@ namespace acl
 
     template<class decompression_settings_type> class decompression_context;
 
+    struct batch_request;
+    struct batch_decode_stats;
+    class batch_decompression_context;
+
     ACL_IMPL_VERSION_NAMESPACE_END
 }
