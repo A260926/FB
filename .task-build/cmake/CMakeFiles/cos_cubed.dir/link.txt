@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cos_cubed.dir/src/TheRestOfYourLife/cos_cubed.cc.o -o cos_cubed

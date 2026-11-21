@@ -1,0 +1,4 @@
+GEOMETRY nonunit_t=0.75
+MEDIUM scalar_hits=2590/4096 expected_probability=0.632121
+CAMERA P3 8 8 channels=192 sum=27444
+BASELINE_COMPLETE

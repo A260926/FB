@@ -1,0 +1,8 @@
+#!/bin/sh
+# Sandbox-local mktemp shim: the system temp directory is not writable here, so a template-less
+# `mktemp` is redirected into the repo-local build temp directory. Only used by task_support/run.sh
+# when this directory is prepended to PATH.
+case "$#" in
+  0) exec /usr/bin/mktemp "$(cd "$(dirname "$0")/.." && pwd)/tmp/tmp.XXXXXXXXXX" ;;
+  *) exec /usr/bin/mktemp "$@" ;;
+esac

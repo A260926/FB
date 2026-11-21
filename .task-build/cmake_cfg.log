@@ -1,0 +1,12 @@
+-- The CXX compiler identification is AppleClang 21.0.0.21000334
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Compiler ID: AppleClang
+-- Release flags: -O3 -DNDEBUG
+-- Debug flags: -g
+-- Configuring done (0.3s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake

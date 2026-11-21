@@ -1,0 +1,12 @@
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/inOneWeekend.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/theNextWeek.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/theRestOfYourLife.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/cos_cubed.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/cos_density.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/integrate_x_sq.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/pi.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/estimate_halfway.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/sphere_importance.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/sphere_plot.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS4FA75E3D6FFEU6603R0419BB7C0/attempts/20261121T180648064079Z/repo/.task-build/cmake/CMakeFiles/rebuild_cache.dir

@@ -13,6 +13,7 @@
 
 #include "hittable.h"
 #include "pdf.h"
+#include "subsurface.h"
 #include "texture.h"
 
 
@@ -42,6 +43,17 @@ class material {
     virtual double scattering_pdf(const ray& r_in, const hit_record& rec, const ray& scattered)
     const {
         return 0;
+    }
+
+    // Subsurface hook. Ordinary materials leave this as false and use scatter() instead. The
+    // marker material installed by a subsurface_object (defined in subsurface.cpp) overrides it
+    // to run the full volumetric random walk, filling `out` with the exit ray, spectral weight,
+    // charged event count and termination reason. Keeping this virtual means camera.h never has
+    // to link against subsurface.cpp directly.
+    virtual bool subsurface_walk(const ray& r_in, const hit_record& rec, int depth,
+                                 subsurface_result& out) const {
+        (void)r_in; (void)rec; (void)depth; (void)out;
+        return false;
     }
 };
 

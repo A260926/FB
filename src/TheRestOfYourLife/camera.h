@@ -14,6 +14,7 @@
 #include "hittable.h"
 #include "pdf.h"
 #include "material.h"
+#include "subsurface.h"
 
 
 class camera {
@@ -44,7 +45,7 @@ class camera {
                 for (int s_j = 0; s_j < sqrt_spp; s_j++) {
                     for (int s_i = 0; s_i < sqrt_spp; s_i++) {
                         ray r = get_ray(i, j, s_i, s_j);
-                        pixel_color += ray_color(r, max_depth, world, lights);
+                        pixel_color += trace_ray(r, max_depth, world, lights);
                     }
                 }
                 write_color(std::cout, pixel_samples_scale * pixel_color);
@@ -52,6 +53,62 @@ class camera {
         }
 
         std::clog << "\rDone.                 \n";
+    }
+
+    // Public linear-RGB entry point for tracing a single ray. render() uses this same
+    // integration routine, so externally driven rays (for example the checks) see exactly the
+    // same scattering, subsurface and lighting logic as rendered pixels.
+    color trace_ray(const ray& r, int depth, const hittable& world, const hittable& lights)
+    const {
+        // If we've exceeded the ray bounce limit, no more light is gathered.
+        if (depth <= 0)
+            return color(0,0,0);
+
+        hit_record rec;
+
+        // If the ray hits nothing, return the background color.
+        if (!world.hit(r, interval(0.001, infinity), rec))
+            return background;
+
+        // A subsurface object owns the whole internal random walk, reached through the marker
+        // material's virtual hook so this header needs no link dependency on subsurface.cpp.
+        // Only the wrapped boundary is queried inside; the outside world resumes once the walk
+        // exits (or reflects at entry).
+        subsurface_result walk;
+        if (rec.mat->subsurface_walk(r, rec, depth, walk)) {
+            const int remaining = depth - walk.events_used;
+
+            // Entry reflection (unit weight) and refracted exit (spectral weight) both continue
+            // as ordinary outside rays. Absorption and an exhausted budget contribute nothing.
+            if (walk.reason == subsurface_termination::reflected ||
+                walk.reason == subsurface_termination::exited)
+                return walk.weight * trace_ray(walk.exit_ray, remaining, world, lights);
+            return color(0,0,0);
+        }
+
+        scatter_record srec;
+        color color_from_emission = rec.mat->emitted(r, rec, rec.u, rec.v, rec.p);
+
+        if (!rec.mat->scatter(r, rec, srec))
+            return color_from_emission;
+
+        if (srec.skip_pdf) {
+            return srec.attenuation * trace_ray(srec.skip_pdf_ray, depth-1, world, lights);
+        }
+
+        auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
+        mixture_pdf p(light_ptr, srec.pdf_ptr);
+
+        ray scattered = ray(rec.p, p.generate(), r.time());
+        auto pdf_value = p.value(scattered.direction());
+
+        double scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
+
+        color sample_color = trace_ray(scattered, depth-1, world, lights);
+        color color_from_scatter =
+            (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
+
+        return color_from_emission + color_from_scatter;
     }
 
   private:
@@ -148,41 +205,11 @@ class camera {
         return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
     }
 
+    // Original per-ray entry point; it delegates to the shared public trace_ray routine so that
+    // both rendering and externally driven rays run the exact same integration logic.
     color ray_color(const ray& r, int depth, const hittable& world, const hittable& lights)
     const {
-        // If we've exceeded the ray bounce limit, no more light is gathered.
-        if (depth <= 0)
-            return color(0,0,0);
-
-        hit_record rec;
-
-        // If the ray hits nothing, return the background color.
-        if (!world.hit(r, interval(0.001, infinity), rec))
-            return background;
-
-        scatter_record srec;
-        color color_from_emission = rec.mat->emitted(r, rec, rec.u, rec.v, rec.p);
-
-        if (!rec.mat->scatter(r, rec, srec))
-            return color_from_emission;
-
-        if (srec.skip_pdf) {
-            return srec.attenuation * ray_color(srec.skip_pdf_ray, depth-1, world, lights);
-        }
-
-        auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
-        mixture_pdf p(light_ptr, srec.pdf_ptr);
-
-        ray scattered = ray(rec.p, p.generate(), r.time());
-        auto pdf_value = p.value(scattered.direction());
-
-        double scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
-
-        color sample_color = ray_color(scattered, depth-1, world, lights);
-        color color_from_scatter =
-            (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
-
-        return color_from_emission + color_from_scatter;
+        return trace_ray(r, depth, world, lights);
     }
 };
 
