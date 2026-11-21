@@ -2,11 +2,10 @@
 set -euo pipefail
 mkdir -p .task-build
 cxx=${CXX:-c++}
-sources=(src/render.cpp src/scene.cpp src/mesh.cpp src/platform.cpp)
+sources=(src/render.cpp src/scene.cpp src/mesh.cpp src/platform.cpp src/heightfield.cpp)
 if [[ ${1:-baseline} == target ]]; then
   test -s src/heightfield.h
   test -s src/heightfield.cpp
-  sources+=(src/heightfield.cpp)
 fi
 objects=()
 for src in "${sources[@]}"; do

@@ -836,7 +836,7 @@ CUDA_CALLABLE inline float PrimitiveArea(const Primitive& p)
 	{
 		case eSphere:
 		{
-			float area = 4.0f*kPi*p.sphere.radius*p.sphere.radius;  
+			float area = 4.0f*kPi*p.sphere.radius*p.sphere.radius;
 			return area;
 		}
 		case ePlane:
@@ -847,9 +847,29 @@ CUDA_CALLABLE inline float PrimitiveArea(const Primitive& p)
 		{
 			return p.mesh.area*p.endTransform.s;
 		}
+		case eHeightField:
+		{
+			// height fields use a pointwise area density, never a constant
+			return 0.0f;
+		}
 	};
 
 	return 0.0f;
+}
+
+// Pointwise world space area density of a height field sample. Only valid
+// for eHeightField primitives.
+CUDA_CALLABLE inline float PrimitiveAreaDensity(const Primitive& p,
+	const Transform& transform, float u, float v)
+{
+	return HeightFieldPrimitiveAreaDensity(p, transform, u, v);
+}
+
+// Recover the sampling parameters of a world space point on a height field.
+CUDA_CALLABLE inline bool PrimitiveInverseSample(const Primitive& p,
+	const Transform& transform, const Vec3& worldPosition, float& u, float& v)
+{
+	return HeightFieldPrimitiveInverse(p, transform, worldPosition, u, v);
 }
 
 CUDA_CALLABLE inline void PrimitiveSample(const Primitive& p, float time, Vec3& pos, Vec3& normal, Random& rand)
@@ -864,13 +884,21 @@ CUDA_CALLABLE inline void PrimitiveSample(const Primitive& p, float time, Vec3& 
 			Sample2D(rand, u1, u2);
 
 			// todo: handle scaling in transform matrix
-			pos = TransformPoint(transform, UniformSampleSphere(u1, u2)*p.sphere.radius);			
+			pos = TransformPoint(transform, UniformSampleSphere(u1, u2)*p.sphere.radius);
 			normal = Normalize(pos-transform.p);
 			return;
 		}
 		case ePlane:
 		{
 			assert(0);
+			return;
+		}
+		case eHeightField:
+		{
+			float u, v;
+			Sample2D(rand, u, v);
+
+			HeightFieldPrimitiveSample(p, transform, u, v, pos, normal);
 			return;
 		}
 		case eMesh:
@@ -926,6 +954,11 @@ CUDA_CALLABLE inline Bounds PrimitiveBounds(const Primitive& p)
 		{
 			// read bounds from bvh root
 			localBounds = p.mesh.nodes[0].bounds;
+			break;
+		}
+		case eHeightField:
+		{
+			localBounds = p.heightfield.snapshot->LocalBounds();
 			break;
 		}
 	};
@@ -1010,9 +1043,14 @@ CUDA_CALLABLE inline bool PrimitiveIntersect(const Primitive& p, const Ray& ray,
 
 				outT = t;
 				*outNormal = SafeNormalize(TransformVector(transform, smoothNormal), triNormal);
-			}			
+			}
 
 			return hit;
+		}
+		case eHeightField:
+		{
+			return HeightFieldPrimitiveIntersect(p, transform, ray.origin, ray.dir,
+				outT, outNormal);
 		}
 	}
 

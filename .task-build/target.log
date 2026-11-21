@@ -1,0 +1,27 @@
+CASE intersections flat_field checks=11
+CASE intersections saddle_multiple_roots checks=9
+CASE intersections single_cell_two_roots checks=4250
+CASE intersections exhaustive_random_agreement checks=2374
+CASE intersections shared_edges_and_boundary checks=29
+CASE intersections rotated_scaled_instances checks=347
+CASE intersections quadtree_culling checks=340
+GROUP intersections cases=7 checks=7360 COMPLETE
+CASE updates constructor_validation checks=6
+CASE updates single_edit_workload checks=15
+CASE updates invalid_batch_then_retry checks=12
+CASE updates empty_and_unchanged_edits checks=6
+CASE updates duplicate_coordinates_last_wins checks=4
+CASE updates disjoint_partial_refresh checks=7
+CASE updates snapshot_interleave checks=24
+GROUP updates cases=7 checks=74 COMPLETE
+CASE lighting area_density_matches_area checks=4
+CASE lighting sampling_and_inverse_conventions checks=520
+CASE lighting directional_density_integral checks=1865
+LIGHT mean direct=0.180803 directional=0.179534 reference=0.180873 samples=6000 errors=0.000383,0.007400
+CASE lighting cpu_direct_vs_directional_means checks=582
+LIGHT edited direct=0.180513 directional=0.197727 reference=0.180781 samples=2500 errors=0.001479,0.093739
+LIGHT occluded direct=0.137966 directional=0.146876 reference=0.135586 samples=2500 errors=0.017560,0.083274
+CASE lighting edited_light_and_occluder checks=11
+CASE lighting zero_cosine_and_double_sided checks=262
+GROUP lighting cases=6 checks=3244 COMPLETE
+TARGET_COMPLETE cases=20

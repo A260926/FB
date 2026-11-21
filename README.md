@@ -136,6 +136,93 @@ To convert an animation sequence, e.g.: frame_1.tin, frame_2.tin, ... use the fo
 tinsel -spp 100 frame_%d.tin
 ```
 
+Height Fields
+-------------
+
+A height field is an editable bilinear surface traced directly as a curved
+patch - it is never tessellated into triangles. Construction takes `N*N`
+cells from `(N+1)*(N+1)` row-major finite heights, where `N` is a power of
+two >= 2, over a local rectangle of positive finite width `W` and depth `D`.
+Each cell interpolates its four corners as `y = h(x,z)`; the front-facing
+geometric normal is `(-dh/dx, 1, -dh/dz)`.
+
+Call order:
+
+```cpp
+// 1. construct the editable field from row-major heights
+HeightField field(N, W, D, heights);
+
+// 2. capture an immutable, self-owning snapshot
+HeightFieldSnapshot snapshot = field.Snapshot();
+
+// 3. attach the snapshot to a primitive (many primitives may share one)
+Primitive primitive;
+primitive.type = eHeightField;
+primitive.heightfield.snapshot = std::make_shared<HeightFieldSnapshot>(snapshot);
+primitive.startTransform = primitive.endTransform =
+    Transform(position, rotationQuat, uniformPositiveScale); // static instances only
+
+// 4. the scene BVH, bounds and intersection paths pick it up automatically
+scene.AddPrimitive(primitive);
+scene.Build();
+Ray ray(origin, dir, time);
+float t; Vec3 normal;
+PrimitiveIntersect(scene.primitives[0], ray, t, &normal);
+```
+
+Continuous editing uses batch vertex updates over a fixed quadtree:
+
+```cpp
+HeightEdit edits[] = { HeightEdit(x, z, newHeight), /* ... */ };
+HeightUpdateStats stats;
+if (!field.Update(edits, numEdits, stats))   // whole batch validated first
+    ;                                         // nothing changed on failure
+// stats.leavesRecomputed / stats.nodesRecomputed report the real local work;
+// an empty or net-unchanged batch creates no version and reports zero work
+
+HeightFieldSnapshot next = field.Snapshot(); // new primitives see the new version
+```
+
+Rules worth knowing:
+
+- A batch is validated before any change; repeated coordinates resolve to the
+  last entry. On failure the heights, tree, version and work stats are untouched.
+- A real change refreshes only the leaf cells touching edited vertices and
+  their quadtree ancestors. For a 257x257 vertex field a single interior edit
+  recomputes four leaves; no full-field scan or full rebuild is performed.
+- Snapshots keep their own version alive through shared ownership. Old scenes
+  and old primitives keep the old heights, bounds, normals and densities;
+  releasing a snapshot frees its unreferenced history - full height arrays and
+  whole trees are never copied per edit.
+- Intersection solves the per-cell quadratic in double precision, examines
+  every valid root and returns the nearest positive one (rays need not be unit
+  length). Shared grid edges never miss; edge derivatives use the cell with the
+  smaller row, then smaller column, with the outer boundary using its unique
+  cell.
+- Light sampling is uniform over the local `(u,v)` parameter rectangle, not
+  over triangle area. `Sample`/`Inverse` share that convention and the local
+  area density is `1/(W*D*sqrt(1+hx*hx+hz*hz))`; the world density divides by
+  the squared instance scale and the solid-angle density multiplies by the
+  squared connection distance and divides by the absolute cosine. Direct light
+  sampling and BSDF-continuation balance MIS both use this pointwise density
+  with the primitive's existing `lightSamples` count. Height field lights emit
+  from both sides; an exactly zero-cosine connection contributes nothing.
+
+Tests and example:
+
+```
+bash task_support/run.sh target           # builds everything, runs the three
+                                          # test groups, the render example and
+                                          # the original production baseline
+./.task-build/example <output directory>  # writes before.ppm, after.ppm,
+                                          # retained.ppm via the CpuRenderer
+```
+
+`tests/heightfield_target.cpp` registers `intersections`, `updates` and
+`lighting` groups through `task_support/check.h`; `examples/heightfield_render.cpp`
+renders the field before an edit, after an edit that lifts a vertex outside
+the original bounds, and a retained primitive still pinned to the old snapshot.
+
 
 Todo List
 ---------

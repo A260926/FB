@@ -5,6 +5,7 @@
 #include "bvh.h"
 #include "skylight.h"
 #include "probe.h"
+#include "heightfield.h"
 
 #include <vector>
 
@@ -103,7 +104,8 @@ enum GeometryType
 {
 	eSphere,
 	ePlane,
-	eMesh
+	eMesh,
+	eHeightField
 };
 
 struct SphereGeometry
@@ -134,15 +136,22 @@ struct MeshGeometry
 	unsigned long id;
 };
 
+// Kept outside the primitive union because its snapshot has non-trivial
+// shared ownership.
+struct HeightFieldGeometry
+{
+	std::shared_ptr<HeightFieldSnapshot> snapshot;
+};
+
 
 struct Primitive
 {
 	Primitive() : lightSamples(0) {}
 
 	// begin end transforms for the primitive
-	Transform startTransform;	
+	Transform startTransform;
 	Transform endTransform;
-	
+
 	GeometryType type;
 
 	union
@@ -151,6 +160,9 @@ struct Primitive
 		PlaneGeometry plane;
 		MeshGeometry mesh;
 	};
+
+	// height fields live outside the union because of their shared snapshot
+	HeightFieldGeometry heightfield;
 
 	Material material;
 

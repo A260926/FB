@@ -100,6 +100,30 @@ inline bool Trace(const Scene& scene, const Ray& ray, float& outT, Vec3& outNorm
 
 
 
+// solid angle pdf of a light sample. Sphere and mesh lights use the constant
+// inverse area convention; height field lights use the true pointwise area
+// density of the bilinear surface evaluated at the sampled parameters.
+inline float LightSolidAnglePdf(const Primitive& lightPrimitive,
+	const Transform& transform, const Vec3& lightPos, const Vec3& wi,
+	float distance, float cosLight)
+{
+	if (lightPrimitive.type == eHeightField)
+	{
+		float u, v;
+		if (!PrimitiveInverseSample(lightPrimitive, transform, lightPos, u, v))
+			return 0.0f;
+
+		const float areaPdf = PrimitiveAreaDensity(lightPrimitive, transform, u, v);
+		return areaPdf*distance*distance/Max(1.e-6f, Abs(cosLight));
+	}
+
+	const float lightArea = PrimitiveArea(lightPrimitive);
+	if (lightArea <= 0.0f)
+		return 0.0f;
+
+	return ((1.0f/lightArea)*distance*distance)/Max(1.e-6f, Abs(cosLight));
+}
+
 inline Vec3 SampleLights(const Scene& scene, const Primitive& surfacePrimitive, float etaI, float etaO, const Vec3& surfacePos, const Vec3& surfaceNormal, const Vec3& shadingNormal, const Vec3& wo, float time, Random& rand)
 {	
 	Vec3 sum(0.0f);
@@ -155,6 +179,9 @@ inline Vec3 SampleLights(const Scene& scene, const Primitive& surfacePrimitive, 
 		if (numSamples == 0)
 			continue;
 
+		const Transform lightTransform =
+			InterpolateTransform(lightPrimitive.startTransform, lightPrimitive.endTransform, time);
+
 		for (int s=0; s < numSamples; ++s)
 		{
 			// sample light source
@@ -172,17 +199,15 @@ inline Vec3 SampleLights(const Scene& scene, const Primitive& surfacePrimitive, 
 			float t;
 			Vec3 n;
 			const Primitive* hit;
-			if (Trace(scene, Ray(surfacePos + FaceForward(surfaceNormal, wi)*kRayEpsilon, wi, time), t, n, &hit))			
+			if (Trace(scene, Ray(surfacePos + FaceForward(surfaceNormal, wi)*kRayEpsilon, wi, time), t, n, &hit))
 			{
-				float tSq = t*t;
-
 				// if our next hit was further than distance to light then accept
 				// sample, this works for portal sampling where you have a large light
 				// that you sample through a small window
 				const float kTolerance = 1.e-2f;
 
 				if (fabsf(t - sqrtf(dSq)) <= kTolerance)
-				{				
+				{
 					const float nl = Abs(Dot(lightNormal, wi));
 
 					// for glancing rays, note we use abs to include cases
@@ -190,9 +215,14 @@ inline Vec3 SampleLights(const Scene& scene, const Primitive& surfacePrimitive, 
 					if (Abs(nl) < 1.e-6f)
 						continue;
 
-					// light pdf with respect to area and convert to pdf with respect to solid angle
-					float lightArea = PrimitiveArea(lightPrimitive);
-					float lightPdf = ((1.0f/lightArea)*tSq)/nl;
+					// light pdf with respect to solid angle. Height field
+					// lights use the true pointwise density of the bilinear
+					// surface instead of a constant inverse area.
+					float lightPdf = LightSolidAnglePdf(lightPrimitive,
+						lightTransform, lightPos, wi, t, nl);
+
+					if (!(lightPdf > 0.0f))
+						continue;
 
 					// bsdf pdf for light's direction
 					float bsdfPdf = BSDFPdf(surfacePrimitive.material, etaI, etaO, surfacePos, shadingNormal, wo, wi);
@@ -284,20 +314,45 @@ Vec3 PathTrace(const Scene& scene, const Vec3& startOrigin, const Vec3& startDir
 			}			
 			else if (kBsdfSamples > 0)
 			{
-				// area pdf that this dir was already included by the light sampling from previous step
-				float lightArea = PrimitiveArea(*hit);
+				bool hasLightPdf = false;
+				float lightPdf = 0.0f;
 
-				if (lightArea > 0.0f)
+				if (hit->type == eHeightField)
 				{
-					// convert to pdf with respect to solid angle
-					float lightPdf = ((1.0f/lightArea)*t*t)/Clamp(Dot(-rayDir, n), 1.e-3f, 1.0f);
+					// pointwise solid angle pdf of the bilinear light surface
+					const Transform hitTransform =
+						InterpolateTransform(hit->startTransform, hit->endTransform, rayTime);
 
+					float u, v;
+					if (PrimitiveInverseSample(*hit, hitTransform, p, u, v))
+					{
+						const float areaPdf = PrimitiveAreaDensity(*hit, hitTransform, u, v);
+						const float cosLight = Abs(Dot(-rayDir, n));
+						lightPdf = areaPdf*t*t/Max(1.e-6f, cosLight);
+						hasLightPdf = areaPdf > 0.0f;
+					}
+				}
+				else
+				{
+					// area pdf that this dir was already included by the light sampling from previous step
+					float lightArea = PrimitiveArea(*hit);
+
+					if (lightArea > 0.0f)
+					{
+						// convert to pdf with respect to solid angle
+						lightPdf = ((1.0f/lightArea)*t*t)/Clamp(Dot(-rayDir, n), 1.e-3f, 1.0f);
+						hasLightPdf = true;
+					}
+				}
+
+				if (hasLightPdf)
+				{
 					// calculate weight for bsdf sampling
 					int N = hit->lightSamples+kBsdfSamples;
 					float cbsdf = kBsdfSamples/N;
 					float clight = float(hit->lightSamples)/N;
 					float weight = cbsdf*bsdfPdf/(cbsdf*bsdfPdf+ clight*lightPdf);
-					
+
 					// specular paths have zero chance of being included by direct light sampling (zero pdf)
 					if (rayType == eSpecular)
 						weight = 1.0f;
