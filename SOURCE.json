@@ -1,0 +1,10 @@
+{
+  "repo": "https://github.com/mlivesu/cinolib",
+  "commit": "151dc5c46309affedadb9b45619cc137fb7326ed",
+  "exclusion_reason": "未用GUI、应用/示例、图像文档，以及未启用的第三方运行库；include生产目录全保留，Eigen核心头及许可证全保留。",
+  "gitlinks": [],
+  "gitmodules": false,
+  "retained_count": 845,
+  "excluded_count": 2008,
+  "manifest": "private/source-manifest.json"
+}
