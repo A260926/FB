@@ -34,6 +34,7 @@ add_library(FrameGraph
   "include/fg/FrameGraphResource.hpp"
   "include/fg/FrameGraph.hpp"
   "include/fg/FrameGraph.inl"
+  "include/fg/Completion.hpp"
   "include/fg/GraphNode.hpp"
   "include/fg/PassNode.hpp"
   "include/fg/PassEntry.hpp"

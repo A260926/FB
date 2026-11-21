@@ -16,7 +16,32 @@ inline const Data &FrameGraph::addCallbackPass(const std::string_view name,
 
   auto *pass = new FrameGraphPass<Data, Execute>(std::forward<Execute>(exec));
   auto &passNode =
-    _createPassNode(name, std::unique_ptr<FrameGraphPass<Data, Execute>>(pass));
+    _createPassNode(name, std::unique_ptr<FrameGraphPass<Data, Execute>>(pass),
+                    false);
+  Builder builder{*this, passNode};
+  std::invoke(setup, builder, pass->data);
+  return pass->data;
+}
+
+template <typename Data, typename Setup, typename Execute>
+inline const Data &
+FrameGraph::addAsyncCallbackPass(const std::string_view name, Setup &&setup,
+                                 Execute &&exec) {
+  static_assert(std::is_invocable_v<Setup, Builder &, Data &>,
+                "Invalid setup callback");
+  static_assert(std::is_invocable_v<Execute, const Data &,
+                                    FrameGraphPassResources &, void *>,
+                "Invalid exec callback");
+  static_assert(
+    std::is_invocable_r_v<FrameGraphCompletion, Execute, const Data &,
+                          FrameGraphPassResources &, void *>,
+    "Async exec callback must return FrameGraphCompletion");
+  static_assert(sizeof(Execute) < 1024, "Execute captures too much");
+
+  auto *pass = new FrameGraphPass<Data, Execute>(std::forward<Execute>(exec));
+  auto &passNode =
+    _createPassNode(name, std::unique_ptr<FrameGraphPass<Data, Execute>>(pass),
+                    true);
   Builder builder{*this, passNode};
   std::invoke(setup, builder, pass->data);
   return pass->data;

@@ -46,8 +46,8 @@ bool PassNode::writes(FrameGraphResource id) const {
 //
 
 PassNode::PassNode(const std::string_view name, uint32_t nodeId,
-                   std::unique_ptr<FrameGraphPassConcept> &&exec)
-    : GraphNode{name, nodeId}, m_exec{std::move(exec)} {
+                   std::unique_ptr<FrameGraphPassConcept> &&exec, bool async)
+    : GraphNode{name, nodeId}, m_exec{std::move(exec)}, m_async{async} {
   m_creates.reserve(10);
   m_reads.reserve(10);
   m_writes.reserve(10);

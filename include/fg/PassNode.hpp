@@ -30,6 +30,8 @@ public:
   [[nodiscard]] bool writes(FrameGraphResource id) const;
 
   [[nodiscard]] auto hasSideEffect() const { return m_hasSideEffect; }
+  /** True if this pass was registered through addAsyncCallbackPass. */
+  [[nodiscard]] auto isAsync() const { return m_async; }
   [[nodiscard]] auto canExecute() const {
     return getRefCount() > 0 || hasSideEffect();
   }
@@ -43,7 +45,7 @@ public:
 
 private:
   PassNode(const std::string_view name, uint32_t nodeId,
-           std::unique_ptr<FrameGraphPassConcept> &&);
+           std::unique_ptr<FrameGraphPassConcept> &&, bool async);
 
   FrameGraphResource _read(FrameGraphResource id, uint32_t flags);
   [[nodiscard]] FrameGraphResource _write(FrameGraphResource id,
@@ -57,6 +59,7 @@ private:
   std::vector<AccessDeclaration> m_writes;
 
   bool m_hasSideEffect{false};
+  bool m_async{false};
 };
 
 #if __cplusplus < 202002L
