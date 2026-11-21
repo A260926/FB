@@ -91,3 +91,89 @@ I know it's just a simple toy, ok :)
   * WebAssembly in `Cpp/Emscripten/build.sh`. CPU, single threaded, no SIMD.
 * C# project in `Cs/TestCs.sln`. A command line app that renders some frames and dumps out final TGA screenshot at the end.
 * Unity project in `Unity`. I used Unity 2021.3.16.
+
+### CPU irradiance cache (optional, off by default)
+
+`Cpp/Source/IrradianceCache.h/.cpp` add an optional, explicitly *biased* irradiance
+cache for the CPU preview. Nearby diffuse hits can reuse a cosine-hemisphere
+illumination estimate instead of tracing a fresh hemisphere. It is a spatial
+interpolation of point records, never a blend of a previous frame image, and it
+does not change the directional sampling distribution of the continuing path.
+Metal, dielectric, self-emission, and the explicit sphere-light direct estimate
+keep using the original production implementation.
+
+* Enable it per draw with the `kFlagIrradianceCache` test flag **and** a valid
+  `ICConfig`. With the flag absent (or the cache unconfigured) the random stream,
+  pixels, and the `GetSceneDesc` object/material layout are exactly the
+  production ones.
+
+  ```cpp
+  ICConfig cfg;
+  cfg.gatherSamples = 32;            // M: positive integer hemisphere probes
+  cfg.tau           = 0.35f;         // finite, 0 < tau <= 1
+  cfg.minRadius     = 0.05f;         // finite, 0 < minRadius <= maxRadius
+  cfg.maxRadius     = 0.5f;
+  cfg.seed          = 12345u;
+  GetIrradianceCache().Configure(cfg);   // invalid configs are rejected, state unchanged
+  // ... DrawTest(..., kFlagIrradianceCache);
+  ```
+
+  Any successful configuration change clears the records; `Clear()` drops them at
+  any time. Camera movement keeps the cache; sphere position/radius, material or
+  emission changes invalidate it before the next draw (the renderer snapshots the
+  scene in `UpdateTest`).
+
+* **Record.** Each record stores the original sphere id, hit side (front/back),
+  position `x`, unit normal `n` toward the incoming light, remaining scatter
+  count, RGB `H` and radius `R`. `H` is the mean radiance `Li` returned by
+  cosine-hemisphere samples (i.e. `E/pi`); the local surface albedo is never part
+  of `H` and is applied exactly once at the reusing point.
+
+* **Gather.** A miss fires `gatherSamples` real hemisphere probes through the
+  production intersection/transport (the cache is internally disabled), using an
+  RNG derived only from `(frame, pixel, sample, path depth)` and the seed. A
+  probe's *first* direct hit on an emissive sphere drops only that self-emission
+  (the sky is kept); a light seen after a specular event or one real scatter
+  still contributes, so the point's direct sphere light is counted exactly once.
+  First-segment distances are clamped to `kMinT` and truncated to `maxRadius`
+  (an escaping probe counts as `maxRadius`); later bounces never replace the
+  first segment. `R = clamp(M / sum(1/d_j), minRadius, maxRadius)`. The actual
+  probe directions, first distances and per-probe `Li` are exposed via
+  `GetGatherLog` for verification.
+
+* **Query.** Only records with the same sphere id, side and remaining depth are
+  considered. The error is
+  `e = |x-xr|/Rr + sqrt(max(0, 1 - dot(n,nr)))`; a record is usable when
+  `e < tau` **and** the finite connector between the two normal-offset endpoints
+  is not blocked by another sphere (the owning sphere is ignored, others are
+  not). Weights are `1/e - 1/tau`, normalized; if any record has `e == 0` only
+  those are averaged. A sparse hash grid (cell size `maxRadius`) means only the
+  3×3×3 neighbourhood is touched, never the whole table.
+
+* **Rounds/concurrency.** Each `DrawTest` freezes the readable set at its start;
+  candidates gathered during the round are invisible until all rows finish, then
+  published in stable `(frame, pixel, sample, path depth)` order. Row tasks write
+  only their own candidate vectors. Forward, reverse and the in-tree enkiTS
+  scheduling produce identical records and per-pixel linear RGB for fixed input.
+  Gather depth is bounded by the current remaining depth; a cache hit never
+  extends the path.
+
+* **Read-only/statistics API.** `GetRecord(s)`, `GetGatherLog`, `GetStats`
+  (queries, hits, gathers, probe rays, connector checks/blocked, records examined,
+  candidates published), `ResetStats`, `Configure`, `Clear`.
+
+### Tests and example
+
+* `tests/irradiance_cache.cpp` registers `records`, `transport` and `passes`
+  groups through `task_cases/task_case_count` and uses `TASK_CHECK` (no `main`).
+  The `ICTest` adapter in `Test.cpp` drives the real scene/integrator — there is
+  no second integrator.
+* `examples/irradiance_cache.cpp <out-dir>` runs two real `DrawTest` rounds,
+  writes `irradiance.ppm` and prints hit/gather counts.
+* Build and run everything (compiles the new header/implementation, the three
+  test groups, the example, and the existing CPU draw):
+
+  ```sh
+  bash task_support/run.sh target   # also runs the production baseline last
+  ```
+

@@ -5,6 +5,10 @@ enum TestFlags
 {
     kFlagAnimate = (1 << 0),
     kFlagProgressive = (1 << 1),
+    // Optional, biased diffuse irradiance cache for the CPU preview. Off by
+    // default; when absent the random stream, image and GetSceneDesc layout
+    // are exactly the production ones.
+    kFlagIrradianceCache = (1 << 2),
 };
 
 void InitializeTest();
