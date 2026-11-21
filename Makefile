@@ -12,6 +12,7 @@ headers := include/FastBVH.h \
            include/FastBVH/BuildStrategy.h \
            include/FastBVH/BVH.h \
            include/FastBVH/Config.h \
+           include/FastBVH/EditableMesh.h \
            include/FastBVH/Intersection.h \
            include/FastBVH/Iterable.h \
            include/FastBVH/Ray.h \
@@ -24,7 +25,8 @@ example_headers := examples/Log.h \
                    examples/tiny_obj_loader.h
 
 examples := examples/CubeOfSpheres \
-            examples/ObjFile
+            examples/ObjFile \
+            examples/editable_mesh
 
 .PHONY: all
 all: simple-target
@@ -36,6 +38,9 @@ examples/CubeOfSpheres: examples/CubeOfSpheres.cpp $(headers) $(example_headers)
 
 examples/ObjFile: examples/ObjFile.cpp $(headers) $(example_headers)
 	$(CXX) $(CXXFLAGS) -I $(CURDIR)/examples examples/tiny_obj_loader.cc $< -o $@
+
+examples/editable_mesh: examples/editable_mesh.cpp src/EditableMesh.cpp $(headers)
+	$(CXX) $(CXXFLAGS) examples/editable_mesh.cpp src/EditableMesh.cpp -o $@
 
 examples/%: examples/%.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@

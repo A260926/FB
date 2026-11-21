@@ -10,5 +10,9 @@ If you're here for reference material, you can go ahead and checkout the two mai
  - @ref FastBVH::BuildStrategy
  - @ref FastBVH::BVH
  - @ref FastBVH::Traverser
+ - @ref FastBVH::EditableMesh
 
 If you're here to learn, you can checkout out the [Getting Started](doxygen/GettingStarted.md) page.
+
+If you need to edit a triangle mesh while tracking its self-intersections
+and tracing rays against it, checkout the [Editable Meshes](doxygen/EditableMesh.md) page.

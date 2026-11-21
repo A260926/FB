@@ -28,3 +28,7 @@ add_example(ObjFile
   ObjFile.cpp
   tiny_obj_loader.h
   tiny_obj_loader.cc)
+
+add_example(editable_mesh
+  editable_mesh.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/EditableMesh.cpp)

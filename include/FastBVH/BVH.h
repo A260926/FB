@@ -77,6 +77,14 @@ class BVH final {
   //! \return A read-only iterable container of nodes.
   inline auto getNodes() const noexcept { return ConstIterable<Node<Float>>(nodes.data(), nodes.size()); }
 
+  //! Accesses the mutable node array.
+  //! This is intended for advanced use cases such as dynamic refitting
+  //! (see EditableMesh): only the node bounding boxes may be changed.
+  //! The tree topology (node count, start, primitive_count, right_offset)
+  //! must remain untouched for the traversers to keep working.
+  //! \return A reference to the mutable node array.
+  inline NodeArray<Float>& getMutableNodes() noexcept { return nodes; }
+
   //! Accesses an iterable container to the primitives in the BVH.
   //! \return An iterable container of the primitive array.
   inline auto getPrimitives() const noexcept { return primitives; }

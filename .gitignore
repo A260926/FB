@@ -1,4 +1,5 @@
 build
+.task-build
 render.ppm
 *.o
 *.obj
@@ -6,3 +7,4 @@ render.ppm
 doxygen/html
 examples/CubeOfSpheres
 examples/ObjFile
+examples/editable_mesh
