@@ -2991,6 +2991,15 @@ namespace minipbrt {
     const char* get_original_filename() const;
 
     void set_error(const char* fmt, ...);
+
+    /// Set an error located at an explicit position in a (possibly included)
+    /// file. Used for errors which are discovered after the parser has moved
+    /// on from the place where the problem was introduced.
+    void set_error_at(const char* filename, int64_t offset, int64_t line, int64_t column, const char* fmt, ...);
+
+    /// Offset, in bytes, of the cursor within the current file.
+    int64_t cursor_offset() const;
+
     bool has_error() const;
     const Error* get_error() const;
 
@@ -3110,6 +3119,8 @@ namespace minipbrt {
     bool parse_params();
     bool parse_param();
 
+    bool resolve_instances();
+
     bool parse_ints(uint32_t* count);
     bool parse_floats(uint32_t* count);
     bool parse_spectrum(uint32_t* count);
@@ -3155,13 +3166,27 @@ namespace minipbrt {
     void save_current_transform_matrices(Transform* dest) const;
     void save_inverse_transform_matrices(Transform* dest) const;
 
-    uint32_t find_object(const char* name) const;
     uint32_t find_medium(const char* name) const;
     uint32_t find_material(const char* name) const;
     uint32_t find_texture(const char* name, TextureData dataType) const;
 
     void push_bytes(void* src, size_t numBytes);
     void push_string(const char* src, size_t len);
+
+    struct SourceLocation {
+      std::string filename;
+      int64_t offset = 0;
+      int64_t line   = 0;
+      int64_t column = 0;
+    };
+
+    struct PendingInstanceRef {
+      uint32_t instance = kInvalidIndex;
+      std::string name;
+      SourceLocation location;
+    };
+
+    SourceLocation current_location();
 
   private:
     Tokenizer m_tokenizer;
@@ -3170,6 +3195,12 @@ namespace minipbrt {
     AttributeStack* m_attrs      = nullptr;
     uint32_t m_activeObject      = kInvalidIndex;
     uint32_t m_firstShape        = kInvalidIndex; // Index of the first shape in the currently active object.
+
+    // Object name lookups are deferred until the entire scene has been read,
+    // so that object names may be referenced before they are defined.
+    std::vector<PendingInstanceRef> m_pendingInstanceRefs;
+    std::vector<SourceLocation> m_objectLocations; // One entry per object, in definition order.
+    SourceLocation m_statementLocation;            // Location of the current statement's keyword.
 
     Scene* m_scene               = nullptr;
 
@@ -5184,6 +5215,42 @@ namespace minipbrt {
   }
 
 
+  void Tokenizer::set_error_at(const char* filename, int64_t offset, int64_t line, int64_t column, const char* fmt, ...)
+  {
+    if (has_error()) {
+      return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(nullptr, 0, fmt, args);
+    va_end(args);
+
+    if (len <= 0) {
+      return;
+    }
+
+    if (m_error != nullptr) {
+      delete m_error;
+      m_error = nullptr;
+    }
+
+    char* errorMessage = new char[size_t(len + 1)];
+    va_start(args, fmt);
+    vsnprintf(errorMessage, size_t(len + 1), fmt, args);
+    va_end(args);
+
+    m_error = new Error(filename, offset, errorMessage);
+    m_error->set_line_and_column(line, column);
+  }
+
+
+  int64_t Tokenizer::cursor_offset() const
+  {
+    return m_fileData[m_includeDepth].bufOffset + static_cast<int64_t>(m_pos - m_buf);
+  }
+
+
   bool Tokenizer::has_error() const
   {
     return m_error != nullptr;
@@ -5255,6 +5322,10 @@ namespace minipbrt {
       ok = parse_statement();
     }
 
+    if (ok) {
+      ok = resolve_instances();
+    }
+
     return ok;
   }
 
@@ -5297,6 +5368,12 @@ namespace minipbrt {
       m_tokenizer.set_error("Unknown statement");
       return false;
     }
+
+    // Capture the directive's own location before parsing its arguments. The
+    // tokenizer may auto-close an included file while the arguments are being
+    // consumed, which would otherwise make later error locations point at the
+    // wrong file.
+    m_statementLocation = current_location();
 
     if (m_temp.capacity() > kMaxReservedTempSpace) {
       m_temp.resize(kMaxReservedTempSpace);
@@ -6699,6 +6776,7 @@ namespace minipbrt {
     save_current_transform_matrices(&object->objectToInstance);
     object->name = copy_string(string_arg(0));
 
+    m_objectLocations.push_back(m_statementLocation);
     m_activeObject = static_cast<uint32_t>(m_scene->objects.size());
     m_scene->objects.push_back(object);
     return true;
@@ -6733,28 +6811,130 @@ namespace minipbrt {
 
   bool Parser::parse_ObjectInstance()
   {
-    if (m_activeObject != kInvalidIndex) {
-      m_tokenizer.set_error("Nested instances are not allowed");
-      return false;
-    }
-
     const char* name = string_arg(0);
-
-    uint32_t object = find_object(name);
-    if (object == kInvalidIndex) {
-      // TODO: warn that the object isn't defined.
-      return true;
+    if (name == nullptr || name[0] == '\0') {
+      m_tokenizer.set_error("ObjectInstance requires a non-empty object name");
+      return false;
     }
 
     Instance* instance = new Instance();
     save_current_transform_matrices(&instance->instanceToWorld);
-    instance->object = object;
+    instance->object = kInvalidIndex;
+    instance->ownerObject = m_activeObject;
     instance->areaLight = m_attrs->top->areaLight;
     instance->insideMedium = m_attrs->top->insideMedium;
     instance->outsideMedium = m_attrs->top->outsideMedium;
     instance->reverseOrientation = m_attrs->top->reverseOrientation;
 
+    PendingInstanceRef ref;
+    ref.instance = static_cast<uint32_t>(m_scene->instances.size());
+    ref.name = name;
+    ref.location = m_statementLocation;
+    m_pendingInstanceRefs.push_back(ref);
+
     m_scene->instances.push_back(instance);
+    return true;
+  }
+
+
+  Parser::SourceLocation Parser::current_location()
+  {
+    SourceLocation location;
+    const char* filename = m_tokenizer.get_filename();
+    location.filename = (filename != nullptr) ? filename : "";
+    location.offset = m_tokenizer.cursor_offset();
+    int64_t line = 0, column = 0;
+    m_tokenizer.cursor_location(&line, &column);
+    location.line = line;
+    location.column = column;
+    return location;
+  }
+
+
+  bool Parser::resolve_instances()
+  {
+    // Build a name -> object index map. Names must be unique across the whole
+    // scene, otherwise references would be ambiguous.
+    std::unordered_map<std::string, uint32_t> objectIndices;
+    objectIndices.reserve(m_scene->objects.size());
+    for (uint32_t i = 0; i < m_scene->objects.size(); i++) {
+      const Object* object = m_scene->objects[i];
+      const char* name = (object != nullptr) ? object->name : nullptr;
+      if (name == nullptr || name[0] == '\0') {
+        continue;
+      }
+      auto inserted = objectIndices.insert(std::make_pair(std::string(name), i));
+      if (!inserted.second) {
+        const SourceLocation& location = (i < m_objectLocations.size()) ? m_objectLocations[i] : SourceLocation();
+        m_tokenizer.set_error_at(location.filename.c_str(), location.offset, location.line, location.column,
+                                 "Object name \"%s\" is defined more than once", name);
+        return false;
+      }
+    }
+
+    // Resolve each deferred reference and check that it isn't a self-reference.
+    for (const PendingInstanceRef& ref : m_pendingInstanceRefs) {
+      auto it = objectIndices.find(ref.name);
+      if (it == objectIndices.end()) {
+        m_tokenizer.set_error_at(ref.location.filename.c_str(), ref.location.offset,
+                                 ref.location.line, ref.location.column,
+                                 "ObjectInstance refers to undefined object \"%s\"", ref.name.c_str());
+        return false;
+      }
+      Instance* instance = m_scene->instances[ref.instance];
+      instance->object = it->second;
+      if (instance->ownerObject == instance->object) {
+        m_tokenizer.set_error_at(ref.location.filename.c_str(), ref.location.offset,
+                                 ref.location.line, ref.location.column,
+                                 "Object \"%s\" directly instantiates itself", ref.name.c_str());
+        return false;
+      }
+    }
+
+    // Build adjacency lists (owner object -> child object) for cycle detection.
+    std::vector<std::vector<uint32_t> > children(m_scene->objects.size());
+    for (const Instance* instance : m_scene->instances) {
+      if (instance->ownerObject != kInvalidIndex && instance->object != kInvalidIndex) {
+        children[instance->ownerObject].push_back(instance->object);
+      }
+    }
+
+    // Detect indirect cycles in the object reference graph with an iterative
+    // depth-first search. Colours: 0 = unvisited, 1 = on current path, 2 = done.
+    const uint32_t numObjects = static_cast<uint32_t>(m_scene->objects.size());
+    std::vector<uint32_t> colour(numObjects, 0);
+    struct Frame { uint32_t object; size_t child; };
+    for (uint32_t start = 0; start < numObjects; start++) {
+      if (colour[start] != 0) {
+        continue;
+      }
+      std::vector<Frame> stack;
+      stack.push_back(Frame{ start, 0 });
+      colour[start] = 1;
+      while (!stack.empty()) {
+        Frame& frame = stack.back();
+        if (frame.child < children[frame.object].size()) {
+          uint32_t child = children[frame.object][frame.child++];
+          if (colour[child] == 1) {
+            const Object* object = m_scene->objects[child];
+            const SourceLocation& location = (child < m_objectLocations.size()) ? m_objectLocations[child] : SourceLocation();
+            m_tokenizer.set_error_at(location.filename.c_str(), location.offset, location.line, location.column,
+                                     "Object reference cycle detected involving \"%s\"",
+                                     (object != nullptr && object->name != nullptr) ? object->name : "");
+            return false;
+          }
+          if (colour[child] == 0) {
+            colour[child] = 1;
+            stack.push_back(Frame{ child, 0 });
+          }
+        }
+        else {
+          colour[frame.object] = 2;
+          stack.pop_back();
+        }
+      }
+    }
+
     return true;
   }
 
@@ -8091,26 +8271,6 @@ namespace minipbrt {
                     inverse(m_transforms->matrices[m_transforms->entry][1]) };
     std::memcpy(dest->start, inv[0].rows, sizeof(float) * 16);
     std::memcpy(dest->end,   inv[1].rows, sizeof(float) * 16);
-  }
-
-
-  uint32_t Parser::find_object(const char* name) const
-  {
-    if (name == nullptr || name[0] == '\0' || m_scene->objects.empty()) {
-      return kInvalidIndex;
-    }
-    // Note that we're searching in reverse because we want to find the newest
-    // object first, in the case where there's more than one object with the
-    // same name (i.e. where the name has been redefined).
-    uint32_t i = uint32_t(m_scene->objects.size());
-    do {
-      --i;
-      const Object* object = m_scene->objects[i];
-      if (object != nullptr && object->name != nullptr && std::strcmp(name, object->name) == 0) {
-        return i;
-      }
-    } while (i > 0);
-    return kInvalidIndex;
   }
 
 

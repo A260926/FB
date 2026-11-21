@@ -1,0 +1,21 @@
+TransformTimes 0 1
+WorldBegin
+  ObjectInstance "outerA"
+  ObjectInstance "outerB"
+  Shape "trianglemesh"
+    "integer indices" [0 1 2]
+    "point P" [0 0 0  2 0 0  0 2 0]
+  ObjectBegin "mid"
+    ActiveTransform StartTime
+      Rotate 0 0 0 1
+    ActiveTransform EndTime
+      Rotate 90 0 0 1
+    ActiveTransform All
+    ConcatTransform [1 0 0 0   0.5 1 0 0   0 0 1 0   0 0 0 1]
+    Shape "trianglemesh"
+      "integer indices" [0 1 2]
+      "point P" [0 0 0  1 0 0  0 1 0]
+    Include "nested_include.pbrt"
+  ObjectEnd
+  Include "nested_objects.pbrt"
+WorldEnd

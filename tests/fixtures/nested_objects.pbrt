@@ -1,0 +1,23 @@
+ObjectBegin "leaf"
+  ReverseOrientation
+  Shape "trianglemesh"
+    "integer indices" [0 1 2]
+    "point P" [0 0 0  1 0 0  0 1 0]
+ObjectEnd
+
+ObjectBegin "outerA"
+  AttributeBegin
+    Translate 100 0 0
+  AttributeEnd
+  ActiveTransform StartTime
+    Translate 0 0 0
+  ActiveTransform EndTime
+    Translate 4 0 0
+  ActiveTransform All
+  ObjectInstance "mid"
+ObjectEnd
+
+ObjectBegin "outerB"
+  Scale -1 1 1
+  ObjectInstance "mid"
+ObjectEnd

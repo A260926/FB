@@ -10,3 +10,11 @@ add_executable(minipbrt
   minipbrt.cpp
   minipbrt.h
 )
+
+add_executable(nested_motion
+  examples/nested_motion.cpp
+  minipbrt.cpp
+  minipbrt_scene.cpp
+  minipbrt.h
+  minipbrt_scene.h
+)

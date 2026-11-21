@@ -24,6 +24,8 @@ Features
   curves.
 - Utility functions for converting shapes into triangle meshes.
 - PLY loading automatically triangulates polygons with more than 3 vertices.
+- Supports nested, animated object instancing and can evaluate world geometry
+  at a shutter time, plus continuous motion bounds (`minipbrt_scene.h`).
 - Gives useful error info if a file fails to parse, including the line and 
   column number where it failed.
 - MIT Licensed.
@@ -34,6 +36,8 @@ Getting started
 
 - Copy `minipbrt.h` and `minipbrt.cpp` into your project.
 - Add `#include <minipbrt.h>` wherever necessary.
+- To sample or bound animated nested scenes, also copy `minipbrt_scene.h` and
+  `minipbrt_scene.cpp` and include `minipbrt_scene.h`.
 
 The CMake file in this directory is just for building the examples.
 
@@ -135,6 +139,86 @@ some may have failed to load. A more robust implementation should check for
 this, either by checking the return value of `scene->to_triangle_mesh` or by
 scanning `scene-shapes` a second time to see whether it still contains any
 PLYMesh shapes.
+
+
+Nested instancing and shutter-time geometry
+-------------------------------------------
+
+minipbrt's scene model supports nested object instancing and animation:
+
+* An `ObjectInstance` may appear inside an `ObjectBegin/End` block. The
+  enclosing object is recorded in `Instance::ownerObject` (`kInvalidIndex`
+  means the instance is directly in the world).
+* Object names may be referenced before they are defined; they are all
+  resolved once the whole file (including includes) has been read. Undefined
+  names, duplicate names and reference cycles make `load()` fail with an
+  `Error` that carries the file, line and column.
+* `Object::firstShape`/`numShapes` cover only the shapes defined directly in
+  that object. Instances are separate entries; geometry is shared, never
+  copied.
+
+`minipbrt_scene.h` / `minipbrt_scene.cpp` provide two helpers that walk this
+hierarchy. They work on any `Scene`, whether it came from `Loader` or was
+constructed by hand, and they validate their inputs.
+
+```cpp
+#include "minipbrt_scene.h"
+
+std::vector<minipbrt::SceneDraw> draws;
+std::string error;
+if (!minipbrt::sample_scene(scene, /*shutter time*/ 0.5, draws, error)) {
+  // error explains what was wrong; draws is unchanged
+}
+
+std::vector<minipbrt::SceneMotionBounds> bounds;
+if (!minipbrt::bound_scene_motion(scene, /*begin*/ 0.0, /*end*/ 1.0,
+                                  /*epsilon*/ 1e-4, bounds, error)) {
+  // error explains what was wrong; bounds is unchanged
+}
+```
+
+`sample_scene` produces one `SceneDraw` per reachable triangle mesh, ordered as
+follows: world-direct shapes first (empty `path`), then root instances in
+`Scene::instances` order; within an object, direct shapes come before child
+instances. `path` lists the instance indexes from the world root down to the
+shape's owner, and `shape` indexes `Scene::shapes`. `world` is the shape-to-
+world matrix and `normal` the inverse transpose of its linear 3x3 part.
+
+`bound_scene_motion` produces the same shape/path pairs with an axis-aligned
+world box that contains every mesh vertex for the whole closed interval
+`[begin, end]` (clamped to the scene's time range like sampling). Because
+several animated factors multiply together, a vertex path is generally a
+high-degree polynomial in time; the implementation isolates its extrema rather
+than sampling. Each side of the box is guaranteed to lie within
+`epsilon + 1e-8 * S` of the true extremum (where `S` is the larger of 1 and
+the largest absolute coordinate of that trajectory), and never inside it.
+Matrices may degenerate during the interval — the bound still holds.
+
+### Transform composition and ownership
+
+The world matrix for a shape with instance path `I0 .. In-1` and shape
+transform `S` is
+
+    world(t) = I0(t) * I1(t) * ... * In-1(t) * S(t)
+
+Each factor is interpolated element-wise between its `start` and `end`
+matrices, then the interpolated matrices are multiplied (interpolating the
+product of the endpoints instead is not equivalent). Both matrices are
+row-major and act on column vectors. Times outside the scene's
+`[startTime, endTime]` are clamped; when the two are equal, `start` is used.
+
+`Shape::shapeToWorld` for a shape inside an object already includes that
+object's `objectToInstance` matrix, so `objectToInstance` must **not** be
+applied again. `normal` is the inverse transpose of `world`'s linear part, and
+`flipOrientation` is the XOR of the shape's and every instance's
+`reverseOrientation` flags with `det(world) < 0`.
+
+The two helpers reject non-finite times and matrices, non-affine matrices,
+invalid object/shape/mesh-index data, reference cycles, unreachable
+non-triangle-mesh shapes, and (for sampling) a non-invertible world matrix. On
+failure `out` is left untouched and `error` is set; on success `out` is
+replaced and `error` is cleared.
+
 
 
 Implementation notes
