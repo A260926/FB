@@ -29,6 +29,7 @@ private:
 
   Int2 compute_num_pixel_division() const;
   bool compare_corners(const Rectangle rect);
+  bool compare_guide_corners(const Int2 corner[]) const;
   void subdivide_rect(const Rectangle rect);
   void interpolate_rect(const Rectangle rect);
   bool subdivide_or_interpolate(const Rectangle rect);

@@ -28,12 +28,22 @@ public:
   void SetJitter(Real jitter);
   void SetSampleTimeRange(Real start_time, Real end_time);
 
+  // surface guide aware sampling. When enabled, the adaptive sampler
+  // subdivides cells whose corner guides differ and interpolates the
+  // guide data of untraced grid points.
+  void SetGuideEnabled(int guide_enabled);
+  void SetGuideThresholds(Real depth_range, Real normal_error);
+
   const Int2    &GetResolution() const;
   const Int2    &GetPixelSamples() const;
   const Vector2 &GetFilterWidth() const;
   // TODO ADAPTIVE_TEST
   int            GetMaxSubdivision() const;
   Real           GetSubdivisionThreshold() const;
+
+  int  GetGuideEnabled() const;
+  Real GetGuideDepthRange() const;
+  Real GetGuideNormalError() const;
 
   Vector2 GetSampleTimeRange() const;
   bool IsSamplingTime() const;
@@ -58,6 +68,10 @@ private:
   Real jitter_;
   int  max_subd_;
   Real subd_threshold_;
+
+  int  guide_enabled_;
+  Real guide_depth_range_;
+  Real guide_normal_error_;
 
   bool need_jitter_;
   bool need_time_sampling_;

@@ -8,6 +8,7 @@
 #include "fj_transform.h"
 #include "fj_box.h"
 
+#include <stdint.h>
 #include <vector>
 
 namespace fj {
@@ -49,6 +50,12 @@ public:
   void SetShadowTarget(const ObjectGroup *group);
   void SetSelfHitTarget(const ObjectGroup *group);
 
+  // surface guide label. Defaults to 1. 0 is reserved for the background;
+  // passing 0 throws std::invalid_argument. Distinct instances may share
+  // the same id.
+  void SetGuideID(uint32_t guide_id);
+  uint32_t GetGuideID() const;
+
   const ObjectGroup *GetReflectTarget() const;
   const ObjectGroup *GetRefractTarget() const;
   const ObjectGroup *GetShadowTarget() const;
@@ -85,6 +92,7 @@ private:
   const ObjectGroup *refraction_target_;
   const ObjectGroup *shadow_target_;
   const ObjectGroup *self_target_;
+  uint32_t guide_id_;
 };
 
 } // namespace xxx

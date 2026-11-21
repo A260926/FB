@@ -14,6 +14,7 @@ namespace fj {
 class ObjectInstance;
 class ObjectGroup;
 class Texture;
+struct SurfaceGuideHit;
 
 enum RayContext {
   CXT_CAMERA_RAY = 0,
@@ -25,6 +26,8 @@ enum RayContext {
 
 class FJ_API TraceContext {
 public:
+  TraceContext() : guide_hit(NULL) {}
+
   int ray_context;
   int diffuse_depth;
   int reflect_depth;
@@ -44,6 +47,10 @@ public:
   double raymarch_refract_step;
 
   const ObjectGroup *trace_target;
+
+  // Optional output slot for the surface guide of the primary hit.
+  // Filled only for CXT_CAMERA_RAY traces; recursive rays leave it alone.
+  SurfaceGuideHit *guide_hit;
 };
 
 class FJ_API SurfaceInput {

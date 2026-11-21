@@ -13,6 +13,7 @@
 #include "fj_ray.h"
 
 #include <cassert>
+#include <stdexcept>
 
 namespace fj {
 
@@ -30,7 +31,8 @@ ObjectInstance::ObjectInstance() :
     reflection_target_(NULL),
     refraction_target_(NULL),
     shadow_target_(NULL),
-    self_target_(NULL)
+    self_target_(NULL),
+    guide_id_(1)
 {
   XfmInitTransformSampleList(&transform_samples_);
   update_bounds();
@@ -152,6 +154,20 @@ void ObjectInstance::SetShadowTarget(const ObjectGroup *group)
 void ObjectInstance::SetSelfHitTarget(const ObjectGroup *group)
 {
   self_target_ = group;
+}
+
+void ObjectInstance::SetGuideID(uint32_t guide_id)
+{
+  if (guide_id == 0) {
+    throw std::invalid_argument("ObjectInstance::SetGuideID: 0 is reserved for the background");
+  }
+
+  guide_id_ = guide_id;
+}
+
+uint32_t ObjectInstance::GetGuideID() const
+{
+  return guide_id_;
 }
 
 const ObjectGroup *ObjectInstance::GetReflectTarget() const

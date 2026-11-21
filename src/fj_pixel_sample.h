@@ -4,6 +4,7 @@
 #ifndef FJ_PIXEL_SAMPLER_H
 #define FJ_PIXEL_SAMPLER_H
 
+#include "fj_surface_guides.h"
 #include "fj_vector.h"
 #include "fj_color.h"
 #include "fj_types.h"
@@ -12,13 +13,16 @@ namespace fj {
 
 class Sample {
 public:
-  Sample() : uv(), data(), time(0.) {}
+  Sample() : uv(), data(), time(0.), guide() {}
   ~Sample() {}
 
 public:
   Vector2 uv;
   Vector4 data;
   Real time;
+  // surface guide captured from the primary ray for this sample.
+  // Stays zero (background) when guides are disabled or the ray missed.
+  SurfaceGuideHit guide;
 };
 
 inline Vector4 ToData(const Color4 &color)

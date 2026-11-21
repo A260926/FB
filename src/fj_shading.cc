@@ -7,6 +7,7 @@
 #include "fj_intersection.h"
 #include "fj_object_group.h"
 #include "fj_accelerator.h"
+#include "fj_surface_guides.h"
 #include "fj_interval.h"
 #include "fj_numeric.h"
 #include "fj_texture.h"
@@ -223,6 +224,8 @@ TraceContext SlCameraContext(const ObjectGroup *target)
   cxt.raymarch_diffuse_step = .05;
   cxt.raymarch_reflect_step = .05;
   cxt.raymarch_refract_step = .05;
+
+  cxt.guide_hit = NULL;
 
   return cxt;
 }
@@ -566,6 +569,16 @@ static int trace_surface(const TraceContext *cxt, const Ray &ray,
     out_rgba->a = out.Os;
 
     *t_hit = isect.t_hit;
+
+    // record the surface guide of the primary hit. Recursive rays
+    // (reflect/refract/shadow/diffuse) never reach this branch, so the
+    // primary record cannot be overwritten by secondary tracing.
+    if (cxt->ray_context == CXT_CAMERA_RAY && cxt->guide_hit != NULL) {
+      cxt->guide_hit->id = isect.object->GetGuideID();
+      cxt->guide_hit->depth = isect.t_hit;
+      // isect.N is already the normalized world space shading normal
+      cxt->guide_hit->normal = isect.N;
+    }
   }
 
   return hit;

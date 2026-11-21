@@ -115,6 +115,14 @@ static void get_corner_points(const Rectangle &rect, Int2 corner[])
   corner[3] = Int2(rect.max[0], rect.max[1]);
 }
 
+static Vector bilerp_vector(const Vector &v00, const Vector &v10,
+    const Vector &v01, const Vector &v11, Real s, Real t)
+{
+  const Vector a = Lerp(v00, v01, t);
+  const Vector b = Lerp(v10, v11, t);
+  return Lerp(a, b, s);
+}
+
 Sample *AdaptiveGridSampler::get_next_sample()
 {
   while (!subd_stack_.empty()) {
@@ -256,7 +264,63 @@ bool AdaptiveGridSampler::compare_corners(const Rectangle rect)
     }
   }
 
-  return beyond_threshold;
+  if (beyond_threshold) {
+    return true;
+  }
+
+  if (GetGuideEnabled() && compare_guide_corners(corner)) {
+    return true;
+  }
+
+  return false;
+}
+
+bool AdaptiveGridSampler::compare_guide_corners(const Int2 corner[]) const
+{
+  SurfaceGuideHit guide[4];
+  for (int i = 0; i < 4; i++) {
+    guide[i] = samples_[corner[i][1] * nsamples_[0] + corner[i][0]].guide;
+  }
+
+  // any label change across the cell forces subdivision, even when the
+  // corner colors are identical
+  for (int i = 0; i < 4; i++) {
+    for (int j = i + 1; j < 4; j++) {
+      if (guide[i].id != guide[j].id) {
+        return true;
+      }
+    }
+  }
+
+  // depth range over the corners that share the same non-zero label.
+  // (labels are all equal at this point; background corners are excluded)
+  if (guide[0].id != 0) {
+    Real depth_min = guide[0].depth;
+    Real depth_max = guide[0].depth;
+    for (int i = 1; i < 4; i++) {
+      depth_min = Min(depth_min, guide[i].depth);
+      depth_max = Max(depth_max, guide[i].depth);
+    }
+    if (depth_max - depth_min > GetGuideDepthRange()) {
+      return true;
+    }
+  }
+
+  // normal disagreement between any pair of unit normals. Zero normals
+  // (missed rays) are not unit normals and are skipped here.
+  const Real normal_error = GetGuideNormalError();
+  for (int i = 0; i < 4; i++) {
+    for (int j = i + 1; j < 4; j++) {
+      if (Length(guide[i].normal) == 0 || Length(guide[j].normal) == 0) {
+        continue;
+      }
+      if (1 - Dot(guide[i].normal, guide[j].normal) > normal_error) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 void AdaptiveGridSampler::subdivide_rect(const Rectangle rect)
@@ -306,10 +370,29 @@ void AdaptiveGridSampler::interpolate_rect(const Rectangle rect)
   const Vector4 &data2 = samples_[YMAX * nsamples_[0] + XMIN].data;
   const Vector4 &data3 = samples_[YMAX * nsamples_[0] + XMAX].data;
 
+  // Guide interpolation is only allowed when the four corner labels agree;
+  // mixed labels must never produce a new label. Guides of grid points
+  // that were really traced are kept as they are.
+  const bool interp_guide = GetGuideEnabled();
+  SurfaceGuideHit gcorner[4];
+  bool same_guide_id = false;
+  if (interp_guide) {
+    gcorner[0] = samples_[YMIN * nsamples_[0] + XMIN].guide;
+    gcorner[1] = samples_[YMIN * nsamples_[0] + XMAX].guide;
+    gcorner[2] = samples_[YMAX * nsamples_[0] + XMIN].guide;
+    gcorner[3] = samples_[YMAX * nsamples_[0] + XMAX].guide;
+
+    same_guide_id =
+        gcorner[0].id == gcorner[1].id &&
+        gcorner[0].id == gcorner[2].id &&
+        gcorner[0].id == gcorner[3].id;
+  }
+
   // using less than equal
   for (int y = YMIN; y <= YMAX; y++) {
-    const Vector4 data02 = Lerp(data0, data2, 1.*(y - YMIN) / (YMAX-YMIN));
-    const Vector4 data13 = Lerp(data1, data3, 1.*(y - YMIN) / (YMAX-YMIN));
+    const Real ty = 1.*(y - YMIN) / (YMAX-YMIN);
+    const Vector4 data02 = Lerp(data0, data2, ty);
+    const Vector4 data13 = Lerp(data1, data3, ty);
 
     // using less than equal
     for (int x = XMIN; x <= XMAX; x++) {
@@ -318,6 +401,23 @@ void AdaptiveGridSampler::interpolate_rect(const Rectangle rect)
       sample.data = Lerp(data02, data13, 1.*(x - XMIN) / (XMAX-XMIN));
 
       if (subd_flag_[OFFSET] < 0) {
+        if (same_guide_id) {
+          const Real tx = 1.*(x - XMIN) / (XMAX-XMIN);
+          SurfaceGuideHit &guide = sample.guide;
+
+          guide.id = gcorner[0].id;
+          guide.depth = Bilerp(
+              gcorner[0].depth, gcorner[1].depth,
+              gcorner[2].depth, gcorner[3].depth,
+              tx, ty);
+          guide.normal = bilerp_vector(
+              gcorner[0].normal, gcorner[1].normal,
+              gcorner[2].normal, gcorner[3].normal,
+              tx, ty);
+          // Normalize() keeps a zero vector zero
+          guide.normal = Normalize(guide.normal);
+        }
+
         subd_flag_[OFFSET] = 0;
       }
     }

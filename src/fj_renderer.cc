@@ -16,6 +16,7 @@
 #include "fj_camera.h"
 #include "fj_filter.h"
 #include "fj_socket.h"
+#include "fj_surface_guides.h"
 #include "fj_vector.h"
 #include "fj_light.h"
 #include "fj_tiler.h"
@@ -28,6 +29,7 @@
 #include <cstdio>
 #include <cfloat>
 #include <ctime>
+#include <map>
 
 #include <cerrno>
 
@@ -369,6 +371,9 @@ Renderer::Renderer()
   target_lights_ = NULL;
   nlights_ = 0;
 
+  surface_guides_ = NULL;
+  SetGuideThresholds(.1, .05);
+
   SetResolution(320, 240);
   SetTileSize(64, 64);
   SetFilterWidth(2, 2);
@@ -611,6 +616,26 @@ void Renderer::SetTargetLights(Light **lights, int nlights)
   nlights_ = nlights;
 }
 
+void Renderer::SetSurfaceGuides(SurfaceGuideBuffer *guides)
+{
+  surface_guides_ = guides;
+}
+
+void Renderer::SetGuideThresholds(Real depth_range, Real normal_error)
+{
+  const bool depth_ok = std::isfinite(depth_range) && depth_range > 0;
+  const bool normal_ok = std::isfinite(normal_error) &&
+      normal_error > 0 && normal_error <= 2;
+
+  if (!depth_ok || !normal_ok) {
+    // keep the previous thresholds
+    return;
+  }
+
+  guide_depth_range_ = depth_range;
+  guide_normal_error_ = normal_error;
+}
+
 void Renderer::SetUseMaxThread(int use_max_thread)
 {
   use_max_thread_ = (use_max_thread != 0);
@@ -686,7 +711,7 @@ int Renderer::RenderScene()
 // TODO TMP REMOVE LATER
 class Worker {
 public:
-  Worker() : camera(NULL), framebuffer(NULL), sampler(NULL) {}
+  Worker() : camera(NULL), framebuffer(NULL), sampler(NULL), guides(NULL) {}
   ~Worker()
   {
     delete sampler;
@@ -704,6 +729,7 @@ public:
   Sampler *sampler;
   Filter filter;
   std::vector<Sample> pixel_samples;
+  SurfaceGuideBuffer *guides;
 
   TraceContext context;
   Rectangle tile_region;
@@ -761,6 +787,12 @@ int Renderer::execute_rendering()
   tiler.Divide(xres, yres, xtilesize, ytilesize);
   tiler.GenerateTiles(frame_region_);
   const int tile_count = tiler.GetTileCount();
+
+  // reset the surface guide buffer at the current resolution. Pixels
+  // outside the render region stay zero for the whole frame.
+  if (surface_guides_ != NULL) {
+    surface_guides_->Reset(xres, yres);
+  }
 
   // Worker
   std::vector<Worker> worker_list(thread_count);
@@ -895,6 +927,12 @@ static void init_worker(Worker *worker, int id,
   worker->sampler->SetSampleTimeRange(
       renderer->sample_time_start_, renderer->sample_time_end_);
 
+  // surface guides
+  worker->guides = renderer->surface_guides_;
+  worker->sampler->SetGuideEnabled(renderer->surface_guides_ != NULL ? 1 : 0);
+  worker->sampler->SetGuideThresholds(
+      renderer->guide_depth_range_, renderer->guide_normal_error_);
+
   // Filter
   worker->filter.SetFilterType(FLT_GAUSSIAN, xfwidth, yfwidth);
 
@@ -973,6 +1011,77 @@ static Color4 apply_pixel_filter(Worker *worker, int x, int y)
   return pixel;
 }
 
+// Reconstructs one pixel of the surface guide buffer from the same sample
+// set and Gaussian weights used for the beauty pixel. Labels are never
+// averaged: every sample votes with its filter weight and the label with
+// the largest total weight wins (ties go to the smaller id). Depth and
+// normal are weighted means over the winning label's samples only.
+static SurfaceGuide apply_guide_filter(Worker *worker, int x, int y)
+{
+  struct GuideVote {
+    GuideVote() : weight(0), depth(0), normal() {}
+    Real weight;
+    Real depth;   // sum of weight * depth
+    Vector normal; // sum of weight * normal
+  };
+
+  const int nsamples = worker->pixel_samples.size();
+  const int xres = worker->xres;
+  const int yres = worker->yres;
+  const Filter &filter = worker->filter;
+
+  // std::map iterates labels in ascending id order
+  std::map<uint32_t, GuideVote> votes;
+  Real wgt_sum = 0;
+
+  for (int i = 0; i < nsamples; i++) {
+    const Sample &sample = worker->pixel_samples[i];
+    const Real filtx = xres * sample.uv.x - (x + .5);
+    const Real filty = yres * (1-sample.uv.y) - (y + .5);
+    const Real wgt = filter.Evaluate(filtx, filty);
+
+    GuideVote &vote = votes[sample.guide.id];
+    vote.weight += wgt;
+    vote.depth += wgt * sample.guide.depth;
+    vote.normal += wgt * sample.guide.normal;
+
+    wgt_sum += wgt;
+  }
+
+  SurfaceGuide guide;
+  if (votes.empty() || wgt_sum == 0) {
+    return guide;
+  }
+
+  // the first strictly largest weight wins; on ties the smaller id,
+  // which comes first in the map, is kept
+  uint32_t winner_id = 0;
+  Real winner_weight = -1;
+  Real background_weight = 0;
+  for (std::map<uint32_t, GuideVote>::const_iterator it = votes.begin();
+      it != votes.end(); ++it) {
+    if (it->first == 0) {
+      background_weight = it->second.weight;
+    }
+    if (it->second.weight > winner_weight) {
+      winner_weight = it->second.weight;
+      winner_id = it->first;
+    }
+  }
+
+  guide.id = winner_id;
+  guide.coverage = (wgt_sum - background_weight) / wgt_sum;
+
+  if (winner_id != 0) {
+    const GuideVote &winner = votes[winner_id];
+    guide.depth = winner.depth / winner.weight;
+    // Normalize() keeps a zero vector zero
+    guide.normal = Normalize(winner.normal / winner.weight);
+  }
+
+  return guide;
+}
+
 static void reconstruct_image(Worker *worker)
 {
   FrameBuffer *fb = worker->framebuffer;
@@ -990,6 +1099,10 @@ static void reconstruct_image(Worker *worker)
       pixel = apply_pixel_filter(worker, x, y);
 
       fb->SetColor(x, y, pixel);
+
+      if (worker->guides != NULL) {
+        worker->guides->SetPixel(x, y, apply_guide_filter(worker, x, y));
+      }
     }
   }
 }
@@ -1064,11 +1177,20 @@ static int integrate_samples(Worker *worker)
   TraceContext cxt = worker->context;
   Ray ray;
 
+  // The primary intersection fills this record while the regular shading
+  // runs; no extra geometry query or material call is issued for guides.
+  SurfaceGuideHit guide_hit;
+  if (worker->guides != NULL) {
+    cxt.guide_hit = &guide_hit;
+  }
+
   while ((smp = worker->sampler->GetNextSample()) != NULL) {
     Color4 C_trace;
     double t_hit = FLT_MAX;
     int hit = 0;
     int interrupted = 0;
+
+    guide_hit = SurfaceGuideHit();
 
     worker->camera->GetRay(smp->uv, smp->time, &ray);
     cxt.time = smp->time;
@@ -1085,6 +1207,7 @@ static int integrate_samples(Worker *worker)
       smp->data[2] = 0;
       smp->data[3] = 0;
     }
+    smp->guide = guide_hit;
 
     interrupted = CbReportSampleDone(&worker->tile_report);
     if (interrupted) {

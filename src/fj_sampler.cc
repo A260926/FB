@@ -20,6 +20,10 @@ Sampler::Sampler() :
   max_subd_(1),
   subd_threshold_(.05),
 
+  guide_enabled_(0),
+  guide_depth_range_(.1),
+  guide_normal_error_(.05),
+
   need_jitter_(true),
   need_time_sampling_(false),
 
@@ -128,6 +132,32 @@ bool Sampler::IsJittered() const
 Real Sampler::GetJitter() const
 {
   return jitter_;
+}
+
+void Sampler::SetGuideEnabled(int guide_enabled)
+{
+  guide_enabled_ = guide_enabled ? 1 : 0;
+}
+
+void Sampler::SetGuideThresholds(Real depth_range, Real normal_error)
+{
+  guide_depth_range_ = depth_range;
+  guide_normal_error_ = normal_error;
+}
+
+int Sampler::GetGuideEnabled() const
+{
+  return guide_enabled_;
+}
+
+Real Sampler::GetGuideDepthRange() const
+{
+  return guide_depth_range_;
+}
+
+Real Sampler::GetGuideNormalError() const
+{
+  return guide_normal_error_;
 }
 
 int Sampler::GenerateSamples(const Rectangle &region)

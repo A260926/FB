@@ -8,6 +8,7 @@
 #include "fj_callback.h"
 #include "fj_progress.h"
 #include "fj_timer.h"
+#include "fj_types.h"
 
 namespace fj {
 
@@ -16,6 +17,7 @@ class FrameBuffer;
 class ObjectGroup;
 class Camera;
 class Light;
+class SurfaceGuideBuffer;
 
 class FrameProgress {
 public:
@@ -74,6 +76,15 @@ public:
   void SetTargetObjects(ObjectGroup *grp);
   void SetTargetLights(Light **lights, int nlights);
 
+  // Surface guide output. The buffer is owned by the caller and must
+  // outlive the next RenderScene() call. Passing NULL disables the
+  // surface guide output (the default).
+  void SetSurfaceGuides(SurfaceGuideBuffer *guides);
+  // Thresholds for the guide aware adaptive subdivision. Both values must
+  // be finite and positive, and normal_error must not exceed 2. Invalid
+  // values are ignored and the previous thresholds are kept.
+  void SetGuideThresholds(Real depth_range, Real normal_error);
+
   // use max thread if use_max_thread is 1, otherwise takes account for thread_count
   void SetUseMaxThread(int use_max_thread);
   void SetThreadCount(int thread_count);
@@ -104,6 +115,10 @@ public:
   ObjectGroup *target_objects_;
   Light **target_lights_;
   int nlights_;
+
+  SurfaceGuideBuffer *surface_guides_;
+  Real guide_depth_range_;
+  Real guide_normal_error_;
 
   int resolution_[2];
   Rectangle frame_region_;
