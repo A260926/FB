@@ -1,0 +1,57 @@
+{
+  "repo": "https://github.com/jtsiomb/c-ray",
+  "commit": "827749558191f8f194185bb4f625722d3d2ddd20",
+  "manifest": [
+    {
+      "path": "COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "mode": 420
+    },
+    {
+      "path": "README.md",
+      "sha256": "6a8b667056272b78b44702e9ad246bdbf2252e0b60892899073527d751bb260c",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/Makefile",
+      "sha256": "298d9ebe3437f06e1021ceea35503a41929cb5e027b4d0dca99d9007d3163f75",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/README.md",
+      "sha256": "c71f30499fb1b3690a727a53746ac091261f2b0f2aef4ef5f23b3ea5b6e1755e",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/c-ray-fast.c",
+      "sha256": "d26255b4002472971ceb54f68ecca13820e94feab9c932292a437e1d95458a45",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/gen_fract.scm",
+      "sha256": "cc8cdc759297a908ab7de3d10311df04e1559e253dc72724df2cef132a26b424",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/reflbox.scn",
+      "sha256": "1b3d78c18db44ccda5d4a06141d4ecf09fe13e8b45c07cd411c20a07ce1c9804",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/simple.scn",
+      "sha256": "7c6dad1f8003a77ee8d3a7e76d3c62c90742adc82d9ffbd8b4476d2c74dfb070",
+      "mode": 420
+    },
+    {
+      "path": "c-ray-fast/sphfract.scn",
+      "sha256": "1bd10a1b3ae2b3eb78997b76da87f0b7b3d5ba0b1fde8b9e03d48ec8ac1c6718",
+      "mode": 420
+    }
+  ],
+  "excluded": "Other independent renderer variants outside c-ray-fast; root license retained."
+}
