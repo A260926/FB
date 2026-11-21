@@ -33,13 +33,15 @@
 #include "camera.hxx"
 #include "materials.hxx"
 #include "lights.hxx"
+#include "lighttree.hxx"
 
 class Scene
 {
 public:
     Scene() :
         mGeometry(NULL),
-        mBackground(NULL)
+        mBackground(NULL),
+        mUseLightTree(false)
     {}
 
     ~Scene()
@@ -109,6 +111,50 @@ public:
     const BackgroundLight* GetBackground() const
     {
         return mBackground;
+    }
+
+    // Original light-table ID of the background light, or -1 if there is none.
+    int GetBackgroundID() const
+    {
+        if(mBackground == NULL)
+            return -1;
+        for(int i = 0; i < (int)mLights.size(); ++i)
+        {
+            if(mLights[i] == mBackground)
+                return i;
+        }
+        return -1;
+    }
+
+    //////////////////////////////////////////////////////////////////////////
+    // Static light tree (disabled by default)
+    //
+    // The tree is a read-only snapshot of the current light table.  It is
+    // rebuilt only when RebuildLightTree() is explicitly called, so loading a
+    // scene or changing mLights never silently invalidates a snapshot.  A
+    // failed rebuild (e.g. non-finite/negative light intensity) keeps the
+    // previously held snapshot and returns false.  Light sub-path emission
+    // never uses the tree: qE stays uniform 1/N.
+    bool RebuildLightTree()
+    {
+        return mLightTree.Build(*this);
+    }
+
+    const LightTree& GetLightTree() const
+    {
+        return mLightTree;
+    }
+
+    // Whether renderers should consult the tree.  Even when enabled, an empty
+    // snapshot makes the renderers fall back to uniform selection.
+    void SetUseLightTree(bool aUse)
+    {
+        mUseLightTree = aUse;
+    }
+
+    bool UseLightTree() const
+    {
+        return mUseLightTree && !mLightTree.IsEmpty();
     }
 
     //////////////////////////////////////////////////////////////////////////
@@ -483,6 +529,15 @@ public:
 
     std::string           mSceneName;
     std::string           mSceneAcronym;
+
+    LightTree             mLightTree;
+    bool                  mUseLightTree;
 };
+
+// Scene is now complete; define the scene-based build entry point.
+inline bool LightTree::Build(const Scene &aScene)
+{
+    return Build(aScene.mLights, aScene.mSceneSphere);
+}
 
 #endif //__SCENE_HXX__

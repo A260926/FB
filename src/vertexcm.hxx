@@ -32,6 +32,7 @@
 #include "bsdf.hxx"
 #include "rng.hxx"
 #include "hashgrid.hxx"
+#include "lighttree.hxx"
 
 ////////////////////////////////////////////////////////////////////////////////
 // A NOTE ON PATH MIS WEIGHT EVALUATION
@@ -44,8 +45,8 @@
 //
 // These quantities represent partial weights associated with the sub-path. When
 // we connect or merge one vertex to another, we use these quantities to quickly
-// evaluate the MIS weight for the full path we have constructed. This scheme is
-// presented in the technical report
+// evaluate the MIS weight for the full path we have constructed. This scheme
+// is presented in the technical report
 //
 //   "Implementing Vertex Connection and Merging"
 //   http://www.iliyan.com/publications/ImplementingVCM
@@ -55,11 +56,41 @@
 //
 //   [tech. rep. (##)]
 //
-// where ## is the equation number. 
+// where ## is the equation number.
 //
+////////////////////////////////////////////////////////////////////////////////
+// NON-UNIFORM LIGHT SELECTION (light tree)
+////////////////////////////////////////////////////////////////////////////////
+//
+// Light sub-path emission always uses the uniform discrete probability
+// qE(light) = 1/N.  The optional static light tree only changes the direct
+// illumination selection probability qD(x, light), which depends on the
+// receiving point x.  Of all bidirectional sampling strategies, exactly ONE
+// per full path uses qD: the next-event-estimation (NEE) technique that
+// connects the first camera surface vertex directly to the emitter.  Every
+// other strategy (light emission, vertex connection, merging, BSDF hitting a
+// light, escaping to the background, light tracing) keeps using qE = 1/N.
+//
+// Because the original recurrence assumes the NEE light pick equals the
+// emission pick (both 1/N) and lets them cancel, we additionally propagate an
+// isolated NEE-only partial weight (mNeeD*) on light vertices: it follows the
+// same recurrence as dVCM/dVC/dVM but with every newer-technique birth
+// constant removed.  At a strategy site the relative density of the NEE
+// competitor differs from the uniform assumption by
+//
+//   r(x, light) = qD(x, light) / qE(light) = N * qD(x, light),
+//
+// so the balance-heuristic denominator gains an additive (r - 1) * neeTerm.
+// With the tree disabled r == 1 everywhere and every result is bit-identical
+// to the original uniform implementation.
 
 class VertexCM : public AbstractRenderer
 {
+    // Grants the transport unit tests read-only access to the real MIS state
+    // (partial weights, NEE monomials, light IDs) so they can validate the
+    // production recurrence against an independent enumeration.
+    friend struct VertexMisAdapter;
+
     // The sole point of this structure is to make carrying around the ray baggage easier.
     struct SubPathState
     {
@@ -73,6 +104,23 @@ class VertexCM : public AbstractRenderer
         float dVCM; // MIS quantity used for vertex connection and merging
         float dVC;  // MIS quantity used for vertex connection
         float dVM;  // MIS quantity used for vertex merging
+
+        // NEE-only counterparts (light sub-paths; kept zero on camera paths).
+        float mNeeDVCM;
+        float mNeeDVC;
+        float mNeeDVM;
+
+        // Original light-table ID of the light sub-path root; -1 on camera
+        // sub-paths.
+        int   mLightID;
+
+        // Constant r = qD(x1, light)/qE(light) of the competing s = 1 (NEE)
+        // technique.  In that technique the eye sub-path reaches x1, the first
+        // light-side surface vertex (adjacent to the emitter x0), and samples
+        // the emitter from there.  x1 is fixed for the whole light sub-path,
+        // hence the ratio does not depend on the later connection/merge
+        // boundary.  Equals 1 with the tree disabled.
+        float mR;
     };
 
     // Path vertex, used for merging and connection
@@ -89,6 +137,17 @@ class VertexCM : public AbstractRenderer
         float dVCM; // MIS quantity used for vertex connection and merging
         float dVC;  // MIS quantity used for vertex connection
         float dVM;  // MIS quantity used for vertex merging
+
+        // NEE-only partial weights (light vertices; zero for camera vertices).
+        float mNeeDVCM;
+        float mNeeDVC;
+        float mNeeDVM;
+
+        // Original light-table ID this light sub-path was emitted from.
+        int   mLightID;
+
+        // Per-light-subpath constant r = qD(x1, light)/qE(light).
+        float mR;
 
         // Used by HashGrid
         const Vec3f& GetPosition() const
@@ -115,7 +174,7 @@ class VertexCM : public AbstractRenderer
             const Vec3f        &aCameraPosition,
             const CameraBSDF   &aCameraBsdf,
             const SubPathState &aCameraState
-        ) : 
+        ) :
             mVertexCM(aVertexCM),
             mCameraPosition(aCameraPosition),
             mCameraBsdf(aCameraBsdf),
@@ -153,8 +212,19 @@ class VertexCM : public AbstractRenderer
             cameraBsdfRevPdfW *= aLightVertex.mBsdf.ContinuationProb();
 
             // Partial light sub-path MIS weight [tech. rep. (38)]
-            const float wLight = aLightVertex.dVCM * mVertexCM.mMisVcWeightFactor +
+            float wLight = aLightVertex.dVCM * mVertexCM.mMisVcWeightFactor +
                 aLightVertex.dVM * mVertexCM.Mis(cameraBsdfDirPdfW);
+
+            // The NEE competitor's relative density is scaled by its
+            // per-light-subpath ratio.  Skipped with the tree off to preserve
+            // the exact original arithmetic.
+            if(mVertexCM.mUseTree)
+            {
+                const float neeTerm = aLightVertex.mNeeDVCM *
+                    mVertexCM.mMisVcWeightFactor +
+                    aLightVertex.mNeeDVM * mVertexCM.Mis(cameraBsdfDirPdfW);
+                wLight += (aLightVertex.mR - 1.f) * neeTerm;
+            }
 
             // Partial eye sub-path MIS weight [tech. rep. (39)]
             const float wCamera = mCameraState.dVCM * mVertexCM.mMisVcWeightFactor +
@@ -213,11 +283,13 @@ public:
         int           aSeed = 1234
     ) :
         AbstractRenderer(aScene),
-        mRng(aSeed),
-        mLightTraceOnly(false),
-        mUseVC(false),
         mUseVM(false),
-        mPpm(false)
+        mUseVC(false),
+        mLightTraceOnly(false),
+        mPpm(false),
+        mUseTree(false),
+        mUniformPickProb(0.f),
+        mRng(aSeed)
     {
         switch(aAlgorithm)
         {
@@ -291,6 +363,12 @@ public:
         mScreenPixelCount = float(resX * resY);
         mLightSubPathCount   = float(resX * resY);
 
+        // Light sub-paths are always emitted uniformly (qE = 1/N).  The tree
+        // only changes the direct-light selection probability qD(x, light).
+        mUseTree = mScene.UseLightTree();
+        mUniformPickProb = mScene.GetLightCount() > 0 ?
+            1.f / float(mScene.GetLightCount()) : 0.f;
+
         // Setup our radius, 1st iteration has aIteration == 0, thus offset
         float radius = mBaseRadius;
         radius /= std::pow(float(aIteration + 1), 0.5f * (1 - mRadiusAlpha));
@@ -352,12 +430,26 @@ public:
                     // Infinite lights use MIS handled via solid angle integration,
                     // so do not divide by the distance for such lights [tech. rep. Section 5.1]
                     if(lightState.mPathLength > 1 || lightState.mIsFiniteLight == 1)
-                        lightState.dVCM *= Mis(Sqr(isect.dist));
+                    {
+                        lightState.dVCM     *= Mis(Sqr(isect.dist));
+                        lightState.mNeeDVCM *= Mis(Sqr(isect.dist));
+                    }
 
-                    lightState.dVCM /= Mis(std::abs(bsdf.CosThetaFix()));
-                    lightState.dVC  /= Mis(std::abs(bsdf.CosThetaFix()));
-                    lightState.dVM  /= Mis(std::abs(bsdf.CosThetaFix()));
+                    const float absCos = Mis(std::abs(bsdf.CosThetaFix()));
+                    lightState.dVCM     /= absCos;
+                    lightState.dVC      /= absCos;
+                    lightState.dVM      /= absCos;
+                    lightState.mNeeDVCM /= absCos;
+                    lightState.mNeeDVC  /= absCos;
+                    lightState.mNeeDVM  /= absCos;
                 }
+
+                // At the first real surface x1 after the emitter, fix the
+                // constant r = qD(x1, light)/qE(light) of every competing
+                // s = 1 (NEE) technique built from this light sub-path.  qE
+                // stays uniform 1/N; only direct light selection uses qD.
+                if(lightState.mPathLength == 1)
+                    lightState.mR = LightPickRatio(hitPoint, lightState.mLightID);
 
                 // Store vertex, unless BSDF is purely specular, which prevents
                 // vertex connections and merging
@@ -372,6 +464,12 @@ public:
                     lightVertex.dVCM = lightState.dVCM;
                     lightVertex.dVC  = lightState.dVC;
                     lightVertex.dVM  = lightState.dVM;
+
+                    lightVertex.mNeeDVCM = lightState.mNeeDVCM;
+                    lightVertex.mNeeDVC  = lightState.mNeeDVC;
+                    lightVertex.mNeeDVM  = lightState.mNeeDVM;
+                    lightVertex.mLightID = lightState.mLightID;
+                    lightVertex.mR       = lightState.mR;
 
                     mLightVertices.push_back(lightVertex);
                 }
@@ -418,6 +516,13 @@ public:
             const Vec2f screenSample = GenerateCameraSample(pathIdx, cameraState);
             Vec3f color(0);
 
+            // Immediately preceding camera surface vertex.  When a BSDF-sampled
+            // ray hits a light or escapes to the background, the competing
+            // next-event-estimation technique would have sampled that light
+            // from this very point, so its qD must be evaluated here.
+            Vec3f prevPoint(0.f);
+            bool  hasPrevPoint = false;
+
             //////////////////////////////////////////////////////////////////////
             // Trace camera path
             for(;; ++cameraState.mPathLength)
@@ -438,7 +543,9 @@ public:
                         if(cameraState.mPathLength >= mMinPathLength)
                         {
                             color += cameraState.mThroughput *
-                                GetLightRadiance(mScene.GetBackground(), cameraState,
+                                GetLightRadiance(mScene.GetBackground(),
+                                mScene.GetBackgroundID(), cameraState,
+                                hasPrevPoint ? prevPoint : cameraState.mOrigin,
                                 Vec3f(0), ray.dir);
                         }
                     }
@@ -468,13 +575,15 @@ public:
                 if(isect.lightID >= 0)
                 {
                     const AbstractLight *light = mScene.GetLightPtr(isect.lightID);
-                
+
                     if(cameraState.mPathLength >= mMinPathLength)
                     {
                         color += cameraState.mThroughput *
-                            GetLightRadiance(light, cameraState, hitPoint, ray.dir);
+                            GetLightRadiance(light, isect.lightID, cameraState,
+                            hasPrevPoint ? prevPoint : hitPoint,
+                            hitPoint, ray.dir);
                     }
-                    
+
                     break;
                 }
 
@@ -521,7 +630,8 @@ public:
                             break;
 
                         color += cameraState.mThroughput * lightVertex.mThroughput *
-                            ConnectVertices(lightVertex, bsdf, hitPoint, cameraState);
+                            ConnectVertices(lightVertex, bsdf, hitPoint,
+                            cameraState);
                     }
                 }
 
@@ -536,6 +646,11 @@ public:
                     // PPM merges only at the first non-specular surface from camera
                     if(mPpm) break;
                 }
+
+                // This surface becomes the previous point for the next ray,
+                // which is where a competing NEE technique would sample from.
+                prevPoint = hitPoint;
+                hasPrevPoint = true;
 
                 if(!SampleScattering(bsdf, hitPoint, cameraState))
                     break;
@@ -554,6 +669,50 @@ private:
     {
         //return std::pow(aPdf, /*power*/);
         return aPdf;
+    }
+
+    // Actual discrete direct-light probability qD(x, light).  Without the
+    // tree this is the uniform 1/N; consumes no random numbers.
+    float LightPickProbability(
+        const Vec3f &aReceivingPosition,
+        int          aLightID) const
+    {
+        if(mUseTree)
+            return float(mScene.GetLightTree().Pdf(aReceivingPosition, aLightID));
+        return mUniformPickProb;
+    }
+
+    // r(x, light) = qD(x, light) / qE(light) = N * qD(x, light).  Equals 1
+    // whenever the light tree is disabled, which makes every correction
+    // below vanish and reproduces the uniform implementation exactly.
+    float LightPickRatio(
+        const Vec3f &aReceivingPosition,
+        int          aLightID) const
+    {
+        if(!mUseTree || mUniformPickProb <= 0.f)
+            return 1.f;
+        return LightPickProbability(aReceivingPosition, aLightID) /
+            mUniformPickProb;
+    }
+
+    // Picks a light for next event estimation.  Both branches consume exactly
+    // one random number, so disabling the tree preserves the RNG stream.
+    // Returns the original light ID and the actual qD used.
+    int SampleDirectLight(
+        const Vec3f &aReceivingPosition,
+        float       &oPickProb)
+    {
+        if(mUseTree)
+        {
+            const float rnd = mRng.GetFloat();
+            const int lightID = mScene.GetLightTree().Sample(
+                aReceivingPosition, rnd);
+            oPickProb = LightPickProbability(aReceivingPosition, lightID);
+            return lightID;
+        }
+
+        oPickProb = mUniformPickProb;
+        return int(mRng.GetFloat() * mScene.GetLightCount());
     }
 
     //////////////////////////////////////////////////////////////////////////
@@ -602,6 +761,13 @@ private:
         oCameraState.dVC  = 0;
         oCameraState.dVM  = 0;
 
+        // Camera sub-paths never carry light-side NEE monomials.
+        oCameraState.mNeeDVCM = 0;
+        oCameraState.mNeeDVC  = 0;
+        oCameraState.mNeeDVM  = 0;
+        oCameraState.mLightID = -1;
+        oCameraState.mR       = 1.f;
+
         return sample;
     }
 
@@ -616,14 +782,12 @@ private:
     //    Has to be called AFTER updating the MIS quantities.
     Vec3f GetLightRadiance(
         const AbstractLight *aLight,
+        int                  aLightID,
         const SubPathState  &aCameraState,
+        const Vec3f         &aNeePoint,
         const Vec3f         &aHitpoint,
         const Vec3f         &aRayDirection) const
     {
-        // We sample lights uniformly
-        const int   lightCount    = mScene.GetLightCount();
-        const float lightPickProb = 1.f / lightCount;
-
         float directPdfA, emissionPdfW;
         const Vec3f radiance = aLight->GetRadiance(mScene.mSceneSphere,
             aRayDirection, aHitpoint, &directPdfA, &emissionPdfW);
@@ -641,8 +805,13 @@ private:
         if(mUseVM && !mUseVC)
             return aCameraState.mSpecularPath ? radiance : Vec3f(0);
 
-        directPdfA   *= lightPickProb;
-        emissionPdfW *= lightPickProb;
+        // The emission-based competitor keeps the uniform emission pick qE.
+        emissionPdfW *= mUniformPickProb;
+
+        // The NEE competitor uses the position-dependent qD, evaluated at the
+        // first camera surface vertex that would perform the direct sampling.
+        const float qD = LightPickProbability(aNeePoint, aLightID);
+        directPdfA   *= qD;
 
         // Partial eye sub-path MIS weight [tech. rep. (43)].
         // If the last hit was specular, then dVCM == 0.
@@ -653,7 +822,7 @@ private:
 
         // Full path MIS weight [tech. rep. (37)].
         const float misWeight = 1.f / (1.f + wCamera);
-        
+
         return misWeight * radiance;
     }
 
@@ -665,11 +834,11 @@ private:
         const Vec3f        &aHitpoint,
         const CameraBSDF   &aBsdf)
     {
-        // We sample lights uniformly
-        const int   lightCount    = mScene.GetLightCount();
-        const float lightPickProb = 1.f / lightCount;
-
-        const int   lightID       = int(mRng.GetFloat() * lightCount);
+        // Keep the original RNG consumption order: the light pick consumes one
+        // number before the two light-position numbers, so disabling the tree
+        // leaves the random stream bit-identical.
+        float lightPickProb;
+        const int lightID = SampleDirectLight(aHitpoint, lightPickProb);
         const Vec2f rndPosSamples = mRng.GetVec2f();
 
         const AbstractLight *light = mScene.GetLightPtr(lightID);
@@ -693,35 +862,20 @@ private:
             return Vec3f(0);
 
         const float continuationProbability = aBsdf.ContinuationProb();
-        
+
         // If the light is delta light, we can never hit it
         // by BSDF sampling, so the probability of this path is 0
         bsdfDirPdfW *= light->IsDelta() ? 0.f : continuationProbability;
 
         bsdfRevPdfW *= continuationProbability;
 
-        // Partial light sub-path MIS weight [tech. rep. (44)].
-        // Note that wLight is a ratio of area pdfs. But since both are on the
-        // light source, their distance^2 and cosine terms cancel out.
-        // Therefore we can write wLight as a ratio of solid angle pdfs,
-        // both expressed w.r.t. the same shading point.
+        // Partial light sub-path MIS weight [tech. rep. (44)].  The light
+        // pick here is the actual qD of the current NEE technique, which keeps
+        // this formula valid for non-uniform selection as well.
         const float wLight = Mis(bsdfDirPdfW / (lightPickProb * directPdfW));
 
-        // Partial eye sub-path MIS weight [tech. rep. (45)].
-        //
-        // In front of the sum in the parenthesis we have Mis(ratio), where
-        //    ratio = emissionPdfA / directPdfA,
-        // with emissionPdfA being the product of the pdfs for choosing the
-        // point on the light source and sampling the outgoing direction.
-        // What we are given by the light source instead are emissionPdfW
-        // and directPdfW. Converting to area pdfs and plugging into ratio:
-        //    emissionPdfA = emissionPdfW * cosToLight / dist^2
-        //    directPdfA   = directPdfW * cosAtLight / dist^2
-        //    ratio = (emissionPdfW * cosToLight / dist^2) / (directPdfW * cosAtLight / dist^2)
-        //    ratio = (emissionPdfW * cosToLight) / (directPdfW * cosAtLight)
-        //
-        // Also note that both emissionPdfW and directPdfW should be
-        // multiplied by lightPickProb, so it cancels out.
+        // Partial eye sub-path MIS weight [tech. rep. (45)].  Both pdfs carry
+        // the same light pick, which cancels, so this term is pick independent.
         const float wCamera = Mis(emissionPdfW * cosToLight / (directPdfW * cosAtLight)) * (
             mMisVmWeightFactor + aCameraState.dVCM + aCameraState.dVC * Mis(bsdfRevPdfW));
 
@@ -790,8 +944,18 @@ private:
         const float lightBsdfDirPdfA  = PdfWtoA(lightBsdfDirPdfW,  distance, cosCamera);
 
         // Partial light sub-path MIS weight [tech. rep. (40)]
-        const float wLight = Mis(cameraBsdfDirPdfA) * (
+        float wLight = Mis(cameraBsdfDirPdfA) * (
             mMisVmWeightFactor + aLightVertex.dVCM + aLightVertex.dVC * Mis(lightBsdfRevPdfW));
+
+        // Correct the embedded NEE competitor by its per-light-subpath qD/qE
+        // ratio.  Skipped with the tree off to preserve the original arithmetic.
+        if(mUseTree)
+        {
+            const float neeLight = Mis(cameraBsdfDirPdfA) * (
+                aLightVertex.mNeeDVCM +
+                aLightVertex.mNeeDVC * Mis(lightBsdfRevPdfW));
+            wLight += (aLightVertex.mR - 1.f) * neeLight;
+        }
 
         // Partial eye sub-path MIS weight [tech. rep. (41)]
         const float wCamera = Mis(lightBsdfDirPdfA) * (
@@ -812,10 +976,11 @@ private:
     // Light tracing methods
     //////////////////////////////////////////////////////////////////////////
 
-    // Samples light emission
+    // Samples light emission.  Light sub-paths always select lights uniformly
+    // (qE = 1/N) regardless of the light tree; only NEE uses qD.
     void GenerateLightSample(SubPathState &oLightState)
     {
-        // We sample lights uniformly
+        // We sample lights uniformly for emission.
         const int   lightCount    = mScene.GetLightCount();
         const float lightPickProb = 1.f / lightCount;
 
@@ -836,6 +1001,11 @@ private:
         oLightState.mThroughput    /= emissionPdfW;
         oLightState.mPathLength    = 1;
         oLightState.mIsFiniteLight = light->IsFinite() ? 1 : 0;
+        oLightState.mLightID       = lightID;
+        // Default ratio 1; overwritten at the first surface hit when the tree
+        // is active.  A light path that never hits a surface has no NEE
+        // competitor anyway.
+        oLightState.mR             = 1.f;
 
         // Light sub-path MIS quantities. Implements [tech. rep. (31)-(33)] partially.
         // The evaluation is completed after tracing the emission ray in the light sub-path loop.
@@ -855,10 +1025,18 @@ private:
 
             oLightState.dVM = oLightState.dVC * mMisVcWeightFactor;
         }
+
+        // NEE-only birth values.  At the root the dVCM ratio is pick
+        // independent (both pdfs carry the same pick), while dVC/dVM carry a
+        // 1/pick term that is identical under the uniform assumption; the
+        // (r - 1) correction at usage sites turns these into the qD weights.
+        oLightState.mNeeDVCM = oLightState.dVCM;
+        oLightState.mNeeDVC  = oLightState.dVC;
+        oLightState.mNeeDVM  = oLightState.dVM;
     }
 
     // Computes contribution of light sample to camera by splatting is onto the
-    // framebuffer. Multiplies by throughput (obviously, as nothing is returned).
+    // framebuffer. Multiplied by throughput (obviously, as nothing is returned).
     void ConnectToCamera(
         const SubPathState &aLightState,
         const Vec3f        &aHitpoint,
@@ -906,8 +1084,18 @@ private:
         // Partial light sub-path weight [tech. rep. (46)]. Note the division by
         // mLightPathCount, which is the number of samples this technique uses.
         // This division also appears a few lines below in the framebuffer accumulation.
-        const float wLight = Mis(cameraPdfA / mLightSubPathCount) * (
+        float wLight = Mis(cameraPdfA / mLightSubPathCount) * (
             mMisVmWeightFactor + aLightState.dVCM + aLightState.dVC * Mis(bsdfRevPdfW));
+
+        // The NEE competitor receives the emitter at the light sub-path's
+        // first surface vertex x1, captured once as mR.  Skipped with the
+        // tree off to preserve the exact original arithmetic.
+        if(mUseTree)
+        {
+            const float neeLight = Mis(cameraPdfA / mLightSubPathCount) *
+                aLightState.mNeeDVC * Mis(bsdfRevPdfW);
+            wLight += (aLightState.mR - 1.f) * neeLight;
+        }
 
         // Partial eye sub-path weight is 0 [tech. rep. (47)]
 
@@ -975,11 +1163,14 @@ private:
         {
             // Specular scattering case [tech. rep. (53)-(55)] (partially, as noted above)
             aoState.dVCM = 0.f;
-            //aoState.dVC *= Mis(cosThetaOut / bsdfDirPdfW) * Mis(bsdfRevPdfW);
-            //aoState.dVM *= Mis(cosThetaOut / bsdfDirPdfW) * Mis(bsdfRevPdfW);
             assert(bsdfDirPdfW == bsdfRevPdfW);
             aoState.dVC *= Mis(cosThetaOut);
             aoState.dVM *= Mis(cosThetaOut);
+
+            // The NEE monomial has no dVCM branch and is merely carried.
+            aoState.mNeeDVCM = 0.f;
+            aoState.mNeeDVC *= Mis(cosThetaOut);
+            aoState.mNeeDVM *= Mis(cosThetaOut);
 
             aoState.mSpecularPath &= 1;
         }
@@ -996,12 +1187,23 @@ private:
 
             aoState.dVCM = Mis(1.f / bsdfDirPdfW);
 
+            // NEE-only recurrence: keep solely the carried monomial and drop
+            // every birth constant (those introduce s >= 2 techniques).
+            if(tLightSample)
+            {
+                aoState.mNeeDVC = Mis(cosThetaOut / bsdfDirPdfW) *
+                    (aoState.mNeeDVC * Mis(bsdfRevPdfW));
+                aoState.mNeeDVM = Mis(cosThetaOut / bsdfDirPdfW) *
+                    (aoState.mNeeDVM * Mis(bsdfRevPdfW));
+                aoState.mNeeDVCM = 0.f;
+            }
+
             aoState.mSpecularPath &= 0;
         }
 
         aoState.mOrigin  = aHitPoint;
         aoState.mThroughput *= bsdfFactor * (cosThetaOut / bsdfDirPdfW);
-        
+
         return true;
     }
 
@@ -1011,6 +1213,8 @@ private:
     bool  mUseVC;             // Vertex connection (BPT) is used
     bool  mLightTraceOnly;    // Do only light tracing
     bool  mPpm;               // Do PPM, same terminates camera after first merge
+    bool  mUseTree;           // Position-dependent light selection enabled
+    float mUniformPickProb;   // qE = 1/N, cached per iteration
 
     float mRadiusAlpha;       // Radius reduction rate parameter
     float mBaseRadius;        // Initial merging radius

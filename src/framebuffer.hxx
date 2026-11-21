@@ -101,6 +101,17 @@ public:
         return lum;
     }
 
+    // Read-only pixel access used by the transport tests.
+    Vec3f GetColor(int aPixelIndex) const
+    {
+        return mColor[aPixelIndex];
+    }
+
+    int GetPixelCount() const
+    {
+        return mResX * mResY;
+    }
+
     //////////////////////////////////////////////////////////////////////////
     // Saving
     void SavePPM(

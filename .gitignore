@@ -9,3 +9,4 @@
 SmallVCM.vcxproj.user
 /build/*
 /ipch/*
+/.task-build/

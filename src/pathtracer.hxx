@@ -30,6 +30,7 @@
 #include "renderer.hxx"
 #include "bsdf.hxx"
 #include "rng.hxx"
+#include "lighttree.hxx"
 
 class PathTracer : public AbstractRenderer
 {
@@ -44,9 +45,12 @@ public:
 
     virtual void RunIteration(int aIteration)
     {
-        // We sample lights uniformly
+        // When the light tree is disabled we sample lights uniformly, exactly
+        // as the original implementation.  When enabled, the discrete light
+        // selection probability qD(x, light) depends on the receiving point.
+        const bool useTree = mScene.UseLightTree();
         const int   lightCount    = mScene.GetLightCount();
-        const float lightPickProb = 1.f / lightCount;
+        const float uniformPickProb = lightCount > 0 ? 1.f / lightCount : 0.f;
 
         const int resX = int(mScene.mCamera.mResolution.x);
         const int resY = int(mScene.mCamera.mResolution.y);
@@ -67,6 +71,12 @@ public:
             uint  pathLength   = 1;
             bool  lastSpecular = true;
             float lastPdfW     = 1;
+
+            // Receiving (shading) point of the last surface interaction.  A
+            // BSDF-sampled ray that hits a light or escapes must evaluate qD
+            // at this very point, so that NEE and BSDF-hit strategies use the
+            // same position-dependent light selection probability.
+            Vec3f shadePoint(0.f);
 
             for(;; ++pathLength)
             {
@@ -89,6 +99,9 @@ public:
                     float misWeight = 1.f;
                     if(pathLength > 1 && !lastSpecular)
                     {
+                        const float lightPickProb = LightPickProb(
+                            useTree, shadePoint, mScene.GetBackgroundID(),
+                            uniformPickProb);
                         misWeight = Mis2(lastPdfW, directPdfW * lightPickProb);
                     }
 
@@ -121,6 +134,10 @@ public:
                     {
                         const float directPdfW = PdfAtoW(directPdfA, isect.dist,
                             bsdf.CosThetaFix());
+                        // qD is evaluated at the previous shading point, i.e.
+                        // the point from which the BSDF-sampled ray departed.
+                        const float lightPickProb = LightPickProb(
+                            useTree, shadePoint, isect.lightID, uniformPickProb);
                         misWeight = Mis2(lastPdfW, directPdfW * lightPickProb);
                     }
 
@@ -134,10 +151,16 @@ public:
                 if(bsdf.ContinuationProb() == 0)
                     break;
 
+                // This surface point is the receiving position for every light
+                // decision made for the remainder of this path segment.
+                shadePoint = hitPoint;
+
                 // next event estimation
                 if(!bsdf.IsDelta() && pathLength + 1 >= mMinPathLength)
                 {
-                    int lightID = int(mRng.GetFloat() * lightCount);
+                    float lightPickProb;
+                    const int lightID = PickLight(hitPoint, useTree,
+                        lightCount, uniformPickProb, lightPickProb);
                     const AbstractLight *light = mScene.GetLightPtr(lightID);
 
                     Vec3f directionToLight;
@@ -215,6 +238,43 @@ public:
     }
 
 private:
+
+    // Selects a light for next event estimation at aReceivingPosition and
+    // returns its original ID together with the actual selection probability.
+    // Both branches consume exactly one random number, so disabling the tree
+    // does not change the random number stream.
+    int PickLight(
+        const Vec3f &aReceivingPosition,
+        bool         aUseTree,
+        int          aLightCount,
+        float        aUniformPickProb,
+        float       &oPickProb)
+    {
+        if(aUseTree)
+        {
+            const LightTree &tree = mScene.GetLightTree();
+            const float rnd = mRng.GetFloat();
+            const int lightID = tree.Sample(aReceivingPosition, rnd);
+            oPickProb = float(tree.Pdf(aReceivingPosition, lightID));
+            return lightID;
+        }
+
+        oPickProb = aUniformPickProb;
+        return int(mRng.GetFloat() * aLightCount);
+    }
+
+    // Discrete light selection probability qD(x, light).  Without the tree
+    // this is the uniform 1/N.  Consumes no random numbers.
+    float LightPickProb(
+        bool         aUseTree,
+        const Vec3f &aReceivingPosition,
+        int          aLightID,
+        float        aUniformPickProb) const
+    {
+        if(aUseTree)
+            return float(mScene.GetLightTree().Pdf(aReceivingPosition, aLightID));
+        return aUniformPickProb;
+    }
 
     // Mis power (1 for balance heuristic)
     float Mis(float aPdf) const
