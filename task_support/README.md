@@ -1,0 +1,1 @@
+Unchanged CPU smoke; compiles the original fog host implementation with bundled headers. The target groups are primal, adjoint, snapshot. The required .cc is compiled by build.sh and linked through libfog.a. Target tests must exercise that production implementation. New example must create all three fresh nonempty files under .task-build/fog-fit/.
