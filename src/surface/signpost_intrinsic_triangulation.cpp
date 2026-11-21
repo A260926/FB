@@ -4,11 +4,24 @@
 #include "geometrycentral/surface/mesh_graph_algorithms.h"
 #include "geometrycentral/surface/trace_geodesic.h"
 
+#include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <queue>
+#include <stdexcept>
+#include <unordered_set>
 
 namespace geometrycentral {
 namespace surface {
+
+namespace {
+
+// Tolerance used when deciding that a fresh trace crosses an input edge at exactly the same point as an existing
+// intersection record. This is a tolerance on the dimensionless t-parameter along an edge, so it does not depend on
+// the scale of the mesh.
+const double INCREMENTAL_MERGE_EPS = 1e-10;
+
+}; // namespace
 
 SignpostIntrinsicTriangulation::SignpostIntrinsicTriangulation(ManifoldSurfaceMesh& mesh_,
                                                                IntrinsicGeometryInterface& inputGeom_)
@@ -277,6 +290,9 @@ bool SignpostIntrinsicTriangulation::checkEdgeOriginal(Edge e) const { return ed
 
 bool SignpostIntrinsicTriangulation::flipEdgeIfNotDelaunay(Edge e) {
 
+  // Any rejected or no-op call reports an empty work list.
+  if (incrementalMode) clearLastUpdate();
+
   // Can't flip
   if (isFixed(e)) return false;
 
@@ -316,12 +332,19 @@ bool SignpostIntrinsicTriangulation::flipEdgeIfNotDelaunay(Edge e) {
 
   edgeIsOriginal[e] = false;
 
-  triangulationChanged();
+  if (incrementalMode) {
+    incrementallyUpdateFlip(e);
+  } else {
+    triangulationChanged();
+  }
   invokeEdgeFlipCallbacks(e);
   return true;
 }
 
 bool SignpostIntrinsicTriangulation::flipEdgeIfPossible(Edge e) {
+
+  // A rejected call reports no work.
+  if (incrementalMode) clearLastUpdate();
 
   // Can't flip
   if (isFixed(e)) return false;
@@ -367,13 +390,22 @@ bool SignpostIntrinsicTriangulation::flipEdgeIfPossible(Edge e) {
 
   edgeIsOriginal[e] = false;
 
-  triangulationChanged();
+  if (incrementalMode) {
+    incrementallyUpdateFlip(e);
+  } else {
+    triangulationChanged();
+  }
   invokeEdgeFlipCallbacks(e);
   return true;
 }
 
 void SignpostIntrinsicTriangulation::flipEdgeManual(Edge e, double newLength, double forwardAngle, double reverseAngle,
                                                     bool isOrig, bool reverseFlip) {
+  if (incrementalMode) {
+    throw std::logic_error(
+        "SignpostIntrinsicTriangulation::flipEdgeManual() is not supported while the incremental common "
+        "subdivision mode is enabled; use flipEdgeIfPossible() or flipEdgeIfNotDelaunay()");
+  }
 
   int flipCount = reverseFlip ? 3 : 1; // three flips give opposite orientaiton
   for (int i = 0; i < flipCount; i++) {
@@ -398,6 +430,11 @@ void SignpostIntrinsicTriangulation::flipEdgeManual(Edge e, double newLength, do
 
 
 Vertex SignpostIntrinsicTriangulation::insertVertex(SurfacePoint newPositionOnIntrinsic) {
+  if (incrementalMode) {
+    throw std::logic_error(
+        "SignpostIntrinsicTriangulation::insertVertex() is not supported while the incremental common "
+        "subdivision mode is enabled; use splitEdge() for edge insertions");
+  }
   switch (newPositionOnIntrinsic.type) {
   case SurfacePointType::Vertex: {
     throw std::logic_error("can't insert vertex at vertex");
@@ -464,7 +501,8 @@ Halfedge SignpostIntrinsicTriangulation::insertVertex_edge(SurfacePoint newP) {
   }
 
 
-  // == (3) Assign edge lengths to the new edges
+  // == (3) Assign edge lengths to the new edges. The loop below also identifies newHeBack, the second halfedge along
+  // the old edge (newHeFront runs from the old tail toward the new vertex).
   Halfedge currHe = newHeFront;
   Halfedge newHeBack;
   std::array<double, 4> newLens = {frontLen, Alen, backLen, Blen};
@@ -477,7 +515,11 @@ Halfedge SignpostIntrinsicTriangulation::insertVertex_edge(SurfacePoint newP) {
   // === (4) Now that we have edge lengths, sort out tangent spaces and position on supporting.
   resolveNewVertex(newV, newP);
 
-  triangulationChanged();
+  if (incrementalMode) {
+    incrementallyUpdateSplit(insertionEdge, newHeFront, newHeBack, newV, newP.tEdge);
+  } else {
+    triangulationChanged();
+  }
   invokeEdgeSplitCallbacks(insertionEdge, newHeFront, newHeBack);
 
   return newHeFront;
@@ -535,6 +577,11 @@ Vertex SignpostIntrinsicTriangulation::insertVertex_face(SurfacePoint newP) {
 }
 
 Face SignpostIntrinsicTriangulation::removeInsertedVertex(Vertex v) {
+  if (incrementalMode) {
+    throw std::logic_error(
+        "SignpostIntrinsicTriangulation::removeInsertedVertex() is not supported while the incremental common "
+        "subdivision mode is enabled");
+  }
   // Strategy: flip edges until the vertex has degree three, then remove by replacing with a single face
   // TODO needs a proof that this always works... what about self edges, etc? Seems to work well.
 
@@ -578,6 +625,11 @@ Face SignpostIntrinsicTriangulation::removeInsertedVertex(Vertex v) {
 }
 
 Halfedge SignpostIntrinsicTriangulation::splitEdge(Halfedge he, double tSplit) {
+  if (!std::isfinite(tSplit) || tSplit <= 0. || tSplit >= 1.) {
+    throw std::invalid_argument(
+        "SignpostIntrinsicTriangulation::splitEdge(): tSplit must be finite and strictly within (0, 1)");
+  }
+  if (incrementalMode) clearLastUpdate();
   return insertVertex_edge(SurfacePoint(he, tSplit));
 }
 
@@ -906,6 +958,435 @@ void SignpostIntrinsicTriangulation::constructCommonSubdivision() {
       }
     }
   }
+}
+
+
+// ======================================================
+// ======== Incremental common subdivision
+// ======================================================
+
+void SignpostIntrinsicTriangulation::setIncrementalCommonSubdivision(bool enabled) {
+  if (enabled == incrementalMode) return;
+
+  if (enabled) {
+    incrementalMode = true;
+    lastUpdate = CommonSubdivisionUpdate{};
+    // One full build is allowed when the mode is enabled. Its work is not reported through the per-call update.
+    ensureIncrementalCommonSubdivision();
+  } else {
+    incrementalMode = false;
+    lastUpdate = CommonSubdivisionUpdate{};
+    // Back to the lazy behavior: the next getCommonSubdivision() rebuilds from scratch.
+    commonSubdivision.reset();
+  }
+}
+
+bool SignpostIntrinsicTriangulation::getIncrementalCommonSubdivision() const { return incrementalMode; }
+
+CommonSubdivisionUpdate SignpostIntrinsicTriangulation::lastCommonSubdivisionUpdate() const { return lastUpdate; }
+
+void SignpostIntrinsicTriangulation::clearLastUpdate() {
+  lastUpdate.retracedEdges.clear();
+  lastUpdate.touchedInputEdges.clear();
+}
+
+void SignpostIntrinsicTriangulation::ensureIncrementalCommonSubdivision() {
+  if (!commonSubdivision) {
+    constructCommonSubdivision();
+  }
+}
+
+void SignpostIntrinsicTriangulation::detachFromChain(std::vector<CommonSubdivisionPoint*>& chain,
+                                                     CommonSubdivisionPoint* p) {
+  chain.erase(std::remove(chain.begin(), chain.end(), p), chain.end());
+}
+
+void SignpostIntrinsicTriangulation::insertOrderedOnA(CommonSubdivision& cs, Edge eA, CommonSubdivisionPoint* p) {
+  std::vector<CommonSubdivisionPoint*>& vec = cs.pointsAlongA[eA];
+  // The endpoint records stay at the front/back; the new record belongs in the interior.
+  auto it = vec.begin() + 1;
+  while (it != vec.end() - 1 && (*it)->posA.tEdge < p->posA.tEdge) {
+    ++it;
+  }
+  vec.insert(it, p);
+}
+
+CommonSubdivisionPoint* SignpostIntrinsicTriangulation::findRecordOnInputEdge(Edge eA, double tEdge,
+                                                                               bool includeEdgeVertices) {
+  CommonSubdivision& cs = *commonSubdivision;
+  for (CommonSubdivisionPoint* p : cs.pointsAlongA[eA]) {
+    if (p->retired) continue;
+    if (p->intersectionType == CSIntersectionType::EDGE_PARALLEL) continue;
+    if (!includeEdgeVertices && p->intersectionType == CSIntersectionType::EDGE_VERTEX) continue;
+    if (p->posA.type != SurfacePointType::Edge) continue;
+    if (std::abs(p->posA.tEdge - tEdge) <= INCREMENTAL_MERGE_EPS) {
+      return p;
+    }
+  }
+  return nullptr;
+}
+
+CommonSubdivisionPoint* SignpostIntrinsicTriangulation::findIntrinsicVertexRecord(Vertex vB) {
+  CommonSubdivision& cs = *commonSubdivision;
+  for (Edge e : vB.adjacentEdges()) {
+    std::vector<CommonSubdivisionPoint*>& chain = cs.pointsAlongB[e];
+    if (chain.empty()) continue;
+    for (CommonSubdivisionPoint* p : {chain.front(), chain.back()}) {
+      if (p->posB.type == SurfacePointType::Vertex && p->posB.vertex == vB) {
+        return p;
+      }
+    }
+  }
+  return nullptr;
+}
+
+CommonSubdivisionPoint*
+SignpostIntrinsicTriangulation::createIntrinsicVertexRecord(Vertex vB,
+                                                             std::unordered_set<size_t>& touchedInput,
+                                                             std::vector<CommonSubdivisionPoint*>& detachedWhich) {
+  CommonSubdivision& cs = *commonSubdivision;
+  SurfacePoint loc = vertexLocations[vB];
+
+  // An intrinsic vertex landing exactly on an input vertex shares that vertex's existing record.
+  if (loc.type == SurfacePointType::Vertex) {
+    Edge eA = loc.vertex.halfedge().edge();
+    touchedInput.insert(eA.getIndex());
+    for (CommonSubdivisionPoint* p : cs.pointsAlongA[eA]) {
+      if (p->posA.type == SurfacePointType::Vertex && p->posA.vertex == loc.vertex) {
+        return p;
+      }
+    }
+    throw std::runtime_error("incremental common subdivision: could not find input vertex record");
+  }
+
+  if (loc.type == SurfacePointType::Edge) {
+    touchedInput.insert(loc.edge.getIndex());
+
+    // Splitting exactly at an existing input-edge intersection must merge into the same record. First check live
+    // records on the chain...
+    CommonSubdivisionPoint* existing = findRecordOnInputEdge(loc.edge, loc.tEdge, true);
+
+    // ...then records retired earlier during this same edit, reusing them at their stable address.
+    if (existing == nullptr) {
+      for (CommonSubdivisionPoint* cand : detachedWhich) {
+        if (cand->posA.type == SurfacePointType::Edge && cand->posA.edge == loc.edge &&
+            std::abs(cand->posA.tEdge - loc.tEdge) <= INCREMENTAL_MERGE_EPS) {
+          existing = cand;
+          break;
+        }
+      }
+    }
+
+    if (existing != nullptr) {
+      existing->retired = false;
+      existing->intersectionType = CSIntersectionType::EDGE_VERTEX;
+      existing->posA = loc;
+      existing->posB = SurfacePoint(vB);
+      existing->orientation = true;
+      // A reused record may still be referenced by the old (now cleared) chain only; make sure it is on the input
+      // chain exactly once, in the right position.
+      detachFromChain(cs.pointsAlongA[loc.edge], existing);
+      insertOrderedOnA(cs, loc.edge, existing);
+      return existing;
+    }
+
+    cs.subdivisionPoints.push_back(
+        CommonSubdivisionPoint{CSIntersectionType::EDGE_VERTEX, loc, SurfacePoint(vB), true});
+    CommonSubdivisionPoint* p = &cs.subdivisionPoints.back();
+    insertOrderedOnA(cs, loc.edge, p);
+    return p;
+  }
+
+  // Interior (face) vertex: no input-side edge chain attachment.
+  cs.subdivisionPoints.push_back(
+      CommonSubdivisionPoint{CSIntersectionType::FACE_VERTEX, loc, SurfacePoint(vB), true});
+  return &cs.subdivisionPoints.back();
+}
+
+void SignpostIntrinsicTriangulation::detachEdgeRecords(Edge e, std::unordered_set<size_t>& touchedInput,
+                                                        std::vector<CommonSubdivisionPoint*>& detached) {
+  CommonSubdivision& cs = *commonSubdivision;
+  std::vector<CommonSubdivisionPoint*>& chain = cs.pointsAlongB[e];
+
+  for (CommonSubdivisionPoint* p : chain) {
+    if (p->posA.type == SurfacePointType::Edge) {
+      touchedInput.insert(p->posA.edge.getIndex());
+    }
+    if (p->intersectionType == CSIntersectionType::EDGE_PARALLEL) {
+      // The input edge carrying this parallel segment must be re-examined, since this intrinsic edge is about to be
+      // rebuilt and the shared segment may disappear. The record itself is retired by recoverParallelEdges().
+      touchedInput.insert(p->posA.edge.getIndex());
+      continue;
+    }
+    if (p->posB.type != SurfacePointType::Vertex && p->posA.type == SurfacePointType::Edge) {
+      // Crossing record owned by this edge: remove it from the input-side chain as well.
+      detachFromChain(cs.pointsAlongA[p->posA.edge], p);
+      p->retired = true;
+      detached.push_back(p);
+    }
+  }
+
+  chain.clear();
+}
+
+void SignpostIntrinsicTriangulation::buildEdgeChain(Edge e, CommonSubdivisionPoint* tailRec,
+                                                    CommonSubdivisionPoint* tipRec,
+                                                    std::unordered_set<size_t>& touchedInput,
+                                                    std::vector<CommonSubdivisionPoint*>& detached) {
+  CommonSubdivision& cs = *commonSubdivision;
+
+  // Re-run the same surface tracing used by the full construction, but only for this edge.
+  std::vector<SurfacePoint> edgeTrace = traceIntrinsicHalfedgeAlongInput(e.halfedge());
+  std::vector<double> tVals = recoverTraceTValues(edgeTrace);
+
+  std::vector<CommonSubdivisionPoint*>& chain = cs.pointsAlongB[e];
+  chain.push_back(tailRec);
+
+  if (!(edgeIsOriginal[e] || edgeTrace.size() == 2)) {
+    for (size_t iP = 1; iP + 1 < edgeTrace.size(); iP++) {
+      const SurfacePoint& point = edgeTrace[iP];
+      if (point.type != SurfacePointType::Edge) {
+        throw std::runtime_error(
+            "incremental common subdivision failure: edge traces should contain only edge crossings");
+      }
+      touchedInput.insert(point.edge.getIndex());
+
+      // A trace may brush against the input edge carrying an endpoint vertex; such a crossing is really just the
+      // endpoint, not an additional subdivision point.
+      auto sameAsEndpoint = [&](CommonSubdivisionPoint* endRec) {
+        return endRec->posA.type == SurfacePointType::Edge && endRec->posA.edge == point.edge &&
+               std::abs(endRec->posA.tEdge - point.tEdge) <= INCREMENTAL_MERGE_EPS;
+      };
+      if (sameAsEndpoint(tailRec) || sameAsEndpoint(tipRec)) {
+        continue;
+      }
+
+      // Reuse the record from the previous trace if this crossing is the same point on the input mesh; otherwise
+      // allocate a new one.
+      CommonSubdivisionPoint* rec = nullptr;
+      for (CommonSubdivisionPoint* cand : detached) {
+        if (!cand->retired) continue;
+        if (cand->posA.type == SurfacePointType::Edge && cand->posA.edge == point.edge &&
+            std::abs(cand->posA.tEdge - point.tEdge) <= INCREMENTAL_MERGE_EPS) {
+          rec = cand;
+          break;
+        }
+      }
+
+      if (rec == nullptr) {
+        cs.subdivisionPoints.emplace_back();
+        rec = &cs.subdivisionPoints.back();
+        rec->intersectionType = CSIntersectionType::EDGE_TRANSVERSE;
+        rec->orientation = false;
+        rec->posA = point;
+        insertOrderedOnA(cs, point.edge, rec);
+      } else {
+        rec->retired = false;
+        rec->intersectionType = CSIntersectionType::EDGE_TRANSVERSE;
+        rec->posA = point;
+        insertOrderedOnA(cs, point.edge, rec);
+      }
+
+      // Keep the position on the intrinsic halfedge consistent with the fresh trace's parameter order.
+      rec->posB = SurfacePoint(e, tVals[iP]);
+      chain.push_back(rec);
+    }
+  }
+
+  chain.push_back(tipRec);
+}
+
+void SignpostIntrinsicTriangulation::recoverParallelEdges(
+    const std::unordered_set<size_t>& touchedInput) {
+  CommonSubdivision& cs = *commonSubdivision;
+
+  for (size_t eAInd : touchedInput) {
+    Edge eA = inputMesh.edge(eAInd);
+    std::vector<CommonSubdivisionPoint*>& vec = cs.pointsAlongA[eA];
+
+    // Retire parallel records from earlier edits; they will be re-detected below if the shared segment still
+    // exists. Retired ones are kept as revival candidates so a surviving shared segment keeps a stable address.
+    std::vector<CommonSubdivisionPoint*> retiredParallel;
+    for (size_t iP = 0; iP < vec.size();) {
+      CommonSubdivisionPoint* p = vec[iP];
+      if (p->intersectionType == CSIntersectionType::EDGE_PARALLEL) {
+        detachFromChain(cs.pointsAlongB[p->posB.edge], p);
+        detachFromChain(vec, p);
+        p->retired = true;
+        retiredParallel.push_back(p);
+      } else {
+        ++iP;
+      }
+    }
+
+    // Sort interior records by their position along the input edge; endpoint records remain fixed.
+    std::sort(vec.begin() + 1, vec.end() - 1, [](CommonSubdivisionPoint* a, CommonSubdivisionPoint* b) {
+      return a->posA.tEdge < b->posA.tEdge;
+    });
+
+    // Two consecutive records which are both intrinsic-side vertices bound a shared (parallel) edge segment.
+    for (size_t iP = 1; iP + 1 < vec.size(); iP++) {
+      if (vec[iP - 1]->posB.type == SurfacePointType::Vertex && vec[iP]->posB.type == SurfacePointType::Vertex) {
+
+        // Identify the intrinsic edge connecting the two intrinsic vertices.
+        Edge sharedBEdge;
+        for (Halfedge he : vec[iP - 1]->posB.vertex.outgoingHalfedges()) {
+          if (he.tipVertex() == vec[iP]->posB.vertex) {
+            sharedBEdge = he.edge();
+            break;
+          }
+        }
+        GC_SAFETY_ASSERT(sharedBEdge != Edge(),
+                         "could not align shared edges in incremental common subdivision");
+
+        // Revive the previous parallel record for this same intrinsic edge if one exists.
+        CommonSubdivisionPoint* csPoint = nullptr;
+        for (CommonSubdivisionPoint* cand : retiredParallel) {
+          if (cand->posB.edge == sharedBEdge) {
+            csPoint = cand;
+            break;
+          }
+        }
+        if (csPoint != nullptr) {
+          csPoint->retired = false;
+          csPoint->posA = SurfacePoint(eA, 0.5);
+          csPoint->posB = SurfacePoint(sharedBEdge, 0.5);
+        } else {
+          cs.subdivisionPoints.emplace_back();
+          csPoint = &cs.subdivisionPoints.back();
+          csPoint->posA = SurfacePoint(eA, 0.5);
+          csPoint->posB = SurfacePoint(sharedBEdge, 0.5);
+          csPoint->intersectionType = CSIntersectionType::EDGE_PARALLEL;
+          csPoint->orientation = false;
+        }
+
+        vec.insert(vec.begin() + iP, csPoint);
+        GC_SAFETY_ASSERT(cs.pointsAlongB[sharedBEdge].size() == 2,
+                         "shared edge should have exactly two points (endpoints)");
+        cs.pointsAlongB[sharedBEdge].insert(cs.pointsAlongB[sharedBEdge].begin() + 1, csPoint);
+      }
+    }
+  }
+}
+
+void SignpostIntrinsicTriangulation::publishUpdate(const std::unordered_set<size_t>& touchedInput,
+                                                   const std::vector<Edge>& retracedEdges) {
+  lastUpdate.retracedEdges.clear();
+  for (Edge e : retracedEdges) {
+    lastUpdate.retracedEdges.push_back(e.getIndex());
+  }
+  std::sort(lastUpdate.retracedEdges.begin(), lastUpdate.retracedEdges.end());
+  lastUpdate.retracedEdges.erase(
+      std::unique(lastUpdate.retracedEdges.begin(), lastUpdate.retracedEdges.end()),
+      lastUpdate.retracedEdges.end());
+
+  lastUpdate.touchedInputEdges.clear();
+  for (size_t ind : touchedInput) {
+    lastUpdate.touchedInputEdges.push_back(ind);
+  }
+  std::sort(lastUpdate.touchedInputEdges.begin(), lastUpdate.touchedInputEdges.end());
+  lastUpdate.touchedInputEdges.erase(
+      std::unique(lastUpdate.touchedInputEdges.begin(), lastUpdate.touchedInputEdges.end()),
+      lastUpdate.touchedInputEdges.end());
+
+  // Connectivity derived from the intersection chains must be rebuilt on demand from the current chains.
+  commonSubdivision->invalidateDerivedMesh();
+}
+
+void SignpostIntrinsicTriangulation::incrementallyUpdateFlip(Edge e) {
+  ensureIncrementalCommonSubdivision();
+
+  std::unordered_set<size_t> touchedInput;
+  std::vector<CommonSubdivisionPoint*> detached;
+
+  // Take down everything the old trace put along the flipped edge.
+  detachEdgeRecords(e, touchedInput, detached);
+
+  // The flip rewires the edge to the two opposite vertices of the diamond.
+  Halfedge he = e.halfedge();
+  CommonSubdivisionPoint* tailRec = findIntrinsicVertexRecord(he.tailVertex());
+  CommonSubdivisionPoint* tipRec = findIntrinsicVertexRecord(he.twin().vertex());
+  GC_SAFETY_ASSERT(tailRec != nullptr && tipRec != nullptr,
+                   "could not locate endpoint records in incremental flip");
+
+  // Only the swapped-out intrinsic edge is re-traced.
+  buildEdgeChain(e, tailRec, tipRec, touchedInput, detached);
+
+  recoverParallelEdges(touchedInput);
+  publishUpdate(touchedInput, {e});
+}
+
+void SignpostIntrinsicTriangulation::incrementallyUpdateSplit(Edge oldEdge, Halfedge newHeFront,
+                                                               Halfedge newHeBack, Vertex newV, double tSplit) {
+  ensureIncrementalCommonSubdivision();
+
+  // Both halfedges along the old edge now terminate at the new vertex.
+  GC_SAFETY_ASSERT(newHeFront.vertex() == newV && newHeBack.vertex() == newV,
+                   "inconsistent halfedges handed to incremental split");
+
+  std::unordered_set<size_t> touchedInput;
+  std::vector<CommonSubdivisionPoint*> detached;
+
+  // Save the endpoint records of the unsplit edge before taking its chain apart, and detect a split landing exactly
+  // on an existing intersection of this edge. The decision uses the intrinsic edge parameter, so it is exact even
+  // though the freshly traced vertex location carries floating-point error.
+  std::vector<CommonSubdivisionPoint*>& oldChain = commonSubdivision->pointsAlongB[oldEdge];
+  GC_SAFETY_ASSERT(oldChain.size() >= 2, "edge chain must include endpoints");
+  CommonSubdivisionPoint* oldTailRec = oldChain.front();
+  CommonSubdivisionPoint* oldTipRec = oldChain.back();
+  CommonSubdivisionPoint* mergeRec = nullptr;
+  for (CommonSubdivisionPoint* p : oldChain) {
+    if (p->intersectionType == CSIntersectionType::EDGE_TRANSVERSE && p->posB.type == SurfacePointType::Edge &&
+        std::abs(p->posB.tEdge - tSplit) <= INCREMENTAL_MERGE_EPS) {
+      mergeRec = p;
+      break;
+    }
+  }
+
+  detachEdgeRecords(oldEdge, touchedInput, detached);
+
+  // Record for the newly inserted intrinsic vertex. When the split lands on an existing intersection, merge into the
+  // same record at its stable address rather than creating a second one.
+  CommonSubdivisionPoint* newVRec;
+  if (mergeRec != nullptr) {
+    newVRec = mergeRec;
+    newVRec->retired = false;
+    newVRec->intersectionType = CSIntersectionType::EDGE_VERTEX;
+    newVRec->posB = SurfacePoint(newV);
+    newVRec->orientation = true;
+    // posA (the exact input-edge intersection location) is kept and the record is reattached on the input chain.
+    insertOrderedOnA(*commonSubdivision, newVRec->posA.edge, newVRec);
+  } else {
+    newVRec = createIntrinsicVertexRecord(newV, touchedInput, detached);
+  }
+
+  auto recordForVertex = [&](Vertex v) -> CommonSubdivisionPoint* {
+    if (v == newV) return newVRec;
+    if (v == oldEdge.halfedge().tailVertex()) return oldTailRec;
+    if (v == oldEdge.halfedge().tipVertex()) return oldTipRec;
+    return findIntrinsicVertexRecord(v);
+  };
+
+  // Every edge incident on the new vertex is new or had its endpoint/interval changed: the two child edges which
+  // replaced the old edge, plus the radial edges connecting the new vertex to the opposite vertices of the adjacent
+  // faces. All of them need fresh traces; no other edge does.
+  std::vector<Edge> incident;
+  for (Edge eInc : newV.adjacentEdges()) {
+    incident.push_back(eInc);
+  }
+  std::vector<Edge> retraced;
+  for (Edge child : incident) {
+    Halfedge ch = child.halfedge();
+    CommonSubdivisionPoint* tailRec = recordForVertex(ch.tailVertex());
+    CommonSubdivisionPoint* tipRec = recordForVertex(ch.tipVertex());
+    GC_SAFETY_ASSERT(tailRec != nullptr && tipRec != nullptr,
+                     "could not locate endpoint records in incremental split");
+    buildEdgeChain(child, tailRec, tipRec, touchedInput, detached);
+    retraced.push_back(child);
+  }
+
+  recoverParallelEdges(touchedInput);
+  publishUpdate(touchedInput, retraced);
 }
 
 

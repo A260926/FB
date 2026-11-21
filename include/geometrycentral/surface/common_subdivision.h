@@ -34,6 +34,11 @@ struct CommonSubdivisionPoint {
   SurfacePoint posA;
   SurfacePoint posB;
   bool orientation; // WARNING: some constructors (e.g. signposts) do not properly populate this
+
+  // True once the point has been detached from every pointsAlongA/pointsAlongB chain. Retired records are kept
+  // around (not erased from subdivisionPoints) so that surviving records keep stable addresses, but are ignored when
+  // constructing the derived common subdivision mesh. Only used by the incremental update mode.
+  bool retired = false;
 };
 std::ostream& operator<<(std::ostream& out, const CSIntersectionType& type);
 std::ostream& operator<<(std::ostream& out, const CommonSubdivisionPoint& pt);
@@ -117,6 +122,12 @@ public:
   // Construct `mesh` and auxiliary data. Throws on failure (see note above)
   void constructMesh(bool triangulate = true, bool skipIfAlreadyConstructed = true);
   void triangulateMesh();
+
+  // Drop any mesh connectivity derived from the raw intersection chains (mesh, sourcePoints and the source face
+  // arrays). The next call to constructMesh() rebuilds everything from the current pointsAlongA/pointsAlongB chains,
+  // rather than reusing a stale mesh. Used by incremental common subdivision updates, which mutate the raw chains in
+  // place.
+  void invalidateDerivedMesh();
 
   // Interpolate data at vertices from one of the meshes to the common subdivision. The return value is defined
   // per-vertex of the commonm subdivision mesh.

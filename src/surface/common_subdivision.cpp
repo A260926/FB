@@ -372,6 +372,14 @@ void CommonSubdivision::checkMeshConstructed() const {
   }
 }
 
+void CommonSubdivision::invalidateDerivedMesh() {
+  // Resetting the unique_ptr also destroys the MeshData containers, which deregisters them from the (old) mesh.
+  mesh.reset();
+  sourcePoints = VertexData<CommonSubdivisionPoint*>();
+  sourceFaceA = FaceData<Face>();
+  sourceFaceB = FaceData<Face>();
+}
+
 std::unique_ptr<SimplePolygonMesh> CommonSubdivision::buildSimpleMesh() {
   std::vector<std::vector<size_t>> faces;
   std::vector<CommonSubdivisionPoint*> parents;
@@ -399,6 +407,8 @@ void CommonSubdivision::constructMeshData(std::vector<std::vector<size_t>>& face
   // parents_out.reserve(nE + meshB.nVertices());
 
   for (CommonSubdivisionPoint& p : subdivisionPoints) {
+    // Retired records are tombstones kept around for address stability and must not contribute to the derived mesh.
+    if (p.retired) continue;
     if (p.intersectionType != CSIntersectionType::EDGE_PARALLEL) {
       subdivisionPointsId[&p] = parents_out.size();
       parents_out.push_back(&p);
