@@ -1,0 +1,16 @@
+{
+  "repo": "https://github.com/cyanray/libnurbs",
+  "commit": "af3b02c50942152eba237c4f60924ef0d4c04a3b",
+  "license": "LICENSE.txt",
+  "upstream_files_unchanged": true,
+  "dependencies": [
+    {
+      "path": "task_support/vendor/eigen",
+      "repo": "https://gitlab.com/libeigen/eigen",
+      "commit": "3147391d946bb4b6c68edd901f2add6ac1f31f8c",
+      "manifest": "task_support/vendor/eigen/PROVENANCE.json"
+    }
+  ],
+  "excluded": [],
+  "support": "task_support contains build/test protocol and starting-state probe only; target implementations and target tests are absent."
+}
