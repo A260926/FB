@@ -1,0 +1,10 @@
+Film "image" "integer xresolution" [12] "integer yresolution" [8]
+Sampler "random" "integer pixelsamples" [4]
+Integrator "path" "integer maxdepth" [3]
+LookAt 0 0 -4 0 0 0 0 1 0
+Camera "perspective" "float fov" [40]
+WorldBegin
+LightSource "infinite" "rgb L" [1 1 1]
+Material "matte" "rgb Kd" [.6 .3 .2]
+Shape "sphere" "float radius" [1]
+WorldEnd
