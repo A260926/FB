@@ -47,6 +47,63 @@ int main()
 }
 ```
 
+## Catmull-Clark Subdivision Plans
+
+When the connectivity stays fixed but control values change over and over —
+for example while interactively previewing a model with several UV sets —
+rebuilding the subdivided mesh each time is wasteful. `pmp::SubdivisionPlan`
+(from `pmp/algorithms/subdivision_plan.h`) is an *owning* alternative to the
+in-place `catmull_clark_subdivision()`:
+
+```cpp
+#include <pmp/algorithms/subdivision_plan.h>
+
+pmp::SubdivisionPlan plan;
+plan.build(mesh, /*levels=*/3, channels);   // captures topology once
+plan.evaluate(positions, channel_values);   // only applies sparse stencils
+```
+
+- **Inputs.** `build()` takes the control cage (an oriented 2-manifold
+  polygon mesh, boundaries, multiple components, extraordinary vertices, and
+  pending deletions are fine; isolated vertices and non-finite values are
+  rejected), a subdivision depth of 1 to 5, and any number of texture
+  channels. Each channel is an independent `TexCoord` value table plus one
+  value index per source face corner. Corners follow the halfedge order of
+  each source face and point to the halfedge to-vertex, so the same
+  geometric vertex can reference different values on different faces.
+- **Ownership.** The plan stores the mapping from source vertices, faces,
+  and corners to compact indices (`source_vertex()`, `source_face()`,
+  `source_corner()`). After `build()`, the source mesh may be modified or
+  destroyed; `evaluate()` only needs new positions and new channel value
+  tables in compact order. Change the topology or the corner indices and you
+  have to build a new plan.
+- **Geometry.** Positions follow the same smooth and permanent feature rules
+  as `catmull_clark_subdivision()` with `BoundaryHandling::Interpolate`.
+- **Channel topology.** Every channel builds its own face-corner topology:
+  the two sides of a geometric interior edge are connected only if both edge
+  endpoints reference the same value index on both sides. Corners are never
+  welded by UV value or spatial position, and face fans around a vertex that
+  are separated by seams stay separate even if they reuse the same value
+  index. Channels are refined with the smooth Catmull-Clark rules on their
+  cut topology (boundary vertices use `(6P + prev + next) / 8`, boundary
+  edge points take the midpoint); geometric features do not alter channel
+  rules. Subfaces correspond one-to-one to the geometric subdivision and all
+  channels share the refined positions.
+- **Outputs.** The refined quad connectivity (`faces()`), the source face of
+  every subface (`face_sources()`), positions, and per-channel refined value
+  tables plus per-corner indices (`channel_values()`, `channel_corners()`).
+  The linear maps are exposed as CSR stencils (`position_stencil()`,
+  `channel_stencil()`) with sorted, merged columns and rows summing to one,
+  so results can be verified independently.
+- **Errors.** Invalid levels, value table sizes, corner indices, non-finite
+  values, or non-manifold input are rejected with `InvalidInputException`
+  before anything is published; a failed `build()` or `evaluate()` keeps the
+  previous plan and results.
+
+See `examples/subdivision_plan.cpp` for a complete example that evaluates
+two control sets with one plan and writes `before.obj`/`after.obj` with
+independent `vt` indices.
+
 ## Read the Docs
 
 The [user guide](https://www.pmp-library.org/guide.html) contains all you need to get started using PMP, including a [tutorial](https://www.pmp-library.org/tutorial.html) covering mesh processing basics.
