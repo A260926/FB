@@ -1,6 +1,9 @@
 #include "Rasterizer.h"
 #include "OrthographicCamera.h"
+#include "PERSPECTIVECAMERA.H"
 #include "ForwardRasterizer.h"
+#include "GeometryObject.h"
+#include <stdexcept>
 
 Rasterizer::Rasterizer()
   : Renderer() {
@@ -13,6 +16,83 @@ Rasterizer::Rasterizer(const World* world)
 }
 
 Rasterizer::~Rasterizer() {
+}
+
+/******************************** Sectioning ********************************/
+
+void Rasterizer::enableSection(const Vector3D& n, const double d,
+                               const RGBColor& color, const RGBColor& diffuse,
+                               const RGBColor& specular) {
+  m_section.enable(n, d, color, diffuse, specular);
+}
+
+void Rasterizer::updateSection(const Vector3D& n, const double d,
+                               const RGBColor& color, const RGBColor& diffuse,
+                               const RGBColor& specular) {
+  m_section.update(n, d, color, diffuse, specular);
+}
+
+void Rasterizer::disableSection() {
+  m_section.disable();
+}
+
+bool Rasterizer::sectionEnabled() const {
+  return m_section.enabled();
+}
+
+Vector3D Rasterizer::sectionPlaneNormal() const {
+  return m_section.plane().n;
+}
+
+double Rasterizer::sectionPlaneD() const {
+  return m_section.plane().d;
+}
+
+const std::vector<unsigned char>& Rasterizer::sectionCapMask() const {
+  return m_section.capMask();
+}
+
+const std::vector<int32_t>& Rasterizer::sectionCapObject() const {
+  return m_section.capObject();
+}
+
+bool Rasterizer::sectionKeeps(const Point3D& point) const {
+  const SectionPlane& plane = m_section.plane();
+  return plane.n * Vector3D(point) + plane.d >= 0.0;
+}
+
+Vector3D Rasterizer::sectionCapNormal() const {
+  const Vector3D n = m_section.plane().n;
+  return Vector3D(-n.x, -n.y, -n.z);
+}
+
+Fragment Rasterizer::sectionCapFragment(const Point3D& point) const {
+  const SectionPlane& plane = m_section.plane();
+  return Fragment(point, plane.color, plane.diffuse, plane.specular,
+                  sectionCapNormal());
+}
+
+// Depth of a covered pixel. Perspective keeps the production inverse axis
+// depth reconstruction; orthographic interpolates the axis depth linearly.
+// With sectioning disabled the legacy calculateDepth path is preserved.
+double Rasterizer::rasterSampleDepth(const Triangle3D& triangle_world,
+                                     const Triangle2D& triangle_raster,
+                                     const Point2D& pixel_raster) const {
+  if (!m_section.enabled()) {
+    return calculateDepth(triangle_world, triangle_raster, pixel_raster);
+  }
+
+  const double z1 = m_camera->viewTransform(triangle_world.v1.position).z;
+  const double z2 = m_camera->viewTransform(triangle_world.v2.position).z;
+  const double z3 = m_camera->viewTransform(triangle_world.v3.position).z;
+
+  double u, v, w;
+  triangle_raster.calculateBarycentricCoords(u, v, w, pixel_raster);
+
+  if (dynamic_cast<const OrthographicCamera*>(m_camera) != nullptr) {
+    return u * z1 + v * z2 + w * z3;
+  }
+  return 1.0 / (u / z1 + v / z2 + w / z3);
 }
 
 

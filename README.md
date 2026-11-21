@@ -36,6 +36,7 @@ I've implement some basic features that I consider relevant for any graphics pro
 * A depth-buffer to solve the visibility surface problem
 * Two rendering paths: Forward and deferred
 * Shadow mapping for directional lights with PCF
+* Image-only world-space section plane preview (solid section fill and cavities, no mesh modification)
 
 # Build instructions
 
@@ -305,6 +306,60 @@ _If you want to know more, this is by far [best tutorial](https://www.youtube.co
 PCF (Percentage Closer Filtering) help us to create soft shadows and making them less "blocky". The idea is, instead of taking only one sample from the shadow map, we take many of them and we calculate the average. In my case I took nine samples: the center point and neighbors. The result has a much better quality:
 
 <p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/shadows_jaggy_pcf.PNG"> </p>
+
+## Section plane (CPU preview)
+
+The rasterizer can cut a closed part with a single world-space plane and fill
+the exposed solid cross section, so cavities and holes are visible without
+editing any geometry. This is an image-only feature: triangle meshes,
+materials and the `World` are never modified and no cap geometry is exported.
+
+### Scope and limitations
+
+* One plane `n.p + d = 0`. The side `n.p + d >= 0` is kept; the other side is
+  clipped away per fragment. `n` and `d` are normalized together (so the plane
+  is invariant under scaling) and the cap normal is `-normalize(n)`.
+* Available on both `ForwardRasterizer` and `DeferredRasterizer`, only through
+  `render(true, false)`. Any other parameter combination is rejected before the
+  existing buffers are touched; shadow maps are not extended to sectioning.
+* Solidity uses the **nonzero integer winding number** of each object's
+  oriented triangle shells (outer shells face outward, cavity inner shells are
+  reversed). It is never replaced by parity/even-odd flips, and every object is
+  tested independently so distinct objects never cancel each other.
+* Geometry is assumed to be a finite, non-self-intersecting, non-degenerate
+  collection of closed oriented shells; all vertices are strictly inside the
+  camera frustum, the plane does not pass through an original vertex or edge,
+  and cut points do not land exactly on a triangle surface. Near/far clipping
+  and topology repair are out of scope.
+* Rays parallel to the plane, or whose intersection falls outside the camera
+  near/far range, produce no cap candidate.
+* The cap position is the real camera-ray/plane intersection. Perspective
+  depth is reconstructed from inverse axis depth; orthographic depth is
+  interpolated linearly. Caps compete in the same axis depth buffer as the
+  retained surfaces (closer wins; ties keep the regular surface, and ties
+  between caps follow `world.m_objects` order). The deferred path writes the
+  winning cap position, normal and material into the shared GBuffer before
+  lighting rather than overwriting the final color.
+
+### Interface
+
+```cpp
+// Enable / replace / disable the plane (n, d, cap color/diffuse/specular).
+renderer.enableSection(n, d, color, diffuse, specular);
+renderer.updateSection(n, d, color, diffuse, specular); // requires enable
+renderer.disableSection();
+
+// Per-frame readback, rebuilt on every section render and cleared on disable.
+const std::vector<unsigned char>& mask  = renderer.sectionCapMask();   // visible cap pixels
+const std::vector<int32_t>&       owner = renderer.sectionCapObject(); // owning object, else -1
+```
+
+Non-finite values, a zero normal or a non-finite color throw
+`std::invalid_argument` and leave the previous configuration and image
+untouched. `updateSection` while disabled throws `std::logic_error`. The
+analytic helpers (`makeSectionPlane`, `sectionRayPlane`, `sectionEdgeE`) live
+in `SectionPass.h`; the example `examples/section_preview.cpp` renders an
+obliquely cut hollow box to a PPM path given as its only argument.
 
 # Gallery
 
