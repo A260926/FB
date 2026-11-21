@@ -15,6 +15,37 @@ I also wrote a series of posts chronicling the process on [my blog](https://www.
 [![Go Report Card](https://goreportcard.com/badge/github.com/markphelps/example?style=flat-square)](https://goreportcard.com/report/github.com/markphelps/go-trace)
 [![SayThanks.io](https://img.shields.io/badge/SayThanks.io-%E2%98%BC-1EAEDB.svg?style=flat-square)](https://saythanks.io/to/markphelps)
 
+## Two-bounce reconnect rendering
+
+`render/instance_scene.go` and `render/reconnect.go` add an optional path that
+reuses surface sampling distributions from an old pose to guide the indirect
+light of the current frame. An `InstanceScene` is an immutable set of
+Lambertian sphere instances (unique `uint64` IDs, row-major 3x4 affine
+matrices with shear, non-uniform scale and mirroring allowed). The same
+instance ID with the same unit-sphere direction is the same material point
+across poses. The exact public API:
+
+```go
+func NewInstanceScene(protos []SphereProto, instances []Instance) (*InstanceScene, error)
+func (s *InstanceScene) HitSurface(r primitive.Ray, tMin, tMax float64) (bool, SurfaceHit)
+func (s *InstanceScene) Resolve(ref SurfaceRef) (SurfacePoint, error)
+func (s *InstanceScene) AreaFactor(ref SurfaceRef) (float64, error)
+func EstimateReconnect(current *InstanceScene, target SurfaceRef, sources []ProposalSource, candidates int, rnd *rand.Rand) (primitive.Color, ReconnectStats, error)
+func RenderReconnect(current *InstanceScene, camera *primitive.Camera, oldScenes []*InstanceScene, width, height, samples, candidates, workers int, seed int64) ([]primitive.Color, error)
+```
+
+`EstimateReconnect` adds the current target to the proposal sources, emits
+`candidates` cosine hemisphere rays per source, transports the first hits into
+the current frame by ID and unit-sphere direction, and selects one candidate
+with weight `K/qmix` (target kernel over the equal-weight mixture of all
+transported source densities, including the old-to-new area ratio). The
+surface term is `targetColor * S/M * visibility * L_y`, where `L_y` continues
+with the original `Lambertian.Bounce` and the existing `color` recursion at
+depth 2; an independent cosine ray estimates the direct sky term.
+`RenderReconnect` returns the row-major linear RGB frame (row 0 is the top
+scanline) and is deterministic in the seed for any worker count. See
+`examples/reconnect` for a two-pose render.
+
 ## Options
 
 ```
