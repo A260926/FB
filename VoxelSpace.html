@@ -80,6 +80,11 @@
 <label for="distancerange">Distance</label>
 <input id="distancerange" type="range" min="100" max="2000" step="1" onchange="camera.distance = this.value">
 
+<label for="clipmapcheck">Clipmap LOD</label>
+<input id="clipmapcheck" type="checkbox" onchange="SetTerrainMode(this.checked ? 'clipmap' : 'array')">
+
+<button type="button" onclick="RaiseTerrainUnderCamera(10); Draw();">Raise ground</button>
+
 <a href="https://github.com/s-macke/VoxelSpace">Github project page</a>
 
 </div>
@@ -88,6 +93,7 @@
     Your browser does not support the canvas element.
 </canvas>
 
+<script src="terrain-clipmap.js"></script>
 <script>
 "use strict";
 
@@ -148,6 +154,104 @@ var input =
 
 var updaterunning = false;
 
+// ---------------------------------------------
+// Terrain modes: periodic array (original) or procedural clipmap LOD
+
+var terrainMode = 'array';          // 'array' | 'clipmap'
+var terrainSource = null;           // TerrainSource in clipmap mode
+var terrainView = null;             // TerrainClipmap subscribed to the source
+var CLIPMAP_SIDE = 17;              // odd side, at least 9
+var CLIPMAP_LEVELS = 9;             // b_last = (R-2)*2^(L-1) = 1536 units
+
+// Adapt the periodic, read-only image maps to a TerrainSource.  The base
+// samples with periodic modulo, while sparse edits use the unwrapped world
+// coordinates and therefore do not repeat across map tiles.
+function CreateMapSource()
+{
+    var localMap = map;
+    return new TerrainSource(function(x, y)
+    {
+        var ix = x & (localMap.width - 1);
+        var iy = y & (localMap.height - 1);
+        var offset = (iy << localMap.shift) + ix;
+        return { height: localMap.altitude[offset], color: localMap.color[offset] };
+    });
+}
+
+// Public mode lifecycle entry point, also used by the headless viewer.
+function SetTerrainMode(mode)
+{
+    if (mode !== 'array' && mode !== 'clipmap') return;
+    if (mode === terrainMode) return;
+    if (mode === 'clipmap')
+    {
+        terrainSource = CreateMapSource();
+        terrainView = new TerrainClipmap(terrainSource,
+            { side: CLIPMAP_SIDE, levels: CLIPMAP_LEVELS });
+        terrainView.moveTo(camera.x, camera.y);
+        terrainMode = 'clipmap';
+    } else
+    {
+        // Tear down the view (unsubscribing it) before dropping the source.
+        if (terrainView) terrainView.destroy();
+        terrainView = null;
+        terrainSource = null;
+        terrainMode = 'array';
+    }
+    var checkbox = (typeof document !== 'undefined' && document.getElementById)
+        ? document.getElementById('clipmapcheck') : null;
+    if (checkbox) checkbox.checked = (terrainMode === 'clipmap');
+}
+
+function GetTerrainSource() { return terrainSource; }
+function GetTerrainClipmap() { return terrainView; }
+
+// Install an externally built procedural source, optionally with an existing
+// view (otherwise one is created here).  Reattaching the same view keeps its
+// ring windows and statistics, so headless sessions can redraw repeatedly.
+function AttachTerrainClipmap(source, viewOrOptions)
+{
+    if (terrainView && terrainView !== viewOrOptions) terrainView.destroy();
+    terrainSource = source;
+    // Duck typing rather than instanceof: headless sessions may construct the
+    // view in another realm whose TerrainClipmap prototype differs.
+    if (viewOrOptions && typeof viewOrOptions.moveTo === 'function' &&
+        typeof viewOrOptions.sample === 'function')
+    {
+        terrainView = viewOrOptions;
+    } else
+    {
+        terrainView = new TerrainClipmap(source, viewOrOptions ||
+            { side: CLIPMAP_SIDE, levels: CLIPMAP_LEVELS });
+    }
+    terrainView.moveTo(camera.x, camera.y);
+    terrainMode = 'clipmap';
+    var checkbox = (typeof document !== 'undefined' && document.getElementById)
+        ? document.getElementById('clipmapcheck') : null;
+    if (checkbox) checkbox.checked = true;
+    return terrainView;
+}
+
+// Raise the grid point directly under the camera.  In clipmap mode this goes
+// through the sparse source edit so every subscribed view sees it; the array
+// mode keeps its own local height map.
+function RaiseTerrainUnderCamera(delta)
+{
+    var gx = Math.floor(camera.x);
+    var gy = Math.floor(camera.y);
+    if (terrainMode === 'clipmap' && terrainView)
+    {
+        var current = terrainView.sample(gx, gy);
+        var height = (current ? current.height : 0) + delta;
+        var color = current ? current.color : 0xFF806040;
+        terrainSource.edit([{ x: gx, y: gy, height: height, color: color }]);
+    } else
+    {
+        var mapoffset = ((gy & (map.width - 1)) << map.shift) + (gx & (map.height - 1)) | 0;
+        map.altitude[mapoffset] = Math.min(255, map.altitude[mapoffset] + delta);
+    }
+}
+
 var time = new Date().getTime();
 
 
@@ -189,8 +293,19 @@ function UpdateCamera()
     }
 
     // Collision detection. Don't fly below the surface.
-    var mapoffset = ((Math.floor(camera.y) & (map.width-1)) << map.shift) + (Math.floor(camera.x) & (map.height-1))|0;
-    if ((map.altitude[mapoffset]+10) > camera.height) camera.height = map.altitude[mapoffset] + 10;
+    if (terrainMode === 'clipmap' && terrainView)
+    {
+        // The clipmap view is the single terrain source; keep its windows
+        // centered on the camera and use its reconstructed ground height.
+        terrainView.moveTo(camera.x, camera.y);
+        var ground = terrainView.sample(camera.x, camera.y);
+        if (ground && (ground.height + 10) > camera.height)
+            camera.height = ground.height + 10;
+    } else
+    {
+        var mapoffset = ((Math.floor(camera.y) & (map.width-1)) << map.shift) + (Math.floor(camera.x) & (map.height-1))|0;
+        if ((map.altitude[mapoffset]+10) > camera.height) camera.height = map.altitude[mapoffset] + 10;
+    }
 
     time = current;
 
@@ -373,10 +488,28 @@ function Flip()
 // ---------------------------------------------
 // The main render routine
 
+// Terrain lookup shared by the renderer and the camera collision.  The array
+// path is the original periodic point sample; clipmap mode goes through the
+// LOD view and returns null outside the resident range.
+function SampleTerrain(x, y)
+{
+    if (terrainMode === 'clipmap' && terrainView)
+    {
+        return terrainView.sample(x, y);
+    }
+    var mapoffset = ((Math.floor(y) & (map.width - 1)) << map.shift) +
+                    (Math.floor(x) & (map.height - 1)) | 0;
+    return { height: map.altitude[mapoffset], color: map.color[mapoffset] };
+}
+
 function Render()
 {
-    var mapwidthperiod = map.width - 1;
-    var mapheightperiod = map.height - 1;
+    // Keep the clipmap windows centered on the camera.  An unchanged camera
+    // costs no source reads; only the renderer's view drives its windows.
+    if (terrainMode === 'clipmap' && terrainView)
+    {
+        terrainView.moveTo(camera.x, camera.y);
+    }
 
     var screenwidth = screendata.canvas.width|0;
     var sinang = Math.sin(camera.angle);
@@ -404,10 +537,15 @@ function Render()
         var invz = 1. / z * 240.;
         for(var i=0; i<screenwidth|0; i=i+1|0)
         {
-            var mapoffset = ((Math.floor(ply) & mapwidthperiod) << map.shift) + (Math.floor(plx) & mapheightperiod)|0;
-            var heightonscreen = (camera.height - map.altitude[mapoffset]) * invz + camera.horizon|0;
-            DrawVerticalLine(i, heightonscreen|0, hiddeny[i], map.color[mapoffset]);
-            if (heightonscreen < hiddeny[i]) hiddeny[i] = heightonscreen;
+            // Only the terrain fetch is replaced.  Points beyond the resident
+            // clipmap range are skipped, so the background sky stays intact.
+            var sampled = SampleTerrain(plx, ply);
+            if (sampled !== null)
+            {
+                var heightonscreen = (camera.height - sampled.height) * invz + camera.horizon|0;
+                DrawVerticalLine(i, heightonscreen|0, hiddeny[i], sampled.color|0);
+                if (heightonscreen < hiddeny[i]) hiddeny[i] = heightonscreen;
+            }
             plx += dx;
             ply += dy;
         }
@@ -484,6 +622,18 @@ function OnLoadedImages(result)
     {
         map.color[i] = 0xFF000000 | (datac[(i<<2) + 2] << 16) | (datac[(i<<2) + 1] << 8) | datac[(i<<2) + 0];
         map.altitude[i] = datah[i<<2];
+    }
+    // Map switch: the image maps are the read-only base, so the old clipmap
+    // view and its source are torn down before a fresh source is built.
+    if (terrainMode === 'clipmap')
+    {
+        if (terrainView) terrainView.destroy();
+        terrainView = null;
+        terrainSource = null;
+        terrainSource = CreateMapSource();
+        terrainView = new TerrainClipmap(terrainSource,
+            { side: CLIPMAP_SIDE, levels: CLIPMAP_LEVELS });
+        terrainView.moveTo(camera.x, camera.y);
     }
     Draw();
 }

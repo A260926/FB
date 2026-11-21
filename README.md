@@ -164,6 +164,107 @@ def Render(p, phi, height, horizon, scale_height, distance, screen_width, screen
 Render( Point(0, 0), 0, 50, 120, 120, 300, 800, 600 )
 ```
 
+## Procedural clipmap terrain (`terrain-clipmap.js`)
+
+The original engine needs a full 1024×1024 height/color array in memory. The
+optional clipmap mode instead generates terrain on demand around the camera,
+so an arbitrarily large procedural world never has to be materialized as one
+array. `terrain-clipmap.js` is plain JavaScript with no dependencies; it works
+both as a Node CommonJS module and as a classic browser script (the two
+constructors become globals).
+
+### Source and point-sampled levels of detail
+
+`new TerrainSource(sampleBase)` wraps a deterministic callback. For every
+integer world point `(x, y)` the callback returns `{height, color}`, where
+`height` is a finite number and `color` is a `0xAABBGGRR` uint32 (the same
+word layout the renderer already uses). The callback is only invoked for grid
+points that actually have to fill a cache slot.
+
+`new TerrainClipmap(source, {side, levels})` subscribes a view to a source.
+Level `l` has grid spacing `s = 2^l` and stores exactly `side × side` resident
+nodes in a fixed ring; the stored value is the source value at the exact world
+point `(ix·s, iy·s)` — there is no regional averaging. `moveTo(cx, cy)`
+positions every level so that its lower-left grid node is
+`(floor(cx/s) − R, floor(cy/s) − R)` with `R = (side−1)/2`. All integer world
+coordinates used by the source and the view are restricted to `[-2^30, 2^30]`;
+a `moveTo` whose windows would leave that range throws `RangeError` before any
+view state changes.
+
+`sample(x, y)` reconstructs the terrain around the last camera center using
+Chebyshev distance `r = max(|x−cx|, |y−cy|)`:
+
+* `r ≤ b0/2` uses level 0 alone, with `b_l = (R−2)·2^l`.
+* `b_l/2 < r < b_l` blends the bilinear value of level `l` with level `l+1`
+  using `w = 2r/b_l − 1` (0 at the inner edge, 1 at the outer edge).
+* `r = b_l` belongs to the coarser level, which keeps the transition
+  continuous; the last level has no coarser neighbor and is used directly.
+* `r > b_last` returns `null`, so the renderer simply skips that sample and
+  leaves the background sky untouched.
+
+Each level bilinearly interpolates `floor(x/s)`, `floor(y/s)` and their four
+neighbors. Heights and all four RGBA channels are interpolated as floats;
+channel rounding and clamping to `0..255` happens once, after any cross-level
+blending. `sample` never calls the source and never moves the statistics.
+
+### Sparse edits and override coordinates
+
+`source.edit([{x, y, height, color}, ...])` validates the whole batch first and
+commits only if every entry is legal (an illegal batch throws `RangeError` and
+leaves the source and every view unchanged). Duplicate coordinates resolve to
+the last entry; an empty batch does nothing. Edits are a sparse coverage over
+the *unwrapped* integer world coordinates, not the periodic tile coordinates.
+When the shipped image maps are used, the read-only base still samples with
+periodic modulo, while an edit at `(x, y)` affects exactly that world point and
+does not repeat across map tiles. A value read through the coverage still
+counts as one source read. Any number of views may subscribe to one source;
+after an edit, each live view re-reads only the edited points that land on one
+of its level grids and are currently resident. Edits outside the windows cost
+nothing, but the coverage persists, so traveling away and back shows the edit
+again.
+
+### Cache lifecycle and statistics
+
+Each level owns one fixed ring of `(side+1)²` slots, of which exactly
+`side²` hold the current window's nodes; the extra row/column lets a one-cell
+move keep the departing edge so stepping straight back into the previous
+window needs zero reads. Ring slots carry absolute grid coordinates and are
+never copied or reallocated. A `moveTo` reads only the set difference between
+the old and new windows: on a diagonal move the two incoming strips share one
+corner, which is read a single time; if a window moves by `side` cells or more
+on either axis the level is simply filled once. No departed history and no
+whole-world pyramid are retained — apart from the sparse edits, memory is
+`O(side²·levels)`.
+
+`stats()` reports cumulative `reads`, `fillsByLevel`, the current `resident`
+count, plus `lastReads` and `lastFillsByLevel` for the most recent `moveTo` or
+edit notification. `source.subscriberCount()` is the number of live views, and
+`view.destroy()` removes exactly that subscription; calling a destroyed view
+afterwards throws while every other view keeps working.
+
+### Renderer integration, controls and headless use
+
+In `VoxelSpace.html` the **Clipmap LOD** checkbox switches between the original
+periodic array path and the clipmap path. The depth stepping, screen
+projection, `DrawVerticalLine` and `hiddeny` occlusion are unchanged — only the
+terrain fetch is replaced, and samples outside the resident range are skipped.
+The camera's ground clearance in `UpdateCamera` uses the same view. The
+**Raise ground** button raises the grid point under the camera (through a
+sparse source edit in clipmap mode). Switching maps destroys the old view
+before building a fresh source, so no old source or subscription survives.
+There is no triangle mesh and no separate ray intersector.
+
+The headless production entry points used by the tests are
+`SetTerrainMode('clipmap' | 'array')`, `AttachTerrainClipmap(source, view?)`,
+`GetTerrainSource()`, `GetTerrainClipmap()` and
+`RaiseTerrainUnderCamera(delta)`.
+
+* Tests: `node task_support/run.js target` runs the three synchronous groups in
+  `test/clipmap.js` (`windows`, `updates`, `render`) and the example.
+* Example: `node examples/clipmap.js frame.ppm` renders a moved and an edited
+  procedural frame through the real HTML `Render` and writes a binary P6 PPM.
+* The original renderer check still runs via `node task_support/run.js baseline`.
+
 ## Links
 
 [Web Project demo][project demo] page
