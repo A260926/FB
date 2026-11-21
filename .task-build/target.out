@@ -1,0 +1,20 @@
+CASE propagation basic checks=4100
+CASE propagation block_light checks=7
+CASE propagation matches_reference checks=210
+CASE propagation no_residual_rings checks=1729
+GROUP propagation cases=4 checks=6046 COMPLETE
+CASE editing last_wins_and_set checks=940
+CASE editing empty_and_noop checks=6
+CASE editing equal_sources checks=731
+CASE editing roof_toggle checks=5
+CASE editing repeated_and_batches checks=86958
+CASE editing work_proportional checks=8
+GROUP editing cases=6 checks=88648 COMPLETE
+CASE lit_mesh matches_reference checks=14120
+CASE lit_mesh winding_and_splitting checks=29
+CASE lit_mesh flat_merge checks=620
+CASE lit_mesh gradient_preserved checks=1
+CASE lit_mesh paged_consistency checks=4
+CASE lit_mesh ply checks=32588
+GROUP lit_mesh cases=6 checks=47362 COMPLETE
+TARGET_COMPLETE cases=16

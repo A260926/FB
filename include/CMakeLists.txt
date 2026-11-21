@@ -43,6 +43,10 @@ SET(CORE_INC_FILES
 	PolyVox/Density.h
 	PolyVox/Exceptions.h
 	PolyVox/FilePager.h
+	PolyVox/LightVolume.h
+	PolyVox/LightVolume.inl
+	PolyVox/LitCubicSurfaceExtractor.h
+	PolyVox/LitCubicSurfaceExtractor.inl
 	PolyVox/LowPassFilter.h
 	PolyVox/LowPassFilter.inl
 	PolyVox/MarchingCubesSurfaceExtractor.h
