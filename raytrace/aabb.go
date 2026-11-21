@@ -15,7 +15,19 @@ func NewAABB(min mgl64.Vec3, max mgl64.Vec3) *AABB {
 	return &AABB{min, max}
 }
 
+// IsEmpty reports whether this box has been constructed as an empty bound
+// (Min = +Inf, Max = -Inf).  Empty boxes never produce a hit.
+func (aabb *AABB) IsEmpty() bool {
+	return aabb.min.X() > aabb.max.X() ||
+		aabb.min.Y() > aabb.max.Y() ||
+		aabb.min.Z() > aabb.max.Z()
+}
+
 func (aabb *AABB) Hit(ray *Ray, tMin float64, tMax float64) bool {
+	if aabb.IsEmpty() {
+		return false
+	}
+
 	minvec := [3]float64{aabb.min.X(), aabb.min.Y(), aabb.min.Z()}
 	maxvec := [3]float64{aabb.max.X(), aabb.max.Y(), aabb.max.Z()}
 	originvec := [3]float64{ray.Origin().X(), ray.Origin().Y(), ray.Origin().Z()}
@@ -46,6 +58,13 @@ func (aabb *AABB) Hit(ray *Ray, tMin float64, tMax float64) bool {
 }
 
 func (aabb *AABB) GetSurroundingBox(other *AABB) *AABB {
+	if aabb.IsEmpty() {
+		return other
+	}
+	if other.IsEmpty() {
+		return aabb
+	}
+
 	small := mgl64.Vec3{math.Min(aabb.min.X(), other.min.X()), math.Min(aabb.min.Y(), other.min.Y()), math.Min(aabb.min.Z(), other.min.Z())}
 	big := mgl64.Vec3{math.Max(aabb.max.X(), other.max.X()), math.Max(aabb.max.Y(), other.max.Y()), math.Max(aabb.max.Z(), other.max.Z())}
 	return NewAABB(small, big)

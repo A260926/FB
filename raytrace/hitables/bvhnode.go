@@ -1,6 +1,7 @@
 package hitables
 
 import (
+	"math"
 	"math/rand"
 	"sort"
 
@@ -43,13 +44,55 @@ func NewBvhNode(hitables []raytrace.Hitable, time0 float64, time1 float64) *BvhN
 	boxLeft := left.GetBoundingBox(time0, time1)
 	boxRight := right.GetBoundingBox(time0, time1)
 
-	if boxLeft == nil || boxRight == nil {
-		// todo: fail miserably
-	}
-
-	box := boxLeft.GetSurroundingBox(boxRight)
+	box := combineBoxes(boxLeft, boxRight)
 
 	return &BvhNode{box, left, right}
+}
+
+// combineBoxes merges two child bounds.  A nil or empty bound never enlarges
+// the other child's box.
+func combineBoxes(left *raytrace.AABB, right *raytrace.AABB) *raytrace.AABB {
+	leftEmpty := left == nil || left.IsEmpty()
+	rightEmpty := right == nil || right.IsEmpty()
+
+	switch {
+	case leftEmpty && rightEmpty:
+		inf := math.Inf(1)
+		return raytrace.NewAABB(mgl64.Vec3{inf, inf, inf}, mgl64.Vec3{-inf, -inf, -inf})
+	case leftEmpty:
+		return right
+	case rightEmpty:
+		return left
+	default:
+		return left.GetSurroundingBox(right)
+	}
+}
+
+// Refit recomputes this node's bounding box bottom-up from its existing
+// children.  It does not re-sort, build a replacement tree, or swap out leaf
+// objects, so a shared PatchSet keeps its identity.
+func (s *BvhNode) Refit(time0 float64, time1 float64) {
+	if s == nil {
+		return
+	}
+	leftNode, leftIsNode := s.left.(*BvhNode)
+	rightNode, rightIsNode := s.right.(*BvhNode)
+	if leftIsNode {
+		leftNode.Refit(time0, time1)
+	}
+	if rightIsNode && rightNode != leftNode {
+		rightNode.Refit(time0, time1)
+	}
+
+	var leftBox *raytrace.AABB
+	if s.left != nil {
+		leftBox = s.left.GetBoundingBox(time0, time1)
+	}
+	var rightBox *raytrace.AABB
+	if s.right != nil {
+		rightBox = s.right.GetBoundingBox(time0, time1)
+	}
+	s.box = combineBoxes(leftBox, rightBox)
 }
 
 func (s *BvhNode) Hit(ray *raytrace.Ray, tMin float64, tMax float64) *raytrace.HitRecord {
