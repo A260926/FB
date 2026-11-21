@@ -149,6 +149,7 @@ set(VCG_HEADERS
 		vcg/complex/algorithms/update/curvature.h
 		vcg/complex/algorithms/point_outlier.h
 		vcg/complex/algorithms/harmonic.h
+		vcg/complex/algorithms/tufted_laplacian.h
 		vcg/complex/algorithms/point_matching_scale.h
 		vcg/complex/algorithms/attribute_seam.h
 		vcg/complex/foreach.h

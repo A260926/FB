@@ -23,7 +23,14 @@
 #ifndef __VCGLIB_HARMONIC_FIELD
 #define __VCGLIB_HARMONIC_FIELD
 
+#include <cmath>
+#include <map>
+#include <queue>
+#include <stdexcept>
+#include <vector>
+
 #include <vcg/complex/complex.h>
+#include <vcg/complex/algorithms/tufted_laplacian.h>
 #include <Eigen/Sparse>
 
 namespace vcg {
@@ -176,6 +183,178 @@ public:
         EdgeAlreadyVisited
     };
 
+    /**
+     * @brief ComputeScalarField overload driven by a prebuilt
+     * vcg::tri::TuftedOperator (intrinsic Delaunay tufted Laplacian).
+     *
+     * The operator must match the vertex layout of @p m. Dirichlet constraints
+     * are imposed exactly by elimination of the constrained unknowns, and the
+     * real connected components of the input mesh are used: every component
+     * must carry at least one constraint.
+     *
+     * @throws std::invalid_argument on layout mismatch, duplicate conflicting
+     *         constraints or a component without anchors. In those cases @p
+     *         field is left untouched.
+     * @return false only when the linear solve fails; no partial values are
+     *         published in that case either.
+     */
+    template <typename ACCESSOR>
+    static bool ComputeScalarField(MeshType & m, const ConstraintVec & constraints,
+                                   ACCESSOR field, const TuftedOperator<MeshType> & op)
+    {
+        typedef Eigen::SparseMatrix<CoeffScalar> SpMat;
+        typedef Eigen::Triplet<CoeffScalar>      Triple;
+        typedef Eigen::Matrix<CoeffScalar, Eigen::Dynamic, 1> Vec;
+
+        RequireCompactness(m);
+
+        const int n = m.VN();
+        if (n != op.vertexCount())
+            throw std::invalid_argument(
+                "Harmonic: tufted operator does not match the mesh vertex layout");
+
+        // Resolve and validate the constraints.
+        std::vector<char> constrained(n, 0);
+        Vec prescribed = Vec::Zero(n);
+        if (constraints.empty())
+            throw std::invalid_argument("Harmonic: at least one Dirichlet constraint is required");
+        for (ConstraintIt it = constraints.begin(); it != constraints.end(); ++it)
+        {
+            if (it->first == nullptr)
+                throw std::invalid_argument("Harmonic: constraint on a null vertex");
+            const int idx = vcg::tri::Index(m, it->first);
+            if (idx < 0 || idx >= n)
+                throw std::invalid_argument("Harmonic: constraint references a vertex outside the mesh");
+            if (constrained[idx])
+            {
+                if (std::abs(prescribed[idx] - CoeffScalar(it->second)) >
+                    CoeffScalar(1e-12) * (CoeffScalar(1.0) + std::abs(prescribed[idx])))
+                    throw std::invalid_argument(
+                        "Harmonic: conflicting duplicate constraints on the same vertex");
+            }
+            else
+            {
+                constrained[idx] = 1;
+                prescribed[idx] = CoeffScalar(it->second);
+            }
+        }
+
+        // Real connected components of the input mesh.
+        const std::vector<int> component = connectedComponents(m);
+        const int compCount = component.empty() ? 0
+                                  : *std::max_element(component.begin(), component.end()) + 1;
+        std::vector<char> anchored(compCount, 0);
+        for (int i = 0; i < n; ++i)
+        {
+            if (constrained[i]) anchored[component[i]] = 1;
+        }
+        for (int c = 0; c < compCount; ++c)
+        {
+            if (!anchored[c])
+                throw std::invalid_argument(
+                    "Harmonic: every connected component must contain a constraint");
+        }
+
+        // Exact Dirichlet elimination: split constrained / free unknowns.
+        const SpMat full = op.laplacian();
+        std::vector<int> freeIndex(n, -1);
+        int freeCount = 0;
+        for (int i = 0; i < n; ++i)
+            if (!constrained[i]) freeIndex[i] = freeCount++;
+
+        SpMat reduced(freeCount, freeCount);
+        Vec rhs = Vec::Zero(freeCount);
+        std::vector<Triple> trips;
+        for (int k = 0; k < full.outerSize(); ++k)
+        {
+            if (constrained[k]) continue;   // outer index is a free column
+            for (typename SpMat::InnerIterator it(full, k); it; ++it)
+            {
+                const int r = it.row();
+                const int c = it.col();
+                if (constrained[r])
+                {
+                    // Symmetric counterpart of a free-row / constrained-col entry.
+                    rhs[freeIndex[c]] -= it.value() * prescribed[r];
+                }
+                else if (constrained[c])
+                {
+                    rhs[freeIndex[r]] -= it.value() * prescribed[c];
+                }
+                else
+                {
+                    trips.emplace_back(freeIndex[r], freeIndex[c], it.value());
+                }
+            }
+        }
+        reduced.setFromTriplets(trips.begin(), trips.end());
+
+        Vec freeValues(freeCount);
+        if (freeCount > 0)
+        {
+            Eigen::SimplicialLDLT<SpMat> solver;
+            solver.compute(reduced);
+            if (solver.info() != Eigen::Success)
+                return false;               // nothing has been written to field
+            freeValues = solver.solve(rhs);
+            if (solver.info() != Eigen::Success)
+                return false;
+        }
+
+        // Publish only after the whole solve succeeded.
+        Vec result(n);
+        for (int i = 0; i < n; ++i)
+            result[i] = constrained[i] ? prescribed[i] : freeValues[freeIndex[i]];
+        for (int i = 0; i < n; ++i)
+            field[i] = Scalar(result[i]);
+        return true;
+    }
+
+private:
+    /// Labels the connected components of the mesh through face connectivity.
+    static std::vector<int> connectedComponents(MeshType & m)
+    {
+        const int n = m.VN();
+        std::vector<std::vector<int> > adj(n);
+        for (size_t fi = 0; fi < m.face.size(); ++fi)
+        {
+            const FaceType & f = m.face[fi];
+            for (int e = 0; e < 3; ++e)
+            {
+                const int a = vcg::tri::Index(m, f.cV(e));
+                const int b = vcg::tri::Index(m, f.cV((e + 1) % 3));
+                adj[a].push_back(b);
+                adj[b].push_back(a);
+            }
+        }
+        std::vector<int> comp(n, -1);
+        int label = 0;
+        for (int s = 0; s < n; ++s)
+        {
+            if (comp[s] != -1) continue;
+            std::queue<int> q;
+            q.push(s);
+            comp[s] = label;
+            while (!q.empty())
+            {
+                const int v = q.front();
+                q.pop();
+                for (size_t i = 0; i < adj[v].size(); ++i)
+                {
+                    const int w = adj[v][i];
+                    if (comp[w] == -1)
+                    {
+                        comp[w] = label;
+                        q.push(w);
+                    }
+                }
+            }
+            ++label;
+        }
+        return comp;
+    }
+
+public:
 
     /**
      * @brief CotangentWeightIfNotVisited computes the cotangent weighting for an edge
