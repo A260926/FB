@@ -1,0 +1,8 @@
+mtllib scene.mtl
+v -1 -1 -3
+v 1 -1 -3
+v 1 1 -3
+v -1 1 -3
+usemtl emitter
+f 1 2 3
+f 1 3 4

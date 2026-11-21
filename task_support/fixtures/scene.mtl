@@ -1,0 +1,5 @@
+newmtl emitter
+Kd 0 0 0
+Ks 0 0 0
+Ke 0.64 0.25 0.09
+illum 2
