@@ -1,0 +1,32 @@
+# Inter-Quake Export
+joint "root" -1
+joint "tip" 0
+pq 1 0 0 0 0 0 1 1 1 1
+pq 0 2 0 0 0 0 1 1 1 1
+mesh "triangle"
+material "none"
+vp 1 0 0
+vt 0 0
+vn 0 0 1
+vx 1 0 0 1
+vb 0 0.5 1 0.5
+vp 2 0 0
+vt 1 0
+vn 0 0 1
+vx 1 0 0 1
+vb 1 1
+vp 1 1 0
+vt 0 1
+vn 0 0 1
+vx 1 0 0 1
+vb 0 1
+fa 0 1 2
+animation "move"
+framerate 1
+loop
+frame
+pq 1 0 0 0 0 0 1 1 1 1
+pq 0 2 0 0 0 0 1 1 1 1
+frame
+pq 3 0 0 0 0 0 1 1 1 1
+pq 0 2 0 0 0 0 1 1 1 1
