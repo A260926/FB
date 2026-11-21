@@ -1,0 +1,241 @@
+{
+  "repo": "https://github.com/jdupuy/HalfedgeCatmullClark",
+  "commit": "08f99cbb32203bbbc27fa970038a127986f6e6c0",
+  "license": "MIT selected from dual MIT/public-domain license; LICENSE.txt retained",
+  "upstream_files": [
+    {
+      "path": ".appveyor.yml",
+      "mode": "100644",
+      "git_blob": "621219c01b6a0032c7b86d6222f37a87ef7e390c",
+      "sha256": "da48518108fccbf2067c5f484d505c71b0ed8c009a950e8ec98962691f6d444b"
+    },
+    {
+      "path": ".travis.yml",
+      "mode": "100644",
+      "git_blob": "a87bd3b7950a50064420130d55e26749f3603088",
+      "sha256": "8c78ff1eaab29a53cb2bbe7f92926fd9457f31eb7b7b1401ce703fb5c848954b"
+    },
+    {
+      "path": "CatmullClark.h",
+      "mode": "100644",
+      "git_blob": "f838e8f8dbb99d8b57b4f1c93f0409b7f4cd5c46",
+      "sha256": "3e20b1de385c5c2740d640d5573022b95c963456ec3f89a1a479c45bd5081217"
+    },
+    {
+      "path": "LICENSE.txt",
+      "mode": "100644",
+      "git_blob": "abed9e9a241ba331b07b280b75e7ed21461c23cc",
+      "sha256": "7834597902bed999f7411a809641ee8f253d42fb54226ca377686501714fbb30"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "ad61988b389bccdd3e564217fd4c943a6724b7d3",
+      "sha256": "139255e1ed49deac03c2a74815b8d8c778feffda1a40de908d56b4079983fbf7"
+    },
+    {
+      "path": "examples/CMakeLists.txt",
+      "mode": "100644",
+      "git_blob": "9e9784dc0c57cf751f277b39ca80ae5597836291",
+      "sha256": "e42d56a62124a5c698481ee6767f9a31b41a22c99fc524117f5b697394bdbc53"
+    },
+    {
+      "path": "examples/ConcurrentBitField.h",
+      "mode": "100644",
+      "git_blob": "2ac5b11b35436e2123b1a439cca24757bdc6ce71",
+      "sha256": "0edc3cdf6c39b1b536727c0b89fdf8ca1b3c27fe1bec6aebb2084c740dc46641"
+    },
+    {
+      "path": "examples/README.md",
+      "mode": "100644",
+      "git_blob": "4b9696932a03cd58e0cfd787aa4a926bdc76881f",
+      "sha256": "81c8190fab0069bee3b0098a21174e07eedeaf56f173730583c95f27c01708ac"
+    },
+    {
+      "path": "examples/glad/glad.c",
+      "mode": "100644",
+      "git_blob": "40ff64d4f8e5923465eaa637675477578d62623b",
+      "sha256": "c6e95acd15fcd414b660181ba6d943b1b801a3b88df61797261d83ab06ecf0f3"
+    },
+    {
+      "path": "examples/glad/glad.h",
+      "mode": "100644",
+      "git_blob": "948b4f557d42101ee375090532d40962ea9a58a9",
+      "sha256": "7221a8e04537fdbe415a8c399d4df37f4dc26c22b689a4394d034b60f552b437"
+    },
+    {
+      "path": "examples/glad/khrplatform.h",
+      "mode": "100644",
+      "git_blob": "dd22d9270188f2878f5dd47806497b16b34db0fe",
+      "sha256": "e206a6931f98ffe1c5c7ece69c4f94bbe1c9279243f40cbe7782848a0d3fa2de"
+    },
+    {
+      "path": "examples/mesh_info.c",
+      "mode": "100644",
+      "git_blob": "63ce1f0ec0fe5fd70aea80cfa5b9d130d3e984eb",
+      "sha256": "eea4df11cc5a19c4735de69422019c629a7d8cd7dbda9d1a0880562787ee40e5"
+    },
+    {
+      "path": "examples/meshes/ArmorGuy.ccm",
+      "mode": "100644",
+      "git_blob": "4b4f87427a08ec94650c3d411ceada475c3066aa",
+      "sha256": "609b286d71187f3d92912354156f614b92fd75a84aaeb0af805b9f8cb9758ec9"
+    },
+    {
+      "path": "examples/meshes/Bigguy.ccm",
+      "mode": "100644",
+      "git_blob": "0e51fe1dccf0affe741e72b6aa3fecd88217a9f9",
+      "sha256": "778a1a82fb632f78b23b8922d2773dc156db1aceb142e542e4945afb753e2025"
+    },
+    {
+      "path": "examples/meshes/Bishop.ccm",
+      "mode": "100644",
+      "git_blob": "0c6607b71fc12f9c7e769561fc275c35b2039840",
+      "sha256": "9d5f93c62143d5eebe8615ba61c06d63d05c97f00d855833146109527a55f470"
+    },
+    {
+      "path": "examples/meshes/Car.ccm",
+      "mode": "100644",
+      "git_blob": "9a48988926b8fc27b31fbbb46b9c3ae34918aebf",
+      "sha256": "26808d93f62ce84d84075d7fee65b48d9500f1f67726f58c2a5cbcf0a5a61248"
+    },
+    {
+      "path": "examples/meshes/Imrod.ccm",
+      "mode": "100644",
+      "git_blob": "ed5d258fbf4190cdced1c140b7a63dc3b42fae5d",
+      "sha256": "8f1590774fc0978be64989a02dac282929868fb45491c8c3b216ddceafd18e7c"
+    },
+    {
+      "path": "examples/meshes/Monsterfrog.ccm",
+      "mode": "100644",
+      "git_blob": "72776ad56db6f6ed1d77b278329ac10f590e7009",
+      "sha256": "7481a7f6788cf73267e4fcce844f1745203ae9add5f88bd48add0769d35ffb84"
+    },
+    {
+      "path": "examples/meshes/Rook.ccm",
+      "mode": "100644",
+      "git_blob": "64ba50d7ab03ad40bb2e78fc33055f16a4c0458b",
+      "sha256": "674ebea7317b760fe39834cb621c9ad8afae8f570bfc9e2adbb90b9779f1cbd2"
+    },
+    {
+      "path": "examples/meshes/T-Rex.ccm",
+      "mode": "100644",
+      "git_blob": "e64b5f0358abe6f8dabe04ad3aaac091aff767d5",
+      "sha256": "69ca90c37426d7bebc35d463287de1a8afd75fe1675e62153356c348b5cacbef"
+    },
+    {
+      "path": "examples/obj_to_ccm.c",
+      "mode": "100644",
+      "git_blob": "55f8d64cb4224f4d5687f8fa48659b06644e6070",
+      "sha256": "7562ea9df4327fe907bd6937ab9954d5073fdcaf217df7d77cf17eea21f3b9a9"
+    },
+    {
+      "path": "examples/subd_cpu.c",
+      "mode": "100644",
+      "git_blob": "218f1cf8bfcfd868fbac0dddafae5bd9abb659f6",
+      "sha256": "cdf1d816831a0c5185e63d94f33d01faa37601d6c1683ddd1a0892be32389f31"
+    },
+    {
+      "path": "examples/subd_gpu.c",
+      "mode": "100644",
+      "git_blob": "e10de2cc3e5965e3ce9b1296134cdbf3280336c9",
+      "sha256": "5d0732f1c3def134fb8046045b4860dcef2d9bf93a653bc00ad7fd52a3869408"
+    },
+    {
+      "path": "glsl/CatmullClark_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "231abc7814d41e8daac18fb4eeb0597cb639187d",
+      "sha256": "2aedc3834aeb8ec2258faf3ef0ec18eb9b940b1da38a5f2edecdae03eeea198b"
+    },
+    {
+      "path": "glsl/cc_CageEdgePoints_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "7e5c6b6fa49739ab1a7af3c3e078e991823a3a34",
+      "sha256": "b255bbb03582cc2d503c49e007bcf9286eecbbf5a93060ff0f589fba6fa2b8c4"
+    },
+    {
+      "path": "glsl/cc_CageFacePoints_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "ca5a16b0b337407582364515edc3cbc27605061d",
+      "sha256": "af4aa1340e9fcd4d165c1caba056c609fcd9a438e76924bba26679a635cf16be"
+    },
+    {
+      "path": "glsl/cc_CageVertexPoints_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "b745f11e67c0ceb8e82725cb27a9e20705531618",
+      "sha256": "5e6a33c1072b23301018aa57cc7f5c0b9c65df5cf88eef2adb9d168dd4e0cf79"
+    },
+    {
+      "path": "glsl/cc_EdgePoints_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "13dee30dda8bbaa0d79c99c0d43c872adb24af97",
+      "sha256": "aebc4e5bf194911770c17c285c0d02687236a6f8900fa1b2c8b6600d673e289a"
+    },
+    {
+      "path": "glsl/cc_FacePoints_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "bccc15684a65ab4735ee6769a935af8bfd73512a",
+      "sha256": "6aa9763f173e9f94089818737e763c78c0b209d966fa4cfedf96e4a4dcc2f676"
+    },
+    {
+      "path": "glsl/cc_RefineCageCreases.glsl",
+      "mode": "100644",
+      "git_blob": "3993b1b45c617b73b0d1bc120468386e203788cb",
+      "sha256": "73c9b7b1af38cd51999d574181e0b9b5f55658d7246ed4f3df3ccef7bc3a5268"
+    },
+    {
+      "path": "glsl/cc_RefineCageHalfedges.glsl",
+      "mode": "100644",
+      "git_blob": "a5a17650914be3c322140eae7cd863f7d27fcf21",
+      "sha256": "1efee7121dfed2bfac46a0add2b1853abffac90ae3acd5c6e7aa17b6a8b98841"
+    },
+    {
+      "path": "glsl/cc_RefineCageVertexUvs.glsl",
+      "mode": "100644",
+      "git_blob": "b1fcb2613380d9dd2ec613fe28224cf287716f6a",
+      "sha256": "3606c4ccee5eaaff7de1efeb7dfd17738e0a24855056f1d3774c23778be82442"
+    },
+    {
+      "path": "glsl/cc_RefineCreases.glsl",
+      "mode": "100644",
+      "git_blob": "ddd3e8d07f2c7191c578ef9dc652e81491195888",
+      "sha256": "44e51d8544836d3eb66fee8598f1673dcce7f93362bdd48550a5cd0963bf43c3"
+    },
+    {
+      "path": "glsl/cc_RefineHalfedges.glsl",
+      "mode": "100644",
+      "git_blob": "a4dabc53ed9df808371e7e9a15f0529c39f1e6ba",
+      "sha256": "0cfdd3291aebf0aabedfe4335adcbcbe5b383313584166d9e4f86801bb143529"
+    },
+    {
+      "path": "glsl/cc_RefineVertexUvs.glsl",
+      "mode": "100644",
+      "git_blob": "c659d230d2cbe14e45c24e5576b4dea3bf86ac37",
+      "sha256": "f9ebeff6395edff08aeeb161cc9e760e397ed8c135bf35f081f296cab40fe721"
+    },
+    {
+      "path": "glsl/cc_VertexPoints_Scatter.glsl",
+      "mode": "100644",
+      "git_blob": "59eeb499ef5779b350a3ca6e6e5870cf1c96ed6d",
+      "sha256": "a4a700ae5efc1c6ff6a41384e10e5a8026c20035c851734c2b953df697b5d6ca"
+    }
+  ],
+  "unexpanded_optional_gitlinks": [
+    {
+      "path": "examples/submodules/dj_opengl",
+      "commit": "92e01bd59364b55c267c18b7ab300d0d17208759",
+      "reason": "GPU demo-only optional modules, not reachable from CPU header build"
+    },
+    {
+      "path": "examples/submodules/glfw",
+      "commit": "114776a24605418e6d719d2f30141e351e93c6e0",
+      "reason": "GPU demo-only optional modules, not reachable from CPU header build"
+    }
+  ],
+  "exclusions": [
+    ".gitmodules removed; GPU-only gitlinks not expanded"
+  ],
+  "binary_assets": "all original examples/meshes/*.ccm retained unchanged, not required by baseline or new headless example",
+  "runtime": "C99 original CPU header + C++17 standard library, no downloads/packages/display/GPU",
+  "support": "upstream.c only instantiates original implementation; tetra baseline exercises forward only; no reverse implementation/tests/example provided"
+}
