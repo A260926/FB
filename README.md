@@ -379,6 +379,42 @@ $ ./minpt \
     - `sensor_diagonal_length`: Diagonal length of the sensor [mm]
     - `sensor_sensitivity`: Sensitivity multiplier of the sensor
 
+### GRIN layer mode (`--grin`)
+
+Appending `--grin y0 y1 n0 k maxArc` after the 19 positional arguments renders
+the scene through a **graded-index (GRIN) medium** instead of placing a
+refractive surface in front of the geometry: planar textures appear shifted
+because the light itself travels along curved paths.
+
+- **Index of refraction.** The medium index `n` varies only with world `y`:
+  `n = n0` for `y < y0`, `n = n0 * exp(k * (y - y0))` for `y0 <= y <= y1`, and
+  `n = n0 * exp(k * (y1 - y0))` for `y > y1`. The profile is continuous, so
+  there is no boundary reflection, absorption, or scattering; rays bend
+  smoothly following `du/ds = (grad(n) - u*dot(u,grad(n)))/n` while the
+  horizontal optical momentum `n*(u.x,u.z)` is conserved inside the
+  exponential layer (solved analytically there). `k = 0` reduces to a uniform
+  medium, i.e. ordinary straight-line path tracing.
+- **Arc-length clipping.** Intersections are reported by the *true arc
+  length* `s` traveled along the curved ray from its origin (not by the
+  parameter of a possibly non-unit direction). `maxArc` is the far clip of
+  every transport segment: the query covers `arcMin..maxArc` with both ends
+  included, and a ray that hits nothing within `maxArc` escapes to the
+  environment light with the tangent it has at the clip point.
+- **L/n^2.** In a lossless graded-index medium the quantity `L/n^2`
+  (radiance divided by the squared index) is invariant along a ray, so the
+  radiance carried over one segment is scaled by `(n_start/n_end)^2`, where
+  `n_start`/`n_end` are the profile indices at the segment's endpoints. The
+  same factor applies to the segment that escapes to the environment map.
+
+In GRIN mode the original camera, BSDF sampling (`Obj::samp`) and triangle
+materials are reused, but explicit light sampling and the corresponding MIS
+weight are disabled (curved bidirectional light connections are not
+implemented); emitters hit by a curved path accumulate at full weight. The
+arrival tangent of each segment drives the next bounce (`wi = -tangent`),
+surface refraction still uses the material's own `Ni`, and medium-layer
+boundaries or turning points consume neither scattering depth nor random
+numbers. Without `--grin` the renderer behaves exactly as before.
+
 ### Input/Output Description
 
 #### Image file
