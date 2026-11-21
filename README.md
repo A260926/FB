@@ -118,6 +118,63 @@ rasterizer.draw(program, buffer);
 rasterizer.framebuffer().color().save("00_triangle.png");
 
 ```
+## Texture source selection (`view_texture`)
+
+`rasterizer/view_texture.h` adds a small pipeline for a mesh without UVs that
+must be textured from one of two source-camera images.
+
+### Visibility sampling
+
+Each original face is rasterized once per source camera against the full target
+grid, entirely before the perspective divide:
+
+- The face polygon is clipped against the six homogeneous planes
+  `-w <= x, y, z <= w` with `w > 0`. The clipped polygon is fan-triangulated;
+  every shard keeps the original face index and its attribute source.
+- The fan is rasterized at pixel centres `(x + 0.5, y + 0.5)` in a y-up target.
+  Coverage is a half-open (top-left) rule: a directed edge includes its
+  boundary when it goes downwards, or when it is horizontal and goes left.
+  Coverage is applied to faces consistently wound counter-clockwise, so
+  reversing the input winding does not change the result when culling is off.
+- `Covered(i, c)` is the number of distinct target pixel centres that face `i`
+  covers in camera `c`; it is never estimated from a bounding box.
+- Depth is the screen-linear `z / w` of a shard vertex mapped to `[0, 1]`, then
+  interpolated. After all faces have been rasterized, one depth resolve pass
+  over the target decides the winner per pixel; on equal depth the later input
+  face wins. `Won(i, c)` counts pixels whose winning identity is face `i`.
+- A face may use camera `c` only when all three original vertices are inside
+  that camera's clip volume, `Covered > 0`, and `Won == Covered`. This is a
+  visibility test in real pixel samples; it does not claim to detect
+  sub-pixel occluders. Faces crossing the near plane or the viewport are still
+  clipped and still occlude other faces, even though they cannot be selected.
+- Statistics use one full-mesh pass per camera plus one resolve pass; no face
+  re-renders the whole mesh.
+
+### Energy and labels
+
+Faces with at least one selectable source get a binary label. The data cost is
+`U(i, c) = W*H - Covered(i, c)`. Over every shared-position interior edge
+(exactly two incident faces) whose two faces both have selectable sources and
+differ in label, one `seamPenalty` is added. Boundary edges and faces without a
+source add nothing. The global minimum energy is found exactly with an s-t
+minimum cut (Dinic), so it is neither per-face greedy nor exponential; labels
+without a source are `-1`.
+
+### Drawing and texture lifetime
+
+`draw` reuses the ordinary `Renderer` triangle pipeline under the observer
+camera. Each face is submitted with its flat label held in a uniform (the label
+is never an interpolated varying), so all fragments of a face use the same
+source; the perspective-correct world position is projected
+with the selected source matrix and divided by `w` to
+`uv = (ndc.xy + 1) / 2`. Sampling uses `uv * size - 0.5`, `floor` for the
+neighbouring texels, a per-texel clamp, and bilinear filtering on linear
+`Vec4` colours. Faces labelled `-1` use the caller-provided fallback colour.
+
+A returned `Selection` owns its statistics and labels; selecting again never
+mutates a previous result. The mesh and both source textures are only read
+during selection and drawing, so the caller must keep them alive.
+
 ## Results
 
 Model Loading and Texture Mapping ("Sad toaster" [Link](https://skfb.ly/on9Dn) by tasha.lime.)

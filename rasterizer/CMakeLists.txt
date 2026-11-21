@@ -12,12 +12,14 @@ project( rasterizer )
 set( SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/renderer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/texture.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/view_texture.cpp"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/math/utility.cpp"
     )
 
 set( HDR
     "${CMAKE_CURRENT_SOURCE_DIR}/renderer.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/view_texture.h"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/buffer.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/program.h"
