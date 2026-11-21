@@ -162,6 +162,11 @@ void glInit(void *zbuffer1)
     GLContext *c;
     GLViewport *v;
     ZBuffer *zbuffer = (ZBuffer *) zbuffer1;
+    /* release a program still bound to a previous context */
+    if (gl_ctx.bound_shader) {
+        tglShaderRelease(gl_ctx.bound_shader);
+        gl_ctx.bound_shader = NULL;
+    }
 #if TGL_HAS(TINYGL_RUNTIME_COMPAT_TEST)
     if (TinyGLRuntimeCompatibilityTest())
         gl_fatal_error("TINYGL_FAILED_RUNTIME_COMPAT_TEST");
@@ -371,6 +376,10 @@ void glInit(void *zbuffer1)
 void glClose(void)
 {
     GLContext *c = gl_get_context();
+    if (c->bound_shader) {
+        tglShaderRelease(c->bound_shader);
+        c->bound_shader = NULL;
+    }
     for (GLuint i = 0; i < 3; i++) {
         gl_free(c->matrix_stack[i]);
     }

@@ -132,7 +132,7 @@ static void GLinterpolate(GLVertex *q, GLVertex *p0, GLVertex *p1, GLfloat t)
 #ifdef _OPENMP
 #pragma omp simd
 #endif
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 4; i++)
         q->color.v[i] = p0->color.v[i] + (p1->color.v[i] - p0->color.v[i]) * t;
 }
 
@@ -236,6 +236,7 @@ static void updateTmp(GLContext *c,
         q->color.v[0] = p0->color.v[0] + (p1->color.v[0] - p0->color.v[0]) * t;
         q->color.v[1] = p0->color.v[1] + (p1->color.v[1] - p0->color.v[1]) * t;
         q->color.v[2] = p0->color.v[2] + (p1->color.v[2] - p0->color.v[2]) * t;
+        q->color.v[3] = p0->color.v[3] + (p1->color.v[3] - p0->color.v[3]) * t;
     }
 
 #if TGL_OPTIMIZATION_HINT_BRANCH_COST < 1
@@ -452,6 +453,11 @@ void gl_draw_triangle_fill(GLVertex *p0, GLVertex *p1, GLVertex *p2)
     GLint dw = zb->depth_write;
     ZB_fillTriangleFunc func;
 
+    if (c->bound_shader) {
+        tgl_shader_fill_triangle(c, p0, p1, p2);
+        return;
+    }
+
     if (c->texture_2d_enabled) {
 #if TGL_HAS(LIT_TEXTURES)
         if (c->current_shade_model != GL_SMOOTH) {
@@ -505,6 +511,10 @@ void gl_draw_triangle_fill(GLVertex *p0, GLVertex *p1, GLVertex *p2)
 void gl_draw_triangle_line(GLVertex *p0, GLVertex *p1, GLVertex *p2)
 {
     GLContext *c = gl_get_context();
+    if (c->bound_shader) {
+        tgl_shader_reject_state(c);
+        return;
+    }
     if (c->zb->depth_test) {
         if (p0->edge_flag)
             ZB_line_z(c->zb, &p0->zp, &p1->zp);
@@ -526,6 +536,10 @@ void gl_draw_triangle_line(GLVertex *p0, GLVertex *p1, GLVertex *p2)
 void gl_draw_triangle_point(GLVertex *p0, GLVertex *p1, GLVertex *p2)
 {
     GLContext *c = gl_get_context();
+    if (c->bound_shader) {
+        tgl_shader_reject_state(c);
+        return;
+    }
     if (p0->edge_flag)
         ZB_plot(c->zb, &p0->zp);
     if (p1->edge_flag)

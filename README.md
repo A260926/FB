@@ -133,6 +133,140 @@ OpenMP is used on supported platforms to parallelize certain operations:
 
 Compile with `-fopenmp` to enable. This is optional (disabled in `config.mk` by default) and not required to use TinyGL.
 
+## Fragment Shader Bytecode (glshader.h)
+
+TinyGL can run a small validated bytecode program on the CPU during
+triangle rasterization, replacing the fixed per-fragment color computation.
+Everything is plain C99 with the standard library: no shader compiler, no
+window system, no GPU. The public interface lives in
+`include/TGL/glshader.h`, the validator and four-lane execution engine in
+`src/shader_vm.c`, and the GL integration (binding, rasterization) in
+`src/shader.c`. A runnable demo is in `examples/shader_vm.c` and a full test
+suite in `checks/shader_vm.c`.
+
+### Programs and lifecycle
+
+```c
+TGLShaderError err;
+TGLShaderProgram *prog = tglShaderCreate(code, ninst, &err); /* refcount 1 */
+tglBindShader(prog);        /* context keeps its own reference */
+tglShaderRelease(prog);     /* release the caller handle, keep drawing */
+... draw ...
+tglBindShader(NULL);        /* unbind: releases the context reference */
+glClose();                  /* also releases a bound program */
+```
+
+* `tglShaderCreate` validates the whole program and stores a private copy of
+  the instructions; mutating the caller's array afterwards has no effect.
+  On failure it returns `NULL` and, when `err` is not `NULL`, stores an
+  error code and the *original instruction index* the error is attributed
+  to. A failed creation never changes the current binding.
+* `tglBindShader`/`tglGetBoundShader` manage the binding. Binding is
+  **immediate state**: it is never recorded into display lists, and
+  triangles replayed from a list use whatever program is bound at replay
+  time. The context keeps a reference, so releasing the caller's handle
+  after binding is safe. Unbinding and `glClose()` release the context
+  reference; the program is freed when the last reference goes away.
+* With no program bound, the fixed pipeline behaves exactly as before.
+
+### Registers and inputs
+
+Each of the four lanes of a 2x2 pixel quad owns 16 registers of four
+floats. `r0` receives the perspective-correct `(u, v, 0, 1)` texture
+coordinate (after the original texture matrix), `r1` the Gouraud color,
+`r2` = (pixel center x, pixel center y, window depth in [0,1], 1/clip.w)
+where the window depth is the pipeline's own 16-bit depth-buffer value
+divided by 65535, i.e. the same scale the `zz >= zbuf` depth test uses.
+`r0..r2` are read-only inputs; `r3..r15` are temporaries that start
+undefined.
+
+### Instruction set
+
+`TGLShaderInst` has an opcode `op`, integer operands `dst,a,b,c`, four
+float immediates `imm[4]` and an unsigned `count`; only the operands an
+opcode uses are validated. `CONST, MOV, ADD, MUL, MAD, LT, TEX` are the
+arithmetic/texture ops (`TEX` samples the 256x256 texture bound at draw
+time with nearest repeat sampling, RGB normalized to [0,1], alpha 1).
+`IF/ELSE/ENDIF` give structured branches, `REPEAT/ENDREPEAT` a finite
+(1..16) loop with per-lane `BREAK_IF`/`CONTINUE_IF`, `DISCARD_IF` removes a
+lane from the write mask (execution continues), `DDX/DDY` are
+quad-neighbour differences, and exactly one `OUTPUT` must be the final
+instruction outside every block. Limits: 1..256 instructions, structural
+nesting depth 8, and a loop-expansion budget of 4096 instructions
+(`REPEAT` bodies count `count` times; `IF/ELSE/ENDIF/OUTPUT` count, the
+loop markers do not).
+
+Validation is whole-program: structure and operands first, then a
+definite-initialization analysis over the real structured control flow
+(every condition feasible both ways, break/continue edges included). Any
+register read that may be reached before a definition is rejected with the
+lowest offending instruction index; unclosed blocks report their opening
+instruction; budget overflow reports the `REPEAT` that first makes the
+expansion exceed the limit (or the final instruction when no loop caused
+it). `DDX/DDY` are only legal outside all blocks.
+
+### Quad execution model
+
+Rasterization walks the triangle's bounding box in even-aligned 2x2 quads
+(lane order: top-left, top-right, bottom-left, bottom-right) and only
+executes quads with at least one covered lane. Coverage uses pixel centers
+and half-open (top-left) edges, so clipped fan triangles share edges
+without holes or double commits. Lanes of a quad not covered by the
+current clipped triangle are **helpers**: they execute with inputs
+extrapolated from *this* triangle's own attribute planes (never copied
+from a neighbour) and never write. Each lane branches and exits loops on
+its own condition and rejoins at merge points. `DISCARD_IF` only cancels
+color/depth writes; the lane keeps computing registers, so later `DDX/DDY`
+still see its values. `DDX` is right-minus-left within each row, `DDY`
+bottom-minus-top within each column, computed from the real final
+registers of the neighbouring lanes (not an analytic UV derivative, and
+discarded lanes are not removed from the difference). The depth test runs
+after the shader with the original `zz >= zbuf` comparison; only covered,
+non-discarded, depth-passing lanes write color/depth. If any lane
+(including helpers) produces a non-finite value, or a perspective
+denominator is zero, the whole quad is dropped and an error is recorded;
+quads completed earlier are kept. `OUTPUT` RGB is clamped to [0,1] only at
+the final byte conversion.
+
+Program mode currently supports `GL_SMOOTH` filled triangles only and
+keeps the existing clipping, culling, texture and depth toggles.
+Blending and point/line polygon modes are rejected explicitly: the draw is
+skipped and the error is recorded. Query it with:
+
+```c
+int e = tglShaderGetError(); /* first pending TGL_SHADER_RT_* error, clears it */
+```
+
+### Independent quad execution
+
+`src/shader_vm.c` also exposes the execution engine without any GL
+context:
+
+```c
+unsigned mask = 0xF;                 /* in: coverage, out: write mask */
+float in[4][3][4], out[4][4];        /* lane inputs r0..r2, lane outputs */
+int rc = tglShaderExecQuad(prog, in, out, /*coverage*/0xF, &mask,
+                           sampler, sampler_ctx);
+```
+
+`TEX` programs require a sampler callback (`tx, ty -> rgba` floats);
+programs without `TEX` may pass `NULL`. On failure (non-finite produced
+value, or `TEX` without a sampler) the return code is a `TGL_SHADER_RT_*`
+value and `out`/`*mask` are left unchanged. A zero coverage mask is valid,
+produces a zero write mask, and still executes the program.
+
+### Example
+
+`examples/shader_vm.c` builds a brick texture and a material program with
+a warp loop, mortar branch and speckle discard, renders
+`surface.ppm`, and dumps one quad's inputs, `DDX/DDY` register
+differences and write mask to `trace.csv`:
+
+```sh
+cmake -S task_support -B .task-build && cmake --build .task-build --target shader_vm_example
+mkdir out && ./.task-build/shader_vm_example out
+```
+
 ## Extension Functions
 Functions not in the GL 1.1 spec, added for convenience. These cannot be added to display lists unless noted.
 

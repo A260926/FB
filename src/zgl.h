@@ -6,6 +6,7 @@
 #endif
 
 #include <TGL/gl.h>
+#include <TGL/glshader.h>
 #include "zbuffer.h"
 #include "zfeatures.h"
 #include "zmath.h"
@@ -340,6 +341,10 @@ typedef struct GLContext {
     GLint boundcolorbuffer;
     GLint boundtexcoordbuffer;
     GLubyte rasterposvalid;
+    /* fragment bytecode program bound to this context (immediate state,
+       never recorded into display lists) */
+    TGLShaderProgram *bound_shader;
+    GLint shader_error;
 #if TGL_HAS(ERROR_CHECK)
     GLenum error_flag;
 #endif
@@ -396,6 +401,13 @@ void gl_draw_triangle_line(GLVertex *p0, GLVertex *p1, GLVertex *p2);
 void gl_draw_triangle_fill(GLVertex *p0, GLVertex *p1, GLVertex *p2);
 void gl_draw_triangle_select(GLVertex *p0, GLVertex *p1, GLVertex *p2);
 void gl_draw_triangle_feedback(GLVertex *p0, GLVertex *p1, GLVertex *p2);
+
+/* shader.c: program-mode fill path and rejection of unsupported modes */
+void tgl_shader_fill_triangle(GLContext *c,
+                              GLVertex *p0,
+                              GLVertex *p1,
+                              GLVertex *p2);
+void tgl_shader_reject_state(GLContext *c);
 /* matrix.c */
 void gl_print_matrix(const GLfloat *m);
 /*
