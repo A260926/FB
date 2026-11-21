@@ -28,11 +28,17 @@
 Integrator::~Integrator() {
 }
 // Integrator Utility Functions
+//
+// The direct lighting helpers carry the local path throughput
+// operator T (eye-to-current-vertex).  Incident light is acted on by
+// T after the local BSDF operator, i.e. T * F * Li; for ordinary
+// materials T and F are diagonal and the results are identical to
+// the old per-channel products.
 COREDLL Spectrum UniformSampleAllLights(const Scene *scene,
 		const Point &p, const Normal &n, const Vector &wo,
 		BSDF *bsdf, const Sample *sample,
 		int *lightSampleOffset, int *bsdfSampleOffset,
-		int *bsdfComponentOffset) {
+		int *bsdfComponentOffset, const SpectralTransfer &throughput) {
 	Spectrum L(0.);
 	for (u_int i = 0; i < scene->lights.size(); ++i) {
 		Light *light = scene->lights[i];
@@ -43,7 +49,7 @@ COREDLL Spectrum UniformSampleAllLights(const Scene *scene,
 		for (int j = 0; j < nSamples; ++j)
 			Ld += EstimateDirect(scene, light, p, n, wo, bsdf,
 				sample, lightSampleOffset[i], bsdfSampleOffset[i],
-				bsdfComponentOffset[i], j);
+				bsdfComponentOffset[i], j, throughput);
 		L += Ld / nSamples;
 	}
 	return L;
@@ -52,7 +58,8 @@ COREDLL Spectrum UniformSampleOneLight(const Scene *scene,
 		const Point &p, const Normal &n,
 		const Vector &wo, BSDF *bsdf, const Sample *sample,
 		int lightSampleOffset, int lightNumOffset,
-		int bsdfSampleOffset, int bsdfComponentOffset) {
+		int bsdfSampleOffset, int bsdfComponentOffset,
+		const SpectralTransfer &throughput) {
 	// Randomly choose a single light to sample, _light_
 	int nLights = int(scene->lights.size());
 	int lightNum;
@@ -66,7 +73,7 @@ COREDLL Spectrum UniformSampleOneLight(const Scene *scene,
 	return (float)nLights *
 		EstimateDirect(scene, light, p, n, wo, bsdf, sample,
 			lightSampleOffset, bsdfSampleOffset,
-			bsdfComponentOffset, 0);
+			bsdfComponentOffset, 0, throughput);
 }
 COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		const Point &p, const Normal &n,
@@ -75,7 +82,7 @@ COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		int lightNumOffset, int bsdfSampleOffset,
 		int bsdfComponentOffset, float *&avgY,
 		float *&avgYsample, float *&cdf,
-		float &overallAvgY) {
+		float &overallAvgY, const SpectralTransfer &throughput) {
 	int nLights = int(scene->lights.size());
 	// Initialize _avgY_ array if necessary
 	if (!avgY) {
@@ -91,7 +98,7 @@ COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		L = UniformSampleOneLight(scene, p, n,
 		    wo, bsdf, sample, lightSampleOffset,
 			lightNumOffset, bsdfSampleOffset,
-			bsdfComponentOffset);
+			bsdfComponentOffset, throughput);
 		float luminance = L.y();
 		overallAvgY = luminance;
 		for (int i = 0; i < nLights; ++i)
@@ -109,7 +116,7 @@ COREDLL Spectrum WeightedSampleOneLight(const Scene *scene,
 		Light *light = scene->lights[lightNum];
 		L = EstimateDirect(scene, light, p, n, wo, bsdf,
 			sample, lightSampleOffset, bsdfSampleOffset,
-			bsdfComponentOffset, 0);
+			bsdfComponentOffset, 0, throughput);
 		// Update _avgY_ array with reflected radiance due to light
 		float luminance = L.y();
 		avgY[lightNum] =
@@ -124,7 +131,8 @@ Spectrum EstimateDirect(const Scene *scene,
         const Light *light, const Point &p,
 		const Normal &n, const Vector &wo,
 		BSDF *bsdf, const Sample *sample, int lightSamp,
-		int bsdfSamp, int bsdfComponent, u_int sampleNum) {
+		int bsdfSamp, int bsdfComponent, u_int sampleNum,
+		const SpectralTransfer &throughput) {
 	Spectrum Ld(0.);
 	// Find light and BSDF sample values for direct lighting estimate
 	float ls1, ls2, bs1, bs2, bcs;
@@ -151,25 +159,31 @@ Spectrum EstimateDirect(const Scene *scene,
 	Spectrum Li = light->Sample_L(p, n,
 		ls1, ls2, &wi, &lightPdf, &visibility);
 	if (lightPdf > 0. && !Li.Black()) {
-		Spectrum f = bsdf->f(wo, wi);
-		if (!f.Black() && visibility.Unoccluded(scene)) {
-			// Add light's contribution to reflected radiance
-			Li *= visibility.Transmittance(scene);
+		SpectralTransfer f = bsdf->fTransfer(wo, wi);
+		if (!f.IsZero() && visibility.Unoccluded(scene)) {
+			// Add light's contribution to reflected radiance.  The
+			// transmittance is a Spectrum and is inserted as a
+			// diagonal operator at the place it physically occurs,
+			// between the incident light and the BSDF response.
+			Spectrum Tr = visibility.Transmittance(scene);
+			Li = SpectralTransfer(Tr) * Li;
 			if (light->IsDeltaLight())
-				Ld += f * Li * AbsDot(wi, n) / lightPdf;
+				Ld += throughput * (f * Li) *
+					AbsDot(wi, n) / lightPdf;
 			else {
 				bsdfPdf = bsdf->Pdf(wo, wi);
 				float weight = PowerHeuristic(1, lightPdf, 1, bsdfPdf);
-				Ld += f * Li * AbsDot(wi, n) * weight / lightPdf;
+				Ld += throughput * (f * Li) *
+					AbsDot(wi, n) * weight / lightPdf;
 			}
 		}
 	}
 	// Sample BSDF with multiple importance sampling
 	if (!light->IsDeltaLight()) {
 		BxDFType flags = BxDFType(BSDF_ALL & ~BSDF_SPECULAR);
-		Spectrum f = bsdf->Sample_f(wo, &wi,
+		SpectralTransfer f = bsdf->Sample_fTransfer(wo, &wi,
 			bs1, bs2, bcs, &bsdfPdf, flags);
-		if (!f.Black() && bsdfPdf > 0.) {
+		if (!f.IsZero() && bsdfPdf > 0.) {
 			lightPdf = light->Pdf(p, n, wi);
 			if (lightPdf > 0.) {
 				// Add light contribution from BSDF sampling
@@ -184,8 +198,10 @@ Spectrum EstimateDirect(const Scene *scene,
 				else
 					Li = light->Le(ray);
 				if (!Li.Black()) {
-					Li *= scene->Transmittance(ray);
-					Ld += f * Li * AbsDot(wi, n) * weight / bsdfPdf;
+					Spectrum Tr = scene->Transmittance(ray);
+					Li = SpectralTransfer(Tr) * Li;
+					Ld += throughput * (f * Li) *
+						AbsDot(wi, n) * weight / bsdfPdf;
 				}
 			}
 		}

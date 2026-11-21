@@ -131,6 +131,14 @@ public:
 			if (c[i] != 0.) return false;
 		return true;
 	}
+	float operator[](int i) const {
+		Assert(i >= 0 && i < COLOR_SAMPLES);
+		return c[i];
+	}
+	float &operator[](int i) {
+		Assert(i >= 0 && i < COLOR_SAMPLES);
+		return c[i];
+	}
 	Spectrum Sqrt() const {
 		Spectrum ret;
 		for (int i = 0; i < COLOR_SAMPLES; ++i)

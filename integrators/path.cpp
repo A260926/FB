@@ -25,6 +25,7 @@
 #include "pbrt.h"
 #include "transport.h"
 #include "scene.h"
+#include "spectral_transfer.h"
 // PathIntegrator Declarations
 class PathIntegrator : public SurfaceIntegrator {
 public:
@@ -58,8 +59,12 @@ void PathIntegrator::RequestSamples(Sample *sample,
 Spectrum PathIntegrator::Li(const Scene *scene,
 		const RayDifferential &r, const Sample *sample,
 		float *alpha) const {
-	// Declare common path integration variables
-	Spectrum pathThroughput = 1., L = 0.;
+	// Declare common path integration variables.  pathTransfer is
+	// the throughput operator T accumulated from the eye end towards
+	// the light; each new scattering operator F updates it as
+	// T = T * F, and emission/direct light is acted on by T.
+	SpectralTransfer pathTransfer = SpectralTransfer::Identity();
+	Spectrum L = 0.;
 	RayDifferential ray(r);
 	bool specularBounce = false;
 	for (int pathLength = 0; ; ++pathLength) {
@@ -77,7 +82,7 @@ Spectrum PathIntegrator::Li(const Scene *scene,
 			}
 			else if (pathLength > 0 && alpha && specularBounce) {
 			    for (u_int i = 0; i < scene->lights.size(); ++i)
-			       L += pathThroughput * scene->lights[i]->Le(ray);
+			       L += pathTransfer * scene->lights[i]->Le(ray);
 			}
 			break;
 		}
@@ -85,11 +90,16 @@ Spectrum PathIntegrator::Li(const Scene *scene,
 			r.maxt = ray.maxt;
 			if (alpha) *alpha = 1.;
 		}
-		else
-			pathThroughput *= scene->Transmittance(ray);
+		else {
+			// Transmittance stays a Spectrum; insert it as a
+			// diagonal operator at the point where it occurs.
+			Spectrum tau = scene->Transmittance(ray);
+			pathTransfer =
+				pathTransfer * SpectralTransfer(tau);
+		}
 		// Possibly add emitted light at path vertex
 		if (pathLength == 0 || specularBounce)
-			L += pathThroughput * isect.Le(-ray.d);
+			L += pathTransfer * isect.Le(-ray.d);
 		// Evaluate BSDF at hit point
 		BSDF *bsdf = isect.GetBSDF(ray);
 		// Sample illumination from lights to find path contribution
@@ -97,17 +107,17 @@ Spectrum PathIntegrator::Li(const Scene *scene,
 		const Normal &n = bsdf->dgShading.nn;
 		Vector wo = -ray.d;
 		if (pathLength < SAMPLE_DEPTH)
-			L += pathThroughput *
-				UniformSampleOneLight(scene, p, n,
-					wo, bsdf, sample,
-					lightPositionOffset[pathLength],
-					lightNumOffset[pathLength],
-					bsdfDirectionOffset[pathLength],
-					bsdfComponentOffset[pathLength]);
+			L += UniformSampleOneLight(scene, p, n,
+				wo, bsdf, sample,
+				lightPositionOffset[pathLength],
+				lightNumOffset[pathLength],
+				bsdfDirectionOffset[pathLength],
+				bsdfComponentOffset[pathLength],
+				pathTransfer);
 		else
-			L += pathThroughput *
-				UniformSampleOneLight(scene, p, n,
-					wo, bsdf, sample);
+			L += UniformSampleOneLight(scene, p, n,
+				wo, bsdf, sample, -1, -1, -1, -1,
+				pathTransfer);
 		// Sample BSDF to get new path direction
 		// Get random numbers for sampling new direction, _bs1_, _bs2_, and _bcs_
 		float bs1, bs2, bcs;
@@ -124,19 +134,21 @@ Spectrum PathIntegrator::Li(const Scene *scene,
 		Vector wi;
 		float pdf;
 		BxDFType flags;
-		Spectrum f = bsdf->Sample_f(wo, &wi, bs1, bs2, bcs,
-			&pdf, BSDF_ALL, &flags);
-		if (f.Black() || pdf == 0.)
+		SpectralTransfer f = bsdf->Sample_fTransfer(wo, &wi, bs1, bs2,
+			bcs, &pdf, BSDF_ALL, &flags);
+		if (f.IsZero() || pdf == 0.)
 			break;
 		specularBounce = (flags & BSDF_SPECULAR) != 0;
-		pathThroughput *= f * AbsDot(wi, n) / pdf;
+		// T = T * F * cos(theta) / pdf, in eye-to-light order
+		f *= AbsDot(wi, n) / pdf;
+		pathTransfer = pathTransfer * f;
 		ray = RayDifferential(p, wi);
 		// Possibly terminate the path
 		if (pathLength > 3) {
 			float continueProbability = .5f;
 			if (RandomFloat() > continueProbability)
 				break;
-			pathThroughput /= continueProbability;
+			pathTransfer *= (1.f / continueProbability);
 		}
 		if (pathLength == maxDepth)
 			break;

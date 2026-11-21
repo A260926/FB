@@ -399,6 +399,75 @@ Spectrum BSDF::Sample_f(const Vector &wo, Vector *wi, BxDFType flags,
 	if (!f.Black() && pdf > 0.) f /= pdf;
 	return f;
 }
+SpectralTransfer BSDF::Sample_fTransfer(const Vector &wo, Vector *wi,
+	BxDFType flags, BxDFType *sampledType) const {
+	float pdf;
+	SpectralTransfer f = Sample_fTransfer(wo, wi,
+		RandomFloat(), RandomFloat(), RandomFloat(),
+		&pdf, flags, sampledType);
+	if (!f.IsZero() && pdf > 0.) f *= (1.f / pdf);
+	return f;
+}
+SpectralTransfer BSDF::Sample_fTransfer(const Vector &woW,
+		Vector *wiW, float u1, float u2, float u3, float *pdf,
+		BxDFType flags, BxDFType *sampledType) const {
+	// Choose which _BxDF_ to sample, exactly as the Spectrum path
+	int matchingComps = NumComponents(flags);
+	if (matchingComps == 0) {
+		*pdf = 0.f;
+		if (sampledType) *sampledType = BxDFType(0);
+		return SpectralTransfer();
+	}
+	int which = min(Floor2Int(u3 * matchingComps),
+		matchingComps-1);
+	BxDF *bxdf = NULL;
+	int count = which;
+	for (int i = 0; i < nBxDFs; ++i)
+		if (bxdfs[i]->MatchesFlags(flags))
+			if (count-- == 0) {
+				bxdf = bxdfs[i];
+				break;
+			}
+	Assert(bxdf);
+	// Sample chosen _BxDF_ through its operator entry point
+	Vector wi;
+	Vector wo = WorldToLocal(woW);
+	*pdf = 0.f;
+	SpectralTransfer f =
+		bxdf->Sample_fTransfer(wo, &wi, u1, u2, pdf);
+	if (*pdf == 0.f) {
+		if (sampledType) *sampledType = BxDFType(0);
+		return SpectralTransfer();
+	}
+	if (sampledType) *sampledType = bxdf->type;
+	*wiW = LocalToWorld(wi);
+	// Compute overall PDF with all matching _BxDF_s
+	if (!(bxdf->type & BSDF_SPECULAR) && matchingComps > 1) {
+		for (int i = 0; i < nBxDFs; ++i) {
+			if (bxdfs[i] != bxdf &&
+			    bxdfs[i]->MatchesFlags(flags))
+				*pdf += bxdfs[i]->Pdf(wo, wi);
+		}
+	}
+	if (matchingComps > 1) *pdf /= matchingComps;
+	// Compute the operator BSDF for the sampled direction.
+	// Non-specular events sum the operators of every matching
+	// lobe, so purely off-diagonal responses survive; specular
+	// events keep the discrete sampled-lobe rule.
+	if (!(bxdf->type & BSDF_SPECULAR)) {
+		f = SpectralTransfer();
+		if (Dot(*wiW, ng) * Dot(woW, ng) > 0)
+			// ignore BTDFs
+			flags = BxDFType(flags & ~BSDF_TRANSMISSION);
+		else
+			// ignore BRDFs
+			flags = BxDFType(flags & ~BSDF_REFLECTION);
+		for (int i = 0; i < nBxDFs; ++i)
+			if (bxdfs[i]->MatchesFlags(flags))
+				f += bxdfs[i]->fTransfer(wo, wi);
+	}
+	return f;
+}
 Spectrum BSDF::Sample_f(const Vector &woW, Vector *wiW,
 		float u1, float u2, float u3, float *pdf,
 		BxDFType flags, BxDFType *sampledType) const {
@@ -490,6 +559,21 @@ Spectrum BSDF::f(const Vector &woW,
 	for (int i = 0; i < nBxDFs; ++i)
 		if (bxdfs[i]->MatchesFlags(flags))
 			f += bxdfs[i]->f(wo, wi);
+	return f;
+}
+SpectralTransfer BSDF::fTransfer(const Vector &woW,
+		const Vector &wiW, BxDFType flags) const {
+	Vector wi = WorldToLocal(wiW), wo = WorldToLocal(woW);
+	if (Dot(wiW, ng) * Dot(woW, ng) > 0)
+		// ignore BTDFs
+		flags = BxDFType(flags & ~BSDF_TRANSMISSION);
+	else
+		// ignore BRDFs
+		flags = BxDFType(flags & ~BSDF_REFLECTION);
+	SpectralTransfer f;
+	for (int i = 0; i < nBxDFs; ++i)
+		if (bxdfs[i]->MatchesFlags(flags))
+			f += bxdfs[i]->fTransfer(wo, wi);
 	return f;
 }
 Spectrum BSDF::rho(BxDFType flags) const {

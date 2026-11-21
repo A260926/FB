@@ -25,6 +25,7 @@
 #include "pbrt.h"
 #include "transport.h"
 #include "scene.h"
+#include "spectral_transfer.h"
 // DirectLighting Declarations
 enum LightStrategy { SAMPLE_ALL_UNIFORM, SAMPLE_ONE_UNIFORM,
 	SAMPLE_ONE_WEIGHTED  // NOBOOK
@@ -126,10 +127,13 @@ Spectrum DirectLighting::Li(const Scene *scene,
 		}
 		if (rayDepth++ < maxDepth) {
 			Vector wi;
-			// Trace rays for specular reflection and refraction
-			Spectrum f = bsdf->Sample_f(wo, &wi,
+			// Trace rays for specular reflection and refraction.
+			// The specular lobes are diagonal operators, so the
+			// operator query reproduces the old Spectrum result
+			// while keeping the same sampled directions and pdfs.
+			SpectralTransfer f = bsdf->Sample_fTransfer(wo, &wi,
 				BxDFType(BSDF_REFLECTION | BSDF_SPECULAR));
-			if (!f.Black() && AbsDot(wi, n) > 0.f) {
+			if (!f.IsZero() && AbsDot(wi, n) > 0.f) {
 				// Compute ray differential _rd_ for specular reflection
 				RayDifferential rd(p, wi);
 				rd.hasDifferentials = true;
@@ -149,11 +153,11 @@ Spectrum DirectLighting::Li(const Scene *scene,
 				rd.ry.d = wi -
 				          dwody + 2 * Vector(Dot(wo, n) * dndy +
 						  dDNdy * n);
-				L += scene->Li(rd, sample) * f * AbsDot(wi, n);
+				L += f * (scene->Li(rd, sample) * AbsDot(wi, n));
 			}
-			f = bsdf->Sample_f(wo, &wi,
+			f = bsdf->Sample_fTransfer(wo, &wi,
 				BxDFType(BSDF_TRANSMISSION | BSDF_SPECULAR));
-			if (!f.Black() && AbsDot(wi, n) > 0.f) {
+			if (!f.IsZero() && AbsDot(wi, n) > 0.f) {
 				// Compute ray differential _rd_ for specular transmission
 				RayDifferential rd(p, wi);
 				rd.hasDifferentials = true;
@@ -177,7 +181,7 @@ Spectrum DirectLighting::Li(const Scene *scene,
 				
 				rd.rx.d = wi + eta * dwodx - Vector(mu * dndx + dmudx * n);
 				rd.ry.d = wi + eta * dwody - Vector(mu * dndy + dmudy * n);
-				L += scene->Li(rd, sample) * f * AbsDot(wi, n);
+				L += f * (scene->Li(rd, sample) * AbsDot(wi, n));
 			}
 		}
 		--rayDepth;

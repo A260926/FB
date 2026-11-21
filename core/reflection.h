@@ -27,6 +27,8 @@
 #include "pbrt.h"
 #include "geometry.h"
 #include "shape.h"
+#include "mc.h"
+#include "spectral_transfer.h"
 // BSDF Inline Functions
 inline float CosTheta(const Vector &w) { return w.z; }
 inline float SinTheta(const Vector &w) {
@@ -75,6 +77,24 @@ public:
 	Spectrum Sample_f(const Vector &wo, Vector *wi,
 		BxDFType flags = BSDF_ALL,
 		BxDFType *sampledType = NULL) const;
+	// Operator (spectral transfer matrix) counterparts of the
+	// Spectrum BSDF queries.  The explicit 3D-sample form returns the
+	// operator F and writes the mixture pdf; the automatic form
+	// follows the old convention and returns F / pdf using the same
+	// random numbers as the Spectrum version.  Component selection,
+	// reflection/transmission handling and mixture densities are
+	// identical to the Spectrum path: non-specular events sum the
+	// operators of all matching lobes, specular events keep the
+	// discrete sampled-lobe rule.
+	SpectralTransfer Sample_fTransfer(const Vector &o, Vector *wi,
+		float u1, float u2, float u3, float *pdf,
+		BxDFType flags = BSDF_ALL,
+		BxDFType *sampledType = NULL) const;
+	SpectralTransfer Sample_fTransfer(const Vector &wo, Vector *wi,
+		BxDFType flags = BSDF_ALL,
+		BxDFType *sampledType = NULL) const;
+	SpectralTransfer fTransfer(const Vector &woW,
+		const Vector &wiW, BxDFType flags = BSDF_ALL) const;
 	float Pdf(const Vector &wo,
 	          const Vector &wi,
 			  BxDFType flags = BSDF_ALL) const;
@@ -129,6 +149,20 @@ public:
 	}
 	virtual Spectrum f(const Vector &wo,
 	                   const Vector &wi) const = 0;
+	// Operator (spectral transfer matrix) counterparts of f and
+	// Sample_f.  Ordinary lobes treat their per-channel Spectrum
+	// response as the diagonal operator diag(f); the spectral
+	// transfer lobe overrides these with a possibly off-diagonal
+	// linear operator.  The old Spectrum queries therefore always
+	// report the diagonal part of the operator.
+	virtual SpectralTransfer fTransfer(const Vector &wo,
+	                                   const Vector &wi) const {
+		return SpectralTransfer(f(wo, wi));
+	}
+	virtual SpectralTransfer Sample_fTransfer(const Vector &wo,
+		Vector *wi, float u1, float u2, float *pdf) const {
+		return SpectralTransfer(Sample_f(wo, wi, u1, u2, pdf));
+	}
 	virtual Spectrum Sample_f(const Vector &wo, Vector *wi,
 		float u1, float u2, float *pdf) const;
 	virtual Spectrum rho(const Vector &wo,
@@ -161,6 +195,17 @@ public:
 	Spectrum f(const Vector &wo, const Vector &wi) const;
 	Spectrum Sample_f(const Vector &wo, Vector *wi,
 		float u1, float u2, float *pdf) const;
+	SpectralTransfer fTransfer(const Vector &wo,
+	                           const Vector &wi) const {
+		return brdf->fTransfer(wo, otherHemisphere(wi));
+	}
+	SpectralTransfer Sample_fTransfer(const Vector &wo, Vector *wi,
+		float u1, float u2, float *pdf) const {
+		SpectralTransfer f =
+			brdf->Sample_fTransfer(wo, wi, u1, u2, pdf);
+		*wi = otherHemisphere(*wi);
+		return f;
+	}
 	float Pdf(const Vector &wo, const Vector &wi) const;
 private:
 	BxDF *brdf;
@@ -256,6 +301,42 @@ public:
 private:
 	// Lambertian Private Data
 	Spectrum R, RoverPI;
+};
+// TransferBxDF Declarations
+//
+// Diffuse reflection lobe whose response is a discrete linear
+// operator over the color channels rather than a per-channel
+// Spectrum.  The reflection function is C / pi; directions are
+// cosine-sampled over the same hemisphere as a Lambertian lobe, so
+// the sampling directions and pdf match the ordinary path.  The
+// Spectrum f() query is explicitly defined as the diagonal part of
+// the operator; a purely off-diagonal response is still a real
+// (non-absorbing) response and is visible through fTransfer().
+class COREDLL TransferBxDF : public BxDF {
+public:
+	// TransferBxDF Public Methods
+	TransferBxDF(const SpectralTransfer &transfer)
+		: BxDF(BxDFType(BSDF_REFLECTION | BSDF_DIFFUSE)),
+		  C(transfer), CoverPI(transfer * INV_PI) {
+	}
+	Spectrum f(const Vector &wo, const Vector &wi) const {
+		return CoverPI.Diagonal();
+	}
+	SpectralTransfer fTransfer(const Vector &wo,
+	                           const Vector &wi) const {
+		return CoverPI;
+	}
+	SpectralTransfer Sample_fTransfer(const Vector &wo,
+		Vector *wi, float u1, float u2, float *pdf) const {
+		*wi = CosineSampleHemisphere(u1, u2);
+		if (wo.z < 0.) wi->z *= -1.f;
+		*pdf = Pdf(wo, *wi);
+		return CoverPI;
+	}
+	const SpectralTransfer &Transfer() const { return C; }
+private:
+	// TransferBxDF Private Data
+	SpectralTransfer C, CoverPI;
 };
 class COREDLL OrenNayar : public BxDF {
 public:

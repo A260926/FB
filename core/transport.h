@@ -31,6 +31,7 @@
 #include "reflection.h"
 #include "sampling.h"
 #include "material.h"
+#include "spectral_transfer.h"
 // Integrator Declarations
 class COREDLL Integrator {
 public:
@@ -52,15 +53,18 @@ COREDLL Spectrum UniformSampleAllLights(const Scene *scene,
 	const Point &p, const Normal &n, const Vector &wo,
 	BSDF *bsdf, const Sample *sample,
 	int *lightSampleOffset, int *bsdfSampleOffset,
-	int *bsdfComponentOffset);
+	int *bsdfComponentOffset,
+	const SpectralTransfer &throughput = SpectralTransfer::Identity());
 COREDLL Spectrum UniformSampleOneLight(const Scene *scene, const Point &p,
 	const Normal &n, const Vector &wo, BSDF *bsdf,
 	const Sample *sample, int lightSampleOffset = -1,
 	int lightNumOffset = -1, int bsdfSampleOffset = -1,
-	int bsdfComponentOffset = -1);
+	int bsdfComponentOffset = -1,
+	const SpectralTransfer &throughput = SpectralTransfer::Identity());
 COREDLL Spectrum WeightedSampleOneLight(const Scene *scene, const Point &p,
 	const Normal &n, const Vector &wo, BSDF *bsdf,
 	const Sample *sample, int lightSampleOffset, int lightNumOffset,
 	int bsdfSampleOffset, int bsdfComponentOffset, float *&avgY,
-	float *&avgYsample, float *&cdf, float &overallAvgY);
+	float *&avgYsample, float *&cdf, float &overallAvgY,
+	const SpectralTransfer &throughput = SpectralTransfer::Identity());
 #endif // PBRT_TRANSPORT_H
