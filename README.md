@@ -47,7 +47,10 @@ Here is a list of features supported by this library (changes from `v1` are indi
   (e.g. `float` or `double`),
 - [NEW] Only depends on the standard library (parallelization uses a custom thread pool based on
   `std::thread`),
-- [NEW] C API for the high-level parts of the library is available.
+- [NEW] C API for the high-level parts of the library is available,
+- [NEW] Oriented bounding box BVH for 3D triangles (`OrientedBvh<T>`, `float` and `double`), with
+  per-node frames fitted from vertex covariance, OBB-direct traversal, refitting, and a dedicated
+  C API entry point (`struct bvh_obb3f`).
 
 ## Building
 
@@ -81,3 +84,111 @@ The library contains several examples that are kept up-to-date with the API:
 - A [benchmarking utility](test/benchmark.cpp) that showcases what the library can do.
 - A [serialization test](test/serialize.cpp) that shows how to save and load a BVH from a file.
 - A [C API example](test/c_api_example.c) that shows how to use the C bindings to this library.
+- An [oriented-BVH preview](examples/obb_preview.cpp) that renders a small scene of slanted planes
+  through the oriented BVH to a P3 PPM file.
+
+## Oriented BVH
+
+`bvh/v2/obb.h` provides `bvh::v2::OrientedBvh<T>` for three-dimensional triangles, with `T` equal to
+`float` or `double`. It is built from an existing `bvh::v2::Bvh<bvh::v2::Node<T, 3>>` plus the
+original `bvh::v2::Tri<T, 3>` array, which must be indexed by the original primitive identifiers in
+the source tree's `prim_ids`:
+
+```cpp
+auto source = bvh::v2::DefaultBuilder<Node>::build(bboxes, centers);
+auto obb = bvh::v2::OrientedBvh<float>::from_bvh(source, triangles);
+// `source` may now be destroyed.
+```
+
+The conversion copies the node topology (the packed node index) and `prim_ids` verbatim, so node
+identifiers, leaf slots and primitive identities are unchanged. Every node stores its own
+orthonormal, right-handed frame (`axis[0..2]`), a center, and non-negative half extents
+(`half_size`). Frames come from the principal axes of the covariance matrix of all triangle
+vertices in the subtree; degenerate covariance matrices (line-like, planar, repeated eigenvalues,
+coincident vertices) fall back to a deterministic orthonormal completion, and no NaN is produced.
+The initial boxes tightly enclose the real vertices along their own axes, with at most
+`64 * epsilon * max(1, |coordinate|)` of outward slack per side.
+
+The read-only accessors are `nodes()`, `prim_ids()`, `node_count()`, `prim_count()`, and
+`get_root()`; node data are `const`, so different subtrees can be inspected to confirm that they
+use different frames.
+
+### Queries
+
+`intersect<IsAnyHit>(ray, start, stack, leaf_fn, stats)` (and the `intersect_closest` /
+`intersect_any` conveniences) traverse the oriented boxes directly: no second axis-aligned tree is
+built and the tree is never converted back to AABBs for a query. The leaf callback receives a
+half-open range of slots into `prim_ids()` and may shorten `ray.tmax`; the traversal orders children
+by their own OBB entry parameters and re-checks the latest distance window before expanding a far
+node. The ray's coordinates are rotated into each box's frame, but the direction is never
+normalized, so reported parameters stay on the world-ray scale. Empty trees, single leaves, finite
+windows, non-unit directions, axis-parallel rays, and negative zeros are supported. All query state
+(the stack, and an optional `TraversalStats`) is caller-owned, so concurrent read-only queries do
+not share anything.
+
+### Refitting
+
+`refit(triangles)` keeps the topology, leaf slots and every axis. Leaves recompute their projection
+ranges from the current vertices; inner nodes project the eight corners of both child OBBs (through
+the children's own frames) onto their own frame and reduce the result. World-space AABB corners are
+never substituted for child OBBs.
+
+### Serialization
+
+`serialize`/`deserialize` use a dedicated format (magic `OBB2`, scalar size, dimension, node and
+primitive counts, then all frames, centers, half extents, node indices and primitive identifiers).
+It is distinct from the axis-aligned `Bvh` archive, and the loaded tree is self-contained: it can be
+queried and refitted without the source tree.
+
+### C API
+
+The C API is built with `-DBVH_BUILD_C_API=ON` and adds the opaque `struct bvh_obb3f` (float, 3D)
+in `bvh/v2/c_api/bvh.h`:
+
+```c
+struct bvh_obb3f* bvh_obb3f_from_bvh(const struct bvh3f*, const struct bvh_vec3f* triangle_vertices,
+                                     size_t triangle_count);
+void bvh_obb3f_destroy(struct bvh_obb3f*);
+bool bvh_obb3f_get_node_obb(const struct bvh_obb3f*, size_t node_id,
+                            struct bvh_vec3f out_axes[3], struct bvh_vec3f* out_center,
+                            struct bvh_vec3f* out_half_size);
+bool bvh_obb3f_node_is_leaf(const struct bvh_obb3f*, size_t node_id);
+size_t bvh_obb3f_node_get_prim_count(const struct bvh_obb3f*, size_t node_id);
+size_t bvh_obb3f_node_get_first_id(const struct bvh_obb3f*, size_t node_id);
+size_t bvh_obb3f_get_node_count(const struct bvh_obb3f*);
+size_t bvh_obb3f_get_prim_count(const struct bvh_obb3f*);
+size_t bvh_obb3f_get_prim_id(const struct bvh_obb3f*, size_t i);
+void bvh_obb3f_refit(struct bvh_obb3f*, const struct bvh_vec3f* triangle_vertices,
+                     size_t triangle_count);
+void bvh_obb3f_save(const struct bvh_obb3f*, FILE*);
+struct bvh_obb3f* bvh_obb3f_load(FILE*);
+void bvh_obb3f_intersect_ray(const struct bvh_obb3f*, const struct bvh_ray3f*,
+                             const struct bvh_intersect_callbackf*);
+void bvh_obb3f_intersect_ray_any(const struct bvh_obb3f*, const struct bvh_ray3f*,
+                                 const struct bvh_intersect_callbackf*);
+void bvh_obb3f_intersect_ray_stats(const struct bvh_obb3f*, const struct bvh_ray3f*,
+                                   const struct bvh_intersect_callbackf*,
+                                   struct bvh_obb_traversal_stats*);
+void bvh_obb3f_intersect_ray_any_stats(const struct bvh_obb3f*, const struct bvh_ray3f*,
+                                       const struct bvh_intersect_callbackf*,
+                                       struct bvh_obb_traversal_stats*);
+```
+
+`bvh_obb3f_from_bvh` only reads the source tree and takes the triangle vertices as a flat array of
+`triangle_count` triangles (three `bvh_vec3f` each). The resulting tree is owned by the caller and
+must be released with `bvh_obb3f_destroy`; the source tree can be destroyed immediately after the
+conversion. `bvh_obb3f_get_node_obb` writes the node's three axes, center and half extents and
+returns `false` for an out-of-range node. Query functions reuse `bvh_ray3f` and
+`bvh_intersect_callbackf`: the callback receives a pointer to the current maximum distance `t` and a
+half-open range of leaf slots into the primitive identifier array (use `bvh_obb3f_get_prim_id`).
+The `*_stats` variants additionally fill `struct bvh_obb_traversal_stats` with node, leaf and
+primitive test counts. All query functions are `const` and safe to call concurrently on the same
+tree. `bvh_obb3f_save`/`bvh_obb3f_load` use the dedicated oriented format, not the `bvh3f` archive.
+
+### Task checks
+
+`tests/obb_cases.cpp` registers `frames`, `traversal`, `maintenance` and `c_api` cases against the
+`task_support` harness, and `tests/obb_c_smoke.c` is a real C11 translation unit that exercises the
+C entry points. `examples/obb_preview.cpp` renders a 48x32 P3 PPM image of two slanted plane
+groups; the traversal test renders the same scene through the oriented tree and through an
+exhaustive world-space loop and compares pixels.

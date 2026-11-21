@@ -37,6 +37,8 @@ struct bvh3f;
 struct bvh_node2f;
 struct bvh_node3f;
 
+struct bvh_obb3f;
+
 struct bvh2d;
 struct bvh3d;
 struct bvh_node2d;
@@ -293,6 +295,98 @@ BVH_API void bvh2f_intersect_ray_robust(const struct bvh2f*, const struct bvh_ra
 BVH_API void bvh3f_intersect_ray_robust(const struct bvh3f*, const struct bvh_ray3f*, const struct bvh_intersect_callbackf*);
 BVH_API void bvh2d_intersect_ray_robust(const struct bvh2d*, const struct bvh_ray2d*, const struct bvh_intersect_callbackd*);
 BVH_API void bvh3d_intersect_ray_robust(const struct bvh3d*, const struct bvh_ray3d*, const struct bvh_intersect_callbackd*);
+
+// Oriented Bounding Box BVH ----------------------------------------------------------------------
+
+// `bvh_obb3f` is an opaque, float, 3D oriented BVH. It is converted from an existing `bvh3f` plus
+// the original triangle array (indexed by the *original* primitive identifiers stored in the
+// source tree). The topology and `prim_ids` are preserved exactly, so node indices, leaf slots and
+// primitive identities remain valid. After the conversion the source `bvh3f` can be destroyed.
+//
+// Lifetime conventions:
+//
+// - A `bvh_obb3f*` returned by `bvh_obb3f_from_bvh` or `bvh_obb3f_load` is owned by the caller and
+//   must be released with `bvh_obb3f_destroy`.
+// - Node access functions (`bvh_obb3f_get_node_obb`, `bvh_obb3f_node_*`, `bvh_obb3f_get_*`) return
+//   values or write into caller-provided structures; no pointer into the tree escapes. Node data
+//   are read-only.
+// - `bvh_obb3f_save` and `bvh_obb3f_load` use a dedicated binary format that is distinct from the
+//   `bvh3f` archive. The loaded tree is self-contained: it can be queried and refitted without the
+//   source tree.
+// - All query functions are const and safe to call concurrently on the same tree. No traversal
+//   state is stored in the tree; each call allocates its own stack and counters.
+// - The ray may be shortened by the user callback through the `float* t` argument, exactly like
+//   the axis-aligned intersection routines. The callback receives a half-open range of slots into
+//   the tree's primitive identifier array.
+
+// Writes the oriented box of the given node into the output vectors (3 floats each for each axis,
+// the center and the half extents). Returns false if `node_id` is out of range.
+BVH_API bool bvh_obb3f_get_node_obb(
+    const struct bvh_obb3f* obb,
+    size_t node_id,
+    struct bvh_vec3f out_axes[3],
+    struct bvh_vec3f* out_center,
+    struct bvh_vec3f* out_half_size);
+
+BVH_API bool bvh_obb3f_node_is_leaf(const struct bvh_obb3f* obb, size_t node_id);
+BVH_API size_t bvh_obb3f_node_get_prim_count(const struct bvh_obb3f* obb, size_t node_id);
+BVH_API size_t bvh_obb3f_node_get_first_id(const struct bvh_obb3f* obb, size_t node_id);
+
+BVH_API size_t bvh_obb3f_get_node_count(const struct bvh_obb3f* obb);
+BVH_API size_t bvh_obb3f_get_prim_count(const struct bvh_obb3f* obb);
+BVH_API size_t bvh_obb3f_get_prim_id(const struct bvh_obb3f* obb, size_t i);
+
+// Converts the given axis-aligned BVH into an oriented one, using `triangles` (a flat array of
+// `prim_count` triangles, each with three vertices) as the source of truth for the geometry. The
+// source BVH is only read and is not modified.
+BVH_API struct bvh_obb3f* bvh_obb3f_from_bvh(
+    const struct bvh3f* source,
+    const struct bvh_vec3f* triangle_vertices,
+    size_t triangle_count);
+
+BVH_API void bvh_obb3f_destroy(struct bvh_obb3f* obb);
+
+// Refits the tree in place from the current triangle vertices. Topology, leaf slots and axes are
+// preserved; leaves recompute their projections and inner nodes reduce the projected corners of
+// their child OBBs.
+BVH_API void bvh_obb3f_refit(
+    struct bvh_obb3f* obb,
+    const struct bvh_vec3f* triangle_vertices,
+    size_t triangle_count);
+
+BVH_API void bvh_obb3f_save(const struct bvh_obb3f* obb, FILE*);
+BVH_API struct bvh_obb3f* bvh_obb3f_load(FILE*);
+
+// Intersection routines. They reuse `bvh_ray3f` and `bvh_intersect_callbackf`; the callback still
+// receives a range of leaf slots into the `prim_ids` array.
+BVH_API void bvh_obb3f_intersect_ray(
+    const struct bvh_obb3f* obb,
+    const struct bvh_ray3f* ray,
+    const struct bvh_intersect_callbackf* callback);
+
+BVH_API void bvh_obb3f_intersect_ray_any(
+    const struct bvh_obb3f* obb,
+    const struct bvh_ray3f* ray,
+    const struct bvh_intersect_callbackf* callback);
+
+// Diagnostic traversal counters, filled by the intersection routines if a pointer is given.
+struct bvh_obb_traversal_stats {
+    size_t node_tests;
+    size_t leaf_tests;
+    size_t primitive_tests;
+};
+
+BVH_API void bvh_obb3f_intersect_ray_stats(
+    const struct bvh_obb3f* obb,
+    const struct bvh_ray3f* ray,
+    const struct bvh_intersect_callbackf* callback,
+    struct bvh_obb_traversal_stats* stats);
+
+BVH_API void bvh_obb3f_intersect_ray_any_stats(
+    const struct bvh_obb3f* obb,
+    const struct bvh_ray3f* ray,
+    const struct bvh_intersect_callbackf* callback,
+    struct bvh_obb_traversal_stats* stats);
 
 #ifdef __cplusplus
 }

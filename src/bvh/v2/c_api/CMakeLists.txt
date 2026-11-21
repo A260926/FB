@@ -1,4 +1,4 @@
-add_library(bvh_c SHARED bvh.cpp)
+add_library(bvh_c SHARED bvh.cpp obb.cpp)
 target_link_libraries(bvh_c PRIVATE bvh)
 target_compile_definitions(bvh_c PRIVATE -DBVH_BUILD_API)
 target_include_directories(bvh_c INTERFACE
