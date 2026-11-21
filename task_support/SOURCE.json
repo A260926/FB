@@ -1,0 +1,15 @@
+{
+  "repo": "fogleman/fauxgl",
+  "commit": "abf826acbbbdd68114b32f9a6b7e6db1bd79d45a",
+  "license": "MIT",
+  "dependency": {
+    "repo": "fogleman/simplify",
+    "commit": "d32f302d50469376eae60b2cd5a328c26888fade",
+    "license": "MIT"
+  },
+  "export_exclusions": [
+    "examples/**",
+    ".git*"
+  ],
+  "reason": "unused old examples/assets; no production source omitted"
+}
