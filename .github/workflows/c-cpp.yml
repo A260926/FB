@@ -1,0 +1,169 @@
+name: CI Build and Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  # Every entry runs the same preset; only what the host provides differs, so
+  # the compiler, generator and sysroot all come from the matrix.
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Desktops and servers; the baseline everything else is compared against.
+          - name: linux-x86_64-gcc
+            runs-on: ubuntu-latest
+            cc: gcc
+            packages: libx11-dev libxext-dev libjpeg-dev
+
+          # The same hardware under a second compiler.
+          - name: linux-x86_64-clang
+            runs-on: ubuntu-latest
+            cc: clang
+            packages: clang libx11-dev libxext-dev libjpeg-dev
+
+          # Apple Silicon: arm64 with AppleClang and Mach-O.
+          - name: macos
+            runs-on: macos-latest
+            cc: clang
+
+          # Cross entries need only their triple: compiler, sysroot and package
+          # names all follow from it, and none of them has libX11 or libjpeg.
+
+          # ARMv8-A: phones, Raspberry Pi 3 and up, Graviton servers.
+          - name: linux-aarch64
+            runs-on: ubuntu-latest
+            triple: aarch64-linux-gnu
+
+          # RV64: SiFive and StarFive Linux boards.
+          - name: linux-riscv64
+            runs-on: ubuntu-latest
+            triple: riscv64-linux-gnu
+
+          # ARMv7-A with an FPU, in ARM mode: Raspberry Pi 2/3, BeagleBone.
+          - name: linux-armhf
+            runs-on: ubuntu-latest
+            triple: arm-linux-gnueabihf
+
+          # Thumb-2 executed for real, not just compiled: Cortex-M3/M4/M7,
+          # so STM32, nRF52 and RP2040.
+          - name: linux-arm-thumb
+            runs-on: ubuntu-latest
+            triple: arm-linux-gnueabihf
+            cflags: -mthumb
+
+          # No FPU, so floats go through libgcc: Cortex-M0/M0+/M3 and ARMv5.
+          - name: linux-arm-softfloat
+            runs-on: ubuntu-latest
+            triple: arm-linux-gnueabi
+
+          # IBM Z mainframes: 64-bit big-endian.
+          - name: linux-s390x
+            runs-on: ubuntu-latest
+            triple: s390x-linux-gnu
+
+          # Sun/Oracle SPARC; traps on unaligned access instead of fixing it up.
+          - name: linux-sparc64
+            runs-on: ubuntu-latest
+            triple: sparc64-linux-gnu
+
+          # MIPS32 big-endian: routers, PIC32MX and PIC32MZ.
+          - name: linux-mips
+            runs-on: ubuntu-latest
+            triple: mips-linux-gnu
+
+          # MIPS32 little-endian: Ingenic SoCs, set-top boxes.
+          - name: linux-mipsel
+            runs-on: ubuntu-latest
+            triple: mipsel-linux-gnu
+
+          # MIPS64: Loongson.
+          - name: linux-mips64el
+            runs-on: ubuntu-latest
+            triple: mips64el-linux-gnuabi64
+
+          # PowerPC 32 big-endian: older Macs, NXP e300 embedded parts.
+          - name: linux-powerpc
+            runs-on: ubuntu-latest
+            triple: powerpc-linux-gnu
+
+          # POWER8 and POWER9 servers.
+          - name: linux-powerpc64le
+            runs-on: ubuntu-latest
+            triple: powerpc64le-linux-gnu
+
+          # 68k: Amiga and Atari, and ColdFire microcontrollers.
+          - name: linux-m68k
+            runs-on: ubuntu-latest
+            triple: m68k-linux-gnu
+
+          # Freestanding, compile only: no Linux toolchain exists for these.
+          # RV32IMAC covers ESP32-C3, GD32VF103 and CH32V.
+          - name: baremetal-riscv32
+            runs-on: ubuntu-latest
+            cc: riscv64-unknown-elf-gcc
+            cflags: -march=rv32imac -mabi=ilp32 --specs=picolibc.specs
+            packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+            baremetal: true
+
+          # TI MSP430: 16-bit int, and the meshes cannot fit its address space
+          # (viking's texture coordinates alone are one 60 KB array).
+          - name: baremetal-msp430
+            runs-on: ubuntu-22.04
+            cc: msp430-gcc
+            cflags: -mmcu=msp430f5529
+            packages: gcc-msp430 msp430-libc
+            baremetal: true
+
+          # x86-64 Windows and the PE/COFF ABI; MinGW is not the default
+          # generator, hence the explicit one.
+          - name: windows-mingw
+            runs-on: windows-latest
+            cc: gcc
+            generator: MinGW Makefiles
+
+    env:
+      CC: ${{ matrix.cc || format('{0}-gcc', matrix.triple) }}
+      CMAKE_GENERATOR: ${{ matrix.generator }}
+      CFLAGS: ${{ matrix.cflags }}
+      # The cross libc lives in /usr/<triple>, not /lib, and qemu needs
+      # pointing at it or nothing starts.
+      QEMU_LD_PREFIX: ${{ matrix.triple && format('/usr/{0}', matrix.triple) || '' }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install packages
+      if: matrix.packages || matrix.triple
+      run: |
+        pkgs="${{ matrix.packages }}"
+        if [ -n "${{ matrix.triple }}" ]; then
+          pkgs="$pkgs gcc-${{ matrix.triple }} qemu-user-static binfmt-support"
+        fi
+        sudo apt-get update
+        sudo apt-get install -y $pkgs
+
+    # qemu-user-static ships the binfmt definitions but leaves them inactive,
+    # and without them the foreign binaries get handed to the shell.
+    - name: Register qemu binfmt handlers
+      if: matrix.triple
+      run: |
+        sudo update-binfmts --enable
+        update-binfmts --display | grep -c enabled
+
+    - name: Build and test
+      if: ${{ !matrix.baremetal }}
+      run: cmake --workflow --preset default
+
+    # The preset holds what is true of every freestanding build; the matrix
+    # supplies only the compiler and its flags.
+    - name: Build the libraries (compile only, nothing is run)
+      if: ${{ matrix.baremetal }}
+      run: cmake --workflow --preset freestanding
