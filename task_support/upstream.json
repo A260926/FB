@@ -1,0 +1,846 @@
+{
+  "repo": "https://github.com/project-arcana/polymesh",
+  "commit": "84b9a5db7e2cf7e8c361fa847673db9ffbface67",
+  "license": "MIT",
+  "production_files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "6bff98356309e67756a6ea4d9aac9bbabe8030103b05bb73d0e3c36b024772bb",
+      "mode": "100644",
+      "git_blob": "3af75a92c8e54bd9ed9bf1e5854b36db8170ee69"
+    },
+    {
+      "path": "Changelog.md",
+      "sha256": "7108eb74269528bf6eab662e6a005e36c4a865a826056f3b7dd0d49f164d6408",
+      "mode": "100644",
+      "git_blob": "25803334ff3398fbd74396ed47af364ce15559e6"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "9e5207201de64f882f721d7a1e48dd3c7da28a8a52a4d24fba4fedd7760e5835",
+      "mode": "100644",
+      "git_blob": "a972d5688fef06bf542a5c2d7b6f7012e2eed1e2"
+    },
+    {
+      "path": "Readme.md",
+      "sha256": "14de5664684a748ae90907a158a2ddc7b2433271dce9eb1c7cac8f9905be3594",
+      "mode": "100644",
+      "git_blob": "10655724893ded89fe7ebffbb3a07f71616e507e"
+    },
+    {
+      "path": "src/polymesh/Mesh.cc",
+      "sha256": "3e05c23a42d88ad80ddbf6258e153cf6d971737d321bb81f21aac422cae6a8a4",
+      "mode": "100644",
+      "git_blob": "963742b4620571a5735f1dea62e36b9ca38c56a3"
+    },
+    {
+      "path": "src/polymesh/Mesh.hh",
+      "sha256": "148bd7955cbefb6d74807409a18acbef0686f9466abb74a741566903bbd4c5b0",
+      "mode": "100644",
+      "git_blob": "42c2690620da9644f2bf10eaa1bcf8ffe02235d0"
+    },
+    {
+      "path": "src/polymesh/algorithms.hh",
+      "sha256": "bd64f99b99be8ea9711e845b80db6ada615bec915e76fb6d07f24b4e7aa505ca",
+      "mode": "100644",
+      "git_blob": "813da2947e2bbb741414366889f77f89c1fba63e"
+    },
+    {
+      "path": "src/polymesh/algorithms/cache-optimization.cc",
+      "sha256": "ad8fe74b052b02a42f3b9561742929032131757aa3434984eca2f3ccfb6611ff",
+      "mode": "100644",
+      "git_blob": "067b982eb862d4d4adb2a42f7ca76bdd0578d15e"
+    },
+    {
+      "path": "src/polymesh/algorithms/cache-optimization.hh",
+      "sha256": "6118daf21535eb1e07c6996598be5e3ff62cb50ab6931d8dfd7ab3b269e6b66c",
+      "mode": "100644",
+      "git_blob": "fa6e5991a0c1ac44c2b62f851f4e682e9d438b28"
+    },
+    {
+      "path": "src/polymesh/algorithms/components.cc",
+      "sha256": "7147413e05979954fcb5220d810eb28c361d540e8a4c895681a53635a87aabff",
+      "mode": "100644",
+      "git_blob": "eed78859fdb47a9518e774f04e4dac93c6bd1557"
+    },
+    {
+      "path": "src/polymesh/algorithms/components.hh",
+      "sha256": "2a65466e002624df72b47e930de2ab2fe08ca99aafdaf42360e20b1b64f9ea7a",
+      "mode": "100644",
+      "git_blob": "57e984ccdb59bb6178c78ccff5cced9a17563771"
+    },
+    {
+      "path": "src/polymesh/algorithms/decimate.hh",
+      "sha256": "44542f6fde6b0ad31e963f92f61778224d40d174580cc1ca8c557c757a9a4153",
+      "mode": "100644",
+      "git_blob": "2eed4ae2b2c71a636a3db4e24a43db1f6b9c0588"
+    },
+    {
+      "path": "src/polymesh/algorithms/deduplicate.hh",
+      "sha256": "09265ea2b4d71b1cd7913c3a1ef2b8d0c762f53ddf4bdf6065b1f6fc2f140a69",
+      "mode": "100644",
+      "git_blob": "e6cda0a46ab39de578dc8db3cd69f8b1842f5647"
+    },
+    {
+      "path": "src/polymesh/algorithms/delaunay.hh",
+      "sha256": "f64335d4136548cbe1136d680717dd03cd26fb2190ab285c9f011527db4a5601",
+      "mode": "100644",
+      "git_blob": "8110bbe6f61681ce2fd6d058ebf73e0050c94ef7"
+    },
+    {
+      "path": "src/polymesh/algorithms/edge_split.hh",
+      "sha256": "e5a72f1dd297e47998cf7d1b2f240d882f9952fff108bc926719f34e4583b390",
+      "mode": "100644",
+      "git_blob": "b4803b6ad9b4adb0d5fe8ec9240ebc26d77020bc"
+    },
+    {
+      "path": "src/polymesh/algorithms/fill_hole.hh",
+      "sha256": "d8c32eb808162105285414e88b1c7c4adf1b8159c39a99f1aadc168e644034d2",
+      "mode": "100644",
+      "git_blob": "da4d3fb0e3bd30e14b124cdd2a03f03366a8542c"
+    },
+    {
+      "path": "src/polymesh/algorithms/interpolation.hh",
+      "sha256": "adbfea3bc1e48c304de61ab56e129336f15a4d6743077decc9e8c24b4be472aa",
+      "mode": "100644",
+      "git_blob": "e41d69176c8a8d78102c23e79480df9e8b69db2a"
+    },
+    {
+      "path": "src/polymesh/algorithms/iteration.hh",
+      "sha256": "c3774be4c6a786c93bcef34cdba13a964f0a606919856cdf705cf85810058672",
+      "mode": "100644",
+      "git_blob": "7bcbf86403ceb413f11b290ae3a3a336898f4e32"
+    },
+    {
+      "path": "src/polymesh/algorithms/normal_estimation.hh",
+      "sha256": "8b90ac3e43f11b298d17807c50f46e5bb3ea84ee2728f4ae4d528006d5e69775",
+      "mode": "100644",
+      "git_blob": "a1f3bd19b68f2abb37d4fb1f2f0f38663002ff04"
+    },
+    {
+      "path": "src/polymesh/algorithms/normalize.hh",
+      "sha256": "1e8e5038562a5b484feb51b0ed7324c7daf405c2fdeca566b2bce8518a51db56",
+      "mode": "100644",
+      "git_blob": "016a1b883627002a6c2f172ebb77f1f7171969cc"
+    },
+    {
+      "path": "src/polymesh/algorithms/operations.hh",
+      "sha256": "17ba8955e0c2e3ee61c916bc55aed3f3ce8b75961949ca7872e762d57e77e6de",
+      "mode": "100644",
+      "git_blob": "37bdc56d2067658ec164b364f1c82fd414a303a3"
+    },
+    {
+      "path": "src/polymesh/algorithms/properties.hh",
+      "sha256": "d3b40b2f8a995d6cfbea804e0f57578a672d5a2ab040b36a45b403f644b41e8a",
+      "mode": "100644",
+      "git_blob": "a17c2a4d99b9a009a13b71055e9bdb89925be554"
+    },
+    {
+      "path": "src/polymesh/algorithms/sampling.hh",
+      "sha256": "7423573cf9e418b3c64a59342d6ce53ba5bfba5295dd0424226e97d5f9b05755",
+      "mode": "100644",
+      "git_blob": "12b84149f441d985defbc231b3d56a01fa43dcd7"
+    },
+    {
+      "path": "src/polymesh/algorithms/smoothing.hh",
+      "sha256": "547b9be60d1ced25176db0aab4196725d1bf2de793e822f194911c52f681966a",
+      "mode": "100644",
+      "git_blob": "14858dc8c4c983411b1a1eab3a81cc87602aab3b"
+    },
+    {
+      "path": "src/polymesh/algorithms/stats.hh",
+      "sha256": "bcd2ef704ad79fea8d96114a354f28014f843f899c713852ade3705e6af04b7c",
+      "mode": "100644",
+      "git_blob": "75ae17a432aa341b71da540b45722662d0881bad"
+    },
+    {
+      "path": "src/polymesh/algorithms/subdivision/loop.hh",
+      "sha256": "20ef7b7d2decdb29c97f51fb221e341beb3d3fadbc5e0503b6470420614e9fc2",
+      "mode": "100644",
+      "git_blob": "67f2e5a19e724767f0b835c0befe919c3eb0de4e"
+    },
+    {
+      "path": "src/polymesh/algorithms/subdivision/sqrt3.hh",
+      "sha256": "a93aa45089578f682aa7b9c698a00463188e269788a7127d5b19f311d8204071",
+      "mode": "100644",
+      "git_blob": "2985f2cfe5869a5a6a3d4e2e2dd02c6c554d4c0e"
+    },
+    {
+      "path": "src/polymesh/algorithms/topology.hh",
+      "sha256": "ee4d7e9b102dd55f1b5c40246d7ce722663259931d5ce97d57c209776429d4de",
+      "mode": "100644",
+      "git_blob": "6d3c53b79c46decdf5778e88e55d0abe3c95382c"
+    },
+    {
+      "path": "src/polymesh/algorithms/tracing.hh",
+      "sha256": "e5c6ed64e0a982ff138b58b6151adb3cf3f2b60db0e8bc663b9ff1ed841ed876",
+      "mode": "100644",
+      "git_blob": "66c74c70377c8ad2ea2769258231faf14eef391b"
+    },
+    {
+      "path": "src/polymesh/algorithms/triangulate.cc",
+      "sha256": "0d71f182fd560d64cf1da967077819a7d7d51d370f62bd4718869b3fa23b59d2",
+      "mode": "100644",
+      "git_blob": "425b9d6de8b502778d92355a968ba291ef4405ec"
+    },
+    {
+      "path": "src/polymesh/algorithms/triangulate.hh",
+      "sha256": "67313f85c6b78863e630be9574e3f9a43778efc742c73bda76023e90d1dab982",
+      "mode": "100644",
+      "git_blob": "ff6c936cce58520a85d379914f62f5bdad259bee"
+    },
+    {
+      "path": "src/polymesh/assert.cc",
+      "sha256": "902f44814a7ce1dfb3fe023170b8442acf183c36c02b801c842487d412927223",
+      "mode": "100644",
+      "git_blob": "c106a12d0aedad817de0638e4cd70ebb5a757fa1"
+    },
+    {
+      "path": "src/polymesh/assert.hh",
+      "sha256": "e784c45232fac426eedc6721797865c63db9f24cefa32d62431e653b0f5226c7",
+      "mode": "100644",
+      "git_blob": "7a1cc9a5e9a8d326af00dd6fa11950aa93ef08d8"
+    },
+    {
+      "path": "src/polymesh/attribute_base.hh",
+      "sha256": "c77954b728ae5c7735ef5407a4f243740cee1e77246c0b1371a35200a6b634c6",
+      "mode": "100644",
+      "git_blob": "a4dcd07f89ec96ab9b65367ea10c7421f1a998f3"
+    },
+    {
+      "path": "src/polymesh/attributes.hh",
+      "sha256": "24ac5092025ab0bd85bf4bdcea03f37edbe1db7cc117e14b04a7e649502528ea",
+      "mode": "100644",
+      "git_blob": "58eb48a34a3739b4f25966e3849a880d96952ad6"
+    },
+    {
+      "path": "src/polymesh/attributes/fast_clear_attribute.hh",
+      "sha256": "6b4493b28d92d201266b5c998d16dca80f4d78e25fd227168788ece7e757aaff",
+      "mode": "100644",
+      "git_blob": "d2cbdf2f76ae487e03495662b7b82b3948c23860"
+    },
+    {
+      "path": "src/polymesh/attributes/flags.hh",
+      "sha256": "292327526882808ef0e3c53b506f21d5363a1f2d9d0141344616d5799710fa50",
+      "mode": "100644",
+      "git_blob": "8f182ff050ef25b656005380607c5ddb8c622603"
+    },
+    {
+      "path": "src/polymesh/attributes/partitioning.hh",
+      "sha256": "650bfca21d2cb8d07086c55e6af51550d36a60f04ded40bce49903ee3d3c013f",
+      "mode": "100644",
+      "git_blob": "0b674482e7b34de0278b8f8cde008e6004f4656d"
+    },
+    {
+      "path": "src/polymesh/attributes/raw_attribute.hh",
+      "sha256": "41683c61c12652d6e29c55d7a5d5f483d9821af6a09513376930638904cd0983",
+      "mode": "100644",
+      "git_blob": "c5eab66572f16681c6e5f4a502d86e99d0770e11"
+    },
+    {
+      "path": "src/polymesh/bind.hh",
+      "sha256": "333d6f1591cea6e938633822e99f47f06cdc7d76b6a95b8142ceb52215b6724d",
+      "mode": "100644",
+      "git_blob": "28a9dc0828c5e2a724dcd0a6c24a962d84873129"
+    },
+    {
+      "path": "src/polymesh/copy.hh",
+      "sha256": "dd09cb4997607751ebdc34ca6178a6bd0ba7967601f1d04c7cf34320acaf88c9",
+      "mode": "100644",
+      "git_blob": "c68d179a91a91aca8e9c3f97db378974a53e94ea"
+    },
+    {
+      "path": "src/polymesh/cursors.hh",
+      "sha256": "09327d6373fe697c71b96b3de0db3cf7e318072f6040b52accdd39e2c5c2e0fe",
+      "mode": "100644",
+      "git_blob": "4c4a5e9117ca12498d2f57d10c1d61f22a6687fb"
+    },
+    {
+      "path": "src/polymesh/debug.cc",
+      "sha256": "6ca21807a5a21fadb0d657c4576eb05044293297a7fcc92f6eca6d0b13007c50",
+      "mode": "100644",
+      "git_blob": "600fc9075e61a0c19ac907dff4f6509bf28e7bab"
+    },
+    {
+      "path": "src/polymesh/debug.hh",
+      "sha256": "f7a753b79c82806d6178167d841eb151ff8379eb908e7dff60b094faea83f240",
+      "mode": "100644",
+      "git_blob": "f01404a88fba4c8f76c110c1eb411e6bdf92c6fa"
+    },
+    {
+      "path": "src/polymesh/detail/AttributeSerializer.hh",
+      "sha256": "1fb4c89b08e79d2d29450ff94f4b12fc464b56b83451eb21e7357b5816852510",
+      "mode": "100644",
+      "git_blob": "0455326dd16f19ec5f056d7f1de8004102993d5b"
+    },
+    {
+      "path": "src/polymesh/detail/delaunay.cc",
+      "sha256": "fcc549676198f4985e5d9c56ae5a5e68c70ec75dd26f930fc860f5c52b058753",
+      "mode": "100644",
+      "git_blob": "89970f8b51cb69c1896a553efbf9338d18039d86"
+    },
+    {
+      "path": "src/polymesh/detail/delaunay.hh",
+      "sha256": "f86bf9483ed49eeae514016ae87f59e63ed27831cc4ebfeb6bf1b52ad5f39768",
+      "mode": "100644",
+      "git_blob": "ee539b8dde53d282fbf22e4c4d2b18f4c0663861"
+    },
+    {
+      "path": "src/polymesh/detail/math.hh",
+      "sha256": "d110620f9a3847a7c7da9ea41c5c347b8d62cafa9928e251a087586d67e9e744",
+      "mode": "100644",
+      "git_blob": "d0e87fc80e8037fbf633aba724f01d79af7774ae"
+    },
+    {
+      "path": "src/polymesh/detail/noop_function.hh",
+      "sha256": "aa0b2bb00769b4082e05d6203497bf085dab7220f5189f0100c5b9b5c7d74091",
+      "mode": "100644",
+      "git_blob": "2db75475741eaf473ea0a54b0e0884cb88c13446"
+    },
+    {
+      "path": "src/polymesh/detail/permutation.hh",
+      "sha256": "bc139fe3b027ac00256f88b80d192925d477a0c58370165681dab0899b300989",
+      "mode": "100644",
+      "git_blob": "ae880594843e5cd5e801bfa0c193e3a14ede0baa"
+    },
+    {
+      "path": "src/polymesh/detail/primitive_set.hh",
+      "sha256": "97f27409659afd5cc89e1aa0ab8f368f9e9fb668112e930fd1e4efbea8630f4c",
+      "mode": "100644",
+      "git_blob": "ced90b30c4f1cf2bcc2b4faff3de3ff691d6277d"
+    },
+    {
+      "path": "src/polymesh/detail/random.hh",
+      "sha256": "e5fee972c82b26d6bd623cda8e7be5e53f85125ec353813efb158115acc5a0b3",
+      "mode": "100644",
+      "git_blob": "ec5113754d02f29aea72152f71aabb568cfa5eac"
+    },
+    {
+      "path": "src/polymesh/detail/split_vector.hh",
+      "sha256": "283ab6a60e6adb3617117e82baf8f9d08133b11aa652953bdd7e42bc55ff6b13",
+      "mode": "100644",
+      "git_blob": "98457769978e4625a0cd4b7393a0c786d6e5a5ef"
+    },
+    {
+      "path": "src/polymesh/detail/topology_iterator.hh",
+      "sha256": "de5ef0b9c858e90f2fa6784ac2cc33a5227094b6d948a3c5ad384b3ed459dd82",
+      "mode": "100644",
+      "git_blob": "90bafd0e0905a4b0c3b6e16b5da0688929a3b371"
+    },
+    {
+      "path": "src/polymesh/detail/union_find.hh",
+      "sha256": "212259877fc59e1a4aa6237716b98ef5fadce495c8b068e6600206b989193a3a",
+      "mode": "100644",
+      "git_blob": "9972ca0475360a3321bf434926986ddfd9860d82"
+    },
+    {
+      "path": "src/polymesh/detail/unique_array.hh",
+      "sha256": "c72fb028a8f2897b001a2f787fbdac26575b1d9a5ce38438e47217b72a6b7682",
+      "mode": "100644",
+      "git_blob": "1d316b82dc16df7a8f10a42bfc9d5be28bd71bc5"
+    },
+    {
+      "path": "src/polymesh/detail/unique_ptr.hh",
+      "sha256": "89e76bbc76e26f41d554c5f8ce7fa5359f5e757f4ca88ee55709837558b7287f",
+      "mode": "100644",
+      "git_blob": "32dfb3308dacfd6ba622b66dc6b9349089c63fe9"
+    },
+    {
+      "path": "src/polymesh/ext/attribute_collection.hh",
+      "sha256": "b104f2b8c607cc206e2b3440ab4aeeb19e6fa8573970a05b8a87741a476b8d5a",
+      "mode": "100644",
+      "git_blob": "62d21373469a78e1232c1bc1875f490d0775f8e1"
+    },
+    {
+      "path": "src/polymesh/fields.hh",
+      "sha256": "0be1833b8d9b854ba9e632deb2025576618db8bcdde2b320fc4eb00642f44eed",
+      "mode": "100644",
+      "git_blob": "f6934c578f8902dc9cf3fc15517607a148cb9c51"
+    },
+    {
+      "path": "src/polymesh/formats.cc",
+      "sha256": "342d717377f1725c848dd65f16f91e399cef2a5a321ed4bb7c25173f9c2afca2",
+      "mode": "100644",
+      "git_blob": "b09e102439ae52f4a6b04d99cae38ccd87c71314"
+    },
+    {
+      "path": "src/polymesh/formats.hh",
+      "sha256": "06aa5e090c7aa385ae1dfb5927ff3b994d72b3c740f8e8d80f17f31abd8aab05",
+      "mode": "100644",
+      "git_blob": "9697f0370afc59eb875a73c6c58223cd565863a3"
+    },
+    {
+      "path": "src/polymesh/formats/obj.cc",
+      "sha256": "303f4f0980a5d95bcfb8d89aa728477af52ed6d06491296216f623051613a732",
+      "mode": "100644",
+      "git_blob": "7b4300285d7f8a74819e88be2740142258af1339"
+    },
+    {
+      "path": "src/polymesh/formats/obj.hh",
+      "sha256": "3e0d2096c6cc775a76ac11378fab4f0099c5dda825f2738e096a1b889ae7934f",
+      "mode": "100644",
+      "git_blob": "d8cdb5e6f8c75b022b9843889fa37daa8d82c45a"
+    },
+    {
+      "path": "src/polymesh/formats/off.cc",
+      "sha256": "256725bf3cfad1296d6a63005a5068c91efcae486afb4ba0f2733073b19d0c4e",
+      "mode": "100644",
+      "git_blob": "f48ce8705af8c227bd7f059773ab8ac17e55fe34"
+    },
+    {
+      "path": "src/polymesh/formats/off.hh",
+      "sha256": "5bb14df64a200d0a8de555ee60aa5fde53ee38ebb0e9291d81113e3a563708ca",
+      "mode": "100644",
+      "git_blob": "e78dc4809c4f781235ae0e73e0c4b0e9ab920183"
+    },
+    {
+      "path": "src/polymesh/formats/ply.cc",
+      "sha256": "88bdf220caa313e1d30b9f675c0018106203add860d6d64aae8efb005b6eaadd",
+      "mode": "100644",
+      "git_blob": "34dff94399326757d46d5a032668fdcf4e4b67c1"
+    },
+    {
+      "path": "src/polymesh/formats/ply.hh",
+      "sha256": "92781b8aa311e3df08a3b38d07285c1bfe7c26db3a90b0f5d918e80b518cfd08",
+      "mode": "100644",
+      "git_blob": "76b0b1b944a9acef19ba4bdd146f23ebd41ce408"
+    },
+    {
+      "path": "src/polymesh/formats/stl.cc",
+      "sha256": "1644c8ac9920306982e90db38689eb3b3e963f7d0233ad64c1cbce6f8f7fbf40",
+      "mode": "100644",
+      "git_blob": "3dc5839d57764828b5fdbd9e6c1a7959d3d3f5db"
+    },
+    {
+      "path": "src/polymesh/formats/stl.hh",
+      "sha256": "1af2bd3b9c6075291fedfa15e88efb9f624f71c202a6dbb5d5e77f66e4664c7a",
+      "mode": "100644",
+      "git_blob": "3bb4816aa5a6a3811a41098ffe93068ce78e5b8f"
+    },
+    {
+      "path": "src/polymesh/fwd.hh",
+      "sha256": "fa60a246f9c1cc0725a880181632ccfd0d76a5c53bdd6a2ef97d2c8eb1c6cecb",
+      "mode": "100644",
+      "git_blob": "a96469a40435849ab3b74ebf010bb127fcf1b56b"
+    },
+    {
+      "path": "src/polymesh/hash.hh",
+      "sha256": "1d27748981a3d3fb8bf90e5a86f5a911a1ddf034787663f256335d624168c5b9",
+      "mode": "100644",
+      "git_blob": "f94afea2f4f05220329189c8618dae586f919623"
+    },
+    {
+      "path": "src/polymesh/impl/impl_attributes.hh",
+      "sha256": "05b6dc72993dc05928bdf6a78e9b538df5f007a9700269bd9e833fbb6f51a760",
+      "mode": "100644",
+      "git_blob": "222706b8aec8a1b2dc8a32b6a444c10537752faf"
+    },
+    {
+      "path": "src/polymesh/impl/impl_cursors.hh",
+      "sha256": "b6f5bb29c091478b9371597ac76eef7420237b23c5ca2be5fe25b42dd2d165c6",
+      "mode": "100644",
+      "git_blob": "78ee003203aacce0236f5cc58701156f996a5d9d"
+    },
+    {
+      "path": "src/polymesh/impl/impl_low_level_api_base.hh",
+      "sha256": "7e21517b5ee12623e6c6d4ca8b47a6e5acd699b41a3deb79cc04120e4064cc0b",
+      "mode": "100644",
+      "git_blob": "a9665a0f97fb42fb8d1542aee23691ad3f1b2474"
+    },
+    {
+      "path": "src/polymesh/impl/impl_low_level_api_mutable.hh",
+      "sha256": "0da698dfd2c80b9e8a3dc6bad462aec9f2c0eb4203089fad0820660906d5f3c1",
+      "mode": "100644",
+      "git_blob": "cf1853a1d76e68a09f8f7a530b7a6ef3c78c53d5"
+    },
+    {
+      "path": "src/polymesh/impl/impl_mesh.hh",
+      "sha256": "7b7e9384153c0f8ae430289abf21b3b33c77e85b9f588decdc9405b7836efdda",
+      "mode": "100644",
+      "git_blob": "5af5703acc73fa35bc73673c8222375c413f317c"
+    },
+    {
+      "path": "src/polymesh/impl/impl_primitive.hh",
+      "sha256": "56878b2597f038548ccbc9b8254a5ba5b391c66ac064193e5495a39bfd523504",
+      "mode": "100644",
+      "git_blob": "6aec17e96661f1ee968d2148f056cbdbaffc9a97"
+    },
+    {
+      "path": "src/polymesh/impl/impl_properties.hh",
+      "sha256": "6968a496ca7ea81307de041a1f4ad1f0e8d54de563bab0044789ca4a0a9f200e",
+      "mode": "100644",
+      "git_blob": "0d2936286d56510f74e9a5151ec3aa27227014d0"
+    },
+    {
+      "path": "src/polymesh/impl/impl_ranges.hh",
+      "sha256": "58d49dc05388737d08aef53dd70d9c74d0d97096a010dc2b4b39da4ac00b2e13",
+      "mode": "100644",
+      "git_blob": "fd00accae4c1a8e8511f341ba1088db5a5bf45ff"
+    },
+    {
+      "path": "src/polymesh/iterators.hh",
+      "sha256": "a4dcfd6013656033bfa6dd81d522bd91422936be50ab9803f3170a01ef69e1a0",
+      "mode": "100644",
+      "git_blob": "cf88fe4a061e279dfeacb5d9c935b1aeb0f23d52"
+    },
+    {
+      "path": "src/polymesh/low_level_api.hh",
+      "sha256": "48b49378b1efcfbe113c9cd670141f22f0abafec5dc62d595eced9367cb63669",
+      "mode": "100644",
+      "git_blob": "aaae6ac1e0df0dde5e5335101ee9fd9610c0db94"
+    },
+    {
+      "path": "src/polymesh/macros.hh",
+      "sha256": "996422797fd012fcd0d01d869bbe499f1cfbf5467f3ea96aa45e055dd277741e",
+      "mode": "100644",
+      "git_blob": "e9a69d7d370b37b33b02bf2cd8c66b80d6cb445b"
+    },
+    {
+      "path": "src/polymesh/objects.hh",
+      "sha256": "a9bf3f89a795b26a31cdb9731783699395490f4833b79baa00bee5288e82cc9e",
+      "mode": "100644",
+      "git_blob": "30a2e5f5f7d246fa37d8e5338e55e23866b6f9fc"
+    },
+    {
+      "path": "src/polymesh/objects/cone.hh",
+      "sha256": "48df3023d85ec927276051c4d93cd87b00a5258c815804d6a2b57628e81fcce6",
+      "mode": "100644",
+      "git_blob": "c2244eedf0063086fade2bf605e6db7f9d3b2efb"
+    },
+    {
+      "path": "src/polymesh/objects/cube.hh",
+      "sha256": "683e5ae4ec3ff7477c62bb6f4f017f2af1be4e6149b52b26cf9bbc50c4984a47",
+      "mode": "100644",
+      "git_blob": "5d0c1e026678c6efb86c24b2c2edc97c81a12747"
+    },
+    {
+      "path": "src/polymesh/objects/cylinder.hh",
+      "sha256": "31c94ce5f975d43d255b2889bf063fcbd90c8a9c5c00e1611e47c4f3c3d5d2b4",
+      "mode": "100644",
+      "git_blob": "86dfa33614209fed0d25890449717b1a893eb76e"
+    },
+    {
+      "path": "src/polymesh/objects/dodecahedron.cc",
+      "sha256": "91b666bad5ecdbbd6ff4e4de10833f50e685391d64ff82b03676e7d5ef242115",
+      "mode": "100644",
+      "git_blob": "ad116e7f7e7776e175af7bdb7f66a1fa2b610ae7"
+    },
+    {
+      "path": "src/polymesh/objects/dodecahedron.hh",
+      "sha256": "65caf972892118e16a4e6b3f0b9b16535a8cc99d754bcd563c086d5568953ff9",
+      "mode": "100644",
+      "git_blob": "ad802dafa584e16492392015d8192d49d90c0229"
+    },
+    {
+      "path": "src/polymesh/objects/ico_sphere.cc",
+      "sha256": "947419223d5d3db5289a00f8cff6490f65be0d6462d53d2f41dcc57f99f67cdf",
+      "mode": "100644",
+      "git_blob": "f58acee498293c0400bc1881939b8c2f81b4c3ac"
+    },
+    {
+      "path": "src/polymesh/objects/ico_sphere.hh",
+      "sha256": "777d8e2aba8205222a6b80e33e2ed6e73da093e084d4e642eb3d0a667c40dce7",
+      "mode": "100644",
+      "git_blob": "cc368eb0bd54ebbfa21fdf33c8c5b2ec878d64fe"
+    },
+    {
+      "path": "src/polymesh/objects/quad.hh",
+      "sha256": "f5d1238cce3d9ae16e1b6c2eb3bce1c32e3ce4a7d96872f0b00a45279ae5c242",
+      "mode": "100644",
+      "git_blob": "85433cbed95a36df28156fa459e156deebcc9239"
+    },
+    {
+      "path": "src/polymesh/objects/uv_sphere.hh",
+      "sha256": "628b54e2fc02df0a367bee8b0921157ba20a9fcb2c4b9506ec005d235db337ab",
+      "mode": "100644",
+      "git_blob": "fbbea26ab815f9326f6390171ea392a8a0e9e462"
+    },
+    {
+      "path": "src/polymesh/pm-std.hh",
+      "sha256": "4498095e9752361e42139b3de7a3f731a77bcb7cf69a2c14581ac730448cddd3",
+      "mode": "100644",
+      "git_blob": "6a0cddaa8fa1c50cfa3085a78b3a5c8d1bd1b4f9"
+    },
+    {
+      "path": "src/polymesh/pm.hh",
+      "sha256": "15ac7fbb108749c5603bed3b98b27b3270972b517890b07f588eaa523bb1e310",
+      "mode": "100644",
+      "git_blob": "dca8b571dc0770fdd3c243f9b606499f42d0f4b4"
+    },
+    {
+      "path": "src/polymesh/primitives.hh",
+      "sha256": "f396089176b78828f9a5e9d8832e334d9a2d6ef0e702efdfd613f686d3153ae4",
+      "mode": "100644",
+      "git_blob": "8a122653d829a4300bdbac241a4d2c077b8d6763"
+    },
+    {
+      "path": "src/polymesh/properties.hh",
+      "sha256": "68b212d15a74d2af2ab7fa9c6757d926fdb9bab04dcb424a09c070d6bfc9bcdb",
+      "mode": "100644",
+      "git_blob": "6de6b33aef414a463e1f02e4a88df1450687b408"
+    },
+    {
+      "path": "src/polymesh/ranges.hh",
+      "sha256": "6890c97ec0c40aba98d65b1171b0c6a96c70ec4a13508ce4daf75937620b8719",
+      "mode": "100644",
+      "git_blob": "0efad6d6a898d2358d8fcb39deea94480bf92f15"
+    },
+    {
+      "path": "src/polymesh/span.hh",
+      "sha256": "8a31fb66f24034bc3ad8856a236e4abc232c51f134024961f514c9307b7c05b0",
+      "mode": "100644",
+      "git_blob": "db18e1a76196c5cd71055be3cf0102b2089fa532"
+    },
+    {
+      "path": "src/polymesh/std/hash.hh",
+      "sha256": "68693cc3158dc46d7a61fd3ae6796ac29e7b927ab4a26f776376cdb39a6a1cae",
+      "mode": "100644",
+      "git_blob": "a06483842c143a80c0c839cd28a0cfe17a4a3803"
+    },
+    {
+      "path": "src/polymesh/std/io.hh",
+      "sha256": "25d537bb176749ac8d703d9990909b17f433f30c37af2b767bd95037b82effc3",
+      "mode": "100644",
+      "git_blob": "fe765ac7eafb341fcc70893dde944efbdec2c29c"
+    },
+    {
+      "path": "src/polymesh/std/memory.hh",
+      "sha256": "5a3090808137a49414e5a919d7550e6150f2657d8206e81e92053c02d046d619",
+      "mode": "100644",
+      "git_blob": "f7b00c4e7d13a8115546c6a904bcca7562ebdb1b"
+    },
+    {
+      "path": "src/polymesh/tmp.hh",
+      "sha256": "c0af12c361d36f21a6e27aff01a59b487501559ae77728be5f7fa18336eda516",
+      "mode": "100644",
+      "git_blob": "953303dbfa8b5fa5d0949971396e17ae3a3d95a9"
+    },
+    {
+      "path": "src/polymesh/view.hh",
+      "sha256": "a477709f7b419dc69e4e095773c51e53a2751b4594b17a2e2c391f79c54bce85",
+      "mode": "100644",
+      "git_blob": "167a15735ecc7345f194fa8253a8218a8c980fa9"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".clang-format",
+      "git_blob": "5fdf0f06d9ee2c014611ec252e905e12fdff01ef",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": ".gitignore",
+      "git_blob": "789aaee3e0562f3035e542198ebad8883529d4c0",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/.gitignore",
+      "git_blob": "b1e2864799419f60749c9ddbd9e74a26451b4367",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/Doxyfile",
+      "git_blob": "4a3389cf0da700689a4187f3709c80e560bf1398",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/Makefile",
+      "git_blob": "c3dca40d0afff5c1f8f8be03ad33630f7f865cec",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/_static/css/custom.css",
+      "git_blob": "f7c9f0b079a5ac303b344c7e18b4caa623ac9b82",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/algorithms.rst",
+      "git_blob": "7a3f05b1deb1539da1ac0521bef52572449b3160",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/attributes.rst",
+      "git_blob": "d51abc84511352d3bc4509ca4ffbbfffef061d74",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/conf.py",
+      "git_blob": "7b34c2f8880d244c42091382dba6b47ec7b98139",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/contributing.rst",
+      "git_blob": "d11c132c9408bc8c28d1a60269eecaab6588df7b",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/cookbook.rst",
+      "git_blob": "2ee1605daf90d7e0605de50eff712dbb2742d709",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/faq.rst",
+      "git_blob": "7e269afd97d2d0cd3841e74831fbca84680f1bb5",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/getting-started.rst",
+      "git_blob": "25d17af3566728bd9337251339960159ca476d76",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/index.rst",
+      "git_blob": "0cb05a2c714efcaf29c1d064f5a10cba45eb1c7f",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/make.bat",
+      "git_blob": "2119f51099bf37e4fdb6071dce9f451ea44c62dd",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/mesh-topology.rst",
+      "git_blob": "7185499368df63e290ea5a7e54d9105bd0ff6b90",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/misc.rst",
+      "git_blob": "d59e7d3b2fd67e64b782ded522238bfc81bded7b",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/objects.rst",
+      "git_blob": "db4977df74992aed2809c8403786597b4e9b840a",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/performance.rst",
+      "git_blob": "80e3dd8375ad93fd523a0cd5f3efa5cc1b853757",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/properties.rst",
+      "git_blob": "dd3c7887de5507bc2df087377eeceb1c5d8c9042",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/readthedocs.yml",
+      "git_blob": "a36db8a13998d337a2e418dced58b9dbef272f78",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/reference.rst",
+      "git_blob": "bba061a17c4acecc9bccc2340491d1c3cf3d8d95",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/requirements.txt",
+      "git_blob": "bd3be8afd71a039c346e6214e0cdc2330d2341f6",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/roadmap.rst",
+      "git_blob": "a0ca1073ebbd26bf92cacc609437499563270ea1",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/serialization.rst",
+      "git_blob": "bb9a6e3dfc101cc10b51a21e6d854ee78ef69425",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/smart-ranges.rst",
+      "git_blob": "00ebb5a22d4bc30aafa693ba897fd82dd6bceee8",
+      "reason": "unused documentation or editor/build metadata"
+    },
+    {
+      "path": "docs/vector-math.rst",
+      "git_blob": "62caf921f46c96d25e884f63f5610231b75fe677",
+      "reason": "unused documentation or editor/build metadata"
+    }
+  ],
+  "dependencies": [
+    {
+      "repo": "https://github.com/project-arcana/clean-core",
+      "commit": "08aa8fc4a042ac3900ab3d7a54e5acbb2c8dbbcd",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "task_support/vendor/LICENSE.clean-core",
+          "upstream_path": "LICENSE",
+          "sha256": "150eb7c9369737a8dce9b864b92f5673205e98b0282c6e5f5a6b2b52307e183d"
+        },
+        {
+          "path": "task_support/vendor/clean-core/assert.hh",
+          "upstream_path": "src/clean-core/assert.hh",
+          "sha256": "c8a372d5afa5b220e071c700dd01da8cbf72b756d7fee2990fd342e1558dd71c"
+        },
+        {
+          "path": "task_support/vendor/clean-core/char_predicates.hh",
+          "upstream_path": "src/clean-core/char_predicates.hh",
+          "sha256": "b8963d732fd637d817533ed2b310b5098745082765ffa8cae1ee5a701089d383"
+        },
+        {
+          "path": "task_support/vendor/clean-core/detail/remove_reference.hh",
+          "upstream_path": "src/clean-core/detail/remove_reference.hh",
+          "sha256": "0c668c6c3ff85f64f30eba854a30950481f9d97019eb93e22f3732fdb13defde"
+        },
+        {
+          "path": "task_support/vendor/clean-core/enable_if.hh",
+          "upstream_path": "src/clean-core/enable_if.hh",
+          "sha256": "778905572506359c32f5b87280c3462f8a5846404d1c18c1f67f1ac5643bcf1e"
+        },
+        {
+          "path": "task_support/vendor/clean-core/forward.hh",
+          "upstream_path": "src/clean-core/forward.hh",
+          "sha256": "605f4497f6579d383ddf7cdc7ce53528cd7485363e798885c412d52464ad71ea"
+        },
+        {
+          "path": "task_support/vendor/clean-core/fwd.hh",
+          "upstream_path": "src/clean-core/fwd.hh",
+          "sha256": "d9f7c39279187a4e079289b3b6122aa8eef8fc0b5a633ed5d4bed59df48f135f"
+        },
+        {
+          "path": "task_support/vendor/clean-core/hash_combine.hh",
+          "upstream_path": "src/clean-core/hash_combine.hh",
+          "sha256": "5c534839e2c3303d397b7bf89bba48ab99730d9b4e07cf4f0332663f5c570c1a"
+        },
+        {
+          "path": "task_support/vendor/clean-core/is_contiguous_range.hh",
+          "upstream_path": "src/clean-core/is_contiguous_range.hh",
+          "sha256": "b073435eb0cff0013651f0ed255dc92c2d926ebe850aa3924352abc6f3073bea"
+        },
+        {
+          "path": "task_support/vendor/clean-core/macros.hh",
+          "upstream_path": "src/clean-core/macros.hh",
+          "sha256": "7e48f2c5d4a4bf48a71b84535e88a7410101854781263e8295d53f8ed2c951f7"
+        },
+        {
+          "path": "task_support/vendor/clean-core/move.hh",
+          "upstream_path": "src/clean-core/move.hh",
+          "sha256": "b37328da434af2dd49c387b3c3c5c02eb344a5fd16d9b039311c5c45bff1cd6d"
+        },
+        {
+          "path": "task_support/vendor/clean-core/pair.hh",
+          "upstream_path": "src/clean-core/pair.hh",
+          "sha256": "bee55b021471d1d87d60748debcdba04ee41dbf224348db6d4936c8e48b1711a"
+        },
+        {
+          "path": "task_support/vendor/clean-core/sentinel.hh",
+          "upstream_path": "src/clean-core/sentinel.hh",
+          "sha256": "9c5db5ca4cc15663b2a5a89c406ed47ea3f532a72463ca809ee0734b1cc9c3b3"
+        },
+        {
+          "path": "task_support/vendor/clean-core/string_view.hh",
+          "upstream_path": "src/clean-core/string_view.hh",
+          "sha256": "133448ea7c9d6a9e792567c897b1046b30fa395598394d622a0a9932a839edcc"
+        }
+      ],
+      "selection": "original header closure, each file verified against this checkout"
+    }
+  ],
+  "gitlinks": [],
+  "symlinks": [],
+  "binary_assets": [],
+  "runtime": "C++17 standard library plus included clean-core headers; no package manager, network or GPU"
+}
