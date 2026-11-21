@@ -1,0 +1,69 @@
+{
+  "repo": "ssloy/tinyraytracer",
+  "commit": "ce6b7852b7de11d485c017e16a9b990b94a66322",
+  "source_export": "Fixed export of the same production files; raw committed ancillary files copied from cached checkout. All nine tracked files compared byte-for-byte with Git blobs.",
+  "files": [
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "blob": "d89afb71403cc356504705175ecfc029700b0d7d",
+      "sha256": "4d450773cfe70003a1eb61dedfe841ba1f52d9e3489bb45da0ac23e03073f70e"
+    },
+    {
+      "path": ".gitpod.yml",
+      "mode": "100644",
+      "blob": "8dd80f126ee35eccf19303be676a4c38e4f2d03e",
+      "sha256": "36f8211ba1e712280ffdfc4ba3c04635adabce55cdbc8187f66937672f296c89"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "blob": "3ac2c28bcd7cddbbdbed5509f162dff9198556c7",
+      "sha256": "e7b71181ecd8058f4adc65f081a5e329439799194a4e677c43e3ae390afc3771"
+    },
+    {
+      "path": "Dockerfile",
+      "mode": "100644",
+      "blob": "aa1f8a5647ecdcc430f46ca1770bc8ec3829b774",
+      "sha256": "3c2c5dcbe804e3f2d2dd82555c1adcb6f7ceb96adfcfb54b70a27af972b2f2e3"
+    },
+    {
+      "path": "Readme.md",
+      "mode": "100644",
+      "blob": "b1763fc22fa8084ecce6639c473537c016cd3ff1",
+      "sha256": "3135180fe8fce4f491a6d7bd06c50143b4bb35bdd99ecb9f3aa4108ac57e6496"
+    },
+    {
+      "path": "anaglyph.jpg",
+      "mode": "100644",
+      "blob": "1e5f8b611ca300ec836d12fb15e96f61fb1e6900",
+      "sha256": "7d79ed9eb135fd0669a6a2f2a5d06907cd363b3d65a50ddc3979de34c19fa301"
+    },
+    {
+      "path": "out.jpg",
+      "mode": "100644",
+      "blob": "b44ed247d91dd06d3f9b3f68330e7b2bca95504f",
+      "sha256": "3d08e593eae25d9006088a2207ffba87528a1c05e71df2d8bed6cca1b0e40698"
+    },
+    {
+      "path": "tinyraytracer.cpp",
+      "mode": "100644",
+      "blob": "2567af8ec3502885f0d89e1f7b132830c814ff18",
+      "sha256": "c66a6d3ec24919b83253a3c1b547e8aaa011245ce0cb3aa1efad1057b80b6f72"
+    },
+    {
+      "path": "trace.png",
+      "mode": "100644",
+      "blob": "1c025141683be73b18884feab03c1e3c8d251b20",
+      "sha256": "ce186e22e8341db85b31aea69c09d2a632436a26901a049aef4d53014720fdee"
+    }
+  ],
+  "gitlinks": [],
+  "gitmodules": false,
+  "exclusions": [
+    ".git metadata only"
+  ],
+  "license": "Readme.md declares WTFPL without version. LICENSE is the previously supplied WTFPL v2 reference text, not a file claimed present at the upstream commit.",
+  "binary_assets": "anaglyph.jpg,out.jpg,trace.png are upstream documentation images; renderer does not load them; preserved unchanged",
+  "runtime_dependencies": "C++17 standard library only; no symlinks, download, credentials or package cache"
+}
