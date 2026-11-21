@@ -39,10 +39,14 @@ struct ShaderBuiltin {
   // fragment shader input
   glm::vec4 FragCoord;
   bool FrontFacing;
+  int SampleID = -1;                        // shaded sample index, -1 in per-pixel mode
+  glm::vec2 SamplePosition = glm::vec2(0.5f);  // sample offset relative to the pixel origin
+  uint32_t SampleMaskIn = 0;                // geometric coverage & state sample mask
 
   // fragment shader output
   glm::vec4 FragColor;
   bool discard = false;
+  uint32_t SampleMask = 0xFFFFFFFFu;        // output sample mask
 
   // derivative
   DerivativeContext dfCtx;
@@ -114,8 +118,14 @@ class ShaderSoft {
   ShaderBuiltin *gl = nullptr;
   std::function<float(BaseSampler<RGBA> *)> texLodFunc;
 
+  // derivative context of the fragment shader invocation running on the
+  // current thread; bound before every shaderMain() execution so that
+  // implicit texture LOD always reads the current lane's data, even when
+  // the sampler object is shared between per-thread shader clones
+  static inline thread_local DerivativeContext *activeDfCtx = nullptr;
+
   float getSampler2DLod(BaseSampler<RGBA> *sampler) const {
-    auto &dfCtx = gl->dfCtx;
+    auto &dfCtx = (activeDfCtx != nullptr) ? *activeDfCtx : gl->dfCtx;
     size_t dfOffset = getSamplerDerivativeOffset(sampler);
 
     auto *coord0 = (glm::vec2 *) (dfCtx.p0 + dfOffset);

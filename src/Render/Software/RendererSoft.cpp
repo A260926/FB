@@ -772,21 +772,37 @@ void RendererSoft::rasterizationPixelQuad(PixelQuadContext &quad) {
   glm::aligned_vec4 *vert = quad.vertPosFlat;
   glm::aligned_vec4 &v0 = quad.vertPos[0];
 
+  const bool sampleShading = renderState_->sampleShading;
+  const uint32_t stateMask = renderState_->sampleMask;
+
   // barycentric
   for (auto &pixel : quad.pixels) {
     for (auto &sample : pixel.samples) {
       sample.inside = barycentric(vert, v0, sample.position, sample.barycentric);
     }
     pixel.InitCoverage();
-    pixel.InitShadingSample();
+    if (!sampleShading) {
+      pixel.InitShadingSample();
+    }
   }
   if (!quad.CheckInside()) {
     return;
   }
 
+  const int sampleCount = quad.pixels[0].sampleCount;
+  const uint32_t targetMask = (1u << sampleCount) - 1u;
+
+  // interpolate z, w & barycentric correction
+  // note: in per-sample mode all real samples are processed (even uncovered
+  // ones) so that derivative helper lanes get perspective-correct extrapolation
   for (auto &pixel : quad.pixels) {
-    for (auto &sample : pixel.samples) {
-      if (!sample.inside) {
+    for (int idx = 0; idx < (int) pixel.samples.size(); idx++) {
+      auto &sample = pixel.samples[idx];
+      if (sampleShading) {
+        if (idx >= sampleCount) {
+          break;  // pixel center sample is not used in per-sample mode
+        }
+      } else if (!sample.inside) {
         continue;
       }
 
@@ -803,11 +819,41 @@ void RendererSoft::rasterizationPixelQuad(PixelQuadContext &quad) {
     }
   }
 
+  // fragment input mask: geometric coverage intersected with the state sample
+  // mask, restricted to the target's real sample bits; independent of early z
+  uint32_t maskIn[4];
+  for (int p = 0; p < 4; p++) {
+    maskIn[p] = quad.pixels[p].CoverageMask() & stateMask & targetMask;
+  }
+
   // early z
   if (earlyZ_ && renderState_->depthTest) {
     if (!earlyZTest(quad)) {
       return;
     }
+  }
+
+  // depth-only rendering: no fragment shader execution, keep original behavior
+  if (!fboColor_) {
+    for (auto &pixel : quad.pixels) {
+      if (!pixel.inside) {
+        continue;
+      }
+      for (int idx = 0; idx < pixel.sampleCount; idx++) {
+        auto &sample = pixel.samples[idx];
+        if (!sample.inside) {
+          continue;
+        }
+        processPerSampleOperations(sample.fboCoord.x, sample.fboCoord.y, sample.position.z, glm::vec4(0.f), idx);
+      }
+    }
+    return;
+  }
+
+  // per-sample shading
+  if (sampleShading) {
+    rasterizationPixelQuadSampleShading(quad, maskIn, targetMask);
+    return;
   }
 
   // varying interpolate
@@ -820,32 +866,105 @@ void RendererSoft::rasterizationPixelQuad(PixelQuadContext &quad) {
   }
 
   // pixel shading
-  for (auto &pixel : quad.pixels) {
+  for (int p = 0; p < 4; p++) {
+    auto &pixel = quad.pixels[p];
     if (!pixel.inside) {
       continue;
     }
 
     // fragment shader
-    processFragmentShader(pixel.sampleShading->position,
-                          quad.frontFacing,
-                          pixel.varyingsFrag,
-                          quad.shaderProgram.get());
-
-    // sample coverage
     auto &builtIn = quad.shaderProgram->getShaderBuiltin();
+    builtIn.FragCoord = pixel.sampleShading->position;
+    builtIn.FrontFacing = quad.frontFacing;
+    builtIn.SampleID = -1;
+    builtIn.SamplePosition = glm::vec2(pixel.sampleShading->position) - glm::vec2(pixel.sampleShading->fboCoord);
+    builtIn.SampleMaskIn = maskIn[p];
+    builtIn.SampleMask = targetMask;
+    builtIn.discard = false;
+
+    quad.shaderProgram->bindFragmentShaderVaryings(pixel.varyingsFrag);
+    quad.shaderProgram->execFragmentShader();
+
+    // discard cancels the commit of this invocation
+    if (builtIn.discard) {
+      continue;
+    }
+
+    // sample coverage: geometric coverage & state mask & shader output mask
+    uint32_t outMask = builtIn.SampleMask & stateMask & targetMask;
 
     // per-sample operations
-    if (pixel.sampleCount > 1) {
-      for (int idx = 0; idx < pixel.sampleCount; idx++) {
-        auto &sample = pixel.samples[idx];
-        if (!sample.inside) {
-          continue;
-        }
-        processPerSampleOperations(sample.fboCoord.x, sample.fboCoord.y, sample.position.z, builtIn.FragColor, idx);
+    for (int idx = 0; idx < pixel.sampleCount; idx++) {
+      auto &sample = pixel.samples[idx];
+      if (!sample.inside || !((outMask >> idx) & 1u)) {
+        continue;
       }
-    } else {
-      auto &sample = *pixel.sampleShading;
-      processPerSampleOperations(sample.fboCoord.x, sample.fboCoord.y, sample.position.z, builtIn.FragColor, 0);
+      processPerSampleOperations(sample.fboCoord.x, sample.fboCoord.y, sample.position.z, builtIn.FragColor, idx);
+    }
+  }
+}
+
+void RendererSoft::rasterizationPixelQuadSampleShading(PixelQuadContext &quad,
+                                                       const uint32_t *maskIn,
+                                                       uint32_t targetMask) {
+  const int sampleCount = quad.pixels[0].sampleCount;
+  auto &builtIn = quad.shaderProgram->getShaderBuiltin();
+
+  // one fragment shader execution per remaining covered sample
+  for (int s = 0; s < sampleCount; s++) {
+    bool anyExec = false;
+    for (int p = 0; p < 4; p++) {
+      if (quad.pixels[p].samples[s].inside && ((maskIn[p] >> s) & 1u)) {
+        anyExec = true;
+        break;
+      }
+    }
+    if (!anyExec) {
+      continue;
+    }
+
+    // varying interpolate at this sample offset for all quad pixels;
+    // uncovered or depth-failed neighbors are extrapolated through the
+    // triangle's perspective interpolation as derivative helper lanes
+    for (auto &pixel : quad.pixels) {
+      interpolateBarycentric((float *) pixel.varyingsFrag,
+                             quad.vertVaryings,
+                             varyingsCnt_,
+                             pixel.samples[s].barycentric);
+    }
+
+    // bind derivative context to the current lanes (same sample offset)
+    DerivativeContext &dfCtx = builtIn.dfCtx;
+    dfCtx.p0 = quad.pixels[0].varyingsFrag;
+    dfCtx.p1 = quad.pixels[1].varyingsFrag;
+    dfCtx.p2 = quad.pixels[2].varyingsFrag;
+    dfCtx.p3 = quad.pixels[3].varyingsFrag;
+
+    for (int p = 0; p < 4; p++) {
+      auto &pixel = quad.pixels[p];
+      auto &sample = pixel.samples[s];
+      if (!sample.inside || !((maskIn[p] >> s) & 1u)) {
+        continue;
+      }
+
+      // fragment shader
+      builtIn.FragCoord = sample.position;
+      builtIn.FrontFacing = quad.frontFacing;
+      builtIn.SampleID = s;
+      builtIn.SamplePosition = glm::vec2(sample.position) - glm::vec2(sample.fboCoord);
+      builtIn.SampleMaskIn = maskIn[p];
+      builtIn.SampleMask = targetMask;
+      builtIn.discard = false;
+
+      quad.shaderProgram->bindFragmentShaderVaryings(pixel.varyingsFrag);
+      quad.shaderProgram->execFragmentShader();
+
+      // only the output mask decides whether this sample commits;
+      // discard cancels this invocation only
+      if (builtIn.discard || !((builtIn.SampleMask >> s) & 1u)) {
+        continue;
+      }
+      processPerSampleOperations(sample.fboCoord.x, sample.fboCoord.y, sample.position.z, builtIn.FragColor, s);
     }
   }
 }

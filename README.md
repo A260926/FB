@@ -38,6 +38,56 @@ programming.
 - Depth test & Alpha blending
 - Early Z test & Reversed Z
 - MSAA 4x
+- Per-sample shading (see below)
+
+#### Per-sample shading
+
+The software triangle fill path can optionally execute the fragment shader once
+per covered sample instead of once per pixel (point, line and non-fill polygon
+paths are unaffected and ignore the new state).
+
+Pipeline states (`RenderStates`):
+
+- `sampleShading` (bool, default `false`): enable per-sample shader execution.
+- `sampleMask` (uint32_t, default `0xFFFFFFFF`): state sample mask, intersected
+  with the geometric coverage.
+
+Shader builtins (`ShaderBuiltin`):
+
+- input `int SampleID`: shaded sample index (`-1` in per-pixel mode).
+- input `glm::vec2 SamplePosition`: sample offset relative to the pixel origin
+  (the 4x MSAA locations, `(0.5, 0.5)` for single-sample targets; in per-pixel
+  mode the offset of the representative point).
+- input `uint32_t SampleMaskIn`: geometric coverage & `sampleMask`, restricted
+  to the target's real sample bits; independent of the early depth test.
+- output `uint32_t SampleMask`: per-fragment output mask, reset to the target's
+  sample bits before every shader execution (`discard` is reset as well).
+
+With `sampleShading=true`, the fragment shader runs once for every sample of
+the geometric coverage intersected with `sampleMask` (state mask `0` means no
+shader execution at all), and `FragCoord`/varyings are rebuilt at the sample
+position. Only the output `SampleMask` bit of the current `SampleID` decides
+whether that sample commits; `discard` cancels the current invocation only.
+With `sampleShading=false` the shader still runs once per pixel at the old
+representative point, and the output mask may reject individual covered
+samples. A sample is committed (color blend + depth write) only if it is
+covered, allowed by the state mask and the output mask, not discarded, and
+passes the depth comparison; uncommitted samples never occupy depth.
+
+Derivatives (`dFdx`/`dFdy` and implicit texture LOD) still come from the 2x2
+pixel quad of the same primitive, but in per-sample mode all four lanes use the
+same `SampleID` sample offset; uncovered or depth-failed neighbor pixels are
+extrapolated through the triangle's perspective interpolation as helper lanes
+(they neither execute the shader nor write buffers).
+
+#### Checks & example
+
+- `checks/target.cpp`: per-sample interpolation/derivative/commit checks,
+  runnable via `bash task_support/run.sh target` (also rebuilds everything and
+  re-runs the textured-draw baseline).
+- `examples/sample_material.cpp`: renders a per-sample material demo into a 4x
+  MSAA target with `RendererSoft` and writes a binary PPM:
+  `sample_material <output.ppm>`.
 
 #### Texture Mapping
 

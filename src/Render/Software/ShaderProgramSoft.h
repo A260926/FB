@@ -98,6 +98,7 @@ class ShaderProgramSoft : public ShaderProgram {
   }
 
   inline void execFragmentShader() {
+    ShaderSoft::activeDfCtx = &builtin_.dfCtx;
     fragmentShader_->setupSamplerDerivative();
     fragmentShader_->shaderMain();
   }

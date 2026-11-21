@@ -88,6 +88,12 @@ struct RenderStates {
   PrimitiveType primitiveType = Primitive_TRIANGLE;
   PolygonMode polygonMode = PolygonMode_FILL;
 
+  // per-sample shading (triangle fill path only, ignored by point/line paths)
+  // sampleShading: execute the fragment shader once per covered sample
+  // sampleMask: state sample mask, intersected with the geometric coverage
+  bool sampleShading = false;
+  uint32_t sampleMask = 0xFFFFFFFFu;
+
   float lineWidth = 1.f;
 };
 

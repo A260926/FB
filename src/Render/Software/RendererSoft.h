@@ -86,6 +86,7 @@ class RendererSoft : public Renderer {
   void rasterizationPolygonsLine(std::vector<PrimitiveHolder> &primitives);
   void rasterizationPolygonsTriangle(std::vector<PrimitiveHolder> &primitives);
   void rasterizationPixelQuad(PixelQuadContext &quad);
+  void rasterizationPixelQuadSampleShading(PixelQuadContext &quad, const uint32_t *maskIn, uint32_t targetMask);
 
   bool earlyZTest(PixelQuadContext &quad);
   void multiSampleResolve();

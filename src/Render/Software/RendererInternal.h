@@ -123,6 +123,18 @@ class PixelContext {
     }
   }
 
+  // bitmask of covered real samples (pixel center sample excluded)
+  inline uint32_t CoverageMask() const {
+    uint32_t mask = 0;
+    int cnt = (sampleCount > 1) ? sampleCount : 1;
+    for (int i = 0; i < cnt; i++) {
+      if (samples[i].inside) {
+        mask |= (1u << i);
+      }
+    }
+    return mask;
+  }
+
  public:
   bool inside = false;
   float *varyingsFrag = nullptr;

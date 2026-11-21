@@ -1,0 +1,5 @@
+src/Base/Geometry.cpp
+src/Base/ImageUtils.cpp
+src/Base/Logger.cpp
+src/Base/Timer.cpp
+src/Render/Software/RendererSoft.cpp
