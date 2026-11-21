@@ -1,9 +1,10 @@
 CXXFLAGS= -O3 -fomit-frame-pointer
-override CXXFLAGS+= -Wall -fsigned-char
+override CXXFLAGS+= -Wall -fsigned-char -pthread
 
 LIBS=-lglut -lGL
 OBJS= \
 	demo.o \
+	async_pose.o \
 	texture.o
 GPU_OBJS= \
 	gpu-demo.o \

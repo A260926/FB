@@ -10,6 +10,7 @@ endif
 LIBS= -mwindows -static -static-libgcc -static-libstdc++ -L. -lfreeglut -lopengl32
 OBJS= \
 	demo.o \
+	async_pose.o \
 	texture.o
 GPU_OBJS= \
 	gpu-demo.o \
