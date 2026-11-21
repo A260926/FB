@@ -1,0 +1,6 @@
+/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/.task-build/cmake/CMakeFiles/lnlib_offline.dir
+/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/.task-build/cmake/CMakeFiles/baseline.dir
+/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/.task-build/cmake/CMakeFiles/target.dir
+/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/.task-build/cmake/CMakeFiles/thb_example.dir
+/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/.task-build/cmake/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/.task-build/cmake/CMakeFiles/rebuild_cache.dir

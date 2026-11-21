@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/thb_example.dir/Volumes/UserFBWorkspace/questions/FS76FF2246412AU6625R7E5CD5CE0/attempts/20261121T180736096005Z/repo/examples/thb_sculpt.cpp.o -o thb_example  liblnlib_offline.a

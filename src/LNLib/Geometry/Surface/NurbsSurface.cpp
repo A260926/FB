@@ -9,6 +9,7 @@
  */
 
 #include "NurbsSurface.h"
+#include "ThbSurface.h"
 #include "Polynomials.h"
 #include "UV.h"
 #include "XYZ.h"
@@ -3908,10 +3909,35 @@ LNLib::LN_Mesh LNLib::NurbsSurface::Triangulate(const LN_NurbsSurface& surface, 
 	}
 	else
 	{
-		LN_Mesh mesh;
+		if (resolutionU < 2 || resolutionV < 2)
+		{
+			throw std::invalid_argument("Triangulate: resolutions must be at least 2.");
+		}
 
-		std::vector<std::vector<XYZ>> points(resolutionU, std::vector<XYZ>(resolutionV));
-		std::vector<std::vector<UV>> uvs(resolutionU, std::vector<UV>(resolutionV));
+		// Validate the tensor surface before any evaluator call.
+		Check(surface);
+		if (!ValidationUtils::IsValidKnotVector(surface.KnotVectorU) ||
+			!ValidationUtils::IsValidKnotVector(surface.KnotVectorV))
+		{
+			throw std::invalid_argument("Triangulate: knot vectors must be nondecreasing.");
+		}
+		for (const auto& row : surface.ControlPoints)
+		{
+			for (const XYZW& point : row)
+			{
+				if (!std::isfinite(point.GetWX()) || !std::isfinite(point.GetWY()) ||
+					!std::isfinite(point.GetWZ()) || !std::isfinite(point.GetW()) ||
+					!(point.GetW() > 0.0))
+				{
+					throw std::invalid_argument("Triangulate: control points must be finite with positive weights.");
+				}
+			}
+		}
+
+		std::vector<XYZ> points;
+		std::vector<UV> uvs;
+		points.reserve(resolutionU * resolutionV);
+		uvs.reserve(resolutionU * resolutionV);
 
 		for (int i = 0; i < resolutionU; ++i)
 		{
@@ -3919,42 +3945,17 @@ LNLib::LN_Mesh LNLib::NurbsSurface::Triangulate(const LN_NurbsSurface& surface, 
 			for (int j = 0; j < resolutionV; ++j)
 			{
 				double v = (double)j / (resolutionV - 1);
-				points[i][j] = GetPointOnSurface(surface, UV(u, v));
-				uvs[i][j] = { u, v };
+				points.push_back(GetPointOnSurface(surface, UV(u, v)));
+				uvs.push_back(UV(u, v));
 			}
 		}
-
-		for (int i = 0; i < resolutionU; ++i)
-		{
-			for (int j = 0; j < resolutionV; ++j)
-			{
-				mesh.Vertices.push_back(points[i][j]);
-				mesh.UVs.push_back(uvs[i][j]);
-			}
-		}
-
-		for (int i = 0; i < resolutionU - 1; ++i)
-		{
-			for (int j = 0; j < resolutionV - 1; ++j)
-			{
-				int idx0 = i * resolutionV + j;
-				int idx1 = i * resolutionV + j + 1;
-				int idx2 = (i + 1) * resolutionV + j;
-				int idx3 = (i + 1) * resolutionV + j + 1;
-
-				mesh.Faces.push_back({ idx0, idx1, idx2 });
-				mesh.UVIndices.push_back(idx0);
-				mesh.UVIndices.push_back(idx1);
-				mesh.UVIndices.push_back(idx2);
-
-				mesh.Faces.push_back({ idx1, idx3, idx2 });
-				mesh.UVIndices.push_back(idx1);
-				mesh.UVIndices.push_back(idx3);
-				mesh.UVIndices.push_back(idx2);
-			}
-		}
-		return mesh;
+		return AssembleRegularGridMesh(resolutionU, resolutionV, points, uvs);
 	}
+}
+
+LNLib::LN_Mesh LNLib::NurbsSurface::Triangulate(const ThbSurface& surface, int resolutionU, int resolutionV)
+{
+	return LNLib::Triangulate(surface, resolutionU, resolutionV);
 }
 
 double LNLib::NurbsSurface::ComputeSignedDistanceFunction(const LN_NurbsSurface& surface, const XYZ& point)

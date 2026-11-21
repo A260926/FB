@@ -248,10 +248,29 @@ void ConvertToOpenCascadeSurface(const LNLib::LN_NurbsSurface& surface, Handle(G
 ```
 More Details could be found in [LNLibExtension](https://github.com/BIMCoderLiang/LNLibEx) Library, which used for **export nurbs surfaces to STEP or IGES** format file.
 
-## Document
-Welcome to use https://deepwiki.com/BIMCoderLiang/LNLib powered by Devin.
+## Truncated Hierarchical B-spline (THB) Surface
+Full-span knot insertion densifies the whole control net even when only a small region is being sculpted. `LNLib::ThbSurface` (`src/LNLib/include/ThbSurface.h`) keeps a single hierarchical state shared by local refinement, coefficient editing, hierarchical evaluation and the display mesh.
 
-## Contributing
+### Hierarchical domains
+- The input is an open-clamped tensor NURBS surface whose two axes have degree 2 or 3 and simple interior knots (non-uniform knots and non-unit parameter domains are allowed). All weights must be finite and strictly positive.
+- Level 0 is the original tensor space. Level `l+1` is obtained from level `l` by inserting the midpoint of every non-zero knot interval once on each axis, so the level spaces are nested.
+- The whole valid domain is `Ω0`. Refining a level-`l` leaf cell splits it into four children and the union of the refined cells defines `Ωl+1`; descendant refinement never removes an ancestor region.
+- A level-`l` tensor basis function is active when its complete support lies inside `Ωl` but not inside `Ωl+1` (the next domain of the deepest level is empty). The active functions are then truncated level by level: every fine tensor component whose complete support falls inside the next active domain is removed, down to the deepest level. These are polynomial **truncated** THB functions (not untruncated HB and not a weight-normalized rational basis): they are non-negative, sum to one, and their first derivatives sum to zero.
+
+### Keys and cells
+- `ThbKey { unsigned level; size_t u, v; }` identifies one control coefficient of that level's tensor basis.
+- `ThbCell { unsigned level; size_t u, v; }` identifies one non-zero knot interval of that level, pairing a U interval and a V interval. Both indices start at zero.
+- `Leaves()` returns the current leaf cells; `Refine(...)` splits each requested current leaf into four children (duplicate requests in a batch are processed once). `Active()` returns the editable keys; `Coefficient`/`SetCoefficient` work in homogeneous space (the first three `XYZW` components are already weighted, `w` must be finite and positive). Coefficients of keys that refinement deactivates can no longer be edited, and refinement preserves the current homogeneous numerator, denominator and first derivatives exactly (no resampling or fitting).
+- `Basis(UV)` returns the active truncated functions at a point (sorted by `(level,u,v)`, only nonzero entries), `Evaluate(UV)` returns the rational jet via the quotient rule without flattening to a global fine tensor mesh, and `ToTensor()` performs the exact expansion into one tensor `LN_NurbsSurface` on the deepest bisection knot vectors. Multiplying every homogeneous coefficient by the same positive factor leaves all spatial results unchanged.
+- `NurbsSurface::Triangulate(const ThbSurface&, int resolutionU, int resolutionV)` samples the hierarchy directly over the original domain and reuses the same grid/index assembly as the tensor-product regular rule (both resolutions must be at least 2). The Delaunay branch is unchanged.
+
+### Exceptions
+All failure modes throw `std::invalid_argument`: malformed control net or knots, non-finite values or non-positive weights, parameters outside the original domain, unknown or deactivated keys, refinement of a cell that is not a current leaf, exceeding `maxLevel` (0–6), or resolutions below two. A failed refinement (or coefficient edit) leaves the leaves, active basis, coefficients and further evaluation unchanged; an empty refinement batch is a no-op.
+
+The example `examples/thb_sculpt.cpp <output.obj>` performs a non-rectangular two-level refinement and a local coefficient edit, then writes `v`/`vt`/`f` records using the hierarchical triangulation.
+
+## Document
+Welcome to use https://deepwiki.com/BIMCoderLiang/LNLib powered by Devin.## Contributing
 Welcome join this project including discussions in **Issues** and make **Pull requests**.
 - Contributors:
 <a href="https://contributors-img.web.app/image?repo=BIMCoderLiang/LNLib">

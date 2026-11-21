@@ -19,6 +19,7 @@ namespace LNLib
 	class UV;
 	class XYZ;
 	class XYZW;
+	class ThbSurface;
 	class LNLIB_EXPORT NurbsSurface
 	{
 	public:
@@ -283,6 +284,13 @@ namespace LNLib
 		/// 2. if useDelaunay = false, it is simple and run faster.
 		/// </summary>
 		static LN_Mesh Triangulate(const LN_NurbsSurface& surface, int resolutionU, int resolutionV, bool useDelaunay);
+
+		/// <summary>
+		/// Regular triangulation of a truncated hierarchical NURBS surface.
+		/// Samples the hierarchy directly over the original domain; the grid
+		/// and index assembly are shared with the tensor-product rule.
+		/// </summary>
+		static LN_Mesh Triangulate(const ThbSurface& surface, int resolutionU, int resolutionV);
 
 		/// <summary>
 		/// A positive value indicates the point is on the side the normal points to (outside), while a negative value means it is inside.
