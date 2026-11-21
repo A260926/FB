@@ -8,6 +8,7 @@ var accessorPreamble = require('./utils/accessor-preamble');
 var inferType = require('./utils/infer-type');
 var isArrayLike = require('./utils/is-array-like');
 var sizeGetter = require('./utils/size-getter');
+var createRationalDerivative = require('./rational-derivative');
 
 var evaluatorCache = {};
 var codeCache = {};
@@ -24,17 +25,31 @@ module.exports = function (cacheKey, nurbs, accessors, debug, checkBounds, isBas
   var spaceDimension = nurbs.dimension;
   var boundary = nurbs.boundary;
 
+  var totalDerivativeOrder = 0;
   if (derivative !== undefined && derivative !== null) {
     if (!Array.isArray(derivative)) {
       derivative = [derivative];
     }
-    var totalDerivativeOrder = 0;
     for (i = 0; i < splineDimension; i++) {
       if (derivative[i] === undefined) derivative[i] = 0;
       totalDerivativeOrder += derivative[i];
     }
-    if (hasWeights && totalDerivativeOrder > 1) {
+    if (hasWeights && (totalDerivativeOrder > 2 || derivative[0] > 2 || derivative[1] > 2)) {
       throw new Error('Analytical derivative not implemented for rational b-splines with order n = ' + totalDerivativeOrder + '.');
+    }
+    if (hasWeights && totalDerivativeOrder > 0 && splineDimension > 1) {
+      // Rational surface derivatives (any mixed order up to two) are
+      // evaluated through the exact quotient rule on the homogeneous
+      // partials. This also fixes the v direction and the mixed uv partial.
+      // One dimensional rational curves keep their existing generated code.
+      var rational = createRationalDerivative(nurbs, checkBounds, isBasis, derivative);
+      if (rational) {
+        if (debug) {
+          var rationalLogger = typeof debug === 'function' ? debug : console.log;
+          rationalLogger('// rational derivative ' + derivative.join(',') + (isBasis ? ' (basis)' : '') + '\n// delegated to src/rational-derivative.js');
+        }
+        return rational;
+      }
     }
   }
 

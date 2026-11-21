@@ -321,7 +321,7 @@ Returns a function which evaluates the spline according to the specified argumen
 Arguments are:
 - `derivativeOrders` (Number or Array of Numbers, default: `undefined`): If provided, evaluates the corresponding partial derivative. For example, to evaluate the third derivative in the second dimension of a spline, you would call `spline.evaluator([0, 3])`. See \[1\] for more details.
 
-  **Currently only first derivatives are implemented for non-uniform rational b-splines. Non-uniform (*non-rational*) b-splines support higher orders.**
+  **Currently only first derivatives are implemented for rational b-splines of one parameter. Rational surfaces support mixed derivatives up to total order two (including `[1, 1]`), evaluated through the exact quotient rule. Non-uniform (*non-rational*) b-splines support higher orders.**
 - `isBasis` (boolean, default: `false`): If true, creates a basis function evaluator instead of a direct spline evaluator. Returns a function `function basis(t0, t1, ..., tn_1, i0, i1, ..., in_1)` (no `out` argument is necessary since the answer is always a scalar) which evaluates the value of the spline basis functions for a given parameter location and control hull indices. The inputs `t0, ..., tn_1` are the spline parameters <em>(t<sub>0</sub>, t<sub>1</sub>, ..., t<sub>n - 1</sub>)</em> and the indices `i0, ..., in_1` are the integer indices of a control point <em>(i<sub>0</sub>, i<sub>1</sub>, ..., i<sub>n - 1</sub>)</em>. The output is a real number between <em>0</em> and <em>1</em> by which the correpsonding control point is multiplied. Summing across all points in the `spline.support` gives the computed spline position. When possible, evaluating the spline directly is much faster.
 
 ---
@@ -335,6 +335,128 @@ Compute the [support][support] of a point on the spline. That is, the integer in
 ### `spline.transform(m)`
 
 Transform a spline in-place using gl-matrix-style matrices (e.g. [gl-mat3](https://github.com/stackgl/gl-mat3) or [gl-mat4](https://github.com/stackgl/gl-mat4)). Modifies spline data and returns a reference to the spline.
+
+## Surface fairing (`extras/fairing`)
+
+`extras/fairing.js` drags a handful of parameter samples on a surface and lets
+the rest of the surface follow smoothly. It builds a fixed discrete bending
+energy from a reference surface, then solves an equality constrained problem
+for every new set of target positions.
+
+```javascript
+var nurbs = require('nurbs');
+var createFairingPlan = require('nurbs/extras/fairing').createFairingPlan;
+
+var surface = nurbs({ points: ..., weights: ..., degree: [2, 2], knots: ..., boundary: ['clamped', 'clamped'] });
+var plan = createFairingPlan(surface, {
+  anchors: [[u0, v0], [u1, v1]],   // 1 to 32 fixed parameter samples
+  lambda: 1e-3                     // mass (membrane) weight in [1e-5, 1]
+});
+
+var result = plan.solve([
+  [x0, y0, z0],                    // target position for the first anchor
+  [x1, y1, z1]
+]);
+// result = { status, surface, energy, constraintResidual, stationarityResidual }
+```
+
+`solve(targets)` can be called any number of times on the same plan. It
+returns one of:
+
+- **`'ok'`**: `surface` is a new spline built with this library's `nurbs`
+  constructor, with the same degree, knots, weights and boundary modes as the
+  reference and only the control point positions changed.
+- **`'inconsistent'`**: the requested targets cannot be reached exactly by any
+  displacement field (`surface` is `null`).
+- **`'numerical_failure'`**: a factorization failed (`surface` is `null`).
+
+### Energy
+
+Let `S(u, v)` be the reference surface and let the displacement field
+`D(u, v) = sum R_ij(u, v) d_ij` use the same rational basis as the surface,
+with control point displacements `d_ij`. With the reference metric
+`g_ab = S_a . S_b`, its inverse `g^ab`, and the Christoffel symbols
+`Gamma^c_ab = sum_d g^cd (S_d . S_ab)`, define the covariant Hessian of each
+ambient coordinate of the displacement independently:
+
+```
+H_ab(D) = D_ab - sum_c Gamma^c_ab D_c
+```
+
+The minimized quantity is
+
+```
+E = integral  [ sum_{a,b,c,d} g^ac g^bd H_ab(D) . H_cd(D) + lambda D . D ]
+              sqrt(det g) du dv
+```
+
+This is the scalar covariant Hessian energy, not a shell mechanics model. The
+integral is evaluated exactly as stated with a 6x6 Gauss-Legendre product rule
+on every non-empty knot rectangle, and that discrete value is what
+`result.energy` reports. The same quadrature and reference metric assemble the
+fixed energy matrix `A` at construction time.
+
+Rational values and first/second partials (including mixed partials when both
+axes are weighted) are evaluated analytically; no finite differences are used
+for assembly. `src/variational/surface-operator.js` owns the reference metric
+and operator assembly, and `src/variational/fairing-plan.js` owns constraint
+handling and the result lifecycle.
+
+### Snapshot semantics
+
+Creation deep copies the reference control points, weights, knots, degree and
+boundary modes. Every `solve` is computed relative to that snapshot, so
+mutating the source surface (or transforming a previously returned result)
+never changes the plan or later results. `assemblyCount` and
+`factorizationCount` remain `1`: the metric matrix and the fixed constraint
+factorization are built once, and `solve` only updates the target right hand
+side.
+
+### Constraints and accuracy
+
+Each anchor contributes three exact rows
+`sum R_ij(anchor) d_ij = target - S(anchor)`: one per ambient coordinate. No
+penalty term is used. Duplicate and linearly dependent rows are handled, and
+the unique minimum energy solution is returned when the constraints are
+consistent. On success, `constraintResidual` is the maximum absolute
+coordinate residual of the point constraints. `stationarityResidual` is
+
+```
+|| A d + B^T mu ||_inf / max(1, ||A d||_inf, ||B^T mu||_inf)
+```
+
+with `A` the displacement energy matrix, `B` the constraint matrix and `mu` the
+corresponding multipliers. At normal scales both are at or below `1e-8`.
+
+Rigid motions of the reference and targets, positive affine
+reparameterizations of either axis, and a uniform positive scaling of all
+weights produce the correspondingly transformed (or identical) geometry.
+
+### Restrictions
+
+This entry point accepts exactly three dimensional, two parameter surfaces with
+nested array control points, polynomial degree 2 or 3 per axis, explicit open
+clamped knots, single interior knots and positive weights. At most 128 control
+points and 1 to 32 anchors are supported. Knot spacing must be at least `1e-3`,
+weights must lie in `[0.1, 10]`, and absolute coordinates and parameters must
+not exceed `10`. The reference surface must be regular: the sine of the angle
+between the two tangents at every integration point is at least `1e-6`.
+Invalid knot structure, out-of-range parameters, non-finite values, an invalid
+`lambda` or a degenerate integration point raise `RangeError` before any input
+is modified. Periodic axes, poles and ndarray editing input are not supported.
+
+### Example
+
+`examples/fairing_obj.cjs` drags three samples on a non-planar, positively
+weighted surface and writes the result as a Wavefront OBJ file with `v`, `vn`
+and `f` records:
+
+```bash
+node examples/fairing_obj.cjs out.obj
+```
+
+Tests live in `task_tests/fairing.cjs`; `bash task_support/run.sh target` runs
+them together with the example and the normal baseline.
 
 ## References
 
