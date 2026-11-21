@@ -1,6 +1,7 @@
 #pragma once
 
 #include <valarray>
+#include <cmath>
 
 namespace gfx {
 
@@ -15,6 +16,16 @@ auto normalize(const Vec& v) -> Vec;
 auto cross(const Vec& a, const Vec& b) -> Vec;
 auto xy(const Vec& v) -> Vec;
 auto xyz(const Vec& v) -> Vec;
+
+// Explicit component views.  std::valarray's "never use auto" rule makes
+// v[i] awkward to use in generic code, so the surface code uses these.
+inline auto xyz_of(const Vec& v) -> Vec { return {v[0], v[1], v[2], 0}; }
+inline auto length(const Vec& v) -> float { return std::sqrt(dot(v, v)); }
+// Rodrigues' rotation: right-handed rotation of v around unit axis k.
+inline auto rotate_axis(const Vec& v, const Vec& k, float angle) -> Vec {
+    auto c = std::cos(angle), s = std::sin(angle);
+    return c * v + (s * dot(k, v)) * k + s * cross(k, v);
+}
 
 struct Mat4 {
     constexpr static size_t N = 4;
