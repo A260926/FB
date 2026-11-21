@@ -80,6 +80,29 @@ Vector3f Camera::getEyePoint() const
 }
 
 
+Vector3f Camera::getPixelRayDirection
+(
+   const int32   x,
+   const int32   y,
+   const int32   width,
+   const int32   height,
+   const Random& random
+) const
+{
+   // identical projection to getFrame(), exposed for first-hit freezing
+   const real64 xF = ((static_cast<real64>(x) + random.getReal64()) * 2.0 /
+      static_cast<real64>(width )) - 1.0;
+   const real64 yF = ((static_cast<real64>(y) + random.getReal64()) * 2.0 /
+      static_cast<real64>(height)) - 1.0;
+
+   const Vector3f offset( (right_m * xF) +
+      (up_m * yF * (static_cast<real64>(height) /
+                    static_cast<real64>(width))) );
+
+   return (viewDirection_m + (offset * ::tan(viewAngle_m * 0.5))).unitize();
+}
+
+
 void Camera::getFrame
 (
    const Scene&  scene,

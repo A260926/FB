@@ -56,6 +56,17 @@ public:
 /// queries --------------------------------------------------------------------
            Vector3f getEyePoint()                                         const;
 
+           /**
+            * Sub-pixel jittered camera ray direction for one pixel, using the
+            * same projection and two random draws as getFrame(). Does not
+            * change the behaviour or random consumption of getFrame().
+            */
+           Vector3f getPixelRayDirection( int32         x,
+                                          int32         y,
+                                          int32         width,
+                                          int32         height,
+                                          const Random& random )            const;
+
            void  getFrame( const Scene&,
                            const Random&,
                            Image& )                                       const;

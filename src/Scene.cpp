@@ -133,6 +133,12 @@ Vector3f Scene::getDefaultEmission
 }
 
 
+bool Scene::isBackgroundBlack() const
+{
+   return skyEmission_m.isZero() && groundReflection_m.isZero();
+}
+
+
 
 
 /// constants ------------------------------------------------------------------

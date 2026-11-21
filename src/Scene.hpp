@@ -71,6 +71,12 @@ public:
 
            Vector3f getDefaultEmission( const Vector3f& backDirection )   const;
 
+           /**
+            * True only when both sky emission and ground reflection are zero,
+            * as required by the diffuse suffix-reconnection mode.
+            */
+           bool     isBackgroundBlack()                                   const;
+
 
 /// constants ------------------------------------------------------------------
    static  int32 TRIANGLES_MAX();

@@ -40,6 +40,12 @@ public:
              */
             Random();
 
+            /**
+             * Create Random object with an explicit seed. The default
+             * constructor is unchanged; this only seeds the reuse passes.
+             */
+            explicit Random( int32u seed );
+
 // use defaults
 //         ~Random();
 //          Random( const Random& );

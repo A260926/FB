@@ -5,6 +5,7 @@
 /_dev
 /temp
 /obj
+/.task-build
 
 *.ppm
 *.rgbe

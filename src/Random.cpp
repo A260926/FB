@@ -72,6 +72,20 @@ Random::Random()
 }
 
 
+Random::Random
+(
+   int32u seed
+)
+{
+   /* *** VERY IMPORTANT ***
+      The initial seeds z1, z2, z3, z4  MUST be larger
+      than 1, 7, 15, and 127 respectively. */
+
+   const int32u s = seed > 127u ? seed : SEED;
+   z_m[0] = z_m[1] = z_m[2] = z_m[3] = s;
+}
+
+
 
 
 /// queries --------------------------------------------------------------------
