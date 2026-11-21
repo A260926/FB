@@ -1,0 +1,19 @@
+{
+  "repo": "https://github.com/standardcyborg/nurbs",
+  "commit": "2742ab100c679b9dc9e412a2804ec7762afb3bd0",
+  "license": "LICENSE",
+  "upstream_production_files_unchanged": true,
+  "excluded": [
+    "docs/clamped.png",
+    "docs/closed-bspline.png",
+    "docs/closed-nurbs.png",
+    "docs/index.html",
+    "docs/open.png",
+    "docs/sc.png",
+    "docs/surface.png",
+    "docs/transformed.png"
+  ],
+  "excluded_reason": "unused browser docs/images; original hashes are in the private source manifest",
+  "runtime": "Node.js builtins; nurbs.js and src/** local modules; no npm install",
+  "support": "task_support is a normal-path probe and future target test protocol, with no target implementation or target tests."
+}
