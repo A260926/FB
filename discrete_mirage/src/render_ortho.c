@@ -30,6 +30,9 @@ static void RENDER_ORTHO(MODE)(LocalVariables* v, OrthoStackItem* stack,
         v->position.z = stack->center.z + stack->deltas[v->octant].z;
         #if defined(MODE_TREE)
         v->node_ref = stack->traversal.node[v->octant];
+        // Track the node box down the ortho subtree (needed by the
+        // deep capture); cube splits are internal to their node.
+        if (!stack->is_cube) node_box_child(&stack->node_box, v->octant, &v->node_box);
         #elif defined(MODE_EVAL)
         node_box_child(&stack->node_box, v->octant, &v->node_box);
         #endif
@@ -111,20 +114,29 @@ static void RENDER_ORTHO(MODE)(LocalVariables* v, OrthoStackItem* stack,
         // Whatever happens, don't traverse past max stack level
         if (is_leaf | is_splat) {
             v->data_ref = stack->traversal.data[v->octant];
-            draw_splat(v, stack);
+            if (v->deep) {
+                draw_splat_deep(v, stack);
+            } else {
+                draw_splat(v, stack);
+            }
             continue;
         }
-        
+
         #if defined(USE_MAP) && !defined(MODE_EVAL)
-        if (v->size_max < v->map.size8) {
-            v->data_ref = stack->traversal.data[v->octant];
-            draw_map8(v, stack);
-            continue;
-        }
-        if (v->size_max < v->map.size64) {
-            v->data_ref = stack->traversal.data[v->octant];
-            draw_map64(v, stack);
-            continue;
+        // The map shortcuts only keep the front layer per pixel, so
+        // they are disabled in the deep mode: the traversal continues
+        // down the octree and the back layers are preserved.
+        if (!v->deep) {
+            if (v->size_max < v->map.size8) {
+                v->data_ref = stack->traversal.data[v->octant];
+                draw_map8(v, stack);
+                continue;
+            }
+            if (v->size_max < v->map.size64) {
+                v->data_ref = stack->traversal.data[v->octant];
+                draw_map64(v, stack);
+                continue;
+            }
         }
         #endif
         
@@ -158,7 +170,9 @@ static void RENDER_ORTHO(MODE)(LocalVariables* v, OrthoStackItem* stack,
         stack->queue = v->queues_forward[v->mask].octants;
         
         #ifdef STENCIL_LOCAL_SIZE
-        if ((!is_local) && (v->size_max < (STENCIL_LOCAL_SIZE - 2))) {
+        // The local stencil would only keep the front layers, so it
+        // is disabled in the deep mode.
+        if ((!is_local) && (!v->deep) && (v->size_max < (STENCIL_LOCAL_SIZE - 2))) {
             v->local_stencil = local_stencil;
             initialize_ortho_local(v, stack);
             

@@ -20,7 +20,10 @@ extern "C" {
 
 // ===================================================== //
 
-const char DMIR_VERSION[] = "2.0.0";
+// Note: API constants are declared static const so that
+// the header can be included by multiple C translation
+// units without causing duplicate symbol definitions.
+static const char DMIR_VERSION[] = "2.0.0";
 
 // ===================================================== //
 
@@ -123,18 +126,18 @@ typedef uint8_t DMirBool;
 
 #ifdef DMIR_DEPTH_INT32
 typedef int32_t DMirDepth;
-const int32_t DMIR_MAX_DEPTH = INT32_MAX >> 1;
+static const int32_t DMIR_MAX_DEPTH = INT32_MAX >> 1;
 #else
 typedef float DMirDepth;
-const float DMIR_MAX_DEPTH = INFINITY;
+static const float DMIR_MAX_DEPTH = INFINITY;
 #endif
 
 typedef uint64_t DMirAddress;
 
 typedef int32_t DMirAffineID;
 
-const int32_t DMIR_LEVEL_BITS = 5;
-const int32_t DMIR_LEVEL_MAX = 32;
+static const int32_t DMIR_LEVEL_BITS = 5;
+static const int32_t DMIR_LEVEL_MAX = 32;
 
 // Axis traversal orders. Declared as #define instead
 // of const to be usable in a switch statement
@@ -384,20 +387,20 @@ typedef struct DMirRenderer {
     DMirRect rect;
 } DMirRenderer;
 
-const int32_t DMIR_SHAPE_POINT = 0;
-const int32_t DMIR_SHAPE_RECT = 1;
-const int32_t DMIR_SHAPE_SQUARE = 2;
-const int32_t DMIR_SHAPE_CIRCLE = 3;
-const int32_t DMIR_SHAPE_CUBE = 4;
+static const int32_t DMIR_SHAPE_POINT = 0;
+static const int32_t DMIR_SHAPE_RECT = 1;
+static const int32_t DMIR_SHAPE_SQUARE = 2;
+static const int32_t DMIR_SHAPE_CIRCLE = 3;
+static const int32_t DMIR_SHAPE_CUBE = 4;
 
-const struct DMirRect DMIR_RECT_EMPTY = {
+static const struct DMirRect DMIR_RECT_EMPTY = {
     .min_x = INT32_MAX,
     .min_y = INT32_MAX,
     .max_x = INT32_MIN,
     .max_y = INT32_MIN,
 };
 
-const struct DMirFrustum DMIR_FRUSTUM_DEFAULT = {
+static const struct DMirFrustum DMIR_FRUSTUM_DEFAULT = {
     .min_depth = 0.001f,
     .max_depth = 10000.0f,
     .focal_extent = 1,
@@ -458,6 +461,116 @@ void dmir_batcher_affine_get(DMirBatcher* batcher, DMirAffineInfo** affine_infos
 DMirRenderer* dmir_renderer_make(void);
 void dmir_renderer_free(DMirRenderer* renderer);
 void dmir_renderer_draw(DMirRenderer* renderer);
+
+// ===================================================== //
+
+// Deep (multi-layer translucent) capture.
+//
+// Instead of only keeping the nearest sample per pixel, the
+// framebuffer can capture up to K nearest *distinct* samples
+// per pixel, sorted from near to far. A sample's identity is
+// the pair (submission_key, node_box), where node_box locates
+// the sampled node in the submission's root-local [0,1]^3
+// grid -- NOT its data_ref or affine_id. This means that two
+// spatial positions of a shared DAG, or two submissions of the
+// same geometry, are always captured as separate layers, while
+// the same node repeatedly covering the same pixel (e.g. due
+// to internal splitting) is recorded only once, with its
+// minimum depth.
+//
+// Usage / call order:
+//   1. dmir_framebuffer_clear(...) and (optionally) render
+//      ordinary opaque content with dmir_batcher_add(...).
+//   2. dmir_deep_begin(framebuffer, capacity): starts the
+//      capture, (re)allocates the layer storage (capacity is
+//      clamped to [1, DMIR_DEEP_CAPACITY_MAX]) and snapshots
+//      the current depth buffer. Only samples strictly nearer
+//      than this snapshot are captured; if the old depth is
+//      empty, nothing is occluded. Any previously captured
+//      layers are discarded.
+//   3. For each batch: dmir_batcher_reset(...), one or more
+//      dmir_batcher_add_deep(...), dmir_batcher_sort(...),
+//      then dmir_renderer_draw(...). Consecutive draws (and
+//      consecutive batches) accumulate into the same capture.
+//      Submission keys must be unique per frame (also across
+//      batcher resets); this is the caller's responsibility.
+//   4. Read the captured layers with dmir_deep_count(...) and
+//      dmir_deep_get(...), and/or composite them with
+//      dmir_deep_composite(...).
+//   5. dmir_deep_end(framebuffer): ends the capture mode. The
+//      captured layers remain readable afterwards; subsequent
+//      ordinary opaque rendering behaves as if the capture had
+//      never been enabled.
+//
+// Ownership and lifetime:
+//   * The layer storage is owned by the framebuffer. Pointers
+//     returned by dmir_deep_get(...) stay valid until the next
+//     dmir_deep_begin(...), dmir_framebuffer_clear(...),
+//     dmir_framebuffer_resize(...) or dmir_framebuffer_free(...),
+//     all of which discard the captured layers.
+//   * The material callback and its user pointer must stay
+//     valid until the end of the draw calls that use them.
+//   * Capturing never modifies the old depth/voxel contents
+//     or the occlusion (stencil) state of the framebuffer.
+//
+// Notes:
+//   * Layers with alpha == 0 are not stored. Layers behind an
+//     alpha == 1 layer are still recorded. Layers beyond the
+//     capacity are dropped (the farthest ones); compositing
+//     treats the dropped remainder as air.
+//   * Layers with equal depth are ordered by submission_key,
+//     then by node box level, x, y, z.
+//   * The result does not depend on the submission order, the
+//     batcher's sorting order, or on splitting the renderer's
+//     rect into non-overlapping parts.
+//   * Only DMIR_SHAPE_RECT submissions are supported in the
+//     capture mode; other shapes keep using dmir_batcher_add.
+
+static const int32_t DMIR_DEEP_CAPACITY_MAX = 32;
+
+// Returns the material of a voxel: linear, non-premultiplied
+// RGB and alpha (each finite and within [0,1]), written to
+// rgba[0..3]. data_ref is the voxel data reference produced
+// by the geometry's traversal callbacks.
+typedef void (*DMirMaterialFunc)(void* user, DMirAddress data_ref, float* rgba);
+
+// One captured sample layer.
+typedef struct DMirLayer {
+    uint64_t submission_key;
+    DMirNodeBox node_box;
+    DMirAddress data_ref;
+    DMirDepth depth;
+    float r, g, b, a;
+} DMirLayer;
+
+void dmir_deep_begin(DMirFramebuffer* framebuffer, uint32_t capacity);
+void dmir_deep_end(DMirFramebuffer* framebuffer);
+
+// Same as dmir_batcher_add, but the submission's samples are
+// captured as per-pixel layers (between dmir_deep_begin and
+// dmir_deep_end) instead of updating the depth/voxel buffers.
+// The group argument may repeat between submissions.
+void dmir_batcher_add_deep(DMirBatcher* batcher, DMirFramebuffer* framebuffer,
+    uint64_t submission_key, DMirMaterialFunc material, void* material_user,
+    uint32_t group, float* cage, DMirGeometry* geometry, DMirAddress root, DMirEffects effects);
+
+// Number of captured layers at pixel (x,y) (0 if none or if
+// the pixel is outside the framebuffer).
+uint32_t dmir_deep_count(DMirFramebuffer* framebuffer, int32_t x, int32_t y);
+
+// The index-th layer (0 = nearest) at pixel (x,y), or NULL if
+// there is no such layer. See the ownership notes above.
+const DMirLayer* dmir_deep_get(DMirFramebuffer* framebuffer, int32_t x, int32_t y, uint32_t index);
+
+// Read-only compositing of a pixel's layers over a background:
+// starting from C = 0 and T = 1, for each layer (near to far)
+// C += T * alpha * RGB and T *= 1 - alpha; the result written
+// to out_rgb is C + T * background_rgb, and the final
+// transmittance T is returned. background_rgb and out_rgb are
+// linear RGB triplets. No quantization is applied between
+// layers, and compositing never modifies the stored layers.
+float dmir_deep_composite(DMirFramebuffer* framebuffer, int32_t x, int32_t y,
+    const float* background_rgb, float* out_rgb);
 
 // ===================================================== //
 

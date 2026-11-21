@@ -6,6 +6,45 @@
 #include <stdlib.h>
 
 #include "discrete_mirage.h"
+#include "deep_internal.h"
+
+// The bounded deep-layer storage is implemented in deep_buffer.c.
+// These weak fallback definitions allow the core to also be linked
+// without it (e.g. the baseline build); in that case the deep
+// capture mode simply stays disabled (dmir_deep_buffer_make
+// returns NULL, so dmir_deep_begin has no effect).
+#if defined(__GNUC__) || defined(__clang__)
+#define DMIR_WEAK __attribute__((weak))
+
+DMIR_WEAK DMirDeepBuffer* dmir_deep_buffer_make(uint32_t size_x, uint32_t size_y,
+    uint32_t row_size, uint32_t capacity, const DMirDepth* depth_src)
+{
+    (void)size_x; (void)size_y; (void)row_size; (void)capacity; (void)depth_src;
+    return NULL;
+}
+
+DMIR_WEAK void dmir_deep_buffer_free(DMirDeepBuffer* deep) {
+    (void)deep;
+}
+
+DMIR_WEAK void dmir_deep_buffer_insert(DMirDeepBuffer* deep, uint32_t pixel_index,
+    uint64_t submission_key, const DMirNodeBox* node_box, DMirAddress data_ref,
+    DMirDepth depth, DMirMaterialFunc material, void* material_user)
+{
+    (void)deep; (void)pixel_index; (void)submission_key; (void)node_box;
+    (void)data_ref; (void)depth; (void)material; (void)material_user;
+}
+
+DMIR_WEAK float dmir_deep_buffer_composite(DMirDeepBuffer* deep, uint32_t pixel_index,
+    const float* background_rgb, float* out_rgb)
+{
+    (void)deep; (void)pixel_index;
+    out_rgb[0] = background_rgb[0];
+    out_rgb[1] = background_rgb[1];
+    out_rgb[2] = background_rgb[2];
+    return 1.0f;
+}
+#endif
 
 // NULL is defined in <stdlib.h>
 #define FALSE 0
@@ -327,6 +366,9 @@ typedef struct Subtree {
     NodeBox node_box;
     uint64_t node_ref;
     uint64_t data_ref;
+    uint64_t submission_key;
+    DMirMaterialFunc material;
+    void* material_user;
     Effects effects;
     Bounds bounds;
     Rect rect;
@@ -450,6 +492,8 @@ typedef struct FramebufferInternal {
     Stencil* stencil_x;
     Stencil* stencil_y;
     SInt stencil_row_shift;
+    DMirDeepBuffer* deep;
+    Bool deep_active;
 } FramebufferInternal;
 
 typedef struct BatcherInternal {
@@ -1230,10 +1274,14 @@ typedef struct LocalVariables {
     Stencil row_mask;
     uint8_t mask;
     uint8_t is_cube;
+    uint8_t deep;
     NodeBox node_box;
     int32_t octant;
     uint32_t map_traversals_exist;
     Traversal map_traversals[9];
+    uint64_t submission_key;
+    DMirMaterialFunc material;
+    void* material_user;
 } LocalVariables;
 
 typedef struct CircleParams {
@@ -1349,6 +1397,35 @@ static inline void draw_splat(LocalVariables* v, OrthoStackItem* stack) {
     if (v->local_stencil) {
         for (; v->rect.min_y <= v->rect.max_y; v->rect.min_y++) {
             v->local_stencil[v->rect.min_y] &= ~v->row_mask;
+        }
+    }
+}
+
+// Deep-capture variant of draw_splat: same RECT coverage
+// conventions, but instead of touching the depth/voxel/stencil
+// buffers, every covered pixel records a layer sample into the
+// framebuffer's bounded deep storage. Only DMIR_SHAPE_RECT is
+// supported in this mode; other shapes fall back to their
+// bounding-rect coverage.
+static void draw_splat_deep(LocalVariables* v, OrthoStackItem* stack) {
+    FramebufferInternal* framebuffer = v->framebuffer;
+    DMirDeepBuffer* deep = framebuffer->deep;
+
+    if (v->size_max == 0) {
+        STAT_INCREMENT(v->framebuffer, DMIR_SPLATS_1PX);
+    } else {
+        STAT_INCREMENT(v->framebuffer, DMIR_SPLATS_LEAF);
+    }
+
+    RECT_CLIP(v->rect, v->clip_rect);
+
+    for (SInt y = v->rect.min_y; y <= v->rect.max_y; y++) {
+        for (SInt x = v->rect.min_x; x <= v->rect.max_x; x++) {
+            STAT_INCREMENT(framebuffer, DMIR_FRAGMENTS_ADDED);
+            SInt i = PIXEL_INDEX(framebuffer, x + v->offset_x, y + v->offset_y);
+            dmir_deep_buffer_insert(deep, (uint32_t)i,
+                v->submission_key, &v->node_box, v->data_ref, v->position.z,
+                v->material, v->material_user);
         }
     }
 }
@@ -1639,7 +1716,9 @@ Bool initialize_ortho(LocalVariables* v, OrthoStackItem* stack, ProjectedVertex*
     }
     
     // Calculate maps before we dilate the extent
-    if (v->max_stack_level > 0) {
+    // (skipped in the deep mode, where the map shortcuts are
+    // disabled and the traversal continues down the octree)
+    if ((v->max_stack_level > 0) && !v->deep) {
         calculate_maps(&v->map, v->queues_forward, stack[1].deltas, stack->extent, v->dilation, max_level);
     }
     
@@ -1718,20 +1797,23 @@ void dmir_lookups_initialize(void) {
 
 Framebuffer* dmir_framebuffer_make(uint32_t size_x, uint32_t size_y) {
     FramebufferInternal* framebuffer = malloc(sizeof(FramebufferInternal));
-    
+
     if (framebuffer) {
         framebuffer->api.depth = NULL;
         framebuffer->api.voxel = NULL;
-        
+
         framebuffer->stencil_tiles = NULL;
         framebuffer->stencil_x_base = NULL;
         framebuffer->stencil_y_base = NULL;
         framebuffer->stencil_x = NULL;
         framebuffer->stencil_y = NULL;
-        
+
+        framebuffer->deep = NULL;
+        framebuffer->deep_active = FALSE;
+
         dmir_framebuffer_resize((Framebuffer*)framebuffer, size_x, size_y);
     }
-    
+
     return (Framebuffer*)framebuffer;
 }
 
@@ -1743,11 +1825,19 @@ void framebuffer_free_channels(FramebufferInternal* framebuffer) {
     if (framebuffer->stencil_y_base) free(framebuffer->stencil_y_base);
 }
 
+static void framebuffer_deep_discard(FramebufferInternal* framebuffer) {
+    if (framebuffer->deep) dmir_deep_buffer_free(framebuffer->deep);
+    framebuffer->deep = NULL;
+    framebuffer->deep_active = FALSE;
+}
+
 void dmir_framebuffer_free(Framebuffer* framebuffer_ptr) {
     FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
-    
+
+    framebuffer_deep_discard(framebuffer);
+
     framebuffer_free_channels(framebuffer);
-    
+
     free(framebuffer);
 }
 
@@ -1768,7 +1858,9 @@ Stencil* stencil_masks_make(SInt size, SInt margin, Stencil mask, SInt step) {
 
 void dmir_framebuffer_resize(Framebuffer* framebuffer_ptr, uint32_t size_x, uint32_t size_y) {
     FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
-    
+
+    framebuffer_deep_discard(framebuffer);
+
     framebuffer_free_channels(framebuffer);
     
     framebuffer->api.size_x = size_x;
@@ -1812,7 +1904,9 @@ void dmir_framebuffer_resize(Framebuffer* framebuffer_ptr, uint32_t size_x, uint
 
 void dmir_framebuffer_clear(Framebuffer* framebuffer_ptr) {
     FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
-    
+
+    framebuffer_deep_discard(framebuffer);
+
     VoxelRef voxel = {.affine_id = -1, .voxel_id = 0};
     
     for (SInt y = 0; y < framebuffer->api.size_y; y++) {
@@ -1978,12 +2072,10 @@ Subtree* batcher_add_subtree(BatcherInternal* batcher) {
     return subtree;
 }
 
-void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
-    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects)
+static void batcher_add(BatcherInternal* batcher, FramebufferInternal* framebuffer,
+    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects,
+    uint64_t submission_key, DMirMaterialFunc material, void* material_user)
 {
-    BatcherInternal* batcher = (BatcherInternal*)batcher_ptr;
-    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
-    
     GridStackItem* stack_start = batcher->stack;
     GridStackItem* stack = stack_start;
     
@@ -2147,6 +2239,9 @@ void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
                 subtree->node_box = node_box;
                 subtree->node_ref = node_ref;
                 subtree->data_ref = stack->traversal.data[octant];
+                subtree->submission_key = submission_key;
+                subtree->material = material;
+                subtree->material_user = material_user;
                 subtree->effects = effects;
                 subtree->effects.max_level -= stack->level;
                 subtree->effects.dilation_rel *= (1 << stack->level);
@@ -2188,6 +2283,22 @@ void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
         Queue* queues_forward = lookups.sparse + (((octant_order << 3) | (starting_octant)) << 8);
         stack->queue = queues_forward[mask].octants;
     } while (stack > stack_start);
+}
+
+void dmir_batcher_add(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
+    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects)
+{
+    batcher_add((BatcherInternal*)batcher_ptr, (FramebufferInternal*)framebuffer_ptr,
+        group, cage_ptr, geometry, root, effects, 0, NULL, NULL);
+}
+
+void dmir_batcher_add_deep(Batcher* batcher_ptr, Framebuffer* framebuffer_ptr,
+    uint64_t submission_key, DMirMaterialFunc material, void* material_user,
+    uint32_t group, float* cage_ptr, Geometry* geometry, Address root, Effects effects)
+{
+    batcher_add((BatcherInternal*)batcher_ptr, (FramebufferInternal*)framebuffer_ptr,
+        group, cage_ptr, geometry, root, effects,
+        submission_key, material, material_user);
 }
 
 void dmir_batcher_sort(Batcher* batcher_ptr) {
@@ -2425,6 +2536,11 @@ void clear_self_stencil(FramebufferInternal* framebuffer, Rect* rect) {
 void render_cage(LocalVariables* v, Subtree* subtree) {
     v->affine_id = subtree->affine_id;
     v->geometry = v->batcher->affine[v->affine_id].geometry;
+
+    v->submission_key = subtree->submission_key;
+    v->material = subtree->material;
+    v->material_user = subtree->material_user;
+    v->deep = (v->framebuffer->deep_active && (v->material != NULL)) ? 1 : 0;
     
     Effects effects = subtree->effects;
     v->shape = effects.shape;
@@ -2648,10 +2764,12 @@ void render_cage(LocalVariables* v, Subtree* subtree) {
         stack->queue = queues_forward[v->mask].octants;
     } while (stack > stack_start);
     
+    // In the deep mode no fragments were deferred, and the
+    // depth/voxel/stencil buffers must stay untouched.
     #ifdef DMIR_USE_SPLAT_DEFERRED
-    write_fragments(v->renderer, v->framebuffer, v->fragments, v->affine_id);
+    if (!v->deep) write_fragments(v->renderer, v->framebuffer, v->fragments, v->affine_id);
     #elif (STENCIL_BITS > 0) && defined(DMIR_CLEAR_SELF_STENCIL)
-    clear_self_stencil(v->framebuffer, &subtree->rect);
+    if (!v->deep) clear_self_stencil(v->framebuffer, &subtree->rect);
     #endif
 }
 
@@ -2659,9 +2777,9 @@ void dmir_renderer_draw(Renderer* renderer_ptr) {
     RendererInternal* renderer = (RendererInternal*)renderer_ptr;
     FramebufferInternal* framebuffer = (FramebufferInternal*)renderer->api.framebuffer;
     BatcherInternal* batcher = (BatcherInternal*)renderer->api.batcher;
-    
+
     if (!framebuffer || !batcher) return;
-    
+
     SInt size_x = renderer->api.rect.max_x - renderer->api.rect.min_x + 1;
     SInt size_y = renderer->api.rect.max_y - renderer->api.rect.min_y + 1;
     SInt rect_area = size_x * size_y;
@@ -2670,17 +2788,81 @@ void dmir_renderer_draw(Renderer* renderer_ptr) {
         if (renderer->fragments) free(renderer->fragments);
         renderer->fragments = malloc(renderer->fragments_size * sizeof(Fragment));
     }
-    
+
     LocalVariables v = {
         .batcher = batcher,
         .renderer = renderer,
         .framebuffer = framebuffer,
     };
-    
+
     Subtree* subtrees = batcher->subtrees;
     for (SInt index = batcher->sorted_head; index >= 0; index = subtrees[index].next) {
         render_cage(&v, &batcher->subtrees[index]);
     }
+}
+
+////////////////////////////////////
+// Deep (multi-layer) capture API //
+////////////////////////////////////
+
+void dmir_deep_begin(Framebuffer* framebuffer_ptr, uint32_t capacity) {
+    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
+
+    framebuffer_deep_discard(framebuffer);
+
+    framebuffer->deep = dmir_deep_buffer_make(
+        framebuffer->api.size_x, framebuffer->api.size_y,
+        dmir_row_size(framebuffer_ptr), capacity, framebuffer->api.depth);
+
+    if (framebuffer->deep) framebuffer->deep_active = TRUE;
+}
+
+void dmir_deep_end(Framebuffer* framebuffer_ptr) {
+    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
+
+    // The captured layers stay readable until the next
+    // begin/clear/resize/free; only the capture mode is ended.
+    framebuffer->deep_active = FALSE;
+}
+
+uint32_t dmir_deep_count(Framebuffer* framebuffer_ptr, int32_t x, int32_t y) {
+    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
+    DMirDeepBuffer* deep = framebuffer->deep;
+
+    if (!deep) return 0;
+    if (((uint32_t)x >= deep->size_x) | ((uint32_t)y >= deep->size_y)) return 0;
+
+    return deep->count[dmir_pixel_index(framebuffer_ptr, x, y)];
+}
+
+const DMirLayer* dmir_deep_get(Framebuffer* framebuffer_ptr, int32_t x, int32_t y, uint32_t index) {
+    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
+    DMirDeepBuffer* deep = framebuffer->deep;
+
+    if (!deep) return NULL;
+    if (((uint32_t)x >= deep->size_x) | ((uint32_t)y >= deep->size_y)) return NULL;
+
+    SInt i = dmir_pixel_index(framebuffer_ptr, x, y);
+    if (index >= deep->count[i]) return NULL;
+
+    return deep->layers + (size_t)i * deep->capacity + index;
+}
+
+float dmir_deep_composite(Framebuffer* framebuffer_ptr, int32_t x, int32_t y,
+    const float* background_rgb, float* out_rgb)
+{
+    FramebufferInternal* framebuffer = (FramebufferInternal*)framebuffer_ptr;
+    DMirDeepBuffer* deep = framebuffer->deep;
+
+    if (!deep || ((uint32_t)x >= deep->size_x) | ((uint32_t)y >= deep->size_y)) {
+        out_rgb[0] = background_rgb[0];
+        out_rgb[1] = background_rgb[1];
+        out_rgb[2] = background_rgb[2];
+        return 1.0f;
+    }
+
+    return dmir_deep_buffer_composite(deep,
+        (uint32_t)dmir_pixel_index(framebuffer_ptr, x, y), background_rgb, out_rgb);
 }
 
 static uint64_t visit_recursive(const DMirGeometry* geometry, DMirVisitor* visitor,
