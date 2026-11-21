@@ -1,0 +1,1258 @@
+{
+  "repo": "https://github.com/themartiano/luz",
+  "commit": "31d6ef0b30e8d8a5b0c010f63a7cde5772ecd637",
+  "license": "MIT",
+  "gitlinks": [],
+  "gitmodules": false,
+  "retained": [
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "git_blob": "5ada4f5a71aa6e878f3e69151f598f6c40db1ca9",
+      "sha256": "93306338f3f294402f6e7cd87fa1740a39fc209cb2b0715d51fa400e6152654d"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "585c7798c2eb6f8cc82cf85ee3b45ed0ea69dda8",
+      "sha256": "594d44b219178e8118f06eed2949f2796b5a852a9df0cae351c6ca9d0c7a8db7"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "746e7c115786afb99246b90bba114d08ed3b6368",
+      "sha256": "742d815c420e3668cf81ab6e12a7fb60c9c6ae68d9d63785f67be27976870e0f"
+    },
+    {
+      "path": "include/luz/AABB.hpp",
+      "mode": "100644",
+      "git_blob": "a749a783514c759cf97814054ae70e248a800ca0",
+      "sha256": "d0bf055e1f46e6c838b91dc3a6e5051f302cdc48b3e76d6226c6de4dc414aae3"
+    },
+    {
+      "path": "include/luz/ANSIColors.hpp",
+      "mode": "100644",
+      "git_blob": "87ee7f806f4b6f6a98360445996563269d8ce5dc",
+      "sha256": "df48c29b93ff098b0a194dca7d6aaf46c446da79e4140838125775a3b53fd123"
+    },
+    {
+      "path": "include/luz/AssetPath.hpp",
+      "mode": "100644",
+      "git_blob": "9220b4041ff5377444df5578bc213faf338be715",
+      "sha256": "ea7af6cb8f05656a6cfbd531e0226d49be33924166ac4b685c7d79eaca2fb8da"
+    },
+    {
+      "path": "include/luz/Atmosphere.hpp",
+      "mode": "100644",
+      "git_blob": "d975a0bb1367993fdae285746aa1b22fb7bc61c1",
+      "sha256": "775685953c7d9d339b30d375106f0da7a67f146120e0fb7456798bb59bbd9279"
+    },
+    {
+      "path": "include/luz/Blur/Gaussian.hpp",
+      "mode": "100644",
+      "git_blob": "cfba60f0b21247c1fe91d3e73bfb24028f4c1f5f",
+      "sha256": "91b10d92551018ebe2c96806c7758889fafb8040ee9838915b4145e679cc7832"
+    },
+    {
+      "path": "include/luz/Camera.hpp",
+      "mode": "100644",
+      "git_blob": "f6c32bf996836c45d5837473e1d6c0638f87e190",
+      "sha256": "f986a3458c801dca2309b1906fe90e511fb00e25de9eeb3adacb06e6eb7f3ca4"
+    },
+    {
+      "path": "include/luz/Charts/Bar.hpp",
+      "mode": "100644",
+      "git_blob": "6bf51d5494e8bc573744cbe1066927ce6fc11f0d",
+      "sha256": "a8da65c36d67bacd6328bb7880c6918f76f29712d54cfbad045d17039aefcab6"
+    },
+    {
+      "path": "include/luz/Charts/Charts.hpp",
+      "mode": "100644",
+      "git_blob": "100cf46904638a83e52c24e7a4d220389b8ba969",
+      "sha256": "703b7520af4d8f507c6ece3e9afb0681295df31b59c216c3fe511768d1df4c13"
+    },
+    {
+      "path": "include/luz/Clock.hpp",
+      "mode": "100644",
+      "git_blob": "970c56c6d0460b9997947387c40e4afc01ce9dc8",
+      "sha256": "0fd1a67f52d7e7c69bf9c7e4efe71e3c9bfba1e78bf39ad391ab2936be805189"
+    },
+    {
+      "path": "include/luz/Color.hpp",
+      "mode": "100644",
+      "git_blob": "40a3554b423c9c8cd652a6c4063d47639de9f529",
+      "sha256": "7fba34cf350c0528b2008ed58cd375c124a3f1e03b2f5f602da24f87641818cf"
+    },
+    {
+      "path": "include/luz/ColorManagement.hpp",
+      "mode": "100644",
+      "git_blob": "0ed593cf3ecef9047c18bdc65f16d8957b01cd89",
+      "sha256": "892bed07b0ba9fffc512bd5cc2753183da1135910fd7a6d2689b347a93441e90"
+    },
+    {
+      "path": "include/luz/ColorScience.hpp",
+      "mode": "100644",
+      "git_blob": "cfc6fc524cf2ab56dc63cbaa40b93aea3442975a",
+      "sha256": "a82e25f355f9f748021ffd4df35dc57d2d8aea898a573e436d0087878405cf7c"
+    },
+    {
+      "path": "include/luz/Defaults.hpp",
+      "mode": "100644",
+      "git_blob": "205c990e299d7b5c9059cb1e68c575450f980f97",
+      "sha256": "472778c394d31ddd548e8792ae7153eb6e563302a5ac65416c0aad520c3698bd"
+    },
+    {
+      "path": "include/luz/Denoise/NFOR.hpp",
+      "mode": "100644",
+      "git_blob": "37f5d6ad610085ba131dc42204d171f2b47317ec",
+      "sha256": "bd4142e6b339ec540db0bf4c4c3bc5daf23954a85c5d00238b82f2dfa2982244"
+    },
+    {
+      "path": "include/luz/EnvironmentMap.hpp",
+      "mode": "100644",
+      "git_blob": "755cb708eba986f43dbf588445abc9fc528fd0c0",
+      "sha256": "97eea9d0cdb6d9c244aa904644b8c2f8d3ca3d25e35a82fa02a89cb13fe4256c"
+    },
+    {
+      "path": "include/luz/Exit.hpp",
+      "mode": "100644",
+      "git_blob": "cf64ae898a596f7b3e4020df6e10f4c3703617dd",
+      "sha256": "2bd70147fbc77839604e43340c7be0b62531d27b60bacfc1bee637e9e0912b9f"
+    },
+    {
+      "path": "include/luz/FlagsParser.hpp",
+      "mode": "100644",
+      "git_blob": "48f7d40a261633582b63afbf1365b30b22ec770b",
+      "sha256": "ea690670eaf9ddf72e63a1684ac6ce7e4fa768ac13d2c8dd4396e6ac1b76de9f"
+    },
+    {
+      "path": "include/luz/Font.hpp",
+      "mode": "100644",
+      "git_blob": "832445011db4eb132dc2249a31384c0d9bc01067",
+      "sha256": "ae5136f1fdf40c75a21df4276162825a3cb00e0857010290962e7e80edf2ed40"
+    },
+    {
+      "path": "include/luz/Hittables/BVHNode.hpp",
+      "mode": "100644",
+      "git_blob": "335484d0f01c8dff36ba2b460dcf52a6d1601254",
+      "sha256": "846223593de5099c9ffc179e08e8486b80ca9fb4d185f7a5522da4d6e3bc8307"
+    },
+    {
+      "path": "include/luz/Hittables/CloudVolume.hpp",
+      "mode": "100644",
+      "git_blob": "2f936b56afd2f04ad42940c3262f54173a419a36",
+      "sha256": "fc6ecd906dc772dff4542acb989397f94f1a3333e9a62420da7fd514500d366c"
+    },
+    {
+      "path": "include/luz/Hittables/ConstantVolume.hpp",
+      "mode": "100644",
+      "git_blob": "f059fb8845cbf585edc8d10d49ce2c1532c70630",
+      "sha256": "3ec38e8bcf0be763ebaf260ace57377e9a6fcfe43d3b6c7c073ec6c94917278f"
+    },
+    {
+      "path": "include/luz/Hittables/Cube.hpp",
+      "mode": "100644",
+      "git_blob": "1daa0bb98cce20db8d0299156a946d7376bacd02",
+      "sha256": "2bf0ae55e29b95963f76ed7805dc5f43df6f656e846851f365dd107d4e52bcbc"
+    },
+    {
+      "path": "include/luz/Hittables/DensityVolume.hpp",
+      "mode": "100644",
+      "git_blob": "277a20b408e515eafd4c5183bd51e9c8110d4917",
+      "sha256": "e28a6e329ff925d8e15b80089eda76e3dd22caad2af52c96294a3373770f0a2a"
+    },
+    {
+      "path": "include/luz/Hittables/DirectionalLight.hpp",
+      "mode": "100644",
+      "git_blob": "04769bb8219c192f936cc46cc440d4627326fecd",
+      "sha256": "83c3edb75fa0e285485baf060f515374706c5a93a14009f6bcdddef157cd456b"
+    },
+    {
+      "path": "include/luz/Hittables/Hittable.hpp",
+      "mode": "100644",
+      "git_blob": "27407b4a0365646d69378473b7ff045b1d0ccb26",
+      "sha256": "18759dd8c98ae4940fa000a8ec3d84ed04d027ae5cecb59b63cf4c7ef5076125"
+    },
+    {
+      "path": "include/luz/Hittables/Mesh.hpp",
+      "mode": "100644",
+      "git_blob": "62e85c98bd22db0e54a3fa5d01c0d913f3f73913",
+      "sha256": "0398db8eb3ecbef4f536d91af29554b225689c2d9f90736856f67030f3af0b49"
+    },
+    {
+      "path": "include/luz/Hittables/MeshInstance.hpp",
+      "mode": "100644",
+      "git_blob": "75861b62d68069abf07c12e107e57c82ddec228b",
+      "sha256": "96779a1dc4231348d3d16cb45aa62146766355d1c636f21dcf5bfdb65e4dda53"
+    },
+    {
+      "path": "include/luz/Hittables/PerlinSphere.hpp",
+      "mode": "100644",
+      "git_blob": "a4a1437400e435a5e1a4e9b8b79511eaaa53931b",
+      "sha256": "ae2bf58f90e53ee73ae6e41a8b9f2eff2c7050ea89edababe37e4cb5f4afc165"
+    },
+    {
+      "path": "include/luz/Hittables/Plane.hpp",
+      "mode": "100644",
+      "git_blob": "b9de418c8c68020ac3a12afaede23578e50f59a7",
+      "sha256": "1d4414cf2fee5747234e10d5390ea776b7cd58d65cb04e97012c3f40c8bec1be"
+    },
+    {
+      "path": "include/luz/Hittables/Rectangle.hpp",
+      "mode": "100644",
+      "git_blob": "7fe6f6a573e891fcf4d5ebf7d9ebca9fb782b76f",
+      "sha256": "7b09403137e384a359419150d24dc91ee8a1ccfdbd818c4adc37e697ef454ce4"
+    },
+    {
+      "path": "include/luz/Hittables/SparseGridVolume.hpp",
+      "mode": "100644",
+      "git_blob": "8f89c347445e272cbcf7866eaa2c765c9b452598",
+      "sha256": "ac07c1f5aa90b4b9e12ce491bb66a02400fdc0f1df1b855c7b65e0fb064e2a20"
+    },
+    {
+      "path": "include/luz/Hittables/Sphere.hpp",
+      "mode": "100644",
+      "git_blob": "b0f49d6c2e8c361c7f4113120164f6a80c148bc2",
+      "sha256": "afc4ea5be234d4f4fcec0455600c8e8e70c2b300f2a2d3e09948d4eb9d47d473"
+    },
+    {
+      "path": "include/luz/Hittables/Triangle.hpp",
+      "mode": "100644",
+      "git_blob": "b89cddb2cccc494b4aff98569d41faa3f64f7601",
+      "sha256": "19deba8fdd393c2b699126b0c6cd937202cd490cc8ecae2fe5c0a3355ca0040b"
+    },
+    {
+      "path": "include/luz/IESProfile.hpp",
+      "mode": "100644",
+      "git_blob": "5c733869c5aa7900be92b1cb8243a510ccde6c63",
+      "sha256": "78734cffe0b70614366a9b79c29e338bad3403174afdbac30cad0362694f97e2"
+    },
+    {
+      "path": "include/luz/Image.hpp",
+      "mode": "100644",
+      "git_blob": "d86db20ba43819e14d251284200cc45322a20029",
+      "sha256": "93598c99acc9451076900130faa04981067eb770fe9d6fe6437ec02e4ce5dcbf"
+    },
+    {
+      "path": "include/luz/ImageFiles/BMP.hpp",
+      "mode": "100644",
+      "git_blob": "cab71e3a20be83e8f394b38a8a7ec1f74023a114",
+      "sha256": "a0fd161d64a47f4fc28dfa8b4bf2c08490678da8460b360d0bfb9c0a79c1620b"
+    },
+    {
+      "path": "include/luz/ImageFiles/PNG.hpp",
+      "mode": "100644",
+      "git_blob": "38c6d21d6a7511dcd1673a9aed592ca04345a870",
+      "sha256": "ed5ec45930d00a3d7767aafbd742b6c2cf5b98862cbed7a614fe824406e751fe"
+    },
+    {
+      "path": "include/luz/ImageFiles/TIFF.hpp",
+      "mode": "100644",
+      "git_blob": "a81b2e3678c74c2f0318307aab765d28ea7601b6",
+      "sha256": "79d69030c71adc23d4f64c9b57a89ca21614aa9a6a181fb964a67079cfd19b0b"
+    },
+    {
+      "path": "include/luz/LightUnits.hpp",
+      "mode": "100644",
+      "git_blob": "f24060f65364cecd8f8b1053fbfd5206403d9bca",
+      "sha256": "4a8c6c8041bf6f3682b285aa131e0fc465af781b2837e01e9d3ac2ffa84058db"
+    },
+    {
+      "path": "include/luz/Materials/BSDF.hpp",
+      "mode": "100644",
+      "git_blob": "d5b3ff6046a5efe9a5e835e719cf91493ff9615b",
+      "sha256": "9eef79689af5fb835830c69401722f78fe389aae66fc3de22cbe8aac4e45cfae"
+    },
+    {
+      "path": "include/luz/Materials/Dielectric.hpp",
+      "mode": "100644",
+      "git_blob": "e86562aefa9bff51e421f3d8a0f8d0ba4bebfed5",
+      "sha256": "1224e21a719fc069e9f34513af69dedaf4fb368f7aba21f71e15dc0aa6acaf27"
+    },
+    {
+      "path": "include/luz/Materials/DiffuseGlossy.hpp",
+      "mode": "100644",
+      "git_blob": "108fe8888dcc94cce7ecdefe722e689e04f23bc0",
+      "sha256": "c68d912388a72d3d8a058692363e773ece61199996b9da2738b9d07db182dcbd"
+    },
+    {
+      "path": "include/luz/Materials/Emissive.hpp",
+      "mode": "100644",
+      "git_blob": "69b08be3f7c38904a5da5102d37f504daf6514de",
+      "sha256": "de13247785419a2b55454929b87524ff67c3ecdd9a9adba5b7b88f25e3d058bb"
+    },
+    {
+      "path": "include/luz/Materials/Glossy.hpp",
+      "mode": "100644",
+      "git_blob": "c40d8da81722910d3abd54d4d8bf8a7167629d27",
+      "sha256": "4d6cbe06bf10aab29b4cf676d6638879edf0e0ccb733ee74a1ed1507719876c8"
+    },
+    {
+      "path": "include/luz/Materials/HenyeyGreenstein.hpp",
+      "mode": "100644",
+      "git_blob": "93d66c44ea506c17c84cf2e25bcadaef4154a13f",
+      "sha256": "a772fd305cd0d90d7666c29d3d34dddd6cd3c4525f726c3e2b50bf0f7dda9f45"
+    },
+    {
+      "path": "include/luz/Materials/Isotropic.hpp",
+      "mode": "100644",
+      "git_blob": "acd83370bbe7279916b2c4f6e06ab0a4e79c6f88",
+      "sha256": "1e2110fdf52b264ff73ea5a9674b7f817a72ddff0222b8856f90607f61b17103"
+    },
+    {
+      "path": "include/luz/Materials/Lambertian.hpp",
+      "mode": "100644",
+      "git_blob": "2e52ced3bb87b06dd20561e481c9084f473c9ac1",
+      "sha256": "9532c9a759c0b154e6d6aa62a59944fcf51d66032f6b38fdaca7c3decfd91925"
+    },
+    {
+      "path": "include/luz/Materials/Material.hpp",
+      "mode": "100644",
+      "git_blob": "b545531be928209ed3cc44799801cff7905a70d7",
+      "sha256": "42cfa544d7787dcc0b9be5167fced5ae4a8043ed7d27c33b858370c81cb21c77"
+    },
+    {
+      "path": "include/luz/Materials/MaterialTypes.hpp",
+      "mode": "100644",
+      "git_blob": "23481c5edd93e384573933f113d1c1d9ada27233",
+      "sha256": "bb8913ca770361a7f7c671f31bf5079f9203e7b7e76a250bb385d4384d360957"
+    },
+    {
+      "path": "include/luz/Materials/Metal.hpp",
+      "mode": "100644",
+      "git_blob": "5fb9d6b80cff4b3dbd5b966636f22ac7aebdcff8",
+      "sha256": "a7fc597d9e0dc5e212d7b8afc7e9fb0f4bab5c128f293a3e2bb2186e81b49274"
+    },
+    {
+      "path": "include/luz/Materials/Principled.hpp",
+      "mode": "100644",
+      "git_blob": "0dc9ba34fc2a4cbd48e2f551bde5fa705e6e30ca",
+      "sha256": "80d88b60da4acbdd4db5b09575aee17e027fbfaa55b92e47b0f543524ab25c88"
+    },
+    {
+      "path": "include/luz/MeasuredMaterials.hpp",
+      "mode": "100644",
+      "git_blob": "54e6bd156af882b68e530217b9dca6516a2bf68b",
+      "sha256": "07d2f355c88d1e590a88d099cebbf906e50d717424cf85903ece1c88f75fe5ce"
+    },
+    {
+      "path": "include/luz/Noise/Perlin.hpp",
+      "mode": "100644",
+      "git_blob": "c8dbc8dc8f7cf9b37abd671238ad7db43be1304c",
+      "sha256": "358a0875843043128a0fd8a248578d53d64e3ef27937ba63105ee65f8eea13a6"
+    },
+    {
+      "path": "include/luz/OBJReader.hpp",
+      "mode": "100644",
+      "git_blob": "8d77d1a6b90bb3cf4812b0248b8bee4dcfc9c935",
+      "sha256": "7d3d85707dc76de4467a9645513bb8c128a5156fb5c603eac5506c8add546aa8"
+    },
+    {
+      "path": "include/luz/ONB.hpp",
+      "mode": "100644",
+      "git_blob": "34ce6e9c6d47f5cff5d740b8134ef1e56c188159",
+      "sha256": "a72a136979b860853386f73081948a916eecc458774d7e70bd8080f476cc22c1"
+    },
+    {
+      "path": "include/luz/PDFs/CosinePDF.hpp",
+      "mode": "100644",
+      "git_blob": "9eef7428c6361b0d0d68534b237b8a72ebe01b84",
+      "sha256": "9d1966a3dcfb5b63b5631edca32ee612c6fd17f09684c207812ad1d8382ff60f"
+    },
+    {
+      "path": "include/luz/PDFs/HittablePDF.hpp",
+      "mode": "100644",
+      "git_blob": "3158c1fdcea361c354c9d1e569fa48fd3cf0e09a",
+      "sha256": "d983a60f7d83146208b9c8b9013fae600f1be16f48f68d071f2fc55f6916f486"
+    },
+    {
+      "path": "include/luz/PDFs/MixturePDF.hpp",
+      "mode": "100644",
+      "git_blob": "b1dc343f9942e4f2260193393a28bcc308453906",
+      "sha256": "78e2749d16fed9b0d18e8487b8f4be7ac9d9f612ea1d749b30a71b47eaf0cbf1"
+    },
+    {
+      "path": "include/luz/PDFs/PDF.hpp",
+      "mode": "100644",
+      "git_blob": "a262cef67d20aed0f49f08b0f7c31cce271acb19",
+      "sha256": "ed2a4a708592f22d2a4b6339371d16b6e96f3fccb61469ca6399481e502f4792"
+    },
+    {
+      "path": "include/luz/PDFs/SpherePDF.hpp",
+      "mode": "100644",
+      "git_blob": "2a9e987cfc85efd5eb773f3263b841b23fc6d09d",
+      "sha256": "f352f271a9ab22435dbff53f37f700e2fe8865785f3e2844e54077c4595a623f"
+    },
+    {
+      "path": "include/luz/Random.hpp",
+      "mode": "100644",
+      "git_blob": "31d06b63bdb858b577d8bd9ee71ad115010ba59c",
+      "sha256": "d0f46b2a2bdc8c49d631e6835dec4fee6ca24dc8813dff617f46a25aca30f261"
+    },
+    {
+      "path": "include/luz/Ray/Ray.hpp",
+      "mode": "100644",
+      "git_blob": "9e01ca4836da80c95ef8e8cb51716f7a17afc912",
+      "sha256": "42ed2b2679fdfde88099c31efe3d5db5ce677960b10ddfcc1b874d4c83f97dd5"
+    },
+    {
+      "path": "include/luz/RefractiveIndexes.hpp",
+      "mode": "100644",
+      "git_blob": "834a880e0d92f647c6cc47173d1664c89363ec98",
+      "sha256": "5f26b062af57dc67b0f8f87a4c2ac8f9cc4c40543a878f2c3d12db2fcd11fb38"
+    },
+    {
+      "path": "include/luz/Renderer/CausticPhotonMap.hpp",
+      "mode": "100644",
+      "git_blob": "0b21efcd071c99f04ef6b8facdedba452b51ff47",
+      "sha256": "76e3037a8db45144dd587f6acd553d4d56716753754b7077be0bff71346c2a15"
+    },
+    {
+      "path": "include/luz/Renderer/Renderer.hpp",
+      "mode": "100644",
+      "git_blob": "1e902c25788138b74f6940ed8e15d8e69cfc5280",
+      "sha256": "513ea9fe16d7fc9e03157c43217ce3935055c3ec5e4c0a49864aa5364d424f00"
+    },
+    {
+      "path": "include/luz/Sampler.hpp",
+      "mode": "100644",
+      "git_blob": "22aee8972122989b10727a5f3103359570c5bb57",
+      "sha256": "e4dc4f0d1dbe2793d07a074230701c30e30edcbef975f24efc6c21ae62c92673"
+    },
+    {
+      "path": "include/luz/Scene/Scene.hpp",
+      "mode": "100644",
+      "git_blob": "c439e1b917cd4340a0ca8c5215f10da78ecdc2f2",
+      "sha256": "4d7610620de71fbba005cbeaea113ee2a0a1b5d1ddc08a39dc683a68d00b43bd"
+    },
+    {
+      "path": "include/luz/Scene/SceneHelpers.hpp",
+      "mode": "100644",
+      "git_blob": "298bb7d3c4de76f3c2b6ca0c5b71b356d9706058",
+      "sha256": "bfd9576a7949e39df5c54c8e78694c3716d3affd0c36370a7cff1a1b3ebfb15f"
+    },
+    {
+      "path": "include/luz/SceneFile/SceneFile.hpp",
+      "mode": "100644",
+      "git_blob": "98dedd3088c8d5071e7d79c58ed205027b106cf0",
+      "sha256": "559c2789ab3c8fa759ff406d39dd7519fcd13ea4457013603de5743aaafb800f"
+    },
+    {
+      "path": "include/luz/SkyTypes.hpp",
+      "mode": "100644",
+      "git_blob": "8a36f9e2f6bad2cdd46d22329af0adf21b787f9e",
+      "sha256": "473e3643b7a74037aa553b3530339bf7326f1b980f9a042c1abd6022296f24f7"
+    },
+    {
+      "path": "include/luz/SmartArray.hpp",
+      "mode": "100644",
+      "git_blob": "42be76bdc7c702c77f4e110ebfe0f0204bf117d7",
+      "sha256": "35bcce18739cca23753e5e9076549cfa4f5008d0ef61a88a6d9cc287dfde321f"
+    },
+    {
+      "path": "include/luz/SparseVolumeGrid.hpp",
+      "mode": "100644",
+      "git_blob": "61bdcd0d750a7c74242d0ea4bd6e52177a37fbba",
+      "sha256": "378d0caf616d7eac88e5695de84ed0fb36cecad49b1f6746ad1255e1e2c300d2"
+    },
+    {
+      "path": "include/luz/SystemSpecifics.hpp",
+      "mode": "100644",
+      "git_blob": "ba3c1bc50600a47b66b63417c39e5c2a2bb14eaa",
+      "sha256": "3c81bd7d08aac50a12141ba398d7c8dba98d40d8d775835279da9a181e933cb1"
+    },
+    {
+      "path": "include/luz/TerminalProgress.hpp",
+      "mode": "100644",
+      "git_blob": "da454b316f4b80fb7ec40b599b6f84bc3f367023",
+      "sha256": "01a8ef98cf1e5b5d660c441433e7749c84814650b51d063a229f89618222714b"
+    },
+    {
+      "path": "include/luz/Texture.hpp",
+      "mode": "100644",
+      "git_blob": "579ddee21cb490d0328bc7d38ca1570207d7dff1",
+      "sha256": "8072f41713ce72ca4c601f0b0307c5dab168f531af6efe76341657b6c1541067"
+    },
+    {
+      "path": "include/luz/Transform.hpp",
+      "mode": "100644",
+      "git_blob": "4d377f6bac5da2470adeb05c780eaa7a6712bb99",
+      "sha256": "cb55089249b3dbd7bb3668e9525c16be9d5abc779152e5f450310d4c101799cf"
+    },
+    {
+      "path": "include/luz/Utilities.hpp",
+      "mode": "100644",
+      "git_blob": "6f967c74b009717a02216b0f57bcb2a94daa7f2e",
+      "sha256": "6671eca602f6fb3dd05c364ad78ad045d19bde0d35aa20445fadfc6bd5322e23"
+    },
+    {
+      "path": "include/luz/Vector3.hpp",
+      "mode": "100644",
+      "git_blob": "9c371300208853545533a6a8fac95dca05844cc9",
+      "sha256": "7595c823d579daafc948a47e49ee91700e206d9f0e667a39a014f7d653a6d880"
+    },
+    {
+      "path": "include/luz/VolumeGuidingField.hpp",
+      "mode": "100644",
+      "git_blob": "aa4a369b77c13c045342b9ff8ae200e796b8e11d",
+      "sha256": "1dd55fb5e4ee9d66a5c5e455534554239991984f962c0d3d02bf8d594e91b076"
+    },
+    {
+      "path": "include/luz/WindowsSpecifics.hpp",
+      "mode": "100644",
+      "git_blob": "c6046fd10afb82d92d54a47c42dd2d61fda3f2e6",
+      "sha256": "f0e83dda4b784c417cd48398fd6ac4523753e2c3fc66d75654187fdadbe47248"
+    },
+    {
+      "path": "src/cli/FlagsParser.cpp",
+      "mode": "100644",
+      "git_blob": "52c0520652e795101843a042f0580be13687e674",
+      "sha256": "96e952f823c881c7cd082aec697db210fc3cc90219d6ad7f4ae644831796f421"
+    },
+    {
+      "path": "src/cli/main.cpp",
+      "mode": "100644",
+      "git_blob": "47c9af9df2414ef6fac6724219d06bac7068bb1e",
+      "sha256": "afdb93302a6c6190f22fbf8409c114b2cd798c0fa3886ac32373906d9fe472c3"
+    },
+    {
+      "path": "src/core/AABB.cpp",
+      "mode": "100644",
+      "git_blob": "3639d4f7dc94e17e7ed1fa33939106960d61a32a",
+      "sha256": "d9f2dd2db26719dc8713327702f27eb136191018021596c8b39733050f7def31"
+    },
+    {
+      "path": "src/core/Atmosphere.cpp",
+      "mode": "100644",
+      "git_blob": "bf09e795603081f5e98d6edf042196181842c7b9",
+      "sha256": "aedffed6f0983ef79ff85f7120cf410e8ca51f62f67abfef170cd29184596796"
+    },
+    {
+      "path": "src/core/Blur/Gaussian.cpp",
+      "mode": "100644",
+      "git_blob": "382453e174ed75733e0fa260b43436fd5fac5827",
+      "sha256": "59082f8dcf90be43425b3805d19ae957e6c6d5a7a93c091776729c05b3228f58"
+    },
+    {
+      "path": "src/core/Camera.cpp",
+      "mode": "100644",
+      "git_blob": "4d130843ae972e098d05339014c52ce8f862415b",
+      "sha256": "505aea1dabe44cd532b10cdcc851f260e4e805f1a50687d6065a2ca770bdd33e"
+    },
+    {
+      "path": "src/core/Charts/Bar.cpp",
+      "mode": "100644",
+      "git_blob": "0414f17f9479c284c151b50a0aa4a3e0a0dacc9c",
+      "sha256": "cb5199c595fb8a2d0ace226a93ae22cd10d379d4e818a0806553c8f9359807c8"
+    },
+    {
+      "path": "src/core/Charts/Charts.cpp",
+      "mode": "100644",
+      "git_blob": "72e793c141137efa7becac1d03a8cf19c9484caf",
+      "sha256": "678fa3f32185de6fae0e071a1e163f7512e0b5ad8c5f43cfda91ed386fa8fc91"
+    },
+    {
+      "path": "src/core/Clock.cpp",
+      "mode": "100644",
+      "git_blob": "cb7c0dae9ddb709cb09f584f4208454791d2e737",
+      "sha256": "7b12cb711f62ab8eca1d8d5825b072fef3fa608fd3a661ece2d65a03231da0e0"
+    },
+    {
+      "path": "src/core/Color.cpp",
+      "mode": "100644",
+      "git_blob": "af1616685c49986e1846524847a376a2cbeea50f",
+      "sha256": "17540d29862cce3cd2bef523c260201496878033237a72a312e2b6380d8b993b"
+    },
+    {
+      "path": "src/core/ColorManagement.cpp",
+      "mode": "100644",
+      "git_blob": "d324ec5b8acb1b7ec97128073435e511e8b4ed2c",
+      "sha256": "d1328ccc82fb8056c4fcdfed88ce8f79326ce4f5cd6c97cb40877b79f5cebde5"
+    },
+    {
+      "path": "src/core/ColorScience.cpp",
+      "mode": "100644",
+      "git_blob": "3eb11140c705b2a003b6c1f7c8b59fbd82371f1d",
+      "sha256": "7d61b1f6ae6f0da94c5d4294e9fe262ecd5804e06cb7d68067b4fa902d74dacf"
+    },
+    {
+      "path": "src/core/Denoise/NFOR.cpp",
+      "mode": "100644",
+      "git_blob": "1fc7e01df868a7e54beec7ca039bb6d2e5375c1e",
+      "sha256": "fc25fb08f151674a87578796250c625405f22efefc0e1b302abb8a189355deed"
+    },
+    {
+      "path": "src/core/EnvironmentMap.cpp",
+      "mode": "100644",
+      "git_blob": "ba0de6551504855e84f36ca27875b0ad9b1dde27",
+      "sha256": "9717e17733383a103652c75b55625c3da3d8ab92b45c18824cf0cc56edd5f70d"
+    },
+    {
+      "path": "src/core/ExitError.cpp",
+      "mode": "100644",
+      "git_blob": "db418eb4b8f96719b98b8df6380854b6b8c2fbda",
+      "sha256": "70835a9a064a9b1dbec0e4a28196f10e8cb8aa6dd730d40c69793ac46ae2f4c7"
+    },
+    {
+      "path": "src/core/Font.cpp",
+      "mode": "100644",
+      "git_blob": "5f5da97813b719f7e5bd1e51d6673f7110e00f64",
+      "sha256": "259e8deb295de72178f440e9125870482a260e96044dc096e1ecf26252c230cd"
+    },
+    {
+      "path": "src/core/Hittables/BVHNode.cpp",
+      "mode": "100644",
+      "git_blob": "7123a07bcdb97d964c20893112bf0b11b0120c79",
+      "sha256": "94192d3e61f60087bfa63dc0c2a93614fa9fe12c58a35267fba613e848aa542d"
+    },
+    {
+      "path": "src/core/Hittables/CloudVolume.cpp",
+      "mode": "100644",
+      "git_blob": "eb6fcf909a9d56d89b948f83ecdcbaa08b4eee93",
+      "sha256": "8b125cddce31b2c959ad57e71c5904965d85401cbca7cd9252c8bda86ec56f86"
+    },
+    {
+      "path": "src/core/Hittables/CloudVolumeCache.cpp",
+      "mode": "100644",
+      "git_blob": "578fa39646bb55e59e0b4ac62c8adac53c5ca834",
+      "sha256": "b9e1ed718ddb3f4c2f71c1ec1cb3237d6a3a5ac09782f1672a1a1426abf16bd0"
+    },
+    {
+      "path": "src/core/Hittables/ConstantVolume.cpp",
+      "mode": "100644",
+      "git_blob": "85cd985231d0d89f1fd5a730cbc07db021f0eef9",
+      "sha256": "01385f1e71623b124378f7db89adcaa06daa346e1434b5efddcb24e76d2eb926"
+    },
+    {
+      "path": "src/core/Hittables/Cube.cpp",
+      "mode": "100644",
+      "git_blob": "57d0dad6c19edc5b7bd33cfba1ff66c6b6dbf7e7",
+      "sha256": "ca93e48b034d2b69f0865567e0d491894c0336759953727fad329bb9e30a6a8e"
+    },
+    {
+      "path": "src/core/Hittables/DirectionalLight.cpp",
+      "mode": "100644",
+      "git_blob": "2d59f32206179602cea40cc7cd85a2ee6bba6d87",
+      "sha256": "297f09f6fce433b96d10e918fcfc4d9df2883e1af702adea4a40c3dfd762310a"
+    },
+    {
+      "path": "src/core/Hittables/Hittable.cpp",
+      "mode": "100644",
+      "git_blob": "0eda8f4a00e42543961133400596361dca96ccf5",
+      "sha256": "e5c4060297b988256917c4ebcec9899137823569bd3c07b3acbd169854fc7c74"
+    },
+    {
+      "path": "src/core/Hittables/Mesh.cpp",
+      "mode": "100644",
+      "git_blob": "45baf6c8877ce0bb0ed6ab612f8683b612b6d4f3",
+      "sha256": "291e68c705d7741bed69cef0e81c3083cc3c81091fa28174c5913781a8c3b2ed"
+    },
+    {
+      "path": "src/core/Hittables/MeshInstance.cpp",
+      "mode": "100644",
+      "git_blob": "137f25d16e7ae4dff2a46c82a2ea2bfdeff99d88",
+      "sha256": "22a1bedc4ae2f8e3ce29c3b7036f06a05b37607b76e38e1728f7a4d5068e73d2"
+    },
+    {
+      "path": "src/core/Hittables/PerlinSphere.cpp",
+      "mode": "100644",
+      "git_blob": "5b3bb5e561d5d3451a649fa4d487a60983ea4ca9",
+      "sha256": "b6cd2f99b182590ccc1dd0ff45911e8f4d968cdcf3c6ac20e2e0066f21d1f548"
+    },
+    {
+      "path": "src/core/Hittables/Plane.cpp",
+      "mode": "100644",
+      "git_blob": "20782f0b62aa14b34c5c1ca035499f70be15ce91",
+      "sha256": "5c73ac4f96e17c0c9b739b0af44f63ff59c4b99adb56e81b9ffcdc5b1dbd096e"
+    },
+    {
+      "path": "src/core/Hittables/Rectangle.cpp",
+      "mode": "100644",
+      "git_blob": "39cb4c5b1e58bfb05c8565c6d23a0a5de9a1321c",
+      "sha256": "43b0f0359193d9923dc101cb022b342df2c8a5f54dbf2992474aea9230fae3d6"
+    },
+    {
+      "path": "src/core/Hittables/SparseGridVolume.cpp",
+      "mode": "100644",
+      "git_blob": "2d5623d062ec90b300757427830f229daa6b1c86",
+      "sha256": "71f51eb75f9e79b1360a575c46d27b73c8be90a7773c43134a6f1f2b63188bed"
+    },
+    {
+      "path": "src/core/Hittables/Sphere.cpp",
+      "mode": "100644",
+      "git_blob": "4b4c26983452b0f13e0a38893c4a209bf538d080",
+      "sha256": "80db8bb9b6571706cff3a13e249efbb42a67efd3b561c519d6c9f48f9074cb50"
+    },
+    {
+      "path": "src/core/Hittables/Triangle.cpp",
+      "mode": "100644",
+      "git_blob": "6255bb7a57a13626f6e278f3504beee01eb2ca63",
+      "sha256": "8dca03ac85c7b9086e5825849d2067eb35a165daa6ac5ab61aa6aceb3ad9fa3e"
+    },
+    {
+      "path": "src/core/IESProfile.cpp",
+      "mode": "100644",
+      "git_blob": "caae48e1a65b6696a62fb06e19cb1baa3526f6f4",
+      "sha256": "922e2b3d5e913eee9d089acd189276e5e05eed4674ca52a25911a14c94983a17"
+    },
+    {
+      "path": "src/core/Image.cpp",
+      "mode": "100644",
+      "git_blob": "7e8f2ff28876cc805745f02ccbaf502f12545917",
+      "sha256": "4f0741c5b5bccbfb39a5522affa8f7211ce174b8baac0073f56684ee2affddad"
+    },
+    {
+      "path": "src/core/LightUnits.cpp",
+      "mode": "100644",
+      "git_blob": "daea5fb0a5faec1bd40fec0fe8d027194666afe8",
+      "sha256": "196cc4ef474d61d7635368ae78ebe2634ffddb2fcedf9e0f73b4fd81280755da"
+    },
+    {
+      "path": "src/core/Materials/BSDF.cpp",
+      "mode": "100644",
+      "git_blob": "07bbeab1857bff4abfa35109172c53f2126d26e9",
+      "sha256": "9d6bda84992784137607b806318b72d98aa0325e45e053e5c3efbc2bb54b845b"
+    },
+    {
+      "path": "src/core/Materials/Dielectric.cpp",
+      "mode": "100644",
+      "git_blob": "5e91f069bd25ff01730a8437e29c6c365c9d100a",
+      "sha256": "aa85af5d3d9cffaa7587a13f5e3b222c6303f53ab006a7be5f56712e396f6826"
+    },
+    {
+      "path": "src/core/Materials/DiffuseGlossy.cpp",
+      "mode": "100644",
+      "git_blob": "2b24fe921985c98a4a666967e3716e0769428594",
+      "sha256": "e3a639bf8f5e9b173ffb75f55d9ace5347b273cdd7eaf6269d060df4fffe35ef"
+    },
+    {
+      "path": "src/core/Materials/Emissive.cpp",
+      "mode": "100644",
+      "git_blob": "e3606f44c62f73c0cf4177a1217f6fccdf4425ef",
+      "sha256": "4a626dc87e68cbdc2e91f0b9dc669f0e0dd31e4c395c5a01047c7aec45321e55"
+    },
+    {
+      "path": "src/core/Materials/Glossy.cpp",
+      "mode": "100644",
+      "git_blob": "7f8f59d94cb4a3ea41c3da627575e2db76e28f38",
+      "sha256": "ecdf82cd2df810d54f807c381be0926e19ef04812c5f4dda474a0774c4a9d2c5"
+    },
+    {
+      "path": "src/core/Materials/HenyeyGreenstein.cpp",
+      "mode": "100644",
+      "git_blob": "e07abbe34f0281fde76183e276577bbd5b6eb5c5",
+      "sha256": "628b6736bc29b789a200fc28e1264eda04b5c160a58cea5476be0f0cd42f2d15"
+    },
+    {
+      "path": "src/core/Materials/Isotropic.cpp",
+      "mode": "100644",
+      "git_blob": "d9c5adca65c277ed7dd846a621a65b46f2a011c3",
+      "sha256": "3e448c96638a99a9aeb19d468ee5e272ddc717a90221f7b254f4186a65e717dc"
+    },
+    {
+      "path": "src/core/Materials/Lambertian.cpp",
+      "mode": "100644",
+      "git_blob": "af24bfdac2e536e461aed646b709cfaafe4679a8",
+      "sha256": "dc2f68ab95fc11cb76524fabc6dfb43ce656ecfc9f505aefaf314ce3ffed73e0"
+    },
+    {
+      "path": "src/core/Materials/Material.cpp",
+      "mode": "100644",
+      "git_blob": "5e1182e758d96f890f45860bcba76469ce676c16",
+      "sha256": "8fb0b1d0e03d67e17dc10fce3436c6a21be460a56355fbe818a0ce967485c409"
+    },
+    {
+      "path": "src/core/Materials/Metal.cpp",
+      "mode": "100644",
+      "git_blob": "7cf7972acf74519735973dba15e5bd680f583de9",
+      "sha256": "e1fad2e6c1a1f10081f9f572ed66ff20bc501fa5d0602bfb7c544d478e5fcbc3"
+    },
+    {
+      "path": "src/core/Materials/Principled.cpp",
+      "mode": "100644",
+      "git_blob": "d14eb9eb0ff91711b8679323ab2a4c588adf02cc",
+      "sha256": "24233feead129037a83b435f585e44ceacafc124f73f40c8d395b8b40871efe5"
+    },
+    {
+      "path": "src/core/MeasuredMaterials.cpp",
+      "mode": "100644",
+      "git_blob": "7cd8485856f33c556467fbc77890fc992f05fb97",
+      "sha256": "9dc79f0e2946d34c4581d257f08798d36b5e6b93b6f831ca8569ede50a762622"
+    },
+    {
+      "path": "src/core/Noise/Perlin.cpp",
+      "mode": "100644",
+      "git_blob": "b99d2feec5094f2a76af3a9b4443f01062aca02e",
+      "sha256": "fd5bb362815a32e248e4df23d70d615f55dbc35fea981556f325ede36f3f71a7"
+    },
+    {
+      "path": "src/core/ONB.cpp",
+      "mode": "100644",
+      "git_blob": "946f0cb6926c168049a022c1f963c7adf1c4fc8e",
+      "sha256": "b2cb57d732db19dc1e2e706831432ddc785939dd96fbd1eb169aafe389246abd"
+    },
+    {
+      "path": "src/core/PDFs/CosinePDF.cpp",
+      "mode": "100644",
+      "git_blob": "454c231f7cb883adb77a7231ac383cf153e8191f",
+      "sha256": "c28b053f44f7442896860e18294120bddba0c799543870c1f709d175e200ed96"
+    },
+    {
+      "path": "src/core/PDFs/HittablePDF.cpp",
+      "mode": "100644",
+      "git_blob": "fa253d787b9e2aba26b0ce6d1a0bbefa536380ff",
+      "sha256": "79224537399a38e7a4014174ba5a932d7874e08adcd7dc95c2f7f36e90f4db90"
+    },
+    {
+      "path": "src/core/PDFs/MixturePDF.cpp",
+      "mode": "100644",
+      "git_blob": "5c8c56c37758e12ac00185e1b91a1ecf6dd4db99",
+      "sha256": "41364c5c3533be507091b77541a872eaf9c53011f86927d5891fd3f73ec87b37"
+    },
+    {
+      "path": "src/core/PDFs/SpherePDF.cpp",
+      "mode": "100644",
+      "git_blob": "cfe79607e8ca747fd9314de4ea6473787bf9a4bd",
+      "sha256": "21ba8dd198c67cd7b31881f0c15aa28691a28f199f07fda1ad91074ab3b2e7a7"
+    },
+    {
+      "path": "src/core/Random.cpp",
+      "mode": "100644",
+      "git_blob": "10d07c9c53dbcc03266a15e41afcbe736e27a919",
+      "sha256": "872091c787990976a7571f07f58eb4a37cb2a4d0a1df5da7a3be7576b036b5c8"
+    },
+    {
+      "path": "src/core/Ray/Ray.cpp",
+      "mode": "100644",
+      "git_blob": "66f5d5a4769aff6bbbcf49c7bee8321de4f1b773",
+      "sha256": "ab4b70cbad3544bb5fea9d4757938e73e9dd66e3552301acb76e6c825200f5d7"
+    },
+    {
+      "path": "src/core/Sampler.cpp",
+      "mode": "100644",
+      "git_blob": "e68aff9a92cd50a6f93a74975d7b4a533e25313c",
+      "sha256": "2c1069c8302d1c8de51e559afbb266f276543d471922e58fd7c3c0349671dcd6"
+    },
+    {
+      "path": "src/core/SparseVolumeGrid.cpp",
+      "mode": "100644",
+      "git_blob": "eea45462993d594a4130dfb4d83c70c83f705d02",
+      "sha256": "1cb5eeec1ce6aec9d463dcad7d6768a98cb9647b61f56ae7385cc2732c4e5110"
+    },
+    {
+      "path": "src/core/TerminalProgress.cpp",
+      "mode": "100644",
+      "git_blob": "ff6335a52a7ae445db6373e1c1405dcf744b7680",
+      "sha256": "c7e088fbc27d0adcdd60315b260e1291d5173972760c1251ce0b8a268c4bbf9a"
+    },
+    {
+      "path": "src/core/Texture.cpp",
+      "mode": "100644",
+      "git_blob": "197e73d02b6f41de9e319fd09791704d8f02b7e3",
+      "sha256": "a9b00da61887e8336d38a7f49a6917ea52e1f1d517882210f76f58d5da43334a"
+    },
+    {
+      "path": "src/core/Transform.cpp",
+      "mode": "100644",
+      "git_blob": "e6b50299d7b162d0cb2d4120f94baeef8e4b174d",
+      "sha256": "dad052d10a832c070ba5816182b93e7055d17baa787af7a242c935249f2d9e48"
+    },
+    {
+      "path": "src/core/Utilities.cpp",
+      "mode": "100644",
+      "git_blob": "a49a8a2d4abbfdeefe7539c72d827f4c7f9c4742",
+      "sha256": "775c49be5fd0e83fc2ceb704d57953c98c1289ae0a3b48b5e36f3e4b10ab1245"
+    },
+    {
+      "path": "src/core/Vector3.cpp",
+      "mode": "100644",
+      "git_blob": "5695a18a8d8ba3ab325f47c0bb0d46568ea20f75",
+      "sha256": "5a5e7188c1451dc0ab50e39fc0fbf950cbff8d0de435cf5bf7cc208ba3e6c66f"
+    },
+    {
+      "path": "src/io/AssetPath.cpp",
+      "mode": "100644",
+      "git_blob": "c216c030b9c646124a38c58a4b61c4f0624c84aa",
+      "sha256": "7780dccde35121cb4e62d943dfd25e01d8445f3a631749c2e2f0a05ac3817217"
+    },
+    {
+      "path": "src/io/ImageFiles/BMP.cpp",
+      "mode": "100644",
+      "git_blob": "3b826e2edb9b90aa278e19452473fc9b16d58724",
+      "sha256": "1cec1452245207e032db610c8b48f09f100f6c993277ab4938a6d30d5f7791ac"
+    },
+    {
+      "path": "src/io/ImageFiles/PNG.cpp",
+      "mode": "100644",
+      "git_blob": "6bc000f8f695b3c4298cc5f1cf8cf57225c49d01",
+      "sha256": "c1e2ebed8ad92ed3e23968e98ba6e255b6f30d8d7cd865ec5dbe561ac97bcb1d"
+    },
+    {
+      "path": "src/io/ImageFiles/TIFF.cpp",
+      "mode": "100644",
+      "git_blob": "70a394c7d9185f220016b9f4fce3371f1546f6c6",
+      "sha256": "15e5780f77c10ae7c7fc852e705d0d27330e89d936d3add9427fa6aba588332a"
+    },
+    {
+      "path": "src/io/OBJReader.cpp",
+      "mode": "100644",
+      "git_blob": "87fdb4f1e94e084bea53775bb8bc6bee69257c2f",
+      "sha256": "5cbd061fd0021dc3516e0a0b6b888cee792b0e05bae7b0b98bfdebcac638c723"
+    },
+    {
+      "path": "src/io/SceneFile/Materials.cpp",
+      "mode": "100644",
+      "git_blob": "cba039fcb0919007b5731c64ed08b544f8b45ea4",
+      "sha256": "b1e44eef41e5512570609a06cf82638e19bbdccb3e34cc6e8b2a0ca6cdfa0093"
+    },
+    {
+      "path": "src/io/SceneFile/Meshes.cpp",
+      "mode": "100644",
+      "git_blob": "c7a6ae1c3d927361d64fe95ea4c5683f089b8e12",
+      "sha256": "fb354265337b858ff60f4974d891a679f0865994b68ec7d99958d8121b507193"
+    },
+    {
+      "path": "src/io/SceneFile/Objects.cpp",
+      "mode": "100644",
+      "git_blob": "0a9e3790f14bc91c29138276696742bb0f9f57df",
+      "sha256": "f58412cf2d46fb403a8e7138c2b20d57c62243cb1eb3e142738cba580ff9bbd0"
+    },
+    {
+      "path": "src/io/SceneFile/Parsing.cpp",
+      "mode": "100644",
+      "git_blob": "f007c362949aef3bfae533e709431f7bfc50694d",
+      "sha256": "9a325dc9c889e32b3d5406dcf8b20716e016646042538338fa97904f82614d7a"
+    },
+    {
+      "path": "src/io/SceneFile/Scene.cpp",
+      "mode": "100644",
+      "git_blob": "da0ef58a67164318ac69f35254bb55f69ba0ce01",
+      "sha256": "57dab010b7522858b108ce56396f3330a16880df8af42886cf069b7dcda0c123"
+    },
+    {
+      "path": "src/io/SceneFile/SceneFile.cpp",
+      "mode": "100644",
+      "git_blob": "d6bff812865ad67d41ebf6038cdfbb9f8eda81ae",
+      "sha256": "c9c3335cdc3a4caa1646b7ed19ca9e5b96c9bcbebbbdeadf3698dc1715cd463a"
+    },
+    {
+      "path": "src/io/SceneFile/SceneFileInternal.hpp",
+      "mode": "100644",
+      "git_blob": "e2dba1744c4827f76349381f49b8b4020906c785",
+      "sha256": "b553192f03571f9705558dae8f5581a99e3e67ce7eb3be5b542bc58716fd376f"
+    },
+    {
+      "path": "src/io/SceneFile/Settings.cpp",
+      "mode": "100644",
+      "git_blob": "82e6c99d16645ab7b497c803de5e0f288ea612cd",
+      "sha256": "f533df81c9406fae7ca0bc252a5dd98d9f086303b42afe49b7e613c90cd164b0"
+    },
+    {
+      "path": "src/renderer/Atmospherics.cpp",
+      "mode": "100644",
+      "git_blob": "ebc03f4f0947a695c36a6297dea300faed50d751",
+      "sha256": "b48066a560e5314e626c441d8b88a6fa08fdb6bd9c6a7574ccdf951799283dc4"
+    },
+    {
+      "path": "src/renderer/CausticPhotonMap.cpp",
+      "mode": "100644",
+      "git_blob": "0136f741e00609ff410f477a26233824ce9ac622",
+      "sha256": "6d9c6b1a673a310cdec417713d90ad24728f0b379732572af89c9701962b6fab"
+    },
+    {
+      "path": "src/renderer/ColorHelper.cpp",
+      "mode": "100644",
+      "git_blob": "90ee8fe7773336d3fed2c9970e1fd80344ac21e6",
+      "sha256": "ada648c0aba99d5627d8ac0de000d398002ace44adafb90fc9f1654658506ca2"
+    },
+    {
+      "path": "src/renderer/HitHelper.cpp",
+      "mode": "100644",
+      "git_blob": "2207f3797d6ad3f165b89d181e2532cfc88a27a7",
+      "sha256": "a281cb01733611dc76569a11320d64d09a56769e3057cbfc90ef5f0a72987ff8"
+    },
+    {
+      "path": "src/renderer/RayHelper.cpp",
+      "mode": "100644",
+      "git_blob": "da4a5251875c31e4fc2c563ee1f8c99cab754633",
+      "sha256": "c40655fd3c45c4f5d24e02bfbbb0672d40813cb0244c878280c7d21afacff2a4"
+    },
+    {
+      "path": "src/renderer/Renderer.cpp",
+      "mode": "100644",
+      "git_blob": "17f77ef2789358a990af058da016a14e9c6d2542",
+      "sha256": "a27ab40664016e78de40f27adc18fcd0e58a1d1ccf36ed18222c03ff429cf4b3"
+    },
+    {
+      "path": "src/renderer/RendererInternal.hpp",
+      "mode": "100644",
+      "git_blob": "8a0635dafa3e37600243fc2c13f091221dfac409",
+      "sha256": "4628f93f5d44361acf2e7dfef553d26b99cf5bce785af4609acf1a706524412d"
+    },
+    {
+      "path": "src/renderer/SequenceRenderer.cpp",
+      "mode": "100644",
+      "git_blob": "ebc42dffb90f55329f9d6a59963c71f19be9aa7d",
+      "sha256": "07929300ef890da4b651cf1290883f29968b1c7266dacc169b0c9ee5a9d6eed2"
+    },
+    {
+      "path": "src/renderer/Threads.cpp",
+      "mode": "100644",
+      "git_blob": "2e7c6ded5b9116408bb8586abb68d9cea57d64de",
+      "sha256": "ecc37ed364952f8a2147c94bf8f95715c8e3d746971eac4bc8770aaadd59ee45"
+    },
+    {
+      "path": "src/renderer/VolumeGuidingField.cpp",
+      "mode": "100644",
+      "git_blob": "9ed222b404e19252d46311b9b3a1685535a980a4",
+      "sha256": "085098b7416a7dd480c2e6d6f93cedef17fdf0b39d20bdf08e783ee4160d724e"
+    },
+    {
+      "path": "src/scene/Scene.cpp",
+      "mode": "100644",
+      "git_blob": "9f6898ad30a57c081b80bc14d2e74ed6e93da216",
+      "sha256": "66be925b53a938e6c29dde32006dfc4cd968a8bf90adbabc082c549738df6b01"
+    },
+    {
+      "path": "src/scene/SceneHelpers.cpp",
+      "mode": "100644",
+      "git_blob": "6e4d0c9961bc7635532fee4f70153369179bf5f0",
+      "sha256": "248dd688c897fce284a6379c2e2b77be5673a8e37deaee6536029d317cbe9a6a"
+    },
+    {
+      "path": "tests/CloudTransportTests.hpp",
+      "mode": "100644",
+      "git_blob": "f72e71b7e2a66b077676b5a4804a274ed9b3259c",
+      "sha256": "80a683a506402ade41c57b64368f6795e06df0c440bcc72a75f802aa8810daf1"
+    },
+    {
+      "path": "tests/Tests.cpp",
+      "mode": "100644",
+      "git_blob": "912838dad7211a08e7a63556c06764e7c09c1303",
+      "sha256": "beeb17bfcdf32809e6da8cc99491defc714b53f564912d71bb6fa90824ba1632"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".dockerignore",
+      "mode": "100644",
+      "git_blob": "8480b26fba284f21e8ac8045ee92c0c257794dd7"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "mode": "100644",
+      "git_blob": "334dffa49b069579e9c558da29295254f10073bb"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_blob": "e11098a41b2934674049879c825ca8e9ca5ea67e"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "mode": "100644",
+      "git_blob": "7ed5cf35bbf98c80690e71d4cb6aa3c4dada8a89"
+    },
+    {
+      "path": "Makefile",
+      "mode": "100644",
+      "git_blob": "1f90d9f247fc497d55feaddf02de0234dcb278b9"
+    },
+    {
+      "path": "assets/environments/twilight-sky.ppm",
+      "mode": "100644",
+      "git_blob": "77b5bc4b873a8395883bc8771bfa68fec51b7724"
+    },
+    {
+      "path": "assets/objects/suzanne.obj",
+      "mode": "100644",
+      "git_blob": "7654e77e304860c57431c2f85cf0a6f1942006fc"
+    },
+    {
+      "path": "benchmarks/compare.sh",
+      "mode": "100755",
+      "git_blob": "b63e705812d385b09756dfc68d232d86176d1c95"
+    },
+    {
+      "path": "benchmarks/score.sh",
+      "mode": "100755",
+      "git_blob": "3c255200eb02733e018515a895ce2a270473f6a1"
+    },
+    {
+      "path": "docker/benchmark/Dockerfile",
+      "mode": "100644",
+      "git_blob": "139b4384a2d4a178dde7a5ae1d2caf473ba864c7"
+    },
+    {
+      "path": "docker/benchmark/benchmark.sh",
+      "mode": "100755",
+      "git_blob": "beea002e999c7af28e7b8c32b738405c526d3d2c"
+    },
+    {
+      "path": "docs/benchmarks.md",
+      "mode": "100644",
+      "git_blob": "7ef34a31efb589ddbba2afac81d5b67db1689a45"
+    },
+    {
+      "path": "docs/blender-exporter.md",
+      "mode": "100644",
+      "git_blob": "0b286f397091695e7384c39348becd7fa7ff02af"
+    },
+    {
+      "path": "docs/scene-files.md",
+      "mode": "100644",
+      "git_blob": "1dc3d3c2e077632332e570f8211fa8cf192f0bf2"
+    },
+    {
+      "path": "examples/objects/underwater_wave_surface.obj",
+      "mode": "100644",
+      "git_blob": "f451bc3a05b5de0b2fe241ed782c5a4dd2e1da4b"
+    },
+    {
+      "path": "examples/scenes/cornell.luz",
+      "mode": "100644",
+      "git_blob": "af0bd70bf5a81f40bd83dcc90e3cd3975ce83dac"
+    },
+    {
+      "path": "examples/scenes/disney-cloud-backlit.luz",
+      "mode": "100644",
+      "git_blob": "3e8f8e71dfb7a66d3db751009caf20c910d82288"
+    },
+    {
+      "path": "examples/scenes/disney-cloud-golden-hero.luz",
+      "mode": "100644",
+      "git_blob": "f6f583e96b0a37849d228ccd1fbc08804e5cff93"
+    },
+    {
+      "path": "examples/scenes/disney-cloud-interior.luz",
+      "mode": "100644",
+      "git_blob": "5473f18c23ee99126c57a44fc9292a9e30405f1b"
+    },
+    {
+      "path": "examples/scenes/disney-cloud-reference.luz",
+      "mode": "100644",
+      "git_blob": "385b70cce8b18f13280964c30919d3f77ef96952"
+    },
+    {
+      "path": "examples/scenes/earth.luz",
+      "mode": "100644",
+      "git_blob": "d6b0274074699beeef06cd966ab7fa50cd797d9f"
+    },
+    {
+      "path": "examples/scenes/earth_atmosphere.luz",
+      "mode": "100644",
+      "git_blob": "afd3d7f6beb115750b88c28e268b4031686b0a29"
+    },
+    {
+      "path": "examples/scenes/path-traced-cloudscape.luz",
+      "mode": "100644",
+      "git_blob": "bee6aa1b9fedd051b25cea515b4b31562c62d4c8"
+    },
+    {
+      "path": "examples/scenes/procedural-cirrus-twilight.luz",
+      "mode": "100644",
+      "git_blob": "51b032d9252ca752be85a8b658fa04dbc899faf7"
+    },
+    {
+      "path": "examples/scenes/procedural-cumulonimbus-sunrise.luz",
+      "mode": "100644",
+      "git_blob": "c18d8bb6c318144a0c07adca7266c9a287bc5d03"
+    },
+    {
+      "path": "examples/scenes/procedural-cumulus-daylight.luz",
+      "mode": "100644",
+      "git_blob": "966044fc981e0dd395155a669c783f1be7367094"
+    },
+    {
+      "path": "examples/scenes/procedural-stratus-overcast.luz",
+      "mode": "100644",
+      "git_blob": "11637429920267bb0db36a25d0143bbe69365480"
+    },
+    {
+      "path": "examples/scenes/procedural-weather-cumulus.luz",
+      "mode": "100644",
+      "git_blob": "975ba25c6decdf65526402b7671275b21abd87ba"
+    },
+    {
+      "path": "examples/scenes/rtiow.luz",
+      "mode": "100644",
+      "git_blob": "626916ec8688217960386b17734873cfbd551842"
+    },
+    {
+      "path": "examples/scenes/suzanne.luz",
+      "mode": "100644",
+      "git_blob": "23d9f542239228cae48b6b09fc7c5ef6511ec877"
+    },
+    {
+      "path": "examples/scenes/underwater_caustics.luz",
+      "mode": "100644",
+      "git_blob": "2d9d7e1e1cbfaa1a2e86c172e07dcb9f486c1f62"
+    },
+    {
+      "path": "examples/scenes/volumetric_godrays.luz",
+      "mode": "100644",
+      "git_blob": "8fd8bc04bf133ddf468a62e846ddcf383515b0e0"
+    },
+    {
+      "path": "examples/scenes/volumetric_gray_sphere_white_bg.luz",
+      "mode": "100644",
+      "git_blob": "4ce9ca7a0ed80bb7ae1e87a0bdda65d2bda30829"
+    },
+    {
+      "path": "examples/scenes/volumetric_spotlight_fog.luz",
+      "mode": "100644",
+      "git_blob": "10038f4e787301c21bad128507ba6c37fb6d0318"
+    },
+    {
+      "path": "examples/textures/earth_diff_jpg.ppm",
+      "mode": "100644",
+      "git_blob": "0231074f194b6873911949a57d12abc985c56bee"
+    },
+    {
+      "path": "scripts/release.sh",
+      "mode": "100755",
+      "git_blob": "0c60562b39b646bd460af4934e61c0b4dc740b7f"
+    },
+    {
+      "path": "tests/test_blender_export_luz.py",
+      "mode": "100644",
+      "git_blob": "ce3a20dcd0866b608d81fd635ee06a668790c735"
+    },
+    {
+      "path": "tools/benchmark_clouds.py",
+      "mode": "100644",
+      "git_blob": "33142bd45723f2061da49077997708f9ef194cc2"
+    },
+    {
+      "path": "tools/blender_export_luz.py",
+      "mode": "100644",
+      "git_blob": "5d53cb0a4cacfca34e3e772a8334c49bdcf3d87d"
+    },
+    {
+      "path": "tools/bmp_metrics.py",
+      "mode": "100644",
+      "git_blob": "871294a678422f9cd8a5660d4a0fef65e3a2e052"
+    },
+    {
+      "path": "tools/build-vdb-converter.sh",
+      "mode": "100755",
+      "git_blob": "5f4fec477ace9f0df2ef4d96aa846928bcb5116d"
+    },
+    {
+      "path": "tools/generate_banana_pile.py",
+      "mode": "100644",
+      "git_blob": "40965adef789655ed4f11717e794bf0a4e3bc1b8"
+    },
+    {
+      "path": "tools/vdb-to-luzvol.cpp",
+      "mode": "100644",
+      "git_blob": "a396f49c486d5d5d28879ab6f4a91fd88ce8bd29"
+    },
+    {
+      "path": "tools/zip_current_dir_to_ssh.sh",
+      "mode": "100755",
+      "git_blob": "042399e8d4918409d9191f4859a749eb06429ca5"
+    }
+  ],
+  "exclusion_reason": "Excluded optional assets, demos, tool scripts, packaging and non-C++ exporter tests; all production src/include and LICENSE retained unchanged. No third-party runtime dependencies."
+}
