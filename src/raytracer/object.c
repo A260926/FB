@@ -164,6 +164,15 @@ void object_init(struct Object *object, const struct Material *material, const f
 	object->num_lights = num_lights;
 }
 
+bool object_get_triangle_vertices(const struct Object *object, v3 vertices[3])
+{
+	if (object->object_data->type != OBJECT_TRIANGLE)
+		return false;
+	const struct Triangle *triangle = (const struct Triangle *)object;
+	memcpy(vertices, triangle->vertices, sizeof(v3[3]));
+	return true;
+}
+
 #ifdef UNBOUND_OBJECTS
 void unbound_objects_get_closest_intersection(const struct Ray *ray, struct Object **closest_object, v3 closest_normal, float *closest_distance)
 {

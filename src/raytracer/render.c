@@ -25,6 +25,8 @@
 #include "object.h"
 #include "system.h"
 
+#include "shell_diffusion.h"
+
 #ifdef MULTITHREADING
 #include <omp.h>
 #endif
@@ -57,6 +59,57 @@ static enum ReflectionModel reflection_model = REFLECTION_PHONG;
 static enum GlobalIlluminationModel global_illumination_model = GLOBAL_ILLUMINATION_AMBIENT;
 static size_t samples_per_pixel = 1;
 static enum LightAttenuation light_attenuation = LIGHT_ATTENUATION_SQUARE;
+
+/* Snapshot shading support. The diffusion module registers its operations at
+ * load time; if it is not linked in, the renderer simply keeps its original
+ * behaviour and never shades anything from a snapshot. */
+static struct ShellDiffusionRenderOps shell_ops;
+static bool shell_ops_registered;
+static void *active_shell_solution;
+
+void render_shell_register_ops(const struct ShellDiffusionRenderOps *ops)
+{
+	if (!ops || !ops->retain || !ops->release || !ops->sample)
+		return;
+	shell_ops = *ops;
+	shell_ops_registered = true;
+}
+
+void render_set_shell_diffusion_solution(struct ShellDiffusionSolution *solution)
+{
+	void *adopted = NULL;
+	if (solution) {
+		/* Without registered operations the snapshot cannot be retained; a
+		 * failed set must not discard the solution currently in use. */
+		if (!shell_ops_registered)
+			return;
+		adopted = shell_ops.retain(solution);
+		if (!adopted)
+			return;
+	}
+	/* Swap before releasing so a failure never drops the one in use. */
+	void *previous = active_shell_solution;
+	active_shell_solution = adopted;
+	if (previous)
+		shell_ops.release(previous);
+}
+
+void render_clear_shell_diffusion_solution(void)
+{
+	render_set_shell_diffusion_solution(NULL);
+}
+
+/* Replacing is the same atomic swap as setting; kept as a separate entry point
+ * because callers use it to mean "swap in a new frame's snapshot". */
+void render_replace_shell_diffusion_solution(struct ShellDiffusionSolution *solution)
+{
+	render_set_shell_diffusion_solution(solution);
+}
+
+struct ShellDiffusionSolution *render_get_shell_diffusion_solution(void)
+{
+	return active_shell_solution;
+}
 
 void render_init(void)
 {
@@ -163,11 +216,15 @@ float cast_ray(const struct Ray *ray, const v3 kr, v3 color, const uint32_t rema
 	//emittance
 	assign3(obj_color, material->ke);
 
+	v3 shell_illumination;
+	const bool shell_lit = shell_ops_registered && active_shell_solution
+		&& shell_ops.sample(active_shell_solution, object, outgoing_ray.point, shell_illumination);
+
 	float b = dot3(normal, ray->direction);
 	bool is_outside = signbit(b);
 
 	size_t i, j;
-	for (i = 0; i < num_emittant_objects; i++) {
+	for (i = 0; !shell_lit && i < num_emittant_objects; i++) {
 		struct Object *emittant_object = emittant_objects[i];
 		if (unlikely(emittant_object == object))
 			continue;
@@ -229,63 +286,74 @@ float cast_ray(const struct Ray *ray, const v3 kr, v3 color, const uint32_t rema
 	}
 
 	//global illumination
-	switch (global_illumination_model) {
-	case GLOBAL_ILLUMINATION_AMBIENT: {
-		v3 ambient_light;
-		mul3v(material->ka, global_ambient_light_intensity, ambient_light);
-		add3v(obj_color, ambient_light, obj_color);
-	} break;
-	case GLOBAL_ILLUMINATION_PATH_TRACING:
-		if (remaining_bounces && is_outside) {
-			m3 rotation_matrix;
-			if (normal[Y] - object->epsilon < -1.f) {
-				m3 vx = {
-					{ 1.f, 0.f, 0.f },
-					{ 0.f, -1.f, 0.f },
-					{ 0.f, 0.f, -1.f },
-				};
-				assignm(rotation_matrix, vx);
-			} else {
-				float mul = 1.f / (1.f + dot3((v3){ 0.f, 1.f, 0.f }, normal));
-				m3 vx = {
-					{
-						1.f - sqr(normal[X]) * mul,
-						normal[X],
-						-normal[X] * normal[Z] * mul,
-					},
-					{
-						-normal[X],
-						1.f - (sqr(normal[X]) + sqr(normal[Z])) * mul,
-						-normal[Z],
-					},
-					{
-						-normal[X] * normal[Z] * mul,
-						normal[Z],
-						1.f - sqr(normal[Z]) * mul,
-					},
-				};
-				assignm(rotation_matrix, vx);
-			}
+	if (shell_lit) {
+		/* Bound face: the diffused snapshot replaces local lights, ambient
+		 * diffuse and stochastic GI, so no second copy of light is added. */
+		v3 texture_color;
+		material->texture->get_color(material->texture, outgoing_ray.point, texture_color);
+		v3 diffuse;
+		mul3v(texture_color, shell_illumination, diffuse);
+		mul3s(diffuse, 1.f / PI, diffuse);
+		add3v(obj_color, diffuse, obj_color);
+	} else {
+		switch (global_illumination_model) {
+		case GLOBAL_ILLUMINATION_AMBIENT: {
+			v3 ambient_light;
+			mul3v(material->ka, global_ambient_light_intensity, ambient_light);
+			add3v(obj_color, ambient_light, obj_color);
+		} break;
+		case GLOBAL_ILLUMINATION_PATH_TRACING:
+			if (remaining_bounces && is_outside) {
+				m3 rotation_matrix;
+				if (normal[Y] - object->epsilon < -1.f) {
+					m3 vx = {
+						{ 1.f, 0.f, 0.f },
+						{ 0.f, -1.f, 0.f },
+						{ 0.f, 0.f, -1.f },
+					};
+					assignm(rotation_matrix, vx);
+				} else {
+					float mul = 1.f / (1.f + dot3((v3){ 0.f, 1.f, 0.f }, normal));
+					m3 vx = {
+						{
+							1.f - sqr(normal[X]) * mul,
+							normal[X],
+							-normal[X] * normal[Z] * mul,
+						},
+						{
+							-normal[X],
+							1.f - (sqr(normal[X]) + sqr(normal[Z])) * mul,
+							-normal[Z],
+						},
+						{
+							-normal[X] * normal[Z] * mul,
+							normal[Z],
+							1.f - sqr(normal[Z]) * mul,
+						},
+					};
+					assignm(rotation_matrix, vx);
+				}
 
-			v3 delta = { 1.f, 1.f, 1.f };
-			size_t num_samples;
-			if (remaining_bounces == max_bounces) {
-				num_samples = samples_per_pixel;
-				mul3s(delta, 1.f / (float)num_samples, delta);
-			} else {
-				num_samples = 1;
-			}
+				v3 delta = { 1.f, 1.f, 1.f };
+				size_t num_samples;
+				if (remaining_bounces == max_bounces) {
+					num_samples = samples_per_pixel;
+					mul3s(delta, 1.f / (float)num_samples, delta);
+				} else {
+					num_samples = 1;
+				}
 
-			v3 light_mul;
-			for (i = 0; i < num_samples; i++) {
-				float inclination = acosf(rand_flt() * 2.f - 1.f);
-				float azimuth = rand_flt() * PI;
-				mulmv(rotation_matrix, (v3)SPHERICAL_TO_CARTESIAN(1, inclination, azimuth), outgoing_ray.direction);
-				mul3s(delta, dot3(normal, outgoing_ray.direction), light_mul);
-				cast_ray(&outgoing_ray, light_mul, obj_color, 0, NULL);
+				v3 light_mul;
+				for (i = 0; i < num_samples; i++) {
+					float inclination = acosf(rand_flt() * 2.f - 1.f);
+					float azimuth = rand_flt() * PI;
+					mulmv(rotation_matrix, (v3)SPHERICAL_TO_CARTESIAN(1, inclination, azimuth), outgoing_ray.direction);
+					mul3s(delta, dot3(normal, outgoing_ray.direction), light_mul);
+					cast_ray(&outgoing_ray, light_mul, obj_color, 0, NULL);
+				}
 			}
+			break;
 		}
-		break;
 	}
 
 	mul3v(obj_color, kr, obj_color);

@@ -60,6 +60,10 @@ void objects_deinit(void);
 /* Set parent Object */
 void object_init(struct Object *object, const struct Material *material, float epsilon, uint32_t num_lights, enum ObjectType object_type);
 
+/* Read-only query for the three world-space corners of a triangle object, in
+ * the object's stored vertex order. Returns false for non-triangle objects. */
+bool object_get_triangle_vertices(const struct Object *object, v3 vertices[3]);
+
 /* Creates new object and allocates memory. Requires object_init and object_data.postinit to be called after. */
 struct Object *sphere_new(const v3 position, float radius);
 struct Object *triangle_new(v3 vertices[3]);
