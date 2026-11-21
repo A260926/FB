@@ -1,0 +1,3 @@
+import assert from 'node:assert/strict';
+const mod=await import('../checks/ploc.mjs');const cases=mod.cases;assert.ok(Array.isArray(cases)&&cases.length>0,'no test cases');
+for(const group of ['clustering','parallel','mapping','render']){const selected=cases.filter(c=>c.group===group);assert.ok(selected.length,'missing '+group);let total=0;for(const c of selected){assert.equal(typeof c.name,'string');assert.equal(typeof c.run,'function');let count=0;const check=(value,message)=>{count++;assert.ok(value,message);};await c.run(check);assert.ok(count>0,'case has no checks: '+c.name);total+=count;}console.log(`GROUP ${group} cases=${selected.length} checks=${total} COMPLETE`);}console.log(`TARGET_COMPLETE cases=${cases.length}`);
