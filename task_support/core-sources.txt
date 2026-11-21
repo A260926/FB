@@ -2,3 +2,5 @@ src/polymesh/Mesh.cc
 src/polymesh/assert.cc
 src/polymesh/debug.cc
 src/polymesh/formats/obj.cc
+src/polymesh/detail/segment_index.cc
+src/polymesh/algorithms/normal_baker.cc

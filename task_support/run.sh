@@ -30,7 +30,12 @@ test -s .task-build/normal.ppm
 test "$(head -n 1 .task-build/normal.ppm)" = P3
 c++ "${flags[@]}" -c task_support/driver.c -o .task-build/driver.o
 c++ "${flags[@]}" -include src/polymesh/algorithms/normal_baker.hh -include src/polymesh/detail/segment_index.hh checks/test_normal_baker.cpp .task-build/driver.o .task-build/core-*.o -o .task-build/target
-  output_log=$(mktemp)
+  # Some locked-down environments cannot create files in the system temp
+  # directory; fall back to a scratch file inside the build dir in that case.
+  if ! output_log=$(mktemp 2>/dev/null); then
+    output_log=".task-build/target-output.$$"
+    : > "$output_log"
+  fi
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
