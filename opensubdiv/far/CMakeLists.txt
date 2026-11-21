@@ -11,6 +11,7 @@ set(SOURCE_FILES
     bilinearPatchBuilder.cpp
     catmarkPatchBuilder.cpp
     error.cpp
+    hierarchicalDisplacement.cpp
     loopPatchBuilder.cpp
     patchBasis.cpp
     patchBuilder.cpp
@@ -39,6 +40,7 @@ set(PRIVATE_HEADER_FILES
 
 set(PUBLIC_HEADER_FILES
     error.h
+    hierarchicalDisplacement.h
     patchDescriptor.h
     patchParam.h
     patchMap.h

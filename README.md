@@ -21,6 +21,86 @@ For more details, please visit the web site [opensubdiv.org](https://opensubdiv.
 
 The OpenSubdiv core libraries are implemented in C++ with no dependencies other than the C++ standard library.
 
+## Hierarchical displacement (Far::HierarchicalDisplacement)
+
+`Far::HierarchicalDisplacement` (see
+`opensubdiv/far/hierarchicalDisplacement.h`) is a reusable, standard-library-only
+plan for layered sculpting of a subdivision cage with analytic first-order
+adjoints.
+
+Each sculpting layer first subdivides the geometry produced by the previous
+layer with the regular Far subdivision rules, then moves every subdivided
+vertex along the unit area-weighted normal of the current (pre-displacement)
+geometry by a per-vertex scalar displacement.  At the end, the final sculpted
+layer is treated as a brand new control cage and evaluated through the regular
+Far limit-surface machinery (`PatchTableFactory::Options(5)` with
+`ENDCAP_GREGORY_BASIS`, double precision and the adaptive options returned by
+`GetRefineAdaptiveOptions()`).
+
+### Supported domain
+
+* Catmark on oriented manifold quad cages, or Loop on oriented manifold
+  triangle cages;
+* no holes, no explicit edge/vertex creases and no isolated vertices;
+* open boundaries, extraordinary valences and multiple disconnected
+  components are allowed;
+* the boundary rule must be `Sdc::Options::VTX_BOUNDARY_EDGE_ONLY`;
+* 1 to 3 sculpting layers;
+* samples are interior ptex locations (strictly between 0 and 1) of the
+  final layer cage.
+
+### Forward and pullback
+
+```cpp
+Far::HierarchicalDisplacement plan(coarseRefiner, numLayers, samples);
+
+std::vector<std::vector<double>> displacements(numLayers);
+// displacements[l] has plan.GetNumLayerVertices(l + 1) entries.
+
+Far::HierarchicalDisplacementResult result;
+auto tape = plan.Forward(coarseXYZ, displacements, result);
+// result.finalLayerVertices, result.samplePositions and
+// result.sampleNormals are all owned, length-explicit arrays.
+
+std::vector<double> coarseGradient(3 * plan.GetNumCoarseVertices(), 0.0);
+std::vector<std::vector<double>*> displacementGradients(numLayers);
+// ...size each gradient buffer to plan.GetNumLayerVertices(l + 1)...
+tape->Pullback(samplePositionAdjoint, sampleNormalAdjoint,
+               coarseGradient, displacementGradients);
+```
+
+The pullback is fully analytic: it traverses the limit stencils, both unit
+normal normalizations, the cross products of the area normals, the per-layer
+displacements and the linear subdivision stencils.  No finite differences,
+perturbing re-forwards or dense Jacobians are used.  Gradient outputs are
+accumulated onto the caller's buffers (never cleared).
+
+All topology, patch and stencil tables are built once when the plan is
+constructed; `Forward()` and `Pullback()` never rebuild them.  A returned
+tape owns copies of every input and shared immutable plan data, so it remains
+usable after the plan, the input refiner and the caller's buffers are
+released.  Tapes from different forwards never share mutable state.  A failed
+forward (degenerate area normal with `||A_v|| <= 1e-12`, or a degenerate
+sample frame with `||Pu x Pv|| <= 1e-12`) throws `std::runtime_error` and
+publishes nothing, while previously produced tapes stay valid; length,
+index-range and non-finite violations throw `std::invalid_argument`.
+
+### Sparse stencil transpose
+
+`StencilTableReal::SparseTransposeAccumulate()` scatters a covector through
+the transpose of the sparse stencil matrix, accumulating onto an existing
+destination buffer.  The hierarchical pullback uses this single entry point
+for every linear subdivision step and for the limit stencils (including the
+alternate first-derivative weights); ordinary `UpdateValues()` behavior is
+unchanged.
+
+### Headless example
+
+`examples/hierarchical_displacement.cpp` runs a two-layer sculpt on an
+asymmetric closed cube, writes the final layer mesh to the OBJ file given on
+the command line and prints the evaluated samples together with the nonzero
+pullback gradient norms.
+
 The OpenSubdiv::Osd library contains additional conditionally compiled components which use specific external CPU and GPU APIs for evaluation and display and there are also optional interactive examples. Some of these optional aspects are enabled by default but can be disabled while configuring the OpenSubdiv build.
 
 For complete information, please see:

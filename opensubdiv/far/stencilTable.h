@@ -206,6 +206,51 @@ public:
         this->update(srcBase, numBase, srcRef, dst, _weights, start, end);
     }
 
+    /// \brief Accumulates the sparse transpose of the stencil matrix.
+    ///
+    /// For stencil row \c i with each entry (control index \c j, weight
+    /// \c w), this performs:
+    ///
+    /// \code
+    ///     dst[j * dstStride] += w * src[i];
+    /// \endcode
+    ///
+    /// Values are accumulated onto the caller's existing destination
+    /// buffer -- the destination is never cleared or overwritten, so
+    /// multiple tables (or repeated samples) can scatter into the same
+    /// buffer.  The source must provide at least GetNumStencils() entries
+    /// and the destination at least
+    /// GetNumControlVertices() * dstStride entries.
+    ///
+    /// @param src              Source covector, one entry per stencil row
+    /// @param dst              Destination buffer indexed by control vertices
+    /// @param alternateWeights Optional parallel array of row weights to use
+    ///                         instead of the stencil weights (e.g. the
+    ///                         derivative weights of a LimitStencilTable)
+    /// @param dstStride        Stride between successive control-vertex
+    ///                         entries; use 1 for scalar buffers or 3 when
+    ///                         scattering into a packed XYZ array at a fixed
+    ///                         component offset.
+    ///
+    void SparseTransposeAccumulate(REAL const * src, REAL * dst,
+                                   REAL const * alternateWeights = 0,
+                                   int dstStride = 1) const {
+        REAL const * weights = alternateWeights ? alternateWeights
+                                                : _weights.data();
+
+        int offset = 0;
+        int nstencils = (int)_sizes.size();
+        for (int i = 0; i < nstencils; ++i) {
+            REAL srcValue = src[i];
+            int size = _sizes[i];
+            for (int k = 0; k < size; ++k) {
+                dst[_indices[offset + k] * dstStride] +=
+                    weights[offset + k] * srcValue;
+            }
+            offset += size;
+        }
+    }
+
     /// \brief Clears the stencils from the table
     void Clear();
 
