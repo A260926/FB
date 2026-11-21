@@ -167,5 +167,63 @@ killeroo-simple.pbrt: simple scene with "Killeroo" model
 metal.pbrt: Metropolis light transport, measured BRDFs
 
 prt-teapot.pbrt: precomputed radiance transfer
+---
+
+--- Frozen-proposal material replay (material fitting) ---
+
+The CPU path tracer can freeze one batch of random light paths so that the
+same paths can be re-evaluated and differentiated under different plastic
+material parameters without re-sampling or re-tracing.  The implementation
+lives in src/integrators/material_replay.h and material_replay.cpp; a
+runnable fitting driver is in examples/material_fit.cpp.
+
+Supported scene:
+  * static TriangleMesh geometry intersected through Scene::Intersect and
+    the native BVH (no custom intersector),
+  * constant PlasticMaterial only (Lambertian + Blinn(1/roughness)
+    microfacet with FresnelDielectric and the original geometry term),
+  * PointLight lights with their finite shadow rays,
+  * a black background and no participating media.
+  Textured/bump-mapped plastics, other materials, area lights and media are
+  explicitly rejected, either up front or when a bound primitive is hit.
+
+Typical call sequence:
+
+    MaterialReplay replay;
+    replay.BindProposal(id, proposalParams);          // strictly positive
+    replay.BindPrimitive(id, primitive->primitiveId); // stable id binding
+    replay.Record(scene, fixedRays, maxSurfaceVertices, &error);
+    // Scene, MemoryArena and the proposal materials may be destroyed here.
+    std::vector<Spectrum> radiance;
+    replay.Evaluate(targetParams, &radiance, &error); // primal reweighting
+    std::vector<MaterialReplayGradient> gradients;
+    replay.Backward(targetParams, perRayAdjoints, &gradients, &error);
+
+Each id carries seven shared parameters (RGB Kd, RGB Ks, roughness).  Kd/Ks
+components are in [0,1] and roughness in [0.01,1]; proposal Kd/Ks must be
+strictly positive.  Successor directions, component selection, survival,
+occlusion and sample counts are fixed by the proposal BSDF's Sample_f;
+editing target parameters only changes the plastic f used in the prefix
+reweight (target |cos| f divided by the recorded proposal pdf, never a
+target pdf) and the direct-light terms.  Russian roulette is off, every hit
+vertex accumulates all point lights, and a failed BSDF sample ends the path
+with zero contribution instead of drawing again.
+
+Backward() returns, for each shared id, the derivative of
+sum_rays dot(adjoint_r, RGB_r) with respect to its seven parameters, with
+full accumulation when one id repeats along a path.  Differentiation is
+analytic chain propagation (including the Blinn exponent/normalization
+derivative); it never perturbs parameters, re-traces rays or uses an
+automatic-differentiation library, and remains valid at zero albedo.
+Invalid parameters reject atomically and leave an existing record intact.
+
+Build and run:
+
+    bash task_support/run.sh target
+
+This builds the production archive, the regression binary (tests in
+task_tests/material_replay.cpp, grouped as primal/gradient/ownership) and
+the fitting example.  The example takes only an output directory and writes
+fit.ppm, loss.txt and parameters.txt there.
 
 ss-envmap.pbrt: subsurface scattering
