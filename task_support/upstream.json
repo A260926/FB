@@ -1,0 +1,1586 @@
+{
+  "repo": "https://github.com/OpenVolumeMesh/OpenVolumeMesh",
+  "commit": "1ab7cf290bc38ea303e8d0403683e8cc940f67bc",
+  "license": "LGPL-3.0-or-later WITH OpenVolumeMesh template exception",
+  "production_files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "7800fde5ea0b6442ad05fd821333340182d0f84afab179ba0a967b318246468a",
+      "git_blob": "c0c2029c83f21abe4e3e57e67eefc3a11dfbe804",
+      "mode": "100644"
+    },
+    {
+      "path": "LICENSE.md",
+      "sha256": "bcb6857dd19bf307fc0914fdea92e6f8facc3790241f5aa861f10c121a1097fb",
+      "git_blob": "8e2b6c59ad50250745dd75d44c9ff9c4b7e42366",
+      "mode": "100644"
+    },
+    {
+      "path": "license/COPYING",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "git_blob": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "mode": "100644"
+    },
+    {
+      "path": "license/COPYING.EXCEPTIONS",
+      "sha256": "3388d029320922593abcfa1a718290330a2a09ec3a6fb06cddc7b9889e5c26cb",
+      "git_blob": "87d50420e1f951e135825ef597c3eac5addd8618",
+      "mode": "100644"
+    },
+    {
+      "path": "license/COPYING.LESSER",
+      "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c",
+      "git_blob": "fc8a5de7edf437cdc98a216370faf7c757279bcb",
+      "mode": "100644"
+    },
+    {
+      "path": "license/LICENSEHEADER",
+      "sha256": "4fa2c8c12987cd0f4e9b5f1339310ca3b5ad3908031fe0dd8606b374dc30aa67",
+      "git_blob": "a83eb8b3d9b6b690dd55222759c866182b5b3b97",
+      "mode": "100644"
+    },
+    {
+      "path": "src/CMakeLists.txt",
+      "sha256": "c444fbfc1c5a58e41a38e8aacaf3215ae31dde16370423d7075a86097c36ee6e",
+      "git_blob": "d9ef134e4c56ac08122287e13620e32cedaa9d90",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/ColorAttrib.hh",
+      "sha256": "7705907dfcea0fdf660b556745571b4f35021d68b6b4bdf86c3329aa4d665258",
+      "git_blob": "ec5911f3919cf0aa6baec2385f9f257aec861bf5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/ColorAttribT_impl.hh",
+      "sha256": "e9a58c981ef5be6089bfa04c6567ba29ab212d83da5a1526265f898c4acd4b43",
+      "git_blob": "d3343450cc31603af589dd21585c8c678309bc3a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/InterfaceAttrib.cc",
+      "sha256": "e7f80e977c56beb554cc114d637e321338600cc206c13e1980531a9f7a6c50e0",
+      "git_blob": "0035a39e7112d800ee50dc2269fa54946409b54a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/InterfaceAttrib.hh",
+      "sha256": "df035e2a326f6e1ce276bc1065b252523654ce18118104b7fe87a507aa3c6465",
+      "git_blob": "accc8f969a5be72266fe767306bf375529aab650",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/NormalAttrib.hh",
+      "sha256": "db3225e145cb2feb1f227a98c67e530d0670a07f108f76d1a78f1fb91625351c",
+      "git_blob": "34e214fb89664bb80b450b51e396bb021eeab57c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/NormalAttribT_impl.hh",
+      "sha256": "1e73eaf7277d11097d3f1204e43c3b6d1507051fe633f001a95d1f07e3b34220",
+      "git_blob": "29a11c3d41adfc863c974cd954760a79e4083057",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/OpenVolumeMeshStatus.cc",
+      "sha256": "a6fa3d11fc1068f290a6561501a4a3e7f5906a85628fb8381cd1f1af74c03a30",
+      "git_blob": "683d37f006dc0afb3c72dea2ad47b4f43833a96a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/OpenVolumeMeshStatus.hh",
+      "sha256": "fa7c120986b2e51d3520ffc7a75e1b76dd80ab9d224f6c95adeb97fe0e0ca02b",
+      "git_blob": "c3c5249b6a7f8052a977fb514d0fd3776e808e79",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/StatusAttrib.cc",
+      "sha256": "b2f36c4235da1e13b9b1329c847198e54eb7e5dd69d96c80f315746c7ff99e86",
+      "git_blob": "6efc78bc952c5b1d1422b39342c667818b8801fc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/StatusAttrib.hh",
+      "sha256": "82fa95ca4e1259a6184170fc02d5f62ab8a5215d3053f473c69914f38cb697bf",
+      "git_blob": "5df78f28164c45454979f1809d9a74fd09f926d5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/StatusAttribT_impl.hh",
+      "sha256": "aaf8796092aed21de66072a33f79f472baf7fdadfb7be71c895308b0c5c828ef",
+      "git_blob": "55fe07d018c9eb64f71e5563b67f241ed8108b4b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/TexCoordAttrib.hh",
+      "sha256": "a2b8adb47e80fb8cb459a5d485100223a9b1cbe0b4c194ad732c0690d78ef685",
+      "git_blob": "d8cf8204bb5a916f0c1236206ef92ac4f1a1e933",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Attribs/TexCoordAttribT_impl.hh",
+      "sha256": "86dcc11b81d43541a370c39056cc94e8bfcf8af55f6c2077f2a7c3cae161eb39",
+      "git_blob": "716f8ea1ddf0808f306bc2b153b190d4e695a563",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Config/DeprecationConfig.hh.in",
+      "sha256": "39b2235aa9b016f706bde75ab991f382cba9c864c2e6f330057c2aba4e86c116",
+      "git_blob": "ced09dc91a99d9fbd23ff599658ca675a9e66687",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Config/Version.hh.in",
+      "sha256": "a88c864218494e8ca57d0d092b7e66a6610ed8e99efeb2767e5b0eeede084b8f",
+      "git_blob": "46012f8ed8c4f50c067ec6cd0378e3779dcc5a97",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/BaseEntities.cc",
+      "sha256": "cf0ac9a8aedce68312d373cb481513397d7bcf83e4c0d77d48c69a6fcea2dcd8",
+      "git_blob": "13e0dcb7f32da1f0d2909038442378a60ba94d4f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/BaseEntities.hh",
+      "sha256": "a9efa5a480d9a98bf68b9dbfa76b16d1baeb28486173dff301ba1c223f9e4135",
+      "git_blob": "53abb549df86b571ff0b0e3c88d6a4e2e6d9f134",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Entities.hh",
+      "sha256": "1526a3ea73da0b29ae9026bb07adfe507ffae772fbcdeae7780ed5b03e8bc1fb",
+      "git_blob": "cfd6e4944125ce15572d8cedbe76c7acb5c7ca7f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/EntityUtils.hh",
+      "sha256": "b599c302b1cd84bbbd30dc1adb87399cc26cfb9652a46619b5ba1c187f896841",
+      "git_blob": "5cfd00e6ffac00b4d5826a8664385dd2a7ef3e65",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/ForwardDeclarations.hh",
+      "sha256": "3bd4df8a6a16b0d50ab9ac3a6312e22bec82657493f7c541449b3ae2b9ca4da5",
+      "git_blob": "37057fd4be596c132dd6c7f137df3f37595577de",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/GeometryKernel.hh",
+      "sha256": "06ad972775d2c401eba8cab329b4feeee621edd72ea0c949cf1f5c8f98d2c56f",
+      "git_blob": "d86274cb8a8794058767eb3d7b577089062b7b98",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/HandleIndexing.hh",
+      "sha256": "e98327263aa900105e50e2c55eb87b6673650075f5975968914e28f08e07b440",
+      "git_blob": "6030597288eff3e2f8ac01fa609a6cbd89454f2b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Handles.cc",
+      "sha256": "3b9e9b4a258b46e70ad19c74ccacb5cfe5f6949116c57206172670200e6fc79a",
+      "git_blob": "c9c9d7cf5c070708a0d6b83be5379eb34a9bd53d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Handles.hh",
+      "sha256": "b1cee5170aec52c5c217eb4cbcac03a717a4c947fddef12f09c6fe7fcd916730",
+      "git_blob": "d13b53380432a4a2d5c050db0b55cab65e48da65",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators.cc",
+      "sha256": "5c4527f4928f74476667427951e48493484bd44bf18bf92c8e64336c24b06c85",
+      "git_blob": "19b2131d3dc79fc393993f40c5dcb4ba8f1645c8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators.hh",
+      "sha256": "4e235c7ac0180144ba4499da42fcd7e0deee7e5d40580fc82f97b76d37ffab96",
+      "git_blob": "6936380150b3ec91ceea5bcaefd899f8640d4cf4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/BaseCirculator.hh",
+      "sha256": "931af07a17882bb95bac17054b8196ddcf4d3531906a381465aad40cc2f0852a",
+      "git_blob": "2c0f8a481cb89a6eea68c4a6e1b3592499459faf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/BaseIterator.hh",
+      "sha256": "5b78d7c17212ca6e1426b8fa2d51a4f58d159abe475d5e9a32a54d7cd60c4e86",
+      "git_blob": "668aa1c339eed0178144e767550b7cf1c4b1c572",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/BoundaryHalfFaceHalfFaceIter.cc",
+      "sha256": "e56ae09f20750d00ab14a766b668f0774b064812879d5bbadc01ca19958be9ec",
+      "git_blob": "a4358e2b95a63916af55dab443a3f5181ae2bbe7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/BoundaryHalfFaceHalfFaceIter.hh",
+      "sha256": "d60768b05c9abdc270b4a053271637f32efd4f3eb7b507223e0ca4ab1edf64c4",
+      "git_blob": "42d5778c9bdb709c69ffd0d8f2cd1316b5ab55b9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/BoundaryItemIter.cc",
+      "sha256": "e7ebdb0bd6890f339bf295315ef2999951b2451f2b4e3b02997115d1bbf6f1e9",
+      "git_blob": "197b46b5f17b9b24befd24d68645ef034d56455b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/BoundaryItemIter.hh",
+      "sha256": "324b7732615b222cb674b5c7a8be6b0e4a0a4b5bdacad9543b738e1f2863f4ab",
+      "git_blob": "be142f26e53a4dc894c34ba31b75f5c66680daec",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/CellCellIter.cc",
+      "sha256": "d0aa21b40b05f67351de43b4bac4ee8af12db1f2d69be8304fd7b03622515dc3",
+      "git_blob": "ec4f4a38570f527ac3580caf02981f994647044f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/CellCellIter.hh",
+      "sha256": "f4c2051fc665f55e68e01fb09ac05c3648a796dc0ebfca988cc1c460e7ef772f",
+      "git_blob": "cd25e742070f1c4e60ab51a9b494c1c85baaeb18",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/CellIter.cc",
+      "sha256": "1f6d4d98551c3e5df547ec3b524d96cc57055528e165592c319153241bdb63d7",
+      "git_blob": "9f87d1162f9cb9e89a85adf7d324f88c6694ea4a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/CellIter.hh",
+      "sha256": "b338d8cc13a09ed949fae16d0533554ab21666aa3bb91e43ec7d82e3a5b9297a",
+      "git_blob": "5e25e0b55617f32004c3942544477f169b5d3745",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/CellVertexIter.cc",
+      "sha256": "31a98bb4ab644afb7540f4b1a0624eb36b87363e0b62bde90536d0f191fb1219",
+      "git_blob": "d5fccffe520375e4008dea699bae41887669b1ae",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/CellVertexIter.hh",
+      "sha256": "e1faef4a07557202c444c07388ff92731ca3f868b230e73b0a6ecab884fd9263",
+      "git_blob": "75de402375d7982314fff8122cda335e8e8d4a4f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/EdgeIter.cc",
+      "sha256": "74c78acfd02a1d2a9737cdde41a2f1079c7149d409eba82602eeac4aaf9f6e8b",
+      "git_blob": "81d4c49e112c4ffecca8fece694204fda1d5b0c8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/EdgeIter.hh",
+      "sha256": "c3302edd5b46701108f4bb2e3851d4c886f7f32f21ae130e785a31824f3e7ef7",
+      "git_blob": "79381177fdf8257f472365190259404f7acb1e27",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/FaceIter.cc",
+      "sha256": "1bb45a40b8d62b88e303b06e3c687576f3675a021025e03d15bf4c5bca7e4e00",
+      "git_blob": "587e510ed838453fcf3874cb5a8a2244e658e163",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/FaceIter.hh",
+      "sha256": "61b6bd0e94cad9bb82e088c8782035ab2bb21526942a380c4b853450a751b9c2",
+      "git_blob": "e0dc15f31401590ffa4184d341a5a2b6254ff4ca",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/GenericCirculator.hh",
+      "sha256": "01a6c59b55052dae1349c2b22ae0006c352d0fc47ba4880ca87f7a0bf9ab755c",
+      "git_blob": "13152ef80f3ba6b71c37e74e5aa50277fcf090ef",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfEdgeCellIter.cc",
+      "sha256": "b6f5f1ea68a3bab2ad3dd91bff5fd470d3abbcc2e7f56964eb28a075b3ff46e2",
+      "git_blob": "a8f3da03d20416583c341e5296286f0bb2a0777f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfEdgeCellIter.hh",
+      "sha256": "23942c6452dc1810ccca2935f1c4956b8e9dcd1fa38968ff73bc4d6cc7d2b1c4",
+      "git_blob": "607c6f5efb44541e2f1990a30eb167ae54e53e13",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfEdgeHalfFaceIter.cc",
+      "sha256": "c123d2f8023a21edd7e513e02b19de61ef166d267c4658b139a94e8daff7be29",
+      "git_blob": "66e13ba71da64b72bffc4ad18bb2d1c730fc5637",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfEdgeHalfFaceIter.hh",
+      "sha256": "e078cace15ca33cb2cafd221a7fb29021c45bcc754813286fb6319f026fd8e3a",
+      "git_blob": "dc8ee1539c8bb074266bcfdb9d11c6e2c6cb36ab",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfEdgeIter.cc",
+      "sha256": "30383b3ff092809356dfa1e881126cc70e4e3d5d8209f178558d280fb2baa419",
+      "git_blob": "7958d0e9387314a44767fa2c08a23dd085d5db71",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfEdgeIter.hh",
+      "sha256": "fb794384f33ebc45f9d3485722e5c7022561c1e9448d9a55643c2dd1a16b3282",
+      "git_blob": "13754e31c978c5df813b57edb4de7875ed390ba1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfFaceIter.cc",
+      "sha256": "cbfe23ebb94bdb9dd78fa758bf369cc08e71f4b2883922cd5aedf7f9f737eb16",
+      "git_blob": "fb691887b14b56c218a37ca450bc2bde451d3611",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfFaceIter.hh",
+      "sha256": "0ee6e2a1cbe6469e3ed84e9e83fcf0e7ef8283c08b023479aba1b63971602800",
+      "git_blob": "4642fc6bf01f0e40966669643a9f3a87e4bfa7bf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfFaceVertexIter.cc",
+      "sha256": "10d05c51df97dadc3faabd3e4d96273fe26ba40edbc608339e7a5ce5ded5b66a",
+      "git_blob": "be21985329ebf1bbe2f49fabc98dd7110538279d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/HalfFaceVertexIter.hh",
+      "sha256": "1319141c8a7db1fe711df2ee5cb6674eb9b46697f4e477038013f00cc1a9e91c",
+      "git_blob": "5ac7125d4f9fcf00f3193fa815d2b5169765a6da",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexCellIter.cc",
+      "sha256": "7e059db37b87d0a5d62444f71c4be6a6c5869ee1c4f529a20b1a740f24cadc94",
+      "git_blob": "850d13d8a22967089aac3453bf916e48b3547265",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexCellIter.hh",
+      "sha256": "33509975a27278079ac616f585560ee9ee2480d95320844c0b810994453c73a1",
+      "git_blob": "82d0aaf164ff427f2d1236b4f1e130e74c4fe2f9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexFaceIter.cc",
+      "sha256": "aeb3c618acebc41851df83fca0e9c9ebf62f579d0b5c59f70bf414f3bb7d4a3f",
+      "git_blob": "406f90d948ff89d74131f6ab15d7905cc0fd27d4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexFaceIter.hh",
+      "sha256": "e049fc22a0f7be32cce256ffc830b1d62e11a1d09cd3a4b4d7d737827700faaf",
+      "git_blob": "1bbf9ba08410267d0ee028a69f08d607dbd80c3c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexIter.cc",
+      "sha256": "38fb4fde5541f9058cd558c93beaae74ae0f271d37a5aa36d12a9d852e678976",
+      "git_blob": "eeea6653a3fb9aaad13bf8526a9f78eea6326b01",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexIter.hh",
+      "sha256": "380cfb7a2cb3c8a8a98b341db214dbae7d98766d957575cb1b031e71c9010e16",
+      "git_blob": "001704a03687b2c2a21d215d98756d196db358bd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexOHalfEdgeIter.cc",
+      "sha256": "83e1be8b1bc02ec27fa070d2f1d343050ebc8b1cbbd8ed107cf5277210a2461b",
+      "git_blob": "bed7efc912923c6645e19b1297e65e8ab4a8e101",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexOHalfEdgeIter.hh",
+      "sha256": "c73404d1cdb5ad460335b08e6a39089d989a81eefe12de74c4bf5024f1de1d4e",
+      "git_blob": "c679032dde213c35f0a47fa36bf6162d5aa176b4",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexVertexIter.cc",
+      "sha256": "52e8319ed5d189863a498d28cbf485492d993ad06a814401ed1376960075790f",
+      "git_blob": "991f8bbd715490cda4d4e373a192282e0a455486",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/VertexVertexIter.hh",
+      "sha256": "5a08458e6df03d4370414f4075dce88214187f81d27c43e7875280a2a248e619",
+      "git_blob": "4abefe6065656e552e549baf32d9a5bdd950557f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellEdgeIterImpl.cc",
+      "sha256": "43e44cafe91cc182a58702faafff6dfa47af718fb2eb0de1068b20b079c07c1e",
+      "git_blob": "9c924a0facfd0ecfb7ea8d9ee671e93f82f78a1f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellEdgeIterImpl.hh",
+      "sha256": "e3b70ee6894b106738d00afeaaff81369e33ad3dfb36fe0852a3e8f96a27806d",
+      "git_blob": "c35db63f7e37f9df39d7cf82743f7db2c55ed139",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellFaceIterImpl.cc",
+      "sha256": "ec1b2503c5a58f7b8f377553f5218811cfc40da93e895b87c93fcdd427bd757c",
+      "git_blob": "bc7894e939fd38d6a93af239d77474faadb31769",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellFaceIterImpl.hh",
+      "sha256": "e73c592a4052ee7c8fcb8a4ae23eaa65e06978f21b72e8fc361cdd374cd1b1f5",
+      "git_blob": "7c1d313dd1dd3d3b76fed31a454bf93d2f4fd264",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellHalfEdgeIterImpl.cc",
+      "sha256": "91bc2f3872a754a2771a7f9b5f91eb58d24a544ee4d3165c3853ef024d36dd4a",
+      "git_blob": "755d4de25fbdd43c66891ca1460c1bdd71e4edc2",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellHalfEdgeIterImpl.hh",
+      "sha256": "35427cde0813dd401fd4ec4c8c50277c4664bd7d9ef69ecb459adc63fd512ade",
+      "git_blob": "6be2e07a43cd1c9ccafd62a637f7d59af2bed6de",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellHalfFaceIterImpl.cc",
+      "sha256": "2853faaab3bf98094ad8bdc46df87bf5ac1de616dc774a59ffc39bef3001a955",
+      "git_blob": "7e34baa5a23609e478e2deb6cc1c06519fb6b04b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/CellHalfFaceIterImpl.hh",
+      "sha256": "ff1a9b5289d16bdd8f5ad30fd1a8bcecb9b813737e136d73df6260a59315f23b",
+      "git_blob": "d6fcbca15270b0ed4ed867d5c59e0beee752b1e5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/EdgeCellIterImpl.cc",
+      "sha256": "2180337676640258c155bc6f7ee186cb6108b2767fadca813b39681e8eb8ecdb",
+      "git_blob": "01c51b08badf900251bf0b247f274a6cbb7c6c86",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/EdgeCellIterImpl.hh",
+      "sha256": "6e9a5a30a7d2a8e32d5ac11ff4da70eebf8a9e8f449d66a80eb0500569537159",
+      "git_blob": "762a3e90d1979708e538c4ef2445e53eee9fd632",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/EdgeFaceIterImpl.cc",
+      "sha256": "3076b4f058acc7173526920533c0f3065a9517153a3f04acbb4a320aa20e9a7f",
+      "git_blob": "201a24fba23cd28c89a7906926e1355855d6c672",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/EdgeFaceIterImpl.hh",
+      "sha256": "de1fdc253c32a9635a9bab24125d947c5c6d86b9789719fe863e4ad34d5f0a6b",
+      "git_blob": "b9680bbfe30d1aba854ef26655dffa8880797351",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/EdgeHalfFaceIterImpl.cc",
+      "sha256": "f6a45a0434c0469461984b8fd03d236c4031d0a8ead8193c5ce459248e817329",
+      "git_blob": "2979bb896785292ac25f86d3f7e5441c67ee0cce",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/EdgeHalfFaceIterImpl.hh",
+      "sha256": "2960bb9252b4f7f6373eccb45d502397f98b284dabfb52abc196687d4004ae1c",
+      "git_blob": "21d202ef5df609bd0e5a1538aa802f92622292c7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/FaceEdgeIterImpl.cc",
+      "sha256": "eb0b5c37203fa26c0b30a904b6f8c6906e8b6aa7a79712701d07bc73d8b22064",
+      "git_blob": "ebb2d303c049f24d2498e4ad1938581f0f8e1240",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/FaceEdgeIterImpl.hh",
+      "sha256": "9341d32c16751917f778fc70251b765b84a38d3688196cad565eb11c8bc73dd0",
+      "git_blob": "44b820ab7bd441f98cd57a0c4d8be560af4525a0",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/FaceHalfEdgeIterImpl.cc",
+      "sha256": "b7cbe6ebbbbe79b6eab2fbae881f39bc7a2928795c5b3dfd60a935ae45af806f",
+      "git_blob": "ce204b47ab7798208f3b323d5a6226e84138c1a1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/FaceHalfEdgeIterImpl.hh",
+      "sha256": "6723b10dae504fac9a0715d114c3a3c939711cb78a40c6165103ce46bd810abc",
+      "git_blob": "bd288815bed3d32b11a12df39594d018b6e8c576",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/FaceVertexIterImpl.cc",
+      "sha256": "9ddf97c1502abe69ec4c985e3639e2a28ba0f5599553aa1b0fbbd562e35e97b6",
+      "git_blob": "eeb86e20090b7510080c1ba7b6df378bbe8df9be",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/FaceVertexIterImpl.hh",
+      "sha256": "5787909ce104ce17ef76e0e8e49a7d21dc57b89a378f8acfee954a6c54d4c043",
+      "git_blob": "e6a459d3cdf49766c127e30448ff411cce64f95e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/HalfEdgeFaceIterImpl.cc",
+      "sha256": "c558b6fa29b3f8a1365a30858078587e112ae44942954acf14e416b613639a20",
+      "git_blob": "166a1ebf1c1a50956ef275a3cc271ddfece904fc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/HalfEdgeFaceIterImpl.hh",
+      "sha256": "c43b82b781b7347a1591fd8c4a333d2de96956c11de3e7a8a8f02afd389eab64",
+      "git_blob": "3c04210e8a64ddfbe30f706866d34c7351f98eaf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/HalfFaceEdgeIterImpl.cc",
+      "sha256": "971d2b84c27b3712254cd3e7140d593d6c07d110348976203889e881ebba01cc",
+      "git_blob": "bcd7adef20c730d82920221ecd0225e9e44f2b1a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/HalfFaceEdgeIterImpl.hh",
+      "sha256": "e656db64a189109d41db7062a990e34f91347f1867498c8cacb2460c4737ecc4",
+      "git_blob": "35a8141df66a8f2752e982c625714d415d748dea",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/HalfFaceHalfEdgeIterImpl.cc",
+      "sha256": "247e1ccbbb8a790973ae0a29f88e2d4a7dafbebe3e400e93c5552b5ff8e751e3",
+      "git_blob": "fca4019d1ef97a38a8310949390d3c2d91d1c38a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/HalfFaceHalfEdgeIterImpl.hh",
+      "sha256": "9a7a7e8bbb4c65eb612383a5a55ea5d9674a2fab315456969c242e3db4c70dbe",
+      "git_blob": "126736d548beaed2eb06c5fef1156ed33035b323",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/VertexEdgeIterImpl.cc",
+      "sha256": "db987523c7b34b3fdb9fbc564702dd930fa410a2a8f848fd274fc7568ac06338",
+      "git_blob": "c7f67153de0990b85ef63adf4093d80e05689a6f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/VertexEdgeIterImpl.hh",
+      "sha256": "b343a6447e03ce79b70647cff0a855033a0ca7f2461c95bb1bb43ab5c44c8351",
+      "git_blob": "242c1fd22f7a03820268e2d32252ccc52fcf81bb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/VertexHalfFaceIterImpl.cc",
+      "sha256": "f41e2f60e7898135780e8674edaeaf4bdc1fc24e52a67b500d4fd47d64d1e1de",
+      "git_blob": "94cd89bb6ffa5e2a30d4f624d30831f3226fa820",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/VertexHalfFaceIterImpl.hh",
+      "sha256": "c03a167fbdf5208e3e4bad39295566dd8254b34827dca4a45dbd115bbc367594",
+      "git_blob": "d0cc6e7dc034beb585ff3644cc859e67184e6c62",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/VertexIHalfEdgeIterImpl.cc",
+      "sha256": "2bf3e26b4ebfda7f31ba2ad856d4d24d96de04a729ea2c3371cb318d767b7d55",
+      "git_blob": "da2a78c3592205b50c73bc069bafbd49150a44c8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Iterators/detail/VertexIHalfEdgeIterImpl.hh",
+      "sha256": "f79973a87b2ed4433c74895e3b6ca69eaeb40dec45831f33398c0fe5d8ab09ab",
+      "git_blob": "c2ee05b7e5f1e735cd02a8f7657b25d5371c2615",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/OpenVolumeMeshHandle.hh",
+      "sha256": "2b3083980101dc5c43aaff2ec5f1f3c22148e17e6f5c52cc8bc13bcffa515aea",
+      "git_blob": "cb5e3e8926c9e57ddfee20fa9eabb84b8473d68f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults.hh",
+      "sha256": "a9c0102bbe02c3f31ccb690506da50b08743501777d0c031565f081953803e93",
+      "git_blob": "cfca657779e199e2e890bedc042087d139a6dde1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/Eigen.hh",
+      "sha256": "9bcf16153c3b42833d8b7fb5dc94b67c47d3c4cddc07ab877d786fb6104beb1a",
+      "git_blob": "dfc88cdb9866a8ac32041ddb5f47a399fe395a5f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/EigenSparse.hh",
+      "sha256": "54973550f8d09b532c25df3b701945da2c0282aa5f3ee93a8f5acdecc39ecf79",
+      "git_blob": "8e8b57b602ebd36f0ae70b04e45dfa65ecb053a6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/common.hh",
+      "sha256": "2c6eadbf8b9cc2d2a25fd91aa9333918af9e7765a1dec7f586358a7e2b855a6f",
+      "git_blob": "21d1aeea75207a4f58d5636312fde6f86bb93e67",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/map.hh",
+      "sha256": "0fb04765d2db9b2d108397dfca17c40fc533b2cc29d0526afb44fad90559dc5f",
+      "git_blob": "bc7727781e603c469f01e989b7db41af0f0ef431",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/pair.hh",
+      "sha256": "976e1d2a8f86f7b6935f344fa213792d536e9fb579b3d2216124cfc78cd8786d",
+      "git_blob": "88ab5e3db1f5a81b6d76dd1814ae22a1eab7352e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/tuple.hh",
+      "sha256": "32fcc876514089f6e9fa64701902bf17cf015adb09e056f41e812e154626cdd7",
+      "git_blob": "619361caa0ad0a393a226e70984d1be111ee0bde",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/Defaults/unordered_map.hh",
+      "sha256": "f4de0de0ab832487955fd789c9d0ee34ced62fa5e070828176ce0018d3817e30",
+      "git_blob": "2d8a104ead308b3b235fe7752873bed7c5832365",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/PropertyIterator.hh",
+      "sha256": "012d6bc28f1ebb9c5881fe6307df7b24247b5e239fa04d5864289a2cd653e558",
+      "git_blob": "532e8654fb346eb000484fe35dd2db39ec7b08a8",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/PropertyPtr.hh",
+      "sha256": "8a7eea2623bdacce3710ea6b1a2a63eae0aae6859c8b057ecf7d90ed9d9b905b",
+      "git_blob": "dad38d3cc10138a52facef865561d6de4efdefbc",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/PropertyStorageBase.hh",
+      "sha256": "8bde807b051098af1efcfcb3265330096e262722cff53f2d858eb2e0e66c03ab",
+      "git_blob": "780ddd6a1f6750d76a454c6d0100026655ee4174",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/PropertyStoragePtr.hh",
+      "sha256": "b8844345ae58c19c0f7e4dd3f23fb0411e1e6f046c5834cebb7af30f921837b9",
+      "git_blob": "59afe111b4dd8b62ea85d8d9c8e6a71e5ab5ba13",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/Properties/PropertyStorageT.hh",
+      "sha256": "528bd361acf3a5295287410d28546825c24af7cc816ef0e90439f21e5486aab5",
+      "git_blob": "cf0aeeaa2058381f582a1a827f821662e9b8373f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/PropertyDefines.hh",
+      "sha256": "74abc59e6c0e3c04684c590e3f22635f790a9949cfc50fa1a3a37f861f8f0dd2",
+      "git_blob": "90d1b97b6f1f4f841f871e4770ee5d8cdddf8055",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/PropertyPtr.hh",
+      "sha256": "74abc59e6c0e3c04684c590e3f22635f790a9949cfc50fa1a3a37f861f8f0dd2",
+      "git_blob": "90d1b97b6f1f4f841f871e4770ee5d8cdddf8055",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/ResourceManager.cc",
+      "sha256": "3514b8e5d7dd4038b07382f783de4350a2dd5a050d8d7ed93cbadf7c45e1f51c",
+      "git_blob": "674943778cd127326988eb5cf3b92534fbf6d93f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/ResourceManager.hh",
+      "sha256": "c241704d80966cdeae778b766037b844471266a513824c341501b365c3216c39",
+      "git_blob": "bf8012049cf8c163a9c81090d79763ac82b81fd9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/ResourceManagerT_impl.hh",
+      "sha256": "ad3ad7ca153de34fe2c6d102b8a8b2f14b8f831a68f01feaf97938f0050acfc6",
+      "git_blob": "26b064862616a8d84087c448d827e962ff40333b",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/TopologyKernel.cc",
+      "sha256": "338e8086638453163a97be2878ad0c1c9a15673333044ac6ef075f286a0be16e",
+      "git_blob": "b24d5b2ad4bc50a63a77be086edb17c4bcc4da40",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/TopologyKernel.hh",
+      "sha256": "9c6900021dbe8bf600db1cf57dda158eb1cf7da9d141001106388f3e46475db8",
+      "git_blob": "10e98b838be9c1ea268b2a0424a6e69df1270182",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/TypeNames.hh",
+      "sha256": "36ca6c4b3226d867e8d6486d5c2cdf4c5dc8d50ebf8c9d4b6bd6de092c38111b",
+      "git_blob": "203d09f080936ad28b3591468d48cd6244ef7648",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/detail/internal_type_name.cc",
+      "sha256": "5a569d6626d57e4666a8cc174c552ca8578a44164e9815e5b7c7fd376cd3c7b3",
+      "git_blob": "8ebd8d681a525c26b9533e1e3ceb9190ec8fb1cb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/detail/internal_type_name.hh",
+      "sha256": "96c70abb8fdfb32de39c9a7a80a30cbed98bab4d90f4d5f36443b89dcad76a78",
+      "git_blob": "b2e48f4e6d265bcdaa4a40612ca99c21af7c7c94",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Core/detail/swap_bool.hh",
+      "sha256": "5241900eb61d64d1ab0fbe0cd458d67e0a455414da58d94677473f3d938e5cef",
+      "git_blob": "92b503a16fc18c4ec9d606ad0330c56daa386cf5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/FileManager.cc",
+      "sha256": "f1c18aea97d3f087d67533c81bcda550af5922e925c0fd3b9efefa4af6e04fbd",
+      "git_blob": "8057300dc6090df19f33b4f255581c91b8ba1655",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/FileManager.hh",
+      "sha256": "13b99c9dd8f7cb260b12dfd52d5781cd9d2ca754d891758848de8cb06407203b",
+      "git_blob": "1678427debf65c4dee3142d213d8d0a25b3ee383",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/FileManagerT_impl.hh",
+      "sha256": "facac970369552b58891e7ce2879d947c485ed92195c284806dc4aa85a8a389a",
+      "git_blob": "cfb706b623e6c03e6e4a1e7455bcf027e1e887cd",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/Serializers.cc",
+      "sha256": "270d68a4e94dc186c2ab877c3f31afa59df66186b02335ba021640997a8ee188",
+      "git_blob": "04acc8413244a921ee64bb5aa1a51ce86b3c6ee7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/Serializers.hh",
+      "sha256": "015024a8e5beda606e59c501df4fadb4510e99c11142cbb0cc765870a34abad9",
+      "git_blob": "a2c95239019f5c1f78361df7e346ac181f267e62",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/SerializersT_impl.hh",
+      "sha256": "c9d361502cf87b84862c1ad7c171a28d165db9459f99c87afee65b4823c0ae4b",
+      "git_blob": "2c14376923c6ef8f9ec70e0cfdd91f6325588f5d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/TypeNames.cc",
+      "sha256": "a32a04aa1bc73c37986e90728fab2f5704cc412038fd1a287bba41177c5e745e",
+      "git_blob": "04df774cbf63756b45da73331f8446e1b45b3b9e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/TypeNames.hh",
+      "sha256": "f628d25e69b047d0a6b8d6aa448ab3e1bb71cf3355a9016241cdfa79541a65b4",
+      "git_blob": "a7ff58dca504e0df4da2c7c538d0637601c861b1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/FileManager/VtkColorReader.hh",
+      "sha256": "92ea8e415f85552ffe2b29a6198b5f80e1874a335e48fb5fbe46dc8c7423182a",
+      "git_blob": "531a87abcff9755de9955ea5221d56d8f1e923a6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Geometry/EigenTraits.hh",
+      "sha256": "4e5e4fef931ac3fa226cfe2c01634a927fc6940fbd6318f74292c37a6983eb17",
+      "git_blob": "f6a2960de50ec7d59c6e7caf4f881a859b739461",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Geometry/Vector11T.hh",
+      "sha256": "eec9b7a0baf99dcf52355a97358222c9c4e67bcaf91fcef081053d9d36281680",
+      "git_blob": "f42e1de22d5598e2e078ff306bba2121b02d294d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Geometry/VectorT.hh",
+      "sha256": "a1a3dfbe24bb1d614f3b973db16d834d5ada1477b30fdb33d222dd6f80b3d507",
+      "git_blob": "dbce3b80a9de64fd1493b1e16623265948e06df5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/IO.hh",
+      "sha256": "ba9db0b815dc2e84822030d51ee24f3266ee904cf4b12b7a18c876733f6895a7",
+      "git_blob": "c2d652e08f9d23cf68c9a89a4170bcd61b091340",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/PropertyCodecs.cc",
+      "sha256": "dd2ed27bc82a84c726d26df0f699fff43c51a6c8f608fd144b50670b9db2802f",
+      "git_blob": "de5bed3309e25829958ff83163b2ba93cf480be1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/PropertyCodecs.hh",
+      "sha256": "5d83f7b9da2dd473fd7b73d1ac98c4c397753903b63c470b96cc4ceba7cf1be1",
+      "git_blob": "a837fba6a9d82113509139cadbc5b9191c7e6cb5",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/PropertyCodecsEigen.hh",
+      "sha256": "9cf89afaa9396fac10d52521ce354106fc4f3c00148cf5ad37da46f0a72dca0c",
+      "git_blob": "a9cb4ccb2f628bcf9de02081cec6fbfced965bb6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/PropertyCodecsT_impl.hh",
+      "sha256": "66bdcdc9b7248724d4eb2c02930fac6e89b1c1f7ea029f8b9eefd196fac94df5",
+      "git_blob": "522ddfee55647effc100e27a257ee5f66bcb85d6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/ReadOptions.hh",
+      "sha256": "3f3d355aedc3d28d8c915cfdfef97c8818bc96a90e7ddcbf7c78120ac8eaa924",
+      "git_blob": "820ba23e2f0502d95a9e6155054f9b24ffedad56",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/WriteOptions.hh",
+      "sha256": "65426d2988ff90b5e86692abb702127633f9cfbbf01db4f3949dbbfec19062f5",
+      "git_blob": "0f1543fad75d379e7988c07eceacb3183153a5f1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryFileReader.cc",
+      "sha256": "f18782ce73058a76e32dae62718bc8e2f6414c130b4e1918d2da05bc368e02d0",
+      "git_blob": "eb528d923732968222420431f54002b355f19cd1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryFileReader.hh",
+      "sha256": "690f5d03e14efda3ffaa9f35ac244453505c72eeef2809000528cf5828f64156",
+      "git_blob": "0e40fccced970a185ef2341b0356018b8547a8f9",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryFileReader_impl.hh",
+      "sha256": "9ad1911637c83a17630587741ccecff173cfc1c48c3555caf7788b21e73fd03c",
+      "git_blob": "3b966585fcd7901196eb3a242057a275495793d7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryFileWriter.cc",
+      "sha256": "167d14d2071d03b092b1112ed84a5d1ff709c6aa33ce668ae39944b9e69cd777",
+      "git_blob": "24e8bed96e810ad6bd014b35edafed62984c15a6",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryFileWriter.hh",
+      "sha256": "5037c4c61f095985eccd0ff536a4168284a63fbb7b91f650815b3d547f0c079a",
+      "git_blob": "9af71f10c1b63611411e74c0c22810ed3a9a9010",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryIStream.cc",
+      "sha256": "721e6de5d630a437906bf1e2b0dd875101de00d832f2180d03ede90fc17ca98b",
+      "git_blob": "7abc33e147f7434f26a6ac518c3772e8dd918772",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/BinaryIStream.hh",
+      "sha256": "fa8622d380529f910caffc7b80eae5946b7f68373af2a883e340717a83bf1d82",
+      "git_blob": "bdbfd0db07f70efff94b11bebc6403a40a019c88",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/Decoder.cc",
+      "sha256": "4a2ff4819cb9bfa59625f94ef6ff6232ebf2917a0f873b59ab5ef3070fbcfd79",
+      "git_blob": "ed891b03543ea92528fdd6aeb5471738d0dbdedf",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/Decoder.hh",
+      "sha256": "c0ae46c95308279f6a607a754b32f11d008495c588bec1b6862f51dc057fc969",
+      "git_blob": "d3baaa2f9684683838153f8b3f0a0d4196fee17e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/Encoder.cc",
+      "sha256": "76d10ffd751b01a852b00a997ef1dc602f3e76355e650a89baf2e3af73339263",
+      "git_blob": "bd095ef96cceac8227773369807328ea81c4a012",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/Encoder.hh",
+      "sha256": "53478705dce548b584b4f97ca7e13ad9091901c157906e8d3485e4f7d72f421b",
+      "git_blob": "3ac1082df885d1b53ad35d908a3b67b9f1f35a01",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/GeometryReader.cc",
+      "sha256": "a9dc6003174da84f1cdee02365c8444f6956294fbd594a12c60f213a53741d35",
+      "git_blob": "273b4e1576c09ed24f6b07904693c79ecc9a2766",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/GeometryReader.hh",
+      "sha256": "1a04400e9ca47361b0cc77bb9e1d4b8c9e4f69b4efed057edf58faba460dce90",
+      "git_blob": "774d5e62b123fa132d8fb95c9bb6a1d784f7823e",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/GeometryReaderT_impl.hh",
+      "sha256": "0990c65fcc67afe5ba6d3968606412d93115a0f0d8e73e49e7cdf97fd183ee5d",
+      "git_blob": "dbeadc838eeb3d9e85821042e6d4c3aa10138048",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/GeometryWriter.cc",
+      "sha256": "3a16421823df4ca78ae94387a9c7742aeb4cffe2e3ed6117e8bf557710c44664",
+      "git_blob": "66adec4255bf2309f031fc5ec30aa0caab885863",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/GeometryWriter.hh",
+      "sha256": "a06df116dbc9936f581f079cc205d3030778b08ac2c2dfaa9b822ff4f503e499",
+      "git_blob": "a286eaa8f4fe74a68b5800552016be0c1fa2469d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/GeometryWriterT_impl.hh",
+      "sha256": "ebfa4435c01710c075a1ec725ced3498b16390bcf2632a21b8362eacc7fb57c7",
+      "git_blob": "60afb2965f1102f3b29df5530c69476eee5fcd16",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/TopologyType.hh",
+      "sha256": "9508ad00a143fe31b18512585faae3be6b4f98b03c16950e6ecbaec7a3e22dad",
+      "git_blob": "807298f9d8f2289c6f3ec2b44f5e7e73db57e26c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/WriteBuffer.cc",
+      "sha256": "349feb0498cd5bd8632c354f4c758759422c1f02f656f2a6881428ae9682b37c",
+      "git_blob": "d8d4715e10e05acddcb319cc3105e6a04d0d3c07",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/WriteBuffer.hh",
+      "sha256": "688a765c5b8980a015cda6897c7dd74b903f6628391162234ee3049cf6be3e9f",
+      "git_blob": "0895ff49b007022197a3b0a9ed3e009429938579",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/exceptions.hh",
+      "sha256": "eba444f07f3c2775e5ab25d91195cfbe7bc753886a6e94d8a44ec1793cf24fdf",
+      "git_blob": "f5000596a06b7951922046300fda520f9c989d93",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/ovmb_codec.cc",
+      "sha256": "662d7aea51c3f6c26d717baac6879de9fe4c0de3f018f6514afc9abe3601ec9b",
+      "git_blob": "2e1c1c9e4ae2693bb57eaa38e284f243589e4361",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/ovmb_codec.hh",
+      "sha256": "106064b376b713506af94db1672e6d58d92c517c6448647c1e4e0ddf246ca9fd",
+      "git_blob": "2d7a8c50c41b6c32c53ef9906439ce3da019fa02",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/ovmb_format.cc",
+      "sha256": "baaa634e37fc646f2c0c6439d82355bf0520adce0f1c7eb31189fb6b580274cb",
+      "git_blob": "69b4991517eddf34da3947759b2fb444bdc49c8a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/detail/ovmb_format.hh",
+      "sha256": "fc2611264a8e2de285652d023f83602d9a9e44168e1938f81f23d6111d17593a",
+      "git_blob": "cc93522864add23270085ceaeac90f8466d3318a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/enums.cc",
+      "sha256": "7083f209ed8b97a8b5b2fae482773bf12c18cf81ac294cba00cfd122ed6934fe",
+      "git_blob": "622684330f3fd525b5b0e35ad244882c8ce01a12",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/enums.hh",
+      "sha256": "f232f46857dd7c1d6dd464c7f07bffe35292595766cb8bf7202549f4edb5464b",
+      "git_blob": "b576c1fc86757509477a99a9c966650d9c15c51c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/ovmb_read.hh",
+      "sha256": "d58ff5f8a9d2f51abf13d89a45c4b9f8f0004ee7da69be1603fca45e63976060",
+      "git_blob": "679681cc238729c95c74dede1e1d37c039526b29",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/ovmb_write.hh",
+      "sha256": "e7d02a7daf36b4a811bae96300181a05bfa6c9cddf95b9ce2f50a1ed29289ceb",
+      "git_blob": "b4b296494a95dc46d3415174b8a92b6fcbf41193",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/IO/ovmb_write_impl.hh",
+      "sha256": "91092062eef304c53765d66b7fd2fb91f544dce2160a0a7fb7dce8c1fc08c6fb",
+      "git_blob": "729f86ee3d655d0e07d667bf5a8cff976faebf0f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/HexahedralMesh.hh",
+      "sha256": "f05162bdcdbd005ecb8adaf9b50dd061ce46cfd23808ac156f1a363e3f49c0d7",
+      "git_blob": "2e4b9c4a6dadbc54b18d4e075dc6dc148682cdb1",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/HexahedralMeshIterators.cc",
+      "sha256": "92c9af58d405761643bfdabaad817c33d3b85133dc03f8fe6c2e4761a56e3b6c",
+      "git_blob": "513a9fc3120471fb5486f62ed7a32faf9de54b8d",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/HexahedralMeshIterators.hh",
+      "sha256": "55e2130d416ec1382197f35b975682a2283a9877a257ce84816e9cec06287c59",
+      "git_blob": "020730912b92eacafac34dd2a96c05f98c3be149",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/HexahedralMeshTopologyKernel.cc",
+      "sha256": "10487e68b4c6f90a50f48a4f419f5f932e0e68f8d1645b51360eac9e4c7c3ddb",
+      "git_blob": "e68c391f90a5391b81d336f4be38caf232e70a92",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/HexahedralMeshTopologyKernel.hh",
+      "sha256": "19a56d8cf6314a3f425fd082067421e778a3bf8cf8cbeceea8d302d8dcff4e06",
+      "git_blob": "cce1198e7d10bc804958c246efbf54e04118e9ed",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/PolyhedralMesh.hh",
+      "sha256": "d88ea47da4f026f1f51ab28a1920e80b4b76041f3a9a5f150c778599e1bf6ec1",
+      "git_blob": "c992b06f7c8647dcab82f5c07fcafe57afe4214c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/TetrahedralGeometryKernel.hh",
+      "sha256": "f603b9313558957ecbc51fa757a5aa945d79b9ab4a4dccf86f9c3f2a97574b9f",
+      "git_blob": "823d4ceba2e5bd5d0643d2329beff95aab29856c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/TetrahedralMesh.hh",
+      "sha256": "77c876a40ce4228eb196cb05cd587d9ff672986cacbd79c5961ff6145f211843",
+      "git_blob": "55012f8027a26d7ec950585d66ccb2f320552138",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/TetrahedralMeshIterators.cc",
+      "sha256": "9a1edcf16f522658d156019ebc038528412686c2fd9acbbadcde95bb039acdea",
+      "git_blob": "93a8510f459f9fc6cb2ba0fe2ebed0d477797204",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/TetrahedralMeshIterators.hh",
+      "sha256": "b59ec6e62f30407db91601de044f825e52da81395b2bd6082231fc44b49db05d",
+      "git_blob": "ad41687f8ce99975cd0f42ca3952273a65774e9a",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/TetrahedralMeshTopologyKernel.cc",
+      "sha256": "e0eaaf0aa842cbc576174f05424215c24a6b0e224108f47254bc309e5bd83b3e",
+      "git_blob": "e3961d2d35592b26caf6b71229a8fc983d3e55c7",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Mesh/TetrahedralMeshTopologyKernel.hh",
+      "sha256": "e74fbb2fe7e4c3649367a0e31cc15d830ff3cb09a977f35386aad95e02734aa0",
+      "git_blob": "bcce769ea904b021d53179365c7552ec1bb5f731",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Unstable/README.md",
+      "sha256": "f7b00d0b6b53f335bca8da62a3f1d27b5c01da2c335dfc74d9de8f1afebff6e0",
+      "git_blob": "ea456b52e7c0edace3a126a93b6af0e092690874",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Unstable/Topology/TetTopology.cc",
+      "sha256": "f79a1d9b8892a0c72fe4f6946fdc0ce2483733ff1b51455c6de74b52e455c47a",
+      "git_blob": "5cb181eae495e59b0088298ff226816805843d39",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Unstable/Topology/TetTopology.hh",
+      "sha256": "8829638d66ba2c68c8c741c54065b67d1e13ab0b30faa697e8c3fbdc57aad128",
+      "git_blob": "cbe4919ea36664cbd7208b8617ba404c54473934",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Unstable/Topology/TetTopology_impl.hh",
+      "sha256": "8dc14fa222c1ca6f1a623dc241901bade83eb736d0cb7006f762d40c8e62850b",
+      "git_blob": "7e8f00fd6bd843a3fdb97d22557a42d1891407cb",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Unstable/Topology/TriangleTopology.cc",
+      "sha256": "57f42b0c19f2c5cc7ab4faa0809cfeb0c8bdf75dafdb4c6eb123a797869ec019",
+      "git_blob": "91798d3c0ffd9cd5fcfb2797d5847cd7c30cb522",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Unstable/Topology/TriangleTopology.hh",
+      "sha256": "910ac03868f66ac82659c707666716e1a2b104e3ff66baa863641845766b9c37",
+      "git_blob": "f3b66d27c07d5d3cfcc3efb8e79511026b9c3a90",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMesh/Util/SmartTagger.hh",
+      "sha256": "3caf8bd556b8ac6efeaf85c7912109984b884dc81a11798d1e366c5bf38243e7",
+      "git_blob": "4933999db6068cf6741997735464d3634cb9068f",
+      "mode": "100644"
+    },
+    {
+      "path": "src/OpenVolumeMeshConfig.cmake.in",
+      "sha256": "1f60d1f53be8511442becebee31c53fbcc25c5466327de1d772707fec9590308",
+      "git_blob": "2050ee213ecd4362199d1c99f287b8274ea83e77",
+      "mode": "100644"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".editorconfig",
+      "git_blob": "c312adb939a681865903e9aa69a62260564bb5e2",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": ".gitignore",
+      "git_blob": "eb2a3530f9fc8a434471ba4376514d02f366a42f",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": ".gitlab-ci.yml",
+      "git_blob": "bd13a5b087654766e556b5541ca71440a2c4adcd",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CHANGELOG",
+      "git_blob": "6aff7ef80bb2d62eb9125fb7f83990dc11f4e9e7",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CI/Windows.bat",
+      "git_blob": "bedd3eae7b240cff1ae674041b6e9c4af9515f30",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CI/ci-cppcheck.sh",
+      "git_blob": "0a958e0c09b2d445b22da90caa979a3fbc1b0d8c",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CI/ci-doc.sh",
+      "git_blob": "c02d9b6bfe52ee54028955a07995f01a8bcfb7c0",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CI/ci-linux.sh",
+      "git_blob": "8d621bbd03de60ffdc3fb8514c333add4c4e6bd4",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CI/ci-mac.sh",
+      "git_blob": "dd3283a8bf788adb803ca60861a8a1c544c919be",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "CI/unibe/gitlab-ci.yml",
+      "git_blob": "14cb80bc0bdb9a9ed51869dadb7c725e53738f2d",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "README.md",
+      "git_blob": "71112a13ebef3ae942d6c4c6ceb7b9bd6de5dd63",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "codegen/ResourceManager_convenience_functions/.gitignore",
+      "git_blob": "f623ef0f805deff44279fa32290c02d5b48d84d2",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "codegen/ResourceManager_convenience_functions/generate.sh",
+      "git_blob": "d5702f992f973b2489eedc6d2b5a11095ca3eb0f",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "codegen/ResourceManager_convenience_functions/vertex_functions.hh",
+      "git_blob": "49b79ab9910d3446dce76ee26f5207d5d3c01d51",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/CMakeLists.txt",
+      "git_blob": "4dd31fd658ec393f95fd10e41f594c1605658131",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/examples/Cube_with_props.ovm",
+      "git_blob": "57ef8679a10e27b2d12f84228039d36d57c14c56",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/html/favicon.ico",
+      "git_blob": "a1932d760f17559af62da32cceab5bce18ea2012",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/html/logo_vci.png",
+      "git_blob": "5c6c270fac1e83eed1542e21a4fa6f20728f40d7",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/html/style.css",
+      "git_blob": "cee0d06b574232a9643807924ac94f322fda9df9",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/html/vci_footer.html",
+      "git_blob": "2177847d476de0434f15a41c7ae3833d962618e4",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/html/vci_header.html",
+      "git_blob": "183450a1ae04e7d402439fbb44f41f83dc8172b0",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/OpenVolumeMesh_text_128.png",
+      "git_blob": "96e3936fb7e343fc152de34b9966a0a81c296f10",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/halfedge_halfface.png",
+      "git_blob": "7e1b750d541537fad6aaca08775ecd61b22c05c3",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/induced_coordsys.png",
+      "git_blob": "c06c20374431d78b16a2ab38fa80d1c8349755af",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/ovm_class_diagram.png",
+      "git_blob": "04e40c0048b90b30e53b20eaba4a9061562dfc6c",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/sheet_illustration.png",
+      "git_blob": "0bcc748e0d16ddc616eaaff949d3a5492ecd6df2",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/volume_mesh.png",
+      "git_blob": "f6ee668c428bdd1f0c4e94978faa2b65f23f6442",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/images/volume_mesh_hierarchy.png",
+      "git_blob": "983d2a86fe2a4c29111680a092da605f653a329a",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/mainpage.docu",
+      "git_blob": "3e3df49e752ab5566ac30954a3baaecc9cbbff79",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/references.bib",
+      "git_blob": "ede28ab0f2ee65048bd2c44a79137278feed4fcd",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/ascii_file_format.docu",
+      "git_blob": "d4c30094a422c935a6ca49080985a864f26efe5c",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/binary_file_format.docu",
+      "git_blob": "1d8cc55d413275dc17f25ccc0b89a77804ad4c5a",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/building_openvolumemesh.docu",
+      "git_blob": "0741d97b4460133c544d2283503a6c9bf8aaa688",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/concepts.docu",
+      "git_blob": "ca31dc8c088346c1538e092cb1363029bc7c40a3",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/file_formats.docu",
+      "git_blob": "8e0aee576660d9ed31a20c7c6d3d2b6b236160f6",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/iterators_and_circulators.docu",
+      "git_blob": "008c125cd71d100a6ceebce0faa3d49bbc14fdb9",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/subpages/property_system.docu",
+      "git_blob": "1a0d688f088949cac4f3844f789b5fe188e0ed6b",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/tutorials/tutorial_01.docu",
+      "git_blob": "a1900050f0047843f5996a744eb275c5de22fd73",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/tutorials/tutorial_02.docu",
+      "git_blob": "a87fd7cad5868da8058764cfd1416030130474eb",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/tutorials/tutorial_03.docu",
+      "git_blob": "9b96cee6fcd1e6f38326ceee253b3c19e72dc7e9",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "documentation/tutorials/tutorial_04.docu",
+      "git_blob": "c5f4f65536759dfba1e6cae21b95f973fb962a36",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "examples/CMakeLists.txt",
+      "git_blob": "0bf877a0c16978285425ab9bccfedeaf0cbc9deb",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "examples/simple_mesh/simple_mesh.cc",
+      "git_blob": "dc7d40c421b7bd85102eae2d77f90f1c06bd6916",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "examples/vtk_datafile_2/read_vtk.cc",
+      "git_blob": "2a2cd83a9a00153f8265e850079a7fd2783cc76b",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "examples/vtk_datafile_2/vtk_files/s01c_cube.vtk",
+      "git_blob": "c40bb8cf223562ee5dca8f8ebe58a2720524a8a1",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "extra/ovmb-kaitai/.gitignore",
+      "git_blob": "b4a858a01343c3b6840202f85a0395c48b6c79e4",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "extra/ovmb-kaitai/README.md",
+      "git_blob": "8543423c931a03f25190f7bd8650c3a4163820ae",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "extra/ovmb-kaitai/ovmb.ksy",
+      "git_blob": "b87958ff8a0301b2b82c1dacece39440775ddec7",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/FileConverter/CMakeLists.txt",
+      "git_blob": "a5f166b1e4315868d774ccac1a09abf02a0270a1",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/FileConverter/Grammars/Netgen.hpp",
+      "git_blob": "0c77b49c3c8964edf7e1f21ab6883259af506e5b",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/FileConverter/Grammars/Tetmesh.hpp",
+      "git_blob": "b539bb243cd82fd0c81133d3202942ca925a4967",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/FileConverter/MeshGenerator.hpp",
+      "git_blob": "16bbf4e43d8661bf66dfdf1fa65b320a2d215ad5",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/FileConverter/ovm_converter.cc",
+      "git_blob": "8861fa7f0867ada337d690377cd0334765713148",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/FileConverter/ovmb_converter.cc",
+      "git_blob": "16f71f1a4b7840dff63ec3ca92f21c3f0033786f",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/CMakeLists.txt",
+      "git_blob": "c7e4b1fdb0ba208880ed628244e0e59d6b36edd9",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/.gitignore",
+      "git_blob": "55c9951dbfba409df24a9397d78f4341aba148dd",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/Cube_with_props.ovm",
+      "git_blob": "700206bc53f63b01e95337bc6500c6b75a561be4",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/Cube_with_props.ovmb",
+      "git_blob": "db8097233c866e9734c120f42b10d09f97920f23",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/Cylinder.ovm",
+      "git_blob": "2b044d8d1ee64f772159abb987028f33bb68e6ad",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/Cylinder.ovmb",
+      "git_blob": "b24a0beefbea61be4391793e589de6032b5513d9",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/NonManifold.ovm",
+      "git_blob": "a5e770da2ebb56992af3b67b9c4432553660a836",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/TestFiles/NonManifold.ovmb",
+      "git_blob": "8e2d2416fe0ca1cbde2b4c3cda288a43c453ceb0",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests.cc",
+      "git_blob": "ab29e5cb6b1b0e30b01dd399f9101bf58954fe26",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_attribs.cc",
+      "git_blob": "2904dfcbed22be574431ef460c1f9b4485cf62ca",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_basics.cc",
+      "git_blob": "c8583afd2b2ce7f888c2d8d30769e0b08f511e43",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_common.cc",
+      "git_blob": "0dccb8dac2fed022c3ae03bde8b7b55788182b06",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_common.hh",
+      "git_blob": "31b45d75bc8ab42853692bc5d193d928761735bf",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_eigen.cc",
+      "git_blob": "e3e4051ca31bbcc0d52bd685a191eec2fcbb1948",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_files.cc",
+      "git_blob": "5e018b38571d036a8824ac5fc3bcd5283c8bf130",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_garbage_collection.cc",
+      "git_blob": "410f9c2e66384e2fa7146c5b2c861660b43a6843",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_handles.cc",
+      "git_blob": "6361a77f9c5c07d280acd4dd8a2b335e3adc1087",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_iterators.cc",
+      "git_blob": "2311ce9fc03593fd69fcf7b599c10c1cc7aef47a",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_local_topology.cc",
+      "git_blob": "178cf3d7576260aa9657fcf31efa7950fbb77ca8",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_mesh_copies.cc",
+      "git_blob": "8c7d86845d8043587546a9534af710e258d30d54",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_properties.cc",
+      "git_blob": "9265406cffbb51ad2d29014c5d45581ce9bc59b6",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_smart_tagger.cc",
+      "git_blob": "036313b15c291c1c037c7115bc82fd8242cb5436",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_swap_entities.cc",
+      "git_blob": "98ed11fabfd84864c6d499832ce6f7924c928514",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_tet_mesh_navigation.cc",
+      "git_blob": "9fbc81313a3bb92d4c1a9b2a303848997e293db3",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    },
+    {
+      "path": "src/Unittests/unittests_tetrahedral_geometry.cc",
+      "git_blob": "ae0af5fc5c926afd759a0260102ad523a8b31ce3",
+      "reason": "unused optional tests, examples, docs or repository metadata"
+    }
+  ],
+  "dependencies": [],
+  "gitlinks": [],
+  "symlinks": [],
+  "binary_assets": [],
+  "check": "src and license, every included file checked against fixed upstream checkout",
+  "runtime": "C++17 standard library, CMake with optional applications/tests/examples/docs OFF; no downloads"
+}
