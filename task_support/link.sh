@@ -18,7 +18,7 @@ while IFS= read -r file; do
 done < <(find libHh -name '*.cpp' -type f | LC_ALL=C sort)
 "$compiler" "${flags[@]}" "${task_link[@]}" -x c++ task_support/driver.c test/SrMeshPages_task_test.cpp -x none "${objects[@]}" -o .task-build/target
 "$compiler" "${flags[@]}" "${task_link[@]}" examples/paged_refinement.cpp "${objects[@]}" -o .task-build/example
-output_dir=$(mktemp -d)
+output_dir=$(mktemp -d "${TMPDIR:-/tmp}/srpages.XXXXXX")
 trap 'rm -rf "$output_dir"' EXIT
 .task-build/example demos/data/gcanyon-prefix.srm "$output_dir/active.m"
 test -s "$output_dir/active.m"

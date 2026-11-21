@@ -10,6 +10,7 @@
 #include "libHh/NetworkOrder.h"  // from_std()
 #include "libHh/PMesh.h"
 #include "libHh/Set.h"
+#include "libHh/SrMeshPages.h"
 #include "libHh/Stack.h"
 #include "libHh/Stat.h"
 #include "libHh/Timer.h"
@@ -238,6 +239,17 @@ inline const SrVertexGeometry* SrMesh::refined_vg(const SrAVertex* va) const {
   return vg;
 }
 
+// Paging-aware split accessors: when a policy is attached, the SrVsplit payload lives only while its page resides.
+inline const SrVsplit* SrMesh::paged_vsplit(int vspli) const {
+  return _paging ? _paging->sr_vsplit(vspli) : &_vsplits[vspli];
+}
+
+inline SrVsplit* SrMesh::paged_vsplit(int vspli) {
+  return _paging ? _paging->sr_vsplit(vspli) : &_vsplits[vspli];
+}
+
+inline bool SrMesh::paged_resident(int vspli) const { return !_paging || _paging->sr_resident(vspli); }
+
 inline void SrMesh::finish_vmorph(SrAVertex* va) {
   va->vgeom = va->vmorph->vgrefined;
   delete std::exchange(va->vmorph, nullptr);
@@ -316,7 +328,7 @@ bool SrMesh::vspl_legal(const SrVertex* vs) const {
     ASSERTX(!is_active_f(get_fl(vspli) + 0));
     ASSERTX(!is_active_f(get_fl(vspli) + 1));
   }
-  const SrVsplit* vspl = &_vsplits[vspli];
+  const SrVsplit* vspl = paged_vsplit(vspli);
   if ((!is_active_f(vspl->fn[0]) && vspl->fn[0] != &_isolated_face) || !is_active_f(vspl->fn[1]) ||
       (!is_active_f(vspl->fn[2]) && vspl->fn[2] != &_isolated_face) ||
       (!is_active_f(vspl->fn[3]) && vspl->fn[3] != &_isolated_face))
@@ -342,7 +354,7 @@ bool SrMesh::ecol_legal(const SrVertex* vt) const {
   if (!is_active_v(vt + 1)) return false;
   const SrFace* fl = get_fl(vspli);
   const SrAFace* fla = fl->aface;
-  const SrVsplit* vspl = &_vsplits[vspli];
+  const SrVsplit* vspl = paged_vsplit(vspli);
   if (fla->fnei[1] != vspl->fn[0]->aface || fla->fnei[0] != vspl->fn[1]->aface) return false;
   const SrFace* fr = fl + 1;
   const SrAFace* fra = fr->aface;
@@ -1054,12 +1066,41 @@ inline bool SrMesh::big_error(const SrVertexGeometry* vg, const SrVsplit* vspl) 
 #endif
 }
 
+// Bounds-only variants used by the paging path, where the SrVsplit payload of a demanded split is not yet resident.
+inline bool SrMesh::visible_bounds(const SrVertexGeometry* vg, const SrSplitBounds& b) const {
+  const Point& p = vg->point;
+#if !defined(SR_NOR001)
+  const Point pe = p - _refp._eye;
+  const float vdot = dot(pe, vg->vnormal);
+  const float pem2 = mag2<float>(pe);
+  if (vdot > 0.f && square(vdot) > pem2 * b.sin2alpha) return false;
+#endif
+  for_int(i, _refp._nplanes) {
+    if (_refp._planes[i].eval(p) < b.radius_neg) return false;
+  }
+  return true;
+}
+
+inline bool SrMesh::big_error_bounds(const SrVertexGeometry* vg, const SrSplitBounds& b) const {
+#if !defined(SR_NOR001)
+  const Point& p = vg->point;
+  const Point pe = p - _refp._eye;
+  const float pem2 = mag2<float>(pe);
+  const float rhs1 = _refp._tz2 * pem2;
+  const float vdot = dot(pe, vg->vnormal);
+  return b.uni_error_mag2 >= rhs1 || b.dir_error_mag2 * (pem2 - square(vdot)) >= rhs1 * pem2;
+#else
+  const float lf = _refp._eyedir.eval(vg->point);
+  return b.dir_error_mag2 >= _refp._tz2 * square(lf);
+#endif
+}
+
 // ***
 
 bool SrMesh::qrefine(const SrVertex* vs) const {
   ASSERTX(is_splitable(vs) && is_active_v(vs));
   const SrVertexGeometry* vg = refined_vg(vs->avertex);
-  const SrVsplit* vspl = &_vsplits[vs->vspli];
+  const SrVsplit* vspl = paged_vsplit(vs->vspli);
   return is_visible(vg, vspl) && big_error(vg, vspl);
 }
 
@@ -1067,7 +1108,7 @@ bool SrMesh::qcoarsen(const SrVertex* vt) const {
   ASSERTX(is_active_v(vt));
   ASSERTX(get_vt(vt->parent->vspli) == vt);  // The left child of its parent!
   const SrVertex* vs = vt->parent;
-  const SrVsplit* vspl = &_vsplits[vs->vspli];
+  const SrVsplit* vspl = paged_vsplit(vs->vspli);
   const SrVertexGeometry* vg = refined_vg(vt->avertex);
   return !(is_visible(vg, vspl) && big_error(vg, vspl));
 }
@@ -1082,7 +1123,7 @@ void SrMesh::apply_vspl(SrVertex* vs, IntrusiveListNode*& pn) {
   SrAFace* fla = &fpair->pair[0];
   SrAFace* fra = &fpair->pair[1];
   const int vspli = vs->vspli;
-  SrVsplit* vspl = &_vsplits[vspli];
+  SrVsplit* vspl = paged_vsplit(vspli);
   SrVertex* vt = get_vt(vspli);
   SrVertex* vu = vt + 1;
   vs->avertex = nullptr;
@@ -1246,12 +1287,13 @@ void SrMesh::apply_vspl(SrVertex* vs, IntrusiveListNode*& pn) {
   }
   _num_active_vertices++;
   _num_active_faces += 2;
+  if (_paging) _paging->sr_on_execute(vspli);  // Pin the page while the split is active.
 }
 
 void SrMesh::apply_ecol(SrVertex* vs, IntrusiveListNode*& pn) {
   ASSERTX(ecol_legal(get_vt(vs->vspli)));
   const int vspli = vs->vspli;
-  SrVsplit* vspl = &_vsplits[vspli];
+  SrVsplit* vspl = paged_vsplit(vspli);
   SrFace* fl = get_fl(vspli);
   (fl + 0)->aface->activef.unlink();
   SrVertex* vt = get_vt(vspli);
@@ -1335,6 +1377,7 @@ void SrMesh::apply_ecol(SrVertex* vs, IntrusiveListNode*& pn) {
   (fl + 1)->aface = &_isolated_aface;
   --_num_active_vertices;
   --_num_active_faces;
+  if (_paging) _paging->sr_on_merge(vspli);  // Release one pin on the page.
 }
 
 GMesh SrMesh::extract_gmesh() const {
@@ -1420,7 +1463,7 @@ void SrMesh::ok() const {
       for (const SrVertex* vp = v->parent; vp; vp = vp->parent) {
         assertx(!is_active_v(vp));
         assertx(has_been_split(vp));
-        const SrVsplit* vpspl = &_vsplits[vp->vspli];
+        const SrVsplit* vpspl = paged_vsplit(vp->vspli);  // Executed parents are pinned and resident.
         for_int(i, 4) {
           if (vpspl->fn[i] != &_isolated_face) assertx(is_active_f(vpspl->fn[i]));
         }
@@ -1575,12 +1618,40 @@ void SrMesh::force_vsplit(SrVertex* vsf, IntrusiveListNode*& n) {
     } else if (!has_been_created(vs)) {
       SrVertex* vp = vs->parent;
       ASSERTX(vp);
-      stack_split.push(vp);
+      if (_paging && !paged_resident(vp->vspli)) {
+        // An uncreated ancestor needs its page first: register the demand and pause this whole refinement.  Any
+        // already-applied dependency splits stay (they were each legal); the frontier remains valid.
+        _paging->sr_request(vp->vspli);
+        stack_split.clear();
+      } else {
+        stack_split.push(vp);
+      }
+    } else if (_paging && !paged_resident(vs->vspli)) {
+      // The split's own page is missing: register the demand and pause, leaving the legal frontier untouched.
+      _paging->sr_request(vs->vspli);
+      stack_split.clear();
     } else {
-      SrVsplit* vspl = &_vsplits[vs->vspli];
+      SrVsplit* vspl = paged_vsplit(vs->vspli);
+      // First detect any missing prerequisite neighbor page so the demand is registered before touching the stack.
+      bool missing_dep = false;
       for_int(i, 4) {
         const SrFace* fn = vspl->fn[i];
-        if (!is_active_f(fn) && fn != &_isolated_face) stack_split.push(get_vt(get_vspli(fn))->parent);
+        if (is_active_f(fn) || fn == &_isolated_face) continue;
+        const int dep_vspli = get_vspli(fn);
+        if (_paging && !paged_resident(dep_vspli)) {
+          _paging->sr_request(dep_vspli);  // Neighbor dependency page missing; it is never skipped.
+          missing_dep = true;
+        }
+      }
+      if (missing_dep) {
+        stack_split.clear();  // Pause this refinement; independent regions are separate force_vsplit() calls.
+        continue;
+      }
+      // All prerequisite pages are resident: push the neighbor dependency splits, exactly like the original.
+      for_int(i, 4) {
+        const SrFace* fn = vspl->fn[i];
+        if (!is_active_f(fn) && fn != &_isolated_face)
+          stack_split.push(get_vt(get_vspli(fn))->parent);
       }
       if (stack_split.top() == vs) {
         stack_split.pop();
@@ -1589,6 +1660,134 @@ void SrMesh::force_vsplit(SrVertex* vsf, IntrusiveListNode*& n) {
       }
     }
   }
+}
+
+// Public paging entry: apply vspli when every recursive prerequisite is resident, otherwise just register the
+// outstanding page requests.  The active topology is only ever changed through the original apply_vspl().
+bool SrMesh::force_vsplit_paged(int vspli) {
+  assertx(_vsplits.ok(vspli));
+  SrVertex* vsf = get_vt(vspli)->parent;
+  if (has_been_split(vsf)) return true;
+  if (_paging && !paged_resident(vspli)) {
+    _paging->sr_request(vspli);
+    return false;
+  }
+  if (!has_been_created(vsf)) return false;  // Its ancestor chain is still pending.
+  const int num_before = num_active_vertices();
+  IntrusiveListNode* n = _active_vertices.delim();
+  force_vsplit(vsf, n);
+  return num_active_vertices() > num_before;  // False if a missing prerequisite paused the refinement.
+}
+
+void SrMesh::set_paging_policy(ISrPagingPolicy* policy) {
+  // Attaching a policy is only legal on the fully coarsened mesh, so no split is ever stranded without its page.
+  assertx(num_active_faces() == _base_faces.num());
+  _paging = policy;
+}
+
+bool SrMesh::sr_is_resident(int vspli) const {
+  assertx(_vsplits.ok(vspli));
+  return paged_resident(vspli);
+}
+
+Vec4<int> SrMesh::sr_vsplit_fn(int vspli) const {
+  const SrVsplit* vspl = paged_vsplit(vspli);
+  Vec4<int> fni;
+  for_int(j, 4) {
+    const SrFace* fn = vspl->fn[j];
+    fni[j] = fn != &_isolated_face ? narrow_cast<int>(fn - _faces.data()) + 1 : 0;
+  }
+  return fni;
+}
+
+int SrMesh::sr_face_vsplit(int fi) const {
+  assertx(_faces.ok(fi));
+  if (fi < _base_faces.num()) return -1;
+  return (fi - _base_faces.num()) / 2;
+}
+
+int SrMesh::sr_face_of_vsplit(int vspli) const { return narrow_cast<int>(get_fl(vspli) - _faces.data()); }
+
+int SrMesh::sr_vsplit_of_face(int fi) const { return get_vspli(&_faces[fi]); }
+
+int SrMesh::sr_vsplit_parent_vertex(int vspli) const {
+  return narrow_cast<int>(get_vt(vspli)->parent - _vertices.data());
+}
+
+bool SrMesh::sr_vspl_legal(int vspli) const { return vspl_legal(get_vt(vspli)->parent); }
+
+bool SrMesh::sr_ecol_legal(int vspli) const { return ecol_legal(get_vt(vspli)); }
+
+bool SrMesh::sr_qrefine(int vspli) const { return qrefine(get_vt(vspli)->parent); }
+
+bool SrMesh::sr_qcoarsen(int vspli) const { return qcoarsen(get_vt(vspli)); }
+
+void SrMesh::sr_apply_vsplit(int vspli) {
+  SrVertex* vs = get_vt(vspli)->parent;
+  IntrusiveListNode* n = _active_vertices.delim();
+  apply_vspl(vs, n);
+}
+
+void SrMesh::sr_apply_ecol(int vspli) {
+  SrVertex* vs = get_vt(vspli)->parent;
+  IntrusiveListNode* n = &get_vt(vspli)->avertex->activev;
+  apply_ecol(vs, n);
+}
+
+// Build the coarsened working mesh from a paging directory, with no split payloads resident.
+void SrMesh::sr_initialize_paged(const SrPageDirectory& dir) {
+  assertx(_base_vertices.empty());
+  const int bnv = dir.base_nvertices;
+  const int bnf = dir.base_nfaces;
+  const int nvspl = dir.num_vsplits;
+  _vertices.init(bnv + 2 * nvspl);
+  _faces.init(bnf + 2 * nvspl);
+  _vsplits.init(nvspl);
+  _base_vertices.init(bnv);
+  _base_faces.init(bnf);
+  _quick_first_vt = &_vertices[bnv];
+  _quick_first_fl = &_faces[bnf];
+  _bbox = dir.bbox;
+  _materials = dir.materials;
+  for_int(vi, bnv) {
+    SrAVertex* va = &_base_vertices[vi];
+    _vertices[vi].avertex = va;
+    _vertices[vi].parent = nullptr;
+    _vertices[vi].vspli = -1;
+    va->activev.link_before(_active_vertices.delim());
+    va->vertex = &_vertices[vi];
+    va->vgeom = dir.base_vgeom[vi];
+    va->visible = false;
+    va->cached_time = 0;
+  }
+  for_int(fi, bnf) {
+    SrAFace* fa = &_base_faces[fi];
+    _faces[fi].aface = fa;
+    fa->activef.link_before(_active_faces.delim());
+    const SrPageDirectory::BaseFace& bf = dir.base_faces[fi];
+    for_int(j, 3) fa->vertices[j] = &_base_vertices[bf.vi[j]];
+    for_int(j, 3) fa->fnei[j] = bf.fni[j] ? &_base_faces[bf.fni[j] - 1] : &_isolated_aface;
+    fa->matid = bf.matid;
+  }
+  _num_active_vertices = bnv;
+  _num_active_faces = bnf;
+  // Empty split hierarchy: the parent/child identity comes from the directory; the SrVsplit payload stays absent.
+  for_int(vspli, nvspl) {
+    SrVsplit empty;
+    for_int(j, 4) empty.fn[j] = &_isolated_face;
+    _vsplits[vspli] = empty;
+    SrVertex* vs = &_vertices[dir.splits[vspli].parent_vertex];
+    vs->vspli = vspli;
+    SrVertex* vt = get_vt(vspli);
+    for_int(i, 2) {
+      (vt + i)->avertex = nullptr;
+      (vt + i)->parent = vs;
+      (vt + i)->vspli = -1;
+    }
+    SrFace* fl = get_fl(vspli);
+    for_int(i, 2) (fl + i)->aface = &_isolated_aface;
+  }
+  set_initial_view_params();
 }
 
 // Given:   00011'1010'1000
@@ -1620,20 +1819,43 @@ void SrMesh::adapt_refinement(int pnvtraverse) {
     const SrVertexGeometry* rvg = refined_vg(vsa);
     bool new_vis = false;
     if (is_splitable(vs)) {
-      const SrVsplit* cvspl = &_vsplits[vs->vspli];
-      new_vis = is_visible(rvg, cvspl);
-      if (!new_vis) {
-        vsa->visible = false;
-      } else {
-        if (big_error(rvg, cvspl)) {
-          is_modified = true;
-          // Variable tn to help SGI compiler assign n to register.
+      const int cvspli = vs->vspli;
+      if (_paging) {
+        // Decide from directory bounds alone; the page payload may still be absent.
+        const SrSplitBounds cb = _paging->sr_bounds(cvspli);
+        new_vis = visible_bounds(rvg, cb);
+        if (!new_vis) {
+          vsa->visible = false;
+        } else if (big_error_bounds(rvg, cb)) {
+          const int nv_before = num_active_vertices();
           IntrusiveListNode* tn = n->prev();
-          force_vsplit(vs, tn);
-          n = tn;
+          force_vsplit(vs, tn);  // Missing prerequisite pages register requests and pause this refinement.
+          if (num_active_vertices() > nv_before) {
+            is_modified = true;  // A real topology change; a mere outstanding request is not a reached goal.
+            _paging->sr_touch(cvspli);
+            n = tn;  // Newly introduced vertices are linked just before tn, so revisit them.
+          }
+          // If the split was paused for a missing page, do not rewind: keep traversing the legal frontier forward.
           continue;
+        } else if (!vsa->visible) {
+          _ar_tobevisible.push(vs);
         }
-        if (!vsa->visible) _ar_tobevisible.push(vs);
+      } else {
+        const SrVsplit* cvspl = &_vsplits[cvspli];
+        new_vis = is_visible(rvg, cvspl);
+        if (!new_vis) {
+          vsa->visible = false;
+        } else {
+          if (big_error(rvg, cvspl)) {
+            is_modified = true;
+            // Variable tn to help SGI compiler assign n to register.
+            IntrusiveListNode* tn = n->prev();
+            force_vsplit(vs, tn);
+            n = tn;
+            continue;
+          }
+          if (!vsa->visible) _ar_tobevisible.push(vs);
+        }
       }
     } else {
 #if defined(SR_SW_CULLING)
@@ -1653,7 +1875,8 @@ void SrMesh::adapt_refinement(int pnvtraverse) {
     const int pvspli = vsp->vspli;
     const SrFace* fl = get_fl(pvspli);
     const SrAFace* fla = fl->aface;
-    const SrVsplit* pvspl = &_vsplits[pvspli];
+    const SrVsplit* pvspl = paged_vsplit(pvspli);  // An executed parent split is pinned and resident.
+    if (_paging) _paging->sr_touch(pvspli);
     if (fla->fnei[1] != pvspl->fn[0]->aface || fla->fnei[0] != pvspl->fn[1]->aface) continue;
     const SrFace* fr = fl + 1;
     const SrAFace* fra = fr->aface;

@@ -38,6 +38,8 @@ namespace hh {
 
 class PMeshRStream;
 class GMesh;
+class SrPagedMesh;
+class SrPageCodec;
 struct SrAVertex;
 struct SrAFace;
 
@@ -144,6 +146,15 @@ struct SrVsplit {
 #endif
 };
 
+// Conservative view-admission bounds of one split, copied into the paging directory so that the refinement
+// decision never requires the split's page payload.  The geometry and neighbor quad stay in the page.
+struct SrSplitBounds {
+  float uni_error_mag2{0.f};
+  float dir_error_mag2{0.f};
+  float radius_neg{0.f};
+  float sin2alpha{0.f};
+};
+
 struct SrRefineParams {
   // Frame _framei;            // To compute screen-space projections.
   int _nplanes;                // Number of view frustum planes.
@@ -151,6 +162,23 @@ struct SrRefineParams {
   Point _eye;                  // The eyepoint in world coordinates (frame.p()).
   float _tz2;                  // The screen-space tolerance, zoomed and squared.
   LinearFunc _eyedir;          // A linear func along the view direction.
+};
+
+// Interface used by the on-demand paging path (implemented in libHh/SrMeshPages.h).
+// The normal all-resident SrMesh path has no policy attached; every split is then always resident.
+// No pointers ever cross the serialization boundary: the indices are stable split identifiers.
+class ISrPagingPolicy {
+ public:
+  virtual ~ISrPagingPolicy() = default;
+  [[nodiscard]] virtual bool sr_resident(int vspli) const = 0;
+  [[nodiscard]] virtual SrVsplit* sr_vsplit(int vspli) = 0;
+  [[nodiscard]] virtual const SrVsplit* sr_vsplit(int vspli) const = 0;
+  // Conservative view-admission bounds (frustum sphere, residual errors, backface cone) kept in the directory.
+  [[nodiscard]] virtual SrSplitBounds sr_bounds(int vspli) const = 0;
+  virtual void sr_request(int vspli) = 0;  // Register a demand for the page containing vspli.
+  virtual void sr_touch(int vspli) = 0;    // Record actual use for LRU ordering.
+  virtual void sr_on_execute(int vspli) = 0;  // The split was applied: its page becomes pinned.
+  virtual void sr_on_merge(int vspli) = 0;    // The split was legally merged: release one pin.
 };
 
 class SrGeomorphInfo : noncopyable {
@@ -197,6 +225,8 @@ class SrViewParams {
 // Selectively refinable progressive mesh.
 class SrMesh {
  public:
+  friend class SrPagedMesh;
+  friend class SrPageCodec;
   SrMesh();
   ~SrMesh();
   // SrMesh must be empty prior to read_*().  SrMesh is left coarsened.
@@ -220,6 +250,53 @@ class SrMesh {
   [[nodiscard]] int num_active_faces() const { return _num_active_faces; }
   void ok() const;
   [[nodiscard]] const Bbox<float, 3>& get_bbox() const { return _bbox; }
+
+  // ** On-demand paging path (see libHh/SrMeshPages.h).
+  // Attach a paging policy; pass nullptr to restore the normal all-resident behavior.  The mesh must be fully
+  // coarsened when a policy is attached, and the policy outlives (or is detached before) the SrMesh's destruction.
+  void set_paging_policy(ISrPagingPolicy* policy);
+  [[nodiscard]] ISrPagingPolicy* paging_policy() const { return _paging; }
+  [[nodiscard]] bool sr_is_resident(int vspli) const;
+  // Execute vspli only once all of its recursive prerequisites are resident; otherwise the missing page requests
+  // are registered and the active frontier is left untouched (no half split).  Returns true if applied.
+  bool force_vsplit_paged(int vspli);
+
+  // Internal accessors used by the paging implementation (libHh/SrMeshPages.cpp).
+  [[nodiscard]] int sr_num_vsplits() const { return _vsplits.num(); }
+  [[nodiscard]] int sr_base_nvertices() const { return _base_vertices.num(); }
+  [[nodiscard]] int sr_base_nfaces() const { return _base_faces.num(); }
+  [[nodiscard]] int sr_total_nvertices() const { return _vertices.num(); }
+  [[nodiscard]] int sr_total_nfaces() const { return _faces.num(); }
+  [[nodiscard]] int sr_vertex_vspli(int vi) const { return _vertices[vi].vspli; }
+  [[nodiscard]] int sr_vertex_parent(int vi) const {
+    const SrVertex* vp = _vertices[vi].parent;
+    return vp ? narrow_cast<int>(vp - _vertices.data()) : -1;
+  }
+  [[nodiscard]] bool sr_vertex_active(int vi) const { return is_active_v(&_vertices[vi]); }
+  [[nodiscard]] bool sr_vertex_created(int vi) const { return has_been_created(&_vertices[vi]); }
+  [[nodiscard]] bool sr_vertex_split(int vi) const { return has_been_split(&_vertices[vi]); }
+  [[nodiscard]] bool sr_face_active(int fi) const { return is_active_f(&_faces[fi]); }
+  [[nodiscard]] int sr_face_of_vsplit(int vspli) const;
+  [[nodiscard]] int sr_vsplit_of_face(int fi) const;
+  [[nodiscard]] Vec4<int> sr_vsplit_fn(int vspli) const;
+  [[nodiscard]] SrVsplit sr_vsplit_record(int vspli) const { return _vsplits[vspli]; }
+  // Index of the split that introduced face fi (-1 if it is a base-mesh face).
+  [[nodiscard]] int sr_face_vsplit(int fi) const;
+  // Stable per-split bounding identity: the parent-vertex index (the split vertex) in the full hierarchy.
+  [[nodiscard]] int sr_vsplit_parent_vertex(int vspli) const;
+  // Material table (directory contents).
+  [[nodiscard]] const Materials& sr_materials() const { return _materials; }
+  void sr_set_materials(const Materials& materials) { _materials = materials; }
+  // Apply/merge primitives reused by the paging driver (half-edge updates are the original SrMesh ones).
+  void sr_apply_vsplit(int vspli);
+  void sr_apply_ecol(int vspli);
+  // Build the coarsened base mesh and the empty split hierarchy from a paging directory (no page payloads).
+  void sr_initialize_paged(const struct SrPageDirectory& dir);
+  [[nodiscard]] bool sr_vspl_legal(int vspli) const;
+  [[nodiscard]] bool sr_ecol_legal(int vspli) const;
+  [[nodiscard]] bool sr_qrefine(int vspli) const;
+  [[nodiscard]] bool sr_qcoarsen(int vspli) const;
+  [[nodiscard]] bool sr_splitable(int vi) const { return is_splitable(&_vertices[vi]); }
 
   // Interface: Rendering using OpenGL:
   void ogl_render_faces_individually(bool unlit_texture);
@@ -253,6 +330,9 @@ class SrMesh {
   bool _was_modified{false};
   int _cache_time{1};
 
+  // On-demand paging policy; nullptr in the normal all-resident path.
+  ISrPagingPolicy* _paging{nullptr};
+
   // Temporary structs:
   Array<SrVertex*> _ar_tobevisible;
 
@@ -278,13 +358,21 @@ class SrMesh {
   // The auxiliary ones.
   [[nodiscard]] bool splitable(const SrAVertex* va) const { return is_splitable(va->vertex); }
   [[nodiscard]] float get_uni_error_mag2(const SrAVertex* va) const {
-    return _vsplits[va->vertex->vspli].uni_error_mag2;
+    const int vspli = va->vertex->vspli;
+    return _paging ? _paging->sr_bounds(vspli).uni_error_mag2 : _vsplits[vspli].uni_error_mag2;
   }
   [[nodiscard]] float get_dir_error_mag2(const SrAVertex* va) const {
-    return _vsplits[va->vertex->vspli].dir_error_mag2;
+    const int vspli = va->vertex->vspli;
+    return _paging ? _paging->sr_bounds(vspli).dir_error_mag2 : _vsplits[vspli].dir_error_mag2;
   }
-  [[nodiscard]] float get_radiusneg(const SrAVertex* va) const { return _vsplits[va->vertex->vspli].radius_neg; }
-  [[nodiscard]] float get_sin2alpha(const SrAVertex* va) const { return _vsplits[va->vertex->vspli].sin2alpha; }
+  [[nodiscard]] float get_radiusneg(const SrAVertex* va) const {
+    const int vspli = va->vertex->vspli;
+    return _paging ? _paging->sr_bounds(vspli).radius_neg : _vsplits[vspli].radius_neg;
+  }
+  [[nodiscard]] float get_sin2alpha(const SrAVertex* va) const {
+    const int vspli = va->vertex->vspli;
+    return _paging ? _paging->sr_bounds(vspli).sin2alpha : _vsplits[vspli].sin2alpha;
+  }
 
   // Rendering using OpenGL:
   Array<Pixel> _ogl_mat_byte_rgba;  // Size is _materials.num().
@@ -314,12 +402,19 @@ class SrMesh {
   void compute_nspheres(CArrayView<SrVertexGeometry> vgeoms);
   [[nodiscard]] bool is_visible(const SrVertexGeometry* vg, const SrVsplit* vspl) const;
   [[nodiscard]] bool big_error(const SrVertexGeometry* vg, const SrVsplit* vspl) const;
+  // Same decisions using only the directory bounds, so a not-yet-resident split needs no page payload.
+  [[nodiscard]] bool visible_bounds(const SrVertexGeometry* vg, const SrSplitBounds& b) const;
+  [[nodiscard]] bool big_error_bounds(const SrVertexGeometry* vg, const SrSplitBounds& b) const;
   [[nodiscard]] bool qrefine(const SrVertex* vs) const;
   [[nodiscard]] bool qcoarsen(const SrVertex* vt) const;
   void apply_vspl(SrVertex* vs, IntrusiveListNode*& pn);
   void apply_ecol(SrVertex* vs, IntrusiveListNode*& pn);
   void set_initial_view_params();
   void force_vsplit(SrVertex* vsf, IntrusiveListNode*& n);
+  // Paging-aware split accessors: in paged mode the SrVsplit payload may be absent until its page is supplied.
+  [[nodiscard]] const SrVsplit* paged_vsplit(int vspli) const;
+  [[nodiscard]] SrVsplit* paged_vsplit(int vspli);
+  [[nodiscard]] bool paged_resident(int vspli) const;
   void finish_vmorph(SrAVertex* va);
   void start_coarsen_morphing(SrVertex* vt);
   void abort_coarsen_morphing(SrVertex* vc);
