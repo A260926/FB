@@ -323,6 +323,23 @@ $(foreach bin,$(BINS-yes),\
         -l$(CODEC_LIB) $(addprefix -l,$(CODEC_EXTRA_LIBS))\
         )))
 
+# C++ example for the pipelined VP9 RTC rate control interface. It uses the
+# rate control library (libvpxrc) in addition to libvpx and needs the C++
+# linker, so it gets its own rule instead of the generic one above.
+ifeq ($(CONFIG_VP9_ENCODER),yes)
+VP9_RTC_PIPELINE_EXAMPLE_BIN = $(BUILD_PFX)examples/vp9_rtc_pipeline_example$(EXE_SFX)
+OBJS-$(NOT_MSVS)           += $(BUILD_PFX)examples/vp9_rtc_pipeline_example.cc.o
+BINS-$(NOT_MSVS)           += $(VP9_RTC_PIPELINE_EXAMPLE_BIN)
+DIST-SRCS-yes              += examples/vp9_rtc_pipeline_example.cc
+$(VP9_RTC_PIPELINE_EXAMPLE_BIN): $(BUILD_PFX)examples/vp9_rtc_pipeline_example.cc.o
+$(VP9_RTC_PIPELINE_EXAMPLE_BIN): $(LIB_PATH)/libvpxrc.a \
+    $(LIB_PATH)/lib$(CODEC_LIB)$(CODEC_LIB_SUF)
+$(eval $(call linkerxx_template,$(VP9_RTC_PIPELINE_EXAMPLE_BIN),\
+    $(BUILD_PFX)examples/vp9_rtc_pipeline_example.cc.o \
+    -L$(LIB_PATH) -lvpxrc -l$(CODEC_LIB) \
+    $(addprefix -l,$(CODEC_EXTRA_LIBS)) -lm))
+endif
+
 # The following pairs define a mapping of locations in the distribution
 # tree to locations in the source/build trees.
 INSTALL_MAPS += src/%.c   %.c

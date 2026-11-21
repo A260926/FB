@@ -291,6 +291,16 @@ int vp9_test_drop(struct VP9_COMP *cpi);
 // Changes only the decimation count in the rate control structure
 int vp9_rc_drop_frame(struct VP9_COMP *cpi);
 
+// Decision part of vp9_rc_drop_frame(): returns 1 if the current frame
+// should be dropped. Updates only the drop-decision state (decimation
+// counters and the svc drop count reset); the bookkeeping for a dropped
+// frame is applied separately by vp9_rc_drop_frame_apply(). The split allows
+// pipelined rate control users to freeze the drop decision and re-apply its
+// bookkeeping later with up-to-date frame costs.
+int vp9_rc_drop_frame_decision(struct VP9_COMP *cpi);
+// Bookkeeping part of vp9_rc_drop_frame() for a frame decided to be dropped.
+void vp9_rc_drop_frame_apply(struct VP9_COMP *cpi);
+
 // Computes frame size bounds.
 void vp9_rc_compute_frame_size_bounds(const struct VP9_COMP *cpi,
                                       int frame_target,
