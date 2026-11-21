@@ -65,6 +65,59 @@ cross-compiled ones, where no window backend exists. Regenerate the references
 after a deliberate change by running the test executable with
 `--write-references`.
 
+## Lightmapping
+
+`render/lightmap.h` adds a small offline baker for static scenes plus a
+render entry point that replays the result. The flow:
+
+1. **Freeze** — `bake_scene_build()` walks an `Entity` subtree and snapshots
+   every visible `Object` instance: world triangles, a constant linear-RGB
+   reflectance/emission, and an independent set of per-corner lightmap UVs
+   supplied through `BakeBinding`. Instances are addressed by entity path
+   (child indices from the root; the empty path is the root itself), so the
+   same `Object` mounted twice is two instances with two lightmaps. The
+   scene owns deep copies of everything — the source entities, meshes,
+   bindings and materials may be freed right after the build. A build that
+   fails validation (unbound or doubly bound objects, out-of-range
+   reflectance/emission/UVs, or two faces of one instance covering the same
+   texel with positive area) leaves any previous scene untouched.
+2. **Bake** — `bake_step(scene, rounds, S, epsilon, environment)` advances
+   whole bounce rounds. Every covered texel shoots the same **fixed set of
+   S cosine-weighted hemisphere directions** (stratified u with a base-2
+   radical inverse in phi) from `P + epsilon*N` and gathers the previous
+   round's radiance, giving
+   `L = emission + reflectance * sum(L_hit) / S`. Because the directions are
+   fixed rather than random, there is no Monte-Carlo noise and repeated
+   calls compose exactly (`bake_step(2)` equals two `bake_step(1)` calls);
+   the price is that the hemispheric integral is only *approximated* by
+   those S directions, so small S can leave structured artifacts that more
+   samples smooth out. Rays are double-sided for occlusion, back faces
+   absorb, misses see the constant environment radiance, and a round never
+   reads its own new values. `bake_reset()` returns every texel to its
+   emission.
+3. **View** — `renderer_render_lightmapped(renderer, scene, exposure)` draws
+   the live tree through the normal transform/coverage/depth path, but
+   shades each fragment as `base_color/255 * L * exposure` (clamped and
+   truncated to bytes) instead of using the fixed directional light. The
+   tree must still match the snapshot's paths, transforms and geometry; the
+   camera and the material's base-colour texture may change freely without
+   rebaking. The entry point requires `clear=true` and draws into private
+   buffers first, publishing colour and depth to the backend only on
+   success.
+
+Both the baker and the viewer sample the secondary (lightmap) UV with
+**nearest texel, clamp-to-edge**: the interpolated UV is scaled into texel
+units, floored to the nearest texel centre and clamped to the map border.
+Fragments and rays that land on texels no face covers read zero. Texel
+coverage itself is decided at build time at the texel centres
+`((x+0.5)/W, (y+0.5)/H)` with a half-open shared-edge rule, so adjacent
+faces never double-cover and never leave gaps.
+
+`examples/lightmap_preview.c` builds a tiny emissive-panel room and writes
+`round0.ppm` (emission only), `round2.ppm` (two gather rounds) and
+`camera.ppm` (same bake, moved camera).
+
+
 ## Backends
 
 A backend is five function pointers — `init`, `beforeRender`, `afterRender`,

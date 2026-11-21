@@ -1,6 +1,7 @@
 Pingo.pro.user
 
 build
+.task-build
 .vscode
 .cache
 .vs/
