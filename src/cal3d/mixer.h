@@ -17,6 +17,7 @@
 
 class CalAnimation;
 class CalSkeleton;
+class CalStreamClipCache;
 
 struct BoneTransformAdjustment {
     unsigned boneId;
@@ -44,12 +45,51 @@ public:
     void addAnimation(const ISTD::shared_ptr<CalAnimation>& animation);
     void removeAnimation(const ISTD::shared_ptr<CalAnimation>& animation);
 
+    // Blend active in-memory animations.  Throws (and leaves the skeleton
+    // untouched) if any active animation has a streamed source; use
+    // updateSkeletonStreamed for those.
     void updateSkeleton(
         CalSkeleton* skeleton,
         const std::vector<BoneTransformAdjustment>& boneTransformAdjustments,
         const std::vector<BoneScaleAdjustment>& boneScaleAdjustments);
 
+    // Blend active in-memory *and* streamed animations, fetching every block
+    // required by this frame from the shared cache before touching the
+    // skeleton.  Returns false without modifying the skeleton or animation
+    // times if the cache cannot supply all required blocks.  streamCache must
+    // be non-null when a streamed animation is active.
+    bool updateSkeletonStreamed(
+        CalSkeleton* skeleton,
+        const std::vector<BoneTransformAdjustment>& boneTransformAdjustments,
+        const std::vector<BoneScaleAdjustment>& boneScaleAdjustments,
+        CalStreamClipCache* streamCache);
+
+    bool hasStreamedAnimation() const;
+
 private:
+    // One track sample in blend order.  Both entry points reduce to this
+    // representation; a single routine does the actual blending.
+    struct PoseSample {
+        unsigned boneId;
+        CalQuaternion rotation;
+        CalVector translation;
+        float weight;
+        float subsequentAttenuation;
+    };
+
+    void appendMemorySamples(
+        const ISTD::shared_ptr<CalAnimation>& animation,
+        size_t boneCount,
+        std::vector<PoseSample>& samples) const;
+
+    static void blendSamples(CalSkeleton* skeleton, const std::vector<PoseSample>& samples);
+
+    void finishSkeleton(
+        CalSkeleton* skeleton,
+        const std::vector<BoneTransformAdjustment>& boneTransformAdjustments,
+        const std::vector<BoneScaleAdjustment>& boneScaleAdjustments,
+        const std::vector<PoseSample>& samples);
+
     void applyBoneAdjustments(
         CalSkeleton* skeleton,
         const std::vector<BoneTransformAdjustment>& boneTransformAdjustments,
