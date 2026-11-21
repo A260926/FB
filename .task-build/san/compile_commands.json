@@ -1,0 +1,566 @@
+[
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/accelerators/bvh.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/accelerators/bvh.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/accelerators/bvh.c",
+  "output": "CMakeFiles/lib.dir/src/lib/accelerators/bvh.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/api/c-ray.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/api/c-ray.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/api/c-ray.c",
+  "output": "CMakeFiles/lib.dir/src/lib/api/c-ray.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/camera.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/camera.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/camera.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/camera.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/mesh.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/mesh.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/mesh.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/mesh.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/pn_triangle.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/pn_triangle.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/pn_triangle.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/pn_triangle.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/poly.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/poly.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/poly.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/poly.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/scene.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/scene.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/scene.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/scene.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/sphere.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/sphere.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/sphere.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/sphere.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/spline.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/spline.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/spline.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/spline.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/datatypes/tile.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/tile.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/datatypes/tile.c",
+  "output": "CMakeFiles/lib.dir/src/lib/datatypes/tile.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/bsdfnode.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/bsdfnode.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/bsdfnode.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/bsdfnode.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/colornode.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/colornode.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/colornode.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/colornode.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/blackbody.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/blackbody.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/blackbody.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/blackbody.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/color_ramp.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/color_ramp.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/color_ramp.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/color_ramp.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/combinehsl.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/combinehsl.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/combinehsl.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/combinehsl.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/combinehsv.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/combinehsv.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/combinehsv.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/combinehsv.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/combinergb.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/combinergb.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/combinergb.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/combinergb.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/grayscale.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/grayscale.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/grayscale.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/grayscale.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/map_range.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/map_range.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/map_range.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/map_range.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/math.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/math.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/math.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/math.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/split.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/split.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/split.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/split.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/vecmath.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vecmath.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vecmath.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/vecmath.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/vecmix.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vecmix.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vecmix.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/vecmix.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/vectocolor.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vectocolor.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vectocolor.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/vectocolor.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/converter/vectovalue.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vectovalue.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/converter/vectovalue.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/converter/vectovalue.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/input/fresnel.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/fresnel.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/fresnel.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/input/fresnel.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/input/light_path.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/light_path.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/light_path.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/input/light_path.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/input/normal.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/normal.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/normal.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/input/normal.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/input/uv.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/uv.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/input/uv.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/input/uv.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/nodebase.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/nodebase.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/nodebase.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/nodebase.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/add.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/add.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/add.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/add.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/background.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/background.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/background.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/background.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/diffuse.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/diffuse.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/diffuse.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/diffuse.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/emission.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/emission.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/emission.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/emission.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/glass.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/glass.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/glass.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/glass.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/isotropic.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/isotropic.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/isotropic.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/isotropic.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/metal.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/metal.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/metal.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/metal.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/mix.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/mix.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/mix.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/mix.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/plastic.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/plastic.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/plastic.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/plastic.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/translucent.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/translucent.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/translucent.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/translucent.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/shaders/transparent.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/transparent.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/shaders/transparent.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/shaders/transparent.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/alpha.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/alpha.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/alpha.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/alpha.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/checker.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/checker.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/checker.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/checker.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/colormix.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/colormix.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/colormix.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/colormix.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/constant.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/constant.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/constant.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/constant.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/gradient.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/gradient.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/gradient.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/gradient.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/hsv_transform.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/hsv_transform.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/hsv_transform.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/hsv_transform.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/textures/image.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/image.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/textures/image.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/textures/image.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/valuenode.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/valuenode.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/valuenode.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/valuenode.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/nodes/vectornode.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/vectornode.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/nodes/vectornode.c",
+  "output": "CMakeFiles/lib.dir/src/lib/nodes/vectornode.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/protocol/protocol.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/protocol/protocol.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/protocol/protocol.c",
+  "output": "CMakeFiles/lib.dir/src/lib/protocol/protocol.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/protocol/server.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/protocol/server.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/protocol/server.c",
+  "output": "CMakeFiles/lib.dir/src/lib/protocol/server.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/protocol/worker.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/protocol/worker.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/protocol/worker.c",
+  "output": "CMakeFiles/lib.dir/src/lib/protocol/worker.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/instance.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/instance.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/instance.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/instance.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/pathtrace.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/pathtrace.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/pathtrace.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/pathtrace.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/renderer.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/renderer.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/renderer.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/renderer.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/samplers/halton.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/halton.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/halton.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/samplers/halton.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/samplers/hammersley.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/hammersley.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/hammersley.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/samplers/hammersley.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/samplers/random.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/random.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/random.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/samplers/random.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/samplers/sampler.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/sampler.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/samplers/sampler.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/samplers/sampler.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/renderer/sky.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/sky.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/renderer/sky.c",
+  "output": "CMakeFiles/lib.dir/src/lib/renderer/sky.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/lib.dir/src/lib/vendored/pcg_basic.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/vendored/pcg_basic.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/lib/vendored/pcg_basic.c",
+  "output": "CMakeFiles/lib.dir/src/lib/vendored/pcg_basic.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/args.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/args.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/args.c",
+  "output": "CMakeFiles/driver.dir/src/driver/args.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/encoders/encoder.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/encoder.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/encoder.c",
+  "output": "CMakeFiles/driver.dir/src/driver/encoders/encoder.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/encoders/formats/bmp.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/formats/bmp.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/formats/bmp.c",
+  "output": "CMakeFiles/driver.dir/src/driver/encoders/formats/bmp.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/encoders/formats/png.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/formats/png.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/formats/png.c",
+  "output": "CMakeFiles/driver.dir/src/driver/encoders/formats/png.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/encoders/formats/qoi.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/formats/qoi.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/encoders/formats/qoi.c",
+  "output": "CMakeFiles/driver.dir/src/driver/encoders/formats/qoi.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/sdl.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/sdl.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/sdl.c",
+  "output": "CMakeFiles/driver.dir/src/driver/sdl.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/driver.dir/src/driver/vendored/lodepng.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/vendored/lodepng.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/vendored/lodepng.c",
+  "output": "CMakeFiles/driver.dir/src/driver/vendored/lodepng.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/base64.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/base64.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/base64.c",
+  "output": "CMakeFiles/common.dir/src/common/base64.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/color.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/color.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/color.c",
+  "output": "CMakeFiles/common.dir/src/common/color.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/cr_assert.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/cr_assert.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/cr_assert.c",
+  "output": "CMakeFiles/common.dir/src/common/cr_assert.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/cr_string.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/cr_string.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/cr_string.c",
+  "output": "CMakeFiles/common.dir/src/common/cr_string.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/fileio.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/fileio.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/fileio.c",
+  "output": "CMakeFiles/common.dir/src/common/fileio.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/hashtable.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/hashtable.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/hashtable.c",
+  "output": "CMakeFiles/common.dir/src/common/hashtable.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/json_loader.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/json_loader.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/json_loader.c",
+  "output": "CMakeFiles/common.dir/src/common/json_loader.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/loaders/formats/gltf/gltf.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/formats/gltf/gltf.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/formats/gltf/gltf.c",
+  "output": "CMakeFiles/common.dir/src/common/loaders/formats/gltf/gltf.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/loaders/formats/wavefront/mtlloader.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/formats/wavefront/mtlloader.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/formats/wavefront/mtlloader.c",
+  "output": "CMakeFiles/common.dir/src/common/loaders/formats/wavefront/mtlloader.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/loaders/formats/wavefront/wavefront.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/formats/wavefront/wavefront.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/formats/wavefront/wavefront.c",
+  "output": "CMakeFiles/common.dir/src/common/loaders/formats/wavefront/wavefront.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/loaders/meshloader.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/meshloader.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/meshloader.c",
+  "output": "CMakeFiles/common.dir/src/common/loaders/meshloader.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/loaders/textureloader.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/textureloader.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/loaders/textureloader.c",
+  "output": "CMakeFiles/common.dir/src/common/loaders/textureloader.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/logging.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/logging.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/logging.c",
+  "output": "CMakeFiles/common.dir/src/common/logging.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/mempool.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/mempool.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/mempool.c",
+  "output": "CMakeFiles/common.dir/src/common/mempool.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/networking.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/networking.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/networking.c",
+  "output": "CMakeFiles/common.dir/src/common/networking.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/node_parse.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/node_parse.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/node_parse.c",
+  "output": "CMakeFiles/common.dir/src/common/node_parse.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/platform/terminal.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/platform/terminal.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/platform/terminal.c",
+  "output": "CMakeFiles/common.dir/src/common/platform/terminal.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/quaternion.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/quaternion.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/quaternion.c",
+  "output": "CMakeFiles/common.dir/src/common/quaternion.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/textbuffer.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/textbuffer.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/textbuffer.c",
+  "output": "CMakeFiles/common.dir/src/common/textbuffer.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/texture.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/texture.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/texture.c",
+  "output": "CMakeFiles/common.dir/src/common/texture.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/transforms.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/transforms.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/transforms.c",
+  "output": "CMakeFiles/common.dir/src/common/transforms.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/v_impl.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/v_impl.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/v_impl.c",
+  "output": "CMakeFiles/common.dir/src/common/v_impl.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/src/common/vendored/cJSON.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/vendored/cJSON.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common/vendored/cJSON.c",
+  "output": "CMakeFiles/common.dir/src/common/vendored/cJSON.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/common -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/common.dir/generated/gitsha1.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san/generated/gitsha1.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san/generated/gitsha1.c",
+  "output": "CMakeFiles/common.dir/generated/gitsha1.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/san",
+  "command": "/usr/bin/cc -DSTATICALLY_LINKED=0 -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/tests -I/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_POSIX_C_SOURCE=200112L -g -O0 -g -fsanitize=address -DCRAY_DEBUG_ENABLED -o CMakeFiles/c-ray.dir/src/driver/main.c.o -c /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/main.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/src/driver/main.c",
+  "output": "CMakeFiles/c-ray.dir/src/driver/main.c.o"
+}
+]

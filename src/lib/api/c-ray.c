@@ -28,6 +28,7 @@
 #include <renderer/renderer.h>
 #include <datatypes/camera.h>
 #include <datatypes/scene.h>
+#include <datatypes/pn_triangle.h>
 #include <protocol/server.h>
 #include <protocol/worker.h>
 #include <protocol/protocol.h>
@@ -252,10 +253,13 @@ void bvh_build_task(void *arg) {
 	// Mesh array may get realloc'd at any time, so we use a copy of mesh while working
 	struct bvh_build_task_arg *bt = (struct bvh_build_task_arg *)arg;
 	v_timer timer = v_timer_start();
+	if (bt->mesh.pn_enabled)
+		bt->mesh.pn = pn_mesh_setup(&bt->mesh);
 	struct bvh *bvh = build_mesh_bvh(&bt->mesh);
 	long ms = v_timer_get_ms(timer);
 	if (!bvh) {
 		logr(debug, "BVH build FAILED for %s\n", bt->mesh.name);
+		pn_mesh_free(bt->mesh.pn);
 		free(bt);
 		return;
 	}
@@ -263,6 +267,8 @@ void bvh_build_task(void *arg) {
 	v_rwlock_write_lock(bt->scene->bvh_lock);
 	struct bvh *old_bvh = bt->scene->meshes[bt->mesh_idx].bvh;
 	bt->scene->meshes[bt->mesh_idx].bvh = bvh;
+	bt->scene->meshes[bt->mesh_idx].pn = bt->mesh.pn;
+	bt->scene->meshes[bt->mesh_idx].pn_finalized = true;
 	v_rwlock_unlock(bt->scene->bvh_lock);
 	//!//!//!//!//!//!//!//!//!//!//!//!
 	logr(debug, "BVH %s for %s (%lums)\n", old_bvh ? "updated" : "built", bt->mesh.name, ms);
@@ -303,6 +309,84 @@ void cr_mesh_finalize(struct cr_scene *s_ext, cr_mesh mesh) {
 	arg->scene = scene;
 	arg->mesh_idx = mesh;
 	v_threadpool_enqueue(scene->bg_worker, bvh_build_task, arg);
+}
+
+bool cr_mesh_set_pn_triangles(struct cr_scene *s_ext, cr_mesh mesh, bool enabled) {
+	if (!s_ext) return false;
+	struct world *scene = (struct world *)s_ext;
+	if (mesh < 0 || (size_t)mesh > v_arr_len(scene->meshes) - 1) return false;
+	struct mesh *m = &scene->meshes[mesh];
+	if (m->pn_finalized) return false; // Mode is fixed once finalize started.
+	m->pn_enabled = enabled;
+	return true;
+}
+
+static struct mesh *get_mesh(struct world *scene, cr_mesh mesh) {
+	if (mesh < 0 || (size_t)mesh > v_arr_len(scene->meshes) - 1) return NULL;
+	return &scene->meshes[mesh];
+}
+
+bool cr_mesh_update_pn_normals(struct cr_scene *s_ext,
+                               cr_mesh mesh,
+                               const size_t *indices,
+                               const struct cr_vector *values,
+                               size_t count) {
+	if (!s_ext) return false;
+	struct world *scene = (struct world *)s_ext;
+	struct mesh *m = get_mesh(scene, mesh);
+	if (!m || !m->pn_enabled || !m->pn_finalized || !m->pn) return false;
+	const bool ok = pn_mesh_update_normals(m, indices, values, count);
+	// The BLAS hull may have changed, so every instance sharing this mesh must
+	// get a fresh world-level box on the next render preparation.
+	if (ok)
+		scene->top_level_dirty = true;
+	return ok;
+}
+
+struct cr_pn_update_stats cr_mesh_pn_update_stats(struct cr_scene *s_ext, cr_mesh mesh) {
+	struct cr_pn_update_stats out = { 0 };
+	if (!s_ext) return out;
+	struct world *scene = (struct world *)s_ext;
+	struct mesh *m = get_mesh(scene, mesh);
+	if (!m || !m->pn) return out;
+	out.updated_patches = m->pn->last_stats.updated_patches;
+	out.leaf_updates = m->pn->last_stats.leaf_updates;
+	out.node_updates = m->pn->last_stats.node_updates;
+	return out;
+}
+
+const struct cr_vector *cr_mesh_pn_control_points(struct cr_scene *s_ext, cr_mesh mesh, size_t face) {
+	if (!s_ext) return NULL;
+	struct world *scene = (struct world *)s_ext;
+	struct mesh *m = get_mesh(scene, mesh);
+	if (!m || !m->pn) return NULL;
+	const struct pn_patch *patch = pn_mesh_get_patch(m, face);
+	if (!patch || !patch->curved) return NULL;
+	return (const struct cr_vector *)patch->b;
+}
+
+size_t cr_mesh_pn_bvh_node_count(struct cr_scene *s_ext, cr_mesh mesh) {
+	if (!s_ext) return 0;
+	struct world *scene = (struct world *)s_ext;
+	struct mesh *m = get_mesh(scene, mesh);
+	if (!m || !m->bvh) return 0;
+	return bvh_node_count(m->bvh);
+}
+
+long cr_mesh_pn_bvh_parent(struct cr_scene *s_ext, cr_mesh mesh, size_t node) {
+	if (!s_ext) return -1;
+	struct world *scene = (struct world *)s_ext;
+	struct mesh *m = get_mesh(scene, mesh);
+	if (!m || !m->bvh) return -1;
+	return bvh_node_parent(m->bvh, node);
+}
+
+long cr_mesh_pn_bvh_child(struct cr_scene *s_ext, cr_mesh mesh, size_t node, unsigned slot) {
+	if (!s_ext) return -1;
+	struct world *scene = (struct world *)s_ext;
+	struct mesh *m = get_mesh(scene, mesh);
+	if (!m || !m->bvh) return -1;
+	return bvh_node_child(m->bvh, node, slot);
 }
 
 cr_mesh cr_scene_mesh_new(struct cr_scene *s_ext, const char *name) {

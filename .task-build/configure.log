@@ -1,0 +1,18 @@
+CMake Warning (deprecated) at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- The C compiler is: /usr/bin/cc
+-- No sanitizations
+-- Build type: Release
+-- Enabling IPO
+-- Explicitly disabling IPO
+-- Configuring done (0.4s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/cmake

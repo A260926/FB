@@ -196,6 +196,41 @@ CR_EXPORT void cr_mesh_bind_vertex_buf(struct cr_scene *s_ext, cr_mesh mesh, str
 CR_EXPORT void cr_mesh_bind_faces(struct cr_scene *s_ext, cr_mesh mesh, struct cr_face *faces, size_t face_count);
 CR_EXPORT void cr_mesh_finalize(struct cr_scene *s_ext, cr_mesh mesh);
 
+// -- PN triangle (curved patch) mode --
+// Enabled before cr_mesh_finalize(); default off. When on, faces with three
+// corner normals become curved cubic Bézier triangles while faces without
+// corner normals keep their flat behaviour.
+CR_EXPORT bool cr_mesh_set_pn_triangles(struct cr_scene *s_ext, cr_mesh mesh, bool enabled);
+
+// Sparse inter-frame normal update. Call only after previous background
+// build tasks have completed and while no render is in progress. indices are
+// entries of the original normal array; a repeated index takes its last
+// value. An out of range index or a non-finite/zero normal rejects the whole
+// call without changing any state. An empty input succeeds.
+CR_EXPORT bool cr_mesh_update_pn_normals(struct cr_scene *s_ext,
+                                         cr_mesh mesh,
+                                         const size_t *indices,
+                                         const struct cr_vector *values,
+                                         size_t count);
+
+// Real locality counters from the last cr_mesh_update_pn_normals call.
+struct cr_pn_update_stats {
+	size_t updated_patches;
+	size_t leaf_updates;
+	size_t node_updates;
+};
+CR_EXPORT struct cr_pn_update_stats cr_mesh_pn_update_stats(struct cr_scene *s_ext, cr_mesh mesh);
+
+// Read-only view of the ten control points (see pn_triangle.h ordering) for
+// a given original face, or NULL when the face is flat/PN mode is disabled.
+CR_EXPORT const struct cr_vector *cr_mesh_pn_control_points(struct cr_scene *s_ext, cr_mesh mesh, size_t face);
+
+// Read-only BLAS connectivity, used to verify that a sparse update preserves
+// the tree. Parent/child ids are negative for the root / leaf nodes.
+CR_EXPORT size_t cr_mesh_pn_bvh_node_count(struct cr_scene *s_ext, cr_mesh mesh);
+CR_EXPORT long cr_mesh_pn_bvh_parent(struct cr_scene *s_ext, cr_mesh mesh, size_t node);
+CR_EXPORT long cr_mesh_pn_bvh_child(struct cr_scene *s_ext, cr_mesh mesh, size_t node, unsigned slot);
+
 // -- Camera --
 // FIXME: Use cr_vector
 // TODO: Support quaternions, or maybe just a mtx4x4?

@@ -14,6 +14,7 @@
 #include <datatypes/bbox.h>
 #include <datatypes/mesh.h>
 #include <datatypes/poly.h>
+#include <datatypes/pn_triangle.h>
 #include <renderer/instance.h>
 #include <common/vector.h>
 
@@ -61,6 +62,8 @@ struct bvh_node {
 struct bvh {
 	struct bvh_node *nodes;
 	size_t *prim_indices;
+	size_t *parents;   // Parent node id per node; SIZE_MAX for the root
+	unsigned char *parent_slot; // 0/1: which child of the parent this node is
 	size_t node_count;
 };
 
@@ -321,10 +324,14 @@ static void build_bvh_recursive(
 	const struct boundingBox *bboxes,
 	const struct vector *centers,
 	size_t begin, size_t end,
-	size_t depth)
+	size_t depth,
+	size_t parent,
+	unsigned char parent_slot)
 {
 	const size_t prim_count = end - begin;
 	struct bvh_node *node = &bvh->nodes[node_id];
+	bvh->parents[node_id] = parent;
+	bvh->parent_slot[node_id] = parent_slot;
 
 	if (depth >= MAX_BVH_DEPTH || prim_count < 2)
 		goto make_leaf;
@@ -371,8 +378,8 @@ static void build_bvh_recursive(
 	store_bbox_to_node(&bvh->nodes[first_child + 1], &right_bbox);
 	node->index = make_inner_index(first_child);
 
-	build_bvh_recursive(first_child + 0, bvh, bboxes, centers, begin, right_begin, depth + 1);
-	build_bvh_recursive(first_child + 1, bvh, bboxes, centers, right_begin, end, depth + 1);
+	build_bvh_recursive(first_child + 0, bvh, bboxes, centers, begin, right_begin, depth + 1, node_id, 0);
+	build_bvh_recursive(first_child + 1, bvh, bboxes, centers, right_begin, end, depth + 1, node_id, 1);
 	return;
 
 make_leaf:
@@ -404,13 +411,17 @@ static inline struct bvh *build_bvh_generic(
 	struct bvh *bvh = malloc(sizeof(struct bvh));
 	bvh->node_count = 1; // For the root
 	bvh->nodes = malloc(sizeof(struct bvh_node) * max_nodes);
+	bvh->parents = malloc(sizeof(size_t) * max_nodes);
+	bvh->parent_slot = malloc(sizeof(unsigned char) * max_nodes);
 	bvh->prim_indices = prim_indices;
 	store_bbox_to_node(&bvh->nodes[0], &root_bbox);
 
-	build_bvh_recursive(0, bvh, bboxes, centers, 0, count, 0);
+	build_bvh_recursive(0, bvh, bboxes, centers, 0, count, 0, SIZE_MAX, 0);
 
 	// Shrink array of nodes (since some leaves may contain more than 1 primitive)
 	bvh->nodes = realloc(bvh->nodes, sizeof(struct bvh_node) * bvh->node_count);
+	bvh->parents = realloc(bvh->parents, sizeof(size_t) * bvh->node_count);
+	bvh->parent_slot = realloc(bvh->parent_slot, sizeof(unsigned char) * bvh->node_count);
 	free(centers);
 	free(bboxes);
 	return bvh;
@@ -550,6 +561,11 @@ pop:
 
 static void get_poly_bbox_and_center(const void *userData, unsigned i, struct boundingBox *bbox, struct vector *center) {
 	const struct mesh *mesh = userData;
+	if (mesh->pn_enabled) {
+		*bbox = pn_prim_bbox(mesh, i);
+		*center = pn_prim_center(mesh, i);
+		return;
+	}
 	struct vector v0 = mesh->vbuf.vertices[mesh->polygons[i].vertexIndex[0]];
 	struct vector v1 = mesh->vbuf.vertices[mesh->polygons[i].vertexIndex[1]];
 	struct vector v2 = mesh->vbuf.vertices[mesh->polygons[i].vertexIndex[2]];
@@ -573,8 +589,14 @@ static inline bool intersect_bottom_level_leaf(
 	const struct mesh *mesh = user_data;
 	bool found = false;
 	for (size_t i = begin; i < end; ++i) {
-		struct poly *p = &mesh->polygons[bvh->prim_indices[i]];
-		if (rayIntersectsWithPolygon(mesh, ray, p, isect)) {
+		const size_t prim_index = bvh->prim_indices[i];
+		struct poly *p = &mesh->polygons[prim_index];
+		bool hit;
+		if (mesh->pn)
+			hit = pn_ray_intersect(mesh, p, &mesh->pn->patches[prim_index], ray, isect);
+		else
+			hit = rayIntersectsWithPolygon(mesh, ray, p, isect);
+		if (hit) {
 			isect->polygon = p;
 			found = true;
 		}
@@ -605,6 +627,25 @@ static inline bool intersect_top_level_leaf(
 
 struct boundingBox get_root_bbox(const struct bvh *bvh) {
 	return load_bbox_from_node(&bvh->nodes[0]);
+}
+
+size_t bvh_node_count(const struct bvh *bvh) {
+	return bvh ? bvh->node_count : 0;
+}
+
+long bvh_node_parent(const struct bvh *bvh, size_t node) {
+	if (!bvh || node >= bvh->node_count)
+		return -1;
+	return bvh->parents[node] == SIZE_MAX ? -1 : (long)bvh->parents[node];
+}
+
+long bvh_node_child(const struct bvh *bvh, size_t node, unsigned slot) {
+	if (!bvh || node >= bvh->node_count || slot > 1)
+		return -1;
+	struct bvh_index idx = bvh->nodes[node].index;
+	if (idx.prim_count != 0)
+		return -1; // Leaf: no children
+	return (long)(idx.first_child_or_prim + slot);
 }
 
 struct boundingBox get_transformed_root_bbox(const struct bvh *bvh, const struct matrix4x4 *mat) {
@@ -651,6 +692,92 @@ struct bvh *build_mesh_bvh(const struct mesh *mesh) {
 	return build_bvh_generic(mesh, get_poly_bbox_and_center, v_arr_len(mesh->polygons));
 }
 
+void bvh_refit_mesh(struct bvh *bvh,
+                    const struct mesh *mesh,
+                    const size_t *changed_faces,
+                    size_t changed_count,
+                    size_t *leaf_updates,
+                    size_t *node_updates) {
+	if (!bvh || bvh->node_count < 1)
+		return;
+
+	// Two reverse tables in linear passes: face -> traversal slot -> leaf node.
+	// prim_indices is a plain malloc'd array (one entry per face), not a v_arr.
+	const size_t slot_count = v_arr_len(mesh->polygons);
+	size_t *face_to_slot = malloc(sizeof(size_t) * slot_count);
+	size_t *slot_to_leaf = malloc(sizeof(size_t) * slot_count);
+	for (size_t slot = 0; slot < slot_count; ++slot)
+		face_to_slot[bvh->prim_indices[slot]] = slot;
+	for (size_t node_id = 0; node_id < bvh->node_count; ++node_id) {
+		struct bvh_index idx = bvh->nodes[node_id].index;
+		if (idx.prim_count == 0)
+			continue;
+		for (size_t slot = idx.first_child_or_prim;
+		     slot < idx.first_child_or_prim + idx.prim_count; ++slot)
+			slot_to_leaf[slot] = node_id;
+	}
+
+	// Mark touched leaves (and later ancestors) so each node is refitted once.
+	unsigned char *touched = calloc(bvh->node_count, sizeof(unsigned char));
+	size_t leaves = 0;
+	for (size_t i = 0; i < changed_count; ++i) {
+		const size_t leaf = slot_to_leaf[face_to_slot[changed_faces[i]]];
+		if (!touched[leaf]) {
+			touched[leaf] = 1;
+			++leaves;
+		}
+	}
+	// Mark every ancestor of a touched leaf.
+	for (size_t i = 0; i < changed_count; ++i) {
+		const size_t leaf = slot_to_leaf[face_to_slot[changed_faces[i]]];
+		size_t parent = bvh->parents[leaf];
+		while (parent != SIZE_MAX) {
+			touched[parent] = 1;
+			parent = bvh->parents[parent];
+		}
+	}
+	free(face_to_slot);
+	free(slot_to_leaf);
+
+	// Refit touched leaves from their current primitive ranges.
+	for (size_t node_id = 0; node_id < bvh->node_count; ++node_id) {
+		struct bvh_index idx = bvh->nodes[node_id].index;
+		if (!touched[node_id] || idx.prim_count == 0)
+			continue;
+		struct boundingBox box = emptyBBox;
+		for (size_t slot = idx.first_child_or_prim;
+		     slot < idx.first_child_or_prim + idx.prim_count; ++slot) {
+			struct boundingBox prim_box = pn_prim_bbox(mesh, bvh->prim_indices[slot]);
+			extendBBox(&box, &prim_box);
+		}
+		store_bbox_to_node(&bvh->nodes[node_id], &box);
+	}
+
+	// Refit touched inner nodes bottom-up. The DFS builder always gives a
+	// child a larger id than its parent, so descending order is a valid
+	// topological order and every child box is current when its parent is
+	// refitted.
+	size_t inner = 0;
+	for (size_t k = bvh->node_count; k > 0; --k) {
+		const size_t node_id = k - 1;
+		struct bvh_index idx = bvh->nodes[node_id].index;
+		if (!touched[node_id] || idx.prim_count != 0)
+			continue;
+		++inner;
+		const size_t first_child = idx.first_child_or_prim;
+		struct boundingBox box = emptyBBox;
+		struct boundingBox left_box = load_bbox_from_node(&bvh->nodes[first_child + 0]);
+		struct boundingBox right_box = load_bbox_from_node(&bvh->nodes[first_child + 1]);
+		extendBBox(&box, &left_box);
+		extendBBox(&box, &right_box);
+		store_bbox_to_node(&bvh->nodes[node_id], &box);
+	}
+	free(touched);
+
+	if (leaf_updates) *leaf_updates = leaves;
+	if (node_updates) *node_updates = inner;
+}
+
 struct bvh *build_top_level_bvh(const struct instance *instances) {
 	return build_bvh_generic(instances, get_instance_bbox_and_center, v_arr_len(instances));
 }
@@ -681,6 +808,8 @@ void destroy_bvh(struct bvh *bvh) {
 	if (!bvh) return;
 	if (bvh->nodes) free(bvh->nodes);
 	if (bvh->prim_indices) free(bvh->prim_indices);
+	if (bvh->parents) free(bvh->parents);
+	if (bvh->parent_slot) free(bvh->parent_slot);
 	free(bvh);
 }
 

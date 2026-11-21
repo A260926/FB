@@ -1,0 +1,23 @@
+CASE geometry control_net_formula checks=34
+CASE geometry hull_bulge_beyond_vertex_box checks=33
+CASE geometry missing_normals_flat_fallback checks=6
+CASE geometry non_unit_normals_normalized checks=10
+GROUP geometry cases=4 checks=83 COMPLETE
+CASE roots folded_multiple_branches checks=41
+CASE roots out_of_domain_root_rejected checks=5
+CASE roots non_unit_direction_finite_distance checks=12
+CASE roots accuracy_and_clear_miss checks=19
+CASE roots near_planar_not_degenerate checks=4
+GROUP roots cases=5 checks=81 COMPLETE
+CASE integration multi_face_nearest_and_material checks=5
+CASE integration per_corner_uv_seam_and_material checks=7
+CASE integration sparse_update_locality checks=888
+CASE integration shared_position_distinct_normal checks=3
+CASE integration watertight_shared_edge checks=37
+CASE integration instances_world_bounds checks=5
+GROUP integration cases=6 checks=945 COMPLETE
+CASE protocol roundtrip_production_query checks=28
+CASE protocol legacy_payload_disabled checks=7
+CASE protocol preview_image_contents checks=5
+GROUP protocol cases=3 checks=40 COMPLETE
+TARGET_COMPLETE cases=18

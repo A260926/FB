@@ -25,6 +25,11 @@ struct bvh;
 /// Returns the bounding box of the root of the given BVH
 struct boundingBox get_root_bbox(const struct bvh *bvh);
 
+/// Read-only connectivity for locality tests.
+size_t bvh_node_count(const struct bvh *bvh);
+long bvh_node_parent(const struct bvh *bvh, size_t node);
+long bvh_node_child(const struct bvh *bvh, size_t node, unsigned slot);
+
 /// Returns the transformed bounding box of the BVH, using a better approximation than transforming
 /// the root bounding box.
 struct boundingBox get_transformed_root_bbox(const struct bvh *bvh, const struct matrix4x4 *);
@@ -55,3 +60,14 @@ bool traverse_bottom_level_bvh(
 
 /// Frees the memory allocated by the given BVH
 void destroy_bvh(struct bvh *);
+
+/// Refits the BLAS in place after PN patch control nets changed. The tree
+/// topology and primitive ordering are preserved; only the bounds of leaves
+/// containing a changed primitive and of their ancestors are rewritten.
+/// Reports the real numbers of updated leaves and inner nodes.
+void bvh_refit_mesh(struct bvh *bvh,
+                    const struct mesh *mesh,
+                    const size_t *changed_faces,
+                    size_t changed_count,
+                    size_t *leaf_updates,
+                    size_t *node_updates);

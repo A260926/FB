@@ -342,6 +342,7 @@ static cJSON *serialize_mesh(const struct mesh in) {
 	cJSON_AddItemToObject(out, "polygons", serialize_faces(in.polygons));
 	cJSON_AddItemToObject(out, "vbuf", serialize_vertex_buffer(in.vbuf));
 	cJSON_AddStringToObject(out, "name", in.name);
+	cJSON_AddBoolToObject(out, "pn_triangles", in.pn_enabled);
 	return out;
 }
 
@@ -352,6 +353,8 @@ static struct mesh deserialize_mesh(const cJSON *in) {
 	out.polygons = deserialize_faces(cJSON_GetObjectItem(in, "polygons"));
 	out.vbuf = deserialize_vertex_buffer(cJSON_GetObjectItem(in, "vbuf"));
 	out.name = stringCopy(cJSON_GetStringValue(cJSON_GetObjectItem(in, "name")));
+	// Older serialized data has no PN flag: treat it as disabled.
+	out.pn_enabled = cJSON_IsTrue(cJSON_GetObjectItem(in, "pn_triangles"));
 
 	return out;
 }

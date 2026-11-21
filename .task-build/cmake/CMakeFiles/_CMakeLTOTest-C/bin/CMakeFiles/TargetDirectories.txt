@@ -1,0 +1,4 @@
+/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/cmake/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/foo.dir
+/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/cmake/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/boo.dir
+/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/cmake/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS84211EE9785BU6587RC8761AB00/attempts/20261121T180710673453Z/repo/.task-build/cmake/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/rebuild_cache.dir
