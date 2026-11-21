@@ -2,3 +2,4 @@
 .DS_Store
 /samples/*.caf
 !/samples/helenkane.caf
+.task-build/

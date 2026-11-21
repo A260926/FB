@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 
 	"github.com/sirupsen/logrus"
 )
@@ -18,6 +20,8 @@ var ChunkTypeInformation = stringToChunkType("info")
 var ChunkTypeAudioData = stringToChunkType("data")
 var ChunkTypePacketTable = stringToChunkType("pakt")
 var ChunkTypeMidi = stringToChunkType("midi")
+var ChunkTypeFree = stringToChunkType("free")
+var ChunkTypeMagicCookie = stringToChunkType("kuki")
 
 func stringToChunkType(str string) (result FourByteString) {
 	for i, v := range str {
@@ -124,7 +128,42 @@ func (c *PacketTable) decode(r *bufio.Reader) error {
 	return nil
 }
 
+// encodedIntSize returns the number of bytes encodeInt would write for i.
+// CAF variable-length integers use at most 8 bytes (7 bits per byte).
+func encodedIntSize(i uint64) int {
+	n := 1
+	for i >>= 7; i != 0; i >>= 7 {
+		n++
+	}
+	return n
+}
+
+// EncodedSize reports the exact encoded size of the packet table chunk
+// payload: the 24-byte header plus one variable-length integer per entry.
+// It returns an error instead of overflowing when the size cannot be
+// represented as an int64.
+func (c *PacketTable) EncodedSize() (int64, error) {
+	if c == nil {
+		return 0, errors.New("nil packet table")
+	}
+	if c.Header.NumberPackets < 0 || int64(len(c.Entry)) != c.Header.NumberPackets {
+		return 0, errors.New("packet table header does not match number of entries")
+	}
+	size := int64(packetTableHdrSize)
+	for _, v := range c.Entry {
+		add := int64(encodedIntSize(v))
+		if size > math.MaxInt64-add {
+			return 0, errors.New("packet table encoded size overflows int64")
+		}
+		size += add
+	}
+	return size, nil
+}
+
 func (c *PacketTable) encode(w io.Writer) error {
+	if _, err := c.EncodedSize(); err != nil {
+		return err
+	}
 	if err := binary.Write(w, binary.BigEndian, c.Header); err != nil {
 		return err
 	}
@@ -412,6 +451,14 @@ func (c *Chunk) decode(r *bufio.Reader) error {
 			cc = ba
 			c.Contents = cc
 		}
+	case ChunkTypeFree, ChunkTypeMagicCookie:
+		{
+			ba := make([]byte, c.Header.ChunkSize)
+			if err := binary.Read(r, binary.BigEndian, &ba); err != nil {
+				return err
+			}
+			c.Contents = &UnknownContents{Data: ba}
+		}
 	default:
 		{
 			logrus.Debugf("Got unknown chunk type")
@@ -465,6 +512,16 @@ func (c *Chunk) Encode(w io.Writer) error {
 	case ChunkTypePacketTable:
 		{
 			cc := c.Contents.(*PacketTable)
+			size, err := cc.EncodedSize()
+			if err != nil {
+				return err
+			}
+			if c.Header.ChunkSize != size {
+				return fmt.Errorf("pakt chunk size %d does not match encoded size %d", c.Header.ChunkSize, size)
+			}
+			if cc.Header.NumberPackets != int64(len(cc.Entry)) {
+				return errors.New("pakt entry count does not match number of packets")
+			}
 			if err := cc.encode(w); err != nil {
 				return err
 			}
@@ -477,6 +534,16 @@ func (c *Chunk) Encode(w io.Writer) error {
 				return err
 			}
 
+		}
+	case ChunkTypeFree, ChunkTypeMagicCookie:
+		{
+			data := c.Contents.(*UnknownContents).Data
+			if int64(len(data)) != c.Header.ChunkSize {
+				return fmt.Errorf("%s chunk size %d does not match %d payload bytes", string(c.Header.ChunkType[:]), c.Header.ChunkSize, len(data))
+			}
+			if _, err := w.Write(data); err != nil {
+				return err
+			}
 		}
 	default:
 		{
