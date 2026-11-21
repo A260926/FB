@@ -33,6 +33,8 @@
 #include <errno.h>
 #include <pthread.h>
 
+#include "projective.h"
+
 #define VER_STR		"c-ray-fast v2.0"
 #define COMMENT		"# rendered with " VER_STR
 
@@ -56,72 +58,7 @@ typedef unsigned __int8 uint8_t;
 typedef unsigned __int32 uint32_t;
 #endif	/* sized type detection */
 
-struct vec3 {
-	double x, y, z;
-};
-
-struct color {
-	float r, g, b, a;
-};
-
-struct ray {
-	struct vec3 orig, dir, invdir;
-};
-
-struct material {
-	char *name;
-	struct color kd, ks; /* color (diffuse/specular) */
-	double spow;		/* specular power */
-	double refl;		/* reflection intensity */
-	double refr;		/* refraction (transmission) intensity */
-	double ior;			/* index of refraction */
-};
 struct material def_mtl = {0, {1, 1, 1}, {1, 1, 1}, 50, 0, 0, 0};
-
-struct sphere {
-	struct vec3 pos;
-	double rad;
-};
-
-struct plane {
-	struct vec3 pos;
-	struct vec3 norm;
-};
-
-enum {
-	OBJ_SPHERE = 1,
-	OBJ_PLANE = 2
-};
-
-struct object {
-	int type;
-	union {
-		struct sphere sph;
-		struct plane pln;
-	} o;
-	struct material mat;
-};
-
-struct spoint {
-	struct vec3 pos, normal, vref;	/* position, normal and view reflection */
-	double dist;		/* parametric distance of intersection along the ray */
-	struct object *obj;
-};
-
-struct camera {
-	struct vec3 pos, targ;
-	double fov;
-};
-
-struct light {
-	struct vec3 pos;
-	struct color col;
-};
-
-
-struct aabox {
-	struct vec3 vmin, vmax;
-};
 
 struct octnode {
 	struct aabox aabb;
@@ -140,7 +77,6 @@ void *thread_func(void *arg);
 void trace(struct ray *ray, int depth, struct color *col);
 void shade(struct ray *ray, struct spoint *sp, int depth, struct color *col);
 int ray_scene(struct ray *ray, struct spoint *sp);
-void reflect(struct vec3 *res, struct vec3 *v, struct vec3 *n);
 void refract(struct vec3 *res, struct vec3 *v, struct vec3 *n, double from_ior, double to_ior);
 void cross_product(struct vec3 *res, struct vec3 *v1, struct vec3 *v2);
 void get_primary_ray(struct ray *ray, int x, int y, int sample);
@@ -149,7 +85,6 @@ void jitter(struct vec3 *res, int x, int y, int s);
 int ray_object(struct object *obj, struct ray *ray, struct spoint *sp);
 int ray_sphere(struct sphere *sph, struct ray *ray, struct spoint *sp);
 int ray_plane(struct plane *pln, struct ray *ray, struct spoint *sp);
-int ray_aabox(struct aabox *aabox, struct ray *ray);
 int box_sphere(struct aabox *box, struct sphere *sph);
 int load_scene(FILE *fp);
 int build_octree(struct octnode *node, int depth);
@@ -162,22 +97,10 @@ int detect_nproc(void);
 
 #define RAY_MAG			1000.0			/* trace rays of this magnitude */
 #define MAX_RAY_DEPTH	5				/* raytrace recursion limit */
-#define ERR_MARGIN		1e-6			/* an arbitrary error margin to avoid surface acne */
 
 #define OCT_MAX_OBJ		64
 #define OCT_MAX_DEPTH	9
 
-/* some helpful macros... */
-#define SQ(x)		((x) * (x))
-#define MAX(a, b)	((a) > (b) ? (a) : (b))
-#define MIN(a, b)	((a) < (b) ? (a) : (b))
-#define CLAMP(x, a, b)	MIN(MAX(x, a), b)
-#define DOT(a, b)	((a).x * (b).x + (a).y * (b).y + (a).z * (b).z)
-#define NORMALIZE(a)  do {\
-	double len = sqrt(DOT(a, a));\
-	(a).x /= len; (a).y /= len; (a).z /= len;\
-} while(0);
-#define LERP(a, b, t)	((a) + ((b) - (a)) * (t))
 
 /* global state */
 int xres = 800;
@@ -239,8 +162,6 @@ int main(int argc, char **argv)
 	FILE *infile = stdin, *outfile = stdout, *outfile_alpha = 0;
 	char *endp;
 	float gamma;
-	struct object *obj;
-	struct aabox box;
 
 	for(i=1; i<argc; i++) {
 		if(argv[i][0] == '-') {
@@ -408,44 +329,9 @@ invalopt:		fprintf(stderr, "invalid option: %s\n", argv[i]);
 	if(blk_width > xres) blk_width = xres;
 	if(blk_height > yres) blk_height = yres;
 
-	/* prepare acceleration structure */
-	if(!(octroot = malloc(sizeof *octroot)) || !(octroot->obj = malloc(num_obj * sizeof *octroot->obj))) {
-		perror("failed to allocate octree root node");
-		return 1;
-	}
-	octroot->num_obj = 0;
-
-	box.vmin.x = box.vmin.y = box.vmin.z = DBL_MAX;
-	box.vmax.x = box.vmax.y = box.vmax.z = -DBL_MAX;
-
-	obj = objects;
-	for(i=0; i<num_obj; i++) {
-		if(obj->type == OBJ_SPHERE) {
-			struct sphere *sph = &obj->o.sph;
-			double d;
-
-			d = sph->pos.x - sph->rad;
-			if(d < box.vmin.x) box.vmin.x = d;
-			d = sph->pos.x + sph->rad;
-			if(d > box.vmax.x) box.vmax.x = d;
-			d = sph->pos.y - sph->rad;
-			if(d < box.vmin.y) box.vmin.y = d;
-			d = sph->pos.y + sph->rad;
-			if(d > box.vmax.y) box.vmax.y = d;
-			d = sph->pos.z - sph->rad;
-			if(d < box.vmin.z) box.vmin.z = d;
-			d = sph->pos.z + sph->rad;
-			if(d > box.vmax.z) box.vmax.z = d;
-
-			octroot->obj[octroot->num_obj++] = obj;
-		}
-		obj++;
-	}
-	octroot->aabb = box;
-
 	if(verbose) fprintf(stderr, "Building acceleration structure... ");
 	start_time = get_msec();
-	if(build_octree(octroot, 0) == -1) {
+	if(prepare_scene() == -1) {
 		return 1;
 	}
 	if(verbose) {
@@ -607,24 +493,38 @@ int ray_scene(struct ray *ray, struct spoint *retsp)
 	ray->invdir.z = 1.0 / ray->dir.z;
 
 	if(!retsp) {
+		/* occlusion query: any hit inside ERR_MARGIN <= t <= 1 */
 		for(i=0; i<num_inf; i++) {
 			if(ray_object(infobj + i, ray, 0)) {
 				return 1;
 			}
 		}
-		return isect_octnode(octroot, ray, 0);
+		if(octroot && isect_octnode(octroot, ray, 0)) {
+			return 1;
+		}
+		return proj_intersect(ray, 0, 0);
 	}
 
 	sp0.dist = DBL_MAX;
 	sp0.obj = 0;
+	sp0.inst = 0;
+	sp0.psph = 0;
+	sp0.mat = 0;
 
 	for(i=0; i<num_inf; i++) {
 		if(ray_object(infobj + i, ray, &sp) && sp.dist < sp0.dist) {
 			sp0 = sp;
 		}
 	}
-	if(isect_octnode(octroot, ray, &sp) && sp.dist < sp0.dist) {
+	if(octroot && isect_octnode(octroot, ray, &sp) && sp.dist < sp0.dist) {
 		sp0 = sp;
+	}
+	/* projective instances share the same production path as everything */
+	{
+		struct spoint psp;
+		if(proj_intersect(ray, &psp, 0) && psp.dist < sp0.dist) {
+			sp0 = psp;
+		}
 	}
 
 #else
@@ -634,11 +534,14 @@ int ray_scene(struct ray *ray, struct spoint *retsp)
 				return 1;
 			}
 		}
-		return 0;
+		return proj_intersect(ray, 0, 0);
 	}
 
 	sp0.dist = DBL_MAX;
 	sp0.obj = 0;
+	sp0.inst = 0;
+	sp0.psph = 0;
+	sp0.mat = 0;
 
 	/* find the nearest intersection ... */
 	for(i=0; i<num_obj; i++) {
@@ -648,9 +551,15 @@ int ray_scene(struct ray *ray, struct spoint *retsp)
 			}
 		}
 	}
+	{
+		struct spoint psp;
+		if(proj_intersect(ray, &psp, 0) && psp.dist < sp0.dist) {
+			sp0 = psp;
+		}
+	}
 #endif
 
-	if(sp0.obj) {
+	if(sp0.obj || sp0.psph) {
 		if(retsp) *retsp = sp0;
 		return 1;
 	}
@@ -689,7 +598,7 @@ void shade(struct ray *ray, struct spoint *sp, int depth, struct color *col)
 	struct ray rray, shadow_ray;
 	struct color rcol;
 	double from_ior, to_ior;
-	struct material *mtl = &sp->obj->mat;
+	struct material *mtl = sp->mat ? sp->mat : &sp->obj->mat;
 
 	if(DOT(ray->dir, sp->normal) > 0.0) {
 		sp->normal.x = -sp->normal.x;
@@ -763,7 +672,7 @@ void shade(struct ray *ray, struct spoint *sp, int depth, struct color *col)
 }
 
 /* calculate reflection vector */
-void reflect(struct vec3 *res, struct vec3 *v, struct vec3 *n)
+void reflect(struct vec3 *res, const struct vec3 *v, const struct vec3 *n)
 {
 	double dot = v->x * n->x + v->y * n->y + v->z * n->z;
 	res->x = -(2.0 * dot * n->x - v->x);
@@ -869,14 +778,24 @@ int ray_object(struct object *obj, struct ray *ray, struct spoint *sp)
 	switch(obj->type) {
 	case OBJ_SPHERE:
 		if(ray_sphere(&obj->o.sph, ray, sp)) {
-			if(sp) sp->obj = obj;
+			if(sp) {
+				sp->obj = obj;
+				sp->mat = &obj->mat;
+				sp->inst = 0;
+				sp->psph = 0;
+			}
 			return 1;
 		}
 		break;
 
 	case OBJ_PLANE:
 		if(ray_plane(&obj->o.pln, ray, sp)) {
-			if(sp) sp->obj = obj;
+			if(sp) {
+				sp->obj = obj;
+				sp->mat = &obj->mat;
+				sp->inst = 0;
+				sp->psph = 0;
+			}
 			return 1;
 		}
 		break;
@@ -965,7 +884,7 @@ int ray_plane(struct plane *pln, struct ray *ray, struct spoint *sp)
 	return 1;
 }
 
-int ray_aabox(struct aabox *box, struct ray *ray)
+int ray_aabox(const struct aabox *box, const struct ray *ray)
 {
 	double tmin, tmax, tx1, tx2, ty1, ty2, tz1, tz2;
 
@@ -1117,12 +1036,24 @@ char *expect_str(char *ptr, char *buf, int bufsz)
 int load_scene(FILE *fp)
 {
 	int lineno = 0;
-	char buf[256], name[64], *line, *ptr, *next;
+	char buf[512], name[64], pname[64], *line, *ptr, *next;
 	int max_obj, max_mtl, max_lt, max_inf;
 	struct object *obj;
 	struct light *lt;
 	struct material *mtl;
 	double num;
+
+	/* reset any previously loaded scene so load_scene can be driven again */
+	{
+		int k;
+		for(k = 0; k < num_mtl; k++) free(materials[k].name);
+		free(objects);
+		free(materials);
+		free(infobj);
+		free(lights);
+		proj_clear();
+	}
+	num_obj = num_inf = num_mtl = num_lt = 0;
 
 	max_obj = max_mtl = max_lt = max_inf = 8;
 	objects = malloc(max_obj * sizeof *objects);
@@ -1165,19 +1096,11 @@ int load_scene(FILE *fp)
 			break;
 
 		case 's':
-		case 'p':
 			APPEND(objects, obj);
 			obj = objects + num_obj;
-
-			if(line[0] == 's') {
-				obj->type = OBJ_SPHERE;
-				EXPECT_VEC(ptr, &obj->o.sph.pos);
-				EXPECT_NUM(ptr, &obj->o.sph.rad);
-			} else {
-				obj->type = OBJ_PLANE;
-				EXPECT_VEC(ptr, &obj->o.pln.pos);
-				EXPECT_VEC(ptr, &obj->o.pln.norm);
-			}
+			obj->type = OBJ_SPHERE;
+			EXPECT_VEC(ptr, &obj->o.sph.pos);
+			EXPECT_NUM(ptr, &obj->o.sph.rad);
 			if((next = expect_str(ptr, name, sizeof name))) {
 				if(!(mtl = find_material(name))) {
 					fprintf(stderr, "%d: reference to unknown material: \"%s\"\n", lineno, name);
@@ -1193,11 +1116,80 @@ int load_scene(FILE *fp)
 				expect_num(next, &obj->mat.ior);
 			}
 mtldone:	num_obj++;
+			break;
 
-			if(line[0] == 'p') {
-				/* also add planes to the infinite objects list */
-				APPEND(infobj, inf);
-				infobj[num_inf++] = *obj;
+		case 'p':
+			{
+				char *after = ptr;
+				while(*after && isspace(*after)) after++;
+
+				if(*after == '"') {
+					/* prototype sphere: p "proto" x y z radius "material" */
+					struct sphere ps;
+					int mi = -1, k;
+
+					if(!(ptr = expect_str(ptr, pname, sizeof pname))) return -1;
+					if(!(ptr = expect_vec(ptr, &ps.pos))) return -1;
+					if(!(ptr = expect_num(ptr, &ps.rad))) return -1;
+					if(!isfinite(ps.pos.x) || !isfinite(ps.pos.y) ||
+							!isfinite(ps.pos.z) || !isfinite(ps.rad) ||
+							ps.rad <= 0.0) {
+						fprintf(stderr, "%d: invalid prototype sphere\n", lineno);
+						return -1;
+					}
+					if(!(ptr = expect_str(ptr, name, sizeof name))) return -1;
+					for(k = 0; k < num_mtl; k++) {
+						if(strcmp(materials[k].name, name) == 0) { mi = k; break; }
+					}
+					if(mi < 0) {
+						fprintf(stderr, "%d: reference to unknown material: \"%s\"\n", lineno, name);
+						return -1;
+					}
+					if(proj_add_proto_sphere(pname, &ps, mi) == -1) return -1;
+					break;
+				}
+			}
+			/* legacy plane: p x y z nx ny nz ... */
+			APPEND(objects, obj);
+			obj = objects + num_obj;
+			obj->type = OBJ_PLANE;
+			EXPECT_VEC(ptr, &obj->o.pln.pos);
+			EXPECT_VEC(ptr, &obj->o.pln.norm);
+			if((next = expect_str(ptr, name, sizeof name))) {
+				if(!(mtl = find_material(name))) {
+					fprintf(stderr, "%d: reference to unknown material: \"%s\"\n", lineno, name);
+					continue;
+				}
+				obj->mat = *mtl;
+			} else {
+				obj->mat = def_mtl;
+				if(!(next = expect_color(ptr, &obj->mat.kd))) goto planedone;
+				if(!(next = expect_num(next, &obj->mat.spow))) goto planedone;
+				if(!(next = expect_num(next, &obj->mat.refl))) goto planedone;
+				if(!(next = expect_num(next, &obj->mat.refr))) goto planedone;
+				expect_num(next, &obj->mat.ior);
+			}
+planedone:	num_obj++;
+			/* also add planes to the infinite objects list */
+			APPEND(infobj, inf);
+			infobj[num_inf++] = *obj;
+			break;
+
+		case 'i':
+			{
+				char iname[64], iproto[64];
+				double m[16];
+				int k;
+
+				if(!(ptr = expect_str(ptr, iname, sizeof iname))) return -1;
+				if(!(ptr = expect_str(ptr, iproto, sizeof iproto))) return -1;
+				for(k = 0; k < 16; k++) {
+					if(!(ptr = expect_num(ptr, &m[k]))) return -1;
+				}
+				if(proj_add_instance(iname, iproto, m) == -1) {
+					fprintf(stderr, "%d: invalid instance record\n", lineno);
+					return -1;
+				}
 			}
 			break;
 
@@ -1257,6 +1249,82 @@ mtldone:	num_obj++;
 		}
 	}
 
+	/* bind the finished material table so prototype spheres resolve it */
+	proj_bind_materials(materials, num_mtl);
+	return 0;
+}
+
+/* Release a previously built legacy octree (the per-prototype and top-level
+ * projective indexes are released inside proj_prepare).
+ */
+static void free_octnode(struct octnode *node)
+{
+	int i;
+	if(!node) return;
+	for(i = 0; i < 8; i++) free_octnode(node->sub[i]);
+	free(node->obj);
+	free(node);
+}
+
+/* Rebuild every acceleration structure from the current scene data. Safe to
+ * call repeatedly: old indexes are released first, so editing sphere
+ * parameters or instance matrices and re-preparing keeps geometry, candidate
+ * ranges and the shared local trees consistent.
+ */
+int prepare_scene(void)
+{
+	int i;
+	struct object *obj;
+	struct aabox box;
+
+	free_octnode(octroot);
+	octroot = 0;
+
+	/* legacy sphere octree */
+	if(!(octroot = malloc(sizeof *octroot)) ||
+			!(octroot->obj = malloc((num_obj ? num_obj : 1) * sizeof *octroot->obj))) {
+		perror("failed to allocate octree root node");
+		return -1;
+	}
+	octroot->num_obj = 0;
+	memset(octroot->sub, 0, sizeof octroot->sub);
+
+	box.vmin.x = box.vmin.y = box.vmin.z = DBL_MAX;
+	box.vmax.x = box.vmax.y = box.vmax.z = -DBL_MAX;
+
+	obj = objects;
+	for(i = 0; i < num_obj; i++) {
+		if(obj->type == OBJ_SPHERE) {
+			struct sphere *sph = &obj->o.sph;
+			double d;
+
+			d = sph->pos.x - sph->rad;
+			if(d < box.vmin.x) box.vmin.x = d;
+			d = sph->pos.x + sph->rad;
+			if(d > box.vmax.x) box.vmax.x = d;
+			d = sph->pos.y - sph->rad;
+			if(d < box.vmin.y) box.vmin.y = d;
+			d = sph->pos.y + sph->rad;
+			if(d > box.vmax.y) box.vmax.y = d;
+			d = sph->pos.z - sph->rad;
+			if(d < box.vmin.z) box.vmin.z = d;
+			d = sph->pos.z + sph->rad;
+			if(d > box.vmax.z) box.vmax.z = d;
+
+			octroot->obj[octroot->num_obj++] = obj;
+		}
+		obj++;
+	}
+	octroot->aabb = box;
+
+	if(build_octree(octroot, 0) == -1) {
+		return -1;
+	}
+
+	/* projective shared local trees, bounds and candidate tables */
+	if(proj_prepare() == -1) {
+		return -1;
+	}
 	return 0;
 }
 
