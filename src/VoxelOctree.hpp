@@ -55,6 +55,20 @@ public:
     Vec3 center() const {
         return _center;
     }
+
+    /* Read-only view of the compact descriptor array.  The interface queries in
+     * VoxelInterfaces read this hierarchy directly; they never modify it. */
+    uint64 descriptorCount() const {
+        return _octreeSize;
+    }
+
+    uint32 descriptorWord(uint64 index) const {
+        return index < _octreeSize ? _octree[index] : 0;
+    }
+
+    const uint32 *descriptors() const {
+        return _octree.get();
+    }
 };
 
 #endif /* VOXELOCTREE_HPP_ */
