@@ -18,8 +18,7 @@ mkdir -p .task-build/beam-example
 rm -f .task-build/beam-example/beam.ppm
 .task-build/example .task-build/beam-example
 test -s .task-build/beam-example/beam.ppm
-  output_log=$(mktemp)
-  trap 'rm -f "$output_log"' EXIT
+  output_log=.task-build/target-run.log
   set +e
   .task-build/target >"$output_log" 2>&1
   status=$?

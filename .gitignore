@@ -1,3 +1,6 @@
 # Ignore content built with CMake
 build/
 
+
+# Task build artifacts
+.task-build/
