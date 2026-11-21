@@ -1,0 +1,2956 @@
+{
+  "origins": [
+    {
+      "path": ".",
+      "repo": "https://github.com/BIMCoderLiang/LNLib",
+      "commit": "d58a057aebb14deb8c03d97400e18634e0655978",
+      "license": "LGPL-2.1",
+      "license_path": "LICENSE"
+    },
+    {
+      "path": "third_party/eigen",
+      "repo": "https://github.com/eigenteam/eigen-git-mirror",
+      "commit": "cf794d3b741a6278df169e58461f8529f43bce5d",
+      "version": "3.3.7",
+      "license": "MPL-2.0 and BSD notices in individual files",
+      "license_path": "third_party/eigen/COPYING.MPL2"
+    }
+  ],
+  "files": {
+    "CMakeLists.txt": {
+      "sha256": "4afe51ac8574df2fb55637ebd20d74931cb088666111af6427defa36b6d0d63c",
+      "mode": "100644",
+      "git_blob": "3abb9ab0b1c3153afb8e00537c3bf5936a0c0f9d"
+    },
+    "LICENSE": {
+      "sha256": "20c17d8b8c48a600800dfd14f95d5cb9ff47066a9641ddeab48dc54aec96e331",
+      "mode": "100644",
+      "git_blob": "8000a6faacf471c537530805ab29523c7732e11a"
+    },
+    "README.md": {
+      "sha256": "6598b74b56c0f3c4e647c4b97f4dedec9f5e1c5c2a9b499d105d4b7e11b23b4c",
+      "mode": "100644",
+      "git_blob": "e6435aaf2c8c1ae30840a768738013b9fee94648"
+    },
+    "src/LNLib/Algorithm/ControlPointsUtils.cpp": {
+      "sha256": "86af15406d5c4f1e50e4c68898bfdd6bc2740b246a9245c1991e7331dbd9e064",
+      "mode": "100644",
+      "git_blob": "256fb4625ea3d9cfc053f78e60551253d412ee74"
+    },
+    "src/LNLib/Algorithm/Integrator.cpp": {
+      "sha256": "f3899912f8fcc4ecb972b23d04e67b4b68856f79c653c3f5c25feee4610f89ad",
+      "mode": "100644",
+      "git_blob": "299b8fb65f6d87217e5add60663e8ead19c99c2e"
+    },
+    "src/LNLib/Algorithm/Interpolation.cpp": {
+      "sha256": "f125be523cfc4a21e6babc9296cfca719a80be3e2c10651aae000bc1cf07b777",
+      "mode": "100644",
+      "git_blob": "59ac6c623a67b9f95ca5f49154867991e4c95665"
+    },
+    "src/LNLib/Algorithm/Intersection.cpp": {
+      "sha256": "2d2e207b3285e9861ac7a85b9ee4fac3e961791e2cd33ac5f4399a358deefefd",
+      "mode": "100644",
+      "git_blob": "b5feed5664023e2b25494114e71026a0dc5db297"
+    },
+    "src/LNLib/Algorithm/KnotVectorUtils.cpp": {
+      "sha256": "2f01ca1df23da711facc06dcb9eb92d7ece244ecbc817e7126016c5a12abcbeb",
+      "mode": "100644",
+      "git_blob": "9d8c4567b78c4017b8ca961c7b759a189dfdd9be"
+    },
+    "src/LNLib/Algorithm/Octree/Octree.cpp": {
+      "sha256": "c98d5b065c977a959a8df8b736ca349aa0fb36b42733c4a5f70c327f825890ac",
+      "mode": "100644",
+      "git_blob": "4c3c33b919329b108012d9bbe0e931e0af4a2082"
+    },
+    "src/LNLib/Algorithm/Octree/OctreeCollector.cpp": {
+      "sha256": "af236b3b465d0767efd44dce5ccfb7625b23aba89606c4442b49582db417bb8b",
+      "mode": "100644",
+      "git_blob": "f4d269d68891a2c244df0f0e452b5a54cd0a2baf"
+    },
+    "src/LNLib/Algorithm/Polynomials.cpp": {
+      "sha256": "1c03ad69496f73177ce77bb789c8ed2f9c75af9e8dfe977a24ddaa07b9e83e72",
+      "mode": "100644",
+      "git_blob": "124a398ffb82b3cd776af4dcff187a5346a0fd67"
+    },
+    "src/LNLib/Algorithm/Projection.cpp": {
+      "sha256": "b38c2092ad3a7c95350dfd1369793fa7b341bcc76c01eda8e0f4a06ff79785e0",
+      "mode": "100644",
+      "git_blob": "cfb0b9ff7e16497fd1a91d9bb081db6807d4ee69"
+    },
+    "src/LNLib/Algorithm/ValidationUtils.cpp": {
+      "sha256": "21af43d8aebed7c33b7ee2254ffa0dd5a17a87f2d4d996178e9ca5d1757ecc7b",
+      "mode": "100644",
+      "git_blob": "32629f3a529edadb2c19e7a535fc875fb50bf158"
+    },
+    "src/LNLib/Algorithm/Voronoi.cpp": {
+      "sha256": "f8249b417a09b728fb24617d32b6e653553440dbc95905565820517944412665",
+      "mode": "100644",
+      "git_blob": "e2654f8a17b0eaab62b412b2278aae276ecd7b87"
+    },
+    "src/LNLib/CMakeLists.txt": {
+      "sha256": "b47a09c605e90f1b9f633eab8dd6298a00f51f9c4b009209b5c4633d165c289e",
+      "mode": "100644",
+      "git_blob": "53fc2a4d08c0c8151e92af94e2f551f6f51c7d16"
+    },
+    "src/LNLib/Geometry/Curve/BezierCurve.cpp": {
+      "sha256": "20d6fa3f74526eec797eb855330948cc8bf0f77638cdce59243318f2da9f1e69",
+      "mode": "100644",
+      "git_blob": "443de549042081e5c25bb1ed6f4232f29f06464f"
+    },
+    "src/LNLib/Geometry/Curve/NurbsCurve.cpp": {
+      "sha256": "eebe4757aca73241581d708ef53770eaa7e5078d5600240504ab48ecc6e3dd3b",
+      "mode": "100644",
+      "git_blob": "12df430e382d8aaf2f8e93b7d42a2088ae826c66"
+    },
+    "src/LNLib/Geometry/Surface/NurbsSurface.cpp": {
+      "sha256": "b60dd6a1cda2c58ed7bd2bc37f8499a3e81a581cbe97d2ff45d5454ea5c90a56",
+      "mode": "100644",
+      "git_blob": "1cfff6d0af7df109c857d6cb94227505a13fcad1"
+    },
+    "src/LNLib/Geometry/Volume/NurbsVolume.cpp": {
+      "sha256": "88a59c2b4910a7a74bea7da094ebe195dd8a2ca2595f4439be61742dccd661ea",
+      "mode": "100644",
+      "git_blob": "3ed0070ac5cc15810d06cdee90023d0daf7e8017"
+    },
+    "src/LNLib/Mathematics/Math/Matrix4d.cpp": {
+      "sha256": "7625c332bbdb39119165d3baca387a0a6844c0a1d643c4cf055b087aa681db43",
+      "mode": "100644",
+      "git_blob": "8fe9c46adb32cdc5a24bbcec29380b5c4e88fbd9"
+    },
+    "src/LNLib/Mathematics/Math/UV.cpp": {
+      "sha256": "a321824ee5c757e7c4324e89753126e1ce4f0cb51ba6dd7da7ca5cb85bfe8dc1",
+      "mode": "100644",
+      "git_blob": "455e5275c35805bcc35eb587b5158e8ca3c854eb"
+    },
+    "src/LNLib/Mathematics/Math/UVW.cpp": {
+      "sha256": "c564e51102b62b887cee9bddd884ed5fc2be74a2d9a4541542151f3fb3da4841",
+      "mode": "100644",
+      "git_blob": "b7185faa7495201353f7fdd95f1087a190d4a7bf"
+    },
+    "src/LNLib/Mathematics/Math/XYZ.cpp": {
+      "sha256": "75150d336d5fba88ad881aa235d35970d14d5c9660ce2f0a29e6ec6ffe1152ab",
+      "mode": "100644",
+      "git_blob": "a1226709a3f7c81f5e1d16a54ba8a2dd3ba46cae"
+    },
+    "src/LNLib/Mathematics/Math/XYZW.cpp": {
+      "sha256": "a3c145e9a71488cc639dcae2da91f717448f9c91888152dc9092a7070481267f",
+      "mode": "100644",
+      "git_blob": "04664eed5f99c23066e10e428b5e1f9d79123eca"
+    },
+    "src/LNLib/Mathematics/Utils/MathUtils.cpp": {
+      "sha256": "5224f6edebf412406388f94ea8428291f9bb56a46a6c9e65b4b4599aa9a0b16b",
+      "mode": "100644",
+      "git_blob": "ec6dca16fa00bcb28d22a356c15256dbe72f67e2"
+    },
+    "src/LNLib/cmake/LNLibConfig.cmake.in": {
+      "sha256": "0db61cd67a7fe023ef55b6251434e041c51677e9bbaf822535a8ba5d28422ee3",
+      "mode": "100644",
+      "git_blob": "fb625275ce42170d71842a2b77516a850fdb5edf"
+    },
+    "src/LNLib/include/BezierCurve.h": {
+      "sha256": "eadd0f0acd6b38c1003fa64246a6e4f0b48b6977c973f78b81dac967ff533e0c",
+      "mode": "100644",
+      "git_blob": "52b1bc241a0e6ffed976d37ae9b885a2c549c126"
+    },
+    "src/LNLib/include/BezierSurface.h": {
+      "sha256": "cd84a67a24b46e82628f00479562b003623dddb616367096f9c903342752b8f0",
+      "mode": "100644",
+      "git_blob": "8c44c70c53b1e7a89b9bb0f772c348c01212cbe9"
+    },
+    "src/LNLib/include/BsplineCurve.h": {
+      "sha256": "3b1a7500bff1e272a783ec3e961bf89291fae4702531d4cff2b3f5ae02926a69",
+      "mode": "100644",
+      "git_blob": "a6e2c22a66cf5f885a6ca251006b329560887963"
+    },
+    "src/LNLib/include/BsplineSurface.h": {
+      "sha256": "d256396196a728b75a06c8f9cb742f1b2df31fc1c5411b87835f0b7d76d5b5df",
+      "mode": "100644",
+      "git_blob": "4c669da4f598599c488b6fdfcf3561bb886487e1"
+    },
+    "src/LNLib/include/Constants.h": {
+      "sha256": "caaac49765ac2c5af9e3dc7d15ff66ba26fdbe277247e20e560058d98d1d11b9",
+      "mode": "100644",
+      "git_blob": "b38834b72daed2ddd6cdefdd153ec7cfc7521ff7"
+    },
+    "src/LNLib/include/ControlPointsUtils.h": {
+      "sha256": "4fd389938a0468caefce867e81d7989507fb6a7a3b293b3f96d1a847fd7754dc",
+      "mode": "100644",
+      "git_blob": "7e8788230733732455263c35f28260adef36b75a"
+    },
+    "src/LNLib/include/FFT.h": {
+      "sha256": "8276af966f7a77517857dcce90c5e9a93669e1360e61cd72a34903f7275d9915",
+      "mode": "100644",
+      "git_blob": "b464d3001c412b7157a5f0fae9f9a5d53de4a016"
+    },
+    "src/LNLib/include/Integrator.h": {
+      "sha256": "dd2857906b3184ecfb454f0b0e5ff788eb93b435ec24857006e3c49cddeb5f24",
+      "mode": "100644",
+      "git_blob": "884188aecc769c649d1d972c297ae5f537afa1fa"
+    },
+    "src/LNLib/include/Interpolation.h": {
+      "sha256": "b48304dcc8ae987d6628f8653cdd54544364cfc9de06b2ec6cd00fe4223f542f",
+      "mode": "100644",
+      "git_blob": "b9f1bf5167a863a5cfaa414de2d4c20a9e709e8a"
+    },
+    "src/LNLib/include/Intersection.h": {
+      "sha256": "4d9cfdfeff6f3c9931826025c627a5ee920913198b7d1f989c811f832335ed3f",
+      "mode": "100644",
+      "git_blob": "60698b1b97f36353bfd1f2490197327777fd571f"
+    },
+    "src/LNLib/include/KnotVectorUtils.h": {
+      "sha256": "d9699c3293b86eb854d4e136fc4bd8a656e81359845e53948749942ea430b098",
+      "mode": "100644",
+      "git_blob": "557303457ee112a251647e7353309f624cc72447"
+    },
+    "src/LNLib/include/LNEnums.h": {
+      "sha256": "ea7dedf666e0012baa30cda7d734fc92cff45c2a88ce9a78d66513de7b1796a8",
+      "mode": "100644",
+      "git_blob": "5661bedcc377b648f4b3f07d8ec6a57d1eb61677"
+    },
+    "src/LNLib/include/LNLibDefinitions.h": {
+      "sha256": "bebff0f171e30ff54e8ababb5a813fedabb0556ffa07925580189c6634bd1a9d",
+      "mode": "100644",
+      "git_blob": "20a04621edc82db61fd777c5792d0adb0ea78073"
+    },
+    "src/LNLib/include/LNLibExceptions.h": {
+      "sha256": "dbba64a6870ced7fc18b648343e1b4fc05c7c45a2d0490dd8d07cba9db862bb2",
+      "mode": "100644",
+      "git_blob": "f38ab0d7207683366b075c4faf79ec239bb2b5b5"
+    },
+    "src/LNLib/include/LNObject.h": {
+      "sha256": "59213c042e46ab2cc11577a8b93b526143e3445f2d36bbf1e233fbb8a5691e0e",
+      "mode": "100644",
+      "git_blob": "e565541a637f8ce535e47261f22ea2225c783f2c"
+    },
+    "src/LNLib/include/MathUtils.h": {
+      "sha256": "4e49c969e89d8cbb2a5d2c07179a686cd7b7404a39c521e9a4e7714866234ee8",
+      "mode": "100644",
+      "git_blob": "4d5afb9ac53beebb840e63ece5b66d2adfe0513f"
+    },
+    "src/LNLib/include/Matrix4d.h": {
+      "sha256": "722208fe902262e7dda4d352265c3d8a07fd99b94ca46b55bb6a65347a9e81f1",
+      "mode": "100644",
+      "git_blob": "b7d1fbda6f83ca198f79060088963d1591fb466c"
+    },
+    "src/LNLib/include/NurbsCurve.h": {
+      "sha256": "538b4446069448e8828b4de246930bace9efe9bf087b829ccab94500ff6b4f2b",
+      "mode": "100644",
+      "git_blob": "ed6ead11f80521aeb67d899a3e352303e9d227cd"
+    },
+    "src/LNLib/include/NurbsSurface.h": {
+      "sha256": "b7fecabdd56c4e77e834eeb85f78da579b586b5327cd7b147ed8c4954a56e9ba",
+      "mode": "100644",
+      "git_blob": "9ff7749eb2fc1ea5b7c7636d2a5fee6e545716f5"
+    },
+    "src/LNLib/include/NurbsVolume.h": {
+      "sha256": "f3ea97f8ec1c3e22b377dcfa0fc7c0f90d9d5a522ce359143c07d782cc1ccad0",
+      "mode": "100644",
+      "git_blob": "1230ec1adaaf4bb79fac46cf22093d59e478685b"
+    },
+    "src/LNLib/include/Octree.h": {
+      "sha256": "24d99d21936195a40282a2118df354550e17c8759247cf0b98c592aef9f3980c",
+      "mode": "100644",
+      "git_blob": "71dc343606dfd693f8ef08f437a5246e3653a07e"
+    },
+    "src/LNLib/include/OctreeCollector.h": {
+      "sha256": "a739d56fde18c5a9a17225d9c9a7ac525949342980f26a9dec18101b0447fcec",
+      "mode": "100644",
+      "git_blob": "b3619bddb81170e48e025453f24a1ebcb66c1d81"
+    },
+    "src/LNLib/include/Polynomials.h": {
+      "sha256": "a74bdce0584debd57cc9db7498e0bb88773d5d2875089e4a15c45d3ca2bd162f",
+      "mode": "100644",
+      "git_blob": "cb2a912d1274b4b7e4ac8d085d406247c3973115"
+    },
+    "src/LNLib/include/Projection.h": {
+      "sha256": "143e7f88566b27e373638b80750d0e7a9d96f99aab12b0abaa68eb5aa175c85b",
+      "mode": "100644",
+      "git_blob": "bb924ef0937266e116dac382ce456fe5175ea93c"
+    },
+    "src/LNLib/include/UV.h": {
+      "sha256": "ace6948597801292badf64b55c7b7e3b41b9078a2ddbe0f4c595ae7631c6cc72",
+      "mode": "100644",
+      "git_blob": "fc6818004a623bbe38333a3db2957442680cef10"
+    },
+    "src/LNLib/include/UVW.h": {
+      "sha256": "feb10724655266a1887fa671ac6dbab80e62339ea5475c4f05efecba57304a7c",
+      "mode": "100644",
+      "git_blob": "ee60bb90dab0a707d59f94b335d438c6d40aff2b"
+    },
+    "src/LNLib/include/ValidationUtils.h": {
+      "sha256": "ecd0176706671fcd8054564ecb4b0edddb1654ff2400e2361c2e4d9e5571dc82",
+      "mode": "100644",
+      "git_blob": "112339b1352d66d7cb966d506ccb4e46bcf9f325"
+    },
+    "src/LNLib/include/Voronoi.h": {
+      "sha256": "ec09c0ceb097750474103d21d1a06dd4542b5b02e39094ba9687f30fac5baf86",
+      "mode": "100644",
+      "git_blob": "c26131ed571817a1d88a2510fe66961f010b30e0"
+    },
+    "src/LNLib/include/XYZ.h": {
+      "sha256": "d56747c2498d1716a861a98c90f9039c3c055aa5b41b4b693ea94ea7bc9836dc",
+      "mode": "100644",
+      "git_blob": "cd93d987781302c792b75813ff2235349a45def3"
+    },
+    "src/LNLib/include/XYZW.h": {
+      "sha256": "0a985fb25ac224b0db95bc9a67c70c7d3c2c619416c18e638fd4b0419e6fc72e",
+      "mode": "100644",
+      "git_blob": "e820572ade4b10aa88ac5381cac184b5642993ea"
+    },
+    "third_party/eigen/COPYING.BSD": {
+      "sha256": "4f877e5ae4672568ef82cfd0023e2cef4a7cf55d867ab249efc9569a7eb9e5b1",
+      "mode": "0o644"
+    },
+    "third_party/eigen/COPYING.GPL": {
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "mode": "0o644"
+    },
+    "third_party/eigen/COPYING.LGPL": {
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+      "mode": "0o644"
+    },
+    "third_party/eigen/COPYING.MINPACK": {
+      "sha256": "f5b330efdad110cdd84d585ec61220b0650461fa599e36b13e1726c9346dcfb9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/COPYING.MPL2": {
+      "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
+      "mode": "0o644"
+    },
+    "third_party/eigen/COPYING.README": {
+      "sha256": "c83230b770f17ef1386ea1fd3681271dd98aa93646bdbfb5bff3a1b7050fff9d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/CMakeLists.txt": {
+      "sha256": "e99debb6c24423664cf610d53fab092eeab1ec23076b966476ddfe73af120202",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Cholesky": {
+      "sha256": "66259207922d6c73550f340dedd1232a2c7f4bd93ae0f9c2f1e918e62bd63e26",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/CholmodSupport": {
+      "sha256": "26f0d1bd0677785394f1f4eb2cddf763423f703c0941b3e58373e955b0130327",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Core": {
+      "sha256": "5d950096685ce9eedf099aa3a5f01174fc68ec41c3f0c3011e2834cb7933fa6d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Dense": {
+      "sha256": "5325c9d4d693e504ee012c5275ad4b10b135a701cbd87c14466d2ea21ea22ee5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Eigen": {
+      "sha256": "b0473b5d7c0cd9311d4a90548162e8cf160904476871f7fb749e9624e9b3dfd1",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Eigenvalues": {
+      "sha256": "14ade6b0ae8988c163d06a5e25fa56e8dddd105d0075c8d0738bf33d67d3378c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Geometry": {
+      "sha256": "31e95666fedc8e0a421f5c0e213d0916eae85ca4b427512ee124a0d717671a49",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Householder": {
+      "sha256": "fae2c45c354729a373934f5104602458dbb38b3b6e61f58ef5b156b7babab749",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/IterativeLinearSolvers": {
+      "sha256": "84ffa38ac1ef3be005bff500b78b529c1e164fc50637836ff8648fea127b74f7",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Jacobi": {
+      "sha256": "c48a6074e2e65b3648dd8671574a74cee253d8e2b94866f5410f124a55589232",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/LU": {
+      "sha256": "8b803a890b084e936eca78faf1e361ba76697181d2eba5d6810f602273ef9595",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/MetisSupport": {
+      "sha256": "e46d51d3065962408a403480f2c9cad4e7d61fb509c1e4a695274751274969a2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/OrderingMethods": {
+      "sha256": "9a298753f1bc00c6591cf3d8faf2053ac9b0c8d362e71ba2136504ca8cbd8d9e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/PaStiXSupport": {
+      "sha256": "11485398858b54ffc195cc51d31543fc65fea79a8cd901ef95da405ce790e370",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/PardisoSupport": {
+      "sha256": "50ec5003df399fabf518620e220f71c717ff3a03a7218b8650a974dc3ad06b15",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/QR": {
+      "sha256": "4935341e2f0d80136ad52eb34f95556190b663ddd638e64aa9ffcfe98ac65c03",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/QtAlignedMalloc": {
+      "sha256": "9ba5db58fc2e366a833d0a47e658dc78ec89044ea0bc575d400d77d7e2956683",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SPQRSupport": {
+      "sha256": "4fa2d73b998c0794682d63dffbfff795bea41a7d18665840b1c357e66ff1c89d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SVD": {
+      "sha256": "80aee8aa3268d6f4aa601d60acd560624e98ed47d0b440cc19f354ce868cdef6",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/Sparse": {
+      "sha256": "fb92e4b1c0b85d3e9292d064b1b1700bf1d488d4905c64aa23b9e40feda75478",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SparseCholesky": {
+      "sha256": "7fefd6f6aa714052d1a67ef9f598d47bdfa2e21f237c820c4c0e37d013b49229",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SparseCore": {
+      "sha256": "2323c1e3179dfc6abf348161b78c1bf5ecd0caa8f452c70caca9a1cdfdd6a6ae",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SparseLU": {
+      "sha256": "cf9296fbb3c7d68329013fdc7464e1d696d1aeae9c778d9e06d370d108fad9a2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SparseQR": {
+      "sha256": "9756bad84167491b44d9990613ea2e889857eeb54ffca50d590410846f5c67d2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/StdDeque": {
+      "sha256": "c1885167a447825ab7c35573422c3efa23dec62f5b630ac322ffe658e0ee5242",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/StdList": {
+      "sha256": "03540e297ae96ed03e828d9a433bb7f5a5e93aa83c6f50a6c271c78f9283d667",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/StdVector": {
+      "sha256": "7e8b1060757a1140298ff3905df70edb59ad1083f505681df30dc9dc9963d8ab",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/SuperLUSupport": {
+      "sha256": "8aa601f3fa1e6bfc03b799666bf39ebc42d44917a5fb2aaa489beafd63901f72",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/UmfPackSupport": {
+      "sha256": "003d41fa08cde68b1c4698499fa9bf9c803cebb27ae748615851519f42dc56ac",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Cholesky/LDLT.h": {
+      "sha256": "6f4d9d3c5f1068ee8e07681a01251aec94158e129d8398fe7ea24dac827904d0",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Cholesky/LLT.h": {
+      "sha256": "f0f11cd7d0cbd5b47fc8fa0d8b7e9b77f29b490bf856923ea6a9daeb30163b2a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Cholesky/LLT_LAPACKE.h": {
+      "sha256": "1efc3720834ec96ba0df4a0622aa20c3a80ae48d90d60cfaad5e0bf9c1cfa04b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/CholmodSupport/CholmodSupport.h": {
+      "sha256": "eec5b84c2c576530670fe2607d8979811025eef44eedbca03f56bbbdc777f9ae",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Array.h": {
+      "sha256": "e1efbc037d34f8354fee2b852ae8c50add432291f5ccc2dd8746f81625a9a1ad",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/ArrayBase.h": {
+      "sha256": "d14a9dd19018f04b66e01e82bc12f3edc2f4a1d7f45fa9504936d000ed56c70e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/ArrayWrapper.h": {
+      "sha256": "37016f0f53e895d4946b68b7030d85d67913d4143a53529f4d5899fb4f8aedbe",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Assign.h": {
+      "sha256": "3dfc6a05fef83bb7743f3d45e8028cccdff4010a5d516396c6087a45529e694e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/AssignEvaluator.h": {
+      "sha256": "de41495e87ef8490e6c91914e9530ef4a9f2bf66980510b826c72e9539004347",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Assign_MKL.h": {
+      "sha256": "646a4f53c95625d14fe0f656f9dfb436f005fb129b73f3227d28ecfc6e0f5a0e",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/BandMatrix.h": {
+      "sha256": "bcad8b0d59a56e9f3d4f39ee6396e27cf4143d24fbd24c91fab7e03c7415c564",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Block.h": {
+      "sha256": "551858019e0ae5a66ef5638036f18124c18033b3cfe04ba7c4c934d15ebbc747",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/BooleanRedux.h": {
+      "sha256": "a1f6b1837c81ba9056b1c73e91723282b5fd6103a38218013411d057272b2e27",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CommaInitializer.h": {
+      "sha256": "e21f93bef2476ffc5362644cfc669b24f94da5cf44870e2c140ffdfb93e76d59",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/ConditionEstimator.h": {
+      "sha256": "b9276dfb980b45f22ede4e08eee447f5e00847400e66f267967692233e424c27",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CoreEvaluators.h": {
+      "sha256": "024f0697595c58ed6415059169bdd51fe095c9e02bc43210e5847f7e619ec73f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CoreIterators.h": {
+      "sha256": "9aa4f2f822089d478d0ae3277716c204e3035a6bd0edd50cf3942f99342c7f91",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CwiseBinaryOp.h": {
+      "sha256": "6c3a41fbda9a5c2af43a627468d4e66fdac13fc9586867a233d22e1bd764d47d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CwiseNullaryOp.h": {
+      "sha256": "70d8db4dab20d8f1e640b5c0677785c1708bdd779fcabd9814ed7f956c3885cd",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CwiseTernaryOp.h": {
+      "sha256": "97d9e03c73e1a101352d8b00ee191013b6b6acf00e90c887dd54bea4551de7be",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CwiseUnaryOp.h": {
+      "sha256": "16a8224c1758e79ca01692110137ee5cfeccdf8018020571569d1102cf0e5616",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/CwiseUnaryView.h": {
+      "sha256": "140671a011363e16bc49eca3c9ffc808f9fcf7569e45f8580d320e2023d2037c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/DenseBase.h": {
+      "sha256": "8edd2736238e5de192b69aa9310475beb923acfd11c336854c9215496434f87f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/DenseCoeffsBase.h": {
+      "sha256": "5e7f54eddcb464a1863e5bfb1b1060bbede58cdca60a720a3244d46844252b03",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/DenseStorage.h": {
+      "sha256": "0f42190688b6a803a9094344c729c9c220939274e38f0c69ecd28702965b1a8b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Diagonal.h": {
+      "sha256": "796e8e8a299f06296a82ed53f7986d18c29b695e5d4ba5daa0c5d5567b902f8d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/DiagonalMatrix.h": {
+      "sha256": "e3cdb9bedbf570b230d8f19f3cfbb58f3342e6fc4407bb0ea24397ca094fb6c0",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/DiagonalProduct.h": {
+      "sha256": "14712906425a63d11c226826ed588553756a055bb8c72a73788eadc23c3320d8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Dot.h": {
+      "sha256": "8a78da80e2bf939bcde97058170fa4e6895a60da369c489048cea10f02ee96b8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/EigenBase.h": {
+      "sha256": "413187c10593667561db6d41edb4a2ffc845119e86226a815cbacba22d408cb9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/ForceAlignedAccess.h": {
+      "sha256": "179a8ebf0fdba78414a9e01b130db5fbf78dc5d1c7fd48c5d49dcc7ccca4aaff",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Fuzzy.h": {
+      "sha256": "9363e60d792c2c3db5c90c6237afd9f7eb482e6df68ee19d5aed1f545fd3812f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/GeneralProduct.h": {
+      "sha256": "da6b11ee92812a12224cd4062a25a8417f73d2ff45d5980e40e3a5a9d572be35",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/GenericPacketMath.h": {
+      "sha256": "970f684e1ccf66d2ff332f4b470c35e4769607916f87e6e713a1b6664c9d5b2a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/GlobalFunctions.h": {
+      "sha256": "b179a2e524366c10dff75da4c5d778f37ef1e709f2803745fd3b4ab46eb2bdcd",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/IO.h": {
+      "sha256": "ee812d1bf34f6e17863dea22a01ada13f249598d9a9cce396f94fb801b6b1a3b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Inverse.h": {
+      "sha256": "88200e4b074de5e0956b1c87bdd0717c0e9a71fcd8ede3252c5bda4b9059bed4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Map.h": {
+      "sha256": "7dd3186008de94797622a894455b19d166e99eb3a6610c83f71697d6f33581fd",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/MapBase.h": {
+      "sha256": "34657dcfac1cfa0be9a5097cfa612ce0273c6897e835dbb69aff40094a441c3c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/MathFunctions.h": {
+      "sha256": "4fbbeffbf049571ac562c28ee5d7c19cca7f726add23a87bb49df1f41975f996",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/MathFunctionsImpl.h": {
+      "sha256": "d1d295d38681fdeedc369c4904dda13774e0b85ac83041348d53db05eaacc15f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Matrix.h": {
+      "sha256": "cd8d4e0711c5df7aba8fc460fae3925d71317c41a863f6c8b87953c2a2d05843",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/MatrixBase.h": {
+      "sha256": "78d1b482afe33b06e82ae4e1f730fad06b1e584173769a60555e7a5a47545470",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/NestByValue.h": {
+      "sha256": "8c8647715e83f43877fb68ae3e92a56f1bd3080b3b16113ebb9ef3f1212a2e6e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/NoAlias.h": {
+      "sha256": "dfe76e0908276d20f3693ec87c3e8919ea57a742d0aae34b907cfabee8f8eaa7",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/NumTraits.h": {
+      "sha256": "b198579d5701f52e441fa52e48ef96c7d47254ce770e68a65813d9d7986352fd",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/PermutationMatrix.h": {
+      "sha256": "d3c399cff29b81e23c912caec4287b3563f7710dc615ff8f2c736da642d36e63",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/PlainObjectBase.h": {
+      "sha256": "6436285bdf6e1457e65a874de30d589563a783135482d5b20607b114849baeb2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Product.h": {
+      "sha256": "e1c11e9f9beb513cf5c2392f7b51f3bb34dbb89afa3786d0ea456ebc8f3c5f81",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/ProductEvaluators.h": {
+      "sha256": "4e775b34547bd3f7d7c8251f969a801228a389d630d5a1fba78b341a6dd7982d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Random.h": {
+      "sha256": "38b78ba788a7fdf72cd88bfa1613e0af2ffeddc6b07703a28cf2ba481ab1a43c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Redux.h": {
+      "sha256": "10bbaae343fe3a93676da261fa9c14deec1779d2663c586e4f66522a1cd3375d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Ref.h": {
+      "sha256": "01a3bcdad0363b13fb21b86ea0ac400d5090f846b100d5b1cefd35617ef9d119",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Replicate.h": {
+      "sha256": "8d810dfbf08ee5ae0d39fbc3f71f0059b3d95aac6fdb63b64c711839509c6305",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/ReturnByValue.h": {
+      "sha256": "75a2f774ce1deb04214b5d6d67e8ec33cb82e7c44946b1a29465fbf5b9c62a78",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Reverse.h": {
+      "sha256": "72ab4399c776921547cf13af74c3b13f412af9efc8f431293e1a0fa9a7319d64",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Select.h": {
+      "sha256": "8739a2a3d23debd527816d961fda688e8dc3ec9be61da9b45f4d2cee0a048636",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/SelfAdjointView.h": {
+      "sha256": "a3302100c05c965859af6f049b2d1f6fe2bf74c27d9155b2d050812c2718e261",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/SelfCwiseBinaryOp.h": {
+      "sha256": "4d0f02140378c8fd28bb05d2f13dc50dd867bdbc2dddce223fe37b82dbf17ab5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Solve.h": {
+      "sha256": "e276cf089174311b182d070d584795d30626101436fedde2d6c743cc1dfc4324",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/SolveTriangular.h": {
+      "sha256": "896325405ecfe579d94f6f75aefd7ff6cd48e8fdbb43f2fc3c1e56bbde57c2ba",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/SolverBase.h": {
+      "sha256": "ffbb1e941695a300c65c4333df7966270fc8a1011356beeebfd4d780f28bf803",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/StableNorm.h": {
+      "sha256": "91cd41e9e9c05625d0b80edb948bf9fc254e55d2de5ef3f2d4c7d376d3de2e48",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Stride.h": {
+      "sha256": "523f6b45d8b0a0242963ad2a4d5a4fee910485bc7e7fc9ca442cca8282b3a961",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Swap.h": {
+      "sha256": "eb3eebb8b252ee2aa5f97eb97675a14c1317b95a0ce6f83abc6dc6b556df4cd5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Transpose.h": {
+      "sha256": "d58f061e9f481cd176e4990928b3a4a9caff5248f331fe767e750a6c74189fd9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Transpositions.h": {
+      "sha256": "4b0a6fac4718fe1d06cb7eaf3a619b4aadc4766b7fdc4a68d2fcbf23a404260e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/TriangularMatrix.h": {
+      "sha256": "7f7c77d7b3005a3b5648cb6df0a2bfc53c29693b48db816bb92d944dc040a412",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/VectorBlock.h": {
+      "sha256": "a45df905986d0f46db45bec6dc7bd5623926c4f85101eb15f52aa2fe3f7ebb18",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/VectorwiseOp.h": {
+      "sha256": "8ebe8922d00a6f8023ebc2515364e25d707c4c78d69f9b330b7744785d6ec976",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/Visitor.h": {
+      "sha256": "c91b32670eb935ef1927688eff704e469d69def6a736619a2b962726ad531620",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AVX/Complex.h": {
+      "sha256": "1527741115ee72f77510b0ac65a620441bc7670df80f780505a2c35424988b65",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AVX/MathFunctions.h": {
+      "sha256": "1a126cc57de6ccb9a876359020258044d9a8e9cf2c18b43f72e0ea6c2ff8d128",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AVX/PacketMath.h": {
+      "sha256": "dbaabd2c453b0a2bb4c946f5315bc4ae7504eff5520a9d25d720f506b63dd47f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AVX/TypeCasting.h": {
+      "sha256": "b5e4e2dcafb2de207a9508a04d41c202d9666027a4e30c99fcb2450a4dc76a4f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AVX512/MathFunctions.h": {
+      "sha256": "c7e4b67ac1665bffe398872667924c28b1a3715fd8ba5d9ed78097237eb33c91",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AVX512/PacketMath.h": {
+      "sha256": "abb6db80ef07b813fe72b28964b89bddca3a94d29c1c0df9432b62e6c19b177c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AltiVec/Complex.h": {
+      "sha256": "679d216865af89c9980fe4b1b326da499233666661b13610f75a1d724fdf1346",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AltiVec/MathFunctions.h": {
+      "sha256": "70b9e13adeed42efffab787c84c5b2ff891508ddde27502c9635903d35c50ac1",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/AltiVec/PacketMath.h": {
+      "sha256": "9aa99d0655625e36a8837a669192103c06c5edebebe61f0fe1a6a4152477c6b6",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/CUDA/Complex.h": {
+      "sha256": "62a26a8971e6ca07d4c1defd8b71df49ea6e6adb703ca635474d9bdc87e9a1ba",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/CUDA/Half.h": {
+      "sha256": "f020ba03ee64a17af11b20b61ebe3d6d32c35b544a883e00ef40415d19bfc491",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/CUDA/MathFunctions.h": {
+      "sha256": "3a917ab5166c4886cedad6ec30675d8cd6f8ce4be11b4b82d97d7430200eb08b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/CUDA/PacketMath.h": {
+      "sha256": "0574360793e54a8b18226744cd59ec878db33df022d490e8797ab3ee39ba2614",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/CUDA/PacketMathHalf.h": {
+      "sha256": "8928874a8f8a25c255fad928dd089893e35f1e2968bf2868655b004de468c687",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/CUDA/TypeCasting.h": {
+      "sha256": "c9c3651a2b3f6058d27f1b59e388c1899d4ccc26cb83b413d6e790e56830dd68",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/Default/ConjHelper.h": {
+      "sha256": "5f9fa828d2774bd7871b7bd275a81254234352dd57076fe7e4754aac5fa238a2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/Default/Settings.h": {
+      "sha256": "6240582241b284fbcd6a2494ede1e4f0a23f5d81f8234e1d990821ae7ea07f5c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/NEON/Complex.h": {
+      "sha256": "7bcb425a1e8c794b96f4798d6734e6e979e83dbcf1ec57d59a8f9ba4175bb98c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/NEON/MathFunctions.h": {
+      "sha256": "3c5f558811444a46d9f8114071703fda5397908ab78571e6c44e1c9e64611395",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/NEON/PacketMath.h": {
+      "sha256": "08174e9eb24823369a341444c3a5465880bff77211c92ab570d24f2e4b2988bc",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/SSE/Complex.h": {
+      "sha256": "a3e376cf6dd4bfe6b8b5f64056ed0be86e7eb88a40dafd3e1b49f8cd3b7162a8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/SSE/MathFunctions.h": {
+      "sha256": "3263a15ddfba774d83e80a26846ece590b488bbd53cb1b921713d39030e46e1d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/SSE/PacketMath.h": {
+      "sha256": "51cd305f31836f0b696aab084615d8a7f166eb4aea7015358a55592aebae685d",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/SSE/TypeCasting.h": {
+      "sha256": "c390a8934d0d5fe442f528c98728605b5bf1a33bdb9720f946f320c96d833b7f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/ZVector/Complex.h": {
+      "sha256": "48493631ed1795a3fc0a7db33eaf3ebdf7a6d6489d117112033886678488f2a5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/ZVector/MathFunctions.h": {
+      "sha256": "de13ac7694445277db432fc47f7f75ccc354d7025d1e3e32310599a48c06c125",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/arch/ZVector/PacketMath.h": {
+      "sha256": "e93caca0f420a27f25048356dbdd2232fe7487a7b27f4974cd593d9680a76e54",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/functors/AssignmentFunctors.h": {
+      "sha256": "7ecfac4fd9f13e25c724f56d6490432383de507239545bcb2b8d032e43e469ab",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/functors/BinaryFunctors.h": {
+      "sha256": "8a76d2f4c9185e17afa519edc415d86c758450d0ec6325d462929422372a08c3",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/functors/NullaryFunctors.h": {
+      "sha256": "a8d2d49206e21315024082c0de23d87bce0b2bdd4396dc0867fdb44511703661",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/functors/StlFunctors.h": {
+      "sha256": "00cb273878f48e6dddcc0404915801440adaec2bf96dedabeb17608e500773f2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/functors/TernaryFunctors.h": {
+      "sha256": "0fc3c1aa2a5ad2f1ca9cdbcf37a633712cc0452b107ed63f6a4cf10d67111168",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/functors/UnaryFunctors.h": {
+      "sha256": "1886c2416e6e7ee3899b5fb935f492e0c1a3bda41972da799f5b1adab4ff6f97",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralBlockPanelKernel.h": {
+      "sha256": "a006718741e54ef0ee1dfd22bf1385d0567a08ac6fd2e409f07b99a16ba65126",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralMatrixMatrix.h": {
+      "sha256": "8f15c398e956342a936fdabcb944ae5ff48bbb3b3c3cbbaf458428a2d862367e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralMatrixMatrixTriangular.h": {
+      "sha256": "a194766865c174930ea7d9c51ede95dbac50468b88154c2372a7984c2c9463b8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralMatrixMatrixTriangular_BLAS.h": {
+      "sha256": "ef0698cc4538cd86b456f4d084a7b57e941034ec8b7ab7ba605ee0de17127d55",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralMatrixMatrix_BLAS.h": {
+      "sha256": "870fe97c0af77885619676117ebd097de9672f6606f659f3e03f2c1208dd4aff",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralMatrixVector.h": {
+      "sha256": "1a1915154d1360794f53905d5570cac92d28482652dfa9f7d4d601a4a446c9b5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/GeneralMatrixVector_BLAS.h": {
+      "sha256": "999b5819ab540b4f9bba07cb57763cd433c9cbc1fea66e05da12aa41064e7693",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/Parallelizer.h": {
+      "sha256": "72c99ab885dbea5b007075214ce557851d11a4547006ffbab3e4cf8e71f55a02",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/SelfadjointMatrixMatrix.h": {
+      "sha256": "5d18d20122bba4cd975f4b5f2c27cd82029189ad152430bef9acca3117f986eb",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/SelfadjointMatrixMatrix_BLAS.h": {
+      "sha256": "3cfa2e82294af8c2ecf23c206e42fcd4a79cf68b2cdd77c40e1b4afd24d535a9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/SelfadjointMatrixVector.h": {
+      "sha256": "6d5f0fd4903f5574fc92b72bc9d9a873da897f74b9337fca187d9c2aa7cee2d4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/SelfadjointMatrixVector_BLAS.h": {
+      "sha256": "10aad74414d67ae92cd458c5267f84c441dd2c3de826cd4f9333aa042cc76b1c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/SelfadjointProduct.h": {
+      "sha256": "500494461d25501608e3d2ebd1a423e38f8f03d4505e38881fb1abda1b3ea6ca",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/SelfadjointRank2Update.h": {
+      "sha256": "11a9e9d9734dd857e681ddf431a3b0ed46acccebf59c0d50275fa8e4515f848a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularMatrixMatrix.h": {
+      "sha256": "9b024274c211db66c801d663767460693900d4dc5cd55284261f546817e96ce8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularMatrixMatrix_BLAS.h": {
+      "sha256": "71cc375e88c55fa4c8ee0660f4e6a396e84c1a018521f1c4ca24360eb3c59eff",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularMatrixVector.h": {
+      "sha256": "a45c7b2e4fa32c52372f9d635c6599a1844f9053edd9108774e64972b0bdc8fe",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularMatrixVector_BLAS.h": {
+      "sha256": "4ac4ff35409d8875e57af5cec80ae7c537b64034e2720d401fbeba4ec7268749",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularSolverMatrix.h": {
+      "sha256": "9068a913179b959d18d3051aac7f2b9e3abc31102613ba6c49f690e434ebb5d3",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularSolverMatrix_BLAS.h": {
+      "sha256": "631dd73267f358a8d1204a22a3f9eabf51ccac31ede53129c1f6cb8257b9a0a2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/products/TriangularSolverVector.h": {
+      "sha256": "81f9d0797f6a59034afc603b0ff8f738b7cc2d4a8b85b690aad1d7c2b67d7163",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/BlasUtil.h": {
+      "sha256": "1c4fca03bd6a8980c309edb0b0c2b752b4e83856020df89a1e25b4ba232ab4f2",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/util/Constants.h": {
+      "sha256": "5e0aa3575bea7a01dfe509b5641048876d0e94e000fe8e9fe3763a93c95b5b86",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/DisableStupidWarnings.h": {
+      "sha256": "d5e071a7d86376572bf27aa2084b4aa6b654fb61f643e84149988d0e0643425e",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/util/ForwardDeclarations.h": {
+      "sha256": "e8c475af2387728eb1884358f461af9d9e32e775ad35973060526213d78c5201",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/MKL_support.h": {
+      "sha256": "a74842bd1b0ea282b9c352c614075f588bb64539559d8b4741da7611364f01e8",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/util/Macros.h": {
+      "sha256": "d2f503cce73828374700610d46395d56723d27ceaa5c465058304dfbd230033c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/Memory.h": {
+      "sha256": "2da6d67f7fa2854b70fd956c98559988ab256018e0a9032c89a69812d16a7f61",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/Meta.h": {
+      "sha256": "cb24a406053ccf7c1c89fcd1439afd6b434d178d32ad4fcf610c22db1c727b4f",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Core/util/NonMPL2.h": {
+      "sha256": "45e90a0556a27623a911bf6c9bc81cb3dfcbc9ec82dce28e4af7f8255ea5dad7",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/ReenableStupidWarnings.h": {
+      "sha256": "61a2d08ef1ed3062ebc532b5bb2c90d44f6a93e10e72ccc3fb39b287ddd4a0ad",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/StaticAssert.h": {
+      "sha256": "aa1793093a984017de28ce33cdd2600a9c69cfe96dd5ecc4c926fc6f8208c127",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Core/util/XprHelper.h": {
+      "sha256": "2cfef1e7a12b66102a57f5a7e9796a43590306326cfb0d20c7bd764456a24260",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/ComplexEigenSolver.h": {
+      "sha256": "ab27f7951821bfa8e574915f98917c7446716f4bb681a5fe4976809be48aa1a4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/ComplexSchur.h": {
+      "sha256": "565f0e3ae9a7d5a458333b0692887978887de4b9a385d91d7a803415f3649e4a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/ComplexSchur_LAPACKE.h": {
+      "sha256": "fd6553437ebd9249d16e31ae2aeed73c983cafa3cab835cc9829343e5ccefa4f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/EigenSolver.h": {
+      "sha256": "1190506d0c3b5af4a22828b8401d1faa505c4378f17eb8efd69d03431ae37b02",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/GeneralizedEigenSolver.h": {
+      "sha256": "82385783f608b22cec0699df6e58e3b8e9fbce6b40933d257afbd1651cd74f87",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/GeneralizedSelfAdjointEigenSolver.h": {
+      "sha256": "b8e85a634eeb4ffb6a6df4246f323f918057e9b8beb83eb08476da7c3c070887",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/HessenbergDecomposition.h": {
+      "sha256": "6403bb9ed1fa48ad93f3881a05a1f0d8120fef7daf700aabd4df1bc640de001c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/MatrixBaseEigenvalues.h": {
+      "sha256": "4a471a330919cd1f3ad97252f4630a61b84b5d9b625d9546623fd4800e92a5fe",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/RealQZ.h": {
+      "sha256": "0b0db631cf35d0ad782125f1dc35b01dcce0a45d8f9385e6d658d0bd10724e34",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/RealSchur.h": {
+      "sha256": "0951f5597a254acedcab28d64107ebe61b03d371acbcc3c1c3d5aeb001fb3597",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/RealSchur_LAPACKE.h": {
+      "sha256": "30aafb5459f8297d6851aa6a8b651275565d9faa451332d04af50713c043562b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/SelfAdjointEigenSolver.h": {
+      "sha256": "149879be48d74888c3004815f29a17666c273d6ff30b59bab4f6f766981aede8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/SelfAdjointEigenSolver_LAPACKE.h": {
+      "sha256": "595ae077aa38318a867fa6543fea9fb5e6a545532f27d676958cc1fae6ef6fa4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Eigenvalues/Tridiagonalization.h": {
+      "sha256": "f566763c0ff0a6e7876ae8d8bc3392f6a1b91436d232df98f696116117d0dd22",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/AlignedBox.h": {
+      "sha256": "dd8caf19d6c9d240af6ecc7b212d29fa1d5412aaf00f5dbdce1420ade69c2453",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/AngleAxis.h": {
+      "sha256": "c786445fcc4c7172090f9ec1162dc30aa61d652612f65828c0a6745513b2eef9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/EulerAngles.h": {
+      "sha256": "234613b4bcffc4c4c688301bd7f9d3c6c5c1a3451ac976774ab9b339c4c6da38",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Homogeneous.h": {
+      "sha256": "428080d1bc8b9e6c4f1620d3a2c2c95737890b266797769e94817e36205743ee",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Hyperplane.h": {
+      "sha256": "b063c91a3b7c66683e8a97e448f67665cd11f43dc5ac07c58213d9c22f36354e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/OrthoMethods.h": {
+      "sha256": "3b8ee14cb98d51d73c7c74bd75775f10dc3ef0fc433838b84bc4973909d25abe",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/ParametrizedLine.h": {
+      "sha256": "076c4b0727d42cc3d2a7e94ca9435f7b484034b163a2f38abfae6c7fa2f9eb4d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Quaternion.h": {
+      "sha256": "f16e7090de437e95d25b45933554a12de905b57933734942000ad8e5ec726e3f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Rotation2D.h": {
+      "sha256": "398ba775ef546cd7b0d9155fedb2b4bb1156ecb7ac8a1330bab1a48e80fb06a9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/RotationBase.h": {
+      "sha256": "122a302f2f3593ac3951e4408c7d1404360a031baa0380617ba1dd6dd64518cc",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Scaling.h": {
+      "sha256": "ee19cdcf8218258d89c4851b54ebbb4d6845101709b506adc7b46462fabcb6a4",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Transform.h": {
+      "sha256": "5f927add3fa3e515a2c70094b84ddb7da7215d64506e5edb6a9aba52173d48a0",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Translation.h": {
+      "sha256": "4f83f8085d651c80297e90004cdd5da90637801aeefc9141bf214262aab40cd8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/Umeyama.h": {
+      "sha256": "666d793d75de858bf496e698d6e23d1363e4c9707c370a9279f504c3a500a9ad",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Geometry/arch/Geometry_SSE.h": {
+      "sha256": "a8e0ec3585a1eddaf2186d2b32446cd52a0a5e8000ddf594b77acd7f3b3e5135",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Householder/BlockHouseholder.h": {
+      "sha256": "bd3bea6ad32b93b134e642ba7288765d06e015eef58a57519279bdc80fe8b129",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Householder/Householder.h": {
+      "sha256": "63fe489f1eabd51399649cc0102803dd616689ef831a2224afe53d48c013d5e0",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Householder/HouseholderSequence.h": {
+      "sha256": "c38234f5ae691e94bf11bc8f42b173a954b2b140c47e5af1d8cdcbc3551e16fe",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/BasicPreconditioners.h": {
+      "sha256": "f268983e8db798b7db7e1f71b0d1e7dbc039fc5cf7074091cae7a40c1a9df122",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/BiCGSTAB.h": {
+      "sha256": "ab25f5908cfc026a0a33430b1aa9ac6690dc6522a0cd5b2b74347fce4fb482f9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/ConjugateGradient.h": {
+      "sha256": "8110d53ec41b73002283d487b9fc750b8fd95b9641920dca92ad8b244f066ebc",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/IncompleteCholesky.h": {
+      "sha256": "cb0c7eebedb123d2311773d7a7d19c1e6c13921bb8fd17208927564bb317863b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/IncompleteLUT.h": {
+      "sha256": "b42a7d3ee7c4cd5632e38b7aaba303850ccb0e09887d224219c8cf13e9479103",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/IterativeSolverBase.h": {
+      "sha256": "46042d33641dd1b412b247f8d6c3399f1ced7a7e69460dbf52802a76e0c4f68d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/LeastSquareConjugateGradient.h": {
+      "sha256": "cd5e2b5b88bcbc683d1e76a66c8fb3f039f40b0bb977964eeb4304eb5798136d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/IterativeLinearSolvers/SolveWithGuess.h": {
+      "sha256": "ffacc3f7e57834f57fb79095c8651fb1124937b842b7f4ef92cbc3c6afbbfaee",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/Jacobi/Jacobi.h": {
+      "sha256": "afd01aa5bfb86c1fe18e7fa0c041e20508ceff41b97998f0a8620d2f170f99e4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/LU/Determinant.h": {
+      "sha256": "c9add6beffdfda8d5547a571d713a63f790d19c78ab2b17aa3d5c7ffe159f116",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/LU/FullPivLU.h": {
+      "sha256": "341a76ad63072dceef85132886647ad08b0e1da024d18ce1b51f3bba4c052fdc",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/LU/InverseImpl.h": {
+      "sha256": "96425e9c997b0413842bd9e87f91987120195e096ab281801beabba59b465f42",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/LU/PartialPivLU.h": {
+      "sha256": "47975ed4891b4a9bca254954de9cfe34cad7e538442ade20a18778402175f89c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/LU/PartialPivLU_LAPACKE.h": {
+      "sha256": "e34e5e8934c5c1a591ca3eafd1a7045898c404a95b93eeb374466a1278c44625",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/LU/arch/Inverse_SSE.h": {
+      "sha256": "b8d17910200c4cf148ee8cc7120a09d29749542bf6603d44c8a9df5d97183ca4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/MetisSupport/MetisSupport.h": {
+      "sha256": "c7b5f60a7baf958a7a0b46bf484518b9e49d56bc98ef8965c5433bd7c64f264f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/OrderingMethods/Amd.h": {
+      "sha256": "9fcc6db26fd1bec9cbaea4a54975b96e1f64c0d522b8e7e6ebe0de06273895a4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/OrderingMethods/Eigen_Colamd.h": {
+      "sha256": "a827df806c79601253083ba75af7799d1d1616c0c5fb2d779f5c1d02ce20b249",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/OrderingMethods/Ordering.h": {
+      "sha256": "f018c3904308f8e3b1e1df81640977452eadd455df0c66f82fb95669337ad36a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/PaStiXSupport/PaStiXSupport.h": {
+      "sha256": "31a279855101253816109d062ce36302161a3658b148a8760c3beb1853bb532b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/PardisoSupport/PardisoSupport.h": {
+      "sha256": "4de10de3f84b900cb03cf074e6f9df35b67047125c5708123b13aaa954bb97b4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/QR/ColPivHouseholderQR.h": {
+      "sha256": "c9650e0e0dbe05b39a8aabd846b34ec8a4da50748d8507c72ae29cf27fc4f3ad",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/QR/ColPivHouseholderQR_LAPACKE.h": {
+      "sha256": "3e0e20fee012834d4652f2aff391d9d7499c2c86f64ec0407bc4f150853331bb",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/QR/CompleteOrthogonalDecomposition.h": {
+      "sha256": "984a6c554bfb0c972580b898dbc77740be02889f3f342db84cc758c1d166742c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/QR/FullPivHouseholderQR.h": {
+      "sha256": "d154ffdc91ec26f24504befa92ad91d2c04721ec1fd1134474eda4bf64471200",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/QR/HouseholderQR.h": {
+      "sha256": "45bf537d65f7cd80e5e269672f09fc37bca01b5392d34282693bf5b85df99f95",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/QR/HouseholderQR_LAPACKE.h": {
+      "sha256": "8a8486145c909c2108aaf1bbd5b448f91c0bb2553070da5e4e1b38661b76aa87",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SPQRSupport/SuiteSparseQRSupport.h": {
+      "sha256": "6575db71635a444af0ace4022047c011aa37336a466ddddde5a6f8751644dfd8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SVD/BDCSVD.h": {
+      "sha256": "5a30f2efb2816d50efd1cbdd6e551994417c8d2682c09c0a824b465ed5e8f2a5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SVD/JacobiSVD.h": {
+      "sha256": "66e64f55376e80dde525d9d62235fd6e6c93a674b8492e6a036e22c23b015200",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SVD/JacobiSVD_LAPACKE.h": {
+      "sha256": "91aeb6dcd05f0eb685d7171ae98f953599493d651c3eec3b0c8df90e59d22e9a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SVD/SVDBase.h": {
+      "sha256": "48520b8a69c3c3fa9c8f41d1868ccd00a95420955431bd02d3ae246dc9363c59",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SVD/UpperBidiagonalization.h": {
+      "sha256": "ffd6e21c6b478cfdb4975342d44c6257ba170615d1df7ce5aafc3931cc60b5d4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCholesky/SimplicialCholesky.h": {
+      "sha256": "ab3e9c816771eb9816d7bb1271b69136d2509bffc57090b6d8aba4b41c757a41",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCholesky/SimplicialCholesky_impl.h": {
+      "sha256": "68e2cdb5d15bd6c022e74cfd751a11ac3f8bed30392782a9d9c691a06d6338e4",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/AmbiVector.h": {
+      "sha256": "678d46b1d27e49f8cf29deb43d7bb289350a51ca3bbd3fad07f15739e0fa951a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/CompressedStorage.h": {
+      "sha256": "cbf3caedd63a5558e0c330326f20590a2b2ab54acbc74c4230289636bd03c1f6",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/ConservativeSparseSparseProduct.h": {
+      "sha256": "e504e730de3fd26b60a1650c2300e59df86e6f5fe6f2ff0a0c2e62f8a601d712",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/MappedSparseMatrix.h": {
+      "sha256": "2ea4abaa6fc437a2974174c5204c6bdb0e40cc6b59dfd33bd020d9c2dd660eda",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseAssign.h": {
+      "sha256": "8a5d1ef153e73b37d4ddac7ff0ba9e4966b2729a70251f868f2b124f0c2cc5b5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseBlock.h": {
+      "sha256": "3d5d687c1f1419fb81eca03f8ad1e923a64d0fc3ba9e69017855b459b8396768",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseColEtree.h": {
+      "sha256": "871be15fce8853900437445ee4913bba0c9c3d6af08e6313f3deb9cb916e9344",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseCompressedBase.h": {
+      "sha256": "5bb4219f4060fb2b280628f145a9c9593816cd2f31ce690e3bb1d4538e69b1e2",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseCwiseBinaryOp.h": {
+      "sha256": "309f0a754cc0e156fdab3ed9177e9a0e65e39e968649862ffed4a9db4afdc831",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseCwiseUnaryOp.h": {
+      "sha256": "b23b409ac2628f6d244d620ca539447e71e2554b691059b9ebd8ce74276818c5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseDenseProduct.h": {
+      "sha256": "436a9b58e2ae27a795c13ccbd01ce5644922a5df884cc3c3de4e972a585bd806",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseDiagonalProduct.h": {
+      "sha256": "aa5d600eb466743c6ead15ca60ab77e79f15579eabc24920dfdab5ae6363519f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseDot.h": {
+      "sha256": "a8d305b52c1dc6e66b2402dfb6ec1cd54967f1d5cf1e7ecef81e876277d78767",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseFuzzy.h": {
+      "sha256": "f87bcc4641b02eea1e015454cda4f124e65eacad4b2a817bcc88549edce91370",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseMap.h": {
+      "sha256": "2c43629c60e0ccffb47d22f17bd202d909931a9bf0ebe5a6619a2ecbdf061fa0",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseMatrix.h": {
+      "sha256": "700f83c4a6e674989e335fb68815a9224d3f0bcc162ea9395effb10a35ccb6ea",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseMatrixBase.h": {
+      "sha256": "4a7da3d2c56a2e998da7420aa534cd42ba9c483abb4eed144265c2b3a1608439",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparsePermutation.h": {
+      "sha256": "30e0a30a0418db9a58b4f31086f1af91193c9285ae18ef1d93441132a4ad88cf",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseProduct.h": {
+      "sha256": "7d4297bb1e5110b605413bea62a6bcd7da79e85c2c861b49f4e9407cf427b543",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseRedux.h": {
+      "sha256": "f3e68290cad5fbbba0ecf8284fa238a52072108e3368c0632f8c90816b41dc91",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseRef.h": {
+      "sha256": "b79265e9213e1ac5300214ebe681b53b6b865fbac807ee85bee53eb18b17b642",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseSelfAdjointView.h": {
+      "sha256": "a5682db9db68d90127941d4f2dcf2ee5acdd8ca14c096be611432b13e3091fe7",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseSolverBase.h": {
+      "sha256": "fc525e230bdb66f4ba4d79d02386ea716d3b01eba5b734533a171f043a20a479",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseSparseProductWithPruning.h": {
+      "sha256": "a09f7932bf0fa3106555cbb2224f37c409c0f41f014c5f122c516bf092f331c8",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseTranspose.h": {
+      "sha256": "bf3180918315deb7dc433fa0d4f388d7a4209fa430783cc9d80373ab88bfd72e",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseTriangularView.h": {
+      "sha256": "c0bce29b40b11481ed84f3e77fe0444e7788c43a6be68b3b58c9a6db6221a6cf",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseUtil.h": {
+      "sha256": "99f91ef4c2b58e9179a5844f8736cb5320b190bcea14c1b5f038ba0bc4e61787",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseVector.h": {
+      "sha256": "8fde1bd0ab875abe8cddc4008289baa7237daa2fd8d9629aec1b4fe171dd7d27",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/SparseView.h": {
+      "sha256": "57850b96570203482c5cc422c1ce2a8dd72352c39c8a728f93dc8a719a29ab1c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseCore/TriangularSolver.h": {
+      "sha256": "e9caf168bfdea718fa900283448395de5791b237683df10caf0b453cf4ed314f",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU.h": {
+      "sha256": "157c2898588afe6efdfaabe7fbc63e5c7fb0957d6c1a6654edca0a8443d681a1",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLUImpl.h": {
+      "sha256": "c6a155332ca1b7894e00f3f7ea5cfe38b4ca0cb2d5e3f69b025c40137e7c0e40",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_Memory.h": {
+      "sha256": "8cbed4d0275e0739d01b1a529fc97249f9ef5e671754f0e518fd63d690691801",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_Structs.h": {
+      "sha256": "8a204a6a9409586135ff5218420dc6e1389fcdae1cfe072750fd4478a8394614",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_SupernodalMatrix.h": {
+      "sha256": "46f52a967d3e84913fa21b642c220f2338878720a4388accd7a5d185a96d7fd0",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_Utils.h": {
+      "sha256": "55f6cb16d53c850699977b228d2b3428a2753a4e1e1f4919c1f4a5003d427210",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_column_bmod.h": {
+      "sha256": "504173ccf9d9a0cbe9feaee1c9a34968c41a8af9ee28681f53c38c70b918f44a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_column_dfs.h": {
+      "sha256": "28d7a5c335b6ef2cc18539b66a0028448d46fe155e9a1dd33faf12b7b7e70feb",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_copy_to_ucol.h": {
+      "sha256": "c6e7a3007e53f7bde5668c57adf4df64cae9e5dfc6596384533792b2a45a1639",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_gemm_kernel.h": {
+      "sha256": "d4025eab3175b5dede317d96577636ac1732ffa807a928c411c1848a22eb3025",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_heap_relax_snode.h": {
+      "sha256": "e87e76a8d5b5f4e4c081a1800ac7154b7d2bf5966392d1d8cd2e1a108c453cb9",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_kernel_bmod.h": {
+      "sha256": "c2c4d8f589e9134eb8669fada7bf6f86c9f7d65795e2b9079955648d06955825",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_panel_bmod.h": {
+      "sha256": "a256f5e7b2f064208249719e075bf521610b90016902de6d9ea0d8ec43b7031b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_panel_dfs.h": {
+      "sha256": "1c7c706c25786c3783570a3a3e5efb8e14e70950229c2435d26da8ce2d3fc43c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_pivotL.h": {
+      "sha256": "5ad1a6b28183f605213c8987d9fe15dd17d57876dbc958210ec3ed0213306c5b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_pruneL.h": {
+      "sha256": "c5b9134a43ba6361061875b2f331c355b1203942639bf6d02db1d5ece3a159bc",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseLU/SparseLU_relax_snode.h": {
+      "sha256": "c665a42771eb09e631fe8d9bed5d4db53c28b2482df381739a0e4e1cee1924d6",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SparseQR/SparseQR.h": {
+      "sha256": "5bef6a2a2103e4cf47bc44533ca541881087ae54aedcf739bba31063321bf458",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/StlSupport/StdDeque.h": {
+      "sha256": "88ce4277e52348d36a611fa3c472d6d277604f605c65c2ce2d8a9b74279c671d",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/StlSupport/StdList.h": {
+      "sha256": "b93cad65e0d808a0326c764641cff52ab9000e1691bf4894c2fbb39e70c5462c",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/StlSupport/StdVector.h": {
+      "sha256": "78dd7645cbc017e692b1a1ba2edb0e1a19e9a474433af9e0b8ff184f082c2ce5",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/StlSupport/details.h": {
+      "sha256": "3785c06753150648f95aaa9fd29babcf0f01376a0132a91e9cfc820bb6541781",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/SuperLUSupport/SuperLUSupport.h": {
+      "sha256": "9cdf158bf30449c02c2fca1cb1e86890c29434f08b00694c54cbba9d0bdadabe",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/UmfPackSupport/UmfPackSupport.h": {
+      "sha256": "cf9e3e9c2819c51ee2470413d1ea22d45066e6a13f06330c017047e2755232b6",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/misc/Image.h": {
+      "sha256": "f8f9fb664c1462056175f956d9377bedd150e8c45fb89a39ef4463b63686c4a1",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/misc/Kernel.h": {
+      "sha256": "2088910ed3d2fd24df3d2f7cd3164bc8457c782a8e0058b7f4adf228a1d3eeba",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/misc/RealSvd2x2.h": {
+      "sha256": "5fe0795f45cd92a09b48c02259ef743bacbbe86f890cb0c0725c0c03fb56886a",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/misc/blas.h": {
+      "sha256": "74e5a8752672edadd93637f6dc7feb8a50427ea94f9ac5d1ed56dc2dae0fad67",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/misc/lapack.h": {
+      "sha256": "ffdfe0aa46cb3221202a9f2582e39ecf6d5ad66626cdfd70f409859521d68346",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/misc/lapacke.h": {
+      "sha256": "7300eca7804860fc8679f26f68001bfb2803fe519c3c1cd2f1e37787be965415",
+      "mode": "0o755"
+    },
+    "third_party/eigen/Eigen/src/misc/lapacke_mangling.h": {
+      "sha256": "7d71fdee53a1e0cd01568aba2f152f2e1e4fbb849e84d740e3b031e819fbfa22",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/ArrayCwiseBinaryOps.h": {
+      "sha256": "3057960f15226fc9e3b9ac3c394474452181a89af099ad2d5a81df9ce9dbaf92",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/ArrayCwiseUnaryOps.h": {
+      "sha256": "30378a76dc44703d281b0605b6c4a2774e8a8a1cf37fec732a571d68c395cd59",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/BlockMethods.h": {
+      "sha256": "d4c7b64f4e449b3f2d0e7d9883765b5dcac020fbcaeb2ac599176d18db02550b",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/CommonCwiseBinaryOps.h": {
+      "sha256": "1f8a9bec47fcd5f7f529d5956e15da2d0d32511879bdf613d39fb22fbc9b4498",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/CommonCwiseUnaryOps.h": {
+      "sha256": "0d8e10f6c1d9da6f5d747b9e91e25745685b1d3e37a2e26f3a16a3a94c5b4f27",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/MatrixCwiseBinaryOps.h": {
+      "sha256": "02980a53165715f789a6c41c6f32046a8c38a88544d498ec38645bbfd7b32579",
+      "mode": "0o644"
+    },
+    "third_party/eigen/Eigen/src/plugins/MatrixCwiseUnaryOps.h": {
+      "sha256": "3d13235e4019216126592b42596b515fceed6bbaf1492f83559f5d84e49c5167",
+      "mode": "0o644"
+    }
+  },
+  "excluded_upstream": [
+    ".gitignore",
+    ".gitmodules",
+    "assets/LNLib.png",
+    "assets/aicurve.jpg",
+    "assets/aisurface.png",
+    "assets/curve.png",
+    "assets/surface.png",
+    "assets/volume.png",
+    "build.bat",
+    "build.sh",
+    "dotnet/CAPI/CMakeLists.txt",
+    "dotnet/CAPI/include/BezierCurve_CAPI.h",
+    "dotnet/CAPI/include/BezierSurface_CAPI.h",
+    "dotnet/CAPI/include/Interpolation_CAPI.h",
+    "dotnet/CAPI/include/Intersection_CAPI.h",
+    "dotnet/CAPI/include/KnotVectorUtils_CAPI.h",
+    "dotnet/CAPI/include/LNEnums_CAPI.h",
+    "dotnet/CAPI/include/LNObject_CAPI.h",
+    "dotnet/CAPI/include/Matrix4d_CAPI.h",
+    "dotnet/CAPI/include/NurbsCurve_CAPI.h",
+    "dotnet/CAPI/include/NurbsSurface_CAPI.h",
+    "dotnet/CAPI/include/Polynomials_CAPI.h",
+    "dotnet/CAPI/include/Projection_CAPI.h",
+    "dotnet/CAPI/include/UV_CAPI.h",
+    "dotnet/CAPI/include/ValidationUtils_CAPI.h",
+    "dotnet/CAPI/include/XYZW_CAPI.h",
+    "dotnet/CAPI/include/XYZ_CAPI.h",
+    "dotnet/CAPI/src/BezierCurve_CAPI.cpp",
+    "dotnet/CAPI/src/BezierSurface_CAPI.cpp",
+    "dotnet/CAPI/src/Interpolation_CAPI.cpp",
+    "dotnet/CAPI/src/Intersection_CAPI.cpp",
+    "dotnet/CAPI/src/KnotVectorUtils_CAPI.cpp",
+    "dotnet/CAPI/src/Matrix4d_CAPI.cpp",
+    "dotnet/CAPI/src/NurbsCurve_CAPI.cpp",
+    "dotnet/CAPI/src/NurbsSurface_CAPI.cpp",
+    "dotnet/CAPI/src/Polynomials_CAPI.cpp",
+    "dotnet/CAPI/src/Projection_CAPI.cpp",
+    "dotnet/CAPI/src/UV_CAPI.cpp",
+    "dotnet/CAPI/src/ValidationUtils_CAPI.cpp",
+    "dotnet/CAPI/src/XYZW_CAPI.cpp",
+    "dotnet/CAPI/src/XYZ_CAPI.cpp",
+    "dotnet/DotNetTest/CMakeLists.txt",
+    "dotnet/DotNetTest/Test.cs",
+    "dotnet/PInvoke/CMakeLists.txt",
+    "dotnet/PInvoke/src/BezierCurve.cs",
+    "dotnet/PInvoke/src/BezierSurface.cs",
+    "dotnet/PInvoke/src/Interpolation.cs",
+    "dotnet/PInvoke/src/Intersection.cs",
+    "dotnet/PInvoke/src/KnotVectorUtils.cs",
+    "dotnet/PInvoke/src/LNEnums.cs",
+    "dotnet/PInvoke/src/LNLibDefinitions.cs",
+    "dotnet/PInvoke/src/LNObject.cs",
+    "dotnet/PInvoke/src/Matrix4d.cs",
+    "dotnet/PInvoke/src/NurbsCurve.cs",
+    "dotnet/PInvoke/src/NurbsSurface.cs",
+    "dotnet/PInvoke/src/Polynomials.cs",
+    "dotnet/PInvoke/src/Projection.cs",
+    "dotnet/PInvoke/src/UV.cs",
+    "dotnet/PInvoke/src/ValidationUtils.cs",
+    "dotnet/PInvoke/src/XYZ.cs",
+    "dotnet/PInvoke/src/XYZW.cs",
+    "emscripten/CMakeLists.txt",
+    "emscripten/README.md",
+    "emscripten/build_wasm.ps1",
+    "python/CMakeLists.txt",
+    "python/pybind11",
+    "python/src/Construct/BezierCurve.cpp",
+    "python/src/Construct/BezierSurface.cpp",
+    "python/src/Construct/Intersection.cpp",
+    "python/src/Construct/KnotVectorUtils.cpp",
+    "python/src/Construct/LNEnums.cpp",
+    "python/src/Construct/LNObject.cpp",
+    "python/src/Construct/Matrix4d.cpp",
+    "python/src/Construct/NurbsCurve.cpp",
+    "python/src/Construct/NurbsSurface.cpp",
+    "python/src/Construct/Polynomials.cpp",
+    "python/src/Construct/Projection.cpp",
+    "python/src/Construct/UV.cpp",
+    "python/src/Construct/ValidationUtils.cpp",
+    "python/src/Construct/XYZ.cpp",
+    "python/src/Construct/XYZW.cpp",
+    "python/src/PyLNLib.cpp",
+    "python/src/PyLNLib.h",
+    "tests/CMakeLists.txt",
+    "tests/T_Additional.cpp",
+    "tests/T_AdvancedGeometric.cpp",
+    "tests/T_AdvancedSurface.cpp",
+    "tests/T_BezierCurve.cpp",
+    "tests/T_BezierSurface.cpp",
+    "tests/T_BsplineCurve.cpp",
+    "tests/T_BsplineSurface.cpp",
+    "tests/T_Circles.cpp",
+    "tests/T_Clamp.cpp",
+    "tests/T_CommonSurfaces.cpp",
+    "tests/T_Extension.cpp",
+    "tests/T_Fitting.cpp",
+    "tests/T_Fundamental.cpp",
+    "tests/T_Main.cpp",
+    "tests/T_MathUtils.cpp",
+    "tests/T_Matrix4d.cpp",
+    "tests/T_NurbsCurve.cpp",
+    "tests/T_NurbsSurface.cpp",
+    "tests/T_Polynomials.cpp",
+    "tests/T_ShapeModification.cpp",
+    "tests/T_Tessellation.cpp",
+    "tests/T_UV.cpp",
+    "tests/T_XYZ.cpp",
+    "tests/T_XYZW.cpp"
+  ],
+  "excluded_dependency": [
+    ".hgeol",
+    ".hgignore",
+    ".hgtags",
+    "CMakeLists.txt",
+    "CTestConfig.cmake",
+    "CTestCustom.cmake.in",
+    "INSTALL",
+    "README.md",
+    "bench/BenchSparseUtil.h",
+    "bench/BenchTimer.h",
+    "bench/BenchUtil.h",
+    "bench/README.txt",
+    "bench/analyze-blocking-sizes.cpp",
+    "bench/basicbench.cxxlist",
+    "bench/basicbenchmark.cpp",
+    "bench/basicbenchmark.h",
+    "bench/benchBlasGemm.cpp",
+    "bench/benchCholesky.cpp",
+    "bench/benchEigenSolver.cpp",
+    "bench/benchFFT.cpp",
+    "bench/benchGeometry.cpp",
+    "bench/benchVecAdd.cpp",
+    "bench/bench_gemm.cpp",
+    "bench/bench_multi_compilers.sh",
+    "bench/bench_norm.cpp",
+    "bench/bench_reverse.cpp",
+    "bench/bench_sum.cpp",
+    "bench/bench_unrolling",
+    "bench/benchmark-blocking-sizes.cpp",
+    "bench/benchmark.cpp",
+    "bench/benchmarkSlice.cpp",
+    "bench/benchmarkX.cpp",
+    "bench/benchmarkXcwise.cpp",
+    "bench/benchmark_suite",
+    "bench/btl/CMakeLists.txt",
+    "bench/btl/COPYING",
+    "bench/btl/README",
+    "bench/btl/actions/action_aat_product.hh",
+    "bench/btl/actions/action_ata_product.hh",
+    "bench/btl/actions/action_atv_product.hh",
+    "bench/btl/actions/action_axpby.hh",
+    "bench/btl/actions/action_axpy.hh",
+    "bench/btl/actions/action_cholesky.hh",
+    "bench/btl/actions/action_ger.hh",
+    "bench/btl/actions/action_hessenberg.hh",
+    "bench/btl/actions/action_lu_decomp.hh",
+    "bench/btl/actions/action_lu_solve.hh",
+    "bench/btl/actions/action_matrix_matrix_product.hh",
+    "bench/btl/actions/action_matrix_matrix_product_bis.hh",
+    "bench/btl/actions/action_matrix_vector_product.hh",
+    "bench/btl/actions/action_partial_lu.hh",
+    "bench/btl/actions/action_rot.hh",
+    "bench/btl/actions/action_symv.hh",
+    "bench/btl/actions/action_syr2.hh",
+    "bench/btl/actions/action_trisolve.hh",
+    "bench/btl/actions/action_trisolve_matrix.hh",
+    "bench/btl/actions/action_trmm.hh",
+    "bench/btl/actions/basic_actions.hh",
+    "bench/btl/cmake/FindACML.cmake",
+    "bench/btl/cmake/FindATLAS.cmake",
+    "bench/btl/cmake/FindBLAZE.cmake",
+    "bench/btl/cmake/FindBlitz.cmake",
+    "bench/btl/cmake/FindCBLAS.cmake",
+    "bench/btl/cmake/FindGMM.cmake",
+    "bench/btl/cmake/FindMKL.cmake",
+    "bench/btl/cmake/FindMTL4.cmake",
+    "bench/btl/cmake/FindOPENBLAS.cmake",
+    "bench/btl/cmake/FindPackageHandleStandardArgs.cmake",
+    "bench/btl/cmake/FindTvmet.cmake",
+    "bench/btl/cmake/MacroOptionalAddSubdirectory.cmake",
+    "bench/btl/data/CMakeLists.txt",
+    "bench/btl/data/action_settings.txt",
+    "bench/btl/data/gnuplot_common_settings.hh",
+    "bench/btl/data/go_mean",
+    "bench/btl/data/mean.cxx",
+    "bench/btl/data/mk_gnuplot_script.sh",
+    "bench/btl/data/mk_mean_script.sh",
+    "bench/btl/data/mk_new_gnuplot.sh",
+    "bench/btl/data/perlib_plot_settings.txt",
+    "bench/btl/data/regularize.cxx",
+    "bench/btl/data/smooth.cxx",
+    "bench/btl/data/smooth_all.sh",
+    "bench/btl/generic_bench/bench.hh",
+    "bench/btl/generic_bench/bench_parameter.hh",
+    "bench/btl/generic_bench/btl.hh",
+    "bench/btl/generic_bench/init/init_function.hh",
+    "bench/btl/generic_bench/init/init_matrix.hh",
+    "bench/btl/generic_bench/init/init_vector.hh",
+    "bench/btl/generic_bench/static/bench_static.hh",
+    "bench/btl/generic_bench/static/intel_bench_fixed_size.hh",
+    "bench/btl/generic_bench/static/static_size_generator.hh",
+    "bench/btl/generic_bench/timers/STL_perf_analyzer.hh",
+    "bench/btl/generic_bench/timers/STL_timer.hh",
+    "bench/btl/generic_bench/timers/mixed_perf_analyzer.hh",
+    "bench/btl/generic_bench/timers/portable_perf_analyzer.hh",
+    "bench/btl/generic_bench/timers/portable_perf_analyzer_old.hh",
+    "bench/btl/generic_bench/timers/portable_timer.hh",
+    "bench/btl/generic_bench/timers/x86_perf_analyzer.hh",
+    "bench/btl/generic_bench/timers/x86_timer.hh",
+    "bench/btl/generic_bench/utils/size_lin_log.hh",
+    "bench/btl/generic_bench/utils/size_log.hh",
+    "bench/btl/generic_bench/utils/utilities.h",
+    "bench/btl/generic_bench/utils/xy_file.hh",
+    "bench/btl/libs/BLAS/CMakeLists.txt",
+    "bench/btl/libs/BLAS/blas.h",
+    "bench/btl/libs/BLAS/blas_interface.hh",
+    "bench/btl/libs/BLAS/blas_interface_impl.hh",
+    "bench/btl/libs/BLAS/c_interface_base.h",
+    "bench/btl/libs/BLAS/main.cpp",
+    "bench/btl/libs/STL/CMakeLists.txt",
+    "bench/btl/libs/STL/STL_interface.hh",
+    "bench/btl/libs/STL/main.cpp",
+    "bench/btl/libs/blaze/CMakeLists.txt",
+    "bench/btl/libs/blaze/blaze_interface.hh",
+    "bench/btl/libs/blaze/main.cpp",
+    "bench/btl/libs/blitz/CMakeLists.txt",
+    "bench/btl/libs/blitz/blitz_LU_solve_interface.hh",
+    "bench/btl/libs/blitz/blitz_interface.hh",
+    "bench/btl/libs/blitz/btl_blitz.cpp",
+    "bench/btl/libs/blitz/btl_tiny_blitz.cpp",
+    "bench/btl/libs/blitz/tiny_blitz_interface.hh",
+    "bench/btl/libs/eigen2/CMakeLists.txt",
+    "bench/btl/libs/eigen2/btl_tiny_eigen2.cpp",
+    "bench/btl/libs/eigen2/eigen2_interface.hh",
+    "bench/btl/libs/eigen2/main_adv.cpp",
+    "bench/btl/libs/eigen2/main_linear.cpp",
+    "bench/btl/libs/eigen2/main_matmat.cpp",
+    "bench/btl/libs/eigen2/main_vecmat.cpp",
+    "bench/btl/libs/eigen3/CMakeLists.txt",
+    "bench/btl/libs/eigen3/btl_tiny_eigen3.cpp",
+    "bench/btl/libs/eigen3/eigen3_interface.hh",
+    "bench/btl/libs/eigen3/main_adv.cpp",
+    "bench/btl/libs/eigen3/main_linear.cpp",
+    "bench/btl/libs/eigen3/main_matmat.cpp",
+    "bench/btl/libs/eigen3/main_vecmat.cpp",
+    "bench/btl/libs/gmm/CMakeLists.txt",
+    "bench/btl/libs/gmm/gmm_LU_solve_interface.hh",
+    "bench/btl/libs/gmm/gmm_interface.hh",
+    "bench/btl/libs/gmm/main.cpp",
+    "bench/btl/libs/mtl4/.kdbgrc.main",
+    "bench/btl/libs/mtl4/CMakeLists.txt",
+    "bench/btl/libs/mtl4/main.cpp",
+    "bench/btl/libs/mtl4/mtl4_LU_solve_interface.hh",
+    "bench/btl/libs/mtl4/mtl4_interface.hh",
+    "bench/btl/libs/tensors/CMakeLists.txt",
+    "bench/btl/libs/tensors/main_linear.cpp",
+    "bench/btl/libs/tensors/main_matmat.cpp",
+    "bench/btl/libs/tensors/main_vecmat.cpp",
+    "bench/btl/libs/tensors/tensor_interface.hh",
+    "bench/btl/libs/tvmet/CMakeLists.txt",
+    "bench/btl/libs/tvmet/main.cpp",
+    "bench/btl/libs/tvmet/tvmet_interface.hh",
+    "bench/btl/libs/ublas/CMakeLists.txt",
+    "bench/btl/libs/ublas/main.cpp",
+    "bench/btl/libs/ublas/ublas_interface.hh",
+    "bench/check_cache_queries.cpp",
+    "bench/dense_solvers.cpp",
+    "bench/eig33.cpp",
+    "bench/geometry.cpp",
+    "bench/perf_monitoring/gemm/changesets.txt",
+    "bench/perf_monitoring/gemm/gemm.cpp",
+    "bench/perf_monitoring/gemm/gemm_settings.txt",
+    "bench/perf_monitoring/gemm/lazy_gemm.cpp",
+    "bench/perf_monitoring/gemm/lazy_gemm_settings.txt",
+    "bench/perf_monitoring/gemm/make_plot.sh",
+    "bench/perf_monitoring/gemm/run.sh",
+    "bench/product_threshold.cpp",
+    "bench/quat_slerp.cpp",
+    "bench/quatmul.cpp",
+    "bench/sparse_cholesky.cpp",
+    "bench/sparse_dense_product.cpp",
+    "bench/sparse_lu.cpp",
+    "bench/sparse_product.cpp",
+    "bench/sparse_randomsetter.cpp",
+    "bench/sparse_setter.cpp",
+    "bench/sparse_transpose.cpp",
+    "bench/sparse_trisolver.cpp",
+    "bench/spbench/CMakeLists.txt",
+    "bench/spbench/sp_solver.cpp",
+    "bench/spbench/spbench.dtd",
+    "bench/spbench/spbenchsolver.cpp",
+    "bench/spbench/spbenchsolver.h",
+    "bench/spbench/spbenchstyle.h",
+    "bench/spbench/test_sparseLU.cpp",
+    "bench/spmv.cpp",
+    "bench/tensors/README",
+    "bench/tensors/benchmark.h",
+    "bench/tensors/benchmark_main.cc",
+    "bench/tensors/contraction_benchmarks_cpu.cc",
+    "bench/tensors/tensor_benchmarks.h",
+    "bench/tensors/tensor_benchmarks_cpu.cc",
+    "bench/tensors/tensor_benchmarks_fp16_gpu.cu",
+    "bench/tensors/tensor_benchmarks_gpu.cu",
+    "bench/tensors/tensor_benchmarks_sycl.cc",
+    "bench/vdw_new.cpp",
+    "blas/BandTriangularSolver.h",
+    "blas/CMakeLists.txt",
+    "blas/GeneralRank1Update.h",
+    "blas/PackedSelfadjointProduct.h",
+    "blas/PackedTriangularMatrixVector.h",
+    "blas/PackedTriangularSolverVector.h",
+    "blas/README.txt",
+    "blas/Rank2Update.h",
+    "blas/common.h",
+    "blas/complex_double.cpp",
+    "blas/complex_single.cpp",
+    "blas/double.cpp",
+    "blas/f2c/chbmv.c",
+    "blas/f2c/chpmv.c",
+    "blas/f2c/complexdots.c",
+    "blas/f2c/ctbmv.c",
+    "blas/f2c/d_cnjg.c",
+    "blas/f2c/datatypes.h",
+    "blas/f2c/drotm.c",
+    "blas/f2c/drotmg.c",
+    "blas/f2c/dsbmv.c",
+    "blas/f2c/dspmv.c",
+    "blas/f2c/dtbmv.c",
+    "blas/f2c/lsame.c",
+    "blas/f2c/r_cnjg.c",
+    "blas/f2c/srotm.c",
+    "blas/f2c/srotmg.c",
+    "blas/f2c/ssbmv.c",
+    "blas/f2c/sspmv.c",
+    "blas/f2c/stbmv.c",
+    "blas/f2c/zhbmv.c",
+    "blas/f2c/zhpmv.c",
+    "blas/f2c/ztbmv.c",
+    "blas/fortran/complexdots.f",
+    "blas/level1_cplx_impl.h",
+    "blas/level1_impl.h",
+    "blas/level1_real_impl.h",
+    "blas/level2_cplx_impl.h",
+    "blas/level2_impl.h",
+    "blas/level2_real_impl.h",
+    "blas/level3_impl.h",
+    "blas/single.cpp",
+    "blas/testing/CMakeLists.txt",
+    "blas/testing/cblat1.f",
+    "blas/testing/cblat2.dat",
+    "blas/testing/cblat2.f",
+    "blas/testing/cblat3.dat",
+    "blas/testing/cblat3.f",
+    "blas/testing/dblat1.f",
+    "blas/testing/dblat2.dat",
+    "blas/testing/dblat2.f",
+    "blas/testing/dblat3.dat",
+    "blas/testing/dblat3.f",
+    "blas/testing/runblastest.sh",
+    "blas/testing/sblat1.f",
+    "blas/testing/sblat2.dat",
+    "blas/testing/sblat2.f",
+    "blas/testing/sblat3.dat",
+    "blas/testing/sblat3.f",
+    "blas/testing/zblat1.f",
+    "blas/testing/zblat2.dat",
+    "blas/testing/zblat2.f",
+    "blas/testing/zblat3.dat",
+    "blas/testing/zblat3.f",
+    "blas/xerbla.cpp",
+    "cmake/Eigen3Config.cmake.in",
+    "cmake/Eigen3ConfigLegacy.cmake.in",
+    "cmake/EigenConfigureTesting.cmake",
+    "cmake/EigenDetermineOSVersion.cmake",
+    "cmake/EigenDetermineVSServicePack.cmake",
+    "cmake/EigenTesting.cmake",
+    "cmake/EigenUninstall.cmake",
+    "cmake/FindAdolc.cmake",
+    "cmake/FindBLAS.cmake",
+    "cmake/FindBLASEXT.cmake",
+    "cmake/FindCholmod.cmake",
+    "cmake/FindComputeCpp.cmake",
+    "cmake/FindEigen2.cmake",
+    "cmake/FindEigen3.cmake",
+    "cmake/FindFFTW.cmake",
+    "cmake/FindGLEW.cmake",
+    "cmake/FindGMP.cmake",
+    "cmake/FindGSL.cmake",
+    "cmake/FindGoogleHash.cmake",
+    "cmake/FindHWLOC.cmake",
+    "cmake/FindLAPACK.cmake",
+    "cmake/FindMPFR.cmake",
+    "cmake/FindMetis.cmake",
+    "cmake/FindPTSCOTCH.cmake",
+    "cmake/FindPastix.cmake",
+    "cmake/FindSPQR.cmake",
+    "cmake/FindScotch.cmake",
+    "cmake/FindStandardMathLibrary.cmake",
+    "cmake/FindSuperLU.cmake",
+    "cmake/FindUmfpack.cmake",
+    "cmake/RegexUtils.cmake",
+    "cmake/UseEigen3.cmake",
+    "cmake/language_support.cmake",
+    "debug/gdb/__init__.py",
+    "debug/gdb/printers.py",
+    "debug/msvc/eigen.natvis",
+    "debug/msvc/eigen_autoexp_part.dat",
+    "demos/CMakeLists.txt",
+    "demos/mandelbrot/CMakeLists.txt",
+    "demos/mandelbrot/README",
+    "demos/mandelbrot/mandelbrot.cpp",
+    "demos/mandelbrot/mandelbrot.h",
+    "demos/mix_eigen_and_c/README",
+    "demos/mix_eigen_and_c/binary_library.cpp",
+    "demos/mix_eigen_and_c/binary_library.h",
+    "demos/mix_eigen_and_c/example.c",
+    "demos/opengl/CMakeLists.txt",
+    "demos/opengl/README",
+    "demos/opengl/camera.cpp",
+    "demos/opengl/camera.h",
+    "demos/opengl/gpuhelper.cpp",
+    "demos/opengl/gpuhelper.h",
+    "demos/opengl/icosphere.cpp",
+    "demos/opengl/icosphere.h",
+    "demos/opengl/quaternion_demo.cpp",
+    "demos/opengl/quaternion_demo.h",
+    "demos/opengl/trackball.cpp",
+    "demos/opengl/trackball.h",
+    "doc/A05_PortingFrom2To3.dox",
+    "doc/AsciiQuickReference.txt",
+    "doc/B01_Experimental.dox",
+    "doc/CMakeLists.txt",
+    "doc/ClassHierarchy.dox",
+    "doc/CoeffwiseMathFunctionsTable.dox",
+    "doc/CustomizingEigen_CustomScalar.dox",
+    "doc/CustomizingEigen_InheritingMatrix.dox",
+    "doc/CustomizingEigen_NullaryExpr.dox",
+    "doc/CustomizingEigen_Plugins.dox",
+    "doc/DenseDecompositionBenchmark.dox",
+    "doc/Doxyfile.in",
+    "doc/Eigen_Silly_Professor_64x64.png",
+    "doc/FixedSizeVectorizable.dox",
+    "doc/FunctionsTakingEigenTypes.dox",
+    "doc/HiPerformance.dox",
+    "doc/InplaceDecomposition.dox",
+    "doc/InsideEigenExample.dox",
+    "doc/LeastSquares.dox",
+    "doc/Manual.dox",
+    "doc/MatrixfreeSolverExample.dox",
+    "doc/NewExpressionType.dox",
+    "doc/Overview.dox",
+    "doc/PassingByValue.dox",
+    "doc/Pitfalls.dox",
+    "doc/PreprocessorDirectives.dox",
+    "doc/QuickReference.dox",
+    "doc/QuickStartGuide.dox",
+    "doc/SparseLinearSystems.dox",
+    "doc/SparseQuickReference.dox",
+    "doc/StlContainers.dox",
+    "doc/StorageOrders.dox",
+    "doc/StructHavingEigenMembers.dox",
+    "doc/TemplateKeyword.dox",
+    "doc/TopicAliasing.dox",
+    "doc/TopicAssertions.dox",
+    "doc/TopicCMakeGuide.dox",
+    "doc/TopicEigenExpressionTemplates.dox",
+    "doc/TopicLazyEvaluation.dox",
+    "doc/TopicLinearAlgebraDecompositions.dox",
+    "doc/TopicMultithreading.dox",
+    "doc/TopicResizing.dox",
+    "doc/TopicScalarTypes.dox",
+    "doc/TopicVectorization.dox",
+    "doc/TutorialAdvancedInitialization.dox",
+    "doc/TutorialArrayClass.dox",
+    "doc/TutorialBlockOperations.dox",
+    "doc/TutorialGeometry.dox",
+    "doc/TutorialLinearAlgebra.dox",
+    "doc/TutorialMapClass.dox",
+    "doc/TutorialMatrixArithmetic.dox",
+    "doc/TutorialMatrixClass.dox",
+    "doc/TutorialReductionsVisitorsBroadcasting.dox",
+    "doc/TutorialReshapeSlicing.dox",
+    "doc/TutorialSparse.dox",
+    "doc/TutorialSparse_example_details.dox",
+    "doc/UnalignedArrayAssert.dox",
+    "doc/UsingBlasLapackBackends.dox",
+    "doc/UsingIntelMKL.dox",
+    "doc/UsingNVCC.dox",
+    "doc/WrongStackAlignment.dox",
+    "doc/eigen_navtree_hacks.js",
+    "doc/eigendoxy.css",
+    "doc/eigendoxy_footer.html.in",
+    "doc/eigendoxy_header.html.in",
+    "doc/eigendoxy_layout.xml.in",
+    "doc/eigendoxy_tabs.css",
+    "doc/examples/.krazy",
+    "doc/examples/CMakeLists.txt",
+    "doc/examples/CustomizingEigen_Inheritance.cpp",
+    "doc/examples/Cwise_erf.cpp",
+    "doc/examples/Cwise_erfc.cpp",
+    "doc/examples/Cwise_lgamma.cpp",
+    "doc/examples/DenseBase_middleCols_int.cpp",
+    "doc/examples/DenseBase_middleRows_int.cpp",
+    "doc/examples/DenseBase_template_int_middleCols.cpp",
+    "doc/examples/DenseBase_template_int_middleRows.cpp",
+    "doc/examples/QuickStart_example.cpp",
+    "doc/examples/QuickStart_example2_dynamic.cpp",
+    "doc/examples/QuickStart_example2_fixed.cpp",
+    "doc/examples/TemplateKeyword_flexible.cpp",
+    "doc/examples/TemplateKeyword_simple.cpp",
+    "doc/examples/TutorialInplaceLU.cpp",
+    "doc/examples/TutorialLinAlgComputeTwice.cpp",
+    "doc/examples/TutorialLinAlgExComputeSolveError.cpp",
+    "doc/examples/TutorialLinAlgExSolveColPivHouseholderQR.cpp",
+    "doc/examples/TutorialLinAlgExSolveLDLT.cpp",
+    "doc/examples/TutorialLinAlgInverseDeterminant.cpp",
+    "doc/examples/TutorialLinAlgRankRevealing.cpp",
+    "doc/examples/TutorialLinAlgSVDSolve.cpp",
+    "doc/examples/TutorialLinAlgSelfAdjointEigenSolver.cpp",
+    "doc/examples/TutorialLinAlgSetThreshold.cpp",
+    "doc/examples/Tutorial_ArrayClass_accessors.cpp",
+    "doc/examples/Tutorial_ArrayClass_addition.cpp",
+    "doc/examples/Tutorial_ArrayClass_cwise_other.cpp",
+    "doc/examples/Tutorial_ArrayClass_interop.cpp",
+    "doc/examples/Tutorial_ArrayClass_interop_matrix.cpp",
+    "doc/examples/Tutorial_ArrayClass_mult.cpp",
+    "doc/examples/Tutorial_BlockOperations_block_assignment.cpp",
+    "doc/examples/Tutorial_BlockOperations_colrow.cpp",
+    "doc/examples/Tutorial_BlockOperations_corner.cpp",
+    "doc/examples/Tutorial_BlockOperations_print_block.cpp",
+    "doc/examples/Tutorial_BlockOperations_vector.cpp",
+    "doc/examples/Tutorial_PartialLU_solve.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_broadcast_1nn.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_broadcast_simple.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_broadcast_simple_rowwise.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_colwise.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_maxnorm.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_reductions_bool.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_reductions_norm.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_reductions_operatornorm.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_rowwise.cpp",
+    "doc/examples/Tutorial_ReductionsVisitorsBroadcasting_visitors.cpp",
+    "doc/examples/Tutorial_simple_example_dynamic_size.cpp",
+    "doc/examples/Tutorial_simple_example_fixed_size.cpp",
+    "doc/examples/class_Block.cpp",
+    "doc/examples/class_CwiseBinaryOp.cpp",
+    "doc/examples/class_CwiseUnaryOp.cpp",
+    "doc/examples/class_CwiseUnaryOp_ptrfun.cpp",
+    "doc/examples/class_FixedBlock.cpp",
+    "doc/examples/class_FixedVectorBlock.cpp",
+    "doc/examples/class_VectorBlock.cpp",
+    "doc/examples/function_taking_eigenbase.cpp",
+    "doc/examples/function_taking_ref.cpp",
+    "doc/examples/make_circulant.cpp",
+    "doc/examples/make_circulant.cpp.entry",
+    "doc/examples/make_circulant.cpp.evaluator",
+    "doc/examples/make_circulant.cpp.expression",
+    "doc/examples/make_circulant.cpp.main",
+    "doc/examples/make_circulant.cpp.preamble",
+    "doc/examples/make_circulant.cpp.traits",
+    "doc/examples/make_circulant2.cpp",
+    "doc/examples/matrixfree_cg.cpp",
+    "doc/examples/nullary_indexing.cpp",
+    "doc/examples/tut_arithmetic_add_sub.cpp",
+    "doc/examples/tut_arithmetic_dot_cross.cpp",
+    "doc/examples/tut_arithmetic_matrix_mul.cpp",
+    "doc/examples/tut_arithmetic_redux_basic.cpp",
+    "doc/examples/tut_arithmetic_scalar_mul_div.cpp",
+    "doc/examples/tut_matrix_coefficient_accessors.cpp",
+    "doc/examples/tut_matrix_resize.cpp",
+    "doc/examples/tut_matrix_resize_fixed_size.cpp",
+    "doc/ftv2node.png",
+    "doc/ftv2pnode.png",
+    "doc/snippets/.krazy",
+    "doc/snippets/AngleAxis_mimic_euler.cpp",
+    "doc/snippets/BiCGSTAB_simple.cpp",
+    "doc/snippets/BiCGSTAB_step_by_step.cpp",
+    "doc/snippets/CMakeLists.txt",
+    "doc/snippets/ColPivHouseholderQR_solve.cpp",
+    "doc/snippets/ComplexEigenSolver_compute.cpp",
+    "doc/snippets/ComplexEigenSolver_eigenvalues.cpp",
+    "doc/snippets/ComplexEigenSolver_eigenvectors.cpp",
+    "doc/snippets/ComplexSchur_compute.cpp",
+    "doc/snippets/ComplexSchur_matrixT.cpp",
+    "doc/snippets/ComplexSchur_matrixU.cpp",
+    "doc/snippets/Cwise_abs.cpp",
+    "doc/snippets/Cwise_abs2.cpp",
+    "doc/snippets/Cwise_acos.cpp",
+    "doc/snippets/Cwise_arg.cpp",
+    "doc/snippets/Cwise_array_power_array.cpp",
+    "doc/snippets/Cwise_asin.cpp",
+    "doc/snippets/Cwise_atan.cpp",
+    "doc/snippets/Cwise_boolean_and.cpp",
+    "doc/snippets/Cwise_boolean_not.cpp",
+    "doc/snippets/Cwise_boolean_or.cpp",
+    "doc/snippets/Cwise_boolean_xor.cpp",
+    "doc/snippets/Cwise_ceil.cpp",
+    "doc/snippets/Cwise_cos.cpp",
+    "doc/snippets/Cwise_cosh.cpp",
+    "doc/snippets/Cwise_cube.cpp",
+    "doc/snippets/Cwise_equal_equal.cpp",
+    "doc/snippets/Cwise_exp.cpp",
+    "doc/snippets/Cwise_floor.cpp",
+    "doc/snippets/Cwise_greater.cpp",
+    "doc/snippets/Cwise_greater_equal.cpp",
+    "doc/snippets/Cwise_inverse.cpp",
+    "doc/snippets/Cwise_isFinite.cpp",
+    "doc/snippets/Cwise_isInf.cpp",
+    "doc/snippets/Cwise_isNaN.cpp",
+    "doc/snippets/Cwise_less.cpp",
+    "doc/snippets/Cwise_less_equal.cpp",
+    "doc/snippets/Cwise_log.cpp",
+    "doc/snippets/Cwise_log10.cpp",
+    "doc/snippets/Cwise_max.cpp",
+    "doc/snippets/Cwise_min.cpp",
+    "doc/snippets/Cwise_minus.cpp",
+    "doc/snippets/Cwise_minus_equal.cpp",
+    "doc/snippets/Cwise_not_equal.cpp",
+    "doc/snippets/Cwise_plus.cpp",
+    "doc/snippets/Cwise_plus_equal.cpp",
+    "doc/snippets/Cwise_pow.cpp",
+    "doc/snippets/Cwise_product.cpp",
+    "doc/snippets/Cwise_quotient.cpp",
+    "doc/snippets/Cwise_round.cpp",
+    "doc/snippets/Cwise_scalar_power_array.cpp",
+    "doc/snippets/Cwise_sign.cpp",
+    "doc/snippets/Cwise_sin.cpp",
+    "doc/snippets/Cwise_sinh.cpp",
+    "doc/snippets/Cwise_slash_equal.cpp",
+    "doc/snippets/Cwise_sqrt.cpp",
+    "doc/snippets/Cwise_square.cpp",
+    "doc/snippets/Cwise_tan.cpp",
+    "doc/snippets/Cwise_tanh.cpp",
+    "doc/snippets/Cwise_times_equal.cpp",
+    "doc/snippets/DenseBase_LinSpaced.cpp",
+    "doc/snippets/DenseBase_LinSpacedInt.cpp",
+    "doc/snippets/DenseBase_LinSpaced_seq.cpp",
+    "doc/snippets/DenseBase_setLinSpaced.cpp",
+    "doc/snippets/DirectionWise_hnormalized.cpp",
+    "doc/snippets/DirectionWise_replicate.cpp",
+    "doc/snippets/DirectionWise_replicate_int.cpp",
+    "doc/snippets/EigenSolver_EigenSolver_MatrixType.cpp",
+    "doc/snippets/EigenSolver_compute.cpp",
+    "doc/snippets/EigenSolver_eigenvalues.cpp",
+    "doc/snippets/EigenSolver_eigenvectors.cpp",
+    "doc/snippets/EigenSolver_pseudoEigenvectors.cpp",
+    "doc/snippets/FullPivHouseholderQR_solve.cpp",
+    "doc/snippets/FullPivLU_image.cpp",
+    "doc/snippets/FullPivLU_kernel.cpp",
+    "doc/snippets/FullPivLU_solve.cpp",
+    "doc/snippets/GeneralizedEigenSolver.cpp",
+    "doc/snippets/HessenbergDecomposition_compute.cpp",
+    "doc/snippets/HessenbergDecomposition_matrixH.cpp",
+    "doc/snippets/HessenbergDecomposition_packedMatrix.cpp",
+    "doc/snippets/HouseholderQR_householderQ.cpp",
+    "doc/snippets/HouseholderQR_solve.cpp",
+    "doc/snippets/HouseholderSequence_HouseholderSequence.cpp",
+    "doc/snippets/IOFormat.cpp",
+    "doc/snippets/JacobiSVD_basic.cpp",
+    "doc/snippets/Jacobi_makeGivens.cpp",
+    "doc/snippets/Jacobi_makeJacobi.cpp",
+    "doc/snippets/LLT_example.cpp",
+    "doc/snippets/LLT_solve.cpp",
+    "doc/snippets/LeastSquaresNormalEquations.cpp",
+    "doc/snippets/LeastSquaresQR.cpp",
+    "doc/snippets/Map_general_stride.cpp",
+    "doc/snippets/Map_inner_stride.cpp",
+    "doc/snippets/Map_outer_stride.cpp",
+    "doc/snippets/Map_placement_new.cpp",
+    "doc/snippets/Map_simple.cpp",
+    "doc/snippets/MatrixBase_adjoint.cpp",
+    "doc/snippets/MatrixBase_all.cpp",
+    "doc/snippets/MatrixBase_applyOnTheLeft.cpp",
+    "doc/snippets/MatrixBase_applyOnTheRight.cpp",
+    "doc/snippets/MatrixBase_array.cpp",
+    "doc/snippets/MatrixBase_array_const.cpp",
+    "doc/snippets/MatrixBase_asDiagonal.cpp",
+    "doc/snippets/MatrixBase_block_int_int.cpp",
+    "doc/snippets/MatrixBase_block_int_int_int_int.cpp",
+    "doc/snippets/MatrixBase_bottomLeftCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_bottomRightCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_bottomRows_int.cpp",
+    "doc/snippets/MatrixBase_cast.cpp",
+    "doc/snippets/MatrixBase_col.cpp",
+    "doc/snippets/MatrixBase_colwise.cpp",
+    "doc/snippets/MatrixBase_computeInverseAndDetWithCheck.cpp",
+    "doc/snippets/MatrixBase_computeInverseWithCheck.cpp",
+    "doc/snippets/MatrixBase_cwiseAbs.cpp",
+    "doc/snippets/MatrixBase_cwiseAbs2.cpp",
+    "doc/snippets/MatrixBase_cwiseEqual.cpp",
+    "doc/snippets/MatrixBase_cwiseInverse.cpp",
+    "doc/snippets/MatrixBase_cwiseMax.cpp",
+    "doc/snippets/MatrixBase_cwiseMin.cpp",
+    "doc/snippets/MatrixBase_cwiseNotEqual.cpp",
+    "doc/snippets/MatrixBase_cwiseProduct.cpp",
+    "doc/snippets/MatrixBase_cwiseQuotient.cpp",
+    "doc/snippets/MatrixBase_cwiseSign.cpp",
+    "doc/snippets/MatrixBase_cwiseSqrt.cpp",
+    "doc/snippets/MatrixBase_diagonal.cpp",
+    "doc/snippets/MatrixBase_diagonal_int.cpp",
+    "doc/snippets/MatrixBase_diagonal_template_int.cpp",
+    "doc/snippets/MatrixBase_eigenvalues.cpp",
+    "doc/snippets/MatrixBase_end_int.cpp",
+    "doc/snippets/MatrixBase_eval.cpp",
+    "doc/snippets/MatrixBase_fixedBlock_int_int.cpp",
+    "doc/snippets/MatrixBase_hnormalized.cpp",
+    "doc/snippets/MatrixBase_homogeneous.cpp",
+    "doc/snippets/MatrixBase_identity.cpp",
+    "doc/snippets/MatrixBase_identity_int_int.cpp",
+    "doc/snippets/MatrixBase_inverse.cpp",
+    "doc/snippets/MatrixBase_isDiagonal.cpp",
+    "doc/snippets/MatrixBase_isIdentity.cpp",
+    "doc/snippets/MatrixBase_isOnes.cpp",
+    "doc/snippets/MatrixBase_isOrthogonal.cpp",
+    "doc/snippets/MatrixBase_isUnitary.cpp",
+    "doc/snippets/MatrixBase_isZero.cpp",
+    "doc/snippets/MatrixBase_leftCols_int.cpp",
+    "doc/snippets/MatrixBase_noalias.cpp",
+    "doc/snippets/MatrixBase_ones.cpp",
+    "doc/snippets/MatrixBase_ones_int.cpp",
+    "doc/snippets/MatrixBase_ones_int_int.cpp",
+    "doc/snippets/MatrixBase_operatorNorm.cpp",
+    "doc/snippets/MatrixBase_prod.cpp",
+    "doc/snippets/MatrixBase_random.cpp",
+    "doc/snippets/MatrixBase_random_int.cpp",
+    "doc/snippets/MatrixBase_random_int_int.cpp",
+    "doc/snippets/MatrixBase_replicate.cpp",
+    "doc/snippets/MatrixBase_replicate_int_int.cpp",
+    "doc/snippets/MatrixBase_reverse.cpp",
+    "doc/snippets/MatrixBase_rightCols_int.cpp",
+    "doc/snippets/MatrixBase_row.cpp",
+    "doc/snippets/MatrixBase_rowwise.cpp",
+    "doc/snippets/MatrixBase_segment_int_int.cpp",
+    "doc/snippets/MatrixBase_select.cpp",
+    "doc/snippets/MatrixBase_selfadjointView.cpp",
+    "doc/snippets/MatrixBase_set.cpp",
+    "doc/snippets/MatrixBase_setIdentity.cpp",
+    "doc/snippets/MatrixBase_setOnes.cpp",
+    "doc/snippets/MatrixBase_setRandom.cpp",
+    "doc/snippets/MatrixBase_setZero.cpp",
+    "doc/snippets/MatrixBase_start_int.cpp",
+    "doc/snippets/MatrixBase_template_int_bottomRows.cpp",
+    "doc/snippets/MatrixBase_template_int_end.cpp",
+    "doc/snippets/MatrixBase_template_int_int_block_int_int_int_int.cpp",
+    "doc/snippets/MatrixBase_template_int_int_bottomLeftCorner.cpp",
+    "doc/snippets/MatrixBase_template_int_int_bottomLeftCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_template_int_int_bottomRightCorner.cpp",
+    "doc/snippets/MatrixBase_template_int_int_bottomRightCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_template_int_int_topLeftCorner.cpp",
+    "doc/snippets/MatrixBase_template_int_int_topLeftCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_template_int_int_topRightCorner.cpp",
+    "doc/snippets/MatrixBase_template_int_int_topRightCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_template_int_leftCols.cpp",
+    "doc/snippets/MatrixBase_template_int_rightCols.cpp",
+    "doc/snippets/MatrixBase_template_int_segment.cpp",
+    "doc/snippets/MatrixBase_template_int_start.cpp",
+    "doc/snippets/MatrixBase_template_int_topRows.cpp",
+    "doc/snippets/MatrixBase_topLeftCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_topRightCorner_int_int.cpp",
+    "doc/snippets/MatrixBase_topRows_int.cpp",
+    "doc/snippets/MatrixBase_transpose.cpp",
+    "doc/snippets/MatrixBase_triangularView.cpp",
+    "doc/snippets/MatrixBase_zero.cpp",
+    "doc/snippets/MatrixBase_zero_int.cpp",
+    "doc/snippets/MatrixBase_zero_int_int.cpp",
+    "doc/snippets/Matrix_Map_stride.cpp",
+    "doc/snippets/Matrix_resize_NoChange_int.cpp",
+    "doc/snippets/Matrix_resize_int.cpp",
+    "doc/snippets/Matrix_resize_int_NoChange.cpp",
+    "doc/snippets/Matrix_resize_int_int.cpp",
+    "doc/snippets/Matrix_setConstant_int.cpp",
+    "doc/snippets/Matrix_setConstant_int_int.cpp",
+    "doc/snippets/Matrix_setIdentity_int_int.cpp",
+    "doc/snippets/Matrix_setOnes_int.cpp",
+    "doc/snippets/Matrix_setOnes_int_int.cpp",
+    "doc/snippets/Matrix_setRandom_int.cpp",
+    "doc/snippets/Matrix_setRandom_int_int.cpp",
+    "doc/snippets/Matrix_setZero_int.cpp",
+    "doc/snippets/Matrix_setZero_int_int.cpp",
+    "doc/snippets/PartialPivLU_solve.cpp",
+    "doc/snippets/PartialRedux_count.cpp",
+    "doc/snippets/PartialRedux_maxCoeff.cpp",
+    "doc/snippets/PartialRedux_minCoeff.cpp",
+    "doc/snippets/PartialRedux_norm.cpp",
+    "doc/snippets/PartialRedux_prod.cpp",
+    "doc/snippets/PartialRedux_squaredNorm.cpp",
+    "doc/snippets/PartialRedux_sum.cpp",
+    "doc/snippets/RealQZ_compute.cpp",
+    "doc/snippets/RealSchur_RealSchur_MatrixType.cpp",
+    "doc/snippets/RealSchur_compute.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_SelfAdjointEigenSolver.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_SelfAdjointEigenSolver_MatrixType.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_SelfAdjointEigenSolver_MatrixType2.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_compute_MatrixType.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_compute_MatrixType2.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_eigenvalues.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_eigenvectors.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_operatorInverseSqrt.cpp",
+    "doc/snippets/SelfAdjointEigenSolver_operatorSqrt.cpp",
+    "doc/snippets/SelfAdjointView_eigenvalues.cpp",
+    "doc/snippets/SelfAdjointView_operatorNorm.cpp",
+    "doc/snippets/SparseMatrix_coeffs.cpp",
+    "doc/snippets/TopicAliasing_block.cpp",
+    "doc/snippets/TopicAliasing_block_correct.cpp",
+    "doc/snippets/TopicAliasing_cwise.cpp",
+    "doc/snippets/TopicAliasing_mult1.cpp",
+    "doc/snippets/TopicAliasing_mult2.cpp",
+    "doc/snippets/TopicAliasing_mult3.cpp",
+    "doc/snippets/TopicAliasing_mult4.cpp",
+    "doc/snippets/TopicAliasing_mult5.cpp",
+    "doc/snippets/TopicStorageOrders_example.cpp",
+    "doc/snippets/Triangular_solve.cpp",
+    "doc/snippets/Tridiagonalization_Tridiagonalization_MatrixType.cpp",
+    "doc/snippets/Tridiagonalization_compute.cpp",
+    "doc/snippets/Tridiagonalization_decomposeInPlace.cpp",
+    "doc/snippets/Tridiagonalization_diagonal.cpp",
+    "doc/snippets/Tridiagonalization_householderCoefficients.cpp",
+    "doc/snippets/Tridiagonalization_packedMatrix.cpp",
+    "doc/snippets/Tutorial_AdvancedInitialization_Block.cpp",
+    "doc/snippets/Tutorial_AdvancedInitialization_CommaTemporary.cpp",
+    "doc/snippets/Tutorial_AdvancedInitialization_Join.cpp",
+    "doc/snippets/Tutorial_AdvancedInitialization_LinSpaced.cpp",
+    "doc/snippets/Tutorial_AdvancedInitialization_ThreeWays.cpp",
+    "doc/snippets/Tutorial_AdvancedInitialization_Zero.cpp",
+    "doc/snippets/Tutorial_Map_rowmajor.cpp",
+    "doc/snippets/Tutorial_Map_using.cpp",
+    "doc/snippets/Tutorial_ReshapeMat2Mat.cpp",
+    "doc/snippets/Tutorial_ReshapeMat2Vec.cpp",
+    "doc/snippets/Tutorial_SlicingCol.cpp",
+    "doc/snippets/Tutorial_SlicingVec.cpp",
+    "doc/snippets/Tutorial_commainit_01.cpp",
+    "doc/snippets/Tutorial_commainit_01b.cpp",
+    "doc/snippets/Tutorial_commainit_02.cpp",
+    "doc/snippets/Tutorial_solve_matrix_inverse.cpp",
+    "doc/snippets/Tutorial_solve_multiple_rhs.cpp",
+    "doc/snippets/Tutorial_solve_reuse_decomposition.cpp",
+    "doc/snippets/Tutorial_solve_singular.cpp",
+    "doc/snippets/Tutorial_solve_triangular.cpp",
+    "doc/snippets/Tutorial_solve_triangular_inplace.cpp",
+    "doc/snippets/VectorwiseOp_homogeneous.cpp",
+    "doc/snippets/Vectorwise_reverse.cpp",
+    "doc/snippets/class_FullPivLU.cpp",
+    "doc/snippets/compile_snippet.cpp.in",
+    "doc/snippets/tut_arithmetic_redux_minmax.cpp",
+    "doc/snippets/tut_arithmetic_transpose_aliasing.cpp",
+    "doc/snippets/tut_arithmetic_transpose_conjugate.cpp",
+    "doc/snippets/tut_arithmetic_transpose_inplace.cpp",
+    "doc/snippets/tut_matrix_assignment_resizing.cpp",
+    "doc/special_examples/CMakeLists.txt",
+    "doc/special_examples/Tutorial_sparse_example.cpp",
+    "doc/special_examples/Tutorial_sparse_example_details.cpp",
+    "doc/special_examples/random_cpp11.cpp",
+    "doc/tutorial.cpp",
+    "eigen3.pc.in",
+    "failtest/CMakeLists.txt",
+    "failtest/bdcsvd_int.cpp",
+    "failtest/block_nonconst_ctor_on_const_xpr_0.cpp",
+    "failtest/block_nonconst_ctor_on_const_xpr_1.cpp",
+    "failtest/block_nonconst_ctor_on_const_xpr_2.cpp",
+    "failtest/block_on_const_type_actually_const_0.cpp",
+    "failtest/block_on_const_type_actually_const_1.cpp",
+    "failtest/colpivqr_int.cpp",
+    "failtest/const_qualified_block_method_retval_0.cpp",
+    "failtest/const_qualified_block_method_retval_1.cpp",
+    "failtest/const_qualified_diagonal_method_retval.cpp",
+    "failtest/const_qualified_transpose_method_retval.cpp",
+    "failtest/cwiseunaryview_nonconst_ctor_on_const_xpr.cpp",
+    "failtest/cwiseunaryview_on_const_type_actually_const.cpp",
+    "failtest/diagonal_nonconst_ctor_on_const_xpr.cpp",
+    "failtest/diagonal_on_const_type_actually_const.cpp",
+    "failtest/eigensolver_cplx.cpp",
+    "failtest/eigensolver_int.cpp",
+    "failtest/failtest_sanity_check.cpp",
+    "failtest/fullpivlu_int.cpp",
+    "failtest/fullpivqr_int.cpp",
+    "failtest/jacobisvd_int.cpp",
+    "failtest/ldlt_int.cpp",
+    "failtest/llt_int.cpp",
+    "failtest/map_nonconst_ctor_on_const_ptr_0.cpp",
+    "failtest/map_nonconst_ctor_on_const_ptr_1.cpp",
+    "failtest/map_nonconst_ctor_on_const_ptr_2.cpp",
+    "failtest/map_nonconst_ctor_on_const_ptr_3.cpp",
+    "failtest/map_nonconst_ctor_on_const_ptr_4.cpp",
+    "failtest/map_on_const_type_actually_const_0.cpp",
+    "failtest/map_on_const_type_actually_const_1.cpp",
+    "failtest/partialpivlu_int.cpp",
+    "failtest/qr_int.cpp",
+    "failtest/ref_1.cpp",
+    "failtest/ref_2.cpp",
+    "failtest/ref_3.cpp",
+    "failtest/ref_4.cpp",
+    "failtest/ref_5.cpp",
+    "failtest/selfadjointview_nonconst_ctor_on_const_xpr.cpp",
+    "failtest/selfadjointview_on_const_type_actually_const.cpp",
+    "failtest/sparse_ref_1.cpp",
+    "failtest/sparse_ref_2.cpp",
+    "failtest/sparse_ref_3.cpp",
+    "failtest/sparse_ref_4.cpp",
+    "failtest/sparse_ref_5.cpp",
+    "failtest/sparse_storage_mismatch.cpp",
+    "failtest/swap_1.cpp",
+    "failtest/swap_2.cpp",
+    "failtest/ternary_1.cpp",
+    "failtest/ternary_2.cpp",
+    "failtest/transpose_nonconst_ctor_on_const_xpr.cpp",
+    "failtest/transpose_on_const_type_actually_const.cpp",
+    "failtest/triangularview_nonconst_ctor_on_const_xpr.cpp",
+    "failtest/triangularview_on_const_type_actually_const.cpp",
+    "lapack/CMakeLists.txt",
+    "lapack/cholesky.cpp",
+    "lapack/clacgv.f",
+    "lapack/cladiv.f",
+    "lapack/clarf.f",
+    "lapack/clarfb.f",
+    "lapack/clarfg.f",
+    "lapack/clarft.f",
+    "lapack/complex_double.cpp",
+    "lapack/complex_single.cpp",
+    "lapack/dladiv.f",
+    "lapack/dlamch.f",
+    "lapack/dlapy2.f",
+    "lapack/dlapy3.f",
+    "lapack/dlarf.f",
+    "lapack/dlarfb.f",
+    "lapack/dlarfg.f",
+    "lapack/dlarft.f",
+    "lapack/double.cpp",
+    "lapack/dsecnd_NONE.f",
+    "lapack/eigenvalues.cpp",
+    "lapack/ilaclc.f",
+    "lapack/ilaclr.f",
+    "lapack/iladlc.f",
+    "lapack/iladlr.f",
+    "lapack/ilaslc.f",
+    "lapack/ilaslr.f",
+    "lapack/ilazlc.f",
+    "lapack/ilazlr.f",
+    "lapack/lapack_common.h",
+    "lapack/lu.cpp",
+    "lapack/second_NONE.f",
+    "lapack/single.cpp",
+    "lapack/sladiv.f",
+    "lapack/slamch.f",
+    "lapack/slapy2.f",
+    "lapack/slapy3.f",
+    "lapack/slarf.f",
+    "lapack/slarfb.f",
+    "lapack/slarfg.f",
+    "lapack/slarft.f",
+    "lapack/svd.cpp",
+    "lapack/zlacgv.f",
+    "lapack/zladiv.f",
+    "lapack/zlarf.f",
+    "lapack/zlarfb.f",
+    "lapack/zlarfg.f",
+    "lapack/zlarft.f",
+    "scripts/CMakeLists.txt",
+    "scripts/buildtests.in",
+    "scripts/cdashtesting.cmake.in",
+    "scripts/check.in",
+    "scripts/debug.in",
+    "scripts/eigen_gen_credits.cpp",
+    "scripts/eigen_gen_docs",
+    "scripts/release.in",
+    "scripts/relicense.py",
+    "signature_of_eigen3_matrix_library",
+    "test/CMakeLists.txt",
+    "test/adjoint.cpp",
+    "test/array.cpp",
+    "test/array_for_matrix.cpp",
+    "test/array_of_string.cpp",
+    "test/array_replicate.cpp",
+    "test/array_reverse.cpp",
+    "test/bandmatrix.cpp",
+    "test/basicstuff.cpp",
+    "test/bdcsvd.cpp",
+    "test/bicgstab.cpp",
+    "test/block.cpp",
+    "test/boostmultiprec.cpp",
+    "test/bug1213.cpp",
+    "test/bug1213.h",
+    "test/bug1213_main.cpp",
+    "test/cholesky.cpp",
+    "test/cholmod_support.cpp",
+    "test/commainitializer.cpp",
+    "test/conjugate_gradient.cpp",
+    "test/conservative_resize.cpp",
+    "test/constructor.cpp",
+    "test/corners.cpp",
+    "test/ctorleak.cpp",
+    "test/cuda_basic.cu",
+    "test/cuda_common.h",
+    "test/denseLM.cpp",
+    "test/dense_storage.cpp",
+    "test/determinant.cpp",
+    "test/diagonal.cpp",
+    "test/diagonalmatrices.cpp",
+    "test/dontalign.cpp",
+    "test/dynalloc.cpp",
+    "test/eigen2support.cpp",
+    "test/eigensolver_complex.cpp",
+    "test/eigensolver_generalized_real.cpp",
+    "test/eigensolver_generic.cpp",
+    "test/eigensolver_selfadjoint.cpp",
+    "test/evaluator_common.h",
+    "test/evaluators.cpp",
+    "test/exceptions.cpp",
+    "test/fastmath.cpp",
+    "test/first_aligned.cpp",
+    "test/geo_alignedbox.cpp",
+    "test/geo_eulerangles.cpp",
+    "test/geo_homogeneous.cpp",
+    "test/geo_hyperplane.cpp",
+    "test/geo_orthomethods.cpp",
+    "test/geo_parametrizedline.cpp",
+    "test/geo_quaternion.cpp",
+    "test/geo_transformations.cpp",
+    "test/half_float.cpp",
+    "test/hessenberg.cpp",
+    "test/householder.cpp",
+    "test/incomplete_cholesky.cpp",
+    "test/inplace_decomposition.cpp",
+    "test/integer_types.cpp",
+    "test/inverse.cpp",
+    "test/is_same_dense.cpp",
+    "test/jacobi.cpp",
+    "test/jacobisvd.cpp",
+    "test/linearstructure.cpp",
+    "test/lscg.cpp",
+    "test/lu.cpp",
+    "test/main.h",
+    "test/mapped_matrix.cpp",
+    "test/mapstaticmethods.cpp",
+    "test/mapstride.cpp",
+    "test/meta.cpp",
+    "test/metis_support.cpp",
+    "test/miscmatrices.cpp",
+    "test/mixingtypes.cpp",
+    "test/mpl2only.cpp",
+    "test/nesting_ops.cpp",
+    "test/nomalloc.cpp",
+    "test/nullary.cpp",
+    "test/numext.cpp",
+    "test/packetmath.cpp",
+    "test/pardiso_support.cpp",
+    "test/pastix_support.cpp",
+    "test/permutationmatrices.cpp",
+    "test/prec_inverse_4x4.cpp",
+    "test/product.h",
+    "test/product_extra.cpp",
+    "test/product_large.cpp",
+    "test/product_mmtr.cpp",
+    "test/product_notemporary.cpp",
+    "test/product_selfadjoint.cpp",
+    "test/product_small.cpp",
+    "test/product_symm.cpp",
+    "test/product_syrk.cpp",
+    "test/product_trmm.cpp",
+    "test/product_trmv.cpp",
+    "test/product_trsolve.cpp",
+    "test/qr.cpp",
+    "test/qr_colpivoting.cpp",
+    "test/qr_fullpivoting.cpp",
+    "test/qtvector.cpp",
+    "test/rand.cpp",
+    "test/real_qz.cpp",
+    "test/redux.cpp",
+    "test/ref.cpp",
+    "test/resize.cpp",
+    "test/rvalue_types.cpp",
+    "test/schur_complex.cpp",
+    "test/schur_real.cpp",
+    "test/selfadjoint.cpp",
+    "test/simplicial_cholesky.cpp",
+    "test/sizeof.cpp",
+    "test/sizeoverflow.cpp",
+    "test/smallvectors.cpp",
+    "test/sparse.h",
+    "test/sparseLM.cpp",
+    "test/sparse_basic.cpp",
+    "test/sparse_block.cpp",
+    "test/sparse_permutations.cpp",
+    "test/sparse_product.cpp",
+    "test/sparse_ref.cpp",
+    "test/sparse_solver.h",
+    "test/sparse_solvers.cpp",
+    "test/sparse_vector.cpp",
+    "test/sparselu.cpp",
+    "test/sparseqr.cpp",
+    "test/special_numbers.cpp",
+    "test/spqr_support.cpp",
+    "test/stable_norm.cpp",
+    "test/stddeque.cpp",
+    "test/stddeque_overload.cpp",
+    "test/stdlist.cpp",
+    "test/stdlist_overload.cpp",
+    "test/stdvector.cpp",
+    "test/stdvector_overload.cpp",
+    "test/superlu_support.cpp",
+    "test/svd_common.h",
+    "test/svd_fill.h",
+    "test/swap.cpp",
+    "test/triangular.cpp",
+    "test/umeyama.cpp",
+    "test/umfpack_support.cpp",
+    "test/unalignedassert.cpp",
+    "test/unalignedcount.cpp",
+    "test/upperbidiagonalization.cpp",
+    "test/vectorization_logic.cpp",
+    "test/vectorwiseop.cpp",
+    "test/visitor.cpp",
+    "test/zerosized.cpp",
+    "unsupported/CMakeLists.txt",
+    "unsupported/Eigen/AdolcForward",
+    "unsupported/Eigen/AlignedVector3",
+    "unsupported/Eigen/ArpackSupport",
+    "unsupported/Eigen/AutoDiff",
+    "unsupported/Eigen/BVH",
+    "unsupported/Eigen/CMakeLists.txt",
+    "unsupported/Eigen/CXX11/CMakeLists.txt",
+    "unsupported/Eigen/CXX11/Tensor",
+    "unsupported/Eigen/CXX11/TensorSymmetry",
+    "unsupported/Eigen/CXX11/ThreadPool",
+    "unsupported/Eigen/CXX11/src/Tensor/README.md",
+    "unsupported/Eigen/CXX11/src/Tensor/Tensor.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorArgMax.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorAssign.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorBase.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorBroadcasting.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorChipping.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorConcatenation.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorContraction.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorContractionBlocking.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorContractionCuda.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorContractionMapper.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorContractionThreadPool.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorConversion.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorConvolution.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorCostModel.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorCustomOp.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDevice.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDeviceCuda.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDeviceDefault.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDeviceSycl.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDeviceThreadPool.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDimensionList.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorDimensions.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorEvalTo.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorEvaluator.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorExecutor.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorExpr.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorFFT.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorFixedSize.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorForcedEval.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorForwardDeclarations.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorFunctors.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorGenerator.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorGlobalFunctions.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorIO.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorImagePatch.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorIndexList.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorInflation.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorInitializer.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorIntDiv.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorLayoutSwap.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorMacros.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorMap.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorMeta.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorMorphing.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorPadding.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorPatch.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorRandom.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorReductionCuda.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorReductionSycl.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorRef.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorReverse.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorScan.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorShuffling.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorStorage.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorStriding.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSycl.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclConvertToDeviceExpression.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclExprConstructor.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclExtractAccessor.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclExtractFunctors.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclLeafCount.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclPlaceHolderExpr.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclRun.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorSyclTuple.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorTraits.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorUInt128.h",
+    "unsupported/Eigen/CXX11/src/Tensor/TensorVolumePatch.h",
+    "unsupported/Eigen/CXX11/src/TensorSymmetry/DynamicSymmetry.h",
+    "unsupported/Eigen/CXX11/src/TensorSymmetry/StaticSymmetry.h",
+    "unsupported/Eigen/CXX11/src/TensorSymmetry/Symmetry.h",
+    "unsupported/Eigen/CXX11/src/TensorSymmetry/util/TemplateGroupTheory.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/EventCount.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/NonBlockingThreadPool.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/RunQueue.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/SimpleThreadPool.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/ThreadEnvironment.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/ThreadLocal.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/ThreadPoolInterface.h",
+    "unsupported/Eigen/CXX11/src/ThreadPool/ThreadYield.h",
+    "unsupported/Eigen/CXX11/src/util/CXX11Meta.h",
+    "unsupported/Eigen/CXX11/src/util/CXX11Workarounds.h",
+    "unsupported/Eigen/CXX11/src/util/EmulateArray.h",
+    "unsupported/Eigen/CXX11/src/util/EmulateCXX11Meta.h",
+    "unsupported/Eigen/CXX11/src/util/MaxSizeVector.h",
+    "unsupported/Eigen/EulerAngles",
+    "unsupported/Eigen/FFT",
+    "unsupported/Eigen/IterativeSolvers",
+    "unsupported/Eigen/KroneckerProduct",
+    "unsupported/Eigen/LevenbergMarquardt",
+    "unsupported/Eigen/MPRealSupport",
+    "unsupported/Eigen/MatrixFunctions",
+    "unsupported/Eigen/MoreVectorization",
+    "unsupported/Eigen/NonLinearOptimization",
+    "unsupported/Eigen/NumericalDiff",
+    "unsupported/Eigen/OpenGLSupport",
+    "unsupported/Eigen/Polynomials",
+    "unsupported/Eigen/Skyline",
+    "unsupported/Eigen/SparseExtra",
+    "unsupported/Eigen/SpecialFunctions",
+    "unsupported/Eigen/Splines",
+    "unsupported/Eigen/src/AutoDiff/AutoDiffJacobian.h",
+    "unsupported/Eigen/src/AutoDiff/AutoDiffScalar.h",
+    "unsupported/Eigen/src/AutoDiff/AutoDiffVector.h",
+    "unsupported/Eigen/src/BVH/BVAlgorithms.h",
+    "unsupported/Eigen/src/BVH/KdBVH.h",
+    "unsupported/Eigen/src/Eigenvalues/ArpackSelfAdjointEigenSolver.h",
+    "unsupported/Eigen/src/EulerAngles/CMakeLists.txt",
+    "unsupported/Eigen/src/EulerAngles/EulerAngles.h",
+    "unsupported/Eigen/src/EulerAngles/EulerSystem.h",
+    "unsupported/Eigen/src/FFT/ei_fftw_impl.h",
+    "unsupported/Eigen/src/FFT/ei_kissfft_impl.h",
+    "unsupported/Eigen/src/IterativeSolvers/ConstrainedConjGrad.h",
+    "unsupported/Eigen/src/IterativeSolvers/DGMRES.h",
+    "unsupported/Eigen/src/IterativeSolvers/GMRES.h",
+    "unsupported/Eigen/src/IterativeSolvers/IncompleteLU.h",
+    "unsupported/Eigen/src/IterativeSolvers/IterationController.h",
+    "unsupported/Eigen/src/IterativeSolvers/MINRES.h",
+    "unsupported/Eigen/src/IterativeSolvers/Scaling.h",
+    "unsupported/Eigen/src/KroneckerProduct/KroneckerTensorProduct.h",
+    "unsupported/Eigen/src/LevenbergMarquardt/CopyrightMINPACK.txt",
+    "unsupported/Eigen/src/LevenbergMarquardt/LMcovar.h",
+    "unsupported/Eigen/src/LevenbergMarquardt/LMonestep.h",
+    "unsupported/Eigen/src/LevenbergMarquardt/LMpar.h",
+    "unsupported/Eigen/src/LevenbergMarquardt/LMqrsolv.h",
+    "unsupported/Eigen/src/LevenbergMarquardt/LevenbergMarquardt.h",
+    "unsupported/Eigen/src/MatrixFunctions/MatrixExponential.h",
+    "unsupported/Eigen/src/MatrixFunctions/MatrixFunction.h",
+    "unsupported/Eigen/src/MatrixFunctions/MatrixLogarithm.h",
+    "unsupported/Eigen/src/MatrixFunctions/MatrixPower.h",
+    "unsupported/Eigen/src/MatrixFunctions/MatrixSquareRoot.h",
+    "unsupported/Eigen/src/MatrixFunctions/StemFunction.h",
+    "unsupported/Eigen/src/MoreVectorization/MathFunctions.h",
+    "unsupported/Eigen/src/NonLinearOptimization/HybridNonLinearSolver.h",
+    "unsupported/Eigen/src/NonLinearOptimization/LevenbergMarquardt.h",
+    "unsupported/Eigen/src/NonLinearOptimization/chkder.h",
+    "unsupported/Eigen/src/NonLinearOptimization/covar.h",
+    "unsupported/Eigen/src/NonLinearOptimization/dogleg.h",
+    "unsupported/Eigen/src/NonLinearOptimization/fdjac1.h",
+    "unsupported/Eigen/src/NonLinearOptimization/lmpar.h",
+    "unsupported/Eigen/src/NonLinearOptimization/qrsolv.h",
+    "unsupported/Eigen/src/NonLinearOptimization/r1mpyq.h",
+    "unsupported/Eigen/src/NonLinearOptimization/r1updt.h",
+    "unsupported/Eigen/src/NonLinearOptimization/rwupdt.h",
+    "unsupported/Eigen/src/NumericalDiff/NumericalDiff.h",
+    "unsupported/Eigen/src/Polynomials/Companion.h",
+    "unsupported/Eigen/src/Polynomials/PolynomialSolver.h",
+    "unsupported/Eigen/src/Polynomials/PolynomialUtils.h",
+    "unsupported/Eigen/src/Skyline/SkylineInplaceLU.h",
+    "unsupported/Eigen/src/Skyline/SkylineMatrix.h",
+    "unsupported/Eigen/src/Skyline/SkylineMatrixBase.h",
+    "unsupported/Eigen/src/Skyline/SkylineProduct.h",
+    "unsupported/Eigen/src/Skyline/SkylineStorage.h",
+    "unsupported/Eigen/src/Skyline/SkylineUtil.h",
+    "unsupported/Eigen/src/SparseExtra/BlockOfDynamicSparseMatrix.h",
+    "unsupported/Eigen/src/SparseExtra/BlockSparseMatrix.h",
+    "unsupported/Eigen/src/SparseExtra/DynamicSparseMatrix.h",
+    "unsupported/Eigen/src/SparseExtra/MarketIO.h",
+    "unsupported/Eigen/src/SparseExtra/MatrixMarketIterator.h",
+    "unsupported/Eigen/src/SparseExtra/RandomSetter.h",
+    "unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsArrayAPI.h",
+    "unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsFunctors.h",
+    "unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsHalf.h",
+    "unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsImpl.h",
+    "unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsPacketMath.h",
+    "unsupported/Eigen/src/SpecialFunctions/arch/CUDA/CudaSpecialFunctions.h",
+    "unsupported/Eigen/src/Splines/Spline.h",
+    "unsupported/Eigen/src/Splines/SplineFitting.h",
+    "unsupported/Eigen/src/Splines/SplineFwd.h",
+    "unsupported/README.txt",
+    "unsupported/bench/bench_svd.cpp",
+    "unsupported/doc/CMakeLists.txt",
+    "unsupported/doc/Overview.dox",
+    "unsupported/doc/eigendoxy_layout.xml.in",
+    "unsupported/doc/examples/BVH_Example.cpp",
+    "unsupported/doc/examples/CMakeLists.txt",
+    "unsupported/doc/examples/EulerAngles.cpp",
+    "unsupported/doc/examples/FFT.cpp",
+    "unsupported/doc/examples/MatrixExponential.cpp",
+    "unsupported/doc/examples/MatrixFunction.cpp",
+    "unsupported/doc/examples/MatrixLogarithm.cpp",
+    "unsupported/doc/examples/MatrixPower.cpp",
+    "unsupported/doc/examples/MatrixPower_optimal.cpp",
+    "unsupported/doc/examples/MatrixSine.cpp",
+    "unsupported/doc/examples/MatrixSinh.cpp",
+    "unsupported/doc/examples/MatrixSquareRoot.cpp",
+    "unsupported/doc/examples/PolynomialSolver1.cpp",
+    "unsupported/doc/examples/PolynomialUtils1.cpp",
+    "unsupported/doc/snippets/CMakeLists.txt",
+    "unsupported/test/BVH.cpp",
+    "unsupported/test/CMakeLists.txt",
+    "unsupported/test/EulerAngles.cpp",
+    "unsupported/test/FFT.cpp",
+    "unsupported/test/FFTW.cpp",
+    "unsupported/test/NonLinearOptimization.cpp",
+    "unsupported/test/NumericalDiff.cpp",
+    "unsupported/test/alignedvector3.cpp",
+    "unsupported/test/autodiff.cpp",
+    "unsupported/test/autodiff_scalar.cpp",
+    "unsupported/test/cxx11_eventcount.cpp",
+    "unsupported/test/cxx11_meta.cpp",
+    "unsupported/test/cxx11_non_blocking_thread_pool.cpp",
+    "unsupported/test/cxx11_runqueue.cpp",
+    "unsupported/test/cxx11_tensor_argmax.cpp",
+    "unsupported/test/cxx11_tensor_argmax_cuda.cu",
+    "unsupported/test/cxx11_tensor_assign.cpp",
+    "unsupported/test/cxx11_tensor_broadcast_sycl.cpp",
+    "unsupported/test/cxx11_tensor_broadcasting.cpp",
+    "unsupported/test/cxx11_tensor_cast_float16_cuda.cu",
+    "unsupported/test/cxx11_tensor_casts.cpp",
+    "unsupported/test/cxx11_tensor_chipping.cpp",
+    "unsupported/test/cxx11_tensor_comparisons.cpp",
+    "unsupported/test/cxx11_tensor_complex_cuda.cu",
+    "unsupported/test/cxx11_tensor_complex_cwise_ops_cuda.cu",
+    "unsupported/test/cxx11_tensor_concatenation.cpp",
+    "unsupported/test/cxx11_tensor_const.cpp",
+    "unsupported/test/cxx11_tensor_contract_cuda.cu",
+    "unsupported/test/cxx11_tensor_contraction.cpp",
+    "unsupported/test/cxx11_tensor_convolution.cpp",
+    "unsupported/test/cxx11_tensor_cuda.cu",
+    "unsupported/test/cxx11_tensor_custom_index.cpp",
+    "unsupported/test/cxx11_tensor_custom_op.cpp",
+    "unsupported/test/cxx11_tensor_device.cu",
+    "unsupported/test/cxx11_tensor_device_sycl.cpp",
+    "unsupported/test/cxx11_tensor_dimension.cpp",
+    "unsupported/test/cxx11_tensor_empty.cpp",
+    "unsupported/test/cxx11_tensor_expr.cpp",
+    "unsupported/test/cxx11_tensor_fft.cpp",
+    "unsupported/test/cxx11_tensor_fixed_size.cpp",
+    "unsupported/test/cxx11_tensor_forced_eval.cpp",
+    "unsupported/test/cxx11_tensor_forced_eval_sycl.cpp",
+    "unsupported/test/cxx11_tensor_generator.cpp",
+    "unsupported/test/cxx11_tensor_ifft.cpp",
+    "unsupported/test/cxx11_tensor_image_patch.cpp",
+    "unsupported/test/cxx11_tensor_index_list.cpp",
+    "unsupported/test/cxx11_tensor_inflation.cpp",
+    "unsupported/test/cxx11_tensor_intdiv.cpp",
+    "unsupported/test/cxx11_tensor_io.cpp",
+    "unsupported/test/cxx11_tensor_layout_swap.cpp",
+    "unsupported/test/cxx11_tensor_lvalue.cpp",
+    "unsupported/test/cxx11_tensor_map.cpp",
+    "unsupported/test/cxx11_tensor_math.cpp",
+    "unsupported/test/cxx11_tensor_mixed_indices.cpp",
+    "unsupported/test/cxx11_tensor_morphing.cpp",
+    "unsupported/test/cxx11_tensor_notification.cpp",
+    "unsupported/test/cxx11_tensor_of_complex.cpp",
+    "unsupported/test/cxx11_tensor_of_const_values.cpp",
+    "unsupported/test/cxx11_tensor_of_float16_cuda.cu",
+    "unsupported/test/cxx11_tensor_of_strings.cpp",
+    "unsupported/test/cxx11_tensor_padding.cpp",
+    "unsupported/test/cxx11_tensor_patch.cpp",
+    "unsupported/test/cxx11_tensor_random.cpp",
+    "unsupported/test/cxx11_tensor_random_cuda.cu",
+    "unsupported/test/cxx11_tensor_reduction.cpp",
+    "unsupported/test/cxx11_tensor_reduction_cuda.cu",
+    "unsupported/test/cxx11_tensor_reduction_sycl.cpp",
+    "unsupported/test/cxx11_tensor_ref.cpp",
+    "unsupported/test/cxx11_tensor_reverse.cpp",
+    "unsupported/test/cxx11_tensor_roundings.cpp",
+    "unsupported/test/cxx11_tensor_scan.cpp",
+    "unsupported/test/cxx11_tensor_scan_cuda.cu",
+    "unsupported/test/cxx11_tensor_shuffling.cpp",
+    "unsupported/test/cxx11_tensor_simple.cpp",
+    "unsupported/test/cxx11_tensor_striding.cpp",
+    "unsupported/test/cxx11_tensor_sugar.cpp",
+    "unsupported/test/cxx11_tensor_sycl.cpp",
+    "unsupported/test/cxx11_tensor_symmetry.cpp",
+    "unsupported/test/cxx11_tensor_thread_pool.cpp",
+    "unsupported/test/cxx11_tensor_uint128.cpp",
+    "unsupported/test/cxx11_tensor_volume_patch.cpp",
+    "unsupported/test/dgmres.cpp",
+    "unsupported/test/forward_adolc.cpp",
+    "unsupported/test/gmres.cpp",
+    "unsupported/test/kronecker_product.cpp",
+    "unsupported/test/levenberg_marquardt.cpp",
+    "unsupported/test/matrix_exponential.cpp",
+    "unsupported/test/matrix_function.cpp",
+    "unsupported/test/matrix_functions.h",
+    "unsupported/test/matrix_power.cpp",
+    "unsupported/test/matrix_square_root.cpp",
+    "unsupported/test/minres.cpp",
+    "unsupported/test/mpreal/mpreal.h",
+    "unsupported/test/mpreal_support.cpp",
+    "unsupported/test/openglsupport.cpp",
+    "unsupported/test/polynomialsolver.cpp",
+    "unsupported/test/polynomialutils.cpp",
+    "unsupported/test/sparse_extra.cpp",
+    "unsupported/test/special_functions.cpp",
+    "unsupported/test/splines.cpp"
+  ],
+  "gitlinks": [
+    {
+      "path": "python/pybind11",
+      "commit": "f5fbe867d2d26e4a0a9177a51f6e568868ad3dc8"
+    }
+  ],
+  "reason": "复用同commit合格来源且逐项核对原提交内容；保留全部C++生产源码与Eigen头及全部COPYING。排除未启用的Python/pybind11、.gitmodules、dotnet、上游测试/文档素材和Eigen非运行组件。未修改真实逻辑。"
+}
