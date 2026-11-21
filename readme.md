@@ -26,6 +26,8 @@ See each header file for documentation.
   procedural shapes generation, ray intersection and closest point queries
 - `yocto/yocto_scene.{h,cpp}`: scene representation and properties
   evaluation
+- `yocto/yocto_lens.{h,cpp}`: owning compound spherical lens configuration,
+  single-ray lens tracing and mechanical focus
 - `yocto/yocto_bvh.{h,cpp}`: ray intersection and closest point queries
   of triangle meshes, quads meshes, line sets and instances scenes using a
   two-level bounding volume hierarchy
@@ -42,7 +44,6 @@ See each header file for documentation.
 
 You can see Yocto/GL in action in the following applications written to
 test the library:
-
 - `apps/ytonemap.cpp`: image conversion and viewing
 - `apps/ycolorgrade.cpp`: image color grading
 - `apps/yconvert.cpp`: scene conversion
@@ -99,6 +100,94 @@ standard library does.
 The library is released under the MIT license. We include various external
 dependencies in the distribution that each have thir own license, compatible
 with the chosen one.
+
+## Compound lens camera
+
+`yocto/yocto_lens.{h,cpp}` adds a physically modeled compound spherical lens to
+the CPU camera, as an alternative to the legacy thin-lens blur. When a camera
+has no lens group configured, the original camera rays, random-number
+consumption and images are unchanged.
+
+### Coordinates and units
+
+All lens quantities are in **meters** and live in lens-local coordinates:
+
+- the optical axis is **+z** and points toward the scene;
+- the film plane is at `z = -g`, with `g` the film distance;
+- the aperture stop is a disk of radius `a` centered on the optical axis at
+  `z = 0`;
+- interfaces are listed with **strictly increasing** vertex `z`.
+
+Each `lens_interface` has a curvature radius `R`, an effective (clear) radius
+`r`, and the refractive index `eta` **after** crossing the interface. The
+medium before the first interface and after the last one is air (`eta = 1`).
+
+For a nonzero `R` the sphere center sits at `z + R` and only the half sphere
+containing the vertex is used, so the effective radius must satisfy
+`0 < r < |R|`. `R = 0` is a flat diaphragm that does not refract, so its `eta`
+must equal the previous medium's index.
+
+### Tracing and camera sampling
+
+A ray through the lens takes the nearest valid intersection at every step.
+Missing the aperture, missing an interface's clear radius, missing an
+intersection, or total internal reflection makes the sample produce **no
+contribution**; it is never resampled. Spherical surfaces refract by Snell's
+law and multiply the unpolarized Fresnel transmittance. The exit ray leaves the
+last interface and maps lens-local **+z** to `camera.frame`'s **-z**.
+
+Film sampling keeps the legacy `film`/`aspect` physical size: the old pixel
+jitter is drawn first and the aperture disk is then sampled uniformly by area
+at `z = 0`. Each sample's exposure weight is
+
+```
+pi * a^2 * cos(theta)^4 / g^2 * product_of_transmittances
+```
+
+where `theta` is the angle between the initial film-to-aperture direction and
+the optical axis. This is a physical irradiance weight and is not normalized by
+aperture area. Blocked samples still occupy the full camera sample count, so
+they stay in the denominator instead of being averaged away.
+
+`params.clamp` limits the per-sample RGB peak **after** multiplying by the
+exposure weight. The weight and validity diagnostics are not clamped. To
+compare irradiance levels, set `clamp` high enough that it never triggers; the
+display truncation never feeds back into the diagnostic channels.
+
+The offscreen diagnostics are `get_weight_image` (mean exposure weight per
+camera sample, geometric factor included, blocked samples zero) and
+`get_valid_image` (fraction of successful samples), both linear float.
+
+### Mechanical focus
+
+Focusing uses an on-axis paraxial ray: from the film center through the
+aperture point `(h, 0, 0)` with `h = a * 1e-3`. The ray is traced through the
+lens and its `x` intercept on the scene plane `z = focus_z` is driven to zero
+by solving for the film distance `g`. This uses the real lens trace, never a
+thin-lens focal length formula.
+
+```cpp
+auto camera = scene.cameras[0];
+auto lens   = lens_config{};  // fill aperture, interfaces
+set_camera_lens(camera, lens);
+auto ok = focus_camera(camera, focus_z, 1e-3f, 1.0f);
+```
+
+`focus_camera` (and `solve_lens_focus` in `yocto_lens.h`) takes a finite,
+positive, non-empty interval of film distances and a `focus_z` larger than the
+last interface `z`. Endpoints that are already roots are accepted. The solve
+fails explicitly when the interval does not bracket a root, when any required
+trace is blocked, when it cannot converge, or when the configuration is
+invalid. On failure the previous camera configuration, existing `film` and the
+caller's RNG are left untouched.
+
+### Validation
+
+Non-finite numbers, out-of-order interfaces, non-positive refractive indices,
+a lens that does not exit back into air, and invalid sizes are rejected before
+rendering (`validate_camera_lens`, also enforced by `make_trace_state`). The
+compound lens is limited to finite non-degenerate lenses, positive film
+distances and perspective cameras.
 
 ## Compilation
 

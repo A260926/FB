@@ -357,6 +357,31 @@ static ray3f sample_camera(const camera_data& camera, const vec2i& ij,
   }
 }
 
+// Sample camera, optionally through a compound lens. The legacy jittered uv is
+// computed first, exactly as in the thin-lens path, and then used as the image
+// coordinate on the film. The aperture disk is sampled uniformly by area.
+static camera_lens_sample sample_camera_lens_sample(const camera_data& camera,
+    const vec2i& ij, const vec2i& image_size, const vec2f& puv,
+    const vec2f& luv, bool tent) {
+  // Compute the legacy jittered uv, reusing the exact same formulas.
+  auto uv = vec2f{0, 0};
+  if (!tent) {
+    uv = vec2f{(ij.x + puv.x) / image_size.x, (ij.y + puv.y) / image_size.y};
+  } else {
+    const auto width  = 2.0f;
+    const auto offset = 0.5f;
+    auto       fuv =
+        width *
+            vec2f{
+                puv.x < 0.5f ? sqrt(2 * puv.x) - 1 : 1 - sqrt(2 - 2 * puv.x),
+                puv.y < 0.5f ? sqrt(2 * puv.y) - 1 : 1 - sqrt(2 - 2 * puv.y),
+            } +
+        offset;
+    uv = vec2f{(ij.x + fuv.x) / image_size.x, (ij.y + fuv.y) / image_size.y};
+  }
+  return sample_camera_lens(camera, uv, sample_disk(luv));
+}
+
 // Sample lights wrt solid angle
 static vec3f sample_lights(const scene_data& scene, const trace_lights& lights,
     const vec3f& position, float rl, float rel, const vec2f& ruv) {
@@ -1464,15 +1489,61 @@ void trace_sample(trace_state& state, const scene_data& scene,
   auto& camera  = scene.cameras[params.camera];
   auto  sampler = get_trace_sampler_func(params);
   auto  idx     = state.width * j + i;
-  auto  ray     = sample_camera(camera, {i, j}, {state.width, state.height},
-           rand2f(state.rngs[idx]), rand2f(state.rngs[idx]), params.tentfilter);
-  auto [radiance, hit, albedo, normal] = sampler(
-      scene, bvh, lights, ray, state.rngs[idx], params);
+
+  auto radiance  = vec3f{0, 0, 0};
+  auto hit       = false;
+  auto albedo    = vec3f{0, 0, 0};
+  auto normal    = vec3f{0, 0, 0};
+  auto ray_dir   = vec3f{0, 0, 0};
+  auto blocked   = false;
+
+  if (camera_has_lens(camera)) {
+    // Compound lens camera. The legacy pixel jitter is reused, then the
+    // aperture is sampled uniformly by area. Failed samples are still counted
+    // in the camera sample denominator and contribute zero radiance and
+    // weight.
+    auto lens_sample = sample_camera_lens_sample(camera, {i, j},
+        {state.width, state.height}, rand2f(state.rngs[idx]),
+        rand2f(state.rngs[idx]), params.tentfilter);
+    ray_dir          = lens_sample.ray.d;
+    auto exposure    = lens_sample.valid ? lens_sample.weight : 0.0f;
+    if (!state.weight_sum.empty()) state.weight_sum[idx] += exposure;
+    if (lens_sample.valid) state.valid_count[idx] += 1;
+    if (lens_sample.valid) {
+      auto result = sampler(scene, bvh, lights, lens_sample.ray,
+          state.rngs[idx], params);
+      radiance    = result.radiance * exposure;
+      hit         = result.hit;
+      albedo      = result.albedo;
+      normal      = result.normal;
+    } else {
+      blocked = true;
+    }
+  } else {
+    auto ray = sample_camera(camera, {i, j}, {state.width, state.height},
+        rand2f(state.rngs[idx]), rand2f(state.rngs[idx]), params.tentfilter);
+    ray_dir  = ray.d;
+    auto result = sampler(scene, bvh, lights, ray, state.rngs[idx], params);
+    radiance    = result.radiance;
+    hit         = result.hit;
+    albedo      = result.albedo;
+    normal      = result.normal;
+  }
+
   if (!isfinite(radiance)) radiance = {0, 0, 0};
+  // Clamp the per-sample RGB peak after applying the exposure weight. The
+  // weight and valid diagnostics are accumulated before this point and are
+  // never clamped.
   if (max(radiance) > params.clamp)
     radiance = radiance * (params.clamp / max(radiance));
   auto weight = 1.0f / (sample + 1);
-  if (hit) {
+  if (blocked) {
+    // Blocked lens samples contribute zero radiance but still occupy the full
+    // camera sample denominator.
+    state.image[idx]  = lerp(state.image[idx], {0, 0, 0, 0}, weight);
+    state.albedo[idx] = lerp(state.albedo[idx], {0, 0, 0}, weight);
+    state.normal[idx] = lerp(state.normal[idx], {0, 0, 0}, weight);
+  } else if (hit) {
     state.image[idx] = lerp(
         state.image[idx], {radiance.x, radiance.y, radiance.z, 1}, weight);
     state.albedo[idx] = lerp(state.albedo[idx], albedo, weight);
@@ -1482,12 +1553,12 @@ void trace_sample(trace_state& state, const scene_data& scene,
     state.image[idx] = lerp(
         state.image[idx], {radiance.x, radiance.y, radiance.z, 1}, weight);
     state.albedo[idx] = lerp(state.albedo[idx], {1, 1, 1}, weight);
-    state.normal[idx] = lerp(state.normal[idx], -ray.d, weight);
+    state.normal[idx] = lerp(state.normal[idx], -ray_dir, weight);
     state.hits[idx] += 1;
   } else {
     state.image[idx]  = lerp(state.image[idx], {0, 0, 0, 0}, weight);
     state.albedo[idx] = lerp(state.albedo[idx], {0, 0, 0}, weight);
-    state.normal[idx] = lerp(state.normal[idx], -ray.d, weight);
+    state.normal[idx] = lerp(state.normal[idx], -ray_dir, weight);
   }
 }
 
@@ -1495,6 +1566,10 @@ void trace_sample(trace_state& state, const scene_data& scene,
 trace_state make_trace_state(
     const scene_data& scene, const trace_params& params) {
   auto& camera = scene.cameras[params.camera];
+  // Reject invalid compound lens setups before allocating or tracing anything.
+  auto lens_error = string{};
+  if (!validate_camera_lens(camera, lens_error))
+    throw std::invalid_argument{lens_error};
   auto  state  = trace_state{};
   if (camera.aspect >= 1) {
     state.width  = params.resolution;
@@ -1508,6 +1583,10 @@ trace_state make_trace_state(
   state.albedo.assign(state.width * state.height, {0, 0, 0});
   state.normal.assign(state.width * state.height, {0, 0, 0});
   state.hits.assign(state.width * state.height, 0);
+  state.weight_sum.assign(state.width * state.height, 0.0f);
+  state.valid_count.assign(state.width * state.height, 0);
+  state.weights.assign(state.width * state.height, 0.0f);
+  state.valid.assign(state.width * state.height, 0.0f);
   state.rngs.assign(state.width * state.height, {});
   auto rng_ = make_rng(1301081);
   for (auto& rng : state.rngs) {
@@ -1591,6 +1670,19 @@ image_data trace_image(const scene_data& scene, const trace_params& params) {
   return get_image(state);
 }
 
+// Refresh the compound lens diagnostic means. Both are over the full camera
+// sample count accumulated so far, so blocked samples stay in the denominator.
+static void update_lens_diagnostics(trace_state& state) {
+  if (state.samples <= 0) return;
+  if (state.weights.size() != (size_t)state.width * (size_t)state.height)
+    return;
+  auto inv = 1.0f / (float)state.samples;
+  for (auto idx = 0; idx < state.width * state.height; idx++) {
+    state.weights[idx] = state.weight_sum[idx] * inv;
+    state.valid[idx]   = (float)state.valid_count[idx] * inv;
+  }
+}
+
 // Progressively compute an image by calling trace_samples multiple times.
 void trace_samples(trace_state& state, const scene_data& scene,
     const trace_bvh& bvh, const trace_lights& lights,
@@ -1612,6 +1704,7 @@ void trace_samples(trace_state& state, const scene_data& scene,
     });
   }
   state.samples += params.batch;
+  update_lens_diagnostics(state);
   if (params.denoise && !state.denoised.empty()) {
     denoise_image(state.denoised, state.width, state.height, state.image,
         state.albedo, state.normal);
@@ -1639,6 +1732,7 @@ void trace_start(trace_context& context, trace_state& state,
       }
     });
     state.samples += params.batch;
+    update_lens_diagnostics(state);
     if (context.stop) return;
     if (params.denoise && !state.denoised.empty()) {
       denoise_image(state.denoised, state.width, state.height, state.image,
@@ -1787,6 +1881,35 @@ void get_normal_image(image_data& normal, const trace_state& state) {
   for (auto idx = 0; idx < state.width * state.height; idx++) {
     normal.pixels[idx] = {
         state.normal[idx].x, state.normal[idx].y, state.normal[idx].z, 1.0f};
+  }
+}
+
+// Get compound lens weight diagnostic. Linear float, never clamped.
+image_data get_weight_image(const trace_state& state) {
+  auto image = make_image(state.width, state.height, true);
+  get_weight_image(image, state);
+  return image;
+}
+void get_weight_image(image_data& image, const trace_state& state) {
+  check_image(image, state.width, state.height, true);
+  for (auto idx = 0; idx < state.width * state.height; idx++) {
+    auto value        = idx < (int)state.weights.size() ? state.weights[idx]
+                                                        : 0.0f;
+    image.pixels[idx] = {value, value, value, 1.0f};
+  }
+}
+
+// Get compound lens validity diagnostic. Linear float in [0, 1], never clamped.
+image_data get_valid_image(const trace_state& state) {
+  auto image = make_image(state.width, state.height, true);
+  get_valid_image(image, state);
+  return image;
+}
+void get_valid_image(image_data& image, const trace_state& state) {
+  check_image(image, state.width, state.height, true);
+  for (auto idx = 0; idx < state.width * state.height; idx++) {
+    auto value        = idx < (int)state.valid.size() ? state.valid[idx] : 0.0f;
+    image.pixels[idx] = {value, value, value, 1.0f};
   }
 }
 

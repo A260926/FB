@@ -5,6 +5,7 @@ add_library(yocto STATIC
   yocto_shape.h yocto_shape.cpp
   yocto_image.h yocto_image.cpp
   yocto_scene.h yocto_scene.cpp
+  yocto_lens.h yocto_lens.cpp
   yocto_trace.h yocto_trace.cpp
   yocto_modelio.h yocto_modelio.cpp
   yocto_pbrtio.h yocto_pbrtio.cpp

@@ -44,6 +44,7 @@
 
 #include "yocto_geometry.h"
 #include "yocto_image.h"
+#include "yocto_lens.h"
 #include "yocto_math.h"
 #include "yocto_shape.h"
 
@@ -88,6 +89,10 @@ struct camera_data {
   float   aspect       = 1.500f;
   float   focus        = 10000;
   float   aperture     = 0;
+  // Owning compound lens group. An empty interface list leaves the legacy
+  // thin-lens camera unchanged. See yocto_lens.h for the configuration and
+  // sampling helpers.
+  lens_config lens_group = {};
 };
 
 // Texture data as array of float or byte pixels. Textures can be stored in

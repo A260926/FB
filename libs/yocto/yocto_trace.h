@@ -46,6 +46,7 @@
 
 #include "yocto_bvh.h"
 #include "yocto_image.h"
+#include "yocto_lens.h"
 #include "yocto_math.h"
 #include "yocto_sampling.h"
 #include "yocto_scene.h"
@@ -154,6 +155,14 @@ struct trace_state {
   vector<int>       hits     = {};
   vector<rng_state> rngs     = {};
   vector<vec4f>     denoised = {};
+  // Compound lens diagnostics. Each camera sample contributes its exposure
+  // weight (zero on blocked samples) to weight_sum, and increments valid_count
+  // when the sample exits the lens. Means are over the full camera sample
+  // count, so blocked samples keep their share of the denominator.
+  vector<float> weight_sum  = {};
+  vector<int>   valid_count = {};
+  vector<float> weights     = {};  // mean exposure weight per camera sample
+  vector<float> valid       = {};  // fraction of successful camera samples
 };
 
 // Initialize state.
@@ -188,6 +197,15 @@ image_data get_albedo_image(const trace_state& state);
 void       get_albedo_image(image_data& image, const trace_state& state);
 image_data get_normal_image(const trace_state& state);
 void       get_normal_image(image_data& image, const trace_state& state);
+// Offscreen compound lens diagnostics. Both are linear float images matching
+// the render resolution. weight holds the mean exposure weight per camera
+// sample (geometry included, blocked samples zero), valid holds the fraction
+// of successful camera samples. Neither channel participates in display
+// truncation or clamping.
+image_data get_weight_image(const trace_state& state);
+void       get_weight_image(image_data& image, const trace_state& state);
+image_data get_valid_image(const trace_state& state);
+void       get_valid_image(image_data& image, const trace_state& state);
 
 // Denoise image
 image_data denoise_image(const image_data& render, const image_data& albedo,
