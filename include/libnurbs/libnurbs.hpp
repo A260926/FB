@@ -7,6 +7,7 @@
 
 /* Algotithm */
 #include "libnurbs/Algorithm/MathUtils.hpp"
+#include "libnurbs/Algorithm/OffsetBounds.hpp"
 
 /* Basis */
 #include "libnurbs/Basis/BSplineBasis.hpp"
