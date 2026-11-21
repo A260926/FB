@@ -6,10 +6,36 @@
 #include "Grid.h"
 #include "Vertex.h"
 #include "Vector3f.h"
+#include <cstdint>
+#include <vector>
 
 typedef Grid<double> ZBuffer;
 
 namespace al { namespace graphics {
+
+/*
+Records the fragment that won the depth test at a pixel. Only populated when
+TriangleDrawer::recordFragments is enabled (default off).
+*/
+struct FragmentRecord
+{
+  std::uint32_t color;
+  // Perspective-correct float attribute carried through the rgb channel.
+  // Callers choose what it means (e.g. local position for capture, float
+  // color for reprojection).
+  Vector3f attribute;
+  // Perspective-correct unit local-space normal (from the normal channel).
+  Vector3f normal;
+  // Screen-space barycentric weights of the winning fragment and the
+  // caller-supplied triangle id (Triangle::textureID).
+  float bary[3];
+  int triangleId;
+  bool valid;
+  FragmentRecord()
+  : color(0), attribute(), normal(), bary{0.0f, 0.0f, 0.0f}, triangleId(-1),
+    valid(false)
+  {}
+};
 
 class TriangleDrawer
 {
@@ -33,6 +59,24 @@ public:
   ZBuffer* depthBuffer;
   std::uint32_t color;
   ImageData* textureImageData;
+
+  // Opt-in extensions used by the depth impostor. Both default to off, so the
+  // existing algorithms and drawing paths are unaffected.
+  //
+  // When true, the fragment depth written/compared is the true projected
+  // depth from the clip-space z (vertex pos.z), instead of the legacy
+  // inverse-w value. The vertex pos must already be in NDC (post
+  // perspective-divide) with pos.z divided by w as well.
+  bool useProjectedDepth = false;
+  // When true, the winning fragment's color, local position and unit normal
+  // are written to fragmentRecords in the same final depth commit that
+  // updates the color/depth targets.
+  bool recordFragments = false;
+  std::vector<FragmentRecord>* fragmentRecords = nullptr;
+  // When true, barycentric coverage accepts either triangle winding, so a
+  // triangle is drawn from both sides. Defaults to false (back-face coverage
+  // of the existing algorithms is preserved).
+  bool doubleSided = false;
 
   TriangleDrawer(ZBuffer* depthBuffer = 0)
   : drawMode(TriangleDrawer::DRAW_SOLID)
@@ -77,7 +121,25 @@ public:
   void barycentricO2(ImageData& imageData, const Triangle& triangle);
 
 private:
+  // True projected depth from the (NDC) clip-space z when useProjectedDepth
+  // is enabled. Falls back to the legacy inverse-w depth otherwise.
+  double fragmentDepth(float ndcZ, double legacyDepth) const
+  {
+    return useProjectedDepth ? static_cast<double>(ndcZ)
+                             : legacyDepth;
+  }
 
+  // Commits the winning fragment to the color/depth/fragment targets in one
+  // place so color, position, normal and depth always update together.
+  void commitFragment(ImageData& imageData,
+                      int x, int y,
+                      std::uint32_t pixel,
+                      float ndcZ,
+                      double legacyDepth,
+                      const Vector3f& attribute,
+                      const Vector3f& normal,
+                      const float bary[3],
+                      int triangleId);
 
     // Used by scanlineTriangle
   void scanline(ImageData& imageData,

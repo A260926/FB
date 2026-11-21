@@ -198,6 +198,39 @@ scanlineTriangle(ImageData& imageData, const Triangle& triangle)
 } // texturedTriangle
 
 inline
+void TriangleDrawer::commitFragment(ImageData& imageData,
+                                    int x, int y,
+                                    std::uint32_t pixel,
+                                    float ndcZ,
+                                    double legacyDepth,
+                                    const Vector3f& attribute,
+                                    const Vector3f& normal,
+                                    const float bary[3],
+                                    int triangleId)
+{
+  const double depth = fragmentDepth(ndcZ, legacyDepth);
+  imageData.setPixel(x, y, pixel);
+  if (depthBuffer) {
+    depthBuffer->unsafeSet(x, y, depth);
+  }
+  if (recordFragments && fragmentRecords) {
+    const unsigned index = static_cast<unsigned>(y) * imageData.width() +
+                           static_cast<unsigned>(x);
+    if (index < fragmentRecords->size()) {
+      FragmentRecord& rec = (*fragmentRecords)[index];
+      rec.color = pixel;
+      rec.attribute = attribute;
+      rec.normal = normal;
+      rec.bary[0] = bary[0];
+      rec.bary[1] = bary[1];
+      rec.bary[2] = bary[2];
+      rec.triangleId = triangleId;
+      rec.valid = true;
+    }
+  }
+}
+
+inline
 void TriangleDrawer::barycentricPixel(ImageData& imageData,
                                       int x, int y,
                                       const Triangle& t,
@@ -207,7 +240,6 @@ void TriangleDrawer::barycentricPixel(ImageData& imageData,
   const Vertex4f& a = t.vertices[0];
   const Vertex4f& b = t.vertices[1];
   const Vertex4f& c = t.vertices[2];
-  const double depth = w;
   uint32_t pixel;
   switch (drawMode) {
     case DRAW_PERSPECTIVE: {
@@ -257,11 +289,35 @@ void TriangleDrawer::barycentricPixel(ImageData& imageData,
       }
       pixel = G3D::lightPixel(pixel, lightStrength);
     }
-    imageData.setPixel(x, y, pixel);
-    if (depthBuffer) {
-      depthBuffer->unsafeSet(x, y, depth);
-    }
 
+    // Projected depth comes from the (NDC) clip-space z of the triangle.
+    // The legacy depth is the inverse-w value computed by the caller.
+    const float ndcZ = a.z()*alp + b.z()*bet + c.z()*gam;
+
+    // Local position and unit normal are delivered through the existing
+    // perspective-correct attribute interpolation used by DRAW_PERSPECTIVE.
+    //
+    // The pre-pass above divides rgb by the original w but leaves normal
+    // untouched (lighting relies on the raw normals). The recovered depth
+    // w = 1 / sum(bary_i / w_i), and pos.w() holds 1/w_i, so:
+    //   attribute = sum(bary_i * (attr_i / w_i)) * w          (rgb channel)
+    //   normal    = sum(bary_i * (n_i / w_i)) * w             (normal channel)
+    // where the normal channel needs an explicit 1/w_i = pos.w() factor.
+    // Interpolating unit normals this way equals interpolating the true
+    // normals and renormalizing.
+    Vector3f attribute, normal;
+    if (recordFragments) {
+      const Vector3f attrNumerator = a.rgb*alp + b.rgb*bet + c.rgb*gam;
+      const Vector3f nrmNumerator =
+          (a.normal * static_cast<float>(a.w())) * alp +
+          (b.normal * static_cast<float>(b.w())) * bet +
+          (c.normal * static_cast<float>(c.w())) * gam;
+      attribute = attrNumerator * static_cast<float>(w);
+      normal = G3D::normalize(nrmNumerator * static_cast<float>(w));
+    }
+    const float bary[3] = {alp, bet, gam};
+    commitFragment(imageData, x, y, pixel, ndcZ, w, attribute, normal, bary,
+                   t.textureID);
   } // if (alpha)
 } // barycentricPixel
 
@@ -310,20 +366,30 @@ barycentricTriangle(ImageData& imageData, const Triangle& triangle)
       // 1. Point is in triangle
       // 2. Vertices are passed in counter-clockwise CCW winding order
       // 3. Coordinates are y-down screen coordinates
+      // When doubleSided is set, either winding is accepted.
       float alp = G3D::crossProduct2D(b.pos, c.pos, p);
-      if (alp > 0) continue;
       float bet = G3D::crossProduct2D(c.pos, a.pos, p);
-      if (bet > 0) continue;
       float gam = G3D::crossProduct2D(a.pos, b.pos, p);
-      if (gam > 0) continue;
+      if (!doubleSided) {
+        if (alp > 0) continue;
+        if (bet > 0) continue;
+        if (gam > 0) continue;
+      }
+      else {
+        // All same sign (inside one winding) is required.
+        if (!((alp <= 0 && bet <= 0 && gam <= 0) ||
+              (alp >= 0 && bet >= 0 && gam >= 0))) {
+          continue;
+        }
+      }
 
       alp /= area;
       bet /= area;
       gam /= area;
 
       const double w = 1 / (a.w()*alp + b.w()*bet + c.w()*gam);
-      const double depth = w;
       if (depthBuffer) {
+        const double depth = fragmentDepth(a.z()*alp + b.z()*bet + c.z()*gam, w);
         if (depth>=depthBuffer->unsafeGet(x,y)) {
           continue;
         }
@@ -422,8 +488,8 @@ barycentricO1(ImageData& imageData, const Triangle& triangle)
       const float gam = w2 / area;
 
       const double w = 1 / (a.w()*alp + b.w()*bet + c.w()*gam);
-      const double depth = w;
       if (depthBuffer) {
+        const double depth = fragmentDepth(a.z()*alp + b.z()*bet + c.z()*gam, w);
         if (depth>=depthBuffer->unsafeGet(x,y)) {
           continue;
         }
@@ -477,8 +543,8 @@ inline int TriangleDrawer::barycentricScanline(ImageData& imageData,
     const double bet = w1 / area;
     const double gam = w2 / area;
     const double w = 1 / (a.w()*alp + b.w()*bet + c.w()*gam);
-    const double depth = w;
     if (depthBuffer) {
+      const double depth = fragmentDepth(a.z()*alp + b.z()*bet + c.z()*gam, w);
       if (depth>=depthBuffer->unsafeGet(x,y)) {
         continue;
       }

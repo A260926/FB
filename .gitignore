@@ -4,3 +4,4 @@ bin/*.exe
 *.zip
 devcpp/sw3dcpp_private.res
 devcpp/sw3dcpp.layout
+.task-build/

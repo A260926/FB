@@ -2,6 +2,8 @@
 #define ANDREW_LIM_GRAPHICS_MATRIX_H
 
 #include <cmath>
+#include "Vector3f.h"
+#include "Vector4f.h"
 
 namespace al { namespace graphics {
 
@@ -171,6 +173,35 @@ public:
   Vector4g<T> operator*(const Vector4g<T>& vec) const
   {
     return mul(vec);
+  }
+
+  /**
+   * Computes the inverse transpose of the upper-left 3x3 block and stores it
+   * in out, column-major (out[col*3+row]). This is the matrix that correctly
+   * transforms normals under the affine part of this matrix.
+   * Returns false if the block is singular.
+   */
+  bool inverseTranspose3x3(float out[9]) const
+  {
+    const double a = get(0,0), b = get(1,0), c = get(2,0);
+    const double d = get(0,1), e = get(1,1), f = get(2,1);
+    const double g = get(0,2), h = get(1,2), i = get(2,2);
+    const double det = a*(e*i - f*h) - b*(d*i - f*g) + c*(d*h - e*g);
+    if (!(det > 0.0) && !(det < 0.0)) {
+      return false;
+    }
+    const double inv = 1.0 / det;
+    // Cofactor matrix (already transposed relative to the adjugate form).
+    out[0] = static_cast<float>((e*i - f*h) * inv);
+    out[1] = static_cast<float>((f*g - d*i) * inv);
+    out[2] = static_cast<float>((d*h - e*g) * inv);
+    out[3] = static_cast<float>((c*h - b*i) * inv);
+    out[4] = static_cast<float>((a*i - c*g) * inv);
+    out[5] = static_cast<float>((b*g - a*h) * inv);
+    out[6] = static_cast<float>((b*f - c*e) * inv);
+    out[7] = static_cast<float>((c*d - a*f) * inv);
+    out[8] = static_cast<float>((a*e - b*d) * inv);
+    return true;
   }
 
   static Matrix4 makeTranslation(T x, T y, T z)
