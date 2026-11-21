@@ -9,7 +9,7 @@ if [[ $mode == target ]]; then
 bash checks/link.sh .task-build/example examples/queued_queries.cpp
 .task-build/example
 bash checks/link.sh .task-build/target checks/target.cpp task_support/driver.c
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/target-output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

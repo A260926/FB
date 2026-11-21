@@ -383,6 +383,37 @@ public:
 	virtual CullingResult TestRect(float xmin, float ymin, float xmax, float ymax, float wmin) const = 0;
 
 	/*!
+	 * \brief Variant of TestRect() that restricts the occlusion query to the tiles
+	 *        owned by a given screen region, see TestRect() for a description of the
+	 *        query parameters and the depth test rules.
+	 *
+	 * This function is intended for threaded culling systems (such as the
+	 * CullingThreadpool class) that partition the screen into tile-aligned bins and
+	 * want each worker to test only the part of a rectangle query that overlaps its
+	 * own bin. Only the (32xN) depth tiles overlapping the scissor rectangle are
+	 * read, so the caller can guarantee that no depth data owned (and concurrently
+	 * written) by neighbouring bins is accessed. The scissor rectangle follows the
+	 * same alignment rules as for RenderTrilist() (multiples of 32xN pixels), and
+	 * the union of the per-bin results (VISIBLE if any bin reports VISIBLE, and
+	 * VIEW_CULLED only if all bins agree) is identical to a TestRect() call without
+	 * a scissor rectangle.
+	 *
+	 * \param xmin NDC coordinate of the left side of the rectangle.
+	 * \param ymin NDC coordinate of the bottom side of the rectangle.
+	 * \param xmax NDC coordinate of the right side of the rectangle.
+	 * \param ymax NDC coordinate of the top side of the rectangle.
+	 * \param wmin Clip space W coordinate for the rectangle.
+	 * \param scissor Scissor rectangle limiting which depth tiles are tested. If
+	 *        nullptr is passed, the full screen is tested (identical to TestRect()).
+	 * \return VIEW_CULLED if the rectangle is outside the view frustum (same
+	 *         condition as TestRect(), independent of the scissor rectangle),
+	 *         VISIBLE if a covered subtile within the scissored tile range passes
+	 *         the depth test, and OCCLUDED otherwise (including the case where the
+	 *         rectangle does not overlap the scissored tile range at all).
+	 */
+	virtual CullingResult TestRectScissor(float xmin, float ymin, float xmax, float ymax, float wmin, const ScissorRect *scissor) const = 0;
+
+	/*!
 	 * \brief This function is similar to RenderTriangles(), but performs an occlusion
 	 *        query instead and does not update the hierarchical z buffer. The query uses 
 	 *        a GREATER_EQUAL (reversed) depth test meaning that depth values equal to the 

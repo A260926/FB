@@ -1625,7 +1625,7 @@ public:
         return retVal;
 	}
     
-    CullingResult TestRect( float xmin, float ymin, float xmax, float ymax, float wmin ) const override
+    FORCE_INLINE CullingResult TestRectInternal( float xmin, float ymin, float xmax, float ymax, float wmin, const ScissorRect *scissor ) const
 	{
 		STATS_ADD(mStats.mOccludees.mNumProcessedRectangles, 1);
 		assert(mMaskedHiZBuffer != nullptr);
@@ -1652,19 +1652,34 @@ public:
 		__m128i tileBBoxi = _mm_and_si128(_mm_add_epi32(pixelBBoxi, SIMD_TILE_PAD), SIMD_TILE_PAD_MASK);
 		int txMin = simd_i32(tileBBoxi)[0] >> TILE_WIDTH_SHIFT;
 		int txMax = simd_i32(tileBBoxi)[1] >> TILE_WIDTH_SHIFT;
-		int tileRowIdx = (simd_i32(tileBBoxi)[2] >> TILE_HEIGHT_SHIFT)*mTilesWidth;
-		int tileRowIdxEnd = (simd_i32(tileBBoxi)[3] >> TILE_HEIGHT_SHIFT)*mTilesWidth;
+		int tyMin = simd_i32(tileBBoxi)[2] >> TILE_HEIGHT_SHIFT;
+		int tyMax = simd_i32(tileBBoxi)[3] >> TILE_HEIGHT_SHIFT;
 
 		if (simd_i32(tileBBoxi)[0] == simd_i32(tileBBoxi)[1] || simd_i32(tileBBoxi)[2] == simd_i32(tileBBoxi)[3])
-        {
-#if MOC_RECORDER_ENABLE
-            {
-                std::lock_guard<std::mutex> lock( mRecorderMutex );
-                if( mRecorder != nullptr ) mRecorder->RecordTestRect( CullingResult::VIEW_CULLED, xmin, ymin, xmax, ymax, wmin );
-            }
-#endif
-            return CullingResult::VIEW_CULLED;
-        }
+			return CullingResult::VIEW_CULLED;
+
+		//////////////////////////////////////////////////////////////////////////////
+		// If a scissor rectangle is given, restrict the traversal to the tiles
+		// overlapping the scissor rectangle. Tiles never straddle (properly aligned)
+		// scissor rectangles, so no depth data owned by other regions is read.
+		//////////////////////////////////////////////////////////////////////////////
+		if (scissor != nullptr)
+		{
+			int scissorTxMin = scissor->mMinX >> TILE_WIDTH_SHIFT;
+			int scissorTxMax = (scissor->mMaxX + TILE_WIDTH - 1) >> TILE_WIDTH_SHIFT;
+			int scissorTyMin = scissor->mMinY >> TILE_HEIGHT_SHIFT;
+			int scissorTyMax = (scissor->mMaxY + TILE_HEIGHT - 1) >> TILE_HEIGHT_SHIFT;
+
+			txMin = max(txMin, max(scissorTxMin, 0));
+			tyMin = max(tyMin, max(scissorTyMin, 0));
+			txMax = min(txMax, min(scissorTxMax, mTilesWidth));
+			tyMax = min(tyMax, min(scissorTyMax, mTilesHeight));
+
+			// The rectangle does not overlap the scissored tile range: this region
+			// cannot prove visibility, but the query is not view culled either.
+			if (txMin >= txMax || tyMin >= tyMax)
+				return CullingResult::OCCLUDED;
+		}
 
 		///////////////////////////////////////////////////////////////////////////////
 		// Pad bounding box to (8x4) subtiles. Skip SIMD lanes outside the subtile BB
@@ -1675,21 +1690,22 @@ public:
 		__mwi stxmax = _mmw_set1_epi32(simd_i32(subTileBBoxi)[1]);
 		__mwi stymax = _mmw_set1_epi32(simd_i32(subTileBBoxi)[3]);
 
-		// Setup pixel coordinates used to discard lanes outside subtile BB
-		__mwi startPixelX = _mmw_add_epi32(SIMD_SUB_TILE_COL_OFFSET, _mmw_set1_epi32(simd_i32(tileBBoxi)[0]));
-		__mwi pixelY = _mmw_add_epi32(SIMD_SUB_TILE_ROW_OFFSET, _mmw_set1_epi32(simd_i32(tileBBoxi)[2]));
-
 		//////////////////////////////////////////////////////////////////////////////
 		// Compute z from w. Note that z is reversed order, 0 = far, 1 = near, which
 		// means we use a greater than test, so zMax is used to test for visibility.
 		//////////////////////////////////////////////////////////////////////////////
 		__mw zMax = _mmw_div_ps(_mmw_set1_ps(1.0f), _mmw_set1_ps(wmin));
 
-		for (;;)
+		for (int ty = tyMin; ty < tyMax; ++ty)
 		{
-			__mwi pixelX = startPixelX;
-			for (int tx = txMin;;)
+			// Setup pixel coordinates used to discard lanes outside subtile BB
+			__mwi pixelY = _mmw_add_epi32(SIMD_SUB_TILE_ROW_OFFSET, _mmw_set1_epi32(ty << TILE_HEIGHT_SHIFT));
+			int tileRowIdx = ty * mTilesWidth;
+
+			for (int tx = txMin; tx < txMax; ++tx)
 			{
+				__mwi pixelX = _mmw_add_epi32(SIMD_SUB_TILE_COL_OFFSET, _mmw_set1_epi32(tx << TILE_WIDTH_SHIFT));
+
 				STATS_ADD(mStats.mOccludees.mNumTilesTraversed, 1);
 
 				int tileIdx = tileRowIdx + tx;
@@ -1715,33 +1731,27 @@ public:
 
 				// If not all tiles failed the conservative z test we can immediately terminate the test
 				if (!_mmw_testz_epi32(zPass, zPass))
-                {
-#if MOC_RECORDER_ENABLE
-                    {
-                        std::lock_guard<std::mutex> lock( mRecorderMutex );
-                        if( mRecorder != nullptr ) mRecorder->RecordTestRect( CullingResult::VISIBLE, xmin, ymin, xmax, ymax, wmin );
-                    }
-#endif
-                    return CullingResult::VISIBLE;
-                }
-
-				if (++tx >= txMax)
-					break;
-				pixelX = _mmw_add_epi32(pixelX, _mmw_set1_epi32(TILE_WIDTH));
+					return CullingResult::VISIBLE;
 			}
-
-			tileRowIdx += mTilesWidth;
-			if (tileRowIdx >= tileRowIdxEnd)
-				break;
-			pixelY = _mmw_add_epi32(pixelY, _mmw_set1_epi32(TILE_HEIGHT));
 		}
+		return CullingResult::OCCLUDED;
+	}
+
+    CullingResult TestRect( float xmin, float ymin, float xmax, float ymax, float wmin ) const override
+	{
+		CullingResult retVal = TestRectInternal(xmin, ymin, xmax, ymax, wmin, nullptr);
 #if MOC_RECORDER_ENABLE
         {
             std::lock_guard<std::mutex> lock( mRecorderMutex );
-            if( mRecorder != nullptr ) mRecorder->RecordTestRect( CullingResult::OCCLUDED, xmin, ymin, xmax, ymax, wmin );
+            if( mRecorder != nullptr ) mRecorder->RecordTestRect( retVal, xmin, ymin, xmax, ymax, wmin );
         }
 #endif
-		return CullingResult::OCCLUDED;
+		return retVal;
+	}
+
+	CullingResult TestRectScissor( float xmin, float ymin, float xmax, float ymax, float wmin, const ScissorRect *scissor ) const override
+	{
+		return TestRectInternal(xmin, ymin, xmax, ymax, wmin, scissor);
 	}
 
 	template<bool FAST_GATHER>

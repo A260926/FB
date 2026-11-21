@@ -14,10 +14,72 @@
 // under the License.
 ////////////////////////////////////////////////////////////////////////////////
 #include <assert.h>
+#include <stdexcept>
 #include "CullingThreadpool.h"
 
 #define SAFE_DELETE(X) {if (X != nullptr) delete X; X = nullptr;}
 #define SAFE_DELETE_ARRAY(X) {if (X != nullptr) delete[] X; X = nullptr;}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Query batch shared state and query ticket implementation
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct CullingThreadpool::QueryBatch
+{
+	std::vector<RectQuery>     mQueries;      // Queries, copied at submission time (immutable afterwards)
+	std::vector<CullingResult> mResults;      // Combined per-query results, filled in when the batch is published
+	std::vector<unsigned char> mBinResults;   // Per-bin partial results [binIdx * mQueries.size() + queryIdx]
+	std::atomic<unsigned int>  mBinsPending;  // Number of bins that have not yet processed this batch
+	std::atomic_bool           mReady;        // Set once the combined results have been published
+	std::mutex                 mMutex;        // Guards the ready flag for waiting threads
+	std::condition_variable    mCV;
+};
+
+CullingThreadpool::QueryTicket::QueryTicket() :
+	mBatch(std::make_shared<QueryBatch>())
+{
+	// An empty ticket is immediately ready and holds zero results
+	mBatch->mBinsPending = 0;
+	mBatch->mReady = true;
+}
+
+CullingThreadpool::QueryTicket::QueryTicket(const QueryTicket &other) = default;
+CullingThreadpool::QueryTicket::QueryTicket(QueryTicket &&other) noexcept = default;
+CullingThreadpool::QueryTicket &CullingThreadpool::QueryTicket::operator=(const QueryTicket &other) = default;
+CullingThreadpool::QueryTicket &CullingThreadpool::QueryTicket::operator=(QueryTicket &&other) noexcept = default;
+CullingThreadpool::QueryTicket::~QueryTicket() = default;
+
+CullingThreadpool::QueryTicket::QueryTicket(const std::shared_ptr<QueryBatch> &batch) :
+	mBatch(batch)
+{
+}
+
+bool CullingThreadpool::QueryTicket::IsReady() const
+{
+	// A moved-from ticket is treated as an empty (ready) ticket
+	return mBatch == nullptr || mBatch->mReady.load(std::memory_order_acquire);
+}
+
+void CullingThreadpool::QueryTicket::Wait() const
+{
+	if (mBatch == nullptr)
+		return;
+	std::unique_lock<std::mutex> lock(mBatch->mMutex);
+	mBatch->mCV.wait(lock, [&] { return mBatch->mReady.load(std::memory_order_acquire); });
+}
+
+const std::vector<CullingThreadpool::CullingResult> &CullingThreadpool::QueryTicket::Results() const
+{
+	if (!IsReady())
+		throw std::logic_error("CullingThreadpool::QueryTicket::Results() called before the query batch results were ready");
+	if (mBatch == nullptr)
+	{
+		static const std::vector<CullingResult> emptyResults;
+		return emptyResults;
+	}
+	return mBatch->mResults;
+}
+
 
 template<class T> CullingThreadpool::StateData<T>::StateData(unsigned int maxJobs) :
 	mMaxJobs(maxJobs),
@@ -186,17 +248,25 @@ inline CullingThreadpool::RenderJobQueue::Job *CullingThreadpool::RenderJobQueue
 
 void CullingThreadpool::RenderJobQueue::Reset()
 {
-	mWritePtr = 0;
-	mBinningPtr = 0;
-
-	for (unsigned int i = 0; i < mNumBins; ++i)
-		mRenderPtrs[i] = 0;
-
+	// Invalidate the job slots before resetting the queue pointers. Workers read
+	// the pointers and the slot state without holding a lock, and must never
+	// observe a zeroed pointer together with a stale slot state from before the
+	// reset: a torn read could otherwise match a stale mBinningJobCompletedIdx
+	// with a zeroed render pointer and re-process an old job (skipping the new
+	// job that later occupies the slot). Since stores become visible in order,
+	// any worker observing the zeroed pointers also observes the invalidated
+	// slots.
 	for (unsigned int i = 0; i < mMaxJobs; ++i)
 	{
 		mJobs[i].mBinningJobCompletedIdx = -1;
 		mJobs[i].mBinningJobStartedIdx = -1;
 	}
+
+	mWritePtr = 0;
+	mBinningPtr = 0;
+
+	for (unsigned int i = 0; i < mNumBins; ++i)
+		mRenderPtrs[i] = 0;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -260,7 +330,11 @@ void CullingThreadpool::ThreadMain(unsigned int threadIdx)
 			RenderJobQueue::Job *job = mRenderQueue->GetRenderJob(binIdx);
 			if (job != nullptr)
 			{
-				if (job->mRenderJobs[binIdx].mTriIdx > 0)
+				QueryBatch *queryBatch = job->mQueryBatch.get();
+				BinPausePoint(binIdx, queryBatch != nullptr);
+				if (queryBatch != nullptr)
+					ProcessQueryBatch(queryBatch, binIdx);
+				else if (job->mRenderJobs[binIdx].mTriIdx > 0)
 					mMOC->RenderTrilist(job->mRenderJobs[binIdx], &mRects[binIdx]);
 
 				mRenderQueue->AdvanceRenderJob(binIdx);
@@ -274,10 +348,14 @@ void CullingThreadpool::ThreadMain(unsigned int threadIdx)
 				RenderJobQueue::Job *job = mRenderQueue->GetBinningJob();
 				if (job != nullptr)
 				{
-					RenderJobQueue::BinningJob &sjob = job->mBinningJob;
-					for (unsigned int i = 0; i < mNumBins; ++i)
-						job->mRenderJobs[i].mTriIdx = 0;
-					mMOC->BinTriangles(sjob.mVerts, sjob.mTris, sjob.nTris, job->mRenderJobs, mBinsW, mBinsH, sjob.mMatrix, sjob.mBfWinding, sjob.mClipPlanes, *sjob.mVtxLayout);
+					// Query batch jobs carry no geometry and skip the binning stage
+					if (job->mQueryBatch == nullptr)
+					{
+						RenderJobQueue::BinningJob &sjob = job->mBinningJob;
+						for (unsigned int i = 0; i < mNumBins; ++i)
+							job->mRenderJobs[i].mTriIdx = 0;
+						mMOC->BinTriangles(sjob.mVerts, sjob.mTris, sjob.nTris, job->mRenderJobs, mBinsW, mBinsH, sjob.mMatrix, sjob.mBfWinding, sjob.mClipPlanes, *sjob.mVtxLayout);
+					}
 					mRenderQueue->FinishedBinningJob(job);
 				}
 				continue;
@@ -292,7 +370,11 @@ void CullingThreadpool::ThreadMain(unsigned int threadIdx)
 					RenderJobQueue::Job *job = mRenderQueue->GetRenderJob(binIdx);
 					if (job != nullptr)
 					{
-						if (job->mRenderJobs[binIdx].mTriIdx > 0)
+						QueryBatch *queryBatch = job->mQueryBatch.get();
+						BinPausePoint(binIdx, queryBatch != nullptr);
+						if (queryBatch != nullptr)
+							ProcessQueryBatch(queryBatch, binIdx);
+						else if (job->mRenderJobs[binIdx].mTriIdx > 0)
 							mMOC->RenderTrilist(job->mRenderJobs[binIdx], &mRects[binIdx]);
 
 						mRenderQueue->AdvanceRenderJob(binIdx);
@@ -306,6 +388,69 @@ void CullingThreadpool::ThreadMain(unsigned int threadIdx)
 			threadIsIdle = true;
 		}
 	}
+}
+
+void CullingThreadpool::ProcessQueryBatch(QueryBatch *batch, unsigned int binIdx)
+{
+	// Test the part of the batch overlapping this bin. The scissor rectangle limits
+	// the test to the depth tiles owned by this bin, so no depth data concurrently
+	// written by neighbouring bins is read.
+	const ScissorRect *scissor = &mRects[binIdx];
+	const unsigned int numQueries = (unsigned int)batch->mQueries.size();
+	unsigned char *binResults = &batch->mBinResults[binIdx * numQueries];
+	for (unsigned int i = 0; i < numQueries; ++i)
+	{
+		const RectQuery &q = batch->mQueries[i];
+		binResults[i] = (unsigned char)mMOC->TestRectScissor(q.mXmin, q.mYmin, q.mXmax, q.mYmax, q.mWmin, scissor);
+	}
+
+	// The last bin to finish publishes the combined results for the whole batch
+	if (batch->mBinsPending.fetch_sub(1, std::memory_order_acq_rel) == 1)
+		PublishQueryBatch(batch);
+}
+
+void CullingThreadpool::PublishQueryBatch(QueryBatch *batch)
+{
+	const unsigned int numQueries = (unsigned int)batch->mQueries.size();
+	const unsigned int numBins = batch->mBinResults.size() / numQueries;
+	for (unsigned int i = 0; i < numQueries; ++i)
+	{
+		// Combine the per-bin results: the query is visible if any bin proved it
+		// visible, view culled if all bins agree it is outside the view frustum,
+		// and occluded otherwise.
+		bool anyVisible = false;
+		bool anyOccluded = false;
+		for (unsigned int bin = 0; bin < numBins; ++bin)
+		{
+			CullingResult binResult = (CullingResult)batch->mBinResults[bin * numQueries + i];
+			anyVisible |= binResult == CullingResult::VISIBLE;
+			anyOccluded |= binResult == CullingResult::OCCLUDED;
+		}
+		batch->mResults[i] = anyVisible ? CullingResult::VISIBLE : (anyOccluded ? CullingResult::OCCLUDED : CullingResult::VIEW_CULLED);
+	}
+
+	// Publish the results and wake up any threads waiting on the ticket
+	{
+		std::lock_guard<std::mutex> lock(batch->mMutex);
+		batch->mReady.store(true, std::memory_order_release);
+	}
+	batch->mCV.notify_all();
+}
+
+void CullingThreadpool::BinPausePoint(unsigned int binIdx, bool isQueryJob)
+{
+	BinPauseState &pause = mBinPause[binIdx];
+	if (!pause.mPauseRequested.load(std::memory_order_acquire))
+		return;
+	if (isQueryJob ? !pause.mPauseQueries.load(std::memory_order_relaxed) : !pause.mPauseDraws.load(std::memory_order_relaxed))
+		return;
+
+	// Signal the paused handshake and wait until the calling thread resumes the bin
+	pause.mParkCount.fetch_add(1, std::memory_order_release);
+	pause.mPaused.store(true, std::memory_order_release);
+	while (pause.mPauseRequested.load(std::memory_order_acquire))
+		std::this_thread::yield();
+	pause.mPaused.store(false, std::memory_order_release);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -330,6 +475,17 @@ CullingThreadpool::CullingThreadpool(unsigned int numThreads, unsigned int binsW
 	mRects = new ScissorRect[mNumBins];
 	mRenderQueue = new RenderJobQueue(mNumBins, mMaxJobs);
 
+	// Setup test hook state (all hooks disabled by default)
+	mBinPause = new BinPauseState[mNumBins];
+	for (unsigned int i = 0; i < mNumBins; ++i)
+	{
+		mBinPause[i].mPauseRequested = false;
+		mBinPause[i].mPauseDraws = false;
+		mBinPause[i].mPauseQueries = false;
+		mBinPause[i].mPaused = false;
+		mBinPause[i].mParkCount = 0;
+	}
+
 	// Add default vertex layout and matrix
 	mVertexLayouts.AddData(VertexLayout(16, 4, 12));
 	mCurrentMatrix = nullptr;
@@ -346,6 +502,12 @@ CullingThreadpool::~CullingThreadpool()
 	if (mThreads != nullptr || !mKillThreads)
 	{
 		WakeThreads();
+
+		// Drain the pipeline: all outstanding drawcalls and queued query batches
+		// must complete (and publish their results) before the pool is destroyed,
+		// so no ticket is left waiting forever and no input is left dangling.
+		Flush();
+
 		mKillThreads = true;
 		for (unsigned int i = 0; i < mNumThreads; ++i)
 			mThreads[i].join();
@@ -355,6 +517,7 @@ CullingThreadpool::~CullingThreadpool()
 	// Free memory
 	SAFE_DELETE(mRenderQueue);
 	SAFE_DELETE_ARRAY(mRects);
+	SAFE_DELETE_ARRAY(mBinPause);
 	SAFE_DELETE_ARRAY(mThreads);
 }
 
@@ -444,6 +607,7 @@ void CullingThreadpool::RenderTriangles(const float *inVtx, const unsigned int *
 
 		// Create new renderjob
 		RenderJobQueue::Job *job = mRenderQueue->GetWriteJob();
+		job->mQueryBatch = nullptr;	// Mark slot as a drawcall job
 		job->mBinningJob.mVerts = inVtx;
 		job->mBinningJob.mTris = inTris + i * 3;
 		job->mBinningJob.nTris = nTris - i < TRIS_PER_JOB ? nTris - i : TRIS_PER_JOB;
@@ -469,4 +633,66 @@ void CullingThreadpool::ComputePixelDepthBuffer(float *depthData, bool flipY)
 {
 	Flush();
 	mMOC->ComputePixelDepthBuffer(depthData, flipY);
+}
+
+CullingThreadpool::QueryTicket CullingThreadpool::EnqueueRectQueries(const RectQuery *queries, size_t numQueries)
+{
+	// Empty batches complete immediately and do not occupy a job ring slot
+	if (numQueries == 0)
+		return QueryTicket();
+
+	// Input contract: finite rectangles with xmin < xmax, ymin < ymax and wmin > 0
+	for (size_t i = 0; i < numQueries; ++i)
+		assert(queries[i].mXmin < queries[i].mXmax && queries[i].mYmin < queries[i].mYmax && queries[i].mWmin > 0.0f);
+
+	// Copy the query array at submission time; the shared state is kept alive
+	// jointly by the returned ticket and the job ring slot referencing it below.
+	std::shared_ptr<QueryBatch> batch = std::make_shared<QueryBatch>();
+	batch->mQueries.assign(queries, queries + numQueries);
+	batch->mResults.resize(numQueries);
+	batch->mBinResults.assign(mNumBins * numQueries, (unsigned char)CullingResult::OCCLUDED);
+	batch->mBinsPending = mNumBins;
+	batch->mReady = false;
+
+	// Wait for a recyclable slot only if the job ring is full. Note that this never
+	// waits for outstanding drawcalls to finish: the batch is pipelined behind the
+	// previously submitted work, exactly like a drawcall.
+	while (!mRenderQueue->CanWrite())
+		std::this_thread::yield();
+
+	// Create new query batch job
+	RenderJobQueue::Job *job = mRenderQueue->GetWriteJob();
+	job->mBinningJob.nTris = 0;
+	job->mQueryBatch = batch;
+	mRenderQueue->AdvanceWriteJob();
+
+	return QueryTicket(batch);
+}
+
+void CullingThreadpool::DebugPauseBin(unsigned int binIdx, bool pauseDraws, bool pauseQueries)
+{
+	BinPauseState &pause = mBinPause[binIdx];
+	pause.mPauseDraws.store(pauseDraws, std::memory_order_relaxed);
+	pause.mPauseQueries.store(pauseQueries, std::memory_order_relaxed);
+	pause.mPauseRequested.store(true, std::memory_order_release);
+}
+
+void CullingThreadpool::DebugResumeBin(unsigned int binIdx)
+{
+	mBinPause[binIdx].mPauseRequested.store(false, std::memory_order_release);
+}
+
+bool CullingThreadpool::DebugIsBinPaused(unsigned int binIdx) const
+{
+	return mBinPause[binIdx].mPaused.load(std::memory_order_acquire);
+}
+
+unsigned int CullingThreadpool::DebugBinParkCount(unsigned int binIdx) const
+{
+	return mBinPause[binIdx].mParkCount.load(std::memory_order_acquire);
+}
+
+unsigned int CullingThreadpool::DebugBinsCompleted(const QueryTicket &ticket) const
+{
+	return ticket.mBatch == nullptr ? 0 : mNumBins - ticket.mBatch->mBinsPending.load(std::memory_order_acquire);
 }

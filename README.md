@@ -382,6 +382,41 @@ of enabling multi-threading in a traditional single threaded application as the 
 a single threaded application. As previously mentioned we integrated this implementation in our interleaved BVH traversal algorithm (see the ["Masked Software Occlusion Culling"](https://software.intel.com/en-us/articles/masked-software-occlusion-culling)
 paper) and noted speedup of roughly *3x*, running on four threads, compared to our previous single threaded implementation.
 
+### Queued rectangle queries
+
+In addition to the immediate `CullingThreadpool::TestRect()` / `TestTriangles()` queries, the threadpool supports *queued* rectangle queries for scene traversal
+style workloads: while occluders are still being rasterized in the background, a batch of rectangle queries can be submitted up front and its results collected
+later. The relevant types and entry points are:
+
+```C++
+struct CullingThreadpool::RectQuery { float mXmin, mYmin, mXmax, mYmax, mWmin; };
+
+CullingThreadpool::QueryTicket ticket = pool.EnqueueRectQueries(queries, numQueries);
+bool ready = ticket.IsReady();                                  // poll without blocking
+ticket.Wait();                                                  // block until this batch is published
+const std::vector<CullingResult> &results = ticket.Results();   // one result per query
+```
+
+Each batch is inserted into the same bounded job ring as the drawcalls, so every result is exactly the result that
+`MaskedOcclusionCulling::TestRect()` would have returned on the occlusion buffer containing only the drawcalls submitted *before* the batch; occluders drawn
+later never affect it. Submitting a batch never flushes the pipeline and never waits for outstanding drawcalls; the calling thread only blocks if the job ring
+is full, waiting for a recyclable slot. The query array is copied at submission time, and an empty batch completes immediately without occupying a ring slot.
+
+**Ticket and calling-thread constraints:**
+
+* Like all state-changing methods of the threadpool (`RenderTriangles()`, `SetBuffer()`, `ClearBuffer()`, ...), `EnqueueRectQueries()` must be called from the
+  single calling thread, in order. The returned `QueryTicket` is a read-only handle and `IsReady()`, `Wait()` and `Results()` may be called from any thread.
+* A `QueryTicket` owns its results. Tickets may be copied freely (copies share the same results), and once ready the results remain valid after the job ring
+  slots have been recycled, after `ClearBuffer()`, `SetBuffer()` or `SetResolution()`, and after the threadpool itself has been destroyed.
+* `Wait()` waits only for its own batch; it does not wait for drawcalls or batches submitted afterwards. `ClearBuffer()`, `SetBuffer()` and `SetResolution()`
+  still execute at the usual `Flush()` boundary, so batches queued before them complete first, and queued queries always complete before the pool is destroyed
+  (release the pool in the usual way, i.e. after `SuspendThreads()`).
+* Calling `Results()` before the batch is ready is an error and throws a `std::logic_error` exception; call `Wait()` (or poll `IsReady()`) first.
+* The `DebugPauseBin()` / `DebugResumeBin()` / `DebugIsBinPaused()` / `DebugBinParkCount()` / `DebugBinsCompleted()` functions are test hooks used by the
+  conformance checks. They are disabled by default and do not alter normal scheduling unless explicitly enabled.
+
+See `examples/queued_queries.cpp` for a complete example.
+
 ## Compiling
 
 The code has been reworked to support more platforms and compilers, such as [Intel C++ Compiler](https://software.intel.com/en-us/intel-compilers), [G++](https://gcc.gnu.org/) 
