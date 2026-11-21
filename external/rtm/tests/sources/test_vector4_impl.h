@@ -1,0 +1,2160 @@
+#pragma once
+
+////////////////////////////////////////////////////////////////////////////////
+// The MIT License (MIT)
+//
+// Copyright (c) 2018 Nicholas Frechette & Animation Compression Library contributors
+// Copyright (c) 2018 Nicholas Frechette & Realtime Math contributors
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+////////////////////////////////////////////////////////////////////////////////
+
+#include <rtm/type_traits.h>
+
+// cpp files that include this header must include the vector header they wish to use
+//#include <rtm/vector4f.h>
+//#include <rtm/vector4d.h>
+
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <utility>
+
+using namespace rtm;
+
+template<typename Vector4Type, typename FloatType>
+inline const FloatType* vector_as_float_ptr_raw(const Vector4Type& input)
+{
+	return vector_to_pointer(input);
+}
+
+template<typename Vector4Type, typename FloatType>
+inline Vector4Type scalar_cross3(const Vector4Type& lhs, const Vector4Type& rhs)
+{
+	const FloatType lhs_x = vector_get_x(lhs);
+	const FloatType lhs_y = vector_get_y(lhs);
+	const FloatType lhs_z = vector_get_z(lhs);
+	const FloatType rhs_x = vector_get_x(rhs);
+	const FloatType rhs_y = vector_get_y(rhs);
+	const FloatType rhs_z = vector_get_z(rhs);
+	return vector_set((lhs_y * rhs_z) - (lhs_z * rhs_y), (lhs_z * rhs_x) - (lhs_x * rhs_z), (lhs_x * rhs_y) - (lhs_y * rhs_x));
+}
+
+template<typename Vector4Type, typename FloatType>
+inline FloatType scalar_dot4(const Vector4Type& lhs, const Vector4Type& rhs)
+{
+	const FloatType lhs_x = vector_get_x(lhs);
+	const FloatType lhs_y = vector_get_y(lhs);
+	const FloatType lhs_z = vector_get_z(lhs);
+	const FloatType lhs_w = vector_get_w(lhs);
+	const FloatType rhs_x = vector_get_x(rhs);
+	const FloatType rhs_y = vector_get_y(rhs);
+	const FloatType rhs_z = vector_get_z(rhs);
+	const FloatType rhs_w = vector_get_w(rhs);
+	return (lhs_x * rhs_x) + (lhs_y * rhs_y) + (lhs_z * rhs_z) + (lhs_w * rhs_w);
+}
+
+template<typename Vector4Type, typename FloatType>
+inline FloatType scalar_dot3(const Vector4Type& lhs, const Vector4Type& rhs)
+{
+	const FloatType lhs_x = vector_get_x(lhs);
+	const FloatType lhs_y = vector_get_y(lhs);
+	const FloatType lhs_z = vector_get_z(lhs);
+	const FloatType rhs_x = vector_get_x(rhs);
+	const FloatType rhs_y = vector_get_y(rhs);
+	const FloatType rhs_z = vector_get_z(rhs);
+	return (lhs_x * rhs_x) + (lhs_y * rhs_y) + (lhs_z * rhs_z);
+}
+
+template<typename Vector4Type, typename FloatType>
+inline FloatType scalar_dot2(const Vector4Type& lhs, const Vector4Type& rhs)
+{
+	const FloatType lhs_x = vector_get_x(lhs);
+	const FloatType lhs_y = vector_get_y(lhs);
+	const FloatType rhs_x = vector_get_x(rhs);
+	const FloatType rhs_y = vector_get_y(rhs);
+	return (lhs_x * rhs_x) + (lhs_y * rhs_y);
+}
+
+template<typename Vector4Type, typename FloatType>
+inline Vector4Type scalar_normalize2(const Vector4Type& input, const Vector4Type& fallback, FloatType threshold)
+{
+	FloatType len_sq = scalar_dot2<Vector4Type, FloatType>(input, input);
+	if (len_sq >= threshold)
+	{
+		FloatType inv_len = rtm::scalar_sqrt_reciprocal(len_sq);
+		return vector_set(vector_get_x(input) * inv_len, vector_get_y(input) * inv_len, (FloatType)0.0);
+	}
+	else
+		return fallback;
+}
+
+template<typename Vector4Type, typename FloatType>
+inline Vector4Type scalar_normalize3(const Vector4Type& input, const Vector4Type& fallback, FloatType threshold)
+{
+	FloatType len_sq = scalar_dot3<Vector4Type, FloatType>(input, input);
+	if (len_sq >= threshold)
+	{
+		FloatType inv_len = rtm::scalar_sqrt_reciprocal(len_sq);
+		return vector_set(vector_get_x(input) * inv_len, vector_get_y(input) * inv_len, vector_get_z(input) * inv_len);
+	}
+	else
+		return fallback;
+}
+
+template<typename Vector4Type, typename FloatType>
+inline Vector4Type scalar_normalize4(const Vector4Type& input, const Vector4Type& fallback, FloatType threshold)
+{
+	FloatType len_sq = scalar_dot4<Vector4Type, FloatType>(input, input);
+	if (len_sq >= threshold)
+	{
+		FloatType inv_len = rtm::scalar_sqrt_reciprocal(len_sq);
+		return vector_set(vector_get_x(input) * inv_len, vector_get_y(input) * inv_len, vector_get_z(input) * inv_len, vector_get_w(input) * inv_len);
+	}
+	else
+		return fallback;
+}
+
+template<typename FloatType>
+void test_vector4_getset_impl()
+{
+	using QuatType = typename related_types<FloatType>::quat;
+	using Vector4Type = typename related_types<FloatType>::vector4;
+	using ScalarType = typename related_types<FloatType>::scalar;
+	using Float2Type = typename related_types<FloatType>::float2;
+	using Float3Type = typename related_types<FloatType>::float3;
+	using Float4Type = typename related_types<FloatType>::float4;
+
+	const Vector4Type zero = vector_zero();
+	const QuatType identity = quat_identity();
+
+	struct alignas(16) Tmp
+	{
+		uint8_t padding0[8];	//  8 |  8
+		FloatType values[4];	// 24 | 40
+		uint8_t padding1[8];	// 32 | 48
+	};
+
+	Tmp tmp = { { 0 }, { FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0) }, {} };
+	alignas(16) uint8_t buffer[64];
+
+	const FloatType test_value0_flt[4] = { FloatType(2.0), FloatType(9.34), FloatType(-54.12), FloatType(6000.0) };
+	const FloatType test_value1_flt[4] = { FloatType(0.75), FloatType(-4.52), FloatType(44.68), FloatType(-54225.0) };
+	const FloatType test_value3_flt[4] = { FloatType(2.0), FloatType(-9.34), FloatType(54.12), FloatType(6000.1) };
+	const Vector4Type test_value0 = vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]);
+	const Vector4Type test_value1 = vector_set(test_value1_flt[0], test_value1_flt[1], test_value1_flt[2], test_value1_flt[3]);
+	const Vector4Type test_value3 = vector_set(test_value3_flt[0], test_value3_flt[1], test_value3_flt[2], test_value3_flt[3]);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Setters, getters, and casts
+
+	CHECK(FloatType(vector_get_x(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+	CHECK(FloatType(vector_get_z(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_w(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(10000.0));
+
+	CHECK(scalar_cast(vector_get_x_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_y_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+	CHECK(scalar_cast(vector_get_z_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(-3.12));
+	CHECK(scalar_cast(vector_get_w_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(10000.0));
+
+	CHECK(FloatType(vector_get_x(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12)), scalar_set(FloatType(10000.0))))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12)), scalar_set(FloatType(10000.0))))) == FloatType(2.34));
+	CHECK(FloatType(vector_get_z(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12)), scalar_set(FloatType(10000.0))))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_w(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12)), scalar_set(FloatType(10000.0))))) == FloatType(10000.0));
+
+	CHECK(FloatType(vector_get_x(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12)))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12)))) == FloatType(2.34));
+	CHECK(FloatType(vector_get_z(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12)))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_w(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12)))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12))))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12))))) == FloatType(2.34));
+	CHECK(FloatType(vector_get_z(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12))))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_w(vector_set(scalar_set(FloatType(0.0)), scalar_set(FloatType(2.34)), scalar_set(FloatType(-3.12))))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x(vector_set(FloatType(-3.12)))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_y(vector_set(FloatType(-3.12)))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_z(vector_set(FloatType(-3.12)))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_w(vector_set(FloatType(-3.12)))) == FloatType(-3.12));
+
+	CHECK(FloatType(vector_get_x(vector_set(scalar_set(FloatType(-3.12))))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_y(vector_set(scalar_set(FloatType(-3.12))))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_z(vector_set(scalar_set(FloatType(-3.12))))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_w(vector_set(scalar_set(FloatType(-3.12))))) == FloatType(-3.12));
+
+	CHECK(FloatType(vector_get_x(zero)) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y(zero)) == FloatType(0.0));
+	CHECK(FloatType(vector_get_z(zero)) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w(zero)) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_coord_forward())) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_coord_forward())) == FloatType(0.0));
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_coord_forward())) == FloatType(1.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_coord_forward())) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_coord_up())) == FloatType(0.0));
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_coord_up())) == FloatType(1.0));
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_coord_up())) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_coord_up())) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_coord_cross())) == FloatType(1.0));
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_coord_cross())) == FloatType(0.0));
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_coord_cross())) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_coord_cross())) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load(&tmp.values[0]))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load(&tmp.values[0]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load(&tmp.values[0]))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load(&tmp.values[0]))) == tmp.values[3]);
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load1(&tmp.values[1]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load1(&tmp.values[1]))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load1(&tmp.values[1]))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load1(&tmp.values[1]))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load2(&tmp.values[1]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load2(&tmp.values[1]))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load2(&tmp.values[1]))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load2(&tmp.values[1]))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load3(&tmp.values[1]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load3(&tmp.values[1]))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load3(&tmp.values[1]))) == tmp.values[3]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load3(&tmp.values[1]))) == FloatType(0.0));
+
+	Float2Type tmpf2 = { tmp.values[0], tmp.values[1] };
+	Float3Type tmpf3 = { tmp.values[0], tmp.values[1], tmp.values[2] };
+	Float4Type tmpf4 = { tmp.values[0], tmp.values[1], tmp.values[2], tmp.values[3] };
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load2(&tmpf2))) == tmpf2.x);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load2(&tmpf2))) == tmpf2.y);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load2(&tmpf2))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load2(&tmpf2))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load3(&tmpf3))) == tmpf3.x);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load3(&tmpf3))) == tmpf3.y);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load3(&tmpf3))) == tmpf3.z);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load3(&tmpf3))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load(&tmpf4))) == tmpf4.x);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load(&tmpf4))) == tmpf4.y);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load(&tmpf4))) == tmpf4.z);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load(&tmpf4))) == tmpf4.w);
+
+	std::memcpy(&buffer[1], &tmp.values[0], sizeof(tmp.values));
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load(&buffer[1]))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load(&buffer[1]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load(&buffer[1]))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load(&buffer[1]))) == tmp.values[3]);
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load1(&buffer[1 + sizeof(FloatType)]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load1(&buffer[1 + sizeof(FloatType)]))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load1(&buffer[1 + sizeof(FloatType)]))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load1(&buffer[1 + sizeof(FloatType)]))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load2(&buffer[1 + sizeof(FloatType)]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load2(&buffer[1 + sizeof(FloatType)]))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load2(&buffer[1 + sizeof(FloatType)]))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load2(&buffer[1 + sizeof(FloatType)]))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load3(&buffer[1 + sizeof(FloatType)]))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load3(&buffer[1 + sizeof(FloatType)]))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load3(&buffer[1 + sizeof(FloatType)]))) == tmp.values[3]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load3(&buffer[1 + sizeof(FloatType)]))) == FloatType(0.0));
+
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_broadcast(&tmp.values[0]))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_broadcast(&tmp.values[0]))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_broadcast(&tmp.values[0]))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_broadcast(&tmp.values[0]))) == tmp.values[0]);
+
+	CHECK(FloatType(vector_get_x(vector_dup_x((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_y(vector_dup_x((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_z(vector_dup_x((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[0]);
+	CHECK(FloatType(vector_get_w(vector_dup_x((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[0]);
+
+	CHECK(FloatType(vector_get_x(vector_dup_y((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_y(vector_dup_y((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_z(vector_dup_y((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[1]);
+	CHECK(FloatType(vector_get_w(vector_dup_y((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[1]);
+
+	CHECK(FloatType(vector_get_x(vector_dup_z((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_y(vector_dup_z((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_z(vector_dup_z((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[2]);
+	CHECK(FloatType(vector_get_w(vector_dup_z((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[2]);
+
+	CHECK(FloatType(vector_get_x(vector_dup_w((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[3]);
+	CHECK(FloatType(vector_get_y(vector_dup_w((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[3]);
+	CHECK(FloatType(vector_get_z(vector_dup_w((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[3]);
+	CHECK(FloatType(vector_get_w(vector_dup_w((Vector4Type)vector_load(&tmp.values[0])))) == tmp.values[3]);
+
+	CHECK(FloatType(vector_get_x(quat_to_vector(identity))) == FloatType(quat_get_x(identity)));
+	CHECK(FloatType(vector_get_y(quat_to_vector(identity))) == FloatType(quat_get_y(identity)));
+	CHECK(FloatType(vector_get_z(quat_to_vector(identity))) == FloatType(quat_get_z(identity)));
+	CHECK(FloatType(vector_get_w(quat_to_vector(identity))) == FloatType(quat_get_w(identity)));
+
+	CHECK(FloatType(vector_get_component2<component2::x>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_component2<component2::y>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+
+	CHECK(FloatType(vector_get_component3<component3::x>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_component3<component3::y>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+	CHECK(FloatType(vector_get_component3<component3::z>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(-3.12));
+
+	CHECK(FloatType(vector_get_component<component4::x>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(FloatType(vector_get_component<component4::y>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+	CHECK(FloatType(vector_get_component<component4::z>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_component<component4::w>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(10000.0));
+
+	CHECK(scalar_cast(vector_get_component2_as_scalar<component2::x>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_component2_as_scalar<component2::y>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+
+	CHECK(scalar_cast(vector_get_component3_as_scalar<component3::x>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_component3_as_scalar<component3::y>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+	CHECK(scalar_cast(vector_get_component3_as_scalar<component3::z>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(-3.12));
+
+	CHECK(scalar_cast(vector_get_component_as_scalar<component4::x>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_component_as_scalar<component4::y>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(2.34));
+	CHECK(scalar_cast(vector_get_component_as_scalar<component4::z>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(-3.12));
+	CHECK(scalar_cast(vector_get_component_as_scalar<component4::w>(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)))) == FloatType(10000.0));
+
+	CHECK(FloatType(vector_get_component2(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component2::x)) == FloatType(0.0));
+	CHECK(FloatType(vector_get_component2(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component2::y)) == FloatType(2.34));
+
+	CHECK(FloatType(vector_get_component3(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component3::x)) == FloatType(0.0));
+	CHECK(FloatType(vector_get_component3(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component3::y)) == FloatType(2.34));
+	CHECK(FloatType(vector_get_component3(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component3::z)) == FloatType(-3.12));
+
+	CHECK(FloatType(vector_get_component(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::x)) == FloatType(0.0));
+	CHECK(FloatType(vector_get_component(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::y)) == FloatType(2.34));
+	CHECK(FloatType(vector_get_component(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::z)) == FloatType(-3.12));
+	CHECK(FloatType(vector_get_component(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::w)) == FloatType(10000.0));
+
+	CHECK(scalar_cast(vector_get_component2_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component2::x)) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_component2_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component2::y)) == FloatType(2.34));
+
+	CHECK(scalar_cast(vector_get_component3_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component3::x)) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_component3_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component3::y)) == FloatType(2.34));
+	CHECK(scalar_cast(vector_get_component3_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component3::z)) == FloatType(-3.12));
+
+	CHECK(scalar_cast(vector_get_component_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::x)) == FloatType(0.0));
+	CHECK(scalar_cast(vector_get_component_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::y)) == FloatType(2.34));
+	CHECK(scalar_cast(vector_get_component_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::z)) == FloatType(-3.12));
+	CHECK(scalar_cast(vector_get_component_as_scalar(vector_set(FloatType(0.0), FloatType(2.34), FloatType(-3.12), FloatType(10000.0)), component4::w)) == FloatType(10000.0));
+
+	CHECK((vector_as_float_ptr_raw<Vector4Type, FloatType>(vector_load(&tmp.values[0]))[0] == tmp.values[0]));
+	CHECK((vector_as_float_ptr_raw<Vector4Type, FloatType>(vector_load(&tmp.values[0]))[1] == tmp.values[1]));
+	CHECK((vector_as_float_ptr_raw<Vector4Type, FloatType>(vector_load(&tmp.values[0]))[2] == tmp.values[2]));
+	CHECK((vector_as_float_ptr_raw<Vector4Type, FloatType>(vector_load(&tmp.values[0]))[3] == tmp.values[3]));
+
+	vector_store(test_value0, &tmp.values[0]);
+	CHECK(FloatType(vector_get_x(test_value0)) == tmp.values[0]);
+	CHECK(FloatType(vector_get_y(test_value0)) == tmp.values[1]);
+	CHECK(FloatType(vector_get_z(test_value0)) == tmp.values[2]);
+	CHECK(FloatType(vector_get_w(test_value0)) == tmp.values[3]);
+
+	// Before each partial store, write other values to the destination
+	// Thus, a store that does nothing fails, and the checks find a store that changes too many lanes
+	vector_store(test_value1, &tmp.values[0]);
+	vector_store1(test_value0, &tmp.values[0]);
+	CHECK(tmp.values[0] == test_value0_flt[0]);
+	CHECK(tmp.values[1] == test_value1_flt[1]);
+	CHECK(tmp.values[2] == test_value1_flt[2]);
+	CHECK(tmp.values[3] == test_value1_flt[3]);
+
+	vector_store(test_value1, &tmp.values[0]);
+	vector_store2(test_value0, &tmp.values[0]);
+	CHECK(tmp.values[0] == test_value0_flt[0]);
+	CHECK(tmp.values[1] == test_value0_flt[1]);
+	CHECK(tmp.values[2] == test_value1_flt[2]);
+	CHECK(tmp.values[3] == test_value1_flt[3]);
+
+	vector_store(test_value0, &tmp.values[0]);
+	vector_store3(test_value1, &tmp.values[0]);
+	CHECK(tmp.values[0] == test_value1_flt[0]);
+	CHECK(tmp.values[1] == test_value1_flt[1]);
+	CHECK(tmp.values[2] == test_value1_flt[2]);
+	CHECK(tmp.values[3] == test_value0_flt[3]);
+
+	vector_store(test_value1, &buffer[1]);
+	CHECK(FloatType(vector_get_x(test_value1)) == FloatType(vector_get_x((Vector4Type)vector_load(&buffer[1]))));
+	CHECK(FloatType(vector_get_y(test_value1)) == FloatType(vector_get_y((Vector4Type)vector_load(&buffer[1]))));
+	CHECK(FloatType(vector_get_z(test_value1)) == FloatType(vector_get_z((Vector4Type)vector_load(&buffer[1]))));
+	CHECK(FloatType(vector_get_w(test_value1)) == FloatType(vector_get_w((Vector4Type)vector_load(&buffer[1]))));
+
+	vector_store(test_value0, &buffer[1]);
+	vector_store1(test_value1, &buffer[1]);
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load(&buffer[1]))) == test_value1_flt[0]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load(&buffer[1]))) == test_value0_flt[1]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load(&buffer[1]))) == test_value0_flt[2]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load(&buffer[1]))) == test_value0_flt[3]);
+
+	vector_store(test_value0, &buffer[1]);
+	vector_store2(test_value1, &buffer[1]);
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load(&buffer[1]))) == test_value1_flt[0]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load(&buffer[1]))) == test_value1_flt[1]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load(&buffer[1]))) == test_value0_flt[2]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load(&buffer[1]))) == test_value0_flt[3]);
+
+	vector_store(test_value0, &buffer[1]);
+	vector_store3(test_value1, &buffer[1]);
+	CHECK(FloatType(vector_get_x((Vector4Type)vector_load(&buffer[1]))) == test_value1_flt[0]);
+	CHECK(FloatType(vector_get_y((Vector4Type)vector_load(&buffer[1]))) == test_value1_flt[1]);
+	CHECK(FloatType(vector_get_z((Vector4Type)vector_load(&buffer[1]))) == test_value1_flt[2]);
+	CHECK(FloatType(vector_get_w((Vector4Type)vector_load(&buffer[1]))) == test_value0_flt[3]);
+
+	vector_store(test_value1, &tmpf4);
+	CHECK(FloatType(vector_get_x(test_value1)) == tmpf4.x);
+	CHECK(FloatType(vector_get_y(test_value1)) == tmpf4.y);
+	CHECK(FloatType(vector_get_z(test_value1)) == tmpf4.z);
+	CHECK(FloatType(vector_get_w(test_value1)) == tmpf4.w);
+
+	vector_store2(test_value1, &tmpf2);
+	CHECK(FloatType(vector_get_x(test_value1)) == tmpf2.x);
+	CHECK(FloatType(vector_get_y(test_value1)) == tmpf2.y);
+
+	vector_store3(test_value1, &tmpf3);
+	CHECK(FloatType(vector_get_x(test_value1)) == tmpf3.x);
+	CHECK(FloatType(vector_get_y(test_value1)) == tmpf3.y);
+	CHECK(FloatType(vector_get_z(test_value1)) == tmpf3.z);
+
+	CHECK((FloatType)vector_get_min_component(test_value0) == FloatType(vector_get_z(test_value0)));
+	CHECK((FloatType)vector_get_min_component(test_value3) == FloatType(vector_get_y(test_value3)));
+	CHECK((FloatType)vector_get_max_component(test_value0) == FloatType(vector_get_w(test_value0)));
+	CHECK(scalar_equal(vector_get_min_component_as_scalar(test_value0), (ScalarType)vector_as_scalar(vector_dup_z(test_value0))));
+	CHECK(scalar_equal(vector_get_min_component_as_scalar(test_value3), (ScalarType)vector_as_scalar(vector_dup_y(test_value3))));
+	CHECK(scalar_equal(vector_get_max_component_as_scalar(test_value0), (ScalarType)vector_as_scalar(vector_dup_w(test_value0))));
+
+	CHECK(vector_all_near_equal(vector_set_x(zero, FloatType(4.0)), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_y(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_z(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_w(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(4.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_x(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_y(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_z(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_w(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(4.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component2<component2::x>(zero, FloatType(4.0)), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component2<component2::y>(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component3<component3::x>(zero, FloatType(4.0)), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3<component3::y>(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3<component3::z>(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component<component4::x>(zero, FloatType(4.0)), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component<component4::y>(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component<component4::z>(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component<component4::w>(zero, FloatType(4.0)), vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(4.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component2<component2::x>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component2<component2::y>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component3<component3::x>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3<component3::y>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3<component3::z>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component<component4::x>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component<component4::y>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component<component4::z>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component<component4::w>(zero, scalar_set(FloatType(4.0))), vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(4.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component2(zero, FloatType(4.0), component2::x), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component2(zero, FloatType(4.0), component2::y), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component3(zero, FloatType(4.0), component3::x), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3(zero, FloatType(4.0), component3::y), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3(zero, FloatType(4.0), component3::z), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component(zero, FloatType(4.0), component4::x), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component(zero, FloatType(4.0), component4::y), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component(zero, FloatType(4.0), component4::z), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component(zero, FloatType(4.0), component4::w), vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(4.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component2(zero, scalar_set(FloatType(4.0)), component2::x), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component2(zero, scalar_set(FloatType(4.0)), component2::y), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component3(zero, scalar_set(FloatType(4.0)), component3::x), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3(zero, scalar_set(FloatType(4.0)), component3::y), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component3(zero, scalar_set(FloatType(4.0)), component3::z), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_set_component(zero, scalar_set(FloatType(4.0)), component4::x), vector_set(FloatType(4.0), FloatType(0.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component(zero, scalar_set(FloatType(4.0)), component4::y), vector_set(FloatType(0.0), FloatType(4.0), FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component(zero, scalar_set(FloatType(4.0)), component4::z), vector_set(FloatType(0.0), FloatType(0.0), FloatType(4.0), FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_set_component(zero, scalar_set(FloatType(4.0)), component4::w), vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(4.0)), FloatType(0.0)));
+
+	CHECK((FloatType)vector_as_scalar(test_value1) == FloatType(vector_get_x(test_value1)));
+	CHECK(scalar_equal(vector_as_scalar(test_value1), scalar_set(vector_get_x(test_value1))));
+}
+
+template<typename FloatType>
+void test_vector4_arithmetic_impl(const FloatType threshold)
+{
+	using Vector4Type = typename related_types<FloatType>::vector4;
+	using ScalarType = typename related_types<FloatType>::scalar;
+
+	const Vector4Type zero = vector_zero();
+	const Vector4Type infinity = vector_set(std::numeric_limits<FloatType>::infinity());
+	const Vector4Type nan = vector_set(std::numeric_limits<FloatType>::quiet_NaN());
+
+	const FloatType test_value0_flt[4] = { FloatType(2.0), FloatType(9.34), FloatType(-54.12), FloatType(6000.0) };
+	const FloatType test_value1_flt[4] = { FloatType(0.75), FloatType(-4.52), FloatType(44.68), FloatType(-54225.0) };
+	const FloatType test_value2_flt[4] = { FloatType(-2.65), FloatType(2.996113), FloatType(0.68123521), FloatType(-5.9182) };
+	const Vector4Type test_value0 = vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]);
+	const Vector4Type test_value1 = vector_set(test_value1_flt[0], test_value1_flt[1], test_value1_flt[2], test_value1_flt[3]);
+	const Vector4Type test_value2 = vector_set(test_value2_flt[0], test_value2_flt[1], test_value2_flt[2], test_value2_flt[3]);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Arithmetic
+
+	CHECK(scalar_near_equal(vector_get_x(vector_add(test_value0, test_value1)), test_value0_flt[0] + test_value1_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_add(test_value0, test_value1)), test_value0_flt[1] + test_value1_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_add(test_value0, test_value1)), test_value0_flt[2] + test_value1_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_add(test_value0, test_value1)), test_value0_flt[3] + test_value1_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_sub(test_value0, test_value1)), test_value0_flt[0] - test_value1_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_sub(test_value0, test_value1)), test_value0_flt[1] - test_value1_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_sub(test_value0, test_value1)), test_value0_flt[2] - test_value1_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_sub(test_value0, test_value1)), test_value0_flt[3] - test_value1_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_mul(test_value0, test_value1)), test_value0_flt[0] * test_value1_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_mul(test_value0, test_value1)), test_value0_flt[1] * test_value1_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_mul(test_value0, test_value1)), test_value0_flt[2] * test_value1_flt[2], threshold));
+	// We have a strange codegen bug with gcc5, use the Catch near equal impl instead
+	CHECK(scalar_cast(vector_get_w_as_scalar(vector_mul(test_value0, test_value1))) == Approx(test_value0_flt[3] * test_value1_flt[3]).margin(threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_mul(test_value0, FloatType(2.34))), test_value0_flt[0] * FloatType(2.34), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_mul(test_value0, FloatType(2.34))), test_value0_flt[1] * FloatType(2.34), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_mul(test_value0, FloatType(2.34))), test_value0_flt[2] * FloatType(2.34), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_mul(test_value0, FloatType(2.34))), test_value0_flt[3] * FloatType(2.34), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_mul(test_value0, scalar_set(FloatType(2.34)))), test_value0_flt[0] * FloatType(2.34), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_mul(test_value0, scalar_set(FloatType(2.34)))), test_value0_flt[1] * FloatType(2.34), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_mul(test_value0, scalar_set(FloatType(2.34)))), test_value0_flt[2] * FloatType(2.34), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_mul(test_value0, scalar_set(FloatType(2.34)))), test_value0_flt[3] * FloatType(2.34), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_div(test_value0, test_value1)), test_value0_flt[0] / test_value1_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_div(test_value0, test_value1)), test_value0_flt[1] / test_value1_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_div(test_value0, test_value1)), test_value0_flt[2] / test_value1_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_div(test_value0, test_value1)), test_value0_flt[3] / test_value1_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_max(test_value0, test_value1)), scalar_max(test_value0_flt[0], test_value1_flt[0]), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_max(test_value0, test_value1)), scalar_max(test_value0_flt[1], test_value1_flt[1]), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_max(test_value0, test_value1)), scalar_max(test_value0_flt[2], test_value1_flt[2]), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_max(test_value0, test_value1)), scalar_max(test_value0_flt[3], test_value1_flt[3]), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_min(test_value0, test_value1)), scalar_min(test_value0_flt[0], test_value1_flt[0]), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_min(test_value0, test_value1)), scalar_min(test_value0_flt[1], test_value1_flt[1]), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_min(test_value0, test_value1)), scalar_min(test_value0_flt[2], test_value1_flt[2]), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_min(test_value0, test_value1)), scalar_min(test_value0_flt[3], test_value1_flt[3]), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_clamp(test_value0, test_value1, test_value2)), scalar_clamp(test_value0_flt[0], test_value1_flt[0], test_value2_flt[0]), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_clamp(test_value0, test_value1, test_value2)), scalar_clamp(test_value0_flt[1], test_value1_flt[1], test_value2_flt[1]), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_clamp(test_value0, test_value1, test_value2)), scalar_clamp(test_value0_flt[2], test_value1_flt[2], test_value2_flt[2]), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_clamp(test_value0, test_value1, test_value2)), scalar_clamp(test_value0_flt[3], test_value1_flt[3], test_value2_flt[3]), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_abs(test_value0)), scalar_abs(test_value0_flt[0]), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_abs(test_value0)), scalar_abs(test_value0_flt[1]), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_abs(test_value0)), scalar_abs(test_value0_flt[2]), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_abs(test_value0)), scalar_abs(test_value0_flt[3]), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg(test_value0)), -test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg(test_value0)), -test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg(test_value0)), -test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg(test_value0)), -test_value0_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg<true, false, false, false>(test_value0)), -test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg<true, false, false, false>(test_value0)), test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg<true, false, false, false>(test_value0)), test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg<true, false, false, false>(test_value0)), test_value0_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg<false, true, false, false>(test_value0)), test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg<false, true, false, false>(test_value0)), -test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg<false, true, false, false>(test_value0)), test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg<false, true, false, false>(test_value0)), test_value0_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg<false, false, true, false>(test_value0)), test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg<false, false, true, false>(test_value0)), test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg<false, false, true, false>(test_value0)), -test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg<false, false, true, false>(test_value0)), test_value0_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg<false, false, false, true>(test_value0)), test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg<false, false, false, true>(test_value0)), test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg<false, false, false, true>(test_value0)), test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg<false, false, false, true>(test_value0)), -test_value0_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg<true, true, true, true>(test_value0)), -test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg<true, true, true, true>(test_value0)), -test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg<true, true, true, true>(test_value0)), -test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg<true, true, true, true>(test_value0)), -test_value0_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_reciprocal(test_value0)), scalar_reciprocal(test_value0_flt[0]), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_reciprocal(test_value0)), scalar_reciprocal(test_value0_flt[1]), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_reciprocal(test_value0)), scalar_reciprocal(test_value0_flt[2]), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_reciprocal(test_value0)), scalar_reciprocal(test_value0_flt[3]), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_sqrt(vector_abs(test_value0))), scalar_sqrt(scalar_abs(test_value0_flt[0])), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_sqrt(vector_abs(test_value0))), scalar_sqrt(scalar_abs(test_value0_flt[1])), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_sqrt(vector_abs(test_value0))), scalar_sqrt(scalar_abs(test_value0_flt[2])), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_sqrt(vector_abs(test_value0))), scalar_sqrt(scalar_abs(test_value0_flt[3])), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_sqrt_reciprocal(vector_abs(test_value0))), scalar_reciprocal(scalar_sqrt(scalar_abs(test_value0_flt[0]))), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_sqrt_reciprocal(vector_abs(test_value0))), scalar_reciprocal(scalar_sqrt(scalar_abs(test_value0_flt[1]))), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_sqrt_reciprocal(vector_abs(test_value0))), scalar_reciprocal(scalar_sqrt(scalar_abs(test_value0_flt[2]))), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_sqrt_reciprocal(vector_abs(test_value0))), scalar_reciprocal(scalar_sqrt(scalar_abs(test_value0_flt[3]))), threshold));
+
+	const Vector4Type neg_zero = vector_set(FloatType(-0.0));
+	CHECK(FloatType(vector_get_x(vector_floor(neg_zero))) == scalar_floor(FloatType(-0.0)));
+	CHECK(std::signbit(FloatType(vector_get_x(vector_floor(neg_zero)))) == std::signbit(scalar_floor(FloatType(-0.0))));
+	CHECK(std::signbit(FloatType(vector_get_x(vector_floor(neg_zero)))) == std::signbit(std::floor(FloatType(-0.0))));
+	CHECK(FloatType(vector_get_x(vector_floor(test_value0))) == scalar_floor(test_value0_flt[0]));
+	CHECK(FloatType(vector_get_y(vector_floor(test_value0))) == scalar_floor(test_value0_flt[1]));
+	CHECK(FloatType(vector_get_z(vector_floor(test_value0))) == scalar_floor(test_value0_flt[2]));
+	CHECK(FloatType(vector_get_w(vector_floor(test_value0))) == scalar_floor(test_value0_flt[3]));
+	CHECK(FloatType(vector_get_x(vector_floor(infinity))) == scalar_floor(FloatType(vector_get_x(infinity))));
+	CHECK(FloatType(vector_get_y(vector_floor(infinity))) == scalar_floor(FloatType(vector_get_y(infinity))));
+	CHECK(FloatType(vector_get_z(vector_floor(infinity))) == scalar_floor(FloatType(vector_get_z(infinity))));
+	CHECK(FloatType(vector_get_w(vector_floor(infinity))) == scalar_floor(FloatType(vector_get_w(infinity))));
+	CHECK(FloatType(vector_get_x(vector_floor(vector_neg(infinity)))) == scalar_floor(-FloatType(vector_get_x(infinity))));
+	CHECK(FloatType(vector_get_y(vector_floor(vector_neg(infinity)))) == scalar_floor(-FloatType(vector_get_y(infinity))));
+	CHECK(FloatType(vector_get_z(vector_floor(vector_neg(infinity)))) == scalar_floor(-FloatType(vector_get_z(infinity))));
+	CHECK(FloatType(vector_get_w(vector_floor(vector_neg(infinity)))) == scalar_floor(-FloatType(vector_get_w(infinity))));
+	CHECK(std::isnan(FloatType(vector_get_x(vector_floor(nan)))));
+	CHECK(std::isnan(FloatType(vector_get_y(vector_floor(nan)))));
+	CHECK(std::isnan(FloatType(vector_get_z(vector_floor(nan)))));
+	CHECK(std::isnan(FloatType(vector_get_w(vector_floor(nan)))));
+
+	CHECK(FloatType(vector_get_x(vector_ceil(neg_zero))) == scalar_ceil(FloatType(-0.0)));
+	CHECK(std::signbit(FloatType(vector_get_x(vector_ceil(neg_zero)))) == std::signbit(std::ceil(FloatType(-0.0))));
+	CHECK(std::signbit(FloatType(vector_get_x(vector_ceil(vector_set(FloatType(-0.5)))))) == std::signbit(std::ceil(FloatType(-0.5))));
+	CHECK(FloatType(vector_get_x(vector_ceil(test_value0))) == scalar_ceil(test_value0_flt[0]));
+	CHECK(FloatType(vector_get_y(vector_ceil(test_value0))) == scalar_ceil(test_value0_flt[1]));
+	CHECK(FloatType(vector_get_z(vector_ceil(test_value0))) == scalar_ceil(test_value0_flt[2]));
+	CHECK(FloatType(vector_get_w(vector_ceil(test_value0))) == scalar_ceil(test_value0_flt[3]));
+	CHECK(FloatType(vector_get_x(vector_ceil(infinity))) == scalar_ceil(FloatType(vector_get_x(infinity))));
+	CHECK(FloatType(vector_get_y(vector_ceil(infinity))) == scalar_ceil(FloatType(vector_get_y(infinity))));
+	CHECK(FloatType(vector_get_z(vector_ceil(infinity))) == scalar_ceil(FloatType(vector_get_z(infinity))));
+	CHECK(FloatType(vector_get_w(vector_ceil(infinity))) == scalar_ceil(FloatType(vector_get_w(infinity))));
+	CHECK(FloatType(vector_get_x(vector_ceil(vector_neg(infinity)))) == scalar_ceil(-FloatType(vector_get_x(infinity))));
+	CHECK(FloatType(vector_get_y(vector_ceil(vector_neg(infinity)))) == scalar_ceil(-FloatType(vector_get_y(infinity))));
+	CHECK(FloatType(vector_get_z(vector_ceil(vector_neg(infinity)))) == scalar_ceil(-FloatType(vector_get_z(infinity))));
+	CHECK(FloatType(vector_get_w(vector_ceil(vector_neg(infinity)))) == scalar_ceil(-FloatType(vector_get_w(infinity))));
+	CHECK(std::isnan(FloatType(vector_get_x(vector_ceil(nan)))));
+	CHECK(std::isnan(FloatType(vector_get_y(vector_ceil(nan)))));
+	CHECK(std::isnan(FloatType(vector_get_z(vector_ceil(nan)))));
+	CHECK(std::isnan(FloatType(vector_get_w(vector_ceil(nan)))));
+
+	{
+		// The largest values that have a fractional part, thus each lane is near the limit of the precision
+		// A conversion to a 32 bit integer overflows for the float64 values
+		const FloatType largest_fraction = FloatType(std::ldexp(FloatType(1.0), std::numeric_limits<FloatType>::digits - 1)) - FloatType(0.5);
+		const FloatType large_flt[4] = { largest_fraction, -largest_fraction, largest_fraction - FloatType(1.0), -(largest_fraction - FloatType(1.0)) };
+		const Vector4Type large = vector_set(large_flt[0], large_flt[1], large_flt[2], large_flt[3]);
+
+		FloatType floor_result[4];
+		FloatType ceil_result[4];
+		FloatType round_symmetric_result[4];
+		FloatType round_bankers_result[4];
+		FloatType fraction_result[4];
+		vector_store(vector_floor(large), &floor_result[0]);
+		vector_store(vector_ceil(large), &ceil_result[0]);
+		vector_store(vector_round_symmetric(large), &round_symmetric_result[0]);
+		vector_store(vector_round_bankers(large), &round_bankers_result[0]);
+		vector_store(vector_fraction(large), &fraction_result[0]);
+
+		for (uint32_t lane_index = 0; lane_index < 4; ++lane_index)
+		{
+			INFO("input: " << large_flt[lane_index]);
+
+			CHECK(floor_result[lane_index] == std::floor(large_flt[lane_index]));
+			CHECK(ceil_result[lane_index] == std::ceil(large_flt[lane_index]));
+			CHECK(round_symmetric_result[lane_index] == std::round(large_flt[lane_index]));
+			CHECK(round_bankers_result[lane_index] == std::nearbyint(large_flt[lane_index]));
+			CHECK(fraction_result[lane_index] == FloatType(0.5));
+		}
+	}
+
+	const Vector4Type scalar_cross3_result = scalar_cross3<Vector4Type, FloatType>(test_value0, test_value1);
+	const Vector4Type vector_cross3_result = vector_cross3(test_value0, test_value1);
+	// We have a strange codegen bug with gcc, use the Catch near equal impl instead
+	CHECK(FloatType(vector_get_x(vector_cross3_result)) == Approx(FloatType(vector_get_x(scalar_cross3_result))).margin(threshold));
+	CHECK(scalar_near_equal(FloatType(vector_get_y(vector_cross3_result)), FloatType(vector_get_y(scalar_cross3_result)), threshold));
+	CHECK(scalar_near_equal(FloatType(vector_get_z(vector_cross3_result)), FloatType(vector_get_z(scalar_cross3_result)), threshold));
+
+	const FloatType test_value10_flt[4] = { FloatType(-0.001138), FloatType(0.91623), FloatType(-1.624598), FloatType(0.715671) };
+	const FloatType test_value11_flt[4] = { FloatType(0.1138), FloatType(-0.623), FloatType(1.4598), FloatType(-0.5671) };
+	const Vector4Type test_value10 = vector_set(test_value10_flt[0], test_value10_flt[1], test_value10_flt[2], test_value10_flt[3]);
+	const Vector4Type test_value11 = vector_set(test_value11_flt[0], test_value11_flt[1], test_value11_flt[2], test_value11_flt[3]);
+	const FloatType scalar_dot_result = scalar_dot4<Vector4Type, FloatType>(test_value10, test_value11);
+	const FloatType vector_dot_result = vector_dot(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot_result, scalar_dot_result, threshold));
+
+	const FloatType scalar_dot3_result = scalar_dot3<Vector4Type, FloatType>(test_value10, test_value11);
+	const FloatType vector_dot3_result = vector_dot3(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot3_result, scalar_dot3_result, threshold));
+	// GCC can fuse a multiply and an add into an FMA in one variant and not in another
+	// Thus the checks below compare the as_scalar and as_vector variants with a threshold
+	const ScalarType vector_dot3_result_scalar = vector_dot3_as_scalar(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot3_result, scalar_cast(vector_dot3_result_scalar), threshold));
+	const Vector4Type vector_dot3_result_vec = vector_dot3_as_vector(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot3_result, (FloatType)vector_get_x(vector_dot3_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_dot3_result, (FloatType)vector_get_y(vector_dot3_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_dot3_result, (FloatType)vector_get_z(vector_dot3_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_dot3_result, (FloatType)vector_get_w(vector_dot3_result_vec), threshold));
+
+	const FloatType scalar_dot2_result = scalar_dot2<Vector4Type, FloatType>(test_value10, test_value11);
+	const FloatType vector_dot2_result = vector_dot2(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot2_result, scalar_dot2_result, threshold));
+	const ScalarType vector_dot2_result_scalar = vector_dot2_as_scalar(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot2_result, scalar_cast(vector_dot2_result_scalar), threshold));
+	const Vector4Type vector_dot2_result_vec = vector_dot2_as_vector(test_value10, test_value11);
+	CHECK(scalar_near_equal(vector_dot2_result, (FloatType)vector_get_x(vector_dot2_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_dot2_result, (FloatType)vector_get_y(vector_dot2_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_dot2_result, (FloatType)vector_get_z(vector_dot2_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_dot2_result, (FloatType)vector_get_w(vector_dot2_result_vec), threshold));
+
+	const ScalarType vector_sdot_result = vector_dot_as_scalar(test_value10, test_value11);
+	CHECK(scalar_near_equal(scalar_cast(vector_sdot_result), scalar_dot_result, threshold));
+
+	const Vector4Type vector_vdot_result = vector_dot_as_vector(test_value10, test_value11);
+	CHECK(scalar_near_equal((FloatType)vector_get_x(vector_vdot_result), scalar_dot_result, threshold));
+	CHECK(scalar_near_equal((FloatType)vector_get_y(vector_vdot_result), scalar_dot_result, threshold));
+	CHECK(scalar_near_equal((FloatType)vector_get_z(vector_vdot_result), scalar_dot_result, threshold));
+	CHECK(scalar_near_equal((FloatType)vector_get_w(vector_vdot_result), scalar_dot_result, threshold));
+
+	const FloatType length_squared_threshold = FloatType(30.0);	// Input W has large values
+	CHECK(scalar_near_equal(scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0), vector_length_squared(test_value0), length_squared_threshold));
+	CHECK(scalar_near_equal(scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0), scalar_cast(vector_length_squared_as_scalar(test_value0)), length_squared_threshold));
+	const FloatType vector_length_squared3_ref = scalar_dot3<Vector4Type, FloatType>(test_value0, test_value0);
+	const FloatType vector_length_squared3_result = vector_length_squared3(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared3_ref, vector_length_squared3_result, threshold));
+	const ScalarType vector_length_squared3_result_scalar = vector_length_squared3_as_scalar(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared3_result, scalar_cast(vector_length_squared3_result_scalar), threshold));
+	const Vector4Type vector_length_squared3_result_vec = vector_length_squared3_as_vector(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared3_ref, (FloatType)vector_get_x(vector_length_squared3_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_length_squared3_ref, (FloatType)vector_get_y(vector_length_squared3_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_length_squared3_ref, (FloatType)vector_get_z(vector_length_squared3_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_length_squared3_ref, (FloatType)vector_get_w(vector_length_squared3_result_vec), threshold));
+
+	const FloatType vector_length_squared_ref = scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0);
+	const Vector4Type vector_length_squared_result_vec = vector_length_squared_as_vector(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared_ref, (FloatType)vector_get_x(vector_length_squared_result_vec), length_squared_threshold));
+	CHECK(scalar_near_equal(vector_length_squared_ref, (FloatType)vector_get_y(vector_length_squared_result_vec), length_squared_threshold));
+	CHECK(scalar_near_equal(vector_length_squared_ref, (FloatType)vector_get_z(vector_length_squared_result_vec), length_squared_threshold));
+	CHECK(scalar_near_equal(vector_length_squared_ref, (FloatType)vector_get_w(vector_length_squared_result_vec), length_squared_threshold));
+
+	const FloatType vector_length_squared2_ref = scalar_dot2<Vector4Type, FloatType>(test_value0, test_value0);
+	const FloatType vector_length_squared2_result = vector_length_squared2(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared2_ref, vector_length_squared2_result, threshold));
+	const ScalarType vector_length_squared2_result_scalar = vector_length_squared2_as_scalar(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared2_result, scalar_cast(vector_length_squared2_result_scalar), threshold));
+	const Vector4Type vector_length_squared2_result_vec = vector_length_squared2_as_vector(test_value0);
+	CHECK(scalar_near_equal(vector_length_squared2_ref, (FloatType)vector_get_x(vector_length_squared2_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_length_squared2_ref, (FloatType)vector_get_y(vector_length_squared2_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_length_squared2_ref, (FloatType)vector_get_z(vector_length_squared2_result_vec), threshold));
+	CHECK(scalar_near_equal(vector_length_squared2_ref, (FloatType)vector_get_w(vector_length_squared2_result_vec), threshold));
+
+	CHECK(scalar_near_equal(rtm::scalar_sqrt(scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0)), vector_length(test_value0), threshold));
+	CHECK(scalar_near_equal(rtm::scalar_sqrt(scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0)), scalar_cast(vector_length_as_scalar(test_value0)), threshold));
+	const FloatType vector_length3_result = vector_length3(test_value0);
+	CHECK(scalar_near_equal(rtm::scalar_sqrt(scalar_dot3<Vector4Type, FloatType>(test_value0, test_value0)), vector_length3_result, threshold));
+	const ScalarType vector_length3_result_scalar = vector_length3_as_scalar(test_value0);
+	CHECK(scalar_near_equal(vector_length3_result, scalar_cast(vector_length3_result_scalar), threshold));
+
+	CHECK(scalar_near_equal(rtm::scalar_sqrt_reciprocal(scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0)), vector_length_reciprocal(test_value0), threshold));
+	CHECK(scalar_near_equal(rtm::scalar_sqrt_reciprocal(scalar_dot4<Vector4Type, FloatType>(test_value0, test_value0)), scalar_cast(vector_length_reciprocal_as_scalar(test_value0)), threshold));
+	CHECK(scalar_near_equal(rtm::scalar_sqrt_reciprocal(scalar_dot3<Vector4Type, FloatType>(test_value0, test_value0)), vector_length_reciprocal3(test_value0), threshold));
+	CHECK(scalar_near_equal(rtm::scalar_sqrt_reciprocal(scalar_dot3<Vector4Type, FloatType>(test_value0, test_value0)), scalar_cast(vector_length_reciprocal3_as_scalar(test_value0)), threshold));
+	CHECK(scalar_near_equal(rtm::scalar_sqrt_reciprocal(scalar_dot2<Vector4Type, FloatType>(test_value0, test_value0)), vector_length_reciprocal2(test_value0), threshold));
+	CHECK(scalar_near_equal(rtm::scalar_sqrt_reciprocal(scalar_dot2<Vector4Type, FloatType>(test_value0, test_value0)), scalar_cast(vector_length_reciprocal2_as_scalar(test_value0)), threshold));
+
+	const Vector4Type test_value_diff = vector_sub(test_value0, test_value1);
+	const FloatType vector_distance3_result = vector_distance3(test_value0, test_value1);
+	CHECK(scalar_near_equal(rtm::scalar_sqrt(scalar_dot3<Vector4Type, FloatType>(test_value_diff, test_value_diff)), vector_distance3_result, threshold));
+	const ScalarType vector_distance3_result_scalar = vector_distance3_as_scalar(test_value0, test_value1);
+	CHECK(scalar_near_equal(vector_distance3_result, scalar_cast(vector_distance3_result_scalar), threshold));
+
+	const FloatType vector_distance_squared3_result = vector_distance_squared3(test_value0, test_value1);
+	CHECK(scalar_near_equal(scalar_dot3<Vector4Type, FloatType>(test_value_diff, test_value_diff), vector_distance_squared3_result, scalar_sqrt(threshold)));
+	const ScalarType vector_distance_squared3_result_scalar = vector_distance_squared3_as_scalar(test_value0, test_value1);
+	CHECK(scalar_near_equal(vector_distance_squared3_result, scalar_cast(vector_distance_squared3_result_scalar), scalar_sqrt(threshold)));
+
+	// The fallback differs from the zero input, thus the checks find a function that returns its input
+	const Vector4Type fallback = vector_set(FloatType(1.0), FloatType(2.0), FloatType(3.0), FloatType(4.0));
+
+	const Vector4Type scalar_normalize2_result = scalar_normalize2<Vector4Type, FloatType>(test_value0, zero, threshold);
+	const Vector4Type vector_normalize2_result = vector_normalize2(test_value0);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize2_result), vector_get_x(scalar_normalize2_result), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize2_result), vector_get_y(scalar_normalize2_result), threshold));
+
+	const Vector4Type vector_normalize2_result_safe = vector_normalize2(test_value0, zero, threshold);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize2_result_safe), vector_get_x(scalar_normalize2_result), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize2_result_safe), vector_get_y(scalar_normalize2_result), threshold));
+
+	const Vector4Type scalar_normalize2_result0 = scalar_normalize2<Vector4Type, FloatType>(zero, fallback, threshold);
+	const Vector4Type vector_normalize2_result0 = vector_normalize2(zero, fallback, threshold);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize2_result0), vector_get_x(scalar_normalize2_result0), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize2_result0), vector_get_y(scalar_normalize2_result0), threshold));
+
+	const Vector4Type scalar_normalize3_result = scalar_normalize3<Vector4Type, FloatType>(test_value0, zero, threshold);
+	const Vector4Type vector_normalize3_result = vector_normalize3(test_value0);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize3_result), vector_get_x(scalar_normalize3_result), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize3_result), vector_get_y(scalar_normalize3_result), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_normalize3_result), vector_get_z(scalar_normalize3_result), threshold));
+
+	const Vector4Type vector_normalize3_result_safe = vector_normalize3(test_value0, zero, threshold);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize3_result_safe), vector_get_x(scalar_normalize3_result), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize3_result_safe), vector_get_y(scalar_normalize3_result), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_normalize3_result_safe), vector_get_z(scalar_normalize3_result), threshold));
+
+	const Vector4Type scalar_normalize3_result0 = scalar_normalize3<Vector4Type, FloatType>(zero, fallback, threshold);
+	const Vector4Type vector_normalize3_result0 = vector_normalize3(zero, fallback, threshold);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize3_result0), vector_get_x(scalar_normalize3_result0), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize3_result0), vector_get_y(scalar_normalize3_result0), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_normalize3_result0), vector_get_z(scalar_normalize3_result0), threshold));
+
+	const Vector4Type scalar_normalize4_result = scalar_normalize4<Vector4Type, FloatType>(test_value0, zero, threshold);
+	const Vector4Type vector_normalize4_result = vector_normalize(test_value0);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize4_result), vector_get_x(scalar_normalize4_result), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize4_result), vector_get_y(scalar_normalize4_result), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_normalize4_result), vector_get_z(scalar_normalize4_result), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_normalize4_result), vector_get_w(scalar_normalize4_result), threshold));
+
+	const Vector4Type vector_normalize4_result_safe = vector_normalize(test_value0, zero, threshold);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize4_result_safe), vector_get_x(scalar_normalize4_result), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize4_result_safe), vector_get_y(scalar_normalize4_result), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_normalize4_result_safe), vector_get_z(scalar_normalize4_result), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_normalize4_result_safe), vector_get_w(scalar_normalize4_result), threshold));
+
+	const Vector4Type scalar_normalize4_result0 = scalar_normalize4<Vector4Type, FloatType>(zero, fallback, threshold);
+	const Vector4Type vector_normalize4_result0 = vector_normalize(zero, fallback, threshold);
+	CHECK(scalar_near_equal(vector_get_x(vector_normalize4_result0), vector_get_x(scalar_normalize4_result0), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_normalize4_result0), vector_get_y(scalar_normalize4_result0), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_normalize4_result0), vector_get_z(scalar_normalize4_result0), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_normalize4_result0), vector_get_w(scalar_normalize4_result0), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_lerp(test_value10, test_value11, FloatType(0.33))), ((test_value11_flt[0] - test_value10_flt[0]) * FloatType(0.33)) + test_value10_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_lerp(test_value10, test_value11, FloatType(0.33))), ((test_value11_flt[1] - test_value10_flt[1]) * FloatType(0.33)) + test_value10_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_lerp(test_value10, test_value11, FloatType(0.33))), ((test_value11_flt[2] - test_value10_flt[2]) * FloatType(0.33)) + test_value10_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_lerp(test_value10, test_value11, FloatType(0.33))), ((test_value11_flt[3] - test_value10_flt[3]) * FloatType(0.33)) + test_value10_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_lerp(test_value10, test_value11, scalar_set(FloatType(0.33)))), ((test_value11_flt[0] - test_value10_flt[0]) * FloatType(0.33)) + test_value10_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_lerp(test_value10, test_value11, scalar_set(FloatType(0.33)))), ((test_value11_flt[1] - test_value10_flt[1]) * FloatType(0.33)) + test_value10_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_lerp(test_value10, test_value11, scalar_set(FloatType(0.33)))), ((test_value11_flt[2] - test_value10_flt[2]) * FloatType(0.33)) + test_value10_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_lerp(test_value10, test_value11, scalar_set(FloatType(0.33)))), ((test_value11_flt[3] - test_value10_flt[3]) * FloatType(0.33)) + test_value10_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_lerp(test_value10, test_value11, vector_set(FloatType(0.33)))), ((test_value11_flt[0] - test_value10_flt[0]) * FloatType(0.33)) + test_value10_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_lerp(test_value10, test_value11, vector_set(FloatType(0.33)))), ((test_value11_flt[1] - test_value10_flt[1]) * FloatType(0.33)) + test_value10_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_lerp(test_value10, test_value11, vector_set(FloatType(0.33)))), ((test_value11_flt[2] - test_value10_flt[2]) * FloatType(0.33)) + test_value10_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_lerp(test_value10, test_value11, vector_set(FloatType(0.33)))), ((test_value11_flt[3] - test_value10_flt[3]) * FloatType(0.33)) + test_value10_flt[3], threshold));
+
+	// Lerp must be stable and return exactly the start when the interpolation alpha is 0.0 and exactly the end when 1.0
+	CHECK(vector_all_near_equal(vector_lerp(test_value10, test_value11, FloatType(0.0)), test_value10, FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_lerp(test_value10, test_value11, FloatType(1.0)), test_value11, FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_lerp(test_value10, test_value11, scalar_set(FloatType(0.0))), test_value10, FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_lerp(test_value10, test_value11, scalar_set(FloatType(1.0))), test_value11, FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_lerp(test_value10, test_value11, vector_set(FloatType(0.0))), test_value10, FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_lerp(test_value10, test_value11, vector_set(FloatType(1.0))), test_value11, FloatType(0.0)));
+
+	CHECK(FloatType(vector_get_x(vector_fraction(neg_zero))) == scalar_fraction(FloatType(-0.0)));
+	CHECK(std::signbit(FloatType(vector_get_x(vector_fraction(neg_zero)))) == std::signbit(scalar_fraction(FloatType(-0.0))));
+	CHECK(scalar_near_equal(vector_get_x(vector_fraction(test_value0)), scalar_fraction(test_value0_flt[0]), threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_fraction(test_value0)), scalar_fraction(test_value0_flt[1]), threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_fraction(test_value0)), scalar_fraction(test_value0_flt[2]), threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_fraction(test_value0)), scalar_fraction(test_value0_flt[3]), threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_mul_add(test_value10, test_value11, test_value2)), (test_value10_flt[0] * test_value11_flt[0]) + test_value2_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_mul_add(test_value10, test_value11, test_value2)), (test_value10_flt[1] * test_value11_flt[1]) + test_value2_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_mul_add(test_value10, test_value11, test_value2)), (test_value10_flt[2] * test_value11_flt[2]) + test_value2_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_mul_add(test_value10, test_value11, test_value2)), (test_value10_flt[3] * test_value11_flt[3]) + test_value2_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_mul_add(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[0] * test_value11_flt[0]) + test_value2_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_mul_add(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[1] * test_value11_flt[0]) + test_value2_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_mul_add(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[2] * test_value11_flt[0]) + test_value2_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_mul_add(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[3] * test_value11_flt[0]) + test_value2_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_mul_add(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[0] * test_value11_flt[0]) + test_value2_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_mul_add(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[1] * test_value11_flt[0]) + test_value2_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_mul_add(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[2] * test_value11_flt[0]) + test_value2_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_mul_add(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[3] * test_value11_flt[0]) + test_value2_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg_mul_sub(test_value10, test_value11, test_value2)), (test_value10_flt[0] * -test_value11_flt[0]) + test_value2_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg_mul_sub(test_value10, test_value11, test_value2)), (test_value10_flt[1] * -test_value11_flt[1]) + test_value2_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg_mul_sub(test_value10, test_value11, test_value2)), (test_value10_flt[2] * -test_value11_flt[2]) + test_value2_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg_mul_sub(test_value10, test_value11, test_value2)), (test_value10_flt[3] * -test_value11_flt[3]) + test_value2_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg_mul_sub(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[0] * -test_value11_flt[0]) + test_value2_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg_mul_sub(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[1] * -test_value11_flt[0]) + test_value2_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg_mul_sub(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[2] * -test_value11_flt[0]) + test_value2_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg_mul_sub(test_value10, test_value11_flt[0], test_value2)), (test_value10_flt[3] * -test_value11_flt[0]) + test_value2_flt[3], threshold));
+
+	CHECK(scalar_near_equal(vector_get_x(vector_neg_mul_sub(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[0] * -test_value11_flt[0]) + test_value2_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_neg_mul_sub(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[1] * -test_value11_flt[0]) + test_value2_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_neg_mul_sub(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[2] * -test_value11_flt[0]) + test_value2_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_neg_mul_sub(test_value10, scalar_set(test_value11_flt[0]), test_value2)), (test_value10_flt[3] * -test_value11_flt[0]) + test_value2_flt[3], threshold));
+}
+
+inline bool reference_all_lanes(const bool* lanes, uint32_t num_lanes)
+{
+	for (uint32_t lane_index = 0; lane_index < num_lanes; ++lane_index)
+	{
+		if (!lanes[lane_index])
+			return false;
+	}
+	return true;
+}
+
+inline bool reference_any_lanes(const bool* lanes, uint32_t num_lanes)
+{
+	for (uint32_t lane_index = 0; lane_index < num_lanes; ++lane_index)
+	{
+		if (lanes[lane_index])
+			return true;
+	}
+	return false;
+}
+
+template<typename FloatType>
+void test_vector4_relational_impl(const FloatType threshold)
+{
+	using Vector4Type = typename related_types<FloatType>::vector4;
+
+	const Vector4Type zero = vector_zero();
+
+	const FloatType test_value0_flt[4] = { FloatType(2.0), FloatType(9.34), FloatType(-54.12), FloatType(6000.0) };
+	const FloatType test_value1_flt[4] = { FloatType(0.75), FloatType(-4.52), FloatType(44.68), FloatType(-54225.0) };
+	const FloatType test_value3_flt[4] = { FloatType(2.0), FloatType(-9.34), FloatType(54.12), FloatType(6000.1) };
+	const Vector4Type test_value0 = vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]);
+	const Vector4Type test_value1 = vector_set(test_value1_flt[0], test_value1_flt[1], test_value1_flt[2], test_value1_flt[3]);
+	const Vector4Type test_value3 = vector_set(test_value3_flt[0], test_value3_flt[1], test_value3_flt[2], test_value3_flt[3]);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Comparisons and masking
+
+	CHECK((mask_get_x(vector_equal(test_value0, test_value1)) != 0) == (test_value0_flt[0] == test_value1_flt[0]));
+	CHECK((mask_get_y(vector_equal(test_value0, test_value1)) != 0) == (test_value0_flt[1] == test_value1_flt[1]));
+	CHECK((mask_get_z(vector_equal(test_value0, test_value1)) != 0) == (test_value0_flt[2] == test_value1_flt[2]));
+	CHECK((mask_get_w(vector_equal(test_value0, test_value1)) != 0) == (test_value0_flt[3] == test_value1_flt[3]));
+
+	CHECK((mask_get_x(vector_equal(test_value0, test_value0)) != 0) == (test_value0_flt[0] == test_value0_flt[0]));
+	CHECK((mask_get_y(vector_equal(test_value0, test_value0)) != 0) == (test_value0_flt[1] == test_value0_flt[1]));
+	CHECK((mask_get_z(vector_equal(test_value0, test_value0)) != 0) == (test_value0_flt[2] == test_value0_flt[2]));
+	CHECK((mask_get_w(vector_equal(test_value0, test_value0)) != 0) == (test_value0_flt[3] == test_value0_flt[3]));
+
+	CHECK((mask_get_x(vector_not_equal(test_value0, test_value1)) != 0) != (test_value0_flt[0] == test_value1_flt[0]));
+	CHECK((mask_get_y(vector_not_equal(test_value0, test_value1)) != 0) != (test_value0_flt[1] == test_value1_flt[1]));
+	CHECK((mask_get_z(vector_not_equal(test_value0, test_value1)) != 0) != (test_value0_flt[2] == test_value1_flt[2]));
+	CHECK((mask_get_w(vector_not_equal(test_value0, test_value1)) != 0) != (test_value0_flt[3] == test_value1_flt[3]));
+
+	CHECK((mask_get_x(vector_not_equal(test_value0, test_value0)) != 0) != (test_value0_flt[0] == test_value0_flt[0]));
+	CHECK((mask_get_y(vector_not_equal(test_value0, test_value0)) != 0) != (test_value0_flt[1] == test_value0_flt[1]));
+	CHECK((mask_get_z(vector_not_equal(test_value0, test_value0)) != 0) != (test_value0_flt[2] == test_value0_flt[2]));
+	CHECK((mask_get_w(vector_not_equal(test_value0, test_value0)) != 0) != (test_value0_flt[3] == test_value0_flt[3]));
+
+	CHECK((mask_get_x(vector_less_than(test_value0, test_value1)) != 0) == (test_value0_flt[0] < test_value1_flt[0]));
+	CHECK((mask_get_y(vector_less_than(test_value0, test_value1)) != 0) == (test_value0_flt[1] < test_value1_flt[1]));
+	CHECK((mask_get_z(vector_less_than(test_value0, test_value1)) != 0) == (test_value0_flt[2] < test_value1_flt[2]));
+	CHECK((mask_get_w(vector_less_than(test_value0, test_value1)) != 0) == (test_value0_flt[3] < test_value1_flt[3]));
+
+	CHECK((mask_get_x(vector_less_equal(test_value0, test_value3)) != 0) == (test_value0_flt[0] <= test_value3_flt[0]));
+	CHECK((mask_get_y(vector_less_equal(test_value0, test_value3)) != 0) == (test_value0_flt[1] <= test_value3_flt[1]));
+	CHECK((mask_get_z(vector_less_equal(test_value0, test_value3)) != 0) == (test_value0_flt[2] <= test_value3_flt[2]));
+	CHECK((mask_get_w(vector_less_equal(test_value0, test_value3)) != 0) == (test_value0_flt[3] <= test_value3_flt[3]));
+
+	CHECK((mask_get_x(vector_greater_than(test_value0, test_value1)) != 0) == (test_value0_flt[0] > test_value1_flt[0]));
+	CHECK((mask_get_y(vector_greater_than(test_value0, test_value1)) != 0) == (test_value0_flt[1] > test_value1_flt[1]));
+	CHECK((mask_get_z(vector_greater_than(test_value0, test_value1)) != 0) == (test_value0_flt[2] > test_value1_flt[2]));
+	CHECK((mask_get_w(vector_greater_than(test_value0, test_value1)) != 0) == (test_value0_flt[3] > test_value1_flt[3]));
+
+	CHECK((mask_get_x(vector_greater_equal(test_value0, test_value1)) != 0) == (test_value0_flt[0] >= test_value1_flt[0]));
+	CHECK((mask_get_y(vector_greater_equal(test_value0, test_value1)) != 0) == (test_value0_flt[1] >= test_value1_flt[1]));
+	CHECK((mask_get_z(vector_greater_equal(test_value0, test_value1)) != 0) == (test_value0_flt[2] >= test_value1_flt[2]));
+	CHECK((mask_get_w(vector_greater_equal(test_value0, test_value1)) != 0) == (test_value0_flt[3] >= test_value1_flt[3]));
+
+	CHECK(vector_all_less_than(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0))) == true);
+	CHECK(vector_all_less_than(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(1.0))) == false);
+	CHECK(vector_all_less_than(zero, zero) == false);
+
+	CHECK(vector_all_less_than2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_than2(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than2(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than2(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than2(zero, zero) == false);
+
+	CHECK(vector_all_less_than3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_than3(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than3(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than3(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_than3(zero, zero) == false);
+
+	CHECK(vector_any_less_than(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0))) == true);
+	CHECK(vector_any_less_than(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(1.0))) == true);
+	CHECK(vector_any_less_than(zero, zero) == false);
+
+	CHECK(vector_any_less_than2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than2(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than2(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than2(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == false);
+	CHECK(vector_any_less_than2(zero, zero) == false);
+
+	CHECK(vector_any_less_than3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than3(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than3(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than3(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_than3(zero, zero) == false);
+
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0))) == true);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(1.0))) == true);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(-1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(0.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(0.0), FloatType(-1.0))) == false);
+	CHECK(vector_all_less_equal(zero, zero) == true);
+
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(-1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(0.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal2(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal2(zero, zero) == true);
+
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(0.0), FloatType(1.0), FloatType(0.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(-1.0), FloatType(0.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(0.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal3(zero, vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0))) == false);
+	CHECK(vector_all_less_equal3(zero, zero) == true);
+
+	CHECK(vector_any_less_equal(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0))) == true);
+	CHECK(vector_any_less_equal(zero, vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0))) == true);
+	CHECK(vector_any_less_equal(zero, vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0))) == true);
+	CHECK(vector_any_less_equal(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0))) == true);
+	CHECK(vector_any_less_equal(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0))) == true);
+	CHECK(vector_any_less_equal(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0))) == false);
+	CHECK(vector_any_less_equal(zero, zero) == true);
+
+	CHECK(vector_any_less_equal2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal2(zero, vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal2(zero, vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal2(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0))) == false);
+	CHECK(vector_any_less_equal2(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0))) == false);
+	CHECK(vector_any_less_equal2(zero, zero) == true);
+
+	CHECK(vector_any_less_equal3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal3(zero, vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal3(zero, vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal3(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0))) == true);
+	CHECK(vector_any_less_equal3(zero, vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0))) == false);
+	CHECK(vector_any_less_equal3(zero, zero) == true);
+
+	CHECK(vector_all_greater_than(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) == true);
+	CHECK(vector_all_greater_than(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_than(zero, zero) == false);
+
+	CHECK(vector_all_greater_than2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than2(zero, zero) == false);
+
+	CHECK(vector_all_greater_than3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_than3(zero, zero) == false);
+
+	CHECK(vector_any_greater_than(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) == true);
+	CHECK(vector_any_greater_than(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) == true);
+	CHECK(vector_any_greater_than(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_greater_than(zero, zero) == false);
+
+	CHECK(vector_any_greater_than2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than2(zero, zero) == false);
+
+	CHECK(vector_any_greater_than3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_than3(zero, zero) == false);
+
+	CHECK(vector_all_greater_equal(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) == true);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_greater_equal(zero, zero) == true);
+
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal2(zero, zero) == true);
+
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_greater_equal3(zero, zero) == true);
+
+	CHECK(vector_any_greater_equal(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_greater_equal(zero, zero) == true);
+
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_equal2(zero, zero) == true);
+
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_greater_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_greater_equal3(zero, zero) == true);
+
+	CHECK(vector_all_equal(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_equal(zero, zero) == true);
+
+	CHECK(vector_all_equal2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_all_equal2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal2(zero, zero) == true);
+
+	CHECK(vector_all_equal3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_equal3(zero, zero) == true);
+
+	CHECK(vector_any_equal(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) == false);
+	CHECK(vector_any_equal(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) == false);
+	CHECK(vector_any_equal(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_any_equal(zero, zero) == true);
+
+	CHECK(vector_any_equal2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal2(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_equal2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal2(zero, zero) == true);
+
+	CHECK(vector_any_equal3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal3(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_equal3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_any_equal3(zero, zero) == true);
+
+
+	CHECK(vector_all_not_equal(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) != false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) != false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_all_not_equal(zero, zero) != true);
+
+	CHECK(vector_all_not_equal2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) != true);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal2(zero, zero) != true);
+
+	CHECK(vector_all_not_equal3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(0.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == false);
+	CHECK(vector_all_not_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_all_not_equal3(zero, zero) != true);
+
+	CHECK(vector_any_not_equal(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), zero) != false);
+	CHECK(vector_any_not_equal(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0)), zero) != false);
+	CHECK(vector_any_not_equal(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(-1.0)), zero) == true);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_not_equal(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(-1.0)), zero) != false);
+	CHECK(vector_any_not_equal(zero, zero) != true);
+
+	CHECK(vector_any_not_equal2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal2(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal2(zero, zero) != true);
+
+	CHECK(vector_any_not_equal3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(-1.0), FloatType(1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(0.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(-1.0), FloatType(0.0), FloatType(-1.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(0.0), FloatType(0.0)), zero) == true);
+	CHECK(vector_any_not_equal3(vector_set(FloatType(-1.0), FloatType(-1.0), FloatType(-1.0), FloatType(0.0)), zero) != false);
+	CHECK(vector_any_not_equal3(zero, zero) != true);
+
+	CHECK(vector_all_near_equal(zero, zero, threshold) == true);
+	CHECK(vector_all_near_equal(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), FloatType(1.0001)) == true);
+	CHECK(vector_all_near_equal(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), FloatType(1.0)) == true);
+	CHECK(vector_all_near_equal(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), FloatType(0.9999)) == false);
+
+	CHECK(vector_all_near_equal2(zero, zero, threshold) == true);
+	CHECK(vector_all_near_equal2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_all_near_equal2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_all_near_equal2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(0.9999)) == false);
+
+	CHECK(vector_all_near_equal3(zero, zero, threshold) == true);
+	CHECK(vector_all_near_equal3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_all_near_equal3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_all_near_equal3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(0.9999)) == false);
+
+	CHECK(vector_any_near_equal(zero, zero, threshold) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(1.0), FloatType(2.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(2.0), FloatType(1.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(2.0), FloatType(1.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(1.0), FloatType(2.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(2.0), FloatType(1.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(2.0), FloatType(1.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(1.0)), FloatType(0.9999)) == false);
+
+	CHECK(vector_any_near_equal2(zero, zero, threshold) == true);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(1.0), FloatType(2.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(2.0), FloatType(1.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0001)) == false);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(1.0), FloatType(2.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(2.0), FloatType(1.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0)) == false);
+	CHECK(vector_any_near_equal2(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(0.9999)) == false);
+
+	CHECK(vector_any_near_equal3(zero, zero, threshold) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(1.0), FloatType(2.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(2.0), FloatType(1.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0001)) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(1.0), FloatType(2.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(2.0), FloatType(1.0), FloatType(2.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(2.0), FloatType(2.0), FloatType(1.0), FloatType(2.0)), FloatType(1.0)) == true);
+	CHECK(vector_any_near_equal3(zero, vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(2.0)), FloatType(0.9999)) == false);
+
+	// Test all the combinations of the values 0.0 and 1.0 in the lanes of the two inputs
+	// Thus, each lane must decide the result alone, and the functions with fewer lanes must ignore the other lanes
+	const FloatType near_equal_threshold = FloatType(0.5);
+	for (uint32_t lhs_bits = 0; lhs_bits < 16; ++lhs_bits)
+	{
+		for (uint32_t rhs_bits = 0; rhs_bits < 16; ++rhs_bits)
+		{
+			FloatType lhs_flt[4];
+			FloatType rhs_flt[4];
+			bool less_than[4];
+			bool less_equal[4];
+			bool greater_than[4];
+			bool greater_equal[4];
+			bool equal[4];
+			bool not_equal[4];
+			bool near_equal[4];
+
+			for (uint32_t lane_index = 0; lane_index < 4; ++lane_index)
+			{
+				// Use integer logic for the reference results, not the floating point comparisons under test
+				const bool lhs_bit = ((lhs_bits >> lane_index) & 1) != 0;
+				const bool rhs_bit = ((rhs_bits >> lane_index) & 1) != 0;
+
+				lhs_flt[lane_index] = lhs_bit ? FloatType(1.0) : FloatType(0.0);
+				rhs_flt[lane_index] = rhs_bit ? FloatType(1.0) : FloatType(0.0);
+				less_than[lane_index] = !lhs_bit && rhs_bit;
+				less_equal[lane_index] = !lhs_bit || rhs_bit;
+				greater_than[lane_index] = lhs_bit && !rhs_bit;
+				greater_equal[lane_index] = lhs_bit || !rhs_bit;
+				equal[lane_index] = lhs_bit == rhs_bit;
+				not_equal[lane_index] = lhs_bit != rhs_bit;
+				near_equal[lane_index] = lhs_bit == rhs_bit;	// The difference is 0.0 or 1.0, and the threshold is 0.5
+			}
+
+			const Vector4Type lhs = vector_set(lhs_flt[0], lhs_flt[1], lhs_flt[2], lhs_flt[3]);
+			const Vector4Type rhs = vector_set(rhs_flt[0], rhs_flt[1], rhs_flt[2], rhs_flt[3]);
+
+			INFO("lhs: [" << lhs_flt[0] << ", " << lhs_flt[1] << ", " << lhs_flt[2] << ", " << lhs_flt[3] << "]");
+			INFO("rhs: [" << rhs_flt[0] << ", " << rhs_flt[1] << ", " << rhs_flt[2] << ", " << rhs_flt[3] << "]");
+
+			CHECK(vector_all_less_than(lhs, rhs) == reference_all_lanes(less_than, 4));
+			CHECK(vector_all_less_than2(lhs, rhs) == reference_all_lanes(less_than, 2));
+			CHECK(vector_all_less_than3(lhs, rhs) == reference_all_lanes(less_than, 3));
+			CHECK(vector_any_less_than(lhs, rhs) == reference_any_lanes(less_than, 4));
+			CHECK(vector_any_less_than2(lhs, rhs) == reference_any_lanes(less_than, 2));
+			CHECK(vector_any_less_than3(lhs, rhs) == reference_any_lanes(less_than, 3));
+
+			CHECK(vector_all_less_equal(lhs, rhs) == reference_all_lanes(less_equal, 4));
+			CHECK(vector_all_less_equal2(lhs, rhs) == reference_all_lanes(less_equal, 2));
+			CHECK(vector_all_less_equal3(lhs, rhs) == reference_all_lanes(less_equal, 3));
+			CHECK(vector_any_less_equal(lhs, rhs) == reference_any_lanes(less_equal, 4));
+			CHECK(vector_any_less_equal2(lhs, rhs) == reference_any_lanes(less_equal, 2));
+			CHECK(vector_any_less_equal3(lhs, rhs) == reference_any_lanes(less_equal, 3));
+
+			CHECK(vector_all_greater_than(lhs, rhs) == reference_all_lanes(greater_than, 4));
+			CHECK(vector_all_greater_than2(lhs, rhs) == reference_all_lanes(greater_than, 2));
+			CHECK(vector_all_greater_than3(lhs, rhs) == reference_all_lanes(greater_than, 3));
+			CHECK(vector_any_greater_than(lhs, rhs) == reference_any_lanes(greater_than, 4));
+			CHECK(vector_any_greater_than2(lhs, rhs) == reference_any_lanes(greater_than, 2));
+			CHECK(vector_any_greater_than3(lhs, rhs) == reference_any_lanes(greater_than, 3));
+
+			CHECK(vector_all_greater_equal(lhs, rhs) == reference_all_lanes(greater_equal, 4));
+			CHECK(vector_all_greater_equal2(lhs, rhs) == reference_all_lanes(greater_equal, 2));
+			CHECK(vector_all_greater_equal3(lhs, rhs) == reference_all_lanes(greater_equal, 3));
+			CHECK(vector_any_greater_equal(lhs, rhs) == reference_any_lanes(greater_equal, 4));
+			CHECK(vector_any_greater_equal2(lhs, rhs) == reference_any_lanes(greater_equal, 2));
+			CHECK(vector_any_greater_equal3(lhs, rhs) == reference_any_lanes(greater_equal, 3));
+
+			CHECK(vector_all_equal(lhs, rhs) == reference_all_lanes(equal, 4));
+			CHECK(vector_all_equal2(lhs, rhs) == reference_all_lanes(equal, 2));
+			CHECK(vector_all_equal3(lhs, rhs) == reference_all_lanes(equal, 3));
+			CHECK(vector_any_equal(lhs, rhs) == reference_any_lanes(equal, 4));
+			CHECK(vector_any_equal2(lhs, rhs) == reference_any_lanes(equal, 2));
+			CHECK(vector_any_equal3(lhs, rhs) == reference_any_lanes(equal, 3));
+
+			CHECK(vector_all_not_equal(lhs, rhs) == reference_all_lanes(not_equal, 4));
+			CHECK(vector_all_not_equal2(lhs, rhs) == reference_all_lanes(not_equal, 2));
+			CHECK(vector_all_not_equal3(lhs, rhs) == reference_all_lanes(not_equal, 3));
+			CHECK(vector_any_not_equal(lhs, rhs) == reference_any_lanes(not_equal, 4));
+			CHECK(vector_any_not_equal2(lhs, rhs) == reference_any_lanes(not_equal, 2));
+			CHECK(vector_any_not_equal3(lhs, rhs) == reference_any_lanes(not_equal, 3));
+
+			CHECK(vector_all_near_equal(lhs, rhs, near_equal_threshold) == reference_all_lanes(near_equal, 4));
+			CHECK(vector_all_near_equal2(lhs, rhs, near_equal_threshold) == reference_all_lanes(near_equal, 2));
+			CHECK(vector_all_near_equal3(lhs, rhs, near_equal_threshold) == reference_all_lanes(near_equal, 3));
+			CHECK(vector_any_near_equal(lhs, rhs, near_equal_threshold) == reference_any_lanes(near_equal, 4));
+			CHECK(vector_any_near_equal2(lhs, rhs, near_equal_threshold) == reference_any_lanes(near_equal, 2));
+			CHECK(vector_any_near_equal3(lhs, rhs, near_equal_threshold) == reference_any_lanes(near_equal, 3));
+		}
+	}
+}
+
+template<typename FloatType, typename Vector4Type>
+inline Vector4Type reference_vector_and(const Vector4Type& input0, const Vector4Type& input1)
+{
+	using Int1Type = typename related_types<FloatType>::int1;
+
+	Int1Type input0_[4];
+	Int1Type input1_[4];
+
+	static_assert(sizeof(Vector4Type) == sizeof(input0_), "Unexpected size");
+	std::memcpy(&input0_[0], &input0, sizeof(Vector4Type));
+	std::memcpy(&input1_[0], &input1, sizeof(Vector4Type));
+
+	Int1Type result_[4];
+	result_[0] = input0_[0] & input1_[0];
+	result_[1] = input0_[1] & input1_[1];
+	result_[2] = input0_[2] & input1_[2];
+	result_[3] = input0_[3] & input1_[3];
+
+	Vector4Type result;
+	std::memcpy(&result, &result_[0], sizeof(Vector4Type));
+
+	return result;
+}
+
+template<typename FloatType, typename Vector4Type>
+inline Vector4Type reference_vector_or(const Vector4Type& input0, const Vector4Type& input1)
+{
+	using Int1Type = typename related_types<FloatType>::int1;
+
+	Int1Type input0_[4];
+	Int1Type input1_[4];
+
+	static_assert(sizeof(Vector4Type) == sizeof(input0_), "Unexpected size");
+	std::memcpy(&input0_[0], &input0, sizeof(Vector4Type));
+	std::memcpy(&input1_[0], &input1, sizeof(Vector4Type));
+
+	Int1Type result_[4];
+	result_[0] = input0_[0] | input1_[0];
+	result_[1] = input0_[1] | input1_[1];
+	result_[2] = input0_[2] | input1_[2];
+	result_[3] = input0_[3] | input1_[3];
+
+	Vector4Type result;
+	std::memcpy(&result, &result_[0], sizeof(Vector4Type));
+
+	return result;
+}
+
+template<typename FloatType, typename Vector4Type>
+inline Vector4Type reference_vector_xor(const Vector4Type& input0, const Vector4Type& input1)
+{
+	using Int1Type = typename related_types<FloatType>::int1;
+
+	Int1Type input0_[4];
+	Int1Type input1_[4];
+
+	static_assert(sizeof(Vector4Type) == sizeof(input0_), "Unexpected size");
+	std::memcpy(&input0_[0], &input0, sizeof(Vector4Type));
+	std::memcpy(&input1_[0], &input1, sizeof(Vector4Type));
+
+	Int1Type result_[4];
+	result_[0] = input0_[0] ^ input1_[0];
+	result_[1] = input0_[1] ^ input1_[1];
+	result_[2] = input0_[2] ^ input1_[2];
+	result_[3] = input0_[3] ^ input1_[3];
+
+	Vector4Type result;
+	std::memcpy(&result, &result_[0], sizeof(Vector4Type));
+
+	return result;
+}
+
+template<typename FloatType>
+void test_vector4_logical_impl()
+{
+	using Vector4Type = typename related_types<FloatType>::vector4;
+
+	const FloatType test_value0_flt[4] = { FloatType(2.0), FloatType(9.34), FloatType(-54.12), FloatType(6000.0) };
+	const FloatType test_value1_flt[4] = { FloatType(0.75), FloatType(-4.52), FloatType(44.68), FloatType(-54225.0) };
+	const FloatType test_value2_flt[4] = { FloatType(2.0), FloatType(-9.34), FloatType(54.12), FloatType(6000.1) };
+	const Vector4Type test_value0 = vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]);
+	const Vector4Type test_value1 = vector_set(test_value1_flt[0], test_value1_flt[1], test_value1_flt[2], test_value1_flt[3]);
+	const Vector4Type test_value2 = vector_set(test_value2_flt[0], test_value2_flt[1], test_value2_flt[2], test_value2_flt[3]);
+
+	CHECK(vector_all_near_equal(vector_and(test_value0, test_value1), reference_vector_and<FloatType>(test_value0, test_value1), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_and(test_value1, test_value2), reference_vector_and<FloatType>(test_value1, test_value2), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_and(test_value0, test_value2), reference_vector_and<FloatType>(test_value0, test_value2), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_or(test_value0, test_value1), reference_vector_or<FloatType>(test_value0, test_value1), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_or(test_value1, test_value2), reference_vector_or<FloatType>(test_value1, test_value2), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_or(test_value0, test_value2), reference_vector_or<FloatType>(test_value0, test_value2), FloatType(0.0)));
+
+	CHECK(vector_all_near_equal(vector_xor(test_value0, test_value1), reference_vector_xor<FloatType>(test_value0, test_value1), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_xor(test_value1, test_value2), reference_vector_xor<FloatType>(test_value1, test_value2), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_xor(test_value0, test_value2), reference_vector_xor<FloatType>(test_value0, test_value2), FloatType(0.0)));
+}
+
+// A mix that takes one lane from a zero input. MSVC for x86 with AVX removes a blend with mask 1
+// when the second input is zero (VS2022 and VS2026). This function is small because the optimizer
+// does not remove the blend in a large function such as test_vector4_impl.
+template<typename FloatType>
+void test_vector4_mix_zero_impl()
+{
+	using Vector4Type = typename related_types<FloatType>::vector4;
+
+	const Vector4Type zero = vector_zero();
+
+	const FloatType test_value0_flt[4] = { FloatType(2.0), FloatType(9.34), FloatType(-54.12), FloatType(6000.0) };
+	const Vector4Type test_value0 = vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]);
+
+	CHECK(vector_all_near_equal(vector_mix<mix4::a, mix4::y, mix4::z, mix4::w>(test_value0, zero), vector_set(FloatType(0.0), test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_mix<mix4::x, mix4::b, mix4::z, mix4::w>(test_value0, zero), vector_set(test_value0_flt[0], FloatType(0.0), test_value0_flt[2], test_value0_flt[3]), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_mix<mix4::x, mix4::y, mix4::c, mix4::w>(test_value0, zero), vector_set(test_value0_flt[0], test_value0_flt[1], FloatType(0.0), test_value0_flt[3]), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_mix<mix4::x, mix4::y, mix4::z, mix4::d>(test_value0, zero), vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], FloatType(0.0)), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_mix<mix4::c, mix4::y, mix4::z, mix4::w>(test_value0, zero), vector_set(FloatType(0.0), test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]), FloatType(0.0)));
+	CHECK(vector_all_near_equal(vector_mix<mix4::z, mix4::b, mix4::z, mix4::w>(zero, test_value0), vector_set(FloatType(0.0), test_value0_flt[1], FloatType(0.0), FloatType(0.0)), FloatType(0.0)));
+}
+
+template<typename FloatType>
+void test_vector4_impl(const FloatType threshold)
+{
+	using Vector4Type = typename related_types<FloatType>::vector4;
+
+	const Vector4Type zero = vector_zero();
+
+	const FloatType test_value0_flt[4] = { FloatType(2.0), FloatType(9.34), FloatType(-54.12), FloatType(6000.0) };
+	const FloatType test_value1_flt[4] = { FloatType(0.75), FloatType(-4.52), FloatType(44.68), FloatType(-54225.0) };
+	const Vector4Type test_value0 = vector_set(test_value0_flt[0], test_value0_flt[1], test_value0_flt[2], test_value0_flt[3]);
+	const Vector4Type test_value1 = vector_set(test_value1_flt[0], test_value1_flt[1], test_value1_flt[2], test_value1_flt[3]);
+
+	const FloatType inf = std::numeric_limits<FloatType>::infinity();
+	const FloatType nan = std::numeric_limits<FloatType>::quiet_NaN();
+
+	CHECK((mask_get_x(vector_finite(vector_set(FloatType(1.0), inf, nan, -inf))) != 0) == scalar_is_finite(FloatType(1.0)));
+	CHECK((mask_get_y(vector_finite(vector_set(FloatType(1.0), inf, nan, -inf))) != 0) == scalar_is_finite(inf));
+	CHECK((mask_get_z(vector_finite(vector_set(FloatType(1.0), inf, nan, -inf))) != 0) == scalar_is_finite(nan));
+	CHECK((mask_get_w(vector_finite(vector_set(FloatType(1.0), inf, nan, -inf))) != 0) == scalar_is_finite(-inf));
+
+	CHECK(vector_is_finite(zero) == true);
+	CHECK(vector_is_finite(vector_set(inf, inf, inf, inf)) == false);
+	CHECK(vector_is_finite(vector_set(-inf, -inf, -inf, -inf)) == false);
+	CHECK(vector_is_finite(vector_set(inf, FloatType(1.0), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite(vector_set(FloatType(1.0), FloatType(inf), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite(vector_set(FloatType(1.0), FloatType(1.0), FloatType(inf), FloatType(1.0))) == false);
+	CHECK(vector_is_finite(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(inf))) == false);
+	CHECK(vector_is_finite(vector_set(nan, nan, nan, nan)) == false);
+	CHECK(vector_is_finite(vector_set(nan, FloatType(1.0), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite(vector_set(FloatType(1.0), FloatType(nan), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite(vector_set(FloatType(1.0), FloatType(1.0), FloatType(nan), FloatType(1.0))) == false);
+	CHECK(vector_is_finite(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(nan))) == false);
+
+	CHECK(vector_is_finite2(zero) == true);
+	CHECK(vector_is_finite2(vector_set(inf, inf, inf, inf)) == false);
+	CHECK(vector_is_finite2(vector_set(-inf, -inf, -inf, -inf)) == false);
+	CHECK(vector_is_finite2(vector_set(inf, FloatType(1.0), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite2(vector_set(FloatType(1.0), FloatType(inf), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(inf), FloatType(1.0))) == true);
+	CHECK(vector_is_finite2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(inf))) == true);
+	CHECK(vector_is_finite2(vector_set(nan, nan, nan, nan)) == false);
+	CHECK(vector_is_finite2(vector_set(nan, FloatType(1.0), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite2(vector_set(FloatType(1.0), FloatType(nan), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(nan), FloatType(1.0))) == true);
+	CHECK(vector_is_finite2(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(nan))) == true);
+
+	CHECK(vector_is_finite3(zero) == true);
+	CHECK(vector_is_finite3(vector_set(inf, inf, inf, inf)) == false);
+	CHECK(vector_is_finite3(vector_set(-inf, -inf, -inf, -inf)) == false);
+	CHECK(vector_is_finite3(vector_set(inf, FloatType(1.0), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite3(vector_set(FloatType(1.0), FloatType(inf), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(inf), FloatType(1.0))) == false);
+	CHECK(vector_is_finite3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(inf))) == true);
+	CHECK(vector_is_finite3(vector_set(nan, nan, nan, nan)) == false);
+	CHECK(vector_is_finite3(vector_set(nan, FloatType(1.0), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite3(vector_set(FloatType(1.0), FloatType(nan), FloatType(1.0), FloatType(1.0))) == false);
+	CHECK(vector_is_finite3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(nan), FloatType(1.0))) == false);
+	CHECK(vector_is_finite3(vector_set(FloatType(1.0), FloatType(1.0), FloatType(1.0), FloatType(nan))) == true);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Swizzling, permutations, and mixing
+
+	CHECK(scalar_near_equal(vector_get_x(vector_select(vector_less_than(zero, vector_set(FloatType(1.0))), test_value0, test_value1)), test_value0_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_select(vector_less_than(zero, vector_set(FloatType(1.0))), test_value0, test_value1)), test_value0_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_select(vector_less_than(zero, vector_set(FloatType(1.0))), test_value0, test_value1)), test_value0_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_select(vector_less_than(zero, vector_set(FloatType(1.0))), test_value0, test_value1)), test_value0_flt[3], threshold));
+	CHECK(scalar_near_equal(vector_get_x(vector_select(vector_less_than(vector_set(FloatType(1.0)), zero), test_value0, test_value1)), test_value1_flt[0], threshold));
+	CHECK(scalar_near_equal(vector_get_y(vector_select(vector_less_than(vector_set(FloatType(1.0)), zero), test_value0, test_value1)), test_value1_flt[1], threshold));
+	CHECK(scalar_near_equal(vector_get_z(vector_select(vector_less_than(vector_set(FloatType(1.0)), zero), test_value0, test_value1)), test_value1_flt[2], threshold));
+	CHECK(scalar_near_equal(vector_get_w(vector_select(vector_less_than(vector_set(FloatType(1.0)), zero), test_value0, test_value1)), test_value1_flt[3], threshold));
+
+	{
+		// A mask with different lanes, thus each lane must select its own input
+		const Vector4Type mask_input = vector_set(FloatType(1.0), FloatType(-1.0), FloatType(-1.0), FloatType(1.0));
+		const Vector4Type select_result0 = vector_select(vector_less_than(zero, mask_input), test_value0, test_value1);
+		CHECK(FloatType(vector_get_x(select_result0)) == test_value0_flt[0]);
+		CHECK(FloatType(vector_get_y(select_result0)) == test_value1_flt[1]);
+		CHECK(FloatType(vector_get_z(select_result0)) == test_value1_flt[2]);
+		CHECK(FloatType(vector_get_w(select_result0)) == test_value0_flt[3]);
+
+		const Vector4Type select_result1 = vector_select(vector_less_than(mask_input, zero), test_value0, test_value1);
+		CHECK(FloatType(vector_get_x(select_result1)) == test_value1_flt[0]);
+		CHECK(FloatType(vector_get_y(select_result1)) == test_value0_flt[1]);
+		CHECK(FloatType(vector_get_z(select_result1)) == test_value0_flt[2]);
+		CHECK(FloatType(vector_get_w(select_result1)) == test_value1_flt[3]);
+	}
+
+	//////////////////////////////////////////////////////////////////////////
+	// Misc
+
+	auto scalar_sign = [](FloatType value) { return value >= FloatType(0.0) ? FloatType(1.0) : FloatType(-1.0); };
+	CHECK(FloatType(vector_get_x(vector_sign(test_value0))) == scalar_sign(test_value0_flt[0]));
+	CHECK(FloatType(vector_get_y(vector_sign(test_value0))) == scalar_sign(test_value0_flt[1]));
+	CHECK(FloatType(vector_get_z(vector_sign(test_value0))) == scalar_sign(test_value0_flt[2]));
+	CHECK(FloatType(vector_get_w(vector_sign(test_value0))) == scalar_sign(test_value0_flt[3]));
+
+	CHECK(FloatType(vector_get_x(vector_copy_sign(test_value0, test_value1))) == rtm_impl::copysign(test_value0_flt[0], test_value1_flt[0]));
+	CHECK(FloatType(vector_get_y(vector_copy_sign(test_value0, test_value1))) == rtm_impl::copysign(test_value0_flt[1], test_value1_flt[1]));
+	CHECK(FloatType(vector_get_z(vector_copy_sign(test_value0, test_value1))) == rtm_impl::copysign(test_value0_flt[2], test_value1_flt[2]));
+	CHECK(FloatType(vector_get_w(vector_copy_sign(test_value0, test_value1))) == rtm_impl::copysign(test_value0_flt[3], test_value1_flt[3]));
+
+	{
+		const Vector4Type infinity_v = vector_set(std::numeric_limits<FloatType>::infinity());
+		const Vector4Type nan_v = vector_set(std::numeric_limits<FloatType>::quiet_NaN());
+
+		const Vector4Type input0 = vector_set(FloatType(-1.75), FloatType(-1.5), FloatType(-1.4999), FloatType(-0.5));
+		const Vector4Type input1 = vector_set(FloatType(-0.4999), FloatType(0.0), FloatType(0.4999), FloatType(0.5));
+		const Vector4Type input2 = vector_set(FloatType(1.4999), FloatType(1.5), FloatType(1.75), FloatType(0.0));
+		const Vector4Type input3 = infinity_v;
+		const Vector4Type input4 = vector_neg(infinity_v);
+		const Vector4Type input5 = nan_v;
+
+		const Vector4Type result0 = vector_round_symmetric(input0);
+		const Vector4Type result1 = vector_round_symmetric(input1);
+		const Vector4Type result2 = vector_round_symmetric(input2);
+		const Vector4Type result3 = vector_round_symmetric(input3);
+		const Vector4Type result4 = vector_round_symmetric(input4);
+		const Vector4Type result5 = vector_round_symmetric(input5);
+		const Vector4Type result6 = vector_round_symmetric(vector_set(FloatType(-0.0)));
+
+		CHECK(FloatType(vector_get_x(result0)) == scalar_round_symmetric(FloatType(vector_get_x(input0))));
+		CHECK(FloatType(vector_get_y(result0)) == scalar_round_symmetric(FloatType(vector_get_y(input0))));
+		CHECK(FloatType(vector_get_z(result0)) == scalar_round_symmetric(FloatType(vector_get_z(input0))));
+		CHECK(FloatType(vector_get_w(result0)) == scalar_round_symmetric(FloatType(vector_get_w(input0))));
+
+		CHECK(FloatType(vector_get_x(result1)) == scalar_round_symmetric(FloatType(vector_get_x(input1))));
+		CHECK(FloatType(vector_get_y(result1)) == scalar_round_symmetric(FloatType(vector_get_y(input1))));
+		CHECK(FloatType(vector_get_z(result1)) == scalar_round_symmetric(FloatType(vector_get_z(input1))));
+		CHECK(FloatType(vector_get_w(result1)) == scalar_round_symmetric(FloatType(vector_get_w(input1))));
+
+		CHECK(FloatType(vector_get_x(result2)) == scalar_round_symmetric(FloatType(vector_get_x(input2))));
+		CHECK(FloatType(vector_get_y(result2)) == scalar_round_symmetric(FloatType(vector_get_y(input2))));
+		CHECK(FloatType(vector_get_z(result2)) == scalar_round_symmetric(FloatType(vector_get_z(input2))));
+		CHECK(FloatType(vector_get_w(result2)) == scalar_round_symmetric(FloatType(vector_get_w(input2))));
+
+		CHECK(FloatType(vector_get_x(result3)) == scalar_round_symmetric(FloatType(vector_get_x(input3))));
+		CHECK(FloatType(vector_get_y(result3)) == scalar_round_symmetric(FloatType(vector_get_y(input3))));
+		CHECK(FloatType(vector_get_z(result3)) == scalar_round_symmetric(FloatType(vector_get_z(input3))));
+		CHECK(FloatType(vector_get_w(result3)) == scalar_round_symmetric(FloatType(vector_get_w(input3))));
+
+		CHECK(FloatType(vector_get_x(result4)) == scalar_round_symmetric(FloatType(vector_get_x(input4))));
+		CHECK(FloatType(vector_get_y(result4)) == scalar_round_symmetric(FloatType(vector_get_y(input4))));
+		CHECK(FloatType(vector_get_z(result4)) == scalar_round_symmetric(FloatType(vector_get_z(input4))));
+		CHECK(FloatType(vector_get_w(result4)) == scalar_round_symmetric(FloatType(vector_get_w(input4))));
+
+		CHECK(FloatType(vector_get_x(result6)) == scalar_round_symmetric(FloatType(-0.0)));
+		CHECK(std::signbit(FloatType(vector_get_x(result6))) == std::signbit(scalar_round_symmetric(FloatType(-0.0))));
+
+		CHECK(std::isnan(FloatType(vector_get_x(result5))));
+		CHECK(std::isnan(FloatType(vector_get_y(result5))));
+		CHECK(std::isnan(FloatType(vector_get_z(result5))));
+		CHECK(std::isnan(FloatType(vector_get_w(result5))));
+	}
+
+	{
+		// An addition of 0.5 rounds for these values: 0.49999997 + 0.5 = 1.0 and 8388609.0 + 0.5 = 8388610.0 (float32)
+		// The float64 values are 0.49999999999999994 and 4503599627370497.0
+		const FloatType largest_below_half = std::nextafter(FloatType(0.5), FloatType(0.0));
+		const FloatType smallest_odd_without_fraction = FloatType(std::ldexp(FloatType(1.0), std::numeric_limits<FloatType>::digits - 1)) + FloatType(1.0);
+		const FloatType largest_below_one_and_half = std::nextafter(FloatType(1.5), FloatType(0.0));
+		const FloatType largest_below_two_and_half = std::nextafter(FloatType(2.5), FloatType(0.0));
+
+		const FloatType inputs_flt[3][4] =
+		{
+			{ largest_below_half, -largest_below_half, smallest_odd_without_fraction, -smallest_odd_without_fraction },
+			{ largest_below_one_and_half, -largest_below_one_and_half, largest_below_two_and_half, -largest_below_two_and_half },
+			{ FloatType(-0.3), FloatType(-0.5), FloatType(2.5), FloatType(-2.5) },
+		};
+
+		for (const FloatType* input_flt : inputs_flt)
+		{
+			const Vector4Type input = vector_set(input_flt[0], input_flt[1], input_flt[2], input_flt[3]);
+
+			FloatType result[4];
+			vector_store(vector_round_symmetric(input), &result[0]);
+
+			for (uint32_t lane_index = 0; lane_index < 4; ++lane_index)
+			{
+				INFO("input: " << input_flt[lane_index]);
+
+				const FloatType ref_result = std::round(input_flt[lane_index]);
+				CHECK(result[lane_index] == ref_result);
+				CHECK(std::signbit(result[lane_index]) == std::signbit(ref_result));
+			}
+		}
+	}
+
+	{
+		const Vector4Type infinity_v = vector_set(std::numeric_limits<FloatType>::infinity());
+		const Vector4Type nan_v = vector_set(std::numeric_limits<FloatType>::quiet_NaN());
+
+		const Vector4Type input0 = vector_set(FloatType(-1.75), FloatType(-1.5), FloatType(-1.4999), FloatType(-0.5));
+		const Vector4Type input1 = vector_set(FloatType(-0.4999), FloatType(0.0), FloatType(0.4999), FloatType(0.5));
+		const Vector4Type input2 = vector_set(FloatType(1.4999), FloatType(1.5), FloatType(1.75), FloatType(0.0));
+		const Vector4Type input3 = infinity_v;
+		const Vector4Type input4 = vector_neg(infinity_v);
+		const Vector4Type input5 = nan_v;
+		const Vector4Type input6 = vector_set(FloatType(2.5), FloatType(-2.5), FloatType(2.75), FloatType(-2.75));
+
+		const Vector4Type result0 = vector_round_bankers(input0);
+		const Vector4Type result1 = vector_round_bankers(input1);
+		const Vector4Type result2 = vector_round_bankers(input2);
+		const Vector4Type result3 = vector_round_bankers(input3);
+		const Vector4Type result4 = vector_round_bankers(input4);
+		const Vector4Type result5 = vector_round_bankers(input5);
+		const Vector4Type result6 = vector_round_bankers(input6);
+		const Vector4Type result7 = vector_round_bankers(vector_set(FloatType(-0.0)));
+
+		CHECK(FloatType(vector_get_x(result0)) == scalar_round_bankers(FloatType(vector_get_x(input0))));
+		CHECK(FloatType(vector_get_y(result0)) == scalar_round_bankers(FloatType(vector_get_y(input0))));
+		CHECK(FloatType(vector_get_z(result0)) == scalar_round_bankers(FloatType(vector_get_z(input0))));
+		CHECK(FloatType(vector_get_w(result0)) == scalar_round_bankers(FloatType(vector_get_w(input0))));
+
+		CHECK(FloatType(vector_get_x(result1)) == scalar_round_bankers(FloatType(vector_get_x(input1))));
+		CHECK(FloatType(vector_get_y(result1)) == scalar_round_bankers(FloatType(vector_get_y(input1))));
+		CHECK(FloatType(vector_get_z(result1)) == scalar_round_bankers(FloatType(vector_get_z(input1))));
+		CHECK(FloatType(vector_get_w(result1)) == scalar_round_bankers(FloatType(vector_get_w(input1))));
+
+		CHECK(FloatType(vector_get_x(result2)) == scalar_round_bankers(FloatType(vector_get_x(input2))));
+		CHECK(FloatType(vector_get_y(result2)) == scalar_round_bankers(FloatType(vector_get_y(input2))));
+		CHECK(FloatType(vector_get_z(result2)) == scalar_round_bankers(FloatType(vector_get_z(input2))));
+		CHECK(FloatType(vector_get_w(result2)) == scalar_round_bankers(FloatType(vector_get_w(input2))));
+
+		CHECK(FloatType(vector_get_x(result3)) == scalar_round_bankers(FloatType(vector_get_x(input3))));
+		CHECK(FloatType(vector_get_y(result3)) == scalar_round_bankers(FloatType(vector_get_y(input3))));
+		CHECK(FloatType(vector_get_z(result3)) == scalar_round_bankers(FloatType(vector_get_z(input3))));
+		CHECK(FloatType(vector_get_w(result3)) == scalar_round_bankers(FloatType(vector_get_w(input3))));
+
+		CHECK(FloatType(vector_get_x(result4)) == scalar_round_bankers(FloatType(vector_get_x(input4))));
+		CHECK(FloatType(vector_get_y(result4)) == scalar_round_bankers(FloatType(vector_get_y(input4))));
+		CHECK(FloatType(vector_get_z(result4)) == scalar_round_bankers(FloatType(vector_get_z(input4))));
+		CHECK(FloatType(vector_get_w(result4)) == scalar_round_bankers(FloatType(vector_get_w(input4))));
+
+		CHECK(std::isnan(FloatType(vector_get_x(result5))));
+		CHECK(std::isnan(FloatType(vector_get_y(result5))));
+		CHECK(std::isnan(FloatType(vector_get_z(result5))));
+		CHECK(std::isnan(FloatType(vector_get_w(result5))));
+
+		CHECK(FloatType(vector_get_x(result6)) == scalar_round_bankers(FloatType(vector_get_x(input6))));
+		CHECK(FloatType(vector_get_y(result6)) == scalar_round_bankers(FloatType(vector_get_y(input6))));
+		CHECK(FloatType(vector_get_z(result6)) == scalar_round_bankers(FloatType(vector_get_z(input6))));
+		CHECK(FloatType(vector_get_w(result6)) == scalar_round_bankers(FloatType(vector_get_w(input6))));
+
+		CHECK(FloatType(vector_get_x(result7)) == scalar_round_bankers(FloatType(-0.0)));
+		CHECK(std::signbit(FloatType(vector_get_x(result7))) == std::signbit(scalar_round_bankers(FloatType(-0.0))));
+	}
+
+	{
+		// The round functions keep the sign of the input as std::round and std::nearbyint do
+		// The large value has no fractional part, and a conversion to an integer overflows for it
+		const FloatType round_inputs[2][4] =
+		{
+			{ FloatType(-0.0), FloatType(-0.3), FloatType(-0.5), FloatType(-2.5) },
+			{ FloatType(-0.7), FloatType(0.5), FloatType(1.0e30), FloatType(-1.0e30) },
+		};
+
+		for (const FloatType* inputs : round_inputs)
+		{
+			// Do not use vector_set with the components of a constant array in a loop:
+			// that code causes an internal compiler error with GCC 14 and 15 on ARM64
+			const Vector4Type input_v = vector_load(inputs);
+
+			FloatType symmetric_result[4];
+			FloatType bankers_result[4];
+			vector_store(vector_round_symmetric(input_v), &symmetric_result[0]);
+			vector_store(vector_round_bankers(input_v), &bankers_result[0]);
+
+			for (uint32_t lane_index = 0; lane_index < 4; ++lane_index)
+			{
+				INFO("input: " << inputs[lane_index]);
+
+				const FloatType ref_symmetric = std::round(inputs[lane_index]);
+				const FloatType ref_bankers = std::nearbyint(inputs[lane_index]);
+
+				CHECK(symmetric_result[lane_index] == ref_symmetric);
+				CHECK(std::signbit(symmetric_result[lane_index]) == std::signbit(ref_symmetric));
+				CHECK(bankers_result[lane_index] == ref_bankers);
+				CHECK(std::signbit(bankers_result[lane_index]) == std::signbit(ref_bankers));
+			}
+		}
+	}
+
+	{
+		const FloatType half_pi = FloatType(rtm::constants::half_pi());
+		const FloatType pi = FloatType(rtm::constants::pi());
+
+		const FloatType angles[] = { FloatType(0.0), pi, -pi, half_pi, -half_pi, FloatType(0.5), FloatType(32.5), FloatType(-0.5), FloatType(-32.5) };
+
+		for (const FloatType angle : angles)
+		{
+			INFO("angle: " << angle);
+
+			const Vector4Type angle_v = vector_set(angle);
+
+			const FloatType ref_sin = scalar_sin(angle);
+			const FloatType ref_cos = scalar_cos(angle);
+			const FloatType ref_tan = scalar_tan(angle);
+			const Vector4Type ref_sincos = scalar_sincos(angle);
+			const FloatType ref_asin = scalar_asin(ref_sin);
+			const FloatType ref_acos = scalar_acos(ref_cos);
+
+			const Vector4Type rtm_sin = vector_sin(angle_v);
+			const Vector4Type rtm_cos = vector_cos(angle_v);
+			Vector4Type rtm_sin2;
+			Vector4Type rtm_cos2;
+			vector_sincos(angle_v, rtm_sin2, rtm_cos2);
+			const Vector4Type rtm_tan = vector_tan(angle_v);
+			const Vector4Type rtm_asin = vector_asin(vector_set(ref_sin));
+			const Vector4Type rtm_acos = vector_acos(vector_set(ref_cos));
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_sin)), ref_sin, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_sin)), ref_sin, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_sin)), ref_sin, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_sin)), ref_sin, threshold));
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_asin)), ref_asin, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_asin)), ref_asin, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_asin)), ref_asin, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_asin)), ref_asin, threshold));
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_cos)), ref_cos, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_cos)), ref_cos, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_cos)), ref_cos, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_cos)), ref_cos, threshold));
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_acos)), ref_acos, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_acos)), ref_acos, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_acos)), ref_acos, threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_acos)), ref_acos, threshold));
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_sin2)), (FloatType)vector_get_x(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_sin2)), (FloatType)vector_get_x(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_sin2)), (FloatType)vector_get_x(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_sin2)), (FloatType)vector_get_x(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_cos2)), (FloatType)vector_get_y(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_cos2)), (FloatType)vector_get_y(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_cos2)), (FloatType)vector_get_y(ref_sincos), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_cos2)), (FloatType)vector_get_y(ref_sincos), threshold));
+
+			// For +-PI/2, we only test that the value is really large or really small
+			if (scalar_abs(angle) == half_pi)
+			{
+				CHECK(vector_all_greater_equal(vector_abs(rtm_tan), vector_set(FloatType(1.0e6))));
+			}
+			else
+			{
+				CHECK(scalar_near_equal(FloatType(vector_get_x(rtm_tan)), ref_tan, threshold));
+				CHECK(scalar_near_equal(FloatType(vector_get_y(rtm_tan)), ref_tan, threshold));
+				CHECK(scalar_near_equal(FloatType(vector_get_z(rtm_tan)), ref_tan, threshold));
+				CHECK(scalar_near_equal(FloatType(vector_get_w(rtm_tan)), ref_tan, threshold));
+			}
+		}
+
+		const FloatType angles_atan[] = { FloatType(-10.0), FloatType(-5.0), FloatType(-0.5), FloatType(-0.25), FloatType(0.0), FloatType(0.25), FloatType(0.5), FloatType(0.75), FloatType(81.0) };
+		for (const FloatType angle : angles_atan)
+		{
+			const Vector4Type angle_v = vector_set(angle);
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(vector_atan(angle_v))), scalar_atan(angle), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(vector_atan(angle_v))), scalar_atan(angle), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(vector_atan(angle_v))), scalar_atan(angle), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(vector_atan(angle_v))), scalar_atan(angle), threshold));
+		}
+
+		const std::pair<FloatType, FloatType> angles_atan2[] =
+		{
+			{ FloatType(-2.0), FloatType(-2.0) },
+			{ FloatType(-1.0), FloatType(-2.0) },
+			{ FloatType(-2.0), FloatType(-1.0) },
+			{ FloatType(2.0), FloatType(2.0) },
+			{ FloatType(1.0), FloatType(2.0) },
+			{ FloatType(2.0), FloatType(1.0) },
+			{ FloatType(2.0), FloatType(0.0) },
+			{ FloatType(-2.0), FloatType(0.0) },
+			{ FloatType(2.0), FloatType(-0.0) },
+			{ FloatType(-2.0), FloatType(-0.0) },
+			{ FloatType(0.0), FloatType(2.0) },
+			{ FloatType(0.0), FloatType(-2.0) },
+			{ FloatType(-0.0), FloatType(2.0) },
+			{ FloatType(-0.0), FloatType(-2.0) },
+		};
+		for (const std::pair<FloatType, FloatType>& angles_ : angles_atan2)
+		{
+			const Vector4Type angle_y = vector_set(angles_.first);
+			const Vector4Type angle_x = vector_set(angles_.second);
+
+			CHECK(scalar_near_equal(FloatType(vector_get_x(vector_atan2(angle_y, angle_x))), scalar_atan2(angles_.first, angles_.second), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_y(vector_atan2(angle_y, angle_x))), scalar_atan2(angles_.first, angles_.second), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_z(vector_atan2(angle_y, angle_x))), scalar_atan2(angles_.first, angles_.second), threshold));
+			CHECK(scalar_near_equal(FloatType(vector_get_w(vector_atan2(angle_y, angle_x))), scalar_atan2(angles_.first, angles_.second), threshold));
+		}
+
+		{
+			// A different input in each lane, thus each lane must use its own input
+			const FloatType lane_angles[4] = { FloatType(0.5), FloatType(-32.5), half_pi * FloatType(0.5), FloatType(-0.25) };
+			const FloatType lane_ratios[4] = { FloatType(0.25), FloatType(-0.75), FloatType(0.5), FloatType(-0.1) };
+			const FloatType lane_x[4] = { FloatType(-2.0), FloatType(1.0), FloatType(-0.5), FloatType(3.0) };
+			const Vector4Type angles_v = vector_set(lane_angles[0], lane_angles[1], lane_angles[2], lane_angles[3]);
+			const Vector4Type ratios_v = vector_set(lane_ratios[0], lane_ratios[1], lane_ratios[2], lane_ratios[3]);
+			const Vector4Type x_v = vector_set(lane_x[0], lane_x[1], lane_x[2], lane_x[3]);
+
+			Vector4Type sin_v;
+			Vector4Type cos_v;
+			vector_sincos(angles_v, sin_v, cos_v);
+
+			FloatType rtm_sin[4];
+			FloatType rtm_cos[4];
+			FloatType rtm_sin2[4];
+			FloatType rtm_cos2[4];
+			FloatType rtm_tan[4];
+			FloatType rtm_asin[4];
+			FloatType rtm_acos[4];
+			FloatType rtm_atan[4];
+			FloatType rtm_atan2[4];
+			vector_store(vector_sin(angles_v), &rtm_sin[0]);
+			vector_store(vector_cos(angles_v), &rtm_cos[0]);
+			vector_store(sin_v, &rtm_sin2[0]);
+			vector_store(cos_v, &rtm_cos2[0]);
+			vector_store(vector_tan(angles_v), &rtm_tan[0]);
+			vector_store(vector_asin(ratios_v), &rtm_asin[0]);
+			vector_store(vector_acos(ratios_v), &rtm_acos[0]);
+			vector_store(vector_atan(ratios_v), &rtm_atan[0]);
+			vector_store(vector_atan2(ratios_v, x_v), &rtm_atan2[0]);
+
+			for (uint32_t lane_index = 0; lane_index < 4; ++lane_index)
+			{
+				INFO("lane: " << lane_index);
+
+				CHECK(scalar_near_equal(rtm_sin[lane_index], scalar_sin(lane_angles[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_cos[lane_index], scalar_cos(lane_angles[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_sin2[lane_index], scalar_sin(lane_angles[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_cos2[lane_index], scalar_cos(lane_angles[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_tan[lane_index], scalar_tan(lane_angles[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_asin[lane_index], scalar_asin(lane_ratios[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_acos[lane_index], scalar_acos(lane_ratios[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_atan[lane_index], scalar_atan(lane_ratios[lane_index]), threshold));
+				CHECK(scalar_near_equal(rtm_atan2[lane_index], scalar_atan2(lane_ratios[lane_index], lane_x[lane_index]), threshold));
+			}
+		}
+	}
+}
+
+template<typename FloatType>
+void test_vector4_exp_log_impl(const FloatType threshold)
+{
+	using Vector4Type = typename related_types<FloatType>::vector4;
+	using ScalarType = typename related_types<FloatType>::scalar;
+
+	const FloatType infinity = std::numeric_limits<FloatType>::infinity();
+	const FloatType nan = std::numeric_limits<FloatType>::quiet_NaN();
+
+	// The functions process each lane separately: we test four inputs at a time
+	{
+		const FloatType inputs[] =
+		{
+			FloatType(0.0), FloatType(-0.0), FloatType(1.0), FloatType(-1.0),
+			FloatType(0.5), FloatType(-2.75), FloatType(10.0), FloatType(-20.0),
+			FloatType(80.0), FloatType(-80.0), FloatType(1.0E-7), FloatType(-1.0E-7),
+		};
+
+		for (size_t input_index = 0; input_index < (sizeof(inputs) / sizeof(inputs[0])); input_index += 4)
+		{
+			FloatType results[4];
+			vector_store(vector_exp(vector_load(&inputs[input_index])), &results[0]);
+
+			for (size_t lane_index = 0; lane_index < 4; ++lane_index)
+			{
+				const FloatType input = inputs[input_index + lane_index];
+				const FloatType ref = std::exp(input);
+				INFO("exp(" << input << ") = " << ref << ", result: " << results[lane_index]);
+
+				// The error is relative to the result
+				CHECK(scalar_abs(results[lane_index] - ref) <= threshold * ref);
+			}
+		}
+	}
+
+	{
+		const FloatType inputs[] =
+		{
+			FloatType(1.0), FloatType(2.0), FloatType(0.5), FloatType(10.0),
+			FloatType(1.0E-30), FloatType(1.0E30), FloatType(0.70710677), FloatType(1.4142135),
+			FloatType(3.0), FloatType(0.1), FloatType(123456.0), FloatType(7.5E-5),
+		};
+
+		for (size_t input_index = 0; input_index < (sizeof(inputs) / sizeof(inputs[0])); input_index += 4)
+		{
+			FloatType results[4];
+			vector_store(vector_log(vector_load(&inputs[input_index])), &results[0]);
+
+			for (size_t lane_index = 0; lane_index < 4; ++lane_index)
+			{
+				const FloatType input = inputs[input_index + lane_index];
+				const FloatType ref = std::log(input);
+				INFO("log(" << input << ") = " << ref << ", result: " << results[lane_index]);
+
+				// The error is relative to the result, or absolute when the result is near zero
+				CHECK(scalar_abs(results[lane_index] - ref) <= threshold * scalar_max(FloatType(1.0), scalar_abs(ref)));
+			}
+		}
+	}
+
+	// Special values
+	{
+		const Vector4Type exp_result = vector_exp(vector_set(-infinity, infinity, nan, FloatType(-800.0)));
+		CHECK(FloatType(vector_get_x(exp_result)) == FloatType(0.0));
+		CHECK(FloatType(vector_get_y(exp_result)) == infinity);
+		CHECK(std::isnan(FloatType(vector_get_z(exp_result))));
+		CHECK(FloatType(vector_get_w(exp_result)) == FloatType(0.0));
+		CHECK(FloatType(vector_get_x(vector_exp(vector_set(FloatType(800.0))))) == infinity);
+
+		const Vector4Type log_result = vector_log(vector_set(FloatType(0.0), FloatType(-1.0), infinity, nan));
+		CHECK(FloatType(vector_get_x(log_result)) == -infinity);
+		CHECK(std::isnan(FloatType(vector_get_y(log_result))));
+		CHECK(FloatType(vector_get_z(log_result)) == infinity);
+		CHECK(std::isnan(FloatType(vector_get_w(log_result))));
+		CHECK(FloatType(vector_get_x(vector_log(vector_set(FloatType(-0.0))))) == -infinity);
+		CHECK(std::isnan(FloatType(vector_get_x(vector_log(vector_set(-infinity))))));
+
+#if !defined(RTM_NEON_INTRINSICS) || defined(RTM_NEON64_INTRINSICS)
+		// ARMv7 NEON flushes denormal values to zero
+		const FloatType denormal = std::numeric_limits<FloatType>::denorm_min();
+		const FloatType log_denormal = std::log(denormal);
+		CHECK(scalar_abs(FloatType(vector_get_x(vector_log(vector_set(denormal)))) - log_denormal) <= threshold * scalar_abs(log_denormal));
+		CHECK(FloatType(vector_get_x(vector_exp(vector_set(log_denormal)))) == denormal);
+#endif
+	}
+
+	// The scalar and the vector functions use the same algorithm: the results are equal
+	{
+		const FloatType inputs[] =
+		{
+			FloatType(0.5), FloatType(-2.75), FloatType(10.0), FloatType(1.0E-30), FloatType(123456.0),
+			FloatType(0.70710677), FloatType(-80.0), FloatType(3.0), FloatType(1.0E-7), FloatType(0.999),
+		};
+
+		for (const FloatType input : inputs)
+		{
+			INFO("The input is " << input);
+			const FloatType exp_result = FloatType(vector_get_x(vector_exp(vector_set(input))));
+			CHECK(scalar_exp(input) == exp_result);
+			CHECK(scalar_cast(scalar_exp(scalar_set(input))) == exp_result);
+
+			const FloatType log_input = scalar_abs(input);
+			const FloatType log_result = FloatType(vector_get_x(vector_log(vector_set(log_input))));
+			CHECK(scalar_log(log_input) == log_result);
+			CHECK(scalar_cast(scalar_log(scalar_set(log_input))) == log_result);
+		}
+	}
+
+	// Exponential interpolation
+	{
+		const Vector4Type start = vector_set(FloatType(2.0), FloatType(-2.0), FloatType(4.0), FloatType(0.5));
+		const Vector4Type end = vector_set(FloatType(8.0), FloatType(-8.0), FloatType(1.0), FloatType(0.5));
+		const Vector4Type ref = vector_set(FloatType(4.0), FloatType(-4.0), FloatType(2.0), FloatType(0.5));
+		const FloatType alpha = FloatType(0.5);
+		const ScalarType alpha_s = scalar_set(alpha);
+
+		CHECK(vector_all_near_equal(vector_eerp(start, end, alpha), ref, threshold * FloatType(4.0)));
+		CHECK(vector_all_near_equal(vector_eerp(start, end, alpha_s), ref, threshold * FloatType(4.0)));
+		CHECK(vector_all_near_equal(vector_eerp(start, end, vector_set(alpha)), ref, threshold * FloatType(4.0)));
+
+		// The result is exactly 'start' when alpha is 0.0, and approximately 'end' when alpha is 1.0
+		CHECK(vector_all_near_equal(vector_eerp(start, end, FloatType(0.0)), start, FloatType(0.0)));
+		CHECK(vector_all_near_equal(vector_eerp(start, end, FloatType(1.0)), end, threshold * FloatType(8.0)));
+
+		// Each lane uses its own alpha: 2 * 4^0.25, -2 * 4^1.0, 4 * 0.25^0.0, 0.5 * 1.0^0.75
+		const Vector4Type alpha_v = vector_set(FloatType(0.25), FloatType(1.0), FloatType(0.0), FloatType(0.75));
+		const Vector4Type ref_v = vector_set(FloatType(2.0) * std::pow(FloatType(4.0), FloatType(0.25)), FloatType(-8.0), FloatType(4.0), FloatType(0.5));
+		CHECK(vector_all_near_equal(vector_eerp(start, end, alpha_v), ref_v, threshold * FloatType(8.0)));
+	}
+}

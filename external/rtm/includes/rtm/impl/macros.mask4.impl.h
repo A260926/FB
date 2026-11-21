@@ -1,0 +1,327 @@
+#pragma once
+
+////////////////////////////////////////////////////////////////////////////////
+// The MIT License (MIT)
+//
+// Copyright (c) 2022 Nicholas Frechette & Realtime Math contributors
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+////////////////////////////////////////////////////////////////////////////////
+
+// Included only once from macros.h
+
+#include "rtm/math.h"
+#include "rtm/impl/compiler_utils.h"
+
+RTM_IMPL_FILE_PRAGMA_PUSH
+
+// This file contains helper macros to help improve code generation where required.
+
+namespace rtm
+{
+	RTM_IMPL_VERSION_NAMESPACE_BEGIN
+
+	namespace rtm_impl
+	{
+#if defined(RTM_NEON_INTRINSICS)
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE uint32x4_t RTM_SIMD_CALL cast_to_u32(uint32x4_t value) RTM_NO_EXCEPT
+		{
+			return value;
+		}
+
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE uint32x2_t RTM_SIMD_CALL cast_to_u32(uint32x2_t value) RTM_NO_EXCEPT
+		{
+			return value;
+		}
+
+		// MSVC has uint32x4_t and float32x4_t as aliases, we cannot have an override
+#if !defined(RTM_COMPILER_MSVC)
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE uint32x4_t RTM_SIMD_CALL cast_to_u32(float32x4_t value) RTM_NO_EXCEPT
+		{
+			return vreinterpretq_u32_f32(value);
+		}
+
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE uint32x2_t RTM_SIMD_CALL cast_to_u32(float32x2_t value) RTM_NO_EXCEPT
+		{
+			return vreinterpret_u32_f32(value);
+		}
+#endif
+#endif
+
+#if defined(RTM_NEON64_INTRINSICS)
+		// Returns true if the two 64 bit lanes of the mask are true, otherwise false.
+		// Each lane of the mask must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask2q_all_true(uint64x2_t mask) RTM_NO_EXCEPT
+		{
+			return vget_lane_u64(vreinterpret_u64_u32(vmovn_u64(mask)), 0) == 0xFFFFFFFFFFFFFFFFULL;
+		}
+
+		// Returns true if one or more of the two 64 bit lanes of the mask are true, otherwise false.
+		// Each lane of the mask must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask2q_any_true(uint64x2_t mask) RTM_NO_EXCEPT
+		{
+			return vget_lane_u64(vreinterpret_u64_u32(vmovn_u64(mask)), 0) != 0;
+		}
+
+		// Returns true if the four 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_all_true(uint64x2_t mask_xy, uint64x2_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_all_true(vandq_u64(mask_xy, mask_zw));
+		}
+
+		// Returns true if the [xyz] 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_all_true3(uint64x2_t mask_xy, uint64x2_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_all_true(vandq_u64(mask_xy, vdupq_laneq_u64(mask_zw, 0)));
+		}
+
+		// Returns true if one or more of the four 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_any_true(uint64x2_t mask_xy, uint64x2_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_any_true(vorrq_u64(mask_xy, mask_zw));
+		}
+
+		// Returns true if one or more of the [xyz] 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_any_true3(uint64x2_t mask_xy, uint64x2_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_any_true(vorrq_u64(mask_xy, vdupq_laneq_u64(mask_zw, 0)));
+		}
+#endif
+
+#if defined(RTM_WASM128_INTRINSICS)
+		// Returns true if the two 64 bit lanes of the mask are true, otherwise false.
+		// Each lane of the mask must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask2q_all_true(v128_t mask) RTM_NO_EXCEPT
+		{
+			return wasm_i64x2_all_true(mask);
+		}
+
+		// Returns true if one or more of the two 64 bit lanes of the mask are true, otherwise false.
+		// Each lane of the mask must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask2q_any_true(v128_t mask) RTM_NO_EXCEPT
+		{
+			return wasm_v128_any_true(mask);
+		}
+
+		// Returns true if the four 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_all_true(v128_t mask_xy, v128_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_all_true(wasm_v128_and(mask_xy, mask_zw));
+		}
+
+		// Returns true if the [xyz] 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_all_true3(v128_t mask_xy, v128_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_all_true(wasm_v128_and(mask_xy, wasm_i64x2_shuffle(mask_zw, mask_zw, 0, 0)));
+		}
+
+		// Returns true if one or more of the four 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_any_true(v128_t mask_xy, v128_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_any_true(wasm_v128_or(mask_xy, mask_zw));
+		}
+
+		// Returns true if one or more of the [xyz] 64 bit lanes of the two masks are true, otherwise false.
+		// Each lane of the masks must be 0 or ~0.
+		RTM_DISABLE_SECURITY_COOKIE_CHECK RTM_FORCE_INLINE bool RTM_SIMD_CALL mask4q_any_true3(v128_t mask_xy, v128_t mask_zw) RTM_NO_EXCEPT
+		{
+			return mask2q_any_true(wasm_v128_or(mask_xy, wasm_i64x2_shuffle(mask_zw, mask_zw, 0, 0)));
+		}
+#endif
+	}
+
+	RTM_IMPL_VERSION_NAMESPACE_END
+}
+
+#if defined(RTM_NEON_INTRINSICS)
+	/// Returns true if all [xyzw] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f or a like type: rtm::vector4f, rtm::quatf, _m128, float32x4_t, uint32x4_t.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE(input_mask, output) \
+		output = vget_lane_u64(vreinterpret_u64_u16(vmovn_u32(rtm::rtm_impl::cast_to_u32(input_mask))), 0) == 0xFFFFFFFFFFFFFFFFULL
+#elif defined(RTM_SSE2_INTRINSICS)
+	/// Returns true if all [xyzw] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE(input_mask, output) \
+		output = _mm_movemask_ps(input_mask) == 0xF
+#elif defined(RTM_WASM128_INTRINSICS)
+	/// Returns true if all [xyzw] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE(input_mask, output) \
+		output = wasm_i32x4_all_true(input_mask)
+#else
+	/// Returns true if all [xyzw] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE(input_mask, output) \
+		output = input_mask.x != 0 && input_mask.y != 0 && input_mask.z != 0 && input_mask.w != 0
+#endif
+
+#if defined(RTM_NEON_INTRINSICS)
+	/// Returns true if all [xy] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f or a like type: rtm::vector4f, rtm::quatf, _m128, float32x4_t, uint32x4_t.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE2(input_mask, output) \
+		output = vgetq_lane_u64(vreinterpretq_u64_u32(rtm::rtm_impl::cast_to_u32(input_mask)), 0) == 0xFFFFFFFFFFFFFFFFULL
+
+	/// Returns true if all [xy] SIMD lanes are true (aka ~0).
+	/// Input must be a float32x2_t or uint32x2_t.
+	/// Output must be a bool.
+	#define RTM_MASK2F_ALL_TRUE(input_mask, output) \
+		output = vget_lane_u64(vreinterpret_u64_u32(rtm::rtm_impl::cast_to_u32(input_mask)), 0) == 0xFFFFFFFFFFFFFFFFULL
+#elif defined(RTM_SSE2_INTRINSICS)
+	/// Returns true if all [xy] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE2(input_mask, output) \
+		output = (_mm_movemask_ps(input_mask) & 0x3) == 0x3
+#elif defined(RTM_WASM128_INTRINSICS)
+	/// Returns true if all [xy] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE2(input_mask, output) \
+		output = wasm_u64x2_extract_lane(input_mask, 0) == 0xFFFFFFFFFFFFFFFFULL
+#else
+	/// Returns true if all [xy] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE2(input_mask, output) \
+		output = input_mask.x != 0 && input_mask.y != 0
+#endif
+
+#if defined(RTM_NEON_INTRINSICS)
+	/// Returns true if all [xyz] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f or a like type: rtm::vector4f, rtm::quatf, _m128, float32x4_t, uint32x4_t.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE3(input_mask, output) \
+		output = (vget_lane_u64(vreinterpret_u64_u16(vmovn_u32(rtm::rtm_impl::cast_to_u32(input_mask))), 0) & 0x0000FFFFFFFFFFFFULL) == 0x0000FFFFFFFFFFFFULL
+#elif defined(RTM_SSE2_INTRINSICS)
+	/// Returns true if all [xyz] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE3(input_mask, output) \
+		output = (_mm_movemask_ps(input_mask) & 0x7) == 0x7
+#elif defined(RTM_WASM128_INTRINSICS)
+	/// Returns true if all [xyz] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE3(input_mask, output) \
+		output = (wasm_i32x4_bitmask(input_mask) & 0x7) == 0x7
+#else
+	/// Returns true if all [xyz] SIMD lanes are true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ALL_TRUE3(input_mask, output) \
+		output = input_mask.x != 0 && input_mask.y != 0 && input_mask.z != 0
+#endif
+
+#if defined(RTM_NEON_INTRINSICS)
+	/// Returns true if any [xyzw] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f or a like type: rtm::vector4f, rtm::quatf, _m128, float32x4_t, uint32x4_t.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE(input_mask, output) \
+		output = vget_lane_u64(vreinterpret_u64_u16(vmovn_u32(rtm::rtm_impl::cast_to_u32(input_mask))), 0) != 0
+#elif defined(RTM_SSE2_INTRINSICS)
+	/// Returns true if any [xyzw] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE(input_mask, output) \
+		output = _mm_movemask_ps(input_mask) != 0
+#elif defined(RTM_WASM128_INTRINSICS)
+	/// Returns true if any [xyzw] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE(input_mask, output) \
+		output = wasm_v128_any_true(input_mask)
+#else
+	/// Returns true if any [xyzw] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE(input_mask, output) \
+		output = input_mask.x != 0 || input_mask.y != 0 || input_mask.z != 0 || input_mask.w != 0
+#endif
+
+#if defined(RTM_NEON_INTRINSICS)
+	/// Returns true if any [xy] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f or a like type: rtm::vector4f, rtm::quatf, _m128, float32x4_t, uint32x4_t.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE2(input_mask, output) \
+		output = vgetq_lane_u64(vreinterpretq_u64_u32(rtm::rtm_impl::cast_to_u32(input_mask)), 0) != 0
+
+	/// Returns true if any [xy] SIMD lanes is true (aka ~0).
+	/// Input must be a float32x2_t or uint32x2_t.
+	/// Output must be a bool.
+	#define RTM_MASK2F_ANY_TRUE(input_mask, output) \
+		output = vget_lane_u64(vreinterpret_u64_u32(rtm::rtm_impl::cast_to_u32(input_mask)), 0) != 0
+#elif defined(RTM_SSE2_INTRINSICS)
+	/// Returns true if any [xy] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE2(input_mask, output) \
+		output = (_mm_movemask_ps(input_mask) & 0x3) != 0
+#elif defined(RTM_WASM128_INTRINSICS)
+	/// Returns true if any [xy] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE2(input_mask, output) \
+		output = wasm_u64x2_extract_lane(input_mask, 0) != 0
+#else
+	/// Returns true if any [xy] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE2(input_mask, output) \
+		output = input_mask.x != 0 || input_mask.y != 0
+#endif
+
+#if defined(RTM_NEON_INTRINSICS)
+	/// Returns true if any [xyz] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f or a like type: rtm::vector4f, rtm::quatf, _m128, float32x4_t, uint32x4_t.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE3(input_mask, output) \
+		output = (vget_lane_u64(vreinterpret_u64_u16(vmovn_u32(rtm::rtm_impl::cast_to_u32(input_mask))), 0) & 0x0000FFFFFFFFFFFFULL) != 0
+#elif defined(RTM_SSE2_INTRINSICS)
+	/// Returns true if any [xyz] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE3(input_mask, output) \
+		output = (_mm_movemask_ps(input_mask) & 0x7) != 0
+#elif defined(RTM_WASM128_INTRINSICS)
+	/// Returns true if any [xyz] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE3(input_mask, output) \
+		output = (wasm_i32x4_bitmask(input_mask) & 0x7) != 0
+#else
+	/// Returns true if any [xyz] SIMD lanes is true (aka ~0).
+	/// Input must be a rtm::mask4f.
+	/// Output must be a bool.
+	#define RTM_MASK4F_ANY_TRUE3(input_mask, output) \
+		output = input_mask.x != 0 || input_mask.y != 0 || input_mask.z != 0
+#endif
+
+RTM_IMPL_FILE_PRAGMA_POP
