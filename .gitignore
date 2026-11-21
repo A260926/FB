@@ -36,3 +36,6 @@
 *.png
 *.jpg
 *.jpeg
+
+# 任务构建目录
+.task-build/

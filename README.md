@@ -18,6 +18,7 @@
 - 核心渲染实现仅 200 行，突出易读性。
 - 写满中文注释，每一处计算都有解释。
 - 多个教程例子，从如何画三角形到模型以及光照。
+- 可选的矩透明帧（Moment OIT）离屏预览：每像素固定 10 个 double 的矩，无需片元链表即可正确合成相互穿插的透明色片。
 
 ## 编译运行
 
@@ -105,6 +106,93 @@ bool RenderHelp::DrawPrimitive()
 
 然后两层 for 循环迭代屏幕上三角形外接矩形的每个点，判断在三角形范围内以后就调用 VS 程序计算该点具体是什么颜色。
 
+## 矩透明帧（Moment OIT 离屏预览）
+
+`moment_oit.h` / `moment_oit.cpp` 给 RenderHelp 增加了可选的**矩透明帧**：一个离屏预览路径，可以不借助任何片元链表，正确显示相互穿插的透明色片。普通帧的行为完全不变——只有调用 `BeginFrame` 之后，`DrawPrimitive` 才走矩帧路径。
+
+### 调用次序
+
+```cpp
+RenderHelp rh(w, h);
+MomentOit mo(rh);                    // 宿主先声明、后析构
+rh.SetVertexShader(vs);              // 沿用现有的 VS/PS/ShaderContext
+rh.SetPixelShader(ps);
+
+mo.BeginFrame(Vec3d(r, g, b));       // 开始矩帧，传入线性 RGB 背景
+rh.DrawPrimitive();                  // 不透明阶段：画不透明面（若干次）
+mo.SealOpaque();                     // 封存不透明颜色和窗口深度
+rh.DrawPrimitive();                  // 透明阶段：收集透明面（若干次）
+
+MomentOitPixel px = mo.ResolvePixel(x, y);      // 只读解析单个像素（可多次）
+MomentOitMoments m = mo.GetMoments(x, y);       // 读取每像素原始矩
+std::vector<MomentOitPixel> frame = mo.ResolveFrame();  // 解析整帧
+mo.CancelFrame();                    // 取消矩帧，之后可以重新开始
+```
+
+### 接口签名
+
+```cpp
+// 矩帧阶段：PHASE_IDLE（空闲）/ PHASE_OPAQUE（不透明收集）/ PHASE_SEALED（已封存，透明收集）
+enum Phase { PHASE_IDLE, PHASE_OPAQUE, PHASE_SEALED };
+
+explicit MomentOit(RenderHelp &host);        // 宿主必须比 MomentOit 活得更久
+void BeginFrame(const Vec3d &background);    // 开始矩帧（线性 RGB 背景）
+void SealOpaque();                           // 封存不透明颜色和窗口深度
+void CancelFrame();                          // 取消矩帧（幂等）
+Phase GetPhase() const;                      // 当前阶段
+MomentOitMoments GetMoments(int x, int y) const;    // 每像素原始矩（只读）
+MomentOitPixel ResolvePixel(int x, int y) const;    // 只读解析单个像素
+std::vector<MomentOitPixel> ResolveFrame() const;   // 只读解析整帧
+```
+
+数据结构：
+
+```cpp
+struct MomentOitMoments {           // 每像素固定 10 个 double
+    double b[4];                    // 光学矩 b[k] = sum(tau * z^k)，tau = -log1p(-alpha)
+    double g[3][2];                 // 颜色矩 g[c][k] = sum(tau * RGB[c] * z^k)
+};
+
+struct MomentOitLayer {             // 重建出的一层（由近到远）
+    double depth, optical_mass, alpha;
+    double color[3];                // 钳到 [0,1] 的层色（用于合成）
+    double unclamped[3];            // 未钳制的层色（便于核对矩）
+};
+
+struct MomentOitPixel {             // 独立持有的解析结果
+    double color[3];                // 合成后的线性 RGB
+    double transmittance;           // 透射率 exp(-b[0])
+    std::vector<MomentOitLayer> layers;    // 0..2 层
+};
+```
+
+### 绘制语义
+
+- 新路径是**双面填充**，没有混合/纹理的特殊开关，输入属性槽需在三个角上一致。每次提交，三个角的 VS 各执行一次。
+- 有限且 `w > 0` 的三角形按 `x/y ∈ [-w, w]`、`z ∈ [0, w]` 在齐次空间完整裁剪，交点携带全部 varying；像素中心按透视权重恢复属性后再执行 PS。
+- 深度是屏幕上线性插值的 `z/w`，越小越近，背景深度是正无穷。
+- **不透明阶段**：PS 返回 `alpha <= 0` 表示丢弃，其他值都当不透明；只有在严格更近、并且 PS 没丢弃之后，才写颜色/深度。
+- **透明阶段**：PS 应返回有限的 `[0,1]` RGB 和 `[0, 1-1e-6]` alpha。透明面只在严格位于封存深度之前时才有贡献，`alpha = 0` 不贡献，透明面不占深度。
+- 覆盖规则：屏幕 y 向下，先整理成有向面积为正，向上的边和向右的水平边包含边界。裁剪后的 fan 内部边和相邻面的共边都按此半开规则处理，恰好覆盖一次——半透明的 alpha 不会在裁后内部边上被加两次。
+
+### 矩模型与近似的含义
+
+透明阶段每像素只保留 **10 个 double** 的矩（另有 10 个 Kahan 补偿累加量），不存片元链表、不按片元增长数组、不缓存三角形重画、不只留最近两片。解析时从 `b[0..3]` 恢复至多两个有序深度 `d0 <= d1` 和正的光学质量 `w0, w1`，使 `sum(wj * dj^k) = b[k]`（`k = 0..3`）——这是正测度的**二节点高斯求积**；单深度退化成一个节点，空像素直接保留封存颜色。然后从 `sum(wj * Cj) = g[0]`、`sum(wj * dj * Cj) = g[1]` 恢复层色，逐通道钳到 `[0,1]`，每层取 `alpha = -expm1(-wj)`，由近到远合成，最后加上 `exp(-b[0]) * 封存颜色`。
+
+- **不超过两个不同深度**：结果等价于精确的分层合成；同深度的多个片元算作一层，颜色用 tau 加权。
+- **三个及以上深度**：明确只是该矩模型的近似（两层模型去逼近多层真值）。重建节点仍在 `[0,1]` 内，四个矩的重建误差不超过 `1e-7`。
+- **精度**：普通尺度、节点间隔至少 `1e-4` 的单/双层场景，RGB 和矩重建的绝对误差不超过 `1e-7`（注意：间隔接近 `1e-4` 时，层色恢复的条件数本身已接近双精度极限，这是矩方法的固有限制，不是实现缺陷；间隔 `>= 1e-2` 时轻松满足）。
+- **稳健性**：近合并（退化为单节点）、很小的 alpha（不设全局 alpha 门槛，真实薄层不会被删掉）、很高的不透明度（alpha 钳到 `1-1e-6`），都不会出 NaN 或负质量。改变提交顺序，结果只差浮点累加误差。
+
+### 生命周期
+
+- 解析不执行 VS/PS，不写普通帧的颜色和深度；多次解析结果一致。
+- 解析结果独立持有：两台设备交错、修改或释放回调捕获的输入，都不改变旧结果。
+- 在错误阶段调用（未开始就封存/解析、重复开始、重复封存、未封存就解析）会在修改之前抛 `std::logic_error`；坐标越界抛 `std::out_of_range`。
+- `Clear`/`Init`/`Reset` 会取消活动中的矩帧；没封存不能解析；取消后可以重新开始。
+
+完整示例见 [examples/moment_oit.cpp](examples/moment_oit.cpp)，测试见 [tests/moment_oit.cpp](tests/moment_oit.cpp)。
+
 ## 完整例子
 
 现在你想写个 D3D 12 的三角形绘制，没有一千行你搞不定，但是现在我们只需要下面几行：
@@ -155,6 +243,8 @@ int main(void)
 | 文件名 | 说明 |
 |-|-|
 | [RenderHelp.h](RenderHelp.h) | 渲染器的实现文件，使用时 include 它就够了 |
+| [moment_oit.h](moment_oit.h) | 矩透明帧（Moment OIT）离屏预览扩展的接口 |
+| [moment_oit.cpp](moment_oit.cpp) | 矩透明帧的实现：矩帧光栅化与二节点高斯求积解析 |
 | [Model.h](Model.h) | 加载模型 |
 | [sample_01_triangle.cpp](sample_01_triangle.cpp) | 绘制三角形的例子 |
 | [sample_02_texture.cpp](sample_02_texture.cpp) | 如何使用纹理，如何设置摄像机矩阵等 |
@@ -163,6 +253,8 @@ int main(void)
 | [sample_05_model.cpp](sample_05_model.cpp) | 如何加载和绘制模型 |
 | [sample_06_normal.cpp](sample_06_normal.cpp) | 使用法向贴图增强模型细节 |
 | [sample_07_specular.cpp](sample_07_specular.cpp) | 绘制高光 |
+| [examples/moment_oit.cpp](examples/moment_oit.cpp) | 矩透明帧示例：相互穿插的透明色片和遮挡物 |
+| [tests/moment_oit.cpp](tests/moment_oit.cpp) | 矩透明帧的测试（capture/reconstruct/lifecycle） |
 
 ## 实现对比
 

@@ -14,7 +14,7 @@ c++ -std=c++17 -O2 -I. -include moment_oit.h examples/moment_oit.cpp moment_oit.
 example_output_dir=$(mktemp -d .task-build/moment-example.XXXXXX)
 .task-build/moment_example "$example_output_dir"
 test -s "$example_output_dir/moments.ppm"
-  output_log=$(mktemp)
+  output_log=$(mktemp .task-build/target-log.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

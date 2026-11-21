@@ -1132,6 +1132,24 @@ typedef std::function<Vec4f(ShaderContext &input)> PixelShader;
 
 
 //---------------------------------------------------------------------
+// 矩透明帧扩展钩子（实现见 moment_oit.h / moment_oit.cpp）
+//---------------------------------------------------------------------
+class RenderHelp;
+
+// 矩透明帧钩子接口：由 MomentOit 实现并安装到 RenderHelp 上。
+// 钩子为 NULL 时 RenderHelp 完全保持普通帧行为；装上钩子后
+// DrawPrimitive 会转发给钩子，由矩帧自己的离屏路径处理。
+class RenderHelpMomentHook {
+public:
+	virtual ~RenderHelpMomentHook() {}
+	// 矩帧激活期间替代 DrawPrimitive 的绘制入口
+	virtual bool OnDrawPrimitive(RenderHelp &rh) = 0;
+	// Clear/Init/Reset 时回调，用于取消活动中的矩帧
+	virtual void OnFrameReset() = 0;
+};
+
+
+//---------------------------------------------------------------------
 // RenderHelp
 //---------------------------------------------------------------------
 class RenderHelp
@@ -1145,6 +1163,7 @@ public:
 		_depth_buffer = NULL;
 		_render_frame = false;
 		_render_pixel = true;
+		_moment_hook = NULL;
 	}
 
 	inline RenderHelp(int width, int height) {
@@ -1152,6 +1171,7 @@ public:
 		_depth_buffer = NULL;
 		_render_frame = false;
 		_render_pixel = true;
+		_moment_hook = NULL;
 		Init(width, height);
 	}
 
@@ -1159,6 +1179,8 @@ public:
 
 	// 复位状态
 	inline void Reset() {
+		// 有活动矩帧时先取消（矩帧由 MomentOit 管理，见 moment_oit.h）
+		if (_moment_hook != NULL) _moment_hook->OnFrameReset();
 		_vertex_shader = NULL;
 		_pixel_shader = NULL;
 		if (_frame_buffer) delete _frame_buffer;
@@ -1190,6 +1212,8 @@ public:
 
 	// 清空 FrameBuffer 和深度缓存
 	inline void Clear() {
+		// 清空普通帧会同时取消活动中的矩帧
+		if (_moment_hook != NULL) _moment_hook->OnFrameReset();
 		if (_frame_buffer) {
 			_frame_buffer->Fill(_color_bg);
 		}
@@ -1228,6 +1252,10 @@ public:
 		_render_pixel = pixel;
 	}
 
+	// 安装/卸载矩透明帧钩子（由 MomentOit 调用），NULL 表示恢复普通帧
+	inline void SetMomentHook(RenderHelpMomentHook *hook) { _moment_hook = hook; }
+	inline RenderHelpMomentHook* GetMomentHook() const { return _moment_hook; }
+
 	// 判断一条边是不是三角形的左上边 (Top-Left Edge)
 	inline bool IsTopLeft(const Vec2i& a, const Vec2i& b) {
 		return ((a.y == b.y) && (a.x < b.x)) || (a.y > b.y);
@@ -1237,7 +1265,10 @@ public:
 
 	// 绘制一个三角形，必须先设定好着色器函数
 	inline bool DrawPrimitive() {
-		if (_frame_buffer == NULL || _vertex_shader == NULL) 
+		// 矩透明帧激活期间，绘制转发给矩帧的离屏路径（见 moment_oit.h）
+		if (_moment_hook != NULL) return _moment_hook->OnDrawPrimitive(*this);
+
+		if (_frame_buffer == NULL || _vertex_shader == NULL)
 			return false;
 
 		// 顶点初始化
@@ -1480,6 +1511,11 @@ protected:
 
 	VertexShader _vertex_shader;
 	PixelShader _pixel_shader;
+
+	RenderHelpMomentHook *_moment_hook;    // 矩透明帧钩子，NULL 为普通帧
+
+	// MomentOit 需要读取着色器和帧尺寸来实现矩帧光栅化
+	friend class MomentOit;
 };
 
 
