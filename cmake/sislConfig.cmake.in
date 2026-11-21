@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/sislTargets.cmake")
+
+# Legacy compatibility
+set(sisl_LIBRARIES sisl)
+
+# Optional: make include dir available
+set(sisl_INCLUDE_DIRS "@CMAKE_INSTALL_PREFIX@/include")
