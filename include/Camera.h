@@ -6,6 +6,7 @@
 #include "ImageWriter.h"
 #include "light/Light.h"
 #include "light/LightList.h"
+#include "GaussianMedium.h"
 #include "ThreadPool.h"
 
 class Camera {
@@ -93,6 +94,15 @@ class Camera {
 
     std::vector<Radiance> render_path_parallel(const Object& world, Light& lights, size_t num_threads);
 
+    // Linear (no tone mapping) camera pass that also produces conservative
+    // per-channel absolute error bounds and the first-segment transmittance.
+    // Supports PointLight leaves (LightList may nest) and non-refractive,
+    // non-BRDF materials only. Returns false and leaves out untouched on an
+    // unsupported scene or on emission-budget exhaustion.
+    bool render_gaussian(const Object& world, const Light& lights,
+                         const GaussianMedium& medium, double abs_error,
+                         std::uint64_t max_work, GaussianFrame& out);
+
 
 
   private:
@@ -132,6 +142,24 @@ class Camera {
     Radiance trace_binary(const Ray& r, const Object& world) const;
 
     Radiance trace_phong(const Ray& r, const Object& world, const Light& lights, int depth) const;
+
+    // Shared surface code used by both PHONG and gaussian rendering.
+    Ray pixel_center_ray(int i, int j) const;
+    Radiance phong_surface_term(const Ray& r, const IntersectionRecord& rec,
+                                const Object& world, const Light& lights) const;
+
+    // Gaussian-medium rendering support.
+    struct GaussianTraceOut;
+    bool validate_gaussian_lights(const Light& light) const;
+    bool gaussian_light_shading(const Light& light, const Point3& p,
+                                const Vector3& normal, const Vector3& view_dir,
+                                const IntersectionRecord& rec, const Object& world,
+                                const GaussianMedium& medium,
+                                Radiance& shading) const;
+    bool trace_gaussian(const Ray& r, const Object& world, const Light& lights,
+                        const GaussianMedium& medium, double abs_error,
+                        std::uint64_t& work_left, int depth,
+                        GaussianTraceOut& out) const;
 
     Radiance schlick_blend(Radiance locals, Radiance reflected, Radiance refracted, double eta, double cos_theta_i, double R0) const {
         double fresnel_reflectance = R0 + (1 - R0) * pow(1 - cos_theta_i, 5);

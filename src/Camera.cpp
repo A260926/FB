@@ -1,6 +1,7 @@
 #include "Camera.h"
 
 #include "brdf/FancyBRDF.h"
+#include "light/PointLight.h"
 
 void Camera::initialize() {
     // Calculate the aspect ratio
@@ -114,6 +115,24 @@ Radiance Camera::trace_binary(const Ray& r, const Object& world) const {
 }
 
 
+Ray Camera::pixel_center_ray(int i, int j) const {
+    auto pixel_center = first_pixel + (i * pixel_delta_u) + (j * pixel_delta_v);
+    auto ray_direction = pixel_center - center;
+    return Ray(center, ray_direction);
+}
+
+// Ambient plus direct Blinn-Phong lighting at a surface point. Shared by the
+// PHONG renderer and the gaussian-medium renderer so the surface shader is
+// never duplicated.
+Radiance Camera::phong_surface_term(const Ray& r, const IntersectionRecord& rec,
+                                    const Object& world, const Light& lights) const {
+    Vector3 view_dir = unit_vector(-r.direction());
+    Radiance local_shading = lights.phong_shading(rec.p, rec.normal, view_dir,
+                                                  rec, world, ambient_light);
+    Radiance ambient = calculate_ambient(*rec.mat_ptr, ambient_light, rec.u, rec.v);
+    return ambient + local_shading;
+}
+
 Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lights, int depth) const {
     IntersectionRecord rec;
     Radiance result;
@@ -124,15 +143,11 @@ Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lig
     }
 
     // Compute Blinn-Phong shading at the intersection point
-    Vector3 view_dir = unit_vector(-r.direction());
-    Radiance local_shading = lights.phong_shading(rec.p, rec.normal, view_dir, rec, world, ambient_light);
-
-    // Compute ambient light contribution
-    Radiance ambient = calculate_ambient(*rec.mat_ptr, ambient_light, rec.u, rec.v);
+    Radiance surface_term = phong_surface_term(r, rec, world, lights);
 
     // Stop recursion if max depth is reached
     if (depth <= 0) {
-        return ambient + local_shading;
+        return surface_term;
     }
 
     // Initialize reflection and refraction contributions
@@ -144,7 +159,7 @@ Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lig
         Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
         Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
         reflected_color = trace_phong(reflect_ray, world, lights, depth - 1);
-        result = (1 - rec.mat_ptr->reflectivity) * (ambient + local_shading) +
+        result = (1 - rec.mat_ptr->reflectivity) * surface_term +
                 rec.mat_ptr->reflectivity * reflected_color;
         return result;
     }
@@ -179,13 +194,13 @@ Radiance Camera::trace_phong(const Ray& r, const Object& world, const Light& lig
         // Combine contributions
         // Use Schlick approximation for Fresnel effect
         double R0 = pow((1.0 - rec.mat_ptr->refractiveindex) / (1.0 + rec.mat_ptr->refractiveindex), 2);
-        result = schlick_blend((ambient + local_shading), reflected_color, refracted_color, eta, cos_theta_i, R0);
+        result = schlick_blend(surface_term, reflected_color, refracted_color, eta, cos_theta_i, R0);
         // result = ambient + local_shading + reflected_color + refracted_color;
         return result;
     }
 
     // Local shading only case
-    result = ambient + local_shading;
+    result = surface_term;
     return result;
 }
 
@@ -458,13 +473,236 @@ std::vector<Radiance> Camera::render_phong(const Object& world, const Light& lig
     for (int j = 0; j < image_height; j++) {
         std::clog << "\rRemaining rows: " << (image_height - j) << ' ' << std::flush;
         for (int i = 0; i < image_width; i++) {
-            auto pixel_center = first_pixel + (i * pixel_delta_u) + (j * pixel_delta_v);
-            auto ray_direction = pixel_center - center;
-            Ray r(center, ray_direction);
+            Ray r = pixel_center_ray(i, j);
             // Pass `nbounces` to control recursive depth
             Radiance pixel_color = trace_phong(r, world, lights, nbounces);
             pixelData[static_cast<size_t>(j) * static_cast<size_t>(image_width) + static_cast<size_t>(i)] = tone_map(pixel_color);
         }
     }
     return pixelData;
+}
+
+// ---------------------------------------------------------------------------
+// Gaussian participating-medium rendering
+// ---------------------------------------------------------------------------
+
+namespace {
+
+bool finite_nonneg_rgb(const Radiance& c) {
+    return std::isfinite(c.x()) && std::isfinite(c.y()) && std::isfinite(c.z()) &&
+           c.x() >= 0.0 && c.y() >= 0.0 && c.z() >= 0.0;
+}
+
+// The gaussian entry only accepts ordinary Phong materials: no refraction and
+// no microfacet BRDF, with finite non-negative parameters.
+bool gaussian_material_supported(const Material& m) {
+    if (m.is_refractive || m.has_brdf) return false;
+    if (!std::isfinite(m.reflectivity) || m.reflectivity < 0.0 ||
+        m.reflectivity > 1.0)
+        return false;
+    if (!std::isfinite(m.kd) || m.kd < 0.0 || !std::isfinite(m.ks) || m.ks < 0.0 ||
+        !std::isfinite(m.ka) || m.ka < 0.0 || !std::isfinite(m.specularexponent) ||
+        m.specularexponent < 0.0)
+        return false;
+    return finite_nonneg_rgb(m.diffusecolor) && finite_nonneg_rgb(m.specularcolor) &&
+           finite_nonneg_rgb(m.base_color);
+}
+
+} // namespace
+
+struct Camera::GaussianTraceOut {
+    Radiance value{0, 0, 0};
+    Radiance error{0, 0, 0};
+    double transmittance = 1.0; // first segment of this ray only
+};
+
+bool Camera::validate_gaussian_lights(const Light& light) const {
+    if (const auto* point = dynamic_cast<const PointLight*>(&light)) {
+        return std::isfinite(point->position.x()) &&
+               std::isfinite(point->position.y()) &&
+               std::isfinite(point->position.z()) &&
+               finite_nonneg_rgb(point->intensity);
+    }
+    if (const auto* list = dynamic_cast<const LightList*>(&light)) {
+        for (const auto& child : list->lights) {
+            if (!child || !validate_gaussian_lights(*child)) return false;
+        }
+        return true;
+    }
+    return false; // RectangularLight and any other light type are unsupported
+}
+
+bool Camera::gaussian_light_shading(const Light& light, const Point3& p,
+                                    const Vector3& normal, const Vector3& view_dir,
+                                    const IntersectionRecord& rec,
+                                    const Object& world,
+                                    const GaussianMedium& medium,
+                                    Radiance& shading) const {
+    if (const auto* point = dynamic_cast<const PointLight*>(&light)) {
+        const Material* mat = rec.mat_ptr;
+
+        // Geometric shadow_frac is computed by the existing point-light code,
+        // so opaque/refractive occlusion behaves exactly as in plain Phong.
+        double shadow = point->shadow_factor(p, world);
+
+        // Finite shadow line from the actual offset origin to the light.
+        // The ray matches PointLight::shadow_factor exactly (unit direction,
+        // same 0.001 offset) so geometric shadow_frac and extinction share one
+        // geometric line.
+        Vector3 light_dir = unit_vector(point->position - p);
+        Point3 shadow_origin = p + 0.001 * light_dir;
+        Ray shadow_ray(shadow_origin, light_dir);
+        double line_end = (point->position - shadow_origin).length();
+        IntersectionRecord shadow_rec;
+        if (world.intersect(shadow_ray, Interval(0.001, line_end), shadow_rec)) {
+            line_end = shadow_rec.t; // kernels behind an occluder are not seen
+        }
+        MediumStats shadow_stats;
+        // Extinction only: emission is never added along shadow lines.
+        shadow *= medium.transmittance(shadow_ray, Interval(0.0, line_end),
+                                       shadow_stats);
+
+        Radiance texture_color = mat->diffusecolor;
+        if (mat->has_texture) {
+            texture_color = mat->get_texture_color(rec.u, rec.v);
+        }
+        Radiance light_intensity = point->intensity_at(p, light_dir);
+        double diff = std::max(0.0, dot(normal, light_dir));
+        Radiance diffuse = shadow * mat->kd * texture_color * light_intensity * diff;
+        Vector3 halfway = unit_vector(light_dir + view_dir);
+        double spec = pow(std::max(0.0, dot(normal, halfway)), mat->specularexponent);
+        Radiance specular = shadow * mat->ks * mat->specularcolor *
+                            light_intensity * spec;
+        shading += diffuse + specular;
+        return true;
+    }
+
+    if (const auto* list = dynamic_cast<const LightList*>(&light)) {
+        for (const auto& child : list->lights) {
+            if (!child || !gaussian_light_shading(*child, p, normal, view_dir, rec,
+                                                  world, medium, shading))
+                return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool Camera::trace_gaussian(const Ray& r, const Object& world,
+                            const Light& lights, const GaussianMedium& medium,
+                            double abs_error, std::uint64_t& work_left,
+                            int depth, GaussianTraceOut& out) const {
+    IntersectionRecord rec;
+    bool hit = world.intersect(r, Interval(0.001, infinity), rec);
+    if (hit && !gaussian_material_supported(*rec.mat_ptr)) return false;
+
+    // A mirror child (if any) shares this ray's error budget; splitting it
+    // keeps the accumulated per-pixel bound inside abs_error at every depth.
+    bool spawn_child = hit && depth > 0 && rec.mat_ptr->is_reflective &&
+                       !rec.mat_ptr->is_refractive && rec.mat_ptr->reflectivity > 0.0;
+    double segment_tolerance = spawn_child ? 0.5 * abs_error : abs_error;
+
+    // Medium segment from this ray's actual origin to the next surface (or to
+    // the end of all kernel support on a miss).
+    SegmentResult segment;
+    MediumStats medium_stats;
+    std::uint64_t budget = work_left == 0 ? 1 : work_left;
+    if (!medium.segment(r, Interval(0.0, hit ? rec.t : infinity),
+                        segment_tolerance, budget, segment, medium_stats))
+        return false;
+    if (medium_stats.interval_evaluations > work_left) return false;
+    work_left -= medium_stats.interval_evaluations;
+
+    const double first_T = segment.transmittance;
+    Radiance value = segment.emission;
+    Radiance error = segment.error;
+
+    if (!hit) {
+        // Miss: medium emission over the full support, then the old background.
+        value += first_T * background;
+        out.value = value;
+        out.error = error;
+        out.transmittance = first_T;
+        return true;
+    }
+
+    Radiance surface = calculate_ambient(*rec.mat_ptr, ambient_light, rec.u, rec.v);
+    Radiance direct(0, 0, 0);
+    if (!gaussian_light_shading(lights, rec.p, rec.normal,
+                                unit_vector(-r.direction()), rec, world, medium,
+                                direct))
+        return false;
+    surface += direct;
+
+    if (!spawn_child) {
+        // Depth exhausted or plain local material: Phong local term only.
+        value += first_T * surface;
+        out.value = value;
+        out.error = error;
+        out.transmittance = first_T;
+        return true;
+    }
+
+    // Reflective branch reuses the exact Phong reflection construction.
+    double reflectivity = rec.mat_ptr->reflectivity;
+    Vector3 reflect_dir = reflect_pm(r.direction(), rec.normal);
+    Ray reflect_ray(rec.p + 0.001 * reflect_dir, reflect_dir);
+    GaussianTraceOut child;
+    if (!trace_gaussian(reflect_ray, world, lights, medium, 0.5 * abs_error,
+                        work_left, depth - 1, child))
+        return false;
+
+    value += first_T * ((1.0 - reflectivity) * surface +
+                        reflectivity * child.value);
+    // Surface terms carry no medium error; only recursive emission propagates,
+    // weighted by this segment's transmittance and the mirror weight.
+    error += first_T * reflectivity * child.error;
+    for (int c = 0; c < 3; ++c) error[c] = std::min(error[c], abs_error);
+
+    out.value = value;
+    out.error = error;
+    // The camera's first-segment transmittance never takes the mirror value.
+    out.transmittance = first_T;
+    return true;
+}
+
+bool Camera::render_gaussian(const Object& world, const Light& lights,
+                             const GaussianMedium& medium, double abs_error,
+                             std::uint64_t max_work, GaussianFrame& out) {
+    if (!std::isfinite(abs_error) || abs_error <= 0.0) return false;
+    if (max_work < 1) return false;
+    if (!validate_gaussian_lights(lights)) return false;
+
+    initialize();
+    const std::size_t pixel_count =
+        static_cast<std::size_t>(image_width) * static_cast<std::size_t>(image_height);
+
+    // Render into a private frame first; only a fully successful frame replaces
+    // the caller's output.
+    GaussianFrame frame;
+    frame.width = image_width;
+    frame.height = image_height;
+    frame.value.resize(pixel_count);
+    frame.error.resize(pixel_count);
+    frame.transmittance.resize(pixel_count);
+
+    for (int j = 0; j < image_height; ++j) {
+        for (int i = 0; i < image_width; ++i) {
+            Ray r = pixel_center_ray(i, j);
+            std::uint64_t work_left = max_work;
+            GaussianTraceOut trace_out;
+            if (!trace_gaussian(r, world, lights, medium, abs_error, work_left,
+                                nbounces, trace_out))
+                return false;
+            std::size_t idx = static_cast<std::size_t>(j) *
+                                  static_cast<std::size_t>(image_width) +
+                              static_cast<std::size_t>(i);
+            frame.value[idx] = trace_out.value;
+            frame.error[idx] = trace_out.error;
+            frame.transmittance[idx] = trace_out.transmittance;
+        }
+    }
+
+    out = std::move(frame); // linear data, no tone mapping is applied
+    return true;
 }

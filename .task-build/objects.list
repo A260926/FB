@@ -1,0 +1,5 @@
+.task-build/obj/Camera.o
+.task-build/obj/GaussianMedium.o
+.task-build/obj/ImageWriter.o
+.task-build/obj/Node.o
+.task-build/obj/ObjectList.o
