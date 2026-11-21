@@ -1,0 +1,14 @@
+CASE dependencies shared_vertex checks=863
+CASE dependencies duplicate_last_wins_empty checks=103
+CASE dependencies color_change_zero_tests checks=98
+CASE dependencies far_component_locality checks=144
+GROUP dependencies cases=4 checks=1208 COMPLETE
+CASE contributors winner_moves_away checks=148
+CASE contributors winner_degenerates checks=90
+CASE contributors winner_restored checks=108
+CASE contributors nonwinner_recolor_handoff checks=153
+GROUP contributors cases=4 checks=499 COMPLETE
+CASE exports export_parity_isolation checks=153
+CASE exports negative_anisotropic_grid checks=793
+GROUP exports cases=2 checks=946 COMPLETE
+TARGET_COMPLETE cases=10

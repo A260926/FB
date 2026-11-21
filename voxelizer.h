@@ -127,6 +127,41 @@ void vx_mesh_free(vx_mesh_t* mesh);
 // Free a point cloud allocated after a call of vx_voxelize_pc
 void vx_point_cloud_free(vx_point_cloud_t* pointcloud);
 
+// Shared internals used by the incremental voxel scene (voxel_scene.hpp).
+// Geometry only: colors are attached by the callback's own context.
+#define VOXELIZER_NORMAL_INDICES_SIZE   (6)
+#define VOXELIZER_INDICES_SIZE          (36)
+
+extern float vx_normals[18];
+
+// Adds one cube (8 vertices, 12 triangles) to an output mesh; used by the
+// scene cube export so its layout matches vx_voxelize exactly.
+void vx__add_voxel(vx_mesh_t* mesh,
+    vx_vertex_t* pos,
+    vx_color_t color,
+    float* vertices);
+
+// Callback invoked once per voxel cell whose (precision inflated) box overlaps
+// the triangle.  cellx/celly/cellz are the signed integer grid keys (the cell
+// center equals key * voxel size), center carries the actual sampled center
+// used by the enumeration and w1/w2/w3 the sub-triangle area weights attached
+// to the triangle vertices in index order (used for color interpolation).
+typedef void (*vx_cell_hit_fn)(void* user,
+    int cellx, int celly, int cellz,
+    float w1, float w2, float w3,
+    vx_vertex_t center);
+
+// Shared single-triangle rasterization entry: runs the same candidate range,
+// degeneracy test, triangle/box overlap and color weight math as the full
+// voxelization.  Returns the number of triangle/box tests performed and flags
+// degenerate (sub epsilon area) triangles through out_degenerate.
+unsigned long long vx__tri_enumerate_cells(vx_vertex_t const p[3],
+    float const voxelSize[3],
+    float precision,
+    vx_cell_hit_fn callback,
+    void* user,
+    int* out_degenerate);
+
 // Voxelizer Helpers, define your own if needed
 #ifndef VOXELIZER_HELPERS
 #define VOXELIZER_HELPERS 1
@@ -163,8 +198,6 @@ void vx_point_cloud_free(vx_point_cloud_t* pointcloud);
 #include <string.h>     // memcpy
 
 #define VOXELIZER_EPSILON               (0.0000001)
-#define VOXELIZER_NORMAL_INDICES_SIZE   (6)
-#define VOXELIZER_INDICES_SIZE          (36)
 #define VOXELIZER_HASH_TABLE_SIZE       (4096)
 
 unsigned int vx_voxel_indices[VOXELIZER_INDICES_SIZE] = {
@@ -706,15 +739,166 @@ void vx__add_voxel(vx_mesh_t* mesh,
     mesh->nvertices += 8;
 }
 
+typedef struct vx__voxelize_ctx {
+    vx_hash_table_t* table;
+    size_t* nvoxels;
+    int colored;
+    vx_color_t trianglecolors[3];
+} vx__voxelize_ctx_t;
+
+// Shared single-triangle rasterization entry: runs the same candidate range,
+// degeneracy test, triangle/box overlap and color weight math as the full
+// voxelization.  Returns the number of triangle/box tests performed and flags
+// degenerate (sub epsilon area) triangles through out_degenerate.
+unsigned long long vx__tri_enumerate_cells(vx_vertex_t const p[3],
+    float const voxelSize[3],
+    float precision,
+    vx_cell_hit_fn callback,
+    void* user,
+    int* out_degenerate)
+{
+    unsigned long long tests = 0;
+    vx_triangle_t triangle;
+    triangle.p1 = p[0];
+    triangle.p2 = p[1];
+    triangle.p3 = p[2];
+    triangle.colors[0] = triangle.colors[1] = triangle.colors[2] =
+        (vx_color_t) {{{ 0.0f, 0.0f, 0.0f }}};
+
+    if (out_degenerate) { *out_degenerate = 0; }
+
+    if (vx__triangle_area(&triangle) < VOXELIZER_EPSILON) {
+        // triangle with 0 area
+        if (out_degenerate) { *out_degenerate = 1; }
+        return 0;
+    }
+
+    vx_aabb_t aabb = vx__triangle_aabb(&triangle);
+
+    aabb.min.x = vx__map_to_voxel(aabb.min.x, voxelSize[0], true);
+    aabb.min.y = vx__map_to_voxel(aabb.min.y, voxelSize[1], true);
+    aabb.min.z = vx__map_to_voxel(aabb.min.z, voxelSize[2], true);
+
+    aabb.max.x = vx__map_to_voxel(aabb.max.x, voxelSize[0], false);
+    aabb.max.y = vx__map_to_voxel(aabb.max.y, voxelSize[1], false);
+    aabb.max.z = vx__map_to_voxel(aabb.max.z, voxelSize[2], false);
+
+    vx_vertex_t hvs;
+    hvs.x = voxelSize[0] * 0.5f;
+    hvs.y = voxelSize[1] * 0.5f;
+    hvs.z = voxelSize[2] * 0.5f;
+
+    for (float x = aabb.min.x; x <= aabb.max.x; x += voxelSize[0]) {
+        for (float y = aabb.min.y; y <= aabb.max.y; y += voxelSize[1]) {
+            for (float z = aabb.min.z; z <= aabb.max.z; z += voxelSize[2]) {
+                vx_aabb_t saabb;
+
+                saabb.min.x = x - hvs.x;
+                saabb.min.y = y - hvs.y;
+                saabb.min.z = z - hvs.z;
+                saabb.max.x = x + hvs.x;
+                saabb.max.y = y + hvs.y;
+                saabb.max.z = z + hvs.z;
+
+                vx_vertex_t boxcenter = vx__aabb_center(&saabb);
+                vx_vertex_t halfsize = vx__aabb_half_size(&saabb);
+
+                // HACK: some holes might appear, this
+                // precision factor reduces the artifact
+                halfsize.x += precision;
+                halfsize.y += precision;
+                halfsize.z += precision;
+
+                ++tests;
+                if (!vx__triangle_box_overlap(boxcenter, halfsize, triangle)) {
+                    continue;
+                }
+
+                float w1 = 0.0f, w2 = 0.0f, w3 = 0.0f;
+
+                if (callback) {
+                    vx_vec3_t v1 = triangle.p1;
+                    vx_vec3_t v2 = triangle.p2;
+                    vx_vec3_t v3 = triangle.p3;
+
+                    vx_triangle_t t1 = {{{v1, v2, boxcenter}}, {{{{0.0f, 0.0f, 0.0f}}}}};
+                    vx_triangle_t t2 = {{{v2, v3, boxcenter}}, {{{{0.0f, 0.0f, 0.0f}}}}};
+                    vx_triangle_t t3 = {{{v3, v1, boxcenter}}, {{{{0.0f, 0.0f, 0.0f}}}}};
+
+                    float a1 = vx__triangle_area(&t1);
+                    float a2 = vx__triangle_area(&t2);
+                    float a3 = vx__triangle_area(&t3);
+                    float area = a1 + a2 + a3;
+
+                    // Match the original interpolation: vertex 0 gets a2/area,
+                    // vertex 1 gets a3/area and vertex 2 gets a1/area.
+                    w1 = a2 / area;
+                    w2 = a3 / area;
+                    w3 = a1 / area;
+                }
+
+                if (callback) {
+                    int cellx = (int) lroundf(x / voxelSize[0]);
+                    int celly = (int) lroundf(y / voxelSize[1]);
+                    int cellz = (int) lroundf(z / voxelSize[2]);
+                    callback(user, cellx, celly, cellz, w1, w2, w3, boxcenter);
+                }
+            }
+        }
+    }
+
+    return tests;
+}
+
+void vx__voxelize_cell_hit(void* user,
+    int cellx, int celly, int cellz,
+    float w1, float w2, float w3,
+    vx_vertex_t center)
+{
+    (void) cellx;
+    (void) celly;
+    (void) cellz;
+
+    vx__voxelize_ctx_t* ctx = (vx__voxelize_ctx_t*) user;
+
+    vx_voxel_data_t* nodedata = VX_MALLOC(vx_voxel_data_t, 1);
+
+    if (ctx->colored) {
+        // Perform barycentric interpolation of colors
+        vx_color_t c1 = ctx->trianglecolors[0];
+        vx_color_t c2 = ctx->trianglecolors[1];
+        vx_color_t c3 = ctx->trianglecolors[2];
+
+        vx__vec3_multiply(&c1, w1);
+        vx__vec3_multiply(&c2, w2);
+        vx__vec3_multiply(&c3, w3);
+
+        vx__vec3_add(&c1, &c2);
+        vx__vec3_add(&c1, &c3);
+
+        nodedata->color = c1;
+    }
+
+    nodedata->position = center;
+
+    size_t hash = vx__vertex_hash(center, VOXELIZER_HASH_TABLE_SIZE);
+
+    bool insert = vx__hash_table_insert(ctx->table, hash, nodedata,
+            vx__vertex_comp_func);
+
+    if (insert) {
+        (*ctx->nvoxels)++;
+    }
+}
+
 vx_hash_table_t* vx__voxelize(vx_mesh_t const* m,
     vx_vertex_t vs,
     vx_vertex_t hvs,
     float precision,
     size_t* nvoxels)
 {
-    vx_hash_table_t* table = NULL;
-
-    table = vx__hash_table_alloc(VOXELIZER_HASH_TABLE_SIZE);
+    vx_hash_table_t* table = vx__hash_table_alloc(VOXELIZER_HASH_TABLE_SIZE);
+    float const voxelSize[3] = { vs.x, vs.y, vs.z };
 
     for (size_t i = 0; i < m->nindices; i += 3) {
         vx_triangle_t triangle;
@@ -738,95 +922,19 @@ vx_hash_table_t* vx__voxelize(vx_mesh_t const* m,
             triangle.colors[2] = m->colors[i3];
         }
 
-        if (vx__triangle_area(&triangle) < VOXELIZER_EPSILON) {
-            // triangle with 0 area
-            continue;
+        vx__voxelize_ctx_t ctx;
+        ctx.table = table;
+        ctx.nvoxels = nvoxels;
+        ctx.colored = m->colors != NULL;
+        if (m->colors) {
+            ctx.trianglecolors[0] = triangle.colors[0];
+            ctx.trianglecolors[1] = triangle.colors[1];
+            ctx.trianglecolors[2] = triangle.colors[2];
         }
 
-        vx_aabb_t aabb = vx__triangle_aabb(&triangle);
-
-        aabb.min.x = vx__map_to_voxel(aabb.min.x, vs.x, true);
-        aabb.min.y = vx__map_to_voxel(aabb.min.y, vs.y, true);
-        aabb.min.z = vx__map_to_voxel(aabb.min.z, vs.z, true);
-
-        aabb.max.x = vx__map_to_voxel(aabb.max.x, vs.x, false);
-        aabb.max.y = vx__map_to_voxel(aabb.max.y, vs.y, false);
-        aabb.max.z = vx__map_to_voxel(aabb.max.z, vs.z, false);
-
-        for (float x = aabb.min.x; x <= aabb.max.x; x += vs.x) {
-            for (float y = aabb.min.y; y <= aabb.max.y; y += vs.y) {
-                for (float z = aabb.min.z; z <= aabb.max.z; z += vs.z) {
-                    vx_aabb_t saabb;
-
-                    saabb.min.x = x - hvs.x;
-                    saabb.min.y = y - hvs.y;
-                    saabb.min.z = z - hvs.z;
-                    saabb.max.x = x + hvs.x;
-                    saabb.max.y = y + hvs.y;
-                    saabb.max.z = z + hvs.z;
-
-                    vx_vertex_t boxcenter = vx__aabb_center(&saabb);
-                    vx_vertex_t halfsize = vx__aabb_half_size(&saabb);
-
-                    // HACK: some holes might appear, this
-                    // precision factor reduces the artifact
-                    halfsize.x += precision;
-                    halfsize.y += precision;
-                    halfsize.z += precision;
-
-                    if (vx__triangle_box_overlap(boxcenter, halfsize, triangle)) {
-                        vx_vec3_t v1, v2, v3;
-                        vx_color_t c1, c2, c3;
-                        vx_voxel_data_t* nodedata;
-                        float a1, a2, a3;
-                        float area;
-
-                        nodedata = VX_MALLOC(vx_voxel_data_t, 1);
-
-                        if (m->colors != NULL) {
-                            // Perform barycentric interpolation of colors
-                            v1 = triangle.p1;
-                            v2 = triangle.p2;
-                            v3 = triangle.p3;
-
-                            c1 = triangle.colors[0];
-                            c2 = triangle.colors[1];
-                            c3 = triangle.colors[2];
-
-                            vx_triangle_t t1 = {{{v1, v2, boxcenter}}, {{{{0.0f, 0.0f, 0.0f}}}}};
-                            vx_triangle_t t2 = {{{v2, v3, boxcenter}}, {{{{0.0f, 0.0f, 0.0f}}}}};
-                            vx_triangle_t t3 = {{{v3, v1, boxcenter}}, {{{{0.0f, 0.0f, 0.0f}}}}};
-
-                            a1 = vx__triangle_area(&t1);
-                            a2 = vx__triangle_area(&t2);
-                            a3 = vx__triangle_area(&t3);
-
-                            area = a1 + a2 + a3;
-
-                            vx__vec3_multiply(&c1, a2 / area);
-                            vx__vec3_multiply(&c2, a3 / area);
-                            vx__vec3_multiply(&c3, a1 / area);
-
-                            vx__vec3_add(&c1, &c2);
-                            vx__vec3_add(&c1, &c3);
-
-                            nodedata->color = c1;
-                        }
-
-                        nodedata->position = boxcenter;
-
-                        size_t hash = vx__vertex_hash(boxcenter, VOXELIZER_HASH_TABLE_SIZE);
-
-                        bool insert = vx__hash_table_insert(table, hash, nodedata,
-                                vx__vertex_comp_func);
-
-                        if (insert) {
-                            (*nvoxels)++;
-                        }
-                   }
-                }
-            }
-        }
+        int degenerate = 0;
+        vx__tri_enumerate_cells(triangle.vertices, voxelSize, precision,
+            vx__voxelize_cell_hit, &ctx, &degenerate);
     }
 
     return table;
