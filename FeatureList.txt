@@ -1,0 +1,224 @@
+For compiling the project:
+
+$ cd /path/to/Code
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make
+
+
+To use the compiled runnable
+
+$ ./ray_tracer <jsonName> [outputDir] [outputName]
+
+example:
+$ ./ray_tracer ../data/jsons/scene.json ../output/ scene103
+
+
+
+-----------------------------------------------------------------------
+Raytracer
+Features:
+
+1. Image write (ppm format)
+Implemented in <ImageWriter.h> and <ImageWriter.cpp>, 
+Demonstrated via all testsuites.
+
+2. Camera implementation, with coordinate transformation
+Implemented in <Camera.h> and <Camera.cpp>
+Demonstrated via all testsuites.
+
+3. Intersection tests (sphere, triangles, cylinder)
+Implemented in <object/Sphere.h> <object/Triangle.h> <object/Cylinder.h>
+Other relavant files <object/Object.h> <object/ObjectList.h> <Object.cpp>
+Demonstrated with binary_primitives.ppm and all other testsuites.
+
+4. Binary image writing (intersection/no intersection)
+Implemented in <Camera.h> and <Camera.cpp>
+relavant functions: render, render_binary, trace_binary
+Use binary mode with input field - "rendermode" : "binary"
+Demonstarted via binary_scene.ppm, binary_primitives.ppm.
+
+5. Blinn-Phong shading
+Implemented in <Camera.cpp> and <light/LightList.h> <light/PointLight.h>
+relavant functions: trace_phong, phong_shading
+New optional input field -  "scene":
+                            { 
+                                ...
+       Optional intensity ->    "ambient_light" : [0.25, 0.25, 0.25]
+                                ...
+                                    "lightsources":[
+                                        ... 
+                                    ],
+                                    "shapes":[
+                                        ... 
+                                    ]
+                            }
+Use blinn-phong mode with input field - "rendermode" : "phong"
+Demonstrated via simple_phong.ppm and all other testsuites rendered with phong rendermode.
+
+6. Shadows
+Implemented in <light/PointLight.h>
+relavant functions: shadow_factor, phong_shading
+Demonstrated via simple_phong.ppm and all other testsuites rendered with phong rendermode.
+
+7. Tone mapping (linear)
+Implemented in <util/Radiance.h> <Camera.h>
+relavant functions: tone_map, linear_tone_map, reinhard_tone_map, filmic_tone_map, luminance_based_scaling
+New optional input field - "camera":
+                            { 
+                                ...
+          Optional ->           "toneMapper" : "linear",  ("reinhard" "filmic" "luminance")
+                                ...
+                            }
+Without explicitly stated, luminance would be used.
+Demonstrated via all testsuites except for binary renders.
+
+8. Reflection
+Implemenetd in <Camera.cpp> <util/Utilities.h> <Material.h>
+relavant functions: trace_phong, reflect_pm
+Demonstrated via phong_scene.ppm and mirror_image.ppm
+
+9. Refraction
+Implemented in <Camera.cpp> <util/Utilities.h> <Material.h>
+relavant functions: trace_phong, schlick_blend, refract
+Demonstrated via refract.ppm
+
+10. Textures (on sphere, triangle, cylinder)
+Implemented in <Material.h> <light/PointLight.h> <object/Sphere.h> <object/Triangle.h> <object/Cylinder.h>
+relavant functions: load_texture, get_texture_color, phong_shading, uv_map
+New input field required - "material":
+                            { 
+                                ...
+    Path to ppm3 texture ->     "texture": "../data/textures/leaves.ppm",
+                                "uv0": [0.2, 0.8],    (optional, traingle only)
+                                "uv1": [0.9, 0],      (optional, traingle only)
+                                "uv2": [0, 0.7],      (optional, traingle only)
+                                "tile_factor_u",      (optional, for tiling)
+                                "tile_factor_v"       (optional, for tiling)
+                                ...
+                            } 
+Currently only support - "rendermode" : "phong"
+Demonstarted via texture.ppm.
+
+11. Bounding volume hierarchy as an acceleration structure
+Implemented in <bvh/BoundingBox.h> <bvh/Node.h> <Node.cpp> 
+relavant functions in <ObjectList.cpp>: build, intersect_bvh_enabled
+New input field required - {
+                            ...
+    Set to enable   ->      "useBVH" : false, (default true)
+                            ...
+                            "camera":
+                                { 
+                                    ...
+                                },
+                            "scene":
+                                { 
+                                    ...
+                                }
+                            }
+Demonstarted via logging intersect test counts and render time
+Evaluation of logs from bvh.ppm can be found in report.
+
+Pathtracer
+Features:
+
+1. Antialiasing via multi-sampling pixels
+Implemented in <Camera.h> <Camera.cpp>
+relavant functions: get_sampled_ray, sample_offset, jittered_sample, generate_poisson_disk_samples
+Currently only support - "rendermode" : "path"
+New input field required - "camera":
+                            { 
+                                ...
+                                "samples_per_pixel" : 100,
+            Optional ->         "sampling_method" : "random" ("jittered", "poisson_disk")
+                                ...
+                            }
+Demonstrated via path_scene.ppm 
+Comparision can be found in report.
+
+2. Defocus in finite-aperture cameras by sampling the camera’s aperture
+Implemented in <Camera.h> <Camera.cpp>
+relavant functions: get_sampled_ray, random_point_in_aperture
+Currently only support - "rendermode" : "path"
+New input field required - "camera":
+                            { 
+                                ...
+                                "aperture" : 0.02,
+                                "focus_dist" : 1.5
+                                ...
+                            }
+Demonstrated via path_scene.ppm 
+Comparision can be found in report.
+
+3. Render materials with BRDF’s (e.g. microfacet)
+Implemented fancier BRDFs in <brdf/...> <light/...> <Material.h> <Camera.cpp>
+relavant functions in <Material.h>: build_brdf , <Camera.cpp>: trace_path_brdf
+Currently only support - "rendermode" : "path"
+New input field required - {
+                            ... 
+                            "camera":
+                                { 
+      Set to use brdf ->            "allowBRDF": true, (default false)
+                                    ...
+                                },
+                            "scene":
+                                { 
+                                    ...
+                                    "shapes":[ 
+                                        { 
+                                        ...
+                                        "material":
+                                                    { 
+                                                        ...
+      All shapes must have this set ->                  "has_brdf": true,
+                                                        "roughness": 0.8,
+                                                        "metalness": 0.0,
+                                                        "base_color": [0.8, 0.5, 0.5], 
+                                                        ...
+                                                    },
+                                        ...
+                                        }
+                                    ...
+                                    ]
+                                }
+                            } 
+Demonstrated via fancy_brdf.ppm 
+
+4. Soft shadows via sampling area lights
+Implemented in <light/RectangularLight.h>
+support both "phong" and "path"
+New input field required - "lightsources": 
+                            [
+                            {
+                                "type": "rectlight",
+                                "position": [0, 1.0, 0.5],
+      plane it lies on ->       "u": [0.5, 0, 0],
+                       ->       "v": [0, 0, -0.5],
+                                "width": 1.0,
+                                "height": 1.0,
+                                "intensity": [0.5, 0.5, 0.5],
+                                "num_samples": 16
+                            }
+                            ]
+Demonstrated via path_scene.ppm
+Comparision can be found in report.
+
+5. Multi-bounce path tracing
+Implemented in <Camera.h> <Camera.cpp>
+relavant functions: render_path, trace_path_phong, trace_path_brdf
+New optional input filed  - {
+                            ...
+    Set to customize  ->    "RR_PROB" : 0.6, (Russian Roulette termination)
+                            ...
+                            "camera":
+                                { 
+                                    ...
+                                },
+                            "scene":
+                                { 
+                                    ...
+                                }
+                            }
+Currently only support - "rendermode" : "path"
+Demonstrated via path_scene.ppm.

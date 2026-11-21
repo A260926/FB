@@ -1,0 +1,483 @@
+{
+  "repo": "https://github.com/JinBa1/cpp-path-tracer",
+  "commit": "7756648ac3d48fc8e478823e9430bb2412045f43",
+  "license": "MIT",
+  "gitlink_count": 0,
+  "gitmodules": false,
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "git_blob": "40a820b10b15660989aa0f28992df84476e20f52",
+      "sha256": "11afe924a0268d2ec16cc9f249ab5839482fd77ab8f709b0d07bb5a6d6cbb9d9"
+    },
+    {
+      "path": "FeatureList.txt",
+      "mode": "100644",
+      "git_blob": "255881d6815f3b5bf4f161320507c96a2df147cd",
+      "sha256": "7ca91fa40b11d121242a1bb0de78b3c0e71508da273676c234a332594f965d0d"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_blob": "b4686a13ab7160143a1c62a76dbc7428a823fc22",
+      "sha256": "4008f18f5d1fc3f20c1f617d835c3de1990711f6f29744211e7f845504f7d99e"
+    },
+    {
+      "path": "PERFORMANCE.md",
+      "mode": "100644",
+      "git_blob": "bc7edd37fe59d8b5a6f33f7c6f3df748bccb989b",
+      "sha256": "02d1b48dc1d5ddd9fd3b00fed13103a992fa30136b8cf5afc3721587fac33cdf"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_blob": "a3e1e2bcb23733395963a2aa6b447e6aa7d474ac",
+      "sha256": "f2d2abae44300f6e681057ab37607a0f3e20be5cf9962e6ca52e6deeda25c031"
+    },
+    {
+      "path": "include/Camera.h",
+      "mode": "100644",
+      "git_blob": "49352249954d78209bb52daf2d6cdb75f8fe9660",
+      "sha256": "db2c755c5ffae22f773262119a6439b0fd791fc946e697a58179de376437cc58"
+    },
+    {
+      "path": "include/ImageWriter.h",
+      "mode": "100644",
+      "git_blob": "39a490c914d7f6a5143b619cf40f7907216cd951",
+      "sha256": "4a37a4557ba906096adf2867187c5cf308f20e9a144fd2135118903caa7d8e99"
+    },
+    {
+      "path": "include/Material.h",
+      "mode": "100644",
+      "git_blob": "30745865f83be32de6f38f17ce190146079f8a63",
+      "sha256": "cc554f3d29dcdd1ee9469c280bbe452322fb212b751e1892ba896eaa452e9ca2"
+    },
+    {
+      "path": "include/Parser.h",
+      "mode": "100644",
+      "git_blob": "9c24f876e444db1f7cbd0b1312ec7e79e945d61a",
+      "sha256": "fa57cc4923693ef1e41951c07ba0006051e9c82fceaa1c085dac308c0814d219"
+    },
+    {
+      "path": "include/ThreadPool.h",
+      "mode": "100644",
+      "git_blob": "abf87344731d88cc168ed4fb4dd9bf67374ddc49",
+      "sha256": "cb983bcad85ed7bfbcfa5fbdb4b91e65fabb8d4577196b202a73a243ab721d9b"
+    },
+    {
+      "path": "include/brdf/BRDF.h",
+      "mode": "100644",
+      "git_blob": "19eb831aedbe1243c30520e651bd9f37de7bbfd4",
+      "sha256": "c59a0bc2e7c2f495f19a4ce1f7e1e5b7d0e4d080966a78d122e0312ca1843b52"
+    },
+    {
+      "path": "include/brdf/FancyBRDF.h",
+      "mode": "100644",
+      "git_blob": "e0f557aaaa9b7f2407533750801f9312a16657e7",
+      "sha256": "15c4f292da81944344ace5d91094b643e033200657a9f1560aabe73b51692347"
+    },
+    {
+      "path": "include/brdf/Lambert.h",
+      "mode": "100644",
+      "git_blob": "de745ea3f8ca7e64af5c59aab537ab259891c60b",
+      "sha256": "c30d985f1970158afcac19347347199366961994a60d628714cc3af2e2ea7b42"
+    },
+    {
+      "path": "include/brdf/Microfacet.h",
+      "mode": "100644",
+      "git_blob": "6a9bbd9e9edec13ae705ff337f935d637dcd4d8a",
+      "sha256": "afe33048cba58c7e2a0469e70ae4255d5410705743f5ad57741251a047fd792f"
+    },
+    {
+      "path": "include/bvh/BoundingBox.h",
+      "mode": "100644",
+      "git_blob": "a70546d507dbd6c72a383f4590c7eec64a5b7a61",
+      "sha256": "c82f1e489b1a124f8e4c6b3d263b197b5ff5a51eec7fd6c0e25cf16e84413964"
+    },
+    {
+      "path": "include/bvh/Node.h",
+      "mode": "100644",
+      "git_blob": "bf1687da6909452519a83a45663858b0d0ec4ae5",
+      "sha256": "459fc08d0f00cd83218710f0f4f31f20987824e3f2badb860a38d1fb4822fad6"
+    },
+    {
+      "path": "include/json.hpp",
+      "mode": "100644",
+      "git_blob": "6fe8a5de2b1d8f693055dc3291d27dd1ba072cbb",
+      "sha256": "cd123b66d0e253fd413fdcbebca4a55c308a8ee4ed9a1b184dfcf0ddb50e60be"
+    },
+    {
+      "path": "include/light/Light.h",
+      "mode": "100644",
+      "git_blob": "b860fe955ca8f5e565c37f6a3198245a7fd161c9",
+      "sha256": "908c0f6af01f4d1e6a3d71749f1fff748b77f1cb562d89d6786cbcbf1b0e990c"
+    },
+    {
+      "path": "include/light/LightList.h",
+      "mode": "100644",
+      "git_blob": "a481c95f75bda798ce8e9a406c990c61dcdbc69d",
+      "sha256": "565774c1e8439183808d34d0ea4497591a73b368063ad168d507f582cc9ccf5c"
+    },
+    {
+      "path": "include/light/PointLight.h",
+      "mode": "100644",
+      "git_blob": "5ffead63d8d8de0e3ae35f0529452bd97f1977db",
+      "sha256": "c2bc65bc0c53e5a84f8f91f6de80692a7a6818dd051b5e625abd60ac59b7d54b"
+    },
+    {
+      "path": "include/light/RectangularLight.h",
+      "mode": "100644",
+      "git_blob": "b0b887c41ffaf7392d669a85dd145249ee708579",
+      "sha256": "5d616474ab7a595bf6b7608bfd380823b4b75ac7fb4685823baed5360196f819"
+    },
+    {
+      "path": "include/object/Cylinder.h",
+      "mode": "100644",
+      "git_blob": "025869cf5978dd736024ccccf7208a5b414ea7fd",
+      "sha256": "e9453f7bab728892e72b3032b23dbbc8954cd2a9e2d0474e71ae7a72290c49ec"
+    },
+    {
+      "path": "include/object/Object.h",
+      "mode": "100644",
+      "git_blob": "a5ff7a794e5a3851b642df1254766ca0035e91e9",
+      "sha256": "6a57c356e6473d6c54e7b3bda4e45d6c0aff376887c842c13b690324d41916f2"
+    },
+    {
+      "path": "include/object/ObjectList.h",
+      "mode": "100644",
+      "git_blob": "858e252c244ffb2cf143d9d78cb9d9ed1576dae1",
+      "sha256": "313b5b42975b4ecab5a685aa03dee734ddce849acd788422619a5017b3153283"
+    },
+    {
+      "path": "include/object/Sphere.h",
+      "mode": "100644",
+      "git_blob": "c1462eb7143ff6d780d1eb9f423378157c69e1e0",
+      "sha256": "45252d5a35ad79f1c5ecc733ff0b4e5fed300b332b5a292759ca68f2ad97bbe0"
+    },
+    {
+      "path": "include/object/Triangle.h",
+      "mode": "100644",
+      "git_blob": "1387bd96a36b6a73a8512d78c4622b7a4d4547af",
+      "sha256": "203e9d37ef12ec59f957418558783beea1d7cb3d218f0356c36296fe76c4f867"
+    },
+    {
+      "path": "include/util/Interval.h",
+      "mode": "100644",
+      "git_blob": "6a130716dc6f8a6c06fb8b8e58ac35c79e545d2b",
+      "sha256": "c2df2ab5fe0096ceb072ed18181af8b07bff2eca043d5f99086c84ff10315929"
+    },
+    {
+      "path": "include/util/Radiance.h",
+      "mode": "100644",
+      "git_blob": "8e3ebc2a4bfdf28ef76276151af70f4dd96fb45e",
+      "sha256": "8bd35de3dbda9a9c614aaf905cf5fff278d398690bce3980559d8f15798cfef5"
+    },
+    {
+      "path": "include/util/Ray.h",
+      "mode": "100644",
+      "git_blob": "91e139d2d59b1a733460452efc8f7b55559eb10a",
+      "sha256": "c5cbedda083ccef1525f197acc4e3004c9382c700c370d31cbf2310f034ec167"
+    },
+    {
+      "path": "include/util/Utilities.h",
+      "mode": "100644",
+      "git_blob": "0a23005bfe2578bacec407bc8cfabffe8f25b70a",
+      "sha256": "1fa23150d26510afc2bf23fe249f764f2da8bc247a3ca56ba04d75af893fe9f0"
+    },
+    {
+      "path": "include/util/Vector3.h",
+      "mode": "100644",
+      "git_blob": "190d4b0df5bbdf16ee41e1fabd2b84b583cf8b7b",
+      "sha256": "5d23ea0708cc805a2c2504d24bf0b3c1f6519223a6eea554e997cf0ae40e8813"
+    },
+    {
+      "path": "src/Camera.cpp",
+      "mode": "100644",
+      "git_blob": "1014c6606518cd80763fa1c633820ee6ffd63816",
+      "sha256": "5cf34b6b9e571909bb7b2f00c1b3dc4c5490ec938879737efa917efbc7c82005"
+    },
+    {
+      "path": "src/ImageWriter.cpp",
+      "mode": "100644",
+      "git_blob": "b83e1c0bc3c266735b3b0ae0945aca3e8accd415",
+      "sha256": "893dc286570ac1098efdc241ba92a25009545ea5cd59e592fe3ec26466a3fe95"
+    },
+    {
+      "path": "src/Node.cpp",
+      "mode": "100644",
+      "git_blob": "8b1c496d3e0eea9b64d99107db024ef2fb59ef95",
+      "sha256": "03f49c01f2df5c8ccc45819844bff6d0c9c5e2398d14829eddfb1c71d49ef704"
+    },
+    {
+      "path": "src/ObjectList.cpp",
+      "mode": "100644",
+      "git_blob": "ed3cd11f80c30ed8b6ebbc905836f9c2b7b3fc26",
+      "sha256": "5e8ed9a19124be58aec797e47fb820aedc6271dfc61c6cb574059cf48cab69e0"
+    },
+    {
+      "path": "src/main.cpp",
+      "mode": "100644",
+      "git_blob": "9fb64ce90dbe31ced1c42916f98371c784922ee3",
+      "sha256": "18423c4f8990a26e7a2440de8945fed436f71035d5f0aed2d8ba67483b3c30bb"
+    }
+  ],
+  "exclusions": [
+    {
+      "path": ".gitignore",
+      "mode": "0o664",
+      "sha256": "53eb9f91c968691036939cad52c630b9fa5e01a38ffd262f3529b0e5014ca5b5"
+    },
+    {
+      "path": ".vscode/launch.json",
+      "mode": "0o664",
+      "sha256": "117d0db2f4d5be9d0276875d9d02a69caf108230ed0dc4d5ec09cee51f0a5df2"
+    },
+    {
+      "path": ".vscode/settings.json",
+      "mode": "0o664",
+      "sha256": "2653d19f4b1a644b79c4b1a238946635539d8625ed8b0fca100151da3fbe321b"
+    },
+    {
+      "path": ".vscode/tasks.json",
+      "mode": "0o664",
+      "sha256": "300edb7c48a988d68c2d646b87c9935a939651f935c476790e3e3c635fc37e38"
+    },
+    {
+      "path": "TestSuite/binary_primitives.json",
+      "mode": "0o664",
+      "sha256": "36109109559e04b18936dd004a227331208d0cecf48c6d304436d63e8ad7f0f3"
+    },
+    {
+      "path": "TestSuite/binary_scene.json",
+      "mode": "0o664",
+      "sha256": "f8e5393c62d09d2b3501b396cbb31258c3dffa9c6c08c53f633e924034b8fa53"
+    },
+    {
+      "path": "TestSuite/bvh.json",
+      "mode": "0o664",
+      "sha256": "eb1f16cd4ca3984f85b3444abbe5a066b83e396d49e2cd14cbcf308dc07f1585"
+    },
+    {
+      "path": "TestSuite/mirror_image.json",
+      "mode": "0o664",
+      "sha256": "7d2a572f7a566119d0b26d2cb6a67efb01d592df66269c8a3f23bd036fd2dd39"
+    },
+    {
+      "path": "TestSuite/path_scene.json",
+      "mode": "0o664",
+      "sha256": "865db2bcbbb8f3e53b476e1465224bff53bc2cc379e9fb4598be1d07b5046e46"
+    },
+    {
+      "path": "TestSuite/phong_scene.json",
+      "mode": "0o664",
+      "sha256": "b4a134d36ef6c1a3c53ce326052b0c5e718b94965a3dfa3e0350f3eddcae7d04"
+    },
+    {
+      "path": "TestSuite/refract.json",
+      "mode": "0o664",
+      "sha256": "2699ed1de038fffdea03262bf0205af3f3104af000e91bc32a5a15007fa36bcd"
+    },
+    {
+      "path": "TestSuite/simple_phong.json",
+      "mode": "0o664",
+      "sha256": "e1ff4f45240e4cd0a0365b08969c1cced5d948671f211f5843e33d0678973a81"
+    },
+    {
+      "path": "TestSuite/texture.json",
+      "mode": "0o664",
+      "sha256": "0d3323896b943f54de27cdff904831543b217924c78c31b8ea21e4ce923fd4c9"
+    },
+    {
+      "path": "data/jsons/anti.json",
+      "mode": "0o664",
+      "sha256": "32e05ed3480436f94c47544b73e4009c623e9cd35df10e388eff10c8b6dba8ca"
+    },
+    {
+      "path": "data/jsons/benchmark_scene.json",
+      "mode": "0o664",
+      "sha256": "1b2cb40a44a47dc4aa026ac4eae925528b841bbf50830c661fca27c1d5bf1197"
+    },
+    {
+      "path": "data/jsons/brdf.json",
+      "mode": "0o664",
+      "sha256": "95bbd266eac618362b1196635816b38398f1176ae7a0015588fb5a7f3ba29241"
+    },
+    {
+      "path": "data/jsons/copy.json",
+      "mode": "0o664",
+      "sha256": "8e129060e848b22560f048fa760bebc72a271d354fcd586e23916af39510effc"
+    },
+    {
+      "path": "data/jsons/fancy_brdf.json",
+      "mode": "0o664",
+      "sha256": "380cdf6daf1287d291e64d0865b8b2f8ad983a5cfe74ace2d8d95e40399753fe"
+    },
+    {
+      "path": "data/jsons/fancy_brdf2.json",
+      "mode": "0o664",
+      "sha256": "bce41c3c9f1cc1579546a5730cddece2102288bd3d75444c0b34f847d655d65f"
+    },
+    {
+      "path": "data/jsons/fancy_brdf3.json",
+      "mode": "0o664",
+      "sha256": "6ebde0d0ac65ec8d2da4be236759e7675d2b607711315f65ea0716873f2a7984"
+    },
+    {
+      "path": "data/jsons/refractarea.json",
+      "mode": "0o664",
+      "sha256": "2676be06c2551889e79b004a8fea55bd5c1170c65800782c48b10d3d3d9d9bcf"
+    },
+    {
+      "path": "data/jsons/refraction_test.json",
+      "mode": "0o664",
+      "sha256": "6f53fdbc87d8865997882f0957dcab3eae2c7cad6f1b8b96d983d9da67c23a11"
+    },
+    {
+      "path": "data/jsons/scene.json",
+      "mode": "0o664",
+      "sha256": "9442ad47879258d96496ec8c4257da35f71abf4414a1e271e72a89ecad297071"
+    },
+    {
+      "path": "data/jsons/tria.json",
+      "mode": "0o664",
+      "sha256": "d77fc19872a0177be10a925410876d733aabd453c390d3ca6f23aa3d8ba4bf34"
+    },
+    {
+      "path": "data/textures/face.ppm",
+      "mode": "0o664",
+      "sha256": "4abb69f29055ea14390d160a404e1e2ce572f4e090600c51f221b503a6a282f0"
+    },
+    {
+      "path": "data/textures/leaves.ppm",
+      "mode": "0o664",
+      "sha256": "08b6b1847ce2bb471e27d379e5ca6861540e64de824660aaaf8f85a687679478"
+    },
+    {
+      "path": "scripts/benchmark.sh",
+      "mode": "0o775",
+      "sha256": "d465082b2acd7a98391f8e4834b4081faf30fd91ab1b4d2c39a1c9dad361d6e2"
+    },
+    {
+      "path": "scripts/smoke_test.sh",
+      "mode": "0o775",
+      "sha256": "1c5ffd0fee005fd2a4150403da5a88658de1cc4b96849a404078149015694913"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_3spheres.json",
+      "mode": "0o664",
+      "sha256": "6eb40d363de83975ad8dea86985798dee13d56d3c83426108a6ac6c100f39778"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_3spheres_off.json",
+      "mode": "0o664",
+      "sha256": "594e10839831b57c12ae8f77a78ce09e6f99fee8ebec267177fa18df16cf56f7"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_empty.json",
+      "mode": "0o664",
+      "sha256": "18a557eb95e6d2ad7ed508fa92dd60ab60c05d0e92e1a6e35963504315a966b3"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_overlapping.json",
+      "mode": "0o664",
+      "sha256": "fa10992f383241658acc53fc7c3c654bbc3f1abdb46acc014ddf31d3ac061361"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_overlapping_off.json",
+      "mode": "0o664",
+      "sha256": "16e63ad6612aabde1adff636e1d35925ca4736dfecf9052150a52ee5880f8488"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_phong_off.json",
+      "mode": "0o664",
+      "sha256": "c002d33a9e60b8ceaf37eaafb02f54dba3ff5d5203f456704311a5d057e80ffe"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_phong_on.json",
+      "mode": "0o664",
+      "sha256": "64482efd4233de894c4528d2c6660c2ef821026719c553cf2f2e895faad06cfa"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_single.json",
+      "mode": "0o664",
+      "sha256": "be8fce2aac47e05428e339ef6d52b49ede502d4940a1c3f0fa1d4466a8e44f2b"
+    },
+    {
+      "path": "tests/fixtures/bvh_test_single_off.json",
+      "mode": "0o664",
+      "sha256": "bda07012af818e620f330364e6ab7b2fd5ac666b0fd9a63bfd64aa4fe26f3738"
+    },
+    {
+      "path": "tests/fixtures/minimal_binary.json",
+      "mode": "0o664",
+      "sha256": "b822af4a0ac9c8bb1519fc4c3f0fab416e482ff78af774dfdbf482dd51a9f81d"
+    },
+    {
+      "path": "tests/fixtures/minimal_bvh_off.json",
+      "mode": "0o664",
+      "sha256": "34ba6ddea8b6b86545992c4e4b80f92d8151ff249040217a95d83fe688a48f35"
+    },
+    {
+      "path": "tests/fixtures/minimal_bvh_on.json",
+      "mode": "0o664",
+      "sha256": "b822af4a0ac9c8bb1519fc4c3f0fab416e482ff78af774dfdbf482dd51a9f81d"
+    },
+    {
+      "path": "tests/fixtures/minimal_path.json",
+      "mode": "0o664",
+      "sha256": "0c62b07ba3f380101e8f824e9e4ff17b5fa7c4b588ec474e8b670814aa9db687"
+    },
+    {
+      "path": "tests/fixtures/minimal_path_bvh.json",
+      "mode": "0o664",
+      "sha256": "a2adcade447659d5ca53c259ac95cdbb82a075027f846cb8703af328e142ea26"
+    },
+    {
+      "path": "tests/fixtures/minimal_texture.json",
+      "mode": "0o664",
+      "sha256": "6645e383f7c8702e3c1483ef889a4a86ddcc17c1a6f69918181033ea20f1df1d"
+    },
+    {
+      "path": "tests/test_boundingbox.cpp",
+      "mode": "0o664",
+      "sha256": "3ac49cd02f42c13481ab6a4bd3cbf7b4d7d76bfa6050fc43e3c088d54038bee9"
+    },
+    {
+      "path": "tests/test_brdf.cpp",
+      "mode": "0o664",
+      "sha256": "70199da6d33a843416a5df15a27bf6891a2615be9a582956f5b4718488d8c6ac"
+    },
+    {
+      "path": "tests/test_bvh.cpp",
+      "mode": "0o664",
+      "sha256": "6c4102e065650b82317ab354e0493c04de9013e1e479ddc65db18bc4c8bbfefe"
+    },
+    {
+      "path": "tests/test_differential.cpp",
+      "mode": "0o664",
+      "sha256": "249f69be9d0e867290f9b452bccf15f97911f626acb6cb9d411b6a50bd69cac6"
+    },
+    {
+      "path": "tests/test_interval.cpp",
+      "mode": "0o664",
+      "sha256": "9c894da0db4b49a3e4e911b0352fdf4899ca7e3e9d0c5ac85c3d142ff472cc88"
+    },
+    {
+      "path": "tests/test_placeholder.cpp",
+      "mode": "0o664",
+      "sha256": "f70ea4f813b87eae3a77f8f042cb2d5c7752296e9492a92226110563d520b9c6"
+    },
+    {
+      "path": "tests/test_ray.cpp",
+      "mode": "0o664",
+      "sha256": "6b56dc22faae5117feba4483c21f46eaadc7fe0acffe00fc6c919848911ba09c"
+    },
+    {
+      "path": "tests/test_vector3.cpp",
+      "mode": "0o664",
+      "sha256": "863da4519a421db60856da9765bb901758f65868b73fadb2a86f29f9e4c6eb18"
+    }
+  ],
+  "exclusion_reason": "未调用的原CLI fixture、图像素材、Catch2测试、编辑器配置和脚本；完整src/include及上游许可证保留；运行不走CMake FetchContent。"
+}
