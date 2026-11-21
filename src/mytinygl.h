@@ -21,6 +21,7 @@
 #define MAX_MATRIX_STACK_DEPTH 24
 #define MAX_LIGHTS 8
 #define MAX_LIST_CALL_DEPTH 64
+#define MAX_NAME_STACK_DEPTH 64
 
 /* State flags */
 #define FLAG_INSIDE_BEGIN_END  (1 << 0)
@@ -83,7 +84,7 @@ typedef struct {
     size_t capacity;
 } vertex_buffer_t;
 
-typedef struct {
+typedef struct GLState {
     /* Clear values */
     color_t clear_color;
     GLdouble clear_depth;
@@ -218,6 +219,19 @@ typedef struct {
 
     /* Vertex buffer (per-context for thread safety) */
     vertex_buffer_t vertices;
+
+    /* Selection (GL_SELECT) - logic lives in src/selection.c */
+    GLenum render_mode;             /* GL_RENDER or GL_SELECT */
+    GLuint *select_buffer;          /* Bound selection buffer (client memory) */
+    GLsizei select_buffer_size;     /* Buffer capacity in GLuints */
+    GLsizei select_buffer_offset;   /* Current write position */
+    GLuint select_hits;             /* Records written this selection pass */
+    GLint select_overflow;          /* Buffer locked after overflow */
+    GLint select_hit_pending;       /* Unsettled hit record exists */
+    GLdouble select_zmin;           /* Pending record min depth (mapped) */
+    GLdouble select_zmax;           /* Pending record max depth (mapped) */
+    GLuint name_stack[MAX_NAME_STACK_DEPTH];
+    GLint name_stack_depth;
 
     /* Error state */
     GLenum error;

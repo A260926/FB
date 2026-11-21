@@ -50,6 +50,10 @@ typedef enum {
     CMD_MATERIALF,
     CMD_MATERIALFV,
     CMD_CALL_LIST,
+    CMD_INIT_NAMES,
+    CMD_PUSH_NAME,
+    CMD_POP_NAME,
+    CMD_LOAD_NAME,
 } list_opcode_t;
 
 /* Display list command - variable size depending on opcode */
@@ -81,6 +85,7 @@ typedef struct {
         struct { GLenum face; GLenum pname; GLfloat param; } materialf;
         struct { GLenum face; GLenum pname; GLfloat params[4]; } materialfv;
         struct { GLuint list; } call_list;
+        struct { GLuint name; } name;
     } data;
 } list_command_t;
 
@@ -159,5 +164,11 @@ int list_record_lightf(GLenum light, GLenum pname, GLfloat param);
 int list_record_lightfv(GLenum light, GLenum pname, const GLfloat *params);
 int list_record_materialf(GLenum face, GLenum pname, GLfloat param);
 int list_record_materialfv(GLenum face, GLenum pname, const GLfloat *params);
+
+/* Selection name-stack recording functions */
+int list_record_init_names(void);
+int list_record_push_name(GLuint name);
+int list_record_pop_name(void);
+int list_record_load_name(GLuint name);
 
 #endif /* MYTINYGL_LISTS_H */

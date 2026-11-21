@@ -229,6 +229,18 @@ GLState *gl_create_context(int32_t width, int32_t height)
     c->vertices.count = 0;
     c->vertices.capacity = 0;
 
+    /* Selection (GL_SELECT) */
+    c->render_mode = GL_RENDER;
+    c->select_buffer = NULL;
+    c->select_buffer_size = 0;
+    c->select_buffer_offset = 0;
+    c->select_hits = 0;
+    c->select_overflow = 0;
+    c->select_hit_pending = 0;
+    c->select_zmin = 0.0;
+    c->select_zmax = 0.0;
+    c->name_stack_depth = 0;
+
     /* Error state */
     c->error = GL_NO_ERROR;
 
@@ -628,6 +640,15 @@ void glBegin(GLenum mode)
         return;
     }
 
+#ifdef MYTINYGL_SELECTION
+    /* Selection mode supports only a subset of primitives; rejecting
+     * here preserves both the render mode and the accumulated results */
+    if (ctx->render_mode == GL_SELECT && !mtgl_select_mode_supported(mode)) {
+        gl_set_error(ctx, GL_INVALID_ENUM);
+        return;
+    }
+#endif
+
     ctx->primitive_mode = mode;
     ctx->flags |= FLAG_INSIDE_BEGIN_END;
 }
@@ -640,10 +661,22 @@ void glEnd(void)
     /* Check for glEnd without glBegin */
     if (!(ctx->flags & FLAG_INSIDE_BEGIN_END)) {
         gl_set_error(ctx, GL_INVALID_OPERATION);
+        /* Drop stray vertices so a failed glBegin/glEnd pair cannot
+         * pollute the next valid primitive */
+        vertex_buffer_clear(ctx);
         return;
     }
 
     ctx->flags &= ~FLAG_INSIDE_BEGIN_END;
+
+#ifdef MYTINYGL_SELECTION
+    /* Selection mode: turn primitives into hit records, not pixels */
+    if (ctx->render_mode == GL_SELECT) {
+        mtgl_select_flush(ctx, ctx->primitive_mode);
+        vertex_buffer_clear(ctx);
+        return;
+    }
+#endif
 
     switch (ctx->primitive_mode) {
         case GL_POINTS:        flush_points(ctx); break;
@@ -2434,6 +2467,22 @@ static void execute_list(GLuint list_id)
                           cmd->data.frustum.bottom, cmd->data.frustum.top,
                           cmd->data.frustum.near_val, cmd->data.frustum.far_val);
                 break;
+#ifdef MYTINYGL_SELECTION
+            case CMD_INIT_NAMES:
+                glInitNames();
+                break;
+            case CMD_PUSH_NAME:
+                glPushName(cmd->data.name.name);
+                break;
+            case CMD_POP_NAME:
+                glPopName();
+                break;
+            case CMD_LOAD_NAME:
+                glLoadName(cmd->data.name.name);
+                break;
+#endif
+            default:
+                break;
         }
     }
 }
@@ -2721,7 +2770,15 @@ void glGetIntegerv(GLenum pname, GLint *params)
 
         /* Render mode */
         case GL_RENDER_MODE:
-            params[0] = 0x1C00;  /* GL_RENDER = 0x1C00 */
+            params[0] = ctx->render_mode;
+            break;
+
+        /* Selection */
+        case GL_NAME_STACK_DEPTH:
+            params[0] = ctx->name_stack_depth;
+            break;
+        case GL_SELECTION_BUFFER_SIZE:
+            params[0] = ctx->select_buffer_size;
             break;
 
         /* Implementation limits */
@@ -2753,7 +2810,7 @@ void glGetIntegerv(GLenum pname, GLint *params)
             params[0] = MAX_MATRIX_STACK_DEPTH;
             break;
         case GL_MAX_NAME_STACK_DEPTH:
-            params[0] = 64;
+            params[0] = MAX_NAME_STACK_DEPTH;
             break;
         case GL_MAX_VIEWPORT_DIMS:
             params[0] = 16384;

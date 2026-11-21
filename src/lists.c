@@ -423,3 +423,32 @@ int list_record_materialfv(GLenum face, GLenum pname, const GLfloat *params)
     for (int i = 0; i < 4; i++) cmd.data.materialfv.params[i] = params[i];
     return record_cmd(&cmd);
 }
+
+/* Selection name-stack commands */
+int list_record_init_names(void)
+{
+    GLState *ctx = gl_get_current_context();
+    if (!ctx || ctx->list_index == 0) return 0;
+    return record_cmd(&(list_command_t){ CMD_INIT_NAMES });
+}
+
+int list_record_push_name(GLuint name)
+{
+    GLState *ctx = gl_get_current_context();
+    if (!ctx || ctx->list_index == 0) return 0;
+    return record_cmd(&(list_command_t){ CMD_PUSH_NAME, .data.name = { name } });
+}
+
+int list_record_pop_name(void)
+{
+    GLState *ctx = gl_get_current_context();
+    if (!ctx || ctx->list_index == 0) return 0;
+    return record_cmd(&(list_command_t){ CMD_POP_NAME });
+}
+
+int list_record_load_name(GLuint name)
+{
+    GLState *ctx = gl_get_current_context();
+    if (!ctx || ctx->list_index == 0) return 0;
+    return record_cmd(&(list_command_t){ CMD_LOAD_NAME, .data.name = { name } });
+}

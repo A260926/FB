@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Added - GL_SELECT Selection Mode
+- Selection (picking) API: `glSelectBuffer`, `glRenderMode` (GL_RENDER/GL_SELECT),
+  `glInitNames`, `glPushName`, `glPopName`, `glLoadName`
+- Geometric hit testing through the existing transform + 6-plane frustum
+  clipping chain (no color-key rendering, no depth readback)
+- Hit rules: point inside frustum, non-zero clipped line segment,
+  positive-area clipped triangle remnant (sub-pixel hits count)
+- Triangles honor glFrontFace/glCullFace; depth/stencil/alpha/scissor/blend/
+  color-mask state does not affect hits; buffers are never modified
+- Hit records [name count, min depth, max depth, names] merge per name-stack
+  run, settle on name change or mode exit, and are written atomically
+  (overflow locks the buffer and glRenderMode returns -1)
+- Name stack depth 64; name ops recordable into display lists and replayed
+  per the mode at call time
+- New files: src/selection.h, src/selection.c
+- New example: examples/select.c
+- New tests: tests/selection.c (geometry, records, replay groups)
+
 ## [0.5.0] - 2025-12-06
 
 ### Added - OpenGL 1.5 VBO Support
