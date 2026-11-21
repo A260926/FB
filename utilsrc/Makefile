@@ -17,6 +17,7 @@ OTHERSOURCES =	mesh_align.cc \
 		mesh_make.cc \
 		mesh_shade.cc \
 		grid_subsamp.cc \
+		mesh_flatten.cc \
 		xf.cc
 
 VIEWOFILES = $(addprefix $(OBJDIR)/,$(VIEWSOURCES:.cc=.o))

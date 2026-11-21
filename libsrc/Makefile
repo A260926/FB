@@ -12,6 +12,7 @@ CCFILES =	TriMesh_bounding.cc \
 		TriMesh_pointareas.cc \
 		TriMesh_stats.cc \
 		TriMesh_tstrips.cc \
+		conformal_map.cc \
 		GLCamera.cc \
 		GLManager.cc \
 		ICP.cc \
