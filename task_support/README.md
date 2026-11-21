@@ -1,0 +1,1 @@
+Baseline source is an unchanged CPU smoke, not a target solution. Target tests register interfaces, optics, transport using check.h. New production units are linked through objects.rsp. Required example must generate a fresh nonempty .task-build/dielectric.ppm.
