@@ -45,6 +45,7 @@ SET(EMBREE_LIBRARY_FILES
   common/scene_verify.cpp
   common/alloc.cpp
   common/geometry.cpp
+  common/photon_beam.cpp
   common/scene_user_geometry.cpp
   common/scene_instance.cpp
   common/scene_instance_array.cpp
@@ -75,6 +76,7 @@ SET(EMBREE_LIBRARY_FILES
   bvh/bvh_statistics.cpp
   bvh/bvh4_factory.cpp
   bvh/bvh8_factory.cpp
+  bvh/bvh_photon_beam.cpp
 
   bvh/bvh_collider.cpp
   bvh/bvh_rotate.cpp

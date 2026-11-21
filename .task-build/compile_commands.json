@@ -1,0 +1,446 @@
+[
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles/taskbaseline.dir/baseline.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_support/baseline.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_support/baseline.cpp",
+  "output": "CMakeFiles/taskbaseline.dir/baseline.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -std=gnu++17 -include/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.h -o CMakeFiles/tasktarget.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_tests/beams.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_tests/beams.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_tests/beams.cpp",
+  "output": "CMakeFiles/tasktarget.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_tests/beams.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -std=gnu++17 -include/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.h -o CMakeFiles/tasktarget.dir/driver.c.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_support/driver.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_support/driver.c",
+  "output": "CMakeFiles/tasktarget.dir/driver.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/cc  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -o CMakeFiles/tasktarget.dir/api.c.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_support/api.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/task_support/api.c",
+  "output": "CMakeFiles/tasktarget.dir/api.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -std=gnu++17 -include/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.h -o CMakeFiles/tasktarget.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp",
+  "output": "CMakeFiles/tasktarget.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -std=gnu++17 -include/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.h -o CMakeFiles/taskexample.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/examples/photon_beams.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/examples/photon_beams.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/examples/photon_beams.cpp",
+  "output": "CMakeFiles/taskexample.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/examples/photon_beams.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include -O3 -DNDEBUG -std=gnu++17 -include/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.h -o CMakeFiles/taskexample.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp",
+  "output": "CMakeFiles/taskexample.dir/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/tutorials/photon_beams/renderer.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/sysinfo.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/sysinfo.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/sysinfo.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/sysinfo.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/alloc.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/alloc.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/alloc.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/alloc.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/filename.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/filename.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/filename.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/filename.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/library.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/library.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/library.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/library.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/thread.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/thread.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/thread.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/thread.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/estring.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/estring.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/estring.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/estring.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/regression.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/regression.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/regression.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/regression.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/mutex.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/mutex.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/mutex.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/mutex.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/condition.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/condition.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/condition.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/condition.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/sys.dir/barrier.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/barrier.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/sys/barrier.cpp",
+  "output": "core/common/sys/CMakeFiles/sys.dir/barrier.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/math",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/math.dir/constants.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/math/constants.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/math/constants.cpp",
+  "output": "core/common/math/CMakeFiles/math.dir/constants.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/simd",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/simd.dir/sse.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/simd/sse.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/simd/sse.cpp",
+  "output": "core/common/simd/CMakeFiles/simd.dir/sse.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/lexers",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/lexers.dir/stringstream.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/lexers/stringstream.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/lexers/stringstream.cpp",
+  "output": "core/common/lexers/CMakeFiles/lexers.dir/stringstream.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/lexers",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/lexers.dir/tokenstream.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/lexers/tokenstream.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/lexers/tokenstream.cpp",
+  "output": "core/common/lexers/CMakeFiles/lexers.dir/tokenstream.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/tasking",
+  "command": "/usr/bin/c++ -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17  -D__SSE__ -D__SSE2__ -o CMakeFiles/tasking.dir/taskschedulerinternal.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/tasking/taskschedulerinternal.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/common/tasking/taskschedulerinternal.cpp",
+  "output": "core/common/tasking/CMakeFiles/tasking.dir/taskschedulerinternal.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/device.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/device.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/device.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/device.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/stat.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/stat.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/stat.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/stat.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/acceln.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/acceln.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/acceln.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/acceln.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/accelset.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/accelset.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/accelset.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/accelset.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/state.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/state.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/state.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/state.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/rtcore.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/rtcore.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/rtcore.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/rtcore.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/rtcore_builder.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/rtcore_builder.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/rtcore_builder.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/rtcore_builder.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_verify.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_verify.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_verify.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_verify.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/alloc.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/alloc.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/alloc.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/alloc.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/geometry.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/geometry.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/geometry.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/geometry.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/photon_beam.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/photon_beam.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/photon_beam.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/photon_beam.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_user_geometry.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_user_geometry.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_user_geometry.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_user_geometry.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_instance.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_instance.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_instance.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_instance.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_instance_array.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_instance_array.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_instance_array.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_instance_array.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_triangle_mesh.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_triangle_mesh.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_triangle_mesh.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_triangle_mesh.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_quad_mesh.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_quad_mesh.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_quad_mesh.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_quad_mesh.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_curves.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_curves.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_curves.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_curves.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_line_segments.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_line_segments.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_line_segments.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_line_segments.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_grid_mesh.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_grid_mesh.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_grid_mesh.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_grid_mesh.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/scene_points.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_points.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/scene_points.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/scene_points.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/common/motion_derivative.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/motion_derivative.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/common/motion_derivative.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/common/motion_derivative.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/subdiv/bezier_curve.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/subdiv/bezier_curve.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/subdiv/bezier_curve.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/subdiv/bezier_curve.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/subdiv/bspline_curve.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/subdiv/bspline_curve.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/subdiv/bspline_curve.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/subdiv/bspline_curve.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/subdiv/catmullrom_curve.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/subdiv/catmullrom_curve.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/subdiv/catmullrom_curve.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/subdiv/catmullrom_curve.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/primitive4.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/primitive4.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/primitive4.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/primitive4.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/instance_intersector.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/instance_intersector.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/instance_intersector.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/instance_intersector.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/instance_array_intersector.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/instance_array_intersector.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/instance_array_intersector.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/instance_array_intersector.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/curve_intersector_virtual_4v.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_4v.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_4v.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/curve_intersector_virtual_4v.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/curve_intersector_virtual_4i.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_4i.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_4i.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/curve_intersector_virtual_4i.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/curve_intersector_virtual_4i_mb.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_4i_mb.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_4i_mb.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/curve_intersector_virtual_4i_mb.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/curve_intersector_virtual_8v.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_8v.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_8v.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/curve_intersector_virtual_8v.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/curve_intersector_virtual_8i.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_8i.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_8i.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/curve_intersector_virtual_8i.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/geometry/curve_intersector_virtual_8i_mb.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_8i_mb.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/geometry/curve_intersector_virtual_8i_mb.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/geometry/curve_intersector_virtual_8i_mb.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/builders/primrefgen.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/builders/primrefgen.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/builders/primrefgen.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/builders/primrefgen.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_statistics.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_statistics.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_statistics.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_statistics.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh4_factory.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh4_factory.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh4_factory.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh4_factory.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh8_factory.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh8_factory.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh8_factory.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh8_factory.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_photon_beam.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_photon_beam.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_photon_beam.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_photon_beam.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_collider.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_collider.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_collider.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_collider.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_rotate.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_rotate.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_rotate.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_rotate.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_refit.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_refit.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_refit.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_refit.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_hair.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_hair.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_hair.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_hair.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_hair_mb.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_hair_mb.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_hair_mb.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_hair_mb.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_morton.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_morton.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_morton.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_morton.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_sah.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_sah.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_sah.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_sah.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_sah_spatial.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_sah_spatial.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_sah_spatial.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_sah_spatial.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_sah_mb.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_sah_mb.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_sah_mb.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_sah_mb.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_builder_twolevel.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_twolevel.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_builder_twolevel.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_builder_twolevel.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels",
+  "command": "/usr/bin/c++ -DEMBREE_LOWEST_ISA -DEMBREE_STATIC_LIB -DEMBREE_TARGET_SSE2 -DTASKING_INTERNAL -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core -I/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/../include  -Wall -Wformat -Wformat-security -fsigned-char -fPIC -std=c++11 -fvisibility=hidden -fvisibility-inlines-hidden -fno-strict-aliasing -fno-tree-vectorize -D_FORTIFY_SOURCE=2 -mmacosx-version-min=10.7 -stdlib=libc++  -DNDEBUG -O3 -std=gnu++17 -D__SSE__ -D__SSE2__ -o CMakeFiles/embree.dir/bvh/bvh_intersector1_bvh4.cpp.o -c /Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_intersector1_bvh4.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/kernels/bvh/bvh_intersector1_bvh4.cpp",
+  "output": "core/kernels/CMakeFiles/embree.dir/bvh/bvh_intersector1_bvh4.cpp.o"
+}
+]

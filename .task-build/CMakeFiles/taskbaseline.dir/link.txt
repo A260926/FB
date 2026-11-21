@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/taskbaseline.dir/baseline.cpp.o -o taskbaseline  core/libembree4.a core/libsimd.a core/liblexers.a core/libsys.a core/libmath.a core/libtasking.a

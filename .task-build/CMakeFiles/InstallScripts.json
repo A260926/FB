@@ -1,0 +1,16 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/sys/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/math/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/simd/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/lexers/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/common/tasking/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/kernels/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS644D290A1983U14228/attempts/20261121T004633935188Z/repo/.task-build/core/tests/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
