@@ -47,13 +47,55 @@ Nurbs<para_dim>::Nurbs(
 }
 
 template<int para_dim>
-Nurbs<para_dim>::Nurbs(Nurbs const& other)
-    : Base_(other),
-      weighted_vector_space_{std::make_shared<WeightedVectorSpace_>(
-          *other.weighted_vector_space_)},
-      homogeneous_b_spline_{
-          std::make_shared<HomogeneousBSpline_>(Base_::parameter_space_,
-                                                weighted_vector_space_)} {}
+Nurbs<para_dim>::Nurbs(
+    SharedPointer<ParameterSpace_> parameter_space,
+    SharedPointer<WeightedVectorSpace_> weighted_vector_space,
+    parameter_spaces::PeriodicModes<para_dim> periodic_modes)
+    : Base_(parameter_space, true) {
+  using parameter_spaces::Periodicity;
+
+  auto& parameter_space_ref = *Base_::parameter_space_;
+  if (parameter_space_ref.GetPeriodicModes() != periodic_modes) {
+    parameter_space_ref =
+        ParameterSpace_(parameter_space_ref.GetKnotVectors(),
+                        parameter_space_ref.GetDegrees(),
+                        periodic_modes);
+  }
+
+  auto const number_of_basis_functions =
+      parameter_space_ref.GetNumberOfBasisFunctions();
+  Array<int, para_dim> sizes{};
+  for (int d{}; d < para_dim; ++d)
+    sizes[d] = number_of_basis_functions[d];
+
+  // Validate the complete homogeneous control points (weighted xyz and
+  // weights) and the strictly positive finite weights.
+  parameter_spaces::ValidatePeriodicControlPadding<para_dim>(
+      weighted_vector_space->GetCoordinates(),
+      sizes,
+      periodic_modes,
+      parameter_space_ref.GetFundamentalSizes(),
+      parameter_space_ref.GetDegrees(),
+      true);
+
+  homogeneous_b_spline_ =
+      std::make_shared<HomogeneousBSpline_>(Base_::parameter_space_,
+                                            weighted_vector_space);
+  weighted_vector_space_ = std::move(weighted_vector_space);
+}
+
+template<int para_dim>
+Nurbs<para_dim>::Nurbs(Nurbs const& other) : Base_(other) {
+  // Members are declared with homogeneous_b_spline_ first, so the
+  // homogeneous spline cannot be built in the member initializer list
+  // before the weighted vector space exists.  Initialize both in the body
+  // in dependency order instead.
+  weighted_vector_space_ = std::make_shared<WeightedVectorSpace_>(
+      *other.weighted_vector_space_);
+  homogeneous_b_spline_ =
+      std::make_shared<HomogeneousBSpline_>(Base_::parameter_space_,
+                                            weighted_vector_space_);
+}
 
 template<int para_dim>
 Nurbs<para_dim>& Nurbs<para_dim>::operator=(Nurbs const& rhs) {
@@ -273,4 +315,24 @@ typename Nurbs<para_dim>::OutputInformation_
 Nurbs<para_dim>::Write(Precision const& precision) const {
   return OutputInformation_{Base_::parameter_space_->Write(precision),
                             weighted_vector_space_->WriteProjected(precision)};
+}
+
+template<int para_dim>
+parameter_spaces::PeriodicModes<para_dim>
+Nurbs<para_dim>::GetPeriodicModes() const {
+  return Base_::parameter_space_->GetPeriodicModes();
+}
+
+template<int para_dim>
+bool Nurbs<para_dim>::IsPeriodic(Dimension const& dimension) const {
+  return Base_::parameter_space_->IsPeriodic(dimension);
+}
+
+template<int para_dim>
+void Nurbs<para_dim>::RotatePeriodicSeam(Dimension const& dimension,
+                                         Knot_ seam,
+                                         Tolerance const& tolerance) const {
+  // The homogeneous BSpline rotates the complete homogeneous control net,
+  // preserving weighted coordinates and weights together.
+  homogeneous_b_spline_->RotatePeriodicSeam(dimension, seam, tolerance);
 }

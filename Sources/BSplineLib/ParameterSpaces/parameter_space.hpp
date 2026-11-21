@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <utility>
 
 #include "BSplineLib/ParameterSpaces/knot_vector.hpp"
+#include "BSplineLib/ParameterSpaces/periodic_axis.hpp"
 #include "BSplineLib/Utilities/containers.hpp"
 #include "BSplineLib/Utilities/error_handling.hpp"
 #include "BSplineLib/Utilities/index.hpp"
@@ -121,6 +122,13 @@ public:
   ParameterSpace(KnotVectors_ knot_vectors, Degrees_ degrees)
       : knot_vectors_(std::move(knot_vectors)),
         degrees_(std::move(degrees)) {};
+  /// @brief Constructor with explicit per-axis periodicity modes.  Periodic
+  /// axes validate the finite knot vector against their infinite knot
+  /// column; control net padding is validated by the owning spline.
+  ParameterSpace(KnotVectors_ knot_vectors,
+                 Degrees_ degrees,
+                 PeriodicModes<para_dim> periodic_modes,
+                 Tolerance const& tolerance = kPeriodicKnotTolerance);
   ParameterSpace(ParameterSpace const& other);
   ParameterSpace(ParameterSpace&& other) noexcept = default;
   ParameterSpace& operator=(ParameterSpace const& rhs);
@@ -232,6 +240,43 @@ public:
   virtual OutputInformation_
   Write(Precision const& precision = kPrecision) const;
 
+  /// @name Periodic axes
+  /// Periodic modes are per-axis; non-periodic axes keep their clamped
+  /// representation unchanged.
+  /// @{
+  virtual PeriodicModes<para_dim> const& GetPeriodicModes() const {
+    return periodic_modes_;
+  }
+  virtual bool IsPeriodic(Dimension const& dimension) const {
+    return periodic_modes_[dimension] == Periodicity::Periodic;
+  }
+  virtual bool HasAnyPeriodicAxis() const;
+  virtual PeriodicAxis& GetPeriodicAxis(Dimension const& dimension);
+  virtual PeriodicAxis const&
+  GetPeriodicAxis(Dimension const& dimension) const;
+  /// @brief Maps a parameter to [a, b) on periodic axes; other axes pass
+  /// through unchanged.
+  virtual ParametricCoordinate_
+  MapToPeriodicDomain(const Type_* parametric_coordinate) const;
+  /// @brief Rotates the seam of one periodic axis and rebuilds its finite
+  /// knot vector.  Throws on non-periodic axes.
+  virtual void RotatePeriodicSeam(Dimension const& dimension,
+                                  Knot_ const& seam,
+                                  Tolerance const& tolerance =
+                                      kPeriodicKnotTolerance);
+  /// @brief Rewrites the finite knot vectors of all periodic axes from
+  /// their fundamental multisets (used after orbit insertion / seam
+  /// rotation).
+  virtual void RebuildPeriodicKnotVectors();
+  /// @brief Fundamental knot multiset sizes m per axis (equals the finite
+  /// storage size for non-periodic axes).
+  virtual Array<int, para_dim> GetFundamentalSizes() const;
+  /// @brief Effective parameter ranges per axis: [a, b) with b = a + L on
+  /// periodic axes, and the finite knot vector's front/back on ordinary
+  /// axes.  Persisted through the IGES periodic trailer.
+  virtual Array<Array<double, 2>, para_dim> GetDomainRanges() const;
+  /// @}
+
 #ifndef NDEBUG
   virtual void ThrowIfParametricCoordinateIsOutsideScope(
       Dimension const& dimension,
@@ -294,9 +339,12 @@ public:
 protected:
   KnotVectors_ knot_vectors_;
   Degrees_ degrees_;
+  PeriodicModes<para_dim> periodic_modes_{};
+  Array<SharedPointer<PeriodicAxis>, para_dim> periodic_axes_{};
 
 private:
   void CopyKnotVectors(KnotVectors_ const& knot_vectors);
+  void CopyPeriodicState(ParameterSpace const& other);
 
   // Number of non-zero basis functions is equal to p+1 - see NURBS book P2.2.
   int GetNumberOfNonZeroBasisFunctions(Dimension const& dimension) const;

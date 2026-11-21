@@ -95,6 +95,11 @@ public:
 
   virtual Coordinate ComputeUpperBoundForMaximumDistanceFromOrigin() const = 0;
 
+  /// @brief Shared parameter space; periodic metadata lives inside it.
+  SharedPointer<ParameterSpace_> const& GetParameterSpace() const {
+    return parameter_space_;
+  }
+
 protected:
   using Index_ = typename ParameterSpace_::Index_;
 

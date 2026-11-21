@@ -19,8 +19,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 template<int para_dim>
 ParameterSpace<para_dim>::ParameterSpace(ParameterSpace const& other)
-    : degrees_{other.degrees_} {
+    : degrees_{other.degrees_},
+      periodic_modes_{other.periodic_modes_} {
   CopyKnotVectors(other.knot_vectors_);
+  CopyPeriodicState(other);
+}
+
+template<int para_dim>
+ParameterSpace<para_dim>::ParameterSpace(KnotVectors_ knot_vectors,
+                                         Degrees_ degrees,
+                                         PeriodicModes<para_dim> periodic_modes,
+                                         Tolerance const& tolerance)
+    : knot_vectors_(std::move(knot_vectors)),
+      degrees_(std::move(degrees)),
+      periodic_modes_(periodic_modes) {
+  for (int i{}; i < para_dim; ++i) {
+    if (periodic_modes_[i] == Periodicity::Periodic) {
+      periodic_axes_[i] = std::make_shared<PeriodicAxis>(
+          PeriodicAxis::FromFiniteKnotVector(*knot_vectors_[i],
+                                             degrees_[i],
+                                             tolerance));
+    }
+  }
 }
 
 template<int para_dim>
@@ -28,6 +48,9 @@ ParameterSpace<para_dim>&
 ParameterSpace<para_dim>::operator=(ParameterSpace const& rhs) {
   CopyKnotVectors(rhs.knot_vectors_);
   degrees_ = rhs.degrees_;
+  periodic_modes_ = rhs.periodic_modes_;
+  periodic_axes_ = {};
+  CopyPeriodicState(rhs);
   return *this;
 }
 
@@ -107,8 +130,11 @@ ParameterSpace<para_dim>::FindFirstNonZeroBasisFunction(
   IndexValue_& first_index = first_support.GetValue();
 
   for (int i{}; i < para_dim; ++i) {
+    Type_ coordinate = parametric_coordinate[i];
+    if (periodic_modes_[i] == Periodicity::Periodic)
+      coordinate = periodic_axes_[i]->MapToDomain(coordinate);
     first_index[i] =
-        knot_vectors_[i]->FindEffectiveSpan(parametric_coordinate[i],
+        knot_vectors_[i]->FindEffectiveSpan(coordinate,
                                             degrees_[i],
                                             tolerance)
         - degrees_[i];
@@ -122,7 +148,10 @@ ParameterSpace<para_dim>::FindKnotSpans(const Type_* parametric_coordinate,
                                         Tolerance const& tolerance) const {
   KnotSpans_ out;
   for (int i{}; i < para_dim; ++i) {
-    out[i] = knot_vectors_[i]->FindSpan(parametric_coordinate[i], tolerance);
+    Type_ coordinate = parametric_coordinate[i];
+    if (periodic_modes_[i] == Periodicity::Periodic)
+      coordinate = periodic_axes_[i]->MapToDomain(coordinate);
+    out[i] = knot_vectors_[i]->FindSpan(coordinate, tolerance);
   }
   return out;
 }
@@ -185,7 +214,10 @@ ParameterSpace<para_dim>::EvaluateBasisValuesPerDimension(
     // get this dim's info
     const auto& this_dim_degree = degrees_[i];
     const auto this_dim_n_basis = this_dim_degree + 1;
-    const auto& this_dim_parametric_coordinate = parametric_coordinate[i];
+    Type_ this_dim_parametric_coordinate = parametric_coordinate[i];
+    if (periodic_modes_[i] == Periodicity::Periodic)
+      this_dim_parametric_coordinate =
+          periodic_axes_[i]->MapToDomain(this_dim_parametric_coordinate);
     const auto& this_knot_vector = *knot_vectors_[i];
     const auto& this_knots = this_knot_vector.GetKnots();
     const int this_zero_degree_support =
@@ -261,7 +293,11 @@ ParameterSpace<para_dim>::EvaluateBasisDerivativeValuesPerDimension(
       continue;
     }
 
-    const auto& this_dim_parametric_coordinate = parametric_coordinate[i];
+    const auto& this_dim_parametric_coordinate_raw = parametric_coordinate[i];
+    Type_ this_dim_parametric_coordinate = this_dim_parametric_coordinate_raw;
+    if (periodic_modes_[i] == Periodicity::Periodic)
+      this_dim_parametric_coordinate =
+          periodic_axes_[i]->MapToDomain(this_dim_parametric_coordinate);
     const auto& this_knot_vector = *knot_vectors_[i];
     const auto& this_knots = this_knot_vector.GetKnots();
     const int this_zero_degree_support =
@@ -406,6 +442,15 @@ ParameterSpace<para_dim>::InsertKnot(Dimension const& dimension,
 
   // runtime checks
   DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
+
+  // Periodic axes are handled through PeriodicAxis orbits by the owning
+  // spline; see splines::BSpline::InsertKnot.
+  if (periodic_modes_[dimension] == Periodicity::Periodic) {
+    throw RuntimeError(
+        "ParameterSpace::InsertKnot must not be called directly on a "
+        "periodic axis; use the spline's InsertKnot instead.");
+  }
+
   KnotWithinBoundCheck(BSPLINELIB_FUNC(), dimension, knot, true);
 
   // if it is on bound, early exit
@@ -442,6 +487,12 @@ ParameterSpace<para_dim>::RemoveKnot(Dimension const& dimension,
 
   // runtime checks
   DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
+
+  if (periodic_modes_[dimension] == Periodicity::Periodic) {
+    throw std::logic_error(
+        "RemoveKnot is not supported on a periodic axis.");
+  }
+
   KnotWithinBoundCheck(BSPLINELIB_FUNC(), dimension, knot, true);
 
   // if it is on bound, early exit
@@ -471,6 +522,11 @@ ParameterSpace<para_dim>::ElevateDegree(Dimension const& dimension,
   assert(tolerance > 0.0);
   DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
 
+  if (periodic_modes_[dimension] == Periodicity::Periodic) {
+    throw std::logic_error(
+        "ElevateDegree is not supported on a periodic axis.");
+  }
+
   ElevationInformation_ const& bezier_information =
       DetermineElevationInformation(dimension, multiplicity);
   knot_vectors_[dimension]->IncreaseMultiplicities(multiplicity);
@@ -485,6 +541,11 @@ ParameterSpace<para_dim>::ReduceDegree(Dimension const& dimension,
                                        Tolerance const& tolerance) {
   assert(tolerance > 0.0);
   DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
+
+  if (periodic_modes_[dimension] == Periodicity::Periodic) {
+    throw std::logic_error(
+        "ReduceDegree is not supported on a periodic axis.");
+  }
 
   Degree& degree = degrees_[dimension];
   Multiplicity const reduction{std::min(multiplicity, degree - 1)};
@@ -529,6 +590,114 @@ void ParameterSpace<para_dim>::CopyKnotVectors(
   for (int i{}; i < para_dim; ++i) {
     knot_vectors_[i] = std::make_shared<KnotVector>(*knot_vectors[i]);
   }
+}
+
+template<int para_dim>
+void ParameterSpace<para_dim>::CopyPeriodicState(
+    ParameterSpace const& other) {
+  for (int i{}; i < para_dim; ++i) {
+    if (other.periodic_axes_[i]) {
+      periodic_axes_[i] =
+          std::make_shared<PeriodicAxis>(*other.periodic_axes_[i]);
+    }
+  }
+}
+
+template<int para_dim>
+bool ParameterSpace<para_dim>::HasAnyPeriodicAxis() const {
+  return std::any_of(periodic_modes_.begin(),
+                     periodic_modes_.end(),
+                     [](Periodicity const& mode) {
+                       return mode == Periodicity::Periodic;
+                     });
+}
+
+template<int para_dim>
+PeriodicAxis& ParameterSpace<para_dim>::GetPeriodicAxis(
+    Dimension const& dimension) {
+  DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
+  if (periodic_modes_[dimension] != Periodicity::Periodic) {
+    throw InvalidArgument(
+        "ParameterSpace::GetPeriodicAxis - axis is not periodic.");
+  }
+  return *periodic_axes_[dimension];
+}
+
+template<int para_dim>
+PeriodicAxis const& ParameterSpace<para_dim>::GetPeriodicAxis(
+    Dimension const& dimension) const {
+  DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
+  if (periodic_modes_[dimension] != Periodicity::Periodic) {
+    throw InvalidArgument(
+        "ParameterSpace::GetPeriodicAxis - axis is not periodic.");
+  }
+  return *periodic_axes_[dimension];
+}
+
+template<int para_dim>
+typename ParameterSpace<para_dim>::ParametricCoordinate_
+ParameterSpace<para_dim>::MapToPeriodicDomain(
+    const Type_* parametric_coordinate) const {
+  ParametricCoordinate_ mapped{};
+  for (int i{}; i < para_dim; ++i) {
+    mapped[i] = (periodic_modes_[i] == Periodicity::Periodic)
+                    ? periodic_axes_[i]->MapToDomain(parametric_coordinate[i])
+                    : parametric_coordinate[i];
+  }
+  return mapped;
+}
+
+template<int para_dim>
+void ParameterSpace<para_dim>::RotatePeriodicSeam(
+    Dimension const& dimension,
+    Knot_ const& seam,
+    Tolerance const& tolerance) {
+  DimensionBoundCheck(BSPLINELIB_FUNC(), dimension, true);
+  if (periodic_modes_[dimension] != Periodicity::Periodic) {
+    throw InvalidArgument(
+        "ParameterSpace::RotatePeriodicSeam - axis is not periodic.");
+  }
+  PeriodicAxis& axis = *periodic_axes_[dimension];
+  axis.RotateSeam(seam, tolerance); // validates the orbit before changing
+  knot_vectors_[dimension] =
+      std::make_shared<KnotVector>(axis.FiniteKnots());
+}
+
+template<int para_dim>
+void ParameterSpace<para_dim>::RebuildPeriodicKnotVectors() {
+  for (int i{}; i < para_dim; ++i) {
+    if (periodic_modes_[i] == Periodicity::Periodic) {
+      knot_vectors_[i] =
+          std::make_shared<KnotVector>(periodic_axes_[i]->FiniteKnots());
+    }
+  }
+}
+
+template<int para_dim>
+Array<int, para_dim> ParameterSpace<para_dim>::GetFundamentalSizes() const {
+  Array<int, para_dim> sizes{};
+  for (int i{}; i < para_dim; ++i) {
+    sizes[i] = (periodic_modes_[i] == Periodicity::Periodic)
+                   ? periodic_axes_[i]->GetNumberOfFundamentalKnots()
+                   : GetNumberOfBasisFunctions(i);
+  }
+  return sizes;
+}
+
+template<int para_dim>
+Array<Array<double, 2>, para_dim>
+ParameterSpace<para_dim>::GetDomainRanges() const {
+  Array<Array<double, 2>, para_dim> ranges{};
+  for (int i{}; i < para_dim; ++i) {
+    if (periodic_modes_[i] == Periodicity::Periodic) {
+      ranges[i] = {periodic_axes_[i]->GetDomainStart(),
+                   periodic_axes_[i]->GetDomainEnd()};
+    } else {
+      ranges[i] = {knot_vectors_[i]->GetFront(),
+                   knot_vectors_[i]->GetBack()};
+    }
+  }
+  return ranges;
 }
 
 template<int para_dim>

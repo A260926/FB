@@ -59,6 +59,13 @@ public:
   Nurbs();
   Nurbs(SharedPointer<ParameterSpace_> parameter_space,
         SharedPointer<WeightedVectorSpace_> weighted_vector_space);
+  /// @brief Constructor with explicit per-axis periodicity modes.  The
+  /// complete homogeneous control points (weighted coordinates and weights)
+  /// must carry the periodic padding rows and all weights must be finite
+  /// and strictly positive.
+  Nurbs(SharedPointer<ParameterSpace_> parameter_space,
+        SharedPointer<WeightedVectorSpace_> weighted_vector_space,
+        parameter_spaces::PeriodicModes<para_dim> periodic_modes);
   Nurbs(Nurbs const& other);
   Nurbs(Nurbs&& other) noexcept = default;
   Nurbs& operator=(Nurbs const& rhs);
@@ -71,6 +78,12 @@ public:
   virtual int Dim() const override {
     return weighted_vector_space_->Dim() - 1;
   };
+
+  /// @brief Shared weighted (homogeneous) vector space, including weights.
+  SharedPointer<WeightedVectorSpace_> const&
+  GetWeightedVectorSpace() const {
+    return weighted_vector_space_;
+  }
 
   void Evaluate(const Type_* parametric_coordinate, Type_* evaluated) const;
   void EvaluateDerivative(const Type_* parametric_coordinate,
@@ -100,6 +113,18 @@ public:
 
   Coordinate ComputeUpperBoundForMaximumDistanceFromOrigin() const final;
   OutputInformation_ Write(Precision const& precision = kPrecision) const;
+
+  /// @name Periodic interface
+  /// @{
+  parameter_spaces::PeriodicModes<para_dim> GetPeriodicModes() const;
+  bool IsPeriodic(Dimension const& dimension) const;
+  /// @brief Moves the parameter seam of a periodic axis to a knot orbit.
+  /// The geometry at any original real parameter is unchanged.
+  void RotatePeriodicSeam(Dimension const& dimension,
+                          Knot_ seam,
+                          Tolerance const& tolerance =
+                              parameter_spaces::kPeriodicKnotTolerance) const;
+  /// @}
 
   /// @brief
   /// @param from

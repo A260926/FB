@@ -68,6 +68,12 @@ public:
   BSpline();
   BSpline(SharedPointer<ParameterSpace_> parameter_space,
           SharedPointer<VectorSpace_> vector_space);
+  /// @brief Constructor with explicit per-axis periodicity modes.  The
+  /// finite knot vectors must store t(-p)..t(m+p) on periodic axes and the
+  /// control net must contain the periodic padding rows.
+  BSpline(SharedPointer<ParameterSpace_> parameter_space,
+          SharedPointer<VectorSpace_> vector_space,
+          parameter_spaces::PeriodicModes<para_dim> periodic_modes);
   BSpline(BSpline const& other);
   BSpline(BSpline&& other) noexcept = default;
   BSpline& operator=(BSpline const& rhs);
@@ -75,6 +81,23 @@ public:
   ~BSpline() override = default;
 
   virtual int Dim() const override { return vector_space_->Dim(); };
+
+  /// @brief Shared control (for a NURBS: homogeneous) vector space.
+  SharedPointer<VectorSpace_> const& GetVectorSpace() const {
+    return vector_space_;
+  }
+
+  /// @name Periodic interface
+  /// @{
+  parameter_spaces::PeriodicModes<para_dim> GetPeriodicModes() const;
+  bool IsPeriodic(Dimension const& dimension) const;
+  /// @brief Moves the parameter seam of a periodic axis to a knot orbit.
+  /// The geometry at any original real parameter is unchanged.
+  void RotatePeriodicSeam(Dimension const& dimension,
+                          Knot_ seam,
+                          Tolerance const& tolerance =
+                              parameter_spaces::kPeriodicKnotTolerance) const;
+  /// @}
 
   void Evaluate(const Type_* parametric_coordinate, Type_* evaluated) const;
   void EvaluateDerivative(const Type_* parametric_coordinate,
@@ -141,6 +164,13 @@ private:
 
   BezierInformation_ MakeBezier(Dimension const& dimension,
                                 Tolerance const& tolerance = kEpsilon) const;
+
+  /// @brief Orbit insertion on one periodic axis, including reconstruction
+  /// of the finite padding and the periodic control net.
+  void InsertKnotPeriodic(Dimension const& dimension,
+                          Knot_ knot,
+                          Multiplicity const& multiplicity,
+                          Tolerance const& tolerance) const;
 };
 
 #include "BSplineLib/Splines/b_spline.inl"

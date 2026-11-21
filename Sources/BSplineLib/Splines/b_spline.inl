@@ -45,6 +45,38 @@ BSpline<para_dim>::BSpline(SharedPointer<ParameterSpace_> parameter_space,
 }
 
 template<int para_dim>
+BSpline<para_dim>::BSpline(
+    SharedPointer<ParameterSpace_> parameter_space,
+    SharedPointer<VectorSpace_> vector_space,
+    parameter_spaces::PeriodicModes<para_dim> periodic_modes)
+    : Base_(std::move(parameter_space), false) {
+  using parameter_spaces::Periodicity;
+
+  auto& parameter_space_ref = *Base_::parameter_space_;
+  if (parameter_space_ref.GetPeriodicModes() != periodic_modes) {
+    parameter_space_ref =
+        ParameterSpace_(parameter_space_ref.GetKnotVectors(),
+                        parameter_space_ref.GetDegrees(),
+                        periodic_modes);
+  }
+
+  auto const number_of_basis_functions =
+      parameter_space_ref.GetNumberOfBasisFunctions();
+  Array<int, para_dim> sizes{};
+  for (int d{}; d < para_dim; ++d)
+    sizes[d] = number_of_basis_functions[d];
+
+  parameter_spaces::ValidatePeriodicControlPadding<para_dim>(
+      vector_space->GetCoordinates(),
+      sizes,
+      periodic_modes,
+      parameter_space_ref.GetFundamentalSizes(),
+      parameter_space_ref.GetDegrees(),
+      false);
+  vector_space_ = std::move(vector_space);
+}
+
+template<int para_dim>
 BSpline<para_dim>::BSpline(BSpline const& other)
     : Base_(other),
       vector_space_{std::make_shared<VectorSpace_>(*other.vector_space_)} {}
@@ -61,6 +93,33 @@ void BSpline<para_dim>::Evaluate(const Type_* parametric_coordinate,
                                  Type_* evaluated) const {
 
   ParameterSpace_ const& parameter_space = *Base_::parameter_space_;
+
+  if (parameter_space.HasAnyPeriodicAxis()) {
+    // Periodic evaluation: parameters are mapped to [a, b) per axis and
+    // control point indices are wrapped modulo the periodic control count.
+    // No clamped surrogate spline is constructed.
+    auto const basis_per_dim =
+        parameter_space.EvaluateBasisValuesPerDimension(parametric_coordinate);
+    auto const first_index =
+        parameter_space.FindFirstNonZeroBasisFunction(parametric_coordinate)
+            .MultiIndex();
+    auto const control_counts =
+        parameter_space.GetNumberOfBasisFunctions();
+    Array<int, para_dim> counts{};
+    for (int d{}; d < para_dim; ++d)
+      counts[d] = control_counts[d];
+    parameter_spaces::PeriodicTensorCombine<para_dim>(
+        basis_per_dim,
+        first_index,
+        counts,
+        parameter_space.GetFundamentalSizes(),
+        parameter_space.GetDegrees(),
+        parameter_space.GetPeriodicModes(),
+        vector_space_->GetCoordinates().data(),
+        vector_space_->Dim(),
+        evaluated);
+    return;
+  }
 
   Coordinate_ evaluated_b_spline;
   evaluated_b_spline.SetData(evaluated);
@@ -88,6 +147,44 @@ void BSpline<para_dim>::EvaluateDerivative(const Type_* parametric_coordinate,
                                            const IntType_* derivative,
                                            Type_* evaluated) const {
   ParameterSpace_ const& parameter_space = *Base_::parameter_space_;
+
+  if (parameter_space.HasAnyPeriodicAxis()) {
+    // Basis derivatives are taken with respect to the original real
+    // parameter: periodic wrapping is a pure translation, so the local
+    // Cox-de Boor derivatives on the mapped parameter equal the derivatives
+    // on the original parameter.
+    int total_order{};
+    for (int d{}; d < para_dim; ++d)
+      total_order += derivative[d];
+    if (total_order > 2) {
+      throw InvalidArgument(
+          "Periodic splines support derivative orders up to 2 only.");
+    }
+    auto const basis_derivative_per_dim =
+        parameter_space.EvaluateBasisDerivativeValuesPerDimension(
+            parametric_coordinate,
+            derivative);
+    auto const first_index =
+        parameter_space.FindFirstNonZeroBasisFunction(parametric_coordinate)
+            .MultiIndex();
+    auto const control_counts =
+        parameter_space.GetNumberOfBasisFunctions();
+    Array<int, para_dim> counts{};
+    for (int d{}; d < para_dim; ++d)
+      counts[d] = control_counts[d];
+    parameter_spaces::PeriodicTensorCombine<para_dim>(
+        basis_derivative_per_dim,
+        first_index,
+        counts,
+        parameter_space.GetFundamentalSizes(),
+        parameter_space.GetDegrees(),
+        parameter_space.GetPeriodicModes(),
+        vector_space_->GetCoordinates().data(),
+        vector_space_->Dim(),
+        evaluated);
+    return;
+  }
+
   Coordinate_ evaluated_b_spline_derivative;
   evaluated_b_spline_derivative.SetData(evaluated);
   evaluated_b_spline_derivative.SetShape(vector_space_->Dim());
@@ -145,6 +242,11 @@ void BSpline<para_dim>::InsertKnot(Dimension const& dimension,
   // bound checks are all done in parametric space
   ParameterSpace_& parameter_space = *Base_::parameter_space_;
   VectorSpace_& vector_space = *vector_space_;
+
+  if (parameter_space.IsPeriodic(dimension)) {
+    InsertKnotPeriodic(dimension, knot, multiplicity, tolerance);
+    return;
+  }
 
   // collect values before updating parameter_space
   const int n_original_coord = vector_space.GetNumberOfCoordinates();
@@ -228,6 +330,11 @@ Multiplicity BSpline<para_dim>::RemoveKnot(Dimension const& dimension,
   // bound checks are all done in parametric space
   ParameterSpace_& parameter_space = *Base_::parameter_space_;
 
+  if (parameter_space.IsPeriodic(dimension)) {
+    throw std::logic_error(
+        "RemoveKnot is not supported on a periodic axis.");
+  }
+
   ParameterSpace_ parameter_space_backup{parameter_space};
   IndexLength_ number_of_coordinates{
       parameter_space.GetNumberOfBasisFunctions()};
@@ -307,6 +414,11 @@ void BSpline<para_dim>::ElevateDegree(Dimension const& dimension,
   // bound checks are all done in parametric space
   ParameterSpace_& parameter_space = *Base_::parameter_space_;
   VectorSpace_& vector_space = *vector_space_;
+
+  if (parameter_space.IsPeriodic(dimension)) {
+    throw std::logic_error(
+        "ElevateDegree is not supported on a periodic axis.");
+  }
 
   // collect values before updating parameter_space
   auto const& [number_of_segments, knots_inserted] =
@@ -417,6 +529,12 @@ bool BSpline<para_dim>::ReduceDegree(Dimension const& dimension,
   ParameterSpace_ parameter_space_backup{parameter_space};
   VectorSpace_& vector_space = *vector_space_;
   VectorSpace_ vector_space_backup{vector_space};
+
+  if (parameter_space.IsPeriodic(dimension)) {
+    throw std::logic_error(
+        "ReduceDegree is not supported on a periodic axis.");
+  }
+
   auto const& [number_of_segments, knots_inserted] =
       MakeBezier(dimension, tolerance);
   IndexLength_ number_of_coordinates{
@@ -535,4 +653,262 @@ BSpline<para_dim>::MakeBezier(Dimension const& dimension,
                                                               tolerance);
   Base_::RefineKnots(dimension, std::get<1>(bezier_information));
   return bezier_information;
+}
+
+template<int para_dim>
+parameter_spaces::PeriodicModes<para_dim>
+BSpline<para_dim>::GetPeriodicModes() const {
+  return Base_::parameter_space_->GetPeriodicModes();
+}
+
+template<int para_dim>
+bool BSpline<para_dim>::IsPeriodic(Dimension const& dimension) const {
+  return Base_::parameter_space_->IsPeriodic(dimension);
+}
+
+namespace {
+
+// One periodic orbit insertion on one control row.  The whole translation
+// orbit of u is inserted at once, so the new control polygon stays periodic
+// with period m + 1.  Takes the m fundamental controls (natural convention
+// Q_r = P_(r mod m)) and returns m + 1 fundamental controls.  Modified
+// controls near the seam wrap into the upper fundamental slots, which is
+// what makes seam-crossing insertion exact.
+inline std::vector<double> PeriodicInfiniteInsertion(
+    parameter_spaces::PeriodicAxis const& axis,
+    std::vector<double> const& fundamental_controls,
+    int coordinate_dimension,
+    double mapped_knot,
+    int span_index) {
+  int const p = axis.GetDegree();
+  int const m = axis.GetNumberOfFundamentalKnots();
+  int const m_new = m + 1;
+  std::vector<double> refined(m_new * coordinate_dimension, 0.0);
+
+  auto old_slot = [m](int infinite_index) {
+    int slot = infinite_index % m;
+    if (slot < 0)
+      slot += m;
+    return slot;
+  };
+  auto new_slot = [m_new](int infinite_index) {
+    int slot = infinite_index % m_new;
+    if (slot < 0)
+      slot += m_new;
+    return slot;
+  };
+
+  // Default identity mapping of the infinite insertion formula; every new
+  // slot first inherits an unchanged (periodically wrapped) old control.
+  for (int j{}; j < m_new; ++j) {
+    int source_infinite = (j <= span_index - p) ? j : (j - 1);
+    int const source = old_slot(source_infinite);
+    for (int c{}; c < coordinate_dimension; ++c) {
+      refined[j * coordinate_dimension + c] =
+          fundamental_controls[source * coordinate_dimension + c];
+    }
+  }
+
+  // Overwrite the p modified controls of the affected window, wrapping
+  // seam-adjacent infinite indices into fundamental slots.
+  for (int r{span_index - p + 1}; r <= span_index; ++r) {
+    double const lower_knot = axis.KnotAt(r);
+    double const upper_knot = axis.KnotAt(r + p);
+    double const alpha =
+        (mapped_knot - lower_knot) / (upper_knot - lower_knot);
+    int const target = new_slot(r);
+    int const source_j = old_slot(r);
+    int const source_j_minus_one = old_slot(r - 1);
+    for (int c{}; c < coordinate_dimension; ++c) {
+      refined[target * coordinate_dimension + c] =
+          alpha
+              * fundamental_controls[source_j * coordinate_dimension + c]
+          + (1.0 - alpha)
+                * fundamental_controls[source_j_minus_one
+                                       * coordinate_dimension + c];
+    }
+  }
+  return refined;
+}
+
+} // namespace
+
+template<int para_dim>
+void BSpline<para_dim>::InsertKnotPeriodic(Dimension const& dimension,
+                                           Knot_ knot,
+                                           Multiplicity const& multiplicity,
+                                           Tolerance const& tolerance) const {
+  using parameter_spaces::PeriodicAxis;
+  using parameter_spaces::Periodicity;
+
+  ParameterSpace_& parameter_space = *Base_::parameter_space_;
+  VectorSpace_& vector_space = *vector_space_;
+  PeriodicAxis& axis = parameter_space.GetPeriodicAxis(dimension);
+  int const p = parameter_space.GetDegree(dimension);
+  int const m = axis.GetNumberOfFundamentalKnots();
+
+  int const current_multiplicity =
+      axis.DetermineOrbitMultiplicity(knot, tolerance);
+  int const performed =
+      std::max(0, std::min(multiplicity, p - current_multiplicity));
+  if (performed == 0)
+    return;
+
+  double const mapped_knot = axis.MapToDomain(knot);
+  int const m_new = m + performed;
+  int const n_new = m_new + p;
+  int const d = vector_space.Dim();
+
+  auto const old_shape = parameter_space.GetNumberOfBasisFunctions();
+  Array<int, para_dim> lengths{};
+  for (int k{}; k < para_dim; ++k)
+    lengths[k] = old_shape[k];
+
+  int stride{1};
+  for (int k{}; k < dimension; ++k)
+    stride *= lengths[k];
+  int slice_count{1};
+  for (int k{}; k < para_dim; ++k)
+    if (k != dimension)
+      slice_count *= lengths[k];
+
+  int total_new{1};
+  Array<int, para_dim> new_lengths = lengths;
+  new_lengths[dimension] = n_new;
+  for (int k{}; k < para_dim; ++k)
+    total_new *= new_lengths[k];
+  typename VectorSpace_::Coordinates_ new_coordinates(total_new, d);
+
+  // All rows are refined on locally allocated fundamental storage first so
+  // that no half-edited state is visible if an allocation fails.
+  for (int slice{}; slice < slice_count; ++slice) {
+    int const low = slice % stride;
+    int const high = slice / stride;
+    int const old_base = low + high * (lengths[dimension] * stride);
+    int const new_base = low + high * (n_new * stride);
+
+    std::vector<double> row(m * d);
+    for (int j{}; j < m; ++j) {
+      std::copy_n(vector_space.CoordinateBegin(old_base + j * stride),
+                  d,
+                  row.data() + j * d);
+    }
+
+    // A working copy of the axis supplies updated knots after each single
+    // insertion, leaving the real parameter space untouched until commit.
+    PeriodicAxis work_axis = axis;
+    for (int r{}; r < performed; ++r) {
+      int const span = work_axis.FindLocalSpan(mapped_knot);
+      row = PeriodicInfiniteInsertion(
+          work_axis, row, d, mapped_knot, span);
+      work_axis.InsertOrbit(mapped_knot, 1, tolerance);
+    }
+
+    // Fundamental controls followed by exact periodic padding copies.
+    for (int j{}; j < m_new; ++j) {
+      std::copy_n(row.data() + j * d,
+                  d,
+                  &new_coordinates(new_base + j * stride, 0));
+    }
+    for (int j{}; j < p; ++j) {
+      std::copy_n(row.data() + j * d,
+                  d,
+                  &new_coordinates(new_base + (m_new + j) * stride, 0));
+    }
+  }
+
+  // All local work succeeded; commit in an order whose failing steps cannot
+  // leave a half-edited spline.  The fundamental multiset is updated first;
+  // the only subsequent allocations (the rebuilt knot vectors) are mirrored
+  // into local pointers before they replace the stored ones, and the final
+  // control net update is a non-throwing move.
+  axis.InsertOrbit(knot, performed, tolerance);
+  typename ParameterSpace_::KnotVectors_ rebuilt =
+      parameter_space.GetKnotVectors();
+  for (int k{}; k < para_dim; ++k) {
+    if (parameter_space.GetPeriodicModes()[k]
+        == parameter_spaces::Periodicity::Periodic) {
+      rebuilt[k] = std::make_shared<parameter_spaces::KnotVector>(
+          parameter_space.GetPeriodicAxis(k).FiniteKnots());
+    }
+  }
+  for (int k{}; k < para_dim; ++k)
+    parameter_space.GetKnotVectors()[k] = rebuilt[k];
+  vector_space.GetCoordinates() = std::move(new_coordinates);
+}
+
+template<int para_dim>
+void BSpline<para_dim>::RotatePeriodicSeam(Dimension const& dimension,
+                                           Knot_ seam,
+                                           Tolerance const& tolerance) const {
+  using parameter_spaces::PeriodicAxis;
+
+  ParameterSpace_& parameter_space = *Base_::parameter_space_;
+  VectorSpace_& vector_space = *vector_space_;
+  PeriodicAxis& axis = parameter_space.GetPeriodicAxis(dimension);
+
+  int const orbit = axis.FindOrbitIndex(seam, tolerance);
+  if (orbit < 0) {
+    throw InvalidArgument(
+        "RotatePeriodicSeam: the seam must be periodic-equivalent to an "
+        "existing fundamental knot.");
+  }
+
+  int const p = parameter_space.GetDegree(dimension);
+  int const m = axis.GetNumberOfFundamentalKnots();
+  int const n = m + p;
+  int const d = vector_space.Dim();
+
+  auto const old_shape = parameter_space.GetNumberOfBasisFunctions();
+  Array<int, para_dim> lengths{};
+  for (int k{}; k < para_dim; ++k)
+    lengths[k] = old_shape[k];
+
+  int stride{1};
+  for (int k{}; k < dimension; ++k)
+    stride *= lengths[k];
+  int slice_count{1};
+  for (int k{}; k < para_dim; ++k)
+    if (k != dimension)
+      slice_count *= lengths[k];
+
+  int total{1};
+  for (int k{}; k < para_dim; ++k)
+    total *= lengths[k];
+  typename VectorSpace_::Coordinates_ rotated_coordinates(total, d);
+
+  for (int slice{}; slice < slice_count; ++slice) {
+    int const low = slice % stride;
+    int const high = slice / stride;
+    int const base = low + high * (lengths[dimension] * stride);
+
+    // Rotated fundamental row j holds old fundamental row (orbit + j) mod m.
+    std::vector<int> source(m);
+    for (int j{}; j < m; ++j)
+      source[j] = (orbit + j) % m;
+    for (int j{}; j < n; ++j) {
+      int fundamental_slot = (j < m) ? j : (j - m);
+      int const old_slot = source[fundamental_slot];
+      std::copy_n(vector_space.CoordinateBegin(base + old_slot * stride),
+                  d,
+                  &rotated_coordinates(base + j * stride, 0));
+    }
+  }
+
+  // Commit: rotate the local multiset first; allocate the rebuilt knot
+  // vectors before replacing the stored pointers so an allocation failure
+  // cannot leave the spline half-edited, then move the control net.
+  axis.RotateSeam(seam, tolerance);
+  typename ParameterSpace_::KnotVectors_ rebuilt =
+      parameter_space.GetKnotVectors();
+  for (int k{}; k < para_dim; ++k) {
+    if (parameter_space.GetPeriodicModes()[k]
+        == parameter_spaces::Periodicity::Periodic) {
+      rebuilt[k] = std::make_shared<parameter_spaces::KnotVector>(
+          parameter_space.GetPeriodicAxis(k).FiniteKnots());
+    }
+  }
+  for (int k{}; k < para_dim; ++k)
+    parameter_space.GetKnotVectors()[k] = rebuilt[k];
+  vector_space.GetCoordinates() = std::move(rotated_coordinates);
 }

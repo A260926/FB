@@ -45,6 +45,14 @@ using std::for_each, std::to_string, utilities::string_operations::Append,
     utilities::system_operations::Open,
     utilities::system_operations::OutputStream;
 
+// Vendor trailer marking genuinely periodic splines.  It is appended after
+// the standard IGES parameter data so legacy readers see an ordinary 126/128
+// entity while this library restores the per-axis periodicity flags and the
+// canonical parameter ranges.  Non-periodic files carry no trailer and are
+// never converted to periodic splines automatically.
+constexpr double kPeriodicTrailerMagic{918273.0};
+constexpr double kPeriodicTrailerVersion{1.0};
+
 template<int para_dim>
 SplineEntry CreateSpline(SplineDataInt const& spline_data_int,
                          SplineDataDouble const& spline_data_double,
@@ -354,13 +362,100 @@ SplineEntry CreateSpline(SplineDataInt const& spline_data_int,
                                                  3);
   iter_fill(coordinates, spline_datum_double, 0.0);
 
-  if (*(spline_datum_int + 2) == 1) {
+  // Detect the vendor periodic trailer: magic, version, para_dim flags and
+  // 2 * para_dim canonical range values.  Files without it stay
+  // non-periodic even if their geometry happens to be closed.
+  int const total_knots = [&]() {
+    int count{};
+    for (int i{}; i < para_dim; ++i)
+      count += number_of_coordinates[i] + degrees[i] + 1;
+    return count;
+  }();
+  int const standard_double_count = knot_vector_start + total_knots
+                                    + total_number_of_coordinates
+                                    + 3 * total_number_of_coordinates
+                                    + 2 * para_dim;
+  int const trailer_size = 2 + 3 * para_dim;
+  parameter_spaces::PeriodicModes<para_dim> modes{};
+  bool const has_trailer =
+      (static_cast<int>(spline_data_double.size())
+       == standard_double_count + trailer_size)
+      && (spline_data_double[standard_double_count]
+          == kPeriodicTrailerMagic);
+  if (has_trailer) {
+    int cursor = standard_double_count;
+    if (spline_data_double[cursor + 1] != kPeriodicTrailerVersion) {
+      throw RuntimeError(
+          "IGES periodic trailer has an unsupported version.");
+    }
+    cursor += 2;
+    for (int i{}; i < para_dim; ++i) {
+      modes[i] = (spline_data_double[cursor + i] > 0.5)
+                     ? parameter_spaces::Periodicity::Periodic
+                     : parameter_spaces::Periodicity::NonPeriodic;
+    }
+    cursor += para_dim;
+    if (std::any_of(modes.begin(), modes.end(), [](auto const& mode) {
+          return mode == parameter_spaces::Periodicity::Periodic;
+        })) {
+      // Rebuild the parameter space with explicit periodic metadata.
+      parameter_space = make_shared<ParameterSpace>(
+          parameter_space->GetKnotVectors(),
+          parameter_space->GetDegrees(),
+          modes);
+      // The stored canonical ranges must agree with the knot extension.
+      auto const derived_ranges = parameter_space->GetDomainRanges();
+      for (int i{}; i < para_dim; ++i) {
+        for (int edge{}; edge < 2; ++edge) {
+          double const stored = spline_data_double[cursor + 2 * i + edge];
+          if (std::abs(stored - derived_ranges[i][edge])
+              > parameter_spaces::kPeriodicKnotTolerance) {
+            throw RuntimeError(
+                "IGES periodic trailer ranges do not match the periodic "
+                "knot extension.");
+          }
+        }
+      }
+    }
+  } else if (static_cast<int>(spline_data_double.size())
+             != standard_double_count) {
+    throw RuntimeError(
+        "IGES entity contains an unrecognized parameter trailer.");
+  }
+
+  bool const is_periodic = std::any_of(
+      modes.begin(), modes.end(), [](auto const& mode) {
+        return mode == parameter_spaces::Periodicity::Periodic;
+      });
+
+  // The polynomial/rational flag follows the type, per-axis counts,
+  // per-axis degrees and two reserved zeros: index 1 + 2*para_dim + 2.
+  int const rational_flag_index = 1 + 2 * para_dim + 2;
+  bool const is_polynomial =
+      (spline_data_int.size()
+           > static_cast<std::size_t>(rational_flag_index)
+       && spline_data_int[rational_flag_index] == 1);
+
+  if (is_polynomial) {
+    if (is_periodic) {
+      return make_shared<BSpline>(
+          parameter_space,
+          make_shared<VectorSpace>(std::move(coordinates)),
+          modes);
+    }
     return make_shared<BSpline>(
-        std::move(parameter_space),
+        parameter_space,
         make_shared<VectorSpace>(std::move(coordinates)));
   } else {
+    if (is_periodic) {
+      return make_shared<Nurbs>(
+          parameter_space,
+          make_shared<WeightedVectorSpace>(std::move(coordinates),
+                                           std::move(weights)),
+          modes);
+    }
     return make_shared<Nurbs>(
-        std::move(parameter_space),
+        parameter_space,
         make_shared<WeightedVectorSpace>(std::move(coordinates),
                                          std::move(weights)));
   }
@@ -482,6 +577,41 @@ void WriteSpline(SplineType const& spline,
            delimiter,
            utilities::containers::GetBack(knot_vector));
   };
+
+  // Vendor periodic trailer (see kPeriodicTrailerMagic): genuine per-axis
+  // periodicity flags followed by the canonical parameter ranges [a, b).
+  auto const& periodic_modes =
+      spline.GetParameterSpace()->GetPeriodicModes();
+  bool const any_periodic =
+      std::any_of(periodic_modes.begin(),
+                  periodic_modes.end(),
+                  [](parameter_spaces::Periodicity const& mode) {
+                    return mode == parameter_spaces::Periodicity::Periodic;
+                  });
+  if (any_periodic) {
+    Append(parameter_data_section_contribution,
+           delimiter,
+           to_string(kPeriodicTrailerMagic));
+    Append(parameter_data_section_contribution,
+           delimiter,
+           to_string(kPeriodicTrailerVersion));
+    for (int i{}; i < para_dim; ++i) {
+      Append(parameter_data_section_contribution,
+             delimiter,
+             periodic_modes[i] == parameter_spaces::Periodicity::Periodic
+                 ? "1"
+                 : "0");
+    }
+    auto const domain_ranges = spline.GetParameterSpace()->GetDomainRanges();
+    for (int i{}; i < para_dim; ++i) {
+      for (int edge{}; edge < 2; ++edge) {
+        Append(parameter_data_section_contribution,
+               delimiter,
+               utilities::string_operations::Write(domain_ranges[i][edge],
+                                                    precision));
+      }
+    }
+  }
 }
 
 String ConvertToHollerith(String const& raw_string) {
