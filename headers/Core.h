@@ -67,6 +67,11 @@
         * set pixel
         */
         void setPixel(Vec2<SI>* const curpix, DynamicVoxel* const voxel);
+
+        /*
+        * Fill the pixels buffer using the shared CPU frame implementation
+        */
+        void processPixels(UC* const pixels);
     };
 
 #endif

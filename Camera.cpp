@@ -15,27 +15,18 @@ extern const float midentity[16];
 
 
 /*
-* rotation matrix
-*/
-static float matrot[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-
-
-/*
-* temporaries matrix
-*/
-static float mattmp_1[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-static float mattmp_2[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-
-
-/*
 * Constructor
 */
 Camera::Camera()
 {
     this->resetTransformation();
     this->nearcenter.x =
-    this->nearcenter.y = 
+    this->nearcenter.y =
     this->nearcenter.z = 0.0f;
+    this->basis.i.x = this->basis.j.y = this->basis.k.z = 1.0f;
+    this->basis.i.y = this->basis.i.z = 0.0f;
+    this->basis.j.x = this->basis.j.z = 0.0f;
+    this->basis.k.x = this->basis.k.y = 0.0f;
 }
 
 
@@ -77,11 +68,11 @@ void Camera::setPosition(const float x, const float y , const float z)
 */
 void Camera::resetTransformation()
 {
-    memset(matrot, 0x0, sizeof(matrot));
-    matrot[0] =
-    matrot[5] =
-    matrot[10] =
-    matrot[15] = 1.0f;
+    memset(this->matrot, 0x0, sizeof(this->matrot));
+    this->matrot[0] =
+    this->matrot[5] =
+    this->matrot[10] =
+    this->matrot[15] = 1.0f;
 }
 
 
@@ -89,12 +80,12 @@ void Camera::resetTransformation()
 * rotate
 */
 void Camera::rotate(const Vec3<float> axis, float angle)
-{	
-    math::eulerorientation(axis, angle, mattmp_1);
-    math::mat4xmat4(matrot, mattmp_1, mattmp_2);
+{
+    math::eulerorientation(axis, angle, this->matrot_1);
+    math::mat4xmat4(this->matrot, this->matrot_1, this->matrot_2);
 
-    memcpy(matrot, mattmp_2, sizeof(matrot));
-    this->updateNearInfo(matrot);
+    memcpy(this->matrot, this->matrot_2, sizeof(this->matrot));
+    this->updateNearInfo(this->matrot);
 }
 
 
@@ -103,10 +94,10 @@ void Camera::rotate(const Vec3<float> axis, float angle)
 */
 void Camera::translate(const Vec3<float> v)
 {
-    math::translate(v, matrot);
-    this->nearcenter.x = matrot[12];
-    this->nearcenter.y = matrot[13];
-    this->nearcenter.z = matrot[14];
+    math::translate(v, this->matrot);
+    this->nearcenter.x = this->matrot[12];
+    this->nearcenter.y = this->matrot[13];
+    this->nearcenter.z = this->matrot[14];
 }
 
 
@@ -116,6 +107,15 @@ void Camera::translate(const Vec3<float> v)
 void Camera::getBasis(Mat3f* const basis)
 {
     *basis = this->basis;
+}
+
+
+/*
+* getPosition
+*/
+Vec3<float> Camera::getPosition() const
+{
+    return this->nearcenter;
 }
 
 

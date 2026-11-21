@@ -1,8 +1,8 @@
 /*
  * Cloud of Voxels (CoV) project
- * Author: m-c/d, mcidclan
+ * Author: mcidclan, m [.D'O'T.] cid [.D'O'T.] clan [.A'T.] gmail [.D'O'T.] com
  * Creation Date: 2011
- * Modification Date: 2025
+ * Modification Date: 2020
  */
 
 #ifndef OCTANT_H
@@ -43,6 +43,12 @@
 
 
         /*
+        * Deletes the subtree rooted at the given octant, recursively
+        */
+        static void destroy(Octant* const octant);
+
+
+        /*
         * initChild
         */
         static void initChild(Octant* const octant,
@@ -58,15 +64,17 @@
         /*
         * initBit
         */
-        static void initBit(Octant* const octant, const Voxel voxel);
-        static void initBit(Octant* const octant, Voxel* const voxel);
+        static void initBit(Octant* const octant, const Voxel voxel,
+        const float half);
+        static void initBit(Octant* const octant, Voxel* const voxel,
+        const float half);
 
 
         /*
         * Set bit space, corresponding to the current voxel
         */
         static void setBit(Octant* const octant,
-        Voxel* const voxel, const bool dynamic = true);
+        Voxel* const voxel, const float half, const bool dynamic = true);
 
 
         /*

@@ -7,6 +7,9 @@
 
 #include "./headers/Core.h"
 #include "./headers/voxelmodels.h"
+#ifndef PSP
+#include "./headers/CPUFrame.h"
+#endif
 
 extern Voxel monkey[MESH_SIZE] __attribute__((aligned(8)));
  
@@ -132,6 +135,18 @@ void Core::setPixel(Vec2<SI>* const curpix, DynamicVoxel* const voxel)
  */
 void Core::process(UC* const pixels)
 {
+    #ifndef PSP
+    // The GL renderer only displays the buffer; the shared CPU implementation
+    // owns the pixel path for PIXEL_STEP == 1. The quad list path passes no
+    // buffer and keeps its own loop.
+    if(pixels != NULL && Options::PIXEL_STEP == 1 &&
+        !Options::QUADS_AS_PIXELS)
+    {
+        this->processPixels(pixels);
+        return;
+    }
+    #endif
+
     Mat3f basis = {
         {1.0f, 0.0f, 0.0f},
         {0.0f, 1.0f, 0.0f},
@@ -223,3 +238,50 @@ void Core::process(UC* const pixels)
     }
     while(true);
 }
+
+
+#ifndef PSP
+/*
+ * Shared CPU pixel implementation, also used by the batched CPU renderer.
+ */
+void Core::processPixels(UC* const pixels)
+{
+    Mat3f basis = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f}
+    };
+    this->camera->getBasis(&basis);
+    const Vec3<float> position = this->camera->getPosition();
+
+    CPUFramePixelConfig config;
+    config.pixelStep = Options::PIXEL_STEP;
+    config.perspectiveFactor = Options::PERSPECTIVE_FACTOR;
+    config.zoom = Options::ZOOM_FACTOR;
+    config.background = {0, 0, 0, 0};
+    config.transparentR = 1.0f;
+    config.transparentG = 1.0f;
+    config.transparentB = 1.0f;
+    config.transparentA = 1.0f;
+    config.maxVoxelsByRay = Options::MAX_VOXELS_BY_RAY > 0
+    ? Options::MAX_VOXELS_BY_RAY : 1u;
+    config.transparency = Options::TRANSPARENCY;
+    config.minVoxelsProximity = (float)Options::MIN_VOXELS_PROXIMITY;
+    config.avoidScanGlitches = Options::AVOID_SCAN_GLITCHES;
+    config.maxRayDistance = (float)this->octree->getRayLength();
+    const int halfWidth = (int)Options::SCR_HALF_WIDTH;
+    const int halfHeight = (int)Options::SCR_HALF_HEIGHT;
+    const int width = (int)Options::SCR_WIDTH;
+    const int height = (int)Options::SCR_HEIGHT;
+
+    for(int y = 0; y < height; y++)
+    {
+        for(int x = 0; x < width; x++)
+        {
+            cpuFrameRenderPixel(*this->octree, basis, position,
+            x - halfWidth, y - halfHeight, config,
+            &pixels[COLOR_BYTES_NUMBER * ((size_t)x + (size_t)y * width)]);
+        }
+    }
+}
+#endif

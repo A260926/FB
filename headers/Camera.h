@@ -56,6 +56,12 @@
 
 
         /*
+        * getPosition
+        */
+        Vec3<float> getPosition() const;
+
+
+        /*
         * Apply translation to a given coordinates
         */
         void reajust(Vec3<float>* const coordinates);
@@ -64,6 +70,14 @@
         private:
         Mat3f basis;
         Vec3<float> nearcenter;
+
+        /*
+        * Rotation state is owned by each instance, so interleaved cameras
+        * never accumulate each other's rotations.
+        */
+        float matrot[16];
+        float matrot_1[16];
+        float matrot_2[16];
 
 
         private:

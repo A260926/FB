@@ -6,7 +6,6 @@
  */
 
 #include "./headers/Octant.h"
-#include "./headers/Octree.h"
 
 /*
  * init
@@ -16,6 +15,11 @@ void OctantManager::init(Octant* const octant)
     octant->depth = 0;
     octant->voxel = NULL;
     octant->children = NULL;
+    octant->facescenter = NULL;
+    octant->center.x =
+    octant->center.y =
+    octant->center.z = 0;
+    octant->half = 0;
 }
 
 
@@ -40,8 +44,37 @@ void OctantManager::removeChildren(Octant* const octant) {
     if(octant->children != NULL)
     {
         delete [] octant->children;
+        octant->children = NULL;
         delete [] octant->facescenter;
-    }    
+        octant->facescenter = NULL;
+    }
+}
+
+
+/*
+ * Recursively release an octant and its subtree.
+ * Voxels are not owned by the octree: depending on the insertion entry
+ * point, their storage may belong to the caller, so it is left untouched.
+ */
+void OctantManager::destroy(Octant* const octant)
+{
+    if(octant == NULL)
+    {
+        return;
+    }
+    if(octant->children != NULL)
+    {
+        UC i = 0;
+        while(i < 8)
+        {
+            OctantManager::destroy(&octant->children[i]);
+            i++;
+        }
+        delete [] octant->children;
+        octant->children = NULL;
+    }
+    delete [] octant->facescenter;
+    octant->facescenter = NULL;
 }
 
 
@@ -73,7 +106,7 @@ const SUI i, const SUI j, const SUI k)
     child->center.z += child->half;
     OctantManager::setFacesCenter(child);
 }
-  
+
 /*
  * setFacesCenter
  */
@@ -93,18 +126,20 @@ void OctantManager::setFacesCenter(Octant* const octant)
 /*
  * Set the bit space corresponding to the current voxel
  */
-void OctantManager::initBit(Octant* const octant, const Voxel voxel)
+void OctantManager::initBit(Octant* const octant, const Voxel voxel,
+const float half)
 {
     Voxel* v = new Voxel();
     v->coordinates = voxel.coordinates;
     v->color = voxel.color;
-    OctantManager::setBit(octant, v);
+    OctantManager::setBit(octant, v, half);
 }
 
 
-void OctantManager::initBit(Octant* const octant, Voxel* const voxel)
+void OctantManager::initBit(Octant* const octant, Voxel* const voxel,
+const float half)
 {
-    OctantManager::setBit(octant, voxel, false);
+    OctantManager::setBit(octant, voxel, half, false);
 }
 
 
@@ -112,12 +147,19 @@ void OctantManager::initBit(Octant* const octant, Voxel* const voxel)
  * Set the bit space corresponding to the current voxel
  */
 void OctantManager::setBit(Octant* const octant, Voxel* const voxel,
-const bool dynamic)
+const float half, const bool dynamic)
 {
-    if(math::absf(voxel->coordinates.x) >= (Octree::half - 2) ||
-        math::absf(voxel->coordinates.y) >= (Octree::half - 2) ||
-        math::absf(voxel->coordinates.z) >= (Octree::half - 2)) return;
-            
+    if(math::absf(voxel->coordinates.x) >= (half - 2) ||
+        math::absf(voxel->coordinates.y) >= (half - 2) ||
+        math::absf(voxel->coordinates.z) >= (half - 2))
+    {
+        if(dynamic)
+        {
+            delete voxel;
+        }
+        return;
+    }
+
     if(octant->depth == 0)
     {
         if(octant->voxel == NULL || (voxel->color & 0x000000FF) == 255) { //Todo
@@ -144,7 +186,7 @@ const bool dynamic)
             }
         }
         OctantManager::setBit(OctantManager::getChildAt(
-        octant, voxel->coordinates), voxel, dynamic);
+        octant, voxel->coordinates), voxel, half, dynamic);
     }
 }
 

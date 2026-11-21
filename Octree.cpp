@@ -5,28 +5,40 @@
  * Modification Date: 2020
  */
 
+#include <cmath>
+
 #include "./headers/Octree.h"
 
 extern Vec3<SI> atom[18];
 extern Vec3<SI> shell[54];
 extern Vec3<SI> shellxl[150];
 
-float Octree::size;
-float Octree::half;
 
 Octree::Octree()
 {
+    this->root = NULL;
+    this->basis = NULL;
+    this->ray = NULL;
+    this->kbase = NULL;
     this->accelerated = false;
+    this->accelerator = NULL;
+    this->initialized = false;
+    this->raylength = 0;
+    this->colordepthstep = 0.0f;
+    this->rootSize = 0;
+    this->rootHalf = 0.0f;
+    this->_kbase.x = this->_kbase.y = this->_kbase.z = 0.0f;
+    this->kNormalizer.x = this->kNormalizer.y = this->kNormalizer.z = 0.0f;
 }
 
 
 Octree::~Octree()
 {
-    delete [] this->root->facescenter;
-    delete this->root;
-    if(Options::ACCELERATED)
+    this->destroyAccelerator();
+    if(this->root != NULL)
     {
-        this->destroyAccelerator();
+        OctantManager::destroy(this->root);
+        this->root = NULL;
     }
 }
 
@@ -34,13 +46,17 @@ Octree::~Octree()
 /*
  *
  */
- void Octree::destroyAccelerator()
+void Octree::destroyAccelerator()
 {
-    UI i = 0, j =0;
-    while(i < Options::OCTREE_SIZE)
+    if(this->accelerator == NULL)
+    {
+        return;
+    }
+    UI i = 0, j = 0;
+    while(i < this->rootSize)
     {
         j = 0;
-        while(j < Options::OCTREE_SIZE)
+        while(j < this->rootSize)
         {
             delete [] this->accelerator[i][j];
             j++;
@@ -49,6 +65,8 @@ Octree::~Octree()
         i++;
     }
     delete [] this->accelerator;
+    this->accelerator = NULL;
+    this->accelerated = false;
 }
 
 
@@ -57,22 +75,28 @@ Octree::~Octree()
  */
 void Octree::createAccelerator()
 {
-    double msize = (pow(Options::OCTREE_SIZE, 3.0)*4.0) / pow(1000.0, 3);
-    printf("Trying to allocate %f GB for accelerator\n", msize);
-    this->accelerator = new Octant***[Options::OCTREE_SIZE];
-    UI i = 0, j = 0;
-    while(i < Options::OCTREE_SIZE)
+    double msize = (pow((double)this->rootSize, 3.0)*4.0) / pow(1000.0, 3);
+    if(!Options::nologs)
     {
-        this->accelerator[i] = new Octant**[Options::OCTREE_SIZE];
+        printf("Trying to allocate %f GB for accelerator\n", msize);
+    }
+    this->accelerator = new Octant***[this->rootSize];
+    UI i = 0, j = 0;
+    while(i < this->rootSize)
+    {
+        this->accelerator[i] = new Octant**[this->rootSize];
         j = 0;
-        while(j < Options::OCTREE_SIZE)
+        while(j < this->rootSize)
         {
-            this->accelerator[i][j] = new Octant*[Options::OCTREE_SIZE];
+            this->accelerator[i][j] = new Octant*[this->rootSize];
             j++;
         }
         i++;
     }
-    printf("Accelerator created\n");
+    if(!Options::nologs)
+    {
+        printf("Accelerator created\n");
+    }
 }
 
 
@@ -81,18 +105,21 @@ void Octree::createAccelerator()
  */
 void Octree::fillAccelerator()
 {
-    printf("Filling the accelerator, please wait...\n");
-    int i = 0, j = 0, k = 0;
-    const SI OCTREE_HALF_SIZE = Options::OCTREE_SIZE / 2;
-    while(i < Options::OCTREE_SIZE)
+    if(!Options::nologs)
+    {
+        printf("Filling the accelerator, please wait...\n");
+    }
+    UI i = 0, j = 0, k = 0;
+    const SI OCTREE_HALF_SIZE = this->rootSize / 2;
+    while(i < this->rootSize)
     {
         j = 0;
         const SI x = i - OCTREE_HALF_SIZE;
-        while(j < Options::OCTREE_SIZE)
+        while(j < this->rootSize)
         {
             k = 0;
             const SI y = j - OCTREE_HALF_SIZE;
-            while(k < Options::OCTREE_SIZE)
+            while(k < this->rootSize)
             {
                 const SI z = k - OCTREE_HALF_SIZE;
                 this->accelerator[i][j][k] =
@@ -103,11 +130,18 @@ void Octree::fillAccelerator()
         }
         i++;
     }
-    printf("Accelerator filled\n");
+    if(!Options::nologs)
+    {
+        printf("Accelerator filled\n");
+    }
 }
 
 void Octree::initAccelerator()
 {
+    if(!this->initialized || this->rootSize == 0 || this->accelerated)
+    {
+        return;
+    }
     this->createAccelerator();
     this->fillAccelerator();
     this->accelerated = true;
@@ -119,6 +153,10 @@ void Octree::initAccelerator()
  */
 void Octree::initRoot(SUI size, SUI maxdepth, const SI raylength)
 {
+    if(this->initialized)
+    {
+        return;
+    }
     this->root = new Octant();
     OctantManager::init(this->root);
     this->root->depth = maxdepth;
@@ -128,10 +166,12 @@ void Octree::initRoot(SUI size, SUI maxdepth, const SI raylength)
     this->root->center.z = 0.0f;
     OctantManager::setFacesCenter(this->root);
     this->ray = NULL;
-    this->raylength = raylength;
-    this->colordepthstep = (1.0f/(float)raylength);
-    Octree::half = this->root->half;
-    Octree::size = Octree::half*2.0f;
+    this->raylength = raylength > 0 ? raylength : 0;
+    this->colordepthstep = this->raylength > 0
+    ? (1.0f/(float)this->raylength) : 0.0f;
+    this->rootSize = size;
+    this->rootHalf = this->root->half;
+    this->initialized = true;
 }
 
 
@@ -156,73 +196,6 @@ void Octree::setRay(Vec3<float>* const ray) {
     kNormalizer.z = math::absf(kbase->z) > 0.001f ? 1.0f / kbase->z : 1000.0f;
 }
 
-/*
- * getBit
- */
-Octant* Octree::getBit()
-{    
-    if(this->accelerated)
-    {
-        const SI x = (this->ray->x + Octree::half);
-        const SI y = (this->ray->y + Octree::half);
-        const SI z = (this->ray->z + Octree::half);
-        
-        if(x >= 0 && x < Options::OCTREE_SIZE &&
-            y >= 0 && y < Options::OCTREE_SIZE &&
-            z >= 0 && z < Options::OCTREE_SIZE)
-        {
-            return this->accelerator[x][y][z];
-        }
-    }
-    return OctantManager::getBit(this->root, {
-        (SI)this->ray->x,
-        (SI)this->ray->y,
-        (SI)this->ray->z
-    });
-}
-
-
-/*
- * getNextBit
- */
-Octant* Octree::getNextBit(float* axis, const float side)
-{
-    const float d = *axis;
-    *axis = ((SI)d) + side;
-    Octant* const curbit = this->getBit();
-    *axis = d;
-    return curbit;
-}
-
-
-/*
- * avoidScanGlitches
- */
-void Octree::avoidScanGlitches(Octant** const curbit)
-{
-    if(Options::AVOID_SCAN_GLITCHES)
-    {
-        if((*curbit)->voxel == NULL) {
-            *curbit = getNextBit(&this->ray->x, 1.0f);
-        }
-        if((*curbit)->voxel == NULL) {
-            *curbit = getNextBit(&this->ray->y, 1.0f);
-        }
-        if((*curbit)->voxel == NULL) {
-            *curbit = getNextBit(&this->ray->z, 1.0f);
-        }
-        if((*curbit)->voxel == NULL) {
-            *curbit = getNextBit(&this->ray->x, -1.0f);
-        }
-        if((*curbit)->voxel == NULL) {
-            *curbit = getNextBit(&this->ray->y, -1.0f);
-        }
-        if((*curbit)->voxel == NULL) {
-            *curbit = getNextBit(&this->ray->z, -1.0f);
-        }
-    }
-}
-
 
 void Octree::setPerspectiveRay(const float x, const float y, const float invDist)
 {
@@ -236,92 +209,265 @@ void Octree::setPerspectiveRay(const float x, const float y, const float invDist
 
 /*
  * rayTrace
+ *
+ * The legacy entry point. It still moves the caller's ray, but the stepping
+ * rules themselves come from the same implementation as the read-only query.
  */
 bool Octree::rayTrace(vector<DynamicVoxel>* const voxels)
 {
-    if(this->ray != NULL)
+    if(this->ray == NULL)
     {
-        float depthray = 0.0f;
-        while(depthray < (float)this->raylength)
-        {
-            // Searches for the deepest available octant from the root,
-            // corresponding to the current ray position
-            Octant* curbit = this->getBit();
-            this->avoidScanGlitches(&curbit);
-            if(curbit->voxel != NULL)
-            {
-                if(!Options::TRANSPARENCY || (curbit->voxel->color & 0x000000FF) == 0xFF)
-                {
-                    voxels->push_back({depthray, curbit->voxel});
-                    return true;
-                }
-                if(Options::TRANSPARENCY)
-                {
-                    if(voxels->size() == 0 || (voxels->size() > 0 && (depthray -
-                    (*voxels)[voxels->size()-1].depth) >= Options::MIN_VOXELS_PROXIMITY))
-                    {
-                        voxels->push_back({depthray, curbit->voxel});
-                    }
-                }
-            }
-            // Calculates the new ray position
-            this->getNextEntryDot(curbit);
-            depthray += this->raystep;
-        }
+        return voxels->size() > 0;
+    }
+
+    RayState state;
+    state.position = *this->ray;
+    state.direction = *this->kbase;
+    state.normalizer = this->kNormalizer;
+    state.step = RAYSTEP_MIN_VALUE;
+
+    vector<TraceHit> hits;
+    this->traceHits(state, (float)this->raylength, Options::TRANSPARENCY,
+    (float)Options::MIN_VOXELS_PROXIMITY, Options::AVOID_SCAN_GLITCHES, &hits);
+
+    *this->ray = state.position;
+
+    for(size_t i = 0; i < hits.size(); i++)
+    {
+        voxels->push_back({hits[i].depth, hits[i].voxel});
     }
     return voxels->size() > 0;
 }
 
 
 /*
- * rayToBorder
+ * getBitAt
  */
-void Octree::rayToBorder(const float a, const float b, const float c)
+Octant* Octree::getBitAt(const Vec3<float>& position) const
 {
-    // Distance between the current ray position and
-    // the next potential octant limit position
-    const float d = (b - a) * c;
-    if(d < this->raystep) {
-        this->raystep = d;
+    if(this->root == NULL)
+    {
+        return NULL;
+    }
+    if(this->accelerated && this->accelerator != NULL)
+    {
+        const SI x = (SI)(position.x + this->rootHalf);
+        const SI y = (SI)(position.y + this->rootHalf);
+        const SI z = (SI)(position.z + this->rootHalf);
+
+        if(x >= 0 && x < (SI)this->rootSize &&
+            y >= 0 && y < (SI)this->rootSize &&
+            z >= 0 && z < (SI)this->rootSize)
+        {
+            return this->accelerator[x][y][z];
+        }
+    }
+    return OctantManager::getBit(this->root, {
+        (SI)position.x,
+        (SI)position.y,
+        (SI)position.z
+    });
+}
+
+
+/*
+ * getNextBitAt
+ */
+Octant* Octree::getNextBitAt(RayState& state, const int axis,
+const float side) const
+{
+    float* const a = (axis == 0) ? &state.position.x
+    : (axis == 1) ? &state.position.y : &state.position.z;
+    const float d = *a;
+    *a = ((SI)d) + side;
+    Octant* const curbit = this->getBitAt(state.position);
+    *a = d;
+    return curbit;
+}
+
+
+/*
+ * avoidScanGlitchesAt
+ */
+void Octree::avoidScanGlitchesAt(RayState& state, Octant** const curbit,
+const bool enabled) const
+{
+    if(!enabled || *curbit == NULL)
+    {
+        return;
+    }
+    if((*curbit)->voxel == NULL) {
+        *curbit = getNextBitAt(state, 0, 1.0f);
+        if(*curbit == NULL) return;
+    }
+    if((*curbit)->voxel == NULL) {
+        *curbit = getNextBitAt(state, 1, 1.0f);
+        if(*curbit == NULL) return;
+    }
+    if((*curbit)->voxel == NULL) {
+        *curbit = getNextBitAt(state, 2, 1.0f);
+        if(*curbit == NULL) return;
+    }
+    if((*curbit)->voxel == NULL) {
+        *curbit = getNextBitAt(state, 0, -1.0f);
+        if(*curbit == NULL) return;
+    }
+    if((*curbit)->voxel == NULL) {
+        *curbit = getNextBitAt(state, 1, -1.0f);
+        if(*curbit == NULL) return;
+    }
+    if((*curbit)->voxel == NULL) {
+        *curbit = getNextBitAt(state, 2, -1.0f);
     }
 }
 
 
 /*
- * getNextEntryDot
+ * rayToBorderAt
  */
-void Octree::getNextEntryDot(Octant* octant)
+void Octree::rayToBorderAt(const float a, const float b, const float c,
+float* const step) const
 {
-    if(this->ray == NULL)
+    // Distance between the current ray position and
+    // the next potential octant limit position
+    const float d = (b - a) * c;
+    if(d < *step) {
+        *step = d;
+    }
+}
+
+
+/*
+ * getNextEntryDotAt
+ */
+void Octree::getNextEntryDotAt(RayState& state, Octant* const octant) const
+{
+    if(octant == NULL)
     {
-      return;
+        state.step = RAYSTEP_MIN_VALUE;
+        return;
     }
 
     if(octant->half <= 0.5f)
     {
-      this->raystep = 1.0f;
-      this->ray->x += this->kbase->x;
-      this->ray->y += this->kbase->y;
-      this->ray->z += this->kbase->z;
-      return;
+        state.step = 1.0f;
+        state.position.x += state.direction.x;
+        state.position.y += state.direction.y;
+        state.position.z += state.direction.z;
+        return;
     }
-    
-    this->raystep = Octree::size;
-    rayToBorder(this->ray->x, octant->facescenter[
-    (this->kbase->x > 0.0f) ? 1 : 0], this->kNormalizer.x);
-    rayToBorder(this->ray->y, octant->facescenter[
-    (this->kbase->y > 0.0f) ? 3 : 2], this->kNormalizer.y);
-    rayToBorder(this->ray->z, octant->facescenter[
-    (this->kbase->z > 0.0f) ? 5 : 4], this->kNormalizer.z);
-    
-    if(this->raystep < RAYSTEP_MIN_VALUE)
+
+    state.step = this->rootSize;
+    rayToBorderAt(state.position.x, octant->facescenter[
+    (state.direction.x > 0.0f) ? 1 : 0], state.normalizer.x, &state.step);
+    rayToBorderAt(state.position.y, octant->facescenter[
+    (state.direction.y > 0.0f) ? 3 : 2], state.normalizer.y, &state.step);
+    rayToBorderAt(state.position.z, octant->facescenter[
+    (state.direction.z > 0.0f) ? 5 : 4], state.normalizer.z, &state.step);
+
+    if(state.step < RAYSTEP_MIN_VALUE)
     {
-        this->raystep = RAYSTEP_MIN_VALUE;
+        state.step = RAYSTEP_MIN_VALUE;
     }
-    
-    this->ray->x += this->kbase->x * this->raystep;
-    this->ray->y += this->kbase->y * this->raystep;
-    this->ray->z += this->kbase->z * this->raystep;
+
+    state.position.x += state.direction.x * state.step;
+    state.position.y += state.direction.y * state.step;
+    state.position.z += state.direction.z * state.step;
+}
+
+
+/*
+ * traceHits
+ */
+void Octree::traceHits(RayState& state, const float maxDistance,
+const bool transparency, const float minVoxelsProximity,
+const bool avoidGlitches, vector<TraceHit>* const hits) const
+{
+    if(this->root == NULL)
+    {
+        return;
+    }
+
+    float depthray = 0.0f;
+    while(depthray < maxDistance)
+    {
+        Octant* curbit = this->getBitAt(state.position);
+        if(curbit == NULL)
+        {
+            break;
+        }
+        this->avoidScanGlitchesAt(state, &curbit, avoidGlitches);
+        if(curbit != NULL && curbit->voxel != NULL)
+        {
+            if(!transparency ||
+                (curbit->voxel->color & 0x000000FF) == 0xFF)
+            {
+                hits->push_back({depthray, curbit->voxel});
+                return;
+            }
+            if(hits->size() == 0 ||
+                (depthray - (*hits)[hits->size()-1].depth) >= minVoxelsProximity)
+            {
+                hits->push_back({depthray, curbit->voxel});
+            }
+        }
+        this->getNextEntryDotAt(state, curbit);
+        depthray += state.step;
+    }
+}
+
+
+/*
+ * queryRay
+ */
+void Octree::queryRay(const RayQuery& query, vector<RayHit>* const hits) const
+{
+    if(hits == NULL)
+    {
+        return;
+    }
+    hits->clear();
+
+    RayState state;
+    state.position.x = query.origin.x;
+    state.position.y = query.origin.y;
+    state.position.z = query.origin.z;
+    state.direction.x = query.direction.x;
+    state.direction.y = query.direction.y;
+    state.direction.z = query.direction.z;
+    state.step = RAYSTEP_MIN_VALUE;
+
+    state.normalizer.x = math::absf(state.direction.x) > 0.001f
+    ? 1.0f / state.direction.x : 1000.0f;
+    state.normalizer.y = math::absf(state.direction.y) > 0.001f
+    ? 1.0f / state.direction.y : 1000.0f;
+    state.normalizer.z = math::absf(state.direction.z) > 0.001f
+    ? 1.0f / state.direction.z : 1000.0f;
+
+    vector<TraceHit> found;
+    this->traceHits(state, query.maxDistance, query.transparency,
+    query.minVoxelsProximity, query.avoidScanGlitches, &found);
+
+    hits->reserve(found.size());
+    for(size_t i = 0; i < found.size(); i++)
+    {
+        const Voxel* const voxel = found[i].voxel;
+        const Color color = {
+            (UC)((voxel->color & 0xFF000000) >> 24),
+            (UC)((voxel->color & 0x00FF0000) >> 16),
+            (UC)((voxel->color & 0x0000FF00) >> 8),
+            (UC)(voxel->color & 0x000000FF)
+        };
+        hits->push_back({found[i].depth, color});
+    }
+}
+
+
+vector<Octree::RayHit> Octree::queryRay(const RayQuery& query) const
+{
+    vector<RayHit> hits;
+    this->queryRay(query, &hits);
+    return hits;
 }
 
 
@@ -329,7 +475,7 @@ void Octree::getNextEntryDot(Octant* octant)
  * addVoxels
  */
 void Octree::addVoxels(Voxel* voxels, const UI nvoxel)
-{    
+{
 	UI i = 0;
     UC percent = 0;
     const UI step = nvoxel / 100;
@@ -337,15 +483,18 @@ void Octree::addVoxels(Voxel* voxels, const UI nvoxel)
 	{
         if((step > 0) && (i % (step * 10) == 0))
         {
-            printf(">%d ", percent);
+            if(!Options::nologs)
+            {
+                printf(">%d ", percent);
+            }
             percent+=10;
         }
-        
+
         if(Options::SMOOTH_SIBLINGS)
         {
             this->addSmooths(&voxels[i]);
         } else this->addSingleVoxel(&voxels[i]);
-            
+
         switch(Options::VOXEL_SHELL_TYPE)
         {
             case 1:
@@ -360,13 +509,16 @@ void Octree::addVoxels(Voxel* voxels, const UI nvoxel)
         }
         i++;
 	}
-    printf("\n");
+    if(!Options::nologs)
+    {
+        printf("\n");
+    }
 }
 
 template<typename T>
 void Octree::initBit(T voxel)
 {
-    OctantManager::initBit(this->root, voxel);
+    OctantManager::initBit(this->root, voxel, this->rootHalf);
 }
 
 
@@ -485,7 +637,19 @@ Color Octree::getColorDepth(const UC r, const UC g, const UC b, const float dept
     return {(UC)(r * darkness), (UC)(g * darkness), (UC)(b * darkness), 0};
 }
 
-float Octree::getDarkness(const float depth)
+float Octree::getDarkness(const float depth) const
 {
    return 1.0f - depth * this->colordepthstep;
+}
+
+
+float Octree::getRayLength() const
+{
+    return (float)this->raylength;
+}
+
+
+SUI Octree::getRootSize() const
+{
+    return this->rootSize;
 }

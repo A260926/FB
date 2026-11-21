@@ -58,4 +58,82 @@ or with powershell:
     voxel-shell-type:xl voxel-shell-rgba:0xFF10F040 min-voxels-proximity:7 `
     accelerate fps:30
 
+Enable threads (optional)
+------------
+On pthread platforms the CPU side can render several viewports at once
+without OpenGL. New files:
+
+- ``headers/CPUFrame.h`` / ``CPUFrame.cpp``: GL-free multi viewport batch
+  renderer, C++17 standard library only.
+- ``examples/cpu_frame.cpp``: builds two octrees of different sizes, two
+  cameras, and writes a PPM file with four worker threads.
+- ``tests/cpu_frame.cpp``: ownership, query and frame tests.
+
+Build the example and the tests without a window or a GPU::
+
+    c++ -std=c++17 -O2 -pthread -I. -include headers/CPUFrame.h -c CPUFrame.cpp -o CPUFrame.o
+    c++ -std=c++17 -O2 -pthread -I. examples/cpu_frame.cpp CPUFrame.o \
+        Octree.cpp Octant.cpp Camera.cpp Options.cpp math.cpp voxeldisplays.cpp \
+        -o cpu_frame_example
+    ./cpu_frame_example out.ppm
+
+    c++ -std=c++17 -O2 -pthread -I. task_support/driver.c tests/cpu_frame.cpp \
+        CPUFrame.o Octree.cpp Octant.cpp Camera.cpp Options.cpp math.cpp \
+        voxeldisplays.cpp -o cpu_frame_tests
+    ./cpu_frame_tests
+
+Each call to ``cpuFrameRender`` takes a list of ``CPUFrameViewport`` and one
+``CPUFrameOptions``. Every viewport supplies its own octree, a camera basis
+and position snapshot, positive even dimensions, ``pixelStep`` 1, a non
+negative perspective factor, a positive zoom, the background RGBA and the
+per channel transparency weights. Rendering rules are the existing ones:
+pixel rays come from the ``Core::process`` geometry (orthographic, or
+perspective through the zoom and perspective factor), depth darkening and
+``MAX_VOXELS_BY_RAY`` clipping are unchanged, and blending runs back to
+front. ``CPUFrameOptions`` also carries the transparency switch, the minimum
+voxel proximity, ``maxVoxelsByRay`` and the scan patch switch, so a batch does
+not follow later changes to the legacy ``Options`` defaults.
+
+Read-only period and ownership
+-----------------------------
+An octree is writable only while it is being built. ``initRoot`` runs once
+per instance and the instance remembers its own root size, insertion bounds,
+ray length and accelerator grid, so trees of size 16 and 32 (depth 4 and 5)
+can coexist, and inserting into one never consults another's bounds or the
+global ``Options::OCTREE_SIZE``. Once ``initAccelerator`` has run, the tree is
+read-only for the whole batch: no query mutates it, and queries may run
+concurrently on the same tree from several worker threads. The accelerator is
+allocated, addressed and released by the instance that built it, and the
+same query implementation serves both the accelerated and the plain
+traversal. Editing and querying at the same time is not supported.
+
+``Octree::queryRay`` is the read-only entry point. It takes the origin, the
+unit direction, a positive maximum distance and the transparency, proximity
+and patch switches, and returns ``Octree::RayHit`` copies ordered by the
+ray's stepping order. The caller's inputs are copied and never retained: the
+tree keeps no pointer to them and no per ray scratch survives the call. A
+returned hit holds a copy of the raw color, so it stays valid after the tree
+is destroyed. The legacy ``setRay``, ``initBasis``, ``setPerspectiveRay`` and
+``rayTrace`` entry points still work and still move the caller's ray; they use
+the same stepping code, but they are not safe to call concurrently.
+
+``cpuFrameRender`` validates the whole batch before starting any work: a null
+tree, a non positive or odd dimension, a ``pixelStep`` other than 1, a
+negative perspective factor, a non positive zoom, a non finite parameter or a
+non orthonormal camera basis raises ``std::invalid_argument`` and no partial
+frame is produced. Workers are between 1 and 32, and the work is split into
+row blocks of ``tileRows`` rows; at least two workers query the same tree
+whenever a viewport has more than one block. No thread is created per pixel
+and task storage does not grow with the pixel count. Results come back in the
+input viewport order, each with its own row-major RGBA buffer. The returned
+``CPUFrameStats`` reports the completed viewport count, the pixel query count
+and the number of worker threads created. Output is byte for byte identical
+whatever the worker count, the block order or the interleaving with other
+batches.
+
+The legacy ``Core::process(pixels)`` path with a non null buffer and
+``PIXEL_STEP == 1`` goes through the same shared pixel implementation; GL only
+displays the resulting buffer. The quad list path and other pixel steps keep
+their previous behaviour.
+
 Enjoy!
