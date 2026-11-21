@@ -223,6 +223,16 @@ const deserializedBVH = MeshBVH.deserialize( serialized, geometry );
 geometry.boundsTree = deserializedBVH;
 ```
 
+## PLOC Build Strategy
+
+In addition to the `CENTER`, `AVERAGE`, and `SAH` split strategies, the BVH can be built bottom-up with Parallel Locally-Ordered Clustering (`PLOC`). Triangles are ordered by the Morton code of their bounds centers and then greedily merged with the neighboring cluster that yields the smallest combined surface area until a single root cluster remains. The resulting packed tree works with all existing query, refit, and serialization functions.
+
+```js
+import { MeshBVH, PLOC } from 'three-mesh-bvh';
+
+const bvh = new MeshBVH( geometry, { strategy: PLOC } );
+```
+
 ## Asynchronous Generation
 
 _NOTE WebWorker syntax is inconsistently supported across bundlers and sometimes not supported at all so the GenerateMeshBVHWorker class is exported separately via `three-mesh-bvh/worker` subpath. If needed the code from `src/worker` can be copied and modified to accommodate a particular build process._
@@ -257,6 +267,27 @@ worker.generate( geometry ).then( bvh => {
     geometry.boundsTree = bvh;
 
 } );
+```
+
+_In Node.js, PLOC trees can also be built across a pool of worker threads with "NodePLOCWorker". The neighbor candidate evaluation and parent bounds merging of every aggregation round are distributed over the threads, and the result is byte identical to a synchronous `new MeshBVH( geometry, { strategy: PLOC } )` for the same geometry and options. The class is exported from `three-mesh-bvh/src/workers/NodePLOCWorker.js` and relies only on Node's built-in `worker_threads`._
+
+```js
+import { NodePLOCWorker } from 'three-mesh-bvh/src/workers/NodePLOCWorker.js';
+
+// ...
+
+const geometry = new KnotGeometry( 1, 0.5, 40, 10 );
+
+// "workers" is the number of threads to use, between 1 and 16
+const worker = new NodePLOCWorker( { workers: 4 } );
+const { bvh, stats } = await worker.generate( geometry, { strategy: PLOC } );
+geometry.boundsTree = bvh;
+
+// per-round active cluster counts and per-thread work counters
+console.log( stats.rounds, stats.threads );
+
+// terminate the thread pool when done
+await worker.dispose();
 ```
 
 ## BVH Queries in a Shader

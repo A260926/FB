@@ -28,6 +28,16 @@ export const AVERAGE = 1;
  */
 export const SAH = 2;
 
+/**
+ * Option to build the BVH bottom-up using Parallel Locally-Ordered Clustering (PLOC).
+ * Triangles are ordered by the Morton code of their bounds centers and then greedily
+ * merged with the neighboring cluster that yields the smallest combined surface area
+ * until a single root cluster remains.
+ *
+ * @type {number}
+ */
+export const PLOC = 3;
+
 // Traversal constants
 
 /**

@@ -11,6 +11,7 @@ export enum SplitStrategy {}
 export const CENTER: SplitStrategy;
 export const AVERAGE: SplitStrategy;
 export const SAH: SplitStrategy;
+export const PLOC: SplitStrategy;
 
 export enum ShapecastIntersection {}
 export const NOT_INTERSECTED: ShapecastIntersection;
