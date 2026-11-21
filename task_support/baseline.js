@@ -1,0 +1,16 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {runViewer} = require('./viewer');
+const map = {width:8,height:8,shift:3,altitude:new Uint8Array(64),color:new Uint32Array(64).fill(0xff3050a0)};
+const options = {map,width:16,height:12,camera:{x:4,y:6,height:1,angle:0,horizon:2,distance:64},background:0xffe09090};
+const flat = runViewer(options).color;
+const ground = Array.from(flat).filter(x=>x===0xff3050a0).length;
+const sky = Array.from(flat).filter(x=>x===0xffe09090).length;
+assert(ground>0 && sky>0 && ground+sky===flat.length);
+assert.deepEqual(runViewer(options).color, flat);
+for(let x=0;x<8;x++)map.altitude[3*8+x]=3;
+const raised=runViewer(options).color;
+const changed=Array.from(raised).filter((x,i)=>x!==flat[i]).length;
+assert(changed>0);
+console.log(`flat_ground=${ground} flat_sky=${sky} raised_changed=${changed}`);
+console.log('BASELINE_OK production_render=2 repeat=stable');
