@@ -25,6 +25,7 @@ namespace cal3d{
 	class CalSpringSystem;
 	class CalRenderer;
 	class CalMesh;
+	class CalFrameTransaction;
 
 
 	class CAL3D_API CalModel : NonCopyable
@@ -63,6 +64,18 @@ namespace cal3d{
 		void update(float deltaTime);
 		void disableInternalData();
 
+		/** Enables/disables the per-model frame callback transaction. The
+		  * switch is only accepted while no animation is active, no playback
+		  * command is queued and no update is running.
+		  * @return the mode in effect after the call. */
+		bool setFrameCallbacksEnabled(bool enabled);
+		/** Returns whether frame callback mode is enabled. */
+		bool getFrameCallbacksEnabled() const;
+		/** Internal: the frame transaction of this model (may be null). */
+		CalFrameTransaction *getFrameTransaction();
+		/** Internal: const access to the frame transaction of this model. */
+		const CalFrameTransaction *getFrameTransaction() const;
+
 	private:
 		CalCoreModel          *m_pCoreModel;
 		CalSkeleton           *m_pSkeleton;
@@ -71,6 +84,7 @@ namespace cal3d{
 		CalPhysique           *m_pPhysique;
 		CalSpringSystem       *m_pSpringSystem;
 		CalRenderer           *m_pRenderer;
+		CalFrameTransaction   *m_pFrameTransaction;
 		Cal::UserData          m_userData;
 		std::vector<CalMesh *> m_vectorMesh;
 		CalBoundingBox         m_boundingBox;

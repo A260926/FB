@@ -19,6 +19,8 @@
 
 using namespace cal3d;
 
+unsigned long long CalCoreAnimation::s_nextRegistrationId = 1;
+
 CalCoreAnimation::CalCoreAnimation()
 {
 }
@@ -168,6 +170,7 @@ void CalCoreAnimation::registerCallback(CalAnimationCallback *callback, float mi
 	CallbackRecord record;
 	record.callback = callback;
 	record.min_interval = min_interval;
+	record.registration_id = s_nextRegistrationId++;
 
 	m_listCallbacks.push_back(record);
 }

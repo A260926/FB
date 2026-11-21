@@ -33,6 +33,7 @@
 #include "cal3d/animation.h"
 #include "cal3d/animation_action.h"
 #include "cal3d/animation_cycle.h"
+#include "cal3d/framecallbacks.h"
 
 using namespace cal3d;
 /*****************************************************************************/
@@ -59,6 +60,7 @@ CalMixer::CalMixer(CalModel* pModel)
 	m_animationDuration = 0.0f;
 	m_timeFactor = 1.0f;
 	m_numBoneAdjustments = 0;
+	m_submittingCommands = false;
 
 }
 
@@ -493,6 +495,16 @@ CalAnimation::CompositionFunction p)
 *****************************************************************************/
 bool CalMixer::stopAction(int coreAnimationId)
 {
+	// Frame callback mode: validate and queue, apply at the next frame start.
+	CalFrameTransaction *pFrameTransaction = m_pModel->getFrameTransaction();
+	if (pFrameTransaction != 0 && pFrameTransaction->isEnabled() && !m_submittingCommands)
+	{
+		FrameCommand command;
+		command.type = FRAME_COMMAND_STOP_ACTION;
+		command.id = coreAnimationId;
+		return pFrameTransaction->enqueueCommand(command);
+	}
+
 	// get the core animation
 	CalCoreAnimation *pCoreAnimation;
 	pCoreAnimation = m_pModel->getCoreModel()->getCoreAnimation(coreAnimationId);
@@ -511,8 +523,10 @@ bool CalMixer::stopAction(int coreAnimationId)
 	// find the specified action and remove it
 	if (iteratorAnimationAction != m_listAnimationAction.end())
 	{
-		// found, so remove
-		(*iteratorAnimationAction)->completeCallbacks(m_pModel);
+		// found, so remove. In frame mode the completion is deferred by the
+		// frame transaction, never fired synchronously.
+		if (!(pFrameTransaction != 0 && pFrameTransaction->isEnabled()))
+			(*iteratorAnimationAction)->completeCallbacks(m_pModel);
 		m_listAnimationAction.erase(iteratorAnimationAction);
 		return true;
 	}
@@ -531,6 +545,16 @@ bool CalMixer::stopAction(int coreAnimationId)
 *****************************************************************************/
 bool CalMixer::stopCycle(int coreAnimationId)
 {
+	// Frame callback mode: validate and queue, apply at the next frame start.
+	CalFrameTransaction *pFrameTransaction = m_pModel->getFrameTransaction();
+	if (pFrameTransaction != 0 && pFrameTransaction->isEnabled() && !m_submittingCommands)
+	{
+		FrameCommand command;
+		command.type = FRAME_COMMAND_STOP_CYCLE;
+		command.id = coreAnimationId;
+		return pFrameTransaction->enqueueCommand(command);
+	}
+
 	// get the core animation
 	CalCoreAnimation *pCoreAnimation;
 	pCoreAnimation = m_pModel->getCoreModel()->getCoreAnimation(coreAnimationId);
@@ -549,8 +573,10 @@ bool CalMixer::stopCycle(int coreAnimationId)
 	// find the specified action and remove it
 	if (iteratorAnimation != m_listAnimationCycle.end())
 	{
-		// found, so remove
-		(*iteratorAnimation)->completeCallbacks(m_pModel);
+		// found, so remove. In frame mode the completion is deferred by the
+		// frame transaction, never fired synchronously.
+		if (!(pFrameTransaction != 0 && pFrameTransaction->isEnabled()))
+			(*iteratorAnimation)->completeCallbacks(m_pModel);
 		m_listAnimationCycle.erase(iteratorAnimation);
 		return true;
 	}
@@ -615,6 +641,18 @@ static void addExtraKeyframeForLoopedAnim(CalCoreAnimation *pCoreAnimation)
 
 bool CalMixer::blendCycle(int id, float weight, float delay)
 {
+	// Frame callback mode: validate and queue, apply at the next frame start.
+	CalFrameTransaction *pFrameTransaction = m_pModel->getFrameTransaction();
+	if (pFrameTransaction != 0 && pFrameTransaction->isEnabled() && !m_submittingCommands)
+	{
+		FrameCommand command;
+		command.type = FRAME_COMMAND_BLEND_CYCLE;
+		command.id = id;
+		command.p1 = weight;
+		command.p2 = delay;
+		return pFrameTransaction->enqueueCommand(command);
+	}
+
 	if ((id < 0) || (id >= (int)m_vectorAnimation.size()))
 	{
 		CalError::setLastError(CalError::INVALID_HANDLE, __FILE__, __LINE__);
@@ -673,7 +711,8 @@ bool CalMixer::blendCycle(int id, float weight, float delay)
 
 	// blend the animation cycle
 	pAnimationCycle->blend(weight, delay);
-	pAnimationCycle->checkCallbacks(0, m_pModel);
+	if (!(pFrameTransaction != 0 && pFrameTransaction->isEnabled()))
+		pAnimationCycle->checkCallbacks(0, m_pModel);
 	return true;
 }
 
@@ -693,13 +732,23 @@ bool CalMixer::blendCycle(int id, float weight, float delay)
 
 bool CalMixer::clearCycle(int id, float delay)
 {
+	// Frame callback mode: validate and queue, apply at the next frame start.
+	CalFrameTransaction *pFrameTransaction = m_pModel->getFrameTransaction();
+	if (pFrameTransaction != 0 && pFrameTransaction->isEnabled() && !m_submittingCommands)
+	{
+		FrameCommand command;
+		command.type = FRAME_COMMAND_CLEAR_CYCLE;
+		command.id = id;
+		command.p1 = delay;
+		return pFrameTransaction->enqueueCommand(command);
+	}
+
 	// check if the animation id is valid
 	if ((id < 0) || (id >= (int)m_vectorAnimation.size()))
 	{
 		CalError::setLastError(CalError::INVALID_HANDLE, __FILE__, __LINE__);
 		return false;
 	}
-
 	// get the animation for the given id
 	CalAnimation *pAnimation;
 	pAnimation = m_vectorAnimation[id];
@@ -726,7 +775,8 @@ bool CalMixer::clearCycle(int id, float delay)
 
 	// blend the animation cycle
 	pAnimationCycle->blend(0.0f, delay);
-	pAnimationCycle->checkCallbacks(0, m_pModel);
+	if (!(pFrameTransaction != 0 && pFrameTransaction->isEnabled()))
+		pAnimationCycle->checkCallbacks(0, m_pModel);
 	return true;
 }
 
@@ -750,6 +800,20 @@ bool CalMixer::clearCycle(int id, float delay)
   *****************************************************************************/
 bool CalMixer::executeAction(int id, float delayIn, float delayOut, float weightTarget, bool autoLock)
 {
+	// Frame callback mode: validate and queue, apply at the next frame start.
+	CalFrameTransaction *pFrameTransaction = m_pModel->getFrameTransaction();
+	if (pFrameTransaction != 0 && pFrameTransaction->isEnabled() && !m_submittingCommands)
+	{
+		FrameCommand command;
+		command.type = FRAME_COMMAND_EXECUTE_ACTION;
+		command.id = id;
+		command.p1 = delayIn;
+		command.p2 = delayOut;
+		command.p3 = weightTarget;
+		command.flag = autoLock;
+		return pFrameTransaction->enqueueCommand(command);
+	}
+
 	// get the core animation
 	CalCoreAnimation *pCoreAnimation;
 	pCoreAnimation = m_pModel->getCoreModel()->getCoreAnimation(id);
@@ -772,7 +836,8 @@ bool CalMixer::executeAction(int id, float delayIn, float delayOut, float weight
 	// execute the animation
 	if (!pAnimationAction->execute(delayIn, delayOut, weightTarget, autoLock))
 		return false;
-	pAnimationAction->checkCallbacks(0, m_pModel);
+	if (!(pFrameTransaction != 0 && pFrameTransaction->isEnabled()))
+		pAnimationAction->checkCallbacks(0, m_pModel);
 	return true;
 }
 
@@ -860,6 +925,11 @@ int CalMixer::getCustomActionID(CalAnimation *a){
 }*/
 void CalMixer::updateAnimation(float deltaTime)
 {
+	// In frame callback mode the frame transaction owns all callback
+	// dispatch; the mixer advances the animations but stays silent.
+	CalFrameTransaction *pFrameTransaction = m_pModel->getFrameTransaction();
+	bool frameMode = pFrameTransaction != 0 && pFrameTransaction->isEnabled();
+
 	// update the current animation time
 	if (m_animationDuration == 0.0f)
 	{
@@ -886,14 +956,25 @@ void CalMixer::updateAnimation(float deltaTime)
 		// update and check if animation action is still active
 		if ((*iteratorAnimationAction)->update(deltaTime))
 		{
-			(*iteratorAnimationAction)->checkCallbacks((*iteratorAnimationAction)->getTime(), m_pModel);
+			if (!frameMode)
+				(*iteratorAnimationAction)->checkCallbacks((*iteratorAnimationAction)->getTime(), m_pModel);
 			++iteratorAnimationAction;
 		}
 		else
 		{
-			// animation action has ended, destroy and remove it from the animation list
-			(*iteratorAnimationAction)->completeCallbacks(m_pModel);
-			delete (*iteratorAnimationAction);
+			// animation action has ended, remove it from the animation list
+			if (!frameMode)
+			{
+				(*iteratorAnimationAction)->completeCallbacks(m_pModel);
+				delete (*iteratorAnimationAction);
+			}
+			else
+			{
+				// Frame mode: the transaction keeps the instance alive until its
+				// completion has been dispatched after the committed pose.
+				CalAnimation *pEnded = *iteratorAnimationAction;
+				pFrameTransaction->adoptEndedAnimation(pEnded);
+			}
 			iteratorAnimationAction = m_listAnimationAction.erase(iteratorAnimationAction);
 		}
 	}
@@ -920,14 +1001,29 @@ void CalMixer::updateAnimation(float deltaTime)
 				accumulatedDuration += (*iteratorAnimationCycle)->getWeight() * (*iteratorAnimationCycle)->getCoreAnimation()->getDuration();
 			}
 
-			(*iteratorAnimationCycle)->checkCallbacks(m_animationTime, m_pModel);
+			if (!frameMode)
+				(*iteratorAnimationCycle)->checkCallbacks(m_animationTime, m_pModel);
 			++iteratorAnimationCycle;
 		}
 		else
 		{
-			// animation cycle has ended, destroy and remove it from the animation list
-			(*iteratorAnimationCycle)->completeCallbacks(m_pModel);
-			delete (*iteratorAnimationCycle);
+			// animation cycle has ended, remove it from the animation list
+			if (!frameMode)
+			{
+				(*iteratorAnimationCycle)->completeCallbacks(m_pModel);
+				delete (*iteratorAnimationCycle);
+			}
+			else
+			{
+				// Frame mode: the transaction keeps the instance alive until its
+				// completion has been dispatched after the committed pose.
+				CalAnimation *pEnded = *iteratorAnimationCycle;
+				for (size_t slot = 0; slot < m_vectorAnimation.size(); ++slot)
+				{
+					if (m_vectorAnimation[slot] == pEnded) m_vectorAnimation[slot] = 0;
+				}
+				pFrameTransaction->adoptEndedAnimation(pEnded);
+			}
 			iteratorAnimationCycle = m_listAnimationCycle.erase(iteratorAnimationCycle);
 		}
 	}

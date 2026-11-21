@@ -30,6 +30,9 @@
 #include "cal3d/morphtargetmixer.h"
 #include "cal3d/physique.h"
 #include "cal3d/springsystem.h"
+#include "cal3d/framecallbacks.h"
+
+#include <cmath>
 
 using namespace cal3d;
  /*****************************************************************************/
@@ -46,6 +49,7 @@ CalModel::CalModel(CalCoreModel *pCoreModel)
   , m_pPhysique(0)
   , m_pSpringSystem(0)
   , m_pRenderer(0)
+  , m_pFrameTransaction(0)
   , m_userData(0)
 {
   assert(pCoreModel);
@@ -57,6 +61,7 @@ CalModel::CalModel(CalCoreModel *pCoreModel)
   m_pPhysique         = new CalPhysique(this);
   m_pSpringSystem     = new CalSpringSystem(this);
   m_pRenderer         = new CalRenderer(this);
+  m_pFrameTransaction = new CalFrameTransaction(this);
 
   m_userData          = 0;
 }
@@ -74,6 +79,7 @@ CalModel::~CalModel()
     delete m_vectorMesh[meshId];
   }
 
+  delete m_pFrameTransaction;
   delete m_pRenderer;
   delete m_pSpringSystem;
   delete m_pPhysique;
@@ -708,12 +714,78 @@ void CalModel::setUserData(Cal::UserData userData)
 
 void CalModel::update(float deltaTime)
 {
+  if (m_pFrameTransaction != 0 && m_pFrameTransaction->isEnabled())
+  {
+    // A nested update of the same model (typically from a callback) is a
+    // no-op: nothing advances, nothing dispatches and the queue is not
+    // submitted early.
+    if (m_pFrameTransaction->isInUpdate()) return;
+
+    // Frame mode only supports finite, non-negative elapsed times. Invalid
+    // values leave the model untouched.
+    if (!(deltaTime >= 0.0f && std::isfinite(deltaTime))) return;
+
+    // 1. submit the commands requested by the previous frame (FIFO)
+    m_pFrameTransaction->beginFrame(deltaTime);
+
+    // 2. snapshot registries and advance the animations silently
+    m_pFrameTransaction->advanceAnimation((CalMixer *)m_pMixer, deltaTime);
+
+    // 3. compute the committed skeleton and the existing deformation chain
+    m_pMixer->updateSkeleton();
+    m_pMorphTargetMixer->update(deltaTime);
+    m_pPhysique->update();
+    m_pSpringSystem->update(deltaTime);
+
+    // 4. dispatch the frame's events against the committed pose/skin
+    m_pFrameTransaction->dispatchFrame();
+    m_pFrameTransaction->endFrame();
+    return;
+  }
+
   m_pMixer->updateAnimation(deltaTime);
   m_pMixer->updateSkeleton();
   // m_pMorpher->update(...);
   m_pMorphTargetMixer->update(deltaTime);
   m_pPhysique->update();
   m_pSpringSystem->update(deltaTime);
+}
+
+/*****************************************************************************/
+/** Enables or disables the frame callback transaction of this model.
+  *****************************************************************************/
+
+bool CalModel::setFrameCallbacksEnabled(bool enabled)
+{
+  if (m_pFrameTransaction == 0) return false;
+  return m_pFrameTransaction->setEnabled(enabled);
+}
+
+/*****************************************************************************/
+/** Returns whether frame callback mode is enabled.
+  *****************************************************************************/
+
+bool CalModel::getFrameCallbacksEnabled() const
+{
+  return m_pFrameTransaction != 0 && m_pFrameTransaction->isEnabled();
+}
+
+/*****************************************************************************/
+/** Returns the frame transaction of this model.
+  *****************************************************************************/
+
+CalFrameTransaction *CalModel::getFrameTransaction()
+{
+  return m_pFrameTransaction;
+}
+
+/*****************************************************************************/
+/** Returns the frame transaction of this model (const access).
+  *****************************************************************************/
+
+const CalFrameTransaction *CalModel::getFrameTransaction() const
+{
+  return m_pFrameTransaction;
 }
 
 /*****************************************************************************/

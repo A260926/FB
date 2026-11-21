@@ -256,6 +256,11 @@ namespace cal3d{
 		/** return array of current cycle animations mixed **/
 		inline const std::list<CalAnimationCycle *> getCurrentCycleActions(){ return m_listAnimationCycle; }
 
+		/** whether at least one animation instance is currently active **/
+		inline bool hasActiveAnimations() const
+		{
+			return !m_listAnimationAction.empty() || !m_listAnimationCycle.empty();
+		}
 
 		/** add a bone constraint to the mixer **/
 		bool addBoneAdjustment(int boneId, BoneAdjustment const & ba);
@@ -265,6 +270,11 @@ namespace cal3d{
 		bool removeBoneAdjustment(int boneId);
 
 	protected:
+		friend class CalFrameTransaction;
+		/** Frame transaction: true while queued commands are applied directly,
+		  * i.e. the playback APIs must run their synchronous implementation
+		  * instead of re-enqueuing. **/
+		bool m_submittingCommands;
 		unsigned int m_numBoneAdjustments;
 		BoneAdjustmentAndBoneId m_boneAdjustmentAndBoneIdArray[CalMixerBoneAdjustmentsMax];
 		virtual void applyBoneAdjustments();

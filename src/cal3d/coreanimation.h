@@ -63,6 +63,13 @@ namespace cal3d{
 		{
 			CalAnimationCallback *callback;
 			float                 min_interval;
+			/// Monotonic identity of the registration. A remove followed by a
+			/// re-registration always yields a different identity, even for the
+			/// same callback object.
+			unsigned long long    registration_id;
+
+			CallbackRecord()
+				: callback(0), min_interval(0.0f), registration_id(0) { }
 		};
 
 		/** Add a callback to the current list of callbacks for this core animation.
@@ -77,6 +84,8 @@ namespace cal3d{
 	private:
 
 		std::vector<CallbackRecord> m_listCallbacks;
+
+		static unsigned long long s_nextRegistrationId;
 
 		float m_duration;
 		std::list<CalCoreTrack *> m_listCoreTrack;
