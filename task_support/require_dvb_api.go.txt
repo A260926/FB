@@ -1,0 +1,21 @@
+package main
+import("bytes";"fmt";"image/color";"os";"time";a "github.com/asticode/go-astisub")
+func must(e error){if e!=nil{panic(e)}}
+func check(ok bool,s string){if !ok{panic(s)}}
+func validate(x []a.BitmapSubtitle){
+ check(len(x)==2,"required DVB incremental frame count");
+ check(x[0].StartAt==0&&x[0].EndAt==2*time.Second&&x[1].StartAt==2*time.Second&&x[1].EndAt==3*time.Second,"required DVB interval positions");
+ for _,f:=range x{check(f.Image!=nil&&f.Image.Bounds().Dx()==8&&f.Image.Bounds().Dy()==8,"required DVB dimensions")}
+ check(x[0].Image.NRGBAAt(1,1)==(color.NRGBA{200,200,200,255}),"required DVB original CLUT pixel");
+ check(x[1].Image.NRGBAAt(1,1)==(color.NRGBA{80,80,80,255}),"required DVB changed CLUT pixel");
+}
+func main(){
+ d,e:=a.NewDVBSubtitleDecoder(1,8,8);must(e);var all []a.BitmapSubtitle
+ ats:=[]time.Duration{0,0,2*time.Second,3*time.Second}
+ for i,at:=range ats{b,e:=os.ReadFile(fmt.Sprintf("task_support/fixtures/pes%d.bin",i));must(e);x,e:=d.Push(b,at);must(e);all=append(all,x...)}
+ x,e:=d.Flush(4*time.Second);must(e);all=append(all,x...);validate(all)
+ f,e:=os.Open("task_support/fixtures/basic.ts");must(e)
+ transported,e:=a.ReadFromDVBSubtitles(f,a.DVBSubtitleOptions{PID:256,PageID:1,Width:8,Height:8,EndAt:4*time.Second});must(e);must(f.Close());validate(transported)
+ for i:=range all{check(all[i].StartAt==transported[i].StartAt&&all[i].EndAt==transported[i].EndAt&&bytes.Equal(all[i].Image.Pix,transported[i].Image.Pix),"required DVB TS/incremental equivalence")}
+ fmt.Println("REQUIRED_DVB_API_OK intervals=2 first_pixel=200 recolored=80 transport=equal")
+}

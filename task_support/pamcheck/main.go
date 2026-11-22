@@ -1,0 +1,4 @@
+package main
+import("encoding/json";"fmt";"image/png";"os";"path/filepath")
+type item struct{File string `json:"file"`;Start int64 `json:"start_at"`;End int64 `json:"end_at"`}
+func main(){dir:=os.Args[1];b,e:=os.ReadFile(filepath.Join(dir,"index.json"));if e!=nil{panic(e)};var entries []item;if e=json.Unmarshal(b,&entries);e!=nil{panic(e)};if len(entries)==0{panic("empty index")};visible:=false;for _,v:=range entries{if v.Start<0||v.End<=v.Start||v.File==""||filepath.Base(v.File)!=v.File{panic("bad interval or file")};f,e:=os.Open(filepath.Join(dir,v.File));if e!=nil{panic(e)};im,e:=png.Decode(f);f.Close();if e!=nil{panic(e)};if im.Bounds().Dx()!=8||im.Bounds().Dy()!=8{panic("wrong dimensions")};for y:=0;y<8;y++{for x:=0;x<8;x++{_,_,_,a:=im.At(x,y).RGBA();if a!=0{visible=true}}}};if !visible{panic("all transparent")};fmt.Println("DVB_EXAMPLE_PNG_OK")}
