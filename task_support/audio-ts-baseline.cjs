@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const load=require('./load.cjs'),{mp2,packets}=require('./transport-fixture.cjs');
+const J=load();J.Demuxer={};const ctx=vm.createContext({JSMpeg:J,console});
+for(const f of ['mp2.js','ts.js'])vm.runInContext(fs.readFileSync('src/'+f,'utf8'),ctx,{filename:f});
+const a=new J.Decoder.MP2Audio({streaming:false});let calls=0;
+a.connect({enqueuedTime:0,play(rate,l,r){assert.equal(rate,48000);assert.equal(l.length,1152);assert.ok(l.every(Number.isFinite));assert.ok(r.every(Number.isFinite));assert.ok(l.some(x=>x!==0));assert.ok(l.some((x,i)=>x!==r[i]));calls++;}});
+a.write(0,mp2());assert.equal(a.decode(),true);assert.equal(a.decode(),false);assert.equal(calls,1);
+console.log('MP2_NONZERO_OK frames=1152 asymmetric=1');
+const d=new J.Demuxer.TS({}),got=[];
+d.connect(0xc0,{write(pts,buffers){got.push({pts,data:Buffer.concat(buffers.map(x=>Buffer.from(x)))});}});
+const bytes=Buffer.concat([packets(257,0xc0,90000,mp2()),packets(257,0xc0,93600,mp2(),3)]);
+for(let at=0;at<bytes.length;at+=7)d.write(bytes.subarray(at,Math.min(at+7,bytes.length)));
+assert.equal(got.length,2);assert.deepEqual(got.map(x=>x.pts),[1,1.04]);for(const p of got)assert.deepEqual(p.data,mp2());
+console.log('TS_PES_OK frames=2 pts=1,1.04 chunk=7');
