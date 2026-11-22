@@ -1,0 +1,97 @@
+{
+  "repo": "https://github.com/Haivision/srt",
+  "commit": "80e0bc48adb8dbc0d4d4635a65a08f31ebd20022",
+  "license": "MPL-2.0; retained per-file BSD notices",
+  "excluded": [
+    {
+      "path": ".gitmodules",
+      "mode": "100644",
+      "git_object": "0c81e9233a7decab1658201c282e08db3bdce22b",
+      "reason": "Declaration of the unused optional ABI-compliance submodule"
+    },
+    {
+      "path": "docs/features/images/block-aligned-5rx10c.png",
+      "mode": "100644",
+      "git_object": "604ad0580cc1fbeb0d820627022761190c9f10b7",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/block-aligned.png",
+      "mode": "100644",
+      "git_object": "25d076913d46c63d3fb64a906ca625a85f5bc0dc",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/non-block-aligned-5rx10c-deleted-packets.png",
+      "mode": "100644",
+      "git_object": "9860eaf7375f7357521656b4a4b4543b34f8d007",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/non-block-aligned-5rx10c.png",
+      "mode": "100644",
+      "git_object": "080d30fe211968f442945c5700f78648176d1a90",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/non-block-aligned.png",
+      "mode": "100644",
+      "git_object": "82ac668d32492eaee0afcd882c584abf3505260d",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/packet-filter-mechanism.png",
+      "mode": "100644",
+      "git_object": "a8060c6532d12e13cebdf835217ae00e7b1bd604",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/rebuild-missing-sequence.png",
+      "mode": "100644",
+      "git_object": "6a8b44640bd1d083135a3ce36e8d273da94639ed",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/srt-encryption-1.png",
+      "mode": "100644",
+      "git_object": "2cfe05da7c57d38ca622ce2d48f62e30107185dd",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/srt-encryption-2.png",
+      "mode": "100644",
+      "git_object": "57f2c4d2dae9cff41d2b55ca514219a65de417e5",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/features/images/staircase-pattern-5rx10c.png",
+      "mode": "100644",
+      "git_object": "9bc05532bfde35a5fd5b2065ba4a5088d739c3a6",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/misc/images/srt-history-good-signal.png",
+      "mode": "100644",
+      "git_object": "ff2acf217c4fae0a67a64cc0af9f06480525a830",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/misc/images/srt-transmission-bad-signal.png",
+      "mode": "100644",
+      "git_object": "5a6d2fe00bb464daf50e98afa2a1798a7f82e605",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "srt-ffplay",
+      "mode": "120000",
+      "git_object": "d7b96ee963a3da4f0b45e80ba9dfd8e8d7d668d5",
+      "reason": "Optional ffplay application integration link, not used by replay"
+    },
+    {
+      "path": "submodules/abi-compliance-checker",
+      "mode": "160000",
+      "git_object": "7c175c45a8ba9ac41b8e47d8ebbab557b623b18e",
+      "reason": "Optional ABI-compliance submodule, not used by production build or replay"
+    }
+  ]
+}
