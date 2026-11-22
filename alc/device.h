@@ -1,0 +1,159 @@
+#ifndef ALC_DEVICE_H
+#define ALC_DEVICE_H
+
+#include "config.h"
+
+#include <atomic>
+#include <concepts>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
+#include "AL/al.h"
+#include "AL/alc.h"
+#include "AL/alext.h"
+
+#include "alconfig.h"
+#include "core/device.h"
+#include "intrusive_ptr.h"
+
+struct BackendBase;
+struct BackendFactory;
+struct BufferSubList;
+struct EffectSubList;
+struct FilterSubList;
+
+
+#if ALSOFT_EAX
+/* Simulate 64MB of X-RAM. */
+inline auto constexpr eax_x_ram_max_size = ALsizei{64 * 1'024 * 1'024};
+#endif // ALSOFT_EAX
+
+struct ALCdevice { };
+
+namespace al {
+struct Device;
+
+struct DeviceDeleter { void operator()(gsl::owner<Device*> device) const noexcept; };
+struct Device final : ALCdevice, intrusive_ref<Device,DeviceDeleter>, DeviceBase {
+    /* This lock protects the device state (format, update size, etc.) from
+     * being changed in multiple threads, or being accessed while being
+     * changed. It's also used to serialize calls to the backend.
+     */
+    std::mutex StateLock;
+    std::unique_ptr<BackendBase> Backend;
+
+    ALCuint NumMonoSources{};
+    ALCuint NumStereoSources{};
+
+    // Maximum number of sources that can be created
+    ALCuint SourcesMax{};
+    // Maximum number of slots that can be created
+    ALCuint AuxiliaryEffectSlotMax{};
+
+    std::string mHrtfName;
+    std::vector<std::string> mHrtfList;
+    ALCenum mHrtfStatus{ALC_FALSE};
+
+    enum class OutputMode1 : ALCenum {
+        Any = ALC_ANY_SOFT,
+        Mono = ALC_MONO_SOFT,
+        Stereo = ALC_STEREO_SOFT,
+        StereoBasic = ALC_STEREO_BASIC_SOFT,
+        Uhj2 = ALC_STEREO_UHJ_SOFT,
+        Hrtf = ALC_STEREO_HRTF_SOFT,
+        Quad = ALC_QUAD_SOFT,
+        X51 = ALC_SURROUND_5_1_SOFT,
+        X61 = ALC_SURROUND_6_1_SOFT,
+        X71 = ALC_SURROUND_7_1_SOFT
+    };
+    auto getOutputMode1() const noexcept -> OutputMode1;
+
+    using OutputMode = OutputMode1;
+
+    std::atomic<ALCenum> mLastError{ALC_NO_ERROR};
+
+    // Map of Buffers for this device
+    std::mutex BufferLock;
+    std::vector<BufferSubList> BufferList;
+
+    // Map of Effects for this device
+    std::mutex EffectLock;
+    std::vector<EffectSubList> EffectList;
+
+    // Map of Filters for this device
+    std::mutex FilterLock;
+    std::vector<FilterSubList> FilterList;
+
+#if ALSOFT_EAX
+    ALCuint eax_x_ram_free_size{eax_x_ram_max_size};
+#endif // ALSOFT_EAX
+
+
+    std::unordered_map<ALuint, std::string> mBufferNames;
+    std::unordered_map<ALuint, std::string> mEffectNames;
+    std::unordered_map<ALuint, std::string> mFilterNames;
+
+    std::string mVendorOverride;
+    std::string mVersionOverride;
+    std::string mRendererOverride;
+
+    void enumerateHrtfs();
+
+    [[nodiscard]]
+    auto getConfigValueBool(std::string_view const block, std::string_view const key,
+        bool const def) const -> bool
+    { return GetConfigValueBool(mDeviceName, block, key, def); }
+
+    template<typename T> [[nodiscard]]
+    auto configValue(std::string_view const block, std::string_view const key) const
+        -> std::optional<T>
+    {
+        if constexpr(std::same_as<T, std::string>)
+            return ConfigValueStr(mDeviceName, block, key);
+        else if constexpr(std::same_as<T, int>)
+            return ConfigValueI32(mDeviceName, block, key);
+        else if constexpr(std::same_as<T, unsigned>)
+            return ConfigValueU32(mDeviceName, block, key);
+        else if constexpr(std::same_as<T, float>)
+            return ConfigValueF32(mDeviceName, block, key);
+        else if constexpr(std::same_as<T, bool>)
+            return ConfigValueBool(mDeviceName, block, key);
+        else
+        {
+            static_assert(dependent_false<T>, "Unexpected config value type");
+            return std::nullopt;
+        }
+    }
+
+    [[nodiscard]] static auto Create(DeviceType type) -> intrusive_ptr<Device>;
+
+    /** Stores the latest ALC device error. */
+    static void SetGlobalError(ALCenum const errorCode) { SetError(nullptr, errorCode); }
+    void setError(ALCenum const errorCode) { SetError(this, errorCode); }
+
+    static inline auto sLastGlobalError = std::atomic{ALC_NO_ERROR};
+    /* Flag to trap ALC device errors */
+    static inline auto sTrapALCError = false;
+
+protected:
+    ~Device();
+
+private:
+    explicit Device(DeviceType type);
+
+    static void SetError(Device *device, ALCenum errorCode);
+
+    friend DeviceDeleter;
+};
+
+} // namespace al
+
+inline BackendFactory *PlaybackFactory{};
+inline BackendFactory *CaptureFactory{};
+
+#endif
