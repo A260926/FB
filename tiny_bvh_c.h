@@ -171,7 +171,6 @@ typedef struct tbvh_config
 } tbvh_config;
 
 TBVH_API void tbvh_get_config( tbvh_config* config );
-
 /* Joins the worker threads of the built-in build pool. Optional; the pool is
    released at exit, and re-created by the next threaded build. */
 TBVH_API void tbvh_shutdown_thread_pool( void );
@@ -348,6 +347,11 @@ TBVH_API void tbvh_context_default( tbvh_context* context );
 #define TBVH_BUILD_DISCARD_INTERMEDIATES	(1u << 11)	/* free the intermediate BVH after conversion; no refit */
 #define TBVH_BUILD_MINIMIZE_MEM_USE			(1u << 12)	/* size intermediate data exactly */
 #define TBVH_BUILD_HQ_ODD_EVEN				(1u << 13)	/* SBVH: one extra bin on odd levels */
+/* Keep the committed split plan of a binned, scalar SBVH build so that tbvh_reclassify can update the
+   tree for deforming geometry. Requires SPATIAL_SPLITS and BINNED, and rejects PRESPLIT, POST_OPTIMIZE,
+   KEEP_SPLITTING and THREADED; for TBVH_LAYOUT_BVH triangle BLASes with float vertices and uint32
+   indices. */
+#define TBVH_BUILD_RETAIN_SPLIT_PLAN		(1u << 14)
 
 typedef enum tbvh_bonsai_top
 {
@@ -464,6 +468,74 @@ TBVH_API tbvh_result tbvh_build_tlasd( tbvh_bvh* tlas, tbvh_instanced* instances
 /* Refit after moving vertices in place. BVH, BVH4_CPU and BVH8_CPU; not after spatial
    splits or presplitting, and not with TBVH_BUILD_DISCARD_INTERMEDIATES. */
 TBVH_API tbvh_result tbvh_refit( tbvh_bvh* bvh );
+
+/* ------------------------------------------------------------------------- */
+/* Retained split plan: reclassification for deforming meshes                */
+/* ------------------------------------------------------------------------- */
+
+/* tbvh_reclassify re-routes the current vertex positions through the retained split plan of a BVH
+   built with TBVH_BUILD_RETAIN_SPLIT_PLAN. Object nodes route by the current fragment AABB centroid
+   against the frozen plane; spatial nodes clip the real triangle polygon against the closed
+   halfspace and pass each non-empty part down. The same tree is updated in place: node identities,
+   parent/child links and the frozen split plan are preserved, while leaf reference ranges are
+   rebuilt. The original Intersect / IsOccluded queries see the updated tree; rays, barycentrics and
+   original primitive indices are unchanged.
+   max_references is the total number of leaf references this call may produce. On success returns
+   TBVH_SUCCESS and fills 'report' (which may be null). On failure the tree, its reference list, the
+   plan and 'report' are unchanged; the caller's vertex buffer is never rolled back, so after a
+   failure it may restore the vertices or retry with a larger budget. Failure results:
+   TBVH_ERROR_NOT_REFITTABLE (no retained plan), TBVH_ERROR_NOT_BUILT, TBVH_ERROR_UNSUPPORTED (not a
+   float / uint32 triangle BLAS, a TLAS, or custom geometry), TBVH_ERROR_INVALID_ARGUMENT (non-finite
+   vertex or degenerate triangle) and TBVH_ERROR_OUT_OF_MEMORY; exceeding the budget is reported as
+   TBVH_ERROR_INVALID_ARGUMENT with a message that names the budget. */
+typedef struct tbvh_reclassify_report
+{
+	uint64_t struct_size;
+	uint64_t spatial_clip_count;	/* real polygon clippings performed at spatial nodes */
+	uint64_t object_route_count;	/* object-node routing decisions */
+	uint64_t reference_count;		/* leaf references after the update */
+	uint64_t empty_leaf_count;		/* leaves that received no reference */
+} tbvh_reclassify_report;
+
+TBVH_API void tbvh_reclassify_report_default( tbvh_reclassify_report* report );
+TBVH_API tbvh_result tbvh_reclassify( tbvh_bvh* bvh, uint32_t max_references, tbvh_reclassify_report* report );
+
+/* Per-node diagnostics for a retained split plan. kind is TBVH_SPLIT_PLAN_OBJECT / _SPATIAL / _LEAF.
+   Interior nodes report axis, plane, left child index and right child index (left + 1). Leaves report
+   first_reference and reference_count, the contiguous range of the reference list; an empty leaf
+   reports reference_count == 0. aabb_min / aabb_max are the node's current tight bounds. */
+#define TBVH_SPLIT_PLAN_OBJECT	0
+#define TBVH_SPLIT_PLAN_SPATIAL	1
+#define TBVH_SPLIT_PLAN_LEAF	2
+
+typedef struct tbvh_split_plan_node
+{
+	uint32_t struct_size;
+	uint32_t kind;			/* TBVH_SPLIT_PLAN_* */
+	uint32_t axis;			/* interior nodes: split axis (0, 1, 2) */
+	float plane;			/* interior nodes: frozen split position */
+	uint32_t left_child;	/* interior nodes */
+	uint32_t right_child;	/* interior nodes */
+	uint32_t first_reference;	/* leaves */
+	uint32_t reference_count;	/* leaves */
+	float aabb_min[3], aabb_max[3];
+} tbvh_split_plan_node;
+
+/* Per-reference diagnostics: the original primitive index and the bounds of the real clipped slice. */
+typedef struct tbvh_split_plan_reference
+{
+	uint32_t struct_size;
+	uint32_t prim_id;
+	float aabb_min[3], aabb_max[3];
+} tbvh_split_plan_reference;
+
+TBVH_API void tbvh_split_plan_node_default( tbvh_split_plan_node* node );
+TBVH_API void tbvh_split_plan_reference_default( tbvh_split_plan_reference* ref );
+/* Read-only; returns TBVH_ERROR_NOT_REFITTABLE if the tree carries no retained split plan, and
+   TBVH_ERROR_INVALID_ARGUMENT for an out-of-range index. */
+TBVH_API tbvh_result tbvh_get_split_plan_node( const tbvh_bvh* bvh, uint32_t node_index, tbvh_split_plan_node* node );
+TBVH_API tbvh_result tbvh_get_split_plan_reference( const tbvh_bvh* bvh, uint32_t reference_index, tbvh_split_plan_reference* ref );
+
 /* Tree optimization by reinsertion; 0 iterations uses the settings' optimize_iterations. */
 TBVH_API tbvh_result tbvh_optimize( tbvh_bvh* bvh, uint32_t iterations );
 

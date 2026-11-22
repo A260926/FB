@@ -14,7 +14,7 @@ rm -f .task-build/reclassify.ppm
 .task-build/example .task-build/reclassify.ppm
 test -s .task-build/reclassify.ppm
 c++ -std=c++20 -O1 -pthread -DTINYBVH_NO_SIMD -I. task_support/driver.c tests/reclassify_target.cpp .task-build/library.o -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp -p .task-build reclassify_output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

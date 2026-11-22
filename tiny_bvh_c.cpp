@@ -508,7 +508,8 @@ void tbvh_build_settings_default( tbvh_build_settings* s )
 		(d.useFullSweep ? TBVH_BUILD_FULL_SWEEP : 0) | (d.binnedBVH ? TBVH_BUILD_BINNED : 0) | (d.useHPLOC ? TBVH_BUILD_HPLOC : 0) |
 		(d.keepSplitting ? TBVH_BUILD_KEEP_SPLITTING : 0) | (d.postOptimize ? TBVH_BUILD_POST_OPTIMIZE : 0) |
 		(d.useSIMDifavailable ? TBVH_BUILD_USE_SIMD : 0) | (d.enableThreading ? TBVH_BUILD_THREADED : 0) |
-		(d.discardIntermediates ? TBVH_BUILD_DISCARD_INTERMEDIATES : 0) | (d.minimizeMemUse ? TBVH_BUILD_MINIMIZE_MEM_USE : 0);
+		(d.discardIntermediates ? TBVH_BUILD_DISCARD_INTERMEDIATES : 0) | (d.minimizeMemUse ? TBVH_BUILD_MINIMIZE_MEM_USE : 0) |
+		(d.retainSplitPlan ? TBVH_BUILD_RETAIN_SPLIT_PLAN : 0);
 	s->min_spatial_overlap = d.minSpatialOverlap, s->presplit_factor = d.presplitFactor;
 	s->bonsai_grid_prims = d.bonsaiGridPrims, s->bonsai_prune_factor = d.bonsaiPruneFactor;
 	s->bonsai_top_tree = d.bonsaiTopTree, s->optimize_iterations = (uint32_t)d.optimizeIterations;
@@ -597,6 +598,7 @@ tbvh_result tbvh_set_build_settings( tbvh_bvh* h, const tbvh_build_settings* s )
 		d.keepSplitting = f & TBVH_BUILD_KEEP_SPLITTING, d.postOptimize = f & TBVH_BUILD_POST_OPTIMIZE;
 		d.useSIMDifavailable = f & TBVH_BUILD_USE_SIMD, d.discardIntermediates = f & TBVH_BUILD_DISCARD_INTERMEDIATES;
 		d.minimizeMemUse = f & TBVH_BUILD_MINIMIZE_MEM_USE;
+		d.retainSplitPlan = (f & TBVH_BUILD_RETAIN_SPLIT_PLAN) != 0;
 	#ifdef ENABLE_THREADED_BUILDS
 		d.enableThreading = f & TBVH_BUILD_THREADED;
 	#endif
@@ -628,7 +630,7 @@ tbvh_result tbvh_get_build_settings( const tbvh_bvh* h, tbvh_build_settings* s )
 			(d.keepSplitting ? TBVH_BUILD_KEEP_SPLITTING : 0) | (d.postOptimize ? TBVH_BUILD_POST_OPTIMIZE : 0) |
 			(d.useSIMDifavailable ? TBVH_BUILD_USE_SIMD : 0) | (d.enableThreading ? TBVH_BUILD_THREADED : 0) |
 			(d.discardIntermediates ? TBVH_BUILD_DISCARD_INTERMEDIATES : 0) | (d.minimizeMemUse ? TBVH_BUILD_MINIMIZE_MEM_USE : 0) |
-			(b.hqbvhoddeven ? TBVH_BUILD_HQ_ODD_EVEN : 0);
+			(d.retainSplitPlan ? TBVH_BUILD_RETAIN_SPLIT_PLAN : 0) | (b.hqbvhoddeven ? TBVH_BUILD_HQ_ODD_EVEN : 0);
 		s->min_spatial_overlap = d.minSpatialOverlap, s->presplit_factor = d.presplitFactor;
 		s->bonsai_grid_prims = d.bonsaiGridPrims, s->bonsai_prune_factor = d.bonsaiPruneFactor;
 		s->bonsai_top_tree = d.bonsaiTopTree, s->optimize_iterations = (uint32_t)d.optimizeIterations;
@@ -645,6 +647,17 @@ tbvh_result tbvh_build( tbvh_bvh* h, const tbvh_geometry* g, const tbvh_quality 
 {
 	if (!Valid( h )) return BadHandle( h, "tbvh_build" );
 	if (IsDouble( h->layout )) return Fail( TBVH_ERROR_WRONG_PRECISION, "tbvh_build: double precision layout; use tbvh_buildd" );
+	// A retained split plan is only defined for one builder mode; reject other combinations before
+	// the build so that no fatal error is raised and the handle stays usable.
+	if (h->layout == TBVH_LAYOUT_BVH)
+	{
+		const BVHBuildSettings& bs = static_cast<const BVHBase&>(*(BVH*)h->obj).settings;
+		if (bs.retainSplitPlan && !SplitPlanSettingsCompatible( bs ))
+			return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_build: TBVH_BUILD_RETAIN_SPLIT_PLAN needs SPATIAL_SPLITS and BINNED, "
+				"with PRESPLIT, POST_OPTIMIZE, KEEP_SPLITTING, THREADED, FULL_SWEEP and HPLOC disabled" );
+		if (bs.retainSplitPlan && q != TBVH_QUALITY_DEFAULT)
+			return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_build: a retained split plan uses TBVH_QUALITY_DEFAULT" );
+	}
 	if (const tbvh_result r = CheckGeometry<tbvh_geometry, float>( g, "tbvh_build" )) return r;
 	TBVH_TRY
 	return Visit( h, [&]( auto& o ) -> tbvh_result
@@ -786,6 +799,8 @@ tbvh_result tbvh_refit( tbvh_bvh* h )
 		{
 			if (!Built( o )) return Fail( TBVH_ERROR_NOT_BUILT, "tbvh_refit: not built" );
 			const auto* inner = InnerBVH( o );
+			if (inner->hasSplitPlan())
+				return Fail( TBVH_ERROR_NOT_REFITTABLE, "tbvh_refit: a retained split plan is updated with tbvh_reclassify" );
 			if (!static_cast<const BaseOf<T>&>(o).isRefittable())
 				return Fail( TBVH_ERROR_NOT_REFITTABLE, "tbvh_refit: built with spatial splits or presplitting" );
 			if (inner->isTLAS()) return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_refit: rebuild a TLAS instead" );
@@ -799,8 +814,110 @@ tbvh_result tbvh_refit( tbvh_bvh* h )
 	TBVH_CATCH_MUTATING( h )
 }
 
-tbvh_result tbvh_optimize( tbvh_bvh* h, uint32_t iterations )
+// ============================================================================
+// API: retained split plan
+// ============================================================================
+
+namespace {
+// Map the classification of a failed Reclassify to a C API result.
+tbvh_result ReclassifyResult( const ReclassifyStatus s, const char* fn )
 {
+	switch (s)
+	{
+	case ReclassifyStatus::Ok: return TBVH_SUCCESS;
+	case ReclassifyStatus::PlanInactive: return Fail( TBVH_ERROR_NOT_REFITTABLE, "%s: no retained split plan; build with TBVH_BUILD_RETAIN_SPLIT_PLAN", fn );
+	case ReclassifyStatus::NotBuilt: return Fail( TBVH_ERROR_NOT_BUILT, "%s: not built", fn );
+	case ReclassifyStatus::NotABlas: return Fail( TBVH_ERROR_UNSUPPORTED, "%s: reclassification is for a triangle BLAS, not a TLAS", fn );
+	case ReclassifyStatus::CustomGeometry: return Fail( TBVH_ERROR_UNSUPPORTED, "%s: reclassification is for triangle geometry, not custom primitives", fn );
+	case ReclassifyStatus::UnsupportedLayout: return Fail( TBVH_ERROR_UNSUPPORTED, "%s: reclassification needs a float / uint32 triangle BLAS", fn );
+	case ReclassifyStatus::NonFiniteVertices: return Fail( TBVH_ERROR_INVALID_ARGUMENT, "%s: a current vertex is NaN or infinite", fn );
+	case ReclassifyStatus::DegenerateTriangle: return Fail( TBVH_ERROR_INVALID_ARGUMENT, "%s: a current triangle is degenerate", fn );
+	case ReclassifyStatus::BudgetExceeded: return Fail( TBVH_ERROR_INVALID_ARGUMENT, "%s: max_references is too small for this deformation", fn );
+	case ReclassifyStatus::OutOfMemory: return Fail( TBVH_ERROR_OUT_OF_MEMORY, "%s: out of memory", fn );
+	case ReclassifyStatus::InvalidInput: return Fail( TBVH_ERROR_INVALID_ARGUMENT, "%s: invalid input", fn );
+	}
+	return Fail( TBVH_ERROR_INTERNAL, "%s: unexpected status", fn );
+}
+} // namespace
+
+void tbvh_reclassify_report_default( tbvh_reclassify_report* r )
+{
+	if (!r) return;
+	memset( r, 0, sizeof( *r ) );
+	r->struct_size = sizeof( *r );
+}
+
+tbvh_result tbvh_reclassify( tbvh_bvh* h, const uint32_t maxReferences, tbvh_reclassify_report* report )
+{
+	if (!Valid( h )) return BadHandle( h, "tbvh_reclassify" );
+	if (h->layout != TBVH_LAYOUT_BVH) return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_reclassify: TBVH_LAYOUT_BVH only" );
+	TBVH_TRY
+	BVH& o = *(BVH*)h->obj;
+	ReclassifyReport inner;
+	if (!o.Reclassify( maxReferences, inner ))
+		return ReclassifyResult( o.lastReclassifyStatus, "tbvh_reclassify" );
+	if (report)
+	{
+		memset( report, 0, sizeof( *report ) );
+		report->struct_size = sizeof( *report );
+		report->spatial_clip_count = inner.spatialClipCount;
+		report->object_route_count = inner.objectRouteCount;
+		report->reference_count = inner.referenceCount;
+		report->empty_leaf_count = inner.emptyLeafCount;
+	}
+	return TBVH_SUCCESS;
+	TBVH_CATCH_MUTATING( h )
+}
+
+void tbvh_split_plan_node_default( tbvh_split_plan_node* n )
+{
+	if (!n) return;
+	memset( n, 0, sizeof( *n ) );
+	n->struct_size = sizeof( *n );
+}
+
+void tbvh_split_plan_reference_default( tbvh_split_plan_reference* r )
+{
+	if (!r) return;
+	memset( r, 0, sizeof( *r ) );
+	r->struct_size = sizeof( *r );
+}
+
+tbvh_result tbvh_get_split_plan_node( const tbvh_bvh* h, const uint32_t nodeIdx, tbvh_split_plan_node* node )
+{
+	if (!Valid( h )) return BadHandle( h, "tbvh_get_split_plan_node" );
+	if (!node) return Fail( TBVH_ERROR_INVALID_ARGUMENT, "tbvh_get_split_plan_node: node is null" );
+	if (h->layout != TBVH_LAYOUT_BVH) return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_get_split_plan_node: TBVH_LAYOUT_BVH only" );
+	const BVH& o = *(const BVH*)h->obj;
+	if (!o.hasSplitPlan()) return Fail( TBVH_ERROR_NOT_REFITTABLE, "tbvh_get_split_plan_node: no retained split plan" );
+	SplitPlanNodeInfo info;
+	if (!o.GetSplitPlanNode( nodeIdx, info )) return Fail( TBVH_ERROR_INVALID_ARGUMENT, "tbvh_get_split_plan_node: node %u is out of range", nodeIdx );
+	memset( node, 0, sizeof( *node ) );
+	node->struct_size = sizeof( *node );
+	node->kind = info.kind, node->axis = info.axis, node->plane = info.plane;
+	node->left_child = info.leftChild, node->right_child = info.rightChild;
+	node->first_reference = info.firstReference, node->reference_count = info.referenceCount;
+	for (int i = 0; i < 3; i++) node->aabb_min[i] = info.aabbMin[i], node->aabb_max[i] = info.aabbMax[i];
+	return TBVH_SUCCESS;
+}
+
+tbvh_result tbvh_get_split_plan_reference( const tbvh_bvh* h, const uint32_t refIdx, tbvh_split_plan_reference* ref )
+{
+	if (!Valid( h )) return BadHandle( h, "tbvh_get_split_plan_reference" );
+	if (!ref) return Fail( TBVH_ERROR_INVALID_ARGUMENT, "tbvh_get_split_plan_reference: ref is null" );
+	if (h->layout != TBVH_LAYOUT_BVH) return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_get_split_plan_reference: TBVH_LAYOUT_BVH only" );
+	const BVH& o = *(const BVH*)h->obj;
+	if (!o.hasSplitPlan()) return Fail( TBVH_ERROR_NOT_REFITTABLE, "tbvh_get_split_plan_reference: no retained split plan" );
+	SplitPlanReferenceInfo info;
+	if (!o.GetSplitPlanReference( refIdx, info )) return Fail( TBVH_ERROR_INVALID_ARGUMENT, "tbvh_get_split_plan_reference: reference %u is out of range", refIdx );
+	memset( ref, 0, sizeof( *ref ) );
+	ref->struct_size = sizeof( *ref );
+	ref->prim_id = info.primId;
+	for (int i = 0; i < 3; i++) ref->aabb_min[i] = info.aabbMin[i], ref->aabb_max[i] = info.aabbMax[i];
+	return TBVH_SUCCESS;
+}
+
+tbvh_result tbvh_optimize( tbvh_bvh* h, uint32_t iterations ){
 	if (!Valid( h )) return BadHandle( h, "tbvh_optimize" );
 	TBVH_TRY
 	return Visit( h, [&]( auto& o ) -> tbvh_result
@@ -809,6 +926,7 @@ tbvh_result tbvh_optimize( tbvh_bvh* h, uint32_t iterations )
 		if constexpr (HasOptimize<T>::value)
 		{
 			if (!Built( o )) return Fail( TBVH_ERROR_NOT_BUILT, "tbvh_optimize: not built" );
+			if (InnerBVH( o )->hasSplitPlan()) return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_optimize: a retained split plan cannot be optimized" );
 			if (InnerBVH( o )->isTLAS()) return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_optimize: not for a TLAS" );
 			if (iterations == 0) iterations = (uint32_t)static_cast<BaseOf<T>&>(o).settings.optimizeIterations;
 			o.Optimize( iterations, 8u );
@@ -992,6 +1110,8 @@ tbvh_result tbvh_save( const tbvh_bvh* h, const char* fileName )
 		if constexpr (HasSave<T>::value)
 		{
 			if (!Built( o )) return Fail( TBVH_ERROR_NOT_BUILT, "tbvh_save: not built" );
+			if (InnerBVH( o )->hasSplitPlan())
+				return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_save: a retained split plan cannot be saved" );
 			if (InnerBVH( o )->isTLAS() || InnerBVH( o )->hasCustomGeom())
 				return Fail( TBVH_ERROR_UNSUPPORTED, "tbvh_save: a TLAS or custom geometry cannot be saved" );
 			if (!o.Save( fileName )) return Fail( TBVH_ERROR_IO, "tbvh_save: cannot write '%s'", fileName );

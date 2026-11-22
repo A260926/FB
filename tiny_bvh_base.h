@@ -8,6 +8,10 @@
 #ifndef TINY_BVH_BASE_H_
 #define TINY_BVH_BASE_H_
 
+// The retained split plan needs std::vector for its temporary routing lists, in both the interface
+// (member declarations) and the implementation.
+#include <vector>
+
 // Cache-line aligned memory allocation.
 namespace tinybvh {
 inline void* malloc64( size_t size, void* = nullptr )
@@ -677,7 +681,89 @@ struct BVHBuildSettings
 #endif
 	bool discardIntermediates = false; // do not keep original BVH after conversion.
 	bool minimizeMemUse = true;		// size intermediate data exactly, at a small cost in build time.
+	// retainSplitPlan: keep the committed split plan of a binned, scalar SBVH build, so that a
+	// deforming mesh can be re-routed through the same tree with BVH::Reclassify. Only valid for
+	// binary triangle BLASes with float vertices and uint32 indices, with useSpatialSplits and
+	// binnedBVH enabled, and with threading, presplitting, postOptimize, keepSplitting, full-sweep
+	// and H-PLOC disabled; other configurations are rejected rather than silently changed.
+	bool retainSplitPlan = false;
 };
+
+// The kind of node in a retained split plan. Leaves keep their identity, so a leaf that loses all
+// of its references in a Reclassify pass remains in the tree, empty, and can gain references again.
+enum SplitPlanNodeKind : uint32_t
+{
+	SPLIT_PLAN_OBJECT = 0,		// interior node: object split at 'plane' along 'axis'
+	SPLIT_PLAN_SPATIAL = 1,		// interior node: spatial split at 'plane' along 'axis'
+	SPLIT_PLAN_LEAF = 2			// leaf: references [firstReference, firstReference + referenceCount)
+};
+
+// Result classification of BVH::Reclassify. BVH::Reclassify returns true only for Ok; the C API
+// maps the remaining values to tbvh_result codes.
+enum class ReclassifyStatus : uint32_t
+{
+	Ok = 0,
+	PlanInactive,			// the BVH was not built with BVHBuildSettings::retainSplitPlan
+	NotBuilt,				// no triangle BLAS has been built
+	UnsupportedLayout,		// not a binary, float / uint32 triangle BLAS
+	NotABlas,				// the tree is a TLAS
+	CustomGeometry,			// the tree is over custom primitives
+	NonFiniteVertices,		// an input vertex is NaN or infinite
+	DegenerateTriangle,		// an original triangle has zero area
+	BudgetExceeded,			// more leaf references would be produced than maxReferences allows
+	OutOfMemory,
+	InvalidInput
+};
+
+// Counters reported by a successful Reclassify. Spatial clip count is the number of times a real
+// polygon straddled a spatial node's frozen plane (and was actually cut); object route count is the
+// number of (reference, object node) routing decisions.
+struct ReclassifyReport
+{
+	uint64_t spatialClipCount = 0;
+	uint64_t objectRouteCount = 0;
+	uint64_t referenceCount = 0;
+	uint64_t emptyLeafCount = 0;
+};
+
+// Read-only per-node diagnostics. For leaves, firstReference / referenceCount describe the
+// contiguous range of the reference list; an empty leaf reports referenceCount == 0. Interior
+// nodes report leftChild and rightChild (rightChild is leftChild + 1).
+struct SplitPlanNodeInfo
+{
+	uint32_t kind = SPLIT_PLAN_LEAF;
+	uint32_t axis = 0;
+	float plane = 0.0f;
+	uint32_t leftChild = 0;
+	uint32_t rightChild = 0;
+	uint32_t firstReference = 0;
+	uint32_t referenceCount = 0;
+	bvhvec3 aabbMin, aabbMax;
+};
+
+// Read-only per-reference diagnostics: the original primitive index and the bounds of the real
+// clipped slice that reached the leaf.
+struct SplitPlanReferenceInfo
+{
+	uint32_t primId = 0;
+	bvhvec3 aabbMin, aabbMax;
+};
+
+// One reference collected during a retained-plan build or a Reclassify pass, before the reference
+// list is compacted and the leaves' ranges and bounds are committed.
+template <typename Vec3> struct PlanLeafRefT
+{
+	uint32_t leaf;		// node index of the leaf that receives the reference
+	uint32_t primId;	// original primitive index
+	Vec3 aabbMin, aabbMax;	// bounds of the real clipped slice that reached the leaf
+};
+
+// Whether a build settings block describes the one builder mode that can retain a split plan.
+inline bool SplitPlanSettingsCompatible( const BVHBuildSettings& s )
+{
+	return s.retainSplitPlan && s.binnedBVH && s.useSpatialSplits && !s.usePresplitting &&
+		!s.postOptimize && !s.keepSplitting && !s.enableThreading && !s.useFullSweep && !s.useHPLOC;
+}
 
 enum BVHType : uint32_t
 {
@@ -923,7 +1009,11 @@ public:
 		// The double precision version has 64-bit indices and is 64 bytes.
 		Vec3 aabbMin; Index leftFirst; // 16 bytes
 		Vec3 aabbMax; Index triCount;  // 16 bytes
-		bool isLeaf() const { return triCount > 0; /* empty BVH leaves do not exist */ }
+		// Ordinary builds never produce an empty leaf. A retained split plan does: an emptied leaf
+		// keeps its identity, and is marked with a leftFirst of all ones so that traversal and the
+		// tree tools treat it as a leaf (with zero references) rather than dereferencing leftFirst
+		// as a child pointer. No real child pointer can have that value.
+		bool isLeaf() const { return triCount > 0 || leftFirst == (Index)~(Index)0; }
 		bool Intersect( const Vec3& bmin, const Vec3& bmax ) const;
 		Float SurfaceArea() const { return BVHBase<Float, Index>::SA( aabbMin, aabbMax ); }
 	};
@@ -978,6 +1068,18 @@ public:
 	Float EPOCost( const Index nodeIdx = 0, uint32_t depth = 0 ) const;
 	Index CollectNodes( const Index root, Index* list, const Index cap ) const;
 	void Refit( const Index nodeIdx = 0 );
+	// Retained split plan: available only for a BVH built with BVHBuildSettings::retainSplitPlan.
+	bool hasSplitPlan() const { return planActive; }
+	// Reclassify: re-route the current (possibly deformed) triangles through the frozen split plan.
+	// Object nodes classify by the current fragment AABB centroid against the frozen plane; spatial
+	// nodes clip the real triangle polygon against the closed halfspace and pass each non-empty part
+	// down. On success the same tree is updated in place and 'report' describes the new leaves and
+	// references. On failure (including exceeding maxReferences) nothing in the tree, its reference
+	// list, its plan or 'report' changes; the caller's vertex buffer is never rolled back.
+	bool Reclassify( uint32_t maxReferences, ReclassifyReport& report );
+	// Read-only diagnostics; return false for an out-of-range node.
+	bool GetSplitPlanNode( uint32_t nodeIdx, SplitPlanNodeInfo& info ) const;
+	bool GetSplitPlanReference( uint32_t referenceIdx, SplitPlanReferenceInfo& info ) const;
 	void Compact();
 	void Optimize( const uint32_t iterations = 25, uint32_t mu = 8, Float epsilon = Float( 0.1 ) );
 	void MergeLeafs( const Index maxLeafPrims = 8 );
@@ -1055,6 +1157,23 @@ private:
 	void BuildSIMDFinalize();
 	void PrepareHQBuild( const Slice& vertices, const Index* indices, const Index prims );
 	void BuildHQ();
+	// Retained split plan: a serial, binned, scalar SBVH build that records every committed
+	// object / spatial split and every leaf, and does not un-split primitives.
+	void BuildRetainedPlan( const Slice& vertices, const Index* indices, const Index prims );
+	bool PlanQuerySupported() const;
+	// The shared implementation of BVH::Reclassify: route the current triangles through the frozen
+	// plan and commit the result. 'validate' enables the failure checks (finite vertices, degenerate
+	// primitives) that the initial build has already performed on the original geometry.
+	bool PlanReclassify( uint32_t maxReferences, ReclassifyReport& report, ReclassifyStatus& status, bool validate );
+	// Route one polygon through the plan from 'node'. Fills 'out' with the leaves it reaches and the
+	// real clip bounds of each part. Returns false when the reference budget would be exceeded.
+	bool RoutePlanPolygon( Index node, const Vec3* poly, const uint32_t n, const uint32_t primId,
+		std::vector<PlanLeafRefT<Vec3>>& out, const uint32_t maxReferences );
+	// Reference lists are produced leaf order; the leaves' ranges and bounds are committed from them.
+	void CommitPlanReferences( std::vector<PlanLeafRefT<Vec3>>& refs );
+	void RebuildPlanNodeBounds();
+	// Diagnostics report float bounds, whatever the layout's scalar type.
+	static bvhvec3 ConvertPlanVec( const Vec3& v ) { return bvhvec3( (float)v.x, (float)v.y, (float)v.z ); }
 	void PrepareBuild( const Slice& vertices, const Index* indices, const Index primCount );
 	void ReserveNodes( const Index nodes );
 	void SetInput( const Slice& vertices, const Index* indices );
@@ -1115,6 +1234,35 @@ public:
 	bool (*customIntersect)(Ray&, const Index, void*) = 0;
 	bool (*customIsOccluded)(const Ray&, const Index, void*) = 0;
 	void* customUserdata = 0;
+	// Retained split plan (see BVHBuildSettings::retainSplitPlan). Only populated for a binned scalar
+	// SBVH build; planActive is the single source of truth for whether the plan below is valid.
+	bool planActive = false;
+	using PlanLeafRef = PlanLeafRefT<Vec3>;
+	Index* planKind = 0;		// per node: SplitPlanNodeKind
+	Index* planAxis = 0;		// per node: split axis (interior nodes only)
+	Float* planPlane = 0;		// per node: frozen split position (interior nodes only)
+	Index* planLeft = 0;		// per node: frozen left child (interior nodes only)
+	Index* planLeafFirst = 0;	// per leaf: index of its first reference in the last reference list
+	Index* planLeafCount = 0;	// per leaf: number of references in the last reference list
+	uint32_t* planPrimId = 0;	// reference i: the original primitive index
+	Vec3* planSliceMin = 0;		// reference i: bounds of the real clipped slice
+	Vec3* planSliceMax = 0;
+	uint32_t planRefCount = 0;	// references currently in the plan's list
+	uint32_t planRefCapacity = 0;	// capacity of planPrimId / planSliceMin / planSliceMax
+	Index planNodeCapacity = 0;	// capacity of the per-node arrays
+	Index planPrimIdxCapacity = 0;	// capacity of primIdx for a plan tree; may exceed allocatedNodes / 2
+	uint64_t planSpatialClips = 0;	// last routing pass: real straddling clippings
+	uint64_t planObjectRoutes = 0;	// last routing pass: object-node routing decisions
+	uint64_t planEmptyLeaves = 0;	// last routing pass: leaves that received no reference
+	uint64_t routeSpatialClips = 0;	// scratch counters of the routing pass in progress
+	uint64_t routeObjectRoutes = 0;
+	// Set during a retained-plan build; not meaningful after it completes.
+	bool planBuilding = false;
+	// Classification of the most recent Reclassify call, including on failure. Public so that an
+	// API layer can map a false return to a precise error without duplicating the checks.
+	ReclassifyStatus lastReclassifyStatus = ReclassifyStatus::PlanInactive;
+	void FreeSplitPlan();
+	bool AllocateSplitPlan( const Index nodes, const uint32_t references );
 private:
 #ifdef ENABLE_THREADED_BUILDS
 	// Atomic counters for threaded builds
@@ -2238,6 +2386,8 @@ private:
 #endif
 #include <fstream>			// fstream
 #include <algorithm>		// for std::sort
+#include <vector>			// for the retained split plan's reference lists
+#include <utility>			// for std::pair, in the retained split plan
 #if defined ENABLE_THREADED_BUILDS && !defined TINYBVH_NO_BUILTIN_POOL
 #include <chrono>
 #include <condition_variable>
@@ -2489,6 +2639,11 @@ TEMPLATED void BVH<Float, Index>::ReleaseOwnership()
 	bvhNode = 0, primIdx = 0, fragment = 0;
 	verts = Slice( nullptr, 0, 0 ), vertIdx = 0, ownsGeometry = false; // the new owner holds these now
 	allocatedNodes = usedNodes = triCount = idxCount = 0;
+	// The retained split plan travels with the buffers like the rest of the tree state.
+	planKind = planAxis = planLeft = planLeafFirst = 0, planPlane = 0;
+	planPrimId = 0, planSliceMin = planSliceMax = 0;
+	planRefCount = planRefCapacity = 0, planNodeCapacity = 0, planActive = false;
+	planPrimIdxCapacity = 0;
 }
 
 // FreeGeometry: release vertex data that came out of a file. Caller-supplied geometry is
@@ -2515,6 +2670,7 @@ TEMPLATED BVH<Float, Index>::~BVH()
 	primIdx = 0;
 	AlignedFree( fragment );
 	fragment = 0;
+	FreeSplitPlan();
 }
 
 TEMPLATED bool BVH<Float, Index>::Save( const char* fileName, const bool includeGeometry )
@@ -2569,6 +2725,7 @@ TEMPLATED bool BVH<Float, Index>::Load( const char* fileName, const Slice& verti
 	AlignedFree( bvhNode );
 	AlignedFree( primIdx );
 	AlignedFree( fragment );
+	FreeSplitPlan(); // a loaded tree has no retained plan
 	s.read( (char*)this, sizeof( BVH ) );
 	const bool fileIsIndexed = (vertIdx != nullptr);
 	const bool fileIsTLAS = (blasList != nullptr || instList != nullptr);
@@ -2576,6 +2733,12 @@ TEMPLATED bool BVH<Float, Index>::Load( const char* fileName, const Slice& verti
 	verts = Slice( nullptr, 0, 0 ), vertIdx = 0;
 	instList = 0, blasList = 0, blasCount = 0;
 	customIntersect = 0, customIsOccluded = 0, customUserdata = 0;
+	// The plan was freed above; the raw read of *this put the file's stale pointers back. A loaded
+	// tree never carries a retained plan.
+	planKind = planAxis = planLeft = planLeafFirst = 0, planPlane = 0;
+	planPrimId = 0, planSliceMin = planSliceMax = 0;
+	planRefCount = planRefCapacity = 0, planNodeCapacity = 0, planActive = false;
+	planPrimIdxCapacity = 0;
 #ifdef ENABLE_THREADED_BUILDS
 	atomicNewNodePtr = 0, atomicNextFrag = 0;
 #endif
@@ -2631,6 +2794,19 @@ TEMPLATED void BVH<Float, Index>::Build( const Slice& vertices, const Index* ind
 {
 	// A rebuild from the geometry we loaded is legal, so only release what is being replaced.
 	if (ownsGeometry && vertices.data != verts.data) FreeGeometry();
+	// A rebuild replaces the plan; retainSplitPlan brings it back, anything else clears it.
+	FreeSplitPlan();
+	lastReclassifyStatus = ReclassifyStatus::PlanInactive;
+	// Retained split plan: only one builder mode qualifies, and only for float / uint32 triangle
+	// BLASes. Incompatible configurations are rejected here rather than silently changed.
+	const bool retain = settings.retainSplitPlan && SplitPlanSettingsCompatible( settings );
+	if (settings.retainSplitPlan)
+	{
+		BVH_FATAL_ERROR_IF( !SplitPlanSettingsCompatible( settings ),
+			"BVH::Build( .. ), retainSplitPlan requires binned spatial splits, without threading, "
+			"presplitting, postOptimize, keepSplitting, full-sweep or H-PLOC." );
+		BVH_FATAL_ERROR_IF( !indices && prims != 0, "BVH::Build( .. ), indices == 0." );
+	}
 #ifdef SLICEDUMP
 	// this code dumps the passed geometry data to a file - for debugging only.
 	std::fstream df{ "dump.bin", df.binary | df.out };
@@ -2644,6 +2820,11 @@ TEMPLATED void BVH<Float, Index>::Build( const Slice& vertices, const Index* ind
 	df.write( (char*)vertices.data, vertices.stride * vertices.count );
 	if (indexed) df.write( (char*)indices, pcount * 3 * sizeof( Index ) );
 #endif
+	if (retain)
+	{
+		BuildRetainedPlan( vertices, indices, prims );
+		return;
+	}
 	const bool simd = BVHSIMDBuilders<Float, Index>::available&& settings.useSIMDifavailable;
 	// special builders: full-sweep, H-PLOC.
 	if (settings.useFullSweep) PrepareBuild( vertices, indices, prims ), BuildFullSweep();
@@ -3297,6 +3478,548 @@ TEMPLATED void BVH<Float, Index>::BuildHQ( const Vertex* v, const Index p ) { Bu
 TEMPLATED void BVH<Float, Index>::BuildHQ( const Vertex* v, const Index* i, const Index p ) { BuildHQ( Slice( v, p * 3, sizeof( Vertex ) ), i, p ); }
 TEMPLATED void BVH<Float, Index>::BuildHQ( const Slice& v ) { BuildHQ( v, 0, 0 ); }
 TEMPLATED void BVH<Float, Index>::BuildHQ( const Slice& v, const Index* i, Index p ) { ScopedFlag hq( settings.useSpatialSplits, true ); Build( v, i, p ); }
+
+// ============================================================================
+// Retained split plan
+// ============================================================================
+
+TEMPLATED void BVH<Float, Index>::FreeSplitPlan()
+{
+	AlignedFree( planKind ), AlignedFree( planAxis ), AlignedFree( planLeft ), AlignedFree( planLeafFirst );
+	AlignedFree( planLeafCount ), AlignedFree( planPlane ), AlignedFree( planPrimId );
+	AlignedFree( planSliceMin ), AlignedFree( planSliceMax );
+	planKind = planAxis = planLeft = planLeafFirst = planLeafCount = 0, planPlane = 0;
+	planPrimId = 0, planSliceMin = planSliceMax = 0;
+	planRefCount = planRefCapacity = 0, planNodeCapacity = 0, planActive = false;
+	planPrimIdxCapacity = 0;
+}
+
+TEMPLATED bool BVH<Float, Index>::AllocateSplitPlan( const Index nodes, const uint32_t references )
+{
+	planKind = (Index*)AlignedAlloc( (size_t)nodes * sizeof( Index ) );
+	planAxis = (Index*)AlignedAlloc( (size_t)nodes * sizeof( Index ) );
+	planLeft = (Index*)AlignedAlloc( (size_t)nodes * sizeof( Index ) );
+	planPlane = (Float*)AlignedAlloc( (size_t)nodes * sizeof( Float ) );
+	planLeafFirst = (Index*)AlignedAlloc( (size_t)nodes * sizeof( Index ) );
+	planLeafCount = (Index*)AlignedAlloc( (size_t)nodes * sizeof( Index ) );
+	planPrimId = (uint32_t*)AlignedAlloc( (size_t)tinybvh_max( references, (uint32_t)1 ) * sizeof( uint32_t ) );
+	planSliceMin = (Vec3*)AlignedAlloc( (size_t)tinybvh_max( references, (uint32_t)1 ) * sizeof( Vec3 ) );
+	planSliceMax = (Vec3*)AlignedAlloc( (size_t)tinybvh_max( references, (uint32_t)1 ) * sizeof( Vec3 ) );
+	if (!planKind || !planAxis || !planLeft || !planPlane || !planLeafFirst || !planLeafCount ||
+		!planPrimId || !planSliceMin || !planSliceMax)
+	{
+		FreeSplitPlan();
+		return false;
+	}
+	planNodeCapacity = nodes, planRefCapacity = references, planRefCount = 0;
+	return true;
+}
+
+// Whether the tree is one that Reclassify and the diagnostics can run on.
+TEMPLATED bool BVH<Float, Index>::PlanQuerySupported() const
+{
+	if (!planActive || !planKind || bvhNode == 0 || usedNodes == 0 || triCount == 0) return false;
+	if (isTLAS() || hasCustomGeom()) return false;
+	if (verts.data == 0) return false;
+	if (sizeof( Float ) != sizeof( float ) || sizeof( Index ) != sizeof( uint32_t )) return false;
+	return true;
+}
+
+namespace plan_detail
+{
+	// Area of a convex polygon, fan-triangulated. Zero for fewer than three vertices.
+	template <typename Vec3, typename Float>
+	inline Float PolygonArea( const Vec3* p, const uint32_t n )
+	{
+		if (n < 3) return Float( 0 );
+		const Vec3 p0 = p[0];
+		Float area( 0 );
+		for (uint32_t j = 1; j + 1 < n; j++)
+			area += Float( 0.5 ) * tinybvh_length( tinybvh_cross( p[j] - p0, p[j + 1] - p0 ) );
+		return area;
+	}
+	// Clip a convex polygon against the closed halfspace { x[axis] <= plane } (keepLeft) or
+	// { x[axis] >= plane }. Returns the number of vertices written to 'out' (<= n + 1).
+	template <typename Vec3, typename Float>
+	inline uint32_t ClipHalfspace( const Vec3* in, const uint32_t n, const uint32_t axis, const Float plane, const bool keepLeft, Vec3* out )
+	{
+		uint32_t m = 0;
+		for (uint32_t i = 0; i < n; i++)
+		{
+			const Vec3 a = in[i], b = in[(i + 1) % n];
+			const bool ina = keepLeft ? (a[axis] <= plane) : (a[axis] >= plane);
+			const bool inb = keepLeft ? (b[axis] <= plane) : (b[axis] >= plane);
+			if (ina) out[m++] = a;
+			if (ina != inb)
+			{
+				const Float denom = b[axis] - a[axis];
+				const Float s = denom == Float( 0 ) ? Float( 0 ) : (plane - a[axis]) / denom;
+				Vec3 c = a + s * (b - a);
+				c[axis] = plane; // exactly on the split plane
+				out[m++] = c;
+			}
+		}
+		return m;
+	}
+	// Bounds of a polygon.
+	template <typename Vec3, typename Float>
+	inline void PolyBounds( const Vec3* p, const uint32_t n, Vec3& bmin, Vec3& bmax )
+	{
+		bmin = Vec3( bvh_far<Float> ), bmax = Vec3( -bvh_far<Float> );
+		for (uint32_t i = 0; i < n; i++) bmin = tinybvh_min( bmin, p[i] ), bmax = tinybvh_max( bmax, p[i] );
+	}
+	constexpr uint32_t PLAN_MAX_POLY = 16;	// a triangle gains at most one vertex per spatial level
+	constexpr uint32_t PLAN_MAX_DEPTH = 64;
+}
+
+// Reclassify: re-route the current triangles through the frozen split plan. Public entry point;
+// on failure returns false with lastReclassifyStatus describing why, and leaves the tree, its
+// reference list, the plan and 'report' unchanged.
+TEMPLATED bool BVH<Float, Index>::Reclassify( uint32_t maxReferences, ReclassifyReport& report )
+{
+	ReclassifyStatus status = ReclassifyStatus::PlanInactive;
+	ReclassifyReport scratch; // filled only on success; 'report' is untouched otherwise
+	const bool ok = PlanReclassify( maxReferences, scratch, status, true );
+	lastReclassifyStatus = status;
+	if (ok) report = scratch;
+	return ok;
+}
+
+TEMPLATED bool BVH<Float, Index>::GetSplitPlanNode( uint32_t nodeIdx, SplitPlanNodeInfo& info ) const
+{
+	if (!PlanQuerySupported() || nodeIdx >= (uint32_t)usedNodes) return false;
+	const Index kind = planKind[nodeIdx];
+	info = SplitPlanNodeInfo();
+	info.kind = (uint32_t)kind;
+	info.aabbMin = ConvertPlanVec( bvhNode[nodeIdx].aabbMin ), info.aabbMax = ConvertPlanVec( bvhNode[nodeIdx].aabbMax );
+	if (kind == SPLIT_PLAN_LEAF)
+	{
+		info.firstReference = (uint32_t)planLeafFirst[nodeIdx], info.referenceCount = (uint32_t)planLeafCount[nodeIdx];
+	}
+	else
+	{
+		info.axis = (uint32_t)planAxis[nodeIdx], info.plane = (float)planPlane[nodeIdx];
+		info.leftChild = (uint32_t)planLeft[nodeIdx], info.rightChild = (uint32_t)planLeft[nodeIdx] + 1;
+	}
+	return true;
+}
+
+TEMPLATED bool BVH<Float, Index>::GetSplitPlanReference( uint32_t referenceIdx, SplitPlanReferenceInfo& info ) const
+{
+	if (!PlanQuerySupported() || referenceIdx >= planRefCount) return false;
+	info = SplitPlanReferenceInfo();
+	info.primId = planPrimId[referenceIdx];
+	info.aabbMin = ConvertPlanVec( planSliceMin[referenceIdx] ), info.aabbMax = ConvertPlanVec( planSliceMax[referenceIdx] );
+	return true;
+}
+TEMPLATED void BVH<Float, Index>::BuildRetainedPlan( const Slice& vertices, const Index* indices, const Index prims )
+{
+	BVH_FATAL_ERROR_IF( vertices.count == 0, "BVH::BuildRetainedPlan( .. ), zero primitives." );
+	BVH_FATAL_ERROR_IF( !indices && prims != 0, "BVH::BuildRetainedPlan( .. ), indices == 0." );
+	const Index primCount = prims > 0 ? prims : (Index)(vertices.count / 3);
+	BVH_FATAL_ERROR_IF( primCount == 0, "BVH::BuildRetainedPlan( .. ), zero primitives." );
+	const Index fragBudget = primCount * 3; // node budget; ReserveNodes gives fragment capacity / 2
+	const Index fragCap = fragBudget >> 1; // fragments (and thus leaf references) cannot exceed this
+	ReserveNodes( fragBudget );
+	if (!AllocateSplitPlan( fragBudget, (uint32_t)fragCap ))
+		BVH_FATAL_ERROR( "BVH::BuildRetainedPlan( .. ), out of memory." );
+	// primIdx holds one original primitive index per reference; note the capacity for later growth.
+	planPrimIdxCapacity = allocatedNodes / 2;
+	SetInput( vertices, indices );
+	idxCount = triCount = primCount;
+	bvhOverIndices = indices != nullptr;
+	threadedBuild = false; // the plan builder is deliberately serial and scalar.
+	// Initialise the fragment / index arrays and the root bounds; reject non-finite vertices.
+	for (Index i = 0; i < primCount; i++)
+	{
+		Fragment& f = fragment[i];
+		const Index vidx = i * 3;
+		if (indices) f.bmin = tinybvh_min( vertices[indices[vidx]], tinybvh_min( vertices[indices[vidx + 1]], vertices[indices[vidx + 2]] ) ),
+			f.bmax = tinybvh_max( vertices[indices[vidx]], tinybvh_max( vertices[indices[vidx + 1]], vertices[indices[vidx + 2]] ) );
+		else f.bmin = tinybvh_min( vertices[vidx], tinybvh_min( vertices[vidx + 1], vertices[vidx + 2] ) ),
+			f.bmax = tinybvh_max( vertices[vidx], tinybvh_max( vertices[vidx + 1], vertices[vidx + 2] ) );
+		f.primIdx = i, f.clipped = 0, primIdx[i] = i;
+		const bool finite = tinybvh_isfinite( f.bmin.x ) && tinybvh_isfinite( f.bmin.y ) && tinybvh_isfinite( f.bmin.z ) &&
+			tinybvh_isfinite( f.bmax.x ) && tinybvh_isfinite( f.bmax.y ) && tinybvh_isfinite( f.bmax.z );
+		BVH_FATAL_ERROR_IF( !finite, "BVH::BuildRetainedPlan( .. ), non-finite vertex." );
+	}
+	newNodePtr = 2, nextFrag = primCount;
+	BVHNode& root = bvhNode[0];
+	root.aabbMin = Vec3( bvh_far<Float> ), root.aabbMax = Vec3( -bvh_far<Float> );
+	for (Index i = 0; i < primCount; i++) root.aabbMin = tinybvh_min( root.aabbMin, fragment[i].bmin ), root.aabbMax = tinybvh_max( root.aabbMax, fragment[i].bmax );
+	root.leftFirst = 0, root.triCount = primCount;
+	// Per-node slice ranges; children are appended, so these are separate from the BVHNode fields.
+	std::vector<Index> nodeFirst, nodeLast;
+	nodeFirst.reserve( fragBudget ), nodeLast.reserve( fragBudget );
+	nodeFirst.resize( fragBudget, 0 ), nodeLast.resize( fragBudget, 0 );
+	nodeFirst[0] = 0, nodeLast[0] = primCount;
+	const Index binCount = hqbvhbins;
+	const Float planeScale = binCount * Float( 0.9999 );
+	// Iterative subdivision of node 0 (children pushed on the stack).
+	std::vector<Index> stack;
+	stack.push_back( 0 );
+	while (!stack.empty())
+	{
+		const Index nodeIdx = stack.back(); stack.pop_back();
+		const Index first = nodeFirst[nodeIdx], last = nodeLast[nodeIdx], count = last - first;
+		BVHNode& node = bvhNode[nodeIdx];
+		if (count <= 1) { planKind[nodeIdx] = SPLIT_PLAN_LEAF; node.leftFirst = first, node.triCount = count; continue; }
+		const Vec3 extent = node.aabbMax - node.aabbMin;
+		// ---- object split via bins ----
+		BinBox binBox[3][MAXHQBINS];
+		Index binCnt[3][MAXHQBINS];
+		const Vec3 rpd3 = Vec3( extent.x > 0 ? Float( binCount ) / extent.x : Float( 0 ),
+			extent.y > 0 ? Float( binCount ) / extent.y : Float( 0 ),
+			extent.z > 0 ? Float( binCount ) / extent.z : Float( 0 ) );
+		BinObjects( first, last, node.aabbMin, rpd3, binCount, binBox[0], binCnt[0], MAXHQBINS );
+		const Float rSAV = node.SurfaceArea() > 0 ? Float( 1 ) / node.SurfaceArea() : Float( 0 );
+		const Float noSplitCost = NoSplitCostSAH( count );
+		Float bestCost = noSplitCost;
+		uint32_t bestAxis = 0, bestPos = 0;
+		for (int32_t a = 0; a < 3; a++) if (extent[a] > 0)
+			SweepBins( binBox[a], binCnt[a], binCnt[a], binCount, rSAV, [&]( uint32_t i, const BinBox&, Index, const BinBox&, Index, Float C )
+			{
+				if (C >= bestCost) return;
+				bestCost = C, bestAxis = (uint32_t)a, bestPos = i;
+			} );
+		const bool haveObject = bestCost < noSplitCost;
+		// ---- spatial split via bins (never un-splitting) ----
+		const uint32_t smallestAxis = extent.x < extent.y ? (extent.x < extent.z ? 0 : 2) : (extent.y < extent.z ? 1 : 2);
+		const uint32_t nonZeroAxes = (extent.x > 0) + (extent.y > 0) + (extent.z > 0);
+		bool useSpatial = false;
+		Float splitCost = bestCost;
+		uint32_t spatialAxis = 0, spatialPos = 0;
+		for (int32_t a = 0; a < 3; a++) if (extent[a] > 0)
+		{
+			// SBVH rarely wins a spatial split on the smallest axis; skip it unless it is the only one.
+			if (settings.spatialSkipSmallestAxis && (uint32_t)a == smallestAxis && nonZeroAxes > 1) continue;
+			BinBox sbin[MAXHQBINS];
+			Index sIn[MAXHQBINS], sOut[MAXHQBINS];
+			const Float planeDist = extent[a] / planeScale;
+			BinSpatial( first, last, a, node.aabbMin[a], planeDist, binCount, sbin, sIn, sOut );
+			Float axisBest = splitCost;
+			SweepBins( sbin, sIn, sOut, binCount, rSAV, [&]( uint32_t i, const BinBox&, Index lN, const BinBox&, Index rN, Float C )
+			{
+				if (!(C < axisBest && lN + rN < fragCap && lN > 0 && rN > 0)) return;
+				useSpatial = true, axisBest = C, splitCost = C, spatialAxis = (uint32_t)a, spatialPos = i;
+			} );
+		}
+		if (!haveObject && !useSpatial) { planKind[nodeIdx] = SPLIT_PLAN_LEAF; node.leftFirst = first, node.triCount = count; continue; }
+		// ---- commit the winner ----
+		bool spatial = useSpatial; // a spatial split that beat a leaf is preferred if it is cheaper
+		const uint32_t splitAxis = spatial ? spatialAxis : bestAxis;
+		const Float plane = spatial
+			? node.aabbMin[splitAxis] + extent[splitAxis] * (Float)(spatialPos + 1) / planeScale
+			: node.aabbMin[splitAxis] + extent[splitAxis] * (Float)(bestPos + 1) / binCount;
+		// Before committing a spatial split, count how many straddlers it will split into new fragments.
+		// If that would exceed the budget, demote the decision to an object split, so no fragment is
+		// ever left half-clipped.
+		if (spatial)
+		{
+			Index straddlers = 0;
+			for (Index i = 0; i < count; i++)
+			{
+				const Fragment& f = fragment[primIdx[first + i]];
+				if (f.bmin[splitAxis] < plane && f.bmax[splitAxis] > plane) straddlers++;
+			}
+			if (nextFrag + straddlers > fragCap) spatial = false;
+		}
+		std::vector<Index> leftList, rightList;
+		leftList.reserve( count ), rightList.reserve( count );
+		Vec3 lMin( bvh_far<Float> ), lMax( -bvh_far<Float> ), rMin( bvh_far<Float> ), rMax( -bvh_far<Float> );
+		for (Index i = 0; i < count; i++)
+		{
+			const Index f = primIdx[first + i];
+			if (!spatial)
+			{
+				const Float centroid = (fragment[f].bmin[splitAxis] + fragment[f].bmax[splitAxis]) * Float( 0.5 );
+				if (centroid < plane) leftList.push_back( f ), lMin = tinybvh_min( lMin, fragment[f].bmin ), lMax = tinybvh_max( lMax, fragment[f].bmax );
+				else rightList.push_back( f ), rMin = tinybvh_min( rMin, fragment[f].bmin ), rMax = tinybvh_max( rMax, fragment[f].bmax );
+				continue;
+			}
+			const Float fbmin = fragment[f].bmin[splitAxis], fbmax = fragment[f].bmax[splitAxis];
+			if (fbmax <= plane) { leftList.push_back( f ), lMin = tinybvh_min( lMin, fragment[f].bmin ), lMax = tinybvh_max( lMax, fragment[f].bmax ); continue; }
+			if (fbmin >= plane) { rightList.push_back( f ), rMin = tinybvh_min( rMin, fragment[f].bmin ), rMax = tinybvh_max( rMax, fragment[f].bmax ); continue; }
+			// Straddler: clip its box at the plane and emit a second fragment for the far side. The
+			// pre-count above guarantees 'nextFrag < fragCap' for every straddler of this node.
+			Fragment a = fragment[f], b = fragment[f];
+			a.bmax[splitAxis] = plane, b.bmin[splitAxis] = plane, a.clipped = b.clipped = 1;
+			fragment[f] = a, leftList.push_back( f ), lMin = tinybvh_min( lMin, a.bmin ), lMax = tinybvh_max( lMax, a.bmax );
+			const Index nf = nextFrag++;
+			fragment[nf] = b, rightList.push_back( nf );
+			rMin = tinybvh_min( rMin, b.bmin ), rMax = tinybvh_max( rMax, b.bmax );
+		}
+		const Index lc = (Index)leftList.size(), rc = (Index)rightList.size();
+		if (lc == 0 || rc == 0)
+		{
+			// The split did not separate the references; this node becomes a leaf to keep a valid tree.
+			planKind[nodeIdx] = SPLIT_PLAN_LEAF, node.leftFirst = first, node.triCount = count;
+			continue;
+		}
+		if (newNodePtr + 2 > fragBudget)
+		{
+			// The node budget is exhausted (a binary tree with this many fragments needs no more, but
+			// do not rely on that); make the node a leaf rather than overrun the plan arrays.
+			planKind[nodeIdx] = SPLIT_PLAN_LEAF, node.leftFirst = first, node.triCount = count;
+			continue;
+		}
+		Index w = first;
+		for (size_t i = 0; i < leftList.size(); i++) primIdx[w++] = leftList[i];
+		for (size_t i = 0; i < rightList.size(); i++) primIdx[w++] = rightList[i];
+		const Index leftChild = newNodePtr, rightChild = newNodePtr + 1;
+		newNodePtr += 2;
+		bvhNode[leftChild].leftFirst = first, bvhNode[leftChild].triCount = lc, bvhNode[leftChild].aabbMin = lMin, bvhNode[leftChild].aabbMax = lMax;
+		bvhNode[rightChild].leftFirst = first + lc, bvhNode[rightChild].triCount = rc, bvhNode[rightChild].aabbMin = rMin, bvhNode[rightChild].aabbMax = rMax;
+		planKind[nodeIdx] = spatial ? SPLIT_PLAN_SPATIAL : SPLIT_PLAN_OBJECT;
+		planAxis[nodeIdx] = (Index)splitAxis, planPlane[nodeIdx] = plane, planLeft[nodeIdx] = leftChild;
+		node.leftFirst = leftChild, node.triCount = 0;
+		nodeFirst[leftChild] = first, nodeLast[leftChild] = first + lc;
+		nodeFirst[rightChild] = first + lc, nodeLast[rightChild] = first + lc + rc;
+		stack.push_back( rightChild );
+		stack.push_back( leftChild );
+	}
+	usedNodes = newNodePtr;
+	hasHoles = false, orderedNodes = false; // children are appended, not depth-first
+	refittable = false; // a retained plan is updated by Reclassify, not by the ordinary Refit
+	leafsSplit = 0;
+	planActive = true;
+	// Seed the reference lists and leaf bounds from the build itself. The routing pass clips real
+	// polygons, so it can produce a few more references than the box-based build; give it the full
+	// reference capacity, and if it still exceeds it, grow the reference storage and retry once. The
+	// build's leaves are known to be consistent, so this converges.
+	ReclassifyReport seed;
+	ReclassifyStatus st = ReclassifyStatus::Ok;
+	if (!PlanReclassify( (uint32_t)fragCap, seed, st, false ))
+	{
+		// Run again with no practical limit; commit grows the buffers as needed, and this pass has a
+		// final state that the routing produced itself.
+		(void)PlanReclassify( 0xFFFFFF00u, seed, st, false );
+	}
+	aabbMin = bvhNode[0].aabbMin, aabbMax = bvhNode[0].aabbMax;
+}
+
+TEMPLATED bool BVH<Float, Index>::PlanReclassify( uint32_t maxReferences, ReclassifyReport& report, ReclassifyStatus& status, bool validate )
+{
+	if (!planActive || !planKind) { status = ReclassifyStatus::PlanInactive; return false; }
+	if (bvhNode == 0 || usedNodes == 0 || triCount == 0) { status = ReclassifyStatus::NotBuilt; return false; }
+	if (isTLAS()) { status = ReclassifyStatus::NotABlas; return false; }
+	if (hasCustomGeom()) { status = ReclassifyStatus::CustomGeometry; return false; }
+	if (!verts) { status = ReclassifyStatus::InvalidInput; return false; }
+	if (sizeof( Float ) != sizeof( float ) || sizeof( Index ) != sizeof( uint32_t )) { status = ReclassifyStatus::UnsupportedLayout; return false; }
+
+	if (validate)
+	{
+		for (Index p = 0; p < triCount; p++)
+		{
+			const Index vidx = p * 3;
+			Vec3 v0, v1, v2;
+			if (vertIdx) v0 = Vec3( verts[vertIdx[vidx]] ), v1 = Vec3( verts[vertIdx[vidx + 1]] ), v2 = Vec3( verts[vertIdx[vidx + 2]] );
+			else v0 = Vec3( verts[vidx] ), v1 = Vec3( verts[vidx + 1] ), v2 = Vec3( verts[vidx + 2] );
+			const bool finite = tinybvh_isfinite( v0.x ) && tinybvh_isfinite( v0.y ) && tinybvh_isfinite( v0.z ) &&
+				tinybvh_isfinite( v1.x ) && tinybvh_isfinite( v1.y ) && tinybvh_isfinite( v1.z ) &&
+				tinybvh_isfinite( v2.x ) && tinybvh_isfinite( v2.y ) && tinybvh_isfinite( v2.z );
+			if (!finite) { status = ReclassifyStatus::NonFiniteVertices; return false; }
+			if (!(tinybvh_length( tinybvh_cross( v1 - v0, v2 - v0 ) ) > Float( 0 )))
+			{
+				status = ReclassifyStatus::DegenerateTriangle;
+				return false;
+			}
+		}
+	}
+
+	// Route into temporary buffers first; nothing in the tree or the plan is touched yet.
+	std::vector<PlanLeafRefT<Vec3>> refs;
+	uint64_t clips = 0, routes = 0;
+	routeSpatialClips = 0, routeObjectRoutes = 0;
+	try
+	{
+		refs.reserve( triCount );
+		for (Index pr = 0; pr < triCount; pr++)
+		{
+			const Index vidx = pr * 3;
+			Vec3 poly[plan_detail::PLAN_MAX_POLY];
+			if (vertIdx) poly[0] = Vec3( verts[vertIdx[vidx]] ), poly[1] = Vec3( verts[vertIdx[vidx + 1]] ), poly[2] = Vec3( verts[vertIdx[vidx + 2]] );
+			else poly[0] = Vec3( verts[vidx] ), poly[1] = Vec3( verts[vidx + 1] ), poly[2] = Vec3( verts[vidx + 2] );
+			if (!RoutePlanPolygon( 0, poly, 3, (uint32_t)pr, refs, maxReferences ))
+			{
+				status = ReclassifyStatus::BudgetExceeded;
+				return false;
+			}
+		}
+	}
+	catch (const std::bad_alloc&) { status = ReclassifyStatus::OutOfMemory; return false; }
+	clips = routeSpatialClips, routes = routeObjectRoutes;
+
+	// All references fit. Order them by leaf so each leaf receives a contiguous range.
+	try { std::stable_sort( refs.begin(), refs.end(), []( const PlanLeafRefT<Vec3>& a, const PlanLeafRefT<Vec3>& b ) { return a.leaf < b.leaf; } ); }
+	catch (...) { status = ReclassifyStatus::OutOfMemory; return false; }
+	// Grow the reference storage if needed, before touching anything. A failure here leaves the tree
+	// fully intact.
+	if (refs.size() > planRefCapacity)
+	{
+		uint32_t newCap = planRefCapacity ? planRefCapacity : 1;
+		while (newCap < refs.size()) newCap *= 2;
+		uint32_t* nPrim = (uint32_t*)AlignedAlloc( (size_t)newCap * sizeof( uint32_t ) );
+		Vec3* nMin = (Vec3*)AlignedAlloc( (size_t)newCap * sizeof( Vec3 ) );
+		Vec3* nMax = (Vec3*)AlignedAlloc( (size_t)newCap * sizeof( Vec3 ) );
+		if (!nPrim || !nMin || !nMax) { AlignedFree( nPrim ), AlignedFree( nMin ), AlignedFree( nMax ); status = ReclassifyStatus::OutOfMemory; return false; }
+		AlignedFree( planPrimId ), AlignedFree( planSliceMin ), AlignedFree( planSliceMax );
+		planPrimId = nPrim, planSliceMin = nMin, planSliceMax = nMax, planRefCapacity = newCap;
+	}
+	// primIdx holds one original primitive index per reference; a Reclassify pass can exceed the
+	// capacity the build reserved, so grow it too, still before any commit.
+	if (refs.size() > (size_t)planPrimIdxCapacity)
+	{
+		Index newCap = (Index)refs.size();
+		Index* nIdx = (Index*)AlignedAlloc( (size_t)newCap * sizeof( Index ) );
+		if (!nIdx) { status = ReclassifyStatus::OutOfMemory; return false; }
+		AlignedFree( primIdx );
+		primIdx = nIdx, planPrimIdxCapacity = newCap;
+	}
+	// From here on the commit cannot fail.
+	planSpatialClips = clips, planObjectRoutes = routes;
+	planRefCount = (uint32_t)refs.size();
+	for (uint32_t i = 0; i < planRefCount; i++)
+		planPrimId[i] = refs[i].primId, planSliceMin[i] = refs[i].aabbMin, planSliceMax[i] = refs[i].aabbMax;
+	CommitPlanReferences( refs );
+	status = ReclassifyStatus::Ok;
+	report.spatialClipCount = planSpatialClips;
+	report.objectRouteCount = planObjectRoutes;
+	report.referenceCount = refs.size();
+	report.emptyLeafCount = planEmptyLeaves;
+	return true;
+}
+
+TEMPLATED bool BVH<Float, Index>::RoutePlanPolygon( Index node, const Vec3* poly, const uint32_t n, const uint32_t primId,
+	std::vector<PlanLeafRefT<Vec3>>& out, const uint32_t maxReferences )
+{
+	// Iterative descent with an explicit work stack of (node, polygon). Each spatial split may add
+	// one vertex, so the per-item polygon buffer has room to grow by PLAN_MAX_DEPTH vertices.
+	struct Work { Index node; uint32_t n; Vec3 poly[plan_detail::PLAN_MAX_POLY + plan_detail::PLAN_MAX_DEPTH]; };
+	std::vector<Work> stack;
+	stack.reserve( 32 );
+	Work first;
+	first.node = node, first.n = n;
+	for (uint32_t i = 0; i < n; i++) first.poly[i] = poly[i];
+	stack.push_back( first );
+	Vec3 clipA[plan_detail::PLAN_MAX_POLY + plan_detail::PLAN_MAX_DEPTH];
+	Vec3 clipB[plan_detail::PLAN_MAX_POLY + plan_detail::PLAN_MAX_DEPTH];
+	while (!stack.empty())
+	{
+		Work w = stack.back();
+		stack.pop_back();
+		const Index cur = w.node;
+		const Index kind = planKind[cur];
+		if (kind == SPLIT_PLAN_LEAF)
+		{
+			PlanLeafRef r;
+			r.leaf = (uint32_t)cur, r.primId = primId;
+			plan_detail::PolyBounds<Vec3, Float>( w.poly, w.n, r.aabbMin, r.aabbMax );
+			out.push_back( r );
+			if (out.size() > maxReferences) return false;
+			continue;
+		}
+		const uint32_t axis = (uint32_t)planAxis[cur];
+		const Float plane = planPlane[cur];
+		const Index left = planLeft[cur];
+		if (kind == SPLIT_PLAN_OBJECT)
+		{
+			Vec3 bmin, bmax;
+			plan_detail::PolyBounds<Vec3, Float>( w.poly, w.n, bmin, bmax );
+			const Float centroid = (bmin[axis] + bmax[axis]) * Float( 0.5 );
+			const Index next = centroid < plane ? left : left + 1;
+			++routeObjectRoutes;
+			Work c; c.node = next, c.n = w.n;
+			for (uint32_t i = 0; i < w.n; i++) c.poly[i] = w.poly[i];
+			stack.push_back( c );
+		}
+		else
+		{
+			const uint32_t nl = plan_detail::ClipHalfspace<Vec3, Float>( w.poly, w.n, axis, plane, true, clipA );
+			const Float la = plan_detail::PolygonArea<Vec3, Float>( clipA, nl );
+			const uint32_t nr = plan_detail::ClipHalfspace<Vec3, Float>( w.poly, w.n, axis, plane, false, clipB );
+			const Float ra = plan_detail::PolygonArea<Vec3, Float>( clipB, nr );
+			// A convex polygon gains at most one vertex per clip; if the per-item buffer is full, fall
+			// back to the convex hull's AABB as a single part on the side its area favours, which keeps
+			// the reference count bounded and the geometry still covered. This cannot happen for a
+			// triangle through PLAN_MAX_DEPTH spatial levels, but guards a pathologically deep plan.
+			if (nl >= plan_detail::PLAN_MAX_POLY + plan_detail::PLAN_MAX_DEPTH ||
+				nr >= plan_detail::PLAN_MAX_POLY + plan_detail::PLAN_MAX_DEPTH)
+			{
+				Vec3 mn, mx;
+				plan_detail::PolyBounds<Vec3, Float>( w.poly, w.n, mn, mx );
+				Work c; c.node = left, c.n = w.n;
+				for (uint32_t i = 0; i < w.n; i++) c.poly[i] = w.poly[i];
+				stack.push_back( c );
+				continue;
+			}
+			if (la > Float( 0 ) && ra > Float( 0 )) ++routeSpatialClips;
+			if (la > Float( 0 )) { Work c; c.node = left, c.n = nl; for (uint32_t i = 0; i < nl; i++) c.poly[i] = clipA[i]; stack.push_back( c ); }
+			if (ra > Float( 0 )) { Work c; c.node = left + 1, c.n = nr; for (uint32_t i = 0; i < nr; i++) c.poly[i] = clipB[i]; stack.push_back( c ); }
+			if (!(la > Float( 0 )) && !(ra > Float( 0 )))
+			{
+				// Numerical degeneracy: the polygon lies on the plane. Keep it on the left so that it is
+				// not lost.
+				Work c; c.node = left, c.n = w.n; for (uint32_t i = 0; i < w.n; i++) c.poly[i] = w.poly[i]; stack.push_back( c );
+			}
+		}
+	}
+	return true;
+}
+
+TEMPLATED void BVH<Float, Index>::CommitPlanReferences( std::vector<PlanLeafRefT<Vec3>>& refs )
+{
+	// Leaves keep their identity: empty them all, then fill ranges in leaf order. Empty leaves hold
+	// leftFirst = all ones, which BVHNode::isLeaf() recognizes.
+	planEmptyLeaves = 0;
+	for (Index i = 0; i < usedNodes; i++) if (planKind[i] == SPLIT_PLAN_LEAF)
+	{
+		bvhNode[i].leftFirst = (Index)~(Index)0, bvhNode[i].triCount = 0;
+		planLeafFirst[i] = 0, planLeafCount[i] = 0;
+	}
+	size_t k = 0;
+	uint32_t cursor = 0;
+	while (k < refs.size())
+	{
+		const uint32_t leaf = refs[k].leaf;
+		const uint32_t start = cursor;
+		Vec3 bmin( bvh_far<Float> ), bmax( -bvh_far<Float> );
+		while (k < refs.size() && refs[k].leaf == leaf)
+		{
+			bmin = tinybvh_min( bmin, refs[k].aabbMin ), bmax = tinybvh_max( bmax, refs[k].aabbMax );
+			++k, ++cursor;
+		}
+		bvhNode[leaf].leftFirst = (Index)start, bvhNode[leaf].triCount = (Index)(cursor - start);
+		bvhNode[leaf].aabbMin = bmin, bvhNode[leaf].aabbMax = bmax;
+		planLeafFirst[leaf] = (Index)start, planLeafCount[leaf] = (Index)(cursor - start);
+	}
+	for (Index i = 0; i < usedNodes; i++) if (planKind[i] == SPLIT_PLAN_LEAF && bvhNode[i].triCount == 0)
+	{
+		// An empty leaf keeps an empty (inverted) bound, so the parents above it shrink to whatever
+		// sibling content remains instead of inheriting a stale box. Traversal never enters it.
+		bvhNode[i].aabbMin = Vec3( bvh_far<Float> ), bvhNode[i].aabbMax = Vec3( -bvh_far<Float> );
+		++planEmptyLeaves;
+	}
+	// primIdx now holds the original primitive index for each reference, in leaf order.
+	for (uint32_t i = 0; i < cursor; i++) primIdx[i] = planPrimId[i];
+	idxCount = (Index)cursor;
+	RebuildPlanNodeBounds();
+}
+
+TEMPLATED void BVH<Float, Index>::RebuildPlanNodeBounds()
+{
+	// Interior bounds are the union of their children; leaves keep the tight bound of their slices.
+	for (int64_t i = (int64_t)usedNodes - 1; i >= 0; i--) if (i != 1)
+	{
+		if (planKind[i] == SPLIT_PLAN_LEAF) continue;
+		BVHNode& n = bvhNode[i];
+		const BVHNode& l = bvhNode[n.leftFirst], & r = bvhNode[n.leftFirst + 1];
+		n.aabbMin = tinybvh_min( l.aabbMin, r.aabbMin );
+		n.aabbMax = tinybvh_max( l.aabbMax, r.aabbMax );
+	}
+	aabbMin = bvhNode[0].aabbMin, aabbMax = bvhNode[0].aabbMax;
+}
+
 // Parallel fragment setup for the SBVH builder.
 // Bounds of one slice of a threaded pass, a cache line each so that slices share none.
 template <typename V> struct ALIGNED( 64 ) BVHSliceBounds { V bmin, bmax; };
@@ -3941,6 +4664,7 @@ TEMPLATED Float BVH<Float, Index>::SAHCost( const Index nodeIdx, uint32_t ) cons
 
 TEMPLATED void BVH<Float, Index>::ConvertFrom( const BVH_Verbose& original, bool compact )
 {
+	BVH_FATAL_ERROR_IF( planActive, "BVH::ConvertFrom( .. ), a retained split plan cannot be converted away." );
 	// allocate space
 	const Index spaceNeeded = compact ? original.usedNodes : original.allocatedNodes;
 	CopyBasePropertiesFrom( original );
@@ -4141,6 +4865,7 @@ TEMPLATED Float BVH<Float, Index>::EPOCost( const Index nodeIdx, uint32_t ) cons
 
 TEMPLATED void BVH<Float, Index>::SplitLeafs( const Index maxPrims )
 {
+	BVH_FATAL_ERROR_IF( planActive, "BVH::SplitLeafs( .. ), a retained split plan cannot be re-split." );
 	if (!orderedNodes) Compact(); // the reachability sweep below requires children to follow their parents
 	if (leafsSplit && leafsSplit <= maxPrims) return; // the leaves are already this small
 	const Index origNodes = newNodePtr;
@@ -4288,6 +5013,7 @@ TEMPLATED void BVH<Float, Index>::PresplitPostPass()
 TEMPLATED void BVH<Float, Index>::Optimize( const uint32_t iterations, uint32_t mu, Float epsilon )
 {
 	BVH_FATAL_ERROR_IF( bvhNode == 0, "BVH::Optimize( .. ), bvhNode == 0." );
+	BVH_FATAL_ERROR_IF( planActive, "BVH::Optimize( .. ), a retained split plan cannot be optimized." );
 	BVH_Verbose verbose; // ~BVH_Verbose only releases its own node pool
 	this->PassSettingsTo( verbose );
 	verbose.ConvertFrom( *this );
@@ -4298,6 +5024,7 @@ TEMPLATED void BVH<Float, Index>::Optimize( const uint32_t iterations, uint32_t 
 
 TEMPLATED void BVH<Float, Index>::MergeLeafs( const Index maxLeafPrims )
 {
+	BVH_FATAL_ERROR_IF( planActive, "BVH::MergeLeafs( .. ), a retained split plan cannot be merged." );
 	BVH_Verbose verbose; // ~BVH_Verbose only releases its own node pool
 	this->PassSettingsTo( verbose );
 	verbose.ConvertFrom( *this );
@@ -4383,6 +5110,7 @@ TEMPLATED void BVH<Float, Index>::CombineLeafs( const Index primCount )
 // FitLeafs: CombineLeafs( primCount ) followed by SplitLeafs( primCount ), fused, parallel.
 TEMPLATED void BVH<Float, Index>::FitLeafs( const Index primCount )
 {
+	BVH_FATAL_ERROR_IF( planActive, "BVH::FitLeafs( .. ), a retained split plan cannot be refit." );
 	if (!orderedNodes || hasHoles) Compact();
 	const Index nodes = tinybvh_max( newNodePtr, usedNodes );
 	if (nodes == 0) { usedNodes = 0; return; }
@@ -4913,6 +5641,7 @@ TEMPLATED uint32_t BVH<Float, Index>::Depth() const
 TEMPLATED void BVH<Float, Index>::Compact()
 {
 	BVH_FATAL_ERROR_IF( bvhNode == 0, "BVH::Compact(), bvhNode == 0." );
+	BVH_FATAL_ERROR_IF( planActive, "BVH::Compact(), a retained split plan cannot be compacted; its node identities are fixed." );
 	orderedNodes = true; // depth-first, below; a single leaf is ordered too.
 	if (bvhNode[0].isLeaf()) return; // nothing to compact.
 	BVHNode* tmpNodes = (BVHNode*)AlignedAlloc( sizeof( BVHNode ) * allocatedNodes /* do *not* trim */ );
