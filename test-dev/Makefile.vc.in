@@ -1,0 +1,32 @@
+CC	= cl
+CFLAGS	= /O2 /W3 /MD /I..\include /I..\src /DWIN32 \
+	  /D_USE_MATH_DEFINES /D_CRT_SECURE_NO_WARNINGS
+LDFLAGS = /RELEASE /OUT:$(EXE)
+EXE	= libxmp-tests.exe
+
+MAIN_SOURCES	= @MAINSRCS@
+XMP_SOURCES	= @XMPSRCS@
+ALL_SOURCES	= $(MAIN_SOURCES) $(XMP_SOURCES)
+
+all: $(EXE)
+	$(EXE)
+
+$(EXE): $(ALL_SOURCES) all_tests.c all_tests.rsp
+	copy ..\libxmp.lib .
+	copy ..\libxmp.dll .
+	$(CC) /MP /nologo $(CFLAGS) $(ALL_SOURCES) @all_tests.rsp /link $(LDFLAGS) libxmp.lib
+
+all_tests.c: all_tests.txt
+	type nul > $@
+	for /F "tokens=*" %%I in ( $** ) do @echo declare_test(%%I); >> $@
+
+all_tests.rsp: all_tests.txt
+	type nul > $@
+	for /F "tokens=*" %%I in ( $** ) do @echo %%I.c >> $@
+
+clean:
+	del all_tests.rsp
+	del libxmp.lib
+	del libxmp.dll
+	del *.obj
+	del $(EXE)

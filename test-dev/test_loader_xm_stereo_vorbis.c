@@ -1,0 +1,31 @@
+#include "test.h"
+
+/* Test loading 8-bit and 16-bit stereo XM samples (OggMod).
+ *
+ * This module was converted using OggMod at quality level 1
+ * for both samples. The samples should render identically
+ * at this level for both x87 and IEEE-754 floating point.
+ */
+
+TEST(test_loader_xm_stereo_vorbis)
+{
+	xmp_context opaque;
+	struct xmp_module_info info;
+	FILE *f;
+	int ret;
+
+	f = fopen("data/stereo_oxm.data", "r");
+
+	opaque = xmp_create_context();
+	ret = xmp_load_module(opaque, "data/stereo.oxm");
+	fail_unless(ret == 0, "module load");
+
+	xmp_get_module_info(opaque, &info);
+
+	ret = compare_module(info.mod, f);
+	fail_unless(ret == 0, "format not correctly loaded");
+
+	xmp_release_module(opaque);
+	xmp_free_context(opaque);
+}
+END_TEST
