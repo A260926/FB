@@ -1,0 +1,226 @@
+package avc
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// PPS - Picture Parameter Set
+type PPS struct {
+	PicParameterSetID                     uint32
+	SeqParameterSetID                     uint32
+	EntropyCodingModeFlag                 bool
+	BottomFieldPicOrderInFramePresentFlag bool
+	NumSliceGroupsMinus1                  uint
+	SliceGroupMapType                     uint
+	RunLengthMinus1                       []uint
+	TopLeft                               []uint
+	BottomRight                           []uint
+	SliceGroupChangeDirectionFlag         bool
+	SliceGroupChangeRateMinus1            uint
+	PicSizeInMapUnitsMinus1               uint
+	SliceGroupID                          []uint
+	NumRefIdxI0DefaultActiveMinus1        uint
+	NumRefIdxI1DefaultActiveMinus1        uint
+	WeightedPredFlag                      bool
+	WeightedBipredIDC                     uint
+	PicInitQpMinus26                      int
+	PicInitQsMinus26                      int
+	ChromaQpIndexOffset                   int
+	DeblockingFilterControlPresentFlag    bool
+	ConstrainedIntraPredFlag              bool
+	RedundantPicCntPresentFlag            bool
+	Transform8x8ModeFlag                  bool
+	PicScalingMatrixPresentFlag           bool
+	PicScalingLists                       []ScalingList
+	SecondChromaQpIndexOffset             int
+}
+
+// AVC PPS errors
+var (
+	ErrNotPPS = errors.New("not an PPS NAL unit")
+)
+
+// maxNumSliceGroupsMinus1 is the highest num_slice_groups_minus1 allowed by any
+// AVC profile (ISO/IEC 14496-10 Annex A).
+const maxNumSliceGroupsMinus1 = 7
+
+// maxNumRefIdxActiveMinus1 is the highest num_ref_idx_lX_default_active_minus1
+// (7.4.2.2) and num_ref_idx_lX_active_minus1 (7.4.3, field slices) allowed.
+const maxNumRefIdxActiveMinus1 = 31
+
+// ParsePPSNALUnit - Parse AVC PPS NAL unit starting with NAL header
+func ParsePPSNALUnit(data []byte, spsMap map[uint32]*SPS) (*PPS, error) {
+	var err error
+
+	pps := &PPS{}
+
+	rd := bytes.NewReader(data)
+	reader := bits.NewEBSPReader(rd)
+	// Note! First byte is NAL Header
+
+	naluHdr := reader.Read(8)
+	naluType := GetNaluType(byte(naluHdr))
+	if naluType != NALU_PPS {
+		return nil, ErrNotPPS
+	}
+
+	pps.PicParameterSetID = uint32(reader.ReadExpGolomb())
+	pps.SeqParameterSetID = uint32(reader.ReadExpGolomb())
+	pps.EntropyCodingModeFlag = reader.ReadFlag()
+	pps.BottomFieldPicOrderInFramePresentFlag = reader.ReadFlag()
+	pps.NumSliceGroupsMinus1 = reader.ReadExpGolomb()
+	// The allowed range of num_slice_groups_minus1 is specified in Annex A of
+	// ISO/IEC 14496-10. The widest range of any profile (Baseline in A.2.1 and
+	// Extended in A.2.3) is 0 to 7; all other profiles require 0. Guard against a
+	// bogus value before looping, to avoid gigabytes being appended below from a
+	// tiny malformed NAL unit.
+	if pps.NumSliceGroupsMinus1 > maxNumSliceGroupsMinus1 {
+		reader.SetError(fmt.Errorf("num_slice_groups_minus1 %d out of range [0, %d]",
+			pps.NumSliceGroupsMinus1, maxNumSliceGroupsMinus1))
+		return nil, reader.AccError()
+	}
+
+	if pps.NumSliceGroupsMinus1 > 0 {
+		pps.SliceGroupMapType = reader.ReadExpGolomb()
+		if !checkMax(reader, "slice_group_map_type", pps.SliceGroupMapType, 6) {
+			return nil, reader.AccError()
+		}
+		switch pps.SliceGroupMapType {
+		case 0:
+			for iGroup := uint(0); iGroup <= pps.NumSliceGroupsMinus1; iGroup++ {
+				rl := reader.ReadExpGolomb()
+				pps.RunLengthMinus1 = append(pps.RunLengthMinus1, rl)
+			}
+		case 2:
+			// The last slice group is the background, so it has no rectangle.
+			for iGroup := uint(0); iGroup < pps.NumSliceGroupsMinus1; iGroup++ {
+				tl := reader.ReadExpGolomb()
+				pps.TopLeft = append(pps.TopLeft, tl)
+				br := reader.ReadExpGolomb()
+				pps.BottomRight = append(pps.BottomRight, br)
+			}
+		case 3, 4, 5:
+			pps.SliceGroupChangeDirectionFlag = reader.ReadFlag()
+			pps.SliceGroupChangeRateMinus1 = reader.ReadExpGolomb()
+		case 6:
+			pps.PicSizeInMapUnitsMinus1 = reader.ReadExpGolomb()
+			// slice_group_id[i] has Ceil(Log2(num_slice_groups_minus1 + 1)) bits, at least 1.
+			nrBits := bits.CeilLog2(pps.NumSliceGroupsMinus1 + 1)
+			// Check the count against the bits left before allocating for it.
+			bitsLeft := max(8*len(data)-reader.NrBitsRead(), 0)
+			if reader.AccError() == nil && pps.PicSizeInMapUnitsMinus1 >= uint(bitsLeft/nrBits) {
+				reader.SetError(fmt.Errorf("pic_size_in_map_units_minus1 %d with %d-bit slice_group_id exceeds the %d bits left",
+					pps.PicSizeInMapUnitsMinus1, nrBits, bitsLeft))
+			}
+			if reader.AccError() != nil {
+				return nil, reader.AccError()
+			}
+			pps.SliceGroupID = make([]uint, pps.PicSizeInMapUnitsMinus1+1)
+			for i := range pps.SliceGroupID {
+				pps.SliceGroupID[i] = reader.Read(nrBits)
+			}
+		}
+	}
+	pps.NumRefIdxI0DefaultActiveMinus1 = reader.ReadExpGolomb()
+	pps.NumRefIdxI1DefaultActiveMinus1 = reader.ReadExpGolomb()
+	if !checkMax(reader, "num_ref_idx_l0_default_active_minus1", pps.NumRefIdxI0DefaultActiveMinus1, maxNumRefIdxActiveMinus1) ||
+		!checkMax(reader, "num_ref_idx_l1_default_active_minus1", pps.NumRefIdxI1DefaultActiveMinus1, maxNumRefIdxActiveMinus1) {
+		return nil, reader.AccError()
+	}
+	pps.WeightedPredFlag = reader.ReadFlag()
+	pps.WeightedBipredIDC = reader.Read(2)
+	if !checkMax(reader, "weighted_bipred_idc", pps.WeightedBipredIDC, 2) {
+		return nil, reader.AccError()
+	}
+	pps.PicInitQpMinus26 = reader.ReadSignedGolomb()
+	pps.PicInitQsMinus26 = reader.ReadSignedGolomb()
+	pps.ChromaQpIndexOffset = reader.ReadSignedGolomb()
+	// The lower bound of pic_init_qp_minus26 is -(26 + QpBdOffsetY). The SPS may
+	// not be known yet, so allow the widest one (bit_depth_luma_minus8 = 6) here.
+	// ParseSliceHeader checks the resulting SliceQPY against the actual bit depth.
+	if !checkRange(reader, "pic_init_qp_minus26", pps.PicInitQpMinus26, -(26+6*6), 25) ||
+		!checkRange(reader, "pic_init_qs_minus26", pps.PicInitQsMinus26, -26, 25) ||
+		!checkRange(reader, "chroma_qp_index_offset", pps.ChromaQpIndexOffset, -12, 12) {
+		return nil, reader.AccError()
+	}
+	pps.DeblockingFilterControlPresentFlag = reader.ReadFlag()
+	pps.ConstrainedIntraPredFlag = reader.ReadFlag()
+	pps.RedundantPicCntPresentFlag = reader.ReadFlag()
+	if !reader.IsSeeker() {
+		// Cannot call MoreRbspData, so cannot parse further
+		return pps, nil
+	}
+	moreRbsp, err := reader.MoreRbspData()
+	if err != nil {
+		if reader.AccError() != nil {
+			return nil, reader.AccError()
+		}
+		return nil, err
+	}
+
+	if moreRbsp {
+		pps.Transform8x8ModeFlag = reader.ReadFlag()
+		pps.PicScalingMatrixPresentFlag = reader.ReadFlag()
+		if pps.PicScalingMatrixPresentFlag {
+			// The number of scaling lists is
+			// 6 + ((chroma_format_idc != 3) ? 2 : 6) * transform_8x8_mode_flag
+			// (ISO/IEC 14496-10 Section 7.3.2.2). The 6 4x4 lists are always
+			// present, so chroma_format_idc from the SPS is only needed when
+			// 8x8 transform mode is enabled.
+			nrScalingLists := 6
+			if pps.Transform8x8ModeFlag {
+				sps, ok := spsMap[pps.SeqParameterSetID]
+				if !ok {
+					return pps, fmt.Errorf("sps ID %d not found in map", pps.SeqParameterSetID)
+				}
+				if sps.ChromaFormatIDC != 3 {
+					nrScalingLists += 2
+				} else {
+					nrScalingLists += 6
+				}
+			}
+			pps.PicScalingLists = make([]ScalingList, nrScalingLists)
+
+			for i := 0; i < nrScalingLists; i++ {
+				picScalingPresent := reader.ReadFlag()
+				if !picScalingPresent {
+					pps.PicScalingLists[i] = nil
+					continue
+				}
+				sizeOfScalingList := 16 // 4x4 for i < 6
+				if i >= 6 {
+					sizeOfScalingList = 64 // 8x8 for i >= 6
+				}
+				pps.PicScalingLists[i] = readScalingList(reader, sizeOfScalingList)
+				if reader.AccError() != nil {
+					return nil, reader.AccError()
+				}
+			}
+		}
+		pps.SecondChromaQpIndexOffset = reader.ReadSignedGolomb()
+		if !checkRange(reader, "second_chroma_qp_index_offset", pps.SecondChromaQpIndexOffset, -12, 12) {
+			return nil, reader.AccError()
+		}
+	}
+
+	err = reader.ReadRbspTrailingBits()
+	if err != nil {
+		if reader.AccError() != nil {
+			return nil, reader.AccError()
+		}
+		return nil, err
+	}
+	if reader.AccError() != nil {
+		return nil, reader.AccError()
+	}
+	_ = reader.Read(1)
+	if reader.AccError() != io.EOF {
+		return nil, fmt.Errorf("not at end after reading rbsp_trailing_bits")
+	}
+	return pps, nil
+}

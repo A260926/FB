@@ -1,0 +1,502 @@
+package mp4
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/aac"
+	"github.com/Eyevinn/mp4ff/avc"
+	"github.com/Eyevinn/mp4ff/bits"
+	"github.com/Eyevinn/mp4ff/hevc"
+)
+
+// InitSegment - MP4/CMAF init segment
+type InitSegment struct {
+	MediaType string
+	Ftyp      *FtypBox
+	Moov      *MoovBox
+	Children  []Box // All top-level boxes in order
+}
+
+// NewMP4Init - Create MP4Init
+func NewMP4Init() *InitSegment {
+	return &InitSegment{
+		Children: []Box{},
+	}
+}
+
+// AddChild - Add a top-level box to InitSegment
+func (s *InitSegment) AddChild(b Box) {
+	switch b.Type() {
+	case "ftyp":
+		s.Ftyp = b.(*FtypBox)
+	case "moov":
+		s.Moov = b.(*MoovBox)
+	}
+	s.Children = append(s.Children, b)
+}
+
+// Size - size of init segment
+func (s *InitSegment) Size() uint64 {
+	var size uint64 = 0
+	for _, box := range s.Children {
+		size += box.Size()
+	}
+	return size
+}
+
+// Encode - encode an initsegment to a Writer
+func (s *InitSegment) Encode(w io.Writer) error {
+	for _, b := range s.Children {
+		err := b.Encode(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// EncodeSW - encode an initsegment to a SliceWriter
+func (s *InitSegment) EncodeSW(sw bits.SliceWriter) error {
+	for _, b := range s.Children {
+		err := b.EncodeSW(sw)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Info - write box tree with indent for each level
+func (s *InitSegment) Info(w io.Writer, specificBoxLevels, indent, indentStep string) error {
+	for _, box := range s.Children {
+		err := box.Info(w, specificBoxLevels, indent, indentStep)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CreateEmptyInit - create an init segment for fragmented files
+func CreateEmptyInit() *InitSegment {
+	initSeg := NewMP4Init()
+	initSeg.AddChild(CreateFtyp())
+	moov := NewMoovBox()
+	initSeg.AddChild(moov)
+	mvhd := CreateMvhd()
+	moov.AddChild(mvhd)
+	mvex := NewMvexBox()
+	moov.AddChild(mvex)
+	return initSeg
+}
+
+// AddEmptyTrack - add trak + trex box with appropriate trackID value and returns a reference to the new TrakBox
+func (s *InitSegment) AddEmptyTrack(timeScale uint32, mediaType, language string) *TrakBox {
+	moov := s.Moov
+	trackID := uint32(len(moov.Traks) + 1)
+	moov.Mvhd.NextTrackID = trackID + 1
+	newTrak := CreateEmptyTrak(trackID, timeScale, mediaType, language)
+	moov.AddChild(newTrak)
+	moov.Mvex.AddChild(CreateTrex(trackID))
+	return newTrak
+}
+
+// CreateEmptyTrak - create a full trak-tree for an empty (fragmented) track with no samples or stsd content
+func CreateEmptyTrak(trackID, timeScale uint32, mediaType, language string) *TrakBox {
+	/*  Built tree like
+	- trak
+	+ tkhd (trakID, flags, width, height)
+	+ mdia
+	  - mdhd (track Timescale, language (3letters))
+	  - hdlr (hdlr showing mediaType)
+	  - elng (only if language is not 3 letters)
+	  - minf
+		+ vmhd/smhd etc (media header box)
+		+ dinf
+		  - dref
+			+ url
+		+ stbl
+		  - stsd
+			+ empty on purpose
+		  - stts
+		  - stsc
+		  - stsz
+		  - stco
+	*/
+	hdlr, err := CreateHdlr(mediaType)
+	if err != nil {
+		panic(fmt.Sprintf("mediaType %s not supported", mediaType))
+	}
+	trak := &TrakBox{}
+	tkhd := CreateTkhd()
+	tkhd.TrackID = trackID
+	if hdlr.HandlerType == "soun" {
+		tkhd.Volume = 0x0100 // Fixed 16 value 1.0
+	}
+	trak.AddChild(tkhd)
+
+	mdia := &MdiaBox{}
+	trak.AddChild(mdia)
+	mdhd := &MdhdBox{}
+	mdhd.Timescale = timeScale
+	mdia.AddChild(mdhd)
+	mdia.AddChild(hdlr)
+	if len(language) == 3 {
+		mdhd.SetLanguage(language)
+	} else {
+		mdhd.SetLanguage("und")
+		elng := CreateElng(language)
+		mdia.AddChild(elng)
+	}
+	minf := NewMinfBox()
+	mdia.AddChild(minf)
+	// The media header follows from the handler type (ISO/IEC 14496-12 Clause 12).
+	switch hdlr.HandlerType {
+	case "vide":
+		minf.AddChild(CreateVmhd())
+	case "soun":
+		minf.AddChild(CreateSmhd())
+	case "subt":
+		minf.AddChild(&SthdBox{})
+	default: // text, meta and others
+		minf.AddChild(&NmhdBox{})
+	}
+	dinf := &DinfBox{}
+	dinf.AddChild(CreateDref())
+	minf.AddChild(dinf)
+	stbl := NewStblBox()
+	minf.AddChild(stbl)
+	stsd := NewStsdBox()
+	stbl.AddChild(stsd)
+	stbl.AddChild(&SttsBox{})
+	stbl.AddChild(&StscBox{})
+	stbl.AddChild(&StszBox{})
+	stbl.AddChild(&StcoBox{})
+	return trak
+}
+
+// SetAVCDescriptor - Set AVC SampleDescriptor based on SPS and PPS
+func (t *TrakBox) SetAVCDescriptor(sampleDescriptorType string, spsNALUs, ppsNALUs [][]byte, includePS bool) error {
+	if sampleDescriptorType != "avc1" && sampleDescriptorType != "avc3" {
+		return fmt.Errorf("sampleDescriptorType %s not allowed", sampleDescriptorType)
+	}
+	if sampleDescriptorType == "avc1" && !includePS {
+		return fmt.Errorf("cannot make avc1 descriptor without parameter sets")
+	}
+	avcSPS, err := avc.ParseSPSNALUnit(spsNALUs[0], false)
+	if err != nil {
+		return fmt.Errorf("could not parse SPS NALU: %w", err)
+	}
+	t.Tkhd.Width = Fixed32(avcSPS.Width << 16)   // This is display width
+	t.Tkhd.Height = Fixed32(avcSPS.Height << 16) // This is display height
+	stsd := t.Mdia.Minf.Stbl.Stsd
+
+	avcC, err := CreateAvcC(spsNALUs, ppsNALUs, includePS)
+	if err != nil {
+		return err
+	}
+	width, height := uint16(avcSPS.Width), uint16(avcSPS.Height)
+	avcx := CreateVisualSampleEntryBox(sampleDescriptorType, width, height, avcC)
+	stsd.AddChild(avcx)
+	return nil
+}
+
+// SetHEVCDescriptor sets HEVC SampleDescriptor based on descriptorType, VPS, SPS, PPS and SEI.
+func (t *TrakBox) SetHEVCDescriptor(sampleDescriptorType string, vpsNALUs, spsNALUs, ppsNALUs, seiNALUs [][]byte, includePS bool) error {
+	if sampleDescriptorType != "hvc1" && sampleDescriptorType != "hev1" &&
+		sampleDescriptorType != "dvh1" && sampleDescriptorType != "dvhe" {
+		return fmt.Errorf("sampleDescriptorType %s not allowed", sampleDescriptorType)
+	}
+	hevcSPS, err := hevc.ParseSPSNALUnit(spsNALUs[0])
+	if err != nil {
+		return fmt.Errorf("could not parse SPS NALU: %w", err)
+	}
+	width, height := hevcSPS.ImageSize()
+	t.Tkhd.Width = Fixed32(width << 16)   // This is display width
+	t.Tkhd.Height = Fixed32(height << 16) // This is display height
+	stsd := t.Mdia.Minf.Stbl.Stsd
+
+	// hvc1/dvh1 must include parameter sets (PS) and they must be complete
+	// hev1/dvhe may include PS and they may not be complete
+	// here we choose to include PS in both cases
+	completePS := sampleDescriptorType == "hvc1" || sampleDescriptorType == "dvh1"
+	if completePS && !includePS {
+		return fmt.Errorf("must include parameter sets for %s", sampleDescriptorType)
+	}
+	hvcC, err := CreateHvcC(vpsNALUs, spsNALUs, ppsNALUs, completePS, completePS, completePS, includePS)
+	if len(seiNALUs) > 0 {
+		hvcC.AddNaluArrays([]hevc.NaluArray{hevc.NewNaluArray(completePS, hevc.NALU_SEI_PREFIX, seiNALUs)})
+	}
+	if err != nil {
+		return err
+	}
+	avcx := CreateVisualSampleEntryBox(sampleDescriptorType, uint16(width), uint16(height), hvcC)
+	stsd.AddChild(avcx)
+	return nil
+}
+
+// SetAV1Descriptor sets an AV1 (av01) SampleDescriptor from an av1C configuration box and the
+// coded picture size. Unlike AVC/HEVC, the size is not derivable from the config box alone, so it
+// is passed in (e.g. from the sequence header or the container).
+func (t *TrakBox) SetAV1Descriptor(sampleDescriptorType string, av1C *Av1CBox, width, height uint16) error {
+	if sampleDescriptorType != "av01" {
+		return fmt.Errorf("sampleDescriptorType %s not allowed", sampleDescriptorType)
+	}
+	if av1C == nil {
+		return fmt.Errorf("no av1C box")
+	}
+	t.Tkhd.Width = Fixed32(uint32(width) << 16)   // This is display width
+	t.Tkhd.Height = Fixed32(uint32(height) << 16) // This is display height
+	stsd := t.Mdia.Minf.Stbl.Stsd
+	av1x := CreateVisualSampleEntryBox(sampleDescriptorType, width, height, av1C)
+	stsd.AddChild(av1x)
+	return nil
+}
+
+// SetVPxDescriptor sets a VP8 (vp08) or VP9 (vp09) SampleDescriptor from a vpcC configuration box
+// and the coded picture size. The vpcC fields (profile, level, bit depth, chroma subsampling,
+// colour information) are derived from the bitstream by the vp8/vp9 packages.
+func (t *TrakBox) SetVPxDescriptor(sampleDescriptorType string, vpcC *VppCBox, width, height uint16) error {
+	if sampleDescriptorType != "vp08" && sampleDescriptorType != "vp09" {
+		return fmt.Errorf("sampleDescriptorType %s not allowed", sampleDescriptorType)
+	}
+	if vpcC == nil {
+		return fmt.Errorf("no vpcC box")
+	}
+	t.Tkhd.Width = Fixed32(uint32(width) << 16)   // This is display width
+	t.Tkhd.Height = Fixed32(uint32(height) << 16) // This is display height
+	stsd := t.Mdia.Minf.Stbl.Stsd
+	vpx := CreateVisualSampleEntryBox(sampleDescriptorType, width, height, vpcC)
+	stsd.AddChild(vpx)
+	return nil
+}
+
+// SetMJpegDescriptor sets a motion JPEG (mjpg) SampleDescriptor as defined for
+// JPEG image sequences in ISO/IEC 23008-12 Annex H.
+// Each sample shall be a complete JPEG image, except if jpegPrefix is non-nil.
+// In that case, a jpgC box is included, and the concatenation of jpegPrefix
+// with each sample data shall be a complete JPEG image.
+func (t *TrakBox) SetMJpegDescriptor(width, height uint16, jpegPrefix []byte) error {
+	t.Tkhd.Width = Fixed32(uint32(width) << 16)   // This is display width
+	t.Tkhd.Height = Fixed32(uint32(height) << 16) // This is display height
+	stsd := t.Mdia.Minf.Stbl.Stsd
+	var jpgC Box
+	if jpegPrefix != nil {
+		jpgC = &JpgCBox{JpegPrefix: jpegPrefix}
+	}
+	mjpg := CreateVisualSampleEntryBox("mjpg", width, height, jpgC)
+	stsd.AddChild(mjpg)
+	return nil
+}
+
+// GetMediaType - should return video or audio (at present)
+// It returns "unknown" when the first track or its hdlr box is missing.
+func (s *InitSegment) GetMediaType() string {
+	if s.Moov == nil || s.Moov.Trak == nil || s.Moov.Trak.Mdia == nil || s.Moov.Trak.Mdia.Hdlr == nil {
+		return "unknown"
+	}
+	switch s.Moov.Trak.Mdia.Hdlr.HandlerType {
+	case "soun":
+		return "audio"
+	case "vide":
+		return "video"
+	default:
+		return "unknown"
+	}
+}
+
+// TweakSingleTrakLive assures that there is only one track and removes any mehd box.
+func (s *InitSegment) TweakSingleTrakLive() error {
+	if len(s.Moov.Traks) != 1 {
+		return fmt.Errorf("only one track allowed for live")
+	}
+	mvex := s.Moov.Mvex
+	if mvex == nil {
+		return fmt.Errorf("no mvex box found")
+
+	}
+	mehd := mvex.Mehd
+	if mehd != nil {
+		for i, c := range mvex.Children {
+			if c == mehd {
+				mvex.Children = append(mvex.Children[:i], mvex.Children[i+1:]...)
+				mvex.Mehd = nil
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// SetAACDescriptor - Modify a TrakBox by adding AAC SampleDescriptor
+// objType is one of AACMain, AAClc, HEAACv1, HEAACv2.
+// Use SetAACDescriptorFromConfig to preserve non-default GA fields or sync extensions.
+// For HEAAC, the samplingFrequency is the base frequency (normally 24000)
+// The channel configuration is stereo, or for HEAACv2 the mono channel that parametric stereo builds on.
+// SetAACDescriptorWithChannelConfig sets other channel configurations.
+func (t *TrakBox) SetAACDescriptor(objType byte, samplingFrequency int) error {
+	var channelConfiguration byte = 2
+	if objType == aac.HEAACv2 {
+		channelConfiguration = 1
+	}
+	return t.SetAACDescriptorWithChannelConfig(objType, channelConfiguration, samplingFrequency)
+}
+
+// SetAACDescriptorWithChannelConfig modifies a TrakBox by adding an AAC SampleDescriptor
+// with a channelConfiguration from ISO/IEC 14496-3, such as 1 (mono), 2 (stereo), 6 (5.1) or 7 (7.1).
+// The channel count of the sample entry is the number of channels of that configuration (see aac.NrChannels).
+// objType is one of AACMain, AAClc, HEAACv1, HEAACv2, and HEAACv2 needs channelConfiguration 1.
+// For HEAAC, the samplingFrequency is the base frequency (normally 24000)
+func (t *TrakBox) SetAACDescriptorWithChannelConfig(objType, channelConfiguration byte, samplingFrequency int) error {
+	nrChannels := aac.NrChannels(channelConfiguration)
+	if nrChannels == 0 {
+		return fmt.Errorf("AAC channel configuration %d has no fixed channel layout", channelConfiguration)
+	}
+	if objType == aac.HEAACv2 && channelConfiguration != 1 {
+		return fmt.Errorf("HE-AACv2 needs channel configuration 1, not %d", channelConfiguration)
+	}
+	asc := &aac.AudioSpecificConfig{
+		ObjectType:           objType,
+		ChannelConfiguration: channelConfiguration,
+		SamplingFrequency:    samplingFrequency,
+		ExtensionFrequency:   0,
+		SBRPresentFlag:       false,
+		PSPresentFlag:        false,
+	}
+	switch objType {
+	case aac.HEAACv1:
+		asc.ExtensionFrequency = 2 * samplingFrequency
+		asc.SBRPresentFlag = true
+	case aac.HEAACv2:
+		asc.ExtensionFrequency = 2 * samplingFrequency
+		asc.SBRPresentFlag = true
+		asc.PSPresentFlag = true
+	}
+
+	return t.SetAACDescriptorFromConfig(asc)
+}
+
+// SetAACDescriptorFromConfig modifies a TrakBox by adding an AAC SampleDescriptor
+// with all fields of asc, such as the frame length, a program config element or sync extensions.
+// The channel count of the sample entry is asc.NrChannels().
+func (t *TrakBox) SetAACDescriptorFromConfig(asc *aac.AudioSpecificConfig) error {
+	if asc == nil {
+		return fmt.Errorf("nil AudioSpecificConfig")
+	}
+	buf := &bytes.Buffer{}
+	err := asc.Encode(buf)
+	if err != nil {
+		return err
+	}
+	nrChannels := asc.NrChannels()
+	if nrChannels == 0 {
+		return fmt.Errorf("AAC channel configuration %d has no fixed channel layout", asc.ChannelConfiguration)
+	}
+	stsd := t.Mdia.Minf.Stbl.Stsd
+	esds := CreateEsdsBox(buf.Bytes())
+	mp4a := CreateAudioSampleEntryBox("mp4a",
+		uint16(nrChannels),
+		16, uint16(asc.SamplingFrequency), esds)
+	stsd.AddChild(mp4a)
+	return nil
+}
+
+// SetAC3Descriptor  - Modify a TrakBox by adding AC-3 SampleDescriptor
+func (t *TrakBox) SetAC3Descriptor(dac3 *Dac3Box) error {
+	stsd := t.Mdia.Minf.Stbl.Stsd
+	nrChannels, _ := dac3.ChannelInfo()
+	samplingFrequency := AC3SampleRates[dac3.FSCod]
+
+	ac3 := CreateAudioSampleEntryBox("ac-3",
+		uint16(nrChannels), //  Not to be used, but we set it anyway
+		16, uint16(samplingFrequency), dac3)
+	stsd.AddChild(ac3)
+	return nil
+}
+
+// SetEC3Descriptor  - Modify a TrakBox by adding EC-3 SampleDescriptor
+func (t *TrakBox) SetEC3Descriptor(dec3 *Dec3Box) error {
+	stsd := t.Mdia.Minf.Stbl.Stsd
+	nrChannels, _ := dec3.ChannelInfo()
+	fscod := dec3.EC3Subs[0].FSCod
+	samplingFrequency := AC3SampleRates[fscod]
+
+	ec3 := CreateAudioSampleEntryBox("ec-3",
+		uint16(nrChannels), //  Not to be used, but we set it anyway
+		16, uint16(samplingFrequency), dec3)
+	stsd.AddChild(ec3)
+	return nil
+}
+
+// SetWvttDescriptor - Set wvtt descriptor with a vttC box. config should start with WEBVTT or be empty.
+func (t *TrakBox) SetWvttDescriptor(config string) error {
+	if config == "" {
+		config = "WEBVTT"
+	}
+	vttC := VttCBox{Config: config}
+	wvtt := WvttBox{}
+	wvtt.AddChild(&vttC)
+	t.Mdia.Minf.Stbl.Stsd.AddChild(&wvtt)
+	return nil
+}
+
+// SetStppDescriptor - add stpp box with utf8-lists namespace, schemaLocation and auxiliaryMimeType
+// The utf8-lists have space-separated items, but no zero-termination
+func (t *TrakBox) SetStppDescriptor(namespace, schemaLocation, auxiliaryMimeTypes string) error {
+	if namespace == "" {
+		namespace = "http://www.w3.org/ns/ttml"
+	}
+	stpp := NewStppBox(namespace, schemaLocation, auxiliaryMimeTypes)
+	t.Mdia.Minf.Stbl.Stsd.AddChild(stpp)
+	return nil
+}
+
+// SetWvtcDescriptor - Set experimental paint-model wvtc descriptor with a vttC box
+// and a ttma box. config should start with WEBVTT or be empty.
+// The ttma box gives a maximum period of activation of DefaultMaxActivationSeconds
+// in the track timescale, so the media header must be set first. Change it with
+// Stsd.Wvtc.Ttma.MaxActivationPeriod.
+func (t *TrakBox) SetWvtcDescriptor(config string) error {
+	ttma, err := t.defaultTtma()
+	if err != nil {
+		return err
+	}
+	if config == "" {
+		config = "WEBVTT"
+	}
+	wvtc := NewWvtcBox()
+	wvtc.AddChild(&VttCBox{Config: config})
+	wvtc.AddChild(ttma)
+	t.Mdia.Minf.Stbl.Stsd.AddChild(wvtc)
+	return nil
+}
+
+// SetStpcDescriptor - add experimental paint-model stpc box with utf8-lists
+// namespace, schemaLocation and auxiliaryMimeType, and a ttma box.
+// The utf8-lists have space-separated items, but no zero-termination.
+// The ttma box gives a maximum period of activation of DefaultMaxActivationSeconds
+// in the track timescale, so the media header must be set first. Change it with
+// Stsd.Stpc.Ttma.MaxActivationPeriod.
+func (t *TrakBox) SetStpcDescriptor(namespace, schemaLocation, auxiliaryMimeTypes string) error {
+	ttma, err := t.defaultTtma()
+	if err != nil {
+		return err
+	}
+	if namespace == "" {
+		namespace = "http://www.w3.org/ns/ttml"
+	}
+	stpc := NewStpcBox(namespace, schemaLocation, auxiliaryMimeTypes)
+	stpc.AddChild(ttma)
+	t.Mdia.Minf.Stbl.Stsd.AddChild(stpc)
+	return nil
+}
+
+// defaultTtma - ttma box with DefaultMaxActivationSeconds in the track timescale
+func (t *TrakBox) defaultTtma() (*TtmaBox, error) {
+	if t.Mdia == nil || t.Mdia.Mdhd == nil || t.Mdia.Mdhd.Timescale == 0 {
+		return nil, fmt.Errorf("no media timescale for the ttma box")
+	}
+	return CreateTtma(DefaultMaxActivationSeconds * t.Mdia.Mdhd.Timescale), nil
+}

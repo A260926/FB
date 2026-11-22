@@ -1,0 +1,196 @@
+package main
+
+import (
+	"bytes"
+	"encoding/binary"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/Eyevinn/mp4ff/mp4"
+)
+
+func TestCommandLines(t *testing.T) {
+	cases := []struct {
+		desc        string
+		args        []string
+		expectedErr bool
+	}{
+		{desc: "help", args: []string{appName, "-h"}, expectedErr: false},
+		{desc: "version", args: []string{appName, "-version"}, expectedErr: false},
+		{desc: "no args", args: []string{appName}, expectedErr: true},
+		{desc: "unknown args", args: []string{appName, "-x"}, expectedErr: true},
+		{desc: "duration = 0", args: []string{appName, "-d", "0", "dummy.mp4", "dummy.mp4"}, expectedErr: true},
+		{desc: "non-existing infile", args: []string{appName, "-d", "1000", "notExists.mp4", "dummy.mp4"}, expectedErr: true},
+		{desc: "bad infile", args: []string{appName, "-d", "1000", "main.go", "dummy.mp4"}, expectedErr: true},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			gotOut := bytes.Buffer{}
+			err := run(c.args, &gotOut)
+			if c.expectedErr {
+				if err == nil {
+					t.Error("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %s", err)
+				return
+			}
+		})
+	}
+}
+
+// TestExternalData checks that a file whose sample data are in another file,
+// through dref url entries, is rejected instead of copying the wrong bytes.
+func TestExternalData(t *testing.T) {
+	outFile := filepath.Join(t.TempDir(), "out.mp4")
+	err := run([]string{appName, "-d", "1000", "../../mp4/testdata/prog_8s_dref.mp4", outFile}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "has its data outside this file") {
+		t.Errorf("expected external data error, got %v", err)
+	}
+}
+
+// TestCroppedFileDuration - simple test to check that cropped file has right duration
+// In general, this duration will not be exactly the same as the one asked for.
+func TestCroppedFileDuration(t *testing.T) {
+	testFile := "../../mp4/testdata/prog_8s.mp4"
+	cropDur := 2000
+	tmpDir := t.TempDir()
+	outFile := tmpDir + "/cropped.mp4"
+
+	err := run([]string{"appName", "-d", strconv.Itoa(cropDur), testFile, outFile}, os.Stdout)
+	if err != nil {
+		t.Error(err)
+	}
+
+	ofh, err := os.Open(outFile)
+	if err != nil {
+		t.Error(err)
+	}
+	defer ofh.Close()
+
+	decCropped, err := mp4.DecodeFile(ofh)
+	if err != nil {
+		t.Error(err)
+	}
+	moovDur := decCropped.Moov.Mvhd.Duration
+	moovTimescale := decCropped.Moov.Mvhd.Timescale
+	if uint64(cropDur)*uint64(moovTimescale) != moovDur*1000 {
+		t.Errorf("got %d/%dms instead of %dms", moovDur, moovTimescale, cropDur)
+	}
+}
+
+// TestTruncatedCtts checks that a ctts box that does not cover all samples of
+// the track gives an error instead of a panic while cropping.
+func TestTruncatedCtts(t *testing.T) {
+	raw, err := os.ReadFile("../../mp4/testdata/bbb_prog_10s.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Cut the first ctts down to a single entry and pad the rest with a free box.
+	cttsPos := bytes.Index(raw, []byte("ctts"))
+	if cttsPos < 0 {
+		t.Fatal("no ctts box found")
+	}
+	sizePos := cttsPos - 4
+	oldSize := binary.BigEndian.Uint32(raw[sizePos : sizePos+4])
+	const newSize = 8 + 4 + 4 + 8 // header + versionAndFlags + entryCount + one entry
+	if oldSize <= newSize+8 {
+		t.Fatalf("ctts box of size %d is too small to truncate", oldSize)
+	}
+	binary.BigEndian.PutUint32(raw[sizePos:sizePos+4], newSize)
+	binary.BigEndian.PutUint32(raw[cttsPos+8:cttsPos+12], 1) // entryCount
+	freePos := sizePos + newSize
+	binary.BigEndian.PutUint32(raw[freePos:freePos+4], oldSize-newSize)
+	copy(raw[freePos+4:freePos+8], []byte("free"))
+
+	inFile := filepath.Join(t.TempDir(), "short_ctts.mp4")
+	if err := os.WriteFile(inFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outFile := filepath.Join(t.TempDir(), "out.mp4")
+	if err := run([]string{appName, "-d", "2", inFile, outFile}, &bytes.Buffer{}); err == nil {
+		t.Error("expected error for ctts not covering all samples, got nil")
+	}
+}
+
+// TestMissingBoxes checks that a file with a track that lacks a box that cropping needs gives an error.
+func TestMissingBoxes(t *testing.T) {
+	cases := []struct {
+		boxType string
+		wantErr string
+	}{
+		{boxType: "moov", wantErr: "no moov box"},
+		{boxType: "mvhd", wantErr: "no mvhd box"},
+		{boxType: "tkhd", wantErr: "track 1 has no tkhd box"},
+		{boxType: "mdia", wantErr: "track 1 has no mdia box"},
+		{boxType: "mdhd", wantErr: "track 1 has no mdhd box"},
+		{boxType: "hdlr", wantErr: "track 1 has no hdlr box"},
+		{boxType: "minf", wantErr: "track 1 has no minf box"},
+		{boxType: "stbl", wantErr: "track 1 has no stbl box"},
+		{boxType: "stts", wantErr: "track 1 has no stts box"},
+		{boxType: "stsc", wantErr: "track 1 has no stsc box"},
+		{boxType: "stsz", wantErr: "track 1 has no stsz box"},
+		{boxType: "stco", wantErr: "track 1 has no stco or co64 box"},
+	}
+	for _, c := range cases {
+		t.Run(c.boxType, func(t *testing.T) {
+			raw, err := os.ReadFile("../../mp4/testdata/prog_8s.mp4")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pos := bytes.Index(raw, []byte(c.boxType))
+			if pos < 0 {
+				t.Fatalf("no %s box found", c.boxType)
+			}
+			copy(raw[pos:pos+4], "free")
+			inFile := filepath.Join(t.TempDir(), "in.mp4")
+			if err := os.WriteFile(inFile, raw, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			outFile := filepath.Join(t.TempDir(), "out.mp4")
+			err = run([]string{appName, "-d", "1000", inFile, outFile}, &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Errorf("got error %v, want one containing %q", err, c.wantErr)
+			}
+		})
+	}
+}
+
+// TestEmptyStss checks that a video track whose stss box has no entries gives an error.
+func TestEmptyStss(t *testing.T) {
+	raw, err := os.ReadFile("../../mp4/testdata/bbb_prog_10s.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Cut the stss down to no entries and pad the rest with a free box.
+	stssPos := bytes.Index(raw, []byte("stss"))
+	if stssPos < 0 {
+		t.Fatal("no stss box found")
+	}
+	sizePos := stssPos - 4
+	oldSize := binary.BigEndian.Uint32(raw[sizePos : sizePos+4])
+	const newSize = 8 + 4 + 4 // header + versionAndFlags + entryCount
+	if oldSize < newSize+8 {
+		t.Fatalf("stss box of size %d is too small to empty", oldSize)
+	}
+	binary.BigEndian.PutUint32(raw[sizePos:sizePos+4], newSize)
+	binary.BigEndian.PutUint32(raw[stssPos+8:stssPos+12], 0) // entryCount
+	freePos := sizePos + newSize
+	binary.BigEndian.PutUint32(raw[freePos:freePos+4], oldSize-newSize)
+	copy(raw[freePos+4:freePos+8], []byte("free"))
+
+	inFile := filepath.Join(t.TempDir(), "empty_stss.mp4")
+	if err := os.WriteFile(inFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outFile := filepath.Join(t.TempDir(), "out.mp4")
+	err = run([]string{appName, "-d", "2000", inFile, outFile}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "did not find any syncframe") {
+		t.Errorf("got error %v, want one about no sync frame", err)
+	}
+}

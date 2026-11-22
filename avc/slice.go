@@ -1,0 +1,469 @@
+package avc
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	mathbits "math/bits"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// Errors for parsing and handling AVC slices
+var (
+	ErrNoSliceHeader      = errors.New("no slice header")
+	ErrInvalidSliceType   = errors.New("invalid slice type")
+	ErrTooFewBytesToParse = errors.New("too few bytes to parse symbol")
+)
+
+// SliceType - AVC slice type
+type SliceType uint
+
+func (s SliceType) String() string {
+	switch s {
+	case SLICE_I:
+		return "I"
+	case SLICE_P:
+		return "P"
+	case SLICE_B:
+		return "B"
+	case SLICE_SI:
+		return "SI"
+	case SLICE_SP:
+		return "SP"
+	default:
+		return ""
+	}
+}
+
+// AVC slice types
+const (
+	SLICE_P  = SliceType(0)
+	SLICE_B  = SliceType(1)
+	SLICE_I  = SliceType(2)
+	SLICE_SP = SliceType(3)
+	SLICE_SI = SliceType(4)
+)
+
+// GetSliceTypeFromNALU - parse slice header to get slice type in interval 0 to 4
+func GetSliceTypeFromNALU(data []byte) (sliceType SliceType, err error) {
+
+	if len(data) <= 1 {
+		err = ErrTooFewBytesToParse
+		return
+	}
+
+	naluType := GetNaluType(data[0])
+	switch naluType {
+	case 1, 2, 5, 19:
+		// slice_layer_without_partitioning_rbsp
+		// slice_data_partition_a_layer_rbsp
+
+	default:
+		err = ErrNoSliceHeader
+		return
+	}
+	r := bits.NewEBSPReader(bytes.NewReader((data[1:])))
+
+	// first_mb_in_slice
+	_ = r.ReadExpGolomb()
+	sliceType = SliceType(r.ReadExpGolomb())
+	if r.AccError() != nil {
+		err = r.AccError()
+	}
+	if sliceType > 9 {
+		err = ErrInvalidSliceType
+		return
+	}
+
+	if sliceType >= 5 {
+		sliceType -= 5 // The same type is repeated twice to tell if all slices in picture are the same
+	}
+	return
+}
+
+type SliceHeader struct {
+	SliceType                     SliceType
+	FirstMBInSlice                uint32
+	PicParamID                    uint32
+	SeqParamID                    uint32
+	ColorPlaneID                  uint32
+	FrameNum                      uint32
+	IDRPicID                      uint32
+	PicOrderCntLsb                uint32
+	DeltaPicOrderCntBottom        int32
+	DeltaPicOrderCnt              [2]int32
+	RedundantPicCnt               uint32
+	NumRefIdxL0ActiveMinus1       uint32
+	NumRefIdxL1ActiveMinus1       uint32
+	ModificationOfPicNumsIDC      uint32
+	AbsDiffPicNumMinus1           uint32
+	LongTermPicNum                uint32
+	AbsDiffViewIdxMinus1          uint32
+	LumaLog2WeightDenom           uint32
+	ChromaLog2WeightDenom         uint32
+	DifferenceOfPicNumsMinus1     uint32
+	LongTermFramIdx               uint32
+	MaxLongTermFrameIdxPlus1      uint32
+	CabacInitIDC                  uint32
+	SliceQPDelta                  int32
+	SliceQSDelta                  int32
+	DisableDeblockingFilterIDC    uint32
+	SliceAlphaC0OffsetDiv2        int32
+	SliceBetaOffsetDiv2           int32
+	SliceGroupChangeCycle         uint32
+	Size                          uint32
+	FieldPicFlag                  bool
+	BottomFieldFlag               bool
+	DirectSpatialMvPredFlag       bool
+	NumRefIdxActiveOverrideFlag   bool
+	RefPicListModificationL0Flag  bool
+	RefPicListModificationL1Flag  bool
+	NoOutputOfPriorPicsFlag       bool
+	LongTermReferenceFlag         bool
+	SPForSwitchFlag               bool
+	AdaptiveRefPicMarkingModeFlag bool
+}
+
+// ParseSliceHeader parses AVC slice header following the syntax in ISO/IEC 14496-10 section 7.3.3
+func ParseSliceHeader(nalu []byte, spsMap map[uint32]*SPS, ppsMap map[uint32]*PPS) (*SliceHeader, error) {
+	sh := &SliceHeader{}
+	if err := parseSliceHeader(sh, nalu, spsMap, ppsMap); err != nil {
+		return nil, err
+	}
+	return sh, nil
+}
+
+// ParseSliceHeaderInto parses the slice header of nalu into sh like ParseSliceHeader, but without
+// allocating, so one SliceHeader can be reused for every slice of a stream. All fields of sh are
+// overwritten. On error, sh holds the fields parsed before the error.
+func ParseSliceHeaderInto(sh *SliceHeader, nalu []byte, spsMap map[uint32]*SPS, ppsMap map[uint32]*PPS) error {
+	*sh = SliceHeader{}
+	return parseSliceHeader(sh, nalu, spsMap, ppsMap)
+}
+
+// SliceHeaderSize returns the size in bytes of the slice header of nalu, as ParseSliceHeader
+// would set it in SliceHeader.Size, without allocating.
+func SliceHeaderSize(nalu []byte, spsMap map[uint32]*SPS, ppsMap map[uint32]*PPS) (int, error) {
+	var sh SliceHeader
+	if err := parseSliceHeader(&sh, nalu, spsMap, ppsMap); err != nil {
+		return 0, err
+	}
+	return int(sh.Size), nil
+}
+
+// parseSliceHeader parses the slice header of nalu into sh.
+func parseSliceHeader(sh *SliceHeader, nalu []byte, spsMap map[uint32]*SPS, ppsMap map[uint32]*PPS) error {
+	r := bits.NewEBSPReaderFromSlice(nalu)
+	nalHdr := r.Read(8)
+	naluType := GetNaluType(byte(nalHdr))
+	switch naluType {
+	case 1, 2, 5, 19:
+		// slice_layer_without_partitioning_rbsp
+		// slice_data_partition_a_layer_rbsp
+	default:
+		err := ErrNoSliceHeader
+		return err
+	}
+	nalRefIDC := (nalHdr >> 5) & 0x3
+	sh.FirstMBInSlice = uint32(r.ReadExpGolomb())
+	sliceTypeValue := r.ReadExpGolomb()
+	if !checkMax(r, "slice_type", sliceTypeValue, 9) {
+		return r.AccError()
+	}
+	sh.SliceType = SliceType(sliceTypeValue)
+	sh.PicParamID = uint32(r.ReadExpGolomb())
+	pps, ok := ppsMap[sh.PicParamID]
+	if !ok {
+		return fmt.Errorf("pps ID %d unknown", sh.PicParamID)
+	}
+	sh.SeqParamID = pps.SeqParameterSetID
+	sps, ok := spsMap[sh.SeqParamID]
+	if !ok {
+		return fmt.Errorf("sps ID %d unknown", sh.SeqParamID)
+	}
+	if sps.SeparateColourPlaneFlag {
+		sh.ColorPlaneID = uint32(r.Read(2))
+	}
+	sh.FrameNum = uint32(r.Read(int(sps.Log2MaxFrameNumMinus4 + 4)))
+	if !sps.FrameMbsOnlyFlag {
+		sh.FieldPicFlag = r.ReadFlag()
+		if sh.FieldPicFlag {
+			sh.BottomFieldFlag = r.ReadFlag()
+		}
+	}
+	if naluType == NALU_IDR {
+		sh.IDRPicID = uint32(r.ReadExpGolomb())
+	}
+	if sps.PicOrderCntType == 0 {
+		sh.PicOrderCntLsb = uint32(r.Read(int(sps.Log2MaxPicOrderCntLsbMinus4 + 4)))
+		if pps.BottomFieldPicOrderInFramePresentFlag && !sh.FieldPicFlag {
+			sh.DeltaPicOrderCntBottom = int32(r.ReadSignedGolomb())
+		}
+	} else if sps.PicOrderCntType == 1 && !sps.DeltaPicOrderAlwaysZeroFlag {
+		sh.DeltaPicOrderCnt[0] = int32(r.ReadSignedGolomb())
+		if pps.BottomFieldPicOrderInFramePresentFlag && !sh.FieldPicFlag {
+			sh.DeltaPicOrderCnt[1] = int32(r.ReadSignedGolomb())
+		}
+	}
+	if pps.RedundantPicCntPresentFlag {
+		sh.RedundantPicCnt = uint32(r.ReadExpGolomb())
+	}
+
+	sliceType := SliceType(sh.SliceType % 5)
+	if sliceType == SLICE_B {
+		sh.DirectSpatialMvPredFlag = r.ReadFlag()
+	}
+
+	switch sliceType {
+	case SLICE_P, SLICE_SP, SLICE_B:
+		sh.NumRefIdxActiveOverrideFlag = r.ReadFlag()
+
+		if sh.NumRefIdxActiveOverrideFlag {
+			// These counts drive the pred_weight_table loops below, so check them
+			// before the uint32 conversion can truncate a bogus value.
+			numRefIdxL0ActiveMinus1 := r.ReadExpGolomb()
+			if !checkMax(r, "num_ref_idx_l0_active_minus1", numRefIdxL0ActiveMinus1, maxNumRefIdxActiveMinus1) {
+				return r.AccError()
+			}
+			sh.NumRefIdxL0ActiveMinus1 = uint32(numRefIdxL0ActiveMinus1)
+			if sliceType == SLICE_B {
+				numRefIdxL1ActiveMinus1 := r.ReadExpGolomb()
+				if !checkMax(r, "num_ref_idx_l1_active_minus1", numRefIdxL1ActiveMinus1, maxNumRefIdxActiveMinus1) {
+					return r.AccError()
+				}
+				sh.NumRefIdxL1ActiveMinus1 = uint32(numRefIdxL1ActiveMinus1)
+			}
+		} else {
+			sh.NumRefIdxL0ActiveMinus1 = uint32(pps.NumRefIdxI0DefaultActiveMinus1)
+			sh.NumRefIdxL1ActiveMinus1 = uint32(pps.NumRefIdxI1DefaultActiveMinus1)
+		}
+	}
+
+	// ref_pic_list_modification (nal unit type != 20 or 21) Section G.3.3.3.1.1
+	if sliceType != SLICE_I && sliceType != SLICE_SI {
+		sh.RefPicListModificationL0Flag = r.ReadFlag()
+		if sh.RefPicListModificationL0Flag {
+		refPicListL0Loop:
+			for {
+				sh.ModificationOfPicNumsIDC = uint32(r.ReadExpGolomb())
+				switch sh.ModificationOfPicNumsIDC {
+				case 0, 1:
+					sh.AbsDiffPicNumMinus1 = uint32(r.ReadExpGolomb())
+				case 2:
+					sh.LongTermPicNum = uint32(r.ReadExpGolomb())
+				case 4, 5:
+					sh.AbsDiffViewIdxMinus1 = uint32(r.ReadExpGolomb())
+				case 3:
+					break refPicListL0Loop
+				}
+				if r.AccError() != nil {
+					break refPicListL0Loop
+				}
+			}
+		}
+	}
+	if sliceType == SLICE_B {
+		sh.RefPicListModificationL1Flag = r.ReadFlag()
+		if sh.RefPicListModificationL1Flag {
+		refPicListL1Loop:
+			for {
+				sh.ModificationOfPicNumsIDC = uint32(r.ReadExpGolomb())
+				switch sh.ModificationOfPicNumsIDC {
+				case 0, 1:
+					sh.AbsDiffPicNumMinus1 = uint32(r.ReadExpGolomb())
+				case 2:
+					sh.LongTermPicNum = uint32(r.ReadExpGolomb())
+				case 4, 5:
+					sh.AbsDiffViewIdxMinus1 = uint32(r.ReadExpGolomb())
+				case 3:
+					break refPicListL1Loop
+				}
+				if r.AccError() != nil {
+					break refPicListL1Loop
+				}
+			}
+		}
+	}
+	// end ref_pic_list_modification
+
+	if pps.WeightedPredFlag && (sliceType == SLICE_P || sliceType == SLICE_SP) ||
+		(pps.WeightedBipredIDC == 1 && sliceType == SLICE_B) {
+		// pred_weight_table, section 7.3.3.2. Both denominators shall be in the range 0 to 7 (7.4.3.2).
+		lumaLog2WeightDenom := r.ReadExpGolomb()
+		if !checkMax(r, "luma_log2_weight_denom", lumaLog2WeightDenom, 7) {
+			return r.AccError()
+		}
+		sh.LumaLog2WeightDenom = uint32(lumaLog2WeightDenom)
+		if sps.ChromaArrayType() != 0 { // chroma_idc != 0 in Bento4
+			chromaLog2WeightDenom := r.ReadExpGolomb()
+			if !checkMax(r, "chroma_log2_weight_denom", chromaLog2WeightDenom, 7) {
+				return r.AccError()
+			}
+			sh.ChromaLog2WeightDenom = uint32(chromaLog2WeightDenom)
+		}
+
+		for i := uint32(0); i <= sh.NumRefIdxL0ActiveMinus1; i++ {
+			lumaWeightL0Flag := r.ReadFlag()
+			if lumaWeightL0Flag {
+				// Just parse, don't store this
+				_ = r.ReadExpGolomb() // luma_weight_l0[i] = SignedGolomb()
+				_ = r.ReadExpGolomb() // luma_offset_l0[i] = SignedGolomb()
+			}
+			if sps.ChromaArrayType() != 0 {
+				chromaWeightL0Flag := r.ReadFlag()
+				if chromaWeightL0Flag {
+					for j := 0; j < 2; j++ {
+						// Just parse, don't store this
+						_ = r.ReadExpGolomb() // chroma_weight_l0[i][j] = SignedGolomb()
+						_ = r.ReadExpGolomb() // chroma_offset_l0[i][j] = SignedGolomb()
+					}
+				}
+			}
+		}
+		if sliceType == SLICE_B {
+			for i := uint32(0); i <= sh.NumRefIdxL1ActiveMinus1; i++ {
+				lumaWeightL1Flag := r.ReadFlag()
+				if lumaWeightL1Flag {
+					// Just parse, don't store this
+					_ = r.ReadExpGolomb() // luma_weight_l1[i] = SignedGolomb()
+					_ = r.ReadExpGolomb() // luma_offset_l1[i] = SignedGolomb()
+				}
+				if sps.ChromaArrayType() != 0 {
+					chromaWeightL1Flag := r.ReadFlag()
+					if chromaWeightL1Flag {
+						// Just parse, don't store this
+						for j := 0; j < 2; j++ {
+							_ = r.ReadSignedGolomb() // chroma_weight_l1[i][j] = SignedGolomb()
+							_ = r.ReadSignedGolomb() // chroma_offset_l1[i][j] = SignedGolomb()
+						}
+					}
+				}
+			}
+		}
+		// end pred_weight_table
+	}
+
+	if nalRefIDC != 0 {
+		// dec_ref_pic_marking
+		if naluType == NALU_IDR {
+			sh.NoOutputOfPriorPicsFlag = r.ReadFlag()
+			sh.LongTermReferenceFlag = r.ReadFlag()
+		} else {
+			sh.AdaptiveRefPicMarkingModeFlag = r.ReadFlag()
+			if sh.AdaptiveRefPicMarkingModeFlag {
+			adaptiveRefPicLoop:
+				for {
+					memoryManagementControlOperation := r.ReadExpGolomb()
+					switch memoryManagementControlOperation {
+					case 1, 3:
+						sh.DifferenceOfPicNumsMinus1 = uint32(r.ReadExpGolomb())
+					case 2:
+						sh.LongTermPicNum = uint32(r.ReadExpGolomb())
+					}
+					switch memoryManagementControlOperation {
+					case 3, 6:
+						sh.LongTermFramIdx = uint32(r.ReadExpGolomb())
+					case 4:
+						sh.MaxLongTermFrameIdxPlus1 = uint32(r.ReadExpGolomb())
+					case 0:
+						break adaptiveRefPicLoop
+					}
+					if r.AccError() != nil {
+						break adaptiveRefPicLoop
+					}
+				}
+			}
+		}
+		// end dec_ref_pic_marking
+	}
+	if pps.EntropyCodingModeFlag && sliceType != SLICE_I && sliceType != SLICE_SI {
+		cabacInitIDC := r.ReadExpGolomb()
+		if !checkMax(r, "cabac_init_idc", cabacInitIDC, 2) {
+			return r.AccError()
+		}
+		sh.CabacInitIDC = uint32(cabacInitIDC)
+	}
+	sliceQPDelta := r.ReadSignedGolomb()
+	// SliceQPY = 26 + pic_init_qp_minus26 + slice_qp_delta must be in the range
+	// -QpBdOffsetY to 51 (7.4.3)
+	qpBdOffsetY := 6 * int(sps.BitDepthLumaMinus8)
+	if !checkRange(r, "SliceQPY", 26+pps.PicInitQpMinus26+sliceQPDelta, -qpBdOffsetY, 51) {
+		return r.AccError()
+	}
+	sh.SliceQPDelta = int32(sliceQPDelta)
+	if sliceType == SLICE_SP || sliceType == SLICE_SI {
+		if sliceType == SLICE_SP {
+			sh.SPForSwitchFlag = r.ReadFlag()
+		}
+		sliceQSDelta := r.ReadSignedGolomb()
+		// QSY = 26 + pic_init_qs_minus26 + slice_qs_delta must be in the range 0 to 51 (7.4.3)
+		if !checkRange(r, "QSY", 26+pps.PicInitQsMinus26+sliceQSDelta, 0, 51) {
+			return r.AccError()
+		}
+		sh.SliceQSDelta = int32(sliceQSDelta)
+	}
+	if pps.DeblockingFilterControlPresentFlag {
+		// disable_deblocking_filter_idc must be in the range 0 to 2, and the
+		// offsets into the deblocking filter tables in the range -6 to +6 (7.4.3)
+		disableDeblockingFilterIDC := r.ReadExpGolomb()
+		if !checkMax(r, "disable_deblocking_filter_idc", disableDeblockingFilterIDC, 2) {
+			return r.AccError()
+		}
+		sh.DisableDeblockingFilterIDC = uint32(disableDeblockingFilterIDC)
+		if sh.DisableDeblockingFilterIDC != 1 {
+			sliceAlphaC0OffsetDiv2 := r.ReadSignedGolomb()
+			if !checkRange(r, "slice_alpha_c0_offset_div2", sliceAlphaC0OffsetDiv2, -6, 6) {
+				return r.AccError()
+			}
+			sliceBetaOffsetDiv2 := r.ReadSignedGolomb()
+			if !checkRange(r, "slice_beta_offset_div2", sliceBetaOffsetDiv2, -6, 6) {
+				return r.AccError()
+			}
+			sh.SliceAlphaC0OffsetDiv2 = int32(sliceAlphaC0OffsetDiv2)
+			sh.SliceBetaOffsetDiv2 = int32(sliceBetaOffsetDiv2)
+		}
+	}
+	if pps.NumSliceGroupsMinus1 > 0 &&
+		pps.SliceGroupMapType >= 3 &&
+		pps.SliceGroupMapType <= 5 {
+		if err := readSliceGroupChangeCycle(r, sh, sps, pps); err != nil {
+			return err
+		}
+	}
+	// A NAL unit that ends inside the slice header is an error, not a header
+	// whose remaining fields are zero.
+	if r.AccError() != nil {
+		return r.AccError()
+	}
+
+	// compute the size in bytes. The last byte may not be fully parsed
+	sh.Size = uint32(r.NrBytesRead())
+	return nil
+}
+
+// readSliceGroupChangeCycle reads slice_group_change_cycle into sh. Its number of bits is
+// Ceil(Log2(PicSizeInMapUnits ÷ SliceGroupChangeRate + 1)), with an exact division, which equals
+// Ceil(Log2(Ceil(PicSizeInMapUnits ÷ SliceGroupChangeRate) + 1)), and its maximum value is
+// Ceil(PicSizeInMapUnits ÷ SliceGroupChangeRate) (7.4.3).
+func readSliceGroupChangeCycle(r *bits.EBSPReader, sh *SliceHeader, sps *SPS, pps *PPS) error {
+	// PicSizeInMapUnits = PicWidthInMbs * PicHeightInMapUnits (7.4.2.1.1) may not fit in a 32-bit uint.
+	picSizeInMapUnits := uint64(sps.PicWidthInMbsMinus1+1) * uint64(sps.PicHeightInMapUnitsMinus1+1)
+	// slice_group_change_rate_minus1 shall be in the range 0 to PicSizeInMapUnits - 1 (7.4.2.2).
+	if uint64(pps.SliceGroupChangeRateMinus1) >= picSizeInMapUnits {
+		return fmt.Errorf("slice_group_change_rate_minus1 %d out of range [0, %d]",
+			pps.SliceGroupChangeRateMinus1, picSizeInMapUnits-1)
+	}
+	sliceGroupChangeRate := uint64(pps.SliceGroupChangeRateMinus1) + 1
+	maxCycle := (picSizeInMapUnits + sliceGroupChangeRate - 1) / sliceGroupChangeRate
+	nrBits := mathbits.Len64(maxCycle) // Ceil(Log2(maxCycle + 1))
+	if nrBits > 32 {
+		return fmt.Errorf("slice_group_change_cycle of %d bits is longer than 32 bits", nrBits)
+	}
+	sliceGroupChangeCycle := r.Read(nrBits)
+	if r.AccError() == nil && uint64(sliceGroupChangeCycle) > maxCycle {
+		r.SetError(fmt.Errorf("slice_group_change_cycle %d out of range [0, %d]", sliceGroupChangeCycle, maxCycle))
+	}
+	sh.SliceGroupChangeCycle = uint32(sliceGroupChangeCycle)
+	return r.AccError()
+}

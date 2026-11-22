@@ -1,0 +1,141 @@
+package mp4
+
+import (
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+)
+
+const (
+	infoVersionNone         = -1
+	infoVersionGroupingType = -2
+	infoVersionDescriptor   = -3
+)
+
+type boxLike interface {
+	Type() string
+	Size() uint64
+	Info(w io.Writer, specificBoxLevels, indent, indentStep string) error
+}
+
+// infoDumper - dump box name and size. Allow for more with write.
+type infoDumper struct {
+	w      io.Writer
+	indent string
+	box    boxLike
+	err    error
+}
+
+// fixStartingCopyrightChar - replace starting one byte © with two-bytes UTF-8
+func fixStartingCopyrightChar(boxType string) string {
+	// © is 0xa9 in latin1 (and in Apple boxes/atoms)
+	// In UTF-8 it is two bytes: 0xc2 0xa9
+	bType := []byte(boxType)
+	if len(bType) > 0 && bType[0] == 0xa9 {
+		bType = append([]byte{0xc2}, bType...)
+	}
+	return string(bType)
+}
+
+// displayBoxType - make a box type safe to print. Control characters are
+// escaped as \xNN, so that a type such as the four zero bytes of the
+// QuickTime wave terminator atom stays visible in the output.
+func displayBoxType(boxType string) string {
+	boxType = fixStartingCopyrightChar(boxType)
+	nrControlChars := 0
+	for i := 0; i < len(boxType); i++ {
+		if isControlChar(boxType[i]) {
+			nrControlChars++
+		}
+	}
+	if nrControlChars == 0 {
+		return boxType
+	}
+	var sb strings.Builder
+	sb.Grow(len(boxType) + 3*nrControlChars)
+	for i := 0; i < len(boxType); i++ {
+		if c := boxType[i]; isControlChar(c) {
+			fmt.Fprintf(&sb, "\\x%02x", c)
+		} else {
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
+}
+
+// isControlChar - C0 control character or DEL
+func isControlChar(c byte) bool {
+	return c < 0x20 || c == 0x7f
+}
+
+// newInfoDumper - make an infoDumper with indent
+// write version if >= 0
+// set Version to -1 if not present for box
+// set Version to -2 for sample group entries
+// set Version to -3 for descriptors
+func newInfoDumper(w io.Writer, indent string, b boxLike, version int, flags uint32) *infoDumper {
+	bd := infoDumper{w, indent, b, nil}
+	utf8BoxType := displayBoxType(b.Type())
+	switch {
+	case version >= 0:
+		bd.write("[%s] size=%d version=%d flags=%06x", utf8BoxType, b.Size(), version, flags)
+	case version == infoVersionNone:
+		bd.write("[%s] size=%d", utf8BoxType, b.Size())
+	case version == infoVersionGroupingType:
+		bd.write("GroupingType %q size=%d", utf8BoxType, b.Size())
+	case version == infoVersionDescriptor:
+		bd.write("Descriptor %q size=2+%d", b.Type(), b.Size())
+	default:
+		bd.write("Unknown version %d", version)
+	}
+	return &bd
+}
+
+// write - write formatted objecds if level <= bd.level
+func (b *infoDumper) write(format string, p ...interface{}) {
+	if b.err != nil {
+		return
+	}
+	_, err := fmt.Fprintf(b.w, "%s", b.indent)
+	if err != nil {
+		b.err = err
+		return
+	}
+	_, b.err = fmt.Fprintf(b.w, format+"\n", p...)
+}
+
+// getInfoLevel - get info level for specific boxLike, or from all
+func getInfoLevel(b boxLike, specificBoxLevels string) (level int) {
+	if len(specificBoxLevels) == 0 {
+		return level
+	}
+	boxesLevels := strings.Split(specificBoxLevels, ",")
+	boxType := b.Type()
+	if _, ok := b.(Descriptor); ok {
+		boxType = "esds"
+	}
+	var err error
+	for _, bl := range boxesLevels {
+		splitPos := strings.Index(bl, ":")
+		if splitPos < 1 {
+			continue
+		}
+		bt := bl[:splitPos]
+		nr := bl[splitPos+1:]
+		switch bt {
+		case boxType:
+			level, err = strconv.Atoi(nr)
+			if err != nil {
+				level = 0
+			}
+			return level
+		case "all":
+			level, err = strconv.Atoi(nr)
+			if err != nil {
+				level = 0
+			}
+		}
+	}
+	return level
+}

@@ -1,0 +1,109 @@
+package hevc
+
+// GetParameterSetsFromByteStream copies VPS, SPS and PPS nalus from a bytestream (Annex B).
+// The stream is not scanned beyond the first video NAL unit.
+func GetParameterSetsFromByteStream(data []byte) (vpss [][]byte, spss [][]byte, ppss [][]byte) {
+	n := len(data)
+	currNaluStart := -1
+	totSize := 0
+	addParameterSet := func(end int) {
+		if currNaluStart < 0 || currNaluStart >= end {
+			return
+		}
+		naluType := GetNaluType(data[currNaluStart])
+		if naluType < NALU_VPS || naluType > NALU_PPS {
+			return
+		}
+		end = trimTrailingZeros(data, currNaluStart, end)
+		if end-currNaluStart < 2 { // incomplete NAL unit header
+			return
+		}
+		switch naluType {
+		case NALU_VPS:
+			vpss = append(vpss, data[currNaluStart:end])
+			totSize += end - currNaluStart
+		case NALU_SPS:
+			spss = append(spss, data[currNaluStart:end])
+			totSize += end - currNaluStart
+		case NALU_PPS:
+			ppss = append(ppss, data[currNaluStart:end])
+			totSize += end - currNaluStart
+		}
+	}
+	for i := 0; i < n-2; i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			addParameterSet(i)
+			currNaluStart = i + 3
+			if currNaluStart < n && GetNaluType(data[currNaluStart]) < 32 { // Video NALU types are below 32
+				break
+			}
+		}
+	}
+	addParameterSet(n)
+	psData := make([]byte, totSize)
+	pos := 0
+	for i := range vpss {
+		copy(psData[pos:], vpss[i])
+		vpss[i] = psData[pos : pos+len(vpss[i]) : pos+len(vpss[i])]
+		pos += len(vpss[i])
+	}
+	for i := range spss {
+		copy(psData[pos:], spss[i])
+		spss[i] = psData[pos : pos+len(spss[i]) : pos+len(spss[i])]
+		pos += len(spss[i])
+	}
+	for i := range ppss {
+		copy(psData[pos:], ppss[i])
+		ppss[i] = psData[pos : pos+len(ppss[i]) : pos+len(ppss[i])]
+		pos += len(ppss[i])
+	}
+	return vpss, spss, ppss
+}
+
+// ExtractNalusOfTypeFromByteStream returns all HEVC nalus of wanted type from bytestream.
+// If stopAtVideo, the stream is not scanned beyond the first video NAL unit.
+func ExtractNalusOfTypeFromByteStream(nType NaluType, data []byte, stopAtVideo bool) [][]byte {
+	currNaluStart := -1
+	n := len(data)
+	var nalus [][]byte
+	for i := 0; i < n-2; i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			if currNaluStart > 0 {
+				currNaluEnd := trimTrailingZeros(data, currNaluStart, i)
+				naluType := GetNaluType(data[currNaluStart])
+				if naluType == nType {
+					nalus = append(nalus, extractSlice(data, currNaluStart, currNaluEnd))
+				}
+			}
+			currNaluStart = i + 3
+			if currNaluStart < n-1 {
+				nextNaluType := GetNaluType(data[currNaluStart])
+				if stopAtVideo && nextNaluType < 32 { // Video nal unit type
+					return nalus
+				}
+			}
+		}
+	}
+	if currNaluStart < 0 {
+		return nil
+	}
+	if currNaluStart < n && GetNaluType(data[currNaluStart]) == nType {
+		nalus = append(nalus, extractSlice(data, currNaluStart, trimTrailingZeros(data, currNaluStart, n)))
+	}
+	return nalus
+}
+
+func extractSlice(data []byte, start, stop int) []byte {
+	sl := make([]byte, stop-start)
+	_ = copy(sl, data[start:stop])
+	return sl
+}
+
+// trimTrailingZeros returns the end of the NALU in data[start:end] without its trailing zero bytes.
+// They belong to the byte stream, since the last byte of a NALU is never zero. The first byte is kept.
+func trimTrailingZeros(data []byte, start, end int) int {
+	for end > start+1 && data[end-1] == 0 {
+		end--
+	}
+	return end
+}

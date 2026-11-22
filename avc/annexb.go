@@ -1,0 +1,304 @@
+package avc
+
+//Functions to handle AnnexB Byte stream format"
+
+import (
+	"encoding/binary"
+	"math/bits"
+	"unsafe"
+)
+
+// ExtractNalusFromByteStream extracts NALUs without startcode from ByteStream.
+// Zero bytes after a NALU, also after the last one, and a start code that ends the stream, are not part of it.
+// This function is codec agnostic.
+func ExtractNalusFromByteStream(data []byte) [][]byte {
+	currNaluStart := -1
+	n := len(data)
+	var nalus [][]byte
+	for i := 0; i < n-2; i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			if currNaluStart > 0 {
+				currNaluEnd := trimTrailingZeros(data, currNaluStart, i)
+				nalus = append(nalus, extractSlice(data, currNaluStart, currNaluEnd))
+			}
+			currNaluStart = i + 3
+		}
+	}
+	if currNaluStart < 0 || currNaluStart == n {
+		return nalus
+	}
+	nalus = append(nalus, extractSlice(data, currNaluStart, trimTrailingZeros(data, currNaluStart, n)))
+	return nalus
+}
+
+func extractSlice(data []byte, start, stop int) []byte {
+	sl := make([]byte, stop-start)
+	_ = copy(sl, data[start:stop])
+	return sl
+}
+
+// trimTrailingZeros returns the end of the NALU in data[start:end] without its trailing zero bytes.
+// They belong to the byte stream, since the last byte of a NALU is never zero. The first byte is kept.
+func trimTrailingZeros(data []byte, start, end int) int {
+	for end > start+1 && data[end-1] == 0 {
+		end--
+	}
+	return end
+}
+
+type scNalu struct {
+	startCodeLength int
+	startPos        int
+}
+
+// ConvertByteStreamToNaluSample changes start codes to 4-byte length fields. Zero bytes after a NALU, also after the
+// last one, bytes before the first start code, and a start code that ends the stream, are not part of a NALU and are
+// dropped. A stream without start codes is returned as it is. With only 4-byte start codes, the stream is converted in
+// place. This function is codec agnostic.
+func ConvertByteStreamToNaluSample(stream []byte) []byte {
+	scNalus, minStartCodeLength := getStartCodePositions(stream)
+	if len(scNalus) == 0 {
+		return stream
+	}
+	streamLen := len(stream)
+	if last := len(scNalus) - 1; scNalus[last].startPos == streamLen {
+		streamLen -= scNalus[last].startCodeLength
+		scNalus = scNalus[:last]
+	}
+	// naluEnd returns the end of NALU i without the zero bytes after it.
+	naluEnd := func(i int) int {
+		end := streamLen
+		if i+1 < len(scNalus) {
+			end = scNalus[i+1].startPos - scNalus[i+1].startCodeLength
+		}
+		return trimTrailingZeros(stream, scNalus[i].startPos, end)
+	}
+	if minStartCodeLength == 4 {
+		// Each length field fits where the start code was, so the NALUs only move down, over dropped bytes.
+		w := 0
+		for i, s := range scNalus {
+			end := naluEnd(i)
+			binary.BigEndian.PutUint32(stream[w:], uint32(end-s.startPos))
+			w += 4
+			if w != s.startPos {
+				copy(stream[w:], stream[s.startPos:end])
+			}
+			w += end - s.startPos
+		}
+		return stream[:w]
+	}
+	// Build new output slice with one extra byte per NALU
+	out := make([]byte, 0, streamLen+len(scNalus))
+	for i, s := range scNalus {
+		end := naluEnd(i)
+		out = binary.BigEndian.AppendUint32(out, uint32(end-s.startPos))
+		out = append(out, stream[s.startPos:end]...)
+	}
+	return out
+}
+
+// Cut overflow bits at compile time to use it safely on < 64-bit systems
+const (
+	magicLeft  uint = 0x0101010101010101 >> (64 - bits.UintSize)
+	magicRight uint = 0x8080808080808080 >> (64 - bits.UintSize)
+)
+
+// This function implement bit-trick to search zero byte in numbered type.
+// You can find detail explanation here https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord .
+func hasZeroByte(x uint) bool {
+	return ((x - magicLeft) & (^x) & magicRight) != 0
+}
+
+func getStartCodePositions(stream []byte) (scNalus []scNalu, minStartCodeLength int) {
+	streamLen := len(stream)
+	// Platform limitation must be known to iterate over slice effectively and safely.
+	uintSize := int(unsafe.Sizeof(uint(0)))
+	// Faster approach for searching the NALU start codes is applicable only for slices which length is multiple of uintSize.
+	// Max length of slice should be limited accordingly.
+	streamLenLim := streamLen - (streamLen % uintSize) - uintSize
+	minStartCodeLength = 4
+
+	// Iterator value is declared outside to continue iteration in second loop.
+	i := 0
+	// Iterating over slice by uintSize as all intermediate bytes will be checked as needed.
+	for ; i < streamLenLim; i += uintSize {
+		// This code is inspired by ffmpeg https://ffmpeg.org/doxygen/trunk/avc_8c_source.html#l00030 .
+
+		// Reference to the current byte in slice converted to untyped Pointer than it's cast to uint reference
+		// and finally dereference to value. hasZeroByte() func check every byte of uint for zero.
+		// hasZeroByte() func is endianness agnostic.
+		if hasZeroByte(*(*uint)(unsafe.Pointer(&stream[i]))) {
+			// Minimal start code size is 3, so checking every odd byte of uint is enough.
+			for j := i + 1; j < i+uintSize; j += 2 {
+				if stream[j] == 0 {
+					startPos, startCodeLength := 0, 3
+					// Next branch will check every neighbor byte to find start code pattern.
+					// Be aware! It will check two first bytes from next uint.
+					if stream[j-1] == 0 && stream[j+1] == 1 {
+						if j-2 >= 0 && stream[j-2] == 0 {
+							startCodeLength++
+						}
+						startPos = j + 2
+					} else if stream[j+1] == 0 && stream[j+2] == 1 {
+						if j-1 >= 0 && stream[j-1] == 0 {
+							startCodeLength++
+						}
+						startPos = j + 3
+					}
+					if startPos != 0 {
+						if startCodeLength < minStartCodeLength {
+							minStartCodeLength = startCodeLength
+						}
+						scNalus = append(scNalus, scNalu{startCodeLength, startPos})
+					}
+				}
+			}
+		}
+	}
+	// We should check remain bytes with old approach.
+	for ; i < streamLen-2; i++ {
+		if stream[i] == 0 && stream[i+1] == 0 && stream[i+2] == 1 {
+			startCodeLength := 3
+			startPos := i + 3
+			if i-1 >= 0 && stream[i-1] == 0 {
+				startCodeLength++
+			}
+			if startCodeLength < minStartCodeLength {
+				minStartCodeLength = startCodeLength
+			}
+			scNalus = append(scNalus, scNalu{startCodeLength, startPos})
+		}
+	}
+	return
+}
+
+// ConvertSampleToByteStream replaces 4-byte NALU lengths with start codes.
+// This function is codec agnostic.
+func ConvertSampleToByteStream(sample []byte) []byte {
+	sampleLength := uint32(len(sample))
+	var pos uint32 = 0
+	for pos+4 <= sampleLength {
+		naluLength := binary.BigEndian.Uint32(sample[pos : pos+4])
+		// uint64 arithmetic so that a length field close to 2^32 cannot wrap
+		if uint64(pos)+4+uint64(naluLength) > uint64(sampleLength) {
+			break // bad nalu length field: leave the rest as is
+		}
+		startCode := []byte{0, 0, 0, 1}
+		copy(sample[pos:pos+4], startCode)
+		pos += naluLength + 4
+	}
+	return sample
+}
+
+// GetParameterSetsFromByteStream copies AVC SPS and PPS nalus from a bytestream (Annex B).
+// The stream is not scanned beyond the first video NAL unit.
+func GetParameterSetsFromByteStream(data []byte) (spss, ppss [][]byte) {
+	n := len(data)
+	currNaluStart := -1
+	totSize := 0
+	addParameterSet := func(end int) {
+		if currNaluStart < 0 || currNaluStart >= end {
+			return
+		}
+		naluType := GetNaluType(data[currNaluStart])
+		if naluType != NALU_SPS && naluType != NALU_PPS {
+			return
+		}
+		end = trimTrailingZeros(data, currNaluStart, end)
+		if naluType == NALU_SPS {
+			spss = append(spss, data[currNaluStart:end])
+		} else {
+			ppss = append(ppss, data[currNaluStart:end])
+		}
+		totSize += end - currNaluStart
+	}
+	for i := 0; i < n-2; i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			addParameterSet(i)
+			currNaluStart = i + 3
+			if currNaluStart < n && GetNaluType(data[currNaluStart]) < 6 { // Video NALU types are below 6
+				break
+			}
+		}
+	}
+	addParameterSet(n)
+	psData := make([]byte, totSize)
+	pos := 0
+	for i := range spss {
+		copy(psData[pos:], spss[i])
+		spss[i] = psData[pos : pos+len(spss[i]) : pos+len(spss[i])]
+		pos += len(spss[i])
+	}
+	for i := range ppss {
+		copy(psData[pos:], ppss[i])
+		ppss[i] = psData[pos : pos+len(ppss[i]) : pos+len(ppss[i])]
+		pos += len(ppss[i])
+	}
+	return spss, ppss
+}
+
+// ExtractNalusOfTypeFromByteStream returns all AVC nalus of wanted type from bytestream.
+// If stopAtVideo, the stream is not scanned beyond the first video NAL unit.
+func ExtractNalusOfTypeFromByteStream(nType NaluType, data []byte, stopAtVideo bool) [][]byte {
+	currNaluStart := -1
+	n := len(data)
+	var nalus [][]byte
+	for i := 0; i < n-2; i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			if currNaluStart > 0 {
+				currNaluEnd := trimTrailingZeros(data, currNaluStart, i)
+				naluType := GetNaluType(data[currNaluStart])
+				if naluType == nType {
+					nalus = append(nalus, extractSlice(data, currNaluStart, currNaluEnd))
+				}
+			}
+			currNaluStart = i + 3
+			if currNaluStart < n-1 {
+				nextNaluType := GetNaluType(data[currNaluStart])
+				if stopAtVideo && nextNaluType < 6 { // Video nal unit type
+					return nalus
+				}
+			}
+		}
+	}
+	if currNaluStart < 0 {
+		return nil
+	}
+	if currNaluStart < n && GetNaluType(data[currNaluStart]) == nType {
+		nalus = append(nalus, extractSlice(data, currNaluStart, trimTrailingZeros(data, currNaluStart, n)))
+	}
+	return nalus
+}
+
+// GetFirstAVCVideoNALUFromByteStream returns a slice with the first video nal unit.
+// No new memory is allocated, but a subslice of data is returned.
+func GetFirstAVCVideoNALUFromByteStream(data []byte) []byte {
+	currNaluStart := -1
+	n := len(data)
+	naluStart, naluEnd := 0, 0
+	for i := 0; i < n-2; i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			if currNaluStart > 0 {
+				currNaluEnd := trimTrailingZeros(data, currNaluStart, i)
+				naluType := GetNaluType(data[currNaluStart])
+				if IsVideoNaluType(naluType) {
+					naluStart = currNaluStart
+					naluEnd = currNaluEnd
+					break
+				}
+			}
+			currNaluStart = i + 3
+		}
+	}
+	if currNaluStart > 0 && currNaluStart < n && naluStart == 0 {
+		naluType := GetNaluType(data[currNaluStart])
+		if IsVideoNaluType(naluType) {
+			naluStart = currNaluStart
+			naluEnd = trimTrailingZeros(data, currNaluStart, n)
+		}
+	}
+	if naluStart == 0 {
+		return nil
+	}
+	return data[naluStart:naluEnd]
+}
