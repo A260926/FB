@@ -465,6 +465,56 @@ enum
 
 #endif /* SISL_INTERNAL || USING_SISL_NEWARRAY */
 
+/* Resumable offset-job support.
+
+   The offset-job engine (src/sisl_offset_job.c) installs three hooks; they
+   stay SISL_NULL for ordinary users of the library, in which case the
+   macros below compile to a no-op and the original synchronous evaluation
+   path is numerically unchanged.
+
+   At every real curve/surface evaluation the core route calls
+   SISL_OFFSET_EVAL_GATE() immediately before entering the evaluator.  The
+   wait half suspends a running job when its evaluation budget is spent -
+   before the evaluator is entered, so no evaluation is started that has
+   not been paid for.  The enter half performs the accounting at the real
+   evaluation entry point.  The gate is placed at the call site of
+   s1221/s1227/s1424 everywhere on the offset path (including the indirect
+   evaluations inside s1362 and s1367), and nowhere else, so every unit of
+   budget corresponds to exactly one real evaluation and no evaluation is
+   charged twice.
+
+   The hooks are function pointers rather than plain symbols so a build
+   that links the engine and a build that does not can share the same core
+   library objects without duplicate-symbol problems.  */
+
+#define SISL_OFFSET_ABORT (-100000)   /* internal: unwind a job */
+
+extern int (*sisl_offset_eval_wait_hook)(void);
+extern int (*sisl_offset_eval_enter_hook)(void);
+extern void (*sisl_offset_progress_hook)(int,int);
+extern int sisl_offset_quiet;
+
+#define SISL_OFFSET_EVAL_WAIT() \
+  (sisl_offset_eval_wait_hook != SISL_NULL ? sisl_offset_eval_wait_hook() : 0)
+
+#define SISL_OFFSET_EVAL_ENTER() \
+  (sisl_offset_eval_enter_hook != SISL_NULL ? sisl_offset_eval_enter_hook() : 0)
+
+/* Returns 0 to continue with the evaluation, or SISL_OFFSET_ABORT to unwind
+   the job (cancellation).  Accounting happens only when continuing.  */
+#define SISL_OFFSET_EVAL_GATE() \
+  (SISL_OFFSET_EVAL_WAIT() ? SISL_OFFSET_ABORT : (SISL_OFFSET_EVAL_ENTER(), 0))
+
+#define SISL_OFFSET_PROGRESS(phase,boundary) \
+  do { if (sisl_offset_progress_hook != SISL_NULL) \
+         sisl_offset_progress_hook((phase),(boundary)); } while (0)
+
+/* The shared offset-surface kernel.  The synchronous s1365() entry point
+   and the resumable job both run this one implementation.  */
+
+void sisl_offset_surface_run(SISLSurf *,double,double,double,int,
+			     SISLSurf **,int *);
+
 /* Set value of PI/2, PI, 3PI/2 and 2PI */
 
 #ifndef PIHALF

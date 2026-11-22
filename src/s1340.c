@@ -471,7 +471,8 @@ err101:
 
 error:
   *stat = lstat;
-  s6err("s1340", *stat, pos);
+  if (lstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1340", *stat, pos);
   goto out;
 
   /* Clear up and free memory before exit. */

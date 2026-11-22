@@ -117,6 +117,48 @@ void s1365(ps,aoffset,aepsge,amax,idim,rs,jstat)
 *********************************************************************
 */
 {
+  sisl_offset_surface_run(ps, aoffset, aepsge, amax, idim, rs, jstat);
+}
+
+/* The hooks are defined here so the core library stays linkable on its own
+   (a program that only calls s1360, say, still gets the definitions through
+   this archive member).  They are SISL_NULL until a resumable job installs
+   them, which leaves the synchronous path unchanged.  The definitions are
+   weak and repeated in the job engine so that every archive member that
+   mentions them resolves no matter which ones the linker pulls in. */
+
+#if defined(__GNUC__) || defined(__clang__)
+#define SISL_OFFSET_WEAK __attribute__((weak))
+#else
+#define SISL_OFFSET_WEAK
+#endif
+
+SISL_OFFSET_WEAK int (*sisl_offset_eval_wait_hook)(void) = SISL_NULL;
+SISL_OFFSET_WEAK int (*sisl_offset_eval_enter_hook)(void) = SISL_NULL;
+SISL_OFFSET_WEAK void (*sisl_offset_progress_hook)(int,int) = SISL_NULL;
+SISL_OFFSET_WEAK int sisl_offset_quiet = 0;
+
+#if defined(SISLNEEDPROTOTYPES)
+void
+sisl_offset_surface_run(SISLSurf *ps, double aoffset, double aepsge,
+			double amax, int idim, SISLSurf **rs, int *jstat)
+#else
+void
+sisl_offset_surface_run(ps, aoffset, aepsge, amax, idim, rs, jstat)
+     SISLSurf   *ps;
+     double aoffset;
+     double aepsge;
+     double amax;
+     int    idim;
+     SISLSurf   **rs;
+     int    *jstat;
+#endif
+/*
+* The shared kernel of the offset-surface approximation.  Both the public
+* synchronous s1365() entry point above and the resumable offset job run
+* this function, so the two paths cannot diverge geometrically.
+*/
+{
   SISLCurve *pc[4];
   SISLCurve *rc[4],*rc13[2],*rc24[2];
   int kstat = 0;     /* Local status variable.                           */
@@ -156,8 +198,11 @@ void s1365(ps,aoffset,aepsge,amax,idim,rs,jstat)
 
   /* Fetch the 4 edge-curves of surface */
 
+  SISL_OFFSET_PROGRESS(0, -1);
+
   for (kk=0; kk<4; kk++)
     {
+      SISL_OFFSET_PROGRESS(0, kk);
       s1435(ps,kk,&pc[kk],&sp[kk],&kstat);
       if (kstat < 0) goto error;
     }
@@ -166,6 +211,7 @@ void s1365(ps,aoffset,aepsge,amax,idim,rs,jstat)
 
   for (kk=0; kk<4; kk++)
     {
+      SISL_OFFSET_PROGRESS(1, kk);
       s1360(pc[kk],toffset,aepsge,snorm,amax,kdim,&rc[kk],&kstat);
       if (kstat<0) goto error;
     }
@@ -186,6 +232,8 @@ void s1365(ps,aoffset,aepsge,amax,idim,rs,jstat)
 
   /* Put the edge curves along 1. parameter direction into common basis. */
 
+  SISL_OFFSET_PROGRESS(2, -1);
+
   s1933(knbcrv,rc13,tstart1,tend1,&sknot13,&kn13,&kord13,&kstat);
   if (kstat<0) goto error;
 
@@ -197,11 +245,15 @@ void s1365(ps,aoffset,aepsge,amax,idim,rs,jstat)
   /* Create a B-spline surface approximating the offset surface of a B-spline
      surface. */
 
+  SISL_OFFSET_PROGRESS(3, -1);
+
   s1366(ps,aoffset,aepsge,amax,idim,sknot13,kn13,kord13,
 	sknot24,kn24,kord24,rs,&kstat);
   if (kstat<0) goto error;
 
   /* Surface approximated. */
+
+  SISL_OFFSET_PROGRESS(4, -1);
 
   *jstat = 0;
   goto out;
@@ -209,7 +261,8 @@ void s1365(ps,aoffset,aepsge,amax,idim,rs,jstat)
   /* Error in lower level routine.  */
 
   error : *jstat = kstat;
-  s6err("s1365",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1365",*jstat,kpos);
   goto out;
 
   out:

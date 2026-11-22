@@ -250,6 +250,7 @@ void s1352(t, n, k, inteps, lefteps, righteps, dim, leftfix, rightfix,
   /* Evaluate the perfect B-spline at its maximum, the midpoint 0,
      and save it in maxval. */
 
+  if (SISL_OFFSET_EVAL_GATE()) { lstat = SISL_OFFSET_ABORT; goto err; }
   s1221(hspline, 0, 0.0, &left, w, &lstat);
   if (lstat < 0) goto err;
 
@@ -300,6 +301,7 @@ void s1352(t, n, k, inteps, lefteps, righteps, dim, leftfix, rightfix,
 
       /* Evaluate the perfect B-spline. */
 
+      if (SISL_OFFSET_EVAL_GATE()) { lstat = SISL_OFFSET_ABORT; goto err; }
       s1221(hspline, 0, ch, &left, w, &lstat);
       if (lstat < 0) goto err;
 
@@ -365,6 +367,7 @@ void s1352(t, n, k, inteps, lefteps, righteps, dim, leftfix, rightfix,
 
       /* Find the maximum of the perfect B-spline. */
 
+      if (SISL_OFFSET_EVAL_GATE()) { lstat = SISL_OFFSET_ABORT; goto err; }
       s1221(hspline, 0, 0.0, &left, w, &lstat);
       if (lstat < 0) goto err;
 
@@ -378,6 +381,7 @@ void s1352(t, n, k, inteps, lefteps, righteps, dim, leftfix, rightfix,
     {
       ch = (2*sum-ta-tb)*hh;
 
+      if (SISL_OFFSET_EVAL_GATE()) { lstat = SISL_OFFSET_ABORT; goto err; }
       s1221(hspline, 0, ch, &left, w, &lstat);
       if (lstat < 0) goto err;
 
@@ -428,7 +432,8 @@ void s1352(t, n, k, inteps, lefteps, righteps, dim, leftfix, rightfix,
 
  err:
   *stat = lstat;
-  s6err("s1352", *stat, pos);
+  if (lstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1352", *stat, pos);
 
   /* Free memory. */
 

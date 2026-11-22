@@ -144,7 +144,8 @@ void s1436(ps1,apar,rcurve,jstat)
   if ((scurve = newarray(ps1->in1*kdim,double)) == SISL_NULL) goto err101;
   
   /* Evaluate this curve at given parameter value.  */
-  
+
+  if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
   s1221(qc,kder,apar,&kleft,scurve,&kstat);
   if (kstat < 0) goto error;
   
@@ -171,7 +172,8 @@ void s1436(ps1,apar,rcurve,jstat)
   /* Error in lower level routine.  */
   
   error : *jstat = kstat;
-  s6err("s1436",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1436",*jstat,kpos);
   goto out;
   
  out: 

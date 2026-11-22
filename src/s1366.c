@@ -415,7 +415,8 @@ err101:
 
 error:
   *jstat = kstat;
-  s6err("s1366",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1366",*jstat,kpos);
   goto out;
 
 out:

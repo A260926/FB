@@ -158,7 +158,8 @@ void s1437(ps1,apar,rcurve,jstat)
   if (qc == SISL_NULL) goto err101;
   
   /* Evaluate this curve in given parameter value.  */
-  
+
+  if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
   s1221(qc,kder,apar,&kleft,scurve,&kstat);
   if (kstat < 0) goto error;
   
@@ -185,7 +186,8 @@ void s1437(ps1,apar,rcurve,jstat)
   /* Error in lower level routine.  */
   
   error : *jstat = kstat;
-  s6err("s1437",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1437",*jstat,kpos);
   goto out;
   
  out: 

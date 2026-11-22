@@ -599,7 +599,8 @@ err101:
 
 error:
   *stat = lstat;
-  s6err("s1345", *stat, pos);
+  if (lstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1345", *stat, pos);
 
   /* Clean up. */
 

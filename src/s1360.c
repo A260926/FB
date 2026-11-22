@@ -308,9 +308,11 @@ void s1360(pc,aoffset,aepsge,enorm,amax,idim,rc,jstat)
 	    {
 	      /* Check right and left hand derivatives of curve */
 
+	      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
 	      s1227(pc,2,tx2,&kleft,sder2,&kstat);
 	      if (kstat<0) goto error;
 
+	      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
 	      s1221(pc,2,tx2,&kleft,sder1,&kstat);
 	      if (kstat<0) goto error;
 
@@ -346,6 +348,7 @@ void s1360(pc,aoffset,aepsge,enorm,amax,idim,rc,jstat)
 	    memcopy(sder,sder2,kdim*3,DOUBLE); /* Copy left derivatives */
           else
 	    {
+	      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
 	      s1221(pc,2,tx2,&kleft,sder,&kstat);
 	      if (kstat<0) goto error;
 	    }
@@ -566,7 +569,8 @@ void s1360(pc,aoffset,aepsge,enorm,amax,idim,rc,jstat)
 
  error:
   *jstat = kstat;
-  s6err("s1360",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1360",*jstat,kpos);
   goto out;
 
  out:

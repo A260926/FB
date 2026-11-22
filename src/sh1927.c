@@ -173,7 +173,8 @@ void sh1927(etau,ik,in,idim,pcurve,ilend,irend,ec,jstat)
    if (ilend > 0)
    {
       /* Compute the necessary derivatives. */
-      
+
+      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
       s1221(pcurve,ilend-1,pcurve->et[ik-1],&kleft,sder,&kstat);
       if (kstat < 0) goto error;
       
@@ -255,6 +256,7 @@ void sh1927(etau,ik,in,idim,pcurve,ilend,irend,ec,jstat)
 	 etau at the point etau[in].  */
       
       kleft = pcurve->in;
+      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
       s1221(pcurve,irend-1,pcurve->et[pcurve->in],&kleft,sder,&kstat);
       if (kstat < 0) goto error;
 		     

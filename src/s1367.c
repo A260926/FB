@@ -188,7 +188,8 @@ void s1367(ps,aoffset,aepsge,idim,epar,ider,ilfs,ilft,eder,jstat)
   if (DEQUAL(aoffset,DZERO))
     {
       /* Evaluate the surface (ps) at the parameter value spar.  */
-      
+
+      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
       s1424(ps,kder,kder,epar,ilfs,ilft,sder,&kstat);
       if (kstat<0) goto error;
       
@@ -208,10 +209,11 @@ void s1367(ps,aoffset,aepsge,idim,epar,ider,ilfs,ilft,eder,jstat)
       double tlen1,tlen2,tnorm,tang=(double)0.0;
       
       /* Evaluate the surface (ps) at the parameter value spar.  */
-      
+
+      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
       s1424(ps,kder,kder,epar,ilfs,ilft,sder,&kstat);
       if (kstat<0) goto error;
-      
+
       /*
        *   Let P(s,t) be a point on the B-spline surface, and N(s,t) the
        *   normal in P.
@@ -551,9 +553,10 @@ void s1367(ps,aoffset,aepsge,idim,epar,ider,ilfs,ilft,eder,jstat)
   goto out;
   
   /* Error in lower level routine.  */
-  
+
   error : *jstat = kstat;
-  s6err("s1367",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1367",*jstat,kpos);
   goto out;
   
   out: return;

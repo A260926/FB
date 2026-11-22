@@ -165,11 +165,13 @@ void s1362(pc1,aoffset,enorm,idim,ider,ax,ileft,eder,jstat)
   
   if (DEQUAL(aoffset,DZERO))
     {
+      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
       s1221(pc1,ider,ax,ileft,eder,&kstat);
       if (kstat<0) goto error;
     }
   else
     {
+      if (SISL_OFFSET_EVAL_GATE()) { kstat = SISL_OFFSET_ABORT; goto error; }
       s1221(pc1,kder,ax,ileft,sder,&kstat);
       if (kstat<0) goto error;
       
@@ -284,9 +286,10 @@ void s1362(pc1,aoffset,enorm,idim,ider,ax,ileft,eder,jstat)
   
   
   /* Error in lower level routine.  */
-  
+
  error:  *jstat = kstat;
-  s6err("s1362",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1362",*jstat,kpos);
   goto out;
   
  out: return;

@@ -219,9 +219,10 @@ void s1347(ep,etang1,etang2,eder11,im1,im2,idim,ipar,epar1,epar2,
   
   /* Error in lower level routine. */
 
-  error: 
+  error:
     *jstat = stat;
-    s6err("s1347",*jstat,kpos);
+    if (stat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+      s6err("s1347",*jstat,kpos);
     goto out;
   
   /* Exit. */

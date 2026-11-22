@@ -156,7 +156,8 @@ void s1435(ps1,iedge,rcedge,cpar,jstat)
   /* Error in lower level routine.  */
   
   error : *jstat = kstat;
-  s6err("s1435",*jstat,kpos);
+  if (kstat != SISL_OFFSET_ABORT && !sisl_offset_quiet)
+    s6err("s1435",*jstat,kpos);
   goto out;
   
  out: return;
