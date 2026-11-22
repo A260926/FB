@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {compile,renderDrawingFrame} from '../src/index.js';
+const source=fs.readFileSync(new URL('./drawing.ass',import.meta.url),'utf8');
+const doc=compile(source),before=JSON.stringify(doc);
+const frame=renderDrawingFrame(doc,0.5,{width:8,height:8});
+assert.equal(frame.width,8);assert.equal(frame.height,8);
+assert.ok(frame.data instanceof Uint8ClampedArray);assert.equal(frame.data.length,256);
+assert.deepEqual(Array.from(frame.data.slice((2*8+2)*4,(2*8+2)*4+4)),[255,0,0,255],'drawing center must be opaque red');
+assert.deepEqual(Array.from(frame.data.slice(0,4)),[0,0,0,0],'outside drawing must stay transparent');
+const end=renderDrawingFrame(doc,2,{width:8,height:8});
+assert.ok(end.data.every(v=>v===0),'right endpoint is inactive');
+assert.equal(JSON.stringify(doc),before);assert.notEqual(end.data,frame.data);
+console.log('REQUIRED_DRAWING_PUBLIC_API_OK center=red right_endpoint=transparent');

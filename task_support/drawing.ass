@@ -1,0 +1,9 @@
+[Script Info]
+PlayResX: 8
+PlayResY: 8
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
+Style: Default,Arial,20,&H000000FF,0,0,7,0,0,0
+[Events]
+Format: Layer, Start, End, Style, Text
+Dialogue: 0,0:00:00.00,0:00:02.00,Default,{\an7\pos(1,1)\p1}m 0 0 l 4 0 4 4 0 4
