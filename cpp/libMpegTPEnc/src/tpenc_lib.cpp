@@ -345,6 +345,33 @@ TRANSPORTENC_ERROR transportEnc_AddOtherDataBits(HANDLE_TRANSPORTENC hTpEnc,
   return tpErr;
 }
 
+TRANSPORTENC_ERROR transportEnc_SetLatmOtherData(HANDLE_TRANSPORTENC hTpEnc,
+                                                 const UCHAR *data,
+                                                 UINT bitCount) {
+  TRANSPORTENC_ERROR tpErr;
+
+  if (hTpEnc == NULL) {
+    return TRANSPORTENC_INVALID_PARAMETER;
+  }
+
+  switch (hTpEnc->transportFmt) {
+    case TT_MP4_LATM_MCP1:
+    case TT_MP4_LOAS:
+      tpErr = transportEnc_LatmSetOtherData(&hTpEnc->writer.latm, data,
+                                            bitCount);
+      break;
+    case TT_MP4_LATM_MCP0:
+      /* MCP0 has no in-band StreamMuxConfig, so otherDataPresent/length
+         cannot be signaled for this feature. */
+      tpErr = TRANSPORTENC_UNSUPPORTED_FORMAT;
+      break;
+    default:
+      tpErr = TRANSPORTENC_UNSUPPORTED_FORMAT;
+  }
+
+  return tpErr;
+}
+
 HANDLE_FDK_BITSTREAM transportEnc_GetBitstream(HANDLE_TRANSPORTENC hTp) {
   return &hTp->bitStream;
 }
@@ -567,6 +594,37 @@ INT transportEnc_GetStaticBits(HANDLE_TRANSPORTENC hTp, int auBits) {
   nbits += nPceBits;
 
   return nbits;
+}
+
+INT transportEnc_GetOtherDataOverheadBits(HANDLE_TRANSPORTENC hTp, int auBits) {
+  if (hTp == NULL) {
+    return 0;
+  }
+
+  switch (hTp->transportFmt) {
+    case TT_MP4_LOAS:
+    case TT_MP4_LATM_MCP0:
+    case TT_MP4_LATM_MCP1:
+      return (INT)transportEnc_LatmGetElementOtherDataOverhead(
+          &hTp->writer.latm, (unsigned)auBits);
+    default:
+      return 0;
+  }
+}
+
+void transportEnc_ResetElementBoundary(HANDLE_TRANSPORTENC hTp) {
+  if (hTp == NULL) {
+    return;
+  }
+  switch (hTp->transportFmt) {
+    case TT_MP4_LOAS:
+    case TT_MP4_LATM_MCP0:
+    case TT_MP4_LATM_MCP1:
+      transportEnc_LatmResetElementBoundary(&hTp->writer.latm);
+      break;
+    default:
+      break;
+  }
 }
 
 void transportEnc_Close(HANDLE_TRANSPORTENC *phTp) {

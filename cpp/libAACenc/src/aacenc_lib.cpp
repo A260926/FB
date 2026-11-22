@@ -1471,6 +1471,11 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
 
   } /* parameter changed */
 
+  /* Header-size probes during initialization leave the LATM/LOAS layer with
+     a half-open AudioMuxElement. Close it so the first real access unit
+     latches any pending otherData and budgets it correctly. */
+  transportEnc_ResetElementBoundary(hAacEncoder->hTpEnc);
+
   return AACENC_OK;
 }
 
@@ -2546,5 +2551,63 @@ AACENC_ERROR aacEncInfo(const HANDLE_AACENCODER hAacEncoder,
     goto bail;
   }
 bail:
+  return err;
+}
+
+AACENC_ERROR aacEncSetLatmOtherData(HANDLE_AACENCODER hAacEncoder,
+                                    const UCHAR *data, UINT bitCount) {
+  AACENC_ERROR err;
+  TRANSPORTENC_ERROR tpErr;
+  const USER_PARAM *settings;
+
+  if (hAacEncoder == NULL) {
+    return AACENC_INVALID_HANDLE;
+  }
+
+  /* Hard input validation first; none of these touch encoder state. */
+  if (bitCount > 2048) {
+    return AACENC_INVALID_CONFIG;
+  }
+  if (bitCount > 0 && data == NULL) {
+    return AACENC_INVALID_CONFIG;
+  }
+  /* InitFlags are cleared by the first successful aacEncEncode() init pass. */
+  if (hAacEncoder->InitFlags != AACENC_INIT_NONE) {
+    return AACENC_INVALID_CONFIG;
+  }
+
+  settings = &hAacEncoder->extParam;
+
+  /* Supported feature envelope. */
+  if (settings->userTpType != TT_MP4_LATM_MCP1 &&
+      settings->userTpType != TT_MP4_LOAS) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+  if (hAacEncoder->aacConfig.audioObjectType != AOT_AAC_LC ||
+      hAacEncoder->aacConfig.sampleRate != 32000 &&
+          hAacEncoder->aacConfig.sampleRate != 44100 &&
+          hAacEncoder->aacConfig.sampleRate != 48000 ||
+      hAacEncoder->aacConfig.bitrateMode != AACENC_BR_MODE_CBR ||
+      hAacEncoder->aacConfig.bitRate != 192000 ||
+      hAacEncoder->aacConfig.framelength != 1024 ||
+      settings->nChannels < 1 || settings->nChannels > 2 ||
+      (hAacEncoder->aacConfig.audioMuxVersion != 0 &&
+       hAacEncoder->aacConfig.audioMuxVersion != 1)) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+
+  tpErr = transportEnc_SetLatmOtherData(hAacEncoder->hTpEnc, data, bitCount);
+  switch (tpErr) {
+    case TRANSPORTENC_OK:
+      err = AACENC_OK;
+      break;
+    case TRANSPORTENC_UNSUPPORTED_FORMAT:
+      err = AACENC_UNSUPPORTED_PARAMETER;
+      break;
+    default:
+      err = AACENC_INVALID_CONFIG;
+      break;
+  }
+
   return err;
 }

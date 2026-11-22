@@ -229,6 +229,31 @@ TRANSPORTENC_ERROR transportEnc_AddOtherDataBits(HANDLE_TRANSPORTENC hTpEnc,
                                                  const int nBits);
 
 /**
+ * \brief  Set AudioMuxElement otherData side data for LATM/LOAS output.
+ *
+ * The bit string is stored inside the instance as a pending replacement and
+ * latched when the next AudioMuxElement starts. It applies to the whole
+ * element (all subframes and the trailing otherData). The call does not
+ * restart codec analysis, the bit reservoir or any encoder delay, and does not
+ * drop already assembled subframes.
+ *
+ * \param hTpEnc    Transport encoder handle initialized for TT_MP4_LATM_MCP1
+ *                  or TT_MP4_LOAS.
+ * \param data      Bytes holding the other data, most significant bit first;
+ *                  unused low bits of the final byte are ignored. Must be
+ *                  non-NULL when bitCount is non-zero.
+ * \param bitCount  Number of valid bits, 0..2048. bitCount 0 with data NULL
+ *                  removes a previously set marker.
+ *
+ * \return TRANSPORTENC_OK on success, TRANSPORTENC_UNSUPPORTED_FORMAT for
+ *         non-LATM/LOAS transports, TRANSPORTENC_INVALID_CONFIG on bad
+ *         arguments. On failure, all previous state is preserved.
+ */
+TRANSPORTENC_ERROR transportEnc_SetLatmOtherData(HANDLE_TRANSPORTENC hTpEnc,
+                                                 const UCHAR *data,
+                                                 UINT bitCount);
+
+/**
  * \brief      Get transport encoder bitstream.
  * \param hTp  Pointer to a transport encoder handle.
  * \return     The handle to the requested FDK bitstream.
@@ -236,12 +261,40 @@ TRANSPORTENC_ERROR transportEnc_AddOtherDataBits(HANDLE_TRANSPORTENC hTpEnc,
 HANDLE_FDK_BITSTREAM transportEnc_GetBitstream(HANDLE_TRANSPORTENC hTp);
 
 /**
- * \brief         Get amount of bits required by the transport headers.
- * \param hTp     Handle of transport encoder.
+ * \brief      Get amount of bits required by the transport headers.
+ * \param hTp  Handle of transport encoder.
  * \param auBits  Amount of payload bits required for the current subframe.
- * \return        Error code.
+ * \return     Error code.
  */
 INT transportEnc_GetStaticBits(HANDLE_TRANSPORTENC hTp, int auBits);
+
+/**
+ * \brief Extra transport header bits caused solely by LATM otherData.
+ *
+ * Returns the difference between the current static bit demand and the
+ * demand the same element would have without any otherData (no marker bits,
+ * no length field, no forced StreamMuxConfig, no marker alignment). Zero for
+ * transports other than LATM/LOAS and when no marker is active. Used by the
+ * AAC quantizer to relax its per-frame minimum size before quantization, so
+ * the side-band budget is accounted for up front rather than inserted later.
+ *
+ * \param hTp     Handle of transport encoder.
+ * \param auBits  Amount of payload bits for the current subframe.
+ * \return        Marker-only overhead in bits.
+ */
+INT transportEnc_GetOtherDataOverheadBits(HANDLE_TRANSPORTENC hTp, int auBits);
+
+/**
+ * \brief Reset LATM/LOAS element boundary bookkeeping after encoder init.
+ *
+ * Init-time header size probes can leave an element looking open. Call this
+ * once initialization finishes so the first real access unit starts a fresh
+ * AudioMuxElement and latches pending otherData correctly. No-op for other
+ * transports.
+ *
+ * \param hTpEnc Transport encoder handle.
+ */
+void transportEnc_ResetElementBoundary(HANDLE_TRANSPORTENC hTpEnc);
 
 /**
  * \brief       Close transport encoder. This function assures that all

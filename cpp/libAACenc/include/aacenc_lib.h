@@ -1653,6 +1653,48 @@ AACENC_ERROR aacEncInfo(const HANDLE_AACENCODER hAacEncoder,
                         AACENC_InfoStruct *pInfo);
 
 /**
+ * \brief  Set short timing markers carried as AudioMuxElement otherData.
+ *
+ * The markers travel in the otherData field of LATM/LOAS AudioMuxElements,
+ * not in the AAC raw_data_block ancillary data. The supplied bytes are read
+ * most significant bit first; unused low bits of the final byte are ignored.
+ * The value is stored inside the encoder, so the caller may overwrite or free
+ * the input memory as soon as this call returns.
+ *
+ * The replacement is pending until the next complete AudioMuxElement starts
+ * (its first real AAC access unit) and is then latched as the active value
+ * for the whole element, including all aggregated subframes and the trailing
+ * otherData. Repeated calls keep only the latest value; no queue is formed.
+ * Setting the data while an element is assembled only affects the next
+ * element. Replacing markers never restarts AAC analysis, the bit reservoir
+ * or encoder delay, and never drops already assembled subframes. A length
+ * change forces a new StreamMuxConfig on the next element without resetting
+ * the periodic header counter; a same-length content change does not.
+ *
+ * Currently supported: an initialized AAC-LC encoder at 32/44.1/48 kHz,
+ * 192 kbps CBR, 1024 samples/frame, mono or stereo, transport
+ * TT_MP4_LATM_MCP1 or TT_MP4_LOAS with AudioMuxVersion 0 or 1, including
+ * 1- and 2-subframe aggregation.
+ *
+ * \param hAacEncoder  A valid, initialized AAC encoder handle.
+ * \param data         Marker bytes, MSB first. May be NULL only when
+ *                     bitCount is 0, which removes any current marker.
+ * \param bitCount     Number of valid bits, 0 to 2048.
+ *
+ * \return
+ *          - AACENC_OK on success.
+ *          - AACENC_INVALID_HANDLE when hAacEncoder is NULL.
+ *          - AACENC_UNSUPPORTED_PARAMETER when the encoder configuration
+ *            cannot carry this otherData.
+ *          - AACENC_INVALID_CONFIG when bitCount is out of range, data is
+ *            NULL with a non-zero bitCount, or the encoder is not
+ *            initialized. On rejection, the previous setting and all encoder
+ *            state are preserved.
+ */
+AACENC_ERROR aacEncSetLatmOtherData(HANDLE_AACENCODER hAacEncoder,
+                                    const UCHAR *data, UINT bitCount);
+
+/**
  * \brief  Set one single AAC encoder parameter.
  *
  * This function allows configuration of all encoder parameters specified in

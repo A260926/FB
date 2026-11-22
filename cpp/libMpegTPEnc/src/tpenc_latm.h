@@ -120,6 +120,11 @@ amm-info@iis.fraunhofer.de
   2 /* set this carefully to avoid buffer overflows \
      */
 
+/* Maximum amount of AudioMuxElement otherData bits accepted by
+ * aacEncSetLatmOtherData(). Storage per encoder instance is fixed and bounded
+ * by this value. */
+#define MAX_LATM_OTHER_DATA_BITS 2048
+
 typedef enum { LATMVAR_SIMPLE_SEQUENCE } LATM_VAR_MODE;
 
 typedef struct {
@@ -162,8 +167,18 @@ typedef struct {
   UINT latmSubframeStart; /* Position of current subframe start */
   UCHAR noSubframes_next;
 
-  UCHAR otherDataLenBits; /* AudioMuxElement other data bits */
-  UCHAR fillBits;         /* AudioMuxElement fill bits */
+  UINT otherDataLenBits; /* AudioMuxElement other data bits (active) */
+  UINT otherDataPendingLenBits; /* Latched at the start of the next element */
+  UCHAR otherDataActive[(MAX_LATM_OTHER_DATA_BITS + 7) >> 3];
+  UCHAR otherDataPending[(MAX_LATM_OTHER_DATA_BITS + 7) >> 3];
+  UCHAR otherDataPendingValid; /* A pending replacement is available. */
+  UCHAR otherDataForcedSmc;    /* Next element must carry a new SMC. */
+  UCHAR elementActive;         /* An AudioMuxElement is being assembled. */
+  UINT smcOtherDataFieldBits;  /* Length field bits of the last written SMC. */
+  /* Marker-only transport overhead of the currently open element, captured at
+     its start so every aggregated subframe budgets the same element cost. */
+  UINT otherDataElementOverhead;
+  UCHAR fillBits;              /* AudioMuxElement fill bits */
   UINT streamMuxConfigBits;
 
 } LATM_STREAM;
@@ -205,6 +220,51 @@ TRANSPORTENC_ERROR transportEnc_LatmAddOtherDataBits(HANDLE_LATM_STREAM hAss,
                                                      const int otherDataBits);
 
 /**
+ * \brief Replace the AudioMuxElement otherData side data.
+ *
+ * The supplied bit string is stored inside the instance and becomes the
+ * "pending" value. It is latched as the active value when the next
+ * AudioMuxElement starts (first real access unit) and then applies to all
+ * subframes and the otherData placement of that whole element. Replacing the
+ * data never restarts codec analysis or drops already assembled subframes.
+ *
+ * \param hAss HANDLE_LATM_STREAM handle
+ * \param data  Bytes holding the other data, MSB first; the unused low bits
+ *              of the final byte are ignored. May be NULL only when bitCount
+ *              is 0 (which removes any marker).
+ * \param bitCount Number of valid bits, from 0 to MAX_LATM_OTHER_DATA_BITS.
+ *
+ * \return TRANSPORTENC_OK on success, an error code otherwise. The previous
+ *         setting and all encoder state remain untouched on failure.
+ */
+TRANSPORTENC_ERROR transportEnc_LatmSetOtherData(HANDLE_LATM_STREAM hAss,
+                                                 const UCHAR *data,
+                                                 UINT bitCount);
+
+/**
+ * \brief Latch pending other data and decide whether the next element needs a
+ *        new StreamMuxConfig. Must be called once when a new AudioMuxElement
+ *        begins, before any header bits are counted or written.
+ *
+ * \param hAss HANDLE_LATM_STREAM handle
+ *
+ * \return 1 if the upcoming element must transmit a StreamMuxConfig, 0 if the
+ *         periodic/default decision may be used.
+ */
+int transportEnc_LatmLatchOtherData(HANDLE_LATM_STREAM hAss);
+
+/**
+ * \brief Number of bits used by the StreamMuxConfig otherDataPresent and
+ *        otherDataLength signaling for the currently active other data.
+ *
+ * \param hAss HANDLE_LATM_STREAM handle
+ *
+ * \return 1 bit when no other data is active, otherwise the length of the
+ *         present flag plus the length encoding in bits.
+ */
+UINT transportEnc_LatmOtherDataLenFieldBits(const HANDLE_LATM_STREAM hAss);
+
+/**
  * \brief Get bit demand of next LATM/LOAS header
  *
  * \param hAss HANDLE_LATM_STREAM handle
@@ -214,6 +274,45 @@ TRANSPORTENC_ERROR transportEnc_LatmAddOtherDataBits(HANDLE_LATM_STREAM hAss,
  */
 unsigned int transportEnc_LatmCountTotalBitDemandHeader(
     HANDLE_LATM_STREAM hAss, unsigned int streamDataLength);
+
+/**
+ * \brief Counterfactual header bit demand assuming no otherData at all.
+ *
+ * Temporarily hides the active otherData and the forced-SMC flag, counts the
+ * header demand the element would then have, and restores the full state.
+ * Used to derive the marker-only transport overhead for bit budgeting.
+ *
+ * \param hAss HANDLE_LATM_STREAM handle
+ * \param streamDataLength the length of the payload
+ *
+ * \return header demand in bits without any otherData contribution.
+ */
+unsigned int transportEnc_LatmCountBitDemandNoOtherData(
+    HANDLE_LATM_STREAM hAss, unsigned int streamDataLength);
+
+/**
+ * \brief Marker-only transport overhead for the open element, constant across
+ *        all of its subframes.
+ *
+ * \param hAss HANDLE_LATM_STREAM handle
+ * \param streamDataLength the length of the payload
+ *
+ * \return marker-only overhead in bits.
+ */
+unsigned int transportEnc_LatmGetElementOtherDataOverhead(
+    HANDLE_LATM_STREAM hAss, unsigned int streamDataLength);
+
+/**
+ * \brief Clear the open-element bookkeeping after encoder initialization.
+ *
+ * Init-time header-size probes leave the LATM state looking like an element
+ * is open. Resetting the boundary ensures the first real access unit latches
+ * any pending otherData and gets a correct budget. Configured marker data and
+ * the periodic header counter are intentionally untouched.
+ *
+ * \param hAss HANDLE_LATM_STREAM handle
+ */
+void transportEnc_LatmResetElementBoundary(HANDLE_LATM_STREAM hAss);
 
 /**
  * \brief Write LATM/LOAS header into given bitstream handle

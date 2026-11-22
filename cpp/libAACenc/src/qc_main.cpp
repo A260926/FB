@@ -362,6 +362,7 @@ AAC_ENCODER_ERROR FDKaacEnc_QCInit(QC_STATE* hQC, struct QC_INIT* init,
   int i;
   hQC->maxBitsPerFrame = init->maxBits;
   hQC->minBitsPerFrame = init->minBits;
+  hQC->minBitsPerFrameInit = init->minBits;
   hQC->nElements = init->channelMapping->nElements;
   if ((initFlags != 0) || ((init->bitrateMode != QCDATA_BR_MODE_FF) &&
                            (hQC->bitResTotMax != init->bitRes))) {
@@ -379,6 +380,7 @@ AAC_ENCODER_ERROR FDKaacEnc_QCInit(QC_STATE* hQC, struct QC_INIT* init,
   hQC->padding.paddingRest = init->padding.paddingRest;
 
   hQC->globHdrBits = init->staticBits; /* Bit overhead due to transport */
+  hQC->globHdrBitsInit = init->staticBits;
 
   err = FDKaacEnc_InitElementBits(
       hQC, init->channelMapping, init->bitrate,

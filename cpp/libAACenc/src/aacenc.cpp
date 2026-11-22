@@ -940,6 +940,39 @@ AAC_ENCODER_ERROR FDKaacEnc_EncodeFrame(
     hAacEnc->qcKernel->globHdrBits = transportEnc_GetStaticBits(
         hTpEnc, avgTotalBits + hAacEnc->qcKernel->bitResTot);
 
+    /* LATM/LOAS otherData adds transport overhead that was unknown at AAC
+       initialization. globHdrBits already includes the marker and is
+       subtracted from the granted dynamic bits, so the core target itself is
+       unchanged. What must move is the quantizer's per-frame minimum: it was
+       derived from the marker-free header demand and would otherwise force
+       fill bits that exceed the legal frame size and drain the bit
+       reservoir. Reduce the original minimum by the marker-only overhead
+       (amortized per access unit) and cap it to the physical frame capacity.
+       At a saturated operating point the bit reservoir has no capacity at
+       all, so no minimum-size fill can be honored and the floor is dropped to
+       zero. Without a marker the overhead is zero and the original minimum is
+       retained byte-for-byte. */
+    {
+      INT perAuOverhead = transportEnc_GetOtherDataOverheadBits(
+          hTpEnc, avgTotalBits + hAacEnc->qcKernel->bitResTot);
+      INT frameCap =
+          hAacEnc->qcKernel->maxBitsPerFrame -
+          hAacEnc->qcKernel->globHdrBits;
+      INT relaxedMin;
+
+      if (hAacEnc->qcKernel->bitResTotMax <= 0) {
+        relaxedMin = 0;
+      } else {
+        relaxedMin =
+            hAacEnc->qcKernel->minBitsPerFrameInit - perAuOverhead;
+        if (relaxedMin > frameCap) {
+          relaxedMin = frameCap;
+        }
+      }
+      hAacEnc->qcKernel->minBitsPerFrame =
+          (relaxedMin > 0) ? (relaxedMin & ~7) : 0;
+    }
+
     /*-------------------------------------------- */
     /*-------------------------------------------- */
     /*-------------------------------------------- */

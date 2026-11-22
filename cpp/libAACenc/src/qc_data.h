@@ -271,8 +271,10 @@ typedef struct {
   /* this is basically struct QC_INIT */
 
   INT globHdrBits;
+  INT globHdrBitsInit;     /* Transport overhead at encoder initialization. */
   INT maxBitsPerFrame; /* maximal allowed bits per frame, 6144*nChannelsEff */
   INT minBitsPerFrame; /* minimal allowd bits per fram, superframing - DRM */
+  INT minBitsPerFrameInit; /* minBitsPerFrame at encoder initialization. */
   INT nElements;
   QCDATA_BR_MODE bitrateMode;
   AACENC_BITRES_MODE bitResMode; /* 0: full bitreservoir, 1: reduced

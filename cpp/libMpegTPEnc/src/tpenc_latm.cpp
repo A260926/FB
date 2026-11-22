@@ -142,12 +142,152 @@ static UINT transportEnc_LatmWriteValue(HANDLE_FDK_BITSTREAM hBs, int value) {
   return bitsWritten;
 }
 
+/* Number of bits transportEnc_LatmWriteValue() would emit for value. */
+static UINT LatmValueBits(int value) {
+  int valueBytes;
+
+  if (value < (1 << 8)) {
+    valueBytes = 1;
+  } else if (value < (1 << 16)) {
+    valueBytes = 2;
+  } else if (value < (1 << 24)) {
+    valueBytes = 3;
+  } else {
+    valueBytes = 4;
+  }
+
+  return (UINT)((valueBytes << 3) + 2);
+}
+
+/*
+ * Number of bits used by the StreamMuxConfig otherDataLength encoding.
+ * AudioMuxVersion 0: otherDataLenEsc (1 bit) plus 8 bit chunks, escape coded.
+ * AudioMuxVersion 1: latmGetValue() coding. The unit is bits in both cases.
+ * Only called when other data is present (len > 0).
+ */
+static UINT LatmOtherDataLenFieldBits(UCHAR audioMuxVersion, UINT len) {
+  if (audioMuxVersion == 1) {
+    return LatmValueBits((int)len);
+  }
+
+  /* otherDataLenEsc + 8 bits per chunk; one chunk covers 0..255, two chunks
+     cover up to 65535 which is well beyond MAX_LATM_OTHER_DATA_BITS. */
+  UINT chunks = 1;
+  UINT tmp = len;
+
+  while (tmp > 0xFF) {
+    chunks++;
+    tmp >>= 8;
+  }
+
+  return chunks * 9;
+}
+
+/* Write the StreamMuxConfig otherDataPresent/length signaling (len > 0). */
+static void LatmWriteOtherDataLen(HANDLE_LATM_STREAM hAss,
+                                  HANDLE_FDK_BITSTREAM hBs, UINT len) {
+  if (hAss->audioMuxVersion == 1) {
+    hAss->streamMuxConfigBits += transportEnc_LatmWriteValue(hBs, (int)len);
+  } else {
+    UINT chunks = 1;
+    UINT tmp = len;
+    UINT i;
+
+    while (tmp > 0xFF) {
+      chunks++;
+      tmp >>= 8;
+    }
+    for (i = chunks; i > 0; i--) {
+      UINT shift = (i - 1) << 3;
+      FDKwriteBits(hBs, (i > 1) ? 1 : 0, 1); /* otherDataLenEsc */
+      FDKwriteBits(hBs, (len >> shift) & 0xFF, 8);
+      hAss->streamMuxConfigBits += 9;
+    }
+  }
+}
+
+UINT transportEnc_LatmOtherDataLenFieldBits(const HANDLE_LATM_STREAM hAss) {
+  if (hAss->otherDataLenBits == 0) {
+    return 0;
+  }
+  return LatmOtherDataLenFieldBits(hAss->audioMuxVersion,
+                                   hAss->otherDataLenBits);
+}
+
+/*
+ * Predicted size of a StreamMuxConfig describing the currently active other
+ * data. streamMuxConfigBits/smcOtherDataFieldBits are cached from the last
+ * real SMC write; only the other data length part can change between
+ * elements, so the prediction is exact and available before quantization.
+ * The cached size already contains the 1-bit otherDataPresent flag, which is
+ * present in both the old and the new SMC and therefore cancels out.
+ */
+static UINT LatmPredictedSmcBits(HANDLE_LATM_STREAM hAss) {
+  UINT fieldBits = transportEnc_LatmOtherDataLenFieldBits(hAss);
+
+  return hAss->streamMuxConfigBits - hAss->smcOtherDataFieldBits + fieldBits;
+}
+
+TRANSPORTENC_ERROR transportEnc_LatmSetOtherData(HANDLE_LATM_STREAM hAss,
+                                                 const UCHAR *data,
+                                                 UINT bitCount) {
+  if (hAss == NULL) {
+    return TRANSPORTENC_INVALID_PARAMETER;
+  }
+  if (bitCount > MAX_LATM_OTHER_DATA_BITS) {
+    return TRANSPORTENC_INVALID_CONFIG;
+  }
+  if (bitCount > 0 && data == NULL) {
+    return TRANSPORTENC_INVALID_CONFIG;
+  }
+
+  /* Store as pending only; the active value and all encoded state stay
+     untouched until the next AudioMuxElement starts. */
+  hAss->otherDataPendingLenBits = bitCount;
+  if (bitCount > 0) {
+    FDKmemcpy(hAss->otherDataPending, data, (bitCount + 7) >> 3);
+  }
+  hAss->otherDataPendingValid = 1;
+
+  return TRANSPORTENC_OK;
+}
+
+int transportEnc_LatmLatchOtherData(HANDLE_LATM_STREAM hAss) {
+  if (hAss->subFrameCnt != 0 || hAss->elementActive) {
+    return hAss->otherDataForcedSmc;
+  }
+
+  hAss->elementActive = 1;
+
+  if (hAss->otherDataPendingValid) {
+    if (hAss->otherDataPendingLenBits != hAss->otherDataLenBits) {
+      /* A length change requires a fresh StreamMuxConfig on this element. */
+      hAss->otherDataForcedSmc = 1;
+    }
+
+    hAss->otherDataLenBits = hAss->otherDataPendingLenBits;
+    FDKmemclear(hAss->otherDataActive, sizeof(hAss->otherDataActive));
+    if (hAss->otherDataLenBits > 0) {
+      FDKmemcpy(hAss->otherDataActive, hAss->otherDataPending,
+                (hAss->otherDataLenBits + 7) >> 3);
+    }
+    hAss->otherDataPendingValid = 0;
+  }
+
+  /* Recompute the element's marker overhead on its first budget query. */
+  hAss->otherDataElementOverhead = (UINT)-1;
+
+  return hAss->otherDataForcedSmc;
+}
+
 static UINT transportEnc_LatmCountFixBitDemandHeader(HANDLE_LATM_STREAM hAss) {
   int bitDemand = 0;
   int insertSetupData = 0;
 
   /* only if start of new latm frame */
   if (hAss->subFrameCnt == 0) {
+    int forcedSmc = transportEnc_LatmLatchOtherData(hAss);
+
     /* AudioSyncStream */
 
     if (hAss->tt == TT_MP4_LOAS) {
@@ -163,13 +303,16 @@ static UINT transportEnc_LatmCountFixBitDemandHeader(HANDLE_LATM_STREAM hAss) {
     } else {
       insertSetupData = 0;
     }
+    if (forcedSmc) {
+      insertSetupData = 1;
+    }
 
     if (hAss->tt != TT_MP4_LATM_MCP0) {
       /* AudioMuxElement::useSameStreamMux Flag */
       bitDemand += 1;
 
       if (insertSetupData) {
-        bitDemand += hAss->streamMuxConfigBits;
+        bitDemand += (int)LatmPredictedSmcBits(hAss);
       }
     }
 
@@ -466,11 +609,11 @@ CreateStreamMuxConfig(HANDLE_LATM_STREAM hAss, HANDLE_FDK_BITSTREAM hBs,
     FDKwriteBits(hBs, (hAss->otherDataLenBits > 0) ? 1 : 0,
                  1); /* otherDataPresent */
     hAss->streamMuxConfigBits += 1;
+    hAss->smcOtherDataFieldBits = 0;
 
     if (hAss->otherDataLenBits > 0) {
-      FDKwriteBits(hBs, 0, 1);
-      FDKwriteBits(hBs, hAss->otherDataLenBits, 8);
-      hAss->streamMuxConfigBits += 9;
+      LatmWriteOtherDataLen(hAss, hBs, hAss->otherDataLenBits);
+      hAss->smcOtherDataFieldBits = transportEnc_LatmOtherDataLenFieldBits(hAss);
     }
 
     FDKwriteBits(hBs, 0, 1); /* crcCheckPresent=0 */
@@ -593,6 +736,14 @@ static TRANSPORTENC_ERROR transportEnc_InitLatmStream(
 
   hAss->fractDelayPresent = fractDelayPresent;
   hAss->otherDataLenBits = 0;
+  hAss->otherDataPendingLenBits = 0;
+  hAss->otherDataPendingValid = 0;
+  hAss->otherDataForcedSmc = 0;
+  hAss->elementActive = 0;
+  hAss->smcOtherDataFieldBits = 0;
+  hAss->otherDataElementOverhead = (UINT)-1;
+  FDKmemclear(hAss->otherDataActive, sizeof(hAss->otherDataActive));
+  FDKmemclear(hAss->otherDataPending, sizeof(hAss->otherDataPending));
 
   hAss->varMode = LATMVAR_SIMPLE_SEQUENCE;
 
@@ -634,6 +785,82 @@ UINT transportEnc_LatmCountTotalBitDemandHeader(HANDLE_LATM_STREAM hAss,
   return bitDemand;
 }
 
+unsigned int transportEnc_LatmCountBitDemandNoOtherData(
+    HANDLE_LATM_STREAM hAss, unsigned int streamDataLength) {
+  UINT bitDemand;
+  UINT savedLen = hAss->otherDataLenBits;
+  UINT savedField = hAss->smcOtherDataFieldBits;
+  UCHAR savedForced = hAss->otherDataForcedSmc;
+  UCHAR savedFill = hAss->fillBits;
+  UCHAR savedElementActive = hAss->elementActive;
+  UCHAR savedPendingValid = hAss->otherDataPendingValid;
+
+  /* Hide every otherData contribution, including a forced StreamMuxConfig
+     that only exists because of a marker length change. Force the element
+     active flag so the counterfactual never latches pending state. */
+  hAss->otherDataLenBits = 0;
+  hAss->smcOtherDataFieldBits = 0;
+  hAss->otherDataForcedSmc = 0;
+  hAss->elementActive = 1;
+
+  bitDemand = transportEnc_LatmCountTotalBitDemandHeader(hAss,
+                                                         streamDataLength);
+
+  hAss->otherDataLenBits = savedLen;
+  hAss->smcOtherDataFieldBits = savedField;
+  hAss->otherDataForcedSmc = savedForced;
+  hAss->fillBits = savedFill;
+  hAss->elementActive = savedElementActive;
+  hAss->otherDataPendingValid = savedPendingValid;
+
+  return bitDemand;
+}
+
+unsigned int transportEnc_LatmGetElementOtherDataOverhead(
+    HANDLE_LATM_STREAM hAss, unsigned int streamDataLength) {
+  UINT elementOverhead;
+  UINT subframes;
+  UINT perAu, remainder;
+
+  /* The fixed part of an element (SMC, marker bits, alignment) is only
+     present at its first subframe. Capture it there and reuse the same value
+     for all remaining subframes, so each AU gets the same element budget. */
+  if (hAss->subFrameCnt == 0 ||
+      hAss->otherDataElementOverhead == (UINT)-1) {
+    if (hAss->otherDataLenBits == 0 && !hAss->otherDataForcedSmc) {
+      hAss->otherDataElementOverhead = 0;
+    } else {
+      UINT withMarker = transportEnc_LatmCountTotalBitDemandHeader(
+          hAss, streamDataLength);
+      UINT withoutMarker = transportEnc_LatmCountBitDemandNoOtherData(
+          hAss, streamDataLength);
+      hAss->otherDataElementOverhead =
+          (withMarker >= withoutMarker) ? withMarker - withoutMarker : 0;
+    }
+  }
+
+  elementOverhead = hAss->otherDataElementOverhead;
+
+  /* Amortize the element cost across the transport subframes. The first
+     subframe also carries any indivisible remainder, so the sum over all
+     subframes equals the exact element overhead. */
+  subframes = (hAss->noSubframes > 0) ? hAss->noSubframes : 1;
+  perAu = elementOverhead / subframes;
+  remainder = elementOverhead - perAu * subframes;
+
+  return (hAss->subFrameCnt == 0) ? perAu + remainder : perAu;
+}
+
+void transportEnc_LatmResetElementBoundary(HANDLE_LATM_STREAM hAss) {
+  if (hAss == NULL) {
+    return;
+  }
+  /* Only clear the half-open element marker; keep the periodic header
+     counter and subframe bookkeeping intact. */
+  hAss->elementActive = 0;
+  hAss->otherDataElementOverhead = (UINT)-1;
+}
+
 static TRANSPORTENC_ERROR AdvanceAudioMuxElement(HANDLE_LATM_STREAM hAss,
                                                  HANDLE_FDK_BITSTREAM hBs,
                                                  int auBits, int bufferFullness,
@@ -643,10 +870,15 @@ static TRANSPORTENC_ERROR AdvanceAudioMuxElement(HANDLE_LATM_STREAM hAss,
 
   /* Insert setup data to assemble Buffer */
   if (hAss->subFrameCnt == 0) {
+    int forcedSmc = transportEnc_LatmLatchOtherData(hAss);
+
     if (hAss->muxConfigPeriod > 0) {
       insertMuxSetup = (hAss->latmFrameCounter == 0);
     } else {
       insertMuxSetup = 0;
+    }
+    if (forcedSmc) {
+      insertMuxSetup = 1;
     }
 
     if (hAss->tt != TT_MP4_LATM_MCP0) {
@@ -656,6 +888,9 @@ static TRANSPORTENC_ERROR AdvanceAudioMuxElement(HANDLE_LATM_STREAM hAss,
                                     hAss, hBs, bufferFullness, cb))) {
           return ErrorStatus;
         }
+        /* The fresh StreamMuxConfig now describes the active length; clear
+           the one-shot force without touching the periodic counter. */
+        hAss->otherDataForcedSmc = 0;
       } else {
         FDKwriteBits(hBs, 1, 1); /* useSameStreamMux */
       }
@@ -750,8 +985,26 @@ TRANSPORTENC_ERROR transportEnc_LatmGetFrame(HANDLE_LATM_STREAM hAss,
       FDKsyncCache(&tmpBuf);
     }
 
-    /* Write AudioMuxElement other data bits */
-    FDKwriteBits(hBs, 0, hAss->otherDataLenBits);
+    /* Write AudioMuxElement other data bits exactly once, after all subframe
+       payloads and before the byte alignment. The bytes are read MSB first;
+       unused low bits of the final byte are not emitted. */
+    if (hAss->otherDataLenBits > 0) {
+      UINT bitsLeft = hAss->otherDataLenBits;
+      UINT byteIdx = 0;
+
+      while (bitsLeft > 0) {
+        UINT chunk = (bitsLeft >= 8) ? 8 : bitsLeft;
+
+        if (chunk == 8) {
+          FDKwriteBits(hBs, hAss->otherDataActive[byteIdx], 8);
+        } else {
+          FDKwriteBits(hBs, hAss->otherDataActive[byteIdx] >> (8 - chunk),
+                       chunk);
+        }
+        bitsLeft -= chunk;
+        byteIdx++;
+      }
+    }
 
     /* Write AudioMuxElement byte alignment fill bits */
     FDKwriteBits(hBs, 0, hAss->fillBits);
@@ -759,6 +1012,8 @@ TRANSPORTENC_ERROR transportEnc_LatmGetFrame(HANDLE_LATM_STREAM hAss,
     FDK_ASSERT((FDKgetValidBits(hBs) % 8) == 0);
 
     hAss->subFrameCnt = 0;
+    hAss->elementActive = 0;
+    hAss->otherDataElementOverhead = (UINT)-1;
 
     FDKsyncCache(hBs);
     *pBytes = (FDKgetValidBits(hBs) + 7) >> 3;
@@ -823,6 +1078,12 @@ TRANSPORTENC_ERROR transportEnc_Latm_Init(HANDLE_LATM_STREAM hAss,
   }
 
   // CreateStreamMuxConfig(hAss, hBs, 0);
+
+  /* The probe run above only primes the cached StreamMuxConfig size; no real
+     AudioMuxElement is open, so pending markers must still latch on the first
+     real element. */
+  hAss->elementActive = 0;
+  hAss->otherDataForcedSmc = 0;
 
 bail:
   return ErrorStatus;
