@@ -1,0 +1,38 @@
+#include "uvgrtp/version.hh"
+
+#include <cstdint>
+#include <string>
+
+namespace uvgrtp {
+
+uint16_t get_version_major() { return @uvgrtp_VERSION_MAJOR@; }
+
+uint16_t get_version_minor() { return @uvgrtp_VERSION_MINOR@; }
+
+uint16_t get_version_patch() { return @uvgrtp_VERSION_PATCH@; }
+
+
+#ifdef RTP_RELEASE_COMMIT
+static const char* uvgrtp_version_cstr = "@uvgrtp_VERSION@-release";
+#else
+static const char* uvgrtp_version_cstr = "@uvgrtp_VERSION@-@uvgrtp_GIT_HASH@";
+#endif
+
+static const char* uvgrtp_git_hash_cstr = "@uvgrtp_GIT_HASH@";
+
+const char* get_version_cstr() { return uvgrtp_version_cstr; }
+
+const char* get_git_hash_cstr() { return uvgrtp_git_hash_cstr; }
+
+#if UVGRTP_EXTENDED_API
+#ifdef RTP_RELEASE_COMMIT
+    std::string get_version() { return "@uvgrtp_VERSION@-release"; }
+#else
+    std::string get_version() { return "@uvgrtp_VERSION@-@uvgrtp_GIT_HASH@"; }
+#endif
+
+std::string get_git_hash() {return "@uvgrtp_GIT_HASH@";}
+#endif
+
+
+} // namespace uvgrtp

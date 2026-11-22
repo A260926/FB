@@ -1,0 +1,139 @@
+{
+  "repo": "https://github.com/ultravideo/uvgRTP",
+  "commit": "b6e2db9f286e75f419ffcd58859f643a9dbb1c48",
+  "license": "BSD-2-Clause",
+  "excluded": [
+    {
+      "path": "docs/arch.png",
+      "mode": "100644",
+      "git_object": "db2f16fbb38c9b041e779b1653ab5ad0669d2d02",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/bc_s.png",
+      "mode": "100644",
+      "git_object": "224b29aa9847d5a4b3902efd602b7ddf7d33e6c2",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/bc_sd.png",
+      "mode": "100644",
+      "git_object": "31ca888dc71049713b35c351933a8d0f36180bf1",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/closed.png",
+      "mode": "100644",
+      "git_object": "98cc2c909da37a6df914fbf67780eebd99c597f5",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/nav_f.png",
+      "mode": "100644",
+      "git_object": "72a58a529ed3a9ed6aa0c51a79cf207e026deee2",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/nav_fd.png",
+      "mode": "100644",
+      "git_object": "032fbdd4c54f54fa9a2e6423b94ef4b2ebdfaceb",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/nav_g.png",
+      "mode": "100644",
+      "git_object": "2093a237a94f6c83e19ec6e5fd42f7ddabdafa81",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/nav_h.png",
+      "mode": "100644",
+      "git_object": "33389b101d9cd9b4c98ad286b5d9c46a6671f650",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/nav_hd.png",
+      "mode": "100644",
+      "git_object": "de80f18ad6488b9990303f267a76fdc83f0ffd80",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/open.png",
+      "mode": "100644",
+      "git_object": "30f75c7efe2dd0c9e956e35b69777a02751f048b",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/splitbar.png",
+      "mode": "100644",
+      "git_object": "fe895f2c58179b471a22d8320b39a4bd7312ec8e",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/splitbard.png",
+      "mode": "100644",
+      "git_object": "8367416d757fd7b6dc4272b6432dc75a75abd068",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/sync_off.png",
+      "mode": "100644",
+      "git_object": "3b443fc62892114406e3d399421b2a881b897acc",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/sync_on.png",
+      "mode": "100644",
+      "git_object": "e08320fb64e6fa33b573005ed6d8fe294e19db76",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_a.png",
+      "mode": "100644",
+      "git_object": "3b725c41c5a527a3a3e40097077d0e206a681247",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_ad.png",
+      "mode": "100644",
+      "git_object": "e34850acfc24be58da6d2fd1ccc6b29cc84fe34d",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_b.png",
+      "mode": "100644",
+      "git_object": "e2b4a8638cb3496a016eaed9e16ffc12846dea18",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_bd.png",
+      "mode": "100644",
+      "git_object": "91c25249869ffe5269c24f8c441e3f1bf75df400",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_h.png",
+      "mode": "100644",
+      "git_object": "fd5cb705488e60fcf30f56fcc951dee74f3b095b",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_hd.png",
+      "mode": "100644",
+      "git_object": "2489273d4ce1d11d3f7557335244c02b9959351b",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_s.png",
+      "mode": "100644",
+      "git_object": "ab478c95b67371d700a20869f7de1ddd73522d50",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    },
+    {
+      "path": "docs/html/tab_sd.png",
+      "mode": "100644",
+      "git_object": "757a565ced4730f85c833fb2547d8e199ae68f19",
+      "reason": "Unused upstream binary documentation/test asset; baseline uses generated in-memory payloads"
+    }
+  ]
+}
