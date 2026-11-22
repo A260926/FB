@@ -1,0 +1,16 @@
+{
+  "repo": "https://github.com/cisco/thor",
+  "commit": "18de8f9f0762c3a542b1122589edb8af859d9813",
+  "license": "BSD-2-Clause",
+  "source_tree": "75ecc6fa65d199d1745a08c10d803f01a726ca6d",
+  "exclusions": [],
+  "gitlinks": [],
+  "gitmodules": false,
+  "compatibility_patch": {
+    "path": "support.patch",
+    "sha256": "8c18ff014bac843e66d626b655c076d23cca45ffd0a4e0053af1adcc4288c7d8",
+    "already_applied": true
+  },
+  "build_note": "原build/ThorEnc和ThorDec是VS项目目录；make命令覆盖可执行输出为.task-build/Thorenc、.task-build/Thordec。",
+  "generated_sources": "保留上游*_gen.c；每次make -B使用移植后的原脚本重建，不交付运行产物。"
+}
