@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(ResumableFLACTask C)
+get_filename_component(SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+add_subdirectory("${SOURCE_ROOT}" upstream)
+if(TASK_TARGET)
+ target_sources(FLAC PRIVATE "${SOURCE_ROOT}/src/libFLAC/stream_decoder_resumable.c")
+endif()
