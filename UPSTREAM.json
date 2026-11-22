@@ -1,0 +1,84 @@
+{
+  "repo": "https://github.com/pion/interceptor",
+  "commit": "0353a584d11ccb4ca5f9e4e59d78c87b0830ed11",
+  "license": "MIT",
+  "export": "git archive HEAD plus go mod vendor from initially empty private module cache",
+  "excluded": [],
+  "dependency_origins": [
+    {
+      "module_version_path": "github.com/pion/logging/@v/v0.2.4.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/pion/logging",
+        "Hash": "39ff9235799bde6d2c7b3f5e21579159e5bbe332",
+        "Ref": "refs/tags/v0.2.4"
+      },
+      "version": "v0.2.4"
+    },
+    {
+      "module_version_path": "github.com/pion/randutil/@v/v0.1.0.info",
+      "origin": null,
+      "version": "v0.1.0"
+    },
+    {
+      "module_version_path": "github.com/pion/rtcp/@v/v1.2.20.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/pion/rtcp",
+        "Hash": "cd21e4757f92fce4a88ad7976baeec9b7690fb6a",
+        "Ref": "refs/tags/v1.2.20"
+      },
+      "version": "v1.2.20"
+    },
+    {
+      "module_version_path": "github.com/pion/rtp/@v/v1.10.6.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/pion/rtp",
+        "Hash": "9a8f93554133824676326b43f068167fef01a884",
+        "Ref": "refs/tags/v1.10.6"
+      },
+      "version": "v1.10.6"
+    },
+    {
+      "module_version_path": "github.com/pion/transport/v5/@v/v5.1.5.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/pion/transport",
+        "Hash": "f2642d1fe72628375d77d2a5ed26fd352b1c26b8",
+        "Ref": "refs/tags/v5.1.5"
+      },
+      "version": "v5.1.5"
+    },
+    {
+      "module_version_path": "github.com/stretchr/testify/@v/v1.12.1.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/stretchr/testify",
+        "Hash": "959dbdacf1533e155162811ea90c90117a420463",
+        "Ref": "refs/tags/v1.12.1"
+      },
+      "version": "v1.12.1"
+    },
+    {
+      "module_version_path": "go.yaml.in/yaml/v3/@v/v3.0.5.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/yaml/go-yaml",
+        "Hash": "e16c7af9361b241fa02d91582fb59ce4954d8afc",
+        "Ref": "refs/tags/v3.0.5"
+      },
+      "version": "v3.0.5"
+    },
+    {
+      "module_version_path": "golang.org/x/time/@v/v0.14.0.info",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://go.googlesource.com/time",
+        "Hash": "2b4e43900c03fd6b77109b7b2b6d77583f48bc1c",
+        "Ref": "refs/tags/v0.14.0"
+      },
+      "version": "v0.14.0"
+    }
+  ]
+}
