@@ -34,6 +34,16 @@ struct Sampler
         base_seed = hashCombine(global_seed, hash(start_seed));
     }
 
+    // Explicitly seeded variant. Lets new integrators derive an independent,
+    // reproducible random identity from parameters such as (seed, iteration,
+    // sample id, path id) without changing the behavior of the old entries.
+    // Deliberately excludes the process-global random seed so that the same
+    // identifiers always produce the same path, across runs too.
+    static void initiateWithSeed(uint32_t explicit_seed)
+    {
+        base_seed = hashCombine(0x9e3779b9u, hash(explicit_seed));
+    }
+
     // Called with e.g. ray path index before each pixel sample
     static void setIndex(uint32_t index)
     {

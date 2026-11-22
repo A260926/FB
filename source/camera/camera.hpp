@@ -61,6 +61,7 @@ private:
     };
 
     void samplePixel(size_t x, size_t y);
+    void sampleImageRound();
     void sampleImageThread(WorkQueue<Bucket>& buckets);
 
     void printInfoThread(WorkQueue<Bucket>& buckets);

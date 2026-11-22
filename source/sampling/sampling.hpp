@@ -72,5 +72,13 @@ enum Dim
     PM_LIGHT = 0, // 4D
 
     /* Photon bounce */
-    PM_REJECT = 2 // 1D
+    PM_REJECT = 2, // 1D
+
+    /* Vertex connection and merging. These deliberately reuse the low Sobol
+       dimensions: each subpath is re-seeded and shuffled, so path identity is
+       established by the explicit seed rather than by dimension. */
+    VCM_LIGHT     = 0, // 3D: light selection, position, direction
+    VCM_LIGHT_BSDF = 3, // 2D: light subpath continuation (same as BSDF)
+    VCM_PAIR      = 6, // 1D: index of the pool light path paired with the eye path
+    VCM_EYE_BSDF  = 3  // 2D: eye subpath continuation
 };

@@ -10,6 +10,7 @@
 #include "../ray/ray.hpp"
 #include "../integrator/path-tracer/path-tracer.hpp"
 #include "../integrator/photon-mapper/photon-mapper.hpp"
+#include "../integrator/vertex-cm/vertex-cm.hpp"
 #include "../sampling/sampling.hpp"
 #include "../sampling/sampler.hpp"
 #include "../common/util.hpp"
@@ -19,7 +20,11 @@
 
 Camera::Camera(const nlohmann::json &j, const Option &option)
 {
-    if (option.photon_map)
+    if (j.find("vcm") != j.end())
+    {
+        integrator = std::make_shared<VertexCM>(j);
+    }
+    else if (option.photon_map)
     {
         integrator = std::make_shared<PhotonMapper>(j);
     }
@@ -70,11 +75,21 @@ void Camera::samplePixel(size_t x, size_t y)
 
     glm::dvec2 half_dim = glm::dvec2(image.width, image.height) * 0.5;
 
-    Sampler::initiate(static_cast<uint32_t>(y * image.width + x));
+    uint32_t pixel_id = static_cast<uint32_t>(y * image.width + x);
 
     for(int i = 0; i < spp; i++)
     {
-        Sampler::setIndex(i);
+        // Integrators with their own deterministic identities initialize the
+        // sample here; the old entries keep the historical seeding rule.
+        if (integrator->deterministicSamples())
+        {
+            integrator->initSample(pixel_id, static_cast<uint32_t>(i));
+        }
+        else
+        {
+            Sampler::initiate(pixel_id);
+            Sampler::setIndex(i);
+        }
 
         auto u = Sampler::get<Dim::PIXEL, 2>();
         glm::dvec2 px(x + u[0], y + u[1]);
@@ -93,13 +108,18 @@ void Camera::samplePixel(size_t x, size_t y)
             glm::dvec3 start = eye + left * aperture_sample.x + up * aperture_sample.y;
             ray = Ray(start, glm::normalize(focus_point - start), integrator->scene.ior);
         }
-        film.deposit(px, integrator->sampleRay(ray));
+        film.deposit(px, integrator->sampleRay(ray, pixel_id, static_cast<uint32_t>(i)));
     }
     num_sampled_pixels++;
 }
 
-void Camera::sampleImage()
+void Camera::sampleImageRound()
 {
+    // Reset per-round progress bookkeeping.
+    num_sampled_pixels = 0;
+    last_num_sampled_pixels = 0;
+    times.clear();
+
     std::vector<Bucket> buckets_vec;
     for (size_t x = 0; x < image.width; x += bucket_size)
     {
@@ -133,6 +153,25 @@ void Camera::sampleImage()
     for (auto& thread : threads)
     {
         thread->join();
+    }
+}
+
+void Camera::sampleImage()
+{
+    if (!integrator->iterative())
+    {
+        sampleImageRound();
+    }
+    else
+    {
+        // One round per call. The film accumulates every round into the image;
+        // the VCM integrator rebuilds its light paths and index in between.
+        size_t rounds = integrator->iterations();
+        for (size_t k = 0; k < rounds; ++k)
+        {
+            integrator->beginIteration(k);
+            sampleImageRound();
+        }
     }
 
     for (int y = 0; y < image.height; y++)

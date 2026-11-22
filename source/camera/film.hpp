@@ -23,6 +23,10 @@ public:
 
     glm::dvec3 scan(size_t col, size_t row) const;
 
+    // Clears all accumulated samples without changing the reconstruction
+    // filter. Used by progressive integrators between iterations.
+    void clear();
+
 private:
     double filter(double x) const;
 
@@ -31,6 +35,8 @@ private:
         void update(const glm::dvec3& v, double weight);
 
         glm::dvec3 get() const;
+
+        void reset();
 
     private:
         std::atomic<double> rgb_sum[3];

@@ -49,7 +49,106 @@ The `ior` field specifies the scene index of refraction. This can be used to sim
 
 The `photon_map`, `bvh`, `cameras`, `materials`, `vertices`, and `surfaces` objects specifies different render settings and scene contents. I go through each of these in the following sections. Click the summaries for more details.
 
-### Photon Map
+___
+
+### Vertex Connection and Merging
+
+<details><summary>The <code>vcm</code> object is optional and enables the Vertex Connection and Merging integrator.</summary><br>
+
+When a scene contains a root `vcm` object, the camera uses the `VertexCM` integrator instead of the path tracer or photon mapper. Vertex connection and merging (VCM) combines bidirectional connections (which converge quickly for ordinary indirect light) with light-path merging (which resolves caustics that ordinary path tracing cannot sample reliably), so both can be accumulated in the same image.
+
+Example:
+
+```json
+"vcm": {
+  "light_paths": 200000,
+  "max_vertices": 8,
+  "radius": 0.05,
+  "alpha": 0.5,
+  "iterations": 8,
+  "seed": 1234,
+  "mode": "combined"
+}
+```
+
+| field          | type    | meaning |
+| -------------- | ------- | ------- |
+| `light_paths`  | integer | Exactly `N` light paths are emitted per iteration. Must be a positive integer. |
+| `max_vertices` | integer | Maximum number of surface vertices on a light path. Must be in `[1, 12]`. |
+| `radius`       | number  | Base merging radius. Must be finite and positive. |
+| `alpha`        | number  | Radius shrink exponent, must satisfy `0 < alpha < 1`. |
+| `iterations`   | integer | Number of progressive rounds. Positive integer. |
+| `seed`         | integer | Deterministic seed for all path identities. Non-negative integer. |
+| `mode`         | string  | `combined`, `connection` or `merging`. |
+
+Each round `k` (starting at zero) discards the previous light paths and index, emits exactly `N` new light paths and rebuilds the spatial index at the finite radius
+
+```
+r_k = radius * (k + 1)^((alpha - 1) / 2).
+```
+
+Because `alpha < 1` the radius shrinks every round, so the bias of the constant-kernel merging estimate decreases while the variance increases; the usual `alpha = 1/2` gives `r_k = radius / sqrt(k + 1)`. Camera rays and light paths share the same first camera intersection. The `mode` field selects which strategies run:
+
+* `combined` runs eye emission, vertex connection and vertex merging.
+* `connection` runs eye emission and vertex connection only.
+* `merging` runs vertex merging only.
+
+All three modes still render the camera's direct view of an emissive surface (eye emission), so a light that is directly visible is never black.
+
+#### Density convention
+
+All path densities are measured per unit **surface area**. A light subpath `x_0, x_1, ..., x_t` (where `x_0` is the emitter) has density
+
+```
+p_L = p_select * p_area(x_0) * prod_j [ pdf_dir(x_j -> x_{j+1}) * |cos(x_{j+1})| / d(x_j,x_{j+1})^2 ]
+```
+
+and an eye subpath `y_1, ..., y_s` has the same product (the camera pixel density is a common factor and is dropped). A direction sampled at a vertex is converted to an area density at the target with `pdf_dir * |cos(target)| / distance^2`. Reverse densities are re-evaluated from the exchanged real directions, never copied from the forward recursion.
+
+The three generalized path densities are
+
+```
+p_eye_emission = p_E(s)          (sample count 1)
+p_connection   = p_E(s) * p_L(t) (sample count 1)
+p_merging      = eta * p_connection,  eta = N * pi * r_k^2   (sample count 1)
+```
+
+The `eta` factor already encodes the `N`-fold path normalization, so the balance heuristic is
+
+```
+w_strategy = n_strategy * p_strategy / sum_enabled_feasible (n_i * p_i)
+```
+
+with every strategy entering with sample count one. The connection and merging estimates are
+
+```
+connection = W_E(s) f(y_s) G(y_s,x_t) beta_t
+merging    = W_E(s) f(y_s) cos(y_s) beta_t k(r_k) / N,   k(r) = 1 / (pi r^2)
+```
+
+and a strategy whose seam lands on a delta (mirror) vertex, or outside the receiving hemisphere, gets weight zero. Every light emission counts in the denominator, including ones that hit nothing, so the normalization never uses the number of *stored* photons.
+
+This is the standard finite-radius, **consistent** VCM construction. For a finite radius the estimator is biased (biased low near geometric boundaries); it is not claimed to be strictly unbiased. As `r -> 0` with `N pi r^2` held roughly constant the merging bias vanishes.
+
+#### Supported scene subset
+
+To keep the densities well defined, VCM supports only a restricted scene:
+
+* `sphere` surfaces, and `triangle` surfaces **without** interpolated (smooth) vertex normals;
+* pure Lambert materials (optionally emissive);
+* perfect mirrors (`perfect_mirror: true`);
+* finite area emissive surfaces (spheres and triangles).
+
+Transparent, rough, complex-IOR materials, quadrics and interpolated triangles are rejected with `std::invalid_argument`. `num_render_threads` must be `1` in VCM mode, and `vcm` cannot be combined with `photon_map`. Escaping eye rays return black for VCM; the path tracer's `Scene::skyColor` is unchanged.
+
+`Material::emittance` after loading is used directly as `Le`. The JSON emittance is still converted to radiosity by dividing by the surface area once (in `Scene::generateEmissives`); the VCM integrator does **not** divide by the area again.
+
+#### Sample identity
+
+Random numbers for a subpath are derived from `(seed, k, sampleId, pathIdentity)` through an explicit seeded sampler. The same identifiers always produce the same path; diagnostics never consume random numbers.
+</details>
+
+___
 
 <details><summary>The <code>photon_map</code> object is optional and it specifies the photon map properties.</summary><br>
 

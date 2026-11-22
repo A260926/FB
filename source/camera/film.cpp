@@ -83,6 +83,14 @@ glm::dvec3 Film::scan(size_t col, size_t row) const
     return blob[row * width + col].get();
 }
 
+void Film::clear()
+{
+    for (auto& splat : blob)
+    {
+        splat.reset();
+    }
+}
+
 double Film::filter(double x) const
 {
     if (filter_cache.empty())
@@ -110,4 +118,12 @@ glm::dvec3 Film::Splat::get() const
     double w = weight_sum.load();
     if (w == 0.0) return glm::dvec3(0.0);
     return glm::max(res / w, 0.0);
+}
+
+void Film::Splat::reset()
+{
+    rgb_sum[0].store(0.0);
+    rgb_sum[1].store(0.0);
+    rgb_sum[2].store(0.0);
+    weight_sum.store(0.0);
 }

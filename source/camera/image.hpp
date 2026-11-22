@@ -17,6 +17,11 @@ struct Image
 
     glm::dvec3& operator()(size_t col, size_t row);
 
+    glm::dvec3 operator()(size_t col, size_t row) const
+    {
+        return blob[row * width + col];
+    }
+
     size_t width, height;
     size_t num_pixels;
 

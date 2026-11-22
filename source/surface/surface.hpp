@@ -13,6 +13,14 @@ class Material;
 
 namespace Surface
 {
+    enum class Kind
+    {
+        Sphere,
+        Triangle,
+        Quadric,
+        Other
+    };
+
     class Base
     {
     public:
@@ -26,9 +34,21 @@ namespace Surface
         virtual glm::dvec3 normal(const glm::dvec3& pos) const = 0;
         virtual void transform(const Transform &T) = 0;
 
-        virtual glm::dvec3 interpolatedNormal(const glm::dvec2& uv) const 
-        { 
-            return glm::dvec3(); 
+        virtual glm::dvec3 interpolatedNormal(const glm::dvec2& uv) const
+        {
+            return glm::dvec3();
+        }
+
+        // Introspection used by integrators that only support a subset of the
+        // scene representation.
+        virtual Kind kind() const
+        {
+            return Kind::Other;
+        }
+
+        virtual bool interpolated() const
+        {
+            return false;
         }
 
         BoundingBox BB() const
@@ -60,6 +80,11 @@ namespace Surface
         virtual glm::dvec3 normal(const glm::dvec3& pos) const;
         virtual void transform(const Transform &T);
 
+        virtual Kind kind() const
+        {
+            return Kind::Sphere;
+        }
+
     protected:
         virtual void computeArea();
         virtual void computeBoundingBox();
@@ -83,6 +108,16 @@ namespace Surface
         virtual glm::dvec3 interpolatedNormal(const glm::dvec2& uv) const;
         virtual void transform(const Transform &T);
 
+        virtual Kind kind() const
+        {
+            return Kind::Triangle;
+        }
+
+        virtual bool interpolated() const
+        {
+            return N != nullptr;
+        }
+
         glm::dvec3 normal() const;
 
     protected:
@@ -105,6 +140,11 @@ namespace Surface
         virtual glm::dvec3 operator()(double u, double v) const;
         virtual glm::dvec3 normal(const glm::dvec3& pos) const;
         virtual void transform(const Transform &T);
+
+        virtual Kind kind() const
+        {
+            return Kind::Quadric;
+        }
 
     protected:
         virtual void computeArea();
