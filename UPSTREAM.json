@@ -1,0 +1,105 @@
+{
+  "repo": "https://github.com/rgaufman/live555",
+  "commit": "d103f7e7e97c139a4f29b9aae0298f1a77f71cc2",
+  "license": "LGPL-3.0-or-later",
+  "export": "git archive HEAD; all tracked content retained; internal license symlinks materialized",
+  "excluded": [],
+  "materialized_license_links": [
+    {
+      "path": "BasicUsageEnvironment/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "BasicUsageEnvironment/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "UsageEnvironment/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "UsageEnvironment/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "groupsock/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "groupsock/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "hlsProxy/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "hlsProxy/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "liveMedia/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "liveMedia/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "mediaServer/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "mediaServer/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "proxyServer/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "proxyServer/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "testProgs/COPYING",
+      "original_target": "../COPYING",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    },
+    {
+      "path": "testProgs/COPYING.LESSER",
+      "original_target": "../COPYING.LESSER",
+      "export_mode": "100644",
+      "reason": "materialize internal license links for standalone descriptor"
+    }
+  ]
+}
