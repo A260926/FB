@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Contributors to the OpenTimelineIO project
+
+#pragma once
+
+#include <cmath>
+#include <vector>
+
+#include "opentimelineio/export.h"
+#include "opentimelineio/version.h"
+
+namespace opentimelineio { namespace OPENTIMELINEIO_VERSION_NS {
+
+/// @brief Color consists of red, green, blue,
+/// and alpha double floating point values,
+/// allowing conversion between different formats.
+/// To be considered interoperable,
+/// the sRGB transfer function encoded values,
+/// ranging between zero and one, are expected to be accurate
+/// to within 1/255 of the intended value.
+/// Round-trip conversions may not be guaranteed outside that.
+/// This class is meant for use in user interface elements,
+// like marker or clip coloring, NOT for image pixel content.
+class OTIO_API_TYPE Color
+{
+public:
+    struct Schema
+    {
+        static auto constexpr name   = "Color";
+        static int constexpr version = 1;
+    };
+
+    OTIO_API Color(
+        double const       r    = 1.f,
+        double const       g    = 1.f,
+        double const       b    = 1.f,
+        double const       a    = 1.f,
+        std::string const& name = "");
+
+    OTIO_API Color(Color const& other);
+
+    OTIO_API static const Color pink;
+    OTIO_API static const Color red;
+    OTIO_API static const Color orange;
+    OTIO_API static const Color yellow;
+    OTIO_API static const Color green;
+    OTIO_API static const Color cyan;
+    OTIO_API static const Color blue;
+    OTIO_API static const Color purple;
+    OTIO_API static const Color magenta;
+    OTIO_API static const Color black;
+    OTIO_API static const Color white;
+    OTIO_API static const Color transparent;
+
+    OTIO_API static Color* from_hex(std::string const& color);
+    OTIO_API static Color* from_int_list(std::vector<int> const& color, int bit_depth);
+    OTIO_API static Color* from_abgr_int(unsigned int abgr) noexcept;
+    OTIO_API static Color* from_float_list(std::vector<double> const& color);
+
+    friend bool operator==(Color lhs, Color rhs) noexcept
+    {
+        return lhs.to_hex() == rhs.to_hex()
+               && lhs.to_abgr_int() == rhs.to_abgr_int();
+    }
+
+    friend bool operator!=(Color lhs, Color rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    OTIO_API std::string to_hex();
+    OTIO_API std::vector<int> to_rgba_int_list(int base);
+    OTIO_API unsigned int     to_abgr_int();
+    OTIO_API std::vector<double> to_rgba_float_list();
+
+    double      r() const { return _r; }
+    double      g() const { return _g; }
+    double      b() const { return _b; }
+    double      a() const { return _a; }
+    std::string name() const { return _name; }
+
+    void set_r(double r) { _r = r; }
+    void set_g(double g) { _g = g; }
+    void set_b(double b) { _b = b; }
+    void set_a(double a) { _a = a; }
+    void set_name(std::string const& name) { _name = name; }
+
+private:
+    double      _r;
+    double      _g;
+    double      _b;
+    double      _a;
+    std::string _name;
+};
+
+}} // namespace opentimelineio::OPENTIMELINEIO_VERSION_NS
