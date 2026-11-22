@@ -122,6 +122,16 @@ typedef struct SBDecState {
    spx_word16_t last_ener;
    spx_uint32_t seed;
 
+   /* Optional dual-output decoding.  The primary memories are used by the
+      un-enhanced ("raw") QMF/synthesis path; the *_alt ones by the enhanced
+      path. */
+   int    dual_output;
+   int    dual_started;
+   spx_mem_t *mem_sp_alt;
+   spx_word16_t *excBuf_alt;
+   spx_word16_t *g0_mem_alt;
+   spx_word16_t *g1_mem_alt;
+
    int    encode_submode;
    const SpeexSubmode * const *submodes;
    int    submodeID;
@@ -146,6 +156,10 @@ void sb_decoder_destroy(void *state);
 
 /**Decodes one frame*/
 int sb_decode(void *state, SpeexBits *bits, void *out);
+
+/** Decodes one frame with both the un-enhanced ("raw") and enhanced outputs
+    rendered from a single pass over the bit-stream. */
+int sb_decode_dual(void *state, SpeexBits *bits, void *out_raw, void *out_enh);
 
 int sb_encoder_ctl(void *state, int request, void *ptr);
 

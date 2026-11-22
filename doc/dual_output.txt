@@ -1,0 +1,112 @@
+Dual-output decoding
+====================
+
+Motivation
+----------
+
+A receiver sometimes wants two versions of the same stream at once: the
+un-enhanced ("raw") audio to record, and the perceptually enhanced audio to
+monitor.  Running two decoders over the same stream is not equivalent: the
+adaptive codebook, LSP interpolation, pitch history, comfort-noise generation
+and random sequence are recursive, and two decoders keep two independent
+copies of that state.  Switching `SPEEX_SET_ENH` on a single decoder does not
+produce two continuously running tracks either -- it changes what the one and
+only decoder renders, so the other variant is not available.
+
+The optional dual-output decoder solves this by rendering both variants from a
+single decode pass.  It is available for the floating-point build of the
+narrowband, wideband and ultra-wideband decoders.
+
+Enabling it
+-----------
+
+    int on = 1;
+    speex_decoder_ctl(state, SPEEX_SET_DUAL_OUTPUT, &on);
+
+`SPEEX_SET_DUAL_OUTPUT` takes an `int` value of 0 (default) or 1.  The setting
+may only be changed **before the first successful decode, or before the first
+lost frame is processed**, whichever comes first.  After that:
+
+  * setting the current value again succeeds (returns 0),
+  * changing the value fails with -1 and leaves the configuration unchanged.
+
+`SPEEX_RESET_STATE` keeps the dual-output configuration.  It performs the
+original reset work separately for both rendering paths, so an enabled decoder
+never reverts to single-output mode because of a reset.
+
+Reading both outputs
+--------------------
+
+    int speex_decode_dual    (void *state, SpeexBits *bits,
+                              float *raw, float *enhanced);
+    int speex_decode_dual_int(void *state, SpeexBits *bits,
+                              spx_int16_t *raw, spx_int16_t *enhanced);
+
+Both buffers are supplied by the caller and must not overlap.  The return
+value, the frame length and the meaning of a NULL `bits` (packet loss) are the
+same as for `speex_decode()` / `speex_decode_int()`:
+
+  * 0  -- frame decoded,
+  * -1 -- end of stream / terminator,
+  * -2 -- corrupt stream, **or** dual output was not enabled.
+
+When dual output is not enabled, the dual entry points return -2 without
+consuming any bit and without writing either buffer.  When dual output is
+enabled, the two buffers respectively receive exactly what two legacy decoders
+started from the same initial state would produce: `raw` matches a decoder that
+always has enhancement off, `enhanced` matches one that always has it on.  This
+holds for normal speech, null/no-transmission frames, DTX and single or
+consecutive packet loss, and across recovery from loss.
+
+Mixing with the single-output entry points
+------------------------------------------
+
+Once dual output is enabled, `speex_decode()` and `speex_decode_int()` may
+still be interleaved with the dual entry points.  They advance **both**
+rendering histories, so neither track is paused or desynchronised.
+`SPEEX_SET_ENH` then only selects which of the two tracks the single-output
+call returns; it does not change the fixed raw/enhanced roles of the dual
+outputs.  In dual-output mode the "raw" output is always un-enhanced and the
+"enhanced" output is always enhanced, regardless of `SPEEX_SET_ENH`.
+
+In-band messages
+----------------
+
+In-band requests (mode changes, VBR/DTX notifications, user-defined handlers)
+are handled once per packet, exactly as in the single-output decoder.  The
+callbacks are not run twice for the two rendering paths.
+
+State sharing and state separation
+----------------------------------
+
+Only the audio parameters are decoded once.  LSPs, the pitch/innovation
+codebooks, comfort-noise generation, the loss-concealment excitation and the
+random sequence each advance exactly once per frame.  The decoder does **not**
+run two full decoder instances over the same bit-stream and does not re-read
+the bit-stream for the second path.
+
+What is kept separately is the rendering state, because the two signals must
+evolve continuously and independently:
+
+  * the LPC synthesis filter memory (`iir_mem16`),
+  * the output high-pass filter memory,
+  * for WB/UWB, the QMF synthesis history and the high-band synthesis memory.
+
+These are never borrowed from one path by the other, and the first path's PCM
+is never copied into the second.  For WB/UWB, all layers still share the single
+decode: the low band is rendered by the one embedded narrowband decoder (again
+in both variants from a single parameter decode), and the single high-band
+parameter decode feeds both QMF/synthesis paths.
+
+Memory grows only with the mode and a bounded frame length; no already-delivered
+compressed prefix is retained.
+
+Compatibility
+-------------
+
+The existing decoders, their default output and the `speex_decode()` /
+`speex_decode_int()` results are unchanged whether or not dual output is
+available.  A non-success return from the dual entry points does not write
+either buffer, matching the legacy decoder's error behaviour.
+
+See `examples/dual_decode_demo.c` for a complete recorder-plus-monitor example.

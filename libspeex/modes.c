@@ -68,6 +68,7 @@
 #define nb_decoder_init NULL
 #define nb_decoder_destroy NULL
 #define nb_decode NULL
+#define nb_decode_dual NULL
 #define nb_decoder_ctl NULL
 
 #define noise_codebook_unquant NULL
@@ -373,6 +374,7 @@ EXPORT const SpeexMode speex_nb_mode = {
    nb_decoder_init,
    nb_decoder_destroy,
    nb_decode,
+   nb_decode_dual,
    nb_encoder_ctl,
    nb_decoder_ctl,
 };

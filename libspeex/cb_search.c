@@ -518,6 +518,14 @@ int   update_target
 #endif /* DISABLE_ENCODER */
 
 #ifndef DISABLE_DECODER
+/* Observation point used by the dual-output regression test (test build only). */
+#ifdef SPEEX_TEST_COUNTERS
+unsigned long speex_test_codebook_unfold_count = 0;
+#define CODEBOOK_UNFOLD_TICK() (speex_test_codebook_unfold_count++)
+#else
+#define CODEBOOK_UNFOLD_TICK() ((void)0)
+#endif
+
 void split_cb_shape_sign_unquant(
 spx_sig_t *exc,
 const void *par,                      /* non-overlapping codebook */
@@ -574,6 +582,7 @@ spx_uint32_t *seed
          exc[subvect_size*i+j]+=s*0.03125*shape_cb[ind[i]*subvect_size+j];
 #endif
    }
+   CODEBOOK_UNFOLD_TICK();
 }
 #endif /* DISABLE_DECODER */
 
@@ -619,5 +628,6 @@ spx_uint32_t *seed
    /* FIXME: This is bad, but I don't think the function ever gets called anyway */
    for (i=0;i<nsf;i++)
       exc[i]=SHL32(EXTEND32(speex_rand(1, seed)),SIG_SHIFT);
+   CODEBOOK_UNFOLD_TICK();
 }
 #endif /* DISABLE_DECODER */

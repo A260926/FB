@@ -75,9 +75,27 @@ int speex_encode_native(void *state, spx_word16_t *in, SpeexBits *bits)
    return (*((SpeexMode**)state))->enc(state, in, bits);
 }
 
+/* Calls the mode's dual-output decoder.  Returns -2 (and leaves the bit-stream
+   cursor and both outputs untouched) when state is not a decoder or when the
+   mode has no dual-output decoder.  The dual-output flag itself is enforced by
+   the decoder, before it reads any bit. */
+static int speex_decode_dual_impl(void *state, SpeexBits *bits, spx_word16_t *raw, spx_word16_t *enh)
+{
+   if (state == NULL || raw == NULL || enh == NULL)
+      return -2;
+   if ((*((SpeexMode**)state))->dec_dual == NULL)
+      return -2;
+   return (*((SpeexMode**)state))->dec_dual(state, bits, raw, enh);
+}
+
 int speex_decode_native(void *state, SpeexBits *bits, spx_word16_t *out)
 {
    return (*((SpeexMode**)state))->dec(state, bits, out);
+}
+
+int speex_decode_dual_native(void *state, SpeexBits *bits, spx_word16_t *raw, spx_word16_t *enh)
+{
+   return speex_decode_dual_impl(state, bits, raw, enh);
 }
 
 
@@ -131,6 +149,32 @@ EXPORT int speex_decode_int(void *state, SpeexBits *bits, spx_int16_t *out)
    return (mode)->dec(state, bits, out);
 }
 
+EXPORT int speex_decode_dual_int(void *state, SpeexBits *bits, spx_int16_t *raw, spx_int16_t *enhanced)
+{
+   return speex_decode_dual_impl(state, bits, raw, enhanced);
+}
+
+#ifndef DISABLE_FLOAT_API
+EXPORT int speex_decode_dual(void *state, SpeexBits *bits, float *raw, float *enhanced)
+{
+   int i, ret;
+   spx_int32_t N;
+   spx_int16_t short_raw[MAX_IN_SAMPLES];
+   spx_int16_t short_enh[MAX_IN_SAMPLES];
+   speex_decoder_ctl(state, SPEEX_GET_FRAME_SIZE, &N);
+   ret = speex_decode_dual_impl(state, bits, short_raw, short_enh);
+   if (ret == 0)
+   {
+      for (i=0;i<N;i++)
+      {
+         raw[i] = short_raw[i];
+         enhanced[i] = short_enh[i];
+      }
+   }
+   return ret;
+}
+#endif /* #ifndef DISABLE_FLOAT_API */
+
 #else
 
 EXPORT int speex_encode(void *state, float *in, SpeexBits *bits)
@@ -172,6 +216,40 @@ EXPORT int speex_decode_int(void *state, SpeexBits *bits, spx_int16_t *out)
             out[i] = -32768;
          else
             out[i] = (spx_int16_t)floor(.5+float_out[i]);
+      }
+   }
+   return ret;
+}
+
+EXPORT int speex_decode_dual(void *state, SpeexBits *bits, float *raw, float *enhanced)
+{
+   return speex_decode_dual_impl(state, bits, raw, enhanced);
+}
+
+EXPORT int speex_decode_dual_int(void *state, SpeexBits *bits, spx_int16_t *raw, spx_int16_t *enhanced)
+{
+   int i, ret;
+   spx_int32_t N;
+   float float_raw[MAX_IN_SAMPLES];
+   float float_enh[MAX_IN_SAMPLES];
+   speex_decoder_ctl(state, SPEEX_GET_FRAME_SIZE, &N);
+   ret = speex_decode_dual_impl(state, bits, float_raw, float_enh);
+   if (ret == 0)
+   {
+      for (i=0;i<N;i++)
+      {
+         if (float_raw[i]>32767.f)
+            raw[i] = 32767;
+         else if (float_raw[i]<-32768.f)
+            raw[i] = -32768;
+         else
+            raw[i] = (spx_int16_t)floor(.5+float_raw[i]);
+         if (float_enh[i]>32767.f)
+            enhanced[i] = 32767;
+         else if (float_enh[i]<-32768.f)
+            enhanced[i] = -32768;
+         else
+            enhanced[i] = (spx_int16_t)floor(.5+float_enh[i]);
       }
    }
    return ret;

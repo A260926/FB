@@ -153,6 +153,16 @@ typedef struct SpeexSBMode {
 
 int speex_encode_native(void *state, spx_word16_t *in, SpeexBits *bits);
 int speex_decode_native(void *state, SpeexBits *bits, spx_word16_t *out);
+int speex_decode_dual_native(void *state, SpeexBits *bits, spx_word16_t *raw, spx_word16_t *enh);
+
+/* Observation counters for the dual-output regression test (defined in
+   bits.c / cb_search.c when the library is built with SPEEX_TEST_COUNTERS).
+   They never affect decoded output. */
+#ifdef SPEEX_TEST_COUNTERS
+extern unsigned long speex_test_bits_unpack_count;
+extern unsigned long speex_test_bits_advance_count;
+extern unsigned long speex_test_codebook_unfold_count;
+#endif
 
 int nb_mode_query(const void *mode, int request, void *ptr);
 int wb_mode_query(const void *mode, int request, void *ptr);

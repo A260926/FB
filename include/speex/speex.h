@@ -160,6 +160,15 @@ extern "C" {
     how much damage we cause if we remove the frame */
 #define SPEEX_GET_ACTIVITY 47
 
+/** Set dual-output decoding (decoder only). The value is an int: 0 (default)
+    disables dual output, 1 enables it. It can only be changed before the first
+    successful decode or lost frame of the decoder; after that, setting the
+    current value succeeds and changing it fails. */
+#define SPEEX_SET_DUAL_OUTPUT 48
+/** Get dual-output decoding state (decoder only). Value is an int: 1 if dual
+    output is enabled, 0 otherwise. */
+#define SPEEX_GET_DUAL_OUTPUT 49
+
 
 /* Preserving compatibility:*/
 /** Equivalent to SPEEX_SET_ENH */
@@ -239,6 +248,9 @@ typedef void (*decoder_destroy_func)(void *st);
 /** Main decoding function */
 typedef int  (*decode_func)(void *state, SpeexBits *bits, void *out);
 
+/** Dual-output decoding function (raw and enhanced outputs) */
+typedef int  (*decode_dual_func)(void *state, SpeexBits *bits, void *out_raw, void *out_enhanced);
+
 /** Function for controlling the decoder options */
 typedef int (*decoder_ctl_func)(void *state, int request, void *ptr);
 
@@ -281,6 +293,9 @@ typedef struct SpeexMode {
 
    /** Pointer to frame decoding function */
    decode_func dec;
+
+   /** Pointer to dual-output frame decoding function (may be NULL) */
+   decode_dual_func dec_dual;
 
    /** ioctl-like requests for encoder */
    encoder_ctl_func enc_ctl;
@@ -370,6 +385,23 @@ int speex_decode(void *state, SpeexBits *bits, float *out);
  * @return return status (0 for no error, -1 for end of stream, -2 corrupt stream)
  */
 int speex_decode_int(void *state, SpeexBits *bits, spx_int16_t *out);
+
+/** Decodes one frame twice: once with the perceptual enhancement disabled
+ * ("raw") and once with it enabled ("enhanced"). Dual output must have been
+ * enabled on the decoder with SPEEX_SET_DUAL_OUTPUT. Both buffers are supplied
+ * by the caller and must not overlap. Values returned are the same as for
+ * speex_decode(): 0 for no error, -1 for end of stream, -2 corrupt stream or
+ * dual output not enabled.
+ *
+ * @param state Decoder state
+ * @param bits Bit-stream from which to decode the frame (NULL if the packet was lost)
+ * @param raw Where to write the decoded frame without enhancement
+ * @param enhanced Where to write the decoded frame with enhancement
+ */
+int speex_decode_dual(void *state, SpeexBits *bits, float *raw, float *enhanced);
+
+/** Integer version of speex_decode_dual(). */
+int speex_decode_dual_int(void *state, SpeexBits *bits, spx_int16_t *raw, spx_int16_t *enhanced);
 
 /** Used like the ioctl function to control the encoder parameters
  *

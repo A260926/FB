@@ -1086,6 +1086,8 @@ void *nb_decoder_init(const SpeexMode *m)
    st->submodeID=mode->defaultSubmode;
 
    st->lpc_enh_enabled=1;
+   st->dual_output=0;
+   st->dual_started=0;
 
    SPEEX_MEMSET(st->excBuf, 0, NB_FRAME_SIZE + NB_PITCH_END);
 
@@ -1147,6 +1149,19 @@ int nb_decoder_ctl(void *state, int request, void *ptr)
    case SPEEX_GET_ENH:
       *((spx_int32_t*)ptr) = st->lpc_enh_enabled;
       break;
+   case SPEEX_SET_DUAL_OUTPUT:
+      {
+         spx_int32_t val = *((spx_int32_t*)ptr);
+         if (val != 0 && val != 1)
+            return -1;
+         if (st->dual_started && (val != 0) != (st->dual_output != 0))
+            return -1;
+         st->dual_output = (val != 0);
+      }
+      break;
+   case SPEEX_GET_DUAL_OUTPUT:
+      *((spx_int32_t*)ptr) = st->dual_output;
+      break;
    case SPEEX_GET_FRAME_SIZE:
       (*(spx_int32_t*)ptr) = NB_FRAME_SIZE;
       break;
@@ -1183,6 +1198,11 @@ int nb_decoder_ctl(void *state, int request, void *ptr)
          int i;
          for (i=0;i<NB_ORDER;i++)
             st->mem_sp[i]=0;
+         if (st->dual_output)
+         {
+            for (i=0;i<NB_ORDER;i++)
+               st->mem_sp_alt[i]=0;
+         }
          for (i=0;i<NB_FRAME_SIZE + NB_PITCH_END + 1;i++)
             st->excBuf[i]=0;
       }
@@ -1312,6 +1332,9 @@ static void nb_decode_lost(DecState *st, spx_word16_t *out, char *stack)
             speex_rand(noise_gain, &st->seed);
    }
 
+   /* The raw rendering path uses the original nb_decode_lost() behaviour; the
+      dual-output caller re-runs the synthesis on the same excitation and LPCs
+      with the enhanced path's own filter memory. */
    bw_lpc(QCONST16(.98,15), st->interp_qlpc, st->interp_qlpc, NB_ORDER);
    iir_mem16(&st->exc[-NB_SUBFRAME_SIZE], st->interp_qlpc, out, NB_FRAME_SIZE,
              NB_ORDER, st->mem_sp, stack);
@@ -1327,9 +1350,59 @@ static void nb_decode_lost(DecState *st, spx_word16_t *out, char *stack)
 /* Just so we don't need to carry the complete wideband mode information */
 static const int wb_skip_table[8] = {0, 36, 112, 192, 352, 0, 0, 0};
 
+static int nb_decode_impl(DecState *st, SpeexBits *bits, spx_word16_t *out, spx_word16_t *out_enh, int render_dual);
+
 int nb_decode(void *state, SpeexBits *bits, void *vout)
 {
-   DecState *st;
+   DecState *st = (DecState*)state;
+   spx_word16_t *out = (spx_word16_t*)vout;
+   int ret;
+   if (!st->dual_output)
+      return nb_decode_impl(st, bits, out, NULL, 0);
+   else
+   {
+      /* Dual output is enabled: the legacy single-output entry point must
+         still advance both rendering histories.  SPEEX_SET_ENH selects which
+         one is returned. */
+      spx_word16_t raw[NB_FRAME_SIZE];
+      spx_word16_t enh[NB_FRAME_SIZE];
+      ret = nb_decode_impl(st, bits, raw, enh, 1);
+      if (ret == 0)
+         SPEEX_COPY(out, st->lpc_enh_enabled ? enh : raw, NB_FRAME_SIZE);
+      return ret;
+   }
+}
+
+int nb_decode_dual(void *state, SpeexBits *bits, void *vout, void *vout_enh)
+{
+   DecState *st = (DecState*)state;
+   spx_word16_t *out = (spx_word16_t*)vout;
+   spx_word16_t *out_enh = (spx_word16_t*)vout_enh;
+   spx_word16_t raw[NB_FRAME_SIZE];
+   spx_word16_t enh[NB_FRAME_SIZE];
+   int ret;
+
+   /* Not enabled: fail before reading any bit or touching any output. */
+   if (!st->dual_output)
+      return -2;
+
+   /* Decode into scratch, so a non-success return never writes the caller's
+      buffers (matching the legacy decoder's error behaviour). */
+   ret = nb_decode_impl(st, bits, raw, enh, 1);
+   if (ret == 0)
+   {
+      SPEEX_COPY(out, raw, NB_FRAME_SIZE);
+      SPEEX_COPY(out_enh, enh, NB_FRAME_SIZE);
+      st->dual_started = 1;
+   }
+   return ret;
+}
+
+/* Decodes one frame.  When render_dual is non-zero both rendering paths are
+   produced (out is the un-enhanced path, out_enh the enhanced path);
+   otherwise only out is written, using the legacy enhancement flag. */
+static int nb_decode_impl(DecState *st, SpeexBits *bits, spx_word16_t *out, spx_word16_t *out_enh, int render_dual)
+{
    int i, sub;
    int pitch;
    spx_word16_t pitch_gain[3];
@@ -1346,11 +1419,8 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
    VARDECL(spx_coef_t *ak);
    VARDECL(spx_lsp_t *qlsp);
    spx_word16_t pitch_average=0;
-
-   spx_word16_t *out = (spx_word16_t*)vout;
    VARDECL(spx_lsp_t *interp_qlsp);
 
-   st=(DecState*)state;
    stack=st->stack;
 
    st->exc = st->excBuf + 2*NB_PITCH_END + NB_SUBFRAME_SIZE + 6;
@@ -1365,6 +1435,21 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
       if (!bits)
       {
          nb_decode_lost(st, out, stack);
+         st->dual_started = 1;
+         if (render_dual)
+         {
+            /* The enhanced decoder takes the very same PLC excitation and
+               (already bandwidth-expanded) LPCs, only its own filter memory
+               differs.  Both buffers are scratch: the caller's outputs are
+               only written once the frame has been decoded successfully. */
+            SPEEX_COPY(out_enh, out, NB_FRAME_SIZE);
+            iir_mem16(&st->exc[-NB_SUBFRAME_SIZE], st->interp_qlpc, out_enh,
+                      NB_FRAME_SIZE, NB_ORDER, st->mem_sp_alt, stack);
+            /* Note: the legacy lost-frame path applies the high-pass filter
+               unconditionally. */
+            highpass(out_enh, out_enh, NB_FRAME_SIZE,
+                     HIGHPASS_NARROWBAND|HIGHPASS_OUTPUT, st->mem_hp_alt);
+         }
          return 0;
       }
 
@@ -1424,12 +1509,12 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
             return -1;
          } else if (m==14) /* Speex in-band request */
          {
-            int ret = speex_inband_handler(bits, st->speex_callbacks, state);
+            int ret = speex_inband_handler(bits, st->speex_callbacks, (void*)st);
             if (ret)
                return ret;
          } else if (m==13) /* User in-band request */
          {
-            int ret = st->user_callback.func(bits, state, st->user_callback.data);
+            int ret = st->user_callback.func(bits, (void*)st, st->user_callback.data);
             if (ret)
                return ret;
          } else if (m>8) /* Invalid mode */
@@ -1468,6 +1553,12 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
 
       /* Final signal synthesis from excitation */
       iir_mem16(st->exc, lpc, out, NB_FRAME_SIZE, NB_ORDER, st->mem_sp, stack);
+      if (render_dual)
+      {
+         /* Same excitation and LPCs for the other path, its own memories. */
+         SPEEX_COPY(out_enh, st->exc, NB_FRAME_SIZE);
+         iir_mem16(out_enh, lpc, out_enh, NB_FRAME_SIZE, NB_ORDER, st->mem_sp_alt, stack);
+      }
 
       /* Normally this is written to later but since this is returning early,
          avoid reading uninitialized memory in caller */
@@ -1475,6 +1566,7 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
          SPEEX_MEMSET(st->innov_save, 0, NB_NB_SUBFRAMES*NB_SUBFRAME_SIZE);
 
       st->count_lost=0;
+      st->dual_started = 1;
       return 0;
    }
 
@@ -1497,6 +1589,13 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
 #endif
       for (i=0;i<NB_ORDER;i++)
          st->mem_sp[i] = MULT16_32_Q15(fact,st->mem_sp[i]);
+      if (render_dual)
+      {
+         /* The enhanced path's independent synthesis memory receives the same
+            post-loss damping. */
+         for (i=0;i<NB_ORDER;i++)
+            st->mem_sp_alt[i] = MULT16_32_Q15(fact,st->mem_sp_alt[i]);
+      }
    }
 
 
@@ -1717,7 +1816,23 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
 
    ALLOC(interp_qlsp, NB_ORDER, spx_lsp_t);
 
-   if (st->lpc_enh_enabled && SUBMODE(comb_gain)>0 && !st->count_lost)
+   /* The enhanced decoding path uses the very same decoded excitation (the
+      adaptive codebook recursion is shared); only the final comb filter and
+      the LPC/high-pass memories differ.  In dual-output mode the raw path is
+      always un-enhanced and the enhanced path always enhanced, independently
+      of SPEEX_SET_ENH (which then only selects the single-output path). */
+   if (render_dual)
+   {
+      SPEEX_COPY(out, &st->exc[-NB_SUBFRAME_SIZE], NB_FRAME_SIZE);
+      if (SUBMODE(comb_gain)>0 && !st->count_lost)
+      {
+         multicomb(st->exc-NB_SUBFRAME_SIZE, out_enh, st->interp_qlpc, NB_ORDER, 2*NB_SUBFRAME_SIZE, best_pitch, 40, SUBMODE(comb_gain), stack);
+         multicomb(st->exc+NB_SUBFRAME_SIZE, out_enh+2*NB_SUBFRAME_SIZE, st->interp_qlpc, NB_ORDER, 2*NB_SUBFRAME_SIZE, best_pitch, 40, SUBMODE(comb_gain), stack);
+      } else {
+         SPEEX_COPY(out_enh, &st->exc[-NB_SUBFRAME_SIZE], NB_FRAME_SIZE);
+      }
+   }
+   else if (st->lpc_enh_enabled && SUBMODE(comb_gain)>0 && !st->count_lost)
    {
       multicomb(st->exc-NB_SUBFRAME_SIZE, out, st->interp_qlpc, NB_ORDER, 2*NB_SUBFRAME_SIZE, best_pitch, 40, SUBMODE(comb_gain), stack);
       multicomb(st->exc+NB_SUBFRAME_SIZE, out+2*NB_SUBFRAME_SIZE, st->interp_qlpc, NB_ORDER, 2*NB_SUBFRAME_SIZE, best_pitch, 40, SUBMODE(comb_gain), stack);
@@ -1746,6 +1861,11 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
       {
          st->exc[i] = MULT16_16_Q14(gain, st->exc[i]);
          out[i]=st->exc[i-NB_SUBFRAME_SIZE];
+      }
+      if (render_dual)
+      {
+         for (i=0;i<NB_FRAME_SIZE;i++)
+            out_enh[i]=st->exc[i-NB_SUBFRAME_SIZE];
       }
    }
 
@@ -1779,14 +1899,20 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
 
       iir_mem16(sp, st->interp_qlpc, sp, NB_SUBFRAME_SIZE, NB_ORDER,
                 st->mem_sp, stack);
-
+      if (render_dual)
+         iir_mem16(out_enh+offset, st->interp_qlpc, out_enh+offset, NB_SUBFRAME_SIZE, NB_ORDER,
+                   st->mem_sp_alt, stack);
       for (i=0;i<NB_ORDER;i++)
          st->interp_qlpc[i] = ak[i];
 
    }
 
    if (st->highpass_enabled)
+   {
       highpass(out, out, NB_FRAME_SIZE, (st->isWideband?HIGHPASS_WIDEBAND:HIGHPASS_NARROWBAND)|HIGHPASS_OUTPUT, st->mem_hp);
+      if (render_dual)
+         highpass(out_enh, out_enh, NB_FRAME_SIZE, (st->isWideband?HIGHPASS_WIDEBAND:HIGHPASS_NARROWBAND)|HIGHPASS_OUTPUT, st->mem_hp_alt);
+   }
    /*for (i=0;i<NB_FRAME_SIZE;i++)
      printf ("%d\n", (int)st->frame[i]);*/
 
@@ -1817,6 +1943,7 @@ int nb_decode(void *state, SpeexBits *bits, void *vout)
 
    st->last_ol_gain = ol_gain;
 
+   st->dual_started = 1;
    return 0;
 }
 #endif /* DISABLE_DECODER */

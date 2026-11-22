@@ -140,6 +140,14 @@ typedef struct DecState {
    spx_word32_t pi_gain[NB_NB_SUBFRAMES];       /**< Gain of LPC filter at theta=pi (fe/2) */
    spx_word16_t *innov_save;    /** If non-NULL, innovation is copied here */
 
+   /* Optional dual-output decoding (see SPEEX_SET_DUAL_OUTPUT).  The primary
+      mem_sp/mem_hp are used by the un-enhanced ("raw") rendering path; the
+      *_alt memories are used by the enhanced rendering path. */
+   int    dual_output;          /**< 1 when dual-output decoding is enabled */
+   int    dual_started;         /**< 1 once a frame has been decoded/lost */
+   spx_mem_t mem_sp_alt[NB_ORDER]; /**< Synthesis memory for enhanced path */
+   spx_mem_t mem_hp_alt[2];     /**< High-pass memory for enhanced path */
+
    spx_word16_t level;
    spx_word16_t max_level;
    spx_word16_t min_level;
@@ -188,6 +196,10 @@ void nb_decoder_destroy(void *state);
 
 /** Decodes one frame*/
 int nb_decode(void *state, SpeexBits *bits, void *out);
+
+/** Decodes one frame, rendering both the un-enhanced ("raw") and the
+    enhanced outputs from a single pass over the audio parameters. */
+int nb_decode_dual(void *state, SpeexBits *bits, void *out_raw, void *out_enh);
 
 /** ioctl-like function for controlling a narrowband encoder */
 int nb_encoder_ctl(void *state, int request, void *ptr);

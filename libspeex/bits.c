@@ -40,6 +40,19 @@
 #include "arch.h"
 #include "os_support.h"
 
+/* Observation points used by the dual-output regression test.  They are only
+   compiled into the test build (SPEEX_TEST_COUNTERS) and never alter any
+   decoding result. */
+#ifdef SPEEX_TEST_COUNTERS
+unsigned long speex_test_bits_unpack_count = 0;
+unsigned long speex_test_bits_advance_count = 0;
+#define BITS_UNPACK_TICK() (speex_test_bits_unpack_count++)
+#define BITS_ADVANCE_TICK() (speex_test_bits_advance_count++)
+#else
+#define BITS_UNPACK_TICK() ((void)0)
+#define BITS_ADVANCE_TICK() ((void)0)
+#endif
+
 /* Maximum size of the bit-stream (for fixed-size allocation) */
 #ifndef MAX_CHARS_PER_FRAME
 #define MAX_CHARS_PER_FRAME (2000/BYTES_PER_CHAR)
@@ -283,6 +296,7 @@ EXPORT int speex_bits_unpack_signed(SpeexBits *bits, int nbBits)
 EXPORT unsigned int speex_bits_unpack_unsigned(SpeexBits *bits, int nbBits)
 {
    unsigned int d=0;
+   BITS_UNPACK_TICK();
    if ((bits->charPtr<<LOG2_BITS_PER_CHAR)+bits->bitPtr+nbBits>bits->nbBits)
       bits->overflow=1;
    if (bits->overflow)
@@ -342,6 +356,7 @@ EXPORT int speex_bits_peek(SpeexBits *bits)
 
 EXPORT void speex_bits_advance(SpeexBits *bits, int n)
 {
+    BITS_ADVANCE_TICK();
     if (((bits->charPtr<<LOG2_BITS_PER_CHAR)+bits->bitPtr+n>bits->nbBits) || bits->overflow){
       bits->overflow=1;
       return;

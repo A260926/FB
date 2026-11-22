@@ -1017,6 +1017,13 @@ void *sb_decoder_init(const SpeexMode *m)
    st->lpc_enh_enabled=0;
    st->seed = 1000;
 
+   st->dual_output = 0;
+   st->dual_started = 0;
+   st->mem_sp_alt = (spx_mem_t*)speex_alloc((2*st->lpcSize)*sizeof(spx_mem_t));
+   st->excBuf_alt = (spx_word16_t*)speex_alloc((st->subframeSize)*sizeof(spx_word16_t));
+   st->g0_mem_alt = (spx_word16_t*)speex_alloc((QMF_ORDER)*sizeof(spx_word16_t));
+   st->g1_mem_alt = (spx_word16_t*)speex_alloc((QMF_ORDER)*sizeof(spx_word16_t));
+
 #ifdef ENABLE_VALGRIND
    VALGRIND_MAKE_MEM_DEFINED(st, (st->stack-(char*)st));
 #endif
@@ -1040,6 +1047,10 @@ void sb_decoder_destroy(void *state)
    speex_free(st->pi_gain);
    speex_free(st->exc_rms);
    speex_free(st->mem_sp);
+   speex_free(st->mem_sp_alt);
+   speex_free(st->excBuf_alt);
+   speex_free(st->g0_mem_alt);
+   speex_free(st->g1_mem_alt);
 
    speex_free(state);
 }
@@ -1070,6 +1081,21 @@ int sb_decoder_ctl(void *state, int request, void *ptr)
       break;
    case SPEEX_GET_ENH:
       *((spx_int32_t*)ptr) = st->lpc_enh_enabled;
+      break;
+   case SPEEX_SET_DUAL_OUTPUT:
+      {
+         spx_int32_t val = *((spx_int32_t*)ptr);
+         if (val != 0 && val != 1)
+            return -1;
+         if (st->dual_started && (val != 0) != (st->dual_output != 0))
+            return -1;
+         st->dual_output = (val != 0);
+         /* Keep the low-band flag in sync with the high-band one. */
+         speex_decoder_ctl(st->st_low, SPEEX_SET_DUAL_OUTPUT, ptr);
+      }
+      break;
+   case SPEEX_GET_DUAL_OUTPUT:
+      *((spx_int32_t*)ptr) = st->dual_output;
       break;
    case SPEEX_SET_MODE:
    case SPEEX_SET_QUALITY:
@@ -1117,6 +1143,13 @@ int sb_decoder_ctl(void *state, int request, void *ptr)
          for (i=0;i<QMF_ORDER;i++)
             st->g0_mem[i]=st->g1_mem[i]=0;
          st->last_ener=0;
+         if (st->dual_output)
+         {
+            for (i=0;i<2*st->lpcSize;i++)
+               st->mem_sp_alt[i]=0;
+            for (i=0;i<QMF_ORDER;i++)
+               st->g0_mem_alt[i]=st->g1_mem_alt[i]=0;
+         }
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
@@ -1212,10 +1245,104 @@ static void sb_decode_lost(SBDecState *st, spx_word16_t *out, int dtx, char *sta
    return;
 }
 
+/* Render both outputs of a lost frame.  The band signals and the high-band
+   excitation are produced once; each rendering path then keeps its own
+   high-band LPC and QMF memories. */
+static void sb_decode_lost_dual(SBDecState *st, spx_word16_t *out, spx_word16_t *out_alt, int dtx, char *stack)
+{
+   int i;
+   int saved_modeid=0;
+   VARDECL(spx_word16_t *exc);
+
+   if (dtx)
+   {
+      saved_modeid=st->submodeID;
+      st->submodeID=1;
+   } else {
+      bw_lpc(QCONST16(0.99f,15), st->interp_qlpc, st->interp_qlpc, st->lpcSize);
+   }
+
+   st->first=1;
+
+   ALLOC(exc, st->frame_size, spx_word16_t);
+   if (!dtx)
+      st->last_ener =  MULT16_16_Q15(QCONST16(.9f,15),st->last_ener);
+   for (i=0;i<st->frame_size;i++)
+      exc[i] = speex_rand(st->last_ener, &st->seed);
+
+   /* Both low-band signals (raw in out[0..frame_size) and enhanced in
+      out_alt[0..frame_size)) were already produced by the embedded decoder.
+      The high-band excitation is shared; only the high-band LPC and QMF
+      memories are path-specific. */
+   SPEEX_COPY(out+st->frame_size, exc, st->frame_size);
+   iir_mem16(out+st->frame_size, st->interp_qlpc, out+st->frame_size, st->frame_size, st->lpcSize, st->mem_sp, stack);
+   qmf_synth(out, out+st->frame_size, h0, out, st->full_frame_size, QMF_ORDER, st->g0_mem, st->g1_mem, stack);
+
+   SPEEX_COPY(out_alt+st->frame_size, exc, st->frame_size);
+   iir_mem16(out_alt+st->frame_size, st->interp_qlpc, out_alt+st->frame_size,
+             st->frame_size, st->lpcSize, st->mem_sp_alt, stack);
+   qmf_synth(out_alt, out_alt+st->frame_size, h0, out_alt, st->full_frame_size,
+             QMF_ORDER, st->g0_mem_alt, st->g1_mem_alt, stack);
+
+   if (dtx)
+   {
+      st->submodeID=saved_modeid;
+   }
+}
+
+static int sb_decode_impl(SBDecState *st, SpeexBits *bits, spx_word16_t *out, spx_word16_t *out_enh, int render_dual);
+
 int sb_decode(void *state, SpeexBits *bits, void *vout)
 {
+   SBDecState *st = (SBDecState*)state;
+   spx_word16_t *out = (spx_word16_t*)vout;
+   int ret;
+
+   if (!st->dual_output)
+      return sb_decode_impl(st, bits, out, NULL, 0);
+   else
+   {
+      /* Dual output is enabled: the legacy entry point must advance both
+         rendering histories; SPEEX_SET_ENH selects the returned one. */
+      VARDECL(spx_word16_t *raw);
+      VARDECL(spx_word16_t *enh);
+      ALLOC(raw, st->full_frame_size, spx_word16_t);
+      ALLOC(enh, st->full_frame_size, spx_word16_t);
+      ret = sb_decode_impl(st, bits, raw, enh, 1);
+      if (ret == 0)
+         SPEEX_COPY(out, st->lpc_enh_enabled ? enh : raw, st->full_frame_size);
+      return ret;
+   }
+}
+
+int sb_decode_dual(void *state, SpeexBits *bits, void *vout, void *vout_enh)
+{
+   SBDecState *st = (SBDecState*)state;
+   spx_word16_t *out = (spx_word16_t*)vout;
+   spx_word16_t *out_enh = (spx_word16_t*)vout_enh;
+   VARDECL(spx_word16_t *raw);
+   VARDECL(spx_word16_t *enh);
+   int ret;
+
+   /* Not enabled: fail before reading any bit or touching any output. */
+   if (!st->dual_output)
+      return -2;
+
+   ALLOC(raw, st->full_frame_size, spx_word16_t);
+   ALLOC(enh, st->full_frame_size, spx_word16_t);
+   ret = sb_decode_impl(st, bits, raw, enh, 1);
+   if (ret == 0)
+   {
+      SPEEX_COPY(out, raw, st->full_frame_size);
+      SPEEX_COPY(out_enh, enh, st->full_frame_size);
+      st->dual_started = 1;
+   }
+   return ret;
+}
+
+static int sb_decode_impl(SBDecState *st, SpeexBits *bits, spx_word16_t *out, spx_word16_t *out_enh, int render_dual)
+{
    int i, sub;
-   SBDecState *st;
    int wideband;
    int ret;
    char *stack;
@@ -1226,18 +1353,34 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
    VARDECL(spx_lsp_t *interp_qlsp);
    spx_int32_t dtx;
    const SpeexSBMode *mode;
-   spx_word16_t *out = (spx_word16_t*)vout;
+   spx_word16_t *out_alt = NULL;
    spx_word16_t *low_innov_alias;
    spx_word32_t exc_ener_sum = 0;
 
-   st = (SBDecState*)state;
    stack=st->stack;
    mode = (const SpeexSBMode*)(st->mode->mode);
 
    low_innov_alias = out+st->frame_size;
    speex_decoder_ctl(st->st_low, SPEEX_SET_INNOVATION_SAVE, low_innov_alias);
-   /* Decode the low-band */
-   ret = speex_decode_native(st->st_low, bits, out);
+
+   if (render_dual)
+   {
+      /* Render both low-band outputs from the single embedded decode.  Each
+         path needs room for the embedded decoder's own innovation scratch in
+         the upper half of its frame. */
+      spx_word16_t *low_raw, *low_enh;
+      VARDECL(spx_word16_t *lowbuf);
+      ALLOC(lowbuf, 2*st->full_frame_size, spx_word16_t);
+      low_raw = lowbuf;
+      low_enh = lowbuf + st->full_frame_size;
+      ret = speex_decode_dual_native(st->st_low, bits, low_raw, low_enh);
+      /* Present the raw low band where the shared code expects it. */
+      SPEEX_COPY(out, low_raw, st->frame_size);
+      SPEEX_COPY(out_enh, low_enh, st->frame_size);
+   } else {
+      /* Decode the low-band */
+      ret = speex_decode_native(st->st_low, bits, out);
+   }
 
    speex_decoder_ctl(st->st_low, SPEEX_GET_DTX_STATUS, &dtx);
 
@@ -1249,7 +1392,10 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
 
    if (!bits)
    {
-      sb_decode_lost(st, out, dtx, stack);
+      if (render_dual)
+         sb_decode_lost_dual(st, out, out_enh, dtx, stack);
+      else
+         sb_decode_lost(st, out, dtx, stack);
       return 0;
    }
 
@@ -1286,7 +1432,10 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
 
       if (dtx)
       {
-         sb_decode_lost(st, out, 1, stack);
+         if (render_dual)
+            sb_decode_lost_dual(st, out, out_enh, 1, stack);
+         else
+            sb_decode_lost(st, out, 1, stack);
          return 0;
       }
 
@@ -1295,11 +1444,23 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
 
       st->first=1;
 
-      /* Final signal synthesis from excitation */
+      /* Low bands for both paths were already produced above.  The high-band
+         excitation is shared; the synthesis and QMF memories are per path. */
       iir_mem16(out+st->frame_size, st->interp_qlpc, out+st->frame_size, st->frame_size, st->lpcSize, st->mem_sp, stack);
+      if (render_dual)
+      {
+         for (i=0;i<st->frame_size;i++)
+            out_enh[st->frame_size+i]=VERY_SMALL;
+         iir_mem16(out_enh+st->frame_size, st->interp_qlpc, out_enh+st->frame_size, st->frame_size, st->lpcSize, st->mem_sp_alt, stack);
+      }
 
       qmf_synth(out, out+st->frame_size, h0, out, st->full_frame_size, QMF_ORDER, st->g0_mem, st->g1_mem, stack);
+      if (render_dual)
+      {
+         qmf_synth(out_enh, out_enh+st->frame_size, h0, out_enh, st->full_frame_size, QMF_ORDER, st->g0_mem_alt, st->g1_mem_alt, stack);
+      }
 
+      st->dual_started = 1;
       return 0;
 
    }
@@ -1320,6 +1481,10 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
    }
 
    ALLOC(ak, st->lpcSize, spx_coef_t);
+
+   /* The enhanced high band is rendered directly into out_enh, whose low half
+      already holds the enhanced low band produced above. */
+   out_alt = out_enh;
 
    for (sub=0;sub<st->nbSubframes;sub++)
    {
@@ -1421,10 +1586,24 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
             innov_save[2*i]=EXTRACT16(PSHR32(exc[i],SIG_SHIFT));
       }
 
+      /* The high-band synthesis is driven by the excitation stored for the
+         previous sub-frame; each rendering path keeps its own copy of that
+         history (they hold identical values but must evolve independently). */
       iir_mem16(st->excBuf, st->interp_qlpc, sp, st->subframeSize, st->lpcSize,
                st->mem_sp, stack);
+      if (render_dual)
+      {
+         /* Same high-band excitation and LPCs, separate cascade memory. */
+         iir_mem16(st->excBuf_alt, st->interp_qlpc, out_alt+st->frame_size+offset,
+                   st->subframeSize, st->lpcSize, st->mem_sp_alt, stack);
+      }
       for (i=0;i<st->subframeSize;i++)
-         st->excBuf[i]=EXTRACT16(PSHR32(exc[i],SIG_SHIFT));
+      {
+         spx_word16_t e = EXTRACT16(PSHR32(exc[i],SIG_SHIFT));
+         st->excBuf[i]=e;
+         if (render_dual)
+            st->excBuf_alt[i]=e;
+      }
       for (i=0;i<st->lpcSize;i++)
          st->interp_qlpc[i] = ak[i];
       st->exc_rms[sub] = compute_rms16(st->excBuf, st->subframeSize);
@@ -1433,10 +1612,13 @@ int sb_decode(void *state, SpeexBits *bits, void *vout)
    st->last_ener = spx_sqrt(exc_ener_sum);
 
    qmf_synth(out, out+st->frame_size, h0, out, st->full_frame_size, QMF_ORDER, st->g0_mem, st->g1_mem, stack);
+   if (render_dual)
+      qmf_synth(out_alt, out_alt+st->frame_size, h0, out_alt, st->full_frame_size, QMF_ORDER, st->g0_mem_alt, st->g1_mem_alt, stack);
    for (i=0;i<st->lpcSize;i++)
       st->old_qlsp[i] = qlsp[i];
 
    st->first=0;
+   st->dual_started = 1;
 
    return 0;
 }

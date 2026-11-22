@@ -71,6 +71,7 @@
 #define sb_decoder_init NULL
 #define sb_decoder_destroy NULL
 #define sb_decode NULL
+#define sb_decode_dual NULL
 #define sb_decoder_ctl NULL
 #endif /* DISABLE_DECODER */
 
@@ -234,6 +235,7 @@ EXPORT const SpeexMode speex_wb_mode = {
    sb_decoder_init,
    sb_decoder_destroy,
    sb_decode,
+   sb_decode_dual,
    sb_encoder_ctl,
    sb_decoder_ctl,
 };
@@ -304,6 +306,7 @@ EXPORT const SpeexMode speex_uwb_mode = {
    sb_decoder_init,
    sb_decoder_destroy,
    sb_decode,
+   sb_decode_dual,
    sb_encoder_ctl,
    sb_decoder_ctl,
 };
