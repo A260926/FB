@@ -142,6 +142,10 @@ typedef struct OggVorbis_File {
 
   ov_callbacks callbacks;
 
+  /* private rewind-window state (lib/rewind_cache.c); NULL unless
+     ov_rewind_enable() has armed the window */
+  void           *rewind_state;
+
 } OggVorbis_File;
 
 
@@ -196,6 +200,22 @@ extern int ov_crosslap(OggVorbis_File *vf1,OggVorbis_File *vf2);
 
 extern int ov_halfrate(OggVorbis_File *vf,int flag);
 extern int ov_halfrate_p(OggVorbis_File *vf);
+
+/* Rewind window for non-seekable (pipe/stream) sources.  The window
+   retains complete compressed packets within a byte budget and
+   reconstructs recent positions without touching the input read/seek/
+   tell callbacks.
+
+   ov_rewind_range() reports the half-open link-local frame interval
+   [*begin,*end) that can still be replayed exactly (frame 0 is the
+   first actual output frame of the current logical link).  It returns
+   OV_FALSE (with both outputs set to 0) before anything is
+   recoverable.  ov_pcm_rewind() succeeds only for a target inside
+   that interval. */
+extern int ov_rewind_enable(OggVorbis_File *vf,long max_bytes);
+extern int ov_rewind_range(OggVorbis_File *vf,ogg_int64_t *begin,
+                           ogg_int64_t *end);
+extern int ov_pcm_rewind(OggVorbis_File *vf,ogg_int64_t target);
 
 #ifdef __cplusplus
 }

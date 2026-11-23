@@ -24,6 +24,7 @@ set(VORBIS_HEADERS
     codec_internal.h
     backends.h
     bitrate.h
+    rewind_cache.h
 )
 
 set(VORBIS_SOURCES
@@ -51,6 +52,7 @@ set(VORBIS_SOURCES
 
 set(VORBISFILE_SOURCES
     vorbisfile.c
+    rewind_cache.c
 )
 
 set(VORBISENC_SOURCES

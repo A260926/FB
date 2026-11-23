@@ -28,6 +28,7 @@
 
 #include "os.h"
 #include "misc.h"
+#include "rewind_cache.h"
 
 /* A 'chained bitstream' is a Vorbis bitstream that contains more than
    one logical bitstream arranged end to end (the only form of Ogg
@@ -615,6 +616,89 @@ static int _make_decode_ready(OggVorbis_File *vf){
   return 0;
 }
 
+/* =================================================================
+ * Rewind window (non-seekable streams only).  The window holds
+ * complete compressed packets plus a linear PCM index; a replay
+ * restarts the existing decode machine and re-synthesises only the
+ * target packet and its overlap predecessor, never touching the input
+ * callbacks.  See lib/rewind_cache.c for the storage details.
+ * =================================================================*/
+
+static rewind_runtime *_rewind_rt(OggVorbis_File *vf){
+  return (rewind_runtime *)vf->rewind_state;
+}
+
+static int _rewind_pcmout(OggVorbis_File *vf){
+  int hs=vorbis_synthesis_halfrate_p(vf->vi);
+  return vorbis_synthesis_pcmout(&vf->vd,NULL)<<hs;
+}
+
+/* Decide how many of the 'want' samples currently available may be
+   handed out during a replay.  The restarted decoder cannot re-derive
+   the stream's EOS short-tail trim, so once the real delivered high
+   water mark is reached any further decoded output is padding.
+   Returns the number to deliver (clamped to the water mark), or -1 to
+   signal that the whole pending block is padding and must be
+   discarded.  Outside a replay it always returns 'want' unchanged, so
+   ordinary (including zero-length) requests keep their old behavior. */
+static long _rewind_take(OggVorbis_File *vf,long want){
+  rewind_runtime *rt=_rewind_rt(vf);
+  ogg_int64_t remain;
+  if(!rt || !rt->armed || !rt->replay)return want;
+  remain=rt->watermark-vf->pcm_offset;
+  if(remain<=0)return -1;
+  return want<remain?want:(long)remain;
+}
+
+/* bookkeeping for a packet that has just been synthesised during
+   normal forward decoding.  Replay packets are accounted by the
+   replay pump instead. */
+static void _rewind_note_packet(OggVorbis_File *vf,ogg_packet *op){
+  rewind_runtime *rt=_rewind_rt(vf);
+  long produced;
+  ogg_int64_t begin;
+  if(!rt || !rt->armed || rt->replay)return;
+  produced=_rewind_pcmout(vf);
+  /* link_pos counts delivered frames from the first actual output
+     frame of the current logical link, which is exactly the required
+     window coordinate; it is re-based on a chain change or hole. */
+  begin=rt->link_pos;
+  /* packets re-encountered while catching up with the old high water
+     mark are already in the window; only retain genuinely new input */
+  if(begin>=rt->watermark)
+    rewind_cache_push(rt->cache,op,begin,begin+produced);
+  rt->link_pos+=produced;
+  if(rt->link_pos>rt->watermark)rt->watermark=rt->link_pos;
+}
+
+/* synthesise one cached packet through the shared decode workspace */
+static int _rewind_synth(OggVorbis_File *vf,ogg_packet *op,int is_replay){
+  rewind_runtime *rt=_rewind_rt(vf);
+  if(vorbis_synthesis(&vf->vb,op))return OV_EBADPACKET;
+  vorbis_synthesis_blockin(&vf->vd,&vf->vb);
+  if(rt){
+    rt->synth_total++;
+    if(is_replay)rt->synth_replay++;
+  }
+  return 0;
+}
+/* feed queued cached packets to the decoder until PCM is available or
+   the replay queue is exhausted.  Returns 1 (PCM ready), 0 (replay
+   finished, resume normal fetching) or a negative OV error. */
+static int _rewind_pump(OggVorbis_File *vf){
+  rewind_runtime *rt=_rewind_rt(vf);
+  if(!rt || !rt->replay)return 0;
+  while(rt->qhead<rt->qn){
+    ogg_packet *op=&rt->q[rt->qhead++];
+    int ret=_rewind_synth(vf,op,1);
+    if(ret)return ret;
+    if(_rewind_pcmout(vf)>0)return 1;
+  }
+  /* caught up with the unpacked high water mark */
+  rt->replay=0;
+  return 0;
+}
+
 static int _open_seekable2(OggVorbis_File *vf){
   ogg_int64_t dataoffset=vf->dataoffsets[0],end,endgran=-1;
   int endserial=vf->os.serialno;
@@ -681,6 +765,20 @@ static int _fetch_and_process_packet(OggVorbis_File *vf,
                                      int spanp){
   ogg_page og;
 
+  /* rewind replay: serve cached packets without pulling anything from
+     the input callbacks.  Preroll was already consumed eagerly by
+     ov_pcm_rewind(), so any PCM present here is deliverable. */
+  if(vf->rewind_state){
+    rewind_runtime *rt0=_rewind_rt(vf);
+    if(rt0 && rt0->armed && rt0->replay &&
+       vorbis_synthesis_pcmout(&vf->vd,NULL)==0){
+      int rret=_rewind_pump(vf);
+      if(rret<0)return rret;
+      if(rret>0)return 1;       /* deliverable replay PCM is waiting */
+      /* replay queue exhausted; fall through to normal fetching */
+    }
+  }
+
   /* handle one packet.  Try to fetch it from current stream state */
   /* extract packets from page */
   while(1){
@@ -702,7 +800,16 @@ static int _fetch_and_process_packet(OggVorbis_File *vf,
         ogg_int64_t granulepos;
 
         op_in=NULL;
-        if(result==-1)return(OV_HOLE); /* hole in the data. */
+        if(result==-1){
+          /* hole in the data.  The window cannot span the gap: the
+             retained tail's overlap predecessor is missing, so drop
+             the window while preserving the ordinary OV_HOLE path. */
+          if(vf->rewind_state){
+            rewind_runtime *rth=_rewind_rt(vf);
+            if(rth && rth->armed)rewind_cache_discontinuity(rth->cache);
+          }
+          return(OV_HOLE);
+        }
         if(result>0){
           /* got a packet.  process it */
           granulepos=op_ptr->granulepos;
@@ -724,6 +831,11 @@ static int _fetch_and_process_packet(OggVorbis_File *vf,
               vorbis_synthesis_blockin(&vf->vd,&vf->vb);
               vf->samptrack+=(vorbis_synthesis_pcmout(&vf->vd,NULL)<<hs);
               vf->bittrack+=op_ptr->bytes*8;
+              if(vf->rewind_state){
+                rewind_runtime *rtn=_rewind_rt(vf);
+                if(rtn && rtn->armed)rtn->synth_total++;
+              }
+              _rewind_note_packet(vf,op_ptr);
             }
 
             /* update the pcm offset. */
@@ -802,6 +914,13 @@ static int _fetch_and_process_packet(OggVorbis_File *vf,
               if(!vf->seekable){
                 vorbis_info_clear(vf->vi);
                 vorbis_comment_clear(vf->vc);
+                /* a new logical link invalidates the old window; the
+                   new segment is indexed from output frame zero with
+                   its own setup */
+                if(vf->rewind_state){
+                  rewind_runtime *rtl=_rewind_rt(vf);
+                  if(rtl && rtl->armed)rewind_runtime_reset_link(rtl);
+                }
               }
               break;
 
@@ -973,6 +1092,7 @@ int ov_clear(OggVorbis_File *vf){
     if(vf->pcmlengths)_ogg_free(vf->pcmlengths);
     if(vf->serialnos)_ogg_free(vf->serialnos);
     if(vf->offsets)_ogg_free(vf->offsets);
+    if(vf->rewind_state)rewind_runtime_destroy(_rewind_rt(vf));
     ogg_sync_clear(&vf->oy);
     if(vf->datasource && vf->callbacks.close_func)
       (vf->callbacks.close_func)(vf->datasource);
@@ -1027,6 +1147,9 @@ int ov_fopen(const char *path,OggVorbis_File *vf){
 int ov_halfrate(OggVorbis_File *vf,int flag){
   int i;
   if(vf->vi==NULL)return OV_EINVAL;
+  /* the rewind window cannot survive a half-rate switch; refuse while
+     armed and leave the state untouched */
+  if(vf->rewind_state && _rewind_rt(vf)->armed)return OV_EINVAL;
   if(vf->ready_state>STREAMSET){
     /* clear out stream state; dumping the decode machine is needed to
        reinit the MDCT lookups. */
@@ -1052,6 +1175,133 @@ int ov_halfrate(OggVorbis_File *vf,int flag){
 int ov_halfrate_p(OggVorbis_File *vf){
   if(vf->vi==NULL)return OV_EINVAL;
   return vorbis_synthesis_halfrate_p(vf->vi);
+}
+
+/* =================================================================
+ * Rewind window public API (non-seekable streams)
+ * =================================================================*/
+
+/* Arm the compressed-packet rewind window.  Only valid on a
+   non-seekable, successfully opened stream before any PCM has been
+   delivered, and only once.  The payload budget is bounded; an
+   unsuitable request returns OV_EINVAL without touching the instance.
+*/
+int ov_rewind_enable(OggVorbis_File *vf,long max_bytes){
+  rewind_runtime *rt;
+  if(vf==NULL)return OV_EINVAL;
+  if(vf->ready_state!=STREAMSET)return OV_EINVAL; /* not open, or PCM
+                                                      delivery began */
+  if(vf->seekable)return OV_EINVAL;
+  if(vf->rewind_state)return OV_EINVAL;            /* one shot */
+  if(max_bytes<REWIND_MIN_BYTES ||
+     max_bytes>REWIND_MAX_BYTES)return OV_EINVAL;
+  if(vorbis_synthesis_halfrate_p(vf->vi))return OV_EINVAL;
+
+  rt=rewind_runtime_create(max_bytes);
+  if(!rt)return OV_EFAULT;
+  rt->armed=1;
+  vf->rewind_state=rt;
+  return 0;
+}
+
+/* Link-local frames (origin: the first actual output frame of the
+   current logical link) that can still be replayed exactly.  Reports
+   the half-open interval [begin,end); OV_FALSE when no position is
+   recoverable yet.  Querying never advances the input. */
+int ov_rewind_range(OggVorbis_File *vf,ogg_int64_t *begin,ogg_int64_t *end){
+  rewind_runtime *rt;
+  if(begin)*begin=0;
+  if(end)*end=0;
+  if(vf==NULL)return OV_EINVAL;
+  rt=_rewind_rt(vf);
+  if(!rt || !rt->armed)return OV_ENOSEEK;
+  return rewind_cache_range(rt->cache,begin,end);
+}
+
+/* Rebuild playback at target, a link-local frame inside the current
+   ov_rewind_range() interval.  Only cached packets are re-synthesised
+   (the target packet plus its overlap predecessor); the input
+   callbacks are never invoked. */
+int ov_pcm_rewind(OggVorbis_File *vf,ogg_int64_t target){
+  rewind_runtime *rt;
+  const rewind_entry *first_e;
+  int idx,start,cnt,k;
+
+  if(vf==NULL)return OV_EINVAL;
+  rt=_rewind_rt(vf);
+  if(!rt || !rt->armed)return OV_ENOSEEK;
+  if(target<0)return OV_EINVAL;
+
+  idx=rewind_cache_locate(rt->cache,target);
+  if(idx<0)return OV_EINVAL; /* outside the recoverable window;
+                                position untouched */
+
+  cnt=rewind_cache_count(rt->cache);
+  /* the packet before the target is needed to rebuild the real
+     long/short window lapping, unless the target packet is itself the
+     link's first audio packet */
+  start=(idx==0)?0:idx-1;
+  first_e=rewind_cache_get(rt->cache,start);
+  if(!first_e)return OV_EFAULT;
+
+  if(rt->qcap<cnt-start){
+    int ncap=cnt-start;
+    ogg_packet *nq=_ogg_realloc(rt->q,ncap*sizeof(*nq));
+    if(!nq)return OV_EFAULT;
+    rt->q=nq;
+    rt->qcap=ncap;
+  }
+  rt->qn=0;
+  for(k=start;k<cnt;k++){
+    const rewind_entry *e=rewind_cache_get(rt->cache,k);
+    ogg_packet *op=&rt->q[rt->qn++];
+    if(!e)return OV_EFAULT;
+    op->packet=e->packet;
+    op->bytes=e->bytes;
+    op->b_o_s=0;
+    op->e_o_s=e->e_o_s;
+    op->granulepos=e->granulepos;
+    op->packetno=e->packetno;
+  }
+  rt->qhead=0;
+
+  /* restart the existing decode machine exactly as a fresh start;
+     the cached predecessor re-establishes overlap state.  The packet
+     queue in vf->os keeps the not-yet-fetched input pages intact. */
+  vorbis_synthesis_restart(&vf->vd);
+
+  /* After a restart the first synthesised block exposes no PCM (its
+     first half has no predecessor); the first samples the replay can
+     deliver therefore belong to the next packet, whose span begins at
+     first_e->end.  Eagerly consume the preroll now so that
+     ov_pcm_tell() reports the target immediately and the filter is
+     never invoked on non-delivered samples.  Only cached packets are
+     touched; the input callbacks are not called. */
+  vf->pcm_offset=first_e->end;
+  rt->replay=1;
+  {
+    ogg_int64_t skip=target-first_e->end;
+    while(skip>0 || vorbis_synthesis_pcmout(&vf->vd,NULL)==0){
+      long avail=vorbis_synthesis_pcmout(&vf->vd,NULL);
+      if(avail>0){
+        long n=(avail<skip)?avail:(long)skip;
+        vorbis_synthesis_read(&vf->vd,(int)n);
+        vf->pcm_offset+=n;
+        skip-=n;
+        if(skip==0)break;
+      }else{
+        int pr=_rewind_pump(vf);
+        if(pr<0)return pr;
+        if(pr==0){
+          /* the cached window ended exactly at (or, defensively,
+             before) the target */
+          if(skip>0)return OV_EINVAL;
+          break;
+        }
+      }
+    }
+  }
+  return 0;
 }
 
 /* Only partially open the vorbis file; test for Vorbisness, and load
@@ -1977,7 +2227,18 @@ long ov_read_filter(OggVorbis_File *vf,char *buffer,int length,
   while(1){
     if(vf->ready_state==INITSET){
       samples=vorbis_synthesis_pcmout(&vf->vd,&pcm);
-      if(samples)break;
+      if(samples){
+        long capped=_rewind_take(vf,samples);
+        if(capped<0){
+          /* replay padding past the real end of the link; discard
+             without running the filter and fetch again */
+          vorbis_synthesis_read(&vf->vd,samples);
+          samples=0;
+        }else{
+          samples=capped;
+          break;
+        }
+      }
     }
 
     /* suck in another packet */
@@ -2134,6 +2395,14 @@ long ov_read_float(OggVorbis_File *vf,float ***pcm_channels,int length,
         int hs=vorbis_synthesis_halfrate_p(vf->vi);
         if(pcm_channels)*pcm_channels=pcm;
         if(samples>length)samples=length;
+        samples=_rewind_take(vf,samples);
+        if(samples<0){
+          /* replay padding past the real end of the link: discard
+             and let the fetch path resume normal decoding */
+          vorbis_synthesis_read(&vf->vd,
+                        vorbis_synthesis_pcmout(&vf->vd,NULL));
+          continue;
+        }
         vorbis_synthesis_read(&vf->vd,samples);
         vf->pcm_offset+=samples<<hs;
         if(bitstream)*bitstream=vf->current_link;

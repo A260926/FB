@@ -18,7 +18,7 @@ libvorbis_la_SOURCES = mdct.c smallft.c block.c envelope.c window.c lsp.c \
 libvorbis_la_LDFLAGS = -no-undefined -version-info @V_LIB_CURRENT@:@V_LIB_REVISION@:@V_LIB_AGE@
 libvorbis_la_LIBADD = @VORBIS_LIBS@ @OGG_LIBS@
 
-libvorbisfile_la_SOURCES = vorbisfile.c
+libvorbisfile_la_SOURCES = vorbisfile.c rewind_cache.c rewind_cache.h
 libvorbisfile_la_LDFLAGS = -no-undefined -version-info @VF_LIB_CURRENT@:@VF_LIB_REVISION@:@VF_LIB_AGE@
 libvorbisfile_la_LIBADD = libvorbis.la @OGG_LIBS@
 
