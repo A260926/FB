@@ -642,6 +642,10 @@ static void SDLCALL MixerCallback(void *userdata, SDL_AudioStream *stream, int a
         mixer->postmix_callback(mixer->postmix_callback_userdata, mixer, &mixer->spec, final_mixbuf, additional_amount / sizeof (float));
     }
 
+    if (mixer->recorder) {
+        MIX_RecorderMix(mixer->recorder, final_mixbuf, additional_amount / SDL_AUDIO_FRAMESIZE(mixer->spec));
+    }
+
     SDL_PutAudioStreamData(stream, final_mixbuf, additional_amount);
 }
 
@@ -903,6 +907,10 @@ void MIX_DestroyMixer(MIX_Mixer *mixer)
 
     if (mixer->device_id) {
         SDL_RemoveEventWatch(AudioDeviceChangeEventWatcher, mixer);
+    }
+
+    if (mixer->recorder) {
+        MIX_DestroyRecorder(mixer->recorder);  // detaches from the mixer and frees it.
     }
 
     SDL_DestroyAudioStream(mixer->output_stream);

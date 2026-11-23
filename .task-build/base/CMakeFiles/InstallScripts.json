@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSFB51AE3EB445U15369/attempts/20261123T003039814490Z/repo/.task-build/base/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSFB51AE3EB445U15369/attempts/20261123T003039814490Z/repo/.task-build/base/sdl/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSFB51AE3EB445U15369/attempts/20261123T003039814490Z/repo/.task-build/base/mixer/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

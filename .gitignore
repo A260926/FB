@@ -1,5 +1,6 @@
 build*
 !build-scripts/
+!deps/SDL/include/build_config/
 aclocal.m4
 autom4te*
 config.cache

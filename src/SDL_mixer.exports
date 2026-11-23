@@ -93,4 +93,10 @@ _MIX_GetMixerFrequencyRatio
 _MIX_LoadAudioNoCopy
 _MIX_LockMixer
 _MIX_UnlockMixer
+_MIX_CreateRecorder
+_MIX_StartRecorder
+_MIX_ReadRecorder
+_MIX_StopRecorder
+_MIX_GetRecorderState
+_MIX_DestroyRecorder
 # extra symbols go here (don't modify this line)

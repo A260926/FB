@@ -207,6 +207,7 @@ struct MIX_Mixer
     MIX_Group *all_groups;
     MIX_PostMixCallback postmix_callback;
     void *postmix_callback_userdata;
+    MIX_Recorder *recorder;  // non-NULL if a recorder is attached to this mixer.
     float *mix_buffer;
     size_t mix_buffer_allocation;
     int actual_mixed_bytes;   // on each iteration of the mixer, number of bytes of real mixed audio, ignoring silence at end if no audio was available to mix there.
@@ -255,6 +256,10 @@ struct MIX_AudioDecoder
 // Parse through an SDL_IOStream for tags (ID3, APE, MusicMatch, etc), and add metadata to props.
 // !!! FIXME: see FIXME in the function's implementation; just ignore return values from this function for now.
 extern bool MIX_ReadMetadataTags(SDL_IOStream *io, SDL_PropertiesID props, MIX_IoClamp *clamp);
+
+// Feed the final mix (postmix-callback output, before it goes to the output stream) to an attached
+//  recorder. Called from MixerCallback with the mixer locked. Never allocates, blocks, or does I/O.
+void MIX_RecorderMix(MIX_Recorder *recorder, const float *pcm, int frames);
 
 // Various Ogg-based decoders use this (Vorbis, FLAC, Opus, etc).
 typedef struct MIX_OggLoop
