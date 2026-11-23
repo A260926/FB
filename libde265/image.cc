@@ -199,6 +199,23 @@ void de265_image::set_image_plane(int cIdx, uint8_t* mem, ptrdiff_t stride, void
 de265_image::de265_image() = default;
 
 
+static std::atomic<uint32_t>& next_image_ID()
+{
+  static std::atomic<uint32_t> s_next_image_ID(0);
+  return s_next_image_ID;
+}
+
+void de265_image::reserve_ID(uint32_t id)
+{
+  uint32_t cur = next_image_ID().load();
+  while (cur < id) {
+    if (next_image_ID().compare_exchange_weak(cur, id)) {
+      break;
+    }
+  }
+}
+
+
 de265_error de265_image::alloc_image(int w,int h, enum de265_chroma c,
                                      std::shared_ptr<const seq_parameter_set> sps, bool allocMetadata,
                                      decoder_context* dctx,
@@ -215,7 +232,7 @@ de265_error de265_image::alloc_image(int w,int h, enum de265_chroma c,
                 allocated to the requested size. Without the release, the old image-data
                 will not be freed. */
 
-  static std::atomic<uint32_t> s_next_image_ID(0);
+  static std::atomic<uint32_t>& s_next_image_ID = next_image_ID();
   ID = s_next_image_ID++;
   removed_at_picture_id = std::numeric_limits<uint32_t>::max();
 

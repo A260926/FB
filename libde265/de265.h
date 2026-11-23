@@ -33,6 +33,7 @@ extern "C" {
 #define __STDC_LIMIT_MACROS 1
 #endif
 #include <stdint.h>
+#include <stddef.h>
 
 #if (defined(_WIN32) || defined(__CYGWIN__)) && !defined(LIBDE265_STATIC_BUILD)
   #ifdef LIBDE265_EXPORTS
@@ -99,6 +100,8 @@ typedef enum {
   DE265_ERROR_IMAGE_SIZE_EXCEEDS_SECURITY_LIMIT=19,
   DE265_ERROR_NAL_SIZE_EXCEEDS_SECURITY_LIMIT=20,
   DE265_ERROR_INVALID_ARGUMENT=21,
+  DE265_ERROR_CHECKPOINT_UNAVAILABLE=22, // decoder is not at a savable state
+  DE265_ERROR_CHECKPOINT_FORMAT=23,      // checkpoint data is malformed or not supported
 
   // --- errors that should become obsolete in later libde265 versions ---
 
@@ -308,6 +311,48 @@ LIBDE265_API de265_error de265_decode(de265_decoder_context*, int* more);
 /* Clear decoder state. Call this when skipping in the stream.
  */
 LIBDE265_API void de265_reset(de265_decoder_context*);
+
+/* --- checkpointing ---
+
+   Offline decoding can save the decoder state between two pictures and resume
+   it later, in a new process, without decoding again from the preceding IDR.
+
+   A checkpoint can only be taken directly after a complete picture: all NALs of
+   that picture have been pushed, de265_push_end_of_frame() has been called for
+   it, and de265_decode() has processed the pushed input and the post-processing
+   tasks (deblocking/SAO). Pictures that are still waiting in the output queue
+   may be left there. If any input, NAL, picture or task is still pending,
+   de265_checkpoint_size() returns 0 and de265_checkpoint_write() returns
+   DE265_ERROR_CHECKPOINT_UNAVAILABLE without writing to the buffer.
+
+   Currently supported: single layer, progressive (frame) coding, 8-bit Main
+   profile 4:2:0 (I420) with fixed parameter sets and picture size, the default
+   image allocator, no missing/corrupt reference pictures, no temporal layer
+   dropping, and NALs pushed with user_data == NULL. The PTS values are
+   preserved. Other decoder states simply cannot be checkpointed.
+
+   de265_checkpoint_size() returns the number of bytes a checkpoint of the
+   current state needs, or 0 if the current state cannot be saved.
+
+   de265_checkpoint_write() serializes the state into 'buffer'. It does not
+   modify the decoder. If 'buffer_size' is smaller than the size reported by
+   de265_checkpoint_size(), nothing is written and
+   DE265_ERROR_INVALID_ARGUMENT is returned. On success DE265_OK is returned.
+
+   de265_checkpoint_read() creates a new, independently owned decoder from a
+   checkpoint. It does not reference the buffer or the decoder the checkpoint
+   was taken from, and the restored decoder initially has no worker threads
+   (de265_start_worker_threads() may be called afterwards). On failure NULL is
+   returned and, if 'err' is non-null, the error code is stored there.
+*/
+LIBDE265_API size_t de265_checkpoint_size(de265_decoder_context*);
+
+LIBDE265_API de265_error de265_checkpoint_write(de265_decoder_context*,
+                                                void* buffer, size_t buffer_size);
+
+LIBDE265_API de265_decoder_context* de265_checkpoint_read(const void* buffer,
+                                                          size_t buffer_size,
+                                                          de265_error* err);
 
 /* Return next decoded picture, if there is any. If no complete picture has been
    decoded yet, NULL is returned. You should call de265_release_next_picture() to

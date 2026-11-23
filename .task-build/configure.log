@@ -1,0 +1,5 @@
+-- SIMD acceleration disabled (ENABLE_SIMD=OFF) — using scalar fallback only
+-- Symbol visibility: hidden (only LIBDE265_API symbols exported)
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265

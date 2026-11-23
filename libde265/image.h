@@ -202,6 +202,13 @@ struct de265_image {
   de265_image();
   ~de265_image();
 
+  friend class checkpoint_state;
+
+  /* Ensure that picture IDs handed out from now on are at least 'id'. Used by
+     de265_checkpoint_read() to keep the IDs of restored pictures distinct from
+     the IDs of pictures allocated after restoring. */
+  static void reserve_ID(uint32_t id);
+
 
   de265_error alloc_image(int w,int h, de265_chroma c,
                           std::shared_ptr<const seq_parameter_set> sps,

@@ -34,6 +34,8 @@ public:
   decoded_picture_buffer() = default;
   ~decoded_picture_buffer();
 
+  friend class checkpoint_state;
+
   void set_max_size_of_DPB(uint8_t n)  { max_images_in_DPB=n; }
   void set_norm_size_of_DPB(uint8_t n) { norm_images_in_DPB=n; }
 

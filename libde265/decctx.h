@@ -50,6 +50,7 @@ class slice_segment_header;
 class image_unit;
 class slice_unit;
 class decoder_context;
+class checkpoint_state;
 
 
 class thread_context
@@ -308,6 +309,8 @@ class decoder_context : public base_context {
   decoder_context();
   ~decoder_context();
 
+  friend class checkpoint_state;
+
   de265_error start_thread_pool(int nThreads);
   void        stop_thread_pool();
 
@@ -400,9 +403,9 @@ class decoder_context : public base_context {
   void         pop_next_picture_in_output_queue() { dpb.pop_next_picture_in_output_queue(); }
 
  private:
-  de265_error read_vps_NAL(bitreader&);
-  de265_error read_sps_NAL(bitreader&);
-  de265_error read_pps_NAL(bitreader&);
+  de265_error read_vps_NAL(bitreader&, const uint8_t* raw, int raw_len);
+  de265_error read_sps_NAL(bitreader&, const uint8_t* raw, int raw_len);
+  de265_error read_pps_NAL(bitreader&, const uint8_t* raw, int raw_len);
   de265_error read_sei_NAL(bitreader& reader, bool suffix);
   de265_error read_eos_NAL(bitreader& reader);
   de265_error read_slice_NAL(bitreader&, std::unique_ptr<NAL_unit> nal, nal_header& nal_hdr);
@@ -423,6 +426,16 @@ class decoder_context : public base_context {
 
  private:
   int num_worker_threads = 0;
+
+ public:
+  // --- raw parameter-set storage (for checkpointing) ---
+
+  /* The RBSP payload (without the two-byte NAL header and without emulation
+     prevention bytes) of the most recently parsed parameter set of each id.
+     Checkpoints re-parse these to restore byte-identical parameter sets. */
+  std::vector<uint8_t> raw_vps[ DE265_MAX_VPS_SETS ];
+  std::vector<uint8_t> raw_sps[ DE265_MAX_SPS_SETS ];
+  std::vector<uint8_t> raw_pps[ DE265_MAX_PPS_SETS ];
 
 
  public:

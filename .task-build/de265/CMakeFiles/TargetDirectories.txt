@@ -1,0 +1,14 @@
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/dist.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/CMakeFiles/install/strip.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/de265.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS6AE30F0D5034U15356/attempts/20261123T164128788703Z/repo/.task-build/de265/libde265/CMakeFiles/install/strip.dir

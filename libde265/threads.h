@@ -101,23 +101,25 @@ constexpr int MAX_THREADS = 32;
 class thread_pool
 {
  public:
+  thread_pool() = default;
+
   de265_error start(int num_threads);
   void        stop(); // do not process remaining tasks
   void        add_task(thread_task* task);
 
 
-  bool stopped;
+  bool stopped = false;
 
   std::deque<thread_task*> tasks;  // we are not the owner
 
-  int num_threads_working;
+  int num_threads_working = 0;
 
   std::mutex  mutex;
   std::condition_variable  cond_var;
 
 private:
   std::thread thread[MAX_THREADS];
-  int num_threads;
+  int num_threads = 0;
 
   //int ctbx[MAX_THREADS]; // the CTB the thread is working on
   //int ctby[MAX_THREADS];

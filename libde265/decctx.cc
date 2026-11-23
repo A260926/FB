@@ -357,14 +357,23 @@ void decoder_context::add_task_decode_slice_segment(thread_context* tctx, bool f
 }
 
 
-de265_error decoder_context::read_vps_NAL(bitreader& reader)
+de265_error decoder_context::read_vps_NAL(bitreader& reader, const uint8_t* raw, int raw_len)
 {
   logdebug(LogHeaders,"---> read VPS\n");
 
+  // 'raw'/'raw_len' is the raw RBSP payload (after the two-byte NAL header, with
+  // emulation prevention bytes already removed). Checking it in lets a
+  // checkpoint restore this parameter set by re-parsing exactly these bytes,
+  // without depending on the original NAL or the input bytestream.
   std::shared_ptr<video_parameter_set> new_vps = std::make_shared<video_parameter_set>();
   de265_error err = new_vps->read(this,&reader);
   if (err != DE265_OK) {
     return err;
+  }
+
+  if (new_vps->video_parameter_set_id < DE265_MAX_VPS_SETS) {
+    int id = new_vps->video_parameter_set_id;
+    raw_vps[id].assign(raw, raw + raw_len);
   }
 
   if (param_vps_headers_fd>=0) {
@@ -376,7 +385,7 @@ de265_error decoder_context::read_vps_NAL(bitreader& reader)
   return DE265_OK;
 }
 
-de265_error decoder_context::read_sps_NAL(bitreader& reader)
+de265_error decoder_context::read_sps_NAL(bitreader& reader, const uint8_t* raw, int raw_len)
 {
   logdebug(LogHeaders,"----> read SPS\n");
 
@@ -387,6 +396,11 @@ de265_error decoder_context::read_sps_NAL(bitreader& reader)
     return err;
   }
 
+  if (new_sps->seq_parameter_set_id < DE265_MAX_SPS_SETS) {
+    int id = new_sps->seq_parameter_set_id;
+    raw_sps[id].assign(raw, raw + raw_len);
+  }
+
   if (param_sps_headers_fd>=0) {
     new_sps->dump(param_sps_headers_fd);
   }
@@ -395,7 +409,7 @@ de265_error decoder_context::read_sps_NAL(bitreader& reader)
 
   // Remove the all PPS that referenced the old SPS because parameters may have changed and we do not want to
   // get the SPS and PPS parameters (e.g. image size) out of sync.
-  
+
   for (auto& p : pps) {
     if (p && p->seq_parameter_set_id == new_sps->seq_parameter_set_id) {
       p = nullptr;
@@ -405,7 +419,7 @@ de265_error decoder_context::read_sps_NAL(bitreader& reader)
   return DE265_OK;
 }
 
-de265_error decoder_context::read_pps_NAL(bitreader& reader)
+de265_error decoder_context::read_pps_NAL(bitreader& reader, const uint8_t* raw, int raw_len)
 {
   logdebug(LogHeaders,"----> read PPS\n");
 
@@ -414,6 +428,11 @@ de265_error decoder_context::read_pps_NAL(bitreader& reader)
   bool success = new_pps->read(&reader,this);
   if (!success) {
     return DE265_WARNING_PPS_HEADER_INVALID;
+  }
+
+  if (new_pps->pic_parameter_set_id < DE265_MAX_PPS_SETS) {
+    int id = new_pps->pic_parameter_set_id;
+    raw_pps[id].assign(raw, raw + raw_len);
   }
 
   if (param_pps_headers_fd>=0) {
@@ -1194,20 +1213,32 @@ de265_error decoder_context::decode_NAL(std::unique_ptr<NAL_unit> nal)
     err = read_slice_NAL(reader, std::move(nal), nal_hdr);
   }
   else switch (nal_hdr.nal_unit_type) {
-    case NAL_UNIT_VPS_NUT:
-      err = read_vps_NAL(reader);
+    case NAL_UNIT_VPS_NUT: {
+      /* The RBSP payload follows the two-byte NAL header. 'nal' has already had
+         its emulation prevention bytes removed, so this is the raw payload that
+         a checkpoint stores. */
+      const uint8_t* raw = nal->data() + 2;
+      int raw_len = nal->size() - 2;
+      err = read_vps_NAL(reader, raw, raw_len);
       nal_parser.free_NAL_unit(std::move(nal));
       break;
+    }
 
-    case NAL_UNIT_SPS_NUT:
-      err = read_sps_NAL(reader);
+    case NAL_UNIT_SPS_NUT: {
+      const uint8_t* raw = nal->data() + 2;
+      int raw_len = nal->size() - 2;
+      err = read_sps_NAL(reader, raw, raw_len);
       nal_parser.free_NAL_unit(std::move(nal));
       break;
+    }
 
-    case NAL_UNIT_PPS_NUT:
-      err = read_pps_NAL(reader);
+    case NAL_UNIT_PPS_NUT: {
+      const uint8_t* raw = nal->data() + 2;
+      int raw_len = nal->size() - 2;
+      err = read_pps_NAL(reader, raw, raw_len);
       nal_parser.free_NAL_unit(std::move(nal));
       break;
+    }
 
     case NAL_UNIT_PREFIX_SEI_NUT:
     case NAL_UNIT_SUFFIX_SEI_NUT:

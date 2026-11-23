@@ -4,6 +4,7 @@ set (libde265_sources
   alloc_pool.cc
   bitstream.cc
   cabac.cc
+  checkpoint.cc
   contextmodel.cc
   de265.cc
   deblock.cc
@@ -42,6 +43,7 @@ set (libde265_headers
   alloc_pool.h
   bitstream.h
   cabac.h
+  checkpoint.h
   de265-version.h
   contextmodel.h
   de265.h
