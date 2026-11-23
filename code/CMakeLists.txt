@@ -744,6 +744,8 @@ SET( PostProcessing_SRCS
   PostProcessing/GenFaceNormalsProcess.h
   PostProcessing/GenVertexNormalsProcess.cpp
   PostProcessing/GenVertexNormalsProcess.h
+  PostProcessing/MorphFrameCompletionProcess.cpp
+  PostProcessing/MorphFrameCompletionProcess.h
   PostProcessing/PretransformVertices.cpp
   PostProcessing/PretransformVertices.h
   PostProcessing/ImproveCacheLocality.cpp

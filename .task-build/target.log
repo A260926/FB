@@ -1,0 +1,18 @@
+CASE generation inclined_triangle_frames checks=38
+CASE generation base_streams_present_targets_completed checks=16
+CASE generation missing_single_stream checks=16
+CASE generation stream_flags_and_normal_inheritance checks=16
+CASE generation neighborhoods_follow_target_positions checks=22
+CASE generation target_without_positions_uses_base checks=15
+CASE generation repeated_processing_keeps_frames checks=10
+CASE generation completion_is_opt_in checks=7
+GROUP generation cases=8 checks=140 COMPLETE
+CASE ownership completed_frames_are_independent checks=18
+CASE ownership destroying_target_keeps_base_and_siblings checks=19
+CASE ownership scene_teardown_releases_completed_frames checks=13
+GROUP ownership cases=3 checks=50 COMPLETE
+CASE gltf export_stores_target_deltas checks=93
+CASE gltf reimport_restores_endpoint_frames checks=38
+CASE gltf legacy_switches_keep_old_layout checks=20
+GROUP gltf cases=3 checks=151 COMPLETE
+TARGET_COMPLETE cases=14

@@ -53,6 +53,9 @@ corresponding preprocessor flag to selectively disable steps.
 #ifndef ASSIMP_BUILD_NO_CALCTANGENTS_PROCESS
 #   include "PostProcessing/CalcTangentsProcess.h"
 #endif
+#ifndef ASSIMP_BUILD_NO_MORPHFRAMECOMPLETION_PROCESS
+#   include "PostProcessing/MorphFrameCompletionProcess.h"
+#endif
 #ifndef ASSIMP_BUILD_NO_JOINVERTICES_PROCESS
 #   include "PostProcessing/JoinVerticesProcess.h"
 #endif
@@ -236,6 +239,9 @@ void GetPostProcessingStepInstanceList(std::vector< BaseProcess* >& out)
 #endif
 #if (!defined ASSIMP_BUILD_NO_CALCTANGENTS_PROCESS)
     out.push_back( new CalcTangentsProcess());
+#endif
+#if (!defined ASSIMP_BUILD_NO_MORPHFRAMECOMPLETION_PROCESS)
+    out.push_back( new MorphFrameCompletionProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_JOINVERTICES_PROCESS)
     out.push_back( new JoinVerticesProcess());

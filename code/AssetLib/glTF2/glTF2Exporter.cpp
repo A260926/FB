@@ -1375,6 +1375,8 @@ void glTF2Exporter::ExportMeshes() {
                               this->mProperties->GetPropertyBool("GLTF2_SPARSE_ACCESSOR_EXP");
             bool bIncludeNormal = this->mProperties->HasPropertyBool("GLTF2_TARGET_NORMAL_EXP") &&
                                   this->mProperties->GetPropertyBool("GLTF2_TARGET_NORMAL_EXP");
+            bool bIncludeTangent = this->mProperties->HasPropertyBool("GLTF2_TARGET_TANGENT_EXP") &&
+                                   this->mProperties->GetPropertyBool("GLTF2_TARGET_TANGENT_EXP");
             bool bExportTargetNames = this->mProperties->HasPropertyBool("GLTF2_TARGETNAMES_EXP") &&
                                       this->mProperties->GetPropertyBool("GLTF2_TARGETNAMES_EXP");
 
@@ -1429,7 +1431,23 @@ void glTF2Exporter::ExportMeshes() {
                     delete[] pNormalDiff;
                 }
 
-                // tangent?
+                // tangent
+                if (pAnimMesh->HasTangentsAndBitangents() && bIncludeTangent && nullptr != aim->mTangents) {
+                    // NOTE: in gltf it is the diff stored; the xyz part of the
+                    // target tangent is stored relative to the base tangent,
+                    // the handedness of the base tangent is kept as is.
+                    aiVector3D *pTangentDiff = new aiVector3D[pAnimMesh->mNumVertices];
+                    for (unsigned int vt = 0; vt < pAnimMesh->mNumVertices; ++vt) {
+                        pTangentDiff[vt] = pAnimMesh->mTangents[vt] - aim->mTangents[vt];
+                    }
+                    Ref<Accessor> vec = ExportData(*mAsset, meshId, b,
+                            pAnimMesh->mNumVertices, pTangentDiff,
+                            AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
+                    if (vec) {
+                        p.targets[am].tangent.push_back(vec);
+                    }
+                    delete[] pTangentDiff;
+                }
             }
         }
     }

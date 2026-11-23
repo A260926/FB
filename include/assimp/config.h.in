@@ -147,6 +147,25 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     "PP_GSN_MAX_SMOOTHING_ANGLE"
 
 // ---------------------------------------------------------------------------
+/** @brief Enables frame completion for morph targets (aiAnimMesh).
+ *
+ * When enabled, the post-processing chain completes missing vertex normals
+ * and missing tangent/bitangent frames of morph targets after the base
+ * mesh streams have been processed. Which streams are completed is still
+ * governed by the #aiProcess_GenSmoothNormals and
+ * #aiProcess_CalcTangentSpace flags: the normal pass fills missing target
+ * normals from the target's own positions, the tangent pass fills missing
+ * target tangents and bitangents from the target's positions, the target's
+ * normals (inherited from the base mesh when absent) and the base mesh's
+ * first UV channel. Targets without own positions are evaluated against
+ * the base positions. Frames that are already present - artist-authored
+ * or generated - are kept untouched, and every target owns its completed
+ * arrays. Property type: bool. Default value: false
+ */
+#define AI_CONFIG_PP_MORPH_FRAME_COMPLETION \
+    "PP_MORPH_FRAME_COMPLETION"
+
+// ---------------------------------------------------------------------------
 /** @brief Sets the colormap (= palette) to be used to decode embedded
  *         textures in MDL (Quake or 3DGS) files.
  *

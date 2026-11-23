@@ -1,0 +1,5 @@
+/Volumes/UserFBWorkspace/questions/FSC18B8AC365BDU6932R9EC21D070/attempts/20261123T165254641605Z/repo/.task-build/lib/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSC18B8AC365BDU6932R9EC21D070/attempts/20261123T165254641605Z/repo/.task-build/lib/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FSC18B8AC365BDU6932R9EC21D070/attempts/20261123T165254641605Z/repo/.task-build/lib/code/CMakeFiles/assimp.dir
+/Volumes/UserFBWorkspace/questions/FSC18B8AC365BDU6932R9EC21D070/attempts/20261123T165254641605Z/repo/.task-build/lib/code/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSC18B8AC365BDU6932R9EC21D070/attempts/20261123T165254641605Z/repo/.task-build/lib/code/CMakeFiles/rebuild_cache.dir
