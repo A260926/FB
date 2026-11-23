@@ -20,6 +20,12 @@ libtheoradec_1.0
 		th_decode_ycbcr_out;
 		th_decode_free;
 
+		th_region_alloc;
+		th_region_packetin;
+		th_region_out;
+		th_region_stats;
+		th_region_free;
+
 		th_packet_isheader;
 		th_packet_iskeyframe;
 

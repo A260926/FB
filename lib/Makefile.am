@@ -214,6 +214,7 @@ decoder_sources = \
 	info.c \
 	internal.c \
 	quant.c \
+	region.c \
 	state.c \
 	$(decoder_arch_sources)
 

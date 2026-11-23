@@ -182,4 +182,20 @@ void oc_dec_accel_init_c(oc_dec_ctx *_dec);
 void oc_dec_dc_unpredict_mcu_plane_c(oc_dec_ctx *_dec,
  oc_dec_pipeline_state *_pipe,int _pli);
 
+/*Parse-only decoder support for the region decoder (lib/region.c).
+  These entry points implement the bitstream parsing half of
+   th_decode_packetin() without any pixel reconstruction; the decoder state
+   they use owns no reference frame pixel buffers, so no full-frame pixel
+   storage is ever reserved.*/
+th_dec_ctx *oc_dec_parse_alloc(const th_info *_info,
+ const th_setup_info *_setup);
+int oc_dec_parse_packet(oc_dec_ctx *_dec,const ogg_packet *_op);
+/*Reverses DC prediction and decodes the dequantized DCT coefficients of
+   every coded fragment of the current frame.
+  _coeffs must have room for 64 coefficients per fragment plus 64 spare
+   entries (used as a dumping ground for out-of-range zig-zag indices, just
+   like the second half of oc_dec_pipeline_state.dct_coeffs).*/
+void oc_dec_parse_finish(oc_dec_ctx *_dec,ogg_int16_t *_coeffs,
+ signed char *_last_zzi);
+
 #endif

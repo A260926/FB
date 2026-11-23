@@ -8,6 +8,11 @@ _th_decode_ctl
 _th_decode_packetin
 _th_decode_ycbcr_out
 _th_decode_free
+_th_region_alloc
+_th_region_packetin
+_th_region_out
+_th_region_stats
+_th_region_free
 _th_packet_isheader
 _th_packet_iskeyframe
 _th_granule_frame

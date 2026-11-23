@@ -1977,6 +1977,143 @@ void th_decode_free(th_dec_ctx *_dec){
   }
 }
 
+th_dec_ctx *oc_dec_parse_alloc(const th_info *_info,
+ const th_setup_info *_setup){
+  oc_dec_ctx *dec;
+  int         i;
+  dec=th_decode_alloc(_info,_setup);
+  if(dec==NULL)return NULL;
+  /*Parsing never touches the reference frame pixel buffers, so release them
+     immediately: the region decoder must not reserve full-frame pixel
+     storage.*/
+  _ogg_free(dec->state.frag_buf_offs);
+  dec->state.frag_buf_offs=NULL;
+  oc_aligned_free(dec->state.ref_frame_handle);
+  dec->state.ref_frame_handle=NULL;
+  for(i=0;i<6;i++)dec->state.ref_frame_data[i]=NULL;
+  return dec;
+}
+
+int oc_dec_parse_packet(oc_dec_ctx *_dec,const ogg_packet *_op){
+  int ret;
+  if(_op->bytes==0){
+    /*A completely empty packet indicates a dropped frame: an INTER frame with
+       no coded blocks.*/
+    ptrdiff_t fragi;
+    _dec->state.frame_type=OC_INTER_FRAME;
+    _dec->state.ntotal_coded_fragis=0;
+    for(ret=0;ret<3;ret++)_dec->state.ncoded_fragis[ret]=0;
+    for(fragi=0;fragi<_dec->state.nfrags;fragi++){
+      _dec->state.frags[fragi].coded=0;
+      _dec->state.frags[fragi].refi=OC_FRAME_NONE;
+    }
+    return 0;
+  }
+  oc_pack_readinit(&_dec->opb,_op->packet,_op->bytes);
+  ret=oc_dec_frame_header_unpack(_dec);
+  if(ret<0)return ret;
+  if(_dec->state.frame_type==OC_INTRA_FRAME)oc_dec_mark_all_intra(_dec);
+  else oc_dec_coded_flags_unpack(_dec);
+  /*If this frame has no coded blocks, there is nothing more to parse.*/
+  if(_dec->state.ntotal_coded_fragis<=0)return 0;
+  if(_dec->state.frame_type!=OC_INTRA_FRAME){
+    oc_dec_mb_modes_unpack(_dec);
+    oc_dec_mv_unpack_and_frag_modes_fill(_dec);
+  }
+  oc_dec_block_qis_unpack(_dec);
+  oc_dec_residual_tokens_unpack(_dec);
+  return 0;
+}
+
+void oc_dec_parse_finish(oc_dec_ctx *_dec,ogg_int16_t *_coeffs,
+ signed char *_last_zzi){
+  oc_dec_pipeline_state pipe;
+  const unsigned char *dct_tokens;
+  const unsigned char *dct_fzig_zag;
+  const oc_fragment   *frags;
+  const ptrdiff_t     *coded_fragis;
+  int                  pli;
+  /*Undo DC prediction for the whole frame.
+    This works purely in the coefficient domain; the MCU chunking used by the
+     normal pipeline does not affect the result, so a single pass per plane
+     is equivalent.*/
+  memset(&pipe,0,sizeof(pipe));
+  for(pli=0;pli<3;pli++){
+    pipe.fragy0[pli]=0;
+    pipe.fragy_end[pli]=_dec->state.fplanes[pli].nvfrags;
+    oc_dec_dc_unpredict_mcu_plane(_dec,&pipe,pli);
+  }
+  /*Decode the dequantized coefficients of every coded fragment, exactly as
+     oc_dec_frags_recon_mcu_plane() would feed them to
+     oc_state_frag_recon(): DC values are the prediction-corrected ones and
+     are not dequantized here, AC values are dequantized.*/
+  dct_tokens=_dec->dct_tokens;
+  dct_fzig_zag=_dec->state.opt_data.dct_fzig_zag;
+  frags=_dec->state.frags;
+  coded_fragis=_dec->state.coded_fragis;
+  for(pli=0;pli<3;pli++){
+    ptrdiff_t ncoded_fragis;
+    ptrdiff_t ti[64];
+    ptrdiff_t eob_runs[64];
+    ptrdiff_t fragii;
+    ncoded_fragis=_dec->state.ncoded_fragis[pli];
+    memcpy(ti,_dec->ti0[pli],sizeof(ti));
+    memcpy(eob_runs,_dec->eob_runs[pli],sizeof(eob_runs));
+    for(fragii=0;fragii<ncoded_fragis;fragii++){
+      const ogg_uint16_t *ac_quant;
+      ogg_int16_t        *cout;
+      ptrdiff_t           fragi;
+      int                 qti;
+      int                 last_zzi;
+      int                 zzi;
+      fragi=coded_fragis[fragii];
+      qti=frags[fragi].mb_mode!=OC_MODE_INTRA;
+      ac_quant=
+       _dec->state.dequant_tables[_dec->state.qis[frags[fragi].qii]][pli][qti];
+      cout=_coeffs+fragi*64;
+      memset(cout,0,64*sizeof(cout[0]));
+      last_zzi=0;
+      for(zzi=0;zzi<64;){
+        int token;
+        last_zzi=zzi;
+        if(eob_runs[zzi]){
+          eob_runs[zzi]--;
+          break;
+        }
+        else{
+          ptrdiff_t eob;
+          int       cw;
+          int       rlen;
+          int       coeff;
+          ptrdiff_t lti;
+          lti=ti[zzi];
+          token=dct_tokens[lti++];
+          cw=OC_DCT_CODE_WORD[token];
+          if(OC_DCT_TOKEN_NEEDS_MORE(token)){
+            cw+=dct_tokens[lti++]<<OC_DCT_TOKEN_EB_POS(token);
+          }
+          eob=cw>>OC_DCT_CW_EOB_SHIFT&0xFFF;
+          if(token==OC_DCT_TOKEN_FAT_EOB){
+            eob+=dct_tokens[lti++]<<8;
+            if(eob==0)eob=OC_DCT_EOB_FINISH;
+          }
+          rlen=(unsigned char)(cw>>OC_DCT_CW_RLEN_SHIFT);
+          cw^=-(cw&1<<OC_DCT_CW_FLIP_BIT);
+          coeff=cw>>OC_DCT_CW_MAG_SHIFT;
+          eob_runs[zzi]=eob;
+          ti[zzi]=lti;
+          zzi+=rlen;
+          cout[dct_fzig_zag[zzi]]=(ogg_int16_t)(coeff*(int)ac_quant[zzi]);
+          zzi+=!eob;
+        }
+      }
+      cout[0]=(ogg_int16_t)frags[fragi].dc;
+      _last_zzi[fragi]=(signed char)last_zzi;
+    }
+    coded_fragis+=ncoded_fragis;
+  }
+}
+
 int th_decode_ctl(th_dec_ctx *_dec,int _req,void *_buf,
  size_t _buf_sz){
   switch(_req){
