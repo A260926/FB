@@ -165,6 +165,32 @@ bool hit = bvh.IntersectSphere( pos, r ); // sphere/BVH collision detection
 * **Opacity micro maps.** `SetOpacityMicroMaps( mapData, N )` attaches an N×N opacity map per triangle, as proposed [by Gruen et al.](https://dl.acm.org/doi/10.1145/3406180) in 2020. The SIMD leaf tests apply it directly.
 * **Triangle intersection.** Default is Möller & Trumbore ([1997](https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf)); Baldwin & Weber ([2016](https://jcgt.org/published/0005/03/03/paper.pdf)) is used for the precomputed leaf formats; `WATERTIGHT_TRITEST` switches to 'watertight' intersection based on the [2013 paper](https://jcgt.org/published/0002/01/05/paper.pdf) by Woop et al., at a small additional cost.
 
+# Ordered hit queries
+
+`Intersect` keeps only the nearest hit. Offline renderers that composite translucent triangles front-to-back instead need every hit along a ray, with the ability to stop early. `tiny_bvh_ordered.h` provides a pausable, ordered query for that; include it on top of `tiny_bvh.h`.
+
+```cpp
+#include "tiny_bvh_ordered.h"
+
+tinybvh::OrderedHitQuery query( bvh, ray, tmin );       // BVH / Ray, float tmin
+tinybvh::OrderedHit hit;
+while (query.Next( hit ))                               // one hit per call, front to back
+{
+    composite( hit.t, hit.u, hit.v, hit.prim, hit.inst );
+    if (transmittance < 0.01f) break;                   // stop and destroy the query at will
+}
+auto stats = query.GetStats();                          // counters since construction
+```
+
+`OrderedHitQueryEx` is the `BVH_Double` / `RayEx` counterpart (with a `double` `tmin` and `OrderedHitEx` results); the rest of this section applies to both.
+
+* **Interface.** Construct with `( const BVH&, const Ray&, tmin )`, where `tmin` has the same precision as the ray and the upper bound is `ray.hit.t` captured at construction. Results are pulled with `bool Next( OrderedHit& )`. After `Next` returns `false` the query stays finished and never modifies the passed result object again. A query holds its own copy of the ray and never mutates the ray, tree, instances or any shared cache, so queries may be interleaved on one thread or run concurrently on different threads against the same read-only scene.
+* **Result record.** `OrderedHit` carries `t`, `u`, `v`, `prim` and `inst`; float/index width match the ray. `inst` and `prim` are always independent fields. For a plain BLAS `inst` is `0` and `prim` is the original triangle index; for a TLAS `inst` is the index into the input instance array and `prim` is the original triangle inside that BLAS. The local intersection is performed in the instance frame, but `t` is always the parameter of the world ray `O + tD`.
+* **Ordering and duplicates.** Every triangle hit in the half-open interval `[tmin, ray.hit.t)` is delivered, sorted lexicographically by `(t, inst, prim)`. Intersection is double-sided and zero-area triangles never hit. Triangles (or instances) at exactly the same distance are both kept — no epsilon merging — and ordered by identity; coincident but distinct triangles remain distinct primitives. When spatial splits place one original triangle in several leaves, it is intersected at most once and delivered at most once per instance; instances sharing a BLAS each keep their own hits.
+* **Lazy, ordered traversal.** The query walks the existing TLAS/BLAS nodes directly: no flattened structure is built, no instances or triangles are scanned up front, and the full ray is never collected before sorting. A min-heap frontier of nodes (and lazily-entered instances), keyed by box entry distance, is advanced only as far as needed to certify the next emitted hit; construction performs root initialization only. Standard-library containers grow on demand for the frontier, tested-primitive sets and already-found candidates, so memory is proportional to the work actually performed rather than to a fixed capacity or the scene size.
+* **Stats.** `GetStats()` returns a copy of cumulative `uint64_t` counters: `nodeVisits` for each TLAS/BLAS node actually expanded, `triangleTests` for each original triangle intersected (once per `(inst, prim)`), `instanceEntries` for each mask-passing instance entered, and `emittedHits` for each result handed out. No work is hidden in uncounted preprocessing.
+* **Scope.** Supported are ordinary binary `BVH` trees (including those from `Build` and `BuildHQ`, with continuous or strided/indexed vertex input) and single-level TLAS trees whose BLASes are such binary BVHs. Rays may be axis-aligned, carry signed-zero components and start inside a box; finite non-zero directions, finite coordinates and `0 <= tmin <= ray.hit.t <= BVH_FAR` are preconditions, and an unbuilt BVH yields an empty query. Instance masks follow the usual bitwise-intersection rule, and the existing finite invertible affine transform convention (non-uniform scale, shear and reflection) is used. GPU and wide-node layouts, voxels, custom primitives, nested TLAS, opacity micro maps and motion instances are out of scope for this interface; nearest-hit, occlusion, building and SIMD APIs are unchanged.
+
 # TLAS, instancing and custom geometry
 
 TinyBVH supports construction of a _Top-Level Acceleration Structure_: a BVH over _Bottom-Level Acceleration Structures_, where each BLAS is a BVH with a 4x4 transform. Different layouts can be combined under a single TLAS, and a BLAS can appear multiple times with different transforms:
@@ -278,6 +304,10 @@ The multi-threaded **path tracing** demo:
 `g++ -mwindows -O3 examples/tiny_bvh_pt.cpp -I. -o tiny_bvh_pt` (on Linux and Windows)
 
 `c++ --std=c++17 -framework Cocoa -O3 examples/tiny_bvh_pt.cpp -I. -o tiny_bvh_pt` (on macOS)
+
+The windowless **ordered, translucent-layer** demo, which composites a 32×32 PPM front-to-back with `OrderedHitQuery` and stops at a transmittance threshold:
+
+`c++ -std=c++20 -O1 examples/ordered_layers.cpp -I. -o ordered_layers && ./ordered_layers out.ppm`
 
 The **performance measurement tool**:
 
