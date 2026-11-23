@@ -745,6 +745,125 @@ extern SDL_DECLSPEC int SDLCALL Sound_Rewind(Sound_Sample *sample);
  */
 extern SDL_DECLSPEC int SDLCALL Sound_Seek(Sound_Sample *sample, Uint32 ms);
 
+
+/**
+ * Position reported by Sound_GetLoopPosition() for a sample with a finite
+ * loop region configured.
+ *
+ * All frame counts are in complete sample frames (all channels interleaved).
+ *
+ * \since This struct is available since SDL_sound 3.3.0.
+ */
+typedef struct Sound_LoopPosition
+{
+    Uint64 logical_frame;    /**< Position on the expanded logical timeline. */
+    Uint64 source_frame;     /**< Matching frame of the original source. */
+    Uint64 output_frame;     /**< Frames delivered in the desired format since
+                                  the most recent explicit loop seek. */
+    Uint64 remaining_repeats; /**< Extra loop passes still ahead. */
+} Sound_LoopPosition;
+
+
+/**
+ * Configure a finite loop region, in native sample frames.
+ *
+ * The decoded stream is logically expanded as
+ * `[0,end)` then `additional_repeats` extra copies of `[start,end)`, then
+ * `[end,N)`, where N is the total number of frames in the source. With zero
+ * repeats the logical stream is identical to the original material, but the
+ * loop position queries stay available. Only the region bounds and the repeat
+ * count are stored; the expanded waveform is never materialized.
+ *
+ * Loop points are exact frame positions, never rounded to milliseconds. The
+ * loop jump happens inside the decoder layer, so the same SDL_AudioStream
+ * keeps running across natural loop points: it is never flushed, cleared or
+ * recreated there, keeping resampling and any filter history continuous.
+ *
+ * Only seekable RIFF/WAVE samples carrying 16-bit PCM or Microsoft ADPCM in
+ * mono or stereo accept a loop. The configuration may be set before the first
+ * decode, or replaced after a Sound_Rewind(); attempts at any other time
+ * fail and leave the previous configuration intact.
+ *
+ * \param sample the Sound_Sample to configure.
+ * \param start first frame of the loop region, in source frames.
+ * \param end one past the last frame of the loop region, in source frames.
+ * \param additional_repeats number of extra plays of the region; zero means
+ *                           the original material plays straight through.
+ * \returns nonzero on success, zero on failure. On failure, specifics of the
+ *          error can be gleaned from Sound_GetError(), and any previously set
+ *          loop configuration is preserved.
+ *
+ * \threadsafety It is safe to call this function from any thread, but a
+ *               single Sound_Sample should not be accessed from two threads
+ *               at the same time.
+ *
+ * \since This function is available since SDL_sound 3.3.0.
+ *
+ * \sa Sound_SeekLoopFrame
+ * \sa Sound_GetLoopPosition
+ * \sa Sound_Rewind
+ */
+extern SDL_DECLSPEC int SDLCALL Sound_SetLoop(Sound_Sample *sample,
+                                              Uint64 start, Uint64 end,
+                                              Uint32 additional_repeats);
+
+/**
+ * Seek on the expanded logical timeline of a looped sample.
+ *
+ * The target is a native sample frame on the logical timeline produced by the
+ * active loop configuration, from zero to the logical length, inclusive. This
+ * starts a fresh playback generation: conversion history (resampler state,
+ * queued PCM, pending EOF/error) is discarded, so the suffix beginning at the
+ * target is decoded with zero prior history, exactly as if it were the start
+ * of a new stream. The loop configuration and the original repeat count are
+ * retained, and only the repeats still ahead of the target remain.
+ *
+ * Out-of-range targets are rejected before touching the underlying stream,
+ * leaving the playback state completely unchanged. If the underlying decoder
+ * seek fails, the sample enters the SOUND_SAMPLEFLAG_ERROR state and no
+ * previously queued audio is delivered; a later successful seek recovers.
+ *
+ * \param sample the Sound_Sample to reposition.
+ * \param logical_frame the target frame on the logical timeline.
+ * \returns nonzero on success, zero on failure. On failure use
+ *          Sound_GetError() for details.
+ *
+ * \threadsafety It is safe to call this function from any thread, but a
+ *               single Sound_Sample should not be accessed from two threads
+ *               at the same time.
+ *
+ * \since This function is available since SDL_sound 3.3.0.
+ *
+ * \sa Sound_SetLoop
+ * \sa Sound_GetLoopPosition
+ */
+extern SDL_DECLSPEC int SDLCALL Sound_SeekLoopFrame(Sound_Sample *sample,
+                                                    Uint64 logical_frame);
+
+/**
+ * Report the current playback position of a looped sample.
+ *
+ * The position follows the frames actually delivered in the desired format,
+ * not the decoder's read-ahead position; queries, zero-length decodes and
+ * internal pre-reads do not advance it.
+ *
+ * \param sample the Sound_Sample to query.
+ * \param pos filled in with the current loop position on success.
+ * \returns nonzero on success, zero if no loop is configured or another
+ *          error occurred; use Sound_GetError() for details.
+ *
+ * \threadsafety It is safe to call this function from any thread, but a
+ *               single Sound_Sample should not be accessed from two threads
+ *               at the same time.
+ *
+ * \since This function is available since SDL_sound 3.3.0.
+ *
+ * \sa Sound_SetLoop
+ * \sa Sound_SeekLoopFrame
+ */
+extern SDL_DECLSPEC int SDLCALL Sound_GetLoopPosition(Sound_Sample *sample,
+                                                      Sound_LoopPosition *pos);
+
 #ifdef __cplusplus
 }
 #endif

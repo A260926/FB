@@ -11,7 +11,7 @@ rm -f .task-build/loop-region.f32
 test -s .task-build/loop-region.f32
 .task-build/driver/output-probe
 cp .task-build/driver/task-target .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/task-output.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

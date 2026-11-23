@@ -16,4 +16,7 @@ _Sound_Rewind
 _Sound_Seek
 _Sound_Version
 _Sound_SetDesiredFormat
+_Sound_SetLoop
+_Sound_SeekLoopFrame
+_Sound_GetLoopPosition
 # extra symbols go here (don't modify this line)

@@ -260,6 +260,14 @@ typedef struct __SOUND_SAMPLEINTERNAL__
     Sint32 total_time;
     Uint32 mix_position;
     MixFunc mix;
+
+    /* Finite loop region state (NULL unless a loop has been configured).
+       Owned by SDL_sound_loop.c; allocated in Sound_SetLoop(). */
+    struct Sound_LoopState *loop;
+
+    /* Set once decoding has produced data; cleared by rewind/loop seek. It
+       locks the loop configuration until the next Sound_Rewind(). */
+    bool playback_started;
 } Sound_SampleInternal;
 
 

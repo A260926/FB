@@ -11,13 +11,14 @@ SUPPORT_MODPLUG ?= true
 
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_CFLAGS :=
+LOCAL_CFLAGS := -include $(LOCAL_PATH)/src/SDL_sound_loop.h
 
 LOCAL_SRC_FILES := $(LOCAL_PATH)/src/SDL_sound.c \
 				$(LOCAL_PATH)/src/SDL_sound_aiff.c \
 				$(LOCAL_PATH)/src/SDL_sound_au.c \
 				$(LOCAL_PATH)/src/SDL_sound_coreaudio.c \
 				$(LOCAL_PATH)/src/SDL_sound_flac.c \
+				$(LOCAL_PATH)/src/SDL_sound_loop.c \
 				$(LOCAL_PATH)/src/SDL_sound_mp3.c \
 				$(LOCAL_PATH)/src/SDL_sound_midi.c \
 				$(LOCAL_PATH)/src/SDL_sound_modplug.c \
@@ -25,7 +26,7 @@ LOCAL_SRC_FILES := $(LOCAL_PATH)/src/SDL_sound.c \
 				$(LOCAL_PATH)/src/SDL_sound_shn.c \
 				$(LOCAL_PATH)/src/SDL_sound_voc.c \
 				$(LOCAL_PATH)/src/SDL_sound_vorbis.c \
-				$(LOCAL_PATH)/src/SDL_sound_wav.c 
+				$(LOCAL_PATH)/src/SDL_sound_wav.c
 
 
 

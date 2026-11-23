@@ -15,6 +15,7 @@
 
 #define __SDL_SOUND_INTERNAL__
 #include "SDL_sound_internal.h"
+#include "SDL_sound_loop.h"
 
 #if SOUND_SUPPORTS_WAV
 
@@ -62,6 +63,10 @@ static SDL_INLINE int read_uint8(SDL_IOStream *io, Uint8 *ui8)
 #define riffID 0x46464952  /* "RIFF", in ascii. */
 #define waveID 0x45564157  /* "WAVE", in ascii. */
 #define factID 0x74636166  /* "fact", in ascii. */
+
+/* Defined at the bottom of this file; used to prove a sample really is a
+   WAV before touching its decoder-private data. */
+extern const Sound_DecoderFunctions __Sound_DecoderFunctions_WAV;
 
 
 /*****************************************************************************
@@ -795,6 +800,157 @@ static int WAV_seek(Sound_Sample *sample, Uint32 ms)
     wav_t *w = (wav_t *) internal->decoder_private;
     return w->fmt->seek_sample(sample, ms);
 } /* WAV_seek */
+
+
+/*****************************************************************************
+ * Frame-exact seeking for finite loop regions.                              *
+ *                                                                           *
+ * Unlike the millisecond seek above, these land on an exact decoded sample *
+ * frame, including frames in the middle of an ADPCM block, without rounding*
+ * to milliseconds or expanding any audio.                                  *
+ *****************************************************************************/
+
+static int seek_frame_fmt_normal(Sound_Sample *sample, Uint64 frame)
+{
+    Sound_SampleInternal *internal = (Sound_SampleInternal *) sample->opaque;
+    wav_t *w = (wav_t *) internal->decoder_private;
+    fmt_t *fmt = w->fmt;
+    const Uint64 offset = frame * (Uint64) fmt->sample_frame_size;
+    const Sint64 pos = fmt->data_starting_offset + (Sint64) offset;
+    const Sint64 rc = SDL_SeekIO(internal->io, pos, SDL_IO_SEEK_SET);
+    BAIL_IF_MACRO(rc != pos, ERR_IO_ERROR, 0);
+    w->bytesLeft = (Sint32) (fmt->total_bytes - (Uint32) offset);
+    return 1;
+} /* seek_frame_fmt_normal */
+
+
+static int seek_frame_fmt_adpcm(Sound_Sample *sample, Uint64 frame)
+{
+    Sound_SampleInternal *internal = (Sound_SampleInternal *) sample->opaque;
+    wav_t *w = (wav_t *) internal->decoder_private;
+    fmt_t *fmt = w->fmt;
+    const Uint32 spb = fmt->fmt.adpcm.wSamplesPerBlock;
+    const Uint64 block = frame / spb;
+    const Uint32 into = (Uint32) (frame % spb);
+    const Uint64 block_offset = block * fmt->wBlockAlign;
+    const Sint64 block_pos = fmt->data_starting_offset + (Sint64) block_offset;
+    const Uint32 bytes_from_block = (Uint32) (fmt->total_bytes
+                                              - (Uint32) block_offset);
+    Sint64 rc;
+    Uint32 skip;
+
+    /* Positioning at the very end of the data leaves an empty decoder. */
+    if (block_pos >= fmt->data_starting_offset + (Sint64) fmt->total_bytes)
+    {
+        rc = SDL_SeekIO(internal->io, block_pos, SDL_IO_SEEK_SET);
+        BAIL_IF_MACRO(rc != block_pos, ERR_IO_ERROR, 0);
+        w->bytesLeft = 0;
+        fmt->fmt.adpcm.samples_left_in_block = 0;
+        return 1;
+    }
+
+    /* The header reader judges EOF through bytesLeft; a backwards seek must
+       not inherit a nearly-exhausted counter, so restore the value the stream
+       has at the start of this block before it reads the header. */
+    w->bytesLeft = (Sint32) bytes_from_block;
+
+    rc = SDL_SeekIO(internal->io, block_pos, SDL_IO_SEEK_SET);
+    BAIL_IF_MACRO(rc != block_pos, ERR_IO_ERROR, 0);
+
+    if (!read_adpcm_block_headers(sample))
+        return 0;  /* EOF/error flags are already set */
+
+    if (into == 0)
+    {
+        /* Make the next read take the ordinary "new block" path, which
+           re-reads these headers and emits the block's first frame. */
+        rc = SDL_SeekIO(internal->io, block_pos, SDL_IO_SEEK_SET);
+        BAIL_IF_MACRO(rc != block_pos, ERR_IO_ERROR, 0);
+        w->bytesLeft = (Sint32) bytes_from_block;
+        fmt->fmt.adpcm.samples_left_in_block = 0;
+        return 1;
+    }
+
+    /* Frame zero of the block is the header's free iSamp2 frame and iSamp1
+       already holds frame one. Decode into-1 nibble frames so iSamp1 holds
+       exactly frame `into`, the frame the next read must emit first. The
+       position never gets rounded to a millisecond or a whole block. */
+    fmt->fmt.adpcm.samples_left_in_block--;  /* account for the free frame */
+    skip = into - 1;
+    while (skip > 0)
+    {
+        if (!decode_adpcm_sample_frame(sample))
+        {
+            sample->flags |= SOUND_SAMPLEFLAG_ERROR;
+            return 0;
+        }
+        fmt->fmt.adpcm.samples_left_in_block--;
+        skip--;
+    }
+
+    return 1;
+} /* seek_frame_fmt_adpcm */
+
+
+int Sound_WAVLoopSupports(Sound_Sample *sample)
+{
+    Sound_SampleInternal *internal;
+    wav_t *w;
+    fmt_t *fmt;
+
+    if ((sample == NULL) || !(sample->flags & SOUND_SAMPLEFLAG_CANSEEK))
+        return 0;
+
+    internal = (Sound_SampleInternal *) sample->opaque;
+    if ((internal == NULL) || (internal->decoder_private == NULL))
+        return 0;
+
+    /* Only the WAV decoder's private data has the layout below. */
+    if (internal->funcs != &__Sound_DecoderFunctions_WAV)
+        return 0;
+
+    w = (wav_t *) internal->decoder_private;
+    fmt = w->fmt;
+
+    if ((fmt->wChannels < 1) || (fmt->wChannels > SOUND_MAX_CHANNELS))
+        return 0;
+
+    if (fmt->wFormatTag == FMT_NORMAL)
+        return fmt->wBitsPerSample == 16;
+
+    if (fmt->wFormatTag == FMT_ADPCM)
+        return 1;
+
+    return 0;
+} /* Sound_WAVLoopSupports */
+
+
+Uint64 Sound_WAVLoopTotalFrames(Sound_Sample *sample)
+{
+    Sound_SampleInternal *internal = (Sound_SampleInternal *) sample->opaque;
+    wav_t *w = (wav_t *) internal->decoder_private;
+    fmt_t *fmt = w->fmt;
+
+    if (fmt->wFormatTag == FMT_ADPCM)
+    {
+        const Uint64 blocks = fmt->total_bytes / fmt->wBlockAlign;
+        return blocks * fmt->fmt.adpcm.wSamplesPerBlock;
+    }
+
+    return fmt->total_bytes / fmt->sample_frame_size;
+} /* Sound_WAVLoopTotalFrames */
+
+
+int Sound_WAVLoopSeekFrame(Sound_Sample *sample, Uint64 source_frame)
+{
+    Sound_SampleInternal *internal = (Sound_SampleInternal *) sample->opaque;
+    wav_t *w = (wav_t *) internal->decoder_private;
+
+    if (w->fmt->wFormatTag == FMT_ADPCM)
+        return seek_frame_fmt_adpcm(sample, source_frame);
+
+    return seek_frame_fmt_normal(sample, source_frame);
+} /* Sound_WAVLoopSeekFrame */
 
 
 static const char *extensions_wav[] = { "WAV", NULL };

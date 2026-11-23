@@ -165,6 +165,7 @@ set(SDLSOUND_SRCS
     src/SDL_sound_au.c
     src/SDL_sound_coreaudio.c
     src/SDL_sound_flac.c
+    src/SDL_sound_loop.c
     src/SDL_sound_midi.c
     src/SDL_sound_modplug.c
     src/SDL_sound_mp3.c
@@ -179,6 +180,7 @@ set(SDLSOUND_HDRS
     src/dr_mp3.h
     "include/SDL3_sound/SDL_sound.h"
     src/SDL_sound_internal.h
+    src/SDL_sound_loop.h
     src/stb_vorbis.h
 )
 source_group("src" FILES ${SDLSOUND_SRCS} ${SDLSOUND_HDRS} ${SDLSOUND_SHARED_SRCS})
@@ -266,6 +268,17 @@ if(NOT TARGET SDL3_sound::SDL3_sound)
     else()
         add_library(SDL3_sound::SDL3_sound ALIAS SDL3_sound-static)
     endif()
+endif()
+
+# The loop header is force-included in every production translation unit,
+# exactly as the fixed task build consumes it.
+if(CMAKE_C_COMPILER_ID MATCHES "(Clang|^GNU$)")
+    foreach(_sdlsound_tgt SDL3_sound-static SDL3_sound-shared)
+        if(TARGET ${_sdlsound_tgt})
+            target_compile_options(${_sdlsound_tgt} PRIVATE
+                "-include${PROJECT_SOURCE_DIR}/src/SDL_sound_loop.h")
+        endif()
+    endforeach()
 endif()
 
 option(SDLSOUND_BUILD_TEST "Build stdio test program." TRUE)

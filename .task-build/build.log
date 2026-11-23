@@ -1,0 +1,8 @@
+[ 11%] Built target SDL_uclibc
+[ 93%] Built target SDL3-static
+[ 95%] Built target task_sound
+[ 96%] Built target api-probe
+[ 99%] Built target native-baseline
+[ 99%] Built target loop-example
+[100%] Built target task-target
+[100%] Built target output-probe

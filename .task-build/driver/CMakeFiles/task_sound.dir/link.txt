@@ -1,0 +1,2 @@
+/usr/bin/ar qc libtask_sound.a CMakeFiles/task_sound.dir/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/src/SDL_sound.c.o CMakeFiles/task_sound.dir/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/src/SDL_sound_wav.c.o CMakeFiles/task_sound.dir/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/src/SDL_sound_loop.c.o
+/usr/bin/ranlib libtask_sound.a

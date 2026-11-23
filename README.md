@@ -44,6 +44,46 @@ SDL_sound always supports the following file formats internally:
 
 Please read docs/INSTALL.txt.
 
+## Finite loop regions
+
+For game-style sound preview, a seekable 16-bit PCM or Microsoft ADPCM
+RIFF/WAVE (mono or stereo) can be given a finite loop region in native sample
+frames with `Sound_SetLoop(sample, start, end, additional_repeats)`. The
+decoded stream is then logically
+
+```
+[0,end), additional_repeats extra plays of [start,end), then [end,N)
+```
+
+where N is the source length. Zero repeats is the original material, and only
+the region bounds and the repeat count are stored — the expanded waveform is
+never allocated. Loop points are exact frames; an ADPCM start or end may land
+in the middle of a block and is never rounded to milliseconds.
+
+There are two distinct ways playback position changes, and they keep
+different converter history:
+
+- **Natural loop jumps** happen inside the decoder when a read reaches the
+  region end. The underlying WAV decoder seeks back to the region start, but
+  the same `SDL_AudioStream` keeps running: it is not flushed, cleared or
+  recreated, so resampling and any filter history stay continuous across the
+  jump. All repeats and the tail flow through that one stream.
+- **Explicit seeks** (`Sound_SeekLoopFrame`, and `Sound_Rewind`, which is a
+  seek to logical frame zero) start a brand-new playback generation. Queued
+  PCM, pending EOF/error state and all converter/resampler history are
+  discarded, so the suffix at the target decodes with zero prior history, as
+  if it were the start of a new stream. The repeat configuration and the
+  repeats still remaining are retained. Out-of-range targets are rejected
+  before touching the backend, leaving the current scene unchanged; a failed
+  underlying seek sets the error state instead of delivering stale audio, and
+  a later successful seek recovers.
+
+While a loop is configured, the millisecond `Sound_Seek` is refused; use
+`Sound_SeekLoopFrame`. The region can be configured before the first decode,
+or replaced after a `Sound_Rewind`. `Sound_GetLoopPosition` reports the
+delivery clock (frames actually handed to the application), never the
+decoder's read-ahead position.
+
 ## Reporting bugs/commenting:
 
 Please visit https://github.com/icculus/SDL_sound/issues for the bug tracker.

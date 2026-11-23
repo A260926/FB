@@ -15,6 +15,7 @@
 
 #define __SDL_SOUND_INTERNAL__
 #include "SDL_sound_internal.h"
+#include "SDL_sound_loop.h"
 
 /* The various decoder drivers... */
 
@@ -572,6 +573,7 @@ void Sound_FreeSample(Sound_Sample *sample)
         SDL_CloseIO(internal->io);
 
     SDL_DestroyAudioStream(internal->stream);
+    SDL_free(internal->loop);
     SDL_free(internal);
     __Sound_SIMDFree(sample->buffer);
     SDL_free(sample);
@@ -591,6 +593,10 @@ int Sound_SetBufferSize(Sound_Sample *sample, Uint32 newSize)
 
     internal->buffer = sample->buffer = newBuf;
     internal->buffer_size = sample->buffer_size = newSize;
+
+    /* Queued, not-yet-delivered PCM lives inside the SDL_AudioStream, not in
+       this scratch buffer, so resizing neither drops audio nor disturbs the
+       loop's repeat count or the delivery clock. */
 
     return 1;
 } /* Sound_SetBufferSize */
@@ -636,6 +642,20 @@ int Sound_SetDesiredFormat(Sound_Sample *sample, const SDL_AudioSpec *desired)
 } /* Sound_SetDesiredFormat */
 
 
+/*
+ * Read through the loop layer when a finite loop region is configured; the
+ * loop wrapper performs the frame-exact decoder jumps. Other samples keep
+ * calling their decoder directly, unchanged.
+ */
+static Uint32 loop_aware_read(Sound_Sample *sample)
+{
+    Sound_SampleInternal *internal = (Sound_SampleInternal *) sample->opaque;
+    if (internal->loop != NULL)
+        return Sound_LoopRead(sample);
+    return internal->funcs->read(sample);
+} /* loop_aware_read */
+
+
 Uint32 Sound_Decode(Sound_Sample *sample)
 {
     Sound_SampleInternal *internal = NULL;
@@ -654,12 +674,23 @@ Uint32 Sound_Decode(Sound_Sample *sample)
     SDL_assert(internal->buffer != NULL);
     SDL_assert(internal->buffer_size > 0);
 
+    /* The first Decode locks any loop configuration until a rewind. */
+    internal->playback_started = true;
+
     /* No AudioStream? No conversion. Decode right into the buffer and return it. */
     if (!internal->stream)
     {
+        Uint32 br;
         /* reset EAGAIN. Decoder can flip it back on if it needs to. */
         sample->flags &= ~SOUND_SAMPLEFLAG_EAGAIN;
-        return internal->funcs->read(sample);
+        br = loop_aware_read(sample);
+        if (br > 0)
+        {
+            internal->playback_started = true;
+            Sound_LoopClockAdvance(sample,
+                br / (Uint32) SDL_AUDIO_FRAMESIZE(sample->desired));
+        }
+        return br;
     } /* if */
 
     /* call into the decoder several times until we have enough data. */
@@ -673,7 +704,7 @@ Uint32 Sound_Decode(Sound_Sample *sample)
 
         /* reset EAGAIN. Decoder can flip it back on if it needs to. */
         sample->flags &= ~SOUND_SAMPLEFLAG_EAGAIN;
-        br = internal->funcs->read(sample);
+        br = loop_aware_read(sample);
 
         /* if the sample hit an error or EOF, note it, but don't let these flags
            be set for the calling app until the stream is empty too. */
@@ -715,6 +746,8 @@ Uint32 Sound_Decode(Sound_Sample *sample)
         } /* if */
 
         SDL_assert(br > 0);
+        Sound_LoopClockAdvance(sample,
+            (Uint32) (br / SDL_AUDIO_FRAMESIZE(sample->desired)));
         return (Uint32) br;
     } /* if */
 
@@ -779,12 +812,23 @@ int Sound_Rewind(Sound_Sample *sample)
     BAIL_IF_MACRO(!initialized, ERR_NOT_INITIALIZED, 0);
 
     internal = (Sound_SampleInternal *) sample->opaque;
+
+    if (internal->loop != NULL)
+    {
+        /* With a loop region, rewind is exactly a frame-zero loop seek: a
+           fresh generation with no conversion history. It also unlocks the
+           configuration so the loop region may be replaced. */
+        internal->playback_started = false;
+        return Sound_SeekLoopFrame(sample, 0);
+    }
+
     if (!internal->funcs->rewind(sample))
     {
         sample->flags |= SOUND_SAMPLEFLAG_ERROR;
         return 0;
     } /* if */
 
+    internal->playback_started = false;
     sample->flags &= ~SOUND_SAMPLEFLAG_EAGAIN;
     sample->flags &= ~SOUND_SAMPLEFLAG_ERROR;
     sample->flags &= ~SOUND_SAMPLEFLAG_EOF;
@@ -802,6 +846,9 @@ int Sound_Seek(Sound_Sample *sample, Uint32 ms)
         BAIL_MACRO(ERR_CANNOT_SEEK, 0);
 
     internal = (Sound_SampleInternal *) sample->opaque;
+    if (internal->loop != NULL)
+        BAIL_MACRO("Use Sound_SeekLoopFrame() while a loop region is set", 0);
+
     BAIL_IF_MACRO(!internal->funcs->seek(sample, ms), NULL, 0);
 
     sample->flags &= ~SOUND_SAMPLEFLAG_EAGAIN;
@@ -810,6 +857,133 @@ int Sound_Seek(Sound_Sample *sample, Uint32 ms)
 
     return 1;
 } /* Sound_Rewind */
+
+
+int Sound_SetLoop(Sound_Sample *sample, Uint64 start, Uint64 end,
+                  Uint32 additional_repeats)
+{
+    Sound_SampleInternal *internal;
+    Uint64 total_frames;
+
+    BAIL_IF_MACRO(!initialized, ERR_NOT_INITIALIZED, 0);
+    BAIL_IF_MACRO(sample == NULL, ERR_INVALID_ARGUMENT, 0);
+
+    internal = (Sound_SampleInternal *) sample->opaque;
+
+    if (!Sound_WAVLoopSupports(sample))
+        BAIL_MACRO("Looping requires a seekable mono/stereo 16-bit PCM or Microsoft ADPCM WAV", 0);
+
+    if (internal->playback_started)
+        BAIL_MACRO("Loop region cannot be changed after decoding started; rewind first", 0);
+
+    total_frames = Sound_WAVLoopTotalFrames(sample);
+
+    /* Validate into a temporary first, so a rejected region leaves the
+       previous configuration (and a never-configured sample) completely
+       intact, with no half-attached loop state. */
+    {
+        Sound_LoopState candidate;
+        Sound_LoopInitState(&candidate);
+        if (internal->loop != NULL)
+            candidate = *internal->loop;
+        if (!Sound_LoopConfigure(&candidate, total_frames, start, end,
+                                 additional_repeats))
+            return 0;
+
+        /* Move the real decoder to frame zero before committing anything:
+           a failed seek must leave the previous configuration in place. */
+        if (!Sound_WAVLoopSeekFrame(sample, 0))
+        {
+            sample->flags |= SOUND_SAMPLEFLAG_ERROR;
+            return 0;
+        } /* if */
+
+        if (internal->loop == NULL)
+        {
+            internal->loop = (Sound_LoopState *) SDL_calloc(1,
+                                              sizeof (Sound_LoopState));
+            BAIL_IF_MACRO(internal->loop == NULL, ERR_OUT_OF_MEMORY, 0);
+        }
+        *internal->loop = candidate;
+    }
+
+    /* Successful configuration starts playback at logical frame zero with a
+       fresh, history-free conversion scene. */
+    if (internal->stream != NULL)
+        SDL_ClearAudioStream(internal->stream);
+    internal->pending_eof = internal->pending_error = false;
+    internal->playback_started = false;
+    sample->flags &= ~(SOUND_SAMPLEFLAG_EAGAIN | SOUND_SAMPLEFLAG_ERROR |
+                       SOUND_SAMPLEFLAG_EOF);
+    return 1;
+} /* Sound_SetLoop */
+
+
+int Sound_SeekLoopFrame(Sound_Sample *sample, Uint64 logical_frame)
+{
+    Sound_SampleInternal *internal;
+    Sound_LoopState *loop;
+    Uint64 source_frame;
+
+    BAIL_IF_MACRO(!initialized, ERR_NOT_INITIALIZED, 0);
+    BAIL_IF_MACRO(sample == NULL, ERR_INVALID_ARGUMENT, 0);
+    internal = (Sound_SampleInternal *) sample->opaque;
+    BAIL_IF_MACRO(internal->loop == NULL, "No loop region configured", 0);
+    loop = internal->loop;
+
+    /* Out-of-range targets are rejected before the underlying stream is
+       touched, so the current playback scene is unchanged. */
+    BAIL_IF_MACRO(logical_frame > loop->total,
+                  "Loop seek position is past the logical end", 0);
+
+    source_frame = Sound_LoopMapSource(loop, logical_frame);
+
+    /* A fresh generation: discard queued PCM, pending end/error state and
+       all converter/resampler history before touching the decoder, so no
+       previously queued sound can be delivered after a failed seek. */
+    if (internal->stream != NULL)
+        SDL_ClearAudioStream(internal->stream);
+    internal->pending_eof = internal->pending_error = false;
+    sample->flags &= ~(SOUND_SAMPLEFLAG_EAGAIN | SOUND_SAMPLEFLAG_ERROR |
+                       SOUND_SAMPLEFLAG_EOF);
+
+    if (!Sound_WAVLoopSeekFrame(sample, source_frame))
+    {
+        sample->flags |= SOUND_SAMPLEFLAG_ERROR;
+        return 0;
+    } /* if */
+
+    Sound_LoopBeginGeneration(loop, logical_frame);
+    /* The configuration lock (playback_started) survives a seek: only a
+       Rewind permits replacing the loop region. */
+    return 1;
+} /* Sound_SeekLoopFrame */
+
+
+int Sound_GetLoopPosition(Sound_Sample *sample, Sound_LoopPosition *pos)
+{
+    Sound_SampleInternal *internal;
+    Sound_LoopState *loop;
+    Uint64 q;
+
+    BAIL_IF_MACRO(!initialized, ERR_NOT_INITIALIZED, 0);
+    BAIL_IF_MACRO(sample == NULL || pos == NULL, ERR_INVALID_ARGUMENT, 0);
+    internal = (Sound_SampleInternal *) sample->opaque;
+    BAIL_IF_MACRO(internal->loop == NULL, "No loop region configured", 0);
+    loop = internal->loop;
+
+    /* The reported position follows delivered desired-format frames (the
+       delivery clock), never the decoder's read-ahead position. */
+    q = loop->origin + loop->clock_pos;
+    if (q > loop->total)
+        q = loop->total;
+
+    pos->logical_frame = q;
+    pos->source_frame = Sound_LoopMapSource(loop, q);
+    pos->output_frame = loop->delivered;
+    pos->remaining_repeats = Sound_LoopRemainingRepeats(loop, q);
+    return 1;
+} /* Sound_GetLoopPosition */
 
 
 Sint32 Sound_GetDuration(Sound_Sample *sample)

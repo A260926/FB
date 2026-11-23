@@ -1,0 +1,12 @@
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/task_sound.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/native-baseline.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/api-probe.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/loop-example.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/task-target.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/output-probe.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/sdl/CMakeFiles/SDL3-static.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/sdl/CMakeFiles/SDL_uclibc.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/sdl/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS1046080974C9U15396/attempts/20261123T014528137336Z/repo/.task-build/driver/sdl/CMakeFiles/rebuild_cache.dir
