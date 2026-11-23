@@ -7,7 +7,8 @@ targets = \
   id3dump \
   mpglib \
   dump_seekindex \
-  extract_frames
+  extract_frames \
+  wav_cues
 
 all: $(targets)
 
@@ -61,6 +62,9 @@ mpglib: mpglib.c
 
 extract_frames: extract_frames.c
 	$(compile) -o $@ $< $(linkflags)
+
+wav_cues: wav_cues.c
+	$(compile) -o $@ $< $(OUT123_CFLAGS) $(OUT123_LDFLAGS) -lm
 
 clean:
 	rm -vf $(targets)

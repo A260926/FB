@@ -32,6 +32,9 @@ int INT123_buffer_formats( out123_handle *ao, const long *rates, int ratecount
                   , struct mpg123_fmt **fmtlist );
 int INT123_buffer_start(out123_handle *ao);
 void INT123_buffer_ndrain(out123_handle *ao, size_t bytes);
+/* Hand the collected chapter marks to the buffer process so it can append
+   them to the WAV file it actually writes. */
+int INT123_buffer_cues(out123_handle *ao);
 
 /* Simple messages to be deal with after playback. */
 

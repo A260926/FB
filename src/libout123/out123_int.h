@@ -48,6 +48,16 @@ enum playstate
 ,	play_live     /* playing right now */
 };
 
+/* One named chapter mark for WAV output. The position is the absolute
+   sample frame offset inside the current file. The label is a copy of the
+   UTF-8 name without embedded NUL, NULL for an empty name. */
+struct out123_cue
+{
+	unsigned long id;
+	size_t pos;
+	char *label;
+};
+
 struct out123_struct
 {
 	enum out123_error errcode;
@@ -95,6 +105,13 @@ struct out123_struct
 	int verbose;	/* verbosity to stderr */
 	double device_buffer; /* device buffer in seconds */
 	char *bindir;	/* OUT123_BINDIR */
+	/* Chapter marks for WAV output. Only the controlling process keeps
+	   this list; the buffer process only counts frames, never marks. */
+	struct out123_cue *cues;
+	size_t cue_count;
+	size_t cue_size;
+	size_t cue_frames; /* frames accepted for the current output stream */
+	int cue_support; /* backend can take WAV chapter marks (buffer proxy) */
 /* TODO int intflag;   ... is it really useful/necessary from the outside? */
 };
 
@@ -111,6 +128,17 @@ struct audio_format_name {
 	char *name;
 	char *sname;
 };
+
+/* Chapter mark bookkeeping, shared between the main library code and the
+   buffer process plumbing. */
+void INT123_cue_clear(out123_handle *ao);
+/* Append a mark, copying the given label (NULL for empty). Returns 0 on
+   success, -1 on out-of-memory. */
+int INT123_cue_add(out123_handle *ao, unsigned long id, const char *label
+,	size_t pos);
+/* Remove marks with position greater than the given written tail, keeping
+   the ones that are already effective. */
+void INT123_cue_cancel(out123_handle *ao, size_t written_frames);
 
 #endif
 

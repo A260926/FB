@@ -33,6 +33,11 @@ typedef struct {
 	// strictly work on audio frame boundaries.
 	size_t size;
 	size_t metasize;
+	/* Shared frame counter for chapter marks: the reader (buffer process)
+	   counts the frames it actually wrote out to the file. It lives in
+	   shared memory so the writer does not have to guess what the other
+	   process has done based on its own (stale) view of the file. */
+	size_t frames_written;
 } txfermem;
 /*
  *   [W] -- May be written to by the writing process only!
@@ -48,6 +53,11 @@ void INT123_xfermem_usesize(txfermem *xf, int framesize);
 
 size_t INT123_xfermem_get_freespace (txfermem *xf);
 size_t INT123_xfermem_get_usedspace (txfermem *xf);
+/* Frames actually written out by the buffer process (reader side). Only the
+   reader increments this; the writer just reads it. */
+void INT123_xfermem_add_written(txfermem *xf, size_t frames);
+size_t INT123_xfermem_get_written(txfermem *xf);
+void INT123_xfermem_reset_written(txfermem *xf);
 
 /* Unless otherwise noted, each command demands a reponse if issued from the
    writer. The reader does not expect responses, only orders. */
@@ -72,6 +82,7 @@ enum xf_cmd_code
 ,	XF_CMD_CUSTOM6   /**< Some custom command to be filled with meaning. */
 ,	XF_CMD_CUSTOM7   /**< Some custom command to be filled with meaning. */
 ,	XF_CMD_CUSTOM8   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUE       /**< Writer hands a set of chapter marks to the reader. */
 };
 
 #define XF_WRITER 0

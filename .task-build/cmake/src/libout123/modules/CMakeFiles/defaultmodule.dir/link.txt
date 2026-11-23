@@ -1,0 +1,2 @@
+/usr/bin/ar qc libdefaultmodule.a CMakeFiles/defaultmodule.dir/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/src/libout123/modules/dummy.c.o
+/usr/bin/ranlib libdefaultmodule.a

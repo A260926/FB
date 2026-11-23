@@ -30,4 +30,5 @@ EXTRA_DIST += \
   doc/examples/feedseek.c \
   doc/examples/dump_seekindex.c \
   doc/examples/extract_frames.c \
+  doc/examples/wav_cues.c \
   doc/examples/Makefile

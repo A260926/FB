@@ -51,6 +51,7 @@ EXTRA_DIST += \
   src/tests/id3-2.3-with-cdi.mp3 \
   src/tests/tmcl.id3 \
   src/tests/uslt.id3 \
+  src/tests/wav_cue_test.c \
   src/tests/sweep.mp3
 
 if BUILD_LIBMPG123

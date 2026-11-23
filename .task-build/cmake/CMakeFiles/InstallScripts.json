@@ -1,0 +1,13 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/src/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/src/compat/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/src/libmpg123/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/src/libout123/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/src/libout123/modules/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS7DC4D5B7A7B8U15357/attempts/20261123T003000561864Z/repo/.task-build/cmake/src/libsyn123/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

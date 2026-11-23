@@ -21,6 +21,11 @@ int INT123_raw_open(out123_handle *);
 int INT123_wav_open(out123_handle *);
 int INT123_wav_write(out123_handle *, unsigned char *buf, int len);
 int INT123_wav_close(out123_handle *);
+/* Appends the cue and LIST/adtl chunks for the registered marks after the
+   data chunk. The number of appended bytes (including a possible pad byte
+   after odd-sized data) is stored in *extra. Returns 0 on success. */
+int INT123_wav_write_cues(out123_handle *ao, const struct out123_cue *cues
+,	size_t cue_count, size_t *extra);
 int INT123_au_close(out123_handle *);
 int INT123_raw_close(out123_handle *);
 int INT123_cdr_formats(out123_handle *);

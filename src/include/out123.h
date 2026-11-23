@@ -18,7 +18,7 @@
  * This must be incremented at least each time a new symbol is added
  * to the header.
  */
-#define OUT123_API_VERSION 5
+#define OUT123_API_VERSION 6
 /** library patch level at client build time */
 #define OUT123_PATCHLEVEL  2
 
@@ -726,6 +726,53 @@ void out123_ndrain(out123_handle *ao, size_t bytes);
  */
 MPG123_EXPORT
 size_t out123_buffered(out123_handle *ao);
+
+/** Mark a named chapter/cue point in a WAV file output.
+ *
+ *  The position recorded is that of the first PCM frame that was not yet
+ *  successfully accepted by preceding out123_play() calls. That is: all
+ *  complete PCM frames that were accepted before this call have been taken
+ *  into account. The unit of the position is a sample frame (one sample per
+ *  channel), stored in the cue chunk as 32 bit sample offset.
+ *
+ *  Without the optional buffer, this is simply the number of frames already
+ *  written to the file. With the optional buffer active, the count also
+ *  includes audio that is still sitting in the shared ring buffer, waiting
+ *  for the buffer process to write it out. Registering is allowed while the
+ *  output is live or paused; it never drains, resumes playback or touches the
+ *  preload setting, and it does not rely on the file length of the writer
+ *  process (which is not where the data is written when buffering is active).
+ *
+ *  A cue only takes effect once all PCM before it has actually been written
+ *  out. out123_drop() discards not-yet-written audio: pending cues that lie
+ *  beyond the real written tail are cancelled along with it, while cues whose
+ *  boundary was already reached are kept. A cancelled ID may be registered
+ *  again. Following out123_play() calls continue counting from the real end
+ *  of file, so pause/continue, playing in pieces, ring buffer wrap-around and
+ *  the ordinary drain on stop/close do not change any cue position.
+ *  Handles are independent of each other; re-opening a handle does not
+ *  inherit old marks.
+ *
+ *  When the file is closed, cue and LIST/adtl chunks are appended after the
+ *  data chunk, preserving registration order and keeping cues that share a
+ *  position but have different IDs. Only seekable, ordinary little-endian
+ *  RIFF/WAVE output with a single data chunk that fits into 32 bit fields is
+ *  supported; RF64, device output and resampling are not.
+ *
+ *  On failure nothing is consumed and no partial mark is created.
+ *
+ * \param ao handle
+ * \param id chapter identifier, must be in the range 1 to 0xffffffff
+ * \param label UTF-8 name, at most 255 bytes without embedded NUL, may be
+ *    empty (or NULL for an empty name); it is copied on success
+ * \return 0 on success, -1 on error, with out123_errcode() set:
+ *    #OUT123_ARG_ERROR for invalid arguments or a duplicate valid ID,
+ *    #OUT123_NOT_LIVE if playback has not been started,
+ *    #OUT123_NOT_SUPPORTED for a non-WAV output or one that cannot have its
+ *    header backfilled.
+ */
+MPG123_EXPORT
+int out123_wav_cue(out123_handle *ao, unsigned long id, const char *label);
 
 /** Extract currently used audio format from handle.
  *  matching mpg123_getformat().

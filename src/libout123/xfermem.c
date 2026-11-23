@@ -83,6 +83,7 @@ void INT123_xfermem_init (txfermem **xf, size_t bufsize, size_t msize, size_t sk
 	(*xf)->fullsize = bufsize;
 	(*xf)->size = bufsize; // Unless overridden for certain frame size.
 	(*xf)->metasize = msize + skipbuf;
+	(*xf)->frames_written = 0;
 }
 
 void INT123_xfermem_done (txfermem *xf)
@@ -153,6 +154,26 @@ void INT123_xfermem_usesize(txfermem *xf, int framesize)
 	if(!xf || framesize < 1)
 		return; // Just ignore stupid.
 	xf->size = xf->fullsize - (xf->fullsize % framesize);
+}
+
+/* The written-frame counter lives in shared memory that both processes have
+   mapped, but only the reader (buffer process) ever writes it. The writer
+   only reads it. That keeps the synchronization simple. */
+void INT123_xfermem_add_written(txfermem *xf, size_t frames)
+{
+	if(xf)
+		xf->frames_written += frames;
+}
+
+size_t INT123_xfermem_get_written(txfermem *xf)
+{
+	return xf ? xf->frames_written : 0;
+}
+
+void INT123_xfermem_reset_written(txfermem *xf)
+{
+	if(xf)
+		xf->frames_written = 0;
 }
 
 static int xfermem_getcmd_raw (int fd, int block, byte *cmds, int count)

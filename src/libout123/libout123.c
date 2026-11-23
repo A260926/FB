@@ -99,6 +99,71 @@ static void out123_clear_module(out123_handle *ao)
 	ao->fn = -1;
 	/* The default is live output devices, files are the special case. */
 	ao->propflags = OUT123_PROP_LIVE;
+	/* A fresh module cannot be assumed to support chapter marks. */
+	ao->cue_support = 0;
+}
+
+void INT123_cue_clear(out123_handle *ao)
+{
+	size_t c;
+	if(!ao)
+		return;
+	for(c=0; c<ao->cue_count; ++c)
+		free(ao->cues[c].label);
+	free(ao->cues);
+	ao->cues = NULL;
+	ao->cue_count = 0;
+	ao->cue_size = 0;
+}
+
+int INT123_cue_add(out123_handle *ao, unsigned long id, const char *label
+,	size_t pos)
+{
+	char *copy = NULL;
+	if(label && *label)
+	{
+		if(!(copy = INT123_compat_strdup(label)))
+			return -1;
+	}
+	if(ao->cue_count == ao->cue_size)
+	{
+		size_t newsize = ao->cue_size ? 2*ao->cue_size : 8;
+		struct out123_cue *newcues = realloc( ao->cues
+		,	newsize*sizeof(struct out123_cue) );
+		if(!newcues)
+		{
+			free(copy);
+			return -1;
+		}
+		ao->cues = newcues;
+		ao->cue_size = newsize;
+	}
+	ao->cues[ao->cue_count].id = id;
+	ao->cues[ao->cue_count].pos = pos;
+	ao->cues[ao->cue_count].label = copy;
+	++ao->cue_count;
+	return 0;
+}
+
+void INT123_cue_cancel(out123_handle *ao, size_t written_frames)
+{
+	size_t in, out = 0;
+	if(!ao)
+		return;
+	for(in=0; in<ao->cue_count; ++in)
+	{
+		if(ao->cues[in].pos > written_frames)
+		{
+			/* The audio before this mark was dropped, so the mark goes
+			   with it. Its ID becomes available again. */
+			free(ao->cues[in].label);
+			continue;
+		}
+		if(out != in)
+			ao->cues[out] = ao->cues[in];
+		++out;
+	}
+	ao->cue_count = out;
 }
 
 /* Ensure that real name is not leaked, needs to be freed before any call to
@@ -146,6 +211,11 @@ out123_handle* attribute_align_arg out123_new(void)
 	ao->verbose = 0;
 	ao->device_buffer = 0.;
 	ao->bindir = NULL;
+	ao->cues = NULL;
+	ao->cue_count = 0;
+	ao->cue_size = 0;
+	ao->cue_frames = 0;
+	ao->cue_support = 0;
 	return ao;
 }
 
@@ -163,6 +233,7 @@ void attribute_align_arg out123_del(out123_handle *ao)
 		free(ao->name);
 	if(ao->bindir)
 		free(ao->bindir);
+	INT123_cue_clear(ao);
 	free(ao);
 }
 
@@ -417,6 +488,11 @@ out123_open(out123_handle *ao, const char* driver, const char* device)
 	out123_close(ao);
 	debug("out123_open() continuing");
 
+	/* A new file starts with no marks and no accepted audio. */
+	INT123_cue_clear(ao);
+	ao->cue_frames = 0;
+	ao->cue_support = 0;
+
 	/* Ensure that audio format is freshly set for "no format yet" mode.
 	   In out123_start*/
 	ao->rate = -1;
@@ -507,7 +583,14 @@ void attribute_align_arg out123_close(out123_handle *ao)
 
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
+	{
+		/* Hand the marks to the buffer process before it closes the file, so
+		   the cue chunks get appended where the data really is written. All
+		   remaining marks are effective by now (drain wrote everything). */
+		if(ao->cue_count)
+			INT123_buffer_cues(ao);
 		INT123_buffer_close(ao);
+	}
 	else
 #endif
 	{
@@ -530,6 +613,10 @@ void attribute_align_arg out123_close(out123_handle *ao)
 		free(ao->realname);
 	ao->realname = NULL;
 
+	/* Marks are per output stream; do not inherit them on a later open. */
+	INT123_cue_clear(ao);
+	ao->cue_frames = 0;
+
 	ao->state = play_dead;
 }
 
@@ -549,6 +636,12 @@ out123_start(out123_handle *ao, long rate, int channels, int encoding)
 	// Stop stupid parameters early.
 	if(rate < 1 || channels < 1)
 		return out123_seterr(ao, OUT123_DEV_OPEN);
+
+	/* Starting a fresh output stream: forget old marks and the accepted
+	   frame count. The backend reports (or sets) cue support on opening. */
+	INT123_cue_clear(ao);
+	ao->cue_frames = 0;
+	ao->cue_support = 0;
 
 	/* Stored right away as parameters for ao->open() and also for reference.
 	   framesize needed for out123_play(). */
@@ -641,7 +734,14 @@ void attribute_align_arg out123_stop(out123_handle *ao)
 		return;
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
+	{
+		/* Stop drains all pending audio inside the buffer process, which then
+		   closes the file. The chapter marks must be over there before that
+		   happens, so pass them along first. */
+		if(ao->cue_count)
+			INT123_buffer_cues(ao);
 		INT123_buffer_stop(ao);
+	}
 	else
 #endif
 	if(   ao->state == play_live
@@ -651,6 +751,9 @@ void attribute_align_arg out123_stop(out123_handle *ao)
 			error("trouble closing device");
 	}
 	ao->state = play_stopped;
+	/* Stopping finalises the file (including any chapter chunks); the marks
+	   are spent now. A later start begins a fresh stream. */
+	INT123_cue_clear(ao);
 }
 
 // Replace the data in a given block of audio data with zeroes
@@ -706,7 +809,14 @@ out123_play(out123_handle *ao, void *bytes, size_t count)
 
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
-		return INT123_buffer_write(ao, bytes, count);
+	{
+		size_t accepted = INT123_buffer_write(ao, bytes, count);
+		/* Frames still in the ring buffer count for chapter marks, too:
+		   they are accepted audio that will end up in the file. */
+		if(ao->framesize)
+			ao->cue_frames += accepted / ao->framesize;
+		return accepted;
+	}
 	else
 #endif
 	{
@@ -754,6 +864,8 @@ out123_play(out123_handle *ao, void *bytes, size_t count)
 	}
 	debug3( "out123_play(%p, %p, ...) = %zu"
 	,	(void*)ao, bytes, sum );
+	if(ao->framesize)
+		ao->cue_frames += sum / ao->framesize;
 	return sum;
 }
 
@@ -766,7 +878,18 @@ void attribute_align_arg out123_drop(out123_handle *ao)
 	ao->errcode = 0;
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
+	{
+		size_t written;
 		INT123_buffer_drop(ao);
+		/* The ring was emptied. The real tail of the file is what the
+		   buffer process reports as written so far (already counted in
+		   whole frames). Marks beyond that tail describe audio that is now
+		   gone; marks at or before it already reached their boundary and
+		   stay. Playback after this continues from that real tail. */
+		written = INT123_xfermem_get_written(ao->buffermem);
+		ao->cue_frames = written;
+		INT123_cue_cancel(ao, ao->cue_frames);
+	}
 	else
 #endif
 	if(ao->state == play_live)
@@ -1500,6 +1623,52 @@ out123_formats( out123_handle *ao, const long *rates, int ratecount
 	}
 }
 
+
+int attribute_align_arg out123_wav_cue(out123_handle *ao, unsigned long id
+,	const char *label)
+{
+	size_t labellen = 0;
+	size_t c;
+
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = OUT123_OK;
+
+	/* Validate the ID first: it has to be a 32 bit nonzero value. */
+	if(id < 1 || id > 0xffffffffUL)
+		return out123_seterr(ao, OUT123_ARG_ERROR);
+	/* The label may be empty, but at most 255 bytes without an embedded
+	   NUL. NULL is treated as an empty name. */
+	if(label)
+	{
+		while(labellen <= 255 && label[labellen])
+			++labellen;
+		if(labellen > 255)
+			return out123_seterr(ao, OUT123_ARG_ERROR);
+	}
+
+	/* Registering is only meaningful while an output stream is live or
+	   paused. */
+	if(!(ao->state == play_paused || ao->state == play_live))
+		return out123_seterr(ao, OUT123_NOT_LIVE);
+
+	/* Only a WAV sink whose header can be rewritten at closing can carry
+	   chapter marks. */
+	if(!ao->cue_support)
+		return out123_seterr(ao, OUT123_NOT_SUPPORTED);
+
+	/* IDs must be unique among the marks still in effect; dropped IDs are
+	   free to be used again. */
+	for(c=0; c<ao->cue_count; ++c)
+		if(ao->cues[c].id == id)
+			return out123_seterr(ao, OUT123_ARG_ERROR);
+
+	/* The position is the end of everything accepted so far: written frames
+	   plus, with buffering, the audio still in the shared ring buffer. */
+	if(INT123_cue_add(ao, id, label, ao->cue_frames))
+		return out123_seterr(ao, OUT123_DOOM);
+	return OUT123_OK;
+}
 
 size_t attribute_align_arg out123_buffered(out123_handle *ao)
 {

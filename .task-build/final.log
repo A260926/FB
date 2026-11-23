@@ -1,0 +1,109 @@
+REQUIRED_CUE_API_CALL_OK
+Wrote .task-build/example.wav with 44100 frames and named chapters.
+EXAMPLE_WAVE_OK nonzero_pcm=1
+CASE queue unbuffered_positions checks=16
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue split_play_and_wrap checks=49
+GROUP queue cases=4 checks=89 COMPLETE
+CASE container same_position_and_empty_name checks=19
+CASE container odd_and_even_padding checks=18
+CASE container float_fact checks=12
+CASE container no_marks_no_chunks checks=9
+GROUP container cases=4 checks=58 COMPLETE
+CASE lifecycle error_codes checks=24
+CASE lifecycle failed_mark_does_not_consume checks=10
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue split_play_and_wrap checks=49
+GROUP queue cases=4 checks=89 COMPLETE
+CASE container same_position_and_empty_name checks=19
+CASE container odd_and_even_padding checks=18
+CASE container float_fact checks=12
+CASE container no_marks_no_chunks checks=9
+GROUP container cases=4 checks=58 COMPLETE
+CASE lifecycle error_codes checks=24
+CASE lifecycle failed_mark_does_not_consume checks=10
+CASE lifecycle drop_cancels_and_reuses_id checks=18
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue split_play_and_wrap checks=49
+GROUP queue cases=4 checks=89 COMPLETE
+CASE container same_position_and_empty_name checks=19
+CASE container odd_and_even_padding checks=18
+CASE container float_fact checks=12
+CASE container no_marks_no_chunks checks=9
+GROUP container cases=4 checks=58 COMPLETE
+CASE lifecycle error_codes checks=24
+CASE lifecycle failed_mark_does_not_consume checks=10
+CASE lifecycle drop_cancels_and_reuses_id checks=18
+CASE lifecycle drop_keeps_reached_boundary checks=11
+CASE lifecycle reopen_does_not_inherit checks=15
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue split_play_and_wrap checks=49
+GROUP queue cases=4 checks=89 COMPLETE
+CASE container same_position_and_empty_name checks=19
+CASE container odd_and_even_padding checks=18
+CASE container float_fact checks=12
+CASE container no_marks_no_chunks checks=9
+GROUP container cases=4 checks=58 COMPLETE
+CASE lifecycle error_codes checks=24
+CASE lifecycle failed_mark_does_not_consume checks=10
+CASE lifecycle drop_cancels_and_reuses_id checks=18
+CASE lifecycle drop_keeps_reached_boundary checks=11
+CASE lifecycle reopen_does_not_inherit checks=15
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue split_play_and_wrap checks=49
+GROUP queue cases=4 checks=89 COMPLETE
+CASE container same_position_and_empty_name checks=19
+CASE container odd_and_even_padding checks=18
+CASE container float_fact checks=12
+CASE container no_marks_no_chunks checks=9
+GROUP container cases=4 checks=58 COMPLETE
+CASE lifecycle error_codes checks=24
+CASE lifecycle failed_mark_does_not_consume checks=10
+CASE lifecycle drop_cancels_and_reuses_id checks=18
+CASE lifecycle drop_keeps_reached_boundary checks=11
+CASE lifecycle reopen_does_not_inherit checks=15
+CASE lifecycle two_handles_independent checks=21
+CASE queue unbuffered_positions checks=16
+CASE queue buffered_positions checks=14
+CASE queue pause_accumulate checks=10
+CASE queue split_play_and_wrap checks=49
+GROUP queue cases=4 checks=89 COMPLETE
+CASE container same_position_and_empty_name checks=19
+CASE container odd_and_even_padding checks=18
+CASE container float_fact checks=12
+CASE container no_marks_no_chunks checks=9
+GROUP container cases=4 checks=58 COMPLETE
+CASE lifecycle error_codes checks=24
+CASE lifecycle failed_mark_does_not_consume checks=10
+CASE lifecycle drop_cancels_and_reuses_id checks=18
+CASE lifecycle drop_keeps_reached_boundary checks=11
+CASE lifecycle reopen_does_not_inherit checks=15
+CASE lifecycle two_handles_independent checks=21
+CASE lifecycle drain_and_pause_keep_positions checks=13
+GROUP lifecycle cases=7 checks=112 COMPLETE
+TARGET_COMPLETE cases=15
+WAVE_PROBE buffered=0 encoding=s16 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=0 encoding=float32 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=0 encoding=s16 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=0 encoding=float32 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=1 encoding=s16 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=0 encoding=s16 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=0 encoding=float32 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=1 encoding=s16 frames=17 pcm=exact riff=valid
+WAVE_PROBE buffered=1 encoding=float32 frames=17 pcm=exact riff=valid
+WAVE_BASELINE_OK cases=4

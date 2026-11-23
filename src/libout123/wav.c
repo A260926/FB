@@ -76,6 +76,9 @@ struct wavdata
 	*/
 	void *the_header;
 	size_t the_header_size;
+	int seekable; /* file position can be rewound to fix the header */
+	int framesize; /* bytes per PCM frame, for frame offsets */
+	size_t riffextra; /* bytes appended after the data chunk (pad + cues) */
 };
 
 static struct wavdata* wavdata_new(void)
@@ -90,6 +93,9 @@ static struct wavdata* wavdata_new(void)
 		wdat->floatwav = 0;
 		wdat->the_header = NULL;
 		wdat->the_header_size = 0;
+		wdat->seekable = 0;
+		wdat->framesize = 0;
+		wdat->riffextra = 0;
 	}
 	return wdat;
 }
@@ -140,6 +146,15 @@ static long from_little(byte *inval, int b)
 	for(i=0;i<b;++i) ret += ((long)inval[i])<<(i*8);
 
 	return ret;
+}
+
+/* Unsigned 32 bit little endian helpers for the chunk lengths and frame
+   offsets, which must not depend on the width of long. */
+static void u32le(unsigned long inval, byte *outval)
+{
+	int i;
+	for(i=0; i<4; ++i)
+		outval[i] = (byte)((inval>>(i*8)) & 0xff);
 }
 
 static int testEndian(void) 
@@ -514,6 +529,12 @@ int INT123_wav_open(out123_handle *ao)
 	if(open_file(wdat, ao->device) < 0)
 		goto wav_open_bad;
 
+	/* Chapter marks need to rewind and rewrite the header at closing, which
+	   only works on a seekable file. A regular file always qualifies; a pipe
+	   or a device does not. */
+	wdat->seekable = fseek(wdat->wavfp, 0L, SEEK_CUR) == 0;
+	ao->cue_support = wdat->seekable;
+
 	if(wdat->floatwav)
 	{
 		long2littleendian(wdat->datalen, floathead->WAVE.data.datalen
@@ -531,6 +552,7 @@ int INT123_wav_open(out123_handle *ao)
 	}
 
 	wdat->bytes_per_sample = bps>>3;
+	wdat->framesize = ao->channels * wdat->bytes_per_sample;
 
 	ao->userptr = wdat;
 	return 0;
@@ -613,6 +635,137 @@ if(fflush(wdat->wavfp))
 	return temp;
 }
 
+/* Write a single RIFF chunk header with the given four-character ID and
+   payload length. The length does not include the pad byte. */
+static int write_chunk_header(FILE *fp, const char *id, size_t len)
+{
+	byte head[8];
+	memcpy(head, id, 4);
+	u32le((unsigned long)len, head+4);
+	return fwrite(head, sizeof(head), 1, fp) == 1 ? 0 : -1;
+}
+
+/* Write zero padding if the given length is odd. */
+static int write_pad(FILE *fp, size_t len)
+{
+	byte zero = 0;
+	if(len & 1)
+		return fwrite(&zero, 1, 1, fp) == 1 ? 0 : -1;
+	return 0;
+}
+
+/* Append the cue and LIST/adtl chunks describing the registered marks.
+   The file position is expected to be at the end of the audio data (that is,
+   including a pad byte after an odd-sized data chunk). Returns 0 on success
+   and stores the number of appended bytes in *extra. */
+int INT123_wav_write_cues(out123_handle *ao, const struct out123_cue *cues
+,	size_t cue_count, size_t *extra)
+{
+	struct wavdata *wdat = ao->userptr;
+	FILE *fp;
+	size_t c;
+	size_t cue_body, list_body, list_payload;
+	size_t total = 0;
+	byte *buf;
+
+	if(!wdat || !wdat->wavfp)
+		return -1;
+	if(!cue_count)
+	{
+		if(extra)
+			*extra = 0;
+		return 0;
+	}
+	/* Every cue entry is 24 bytes: ID, position, data chunk id, chunk
+	   start, block start, sample offset. The body is preceded by the
+	   entry count. */
+	cue_body = 4 + cue_count*24;
+	/* LIST payload: "adtl" plus one labl subchunk per non-empty label,
+	   each with the name including the terminating NUL, plus its pad. */
+	list_payload = 4;
+	for(c=0; c<cue_count; ++c)
+	{
+		size_t labellen;
+		size_t lablpayload;
+		if(!cues[c].label)
+			continue;
+		labellen = strlen(cues[c].label) + 1;
+		/* The labl payload is the 32 bit cue ID plus the name with NUL. */
+		lablpayload = 4 + labellen;
+		list_payload += 8 + lablpayload + (lablpayload & 1);
+	}
+	list_body = list_payload;
+	/* The cue chunk itself, including its pad byte if odd. */
+	total = 8 + cue_body + (cue_body & 1);
+	/* The LIST chunk (its payload always includes "adtl", so nonzero). */
+	total += 8 + list_body + (list_body & 1);
+
+	if(!(buf = malloc(cue_body)))
+	{
+		ao->errcode = OUT123_DOOM;
+		return -1;
+	}
+	fp = wdat->wavfp;
+	u32le((unsigned long)cue_count, buf);
+	byte *p = buf + 4;
+	for(c=0; c<cue_count; ++c)
+	{
+		/* Chapter IDs are passed as unsigned long, but the file field is
+		   32 bit. out123_wav_cue() already refuses IDs above 32 bit. */
+		u32le(cues[c].id & 0xffffffffUL, p);
+		u32le((unsigned long)cues[c].pos & 0xffffffffUL, p+4);
+		memcpy(p+8, "data", 4);
+		u32le(0, p+12); /* chunk start */
+		u32le(0, p+16); /* block start */
+		u32le((unsigned long)cues[c].pos & 0xffffffffUL, p+20);
+		p += 24;
+	}
+	if(  write_chunk_header(fp, "cue ", cue_body)
+	  || fwrite(buf, cue_body, 1, fp) != 1
+	  || write_pad(fp, cue_body) )
+	{
+		free(buf);
+		ao->errcode = OUT123_DEV_PLAY;
+		return -1;
+	}
+	free(buf);
+
+	if(write_chunk_header(fp, "LIST", list_body) || fwrite("adtl", 4, 1, fp) != 1)
+	{
+		ao->errcode = OUT123_DEV_PLAY;
+		return -1;
+	}
+	for(c=0; c<cue_count; ++c)
+	{
+		size_t labellen;
+		size_t lablpayload;
+		byte idbuf[4];
+		if(!cues[c].label)
+			continue;
+		labellen = strlen(cues[c].label) + 1;
+		lablpayload = 4 + labellen;
+		/* labl subchunk: 4 byte ID, 4 byte length, then the 32 bit cue ID
+		   followed by the name including its terminating NUL. */
+		u32le(cues[c].id & 0xffffffffUL, idbuf);
+		if(  write_chunk_header(fp, "labl", lablpayload)
+		  || fwrite(idbuf, 4, 1, fp) != 1
+		  || fwrite(cues[c].label, labellen, 1, fp) != 1
+		  || write_pad(fp, lablpayload) )
+		{
+			ao->errcode = OUT123_DEV_PLAY;
+			return -1;
+		}
+	}
+	if(write_pad(fp, list_body))
+	{
+		ao->errcode = OUT123_DEV_PLAY;
+		return -1;
+	}
+	if(extra)
+		*extra = total;
+	return 0;
+}
+
 int INT123_wav_close(out123_handle *ao)
 {
 	struct wavdata *wdat = ao->userptr;
@@ -630,6 +783,47 @@ int INT123_wav_close(out123_handle *ao)
 			error1("cannot flush WAV stream: %s", INT123_strerror(errno));
 		return close_file(ao);
 	}
+	/* Append the chapter chunks after the audio data, if any. The data chunk
+	   length does not include its own pad byte; pad it first so the chunks
+	   that follow are aligned. riffextra holds everything appended after the
+	   raw PCM (including that pad byte and the cue chunks).
+	   Only marks whose boundary was actually reached by written PCM are
+	   effective; anything beyond the real file tail is silently skipped. */
+	if(ao->cue_count)
+	{
+		size_t cue_extra = 0;
+		size_t data_pad = (wdat->datalen & 1) ? 1 : 0;
+		size_t written_frames = wdat->framesize
+		?	(size_t)wdat->datalen / (size_t)wdat->framesize : 0;
+		size_t c, effective = 0;
+		struct out123_cue *filtered = malloc(ao->cue_count*sizeof(*filtered));
+		if(!filtered)
+		{
+			ao->errcode = OUT123_DOOM;
+			return close_file(ao);
+		}
+		for(c=0; c<ao->cue_count; ++c)
+		{
+			if(ao->cues[c].pos <= written_frames)
+				filtered[effective++] = ao->cues[c];
+		}
+		if(effective)
+		{
+			if(  fseek(wdat->wavfp, 0L, SEEK_END) == 0
+			  && write_pad(wdat->wavfp, (size_t)wdat->datalen) == 0
+			  && INT123_wav_write_cues(ao, filtered, effective
+			     , &cue_extra) == 0 )
+				wdat->riffextra = data_pad + cue_extra;
+			else
+			{
+				free(filtered);
+				if(!AOQUIET)
+					error("cannot append chapter marks to WAV stream");
+				return close_file(ao);
+			}
+		}
+		free(filtered);
+	}
 	if(fseek(wdat->wavfp, 0L, SEEK_SET) >= 0)
 	{
 		if(wdat->floatwav)
@@ -638,7 +832,9 @@ int INT123_wav_close(out123_handle *ao)
 			long2littleendian(wdat->datalen
 			,	floathead->WAVE.data.datalen
 			,	sizeof(floathead->WAVE.data.datalen));
-			long2littleendian(wdat->datalen+sizeof(floathead->WAVE)
+			/* The RIFF length covers all appendage after the data chunk. */
+			long2littleendian( wdat->datalen+sizeof(floathead->WAVE)
+			+	(long)wdat->riffextra
 			,	floathead->WAVElen
 			,	sizeof(floathead->WAVElen));
 			long2littleendian( wdat->datalen
@@ -654,7 +850,9 @@ int INT123_wav_close(out123_handle *ao)
 			struct riff *inthead = wdat->the_header;
 			long2littleendian(wdat->datalen, inthead->WAVE.data.datalen
 			,	sizeof(inthead->WAVE.data.datalen));
-			long2littleendian(wdat->datalen+sizeof(inthead->WAVE), inthead->WAVElen
+			long2littleendian( wdat->datalen+sizeof(inthead->WAVE)
+			+	(long)wdat->riffextra
+			,	inthead->WAVElen
 			,	sizeof(inthead->WAVElen));
 		}
 		/* Always (over)writing the header here; also for stdout, when

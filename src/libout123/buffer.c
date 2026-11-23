@@ -56,6 +56,9 @@
 #define BUF_CMD_NDRAIN   XF_CMD_CUSTOM7
 #define BUF_CMD_AUDIOFMT XF_CMD_CUSTOM8
 
+/* Chapter marks travel as their own command code. */
+#define BUF_CMD_CUE      XF_CMD_CUE
+
 /* TODO: Dynamically allocate that to allow multiple instances. */
 int outburst = 32768;
 
@@ -382,6 +385,43 @@ int INT123_buffer_start(out123_handle *ao)
 		return -1;
 	}
 
+	if(buffer_cmd_finish(ao))
+		return -1;
+	/* The backend reports whether it can take chapter marks. */
+	if(!GOOD_READVAL(writerfd, ao->cue_support))
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+	return 0;
+}
+
+/* Pass the chapter marks over to the buffer process, which owns the file. */
+int INT123_buffer_cues(out123_handle *ao)
+{
+	int writerfd = ao->buffermem->fd[XF_WRITER];
+	size_t c;
+
+	if(INT123_xfermem_putcmd(writerfd, BUF_CMD_CUE) != 1)
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+	if(!GOOD_WRITEVAL(writerfd, ao->cue_count))
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+	for(c=0; c<ao->cue_count; ++c)
+	{
+		if(  !GOOD_WRITEVAL(writerfd, ao->cues[c].id)
+		  || !GOOD_WRITEVAL(writerfd, ao->cues[c].pos)
+		  || xfer_write_string(ao, XF_WRITER, ao->cues[c].label) )
+		{
+			ao->errcode = OUT123_BUFFER_ERROR;
+			return -1;
+		}
+	}
 	return buffer_cmd_finish(ao);
 }
 
@@ -536,6 +576,10 @@ static void buffer_play(out123_handle *ao, size_t bytes)
 	written = out123_play(ao, (unsigned char*)xf->data+xf->readindex, bytes);
 	/* Advance read pointer by the amount of written bytes. */
 	xf->readindex = (xf->readindex + written) % xf->size;
+	/* Keep the shared frame counter current so the writer can learn how much
+	   of the queue really reached the file (needed for chapter marks). */
+	if(ao->framesize)
+		INT123_xfermem_add_written(xf, written / ao->framesize);
 	/* Detect a fatal error by proxy. */
 	if(ao->errcode == OUT123_DEV_PLAY)
 		out123_close(ao);
@@ -898,10 +942,16 @@ int buffer_loop(out123_handle *ao)
 					if(!out123_start(ao, ao->rate, ao->channels, ao->format))
 					{
 						INT123_xfermem_usesize(ao->buffermem, ao->framesize);
+						/* Fresh stream: the frame counter for chapter marks
+						   starts at zero again. */
+						INT123_xfermem_reset_written(xf);
 						out123_pause(ao); /* Be nice, start only on buffer_play(). */
 						mystate = play_live;
 						preloading = TRUE;
 						INT123_xfermem_putcmd(my_fd, XF_CMD_OK);
+						/* Tell the writer whether the backend can take marks. */
+						if(!GOOD_WRITEVAL(my_fd, ao->cue_support))
+							return 2;
 					}
 					else
 					{
@@ -910,6 +960,50 @@ int buffer_loop(out123_handle *ao)
 						if(!GOOD_WRITEVAL(my_fd, ao->errcode))
 							return 2;
 					}
+				break;
+				case BUF_CMD_CUE:
+				{
+					size_t count = 0;
+					size_t n;
+					int success = 1;
+					intflag = FALSE;
+					if(!GOOD_READVAL_BUF(my_fd, count))
+						return 2;
+					INT123_cue_clear(ao);
+					for(n=0; n<count; ++n)
+					{
+						unsigned long id;
+						size_t pos;
+						char *label = NULL;
+						if(
+							!GOOD_READVAL_BUF(my_fd, id)
+						||	!GOOD_READVAL_BUF(my_fd, pos)
+						){
+							success = 0;
+							break;
+						}
+						if(read_record( ao, XF_READER, (void**)&label
+						,	cmd, &i, cmdcount, NULL ))
+						{
+							success = 0;
+							break;
+						}
+						if(INT123_cue_add(ao, id, label, pos))
+							success = 0;
+						free(label);
+						if(!success)
+							break;
+					}
+					if(success)
+						INT123_xfermem_putcmd(my_fd, XF_CMD_OK);
+					else
+					{
+						ao->errcode = OUT123_DOOM;
+						INT123_xfermem_putcmd(my_fd, XF_CMD_ERROR);
+						if(!GOOD_WRITEVAL(my_fd, ao->errcode))
+							return 2;
+					}
+				}
 				break;
 				case BUF_CMD_STOP:
 					intflag = FALSE;
