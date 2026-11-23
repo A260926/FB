@@ -34,6 +34,8 @@ Copyright NVIDIA Corporation 2006 -- Ignacio Castano <icastano@nvidia.com>
 #include <stddef.h>
 #include <stdint.h>
 
+#include "periodic_constraints.h"
+
 namespace xatlas {
 
 enum class ChartType

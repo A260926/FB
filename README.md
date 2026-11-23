@@ -76,6 +76,49 @@ See the [viewer](https://github.com/jpcy/xatlas/tree/master/source/examples/view
 
 [Example code here.](https://github.com/jpcy/xatlas/blob/master/source/examples/example_uvmesh.cpp)
 
+### Periodic UV for rotation-seam surfaces
+
+Surfaces such as tiled or toroidal patches need UVs where seam corners are
+related by an integer lattice transform instead of being welded after
+packing. `xatlas::ComputePeriodicUv` is a separate entry point that runs on
+top of the normal `AddMesh` -> `ComputeCharts` flow.
+
+1. Add triangle meshes with `xatlas::AddMesh` and call `xatlas::ComputeCharts`.
+2. Describe each seam with `xatlas::PeriodicRelation` entries
+   `U_b = Q * U_a + k`. `a` and `b` are face corners identified by
+   `(meshIndex, faceIndex, corner 0..2)`. The relation is directed: `a` is
+   the source corner and `b` is the target corner whose UV is expressed from
+   `a`. `Q` is a 2x2 signed permutation matrix (quarter turn rotations and
+   reflections), `k` is a signed integer translation. The transform is
+   applied exactly in the given coordinates; no integer translation is
+   searched for automatically.
+3. Optionally pin face corners to fixed double UVs with
+   `xatlas::PeriodicPin`.
+4. Call `xatlas::ComputePeriodicUv`. It solves one least squares system shared
+   by every chart, with all relations and pins enforced exactly. Relations
+   are never turned into soft penalties and boundaries are never repaired in
+   a post pass.
+
+Closed loops of relations are not automatically errors: a compatible
+reflection loop leaves a one dimensional free line, a rotation loop fixes a
+point, and only an identity transform paired with a nonzero translation is
+inconsistent. The returned `xatlas::PeriodicResult` stores an output index,
+chart identity and absolute double precision UV for every original face
+corner. The result is an independent allocation that stays valid after the
+atlas is destroyed; free it with `xatlas::DestroyPeriodicResult`.
+
+How periodic UV differs from a normal atlas:
+
+* A normal atlas unfolds, scales and packs each chart independently; its UVs
+  live in texel space inside `[0, width] x [0, height]`. Periodic UV is one
+  global solution across all charts with no per-chart rotation, normalization,
+  pixel scaling or packing, so absolute UVs may lie outside `[0, 1]`.
+* Periodic results are never fed into `PackCharts`; the packed atlas and the
+  periodic result coexist independently, and a failed periodic solve leaves
+  any previously packed atlas untouched.
+* Only triangle `AddMesh` input is supported: no `AddUvMesh`, ignored faces,
+  n-gons or custom `paramFunc`.
+
 ## Technical information / related publications
 
 [Ignacio Castaño's blog post on thekla_atlas](http://www.ludicon.com/castano/blog/articles/lightmap-parameterization/)

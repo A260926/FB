@@ -34,6 +34,7 @@ MIT License
 Copyright (c) 2012 Brandon Pelfrey
 */
 #include "xatlas.h"
+#include "periodic_constraints.h"
 #ifndef XATLAS_C_API
 #define XATLAS_C_API 0
 #endif
@@ -42,8 +43,10 @@ Copyright (c) 2012 Brandon Pelfrey
 #endif
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <mutex>
 #include <thread>
+#include <vector>
 #include <assert.h>
 #include <float.h> // FLT_MAX
 #include <limits.h>
@@ -8875,6 +8878,17 @@ struct MeshPolygonMapping
 	internal::Array<uint32_t> triangleToPolygonIndicesMap; // Triangle indices to polygon indices.
 };
 
+// Cached face corner -> parameter unknown mapping used by the periodic
+// parameterization entry point. Rebuilt from the original geometry each time
+// ComputeCharts runs; never fed into the normal chart packing.
+struct PeriodicCornerMapping
+{
+	internal::Array<int32_t> unknownIndex; // faceCount * 3, parameter unknown index per face corner.
+	internal::Array<int32_t> chartIndex; // faceCount * 3, global chart index per face corner.
+	internal::Array<uint32_t> unknownFirstCorner; // First face corner that defined each unknown.
+	uint32_t unknownCount = 0;
+};
+
 struct Context
 {
 	Atlas atlas;
@@ -8888,6 +8902,8 @@ struct Context
 	internal::Array<MeshPolygonMapping *> meshPolygonMappings;
 	internal::Array<internal::UvMesh *> uvMeshes;
 	internal::Array<internal::UvMeshInstance *> uvMeshInstances;
+	internal::Array<PeriodicCornerMapping *> periodicMappings;
+	ParameterizeFunc lastParamFunc = nullptr;
 	bool uvMeshChartsComputed = false;
 };
 
@@ -8961,6 +8977,12 @@ void Destroy(Atlas *atlas)
 		internal::UvMeshInstance *mesh = ctx->uvMeshInstances[i];
 		mesh->~UvMeshInstance();
 		XA_FREE(mesh);
+	}
+	for (uint32_t i = 0; i < ctx->periodicMappings.size(); i++) {
+		if (ctx->periodicMappings[i]) {
+			ctx->periodicMappings[i]->~PeriodicCornerMapping();
+			XA_FREE(ctx->periodicMappings[i]);
+		}
 	}
 	ctx->~Context();
 	XA_FREE(ctx);
@@ -9357,6 +9379,294 @@ AddMeshError AddUvMesh(Atlas *atlas, const UvMeshDecl &decl)
 	return AddMeshError::Success;
 }
 
+// Rebuild the face corner -> parameter unknown mapping for every mesh from
+// the current chart segmentation. Goes through real chart construction
+// (colocal unification and chart vertex splitting), so corners are never
+// welded purely by source vertex xref. Returns false if the atlas state is
+// not usable for periodic parameterization.
+static bool BuildPeriodicCornerMappings(Context *ctx)
+{
+	for (uint32_t i = 0; i < ctx->periodicMappings.size(); i++) {
+		ctx->periodicMappings[i]->~PeriodicCornerMapping();
+		XA_FREE(ctx->periodicMappings[i]);
+	}
+	ctx->periodicMappings.clear();
+	ctx->periodicMappings.resize(ctx->meshes.size());
+	ctx->periodicMappings.runCtors();
+	uint32_t globalChartIndex = 0;
+	uint32_t globalUnknownCount = 0;
+	for (uint32_t meshIndex = 0; meshIndex < ctx->meshes.size(); meshIndex++) {
+		const internal::Mesh *sourceMesh = ctx->meshes[meshIndex];
+		PeriodicCornerMapping *mapping = XA_NEW(internal::MemTag::Default, PeriodicCornerMapping);
+		ctx->periodicMappings[meshIndex] = mapping;
+		const uint32_t faceCount = sourceMesh->faceCount();
+		mapping->unknownIndex.resize(faceCount * 3);
+		mapping->chartIndex.resize(faceCount * 3);
+		mapping->unknownIndex.fill(-1);
+		mapping->chartIndex.fill(-1);
+		for (uint32_t group = 0; group < ctx->paramAtlas.chartGroupCount(meshIndex); group++) {
+			const internal::param::ChartGroup *chartGroup = ctx->paramAtlas.chartGroupAt(meshIndex, group);
+			for (uint32_t chartOffset = 0; chartOffset < chartGroup->chartCount(); chartOffset++) {
+				const internal::param::Chart *chart = chartGroup->chartAt(chartOffset);
+				const internal::Mesh *unifiedMesh = chart->unifiedMesh();
+				const uint32_t chartFaceCount = chart->originalVertices().length / 3;
+				// One unknown per unified vertex of this chart. Chart
+				// vertex splitting already separated seam corners, while
+				// colocal unification merged coincident corners inside it.
+				internal::Array<int32_t> unifiedToUnknown(internal::MemTag::Default);
+				unifiedToUnknown.resize(unifiedMesh->vertexCount());
+				unifiedToUnknown.fill(-1);
+				for (uint32_t f = 0; f < chartFaceCount; f++) {
+					const uint32_t sourceFace = chart->mapFaceToSourceFace(f);
+					for (uint32_t corner = 0; corner < 3; corner++) {
+						const uint32_t chartVertex = chart->originalVertices()[f * 3 + corner];
+						const uint32_t sourceVertex = chart->mapChartVertexToSourceVertex(chartVertex);
+						const uint32_t unifiedVertex = chart->originalVertexToUnifiedVertex(chartVertex);
+						XA_DEBUG_ASSERT(sourceMesh->vertexAt(sourceFace * 3 + corner) == sourceVertex);
+						XA_DEBUG_ASSERT(unifiedVertex < unifiedMesh->vertexCount());
+						XA_UNUSED(sourceVertex);
+						int32_t unknown = unifiedToUnknown[unifiedVertex];
+						if (unknown < 0) {
+							unknown = (int32_t)globalUnknownCount++;
+							unifiedToUnknown[unifiedVertex] = unknown;
+							mapping->unknownFirstCorner.push_back(sourceFace * 3 + corner);
+						}
+						mapping->unknownIndex[sourceFace * 3 + corner] = unknown;
+						mapping->chartIndex[sourceFace * 3 + corner] = (int32_t)globalChartIndex;
+					}
+				}
+				globalChartIndex++;
+			}
+		}
+		mapping->unknownCount = globalUnknownCount;
+		// Every non-ignored triangle face must belong to a chart.
+		for (uint32_t f = 0; f < faceCount; f++) {
+			if (sourceMesh->isFaceIgnored(f))
+				return false; // Ignored faces are not supported.
+			for (uint32_t corner = 0; corner < 3; corner++) {
+				if (mapping->unknownIndex[f * 3 + corner] < 0 || mapping->chartIndex[f * 3 + corner] < 0)
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
+// Look up the parameter unknown for a user supplied face corner.
+static PeriodicError ResolvePeriodicAngle(Context *ctx, const PeriodicAngle &angle, uint32_t &meshIndexOut, uint32_t &unknownOut)
+{
+	if (angle.meshIndex >= ctx->meshes.size())
+		return PeriodicError::InvalidAngle;
+	const internal::Mesh *mesh = ctx->meshes[angle.meshIndex];
+	if (angle.faceIndex >= mesh->faceCount() || angle.corner > 2)
+		return PeriodicError::InvalidAngle;
+	const PeriodicCornerMapping *mapping = ctx->periodicMappings[angle.meshIndex];
+	const int32_t unknown = mapping->unknownIndex[angle.faceIndex * 3 + angle.corner];
+	if (unknown < 0)
+		return PeriodicError::InvalidAngle;
+	meshIndexOut = angle.meshIndex;
+	unknownOut = (uint32_t)unknown;
+	return PeriodicError::Success;
+}
+
+void DestroyPeriodicResult(PeriodicResult *result)
+{
+	if (!result)
+		return;
+	if (result->meshes) {
+		for (uint32_t i = 0; i < result->meshCount; i++) {
+			if (result->meshes[i].angles)
+				XA_FREE(result->meshes[i].angles);
+		}
+		XA_FREE(result->meshes);
+	}
+	XA_FREE(result);
+}
+
+PeriodicError ComputePeriodicUv(Atlas *atlas, const PeriodicRelation *relations, uint32_t relationCount, const PeriodicPin *pins, uint32_t pinCount, PeriodicResult **resultOut)
+{
+	if (!atlas || !resultOut)
+		return PeriodicError::InvalidState;
+	Context *ctx = (Context *)atlas;
+	// Only triangle AddMesh input is supported.
+	if (!ctx->uvMeshes.isEmpty() || !ctx->uvMeshInstances.isEmpty())
+		return PeriodicError::InvalidState;
+	if (ctx->meshes.isEmpty() || !ctx->paramAtlas.chartsComputed())
+		return PeriodicError::InvalidState;
+	if (ctx->lastParamFunc != nullptr) // Custom parameterization functions are not supported.
+		return PeriodicError::InvalidState;
+	for (uint32_t i = 0; i < ctx->meshes.size(); i++) {
+		if (ctx->meshPolygonMappings[i] != nullptr) // n-gons were triangulated.
+			return PeriodicError::InvalidState;
+		if (ctx->meshes[i]->flags() & internal::MeshFlags::HasIgnoredFaces) {
+			for (uint32_t f = 0; f < ctx->meshes[i]->faceCount(); f++) {
+				if (ctx->meshes[i]->isFaceIgnored(f))
+					return PeriodicError::InvalidState;
+			}
+		}
+	}
+	// Validate the original geometry up front so non-finite or degenerate
+	// inputs fail with a specific reason before any mapping work.
+	for (uint32_t meshIndex = 0; meshIndex < ctx->meshes.size(); meshIndex++) {
+		const internal::Mesh *mesh = ctx->meshes[meshIndex];
+		for (uint32_t face = 0; face < mesh->faceCount(); face++) {
+			const internal::Vector3 &p0 = mesh->position(mesh->vertexAt(face * 3 + 0));
+			const internal::Vector3 &p1 = mesh->position(mesh->vertexAt(face * 3 + 1));
+			const internal::Vector3 &p2 = mesh->position(mesh->vertexAt(face * 3 + 2));
+			if (!internal::isFinite(p0.x) || !internal::isFinite(p0.y) || !internal::isFinite(p0.z) || !internal::isFinite(p1.x) || !internal::isFinite(p1.y) || !internal::isFinite(p1.z) || !internal::isFinite(p2.x) || !internal::isFinite(p2.y) || !internal::isFinite(p2.z))
+				return PeriodicError::NonFiniteGeometry;
+			const internal::Vector3 e1 = p1 - p0;
+			const internal::Vector3 e2 = p2 - p0;
+			if (!(internal::length(e1) > 0.0f) || !(internal::length(internal::cross(e1, e2)) > 0.0f))
+				return PeriodicError::DegenerateGeometry;
+		}
+	}
+	// Rebuild the corner -> unknown mapping from the original geometry and
+	// the current chart segmentation on every call.
+	if (!BuildPeriodicCornerMappings(ctx))
+		return PeriodicError::InvalidState;
+	uint32_t unknownCount = 0;
+	for (uint32_t i = 0; i < ctx->periodicMappings.size(); i++)
+		unknownCount = std::max(unknownCount, ctx->periodicMappings[i]->unknownCount); // Cumulative global counter.
+	if (unknownCount == 0)
+		return PeriodicError::InvalidState;
+	// Validate transforms before touching any solver state.
+	for (uint32_t r = 0; r < relationCount; r++) {
+		const PeriodicRelation &rel = relations[r];
+		int rowNonZero[2] = {0, 0}, colNonZero[2] = {0, 0};
+		bool valid = true;
+		for (int i = 0; i < 2; i++) {
+			for (int j = 0; j < 2; j++) {
+				const int32_t v = rel.q[i * 2 + j];
+				if (v != 0) {
+					if (v != 1 && v != -1)
+						valid = false;
+					rowNonZero[i]++;
+					colNonZero[j]++;
+				}
+			}
+		}
+		if (!valid || rowNonZero[0] != 1 || rowNonZero[1] != 1 || colNonZero[0] != 1 || colNonZero[1] != 1)
+			return PeriodicError::InvalidTransform;
+	}
+	// Resolve all face corners to parameter unknowns.
+	std::vector<internal::periodic::EngineRelation> engineRelations(relationCount);
+	for (uint32_t r = 0; r < relationCount; r++) {
+		const PeriodicRelation &rel = relations[r];
+		uint32_t meshA, unknownA, meshB, unknownB;
+		PeriodicError error = ResolvePeriodicAngle(ctx, rel.a, meshA, unknownA);
+		if (error != PeriodicError::Success)
+			return error;
+		error = ResolvePeriodicAngle(ctx, rel.b, meshB, unknownB);
+		if (error != PeriodicError::Success)
+			return error;
+		internal::periodic::EngineRelation &out = engineRelations[r];
+		out.varA = (int32_t)unknownA;
+		out.varB = (int32_t)unknownB;
+		for (int i = 0; i < 4; i++)
+			out.q[i] = (double)rel.q[i];
+		out.k[0] = (double)rel.k[0];
+		out.k[1] = (double)rel.k[1];
+	}
+	std::vector<internal::periodic::EnginePin> enginePins(pinCount);
+	for (uint32_t p = 0; p < pinCount; p++) {
+		uint32_t meshIndex, unknown;
+		PeriodicError error = ResolvePeriodicAngle(ctx, pins[p].angle, meshIndex, unknown);
+		if (error != PeriodicError::Success)
+			return error;
+		if (!std::isfinite(pins[p].uv[0]) || !std::isfinite(pins[p].uv[1]))
+			return PeriodicError::NonFiniteGeometry;
+		enginePins[p].var = (int32_t)unknown;
+		enginePins[p].uv[0] = pins[p].uv[0];
+		enginePins[p].uv[1] = pins[p].uv[1];
+	}
+	// Build one least squares triangle per source triangle, using local
+	// complex coordinates in an orthonormal face basis.
+	std::vector<internal::periodic::EngineTriangle> engineTriangles;
+	for (uint32_t meshIndex = 0; meshIndex < ctx->meshes.size(); meshIndex++) {
+		const internal::Mesh *mesh = ctx->meshes[meshIndex];
+		const PeriodicCornerMapping *mapping = ctx->periodicMappings[meshIndex];
+		for (uint32_t face = 0; face < mesh->faceCount(); face++) {
+			const uint32_t i0 = mesh->vertexAt(face * 3 + 0);
+			const uint32_t i1 = mesh->vertexAt(face * 3 + 1);
+			const uint32_t i2 = mesh->vertexAt(face * 3 + 2);
+			const internal::Vector3 &p0 = mesh->position(i0);
+			const internal::Vector3 &p1 = mesh->position(i1);
+			const internal::Vector3 &p2 = mesh->position(i2);
+			if (!internal::isFinite(p0.x) || !internal::isFinite(p0.y) || !internal::isFinite(p0.z) || !internal::isFinite(p1.x) || !internal::isFinite(p1.y) || !internal::isFinite(p1.z) || !internal::isFinite(p2.x) || !internal::isFinite(p2.y) || !internal::isFinite(p2.z))
+				return PeriodicError::NonFiniteGeometry;
+			const internal::Vector3 e1 = p1 - p0;
+			const internal::Vector3 e2 = p2 - p0;
+			const double edge1 = (double)internal::length(e1);
+			const internal::Vector3 normalArea = internal::cross(e1, e2);
+			const double area3d = (double)internal::length(normalArea) * 0.5;
+			if (!(edge1 > 0.0) || !(area3d > 0.0))
+				return PeriodicError::DegenerateGeometry;
+			const internal::Vector3 normal = normalArea / (float)(internal::length(normalArea));
+			const internal::Vector3 axisX = e1 / (float)edge1;
+			const internal::Vector3 axisY = internal::cross(normal, axisX);
+			internal::periodic::EngineTriangle tri;
+			tri.v[0] = mapping->unknownIndex[face * 3 + 0];
+			tri.v[1] = mapping->unknownIndex[face * 3 + 1];
+			tri.v[2] = mapping->unknownIndex[face * 3 + 2];
+			tri.z1[0] = edge1;
+			tri.z1[1] = 0.0;
+			tri.z2[0] = (double)internal::dot(e2, axisX);
+			tri.z2[1] = (double)internal::dot(e2, axisY);
+			if (!std::isfinite(tri.z2[0]) || !std::isfinite(tri.z2[1]))
+				return PeriodicError::NonFiniteGeometry;
+			tri.weight = 1.0 / (2.0 * area3d);
+			engineTriangles.push_back(tri);
+		}
+	}
+	std::vector<double> uv(unknownCount * 2, 0.0);
+	uint32_t freeDimension = 0;
+	double relativeResidual = 0.0;
+	const PeriodicError error = internal::periodic::solve(unknownCount, engineRelations.empty() ? nullptr : &engineRelations[0], relationCount, enginePins.empty() ? nullptr : &enginePins[0], pinCount, &engineTriangles[0], (uint32_t)engineTriangles.size(), &uv[0], &freeDimension, &relativeResidual);
+	if (error != PeriodicError::Success)
+		return error;
+	// Allocate the independent result object. It outlives the atlas.
+	PeriodicResult *result = (PeriodicResult *)XA_ALLOC(internal::MemTag::Default, PeriodicResult);
+	memset(result, 0, sizeof(PeriodicResult));
+	result->meshCount = ctx->meshes.size();
+	result->faceCount = (uint32_t)engineTriangles.size();
+	result->unknownCount = unknownCount;
+	result->freeDimension = freeDimension;
+	result->relativeResidual = relativeResidual;
+	result->meshes = (PeriodicMeshResult *)XA_ALLOC_ARRAY(internal::MemTag::Default, PeriodicMeshResult, result->meshCount);
+	memset(result->meshes, 0, sizeof(PeriodicMeshResult) * result->meshCount);
+	bool ok = true;
+	uint32_t totalFaces = 0;
+	for (uint32_t meshIndex = 0; meshIndex < ctx->meshes.size() && ok; meshIndex++) {
+		const internal::Mesh *mesh = ctx->meshes[meshIndex];
+		const PeriodicCornerMapping *mapping = ctx->periodicMappings[meshIndex];
+		const uint32_t faceCount = mesh->faceCount();
+		PeriodicMeshResult &meshResult = result->meshes[meshIndex];
+		meshResult.meshIndex = meshIndex;
+		meshResult.faceCount = faceCount;
+		meshResult.angles = (PeriodicAngleResult *)XA_ALLOC_ARRAY(internal::MemTag::Default, PeriodicAngleResult, faceCount * 3);
+		totalFaces += faceCount;
+		for (uint32_t face = 0; face < faceCount; face++) {
+			for (uint32_t corner = 0; corner < 3; corner++) {
+				PeriodicAngleResult &angleResult = meshResult.angles[face * 3 + corner];
+				const int32_t unknown = mapping->unknownIndex[face * 3 + corner];
+				angleResult.unknownIndex = unknown;
+				angleResult.chartIndex = mapping->chartIndex[face * 3 + corner];
+				angleResult.uv[0] = uv[(uint32_t)unknown * 2 + 0];
+				angleResult.uv[1] = uv[(uint32_t)unknown * 2 + 1];
+			}
+		}
+	}
+	result->faceCount = totalFaces;
+	XA_UNUSED(relativeResidual);
+	if (!ok) {
+		DestroyPeriodicResult(result);
+		return PeriodicError::SolveFailed;
+	}
+	*resultOut = result;
+	return PeriodicError::Success;
+}
+
 void ComputeCharts(Atlas *atlas, ChartOptions options)
 {
 	if (!atlas) {
@@ -9378,6 +9688,7 @@ void ComputeCharts(Atlas *atlas, ChartOptions options)
 	memset(&ctx->atlas, 0, sizeof(Atlas));
 	XA_PRINT("Computing charts\n");
 	if (!ctx->meshes.isEmpty()) {
+		ctx->lastParamFunc = options.paramFunc;
 		if (!ctx->paramAtlas.computeCharts(ctx->taskScheduler, options, ctx->progressFunc, ctx->progressUserData)) {
 			XA_PRINT("   Cancelled by user\n");
 			return;
