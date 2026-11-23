@@ -146,3 +146,93 @@ Bug reports
 Bug reports can be filed in the libwebm issue tracker:
 https://issues.webmproject.org/.
 For security reports, select 'Security report' from the Template dropdown.
+
+
+Muxing frames delivered in decode order (C++ example)
+
+By default mkvmuxer::Segment requires monotonically non-decreasing frame
+timestamps, so streams whose display order differs from their decode order
+(for example H.264 with B frames: display I B P, delivery I P B) cannot be
+written as they arrive. Decode-order mode writes frames in the exact order
+AddGenericFrame() calls succeed, without sorting or re-encoding anything.
+It cannot be combined with chunking, kLive mode, or
+AccurateClusterDuration, and must be enabled before the first frame is
+written.
+
+  #include "mkvmuxer/mkvmuxer.h"
+  #include "mkvmuxer/mkvwriter.h"
+
+  void MuxDecodeOrder() {
+    mkvmuxer::MkvWriter writer;
+    writer.Open("out.mkv");
+
+    mkvmuxer::Segment segment;
+    segment.Init(&writer);
+    segment.set_mode(mkvmuxer::Segment::kFile);
+
+    const uint64_t video_track = segment.AddVideoTrack(640, 360, 1);
+    mkvmuxer::Track* track = segment.GetTrackByNumber(video_track);
+    track->set_codec_id("V_MPEG4/ISO/AVC");
+    // track->SetCodecPrivate(avcc_bytes, avcc_size);
+
+    if (!segment.SetDecodeOrderMode(true))
+      return;  // Incompatible option active, or header already written.
+
+    // In decode-order mode every frame must carry:
+    //  - timestamp():         presentation timestamp (PTS), nanoseconds.
+    //                         May decrease between frames.
+    //  - decode_timestamp():  decode timestamp (DTS), nanoseconds. Must
+    //                         not decrease globally and must strictly
+    //                         increase within a track. Never written to
+    //                         the file; block timecodes stay PTS-based.
+    //  - duration():          frame duration, nanoseconds. Must be > 0.
+    //  - reference timestamps: absolute PTS values (nanoseconds) of the
+    //                         frames this frame references, at most two,
+    //                         no duplicates. Key video frames and audio
+    //                         frames take none; non-key video frames take
+    //                         one or two. Each one is written as a signed
+    //                         ReferenceBlock (quantized reference PTS
+    //                         minus quantized frame PTS).
+    const uint64_t kFrameNs = 40000000;  // 40 ms
+    struct {
+      const uint8_t* data;
+      uint64_t size;
+      uint64_t pts;
+      uint64_t dts;
+      bool is_key;
+      uint64_t refs[2];
+      uint32_t refs_size;
+    } frames[] = {
+        // Display order I0 B1 P2, delivered as I0 P2 B1.
+        {nullptr, 0, 0, 0, true, {0, 0}, 0},                         // I0
+        {nullptr, 0, 2 * kFrameNs, 1 * kFrameNs, false,
+         {0, 0}, 1},                                                // P2
+        {nullptr, 0, 1 * kFrameNs, 2 * kFrameNs, false,
+         {0, 2 * kFrameNs}, 2},                                     // B1
+    };
+
+    for (auto& f : frames) {
+      mkvmuxer::Frame frame;
+      if (!frame.Init(f.data, f.size))
+        return;
+      frame.set_track_number(video_track);
+      frame.set_timestamp(f.pts);
+      frame.set_decode_timestamp(f.dts);
+      frame.set_duration(kFrameNs);
+      frame.set_is_key(f.is_key);
+      if (!frame.set_reference_timestamps(f.refs, f.refs_size))
+        return;
+      if (!segment.AddGenericFrame(&frame)) {
+        // The frame was rejected (illegal time, track number, or
+        // reference combination, or PTS + duration overflow). It was
+        // not written and no clock advanced; later valid frames are
+        // still accepted.
+        continue;
+      }
+    }
+
+    // Segment duration is the largest PTS + duration end point over all
+    // accepted frames, and cues point at the actual keyframes.
+    segment.Finalize();
+    writer.Close();
+  }

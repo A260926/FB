@@ -87,6 +87,9 @@ bool ChunkedCopy(mkvparser::IMkvReader* source, IMkvWriter* dst, int64_t start,
 // Class to hold data the will be written to a block.
 class Frame {
  public:
+  // Maximum number of reference timestamps that a frame can carry.
+  static const uint32_t kMaxReferenceTimestamps = 2;
+
   Frame();
   ~Frame();
 
@@ -134,6 +137,38 @@ class Frame {
     return reference_block_timestamp_set_;
   }
 
+  // Sets the decode timestamp of the frame, in nanoseconds. The value is
+  // copied into the frame. It is only consulted when the segment is in
+  // decode-order mode (see Segment::SetDecodeOrderMode); in the default
+  // mode it is ignored. The decode timestamp is never written to the
+  // output; block timecodes continue to be derived from |timestamp_|.
+  void set_decode_timestamp(uint64_t decode_timestamp);
+  uint64_t decode_timestamp() const { return decode_timestamp_; }
+  bool decode_timestamp_set() const { return decode_timestamp_set_; }
+
+  // Replaces this frame's reference timestamp list with the |count|
+  // values in |reference_timestamps|. Each value is the absolute
+  // presentation timestamp (PTS), in nanoseconds, of a frame that this
+  // frame references during decoding. The values are copied into the
+  // frame; the caller retains ownership of |reference_timestamps|. At
+  // most |kMaxReferenceTimestamps| entries are allowed and duplicates
+  // are not permitted; on either violation the existing list is left
+  // unchanged and false is returned. Passing a |count| of zero clears
+  // the list (|reference_timestamps| may be NULL in that case). Each
+  // entry produces one signed ReferenceBlock element holding the
+  // referenced frame's quantized PTS minus this frame's quantized PTS.
+  bool set_reference_timestamps(const uint64_t* reference_timestamps,
+                                uint32_t count);
+
+  // Returns the number of reference timestamps currently set.
+  uint32_t reference_timestamps_size() const {
+    return reference_timestamps_size_;
+  }
+
+  // Returns the |index|-th reference timestamp in nanoseconds, or 0 if
+  // |index| is out of range.
+  uint64_t reference_timestamp(uint32_t index) const;
+
  private:
   // Id of the Additional data.
   uint64_t add_id_;
@@ -175,6 +210,20 @@ class Frame {
 
   // Flag indicating if |reference_block_timestamp_| has been set.
   bool reference_block_timestamp_set_;
+
+  // Decode timestamp of the data in nanoseconds. Only used when the
+  // segment is in decode-order mode.
+  uint64_t decode_timestamp_;
+
+  // Flag indicating that |decode_timestamp_| has been set.
+  bool decode_timestamp_set_;
+
+  // Absolute presentation timestamps (in nanoseconds) of the frames this
+  // frame references during decoding. Owned by this class.
+  uint64_t reference_timestamps_[kMaxReferenceTimestamps];
+
+  // Number of valid entries in |reference_timestamps_|.
+  uint32_t reference_timestamps_size_;
 
   LIBWEBM_DISALLOW_COPY_AND_ASSIGN(Frame);
 };
@@ -1335,9 +1384,13 @@ class Cluster {
   // Returns the size in bytes for the entire Cluster element.
   uint64_t Size() const;
 
-  // Given |abs_timecode|, calculates timecode relative to most recent timecode.
-  // Returns -1 on failure, or a relative timecode.
-  int64_t GetRelativeTimecode(int64_t abs_timecode) const;
+  // Given |abs_timecode|, calculates the timecode relative to the cluster's
+  // timecode and stores it in |rel_timecode|. Returns true on success. The
+  // full signed 16-bit range of a Block timecode
+  // (|kMinBlockTimecode|..|kMaxBlockTimecode|) is supported; false is
+  // returned (and |rel_timecode| is left untouched) when the result does
+  // not fit in that range.
+  bool GetRelativeTimecode(int64_t abs_timecode, int16_t* rel_timecode) const;
 
   int64_t size_position() const { return size_position_; }
   int32_t blocks_added() const { return blocks_added_; }
@@ -1696,6 +1749,25 @@ class Segment {
   // Toggles whether to write the last frame in each Cluster with Duration.
   void AccurateClusterDuration(bool accurate_cluster_duration);
 
+  // Toggles decode-order mode. In decode-order mode frames handed to
+  // AddGenericFrame() are written to the output in the order the calls
+  // succeed; no timestamp-based reordering (including the audio
+  // hold-back queue) is applied. Every frame must then carry an explicit
+  // decode timestamp (Frame::set_decode_timestamp) and a positive
+  // duration; Frame::timestamp() remains the presentation timestamp and
+  // may decrease between frames. Decode timestamps must not decrease
+  // across the segment and must strictly increase within a track.
+  // References are taken from Frame::set_reference_timestamps only: key
+  // video frames and non-video frames must have none, non-key video
+  // frames must have one or two. No dependency is inferred from the
+  // previously written frame. This cannot be combined with chunking,
+  // kLive mode, or AccurateClusterDuration. Must be called before the
+  // first frame is written. Returns false when the request is rejected:
+  // the segment header has already been written, or |decode_order| is
+  // true and an incompatible option is already active.
+  bool SetDecodeOrderMode(bool decode_order);
+  bool decode_order_mode() const { return decode_order_mode_; }
+
   // Toggles whether to write the Cluster Timecode using exactly 8 bytes.
   void UseFixedSizeClusterTimecode(bool fixed_size_cluster_timecode);
 
@@ -1756,6 +1828,12 @@ class Segment {
 
   // Adds the frame to our frame array.
   bool QueueFrame(Frame* frame);
+
+  // Decode-order mode variant of AddGenericFrame(). Validates the frame
+  // against the decode-order rules and writes it out immediately, in
+  // call order. Returns false (without writing the frame or advancing
+  // any clock) when the frame is not acceptable.
+  bool AddDecodeOrderFrame(const Frame* frame);
 
   // Output all frames that are queued. Returns -1 on error, otherwise
   // it returns the number of frames written.
@@ -1922,6 +2000,32 @@ class Segment {
 
   // Flag whether or not to estimate the file duration.
   bool estimate_file_duration_;
+
+  // Flag telling whether frames are accepted in decode order
+  // (|SetDecodeOrderMode|).
+  bool decode_order_mode_;
+
+  // Highest decode timestamp in nanoseconds accepted so far, across all
+  // tracks. Only used in decode-order mode.
+  uint64_t last_decode_timestamp_;
+
+  // Last decode timestamp in nanoseconds accepted per track number.
+  // Only used in decode-order mode.
+  uint64_t last_track_decode_timestamp_[kMaxTrackNumber];
+
+  // Flags telling whether the corresponding entry in
+  // |last_track_decode_timestamp_| is valid. Only used in decode-order
+  // mode.
+  bool track_decode_timestamp_set_[kMaxTrackNumber];
+
+  // Decode timestamp in nanoseconds of the first frame written to the
+  // current cluster. Only used in decode-order mode.
+  uint64_t cluster_first_decode_timestamp_;
+
+  // Maximum end point (presentation timestamp plus duration, in
+  // nanoseconds) over all accepted frames. Only used in decode-order
+  // mode.
+  uint64_t max_frame_end_timestamp_;
 
   // The size of the EBML header, used to validate the header if
   // WriteEbmlHeader() is called more than once.

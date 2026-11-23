@@ -66,12 +66,31 @@ uint64 WriteBlock(IMkvWriter* writer, const Frame* const frame, int64 timecode,
                         static_cast<int64>(frame->discard_padding()));
   }
 
-  const uint64 reference_block_timestamp =
-      frame->reference_block_timestamp() / timecode_scale;
+  // ReferenceBlock elements. A frame using the multi-reference list gets
+  // one signed ReferenceBlock per entry, holding the referenced frame's
+  // quantized PTS minus this frame's quantized PTS (both endpoints are
+  // quantized before the subtraction). A frame using the legacy single
+  // reference keeps the historical encoding. A zero delta is written out
+  // like any other value.
+  const uint32 reference_count = frame->reference_timestamps_size();
   uint64 reference_block_elem_size = 0;
   if (!frame->is_key()) {
-    reference_block_elem_size =
-        EbmlElementSize(libwebm::kMkvReferenceBlock, reference_block_timestamp);
+    if (reference_count > 0) {
+      const uint64 frame_timecode = frame->timestamp() / timecode_scale;
+      for (uint32 i = 0; i < reference_count; ++i) {
+        const int64 reference_timecode =
+            static_cast<int64>(frame->reference_timestamp(i) /
+                               timecode_scale) -
+            static_cast<int64>(frame_timecode);
+        reference_block_elem_size +=
+            EbmlElementSize(libwebm::kMkvReferenceBlock, reference_timecode);
+      }
+    } else if (frame->reference_block_timestamp_set()) {
+      const uint64 reference_block_timestamp =
+          frame->reference_block_timestamp() / timecode_scale;
+      reference_block_elem_size = EbmlElementSize(
+          libwebm::kMkvReferenceBlock, reference_block_timestamp);
+    }
   }
 
   const uint64 duration = frame->duration() / timecode_scale;
@@ -136,9 +155,27 @@ uint64 WriteBlock(IMkvWriter* writer, const Frame* const frame, int64 timecode,
     return false;
   }
 
-  if (!frame->is_key() && !WriteEbmlElement(writer, libwebm::kMkvReferenceBlock,
-                                            reference_block_timestamp)) {
-    return false;
+  if (!frame->is_key()) {
+    if (reference_count > 0) {
+      const uint64 frame_timecode = frame->timestamp() / timecode_scale;
+      for (uint32 i = 0; i < reference_count; ++i) {
+        const int64 reference_timecode =
+            static_cast<int64>(frame->reference_timestamp(i) /
+                               timecode_scale) -
+            static_cast<int64>(frame_timecode);
+        if (!WriteEbmlElement(writer, libwebm::kMkvReferenceBlock,
+                              reference_timecode)) {
+          return false;
+        }
+      }
+    } else if (frame->reference_block_timestamp_set()) {
+      const uint64 reference_block_timestamp =
+          frame->reference_block_timestamp() / timecode_scale;
+      if (!WriteEbmlElement(writer, libwebm::kMkvReferenceBlock,
+                            reference_block_timestamp)) {
+        return false;
+      }
+    }
   }
 
   if (duration > 0 &&
@@ -553,14 +590,15 @@ uint64 WriteFrame(IMkvWriter* writer, const Frame* const frame,
       !cluster->timecode_scale())
     return 0;
 
-  //  Technically the timecode for a block can be less than the
-  //  timecode for the cluster itself (remember that block timecode
-  //  is a signed, 16-bit integer).  However, as a simplification we
-  //  only permit non-negative cluster-relative timecodes for blocks.
-  const int64 relative_timecode = cluster->GetRelativeTimecode(
-      frame->timestamp() / cluster->timecode_scale());
-  if (relative_timecode < 0 || relative_timecode > kMaxBlockTimecode)
+  // The cluster-relative timecode of a block is serialized as a signed
+  // 16-bit integer, so blocks may carry timecodes that are smaller than
+  // the cluster's own timecode (down to kMinBlockTimecode).
+  int16 relative_timecode = 0;
+  if (!cluster->GetRelativeTimecode(
+          static_cast<int64>(frame->timestamp() / cluster->timecode_scale()),
+          &relative_timecode)) {
     return 0;
+  }
 
   return frame->CanBeSimpleBlock()
              ? WriteSimpleBlock(writer, frame, relative_timecode)
