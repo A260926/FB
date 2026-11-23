@@ -260,3 +260,37 @@ export interface CompiledASS {
 export function compile(text: string, options: object): CompiledASS;
 
 export function decompile(obj: CompiledASS): string;
+
+export interface RenderedDrawingFrame {
+    width: number;
+    height: number;
+    /**
+     * Row-major, tightly packed RGBA bytes (width * height * 4). The array is
+     * straight (non-premultiplied) alpha; fully transparent pixels have zero
+     * RGB, and the buffer never aliases the compiled document.
+     */
+    data: Uint8ClampedArray;
+}
+
+/**
+ * Render one drawing-only dialogue frame from a compiled ASS document.
+ *
+ * Only dialogues whose half-open interval [start, end) contains `seconds` are
+ * drawn. Drawing-only content is supported: M/L/C paths, multiple sub-paths,
+ * `p` scaling, `fscx`/`fscy`, `frz`, `pos`/`move`, `org`, primary colour and
+ * alpha, `fad`/`fade` and rectangle or drawing `clip`/`iclip`. Borders,
+ * shadows, blur, text, perspective rotation, skew and `t` animations on an
+ * active dialogue throw. The document must have a positive PlayResX and
+ * PlayResY; the output is sized from `width` and `height` instead.
+ *
+ * @param document compiled ASS document
+ * @param seconds query time in seconds
+ * @param options output width and height in pixels, each 1..2048
+ * @throws if the document has no positive PlayRes, the size is invalid, or an
+ *   active dialogue uses unsupported content
+ */
+export function renderDrawingFrame(
+    document: CompiledASS,
+    seconds: number,
+    options: { width: number, height: number },
+): RenderedDrawingFrame;

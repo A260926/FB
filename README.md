@@ -39,6 +39,54 @@ const compiledASS = compile(text, options);
 const decompiledText = decompile(compiledASS);
 ```
 
+### Rendering drawing frames
+
+`renderDrawingFrame` turns a compiled document into a single transparent frame
+for karaoke-style drawing signs made with `\p` drawings. It runs in plain
+JavaScript: no DOM, canvas, font engine or animation loop is required.
+
+```js
+import { compile, renderDrawingFrame } from 'ass-compiler';
+
+const document = compile(text);
+const frame = renderDrawingFrame(document, 0.5, { width: 1280, height: 720 });
+// frame.width, frame.height
+// frame.data: Uint8ClampedArray, row-major, straight (non-premultiplied) RGBA
+```
+
+The frame is reset to fully transparent and every dialogue whose half-open
+interval `[start, end)` contains `seconds` is composited on top, lowest `layer`
+first and in original array order within a layer. Sizes must be integers in
+`1..2048`; the script is scaled from its PlayResX/PlayResY to the requested
+size, so the document needs a positive PlayRes and a positive PlayResY.
+
+Supported drawing content:
+
+- `M`/`L`/`C` path commands (including upstream spline expansion), multiple
+  sub-paths, non-zero winding fill with direction-based holes;
+- `p` drawing scale and `pbo`, per-fragment `fscx`/`fscy`, `frz`;
+- `pos`/`move`, `org`, `an1..an9` anchoring with margins;
+- primary colour `\1c` and alpha `\1a`/`\alpha`, `fad` and `fade`;
+- rectangle and drawing `clip`/`iclip`, evaluated in script coordinates so they
+  do not follow the drawing's `p`/`pos`/`move`/`frz` transforms.
+
+Style defaults, inherited fragment tags and named `\r` resets all come from the
+compiled `slices`. Borders, shadows, blur, text, perspective rotation (`\frx`,
+`\fry`), skew (`\fax`, `\fay`) and `t` animations are out of scope: an active
+dialogue that uses any of them throws instead of silently rendering wrong
+pixels. Inactive dialogues never block output.
+
+The renderer is deterministic: recompiling a decompiled document produces
+identical frames, and rendering never mutates the compiled document.
+
+A CLI example writes the frame as a P7 PAM file with `DEPTH 4`,
+`MAXVAL 255` and `TUPLTYPE RGB_ALPHA`, using the script's PlayRes as the output
+size:
+
+```bash
+node examples/render-drawing.mjs input.ass 0.5 output.pam
+```
+
 ### options
 
 ```js
