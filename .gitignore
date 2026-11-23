@@ -42,6 +42,9 @@ compile_commands.json
 # CMake
 cmake-build-*/
 
+# Task harness build output
+.task-build/
+
 # build
 build*/
 

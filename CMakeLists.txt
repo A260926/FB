@@ -164,6 +164,7 @@ add_library(aribcaption
         include/aribcaption/context.hpp
         include/aribcaption/decoder.h
         include/aribcaption/decoder.hpp
+        include/aribcaption/encoder.hpp
         src/base/aligned_alloc.cpp
         src/base/always_inline.hpp
         src/base/cfstr_helper.hpp
@@ -198,6 +199,7 @@ add_library(aribcaption
         src/decoder/decoder_capi.cpp
         src/decoder/decoder_impl.cpp
         src/decoder/decoder_impl.hpp
+        src/encoder/encoder.cpp
 )
 
 # Append renderer-related sources if renderer not disabled
@@ -404,6 +406,7 @@ install(
         ${CMAKE_CURRENT_SOURCE_DIR}/include/aribcaption/context.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/include/aribcaption/decoder.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/aribcaption/decoder.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/aribcaption/encoder.hpp
     DESTINATION
         ${CMAKE_INSTALL_INCLUDEDIR}/aribcaption
 )

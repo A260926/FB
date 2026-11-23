@@ -38,6 +38,7 @@ libaribcaption is a cross-platform library that works on various platforms, incl
 
 ## Features
 - Support captions in Japanese (ARIB STD-B24 JIS), Latin languages (ABNT NBR 15606-1) and Philippine (ARIB STD-B24 UTF-8)
+- Re-encode Japanese Profile A 960x540 captions (including cached DRCS patterns) back into ARIB private caption packets
 - Full support for rendering ARIB additional symbols (Gaiji) and DRCS characters
 - Lightweight and portable implementation that works on various platforms
 - Performance optimized (SSE2 on x86/x64) graphics rendering
@@ -148,6 +149,50 @@ gcc main.c -o main `pkg-config --cflags --libs --static libaribcaption`
 
 # Link to libaribcaption shared library
 gcc main.c -o main `pkg-config --cflags --libs libaribcaption`
+```
+
+## Encoder
+`aribcaption::Encoder` (see [encoder.hpp](include/aribcaption/encoder.hpp)) turns `Caption` objects back into
+ARIB STD-B24 private caption data packets which can be fed into the `Decoder`. Each packet starts with the
+`0x80 0xFF 0xF0` private caption header (no outer MPEG-TS framing or PES start code) and carries a CRC-16.
+
+Supported scope (anything outside it makes `Encode()` return `false` without touching the output or the
+encoder state):
+
+- Japanese JIS encoding, first language, Profile A, 960x540 full-screen captions
+- 36x36 characters, horizontal spacing 4, vertical spacing 24, horizontal/vertical scale 1.0
+- No ruby, decoration, enclosure or built-in sound; transparent background
+- The eight opaque foreground colors of CLUT palette 0; text positions are non-negative integers whose
+  40x60 character box lies completely inside the plane
+- Text characters whose Unicode codepoint is reversibly representable through the bundled JIS conversion
+  tables (UTF-8 mode is never used, a question mark is never treated as success)
+- DRCS patterns of 1..64 width/height, 2 or 4 tones, compact high-bit-first pixels; only the 94 slots of
+  DRCS-1 are used. Identical bitmaps share a slot across captions, definitions are emitted only when a
+  pattern is first used or its slot is replaced, and `Reset()` clears the cache and restarts the session
+  with a Japanese caption management group
+
+```cpp
+#include <aribcaption/encoder.hpp>
+
+aribcaption::Encoder encoder;
+std::vector<aribcaption::EncodedPES> packets;
+if (encoder.Encode(caption, packets)) {
+    // packets[*].pts mirrors the source Caption (PTS_NOPTS is preserved)
+    // packets[*].data starts with 0x80 0xFF 0xF0
+}
+```
+
+The [caption_encode](examples/caption_encode.cpp) example writes two captions sharing one DRCS bitmap to a
+file (8-byte big-endian signed PTS, 4-byte big-endian length, packet bytes) and verifies them in a separate
+read-only decoder process:
+
+```bash
+# Build the library, encoder, example and round-trip tests, then run everything
+bash task_support/run.sh target
+
+# Or run the example directly
+caption_encode output.pes             # write mode (removes any previous output)
+caption_encode --decode output.pes    # separate-process decoder verification
 ```
 
 ## Documents
