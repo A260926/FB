@@ -115,6 +115,82 @@ The various settings (file names, resolution, etc) are not yet exposed via comma
 #### Tests
 These are various tests for my own internal use. There should be no need for you to run them.
 
+#### Headless CPU preview (`dag_rasterizer`)
+
+`src/library/dag_rasterizer.h` (with `depth_hierarchy.h`) provides a small, dependency-free
+CPU rasterizer which is useful for previewing a volume on a machine with no window and no
+GPU. It walks the sparse voxel DAG in the `NodeStore` directly: visible material leaves are
+projected and rasterized onto a depth buffer, and (optionally) whole subtrees which are
+already hidden are skipped with a screen-space depth pyramid. It does **not** build a leaf
+list, a voxel array or a mesh, and it does **not** trace a ray from the root per pixel. It
+only reads a `const Volume`, so picking (`traceRayRef`), storage, extraction and the glyph /
+window code are unaffected.
+
+The example at `examples/dag_preview.cpp` builds a small scene (a material-4 wall full of
+holes with a two-material striped backdrop behind it) and writes `.task-build/dag.ppm`
+without any window, SDL, OpenGL or GPU.
+
+##### Camera
+
+`RasterCamera` (`dag_rasterizer.h`) is described with `double` vectors in world space:
+
+* `eye` - camera position.
+* `right`, `up`, `forward` - a unit, mutually orthogonal basis. `forward` is the viewing
+  direction and `right`/`up` point towards the right edge / top edge of the image.
+* `width`, `height` - image size in pixels, valid range `[1, 1024]`.
+* `fovY` - vertical field of view in radians, valid range `(0, pi)`.
+* `nearPlane`, `farPlane` - valid range `0 < near < far`.
+
+The image origin is the top-left corner. For pixel `(x, y)` the sampling direction is
+
+```
+d = forward
+  + right * (2*(x+0.5)/width  - 1) * tan(fovY/2) * width/height
+  + up    * (1 - 2*(y+0.5)/height) * tan(fovY/2)
+```
+
+It is deliberately **not** normalized. Because `forward` is unit length and orthogonal to
+`right`/`up`, `dot(d, forward) == 1`, so the ray parameter `t` of a point `eye + t*d` is
+exactly its forward (view-space z) depth.
+
+##### Depth
+
+Each integer voxel centre `q` is treated as the solid cell `[q-0.5, q+0.5]`. A node at voxel
+origin `(x, y, z)` covering `2^height` voxels therefore occupies
+`[x-0.5, x+2^height-0.5]` on each axis. The reported depth of a pixel is the ray parameter at
+the **first** point where the ray enters a non-empty material region, within
+`[nearPlane, farPlane]`:
+
+* If the camera is already inside solid material, the depth is `nearPlane`.
+* On an exact depth tie the **smaller material id** wins.
+* A miss is recorded as `depth = +infinity` and `material = 0`.
+* Material `0` is empty; every other material is opaque.
+
+The leaf rasterizer projects each leaf's real extent and tests the pixel ray exactly against
+that solid box. It never treats every pixel in a bounding rectangle as solid, and it never
+subdivides a uniform coarse leaf into unit voxels: a material leaf is rasterized as one solid
+box of its true size. Hit depths are exact (relative error well under `1e-9`); there is no
+`maxFootprint` / average-material approximation.
+
+##### Statistics
+
+`RasterResult::stats` (a `RasterStats`) records real work, incremented where the work happens:
+
+* `nodeVisits` - node occurrences processed (one per popped stack entry; the root counts once,
+  and a shared node reached at N spatial positions counts N times).
+* `leafBoxes` - material leaves submitted to the leaf rasterizer.
+* `hizReads` - depth-hierarchy cells inspected by occlusion queries.
+* `hizUpdates` - depth-hierarchy cells actually rewritten by a pixel write.
+* `hizRejected` - subtrees skipped because the hierarchy proved every pixel of their
+  conservative screen bound was strictly nearer.
+
+Occlusion is off by default per call. When `renderDag(volume, camera, occlusion = true)` is
+used, the tree is visited nearest-first and the hierarchy is consulted before descending or
+rasterizing. The hierarchy is cleared at the start of every frame, so a camera change or a
+scene edit never reuses stale occlusion. Passing `occlusion = false` runs the identical DAG
+walk and leaf rasterization but disables rejection (and all hierarchy reads/writes); the two
+paths must produce identical pixels.
+
 ## License?
 Cubiquity is released into the public domain via the [CC0 dedication](https://creativecommons.org/publicdomain/zero/1.0/). The source code is not under copyright and so you do not require a licence to use it. There are no restrictions on what you can do with the source code, and no requirements or obligations on your part - **it is completely free for any purpose**.
 
