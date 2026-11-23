@@ -53,6 +53,7 @@ public:
 	virtual off_t length() OVERRIDE;
 	virtual off_t seek(off_t offset, SeekOrigin origin) OVERRIDE;
 	virtual off_t tell() OVERRIDE;
+	virtual off_t truncate(off_t length) OVERRIDE;
 
 private:
 	int m_fd;
@@ -111,6 +112,13 @@ bool File::canSeek()
 	return seek(0, File::SeekFromCurrent) != -1;
 }
 
+off_t File::truncate(off_t)
+{
+	// Not all file backends can truncate; callers that require this
+	// must check the return value.
+	return -1;
+}
+
 int FilePOSIX::close()
 {
 	if (m_fd == -1)
@@ -159,6 +167,13 @@ off_t FilePOSIX::seek(off_t offset, File::SeekOrigin origin)
 off_t FilePOSIX::tell()
 {
 	return seek(0, File::SeekFromCurrent);
+}
+
+off_t FilePOSIX::truncate(off_t length)
+{
+	if (::ftruncate(m_fd, length) != 0)
+		return -1;
+	return length;
 }
 
 int FileVF::close()

@@ -39,6 +39,9 @@ protected:
 
 	ssize_t read(void *data, size_t nbytes);
 	ssize_t write(const void *data, size_t nbytes);
+	// Write without updating the track's data offset or data size;
+	// used for provisional data which is not counted until committed.
+	ssize_t writeRaw(const void *data, size_t nbytes);
 	off_t seek(off_t offset);
 	off_t tell();
 	off_t length();

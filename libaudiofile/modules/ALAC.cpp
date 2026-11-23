@@ -69,6 +69,7 @@ public:
 	virtual void reset1() OVERRIDE;
 	virtual void reset2() OVERRIDE;
 	virtual void runPush() OVERRIDE;
+	virtual void syncPush(Chunk *chunk, size_t frameCount) OVERRIDE;
 	virtual void sync1() OVERRIDE;
 	virtual void sync2() OVERRIDE;
 	virtual int bufferSize() const OVERRIDE;
@@ -81,13 +82,20 @@ private:
 	SharedPtr<Buffer> m_codecData;
 	ALACDecoder *m_decoder;
 	ALACEncoder *m_encoder;
+	// Encoder used only for provisional tail packets produced while
+	// syncing.  It is recreated for every flush so that repeated syncs
+	// of the same buffered PCM produce identical packets.
+	ALACEncoder *m_tailEncoder;
 	int m_currentPacket;
 
 	ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData);
 	void initDecoder();
 	void initEncoder();
 
+	AudioFormatDescription inputFormat() const;
 	AudioFormatDescription outputFormat() const;
+	void discardProvisionalData();
+	void encodeProvisionalFrames(Chunk *chunk, size_t frameCount);
 };
 
 ALAC::ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData) :
@@ -97,6 +105,7 @@ ALAC::ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData) :
 	m_codecData(codecData),
 	m_decoder(NULL),
 	m_encoder(NULL),
+	m_tailEncoder(NULL),
 	m_currentPacket(0)
 {
 	if (mode == Decompress)
@@ -109,6 +118,7 @@ ALAC::~ALAC()
 {
 	delete m_decoder;
 	delete m_encoder;
+	delete m_tailEncoder;
 }
 
 void ALAC::initDecoder()
@@ -130,6 +140,21 @@ void ALAC::initEncoder()
 	void *v = NULL;
 	_af_pv_getptr(m_track->f.compressionParams, _AF_CODEC_DATA, &v);
 	::memcpy(v, m_codecData->data(), cookieSize);
+}
+
+AudioFormatDescription ALAC::inputFormat() const
+{
+	AudioFormatDescription inputFormat;
+	inputFormat.mSampleRate = m_track->f.sampleRate;
+	inputFormat.mFormatID = kALACFormatLinearPCM;
+	inputFormat.mFormatFlags = kALACFormatFlagsNativeEndian;
+	inputFormat.mBytesPerPacket = _af_format_frame_size_uncompressed(&m_track->f, false);
+	inputFormat.mFramesPerPacket = 1;
+	inputFormat.mBytesPerFrame = _af_format_frame_size_uncompressed(&m_track->f, false);
+	inputFormat.mChannelsPerFrame = m_track->f.channelCount;
+	inputFormat.mBitsPerChannel = m_track->f.sampleWidth;
+	inputFormat.mReserved = 0;
+	return inputFormat;
 }
 
 AudioFormatDescription ALAC::outputFormat() const
@@ -227,7 +252,9 @@ ALAC *ALAC::createCompress(Track *track, File *fh,
 void ALAC::runPull()
 {
 	SharedPtr<PacketTable> packetTable = m_track->m_packetTable;
-	if (m_currentPacket >= static_cast<int>(packetTable->numPackets()))
+	// A file with no packets (e.g. a zero-frame recording) has no audio.
+	if (!packetTable ||
+		m_currentPacket >= static_cast<int>(packetTable->numPackets()))
 	{
 		m_outChunk->frameCount = 0;
 		return;
@@ -265,6 +292,14 @@ void ALAC::reset1()
 
 void ALAC::reset2()
 {
+	// A zero-packet file has no audio data; leave the read pointer at the
+	// start of the data chunk rather than dereferencing a null table.
+	if (!m_track->m_packetTable)
+	{
+		m_track->fpos_next_frame = m_track->fpos_first_frame;
+		m_track->frames2ignore += m_framesToIgnore;
+		return;
+	}
 	m_track->fpos_next_frame = m_track->fpos_first_frame +
 		m_track->m_packetTable->startOfPacket(m_currentPacket);
 	m_track->frames2ignore += m_framesToIgnore;
@@ -278,19 +313,13 @@ int ALAC::bufferSize() const
 
 void ALAC::runPush()
 {
-	AudioFormatDescription inputFormat;
-	inputFormat.mSampleRate = m_track->f.sampleRate;
-	inputFormat.mFormatID = kALACFormatLinearPCM;
-	inputFormat.mFormatFlags = kALACFormatFlagsNativeEndian;
-	inputFormat.mBytesPerPacket = _af_format_frame_size_uncompressed(&m_track->f, false);
-	inputFormat.mFramesPerPacket = 1;
-	inputFormat.mBytesPerFrame = _af_format_frame_size_uncompressed(&m_track->f, false);
-	inputFormat.mChannelsPerFrame = m_track->f.channelCount;
-	inputFormat.mBitsPerChannel = m_track->f.sampleWidth;
-	inputFormat.mReserved = 0;
+	// A permanent write invalidates any provisional tail packet left by
+	// the previous sync; the data slot is overwritten starting at the
+	// end of the committed packets.
+	discardProvisionalData();
 
-	int32_t numBytes = m_inChunk->frameCount * inputFormat.mBytesPerFrame;
-	int32_t result = m_encoder->Encode(inputFormat, outputFormat(),
+	int32_t numBytes = m_inChunk->frameCount * inputFormat().mBytesPerFrame;
+	int32_t result = m_encoder->Encode(inputFormat(), outputFormat(),
 		static_cast<uint8_t *>(m_inChunk->buffer),
 		static_cast<uint8_t *>(m_outChunk->buffer),
 		&numBytes);
@@ -318,6 +347,110 @@ void ALAC::runPush()
 		m_inChunk->frameCount);
 }
 
+void ALAC::discardProvisionalData()
+{
+	Track *track = m_track;
+	if (track->provisionalDataOffset < 0)
+		return;
+
+	// Reposition at the end of the permanently committed packet data so
+	// the provisional packets are overwritten.
+	if (seek(track->fpos_first_frame + track->data_size) == -1)
+	{
+		_af_error(AF_BAD_LSEEK, "unable to discard provisional ALAC packets");
+		track->filemodhappy = false;
+		return;
+	}
+	track->fpos_next_frame = track->fpos_first_frame + track->data_size;
+
+	track->provisionalDataOffset = -1;
+	track->provisionalDataSize = 0;
+	track->provisionalFrames = 0;
+	track->m_provisionalPacketTable = NULL;
+}
+
+void ALAC::encodeProvisionalFrames(Chunk *chunk, size_t frameCount)
+{
+	Track *track = m_track;
+
+	if (frameCount == 0)
+		return;
+
+	// Each flush uses a fresh encoder so that the same buffered PCM
+	// always yields byte-identical tail packets, keeping repeated
+	// syncs with no new PCM idempotent.
+	delete m_tailEncoder;
+	m_tailEncoder = new ALACEncoder();
+	m_tailEncoder->SetFrameSize(track->f.framesPerPacket);
+	m_tailEncoder->InitializeEncoder(outputFormat());
+
+	// A new flush replaces any provisional tail written by the previous
+	// sync, overwriting it in place rather than appending a second one.
+	if (track->provisionalDataOffset < 0)
+		track->provisionalDataOffset =
+			track->fpos_first_frame + track->data_size;
+	track->provisionalDataSize = 0;
+	track->provisionalFrames = 0;
+	track->m_provisionalPacketTable = new PacketTable();
+	PacketTable *provisionalTable = track->m_provisionalPacketTable.get();
+
+	if (seek(track->provisionalDataOffset) == -1)
+	{
+		_af_error(AF_BAD_LSEEK, "unable to position provisional ALAC packet");
+		track->filemodhappy = false;
+		return;
+	}
+
+	int bytesPerFrame = inputFormat().mBytesPerFrame;
+	const uint8_t *input = static_cast<const uint8_t *>(chunk->buffer);
+	size_t framesEncoded = 0;
+	while (framesEncoded < frameCount)
+	{
+		size_t framesThisPacket = frameCount - framesEncoded;
+		if (framesThisPacket > track->f.framesPerPacket)
+			framesThisPacket = track->f.framesPerPacket;
+
+		int32_t numBytes = framesThisPacket * bytesPerFrame;
+		int32_t result = m_tailEncoder->Encode(inputFormat(), outputFormat(),
+			const_cast<uint8_t *>(input) + framesEncoded * bytesPerFrame,
+			static_cast<uint8_t *>(m_outChunk->buffer),
+			&numBytes);
+		if (result)
+		{
+			_af_error(AF_BAD_CODEC_STATE,
+				"error encoding provisional ALAC audio data");
+			track->filemodhappy = false;
+			return;
+		}
+
+		assert(numBytes <= bufferSize());
+
+		// Provisional bytes are not counted in data_size or in the
+		// permanent packet table.
+		ssize_t bytesWritten = writeRaw(m_outChunk->buffer, numBytes);
+		if (bytesWritten != numBytes)
+		{
+			reportWriteError(0, framesThisPacket);
+			return;
+		}
+
+		provisionalTable->append(numBytes);
+		track->provisionalDataSize += numBytes;
+		track->provisionalFrames += framesThisPacket;
+		framesEncoded += framesThisPacket;
+	}
+}
+
+void ALAC::syncPush(Chunk *chunk, size_t frameCount)
+{
+	if (mode() != Compress)
+	{
+		Module::syncPush(chunk, frameCount);
+		return;
+	}
+	encodeProvisionalFrames(chunk, frameCount);
+}
+
 void ALAC::sync1()
 {
 	m_savedPositionNextFrame = m_track->fpos_next_frame;
@@ -326,10 +459,17 @@ void ALAC::sync1()
 
 void ALAC::sync2()
 {
+	if (mode() == Compress)
+	{
+		// Provisional tail packets live past the logical write position;
+		// seek back so the on-disk position matches the state as if the
+		// flushed PCM were still only buffered.
+		seek(m_savedPositionNextFrame);
+	}
+
 	assert(!canSeek() || (tell() == m_track->fpos_next_frame));
 
-	m_track->fpos_after_data = tell();
-
+	m_track->fpos_after_data = m_savedPositionNextFrame;
 	m_track->fpos_next_frame = m_savedPositionNextFrame;
 	m_track->nextfframe = m_savedNextFrame;
 }

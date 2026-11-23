@@ -598,7 +598,11 @@ status CAFFile::writeData(bool update)
 	int64_t dataLength = -1;
 	uint32_t editCount = 0;
 	if (update)
-		dataLength = track->data_size + 4;
+	{
+		// The data chunk covers both permanently committed packets and
+		// any provisional tail packets made readable by the last sync.
+		dataLength = track->data_size + track->provisionalDataSize + 4;
+	}
 
 	if (!writeTag(&data) ||
 		!writeS64(&dataLength) ||
@@ -613,24 +617,47 @@ status CAFFile::writePacketTable()
 {
 	Track *track = getTrack();
 
-	m_fh->seek(track->fpos_after_data, File::SeekFromBeginning);
-
 	SharedPtr<PacketTable> packetTable = track->m_packetTable;
 	if (!packetTable)
 		return AF_SUCCEED;
 
-	int64_t numPackets = packetTable->numPackets();
-	int64_t numValidFrames = packetTable->numValidFrames();
+	SharedPtr<PacketTable> provisionalTable = track->m_provisionalPacketTable;
+	size_t numProvisionalPackets = provisionalTable ?
+		provisionalTable->numPackets() : 0;
+
+	int64_t numPackets = packetTable->numPackets() + numProvisionalPackets;
+	int64_t numValidFrames = packetTable->numValidFrames() +
+		track->provisionalFrames;
 	int32_t primingFrames = packetTable->primingFrames();
 	int32_t remainderFrames = packetTable->remainderFrames();
 
-	SharedPtr<Buffer> buffer = new Buffer(packetTable->numPackets() * 5);
+	// The packet table immediately follows the valid audio data.
+	AFfileoffset packetTableOffset = track->fpos_first_frame +
+		track->data_size + track->provisionalDataSize;
+
+	// Discard any previous packet table or stale tail packets left
+	// beyond the current valid data before rewriting the single table.
+	// Backends without truncation support degrade gracefully: the seek
+	// below still positions the new table correctly.
+	m_fh->truncate(packetTableOffset);
+	if (m_fh->seek(packetTableOffset, File::SeekFromBeginning) !=
+		packetTableOffset)
+		return AF_FAIL;
+
+	SharedPtr<Buffer> buffer = new Buffer(numPackets * 5);
 
 	uint8_t *data = static_cast<uint8_t *>(buffer->data());
 	size_t position = 0;
 	for (unsigned i=0; i<packetTable->numPackets(); i++)
 	{
 		uint32_t bytesPerPacket = packetTable->bytesPerPacket(i);
+		size_t numBytes = 0;
+		encodeBERInteger(bytesPerPacket, data + position, &numBytes);
+		position += numBytes;
+	}
+	for (size_t i=0; i<numProvisionalPackets; i++)
+	{
+		uint32_t bytesPerPacket = provisionalTable->bytesPerPacket(i);
 		size_t numBytes = 0;
 		encodeBERInteger(bytesPerPacket, data + position, &numBytes);
 		position += numBytes;
@@ -649,6 +676,11 @@ status CAFFile::writePacketTable()
 	{
 		return AF_FAIL;
 	}
+
+	// Remove trailing bytes in case the new table is shorter than the
+	// one from an earlier sync.
+	AFfileoffset endOfPacketTable = m_fh->tell();
+	m_fh->truncate(endOfPacketTable);
 
 	return AF_SUCCEED;
 }

@@ -80,6 +80,21 @@ struct Track
 	AFframecount nextvframe;
 	AFfileoffset data_size;		/* trackBytes */
 
+	/*
+		Provisional packet data made readable by afSyncFile.
+
+		When a synchronized file ends with PCM which does not fill a
+		complete packet, those "tail" packets are written after the
+		permanent audio data so that other processes can read them, but
+		they are not folded into m_packetTable or data_size.  The next
+		sync or the next permanent write seeks back and overwrites this
+		provisional region, so the tail is never counted more than once.
+	*/
+	AFfileoffset provisionalDataOffset;
+	AFfileoffset provisionalDataSize;
+	AFframecount provisionalFrames;
+	SharedPtr<PacketTable> m_provisionalPacketTable;
+
 	SharedPtr<ModuleState> ms;
 
 	double taper, dynamic_range;

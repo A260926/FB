@@ -99,6 +99,13 @@ public:
 	virtual void reset1() { }
 	virtual void reset2() { }
 	virtual void runPush();
+	/*
+		Flush frames held back by an upstream buffering module during a
+		sync.  The default implementation pushes the frames through the
+		normal write path; compression modules may override this to treat
+		synced frames as provisional data.
+	*/
+	virtual void syncPush(Chunk *chunk, size_t frameCount);
 	virtual void sync1() { }
 	virtual void sync2() { }
 

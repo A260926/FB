@@ -76,3 +76,9 @@ void Module::push(size_t frames)
 	m_outChunk->frameCount = frames;
 	m_sink->runPush();
 }
+
+void Module::syncPush(Chunk *chunk, size_t frameCount)
+{
+	chunk->frameCount = frameCount;
+	m_sink->runPush();
+}

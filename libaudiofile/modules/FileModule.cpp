@@ -58,6 +58,11 @@ ssize_t FileModule::write(const void *data, size_t nbytes)
 	return bytesWritten;
 }
 
+ssize_t FileModule::writeRaw(const void *data, size_t nbytes)
+{
+	return m_fh->write(data, nbytes);
+}
+
 off_t FileModule::seek(off_t offset)
 {
 	return m_fh->seek(offset, File::SeekFromBeginning);

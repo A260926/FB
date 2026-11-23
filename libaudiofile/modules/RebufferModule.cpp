@@ -260,9 +260,14 @@ void RebufferModule::sync2()
 {
 	assert(m_offset >= 0 && m_offset < m_numFrames);
 
-	memcpy(m_outChunk->buffer, m_buffer, m_offset * m_bytesPerFrame);
-
-	push(m_offset);
+	// Flush any buffered frames as part of the sync rather than as a
+	// normal write; the sink decides whether they are permanent or
+	// merely provisional.
+	if (m_offset > 0)
+	{
+		memcpy(m_outChunk->buffer, m_buffer, m_offset * m_bytesPerFrame);
+		m_sink->syncPush(m_outChunk.get(), m_offset);
+	}
 
 	memcpy(m_buffer, m_savedBuffer, m_numFrames * m_bytesPerFrame);
 	m_offset = m_savedOffset;

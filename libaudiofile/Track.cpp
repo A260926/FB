@@ -83,6 +83,10 @@ Track::Track()
 	totalvframes = 0;
 	nextvframe = 0;
 	data_size = 0;
+
+	provisionalDataOffset = -1;
+	provisionalDataSize = 0;
+	provisionalFrames = 0;
 }
 
 Track::~Track()
