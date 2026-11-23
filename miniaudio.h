@@ -10333,8 +10333,30 @@ typedef enum
     MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_ASYNC          = 0x00000004,   /* When set, the resource manager will load the data source asynchronously. */
     MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_WAIT_INIT      = 0x00000008,   /* When set, waits for initialization of the underlying data source before returning from ma_resource_manager_data_source_init(). */
     MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_UNKNOWN_LENGTH = 0x00000010,   /* Gives the resource manager a hint that the length of the data source is unknown and calling `ma_data_source_get_length_in_pcm_frames()` should be avoided. */
-    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_LOOPING        = 0x00000020    /* When set, configures the data source to loop by default. */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_LOOPING        = 0x00000020,   /* When set, configures the data source to loop by default. */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_SEEK_COALESCING = 0x00000040   /* When set, seek requests submitted to a data stream are coalesced into a single in-flight seek work unit. Only valid for data streams. */
 } ma_resource_manager_data_source_flags;
+
+
+/*
+The observable state of a coalescing data stream's seek machinery.
+
+requested:  The generation of the most recently accepted seek request. Increments by one for every
+            accepted request, even when the target frame is identical to the previous request.
+settled:    The generation whose target pages and end-of-stream state have all been published. While
+            a generation is in progress this lags `requested`.
+frameIndex: The target PCM frame of the most recently accepted request (generation `requested`).
+result:     MA_BUSY while the latest generation is not fully published; MA_SUCCESS once `settled`
+            catches up to `requested`; otherwise the real error code of the most recent failed
+            generation, which ends that generation.
+*/
+typedef struct
+{
+    ma_uint64 requested;
+    ma_uint64 settled;
+    ma_uint64 frameIndex;
+    ma_result result;
+} ma_resource_manager_seek_state;
 
 
 /*
@@ -10505,6 +10527,15 @@ struct ma_resource_manager_data_stream
     MA_ATOMIC(4, ma_bool32) isDecoderAtEnd;     /* Whether or not the decoder has reached the end. */
     MA_ATOMIC(4, ma_bool32) isPageValid[2];     /* Booleans to indicate whether or not a page is valid. Set to false by the public API, set to true by the job thread. Set to false as the pages are consumed, true when they are filled. */
     MA_ATOMIC(4, ma_bool32) seekCounter;        /* When 0, no seeking is being performed. When > 0, a seek is being performed and reading should be delayed with MA_BUSY. */
+
+    /* Seek coalescing. Only used when MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_SEEK_COALESCING is set. seekFrameIndex is owned by the control thread; the rest cross threads and are therefore atomic. */
+    MA_ATOMIC(8, ma_uint64) seekRequested;      /* Generation of the most recently accepted seek request. Read by the job thread to discover a target override. */
+    MA_ATOMIC(8, ma_uint64) seekTargetAtomic;   /* Target PCM frame of the most recently accepted request. Read by the job thread when it picks up a new generation. */
+    MA_ATOMIC(8, ma_uint64) seekSettled;        /* Generation whose pages and end state have all been published. */
+    ma_uint64 seekFrameIndex;                   /* Target PCM frame of the most recently accepted request. Control thread only. */
+    MA_ATOMIC(8, ma_uint64) seekInFlightGeneration; /* Generation currently owned by the seek work unit (queued or executing), or 0 when no seek work unit is outstanding. */
+    MA_ATOMIC(4, ma_result) seekResult;         /* MA_BUSY while a generation is outstanding, otherwise the result of the most recently settled generation. */
+    ma_bool32 seekCoalescingEnabled;            /* Cached copy of the SEEK_COALESCING flag. */
 };
 
 struct ma_resource_manager_data_source
@@ -10593,6 +10624,7 @@ MA_API ma_result ma_resource_manager_data_stream_init_w(ma_resource_manager* pRe
 MA_API ma_result ma_resource_manager_data_stream_uninit(ma_resource_manager_data_stream* pDataStream);
 MA_API ma_result ma_resource_manager_data_stream_read_pcm_frames(ma_resource_manager_data_stream* pDataStream, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);
 MA_API ma_result ma_resource_manager_data_stream_seek_to_pcm_frame(ma_resource_manager_data_stream* pDataStream, ma_uint64 frameIndex);
+MA_API ma_result ma_resource_manager_data_stream_get_seek_state(ma_resource_manager_data_stream* pDataStream, ma_resource_manager_seek_state* pSeekState);
 MA_API ma_result ma_resource_manager_data_stream_get_data_format(ma_resource_manager_data_stream* pDataStream, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
 MA_API ma_result ma_resource_manager_data_stream_get_cursor_in_pcm_frames(ma_resource_manager_data_stream* pDataStream, ma_uint64* pCursor);
 MA_API ma_result ma_resource_manager_data_stream_get_length_in_pcm_frames(ma_resource_manager_data_stream* pDataStream, ma_uint64* pLength);
@@ -11140,6 +11172,7 @@ typedef enum
     MA_SOUND_FLAG_WAIT_INIT             = 0x00000008,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_WAIT_INIT */
     MA_SOUND_FLAG_UNKNOWN_LENGTH        = 0x00000010,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_UNKNOWN_LENGTH */
     MA_SOUND_FLAG_LOOPING               = 0x00000020,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_LOOPING */
+    MA_SOUND_FLAG_SEEK_COALESCING       = 0x00000040,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_SEEK_COALESCING */
 
     /* ma_sound specific flags. */
     MA_SOUND_FLAG_NO_DEFAULT_ATTACHMENT = 0x00001000,   /* Do not attach to the endpoint by default. Useful for when setting up nodes in a complex graph system. */
@@ -11265,7 +11298,10 @@ struct ma_sound
     float* pProcessingCache;            /* Will be null if pDataSource is null. */
     ma_uint32 processingCacheFramesRemaining;
     ma_uint32 processingCacheCap;
-    ma_bool8 ownsDataSource;    
+    ma_bool8 ownsDataSource;
+
+    /* Seek coalescing support. The last settled seek generation whose output this sound has already realigned to, or 0 before the first completed seek. */
+    ma_uint64 coalescingSettledGeneration;
 
     /*
     We're declaring a resource manager data source object here to save us a malloc when loading a
@@ -72042,6 +72078,37 @@ static ma_uint32 ma_resource_manager_data_stream_seek_counter(const ma_resource_
     return ma_atomic_load_32((ma_uint32*)&pDataStream->seekCounter);
 }
 
+static ma_bool32 ma_resource_manager_data_stream_seek_coalescing_is_enabled(const ma_resource_manager_data_stream* pDataStream)
+{
+    MA_ASSERT(pDataStream != NULL);
+    return pDataStream->seekCoalescingEnabled;
+}
+
+/*
+The real terminal error of the latest coalescing seek generation, or MA_SUCCESS when no error is
+being surfaced. A failed generation ends with its pages untouched, so reads must report this error
+instead of spinning on MA_BUSY against pages that will never be refilled.
+*/
+static ma_result ma_resource_manager_data_stream_get_coalescing_error(const ma_resource_manager_data_stream* pDataStream)
+{
+    ma_resource_manager_seek_state seekState;
+
+    MA_ASSERT(pDataStream != NULL);
+
+    if (!ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream)) {
+        return MA_SUCCESS;
+    }
+
+    if (ma_resource_manager_data_stream_get_seek_state((ma_resource_manager_data_stream*)pDataStream, &seekState) != MA_SUCCESS) {
+        return MA_SUCCESS;
+    }
+
+    if (seekState.result != MA_SUCCESS && seekState.result != MA_BUSY) {
+        return seekState.result;
+    }
+
+    return MA_SUCCESS;
+}
 
 static ma_result ma_resource_manager_data_stream_cb__read_pcm_frames(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
 {
@@ -72148,6 +72215,15 @@ MA_API ma_result ma_resource_manager_data_stream_init_ex(ma_resource_manager* pR
     pDataStream->pResourceManager = pResourceManager;
     pDataStream->flags            = pConfig->flags;
     pDataStream->result           = MA_BUSY;
+
+    /* Seek coalescing starts idle: no generation requested or settled, the cursor at frame 0 and a successful (idle) result. */
+    pDataStream->seekCoalescingEnabled  = (pConfig->flags & MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_SEEK_COALESCING) != 0;
+    ma_atomic_exchange_64(&pDataStream->seekRequested, 0);
+    ma_atomic_exchange_64(&pDataStream->seekTargetAtomic, 0);
+    ma_atomic_exchange_64(&pDataStream->seekSettled, 0);
+    pDataStream->seekFrameIndex = 0;
+    ma_atomic_exchange_64(&pDataStream->seekInFlightGeneration, 0);
+    ma_atomic_exchange_i32(&pDataStream->seekResult, MA_SUCCESS);
 
     ma_data_source_set_range_in_pcm_frames(pDataStream, pConfig->rangeBegInPCMFrames, pConfig->rangeEndInPCMFrames);
     ma_data_source_set_loop_point_in_pcm_frames(pDataStream, pConfig->loopPointBegInPCMFrames, pConfig->loopPointEndInPCMFrames);
@@ -72502,6 +72578,14 @@ MA_API ma_result ma_resource_manager_data_stream_read_pcm_frames(ma_resource_man
         return MA_INVALID_OPERATION;
     }
 
+    /* A failed coalescing generation keeps its old pages invalidated; surface the real error instead of pretending data is coming. */
+    {
+        ma_result coalescingError = ma_resource_manager_data_stream_get_coalescing_error(pDataStream);
+        if (coalescingError != MA_SUCCESS) {
+            return coalescingError;
+        }
+    }
+
     /* Don't attempt to read while we're in the middle of seeking. Tell the caller that we're busy. */
     if (ma_resource_manager_data_stream_seek_counter(pDataStream) > 0) {
         return MA_BUSY;
@@ -72545,6 +72629,124 @@ MA_API ma_result ma_resource_manager_data_stream_read_pcm_frames(ma_resource_man
     return result;
 }
 
+/*
+Posts a coalescing seek work unit for the given generation. The job itself carries no frame index:
+the worker always works from the latest mailbox contents so a target override never requires a new
+queue slot. Returns the result of ma_resource_manager_post_job() without touching any stream state.
+A rejected post rewinds the execution order so it cannot leave a gap that would strand later jobs
+out of order; this is safe because every job for a given stream is posted from its single control
+thread (the job thread only re-enqueues an existing job with its original order).
+*/
+static ma_result ma_resource_manager_data_stream_post_coalesced_seek_job(ma_resource_manager_data_stream* pDataStream)
+{
+    ma_job job;
+    ma_uint32 executionCounterBefore;
+    ma_result result;
+
+    MA_ASSERT(pDataStream != NULL);
+
+    executionCounterBefore = ma_atomic_load_32(&pDataStream->executionCounter);
+
+    job = ma_job_init(MA_JOB_TYPE_RESOURCE_MANAGER_SEEK_DATA_STREAM);
+    job.order = ma_resource_manager_data_stream_next_execution_order(pDataStream);
+    job.data.resourceManager.seekDataStream.pDataStream = pDataStream;
+    job.data.resourceManager.seekDataStream.frameIndex  = 0;   /* The worker reads the real target from the mailbox. */
+
+    result = ma_resource_manager_post_job(pDataStream->pResourceManager, &job);
+    if (result != MA_SUCCESS) {
+        ma_atomic_exchange_32(&pDataStream->executionCounter, executionCounterBefore);
+    }
+
+    return result;
+}
+
+/*
+Coalescing seek path. The public API (control thread) only updates the mailbox. A burst of requests
+produces at most one seek work unit owning the pipeline because an in-flight unit simply picks up the
+latest target when it (re)runs. The wake-up claim is an atomic CAS on the in-flight marker: the
+control thread and the work unit can never both believe they own the new generation. If the resulting
+job post fails the request is rejected and every observable change is rolled back.
+*/
+static ma_result ma_resource_manager_data_stream_seek_to_pcm_frame__coalesced(ma_resource_manager_data_stream* pDataStream, ma_uint64 frameIndex)
+{
+    ma_result result;
+    ma_uint64 newGeneration;
+
+    /* Snapshot of the control-thread-visible state, used only to roll a rejected wake-up back exactly. */
+    ma_uint64 oldRequested;
+    ma_uint64 oldFrameIndex;
+    ma_uint64 oldAbsoluteCursor;
+    ma_result oldSeekResult;
+    ma_uint32 oldRelativeCursor;
+    ma_uint32 oldCurrentPageIndex;
+    ma_bool32 oldPageValid0;
+    ma_bool32 oldPageValid1;
+    ma_bool32 oldDecoderAtEnd;
+
+    MA_ASSERT(pDataStream != NULL);
+    MA_ASSERT(pDataStream->seekCoalescingEnabled);
+
+    if (frameIndex > pDataStream->totalLengthInPCMFrames) {
+        return MA_INVALID_ARGS;    /* The supported envelope only addresses frames 0..length inclusive. */
+    }
+
+    oldRequested        = ma_atomic_load_64(&pDataStream->seekRequested);
+    oldFrameIndex       = pDataStream->seekFrameIndex;
+    oldAbsoluteCursor   = ma_atomic_load_64(&pDataStream->absoluteCursor);
+    oldSeekResult       = (ma_result)ma_atomic_load_i32((ma_int32*)&pDataStream->seekResult);
+    oldRelativeCursor   = pDataStream->relativeCursor;
+    oldCurrentPageIndex = pDataStream->currentPageIndex;
+    oldPageValid0       = ma_atomic_load_32(&pDataStream->isPageValid[0]);
+    oldPageValid1       = ma_atomic_load_32(&pDataStream->isPageValid[1]);
+    oldDecoderAtEnd     = ma_atomic_load_32(&pDataStream->isDecoderAtEnd);
+
+    /* Every accepted request gets a new generation, even when the target is unchanged. */
+    newGeneration = ma_atomic_fetch_add_64(&pDataStream->seekRequested, 1) + 1;
+    pDataStream->seekFrameIndex = frameIndex;
+    ma_atomic_exchange_i32(&pDataStream->seekResult, MA_BUSY);
+
+    /* Publish the target to the worker mailbox before updating anything else it observes. */
+    ma_atomic_exchange_64(&pDataStream->seekTargetAtomic, frameIndex);
+
+    /* The cursor reflects the latest accepted target immediately. */
+    ma_resource_manager_data_stream_set_absolute_cursor(pDataStream, frameIndex);
+
+    /* Both pages are stale relative to the new target. The worker assumes exactly this state. */
+    pDataStream->relativeCursor   = 0;
+    pDataStream->currentPageIndex = 0;
+    ma_atomic_exchange_32(&pDataStream->isPageValid[0], MA_FALSE);
+    ma_atomic_exchange_32(&pDataStream->isPageValid[1], MA_FALSE);
+    ma_atomic_exchange_32(&pDataStream->isDecoderAtEnd, MA_FALSE);
+
+    /*
+    Atomically claim responsibility for waking the worker. If the CAS loses, a work unit is already
+    queued or executing (or re-claims the generation itself) and the mailbox delivers the override
+    without consuming another queue slot.
+    */
+    if (ma_atomic_compare_and_swap_64(&pDataStream->seekInFlightGeneration, 0, newGeneration) != 0) {
+        return MA_SUCCESS;
+    }
+
+    /* We own the wake-up. If it cannot be queued, undo the claim and roll the whole request back. */
+    result = ma_resource_manager_data_stream_post_coalesced_seek_job(pDataStream);
+    if (result != MA_SUCCESS) {
+        ma_atomic_exchange_64(&pDataStream->seekInFlightGeneration, 0);
+        ma_atomic_exchange_64(&pDataStream->seekRequested, oldRequested);
+        pDataStream->seekFrameIndex = oldFrameIndex;
+        ma_atomic_exchange_i32(&pDataStream->seekResult, oldSeekResult);
+        ma_atomic_exchange_64(&pDataStream->absoluteCursor, oldAbsoluteCursor);
+        pDataStream->relativeCursor   = oldRelativeCursor;
+        pDataStream->currentPageIndex = oldCurrentPageIndex;
+        ma_atomic_exchange_32(&pDataStream->isPageValid[0], oldPageValid0);
+        ma_atomic_exchange_32(&pDataStream->isPageValid[1], oldPageValid1);
+        ma_atomic_exchange_32(&pDataStream->isDecoderAtEnd, oldDecoderAtEnd);
+        return result;
+    }
+
+    ma_atomic_fetch_add_32(&pDataStream->seekCounter, 1);
+    return MA_SUCCESS;
+}
+
 MA_API ma_result ma_resource_manager_data_stream_seek_to_pcm_frame(ma_resource_manager_data_stream* pDataStream, ma_uint64 frameIndex)
 {
     ma_job job;
@@ -72561,6 +72763,11 @@ MA_API ma_result ma_resource_manager_data_stream_seek_to_pcm_frame(ma_resource_m
 
     if (streamResult != MA_SUCCESS && streamResult != MA_BUSY) {
         return MA_INVALID_OPERATION;
+    }
+
+    /* Coalescing streams keep their own mailbox/generation bookkeeping and never post more than one seek work unit at a time. */
+    if (ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream)) {
+        return ma_resource_manager_data_stream_seek_to_pcm_frame__coalesced(pDataStream, frameIndex);
     }
 
     /* If we're not already seeking and we're sitting on the same frame, just make this a no-op. */
@@ -72599,6 +72806,25 @@ MA_API ma_result ma_resource_manager_data_stream_seek_to_pcm_frame(ma_resource_m
     job.data.resourceManager.seekDataStream.pDataStream = pDataStream;
     job.data.resourceManager.seekDataStream.frameIndex  = frameIndex;
     return ma_resource_manager_post_job(pDataStream->pResourceManager, &job);
+}
+
+MA_API ma_result ma_resource_manager_data_stream_get_seek_state(ma_resource_manager_data_stream* pDataStream, ma_resource_manager_seek_state* pSeekState)
+{
+    if (pDataStream == NULL || pSeekState == NULL) {
+        return MA_INVALID_ARGS;
+    }
+
+    /* The seek state tuple only exists for streams that opted into coalescing. */
+    if (!ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream)) {
+        return MA_INVALID_OPERATION;
+    }
+
+    pSeekState->requested  = ma_atomic_load_64(&pDataStream->seekRequested);
+    pSeekState->settled    = ma_atomic_load_64(&pDataStream->seekSettled);
+    pSeekState->frameIndex = pDataStream->seekFrameIndex;
+    pSeekState->result     = (ma_result)ma_atomic_load_i32((ma_int32*)&pDataStream->seekResult);
+
+    return MA_SUCCESS;
 }
 
 MA_API ma_result ma_resource_manager_data_stream_get_data_format(ma_resource_manager_data_stream* pDataStream, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap)
@@ -73609,9 +73835,23 @@ done:
     return result;
 }
 
+/*
+Retires a fully settled seek generation: publishes it to the control-thread-visible state, clears the
+in-flight marker and drops the seek counter. Only ever called from the seek work unit for the most
+recently requested generation; an overridden generation is never published.
+*/
+static void ma_resource_manager_data_stream_retire_seek_generation(ma_resource_manager_data_stream* pDataStream, ma_uint64 generation, ma_result result)
+{
+    MA_ASSERT(pDataStream != NULL);
+
+    ma_atomic_exchange_64(&pDataStream->seekSettled, generation);
+    ma_atomic_exchange_i32(&pDataStream->seekResult, result);
+    ma_atomic_exchange_64(&pDataStream->seekInFlightGeneration, 0);
+    ma_atomic_fetch_sub_32(&pDataStream->seekCounter, 1);
+}
+
 static ma_result ma_job_process__resource_manager__seek_data_stream(ma_job* pJob)
 {
-    ma_result result = MA_SUCCESS;
     ma_resource_manager* pResourceManager;
     ma_resource_manager_data_stream* pDataStream;
 
@@ -73628,25 +73868,97 @@ static ma_result ma_job_process__resource_manager__seek_data_stream(ma_job* pJob
 
     /* For streams the status should be MA_SUCCESS for this to do anything. */
     if (ma_resource_manager_data_stream_result(pDataStream) != MA_SUCCESS || pDataStream->isDecoderInitialized == MA_FALSE) {
-        result = MA_INVALID_OPERATION;
-        goto done;
+        /*
+        The stream went away (uninitialization races first job, etc.). A coalescing stream must not be
+        left with a dangling in-flight generation, so retire it with the real error before leaving.
+        */
+        if (ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream) && ma_atomic_load_64(&pDataStream->seekInFlightGeneration) != 0) {
+            ma_resource_manager_data_stream_retire_seek_generation(pDataStream, ma_atomic_load_64(&pDataStream->seekRequested), MA_INVALID_OPERATION);
+        }
+
+        ma_atomic_fetch_add_32(&pDataStream->executionPointer, 1);
+        return MA_INVALID_OPERATION;
+    }
+
+    if (!ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream)) {
+        /* Legacy behavior: one job performs exactly one seek against the frame index carried by the job. */
+        ma_decoder_seek_to_pcm_frame(&pDataStream->decoder, pJob->data.resourceManager.seekDataStream.frameIndex);
+        ma_resource_manager_data_stream_fill_pages(pDataStream);
+        ma_atomic_fetch_sub_32(&pDataStream->seekCounter, 1);
+        ma_atomic_fetch_add_32(&pDataStream->executionPointer, 1);
+        return MA_SUCCESS;
     }
 
     /*
-    With seeking we just assume both pages are invalid and the relative frame cursor at position 0. This is basically exactly the same as loading, except
-    instead of initializing the decoder, we seek to a frame.
+    Coalescing behavior. A single work unit owns the seek pipeline for a whole burst. Each loop
+    iteration decodes the latest requested target. If a newer request arrives while decoding, the
+    in-progress target is still decoded fully (safe decoder hand-off) but is never published; the
+    loop re-runs for the new target without consuming another queue slot.
     */
-    ma_decoder_seek_to_pcm_frame(&pDataStream->decoder, pJob->data.resourceManager.seekDataStream.frameIndex);
+    for (;;) {
+        ma_uint64 requestedGeneration;
+        ma_uint64 targetFrameIndex;
+        ma_result seekResult;
 
-    /* After seeking we'll need to reload the pages. */
-    ma_resource_manager_data_stream_fill_pages(pDataStream);
+        requestedGeneration = ma_atomic_load_64(&pDataStream->seekRequested);
+        targetFrameIndex    = ma_atomic_load_64(&pDataStream->seekTargetAtomic);
 
-    /* We need to let the public API know that we're done seeking. */
-    ma_atomic_fetch_sub_32(&pDataStream->seekCounter, 1);
+        /*
+        With seeking we just assume both pages are invalid and the relative frame cursor at position 0. This is basically exactly the same as loading, except
+        instead of initializing the decoder, we seek to a frame. A failed seek publishes its real error and ends the generation without touching the pages.
+        */
+        seekResult = ma_decoder_seek_to_pcm_frame(&pDataStream->decoder, targetFrameIndex);
+        if (seekResult == MA_SUCCESS) {
+            /* After seeking we'll need to reload the pages. fill_page() records the real end-of-stream state. */
+            ma_resource_manager_data_stream_fill_pages(pDataStream);
+        }
 
-done:
-    ma_atomic_fetch_add_32(&pDataStream->executionPointer, 1);
-    return result;
+        /* Another request landed while this target was being decoded: this generation is stale. Hand off the decoder and chase the new target. */
+        if (requestedGeneration != ma_atomic_load_64(&pDataStream->seekRequested)) {
+            continue;
+        }
+
+        /*
+        Retire the in-flight marker first. This closes the request/completion race: a control-thread
+        request that observed the non-zero marker cannot have posted a job, but will be caught by the
+        re-check below. A request that observes the zero marker posts its own wake-up job. The marker
+        holds the generation that posted this work unit (overrides do not change it), so clear it from
+        its current value rather than the generation just processed.
+        */
+        {
+            ma_uint64 heldGeneration = ma_atomic_load_64(&pDataStream->seekInFlightGeneration);
+            if (ma_atomic_compare_and_swap_64(&pDataStream->seekInFlightGeneration, heldGeneration, 0) != heldGeneration) {
+                /* Only this work unit clears the marker while it holds the pipeline, so this cannot fail. */
+                MA_ASSERT(MA_FALSE);
+                ma_atomic_fetch_add_32(&pDataStream->executionPointer, 1);
+                return MA_ERROR;
+            }
+        }
+
+        {
+            ma_uint64 latestGeneration = ma_atomic_load_64(&pDataStream->seekRequested);
+            if (latestGeneration != requestedGeneration) {
+                /*
+                A request arrived in the retirement window. It either observed the zero marker and
+                posted its own wake-up job (in which case the re-claim fails and we only balance the
+                seek counter), or it observed the non-zero marker and needs this work unit to continue.
+                */
+                if (ma_atomic_compare_and_swap_64(&pDataStream->seekInFlightGeneration, 0, latestGeneration) == 0) {
+                    continue;   /* Re-claimed the new generation without a new queue slot. */
+                }
+
+                /* The control thread posted the wake-up itself. Balance the counter for the retired generation; that job owns everything from here. */
+                ma_atomic_fetch_sub_32(&pDataStream->seekCounter, 1);
+                ma_atomic_fetch_add_32(&pDataStream->executionPointer, 1);
+                return seekResult;
+            }
+        }
+
+        /* Still the latest generation: both pages and the end state are published, so settle it. */
+        ma_resource_manager_data_stream_retire_seek_generation(pDataStream, requestedGeneration, seekResult);
+        ma_atomic_fetch_add_32(&pDataStream->executionPointer, 1);
+        return seekResult;
+    }
 }
 
 MA_API ma_result ma_resource_manager_process_job(ma_resource_manager* pResourceManager, ma_job* pJob)
@@ -77139,6 +77451,94 @@ static void ma_engine_node_process_pcm_frames__general(ma_engine_node* pEngineNo
     *pFrameCountOut = totalFramesProcessedOut;
 }
 
+/*
+Returns MA_TRUE and realigns this sound to a freshly settled coalescing seek generation when one is
+available. Returns MA_FALSE (without touching anything) when the sound is not backed by a coalescing
+stream or while the latest accepted target is still being decoded. The realignment discards the stale
+processing cache and resets the pitch resampler history exactly once per settled generation so the
+next rendered sample is identical to a brand new sound started at that target.
+*/
+static ma_bool32 ma_sound_consume_settled_coalescing_seek(ma_sound* pSound)
+{
+    ma_data_source_base* pDataSourceBase;
+    ma_resource_manager_data_stream* pDataStream;
+    ma_resource_manager_seek_state seekState;
+    ma_result stateResult;
+
+    MA_ASSERT(pSound != NULL);
+    MA_ASSERT(pSound->pDataSource != NULL);
+
+    pDataSourceBase = (ma_data_source_base*)pSound->pDataSource;
+    if (pDataSourceBase->vtable != &g_ma_resource_manager_data_stream_vtable) {
+        return MA_FALSE;
+    }
+
+    pDataStream = (ma_resource_manager_data_stream*)pSound->pDataSource;
+    if (!ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream)) {
+        return MA_FALSE;
+    }
+
+    stateResult = ma_resource_manager_data_stream_get_seek_state(pDataStream, &seekState);
+    if (stateResult != MA_SUCCESS) {
+        return MA_FALSE;
+    }
+
+    /* Nothing has settled beyond what this sound has already realigned to. */
+    if (seekState.settled <= pSound->coalescingSettledGeneration) {
+        return MA_FALSE;
+    }
+
+    /* A new generation has fully published its pages and end-of-stream state. */
+    pSound->coalescingSettledGeneration = seekState.settled;
+
+    /* Drop stale input so no sample decoded before the target can reach the output. */
+    pSound->processingCacheFramesRemaining = 0;
+
+    /* Clear the resampler's fractional position and cached input samples, once for this generation. */
+    ma_resampler_reset(&pSound->engineNode.resampler);
+
+    /* A successful settle clears any stale end-of-stream marker; a failed one leaves the sound free to stop on its next read. */
+    if (seekState.result == MA_SUCCESS) {
+        ma_sound_set_at_end(pSound, MA_FALSE);
+    }
+
+    return MA_TRUE;
+}
+
+/*
+True while a coalescing stream backing this sound has an accepted seek generation that has not fully
+settled. A BUSY generation must render silence rather than read (which would advance the source
+cursor or drain the stale cache) and must never be treated as end-of-stream.
+*/
+static ma_bool32 ma_sound_is_coalescing_seek_busy(const ma_sound* pSound)
+{
+    ma_data_source_base* pDataSourceBase;
+    ma_resource_manager_data_stream* pDataStream;
+    ma_resource_manager_seek_state seekState;
+
+    MA_ASSERT(pSound != NULL);
+
+    if (pSound->pDataSource == NULL) {
+        return MA_FALSE;
+    }
+
+    pDataSourceBase = (ma_data_source_base*)pSound->pDataSource;
+    if (pDataSourceBase->vtable != &g_ma_resource_manager_data_stream_vtable) {
+        return MA_FALSE;
+    }
+
+    pDataStream = (ma_resource_manager_data_stream*)pSound->pDataSource;
+    if (!ma_resource_manager_data_stream_seek_coalescing_is_enabled(pDataStream)) {
+        return MA_FALSE;
+    }
+
+    if (ma_resource_manager_data_stream_get_seek_state(pDataStream, &seekState) != MA_SUCCESS) {
+        return MA_FALSE;
+    }
+
+    return seekState.result == MA_BUSY;
+}
+
 static void ma_engine_node_process_pcm_frames__sound(ma_node* pNode, const float** ppFramesIn, ma_uint32* pFrameCountIn, float** ppFramesOut, ma_uint32* pFrameCountOut)
 {
     /* For sounds, we need to first read from the data source. Then we need to apply the engine effects (pan, pitch, fades, etc.). */
@@ -77177,6 +77577,24 @@ static void ma_engine_node_process_pcm_frames__sound(ma_node* pNode, const float
         ma_node_set_time(pSound, seekTarget);
 
         ma_atomic_exchange_64(&pSound->seekTarget, MA_SEEK_TARGET_NONE);
+    }
+
+    /*
+    If a coalescing seek generation has fully settled since the last process, realign once before any
+    reading so the stale processing cache and resampler history can never leak samples from before the
+    target.
+    */
+    ma_sound_consume_settled_coalescing_seek(pSound);
+
+    /*
+    While the latest coalescing seek target is still being decoded this sound emits silence only: it
+    must not drain the old cache, must not advance the source cursor, and MA_BUSY must not be mistaken
+    for end-of-stream.
+    */
+    if (ma_sound_is_coalescing_seek_busy(pSound)) {
+        ma_silence_pcm_frames(ppFramesOut[0], frameCount, ma_format_f32, ma_node_get_output_channels(pNode, 0));
+        *pFrameCountOut = frameCount;
+        return;
     }
 
     /*
