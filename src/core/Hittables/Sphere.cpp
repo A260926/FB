@@ -263,7 +263,9 @@ bool	Sphere::hit(Ray& ray, HitRecord& hitRecord, double t_min, double t_max) con
 	const Vector3 outwardNormal = (hitRecord.position - this->_position) / this->_radius;
 	setSphereUV(outwardNormal, this->_uvProjection, hitRecord);
 	hitRecord.setFaceNormal(ray, outwardNormal);
+	hitRecord.geometricFrontFace = hitRecord.frontFace;
 	hitRecord.material = this->_material.get();
+	hitRecord.hittable = this;
 
 	return (true);
 }

@@ -7,6 +7,7 @@
 #include <memory>
 
 class	AABB;
+class	Hittable;
 class	Material;
 
 struct	HitRecord
@@ -17,9 +18,16 @@ struct	HitRecord
 	Vector3		normal;
 	Vector3		geometricNormal;
 	bool		frontFace = true;
+	// Front/back side evaluated from the geometric (face) normal. This can
+	// differ from 'frontFace' when a Triangle carries interpolated shading
+	// normals. Control-variate bookkeeping keys off the geometric side.
+	bool		geometricFrontFace = true;
 	double		u = 0.0;
 	double		v = 0.0;
 	Material*	material = nullptr;
+	// Identity of the object that produced the hit. Kept separate from
+	// 'material' so two objects sharing one material stay distinguishable.
+	const Hittable*	hittable = nullptr;
 
 	void	setFaceNormal(const Ray& ray, const Vector3& outwardNormal)
 	{

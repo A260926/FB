@@ -361,6 +361,84 @@ Blender scenes can be exported through Blender's Python API:
 The exporter writes a `.luz` file plus OBJ meshes. Usage and current fidelity
 limits are documented in [`docs/blender-exporter.md`](docs/blender-exporter.md).
 
+## Diffuse Control Variate
+
+`include/luz/Renderer/ControlVariate.hpp` adds an experimental, session-based
+radiance control variate for the diffuse preview. A caller-owned
+`ControlVariate::Session` binds a read-only `Scene` and traces ordinary cosine
+continuation paths through the production `_checkHits` and real materials.
+
+Each epoch freezes a low-order spherical-harmonic model `g(w)` of the incoming
+radiance per `(object, geometric side, remaining depth)`. The next epoch
+evaluates its analytic cosine-hemisphere mean `A(n)` and lets Monte Carlo
+estimate only the signed residual:
+
+```text
+estimate = rho * (A(n) + Li - g(w))
+```
+
+Negative residuals and negative intermediate radiance are kept as-is. There is
+no NEE, Russian roulette or radiance clamping; emissive surfaces terminate the
+path exactly like `emitted()` in the production preview.
+
+Supported scope:
+
+- Geometry: standalone `Sphere` and `Triangle` only; the scene may use the
+  normal BVH. Normals use the geometric (face) normal.
+- Materials: untextured `Lambertian` and `Emissive` only.
+- Sky: `SKY_NONE` (background colour) and `SKY_LINEAR`. Other sky modes,
+  geometries and materials are rejected in the constructor with
+  `std::invalid_argument`, as are invalid configurations (`maxDepth` outside
+  `0..12`, non-finite or non-positive `ridge`, `minSamples` below 9).
+- `maxDepth` is the number of remaining diffuse bounces: depth 0 still sees
+  emissive surfaces and the sky but no longer reflects.
+
+Training labels are the complete suffix `Li`, not `Li - g` and not the final
+pixel. Each key accumulates `(Y(w), Li)` and is fitted per epoch by the average
+normal equations plus `ridge * I`; keys with fewer than `minSamples` records
+publish a zero model. Statistics are only replaced in `finishEpoch()`, so a
+whole epoch reads a frozen table. An empty epoch publishes the zero model and
+still advances the epoch counter. `reset()` clears all models, statistics and
+diagnostics. Sessions are independent and single-threaded.
+
+Diagnostics expose the model coefficients, per-epoch counts, the average normal
+matrix / right-hand side / regularized matrix, and a read-only vertex record of
+the most recent path (`key`, `normal`, `direction`, `Li`, `g`, `A`, `rho`,
+returned estimate). Memory stays bounded by object count and depth; no history
+of full paths is retained.
+
+The random stream is determined by the seed, epoch, sample id and path depth,
+so the same cosine directions are produced with the control variate on or off.
+
+### Spherical-harmonic convention
+
+Real, orthonormal SH in world space, solid-angle measure, `l <= 2`, ordered as
+
+```text
+0: Y_0^0   1: Y_1^-1 (y)  2: Y_1^0 (z)  3: Y_1^1 (x)
+4: Y_2^-2 (xy)  5: Y_2^-1 (yz)  6: Y_2^0  7: Y_2^1 (xz)  8: Y_2^2 (x^2-y^2)
+```
+
+with
+
+```text
+Y_0^0  = 0.2820947918
+Y_1    = 0.4886025119 * component
+Y_2^-2 = 1.0925484306 xy
+Y_2^-1 = 1.0925484306 yz
+Y_2^0  = 0.3153915653 (3z^2 - 1)
+Y_2^1  = 1.0925484306 xz
+Y_2^2  = 0.5462742153 (x^2 - y^2)
+```
+
+The analytic cosine integral `A(n) = integral_{H(n)} g(w) (n.w)/pi dw` is the
+diagonal cosine-kernel convolution of the coefficients with
+`alpha_0 = 1`, `alpha_1 = 2/3`, `alpha_2 = 1/4`.
+
+A small example lives in `examples/control_variate.cpp`; it trains for several
+epochs and writes a PPM. Tests are in `task_tests/control_variate.cpp` and are
+driven by `bash task_support/run.sh target`.
+
 ## Repository Layout
 
 ```text

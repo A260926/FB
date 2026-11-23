@@ -42,6 +42,11 @@ void	Material::setTexture(std::shared_ptr<Texture> texture)
 	this->_texture = texture;
 }
 
+bool	Material::hasTexture(void) const
+{
+	return (static_cast<bool>(this->_texture));
+}
+
 bool	Material::scatter(Ray& ray, HitRecord& hitRecord, ScatterRecord& scatterRecord)
 {
 	return (false);

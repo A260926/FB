@@ -55,6 +55,7 @@ class	Material
 		virtual void	setColor(Color color);
 		virtual Color	colorAt(const HitRecord& hitRecord) const;
 		virtual void	setTexture(std::shared_ptr<Texture> texture);
+		bool			hasTexture(void) const;
 		virtual bool	scatter(Ray& ray, HitRecord& hitRecord, ScatterRecord& scatterRecord);
 		virtual Color	emitted(void);
 		virtual Color	evaluateBSDFCos(
