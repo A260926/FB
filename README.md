@@ -7,6 +7,9 @@ This is a Golang library to manipulate subtitles.
 
 It allows you to manipulate `srt`, `stl`, `ttml`, `ssa/ass`, `webvtt` and `teletext` files for now.
 
+It also decodes the 8-bit bitmap subtitle subset of the DVB subtitling standard
+(`BitmapSubtitle`) directly into `*image.NRGBA` frames. See [DVB bitmap subtitles](#dvb-bitmap-subtitles).
+
 Available operations are `parsing`, `writing`, `applying linear correction`, `syncing`, `fragmenting`, `unfragmenting`, `merging` and `optimizing`.
 
 # Installation
@@ -85,7 +88,6 @@ If **astisub** has been installed properly you can:
         astisub sync -i example.srt -s "-2s" -o example.out.srt
 
 # Features and roadmap
-
 - [x] parsing
 - [x] writing
 - [x] syncing
@@ -101,3 +103,35 @@ If **astisub** has been installed properly you can:
 - [x] .ssa/.ass
 - [x] .teletext
 - [ ] .smi
+
+# DVB bitmap subtitles
+
+`NewDVBSubtitleDecoder` incrementally decodes one DVB subtitle page (ETSI
+EN 300 743) into `BitmapSubtitle` intervals carrying an `*image.NRGBA` frame.
+`Push` takes a complete PES payload without its PES header; regions, objects
+and CLUT updates arriving across PES are kept in the same display set and only
+affect the visible frame at end-of-display-set. `Flush` closes the current
+frame. `ReadFromDVBSubtitles` runs the same incremental decoder over the
+private_stream_1 PES of a selected PID in a transport stream, using the first
+selected PES that carries a PTS as time zero.
+
+Supported scope and the exact field layout follow `task_support/dvb-contract.md`.
+In short, only the 8-bit (`region_depth = 3`) subset is handled:
+
+- `data_identifier` 0x20, subtitle stream id 0, one fixed page and one fixed
+  frame size (1..2048); DDS windows are not processed.
+- object type/provider 0, non-compressed pixel data (`coding_method = 0`),
+  full-range CLUT entries only.
+- interlaced top/bottom fields, with a missing bottom field reusing the top
+  field; non-modifying colour code 1 keeps the previous pixels.
+- normal-case region updates preserve unredrawn indexes; fill and
+  acquisition/mode-change epochs rebuild the background.
+- standalone CLUT updates recolour pixels already in the indexed plane.
+
+Deliberately out of scope and rejected with an error: text/character coding,
+2-bit and 4-bit pixel depths, compressed objects, PCS state 3, unsupported
+object or CLUT flags, PTS wraparound/regressions, and segments of other pages.
+`.ts` files opened through `Open` keep using the Teletext path; bitmap
+subtitles are only reachable through the dedicated DVB entry points. The
+example in `examples/dvbsub` renders a fixed 8x8 stream to PNG frames plus an
+`index.json` manifest.
