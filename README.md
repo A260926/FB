@@ -174,6 +174,61 @@ possible.
 High-level mp3dec_ex_seek function supports precise seek to sample (MP3D_SEEK_TO_SAMPLE)
 using index and binary search.
 
+## Half sample-rate preview
+
+For low-cost preview playback there is a half sample-rate decoding path. It outputs exactly
+the samples the native decode would produce at positions 0, 2, 4, ... (or 1, 3, 5, ...), i.e.
+a plain sample-dropping decimation with **no extra anti-alias low-pass filter**. Because no
+filter is applied, signal energy above half the original Nyquist frequency (above a quarter of
+the original sample rate) is not removed; it folds back (aliases) into the preview band. This
+is intended for cheap previews/thumbnails, not for band-limited resampling.
+
+The frame-level entry point is:
+
+```c
+int mp3dec_decode_frame_half(mp3dec_t *dec, const uint8_t *mp3, int mp3_bytes,
+                             mp3d_sample_t *pcm, mp3dec_frame_info_t *info, int phase);
+```
+
+`phase` is 0 or 1 and selects which frame-local per-channel samples are kept: phase 0 returns
+local samples 0, 2, 4, ... and phase 1 returns 1, 3, 5, ... The return value is the number of
+per-channel frames (half of the full-rate frame). `info.hz` is reported at half the source
+rate, while compressed byte consumption (`frame_bytes`, `frame_offset`) and the other format
+fields (`channels`, `layer`, `bitrate_kbps`) are unchanged. An invalid `phase` returns 0,
+zeroes `info` and does not advance the decoder. Only MPEG-1/2 Layer III with a fixed sample
+rate and a fixed mono/stereo layout is supported.
+
+Only the final polyphase (QMF) weighting of the unselected phase is skipped; the DCT, IMDCT,
+bit reservoir and QMF history still advance for the complete source frame, so a decoder
+instance can be driven by interleaved `mp3dec_decode_frame` and
+`mp3dec_decode_frame_half` calls and stay sample-aligned with a continuous full-rate decode.
+
+The high-level streaming API exposes the same mode through the `MP3D_HALF_RATE` (value 8)
+open flag, usable with `mp3dec_ex_open_buf`, `mp3dec_ex_open_cb` and `mp3dec_ex_open`. It must
+be combined with `MP3D_SEEK_TO_SAMPLE`; byte positioning, `MP3D_DO_NOT_SCAN` and mono/stereo
+transitions are not supported and make the open return a negative error code:
+
+```c
+#define MP3D_HALF_RATE 8
+mp3dec_ex_t dec;
+if (mp3dec_ex_open(&dec, file, MP3D_SEEK_TO_SAMPLE | MP3D_HALF_RATE) == 0) {
+    /* dec.info.hz is half of the native rate; dec.samples is the half-rate length */
+}
+```
+
+Coordinates and cursors (`mp3dec_ex_read`, `mp3dec_ex_read_frame`, `mp3dec_ex_seek`,
+`mp3dec_ex_t::samples`, `mp3dec_ex_t::cur_sample`) all use half-rate interleaved scalar
+positions. After the normal Xing/LAME encoder-delay and padding trim, a native track of N
+per-channel frames yields `ceil(N/2)` half-rate per-channel frames, taken from the trimmed
+native samples 0, 2, 4, ... The native encoder delay is never divided by two (that would lose
+the odd/even phase); the frame index, reservoir preroll and `start_delay` keep native
+coordinates internally. Seek targets must be aligned to the channel count; an unaligned target
+returns `MP3D_E_PARAM` without moving the stream, and a target past the end is clamped to the
+last sample. A read whose capacity is not a multiple of the channel count returns 0 with
+`last_error = MP3D_E_PARAM` and leaves the field untouched; a zero-capacity read does not
+advance.
+
+
 ## Track length detect
 
 If the file is known to be cbr, then all frames have equal size and

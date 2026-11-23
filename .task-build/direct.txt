@@ -1,0 +1,2 @@
+FAIL tests/half_rate.c:215 half_matches_native(&one, hpcm, (size_t)rh*inf.channels, phase)
+FAIL tests/half_rate.c:230 synth_lockstep(VEC_COMPL, 0) == 0

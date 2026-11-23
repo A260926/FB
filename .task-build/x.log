@@ -1,0 +1,5 @@
+NATIVE_OK file=vectors/l3-si_block.bit hz=44100 channels=1 samples=73728 delay=0 nonzero=71392 seek_zero=equal
+NATIVE_OK file=vectors/l3-compl.bit hz=48000 channels=1 samples=248832 delay=0 nonzero=247749 seek_zero=equal
+NATIVE_OK file=vectors/M2L3_noise.bit hz=22050 channels=2 samples=444672 delay=0 nonzero=444155 seek_zero=equal
+NATIVE_OK file=vectors/l3-sin1k0db.bit hz=44100 channels=2 samples=725760 delay=0 nonzero=725629 seek_zero=equal
+NATIVE_BASELINE_OK

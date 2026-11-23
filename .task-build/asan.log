@@ -1,0 +1,21 @@
+CASE synthesis mono_mpeg1 checks=3472
+CASE synthesis short_blocks_mono checks=1030
+CASE synthesis stereo_mpeg2 checks=6182
+CASE synthesis stereo_mpeg1 checks=5076
+CASE synthesis alternating_resync checks=14
+CASE synthesis history_and_work checks=413
+CASE synthesis invalid_phase checks=15
+GROUP synthesis cases=7 checks=16202 COMPLETE
+CASE timeline even_delay checks=14
+CASE timeline odd_delay checks=14
+CASE timeline odd_length_padding checks=14
+CASE timeline block_vs_chunk_reads checks=36976
+CASE timeline seek_suffix checks=30
+CASE timeline clamp_alignment checks=16
+GROUP timeline cases=6 checks=37064 COMPLETE
+CASE compatibility reference_pcm checks=16
+CASE compatibility flag_rejection checks=8
+CASE compatibility callback_file_dual checks=241
+CASE compatibility reject_then_continue checks=12
+GROUP compatibility cases=4 checks=277 COMPLETE
+TARGET_COMPLETE cases=17

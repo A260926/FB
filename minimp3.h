@@ -34,6 +34,14 @@ typedef float mp3d_sample_t;
 void mp3dec_f32_to_s16(const float *in, int16_t *out, int num_samples);
 #endif /* MINIMP3_FLOAT_OUTPUT */
 int mp3dec_decode_frame(mp3dec_t *dec, const uint8_t *mp3, int mp3_bytes, mp3d_sample_t *pcm, mp3dec_frame_info_t *info);
+/* half sample-rate preview: decodes a full compressed frame but emits only every other
+   per-channel sample (phase 0: frame-local samples 0,2,4..., phase 1: 1,3,5...), without
+   any extra low-pass filtering. DCT/IMDCT, bit reservoir and QMF history are advanced
+   exactly as in mp3dec_decode_frame, only the final QMF weighting of the skipped phase is
+   omitted. Returns per-channel frame count (half of the full-rate frame), info.hz is halved
+   while compressed byte consumption and the other format fields are unchanged. An invalid
+   phase returns 0, zeroes info and does not advance the decoder. Layer III only. */
+int mp3dec_decode_frame_half(mp3dec_t *dec, const uint8_t *mp3, int mp3_bytes, mp3d_sample_t *pcm, mp3dec_frame_info_t *info, int phase);
 
 #ifdef __cplusplus
 }
@@ -45,6 +53,13 @@ int mp3dec_decode_frame(mp3dec_t *dec, const uint8_t *mp3, int mp3_bytes, mp3d_s
 
 #include <stdlib.h>
 #include <string.h>
+
+/* Optional instrumentation hook: counts the final QMF synthesis weighting terms actually
+   executed (see mp3d_synth*). Builds may define MINIMP3_SYNTH_WORK(n) to record them;
+   by default the counter is discarded. */
+#ifndef MINIMP3_SYNTH_WORK
+#define MINIMP3_SYNTH_WORK(n) ((void)0)
+#endif
 
 #define MAX_FREE_FORMAT_FRAME_SIZE  2304    /* more than ISO spec's */
 #ifndef MAX_FRAME_SYNC_MATCHES
@@ -1478,7 +1493,54 @@ static void mp3d_synth_pair(mp3d_sample_t *pcm, int nch, const float *z)
     a += z[ 2*64] * 146;
     a += z[ 0*64] * -5;
     pcm[16*nch] = mp3d_scale_pcm(a);
+    MINIMP3_SYNTH_WORK(16); /* two output samples, eight weighted terms each */
 }
+
+/* half-rate pair: same weighting as mp3d_synth_pair, but the two even-position outputs
+   (local positions 0 and 16) are stored at the compacted indices 0 and 8 */
+static void mp3d_synth_pair_half(mp3d_sample_t *pcm, int nch, const float *z)
+{
+    float a;
+    a  = (z[14*64] - z[    0]) * 29;
+    a += (z[ 1*64] + z[13*64]) * 213;
+    a += (z[12*64] - z[ 2*64]) * 459;
+    a += (z[ 3*64] + z[11*64]) * 2037;
+    a += (z[10*64] - z[ 4*64]) * 5153;
+    a += (z[ 5*64] + z[ 9*64]) * 6574;
+    a += (z[ 8*64] - z[ 6*64]) * 37489;
+    a +=  z[ 7*64]             * 75038;
+    pcm[0] = mp3d_scale_pcm(a);
+
+    z += 2;
+    a  = z[14*64] * 104;
+    a += z[12*64] * 1567;
+    a += z[10*64] * 9727;
+    a += z[ 8*64] * 64019;
+    a += z[ 6*64] * -9975;
+    a += z[ 4*64] * -45;
+    a += z[ 2*64] * 146;
+    a += z[ 0*64] * -5;
+    pcm[8*nch] = mp3d_scale_pcm(a);
+    MINIMP3_SYNTH_WORK(16);
+}
+
+static const float g_mp3d_synth_win[15][16] = {
+    { -1,26,-31,208,218,401,-519,2063,2000,4788,-5517,7134,5959,35640,-39336,74992 },
+    { -1,24,-35,202,222,347,-581,2080,1952,4425,-5879,7640,5288,33791,-41176,74856 },
+    { -1,21,-38,196,225,294,-645,2087,1893,4063,-6237,8092,4561,31947,-43006,74630 },
+    { -1,19,-41,190,227,244,-711,2085,1822,3705,-6589,8492,3776,30112,-44821,74313 },
+    { -1,17,-45,183,228,197,-779,2075,1739,3351,-6935,8840,2935,28289,-46617,73908 },
+    { -1,16,-49,176,228,153,-848,2057,1644,3004,-7271,9139,2037,26482,-48390,73415 },
+    { -2,14,-53,169,227,111,-919,2032,1535,2663,-7597,9389,1082,24694,-50137,72835 },
+    { -2,13,-58,161,224,72,-991,2001,1414,2330,-7910,9592,70,22929,-51853,72169 },
+    { -2,11,-63,154,221,36,-1064,1962,1280,2006,-8209,9750,-998,21189,-53534,71420 },
+    { -2,10,-68,147,215,2,-1137,1919,1131,1692,-8491,9863,-2122,19478,-55178,70590 },
+    { -3,9,-73,139,208,-29,-1210,1870,970,1388,-8755,9935,-3300,17799,-56778,69679 },
+    { -3,8,-79,132,200,-57,-1283,1817,794,1095,-8998,9966,-4533,16155,-58333,68692 },
+    { -4,7,-85,125,189,-83,-1356,1759,605,814,-9219,9959,-5818,14548,-59838,67629 },
+    { -4,7,-91,117,177,-106,-1428,1698,402,545,-9416,9916,-7154,12980,-61289,66494 },
+    { -5,6,-97,111,163,-127,-1498,1634,185,288,-9585,9838,-8540,11455,-62684,65290 }
+};
 
 static void mp3d_synth(float *xl, mp3d_sample_t *dstl, int nch, float *lins)
 {
@@ -1486,25 +1548,8 @@ static void mp3d_synth(float *xl, mp3d_sample_t *dstl, int nch, float *lins)
     float *xr = xl + 576*(nch - 1);
     mp3d_sample_t *dstr = dstl + (nch - 1);
 
-    static const float g_win[] = {
-        -1,26,-31,208,218,401,-519,2063,2000,4788,-5517,7134,5959,35640,-39336,74992,
-        -1,24,-35,202,222,347,-581,2080,1952,4425,-5879,7640,5288,33791,-41176,74856,
-        -1,21,-38,196,225,294,-645,2087,1893,4063,-6237,8092,4561,31947,-43006,74630,
-        -1,19,-41,190,227,244,-711,2085,1822,3705,-6589,8492,3776,30112,-44821,74313,
-        -1,17,-45,183,228,197,-779,2075,1739,3351,-6935,8840,2935,28289,-46617,73908,
-        -1,16,-49,176,228,153,-848,2057,1644,3004,-7271,9139,2037,26482,-48390,73415,
-        -2,14,-53,169,227,111,-919,2032,1535,2663,-7597,9389,1082,24694,-50137,72835,
-        -2,13,-58,161,224,72,-991,2001,1414,2330,-7910,9592,70,22929,-51853,72169,
-        -2,11,-63,154,221,36,-1064,1962,1280,2006,-8209,9750,-998,21189,-53534,71420,
-        -2,10,-68,147,215,2,-1137,1919,1131,1692,-8491,9863,-2122,19478,-55178,70590,
-        -3,9,-73,139,208,-29,-1210,1870,970,1388,-8755,9935,-3300,17799,-56778,69679,
-        -3,8,-79,132,200,-57,-1283,1817,794,1095,-8998,9966,-4533,16155,-58333,68692,
-        -4,7,-85,125,189,-83,-1356,1759,605,814,-9219,9959,-5818,14548,-59838,67629,
-        -4,7,-91,117,177,-106,-1428,1698,402,545,-9416,9916,-7154,12980,-61289,66494,
-        -5,6,-97,111,163,-127,-1498,1634,185,288,-9585,9838,-8540,11455,-62684,65290
-    };
     float *zlin = lins + 15*64;
-    const float *w = g_win;
+    const float *w = &g_mp3d_synth_win[0][0];
 
     zlin[4*15]     = xl[18*16];
     zlin[4*15 + 1] = xr[18*16];
@@ -1539,6 +1584,7 @@ static void mp3d_synth(float *xl, mp3d_sample_t *dstl, int nch, float *lins)
         zlin[4*i - 64 + 3] = xr[18*(1 + i)];
 
         V0(0) V2(1) V1(2) V2(3) V1(4) V2(5) V1(6) V2(7)
+        MINIMP3_SYNTH_WORK(128); /* 8 windowed butterflies, 4 lanes times 2 weighted terms each */
 
         {
 #ifndef MINIMP3_FLOAT_OUTPUT
@@ -1620,6 +1666,7 @@ static void mp3d_synth(float *xl, mp3d_sample_t *dstl, int nch, float *lins)
         zlin[4*(i - 16) + 3] = xr[18*(1 + i)];
 
         S0(0) S2(1) S1(2) S2(3) S1(4) S2(5) S1(6) S2(7)
+        MINIMP3_SYNTH_WORK(128); /* 8 windowed butterflies, 4 lanes times 2 weighted terms each */
 
         dstr[(15 - i)*nch] = mp3d_scale_pcm(a[1]);
         dstr[(17 + i)*nch] = mp3d_scale_pcm(b[1]);
@@ -1631,6 +1678,126 @@ static void mp3d_synth(float *xl, mp3d_sample_t *dstl, int nch, float *lins)
         dstl[(49 + i)*nch] = mp3d_scale_pcm(b[2]);
     }
 #endif /* MINIMP3_ONLY_SIMD */
+}
+
+/* Half-rate synthesis: same DCT history and QMF workspace handling as mp3d_synth, so the
+   decoder state stays bit-identical to a full-rate run, but only the final QMF weighting of
+   the selected parity (frame-local sample parity given by phase) is evaluated. Outputs are
+   compacted: 16 per-channel samples (stride nch) instead of 32. The zlin workspace loads of
+   every one of the 15 polyphase iterations run regardless of phase, so no QMF history write
+   is ever skipped; only the unselected parity's weighting accumulations are omitted. */
+static void mp3d_synth_half(float *xl, mp3d_sample_t *dstl, int nch, float *lins, int phase)
+{
+    int i;
+    float *xr = xl + 576*(nch - 1);
+    mp3d_sample_t *dstr = dstl + (nch - 1);
+    float *zlin = lins + 15*64;
+
+    zlin[4*15]     = xl[18*16];
+    zlin[4*15 + 1] = xr[18*16];
+    zlin[4*15 + 2] = xl[0];
+    zlin[4*15 + 3] = xr[0];
+
+    zlin[4*31]     = xl[1 + 18*16];
+    zlin[4*31 + 1] = xr[1 + 18*16];
+    zlin[4*31 + 2] = xl[1];
+    zlin[4*31 + 3] = xr[1];
+
+    if (phase == 0)
+    {   /* the four polyphase pair outputs are the even per-channel positions (full 0,16 and
+           32,48), one call per channel: +0 feeds the left/mono channel and +1 the right.
+           Compacted to half per-channel positions 0,8 and 16,24. */
+        mp3d_synth_pair_half(dstr, nch, lins + 4*15 + 1);
+        mp3d_synth_pair_half(dstr + 16*nch, nch, lins + 4*15 + 64 + 1);
+        mp3d_synth_pair_half(dstl, nch, lins + 4*15);
+        mp3d_synth_pair_half(dstl + 16*nch, nch, lins + 4*15 + 64);
+    }
+
+    for (i = 14; i >= 0; i--)
+    {
+        /* workspace loads: identical to the full-rate path, executed for every iteration */
+        zlin[4*i]     = xl[18*(31 - i)];
+        zlin[4*i + 1] = xr[18*(31 - i)];
+        zlin[4*i + 2] = xl[1 + 18*(31 - i)];
+        zlin[4*i + 3] = xr[1 + 18*(31 - i)];
+        zlin[4*(i + 16)]     = xl[1 + 18*(1 + i)];
+        zlin[4*(i + 16) + 1] = xr[1 + 18*(1 + i)];
+        zlin[4*(i - 16) + 2] = xl[18*(1 + i)];
+        zlin[4*(i - 16) + 3] = xr[18*(1 + i)];
+
+        if (((15 - i) & 1) != phase)
+            continue; /* skip only the final QMF weighting of the unselected parity */
+
+        {   /* accumulate the lanes feeding the kept channels: mono uses lanes 0,2; stereo 0..3 */
+            float acc_a[4] = { 0, 0, 0, 0 }, acc_b[4] = { 0, 0, 0, 0 };
+            const float *w = &g_mp3d_synth_win[14 - i][0];
+            int k, lane;
+            for (k = 0; k < 8; k++)
+            {
+                float w0 = w[2*k], w1 = w[2*k + 1];
+                float *vz = &zlin[4*i - 64*k];
+                float *vy = &zlin[4*i - 64*(15 - k)];
+                for (lane = 0; lane < 4; lane++)
+                {
+                    if ((lane & 1) >= nch)
+                        continue; /* mono has no right-channel lanes 1 and 3 */
+                    if (k == 0)
+                    {
+                        acc_b[lane] = vz[lane]*w1 + vy[lane]*w0;
+                        acc_a[lane] = vz[lane]*w0 - vy[lane]*w1;
+                    } else if (k & 1)
+                    {
+                        acc_b[lane] += vz[lane]*w1 + vy[lane]*w0;
+                        acc_a[lane] += vy[lane]*w1 - vz[lane]*w0;
+                    } else
+                    {
+                        acc_b[lane] += vz[lane]*w1 + vy[lane]*w0;
+                        acc_a[lane] += vz[lane]*w0 - vy[lane]*w1;
+                    }
+                    MINIMP3_SYNTH_WORK(4); /* two weighted products for a and two for b */
+                }
+            }
+            for (lane = 0; lane < nch; lane++)
+            {
+                mp3d_sample_t *dstc = dstl + lane;
+                int ha = (15 - i - phase)/2, hb = (17 + i - phase)/2;
+                int hc = (47 - i - phase)/2, hd = (49 + i - phase)/2;
+                dstc[ha*nch] = mp3d_scale_pcm(acc_a[lane]);
+                dstc[hb*nch] = mp3d_scale_pcm(acc_b[lane]);
+                dstc[hc*nch] = mp3d_scale_pcm(acc_a[lane + 2]);
+                dstc[hd*nch] = mp3d_scale_pcm(acc_b[lane + 2]);
+            }
+        }
+    }
+}
+
+static void mp3d_synth_granule_half(float *qmf_state, float *grbuf, int nbands, int nch, mp3d_sample_t *pcm, float *lins, int phase)
+{
+    int i;
+    for (i = 0; i < nch; i++)
+    {
+        mp3d_DCT_II(grbuf + 576*i, nbands);
+    }
+
+    memcpy(lins, qmf_state, sizeof(float)*15*64);
+    memset(lins + 15*64, 0, sizeof(float)*64*nbands); /* zero workspace so no uninitialized floats reach qmf_state */
+
+    for (i = 0; i < nbands; i += 2)
+    {
+        mp3d_synth_half(grbuf + i, pcm + 16*nch*i, nch, lins + i*64, phase);
+    }
+#ifndef MINIMP3_NONSTANDARD_BUT_LOGICAL
+    if (nch == 1)
+    {
+        for (i = 0; i < 15*64; i += 2)
+        {
+            qmf_state[i] = lins[nbands*64 + i];
+        }
+    } else
+#endif /* MINIMP3_NONSTANDARD_BUT_LOGICAL */
+    {
+        memcpy(qmf_state, lins + nbands*64, sizeof(float)*15*64);
+    }
 }
 
 static void mp3d_synth_granule(float *qmf_state, float *grbuf, int nbands, int nch, mp3d_sample_t *pcm, float *lins)
@@ -1812,6 +1979,91 @@ int mp3dec_decode_frame(mp3dec_t *dec, const uint8_t *mp3, int mp3_bytes, mp3d_s
 #endif /* MINIMP3_ONLY_MP3 */
     }
     return success*hdr_frame_samples(dec->header);
+}
+
+int mp3dec_decode_frame_half(mp3dec_t *dec, const uint8_t *mp3, int mp3_bytes, mp3d_sample_t *pcm, mp3dec_frame_info_t *info, int phase)
+{
+    int i = 0, igr, frame_size = 0, success = 1;
+    const uint8_t *hdr;
+    bs_t bs_frame[1];
+    mp3dec_scratch_t scratch;
+
+    if (phase != 0 && phase != 1)
+    {   /* invalid phase: report nothing and leave the decoder instance untouched */
+        memset(info, 0, sizeof(*info));
+        return 0;
+    }
+    memset(scratch.ist_pos, 0, sizeof(scratch.ist_pos)); /* avoid use-of-uninitialized-value (scfsi reuse) */
+
+    if (mp3_bytes > 4 && dec->header[0] == 0xff && hdr_compare(dec->header, mp3))
+    {
+        frame_size = hdr_frame_bytes(mp3, dec->free_format_bytes) + hdr_padding(mp3);
+        if (frame_size != mp3_bytes && (frame_size + HDR_SIZE > mp3_bytes || !hdr_compare(mp3, mp3 + frame_size)))
+        {
+            frame_size = 0;
+        }
+    }
+    if (!frame_size)
+    {
+        memset(dec, 0, sizeof(mp3dec_t));
+        i = mp3d_find_frame(mp3, mp3_bytes, &dec->free_format_bytes, &frame_size);
+        if (!frame_size || i + frame_size > mp3_bytes)
+        {
+            info->frame_bytes = i;
+            return 0;
+        }
+    }
+
+    hdr = mp3 + i;
+    memcpy(dec->header, hdr, HDR_SIZE);
+    info->frame_bytes = i + frame_size;
+    info->frame_offset = i;
+    info->channels = HDR_IS_MONO(hdr) ? 1 : 2;
+    info->hz = hdr_sample_rate_hz(hdr);
+    info->layer = 4 - HDR_GET_LAYER(hdr);
+    info->bitrate_kbps = hdr_bitrate_kbps(hdr);
+
+    if (info->layer != 3)
+    {   /* half-rate preview is defined for Layer III only */
+        memset(info, 0, sizeof(*info));
+        return 0;
+    }
+
+    info->hz /= 2;
+
+    if (!pcm)
+    {
+        return hdr_frame_samples(hdr)/2;
+    }
+
+    bs_init(bs_frame, hdr + HDR_SIZE, frame_size - HDR_SIZE);
+    if (HDR_IS_CRC(hdr))
+    {
+        get_bits(bs_frame, 16);
+    }
+
+    {
+        int main_data_begin = L3_read_side_info(bs_frame, scratch.gr_info, hdr);
+        if (main_data_begin < 0 || bs_frame->pos > bs_frame->limit)
+        {
+            mp3dec_init(dec);
+            return 0;
+        }
+        success = L3_restore_reservoir(dec, bs_frame, &scratch, main_data_begin);
+        if (success)
+        {
+            for (igr = 0; igr < (HDR_TEST_MPEG1(hdr) ? 2 : 1); igr++, pcm += 288*info->channels)
+            {
+                memset(scratch.grbuf, 0, sizeof(scratch.grbuf));
+                L3_decode(dec, &scratch, scratch.gr_info + igr*info->channels, info->channels);
+                /* full DCT/IMDCT/QMF-history progression, only the skipped phase's final
+                   QMF weighting is omitted */
+                mp3d_synth_granule_half(dec->qmf_state, scratch.grbuf[0], 18, info->channels, pcm, scratch.syn[0], phase);
+            }
+        }
+        L3_save_reservoir(dec, &scratch);
+    }
+    return success*(hdr_frame_samples(dec->header)/2);
 }
 
 #ifdef MINIMP3_FLOAT_OUTPUT

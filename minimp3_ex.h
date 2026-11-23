@@ -13,11 +13,12 @@
 #define MP3D_SEEK_TO_BYTE   0      /* mp3dec_ex_seek seeks to byte in stream */
 #define MP3D_SEEK_TO_SAMPLE 1      /* mp3dec_ex_seek precisely seeks to sample using index (created during duration calculation scan or when mp3dec_ex_seek called) */
 #define MP3D_DO_NOT_SCAN    2      /* do not scan whole stream for duration if vbrtag not found, mp3dec_ex_t::samples will be filled only if mp3dec_ex_t::vbr_tag_found == 1 */
+#define MP3D_HALF_RATE      8      /* half sample-rate preview: output every other per-channel sample with no extra low-pass; requires MP3D_SEEK_TO_SAMPLE, Layer III, fixed sample rate and fixed mono/stereo layout */
 #ifdef MINIMP3_ALLOW_MONO_STEREO_TRANSITION
 #define MP3D_ALLOW_MONO_STEREO_TRANSITION  4
-#define MP3D_FLAGS_MASK 7
+#define MP3D_FLAGS_MASK 15
 #else
-#define MP3D_FLAGS_MASK 3
+#define MP3D_FLAGS_MASK 11
 #endif
 
 /* compile-time config */
@@ -98,6 +99,8 @@ typedef struct
     int is_file, flags, vbr_tag_found, indexes_built;
     int free_format_bytes;
     int buffer_samples, buffer_consumed, to_skip, start_delay;
+    int half_rate, half_phase;          /* half_rate: MP3D_HALF_RATE preview active; half_phase: frame-local phase of the first kept sample */
+    uint64_t native_samples;             /* post-trim length in native interleaved samples (0 in full-rate mode) */
     int last_error;
 } mp3dec_ex_t;
 
@@ -714,9 +717,47 @@ static int mp3dec_load_index(void *user_data, const uint8_t *frame, int frame_si
     return 0;
 }
 
+static int mp3dec_half_rate_flags_valid(int flags)
+{
+    if (!(flags & MP3D_HALF_RATE))
+        return 1;
+    if (!(flags & MP3D_SEEK_TO_SAMPLE))
+        return 0; /* byte positioning is not supported in half-rate mode */
+    if (flags & MP3D_DO_NOT_SCAN)
+        return 0; /* the preview needs the full frame index for precise sample seeking */
+#ifdef MINIMP3_ALLOW_MONO_STEREO_TRANSITION
+    if (flags & MP3D_ALLOW_MONO_STEREO_TRANSITION)
+        return 0; /* half-rate preview requires a fixed mono/stereo layout */
+#endif
+    return 1;
+}
+
+/* Finalize half-rate bookkeeping after the native frame index was built. All index
+   coordinates, start_delay and reservoir preroll stay in native interleaved units; only the
+   public length/cursor and the initial trim are converted to half-rate interleaved units.
+   The selected frame-local phase is constant because every compressed frame starts at an
+   even per-channel sample index and frame f keeps global parity (encoder delay & 1). */
+static int mp3dec_half_rate_setup(mp3dec_ex_t *dec)
+{
+    int channels = dec->info.channels;
+    int delay_per_ch = dec->start_delay/channels;
+    int native_per_ch = (int)(dec->samples/channels);
+    if (dec->info.layer != 3)
+        return MP3D_E_DECODE; /* half-rate preview supports MPEG-1/2 Layer III only */
+    dec->half_rate = 1;
+    dec->native_samples = dec->samples;
+    dec->half_phase = delay_per_ch & 1;
+    dec->to_skip = ((delay_per_ch - dec->half_phase)/2)*channels;
+    /* ceil(native_per_ch/2) per-channel output frames, kept channel aligned */
+    dec->samples = dec->detected_samples = (uint64_t)(((native_per_ch + 1)/2)*channels);
+    dec->info.hz /= 2;
+    dec->cur_sample = 0;
+    return 0;
+}
+
 int mp3dec_ex_open_buf(mp3dec_ex_t *dec, const uint8_t *buf, size_t buf_size, int flags)
 {
-    if (!dec || !buf || (size_t)-1 == buf_size || (flags & (~MP3D_FLAGS_MASK)))
+    if (!dec || !buf || (size_t)-1 == buf_size || (flags & (~MP3D_FLAGS_MASK)) || !mp3dec_half_rate_flags_valid(flags))
         return MP3D_E_PARAM;
     memset(dec, 0, sizeof(*dec));
     dec->file.buffer = buf;
@@ -730,6 +771,15 @@ int mp3dec_ex_open_buf(mp3dec_ex_t *dec, const uint8_t *buf, size_t buf_size, in
     dec->buffer_samples = 0;
     dec->indexes_built = !(dec->vbr_tag_found || (flags & MP3D_DO_NOT_SCAN));
     dec->flags &= (~MP3D_DO_NOT_SCAN);
+    if (flags & MP3D_HALF_RATE)
+    {
+        ret = mp3dec_half_rate_setup(dec);
+        if (ret)
+        {
+            mp3dec_ex_close(dec);
+            return ret;
+        }
+    }
     return 0;
 }
 
@@ -762,6 +812,109 @@ int mp3dec_ex_seek(mp3dec_ex_t *dec, uint64_t position)
     size_t i;
     if (!dec)
         return MP3D_E_PARAM;
+    if (dec->half_rate)
+    {   /* half-rate preview: the public cursor is in half-rate interleaved samples, while the
+           frame index, start_delay and reservoir preroll stay in native interleaved units.
+           Half per-channel output k is native trimmed sample 2*k, so its absolute encoder
+           coordinate is 2*k + start_delay; every compressed frame is decoded with the fixed
+           frame-local phase half_phase (= encoder delay parity). */
+        int channels = dec->info.channels;
+        if (position % (uint64_t)channels)
+            return MP3D_E_PARAM; /* targets must be channel aligned; nothing is changed */
+        if (dec->samples && position > dec->samples)
+            position = dec->samples; /* clamp past-the-end seeks to the last sample */
+        dec->cur_sample = position;
+        uint64_t native_position = 2*position + (uint64_t)dec->start_delay;
+        if (!dec->indexes_built)
+        {   /* lazy index build (VBR tag case), identical machinery to the full-rate path */
+            dec->indexes_built = 1;
+            dec->samples = 0;
+            dec->buffer_samples = 0;
+            if (dec->io)
+            {
+                if (dec->io->seek(dec->start_offset, dec->io->seek_data))
+                    return MP3D_E_IOERROR;
+                int ret = mp3dec_iterate_cb(dec->io, (uint8_t *)dec->file.buffer, dec->file.size, mp3dec_load_index, dec);
+                if (ret && MP3D_E_USER != ret)
+                    return ret;
+            } else
+            {
+                int ret = mp3dec_iterate_buf(dec->file.buffer + dec->start_offset, dec->file.size - dec->start_offset, mp3dec_load_index, dec);
+                if (ret && MP3D_E_USER != ret)
+                    return ret;
+            }
+            for (i = 0; i < dec->index.num_frames; i++)
+                dec->index.frames[i].offset += dec->start_offset;
+            dec->samples = dec->detected_samples;
+        }
+        if (!dec->index.frames)
+        {
+            dec->offset  = dec->start_offset;
+            dec->to_skip = 0;
+            goto do_exit;
+        }
+#ifdef MINIMP3_SEEK_IDX_LINEAR_SEARCH
+        for (i = 0; i < dec->index.num_frames; i++)
+        {
+            if (dec->index.frames[i].sample >= native_position)
+                break;
+        }
+#else
+        i = mp3dec_idx_binary_search(&dec->index, native_position);
+#endif
+        if (i)
+        {
+            int to_fill_bytes = 511;
+            int skip_frames = MINIMP3_PREDECODE_FRAMES
+#ifdef MINIMP3_SEEK_IDX_LINEAR_SEARCH
+             + ((dec->index.frames[i].sample == native_position) ? 0 : 1)
+#endif
+            ;
+            i -= MINIMP3_MIN(i, (size_t)skip_frames);
+            while (i && to_fill_bytes)
+            {   /* make sure bit-reservoir is filled when we start decoding */
+                bs_t bs[1];
+                L3_gr_info_t gr_info[4];
+                int frame_bytes, frame_size;
+                const uint8_t *hdr;
+                if (dec->io)
+                {
+                    hdr = dec->file.buffer;
+                    if (dec->io->seek(dec->index.frames[i - 1].offset, dec->io->seek_data))
+                        return MP3D_E_IOERROR;
+                    size_t readed = dec->io->read((uint8_t *)hdr, HDR_SIZE, dec->io->read_data);
+                    if (readed != HDR_SIZE)
+                        return MP3D_E_IOERROR;
+                    frame_size = hdr_frame_bytes(hdr, dec->free_format_bytes) + hdr_padding(hdr);
+                    readed = dec->io->read((uint8_t *)hdr + HDR_SIZE, frame_size - HDR_SIZE, dec->io->read_data);
+                    if (readed != (size_t)(frame_size - HDR_SIZE))
+                        return MP3D_E_IOERROR;
+                    bs_init(bs, hdr + HDR_SIZE, frame_size - HDR_SIZE);
+                } else
+                {
+                    hdr = dec->file.buffer + dec->index.frames[i - 1].offset;
+                    frame_size = hdr_frame_bytes(hdr, dec->free_format_bytes) + hdr_padding(hdr);
+                    bs_init(bs, hdr + HDR_SIZE, frame_size - HDR_SIZE);
+                }
+                if (HDR_IS_CRC(hdr))
+                    get_bits(bs, 16);
+                i--;
+                if (L3_read_side_info(bs, gr_info, hdr) < 0)
+                    break;
+                frame_bytes = (bs->limit - bs->pos)/8;
+                to_fill_bytes -= MINIMP3_MIN(to_fill_bytes, frame_bytes);
+            }
+        }
+        dec->offset = dec->index.frames[i].offset;
+        {   /* compacted half-buffer skip. The landing frame keeps frame-local per-channel
+               samples half_phase, half_phase+2...; index samples are absolute global
+               interleaved coordinates, so the target's frame-local per-channel index j has
+               the same parity as half_phase and maps to compacted index (j-half_phase)/2. */
+            uint64_t j = (native_position - dec->index.frames[i].sample)/(uint64_t)channels;
+            dec->to_skip = (int)(((j - (uint64_t)dec->half_phase)/2)*(uint64_t)channels);
+        }
+        goto do_exit;
+    }
     if (!(dec->flags & MP3D_SEEK_TO_SAMPLE))
     {
         if (dec->io)
@@ -909,6 +1062,92 @@ do_exit:
     return 0;
 }
 
+static size_t mp3dec_ex_read_frame_half(mp3dec_ex_t *dec, mp3d_sample_t **buf, mp3dec_frame_info_t *frame_info, size_t max_samples)
+{
+    if (dec->detected_samples && dec->cur_sample >= dec->detected_samples)
+        return 0; /* at end of stream */
+    if (dec->last_error)
+        return 0; /* error eof state, seek can reset it */
+    *buf = NULL;
+    uint64_t end_offset = dec->end_offset ? dec->end_offset : dec->file.size;
+    int eof = 0;
+    while (dec->buffer_consumed == dec->buffer_samples)
+    {
+        const uint8_t *dec_buf;
+        if (dec->io)
+        {
+            if (!eof && (dec->input_filled - dec->input_consumed) < MINIMP3_BUF_SIZE)
+            {   /* keep minimum 10 consecutive mp3 frames (~16KB) worst case */
+                memmove((uint8_t*)dec->file.buffer, (uint8_t*)dec->file.buffer + dec->input_consumed, dec->input_filled - dec->input_consumed);
+                dec->input_filled -= dec->input_consumed;
+                dec->input_consumed = 0;
+                size_t readed = dec->io->read((uint8_t*)dec->file.buffer + dec->input_filled, dec->file.size - dec->input_filled, dec->io->read_data);
+                if (readed > (dec->file.size - dec->input_filled))
+                {
+                    dec->last_error = MP3D_E_IOERROR;
+                    readed = 0;
+                }
+                if (readed != (dec->file.size - dec->input_filled))
+                    eof = 1;
+                dec->input_filled += readed;
+                if (eof)
+                    mp3dec_skip_id3v1((uint8_t*)dec->file.buffer, &dec->input_filled);
+            }
+            dec_buf = dec->file.buffer + dec->input_consumed;
+            if (!(dec->input_filled - dec->input_consumed))
+                return 0;
+            dec->buffer_samples = mp3dec_decode_frame_half(&dec->mp3d, dec_buf, (int)(dec->input_filled - dec->input_consumed), dec->buffer, frame_info, dec->half_phase);
+            dec->input_consumed += frame_info->frame_bytes;
+        } else
+        {
+            if (dec->offset >= end_offset)
+                return 0;
+            dec_buf = dec->file.buffer + dec->offset;
+            uint64_t buf_size = end_offset - dec->offset;
+            if (!buf_size)
+                return 0;
+            dec->buffer_samples = mp3dec_decode_frame_half(&dec->mp3d, dec_buf, (int)MINIMP3_MIN(buf_size, (uint64_t)INT_MAX), dec->buffer, frame_info, dec->half_phase);
+        }
+        dec->buffer_consumed = 0;
+        /* frame_info->hz is already the halved rate, matching dec->info.hz from open */
+        if (dec->info.hz != frame_info->hz || dec->info.layer != frame_info->layer)
+        {
+            dec->last_error = MP3D_E_DECODE;
+            return 0;
+        }
+        if (dec->buffer_samples)
+        {
+            dec->buffer_samples *= frame_info->channels; /* compacted half-rate interleaved count */
+            if (dec->to_skip > 0)
+            {
+                size_t skip = MINIMP3_MIN(dec->buffer_samples, dec->to_skip);
+                dec->buffer_consumed += skip;
+                dec->to_skip -= skip;
+            }
+            if (dec->buffer_consumed != dec->buffer_samples && dec->info.channels != frame_info->channels)
+            {
+                dec->last_error = MP3D_E_DECODE;
+                return 0;
+            }
+        } else if (dec->to_skip > 0)
+        {   /* undecodable (reservoir) frame: its half-rate footprint is half the native frame */
+            int frame_samples = (hdr_frame_samples(dec_buf)/2)*frame_info->channels;
+            dec->to_skip -= MINIMP3_MIN(frame_samples, dec->to_skip);
+        }
+        dec->offset += frame_info->frame_bytes;
+    }
+    size_t out_samples = MINIMP3_MIN((size_t)(dec->buffer_samples - dec->buffer_consumed), max_samples);
+    if (dec->detected_samples)
+    {   /* cur_sample and detected_samples are both in half-rate interleaved units */
+        if (dec->cur_sample + out_samples >= dec->detected_samples)
+            out_samples = dec->detected_samples - dec->cur_sample;
+    }
+    dec->cur_sample += out_samples;
+    *buf = dec->buffer + dec->buffer_consumed;
+    dec->buffer_consumed += out_samples;
+    return out_samples;
+}
+
 size_t mp3dec_ex_read_frame(mp3dec_ex_t *dec, mp3d_sample_t **buf, mp3dec_frame_info_t *frame_info, size_t max_samples)
 {
     if (!dec || !buf || !frame_info)
@@ -917,6 +1156,8 @@ size_t mp3dec_ex_read_frame(mp3dec_ex_t *dec, mp3d_sample_t **buf, mp3dec_frame_
             dec->last_error = MP3D_E_PARAM;
         return 0;
     }
+    if (dec->half_rate)
+        return mp3dec_ex_read_frame_half(dec, buf, frame_info, max_samples);
     if (dec->detected_samples && dec->cur_sample >= dec->detected_samples)
         return 0; /* at end of stream */
     if (dec->last_error)
@@ -1013,6 +1254,16 @@ size_t mp3dec_ex_read(mp3dec_ex_t *dec, mp3d_sample_t *buf, size_t samples)
             dec->last_error = MP3D_E_PARAM;
         return 0;
     }
+    if (dec->half_rate)
+    {
+        if (samples == 0)
+            return 0; /* zero capacity must not advance the stream */
+        if (samples % (size_t)dec->info.channels)
+        {   /* half-rate interleaved reads must be whole per-channel frames; leave state intact */
+            dec->last_error = MP3D_E_PARAM;
+            return 0;
+        }
+    }
     mp3dec_frame_info_t frame_info;
     memset(&frame_info, 0, sizeof(frame_info));
     size_t samples_requested = samples;
@@ -1033,7 +1284,7 @@ size_t mp3dec_ex_read(mp3dec_ex_t *dec, mp3d_sample_t *buf, size_t samples)
 
 int mp3dec_ex_open_cb(mp3dec_ex_t *dec, mp3dec_io_t *io, int flags)
 {
-    if (!dec || !io || (flags & (~MP3D_FLAGS_MASK)))
+    if (!dec || !io || (flags & (~MP3D_FLAGS_MASK)) || !mp3dec_half_rate_flags_valid(flags))
         return MP3D_E_PARAM;
     memset(dec, 0, sizeof(*dec));
 #ifdef MINIMP3_HAVE_RING
@@ -1060,6 +1311,15 @@ int mp3dec_ex_open_cb(mp3dec_ex_t *dec, mp3dec_io_t *io, int flags)
     dec->buffer_samples = 0;
     dec->indexes_built = !(dec->vbr_tag_found || (flags & MP3D_DO_NOT_SCAN));
     dec->flags &= (~MP3D_DO_NOT_SCAN);
+    if (flags & MP3D_HALF_RATE)
+    {
+        ret = mp3dec_half_rate_setup(dec);
+        if (ret)
+        {
+            mp3dec_ex_close(dec);
+            return ret;
+        }
+    }
     return 0;
 }
 
