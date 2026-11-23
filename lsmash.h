@@ -1844,6 +1844,44 @@ int lsmash_flush_pooled_samples
     uint32_t       last_sample_delta
 );
 
+/* Enable or disable revocation of pooled samples for a track.
+ * When enabled, samples appended to the track but not yet written out to the
+ * stream can be revoked by lsmash_discard_pooled_samples().
+ *
+ * This function shall be called after the track and its sample descriptions
+ * are configured and before the track accepts any sample; calling it after
+ * any sample was appended returns a negative value and keeps the current mode.
+ * 'enabled' shall be 0 (disable, the default) or 1 (enable); other values are
+ * rejected. The mode is supported only for non-fragmented, self-contained
+ * avc1/mp4a tracks; any other format or file mode returns a negative value.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise. */
+int lsmash_set_pool_undo
+(
+    lsmash_root_t *root,
+    uint32_t       track_ID,
+    int            enabled
+);
+
+/* Discard all samples currently pooled in a track but not yet written out.
+ * The number of discarded samples is stored into 'discarded'; discarding an
+ * empty pool succeeds and stores 0. Samples already written out to the stream
+ * are never discarded. After a successful discard, the track state is
+ * identical to the state as if the discarded samples had never been appended,
+ * and new samples can be appended again from the same decoding time position.
+ * This function performs no file I/O.
+ *
+ * Return 0 if successful.
+ * Return a negative value otherwise, e.g. invalid parameters or the undo mode
+ * not enabled on the track; in that case 'discarded' is left unchanged. */
+int lsmash_discard_pooled_samples
+(
+    lsmash_root_t *root,
+    uint32_t       track_ID,
+    uint32_t      *discarded
+);
+
 /* Update the modification time of a media to the most recent.
  * If the creation time of that media is larger than the modification time,
  * then override the creation one with the modification one.

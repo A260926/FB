@@ -31,6 +31,7 @@
 #include "box_default.h"
 #include "file.h"
 #include "fragment.h"
+#include "pool_undo.h"
 #include "read.h"
 #include "timeline.h"
 #include "write.h"
@@ -3804,7 +3805,13 @@ static int isom_output_cached_chunk( isom_trak_t *trak )
     if( (err = isom_add_stco_entry( stbl, file->size )) < 0 )
         return err;
     /* Output pooled samples in this track. */
-    return isom_write_pooled_samples( file, chunk->pool );
+    err = isom_write_pooled_samples( file, chunk->pool );
+    if( err < 0 )
+        return err;
+    if( trak->cache->pool_undo )
+        /* The pooled samples are committed; no longer revocable. */
+        isom_pool_undo_track_committed( trak );
+    return 0;
 }
 
 int isom_pool_sample( isom_sample_pool_t *pool, lsmash_sample_t *sample, uint32_t samples_per_packet )
@@ -3837,6 +3844,12 @@ static int isom_append_sample_internal
     isom_sample_entry_t *sample_entry
 )
 {
+    if( trak->cache->pool_undo )
+    {
+        int err = isom_pool_undo_append_prologue( trak );
+        if( err < 0 )
+            return err;
+    }
     uint32_t samples_per_packet;
     int ret = isom_update_sample_tables( trak, sample, &samples_per_packet, sample_entry );
     if( ret < 0 )
@@ -3852,6 +3865,10 @@ static int isom_append_sample_internal
         lsmash_file_t       *file           = isom_get_written_media_file( trak, last_stsc_data->sample_description_index );
         if( (ret = isom_write_pooled_samples( file, current_pool )) < 0 )
             return ret;
+        if( trak->cache->pool_undo )
+            /* The previous pool is committed now; the current sample starts
+             * the next revocable generation. */
+            isom_pool_undo_self_committed( trak );
     }
     /* Arbitration system between tracks with extremely scattering dts.
      * Here, we check whether asynchronization between the tracks exceeds the tolerance.

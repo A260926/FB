@@ -27,6 +27,7 @@
 
 #include "box.h"
 #include "box_default.h"
+#include "pool_undo.h"
 #include "write.h"
 #include "read.h"
 #include "print.h"
@@ -638,6 +639,7 @@ static void isom_remove_trak( isom_trak_t *trak )
     if( trak->cache )
     {
         isom_remove_sample_pool( trak->cache->chunk.pool );
+        isom_pool_undo_remove( trak->cache->pool_undo );
         lsmash_list_destroy( trak->cache->roll.pool );
         lsmash_free( trak->cache->rap );
         lsmash_free( trak->cache->fragment );

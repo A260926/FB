@@ -349,6 +349,7 @@ SRC_CORE="        \
     fragment.c    \
     isom.c        \
     meta.c        \
+    pool_undo.c   \
     print.c       \
     read.c        \
     summary.c     \

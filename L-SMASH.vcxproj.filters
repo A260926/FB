@@ -78,6 +78,9 @@
     <ClCompile Include="core\meta.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="core\pool_undo.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="importer\mp3_imp.c">
       <Filter>Sources</Filter>
     </ClCompile>

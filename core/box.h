@@ -1587,6 +1587,7 @@ typedef struct
     isom_grouping_t   roll;
     isom_rap_group_t *rap;
     isom_fragment_t  *fragment;
+    struct isom_pool_undo_tag *pool_undo;   /* pooled-sample undo state, NULL unless enabled */
 } isom_cache_t;
 
 /** Movie Fragments Boxes **/

@@ -178,6 +178,7 @@
     <ClCompile Include="core\fragment.c" />
     <ClCompile Include="core\isom.c" />
     <ClCompile Include="core\meta.c" />
+    <ClCompile Include="core\pool_undo.c" />
     <ClCompile Include="core\print.c" />
     <ClCompile Include="core\read.c" />
     <ClCompile Include="core\summary.c" />
