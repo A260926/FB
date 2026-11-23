@@ -58,6 +58,70 @@ The `options` argument supports the following properties:
 - `onStalled(player)` – A callback that is called whenever there's not enough data for playback
 - `onSourceEstablished(source)` – A callback that is called when source has first received data
 - `onSourceCompleted(source)` – A callback that is called when the source has received all data
+- `syncToPTS` – exact PTS driven playout for streaming. Only takes effect when `streaming: true` and `disableWebAssembly: true` (the pure JavaScript chain) are both in effect; it is ignored otherwise and the default arrival-order streaming/static behavior is unchanged. Default `false`. See [PTS driven streaming playback](#pts-driven-streaming-playback).
+
+
+## PTS driven streaming playback
+
+The default streaming path decodes data as soon as it arrives and ignores the
+PES presentation timestamps. With `syncToPTS: true` the pure JavaScript chain
+(MPEG-TS demuxer → MPEG-1/MP2 decoders → Player → Canvas2D/WebAudio) instead
+plays every frame at its media time.
+
+```javascript
+var player = new JSMpeg.Player(url, {
+	streaming: true,
+	disableWebAssembly: true,
+	syncToPTS: true
+});
+```
+
+### Clocks and time domain
+
+- Audio and video share one 33-bit, 90kHz PTS time domain. Timestamps are
+  unwrapped across the 2^33-tick counter (including the case where the first
+  track to arrive has already wrapped and the other one has not); each track's
+  first timestamp is placed on the wrap cycle nearest the time already known
+  from the other track, so the original audio/video offset is preserved and
+  neither track is zeroed on its own.
+- Playback starts once every enabled track has received one complete frame.
+  The earliest presentation time becomes the media zero point, scheduled
+  100ms later on the playback clock.
+- With an audio track the clock is that instance's `AudioContext.currentTime`;
+  without audio it is `JSMpeg.Now()`. Each Player keeps its own start point,
+  even when several Players share one AudioContext.
+- `player.currentTime` reports the shared media coordinate in seconds and
+  reads `0` before playback starts.
+
+### Playout rules
+
+- Video pictures are rendered when their PTS is due, never early; the previous
+  picture stays on screen during gaps, and one update renders every picture
+  that has become due.
+- Audio frames are decoded and scheduled with `AudioBufferSourceNode.start()`
+  at their PTS, at most 250ms ahead of the frame start (the final frame of a
+  run may extend beyond that window). Gaps stay silent – no source node is
+  created for them and frames are never concatenated early.
+- Updates without new input, or without a due frame, neither advance the
+  decode position nor re-bind the media zero point to a new wall-clock time.
+- Consumed compressed bytes are still reclaimed by the streaming buffers;
+  playback anchors follow the real frame starts, so eviction cannot misalign a
+  later PES or attach its timestamp to an earlier, unconsumed frame.
+
+### Supported input range
+
+- One MPEG-1 video track (I/P pictures; the first picture carries a sequence
+  header) and/or one MP2 audio track; either track may be disabled. Frame rate,
+  sample rate and channel layout are fixed within a stream.
+- Every finite-length PES contains exactly one frame with a PTS, and the PES
+  header is in the first TS packet. TS bytes may still arrive in arbitrary
+  chunk sizes.
+- In-flight data (completed PES plus unconsumed compressed bytes) must fit the
+  configured `videoBufferSize` / `audioBufferSize`; emergency eviction is not
+  handled.
+- Packet loss, track switching, reconnection and B-frame handling are out of
+  scope, as are late-frame dropping, pause/seek policies and whole-stream
+  buffering of timestamps, PCM or pictures.
 
 
 All options except from `canvas` can also be used with the HTML Element through `data-` attributes. E.g. to specify looping and autoplay in JavaScript:

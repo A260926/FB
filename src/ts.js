@@ -15,12 +15,19 @@ var TS = function(options) {
 TS.prototype.connect = function(streamId, destination) {
 	this.pesPacketInfo[streamId] = {
 		destination: destination,
+		streamId: streamId,
 		currentLength: 0,
 		totalLength: 0,
 		pts: 0,
+		tick: 0,
 		buffers: []
 	};
 };
+
+// Optional callback for PTS driven players: invoked exactly once per
+// completed PES with the raw 33-bit PTS in 90kHz ticks. The demuxer itself
+// does not unwrap the 33-bit counter; consumers share one time domain.
+TS.prototype.onFrame = null;
 
 TS.prototype.write = function(buffer) {
 	if (this.leftoverBytes) {
@@ -91,11 +98,11 @@ TS.prototype.parsePacket = function() {
 			var pi = this.pesPacketInfo[streamId];
 			if (pi) {
 				var pts = 0;
+				var tick = 0;
 				if (ptsDtsFlag & 0x2) {
-					// The Presentation Timestamp is encoded as 33(!) bit
-					// integer, but has a "marker bit" inserted at weird places
+					// The Presentation Timestamp is a 33(!) bit integer in a
+					// 90kHz clock, with "marker bit" inserted at weird places
 					// in between, making the whole thing 5 bytes in size.
-					// You can't make this shit up...
 					this.bits.skip(4);
 					var p32_30 = this.bits.read(3);
 					this.bits.skip(1);
@@ -107,7 +114,8 @@ TS.prototype.parsePacket = function() {
 					// Can't use bit shifts here; we need 33 bits of precision,
 					// so we're using JavaScript's double number type. Also
 					// divide by the 90khz clock to get the pts in seconds.
-					pts = (p32_30 * 1073741824 + p29_15 * 32768 + p14_0)/90000;
+					tick = p32_30 * 1073741824 + p29_15 * 32768 + p14_0;
+					pts = tick/90000;
 					
 					this.currentTime = pts;
 					if (this.startTime === -1) {
@@ -115,10 +123,10 @@ TS.prototype.parsePacket = function() {
 					}
 				}
 
-				var payloadLength = packetLength 
+				var payloadLength = packetLength
 					? packetLength - headerLength - 3
 					: 0;
-				this.packetStart(pi, pts, payloadLength);
+				this.packetStart(pi, pts, payloadLength, tick);
 			}
 
 			// Skip the rest of the header without parsing it
@@ -188,10 +196,11 @@ TS.prototype.resync = function() {
 	return false;
 };
 
-TS.prototype.packetStart = function(pi, pts, payloadLength) {
+TS.prototype.packetStart = function(pi, pts, payloadLength, tick) {
 	pi.totalLength = payloadLength;
 	pi.currentLength = 0;
 	pi.pts = pts;
+	pi.tick = tick;
 };
 
 TS.prototype.packetAddData = function(pi, start, end) {
@@ -204,6 +213,9 @@ TS.prototype.packetAddData = function(pi, start, end) {
 
 TS.prototype.packetComplete = function(pi) {
 	pi.destination.write(pi.pts, pi.buffers);
+	if (this.onFrame) {
+		this.onFrame(pi.streamId, pi.tick, pi.pts, pi.currentLength);
+	}
 	pi.totalLength = 0;
 	pi.currentLength = 0;
 	pi.buffers = [];

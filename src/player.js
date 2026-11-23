@@ -1,5 +1,28 @@
 JSMpeg.Player = (function(){ "use strict";
 
+// PTS driven playback uses one shared, monotonically unwrapped 33-bit 90kHz
+// time domain for all tracks. The raw counter wraps at 2^33; adjacent ticks of
+// the same track differ by less than half a wrap, so the nearest cycle is always
+// unambiguous.
+var PTS_TICKS_PER_SECOND = 90000;
+var PTS_WRAP = 0x200000000; // 2^33
+var PTS_HALF_WRAP = PTS_WRAP / 2; // 2^32
+var PTS_START_DELAY = 0.1; // seconds between arming and the media zero point
+var PTS_AUDIO_AHEAD = 0.25; // decode/queue audio at most this far ahead
+
+// Place a raw 33-bit tick on the cycle nearest to an already unwrapped point
+// in the common time domain.
+var nearestWrapCycle = function(tick, reference) {
+	var delta = tick - (reference % PTS_WRAP);
+	if (delta > PTS_HALF_WRAP) {
+		delta -= PTS_WRAP;
+	}
+	else if (delta < -PTS_HALF_WRAP) {
+		delta += PTS_WRAP;
+	}
+	return reference + delta;
+};
+
 var Player = function(url, options) {
 	this.options = options || {};
 
@@ -20,12 +43,26 @@ var Player = function(url, options) {
 		options.streaming = false;
 	}
 
+	// Exact PTS playout only exists for the pure JavaScript streaming chain.
+	// Any other configuration keeps the original arrival-order behavior.
+	this.ptsMode = options.syncToPTS === true
+		&& options.streaming === true
+		&& options.disableWebAssembly === true;
+	if (this.ptsMode) {
+		// The first picture must appear at its PTS, not while being written.
+		options.decodeFirstFrame = false;
+		this.ptsSync = this.createPtsSync();
+	}
+
 	this.maxAudioLag = options.maxAudioLag || 0.25;
 	this.loop = options.loop !== false;
 	this.autoplay = !!options.autoplay || options.streaming;
 
 	this.demuxer = new JSMpeg.Demuxer.TS(options);
 	this.source.connect(this.demuxer);
+	if (this.ptsMode) {
+		this.demuxer.onFrame = this.ptsOnFrame.bind(this);
+	}
 
 	if (!options.disableWebAssembly && JSMpeg.WASMModule.IsSupported()) {
 		this.wasmModule = JSMpeg.WASMModule.GetModule();
@@ -86,8 +123,220 @@ var Player = function(url, options) {
 	}
 	else {
 		this.startLoading();
-		
+
 	}
+};
+
+// ---------------------------------------------------------------------------
+// syncToPTS: exact media-time playout for the pure JavaScript streaming chain
+// ---------------------------------------------------------------------------
+
+// One anchor per track maps a frame's presentation time to the bytes of its
+// PES in that track's BitBuffer. Anchors are the only per-frame state; their
+// count is bounded by the unconsumed PES plus one consumed predecessor per
+// track. No timestamps, PCM or pictures are cached beyond the decoders' own
+// working buffers.
+Player.prototype.createPtsSync = function() {
+	return {
+		// Per-track raw-tick unwrap state; all tracks share one 90kHz domain.
+		lastTick: {video: null, audio: null},
+		// Per-track anchors, kept ordered by increasing presentation tick.
+		anchors: {video: [], audio: []},
+		// Bytes still held in each track's BitBuffer (compressed, unplayed).
+		inflight: {video: 0, audio: 0},
+		// Media zero point: unwrapped tick and the wall clock it maps to.
+		originTick: null,
+		wallOrigin: null,
+		started: false
+	};
+};
+
+// Which logical track a PES stream id belongs to.
+Player.prototype.ptsTrackFor = function(streamId) {
+	if (streamId === JSMpeg.Demuxer.TS.STREAM.VIDEO_1) {
+		return 'video';
+	}
+	if (streamId === JSMpeg.Demuxer.TS.STREAM.AUDIO_1) {
+		return 'audio';
+	}
+	return null;
+};
+
+// Demuxer hook: one call per completed PES. The payload has already been
+// written into the track decoder's BitBuffer, so anchors describe bytes that
+// physically exist there.
+Player.prototype.ptsOnFrame = function(streamId, rawTick, pts, byteLength) {
+	var track = this.ptsTrackFor(streamId);
+	if (!track) {
+		return;
+	}
+	var sync = this.ptsSync;
+	var tick = this.ptsUnwrap(track, rawTick);
+	var anchors = sync.anchors[track];
+	var anchor = {tick: tick, bytes: byteLength};
+	anchors.push(anchor);
+	sync.inflight[track] += byteLength;
+};
+
+// Unwrap a raw 33-bit tick into the shared, monotonic time domain. The first
+// tick of a track establishes itself on the cycle nearest to any time already
+// known from the other track (the common time domain); later ticks pick the
+// wrap cycle nearest to the same track's previous tick. The original offset
+// between the tracks is preserved either way.
+Player.prototype.ptsUnwrap = function(track, rawTick) {
+	var sync = this.ptsSync;
+	var previous = sync.lastTick[track];
+	if (previous === null) {
+		var otherTrack = track === 'video' ? 'audio' : 'video';
+		var reference = sync.lastTick[otherTrack];
+		var unwrapped = reference === null
+			? rawTick
+			: nearestWrapCycle(rawTick, reference);
+		sync.lastTick[track] = unwrapped;
+		return unwrapped;
+	}
+	var next = nearestWrapCycle(rawTick, previous);
+	sync.lastTick[track] = next;
+	return next;
+};
+
+// Every enabled track has at least one complete frame available.
+Player.prototype.ptsReadyToStart = function() {
+	if (this.video && this.ptsSync.anchors.video.length === 0) {
+		return false;
+	}
+	if (this.audio && this.ptsSync.anchors.audio.length === 0) {
+		return false;
+	}
+	return true;
+};
+
+Player.prototype.ptsEarliestTick = function() {
+	var tick = null;
+	if (this.video) {
+		tick = this.ptsSync.anchors.video[0].tick;
+	}
+	if (this.audio) {
+		var audioTick = this.ptsSync.anchors.audio[0].tick;
+		if (tick === null || audioTick < tick) {
+			tick = audioTick;
+		}
+	}
+	return tick;
+};
+
+Player.prototype.ptsClockNow = function() {
+	// With audio, the AudioContext clock is the reference; otherwise the
+	// player's generic wall clock. Each Player instance keeps its own origin.
+	return this.audio
+		? this.audioOut.context.currentTime
+		: JSMpeg.Now();
+};
+
+Player.prototype.ptsMediaTime = function() {
+	var sync = this.ptsSync;
+	if (!sync.started) {
+		return 0;
+	}
+	var elapsed = this.ptsClockNow() - sync.wallOrigin;
+	// The shared media coordinate starts at zero; before the armed start
+	// instant it reports zero rather than a negative value.
+	return elapsed > 0 ? elapsed : 0;
+};
+
+// Arm playback once all enabled tracks hold a complete frame: the earliest
+// presentation time becomes the media zero, scheduled 100ms on the clock.
+Player.prototype.ptsArm = function() {
+	var sync = this.ptsSync;
+	var originTick = this.ptsEarliestTick();
+	sync.originTick = originTick;
+	sync.wallOrigin = this.ptsClockNow() + PTS_START_DELAY;
+	sync.started = true;
+};
+
+// Convert an unwrapped presentation tick to a clock time.
+Player.prototype.ptsToClock = function(tick) {
+	return this.ptsSync.wallOrigin +
+		(tick - this.ptsSync.originTick) / PTS_TICKS_PER_SECOND;
+};
+
+Player.prototype.updateForPTS = function() {
+	var sync = this.ptsSync;
+
+	if (!sync.started) {
+		if (!this.ptsReadyToStart()) {
+			// Missing input: nothing may be decoded and the origin must not be
+			// re-bound to a new wall-clock reading.
+			return;
+		}
+		this.ptsArm();
+	}
+
+	var now = this.ptsClockNow();
+
+	if (this.video) {
+		this.ptsPumpVideo(now);
+	}
+	if (this.audio) {
+		this.ptsPumpAudio(now);
+	}
+};
+
+// Render every complete picture whose presentation time has arrived. Pictures
+// are never rendered early; gaps keep the previous picture on screen.
+Player.prototype.ptsPumpVideo = function(now) {
+	var anchors = this.ptsSync.anchors.video;
+	while (anchors.length > 0) {
+		var anchor = anchors[0];
+		var due = this.ptsToClock(anchor.tick);
+		if (due > now) {
+			break;
+		}
+		// One decode() consumes exactly one PES/frame in the input contract.
+		// If the compressed bytes are not actually decodable yet, leave the
+		// anchor and decode position untouched and wait for a later update.
+		if (!this.video.decode()) {
+			break;
+		}
+		anchor.consumed = true;
+		this.ptsSync.inflight.video -= anchor.bytes;
+		anchors.shift();
+	}
+};
+
+// Decode and schedule audio frames at most PTS_AUDIO_AHEAD ahead of their
+// start; the final frame of a run may extend past that boundary. Gaps remain
+// silent because no source node is created for them.
+Player.prototype.ptsPumpAudio = function(now) {
+	var anchors = this.ptsSync.anchors.audio;
+	while (anchors.length > 0) {
+		var anchor = anchors[0];
+		var due = this.ptsToClock(anchor.tick);
+		if (due - now > PTS_AUDIO_AHEAD) {
+			break;
+		}
+		// Decode one frame; MP2's decode() hands PCM to its destination, which
+		// routes it to the timed playAt() entry via a one-shot output hook.
+		var decoded = this.ptsDecodeAudioAt(due);
+		if (!decoded) {
+			// Frame bytes not fully present yet; do not advance anything.
+			break;
+		}
+		anchor.consumed = true;
+		this.ptsSync.inflight.audio -= anchor.bytes;
+		anchors.shift();
+	}
+};
+
+// Decode a single MP2 frame and route its PCM through playAt() at the frame's
+// exact clock time, while leaving the decoder's normal play() path untouched.
+Player.prototype.ptsDecodeAudioAt = function(when) {
+	var audioOut = this.audioOut;
+	audioOut.timedWhen = when;
+	var ok = this.audio.decode();
+	// A frame either completed and consumed the hook, or nothing was decoded.
+	audioOut.timedWhen = null;
+	return ok;
 };
 
 Player.prototype.startLoading = function() {
@@ -183,6 +432,9 @@ Player.prototype.seek = function(time) {
 };
 
 Player.prototype.getCurrentTime = function() {
+	if (this.ptsMode) {
+		return this.ptsMediaTime();
+	}
 	return this.audio && this.audio.canPlay
 		? this.audio.currentTime - this.audio.startTime
 		: this.video.currentTime - this.video.startTime;
@@ -211,7 +463,10 @@ Player.prototype.update = function() {
 		}
 	}
 
-	if (this.options.streaming) {
+	if (this.ptsMode) {
+		this.updateForPTS();
+	}
+	else if (this.options.streaming) {
 		this.updateForStreaming();
 	}
 	else {

@@ -19,6 +19,11 @@ var WebAudioOut = function(options) {
 	this.volume = 1;
 	this.enabled = true;
 
+	// When set (PTS driven playback), the next play() call is routed to
+	// playAt() at this AudioContext time instead of being queued back to back.
+	// Null keeps the original three argument play() behavior exactly.
+	this.timedWhen = null;
+
 	this.unlocked = !WebAudioOut.NeedsUnlocking();
 	
 	Object.defineProperty(this, 'enqueuedTime', {get: this.getEnqueuedTime});
@@ -36,6 +41,14 @@ WebAudioOut.prototype.destroy = function() {
 
 WebAudioOut.prototype.play = function(sampleRate, left, right) {
 	if (!this.enabled) {
+		return;
+	}
+
+	// PTS driven call: hand off to the timed entry and clear the one-shot hook.
+	if (this.timedWhen !== null) {
+		var when = this.timedWhen;
+		this.timedWhen = null;
+		this.playAt(sampleRate, left, right, when);
 		return;
 	}
 
@@ -71,6 +84,46 @@ WebAudioOut.prototype.play = function(sampleRate, left, right) {
 	source.start(this.startTime);
 	this.startTime += duration;
 	this.wallclockStartTime += duration;
+};
+
+// PTS driven entry point: schedule the decoded PCM at an explicit AudioContext
+// time. Gaps stay silent - nothing is started for them, and consecutive frames
+// are never concatenated ahead of their presentation time. The three argument
+// play() above keeps its original, arrival-order behavior.
+WebAudioOut.prototype.playAt = function(sampleRate, left, right, when) {
+	if (!this.enabled) {
+		return;
+	}
+
+	// An unlocked context is assumed for syncToPTS playback; mirror play()'s
+	// fake advancement so the bookkeeping stays consistent.
+	if (!this.unlocked) {
+		if (this.wallclockStartTime < JSMpeg.Now()) {
+			this.wallclockStartTime = JSMpeg.Now();
+		}
+		this.wallclockStartTime = when + left.length / sampleRate;
+		return;
+	}
+
+	this.gain.gain.value = this.volume;
+
+	var buffer = this.context.createBuffer(2, left.length, sampleRate);
+	buffer.getChannelData(0).set(left);
+	buffer.getChannelData(1).set(right);
+
+	var source = this.context.createBufferSource();
+	source.buffer = buffer;
+	source.connect(this.destination);
+	source.start(when);
+
+	// Track the furthest scheduled point for enqueuedTime/lifecycle bookkeeping.
+	var duration = buffer.duration;
+	if (when + duration > this.startTime) {
+		this.startTime = when + duration;
+	}
+	if (when + duration > this.wallclockStartTime) {
+		this.wallclockStartTime = when + duration;
+	}
 };
 
 WebAudioOut.prototype.stop = function() {
