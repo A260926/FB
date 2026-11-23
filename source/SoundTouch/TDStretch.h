@@ -190,6 +190,15 @@ public:
     /// Clears the input buffer
     void clearInput();
 
+    /// Empties every queue and restores WSOLA phase (overlap mid buffer and
+    /// fractional skip) without releasing storage. Used when a bounded
+    /// segment is (re)started.
+    void resetProcessingState()
+    {
+        clear();
+        skipFract = 0;
+    }
+
     /// Sets the number of channels, 1 = mono, 2 = stereo
     void setChannels(int numChannels);
 

@@ -141,6 +141,25 @@ namespace soundtouch
 ///   tempo/pitch/rate/samplerate settings.
 #define SETTING_NOMINAL_OUTPUT_SEQUENCE		7
 
+
+/// Result of one bounded processing call. All counts are in interleaved
+/// frames (one frame contains one sample per channel).
+struct BoundedResult
+{
+    /// Input frames actually accepted. Frames not consumed must be resent.
+    uint consumed;
+
+    /// Output frames written to the destination; other destination frames
+    /// are left untouched.
+    uint produced;
+
+    /// True once the final real sound and all end compensation is delivered.
+    bool finished;
+};
+
+
+class BoundedPipeline;
+
 class SoundTouch : public FIFOProcessor
 {
 private:
@@ -149,6 +168,13 @@ private:
 
     /// Time-stretch class instance
     class TDStretch *pTDStretch;
+
+    /// Pre-allocated bounded processing pipeline, non-null only between
+    /// prepareBounded() and destruction.
+    BoundedPipeline *pBounded;
+
+    /// True once the legacy putSamples() path has received audio.
+    BOOL bLegacyAudioUsed;
 
     /// Virtual pitch parameter. Effective rate & tempo are calculated from these parameters.
     float virtualRate;
@@ -262,15 +288,41 @@ public:
     /// Returns number of samples currently unprocessed.
     virtual uint numUnprocessedSamples() const;
 
+    /// Pre-allocates the bounded processing pipeline for the stream
+    /// configuration currently set on this object. Must be called exactly
+    /// once, after all configuration (sample rate, channels, rate, tempo,
+    /// AA filter) is finished and before any audio has been supplied.
+    /// Throws std::logic_error if called at the wrong time and
+    /// std::invalid_argument if the configuration is not supported; on a
+    /// failed call the object is left unchanged.
+    void prepareBounded();
+
+    /// Feeds up to 'inputFrames' interleaved frames and produces up to
+    /// 'outputCapacity' frames. Unconsumed input must be resent. When
+    /// 'final' is true the end is locked only after the whole offered input
+    /// has been accepted; afterwards only zero-input draining calls are
+    /// legal until BoundedResult::finished is set.
+    BoundedResult processBounded(const SAMPLETYPE *input, uint inputFrames,
+                                 SAMPLETYPE *output, uint outputCapacity,
+                                 bool final);
+
+    /// Discards the current bounded segment and its end-of-stream state.
+    /// The configuration and all pre-allocated storage are retained, so a
+    /// new segment can be started immediately with identical behaviour to a
+    /// freshly prepared instance.
+    void clearBounded();
+
 
     /// Other handy functions that are implemented in the ancestor classes (see
     /// classes 'FIFOProcessor' and 'FIFOSamplePipe')
     ///
     /// - receiveSamples() : Use this function to receive 'ready' processed samples from SoundTouch.
-    /// - numSamples()     : Get number of 'ready' samples that can be received with 
+    /// - numSamples()     : Get number of 'ready' samples that can be received with
     ///                      function 'receiveSamples()'
     /// - isEmpty()        : Returns nonzero if there aren't any 'ready' samples.
     /// - clear()          : Clears all samples from ready/processing buffers.
+
+    friend class BoundedPipeline;
 };
 
 }

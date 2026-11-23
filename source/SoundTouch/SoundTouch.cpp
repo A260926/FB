@@ -78,7 +78,11 @@
 #include "SoundTouch.h"
 #include "TDStretch.h"
 #include "RateTransposer.h"
+#include "BoundedPipeline.h"
 #include "cpu_detect.h"
+
+#include <cmath>
+#include <new>
 
 using namespace soundtouch;
     
@@ -104,20 +108,24 @@ SoundTouch::SoundTouch()
 
     rate = tempo = 0;
 
-    virtualPitch = 
-    virtualRate = 
+    virtualPitch =
+    virtualRate =
     virtualTempo = 1.0;
 
     calcEffectiveRateAndTempo();
 
     channels = 0;
     bSrateSet = FALSE;
+
+    pBounded = NULL;
+    bLegacyAudioUsed = FALSE;
 }
 
 
 
 SoundTouch::~SoundTouch()
 {
+    delete pBounded;
     delete pRateTransposer;
     delete pTDStretch;
 }
@@ -293,14 +301,16 @@ void SoundTouch::setSampleRate(uint srate)
 // the input of the object.
 void SoundTouch::putSamples(const SAMPLETYPE *samples, uint nSamples)
 {
-    if (bSrateSet == FALSE) 
+    if (bSrateSet == FALSE)
     {
         ST_THROW_RT_ERROR("SoundTouch : Sample rate not defined");
-    } 
-    else if (channels == 0) 
+    }
+    else if (channels == 0)
     {
         ST_THROW_RT_ERROR("SoundTouch : Number of channels not defined");
     }
+
+    bLegacyAudioUsed = TRUE;
 
     // Transpose the rate of the new samples if necessary
     /* Bypass the nominal setting - can introduce a click in sound when tempo/pitch control crosses the nominal value...
@@ -318,14 +328,14 @@ void SoundTouch::putSamples(const SAMPLETYPE *samples, uint nSamples)
     } 
     */
 #ifndef SOUNDTOUCH_PREVENT_CLICK_AT_RATE_CROSSOVER
-    else if (rate <= 1.0f) 
+    if (rate <= 1.0f)
     {
         // transpose the rate down, output the transposed sound to tempo changer buffer
         assert(output == pTDStretch);
         pRateTransposer->putSamples(samples, nSamples);
         pTDStretch->moveSamples(*pRateTransposer);
-    } 
-    else 
+    }
+    else
 #endif
     {
         // evaluate the tempo changer, then transpose the rate up, 
@@ -499,4 +509,91 @@ uint SoundTouch::numUnprocessedSamples() const
         }
     }
     return 0;
+}
+
+
+// Validates the current configuration for bounded processing and allocates
+// the fixed-capacity pipeline. Any failure leaves the object untouched.
+void SoundTouch::prepareBounded()
+{
+    if (pBounded != NULL)
+    {
+        throw std::logic_error("SoundTouch::prepareBounded called twice");
+    }
+    if (bLegacyAudioUsed)
+    {
+        throw std::logic_error(
+            "SoundTouch::prepareBounded must be called before any audio is supplied");
+    }
+    if (bSrateSet == FALSE || channels == 0)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: sample rate and channels must be configured first");
+    }
+    if (channels != 1u && channels != 2u && channels != 6u)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: only 1, 2 or 6 channels are supported");
+    }
+    int configuredRate = 0;
+    pTDStretch->getParameters(&configuredRate, NULL, NULL, NULL);
+    if (configuredRate != 48000)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: only the 48 kHz sample rate is supported");
+    }
+    if (rate < 0.5f || rate > 2.0f || tempo < 0.5f || tempo > 2.0f)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: rate and tempo must lie within [0.5, 2]");
+    }
+    if (std::fabs(virtualPitch - 1.0f) > 1e-6f)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: pitch must remain fixed at 1.0");
+    }
+    if (TransposerBase::getAlgorithm() != TransposerBase::CUBIC)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: only the default CUBIC interpolator is supported");
+    }
+
+    BOOL useAa = pRateTransposer->isAAFilterEnabled();
+    uint aaTaps = pRateTransposer->getAAFilter()->getLength();
+    if (useAa && aaTaps != 64u)
+    {
+        throw std::invalid_argument(
+            "SoundTouch::prepareBounded: only the default 64-tap AA filter is supported");
+    }
+
+    // All validation has already run, so constructing the pipeline can only
+    // fail via allocation. pBounded stays null on any failure, leaving the
+    // object unchanged and ready for another prepareBounded() attempt.
+    pBounded = new BoundedPipeline(*this, channels, rate, tempo,
+                                   useAa != FALSE, aaTaps);
+}
+
+
+BoundedResult SoundTouch::processBounded(const SAMPLETYPE *input,
+                                         uint inputFrames,
+                                         SAMPLETYPE *output,
+                                         uint outputCapacity, bool final)
+{
+    if (pBounded == NULL)
+    {
+        throw std::logic_error(
+            "SoundTouch::processBounded called before prepareBounded");
+    }
+    return pBounded->process(input, inputFrames, output, outputCapacity, final);
+}
+
+
+void SoundTouch::clearBounded()
+{
+    if (pBounded == NULL)
+    {
+        throw std::logic_error(
+            "SoundTouch::clearBounded called before prepareBounded");
+    }
+    pBounded->resetSegment();
 }

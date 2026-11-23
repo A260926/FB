@@ -205,6 +205,68 @@ The time-stretch routine has a 'quick' mode that substantially speeds up the alg
 
 * * *
 
+## 3.6 Bounded processing mode (back-pressure aware)
+
+The legacy `putSamples()` / `receiveSamples()` interface owns growing
+internal buffers and assumes the caller always drains the output. A playback
+thread whose downstream sink sometimes offers only one frame — or no frame at
+all — needs fixed, pre-allocated storage and explicit back pressure instead.
+The bounded processing mode provides exactly that through three methods:
+
+*   `void prepareBounded()` — call it once, after the whole stream
+    configuration (sample rate, channels, rate, tempo, AA filter) is finished
+    and before any audio is supplied. It validates the configuration
+    (floating point, CUBIC interpolation, 64-tap AA, 48 kHz, 1/2/6 channels,
+    rate and tempo within [0.5, 2], pitch fixed at 1.0) and pre-allocates
+    every FIFO. Calling it twice, or after audio has been supplied, throws
+    `std::logic_error`; an unsupported configuration throws
+    `std::invalid_argument` and leaves the object unchanged.
+*   `BoundedResult processBounded(const SAMPLETYPE* input, uint inputFrames,
+    SAMPLETYPE* output, uint outputCapacity, bool final)` — one bounded
+    processing step. It returns the frames actually accepted (`consumed`),
+    the frames written (`produced`), and a `finished` flag.
+*   `void clearBounded()` — drops the current segment and its end-of-stream
+    state while keeping the configuration and all pre-allocated storage, so a
+    new segment can start immediately with results identical to a freshly
+    prepared instance.
+
+Only `prepareBounded()` allocates or frees memory; `processBounded()` and
+`clearBounded()` only move frames and bookkeeping, and they take no locks.
+Every production FIFO — including the intermediate queues inside the WSOLA
+and rate-transposer stages — has a fixed capacity of at most 65536 frames.
+
+### Resend protocol
+
+`consumed` may be smaller than `inputFrames`: the pipeline applies back
+pressure instead of growing its workspace. Advance the input cursor by
+exactly `consumed` and resend the remaining (interleaved) frames on the next
+call; PCM always advances by whole frames, never by individual channels.
+`produced` never exceeds `outputCapacity`, and destination frames beyond
+`produced` are left untouched. A zero output capacity (with a null output
+pointer) is legal: frames accumulate only up to the fixed internal limit,
+after which input acceptance stalls until output capacity is offered again.
+No audio is ever dropped. Zero input frames do not mark the end of the
+stream.
+
+### End locking and the tail
+
+Passing `final = true` does not take effect until every frame supplied in
+that same call has been accepted; if back pressure leaves frames pending, the
+lock waits while the remaining real frames keep flowing. Once locked, only
+zero-input calls are legal (supplying real input then throws
+`std::logic_error`), and the pipeline drives the real WSOLA/interpolator/
+anti-alias stages with silence to flush the overlap and filter tail while
+still honouring output back pressure. Repeating `final` never adds extra
+padding. `finished` becomes true only after the last real sound and all end
+compensation have been delivered; afterwards every call returns
+`consumed = 0`, `produced = 0`, `finished = true`. For an input of N frames
+the total output is always exactly `floor(N / (rate * tempo) + 0.5)` frames,
+independently of the output capacity pattern, so the tail is never truncated
+differently. A complete six-channel driver is provided in
+`examples/bounded.cpp`.
+
+* * *
+
 ## <a name="SoundStretch"></a>4\. SoundStretch audio processing utility
 
 SoundStretch audio processing utility

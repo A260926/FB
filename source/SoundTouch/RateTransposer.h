@@ -96,6 +96,12 @@ public:
 
     // static function to set interpolation algorithm
     static void setAlgorithm(ALGORITHM a);
+
+    // static function to query the active interpolation algorithm
+    static ALGORITHM getAlgorithm() { return algorithm; }
+
+    // Resets the fractional interpolation position to its initial state.
+    void resetPosition() { resetRegisters(); }
 };
 
 
@@ -143,6 +149,18 @@ public:
 
     /// Returns the output buffer object
     FIFOSamplePipe *getOutput() { return &outputBuffer; };
+
+    /// Returns the input/mid sample buffers (bounded-mode scheduling).
+    FIFOSampleBuffer *getInputBuffer() { return &inputBuffer; }
+    FIFOSampleBuffer *getMidBuffer() { return &midBuffer; }
+
+    /// Empties every queue and restores the interpolation position without
+    /// releasing storage. Used when a bounded segment is (re)started.
+    void resetProcessingState()
+    {
+        clear();
+        pTransposer->resetPosition();
+    }
 
     /// Returns the store buffer object
 //    FIFOSamplePipe *getStore() { return &storeBuffer; };

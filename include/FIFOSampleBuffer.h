@@ -80,12 +80,14 @@ private:
     /// only new data when is put to the pipe.
     uint bufferPos;
 
-    /// Rewind the buffer by moving data from position pointed by 'bufferPos' to real 
+    /// Rewind the buffer by moving data from position pointed by 'bufferPos' to real
     /// beginning of the buffer.
     void rewind();
 
     /// Ensures that the buffer has capacity for at least this many samples.
     void ensureCapacity(uint capacityRequirement);
+
+public:
 
     /// Returns current capacity.
     uint getCapacity() const;
