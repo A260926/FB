@@ -92,6 +92,68 @@ position, calling `cm_play()` will continue playing where it left off.
 
 ##### void cm_stop(cm_Source \*src)
 Stops playing and rewinds the stream's play position back to the beginning.
+If the limiter is enabled, the source's queued (not yet delivered) audio is
+also revoked from the limiter's delay line — see below.
+
+
+## Limiter
+`cm_process()` can route the mixed, master-gained signal through a
+stereo-linked lookahead limiter before the final 16bit quantization. The
+limiter delays the output by `L` frames; for each output frame `n` it computes
+the peak `p[n]` of the unclipped signal over the window `[n, n+L]`, and scales
+both channels by the shared envelope `g[n] = min(min(1, ceiling/p[n]),
+g[n-1] + 1/release_frames)` with `g[-1] = 1`. All limiter control functions
+are to be called from the same thread as the source controls, between two
+`cm_process()` calls.
+
+##### int cm_configure_limiter(int lookahead_frames, int ceiling, int release_frames)
+Enables the limiter, or replaces its configuration if already enabled.
+`lookahead_frames` (`1..65536`) is the lookahead `L` in output frames — the
+output is delayed by exactly this many frames. `ceiling` (`1..32767`) is the
+output peak ceiling in 16bit sample units. `release_frames` (`>= 1`) sets the
+envelope release: the gain recovers by `1.0 / release_frames` per output
+frame. Returns `1` on success. On failure returns `0` (see `cm_get_error()`)
+and the previous configuration, queued audio and all sources are left
+untouched. A successful (re)configuration clears all queued PCM and the
+envelope: the next `L` output frames are silence, as if a fresh delayed
+output started now.
+
+##### int cm_set_limiter_parameters(int ceiling, int release_frames)
+Changes the ceiling and release time while the limiter is running. Returns
+`1` only if the limiter is enabled and both arguments are valid; the new
+values apply from the next emitted output frame, while the queued PCM, the
+peak history and the current envelope are preserved. Returns `0` (and changes
+nothing) otherwise.
+
+##### int cm_get_limiter_latency(void)
+Returns the latency introduced by the limiter in output frames, or `0` when
+the limiter is disabled.
+
+##### double cm_get_limiter_gain(void)
+Returns the envelope gain that was applied to the most recently emitted
+output frame. Initially `1`.
+
+##### void cm_reset_limiter(void)
+Clears the limiter's queued PCM and envelope but keeps its configuration and
+all source positions; the output restarts with `L` frames of silence. Does
+nothing while disabled.
+
+##### void cm_disable_limiter(void)
+Releases the limiter and immediately returns to the un-delayed output path;
+the queued PCM is discarded.
+
+Limiter notes:
+* `cm_set_master_gain()` only affects audio entering the delay line from
+  that point on — PCM that is already queued keeps the gain it was queued
+  with.
+* `cm_stop()` and `cm_destroy_source()` revoke the source's not yet
+  delivered contributions from the delay line (the remaining sources' queued
+  audio and the envelope are not rolled back). Natural end-of-stream and
+  `cm_pause()` do **not** revoke: queued audio is delivered as usual.
+* After all sources have finished, keep calling `cm_process()` for `L` more
+  frames to collect the tail still sitting in the delay line.
+* `cm_init()` must only be called with no live sources and the limiter
+  disabled.
 
 
 ## Events

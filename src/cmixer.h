@@ -73,4 +73,11 @@ void cm_play(cm_Source *src);
 void cm_pause(cm_Source *src);
 void cm_stop(cm_Source *src);
 
+int cm_configure_limiter(int lookahead_frames, int ceiling, int release_frames);
+int cm_set_limiter_parameters(int ceiling, int release_frames);
+int cm_get_limiter_latency(void);
+double cm_get_limiter_gain(void);
+void cm_reset_limiter(void);
+void cm_disable_limiter(void);
+
 #endif

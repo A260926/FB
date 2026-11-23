@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "cmixer.h"
+#include "cm_limiter.h"
 
 #define UNUSED(x)         ((void) (x))
 #define CLAMP(x, a, b)    ((x) < (a) ? (a) : (x) > (b) ? (b) : (x))
@@ -59,6 +60,9 @@ struct cm_Source {
   int active;           /* Whether the source is part of `sources` list */
   double gain;          /* Gain set by `cm_set_gain()` */
   double pan;           /* Pan set by `cm_set_pan()` */
+  cm_Source *next_all;  /* Next source in the all-sources list */
+  cm_LimSource *lim;    /* Limiter queue context (NULL while limiter disabled) */
+  cm_LimSource *lim_next; /* Staged limiter context during reconfiguration */
 };
 
 
@@ -66,7 +70,9 @@ static struct {
   const char *lasterror;        /* Last error message */
   cm_EventHandler lock;         /* Event handler for lock/unlock events */
   cm_Source *sources;           /* Linked list of active (playing) sources */
+  cm_Source *all;               /* Linked list of all live sources */
   cm_Int32 buffer[BUFFER_SIZE]; /* Internal master buffer */
+  cm_Int32 staging[BUFFER_SIZE];/* Per-source mix buffer for the limiter path */
   int samplerate;               /* Master samplerate */
   int gain;                     /* Master gain (fixed point) */
 } cmixer;
@@ -108,6 +114,7 @@ void cm_init(int samplerate) {
   cmixer.samplerate = samplerate;
   cmixer.lock = dummy_handler;
   cmixer.sources = NULL;
+  cmixer.all = NULL;
   cmixer.gain = FX_UNIT;
 }
 
@@ -144,10 +151,9 @@ static void fill_source_buffer(cm_Source *src, int offset, int length) {
 }
 
 
-static void process_source(cm_Source *src, int len) {
+static void process_source(cm_Source *src, cm_Int32 *dst, int len) {
   int i, n, a, b, p;
   int frame, count;
-  cm_Int32 *dst = cmixer.buffer;
 
   /* Do rewind if flag is set */
   if (src->rewind) {
@@ -239,23 +245,59 @@ void cm_process(cm_Int16 *dst, int len) {
 
   /* Process active sources */
   lock();
-  s = &cmixer.sources;
-  while (*s) {
-    process_source(*s, len);
-    /* Remove source from list if it is no longer playing */
-    if ((*s)->state != CM_STATE_PLAYING) {
-      (*s)->active = 0;
-      *s = (*s)->next;
-    } else {
-      s = &(*s)->next;
+  if (cm_lim_enabled()) {
+    /* Clear the current frame range in every source's limiter queue, then
+    ** mix each playing source into its own staging buffer so that its
+    ** contribution stays revocable until it is delivered */
+    cm_Source *src;
+    int frames = len / 2;
+    for (src = cmixer.all; src; src = src->next_all) {
+      cm_lim_source_put_silence(src->lim, frames);
+    }
+    s = &cmixer.sources;
+    while (*s) {
+      memset(cmixer.staging, 0, len * sizeof(cmixer.staging[0]));
+      process_source(*s, cmixer.staging, len);
+      cm_lim_source_put((*s)->lim, cmixer.staging, frames);
+      for (i = 0; i < len; i++) {
+        cmixer.buffer[i] += cmixer.staging[i];
+      }
+      /* Remove source from list if it is no longer playing */
+      if ((*s)->state != CM_STATE_PLAYING) {
+        (*s)->active = 0;
+        *s = (*s)->next;
+      } else {
+        s = &(*s)->next;
+      }
+    }
+  } else {
+    s = &cmixer.sources;
+    while (*s) {
+      process_source(*s, cmixer.buffer, len);
+      /* Remove source from list if it is no longer playing */
+      if ((*s)->state != CM_STATE_PLAYING) {
+        (*s)->active = 0;
+        *s = (*s)->next;
+      } else {
+        s = &(*s)->next;
+      }
     }
   }
   unlock();
 
-  /* Copy internal buffer to destination and clip */
-  for (i = 0; i < len; i++) {
-    int x = (cmixer.buffer[i] * cmixer.gain) >> FX_BITS;
-    dst[i] = CLAMP(x, -32768, 32767);
+  if (cm_lim_enabled()) {
+    /* Hand the unclipped master-gained sums to the limiter; it owns the
+    ** delay line, the envelope and the final 16bit quantization */
+    cm_lim_push(cmixer.buffer, len / 2, cmixer.gain, dst);
+    if (len & 1) {
+      dst[len - 1] = 0;
+    }
+  } else {
+    /* Copy internal buffer to destination and clip */
+    for (i = 0; i < len; i++) {
+      int x = (cmixer.buffer[i] * cmixer.gain) >> FX_BITS;
+      dst[i] = CLAMP(x, -32768, 32767);
+    }
   }
 }
 
@@ -266,6 +308,16 @@ cm_Source* cm_new_source(const cm_SourceInfo *info) {
     error("allocation failed");
     return NULL;
   }
+  /* Prepare the limiter queue up front: a failure here must neither publish
+  ** a half-initialized source nor disturb the current output */
+  if (cm_lim_enabled()) {
+    src->lim = cm_lim_source_new(cm_lim_lookahead());
+    if (!src->lim) {
+      free(src);
+      error("allocation failed");
+      return NULL;
+    }
+  }
   src->handler = info->handler;
   src->length = info->length;
   src->samplerate = info->samplerate;
@@ -275,6 +327,10 @@ cm_Source* cm_new_source(const cm_SourceInfo *info) {
   cm_set_pitch(src, 1);
   cm_set_loop(src, 0);
   cm_stop(src);
+  lock();
+  src->next_all = cmixer.all;
+  cmixer.all = src;
+  unlock();
   return src;
 }
 
@@ -389,9 +445,27 @@ void cm_destroy_source(cm_Source *src) {
         *s = src->next;
         break;
       }
+      s = &(*s)->next;
+    }
+    src->active = 0;
+  }
+  {
+    cm_Source **s = &cmixer.all;
+    while (*s) {
+      if (*s == src) {
+        *s = src->next_all;
+        break;
+      }
+      s = &(*s)->next_all;
     }
   }
   unlock();
+  /* Revoke the source's queued (not yet delivered) audio before releasing */
+  if (src->lim) {
+    cm_lim_revoke(src->lim);
+    cm_lim_source_free(src->lim);
+    src->lim = NULL;
+  }
   e.type = CM_EVENT_DESTROY;
   e.udata = src->udata;
   src->handler(&e);
@@ -472,6 +546,96 @@ void cm_pause(cm_Source *src) {
 void cm_stop(cm_Source *src) {
   src->state = CM_STATE_STOPPED;
   src->rewind = 1;
+  /* An explicit stop revokes everything the source has queued but not yet
+  ** delivered; a later cm_play() restarts from the beginning as usual */
+  if (src->lim) {
+    cm_lim_revoke(src->lim);
+  }
+}
+
+
+/*============================================================================
+** Limiter control
+**============================================================================*/
+
+int cm_configure_limiter(int lookahead_frames, int ceiling, int release_frames) {
+  const char *err = NULL;
+  cm_LimPlan *plan;
+  cm_Source *src;
+  plan = cm_lim_plan_new(lookahead_frames, ceiling, release_frames, &err);
+  if (!plan) {
+    error(err ? err : "limiter configuration failed");
+    return 0;
+  }
+  /* Prepare a queue ring for every live source (paused or stopped ones
+  ** included) before committing anything, so a failure keeps the old
+  ** configuration and output untouched */
+  for (src = cmixer.all; src; src = src->next_all) {
+    src->lim_next = cm_lim_source_new(lookahead_frames);
+    if (!src->lim_next) {
+      cm_Source *s2;
+      for (s2 = cmixer.all; s2; s2 = s2->next_all) {
+        cm_lim_source_free(s2->lim_next);
+        s2->lim_next = NULL;
+      }
+      cm_lim_plan_abort(plan);
+      error("allocation failed");
+      return 0;
+    }
+  }
+  /* Everything is allocated: commit the new configuration in one go */
+  cm_lim_plan_commit(plan);
+  for (src = cmixer.all; src; src = src->next_all) {
+    cm_lim_source_free(src->lim);
+    src->lim = src->lim_next;
+    src->lim_next = NULL;
+  }
+  return 1;
+}
+
+
+int cm_set_limiter_parameters(int ceiling, int release_frames) {
+  const char *err = NULL;
+  if (!cm_lim_set_parameters(ceiling, release_frames, &err)) {
+    error(err ? err : "invalid limiter parameters");
+    return 0;
+  }
+  return 1;
+}
+
+
+int cm_get_limiter_latency(void) {
+  return cm_lim_enabled() ? cm_lim_lookahead() : 0;
+}
+
+
+double cm_get_limiter_gain(void) {
+  return cm_lim_last_gain();
+}
+
+
+void cm_reset_limiter(void) {
+  cm_Source *src;
+  if (!cm_lim_enabled()) {
+    return;
+  }
+  cm_lim_reset();
+  for (src = cmixer.all; src; src = src->next_all) {
+    cm_lim_source_clear(src->lim);
+  }
+}
+
+
+void cm_disable_limiter(void) {
+  cm_Source *src;
+  if (!cm_lim_enabled()) {
+    return;
+  }
+  cm_lim_disable();
+  for (src = cmixer.all; src; src = src->next_all) {
+    cm_lim_source_free(src->lim);
+    src->lim = NULL;
+  }
 }
 
 
