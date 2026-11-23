@@ -21,7 +21,7 @@ rm -f .task-build/example-output.wav
 .task-build/audio_render .task-build/example-input.otio .task-build .task-build/example-output.wav 48000 3
 test -s .task-build/example-output.wav
 .task-build/task_fixture check .task-build/example-output.wav
-  output_log=$(mktemp)
+  output_log=.task-build/target-output.log
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

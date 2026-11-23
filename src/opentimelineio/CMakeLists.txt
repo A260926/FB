@@ -4,6 +4,7 @@
 set(OPENTIMELINEIO_HEADER_FILES
     anyDictionary.h
     anyVector.h
+    audioRender.h
     bundle.h
     color.h
     clip.h
@@ -24,6 +25,7 @@ set(OPENTIMELINEIO_HEADER_FILES
     marker.h
     mediaReference.h
     missingReference.h
+    pcmWave.h
     safely_typed_any.h
     serializableCollection.h
     serializableObject.h
@@ -42,6 +44,7 @@ set(OPENTIMELINEIO_HEADER_FILES
     version.h)
 
 add_library(opentimelineio ${OTIO_SHARED_OR_STATIC_LIB}
+    audioRender.cpp
     bundle.cpp
     color.cpp
     clip.cpp
@@ -61,6 +64,7 @@ add_library(opentimelineio ${OTIO_SHARED_OR_STATIC_LIB}
     marker.cpp
     mediaReference.cpp
     missingReference.cpp
+    pcmWave.cpp
     safely_typed_any.cpp
     serializableCollection.cpp
     serializableObject.cpp
