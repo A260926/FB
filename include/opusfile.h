@@ -1851,6 +1851,39 @@ int op_set_gain_offset(OggOpusFile *_of,
    \param _enabled A non-zero value to enable dithering, or 0 to disable it.*/
 void op_set_dither_enabled(OggOpusFile *_of,int _enabled) OP_ARG_NONNULL(1);
 
+/**Enables or disables single-packet loss recovery using the in-band forward
+    error correction (FEC) data carried by the next packet after a loss.
+   When this is enabled and the underlying source cannot be seeked,
+    <tt>libopusfile</tt> watches for a hole in the Ogg page sequence numbers of
+    the current logical link.
+   If it can prove, from the granule position of the first page after the hole
+    and that of the packet before it, that exactly one 20&nbsp;ms packet was
+    lost, it asks <tt>libopus</tt> to reconstruct that one window from the FEC
+    data in the first packet following the hole (falling back to packet loss
+    concealment if that packet carries no usable redundancy), and then decodes
+    that same packet normally before continuing with the rest of the stream.
+   All of this happens transparently through the existing op_read(),
+    op_read_float(), op_read_stereo(), and op_read_float_stereo() entry points;
+    callers never have to parse Ogg pages or manage a decoder themselves.
+   Recovery is only attempted for a single lost packet on mapping family&nbsp;0
+    mono or stereo streams, when the previous packet is known, the page after
+    the hole is not an end-of-stream page, has a valid granule position, and
+    every completed packet on it is exactly 20&nbsp;ms long.
+   Multiple lost packets, end-of-stream pages, missing timestamps, custom
+    decode callbacks, timestamp jumps without an actual sequence-number hole,
+    and any other case where the gap cannot be proven to be exactly
+    20&nbsp;ms keep the original #OP_HOLE behavior instead of guessing.
+   The feature is disabled by default, may only be toggled on unseekable
+    streams, and may not be changed after the first call to one of the
+    op_read*() functions.
+   \param _of      The \c OggOpusFile on which to configure in-band FEC.
+   \param _enabled 0 to disable (the default), or 1 to enable.
+   \return 0 on success, or a negative value on error.
+   \retval #OP_EINVAL \a _enabled was neither 0 nor 1, reading had already
+                      started, or the stream was not fully open.
+   \retval #OP_EIMPL The stream is seekable, so this mode is not supported.*/
+int op_set_inband_fec(OggOpusFile *_of,int _enabled) OP_ARG_NONNULL(1);
+
 /**Reads more samples from the stream.
    \note Although \a _buf_size must indicate the total number of values that
     can be stored in \a _pcm, the return value is the number of samples

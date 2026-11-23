@@ -231,6 +231,23 @@ struct OggOpusFile{
   int                od_buffer_pos;
   /*The number of valid samples in the decoded buffer.*/
   int                od_buffer_size;
+  /*Whether or not single-packet in-band FEC repair is enabled.
+    Only consulted on unseekable streams; defaults to 0.*/
+  int                inband_fec_enabled;
+  /*Whether or not one of the op_read*() entry points has been called.
+    Latches to 1 and blocks further op_set_inband_fec() changes.*/
+  int                read_started;
+  /*Set when a page after a sequence-number hole qualified for repair.
+    The first completed packet on that page will be fed to libopus twice:
+     once with decode_fec=1 to reconstruct the lost 20 ms window into
+     od_buffer, and once normally before the rest of the page is consumed.*/
+  int                fec_pending;
+  /*Set when a sequence-number hole was observed on a page that carried no
+     completed audio packets (e.g. it only held continued packet data).
+    The repair decision is deferred to the first subsequent page that does
+     carry completed packets, which is the page the qualification rules refer
+     to.*/
+  int                fec_hole_pending;
   /*The type of gain offset to apply.
     One of OP_HEADER_GAIN, OP_ALBUM_GAIN, OP_TRACK_GAIN, or OP_ABSOLUTE_GAIN.*/
   int                gain_type;

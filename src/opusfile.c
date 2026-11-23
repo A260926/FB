@@ -1478,6 +1478,10 @@ static void op_decode_clear(OggOpusFile *_of){
     We might be able to re-use it for the next link.*/
   _of->op_count=0;
   _of->od_buffer_size=0;
+  /*Any repair armed for the previous link must not carry over to the next
+     one: a new link never inherits a window the old link could not repair.*/
+  _of->fec_pending=0;
+  _of->fec_hole_pending=0;
   _of->prev_packet_gp=-1;
   _of->prev_page_offset=-1;
   if(!_of->seekable){
@@ -1862,6 +1866,105 @@ static int op_get_link_from_serialno(const OggOpusFile *_of,int _cur_link,
   return _cur_link;
 }
 
+/*One 20 ms Opus frame at 48 kHz.*/
+#define OP_FEC_FRAME_SIZE (960)
+
+/*Forward declaration: the repair path uses the lazily-allocated packet
+   scratch buffer, whose definition lives with the read implementation below.*/
+static int op_init_buffer(OggOpusFile *_of);
+
+/*Whether the configured stream is allowed to use the in-band FEC path at
+   all.*/
+static int op_fec_mode_active(const OggOpusFile *_of){
+  return _of->inband_fec_enabled&&!_of->seekable&&_of->decode_cb==NULL
+   &&_of->ready_state>=OP_INITSET;
+}
+
+/*Evaluate whether the page following a sequence-number hole qualifies for
+   single-packet in-band FEC repair, and, if so, arm it.
+  On success, fec_pending is set and the hole must not be reported to the
+   caller; the granule position tracking is left untouched so that the regular
+   timestamping logic gives the packets on this page their real positions.
+  The conditions intentionally err on the side of the legacy OP_HOLE path:
+   the stream must be unseekable with FEC enabled and no custom decode
+   callback, the current link must use mapping family 0 with one or two
+   channels, a valid previous packet must be known, the page after the hole
+   must not be an EOS page and must carry a valid granule position, every
+   completed packet on it must be exactly 20 ms, and the granule arithmetic
+   must prove a gap of exactly one 20 ms window between the previous packet's
+   end and the start of the packets on this page.
+  Timestamp jumps without a real sequence-number hole never reach here, and
+   anything uncertain simply returns 0.*/
+static int op_fec_repair_arm(OggOpusFile *_of,const ogg_page *_og,
+ const int _durations[255],opus_int32 _total_duration){
+  const OpusHead *head;
+  ogg_int64_t     page_gp;
+  ogg_int64_t     page_start_gp;
+  ogg_int64_t     gap;
+  int             pi;
+  if(!op_fec_mode_active(_of))return 0;
+  if(_of->op_count<=0)return 0;
+  head=&_of->links[0].head;
+  /*Only mapping family 0 mono/stereo is handled by the native decoder path in
+     a way this repair can drive directly.*/
+  if(head->mapping_family!=0||(head->channel_count!=1&&
+   head->channel_count!=2))return 0;
+  /*We need the real end position of the packet before the hole.*/
+  if(_of->prev_packet_gp==-1)return 0;
+  /*The first page after the hole must not be the EOS page (end trimming
+     cannot be mixed with repair), and must carry a usable timestamp.*/
+  if(ogg_page_eos(_og))return 0;
+  page_gp=ogg_page_granulepos(_og);
+  if(page_gp==-1)return 0;
+  /*Every completed packet on the page must be a single 20 ms frame.*/
+  for(pi=0;pi<_of->op_count;pi++){
+    if(_durations[pi]!=OP_FEC_FRAME_SIZE)return 0;
+  }
+  /*Where the completed packets on this page actually start.*/
+  if(op_granpos_add(&page_start_gp,page_gp,-_total_duration)<0)return 0;
+  if(op_granpos_diff(&gap,page_start_gp,_of->prev_packet_gp)<0)return 0;
+  /*The gap must be exactly one 20 ms window.
+    Multiple lost packets or any other duration are left to OP_HOLE.*/
+  if(gap!=OP_FEC_FRAME_SIZE)return 0;
+  _of->fec_pending=1;
+  return 1;
+}
+
+/*Decode the reconstructed 20 ms window for the one lost packet into the
+   packet scratch buffer, so that the regular buffered-output path delivers it
+   before any of the packets from the page that followed the hole.
+  libopus is asked for FEC first; if that packet carried no actual redundancy,
+   its own decode_fec path naturally falls back to packet loss concealment.
+  We never synthesize silence ourselves.
+  The gain configured on the decoder is applied to this output exactly as it
+   is for ordinary packets, and any still-pending pre-skip/pre-roll discard is
+   honored the same way as for a normally decoded packet.*/
+static int op_fec_repair_decode(OggOpusFile *_of,const ogg_packet *_pop){
+  opus_int32 cur_discard_count;
+  int         skip;
+  int         ret;
+  if(_of->od_buffer==NULL){
+    ret=op_init_buffer(_of);
+    if(OP_UNLIKELY(ret<0))return ret;
+  }
+#if defined(OP_FIXED_POINT)
+  ret=opus_multistream_decode(_of->od,_pop->packet,_pop->bytes,
+   _of->od_buffer,OP_FEC_FRAME_SIZE,1);
+#else
+  ret=opus_multistream_decode_float(_of->od,_pop->packet,_pop->bytes,
+   _of->od_buffer,OP_FEC_FRAME_SIZE,1);
+#endif
+  if(OP_UNLIKELY(ret!=OP_FEC_FRAME_SIZE))return OP_EBADPACKET;
+  /*Honor pre-skip/pre-roll exactly the way an ordinary buffered packet would.*/
+  cur_discard_count=_of->cur_discard_count;
+  skip=(int)OP_MIN(OP_FEC_FRAME_SIZE,cur_discard_count);
+  cur_discard_count-=skip;
+  _of->cur_discard_count=cur_discard_count;
+  _of->od_buffer_pos=skip;
+  _of->od_buffer_size=OP_FEC_FRAME_SIZE;
+  return 0;
+}
+
 /*Fetch and process a page.
   This handles the case where we're at a bitstream boundary and dumps the
    decoding machine.
@@ -2008,19 +2111,42 @@ static int op_fetch_and_process_page(OggOpusFile *_of,
         do total_duration=op_collect_audio_packets(_of,durations);
         while(total_duration<0);
         if(!_ignore_holes){
-          /*Report the hole to the caller after we finish timestamping the
-             packets.*/
-          report_hole=1;
-          /*We had lost or damaged pages, so reset our granule position
-             tracking.
-            This makes holes behave the same as a small raw seek.
-            If the next page is the EOS page, we'll discard it (because we
-             can't perform end trimming properly), and we'll always discard at
-             least 80 ms of audio (to allow decoder state to re-converge).
-            We could try to fill in the gap with PLC by looking at timestamps
-             in the non-EOS case, but that's complicated and error prone and we
-             can't rely on the timestamps being valid.*/
-          _of->prev_packet_gp=-1;
+          if(op_fec_mode_active(_of)){
+            /*Remember the hole and keep the granule tracking intact.
+              The repair decision is made against the first subsequent page
+               that actually carries completed packets.*/
+            _of->fec_hole_pending=1;
+          }
+          else{
+            /*Report the hole to the caller after we finish timestamping the
+               packets.*/
+            report_hole=1;
+            /*We had lost or damaged pages, so reset our granule position
+               tracking.
+              This makes holes behave the same as a small raw seek.
+              If the next page is the EOS page, we'll discard it (because we
+               can't perform end trimming properly), and we'll always discard
+               at least 80 ms of audio (to allow decoder state to
+               re-converge).
+              We could try to fill in the gap with PLC by looking at
+               timestamps in the non-EOS case, but that's complicated and
+               error prone and we can't rely on the timestamps being valid.*/
+            _of->prev_packet_gp=-1;
+          }
+        }
+      }
+      /*If a hole was observed on an earlier page without completed packets,
+         evaluate this page as the first one that does carry them.*/
+      if(OP_UNLIKELY(_of->fec_hole_pending)&&_of->op_count>0){
+        _of->fec_hole_pending=0;
+        if(!op_fec_repair_arm(_of,&og,durations,total_duration)){
+          /*The first page with completed packets after the hole does not
+             prove a single lost 20 ms packet: fall back to the legacy
+             behavior and report OP_HOLE after timestamping.*/
+          if(!_ignore_holes){
+            report_hole=1;
+            _of->prev_packet_gp=-1;
+          }
         }
       }
       op_count=_of->op_count;
@@ -2774,6 +2900,21 @@ void op_set_dither_enabled(OggOpusFile *_of,int _enabled){
 #endif
 }
 
+int op_set_inband_fec(OggOpusFile *_of,int _enabled){
+  if(OP_UNLIKELY(_of==NULL))return OP_EINVAL;
+  /*The stream must be fully open before it can be configured.*/
+  if(OP_UNLIKELY(_of->ready_state<OP_OPENED))return OP_EINVAL;
+  /*Seeking-based reads have their own recovery semantics and never use this
+     mode.*/
+  if(OP_UNLIKELY(_of->seekable))return OP_EIMPL;
+  /*Only 0 or 1 are accepted, and only before the first op_read*() call.*/
+  if(OP_UNLIKELY(_enabled!=0&&_enabled!=1)||OP_UNLIKELY(_of->read_started)){
+    return OP_EINVAL;
+  }
+  _of->inband_fec_enabled=_enabled;
+  return 0;
+}
+
 /*Allocate the decoder scratch buffer.
   This is done lazily, since if the user provides large enough buffers, we'll
    never need it.*/
@@ -2835,6 +2976,9 @@ static int op_decode(OggOpusFile *_of,op_sample *_pcm,
 static int op_read_native(OggOpusFile *_of,
  op_sample *_pcm,int _buf_size,int *_li){
   if(OP_UNLIKELY(_of->ready_state<OP_OPENED))return OP_EINVAL;
+  /*Once any read entry point has run, op_set_inband_fec() can no longer
+     change the configuration.*/
+  _of->read_started=1;
   for(;;){
     int ret;
     if(OP_LIKELY(_of->ready_state>=OP_INITSET)){
@@ -2870,6 +3014,19 @@ static int op_read_native(OggOpusFile *_of,
         opus_int32        cur_discard_count;
         int               duration;
         int               trimmed_duration;
+        /*If this page qualified for repair, feed its first packet to libopus
+           twice: this first pass reconstructs the lost 20 ms window into the
+           scratch buffer, and the regular pass below (on the next loop
+           iteration, after the reconstructed window has been delivered)
+           decodes the same packet normally.
+          Neither the packet nor the FEC output can be consumed more than
+           once, so fec_pending is cleared before the call.*/
+        if(OP_UNLIKELY(_of->fec_pending)){
+          _of->fec_pending=0;
+          ret=op_fec_repair_decode(_of,_of->op+op_pos);
+          if(OP_UNLIKELY(ret<0))return ret;
+          continue;
+        }
         pop=_of->op+op_pos++;
         _of->op_pos=op_pos;
         cur_discard_count=_of->cur_discard_count;
