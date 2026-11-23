@@ -175,6 +175,7 @@ GSM_SOURCES =	$(SRC)/add.c		\
 		$(SRC)/gsm_create.c	\
 		$(SRC)/gsm_print.c	\
 		$(SRC)/gsm_option.c	\
+		$(SRC)/plc_frame.c	\
 		$(SRC)/short_term.c	\
 		$(SRC)/table.c
 
@@ -219,6 +220,7 @@ GSM_OBJECTS =	$(SRC)/add.o		\
 		$(SRC)/gsm_create.o	\
 		$(SRC)/gsm_print.o	\
 		$(SRC)/gsm_option.o	\
+		$(SRC)/plc_frame.o	\
 		$(SRC)/short_term.o	\
 		$(SRC)/table.o
 

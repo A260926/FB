@@ -39,6 +39,20 @@ struct gsm_state {
 	char		wav_fmt;	/* only used if WAV49 defined	*/
 	unsigned char	frame_index;	/*            odd/even chaining	*/
 	unsigned char	frame_chain;	/*   half-byte to carry forward	*/
+
+	/*
+	 *  Packet loss concealment bookkeeping.
+	 *  Everything is fixed size; the cache does not grow with the
+	 *  stream length.  plc_lost[] counts consecutive lost frames
+	 *  (WAV49 keeps one counter per half frame), plc_have marks
+	 *  whether a good frame has ever been decoded.
+	 */
+	word		plc_lar[8];	/* LARc of the last good frame	*/
+	word		plc_nc[4];	/* effective Nc (40..120)	*/
+	word		plc_bc[4];	/* coded LTP gain		*/
+	word		plc_e[4][40];	/* RPE dequantized excitation	*/
+	unsigned char	plc_have;	/* a good frame was seen	*/
+	unsigned char	plc_lost[2];	/* consecutive loss counters	*/
 };
 
 
@@ -230,6 +244,16 @@ extern void Gsm_Update_of_reconstructed_short_time_residual_signal P((
 		word	* dpp,		/* [0...39]	IN	*/
 		word	* ep,		/* [0...39]	IN	*/
 		word	* dp));		/* [-120...-1]  IN/OUT 	*/
+
+/*
+ *  Shared frame decode used by the legacy gsm_decode() entry; lives
+ *  in plc_frame.c and keeps the same good-frame bookkeeping as the
+ *  gsm_decode_plc() block entry.
+ */
+extern int gsm_plc_legacy_normal P((struct gsm_state *, unsigned char *, word *));
+#ifdef WAV49
+extern int gsm_plc_legacy_wav    P((struct gsm_state *, unsigned char *, word *));
+#endif
 
 /*
  *  Tables from table.c

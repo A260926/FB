@@ -1,0 +1,19 @@
+CASE Excitation cache_matches_independent_rpe checks=732
+CASE Excitation nrp_fallback_rule checks=7
+CASE Excitation single_loss_residual_history checks=286
+CASE Excitation eight_losses_gain_and_tail checks=2268
+CASE Excitation first_frame_lost_no_history checks=286
+GROUP Excitation cases=5 checks=3579 COMPLETE
+CASE Packing all_good_equals_legacy checks=18
+CASE Packing wav49_four_masks checks=40
+CASE Packing shared_nibble_assembly checks=324
+CASE Packing error_retry_sentinel checks=488
+CASE Packing wav49_validation checks=650
+GROUP Packing cases=5 checks=1520 COMPLETE
+CASE Recovery single_loss_two_good_frames checks=12
+CASE Recovery long_burst_then_recovery checks=22
+CASE Recovery two_instances_interleaved checks=24
+CASE Recovery legacy_and_block_interleaved checks=12
+CASE Recovery wav49_split_loss_counters checks=14
+GROUP Recovery cases=5 checks=84 COMPLETE
+TARGET_COMPLETE cases=15
