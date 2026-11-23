@@ -147,6 +147,12 @@ typedef drmp3_uint32            drmp3_bool32;
 #endif
 /* End Decorations */
 
+/* The consumer's build defines the real spectral-pass counter hook. When absent the
+   decode still works; the hook just becomes a no-op. */
+#ifndef DRMP3_STEMS_SPECTRAL_PASS
+#define DRMP3_STEMS_SPECTRAL_PASS() ((void)0)
+#endif
+
 /* Result Codes */
 typedef drmp3_int32 drmp3_result;
 #define DRMP3_SUCCESS                        0
@@ -292,6 +298,11 @@ typedef struct
     drmp3_L3_gr_info gr_info[4];
     float grbuf[2][576], scf[40], syn[18 + 15][2*32];
     drmp3_uint8 ist_pos[2][39];
+    /* Stem (dual subband path) work areas. stems_spec holds the filtered post-antialias
+       spectrum and is then overwritten in place by the stem IMDCT; stems_lins is the
+       per-stem QMF synthesis history window. Index 0 = low path, 1 = high path. */
+    float stems_spec[2][2*576];
+    float stems_lins[2][(18 + 15)*2*32];
 } drmp3dec_scratch;
 
 typedef struct
@@ -300,6 +311,11 @@ typedef struct
     int reserv, free_format_bytes;
     drmp3_uint8 header[4], reserv_buf[511];
     drmp3dec_scratch scratch;
+    /* Independent overlap/synthesis history for the two subband stems. */
+    float stems_mdct_overlap[2][2][9*32];
+    float stems_qmf_state[2][15*2*32];
+    drmp3_uint8 stems_mode;       /* 0 = native path, 1 = dual subband stems path. */
+    drmp3_uint8 stems_cut[2];     /* Cut used for each of the two MPEG-1 granules. */
 } drmp3dec;
 
 /* Initializes a low level decoder. */
@@ -307,6 +323,20 @@ DRMP3_API void drmp3dec_init(drmp3dec *dec);
 
 /* Reads a frame from a low level decoder. */
 DRMP3_API int drmp3dec_decode_frame(drmp3dec *dec, const drmp3_uint8 *mp3, int mp3_bytes, void *pcm, drmp3dec_frame_info *info);
+
+/*
+Dual subband ("stems") frame decode. Only provided by DR_MP3_FLOAT_OUTPUT builds, but
+the prototype is always visible so float consumers do not need a matching define.
+
+Behaves like drmp3dec_decode_frame() for framing, reservoir and side info, but the
+spectral stage runs once per granule and is split after antialiasing into two paths:
+subbands [0,cut) go to low and [cut,32) to high. Each path keeps its own IMDCT
+overlap and QMF synthesis history, and low+high reconstruct the native decode sample
+by sample. cuts[0]/cuts[1] are the cuts of the two MPEG-1 granules; each must be in
+0..32. The decoder must be (re)initialized with drmp3dec_init() before switching
+between native and stems mode.
+*/
+DRMP3_API int drmp3dec_decode_frame_stems(drmp3dec *dec, const drmp3_uint8 *mp3, int mp3_bytes, float *low, float *high, drmp3dec_frame_info *info, const unsigned cuts[2]);
 
 /* Helper for converting between f32 and s16. */
 DRMP3_API void drmp3dec_f32_to_s16(const float *in, drmp3_int16 *out, size_t num_samples);
@@ -1834,7 +1864,11 @@ static int drmp3_L3_restore_reservoir(drmp3dec *h, drmp3_bs *bs, drmp3dec_scratc
     return h->reserv >= main_data_begin;
 }
 
-static void drmp3_L3_decode(drmp3dec *h, drmp3dec_scratch *s, drmp3_L3_gr_info *gr_info, int nch)
+/* Shared spectral stage: scalefactors, Huffman, joint-stereo reconstruction, short
+   window reorder and antialiasing. Stops after antialiasing so the caller can either
+   run the native IMDCT or split the 32 subbands into dual stems first. Runs once per
+   granule in both modes. */
+static void drmp3_L3_decode_spectral(drmp3dec *h, drmp3dec_scratch *s, drmp3_L3_gr_info *gr_info, int nch)
 {
     int ch;
 
@@ -1865,6 +1899,18 @@ static void drmp3_L3_decode(drmp3dec *h, drmp3dec_scratch *s, drmp3_L3_gr_info *
         }
 
         drmp3_L3_antialias(s->grbuf[ch], aa_bands);
+    }
+}
+
+static void drmp3_L3_decode(drmp3dec *h, drmp3dec_scratch *s, drmp3_L3_gr_info *gr_info, int nch)
+{
+    int ch;
+
+    drmp3_L3_decode_spectral(h, s, gr_info, nch);
+
+    for (ch = 0; ch < nch; ch++, gr_info++)
+    {
+        int n_long_bands = (gr_info->mixed_block_flag ? 2 : 0) << (int)(DRMP3_HDR_GET_MY_SAMPLE_RATE(h->header) == 2);
         drmp3_L3_imdct_gr(s->grbuf[ch], h->mdct_overlap[ch], gr_info->block_type, n_long_bands);
         drmp3_L3_change_sign(s->grbuf[ch]);
     }
@@ -2260,6 +2306,117 @@ static void drmp3d_synth_granule(float *qmf_state, float *grbuf, int nbands, int
     }
 }
 
+#ifdef DR_MP3_FLOAT_OUTPUT
+/*
+Dual subband stem support.
+==========================
+The split happens on the post-antialias, pre-IMDCT granule spectrum, which is laid out
+as 32 subbands of 18 coefficients per channel. Subbands [0,cut) feed the low path and
+[cut,32) the high path. Each path is a self-contained continuation of the ordinary
+polyphase pipeline: its own IMDCT overlap (so a path with no fresh spectrum still rings
+out through the overlap-add window) and its own QMF synthesis history. Running both
+paths is algebraically identical to running the native pipeline once, so the two stem
+PCM streams add back to the native decode sample by sample.
+*/
+#define DRMP3_STEMS_BANDS     32
+#define DRMP3_STEMS_COEFS     18
+
+/* Copy the per-channel filtered spectrum of one path out of the shared granule buffer.
+   Bands that do not belong to the path are zeroed so its IMDCT/QMF only sees its share. */
+static void drmp3_stems_filter(float *dst, const float *grbuf, int nch, int cut, int low_path)
+{
+    int ch, b;
+    for (ch = 0; ch < nch; ch++)
+    {
+        const float *src = grbuf + 576*ch;
+        float *out = dst + 576*ch;
+        for (b = 0; b < DRMP3_STEMS_BANDS; b++)
+        {
+            int take = low_path ? (b < cut) : (b >= cut);
+            if (take)
+            {
+                DRMP3_COPY_MEMORY(out + 18*b, src + 18*b, DRMP3_STEMS_COEFS*sizeof(float));
+            } else
+            {
+                DRMP3_ZERO_MEMORY(out + 18*b, DRMP3_STEMS_COEFS*sizeof(float));
+            }
+        }
+    }
+}
+
+/* Run the IMDCT (with per-path overlap history) and QMF synthesis for one path of a
+   granule. n_long_bands/block_type describe the block layout, identical for both paths. */
+static void drmp3_stems_synth_path(drmp3dec *h, int path, float *spec, float *lins,
+    unsigned block_type, unsigned n_long_bands, int nch, float *pcm)
+{
+    int ch;
+    for (ch = 0; ch < nch; ch++)
+    {
+        drmp3_L3_imdct_gr(spec + 576*ch, h->stems_mdct_overlap[path][ch], block_type, n_long_bands);
+        drmp3_L3_change_sign(spec + 576*ch);
+    }
+
+    drmp3d_DCT_II(spec, 18);
+    if (nch == 2)
+    {
+        drmp3d_DCT_II(spec + 576, 18);
+    }
+
+    DRMP3_COPY_MEMORY(lins, h->stems_qmf_state[path], sizeof(float)*15*64);
+    {
+        int i;
+        for (i = 0; i < 18; i += 2)
+        {
+            drmp3d_synth(spec + i, pcm + 32*nch*i, nch, lins + i*64);
+        }
+    }
+    /* Match drmp3d_synth_granule's mono state rule exactly so low+high still
+       reconstructs the native mono path. */
+#ifndef DR_MP3_NONSTANDARD_BUT_LOGICAL
+    if (nch == 1)
+    {
+        int i;
+        for (i = 0; i < 15*64; i += 2)
+        {
+            h->stems_qmf_state[path][i] = lins[18*64 + i];
+        }
+    } else
+#endif
+    {
+        DRMP3_COPY_MEMORY(h->stems_qmf_state[path], lins + 18*64, sizeof(float)*15*64);
+    }
+}
+
+/* Decode one granule into the two stem outputs. Mirrors the granule half of
+   drmp3dec_decode_frame() but performs the shared spectral stage only once. */
+static void drmp3_stems_decode_granule(drmp3dec *h, drmp3_L3_gr_info *gr_info, int nch,
+    unsigned cut, float *low_pcm, float *high_pcm)
+{
+    int ch;
+    unsigned block_type, n_long_bands;
+
+    DRMP3_ZERO_MEMORY(h->scratch.grbuf[0], 576*2*sizeof(float));
+    drmp3_L3_decode_spectral(h, &h->scratch, gr_info, nch);
+    DRMP3_STEMS_SPECTRAL_PASS();
+
+    /* The block layout is shared by both channels and both paths. */
+    block_type   = gr_info[0].block_type;
+    n_long_bands = gr_info[0].mixed_block_flag
+        ? (2 << (int)(DRMP3_HDR_GET_MY_SAMPLE_RATE(h->header) == 2)) : 0;
+
+    for (ch = 0; ch < nch; ch++)
+    {
+        drmp3_stems_filter(h->scratch.stems_spec[0] + 576*ch, h->scratch.grbuf[ch], 1, (int)cut, 1);
+        drmp3_stems_filter(h->scratch.stems_spec[1] + 576*ch, h->scratch.grbuf[ch], 1, (int)cut, 0);
+    }
+
+    drmp3_stems_synth_path(h, 0, h->scratch.stems_spec[0], h->scratch.stems_lins[0],
+        block_type, n_long_bands, nch, low_pcm);
+    drmp3_stems_synth_path(h, 1, h->scratch.stems_spec[1], h->scratch.stems_lins[1],
+        block_type, n_long_bands, nch, high_pcm);
+}
+#endif /* DR_MP3_FLOAT_OUTPUT */
+
 static int drmp3d_match_frame(const drmp3_uint8 *hdr, int mp3_bytes, int frame_bytes)
 {
     int i, nmatch;
@@ -2314,6 +2471,9 @@ static int drmp3d_find_frame(const drmp3_uint8 *mp3, int mp3_bytes, int *free_fo
 
 DRMP3_API void drmp3dec_init(drmp3dec *dec)
 {
+    /* Zeroing also initializes the native and per-stem overlap/synthesis histories,
+       which is required before switching between native and stems modes. */
+    DRMP3_ZERO_MEMORY(dec, sizeof(drmp3dec));
     dec->header[0] = 0;
 }
 
@@ -2412,6 +2572,96 @@ DRMP3_API int drmp3dec_decode_frame(drmp3dec *dec, const drmp3_uint8 *mp3, int m
 
     return success*drmp3_hdr_frame_samples(dec->header);
 }
+
+#ifdef DR_MP3_FLOAT_OUTPUT
+DRMP3_API int drmp3dec_decode_frame_stems(drmp3dec *dec, const drmp3_uint8 *mp3, int mp3_bytes, float *low, float *high, drmp3dec_frame_info *info, const unsigned cuts[2])
+{
+    int i = 0, igr, frame_size = 0, success = 1;
+    const drmp3_uint8 *hdr;
+    drmp3_bs bs_frame[1];
+    drmp3dec_frame_info local_info[1];
+    drmp3dec_frame_info *pinfo = (info != NULL) ? info : local_info;
+
+    /* Validate everything before touching the decoder or consuming input. */
+    if (dec == NULL || mp3 == NULL || low == NULL || high == NULL || cuts == NULL || mp3_bytes <= 0 ||
+        cuts[0] > DRMP3_STEMS_BANDS || cuts[1] > DRMP3_STEMS_BANDS)
+    {
+        if (info != NULL)
+        {
+            DRMP3_ZERO_MEMORY(info, sizeof(*info));
+        }
+        return 0;
+    }
+
+    pinfo->layer = 0;
+
+    if (mp3_bytes > 4 && dec->header[0] == 0xff && drmp3_hdr_compare(dec->header, mp3))
+    {
+        frame_size = drmp3_hdr_frame_bytes(mp3, dec->free_format_bytes) + drmp3_hdr_padding(mp3);
+        if (frame_size != mp3_bytes && (frame_size + DRMP3_HDR_SIZE > mp3_bytes || !drmp3_hdr_compare(mp3, mp3 + frame_size)))
+        {
+            frame_size = 0;
+        }
+    }
+    if (!frame_size)
+    {
+        DRMP3_ZERO_MEMORY(dec, sizeof(drmp3dec));
+        i = drmp3d_find_frame(mp3, mp3_bytes, &dec->free_format_bytes, &frame_size);
+        if (!frame_size || i + frame_size > mp3_bytes)
+        {
+            pinfo->frame_bytes = i;
+            return 0;
+        }
+    }
+
+    hdr = mp3 + i;
+    DRMP3_COPY_MEMORY(dec->header, hdr, DRMP3_HDR_SIZE);
+    pinfo->frame_bytes = i + frame_size;
+    pinfo->channels = DRMP3_HDR_IS_MONO(hdr) ? 1 : 2;
+    pinfo->sample_rate = drmp3_hdr_sample_rate_hz(hdr);
+    pinfo->layer = 4 - DRMP3_HDR_GET_LAYER(hdr);
+    pinfo->bitrate_kbps = drmp3_hdr_bitrate_kbps(hdr);
+
+    drmp3_bs_init(bs_frame, hdr + DRMP3_HDR_SIZE, frame_size - DRMP3_HDR_SIZE);
+    if (DRMP3_HDR_IS_CRC(hdr))
+    {
+        drmp3_bs_get_bits(bs_frame, 16);
+    }
+
+    /* The dual subband path is defined for MPEG-1 Layer III streams only. */
+    if (pinfo->layer != 3 || !DRMP3_HDR_TEST_MPEG1(hdr))
+    {
+        return 0;
+    }
+
+    {
+        int main_data_begin = drmp3_L3_read_side_info(bs_frame, dec->scratch.gr_info, hdr);
+        if (main_data_begin < 0 || bs_frame->pos > bs_frame->limit)
+        {
+            drmp3dec_init(dec);
+            return 0;
+        }
+        success = drmp3_L3_restore_reservoir(dec, bs_frame, &dec->scratch, main_data_begin);
+        if (success)
+        {
+            dec->stems_mode = 1;
+            dec->stems_cut[0] = (drmp3_uint8)cuts[0];
+            dec->stems_cut[1] = (drmp3_uint8)cuts[1];
+            for (igr = 0; igr < 2; igr++)
+            {
+                drmp3_stems_decode_granule(dec, dec->scratch.gr_info + igr*pinfo->channels,
+                    pinfo->channels, cuts[igr],
+                    low + (size_t)igr*576*pinfo->channels,
+                    high + (size_t)igr*576*pinfo->channels);
+            }
+        }
+        /* Always preserve reservoir history, including on incomplete frames. */
+        drmp3_L3_save_reservoir(dec, &dec->scratch);
+    }
+
+    return success*drmp3_hdr_frame_samples(dec->header);
+}
+#endif /* DR_MP3_FLOAT_OUTPUT */
 
 DRMP3_API void drmp3dec_f32_to_s16(const float *in, drmp3_int16 *out, size_t num_samples)
 {
