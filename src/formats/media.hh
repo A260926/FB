@@ -78,6 +78,17 @@ namespace uvgrtp {
                 /* Return pointer to the internal frame info structure which is relayed to packet handler */
                 media_frame_info_t *get_media_frame_info();
 
+                /* Release all state accumulated for the current RTP receive generation: incomplete
+                 * frames waiting for fragments and frames produced by the media layer but not yet
+                 * returned to the caller. Called when a stream switches to a new sequence generation
+                 * so no old-generation data is mixed into new frames. */
+                virtual void reset_receive_state();
+
+                /* Drop the frames produced by the media layer that are waiting to be returned to the
+                 * caller (e.g. the multiple NAL units of an aggregation packet). Frames already
+                 * handed to the caller are not touched. */
+                virtual void discard_pending_output();
+
                 void set_fps(ssize_t numerator, ssize_t denominator);
                 void set_pace(ssize_t numerator, ssize_t denominator);
 

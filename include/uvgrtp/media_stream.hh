@@ -245,6 +245,29 @@ namespace uvgrtp {
 
             /**
              * \ingroup CORE_API
+             * \brief Enable or disable automatic detection of an RTP receive sequence restart
+             *
+             * \details A sender process may restart while keeping the same SSRC and resume with a
+             * sequence number unrelated to the previous one. By default uvgRTP only re-synchronizes
+             * its RTCP statistics and keeps the H26x reassembly state, so stale fragments or
+             * duplicate history can corrupt the next frames. When this option is enabled, uvgRTP
+             * detects the new sequence generation from the RTP sequence numbers alone, switches to
+             * it without recreating the session or reinstalling the receive hook, and resets the
+             * H26x reassembly and duplicate state plus the RTCP receiver statistics of that source.
+             *
+             * The option must be configured before the first RTP packet of the stream arrives.
+             * Only plaintext H.264/H.265 reception is supported.
+             *
+             * \return RTP error code
+             *
+             * \retval RTP_OK On success
+             * \retval RTP_INVALID_VALUE If enabling after the first RTP packet, or if the stream
+             *         format or encryption mode is not supported (state is left unchanged)
+             */
+            rtp_error_t configure_receive_restart(bool enable);
+
+            /**
+             * \ingroup CORE_API
              * \brief Get the values associated with configuration flags, see ::RTP_CTX_CONFIGURATION_FLAGS for more details
              *
              * \return Value of the configuration flag

@@ -124,6 +124,15 @@ namespace uvgrtp {
                  * Return RTP_GENERIC_ERROR if the packet was corrupted in some way */
                 rtp_error_t packet_handler(void* args, int rce_flags, uint8_t* read_ptr, size_t size, uvgrtp::frame::rtp_frame** out);
 
+                /* Drop all reassembly state of the current receive generation: incomplete FU
+                 * fragments, pending aggregation output, dropped-timestamp history, duplicate-packet
+                 * history and any reassembled NAL units waiting in the queue. Frames already returned
+                 * to the caller are not touched. */
+                void reset_receive_state() override;
+
+                /* Drop the reassembled NAL units waiting in the output queue. */
+                void discard_pending_output() override;
+
             protected:
 
                 /* Handles small packets. May support aggregate packets or not*/

@@ -10,6 +10,7 @@
 #include <thread>
 #include <condition_variable>
 #include <atomic>
+#include <chrono>
 #include <deque>
 #include <map>
 
@@ -28,6 +29,7 @@ namespace uvgrtp {
 
     class socket;
     class rtcp;
+    class receive_restart;
 
     typedef void (*recv_hook)(void* arg, uvgrtp::frame::rtp_frame* frame);
 
@@ -52,6 +54,10 @@ namespace uvgrtp {
         packet_handler media;
         packet_handler rtcp_common;
         std::function<rtp_error_t(uvgrtp::frame::rtp_frame ** out)> getter;
+
+        /* Optional per-stream receive restart state. When set, every valid RTP packet
+         * is first classified by it before the RTCP statistics and media handlers. */
+        receive_restart* restart = nullptr;
     };
 
     /* This class handles the reception processing of received RTP packets. It 
@@ -104,6 +110,10 @@ namespace uvgrtp {
             rtp_error_t install_getter(std::shared_ptr<std::atomic<std::uint32_t>> remote_ssrc,
                 std::function<rtp_error_t(uvgrtp::frame::rtp_frame**)> getter);
 
+            /* Attach/detach a receive restart state object to a stream (nullptr detaches). */
+            rtp_error_t install_receive_restart(std::shared_ptr<std::atomic<std::uint32_t>> remote_ssrc,
+                receive_restart* restart);
+
             /* Remove all handlers associated with this SSRC */
             rtp_error_t remove_handlers(std::shared_ptr<std::atomic<std::uint32_t>> remote_ssrc);
 
@@ -138,6 +148,10 @@ namespace uvgrtp {
             uvgrtp::frame::rtp_frame* pull_frame(std::shared_ptr<std::atomic<std::uint32_t>> remote_ssrc);
             uvgrtp::frame::rtp_frame* pull_frame(ssize_t timeout_ms, std::shared_ptr<std::atomic<std::uint32_t>> remote_ssrc);
 
+            /* Non-blocking pull of a frame already produced by the media layer.
+             * If "remote_ssrc" is non-zero only a frame from that source is returned. */
+            uvgrtp::frame::rtp_frame* pull_frame_available(uint32_t remote_ssrc);
+
             /* Clear the packet handlers associated with this REMOTE SSRC
              * Also clear the hooks associated with this remote_ssrc
              * 
@@ -150,6 +164,22 @@ namespace uvgrtp {
              * Used with media_stream.configure_ctx(RCC_REMOTE_SSRC, ---);
              * Return RTP_OK on success */
             rtp_error_t update_remote_ssrc(uint32_t old_remote_ssrc, uint32_t new_remote_ssrc);
+
+            /* Discard frames that were produced by the media layer but have not been handed to the
+             * application yet (the pull queue and the ready frames of the current batch). Also drops
+             * the frames queued inside the media layer (e.g. H26x aggregation output). Used when a
+             * stream switches to a new RTP generation so no old-generation NAL unit leaks out after
+             * the switch. Frames already passed to a user hook are owned by the caller and untouched. */
+            void discard_pending_frames(uint32_t remote_ssrc);
+
+            /* Handle one received datagram as if it had arrived from the socket. This is the single
+             * production entry point: the receiver thread calls it once per datagram and the tests /
+             * example replay captured bytes through it.
+             *
+             * The caller must NOT hold handlers_mutex_. Returns the last handler result (RTP_PKT_READY
+             * / RTP_MULTIPLE_PKTS_READY / RTP_OK / an error code). */
+            rtp_error_t process_datagram(uint8_t* data, size_t size, int rce_flags,
+                std::chrono::steady_clock::time_point arrival = std::chrono::steady_clock::now());
 
             /// \cond DO_NOT_DOCUMENT
             void set_buffer_size(const ssize_t& value);
@@ -211,6 +241,11 @@ namespace uvgrtp {
 
             // Map different types of handlers by remote SSRC
             std::unordered_map<uint32_t, handler> packet_handlers_;
+
+            /* Number of streams (SSRC entries) currently registered. Used to decide whether a
+             * single installed hook may take every frame (no multiplexing) or frames must be
+             * routed by SSRC. Kept in sync whenever packet_handlers_ changes. */
+            std::atomic<size_t> stream_count_;
 
             int poll_timeout_ms_;
 

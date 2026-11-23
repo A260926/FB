@@ -91,6 +91,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         src/clock_internal.cc
         src/rtcp_internal.cc
         src/frame_internal.cc
+        src/receive_restart.cc
 
         src/formats/media.cc
         src/formats/h26x.cc
@@ -144,6 +145,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         src/clock_internal.hh
         src/rtcp_internal.hh
         src/frame_internal.hh
+        src/receive_restart.hh
 
         src/formats/h26x.hh
         src/formats/h264.hh

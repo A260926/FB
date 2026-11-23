@@ -1,0 +1,7 @@
+-- Set version string to 4.0.1-source
+-- Selecting build type: Release
+PKG_CONFIG_PATH is not set. Setting it to lib/pkgconfig
+libcrypto++ not found. Encryption will be disabled
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp

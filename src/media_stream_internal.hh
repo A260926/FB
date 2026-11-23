@@ -31,6 +31,7 @@ namespace uvgrtp {
     class socket;
     class socketfactory;
     class rtcp_reader;
+    class receive_restart;
 
     namespace frame {
         struct rtp_frame;
@@ -350,6 +351,20 @@ namespace uvgrtp {
         rtp_error_t configure_ctx(int rcc_flag, ssize_t value);
 
         /**
+         * \brief Enable or disable automatic RTP receive restart detection
+         *
+         * \details When enabled, a sender that restarts its RTP sequence numbering while keeping the
+         * same SSRC is detected and the stream switches to the new sequence generation without
+         * recreating the session or reinstalling the receive hook. Only plaintext H.264/H.265
+         * reception is supported and the option must be configured before the first RTP packet.
+         *
+         * \return RTP error code
+         *
+         * \retval RTP_OK On success
+         * \retval RTP_INVALID_VALUE If enabling after the first RTP packet or for an unsupported format */
+        rtp_error_t configure_receive_restart(bool enable);
+
+        /**
          * \brief Get the values associated with configuration flags, see ::RTP_CTX_CONFIGURATION_FLAGS for more details
          *
          * \return Value of the configuration flag
@@ -458,6 +473,9 @@ namespace uvgrtp {
 
         /* Media object associated with this media stream. */
         std::unique_ptr<uvgrtp::formats::media> media_;
+
+        /* Per-stream receive restart detection state. */
+        std::unique_ptr<uvgrtp::receive_restart> receive_restart_;
 
         /* Thread that keeps the holepunched connection open for unidirectional streams */
         std::unique_ptr<uvgrtp::holepuncher> holepuncher_;

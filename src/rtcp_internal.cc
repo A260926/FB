@@ -971,6 +971,90 @@ rtp_error_t uvgrtp::rtcp_internal::update_participant_seq(uint32_t ssrc, uint16_
     return RTP_OK;
 }
 
+bool uvgrtp::rtcp_internal::get_receive_stats(uint32_t ssrc, receive_stats_snapshot& out) const
+{
+    std::lock_guard<std::mutex> prtcp_lock(participants_mutex_);
+    auto it = participants_.find(ssrc);
+    if (it == participants_.end()) {
+        return false;
+    }
+
+    const receiver_statistics& s = it->second->stats;
+    out.received_pkts = s.received_pkts;
+    out.received_prior = s.received_prior;
+    out.expected_prior = s.expected_prior;
+    uint32_t extended_max = ((uint32_t)s.cycles << 16) + s.max_seq;
+    out.expected = extended_max - s.base_seq + 1;
+    out.lost_pkts = s.lost_pkts;
+    out.max_seq = s.max_seq;
+    out.cycles = s.cycles;
+    out.lsr = s.lsr;
+    out.jitter = (uint32_t)s.jitter;
+    out.received_since_report = s.received_rtp_packet;
+    return true;
+}
+
+void uvgrtp::rtcp_internal::activate_receive_statistics()
+{
+    std::lock_guard<std::mutex> prtcp_lock(participants_mutex_);
+    active_ = true;
+}
+
+void uvgrtp::rtcp_internal::reset_receive_generation(uint32_t ssrc, const uvgrtp::frame::rtp_frame* candidate)
+{
+    if (candidate == nullptr) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> prtcp_lock(participants_mutex_);
+
+    if (participants_.find(ssrc) == participants_.end()) {
+        if (add_participant(ssrc) != RTP_OK) {
+            UVG_LOG_WARN("Could not add participant %u for receive restart", ssrc);
+            return;
+        }
+    }
+
+    rtcp_participant* participant = participants_[ssrc].get();
+    receiver_statistics* stats = &participant->stats;
+
+    /* A confirmed restart is not re-run through the initial probation: the candidate and the packet
+     * that confirmed it are a complete new first report. */
+    participant->probation = 0;
+
+    stats->received_pkts = 0;
+    stats->lost_pkts = 0;
+    stats->received_bytes = 0;
+    stats->received_rtp_packet = false;
+
+    stats->expected_pkts = 0;
+    stats->received_prior = 0;
+    stats->expected_prior = 0;
+
+    stats->jitter = 0;
+    stats->transit = 0;
+
+    stats->initial_rtp = candidate->header.timestamp;
+    stats->initial_ntp = uvgrtp::clock::ntp::now();
+
+    /* New sequence generation starts at the candidate. The candidate itself is counted below so
+     * the first report has both expected and received equal to the number of new packets. */
+    stats->max_seq = candidate->header.seq;
+    stats->base_seq = candidate->header.seq;
+    stats->bad_seq = (RTP_SEQ_MOD + 1) % UINT32_MAX;
+    stats->cycles = 0;
+
+    /* Old SR information must not leak into the new generation. */
+    stats->lsr = 0;
+    stats->sr_ts = 0;
+
+    /* The stored SR/RR/SDES/APP frames of the old generation are stale. */
+    dlsr_timestamps_.erase(ssrc);
+
+    /* Count the candidate as the first received packet of the new generation. */
+    update_session_statistics(candidate);
+}
+
 rtp_error_t uvgrtp::rtcp_internal::reset_rtcp_state(uint32_t ssrc)
 {
 
@@ -1951,6 +2035,40 @@ uint32_t uvgrtp::rtcp_internal::size_of_compound_packet(uint16_t reports,
 
 rtp_error_t uvgrtp::rtcp_internal::generate_report()
 {
+    uint8_t* frame = nullptr;
+    uint32_t frame_size = 0;
+
+    rtp_error_t ret = build_compound_report_internal(frame, frame_size);
+    if (ret != RTP_OK || frame == nullptr) {
+        return ret;
+    }
+
+    return send_rtcp_packet_to_participants(frame, frame_size, true);
+}
+
+rtp_error_t uvgrtp::rtcp_internal::build_compound_report(std::unique_ptr<uint8_t[]>& frame_out,
+    uint32_t& frame_size)
+{
+    uint8_t* frame = nullptr;
+    uint32_t size = 0;
+
+    rtp_error_t ret = build_compound_report_internal(frame, size);
+    if (ret != RTP_OK) {
+        frame_out.reset();
+        frame_size = 0;
+        return ret;
+    }
+
+    frame_out.reset(frame);
+    frame_size = size;
+    return RTP_OK;
+}
+
+rtp_error_t uvgrtp::rtcp_internal::build_compound_report_internal(uint8_t*& out_frame, uint32_t& out_size)
+{
+    out_frame = nullptr;
+    out_size = 0;
+
     /* Check the participants_ map. If there is no other participants, don't send report */
     if (participants_.empty()) {
         UVG_LOG_DEBUG("No other participants in this session. Report not sent.");
@@ -2227,7 +2345,11 @@ rtp_error_t uvgrtp::rtcp_internal::generate_report()
 
     UVG_LOG_DEBUG("Sending RTCP report compound packet, Total size: %lli",
         compound_packet_size);
-    return send_rtcp_packet_to_participants(frame, compound_packet_size, true);
+
+    /* Hand the constructed packet to the caller. Ownership of the buffer transfers. */
+    out_frame = frame;
+    out_size = compound_packet_size;
+    return RTP_OK;
 }
 
 

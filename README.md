@@ -43,6 +43,72 @@ Furthermore, we also provide a Doxygen documentation of the [public API](https:/
 
 We warmly welcome any contributions to the project. If you are considering submitting a pull request, please read [CONTRIBUTING.md](CONTRIBUTING.md) before proceeding.
 
+## Recovering from a sender restart on reception
+
+If the sending process is restarted but keeps the same SSRC, the RTP sequence numbers can
+continue from an unrelated point (for example after the encoder reinitialized its random
+sequence base). By default uvgRTP re-synchronizes only its RTCP sequence statistics and leaves
+the H26x reassembly and duplicate-detection state in place, so fragments from the old generation
+can be spliced into the first new frames, or new frames can be discarded because they reuse an
+old `(timestamp, sequence)` pair.
+
+`uvgrtp::media_stream::configure_receive_restart(bool enable)` enables automatic recovery from
+such a restart:
+
+```c++
+uvgrtp::media_stream* stream = session->create_stream(...);
+// Must happen before the first RTP packet of the stream arrives.
+stream->configure_receive_restart(true);
+```
+
+### Configuration timing and supported formats
+
+* The option is disabled by default and must be configured **before the first RTP packet** is
+  received. Enabling it after the first packet, or for a format other than plaintext H.264/H.265,
+  returns `RTP_INVALID_VALUE` and leaves the state unchanged.
+* Disabling it is always allowed and immediately releases a stored restart candidate.
+* The session, socket, local SSRC, SDES items and an installed receive hook are kept as-is; no
+  new session or hook reinstallation is needed to continue delivering NAL units from the new
+  generation.
+
+### Detection rule
+
+For each stream the active highest sequence number `H` is established by the first valid packet.
+For every later packet with sequence number `S` let `d = uint16_t(S - H)`:
+
+* `d < 3000` is normal forward movement (`d == 0` is a duplicate); only `d > 0` advances `H`.
+* `d > 65536 - 100` is a bounded late packet; it is delivered normally and does not change `H`.
+* everything else is a **restart candidate**. A candidate is fully parsed and kept, but it is not
+  delivered, does not update `H` and does not enter RTCP statistics, reassembly or the user queue.
+
+A later valid packet whose sequence number is exactly `candidate + 1` (modulo 16 bits) and is
+still in the candidate region relative to the old `H` confirms the new generation; otherwise the
+new packet replaces the stored candidate. A duplicate of the candidate never confirms and keeps
+the first candidate's contents. Malformed packets change no state. Normal packets of the old
+generation keep being delivered while a candidate is pending; they do not cancel it.
+
+### What a switch does
+
+On confirmation the stream switches generation first, then processes the candidate and the
+confirming packet in that order. Both are counted as *received* in the new report and the report
+base is the candidate's sequence number; the initial RTCP probation is not applied, so the first
+packet is not lost from the statistics. The switch:
+
+* drops the stream's incomplete FU fragments, pending aggregation output, dropped-timestamp
+  history and duplicate-packet history, releasing old-generation frames that have not reached the
+  application yet (frames already handed to a receive hook belong to the caller and are neither
+  freed nor replayed);
+* drops old-generation frames still waiting in the pull queue, so the pull queue and the hook path
+  see the same generation boundary;
+* re-establishes the RTCP receiver statistics of that remote source: extended sequence cycle,
+  cumulative and interval expected/received counts, jitter/transit, and SR/LSR/DLSR are reset. The
+  first report of the new generation therefore reports 2 expected and 2 received packets, and an
+  old Sender Report cannot leak into it. The local SSRC, SDES, configuration and receive hook are
+  preserved, and other streams on the same socket are untouched.
+
+Normal sequence wrap-around and bounded reordering are not treated as a restart. When the option
+is not enabled, the existing delivery behaviour is unchanged.
+
 ## Papers
 
 If you use uvgRTP in your research, please cite one of the following papers:

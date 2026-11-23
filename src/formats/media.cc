@@ -155,6 +155,21 @@ uvgrtp::formats::media_frame_info_t *uvgrtp::formats::media::get_media_frame_inf
     return &minfo_;
 }
 
+void uvgrtp::formats::media::reset_receive_state()
+{
+    for (auto& entry : minfo_.frames) {
+        free_media_frame(entry.second);
+    }
+    minfo_.frames.clear();
+    minfo_.dropped.clear();
+}
+
+void uvgrtp::formats::media::discard_pending_output()
+{
+    /* The base media class has no output of its own: RTP_PKT_READY frames are returned directly
+     * from packet_handler() and are owned by the caller by the time the current packet finishes. */
+}
+
 rtp_error_t uvgrtp::formats::media::packet_handler(void* arg, int rce_flags, uint8_t* read_ptr, size_t size, frame::rtp_frame** out)
 {
     (void)rce_flags;

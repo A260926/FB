@@ -13,6 +13,7 @@
 #include "socket.hh"
 #include "rtcp_reader.hh"
 #include "rtcp_internal.hh"
+#include "receive_restart.hh"
 
 #include "holepuncher.hh"
 #include "reception_flow.hh"
@@ -175,6 +176,12 @@ rtp_error_t uvgrtp::media_stream_internal::init_connection()
 
 rtp_error_t uvgrtp::media_stream_internal::create_media(rtp_format_t fmt)
 {
+    /* Create the receive restart state for every stream, so the format/flags checks are applied
+     * even if the user never enables it. It is attached to the reception flow below. */
+    if (!receive_restart_) {
+        receive_restart_.reset(new uvgrtp::receive_restart());
+    }
+
     switch (fmt) {
     case RTP_FORMAT_H264:
     {
@@ -275,6 +282,32 @@ rtp_error_t uvgrtp::media_stream_internal::create_media(rtp_format_t fmt)
     // set default values for fps
     media_->set_fps(fps_numerator_, fps_denominator_);
     media_->set_pace(pace_numerator_, pace_denominator_);
+
+    /* Wire the restart state callbacks and attach it to the stream's handlers. The object is always
+     * attached (even while disabled) because it must observe the first RTP packet to reject a later
+     * enable; while disabled it returns immediately and leaves the old delivery path unchanged. */
+    if (receive_restart_) {
+        uvgrtp::formats::media* media = media_.get();
+        uvgrtp::rtcp_internal* rtcp = rtcp_ ? rtcp_->pimpl_ : nullptr;
+        uvgrtp::reception_flow* flow = reception_flow_.get();
+        uvgrtp::receive_restart* restart = receive_restart_.get();
+
+        restart->set_callbacks(
+            [rtcp](const uvgrtp::frame::rtp_frame* candidate) {
+                if (rtcp && candidate) {
+                    rtcp->reset_receive_generation(candidate->header.ssrc, candidate);
+                }
+            },
+            [media]() { media->reset_receive_state(); },
+            [flow, media](uint32_t ssrc) {
+                media->discard_pending_output();
+                if (flow) {
+                    flow->discard_pending_frames(ssrc);
+                }
+            });
+
+        reception_flow_->install_receive_restart(remote_ssrc_, restart);
+    }
     return RTP_OK;
 }
 
@@ -334,6 +367,7 @@ rtp_error_t uvgrtp::media_stream_internal::free_resources(rtp_error_t ret)
     //reception_flow_ = nullptr;
     holepuncher_ = nullptr;
     media_ = nullptr;
+    receive_restart_ = nullptr;
     socket_ = nullptr;
 
     if (zrtp_) {
@@ -1056,6 +1090,23 @@ rtp_error_t uvgrtp::media_stream_internal::configure_ctx(int rcc_flag, ssize_t v
     }
 
     return ret;
+}
+
+rtp_error_t uvgrtp::media_stream_internal::configure_receive_restart(bool enable)
+{
+    if (!initialized_ || !receive_restart_) {
+        UVG_LOG_ERROR("RTP context has not been initialized fully, cannot continue!");
+        return RTP_NOT_INITIALIZED;
+    }
+
+    rtp_error_t ret = receive_restart_->configure(enable, fmt_, rce_flags_);
+    if (ret != RTP_OK) {
+        return ret;
+    }
+
+    /* The restart state is always attached in create_media(); enabling/disabling only changes its
+     * behaviour, so the handlers, socket and session are kept intact. */
+    return RTP_OK;
 }
 
 int uvgrtp::media_stream_internal::get_configuration_value(int rcc_flag)

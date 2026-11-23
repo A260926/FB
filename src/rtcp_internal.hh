@@ -428,6 +428,44 @@ namespace uvgrtp {
         /* Update RTCP-related receiver statistics from RTP packets */
         rtp_error_t recv_packet_handler_common(void* arg, int rce_flags, uint8_t* read_ptr, size_t size, frame::rtp_frame** out);
 
+        /* Mark the RTCP instance as receiving so the statistics handler processes packets without
+         * starting the report runner or sockets. Used by the in-memory receive pipeline. */
+        void activate_receive_statistics();
+
+        /* Re-establish the receiver statistics of "ssrc" after a confirmed RTP receive restart.
+         *
+         * "candidate" is the first packet of the new sequence generation. It is counted as
+         * received, and it becomes the base sequence/timestamp of the new report period. The
+         * extended sequence cycle, expected/received interval counters, jitter/transit and the
+         * SR/LSR/DLSR values are all reset so no old-generation value leaks into the new report. */
+        void reset_receive_generation(uint32_t ssrc, const uvgrtp::frame::rtp_frame* candidate);
+
+        /* Construct a compound RTCP report exactly like generate_report() does, but return the
+         * bytes to the caller instead of sending them. Takes ownership of an internal buffer.
+         * "frame_size" is set to 0 when there is nothing to report. */
+        rtp_error_t build_compound_report(std::unique_ptr<uint8_t[]>& frame, uint32_t& frame_size);
+
+        /* Builds the compound packet into a raw buffer owned by the caller. */
+        rtp_error_t build_compound_report_internal(uint8_t*& frame, uint32_t& frame_size);
+
+        /* Snapshot of the receiver statistics of one participant. Used by the regression tests to
+         * verify the interval counters that the RR report block does not carry explicitly. */
+        struct receive_stats_snapshot {
+            uint32_t received_pkts = 0;
+            uint32_t received_prior = 0;
+            uint32_t expected = 0;          /* cumulative expected, derived from cycles/max_seq/base_seq */
+            uint32_t expected_prior = 0;
+            uint32_t lost_pkts = 0;
+            uint16_t max_seq = 0;
+            uint16_t cycles = 0;
+            uint32_t lsr = 0;
+            uint32_t jitter = 0;
+            bool received_since_report = false;
+        };
+
+        /* Copy the current receiver statistics of "ssrc". Returns false if the participant is unknown. */
+        bool get_receive_stats(uint32_t ssrc, receive_stats_snapshot& out) const;
+
         /* Update RTCP-related sender statistics */
         static rtp_error_t send_packet_handler_vec(void* arg, uvgrtp::buf_vec& buffers);
 

@@ -1,0 +1,8 @@
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/uvgrtp_version.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/uvgrtp.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/.task-build/uvgrtp/CMakeFiles/install/strip.dir

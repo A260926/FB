@@ -1,0 +1,143 @@
+[  2%] Building CXX object CMakeFiles/uvgrtp_version.dir/version.cc.o
+[  2%] Built target uvgrtp_version
+[  4%] Building CXX object CMakeFiles/uvgrtp.dir/src/crypto.cc.o
+[  6%] Building CXX object CMakeFiles/uvgrtp.dir/src/frame.cc.o
+[  8%] Building CXX object CMakeFiles/uvgrtp.dir/src/context.cc.o
+[ 10%] Building CXX object CMakeFiles/uvgrtp.dir/src/media_stream.cc.o
+[ 13%] Building CXX object CMakeFiles/uvgrtp.dir/src/reception_flow.cc.o
+[ 15%] Building CXX object CMakeFiles/uvgrtp.dir/src/poll.cc.o
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/reception_flow.cc:487:9: warning: variable 'read_packets' set but not used [-Wunused-but-set-variable]
+  487 |     int read_packets = 0;
+      |         ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/reception_flow.cc:580:9: warning: variable 'processed_packets' set but not used [-Wunused-but-set-variable]
+  580 |     int processed_packets = 0;
+      |         ^
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/reception_flow.cc:1:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/reception_flow.hh:239:19: warning: private field 'user_hook_arg_' is not used [-Wunused-private-field]
+  239 |             void* user_hook_arg_;
+      |                   ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/reception_flow.hh:240:20: warning: private field 'user_hook_' is not used [-Wunused-private-field]
+  240 |             void (*user_hook_)(void* arg, uint8_t* data, uint32_t len);
+      |                    ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/reception_flow.hh:270:18: warning: private field 'ipv6_' is not used [-Wunused-private-field]
+  270 |             bool ipv6_;
+      |                  ^
+[ 17%] Building CXX object CMakeFiles/uvgrtp.dir/src/frame_queue.cc.o
+5 warnings generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/frame_queue.cc:3:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h264.hh:3:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+[ 19%] Building CXX object CMakeFiles/uvgrtp.dir/src/rtcp.cc.o
+1 warning generated.
+[ 21%] Building CXX object CMakeFiles/uvgrtp.dir/src/rtcp_packets.cc.o
+[ 26%] Building CXX object CMakeFiles/uvgrtp.dir/src/session.cc.o
+[ 26%] Building CXX object CMakeFiles/uvgrtp.dir/src/rtp.cc.o
+[ 28%] Building CXX object CMakeFiles/uvgrtp.dir/src/socket.cc.o
+[ 30%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp.cc.o
+[ 32%] Building CXX object CMakeFiles/uvgrtp.dir/src/holepuncher.cc.o
+[ 34%] Building CXX object CMakeFiles/uvgrtp.dir/src/media_stream_internal.cc.o
+[ 36%] Building CXX object CMakeFiles/uvgrtp.dir/src/rtcp_internal.cc.o
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/media_stream_internal.cc:5:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h264.hh:3:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/rtcp_internal.cc:331:9: warning: variable 'report_number' set but not used [-Wunused-but-set-variable]
+  331 |     int report_number = 0;
+      |         ^
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/rtcp_internal.cc:1:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/rtcp_internal.hh:614:14: warning: private field 'initial_' is not used [-Wunused-private-field]
+  614 |         bool initial_;
+      |              ^
+1 warning generated.
+[ 39%] Building CXX object CMakeFiles/uvgrtp.dir/src/frame_internal.cc.o
+[ 41%] Building CXX object CMakeFiles/uvgrtp.dir/src/receive_restart.cc.o
+2 warnings generated.
+[ 43%] Building CXX object CMakeFiles/uvgrtp.dir/src/formats/media.cc.o
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/receive_restart.cc:12:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h264.hh:3:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+1 warning generated.
+[ 45%] Building CXX object CMakeFiles/uvgrtp.dir/src/formats/h26x.cc.o
+[ 47%] Building CXX object CMakeFiles/uvgrtp.dir/src/formats/h264.cc.o
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.cc:1:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h264.cc:1:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h264.hh:3:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+1 warning generated.
+[ 50%] Building CXX object CMakeFiles/uvgrtp.dir/src/formats/h265.cc.o
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h265.cc:1:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h265.hh:3:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+1 warning generated.
+[ 52%] Building CXX object CMakeFiles/uvgrtp.dir/src/formats/h266.cc.o
+1 warning generated.
+[ 54%] Building CXX object CMakeFiles/uvgrtp.dir/src/formats/v3c.cc.o
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h266.cc:1:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h266.hh:7:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/v3c.cc:1:
+In file included from /Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/v3c.hh:7:
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/h26x.hh:98:29: warning: 'push_media_frame' overrides a member function but is not marked 'override' [-Winconsistent-missing-override]
+   98 |                 rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                             ^
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/formats/media.hh:96:37: note: overridden virtual function is here
+   96 |                 virtual rtp_error_t push_media_frame(sockaddr_in& addr, sockaddr_in6& addr6, uint8_t *data, size_t data_len, int rtp_flags, uint32_t ssrc);
+      |                                     ^
+1 warning generated.
+1 warning generated.
+[ 58%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/zrtp_receiver.cc.o
+[ 58%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/hello.cc.o
+[ 60%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/hello_ack.cc.o
+[ 63%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/commit.cc.o
+[ 65%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/dh_kxchng.cc.o
+[ 67%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/confirm.cc.o
+[ 69%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/confack.cc.o
+[ 71%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/error.cc.o
+[ 73%] Building CXX object CMakeFiles/uvgrtp.dir/src/zrtp/zrtp_message.cc.o
+[ 76%] Building CXX object CMakeFiles/uvgrtp.dir/src/srtp/base.cc.o
+[ 78%] Building CXX object CMakeFiles/uvgrtp.dir/src/srtp/srtp.cc.o
+[ 80%] Building CXX object CMakeFiles/uvgrtp.dir/src/srtp/srtcp.cc.o
+[ 82%] Building CXX object CMakeFiles/uvgrtp.dir/src/wrapper_c.cc.o
+[ 84%] Building CXX object CMakeFiles/uvgrtp.dir/src/socketfactory.cc.o
+[ 86%] Building CXX object CMakeFiles/uvgrtp.dir/src/rtcp_reader.cc.o
+/Volumes/UserFBWorkspace/questions/FS2E75F7E84C4EU15384/attempts/20261123T164157460456Z/repo/src/socketfactory.cc:28:18: warning: unused variable 'DEFAULT_INITIAL_BUFFER_SIZE' [-Wunused-const-variable]
+   28 | constexpr size_t DEFAULT_INITIAL_BUFFER_SIZE = 4194304;
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+[ 89%] Linking CXX static library libuvgrtp.a
+[100%] Built target uvgrtp

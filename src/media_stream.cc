@@ -72,6 +72,11 @@ rtp_error_t uvgrtp::media_stream::configure_ctx(int rcc_flag, ssize_t value)
     return impl_->configure_ctx(rcc_flag, value);
 }
 
+rtp_error_t uvgrtp::media_stream::configure_receive_restart(bool enable)
+{
+    return impl_->configure_receive_restart(enable);
+}
+
 int uvgrtp::media_stream::get_configuration_value(int rcc_flag)
 {
     return impl_->get_configuration_value(rcc_flag);

@@ -920,6 +920,37 @@ rtp_error_t uvgrtp::formats::h26x::packet_handler(void* args, int rce_flags, uin
     return ret;
 }
 
+void uvgrtp::formats::h26x::reset_receive_state()
+{
+    media::reset_receive_state();
+
+    discard_pending_output();
+
+    for (auto& fragment : fragments_) {
+        if (fragment.second != nullptr) {
+            (void)uvgrtp::frame::dealloc_frame(fragment.second);
+        }
+    }
+    fragments_.clear();
+
+    access_units_.clear();
+    dropped_ts_.clear();
+    dropped_in_order_.clear();
+
+    seen_packets_.clear();
+    seen_order_.clear();
+
+    discard_until_key_frame_ = true;
+}
+
+void uvgrtp::formats::h26x::discard_pending_output()
+{
+    for (auto& frame : queued_) {
+        (void)uvgrtp::frame::dealloc_frame(frame);
+    }
+    queued_.clear();
+}
+
 void uvgrtp::formats::h26x::garbage_collect_lost_frames(size_t timout)
 {
     if (uvgrtp::clock::hrc::diff_now(last_garbage_collection_) >= GARBAGE_COLLECTION_INTERVAL_MS) {
