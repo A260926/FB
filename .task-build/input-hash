@@ -1,0 +1,7 @@
+f9a98e3619d58a310e91685bd1a8b0abc859e4ed4eec733a279a98bae080b0b2  -
+df95ee32ee450c3226fd62069c10bae76b9680c7165bb84a7195db7ef968b0b4  task_support/build.sh
+3c1734b2f81b1fc397da974aae6e73df2341cf2a636c8c75cfe92eb2cd52f1c1  task_support/baseline.cpp
+Apple clang version 21.0.0 (clang-2100.3.34.2)
+Target: arm64-apple-darwin27.0.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin

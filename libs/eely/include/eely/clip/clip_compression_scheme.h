@@ -14,7 +14,13 @@ enum class clip_compression_scheme {
   fixed,
 
   // Clip is compressed using ACL library.
-  acl
+  acl,
+
+  // Clip data is compressed into the same fixed-bit stream as `fixed`,
+  // but is additionally equipped with a sparse set of decoding checkpoints,
+  // so that arbitrary seeks (including backwards ones) do not require
+  // replaying the whole stream from the beginning.
+  fixed_seek
 };
 
 namespace internal {

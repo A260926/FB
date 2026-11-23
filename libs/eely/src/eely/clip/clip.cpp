@@ -6,6 +6,7 @@
 #include "eely/clip/clip_impl_acl.h"
 #include "eely/clip/clip_impl_base.h"
 #include "eely/clip/clip_impl_fixed.h"
+#include "eely/clip/clip_impl_fixed_seek.h"
 #include "eely/clip/clip_impl_none.h"
 #include "eely/clip/clip_uncooked.h"
 #include "eely/clip/clip_utils.h"
@@ -30,6 +31,10 @@ clip::clip(const project& project, internal::bit_reader& reader) : resource(proj
 
     case clip_compression_scheme::fixed: {
       _impl = std::make_unique<clip_impl_fixed>(reader);
+    } break;
+
+    case clip_compression_scheme::fixed_seek: {
+      _impl = std::make_unique<clip_impl_fixed_seek>(reader);
     } break;
 
     case clip_compression_scheme::acl: {
@@ -66,6 +71,10 @@ clip::clip(const project& project,
       _impl = std::make_unique<clip_impl_fixed>(duration_s, tracks, false, skeleton);
     } break;
 
+    case clip_compression_scheme::fixed_seek: {
+      _impl = std::make_unique<clip_impl_fixed_seek>(duration_s, tracks, false, skeleton);
+    } break;
+
     case clip_compression_scheme::acl: {
       _impl = std::make_unique<clip_impl_acl>(duration_s, tracks, false, skeleton);
     } break;
@@ -99,6 +108,10 @@ clip::clip(const project& project,
       _impl = std::make_unique<clip_impl_fixed>(duration_s, tracks_additive, true, skeleton);
     } break;
 
+    case clip_compression_scheme::fixed_seek: {
+      _impl = std::make_unique<clip_impl_fixed_seek>(duration_s, tracks_additive, true, skeleton);
+    } break;
+
     case clip_compression_scheme::acl: {
       _impl = std::make_unique<clip_impl_acl>(duration_s, tracks_additive, true, skeleton);
     } break;
@@ -121,6 +134,9 @@ void clip::serialize(internal::bit_writer& writer) const
   }
   else if (dynamic_cast<const clip_impl_fixed*>(_impl.get()) != nullptr) {
     compression_scheme = clip_compression_scheme::fixed;
+  }
+  else if (dynamic_cast<const clip_impl_fixed_seek*>(_impl.get()) != nullptr) {
+    compression_scheme = clip_compression_scheme::fixed_seek;
   }
   else {
     compression_scheme = clip_compression_scheme::acl;

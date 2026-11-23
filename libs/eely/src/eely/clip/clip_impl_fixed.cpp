@@ -226,20 +226,32 @@ clip_impl_fixed::clip_impl_fixed(const float duration_s,
                                  const bool is_additive,
                                  const skeleton& skeleton)
 {
+  clip_impl_fixed_cook(duration_s, tracks, is_additive, skeleton, _metadata, _data);
+}
+
+void clip_impl_fixed_cook(const float duration_s,
+                          const std::vector<clip_uncooked_track>& tracks,
+                          const bool is_additive,
+                          const skeleton& skeleton,
+                          clip_metadata_fixed& out_metadata,
+                          std::vector<uint16_t>& out_data)
+{
   std::vector<clip_uncooked_track> reduced_tracks{remove_rest_pose_keys(tracks, skeleton)};
 
   // TODO: linear key reduction
 
   // Metadata
 
-  _metadata.duration_s = duration_s;
-  _metadata.is_additive = is_additive;
-  joint_components_collect(reduced_tracks, skeleton, _metadata.joints_components);
-  joints_ranges_collect(tracks, skeleton, _metadata.joints_ranges);
+  out_metadata.duration_s = duration_s;
+  out_metadata.is_additive = is_additive;
+  joint_components_collect(reduced_tracks, skeleton, out_metadata.joints_components);
+  joints_ranges_collect(tracks, skeleton, out_metadata.joints_ranges);
 
   // Data
 
-  const auto writer = [this](const cooked_key& key) { write_cooked_key(key, _metadata, _data); };
+  const auto writer = [&out_metadata, &out_data](const cooked_key& key) {
+    write_cooked_key(key, out_metadata, out_data);
+  };
   clip_cook(reduced_tracks, skeleton, writer);
 }
 
@@ -282,5 +294,10 @@ const clip_metadata_base* clip_impl_fixed::get_metadata() const
 std::unique_ptr<clip_player_base> clip_impl_fixed::create_player() const
 {
   return std::make_unique<clip_player_fixed>(_metadata, _data);
+}
+
+std::span<const uint16_t> clip_impl_fixed::get_data() const
+{
+  return _data;
 }
 }  // namespace eely::internal

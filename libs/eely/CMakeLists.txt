@@ -45,10 +45,12 @@ set(SOURCE_FILES
     include/eely/clip/clip_impl_acl.h
     include/eely/clip/clip_impl_base.h
     include/eely/clip/clip_impl_fixed.h
+    include/eely/clip/clip_impl_fixed_seek.h
     include/eely/clip/clip_impl_none.h
     include/eely/clip/clip_player_acl.h
     include/eely/clip/clip_player_base.h
     include/eely/clip/clip_player_fixed.h
+    include/eely/clip/clip_player_fixed_seek.h
     include/eely/clip/clip_player_none.h
     include/eely/clip/clip_uncooked.h
     include/eely/clip/clip_utils.h
@@ -122,9 +124,11 @@ set(SOURCE_FILES
     src/eely/clip/clip_cursor.cpp
     src/eely/clip/clip_impl_acl.cpp
     src/eely/clip/clip_impl_fixed.cpp
+    src/eely/clip/clip_impl_fixed_seek.cpp
     src/eely/clip/clip_impl_none.cpp
     src/eely/clip/clip_player_acl.cpp
     src/eely/clip/clip_player_fixed.cpp
+    src/eely/clip/clip_player_fixed_seek.cpp
     src/eely/clip/clip_player_none.cpp
     src/eely/clip/clip_uncooked.cpp
     src/eely/clip/clip_utils.cpp

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Sandbox adapter: argument-less mktemp on macOS ignores TMPDIR and points at
+# /var/folders, which this sandbox blocks. Handle that form inside the
+# sandbox-writable TMPDIR; forward every other invocation to the real mktemp.
+if [ "$#" -eq 0 ]; then
+  dir=${TMPDIR:-/tmp}
+  path="$dir/tmp.$$.$RANDOM$RANDOM"
+  (umask 077 && : > "$path") || exit 1
+  printf '%s\n' "$path"
+  exit 0
+fi
+# Strip this wrapper directory from PATH so the real binary is found.
+real_path=$(printf '%s' "$PATH" | awk -v RS=: -v ORS=: '$0 != "'"$PWD"'/.task-build/bin"'" {print}')
+real_path=${real_path%:}
+exec env PATH="$real_path" mktemp "$@"
