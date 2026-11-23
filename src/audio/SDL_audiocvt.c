@@ -24,6 +24,7 @@
 
 #include "SDL_audioqueue.h"
 #include "SDL_audioresample.h"
+#include "SDL_audiotap.h"
 
 #ifndef SDL_INT_MAX
 #define SDL_INT_MAX ((int)(~0u>>1))
@@ -493,6 +494,10 @@ bool SDL_SetAudioStreamGetCallback(SDL_AudioStream *stream, SDL_AudioStreamCallb
         return SDL_InvalidParamError("stream");
     }
 
+    if (stream->is_tap) {
+        return SDL_SetError("Audio stream taps cannot have get callbacks");
+    }
+
     SDL_LockMutex(stream->lock);
     stream->get_callback = callback;
     stream->get_callback_userdata = userdata;
@@ -504,6 +509,10 @@ bool SDL_SetAudioStreamPutCallback(SDL_AudioStream *stream, SDL_AudioStreamCallb
 {
     CHECK_PARAM(!stream) {
         return SDL_InvalidParamError("stream");
+    }
+
+    if (stream->is_tap) {
+        return SDL_SetError("Audio stream taps cannot have put callbacks");
     }
 
     SDL_LockMutex(stream->lock);
@@ -599,6 +608,12 @@ bool SDL_SetAudioStreamFormat(SDL_AudioStream *stream, const SDL_AudioSpec *src_
 
     SDL_LockMutex(stream->lock);
 
+    // A tap's input end mirrors its producer; it cannot be reconfigured directly.
+    if (stream->is_tap && src_spec) {
+        SDL_UnlockMutex(stream->lock);
+        return SDL_SetError("The input format of an audio stream tap cannot be changed");
+    }
+
     // quietly refuse to change the format of the end currently bound to a device.
     if (stream->bound_device) {
         if (stream->bound_device->physical_device->recording) {
@@ -614,6 +629,25 @@ bool SDL_SetAudioStreamFormat(SDL_AudioStream *stream, const SDL_AudioSpec *src_
             stream->src_chmap = NULL;
         }
         SDL_copyp(&stream->src_spec, src_spec);
+
+        // Taps follow the producer's input end; keep their source spec in sync.
+        // Tap locks are taken in the fixed producer -> tap order, the same
+        // order used by the Put fan-out, so this cannot deadlock.
+        if (!stream->is_tap) {
+            for (SDL_AudioStream *tap = stream->tap_next; tap; tap = tap->tap_next) {
+                SDL_LockMutex(tap->lock);
+            }
+            for (SDL_AudioStream *tap = stream->tap_next; tap; tap = tap->tap_next) {
+                if (src_spec->channels != tap->src_spec.channels) {
+                    SDL_free(tap->src_chmap);
+                    tap->src_chmap = NULL;
+                }
+                SDL_copyp(&tap->src_spec, src_spec);
+            }
+            for (SDL_AudioStream *tap = stream->tap_next; tap; tap = tap->tap_next) {
+                SDL_UnlockMutex(tap->lock);
+            }
+        }
     }
 
     if (dst_spec) {
@@ -633,6 +667,10 @@ bool SetAudioStreamChannelMap(SDL_AudioStream *stream, const SDL_AudioSpec *spec
 {
     CHECK_PARAM(!stream) {
         return SDL_InvalidParamError("stream");
+    }
+
+    if (isinput && stream->is_tap) {
+        return SDL_SetError("The input channel map of an audio stream tap cannot be changed");
     }
 
     bool result = true;
@@ -662,6 +700,26 @@ bool SetAudioStreamChannelMap(SDL_AudioStream *stream, const SDL_AudioSpec *spec
         } else {
             SDL_free(*stream_chmap);
             *stream_chmap = NULL;
+        }
+    }
+
+    // Taps follow the producer's input channel map. Tap locks use the fixed
+    // producer -> tap order, matching every other fan-out operation.
+    if (result && isinput && !stream->is_tap) {
+        for (SDL_AudioStream *tap = stream->tap_next; tap; tap = tap->tap_next) {
+            SDL_LockMutex(tap->lock);
+        }
+        for (SDL_AudioStream *tap = stream->tap_next; tap; tap = tap->tap_next) {
+            int *dupmap = SDL_ChannelMapDup(stream->src_chmap, channels);
+            if (stream->src_chmap && !dupmap) {
+                result = SDL_SetError("Out of memory");
+                break;
+            }
+            SDL_free(tap->src_chmap);
+            tap->src_chmap = dupmap;
+        }
+        for (SDL_AudioStream *tap = stream->tap_next; tap; tap = tap->tap_next) {
+            SDL_UnlockMutex(tap->lock);
         }
     }
 
@@ -796,20 +854,36 @@ static bool CheckAudioStreamIsFullySetup(SDL_AudioStream *stream)
 // you MUST hold `stream->lock` when calling this, and validate your parameters!
 static bool PutAudioStreamBufferInternal(SDL_AudioStream *stream, const SDL_AudioSpec *spec, const int *chmap, const void *buf, int len, SDL_ReleaseAudioBufferCallback callback, void *userdata)
 {
+    // Sample availability before anything is queued, so the put callback sees
+    // the real delta. This must precede the tap fan-out below.
+    const int prev_available = stream->put_callback ? SDL_GetAudioStreamAvailable(stream) : 0;
+
+    bool handled = false;
+
+    // A producer with live taps shares one backing copy of the PCM with every
+    // consumer; taps can never be written to directly.
+    if (!stream->is_tap) {
+        if (!SDL_FanOutTapPut(stream, spec, chmap, buf, len, callback, userdata, &handled)) {
+            return false;
+        }
+    }
+
     SDL_AudioTrack *track = NULL;
 
-    if (callback) {
-        track = SDL_CreateAudioTrack(stream->queue, spec, chmap, (Uint8 *)buf, len, len, callback, userdata);
+    if (handled) {
+        // The fan-out already queued the producer's shared track.
+    } else if (callback) {
+        track = SDL_CreateAudioTrack(stream->queue, spec, chmap, (Uint8 *)(uintptr_t)buf, len, len, callback, userdata);
         if (!track) {
             return false;
         }
     }
 
-    const int prev_available = stream->put_callback ? SDL_GetAudioStreamAvailable(stream) : 0;
-
     bool retval = true;
 
-    if (track) {
+    if (handled) {
+        // nothing more to queue for this stream.
+    } else if (track) {
         SDL_AddTrackToAudioQueue(stream->queue, track);
     } else {
         retval = SDL_WriteToAudioQueue(stream->queue, spec, chmap, (const Uint8 *)buf, len);
@@ -832,6 +906,11 @@ static bool PutAudioStreamBuffer(SDL_AudioStream *stream, const void *buf, int l
 #endif
 
     SDL_LockMutex(stream->lock);
+
+    if (stream->is_tap) {
+        SDL_UnlockMutex(stream->lock);
+        return SDL_SetError("Audio stream taps cannot receive data directly");
+    }
 
     if (!CheckAudioStreamIsFullySetup(stream)) {
         SDL_UnlockMutex(stream->lock);
@@ -989,6 +1068,10 @@ bool SDL_PutAudioStreamPlanarData(SDL_AudioStream *stream, const void * const *c
         return SDL_InvalidParamError("num_samples");
     }
 
+    if (stream->is_tap) {
+        return SDL_SetError("Audio stream taps cannot receive data directly");
+    }
+
     if (num_samples == 0) {
         return true; // nothing to do.
     }
@@ -1085,6 +1168,9 @@ bool SDL_FlushAudioStream(SDL_AudioStream *stream)
 
     SDL_LockMutex(stream->lock);
     SDL_FlushAudioQueue(stream->queue);
+    if (!stream->is_tap) {
+        SDL_FanOutTapFlush(stream);
+    }
     SDL_UnlockMutex(stream->lock);
 
     return true;
@@ -1502,6 +1588,9 @@ bool SDL_ClearAudioStream(SDL_AudioStream *stream)
 
     SDL_LockMutex(stream->lock);
 
+    // Clearing only drops this consumer's own queued audio and history;
+    // future producer submissions still arrive, and sibling consumers are
+    // untouched. Shared buffers stay alive until every other consumer moves on.
     SDL_ClearAudioQueue(stream->queue);
     SDL_zero(stream->input_spec);
     stream->input_chmap = NULL;
@@ -1515,6 +1604,10 @@ void SDL_DestroyAudioStream(SDL_AudioStream *stream)
 {
     if (!stream) {
         return;
+    }
+
+    if (SDL_DestroyAudioStreamTap(stream)) {
+        return;  // taps have their own teardown and no device binding
     }
 
     SDL_DestroyProperties(stream->props);
@@ -1531,11 +1624,50 @@ void SDL_DestroyAudioStream(SDL_AudioStream *stream)
         SDL_UnbindAudioStream(stream);
     }
 
+    // The producer goes away, but its taps keep draining the audio they
+    // already accepted. Shared NoCopy buffers stay referenced by the taps,
+    // so their release callbacks still wait for the last consumer.
+    SDL_OrphanAudioStreamTaps(stream);
+
     SDL_aligned_free(stream->work_buffer);
     SDL_DestroyAudioQueue(stream->queue);
     SDL_DestroyMutex(stream->lock);
 
     SDL_free(stream);
+}
+
+SDL_AudioStream *SDL_CreateAudioStreamTap(SDL_AudioStream *producer, const SDL_AudioSpec *dst_spec)
+{
+    CHECK_PARAM(!producer) {
+        return (SDL_AudioStream *)SDL_InvalidParamError("producer");
+    }
+    CHECK_PARAM(!dst_spec) {
+        return (SDL_AudioStream *)SDL_InvalidParamError("dst_spec");
+    }
+    CHECK_PARAM(!SDL_IsSupportedAudioFormat(dst_spec->format)) {
+        return (SDL_AudioStream *)SDL_InvalidParamError("dst_spec->format");
+    }
+    CHECK_PARAM(!SDL_IsSupportedChannelCount(dst_spec->channels)) {
+        return (SDL_AudioStream *)SDL_InvalidParamError("dst_spec->channels");
+    }
+    CHECK_PARAM(dst_spec->freq <= 0) {
+        return (SDL_AudioStream *)SDL_InvalidParamError("dst_spec->freq");
+    }
+
+    SDL_ChooseAudioConverters();
+    SDL_SetupAudioResampler();
+
+    if (producer->is_tap) {
+        SDL_SetError("Cannot create a tap from another audio stream tap");
+        return NULL;
+    }
+
+    if (producer->src_spec.format == SDL_AUDIO_UNKNOWN) {
+        SDL_SetError("The producer stream has no input format");
+        return NULL;
+    }
+
+    return SDL_CreateAudioStreamTapInternal(producer, dst_spec);
 }
 
 bool SDL_ConvertAudioSamples(const SDL_AudioSpec *src_spec, const Uint8 *src_data, int src_len, const SDL_AudioSpec *dst_spec, Uint8 **dst_data, int *dst_len)

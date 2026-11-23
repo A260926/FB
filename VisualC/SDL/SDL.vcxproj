@@ -430,6 +430,7 @@
     <ClInclude Include="..\..\src\audio\SDL_sysaudio.h" />
     <ClInclude Include="..\..\src\audio\SDL_audioqueue.h" />
     <ClInclude Include="..\..\src\audio\SDL_audioresample.h" />
+    <ClInclude Include="..\..\src\audio\SDL_audiotap.h" />
     <ClInclude Include="..\..\src\audio\SDL_wave.h" />
     <ClInclude Include="..\..\src\audio\wasapi\SDL_wasapi.h" />
     <ClInclude Include="..\..\src\camera\SDL_camera_c.h" />
@@ -768,6 +769,7 @@
     <ClCompile Include="..\..\src\audio\SDL_audiotypecvt.c" />
     <ClCompile Include="..\..\src\audio\SDL_audioqueue.c" />
     <ClCompile Include="..\..\src\audio\SDL_audioresample.c" />
+    <ClCompile Include="..\..\src\audio\SDL_audiotap.c" />
     <ClCompile Include="..\..\src\audio\SDL_mixer.c" />
     <ClCompile Include="..\..\src\audio\SDL_wave.c" />
     <ClCompile Include="..\..\src\audio\wasapi\SDL_wasapi.c" />

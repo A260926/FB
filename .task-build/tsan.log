@@ -1,0 +1,24 @@
+CASE fanout basic_three_way checks=11
+CASE fanout all_three_put_kinds checks=13
+CASE fanout late_join checks=12
+CASE fanout independent_gain checks=766
+CASE fanout independent_frequency_ratio checks=16
+CASE fanout input_channel_map checks=142
+CASE fanout slow_tap_clear checks=15
+CASE fanout threaded_put_get_overlap checks=17
+CASE fanout destroy_orders checks=15
+CASE fanout producer_callbacks checks=11
+GROUP fanout cases=10 checks=1018 COMPLETE
+CASE ownership nocopy_single_callback checks=38
+CASE ownership bounded_memory_growth checks=105
+CASE ownership illegal_tap_writes checks=18
+CASE ownership submit_failure_rollback checks=26
+CASE ownership clear_isolation checks=9
+GROUP ownership cases=5 checks=196 COMPLETE
+CASE conversion noninteger_rate checks=13
+CASE conversion input_format_switch checks=15
+CASE conversion channel_count_switch checks=14
+CASE conversion short_flushed_tails checks=85
+CASE conversion refill_after_flush checks=27
+GROUP conversion cases=5 checks=154 COMPLETE
+TARGET_COMPLETE cases=20

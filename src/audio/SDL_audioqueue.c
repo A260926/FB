@@ -43,6 +43,10 @@ struct SDL_AudioTrack
     void *userdata;
     SDL_ReleaseAudioBufferCallback callback;
 
+    // For shared queues, `shared` owns the backing PCM and the release
+    // callback; the fields above are unused in that case.
+    SDL_SharedAudioBuffer *shared;
+
     Uint8 *data;
     size_t head;
     size_t tail;
@@ -62,6 +66,8 @@ struct SDL_AudioQueue
 
     SDL_MemoryPool track_pool;
     SDL_MemoryPool chunk_pool;
+
+    bool shared;  // true once this queue belongs to a tap fan-out and only holds shared tracks
 };
 
 // Allocate a new block, avoiding checking for ones already in the pool
@@ -168,9 +174,23 @@ SDL_AudioQueue *SDL_CreateAudioQueue(size_t chunk_size)
     return queue;
 }
 
+void SDL_SetAudioQueueShared(SDL_AudioQueue *queue)
+{
+    queue->shared = true;
+}
+
+bool SDL_IsAudioQueueShared(const SDL_AudioQueue *queue)
+{
+    return queue->shared;
+}
+
 static void DestroyAudioTrack(SDL_AudioQueue *queue, SDL_AudioTrack *track)
 {
-    track->callback(track->userdata, track->data, (int)track->capacity);
+    if (track->shared) {
+        SDL_UnrefSharedAudioBuffer(track->shared);
+    } else {
+        track->callback(track->userdata, track->data, (int)track->capacity);
+    }
 
     FreeMemoryPoolBlock(&queue->track_pool, track);
 }
@@ -257,6 +277,160 @@ SDL_AudioTrack *SDL_CreateAudioTrack(
     track->capacity = capacity;
 
     return track;
+}
+
+static void SDLCALL FreeSharedAudioBufferData(void *userdata, const void *buf, int len)
+{
+    (void)userdata;
+    (void)len;
+    SDL_free((void *)buf);
+}
+
+SDL_SharedAudioBuffer *SDL_CreateSharedAudioBuffer(Uint8 *data, size_t len, size_t capacity,
+                                                    SDL_ReleaseAudioBufferCallback callback, void *userdata)
+{
+    SDL_SharedAudioBuffer *buffer = (SDL_SharedAudioBuffer *)SDL_calloc(1, sizeof(*buffer));
+    if (!buffer) {
+        return NULL;
+    }
+
+    buffer->data = data;
+    buffer->len = len;
+    buffer->capacity = capacity;
+    buffer->callback = callback;
+    buffer->userdata = userdata;
+    SDL_SetAtomicInt(&buffer->refcount, 1);
+
+    return buffer;
+}
+
+SDL_SharedAudioBuffer *SDL_CreateSharedAudioBufferCopy(const void *data, size_t len)
+{
+    if (len == 0) {
+        return NULL;
+    }
+
+    Uint8 *copy = (Uint8 *)SDL_malloc(len);
+    if (!copy) {
+        return NULL;
+    }
+    SDL_memcpy(copy, data, len);
+
+    SDL_SharedAudioBuffer *buffer = SDL_CreateSharedAudioBuffer(copy, len, len, FreeSharedAudioBufferData, NULL);
+    if (!buffer) {
+        SDL_free(copy);
+        return NULL;
+    }
+    buffer->owns_data = true;
+
+    return buffer;
+}
+
+SDL_SharedAudioBuffer *SDL_RefSharedAudioBuffer(SDL_SharedAudioBuffer *buffer)
+{
+    if (buffer) {
+        SDL_AtomicIncRef(&buffer->refcount);
+    }
+    return buffer;
+}
+
+void SDL_UnrefSharedAudioBuffer(SDL_SharedAudioBuffer *buffer)
+{
+    if (!buffer) {
+        return;
+    }
+
+    if (SDL_AtomicDecRef(&buffer->refcount)) {
+        if (buffer->callback) {
+            buffer->callback(buffer->userdata, buffer->data, (int)buffer->capacity);
+        }
+        SDL_free(buffer);
+    }
+}
+
+void SDL_DropUnusedSharedAudioBuffer(SDL_SharedAudioBuffer *buffer)
+{
+    if (!buffer) {
+        return;
+    }
+
+    // Nothing else ever referenced this buffer. Copied PCM must be freed here;
+    // borrowed/NoCopy data still belongs to the caller, so leave it untouched.
+    // The release callback is never run for a submission that never landed.
+    SDL_assert(SDL_GetAtomicInt(&buffer->refcount) == 1);
+    if (buffer->owns_data) {
+        SDL_free(buffer->data);
+    }
+    SDL_free(buffer);
+}
+
+SDL_AudioTrack *SDL_CreateSharedAudioTrack(SDL_AudioQueue *queue,
+                                           const SDL_AudioSpec *spec, const int *chmap,
+                                           SDL_SharedAudioBuffer *buffer, size_t head)
+{
+    SDL_assert(SDL_IsAudioQueueShared(queue));
+
+    SDL_AudioTrack *track = (SDL_AudioTrack *)AllocMemoryPoolBlock(&queue->track_pool);
+
+    if (!track) {
+        return NULL;
+    }
+
+    SDL_zerop(track);
+
+    if (chmap) {
+        SDL_assert(SDL_arraysize(track->chmap_storage) >= spec->channels);
+        SDL_memcpy(track->chmap_storage, chmap, sizeof (*chmap) * spec->channels);
+        track->chmap = track->chmap_storage;
+    }
+
+    SDL_copyp(&track->spec, spec);
+
+    track->shared = SDL_RefSharedAudioBuffer(buffer);
+    track->data = buffer->data;
+    track->head = head;
+    track->tail = buffer->len;
+    track->capacity = buffer->capacity;
+
+    return track;
+}
+
+bool SDL_FanOutSharedTrack(SDL_AudioQueue **queues, int num_queues,
+                           const SDL_AudioSpec *spec, const int *chmap,
+                           SDL_SharedAudioBuffer *buffer, const size_t *heads)
+{
+    if (num_queues <= 0) {
+        return true;
+    }
+
+    SDL_AudioTrack **tracks = (SDL_AudioTrack **)SDL_malloc(sizeof(*tracks) * (size_t)num_queues);
+    if (!tracks) {
+        return false;
+    }
+
+    // Create every track first, so a failed allocation leaves all queues untouched.
+    int created = 0;
+    for (int i = 0; i < num_queues; ++i) {
+        const size_t head = heads ? heads[i] : 0;
+        tracks[created] = SDL_CreateSharedAudioTrack(queues[i], spec, chmap, buffer, head);
+        if (!tracks[created]) {
+            for (int j = 0; j < created; ++j) {
+                SDL_UnrefSharedAudioBuffer(tracks[j]->shared);
+                FreeMemoryPoolBlock(&queues[j]->track_pool, tracks[j]);
+            }
+            SDL_free(tracks);
+            return false;
+        }
+        ++created;
+    }
+
+    // All tracks exist; commit them to the queues.
+    for (int i = 0; i < num_queues; ++i) {
+        SDL_AddTrackToAudioQueue(queues[i], tracks[i]);
+    }
+
+    SDL_free(tracks);
+    return true;
 }
 
 static void SDLCALL FreeChunkedAudioBuffer(void *userdata, const void *buf, int len)

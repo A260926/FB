@@ -123,6 +123,7 @@ SDL_DYNAPI_PROC(void,SDL_CopyGPUTextureToTexture,(SDL_GPUCopyPass *a, const SDL_
 SDL_DYNAPI_PROC(bool,SDL_CopyProperties,(SDL_PropertiesID a, SDL_PropertiesID b),(a,b),return)
 SDL_DYNAPI_PROC(bool,SDL_CopyStorageFile,(SDL_Storage *a, const char *b, const char *c),(a,b,c),return)
 SDL_DYNAPI_PROC(SDL_AudioStream*,SDL_CreateAudioStream,(const SDL_AudioSpec *a, const SDL_AudioSpec *b),(a,b),return)
+SDL_DYNAPI_PROC(SDL_AudioStream*,SDL_CreateAudioStreamTap,(SDL_AudioStream *a, const SDL_AudioSpec *b),(a,b),return)
 SDL_DYNAPI_PROC(SDL_Cursor*,SDL_CreateColorCursor,(SDL_Surface *a, int b, int c),(a,b,c),return)
 SDL_DYNAPI_PROC(SDL_Condition*,SDL_CreateCondition,(void),(),return)
 SDL_DYNAPI_PROC(SDL_Cursor*,SDL_CreateCursor,(const Uint8 *a, const Uint8 *b, int c, int d, int e, int f),(a,b,c,d,e,f),return)

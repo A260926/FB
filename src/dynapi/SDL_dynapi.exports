@@ -76,6 +76,7 @@ _SDL_CopyGPUTextureToTexture
 _SDL_CopyProperties
 _SDL_CopyStorageFile
 _SDL_CreateAudioStream
+_SDL_CreateAudioStreamTap
 _SDL_CreateColorCursor
 _SDL_CreateCondition
 _SDL_CreateCursor

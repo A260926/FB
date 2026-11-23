@@ -2203,6 +2203,8 @@ bool SDL_BindAudioStreams(SDL_AudioDeviceID devid, SDL_AudioStream * const *stre
                     result = SDL_SetError("Stream #%d is already bound to a device", i);
                 } else if (stream->simplified) {  // You can get here if you closed the device instead of destroying the stream.
                     result = SDL_SetError("Cannot change binding on a stream created with SDL_OpenAudioDeviceStream");
+                } else if (stream->is_tap) {
+                    result = SDL_SetError("Audio stream taps cannot be bound to a device");
                 }
             }
 

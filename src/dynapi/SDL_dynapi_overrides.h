@@ -102,6 +102,7 @@
 #define SDL_CopyProperties SDL_CopyProperties_REAL
 #define SDL_CopyStorageFile SDL_CopyStorageFile_REAL
 #define SDL_CreateAudioStream SDL_CreateAudioStream_REAL
+#define SDL_CreateAudioStreamTap SDL_CreateAudioStreamTap_REAL
 #define SDL_CreateColorCursor SDL_CreateColorCursor_REAL
 #define SDL_CreateCondition SDL_CreateCondition_REAL
 #define SDL_CreateCursor SDL_CreateCursor_REAL

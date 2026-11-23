@@ -1133,6 +1133,59 @@ extern SDL_DECLSPEC SDL_AudioDeviceID SDLCALL SDL_GetAudioStreamDevice(SDL_Audio
 extern SDL_DECLSPEC SDL_AudioStream * SDLCALL SDL_CreateAudioStream(const SDL_AudioSpec *src_spec, const SDL_AudioSpec *dst_spec);
 
 /**
+ * Create a tap on an audio stream.
+ *
+ * A tap is a read-only audio stream that receives a copy of every buffer
+ * submitted to its producer stream, independently converted to its own
+ * destination format. This lets one decoded track feed, for example, both
+ * local playback and a recording conversion at a different sample rate.
+ *
+ * The producer must be an ordinary audio stream; taps cannot themselves be
+ * tapped. A tap cannot have data put into it, and its input format, input
+ * channel map, put callback and get callback cannot be configured; its
+ * output end, gain, frequency ratio and read position are fully independent.
+ *
+ * The tap starts receiving audio with the next successful
+ * SDL_PutAudioStreamData() call on the producer; audio that was already
+ * queued before the tap was created is not delivered retroactively. Every
+ * later producer submission (including NoCopy and planar data), flush, and
+ * input format or channel map change is reflected in every live tap. The
+ * producer's own reading and callback behavior is unchanged, and data read
+ * out of a tap is never fed back into the producer.
+ *
+ * Submitted PCM keeps a single shared backing between the producer and its
+ * taps; only per-stream metadata, filter history and conversion work space
+ * scale with the number of taps. The completion callback of a
+ * SDL_PutAudioStreamDataNoCopy() buffer runs exactly once, after the
+ * producer and every tap have released it, even if the producer has already
+ * been destroyed.
+ *
+ * Clearing a tap with SDL_ClearAudioStream() only discards that tap's own
+ * queued audio and history; future submissions still reach it and other
+ * consumers are unaffected. Destroying a tap merely removes that consumer.
+ * If the producer is destroyed first, its surviving taps continue to drain
+ * the audio they already accepted, following the producer's final flush.
+ *
+ * \param producer an ordinary (non-tap) audio stream to tap into.
+ * \param dst_spec the format details of the tap's output audio.
+ * \returns a new tap audio stream on success or NULL on failure; call
+ *          SDL_GetError() for more information.
+ *
+ * \threadsafety It is safe to call this function from any thread. For any
+ *               given stream, control calls, submissions and tap
+ *               creation/destruction should be serialized on one thread,
+ *               while another thread may read data from any of the streams.
+ *
+ * \since This function is available since SDL 3.5.0.
+ *
+ * \sa SDL_CreateAudioStream
+ * \sa SDL_PutAudioStreamData
+ * \sa SDL_GetAudioStreamData
+ * \sa SDL_DestroyAudioStream
+ */
+extern SDL_DECLSPEC SDL_AudioStream * SDLCALL SDL_CreateAudioStreamTap(SDL_AudioStream *producer, const SDL_AudioSpec *dst_spec);
+
+/**
  * Get the properties associated with an audio stream.
  *
  * The application can hang any data it wants here, but the following

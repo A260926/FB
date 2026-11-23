@@ -148,6 +148,7 @@ add_sdl_example_executable(audio-simple-playback-callback SOURCES audio/02-simpl
 add_sdl_example_executable(audio-load-wav SOURCES audio/03-load-wav/load-wav.c DATAFILES ${CMAKE_CURRENT_SOURCE_DIR}/../test/sample.wav)
 add_sdl_example_executable(audio-multiple-streams SOURCES audio/04-multiple-streams/multiple-streams.c DATAFILES ${CMAKE_CURRENT_SOURCE_DIR}/../test/sample.wav ${CMAKE_CURRENT_SOURCE_DIR}/../test/sword.wav)
 add_sdl_example_executable(audio-planar-data SOURCES audio/05-planar-data/planar-data.c)
+add_sdl_example_executable(audio-tap SOURCES audio/tap.c)
 add_sdl_example_executable(input-joystick-polling SOURCES input/01-joystick-polling/joystick-polling.c)
 add_sdl_example_executable(input-joystick-events SOURCES input/02-joystick-events/joystick-events.c)
 add_sdl_example_executable(input-gamepad-polling SOURCES input/03-gamepad-polling/gamepad-polling.c DATAFILES ${CMAKE_CURRENT_SOURCE_DIR}/../test/gamepad_front.png)

@@ -543,6 +543,9 @@
     <ClInclude Include="..\..\src\audio\SDL_audioresample.h">
       <Filter>audio</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\audio\SDL_audiotap.h">
+      <Filter>audio</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\core\windows\SDL_directx.h">
       <Filter>core\windows</Filter>
     </ClInclude>
@@ -1430,6 +1433,9 @@
       <Filter>audio</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\audio\SDL_audioresample.c">
+      <Filter>audio</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio\SDL_audiotap.c">
       <Filter>audio</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\audio\SDL_wave.c">

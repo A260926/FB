@@ -242,6 +242,13 @@ struct SDL_AudioStream
 
     SDL_AudioStream *prev;  // linked list of all existing streams (so we can free them on shutdown).
     SDL_AudioStream *next;  // linked list of all existing streams (so we can free them on shutdown).
+
+    // SDL_CreateAudioStreamTap() state.
+    bool is_tap;
+    bool has_taps;       // ordinary streams: true while at least one tap exists
+    SDL_AudioStream *tap_producer;  // taps: the ordinary stream this tap follows; NULL once orphaned
+    SDL_AudioStream *tap_next;      // producer: linked list of its taps
+    SDL_AudioStream *tap_prev;
 };
 
 /* Logical devices are an abstraction in SDL3; you can open the same physical
