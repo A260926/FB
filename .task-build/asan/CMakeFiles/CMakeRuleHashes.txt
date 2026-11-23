@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+1ba6a36db47973c01919d2016f37f2c5 docs/CMakeFiles/info
+a52000a42315b114eb86c783d75ad8da docs/mikmod.html
+cc8ef2ad6794ca831117c6a03351f6be docs/mikmod.info

@@ -1,0 +1,51 @@
+-- The C compiler identification is AppleClang 21.0.0.21000334
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found PkgConfig: /opt/homebrew/bin/pkg-config (found version "3.0.10")
+-- Performing Test FLAG_EXISTS_1
+-- Performing Test FLAG_EXISTS_1 - Success
+-- Performing Test FLAG_EXISTS_2
+-- Performing Test FLAG_EXISTS_2 - Success
+-- Performing Test FLAG_EXISTS_3
+-- Performing Test FLAG_EXISTS_3 - Success
+-- Performing Test HAVE_C_INLINE
+-- Performing Test HAVE_C_INLINE - Success
+-- Performing Test HAVE_C___INLINE__
+-- Performing Test HAVE_C___INLINE__ - Success
+-- Performing Test HAVE_C___INLINE
+-- Performing Test HAVE_C___INLINE - Success
+-- Performing Test HAVE_VISIBILITY
+-- Performing Test HAVE_VISIBILITY - Success
+-- Looking for dlfcn.h
+-- Looking for dlfcn.h - found
+-- Looking for fcntl.h
+-- Looking for fcntl.h - found
+-- Looking for limits.h
+-- Looking for limits.h - found
+-- Looking for malloc.h
+-- Looking for malloc.h - not found
+-- Looking for memory.h
+-- Looking for memory.h - found
+-- Looking for sys/ioctl.h
+-- Looking for sys/ioctl.h - found
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+-- Looking for windows.h
+-- Looking for windows.h - not found
+-- Looking for posix_memalign
+-- Looking for posix_memalign - found
+-- Looking for setenv
+-- Looking for setenv - found
+-- Looking for snprintf
+-- Looking for snprintf - found
+-- Looking for srandom
+-- Looking for srandom - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Configuring done (5.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FSD7A17B969349U15392/attempts/20261123T164222793995Z/repo/.task-build/asan

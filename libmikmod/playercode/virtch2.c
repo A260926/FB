@@ -117,13 +117,35 @@ typedef struct VINFO {
 	SLONGLONG increment;         /* increment value */
 } VINFO;
 
+/* Departing voice state kept while a retrigger crossfade is running. */
+typedef struct VFADE {
+	int       running;           /* =1 -> a departing state is being mixed */
+	int       len;               /* crossfade length in output frames */
+	int       pos;               /* next output frame index (j) */
+	SWORD     handle;            /* sample handle the buffer came from */
+	SWORD    *data;              /* buffer generation held by this fade */
+	void     *token;             /* VC_GEN reference owned by this fade */
+	VINFO     dep;               /* departing voice playback state */
+} VFADE;
+
 static	SWORD **Samples;
 static	VINFO *vinf=NULL,*vnf;
+static	SWORD *vc_add_srce=NULL;
+static	VFADE *vfd=NULL;
 static	long tickleft,samplesthatfit,vc_memory=0;
 static	int vc_softchn;
 static	SLONGLONG idxsize,idxlpos,idxlend;
 static	SLONG *vc_tickbuf=NULL;
 static	UWORD vc_mode;
+
+#define VC_FADE_HAS_CLICK 1
+
+void VC2_FadeSampleRef(SWORD handle);
+void VC2_FadeSampleUnref(SWORD handle);
+void VC2_FadeSampleUnload(SWORD handle);
+void VC2_FadeReleaseAll(void);
+static void VC2_FadeOnPlay(UBYTE voice);
+static void VC2_FadeOnStop(UBYTE voice);
 
 #ifdef _MSC_VER
 /* Weird bug in compiler */ /* FIXME is this still needed? */
@@ -1003,7 +1025,7 @@ static void AddChannel(SLONG* ptr,NATIVE todo)
 	SLONGLONG end,done;
 	SWORD *s;
 
-	if(!(s=Samples[vnf->handle])) {
+	if(!(s=vc_add_srce)) {
 		vnf->current = vnf->active  = 0;
 		vnf->lastvalL = vnf->lastvalR = 0;
 		return;
@@ -1142,9 +1164,26 @@ static void AddChannel(SLONG* ptr,NATIVE todo)
 #define VC1_SampleSpace       VC2_SampleSpace
 #define VC1_SampleLength      VC2_SampleLength
 #define VC1_VoiceRealVolume   VC2_VoiceRealVolume
+#define VC1_FadeOnPlay        VC2_FadeOnPlay
+#define VC1_FadeOnStop        VC2_FadeOnStop
 
 #include "virtch_common.c"
 #undef _IN_VIRTCH_
+
+/*========== Retrigger crossfade entry points (HQ mixer).  The shared
+   virtch_common.c provides VC2_FadeSampleRef/Unref/Unload/ReleaseAll. */
+
+static void VC2_FadeOnPlay(UBYTE voice)
+{
+	if(!vfd || voice>=vc_softchn) return;
+	vc_fade_start(voice);
+}
+
+static void VC2_FadeOnStop(UBYTE voice)
+{
+	if(!vfd || voice>=vc_softchn) return;
+	vc_fade_end(voice);
+}
 
 void VC2_WriteSamples(SBYTE* buf,ULONG todo)
 {
@@ -1170,6 +1209,9 @@ void VC2_WriteSamples(SBYTE* buf,ULONG todo)
 			portion = MIN(left, samplesthatfit);
 			memset(vc_tickbuf,0,portion<<((vc_mode&DMODE_STEREO)?3:2));
 			for(t=0;t<vc_softchn;t++) {
+				VFADE *fd=(vfd)?&vfd[t]:NULL;
+				int fadepart=(fd && fd->running);
+
 				vnf = &vinf[t];
 
 				if(vnf->kick) {
@@ -1178,6 +1220,7 @@ void VC2_WriteSamples(SBYTE* buf,ULONG todo)
 					vnf->active  = 1;
 					vnf->click   = CLICK_BUFFER;
 					vnf->rampvol = 0;
+					if(fadepart) vnf->click=0;
 				}
 
 				if(!vnf->frq) vnf->active = 0;
@@ -1188,6 +1231,8 @@ void VC2_WriteSamples(SBYTE* buf,ULONG todo)
 					if(vnf->flags&SF_REVERSE) vnf->increment=-vnf->increment;
 					vol = vnf->vol;  pan = vnf->pan;
 
+					/* both crossfade ends suppress the control ramp/click */
+					if(fadepart) { vnf->rampvol=0; vnf->click=0; }
 					vnf->oldlvol=vnf->lvolsel;vnf->oldrvol=vnf->rvolsel;
 					if(vc_mode & DMODE_STEREO) {
 						if(pan!=PAN_SURROUND) {
@@ -1202,7 +1247,23 @@ void VC2_WriteSamples(SBYTE* buf,ULONG todo)
 					idxsize=(vnf->size)?((SLONGLONG)(vnf->size)<<FRACBITS)-1:0;
 					idxlend=(vnf->repend)?((SLONGLONG)(vnf->repend)<<FRACBITS)-1:0;
 					idxlpos=(SLONGLONG)(vnf->reppos)<<FRACBITS;
-					AddChannel(vc_tickbuf,portion);
+					vc_add_srce=Samples[vnf->handle];
+					if(fadepart) {
+						memset(vc_fade_bufA,0,portion<<((vc_mode&DMODE_STEREO)?3:2));
+						AddChannel(vc_fade_bufA, portion);
+					} else
+						AddChannel(vc_tickbuf, portion);
+				} else if(fadepart) {
+					memset(vc_fade_bufA,0,portion<<((vc_mode&DMODE_STEREO)?3:2));
+				}
+
+				if(fadepart) {
+					memset(vc_fade_bufB,0,portion<<((vc_mode&DMODE_STEREO)?3:2));
+					if(fd->running) {
+						vc_fade_prepare_dep(fd);
+						AddChannel(vc_fade_bufB, portion);
+					}
+					vc_fade_combine(t,vc_tickbuf,vc_fade_bufA,vc_fade_bufB,portion);
 				}
 			}
 
@@ -1271,6 +1332,8 @@ int VC2_Init(void)
 
 	md_mode |= DMODE_INTERP;
 	vc_mode = md_mode;
+	vc_fade_factor=(int)SAMPLING_FACTOR;
+	vc_fade_configure();
 	return 0;
 }
 
@@ -1355,6 +1418,7 @@ int VC2_SetNumVoices(void)
 		vinf[t].pan=(t&1)?PAN_LEFT:PAN_RIGHT;
 	}
 
+	vc_fade_setup_voices();
 	return 0;
 }
 

@@ -1,0 +1,22 @@
+CASE waveform basic_stereo16 checks=1
+CASE waveform fractional_pan checks=1
+CASE waveform short_bidi_loop checks=1
+CASE waveform reverse_bidi_loop checks=1
+CASE waveform surround_asym checks=2
+CASE waveform hq_four_times checks=2
+CASE waveform formats checks=3
+CASE waveform departing_ends checks=2
+CASE waveform chunk_exact checks=3
+GROUP waveform cases=9 checks=16 COMPLETE
+CASE ownership free_after_play checks=6
+CASE ownership stop_cancels_tail checks=3
+CASE ownership distinct_handles checks=3
+GROUP ownership cases=3 checks=12 COMPLETE
+CASE lifecycle consecutive_play checks=1
+CASE lifecycle replaced_handoff checks=1
+CASE lifecycle two_voices checks=1
+CASE lifecycle position_stopped checks=4
+CASE lifecycle old_already_ended checks=3
+CASE lifecycle disabled_plain checks=1
+GROUP lifecycle cases=6 checks=11 COMPLETE
+TARGET_COMPLETE cases=18

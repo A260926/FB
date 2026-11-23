@@ -65,6 +65,9 @@ MIKMODAPI UBYTE md_sndfxvolume	= 128;	/* volume of sound effects */
 /* INTERNAL GLOBALS */
 UWORD md_bpm = 125;	/* tempo */
 
+/* Retrigger crossfade length in output frames (0 = historical behaviour). */
+ULONG md_retriggerfade = 0;
+
 /* Do not modify the numchn variables yourself!  use MikMod_SetNumVoices() */
 UBYTE md_numchn  = 0, md_sngchn = 0, md_sfxchn = 0;
 UBYTE md_hardchn = 0, md_softchn= 0;
@@ -561,6 +564,14 @@ static int _mm_init(const CHAR *cmdline)
 	_mm_critical=0;
 
 	return 0;
+}
+
+MIKMODAPI int MikMod_SetRetriggerFade(ULONG frames)
+{
+	if(initialized) return 0;
+	if(frames>4096) return 0;
+	md_retriggerfade=frames;
+	return 1;
 }
 
 MIKMODAPI int MikMod_Init(const CHAR *cmdline)

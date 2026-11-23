@@ -691,6 +691,19 @@ extern BOOL S404_Unpack(MREADER*, void**, long*);
 /* max. number of handles a driver has to provide. (not strict) */
 #define MAXSAMPLEHANDLES    384
 
+/*========== Retrigger crossfade support */
+
+/* Configured crossfade length in output frames (0 = disabled).  Set before
+   MikMod_Init() through MikMod_SetRetriggerFade(); the software mixers snapshot
+   it in their own option word at init time. */
+extern ULONG md_retriggerfade;
+
+/* SAMPLE buffer reference accounting.  A sample buffer is owned by its handle
+   slot in the mixer; when the calling application frees the SAMPLE while a
+   departing crossfade still needs the PCM data, the buffer is retired instead
+   of being freed.  The retiring fade holds a reference and drops it when the
+   fade ends, is replaced, or is stopped.  Implemented by the software mixers. */
+
 /* These variables can be changed at ANY time and results will be immediate */
 extern UWORD md_bpm;         /* current song / hardware BPM rate */
 

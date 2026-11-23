@@ -323,6 +323,12 @@ MIKMODAPI extern int    MikMod_Init(const CHAR*);
 MIKMODAPI extern void   MikMod_Exit(void);
 MIKMODAPI extern int    MikMod_Reset(const CHAR*);
 MIKMODAPI extern int    MikMod_SetNumVoices(int,int);
+/* Configure the software mixer's retrigger crossfade length, in output frames.
+   Must be called before MikMod_Init().  0 disables the crossfade (the default
+   and the historical behaviour); 1..4096 is a valid length.  Returns 1 when
+   the setting was accepted, 0 when the library is already initialized or the
+   length is out of range (the previous setting is kept in that case). */
+MIKMODAPI extern int    MikMod_SetRetriggerFade(ULONG);
 MIKMODAPI extern BOOL   MikMod_Active(void);
 MIKMODAPI extern int    MikMod_EnableOutput(void);
 MIKMODAPI extern void   MikMod_DisableOutput(void);

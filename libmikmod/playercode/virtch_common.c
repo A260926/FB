@@ -209,6 +209,304 @@ void VC_SetupPointers(void)
 #ifndef _VIRTCH_COMMON_
 #define _VIRTCH_COMMON_
 
+/*==============================================================================
+  Retrigger crossfade support.
+
+  The mixer keeps a "departing" playback state next to each voice.  When a
+  Voice_Play() retriggers a voice that is already producing PCM, the voice's
+  next-sample cursor is snapshotted (integer/fractional phase, direction, loop
+  bounds, step, effective gains) and the normal mixer machinery is run on that
+  snapshot for the duration of the crossfade.  Both ends are mixed into
+  separate scratch buffers and blended with per-output-frame weights before the
+  down-sampler, the effects and the output callback run, so those stages only
+  advance once.
+
+  Sample buffers are held by generation: a loaded buffer gets a small reference
+  record, the handle slot owns one reference, and each running departing state
+  owns one.  Freeing the SAMPLE while a crossfade still needs the PCM retires
+  the buffer from its handle instead of releasing it; the last reference frees
+  it.  A later load may therefore reuse the same numeric handle without
+  touching the retired generation.
+==============================================================================*/
+
+typedef struct VC_GEN {
+	SWORD *data;
+	int    refs;
+} VC_GEN;
+
+static VC_GEN **vc_gen=NULL;
+static SLONG *vc_fade_bufA=NULL,*vc_fade_bufB=NULL;
+static int    vc_fade_factor=1;
+static ULONG  vc_fade_len=0;
+static int    vfd_count=0;
+
+/* factor used by the mixer that includes this file, for buffer sizing and
+   for translating the configured output-frame length into internal samples. */
+#define VC_FADE_FACTOR  vc_fade_factor
+
+/* Provided by the mixer file that includes this one. */
+static void VC1_FadeOnPlay(UBYTE voice);
+static void VC1_FadeOnStop(UBYTE voice);
+
+static void vc_fade_end(UBYTE voice);
+
+static void vc_gen_release(VC_GEN *g)
+{
+	if(!g) return;
+	if(--g->refs<=0) {
+		MikMod_afree(g->data);
+		MikMod_free(g);
+	}
+}
+
+static void vc_gen_setup(void)
+{
+	if(!vc_fade_len || vc_gen) return;
+	if(!(vc_gen=(VC_GEN**)MikMod_calloc(MAXSAMPLEHANDLES,sizeof(VC_GEN*))))
+		vc_fade_len=0;
+}
+
+static void vc_gen_free_all(void)
+{
+	int i;
+
+	if(!vc_gen) return;
+	for(i=0;i<MAXSAMPLEHANDLES;i++) {
+		if(vc_gen[i]) {
+			MikMod_afree(vc_gen[i]->data);
+			MikMod_free(vc_gen[i]);
+			vc_gen[i]=NULL;
+		}
+	}
+	MikMod_free(vc_gen);
+	vc_gen=NULL;
+}
+
+static void vc_gen_create(SWORD handle,SWORD *data)
+{
+	VC_GEN *g;
+
+	if(!vc_fade_len) return;
+	vc_gen_setup();
+	if(!vc_gen || handle<0 || handle>=MAXSAMPLEHANDLES) return;
+	/* The slot may still reference a retired generation that a departing
+	   voice is reading; leave that object (and the fade's reference) intact
+	   and only make the new generation the slot's owner. */
+	if(!(g=(VC_GEN*)MikMod_calloc(1,sizeof(VC_GEN)))) return;
+	g->data=data;
+	g->refs=1;
+	vc_gen[handle]=g;
+}
+
+/* Take a reference on the buffer currently loaded in 'handle'.  Returns NULL
+   when the crossfade machinery is inactive or no generation record exists. */
+static VC_GEN *vc_gen_acquire(SWORD handle)
+{
+	vc_gen_setup();
+	if(!vc_gen || handle<0 || handle>=MAXSAMPLEHANDLES) return NULL;
+	if(!vc_gen[handle]) return NULL;
+	vc_gen[handle]->refs++;
+	return vc_gen[handle];
+}
+
+/* Called when the driver releases a handle. */
+static void vc_gen_unload(SWORD handle)
+{
+	VC_GEN *g;
+
+	if(!Samples || handle<0 || handle>=MAXSAMPLEHANDLES) return;
+	if(vc_gen && (g=vc_gen[handle])!=NULL) {
+		vc_gen[handle]=NULL;
+		Samples[handle]=NULL;
+		vc_gen_release(g);
+		return;
+	}
+	MikMod_afree(Samples[handle]);
+	Samples[handle]=NULL;
+}
+
+/* Drop the departing state of a voice (if any) and release its reference. */
+static void vc_fade_end(UBYTE voice)
+{
+	VFADE *fd;
+
+	if(!vfd || voice>=vfd_count) return;
+	fd=&vfd[voice];
+	fd->running=0;
+	fd->pos=0;
+	fd->data=NULL;
+	fd->len=0;
+	if(fd->token) {
+		vc_gen_release((VC_GEN*)fd->token);
+		fd->token=NULL;
+	}
+}
+
+static void vc_fade_release_all(void)
+{
+	int t;
+
+	if(!vfd) return;
+	for(t=0;t<vfd_count;t++)
+		vc_fade_end((UBYTE)t);
+}
+
+/* Start (or restart) the departing state for 'voice' from its current next
+   sample position.  Only called when the voice is genuinely producing PCM. */
+static void vc_fade_start(UBYTE voice)
+{
+	VINFO *m;
+	VFADE *fd;
+	VC_GEN *g;
+
+	if(!vfd || !vc_fade_len || voice>=vfd_count) return;
+	m=&vinf[voice];
+	fd=&vfd[voice];
+
+	/* A pending new target has not produced PCM yet: keep the departing
+	   state captured by the previous Play() so consecutive Play() calls on
+	   one output boundary collapse to {pre-batch main, latest target}. */
+	if(m->kick) return;
+
+	if(!m->active) {
+		/* the old voice already ended naturally: plain attack */
+		vc_fade_end(voice);
+		return;
+	}
+
+	/* Pin the main voice's current buffer generation before retiring any
+	   previous departing state, so that a re-entrant replacement on the same
+	   handle keeps the buffer alive. */
+	g=vc_gen_acquire(m->handle);
+	/* Either way the previous departing state is superseded. */
+	vc_fade_end(voice);
+	if(!g) {
+		/* cannot pin the buffer (dead handle): plain attack, no tail */
+		return;
+	}
+
+	fd->dep=*m;
+	fd->dep.active=1;
+	fd->dep.kick=0;
+	fd->dep.rampvol=0;
+#ifdef VC_FADE_HAS_CLICK
+	fd->dep.click=0;
+	fd->dep.lastvalL=fd->dep.lastvalR=0;
+#endif
+	fd->token=g;
+	fd->data=g->data;
+	fd->handle=m->handle;
+	fd->len=(int)vc_fade_len;
+	fd->pos=0;
+	fd->running=1;
+}
+
+/* Set up the shared index globals from the departing state. */
+static void vc_fade_prepare_dep(VFADE *fd)
+{
+	VINFO *dep=&fd->dep;
+
+	vnf=dep;
+	idxsize=(dep->size)?((SLONGLONG)dep->size<<FRACBITS)-1:0;
+	idxlend=(dep->repend)?((SLONGLONG)dep->repend<<FRACBITS)-1:0;
+	idxlpos=(SLONGLONG)dep->reppos<<FRACBITS;
+	vc_add_srce=fd->data;
+}
+
+/* Blend this voice's main and departing scratch buffers into 'dst'.
+   'samples' is the number of internal sample frames (not counting channels);
+   one output frame spans VC_FADE_FACTOR internal frames. */
+static void vc_fade_combine(UBYTE voice,SLONG *dst,const SLONG *nbuf,const SLONG *obuf,int samples)
+{
+	VFADE *fd=&vfd[voice];
+	int per_frame=VC_FADE_FACTOR*((vc_mode&DMODE_STEREO)?2:1);
+	int frames=samples/VC_FADE_FACTOR;
+	int f,s;
+
+	for(f=0;f<frames;f++) {
+		int base=f*per_frame;
+		if(fd->running && fd->pos<fd->len) {
+			SLONGLONG ow=(SLONGLONG)(fd->len-fd->pos);
+			SLONGLONG nw=(SLONGLONG)fd->pos;
+			for(s=0;s<per_frame;s++) {
+				SLONGLONG v=(ow*(SLONGLONG)obuf[base+s] +
+				            nw*(SLONGLONG)nbuf[base+s]) / fd->len;
+				dst[base+s]+=(SLONG)v;
+			}
+			fd->pos++;
+			if(fd->pos>=fd->len) vc_fade_end(voice);
+		} else {
+			for(s=0;s<per_frame;s++)
+				dst[base+s]+=nbuf[base+s];
+		}
+	}
+}
+
+static void vc_fade_buffers_free(void)
+{
+	MikMod_afree(vc_fade_bufA);
+	MikMod_afree(vc_fade_bufB);
+	vc_fade_bufA=vc_fade_bufB=NULL;
+}
+
+static int vc_fade_buffers_alloc(void)
+{
+	if(!vc_fade_len) return 1;
+	if(vc_fade_bufA) return 1;
+	vc_fade_bufA=(SLONG*)MikMod_amalloc((TICKLSIZE+32)*sizeof(SLONG));
+	vc_fade_bufB=(SLONG*)MikMod_amalloc((TICKLSIZE+32)*sizeof(SLONG));
+	if(!vc_fade_bufA || !vc_fade_bufB) {
+		vc_fade_buffers_free();
+		vc_fade_len=0;
+		return 1;
+	}
+	return 0;
+}
+
+static void vc_fade_shutdown(void)
+{
+	vc_fade_release_all();
+	vc_fade_buffers_free();
+	vc_gen_free_all();
+	MikMod_free(vfd);
+	vfd=NULL;
+	vfd_count=0;
+}
+
+/* Snapshot the configured crossfade length for this mixer instance.  Only the
+   C scalar software path is extended: no SIMD and interpolation required. */
+static void vc_fade_configure(void)
+{
+	vc_fade_len=0;
+	if(!md_retriggerfade) return;
+#if defined HAVE_SSE2 || defined HAVE_ALTIVEC
+	return;
+#endif
+	if((md_mode & DMODE_INTERP) /* HQ always sets it */)
+		vc_fade_len=(md_retriggerfade>4096)?4096:md_retriggerfade;
+}
+
+/* (Re)allocate the per-voice departing state table. */
+static void vc_fade_setup_voices(void)
+{
+	int t;
+
+	vc_fade_release_all();
+	MikMod_free(vfd);
+	vfd=NULL;
+	vfd_count=0;
+	if(!vc_fade_len) return;
+	if(!(vfd=(VFADE*)MikMod_calloc(vc_softchn?vc_softchn:1,sizeof(VFADE)))) {
+		vc_fade_len=0;
+		return;
+	}
+	vfd_count=vc_softchn;
+	for(t=0;t<vc_softchn;t++)
+		vfd[t].dep.active=0;
+	vc_gen_setup();
+	vc_fade_buffers_alloc();
+}
+
 static ULONG samples2bytes(ULONG samples)
 {
 	if(vc_mode & DMODE_FLOAT) samples <<= 2;
@@ -258,12 +556,14 @@ ULONG VC1_WriteBytes(SBYTE* buf,ULONG todo)
 
 void VC1_Exit(void)
 {
+	vc_fade_shutdown();
 	MikMod_free(vinf);
 	MikMod_afree(vc_tickbuf);
 	MikMod_afree(Samples);
 
 	vc_tickbuf = NULL;
 	vinf = NULL;
+	vfd = NULL;
 	Samples = NULL;
 
 	VC_SetupPointers();
@@ -291,6 +591,7 @@ ULONG VC1_VoiceGetFrequency(UBYTE voice)
 
 void VC1_VoicePlay(UBYTE voice,SWORD handle,ULONG start,ULONG size,ULONG reppos,ULONG repend,UWORD flags)
 {
+	VC1_FadeOnPlay(voice);
 	vinf[voice].flags  = flags;
 	vinf[voice].handle = handle;
 	vinf[voice].start  = start;
@@ -302,7 +603,13 @@ void VC1_VoicePlay(UBYTE voice,SWORD handle,ULONG start,ULONG size,ULONG reppos,
 
 void VC1_VoiceStop(UBYTE voice)
 {
+	VC1_FadeOnStop(voice);
 	vinf[voice].active = 0;
+	/* With the crossfade active, a pending attack must also be cancelled so
+	   the slot never inherits a tail or a stale kick on reuse.  When the
+	   feature is off the historical behaviour (only 'active' cleared) is
+	   preserved. */
+	if(vfd) vinf[voice].kick = 0;
 }
 
 BOOL VC1_VoiceStopped(UBYTE voice)
@@ -335,6 +642,13 @@ void VC1_VoiceSetPanning(UBYTE voice,ULONG pan)
 
 void VC1_SampleUnload(SWORD handle)
 {
+	/* With the crossfade active, retire the buffer generation instead of
+	   freeing it; the last reference (the handle slot, or a departing voice
+	   still using the PCM) frees the memory. */
+	if(vc_gen) {
+		vc_gen_unload(handle);
+		return;
+	}
 	if (Samples && (handle < MAXSAMPLEHANDLES)) {
 		MikMod_afree(Samples[handle]);
 		Samples[handle]=NULL;
@@ -387,6 +701,7 @@ SWORD VC1_SampleLoad(struct SAMPLOAD* sload,int type)
 		Samples[handle]=NULL;
 		return -1;
 	}
+	vc_gen_create(handle,Samples[handle]);
 
 	/* Unclick sample */
 	if(s->flags & SF_LOOP) {
