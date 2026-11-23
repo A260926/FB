@@ -419,6 +419,39 @@ int	dmalloc_verify_pnt(const char *file, const int line, const char *func,
 			   const int min_size);
 
 /*
+ * int dmalloc_set_func_check_policy
+ *
+ * Set the policy used by the dmalloc memcpy, memmove, strncpy, and
+ * strncat function-checking wrappers (and their public macro entry
+ * points) when they detect a dangerous copy.
+ *
+ * DMALLOC_FUNC_REPORT (the default) preserves the historic behavior:
+ * problems are reported but the libc routine is still called.
+ *
+ * DMALLOC_FUNC_REJECT validates the operation against the dmalloc
+ * allocation records before any memory is accessed and refuses
+ * dangerous copies: the wrapper returns NULL, dmalloc_errno is set to
+ * describe the problem, and the source, destination, fence-posts, and
+ * allocation records are all left unchanged.  This strict mode only
+ * accepts pointers into active dmalloc-tracked heap user allocations
+ * (interior pointers are fine); unknown, freed, fence-post, or
+ * otherwise untracked pointers are rejected without being read.  The
+ * strict checks do not depend on the check-funcs debug token.
+ *
+ * The policy is intended to be set before allocations begin;
+ * concurrent switching is not supported.
+ *
+ * Returns the previous valid policy value or -1 if the argument is not
+ * a valid policy, in which case the active policy is left unchanged.
+ *
+ * ARGUMENTS:
+ *
+ * policy -> DMALLOC_FUNC_REPORT or DMALLOC_FUNC_REJECT.
+ */
+extern
+int	dmalloc_set_func_check_policy(const int policy);
+
+/*
  * unsigned int dmalloc_debug
  *
  * Set the global debug functionality flags.  You can also use

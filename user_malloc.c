@@ -1453,6 +1453,48 @@ int	dmalloc_verify_pnt(const char *file, const int line, const char *func,
 }
 
 /*
+ * int _dmalloc_user_range
+ *
+ * Internal support routine for the arg_check strict function-check
+ * mode.  Return the user-space address range of the active dmalloc
+ * allocation which contains a pointer.  See _dmalloc_chunk_user_range
+ * for details.
+ *
+ * Returns 1 if the pointer is inside an active user allocation or 0 if
+ * not with dmalloc_errno set.
+ *
+ * ARGUMENTS:
+ *
+ * file -> File-name or return-address of the caller.
+ *
+ * line -> Line-number of the caller.
+ *
+ * pnt -> Pointer we are looking up.
+ *
+ * start_p <- Pointer to a character pointer which, if not NULL, will be
+ * set to the first byte of the user allocation.
+ *
+ * bounds_p <- Pointer to a character pointer which, if not NULL, will
+ * be set to the byte just past the end of the user allocation.
+ */
+int	_dmalloc_user_range(const char *file, const int line,
+			    const void *pnt, const char **start_p,
+			    const char **bounds_p)
+{
+  int	ret;
+
+  if (! dmalloc_in(file, line, 0)) {
+    return 0;
+  }
+
+  /* call the user-range chunk code */
+  ret = _dmalloc_chunk_user_range(pnt, start_p, bounds_p);
+  dmalloc_out();
+
+  return ret;
+}
+
+/*
  * unsigned int dmalloc_debug
  *
  * Set the global debug functionality flags.  You can also use

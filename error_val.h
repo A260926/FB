@@ -70,6 +70,10 @@
 #define DMALLOC_ERROR_ADDRESS_LIST	72	/* invalid address list */
 #define DMALLOC_ERROR_SLOT_CORRUPT	73	/* memory slot corruption */
 
+/* strict function-check errors */
+#define DMALLOC_ERROR_NOT_TERMINATED	80	/* string not terminated in alloc */
+#define DMALLOC_ERROR_OVERLAP		81	/* copy ranges overlap */
+
 #define INVALID_ERROR		"errno value is not valid"
 
 typedef struct {
@@ -117,7 +121,11 @@ __attribute__ ((unused))
   { DMALLOC_ERROR_ADMIN_LIST,		"dmalloc bad admin structure list" },
   { DMALLOC_ERROR_ADDRESS_LIST,		"dmalloc internal address list corruption" },
   { DMALLOC_ERROR_SLOT_CORRUPT,		"dmalloc internal memory slot corruption" },
-  
+
+  /* strict function-check errors */
+  { DMALLOC_ERROR_NOT_TERMINATED,	"string not terminated within user allocation" },
+  { DMALLOC_ERROR_OVERLAP,		"copy read and write ranges overlap" },
+
   { 0 }
 };
 

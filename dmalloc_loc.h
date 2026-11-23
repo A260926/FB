@@ -97,4 +97,14 @@
  */
 #define BLOCK_SIZE		(int)(1 << BASIC_BLOCK)	/* size of a block */
 
+/*
+ * Internal support routine for the arg_check strict function-check
+ * mode.  Returns the user-space address range of the active dmalloc
+ * allocation which contains pnt.  See user_malloc.c.
+ */
+extern
+int	_dmalloc_user_range(const char *file, const int line,
+			    const void *pnt, const char **start_p,
+			    const char **bounds_p);
+
 #endif /* ! __DMALLOC_LOC_H__ */

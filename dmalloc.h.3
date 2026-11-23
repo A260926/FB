@@ -47,6 +47,14 @@
 #define DMALLOC_FUNC_DELETE	22	/* delete function called */
 #define DMALLOC_FUNC_DELETE_ARRAY 23	/* delete[] function called */
 
+/*
+ * Policies for dmalloc_set_func_check_policy which controls how the
+ * dmalloc memcpy, memmove, strncpy, and strncat function-checking
+ * wrappers handle dangerous copies.
+ */
+#define DMALLOC_FUNC_REPORT	0	/* report errors, still call libc */
+#define DMALLOC_FUNC_REJECT	1	/* reject bad copies before any access */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

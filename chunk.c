@@ -2156,7 +2156,67 @@ int	_dmalloc_chunk_pnt_check(const char *func, const void *user_pnt,
     log_error_info(NULL, 0, user_pnt, slot_p, "pointer-check", func);
     return 0;
   }
-  
+
+  return 1;
+}
+
+/*
+ * int _dmalloc_chunk_user_range
+ *
+ * Return the user-space address range of the active dmalloc allocation
+ * which contains a pointer.  The range is derived from the requested
+ * user size only: fence-post space, allocator round-up space, and freed
+ * slots are never considered user capacity.  No user memory is read by
+ * this routine.
+ *
+ * Returns 1 if the pointer is inside an active user allocation or 0 if
+ * not with dmalloc_errno set.
+ *
+ * ARGUMENTS:
+ *
+ * user_pnt -> Pointer we are looking up.
+ *
+ * start_p <- Pointer to a character pointer which, if not NULL, will be
+ * set to the first byte of the user allocation.
+ *
+ * bounds_p <- Pointer to a character pointer which, if not NULL, will
+ * be set to the byte just past the end of the user allocation.
+ */
+int	_dmalloc_chunk_user_range(const void *user_pnt,
+				  const char **start_p, const char **bounds_p)
+{
+  skip_alloc_t	*slot_p;
+  pnt_info_t	pnt_info;
+
+  /* look for the pointer anywhere inside of a used allocation */
+  slot_p = find_address(user_pnt, 0 /* used list */, 0 /* not exact pointer */,
+			skip_update);
+  if (slot_p == NULL) {
+    dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
+    return 0;
+  }
+
+  /* only active user allocations count, not admin or external slots */
+  if (! BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_USER)) {
+    dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
+    return 0;
+  }
+
+  get_pnt_info(slot_p, &pnt_info);
+
+  /*
+   * the pointer itself must be inside the requested user space so
+   * fence-post bytes and allocator round-up space are rejected here
+   */
+  if ((const char *)user_pnt < (const char *)pnt_info.pi_user_start
+      || (const char *)user_pnt >= (const char *)pnt_info.pi_user_bounds) {
+    dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
+    return 0;
+  }
+
+  SET_POINTER(start_p, (const char *)pnt_info.pi_user_start);
+  SET_POINTER(bounds_p, (const char *)pnt_info.pi_user_bounds);
+
   return 1;
 }
 

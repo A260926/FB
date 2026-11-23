@@ -151,6 +151,32 @@ int	_dmalloc_chunk_pnt_check(const char *func, const void *user_pnt,
 				 const int min_size);
 
 /*
+ * int _dmalloc_chunk_user_range
+ *
+ * Return the user-space address range of the active dmalloc allocation
+ * which contains a pointer.  The range is derived from the requested
+ * user size only: fence-post space, allocator round-up space, and freed
+ * slots are never considered user capacity.  No user memory is read by
+ * this routine.
+ *
+ * Returns 1 if the pointer is inside an active user allocation or 0 if
+ * not with dmalloc_errno set.
+ *
+ * ARGUMENTS:
+ *
+ * user_pnt -> Pointer we are looking up.
+ *
+ * start_p <- Pointer to a character pointer which, if not NULL, will be
+ * set to the first byte of the user allocation.
+ *
+ * bounds_p <- Pointer to a character pointer which, if not NULL, will
+ * be set to the byte just past the end of the user allocation.
+ */
+extern
+int	_dmalloc_chunk_user_range(const void *user_pnt,
+				  const char **start_p, const char **bounds_p);
+
+/*
  * void *_dmalloc_chunk_malloc
  *
  * Allocate a chunk of memory.
