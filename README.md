@@ -67,6 +67,69 @@ Standard automake process:
 
 
 
+DAB STREAMING MODE
+------------------
+
+By default, DAB ScF-CRC handling is manual: the frontend must encode exactly
+one frame (1152 samples per channel) at a time and call
+`twolame_set_DAB_scf_crc()` to write the CRC it just computed into the tail
+of the *previous* frame. With DAB streaming mode the library does this
+itself: the caller feeds PCM in arbitrarily sized blocks through the normal
+`twolame_encode_buffer()` / `twolame_encode_buffer_interleaved()` calls and
+receives finished MP2 frames with the backfill already applied.
+
+Setup order (all parameters are fixed before initialisation):
+
+    twolame_options *opts = twolame_init();
+    twolame_set_num_channels(opts, 2);
+    twolame_set_in_samplerate(opts, 48000);
+    twolame_set_out_samplerate(opts, 48000);   /* must match the input rate */
+    twolame_set_bitrate(opts, 192);
+    twolame_set_mode(opts, TWOLAME_STEREO);    /* or TWOLAME_MONO */
+    twolame_set_DAB(opts, 1);
+    twolame_set_DAB_crc_length(opts, 2);       /* 2 or 4 bytes */
+    twolame_set_DAB_xpad_length(opts, 0);
+    twolame_set_num_ancillary_bits(opts, 8 * (2 + 2));  /* CRC + 2 F-PAD bytes */
+    twolame_set_DAB_streaming(opts, 1);
+    twolame_init_params(opts);
+
+`twolame_set_DAB_streaming()` only accepts 0 or 1 and is locked in once
+`twolame_init_params()` has succeeded; invalid calls return -1 and leave the
+previous setting untouched. `twolame_init_params()` fails with -1 unless the
+configuration is MPEG-1 or MPEG-2 CBR (no VBR, no freeformat) with mono or
+stereo mode matching the input channel count, equal input/output samplerates,
+DAB enabled with a 2 or 4 byte CRC, zero XPAD, no energy levels, and a
+reserved ancillary bit count that is a multiple of 8 with room for the
+ScF-CRC plus 2 bytes of F-PAD. Both MPEG header CRC (error protection) and
+both padding settings are supported. The float32 encode entry points return
+-1 in this mode.
+
+Latency and buffering: a frame is only handed out once the *next* frame has
+been encoded, because that next frame's ScF-CRC is written into it. The
+output therefore lags the input by one frame; the library internally keeps
+at most one complete MP2 frame plus less than 1152 samples of unencoded PCM,
+no matter how large the input blocks are.
+
+Output space: give each encode call at least `7200 + 2 * num_samples` bytes
+and each flush call at least 7200 bytes. The returned bytes are complete
+MP2 frames in stream order and belong to the caller - the library never
+touches memory it has already handed out, so the buffer may be reused or
+overwritten as soon as the bytes have been copied away.
+
+End of stream: call `twolame_encode_flush()` as usual. Any remaining PCM is
+zero-padded into a real final frame whose CRC still backfills the previous
+frame; the final frame itself carries zero bytes in its ScF-CRC positions
+(the service-specific end-of-stream marker) and is then handed out. A flush
+may therefore return two frames at once, and it returns the held last frame
+even when no PCM is left. For N > 0 input samples per channel the stream
+contains exactly ceil(N / 1152) frames; an empty stream produces none. Once
+flushed, further flushes and zero-length encode calls return 0, and feeding
+new PCM returns -1.
+
+See `examples/dab_stream.c` for a complete program.
+
+
+
 REFERENCE PAPERS
 ----------------
 

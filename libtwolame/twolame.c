@@ -91,6 +91,12 @@ twolame_options *twolame_init(void)
     newoptions->do_dab = FALSE;
     newoptions->dab_crc_len = 2;
     newoptions->dab_xpad_len = 0;
+    newoptions->dab_streaming = FALSE;
+    newoptions->dab_stream_done = 0;
+    newoptions->dab_pending = NULL;
+    newoptions->dab_scratch = NULL;
+    newoptions->dab_pending_len = 0;
+    newoptions->dab_frame_bufsize = 0;
     newoptions->verbosity = 2;
     newoptions->vbr_upper_index = 0;
 
@@ -338,6 +344,56 @@ int twolame_init_params(twolame_options * glopts)
         }
     }
 
+    /* DAB streaming mode only supports a restricted set of configurations. Reject anything
+       else outright instead of silently falling back to another mode. */
+    if (glopts->dab_streaming) {
+        if (!glopts->do_dab) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming requires the DAB extensions to be enabled.\n");
+            return -1;
+        }
+        if (glopts->dab_crc_len != 2 && glopts->dab_crc_len != 4) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming requires a DAB CRC length of 2 or 4 bytes.\n");
+            return -1;
+        }
+        if (glopts->dab_xpad_len != 0) {
+            fprintf(stderr, "twolame_init_params(): DAB streaming requires an XPAD length of 0.\n");
+            return -1;
+        }
+        if (glopts->vbr || glopts->freeformat) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming requires CBR (no VBR, no freeformat).\n");
+            return -1;
+        }
+        if (glopts->do_energy_levels) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming cannot be combined with energy levels.\n");
+            return -1;
+        }
+        if (glopts->mode != TWOLAME_MONO && glopts->mode != TWOLAME_STEREO) {
+            fprintf(stderr, "twolame_init_params(): DAB streaming requires mono or stereo mode.\n");
+            return -1;
+        }
+        if (glopts->num_channels_in != ((glopts->mode == TWOLAME_MONO) ? 1 : 2)) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming requires the number of input channels to match the mode.\n");
+            return -1;
+        }
+        if (glopts->samplerate_in != glopts->samplerate_out) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming requires identical input and output samplerates.\n");
+            return -1;
+        }
+        if ((glopts->num_ancillary_bits % 8) != 0
+                || glopts->num_ancillary_bits < 8 * ((int) glopts->dab_crc_len + 2)) {
+            fprintf(stderr,
+                    "twolame_init_params(): DAB streaming needs reserved ancillary bits to be a multiple of 8 with room for the %d byte ScF-CRC and 2 bytes of F-PAD.\n",
+                    (int) glopts->dab_crc_len);
+            return -1;
+        }
+    }
+
     /*
      * MFC Feb 2003: in VBR mode, joint
      * stereo doesn't make any sense at
@@ -408,6 +464,26 @@ int twolame_init_params(twolame_options * glopts)
         TWOLAME_FREE(glopts->j_sample);
         TWOLAME_FREE(glopts->sb_sample);
         return -1;
+    }
+
+    /* For DAB streaming mode, allocate the two frame buffers: one holds the frame waiting
+       for its successor's ScF-CRC, the other is the scratch buffer frames are encoded into.
+       One CBR frame plus padding slot and slack is all that is ever needed, regardless of
+       how much PCM the caller hands over. */
+    if (glopts->dab_streaming) {
+        glopts->dab_frame_bufsize = (144000 * glopts->bitrate) / glopts->samplerate_out + 16;
+        glopts->dab_pending = (unsigned char *) TWOLAME_MALLOC(glopts->dab_frame_bufsize);
+        glopts->dab_scratch = (unsigned char *) TWOLAME_MALLOC(glopts->dab_frame_bufsize);
+        if (glopts->dab_pending == NULL || glopts->dab_scratch == NULL) {
+            TWOLAME_FREE(glopts->dab_pending);
+            TWOLAME_FREE(glopts->dab_scratch);
+            TWOLAME_FREE(glopts->subband);
+            TWOLAME_FREE(glopts->j_sample);
+            TWOLAME_FREE(glopts->sb_sample);
+            return -1;
+        }
+        glopts->dab_pending_len = 0;
+        glopts->dab_stream_done = 0;
     }
 
     // clear buffers
@@ -665,6 +741,59 @@ static int encode_frame(twolame_options * glopts, bit_stream * bs)
 
 
 /*
+    DAB streaming mode: encode a single frame of audio from glopts->buffer.
+
+    The frame is encoded into the internal scratch buffer, advancing the
+    subband filter and psychoacoustic history exactly once, like a normal
+    frame. The ScF-CRC calculated for it (glopts->dab_crc) is then inserted
+    into the previously held frame, which is written out to mp2buffer at
+    offset mp2_used. The new frame becomes the held frame; it is handed out
+    once its own successor has been encoded (or by twolame_encode_flush()).
+
+    Returns the number of bytes written to mp2buffer (0 or the size of the
+    previously held frame), or -1 on error.
+*/
+static int dab_stream_frame(twolame_options * glopts,
+                            unsigned char *mp2buffer, int mp2buffer_size, int mp2_used)
+{
+    bit_stream *bs;
+    unsigned char *swap;
+    int frame_bytes;
+    int emitted = 0;
+
+    bs = twolame_buffer_init(glopts->dab_scratch, glopts->dab_frame_bufsize);
+    if (bs == NULL)
+        return -1;
+    frame_bytes = encode_frame(glopts, bs);
+    twolame_buffer_deinit(&bs);
+    if (frame_bytes <= 0)
+        return -1;
+
+    if (glopts->dab_pending_len > 0) {
+        /* The ScF-CRC of the frame just encoded belongs to the previous frame.
+           Positions are relative to the previous frame's own length. */
+        if (twolame_set_DAB_scf_crc(glopts, glopts->dab_pending, glopts->dab_pending_len) < 0)
+            return -1;
+        if (mp2_used + glopts->dab_pending_len > mp2buffer_size) {
+            fprintf(stderr, "dab_stream_frame: output buffer too small\n");
+            return -1;
+        }
+        memcpy(mp2buffer + mp2_used, glopts->dab_pending, glopts->dab_pending_len);
+        emitted = glopts->dab_pending_len;
+    }
+
+    /* Hold the new frame back until its successor is encoded */
+    swap = glopts->dab_pending;
+    glopts->dab_pending = glopts->dab_scratch;
+    glopts->dab_scratch = swap;
+    glopts->dab_pending_len = frame_bytes;
+
+    return emitted;
+}
+
+
+
+/*
   glopts
   leftpcm - holds left channel (or mono channel)
   rightpcm - d'uh
@@ -685,6 +814,10 @@ int twolame_encode_buffer(twolame_options * glopts,
 
     if (num_samples == 0)
         return 0;
+
+    /* A flushed DAB stream is finished and rejects further audio */
+    if (glopts->dab_streaming && glopts->dab_stream_done)
+        return -1;
 
 
     // now would be a great time to validate the size of the buffer.
@@ -718,12 +851,21 @@ int twolame_encode_buffer(twolame_options * glopts,
 
             // is there enough to encode a whole frame ?
             if (glopts->samples_in_buffer >= TWOLAME_SAMPLES_PER_FRAME) {
-                int bytes = encode_frame(glopts, mybs);
-                if (bytes <= 0) {
-                    twolame_buffer_deinit(&mybs);
-                    return bytes;
+                if (glopts->dab_streaming) {
+                    int emitted = dab_stream_frame(glopts, mp2buffer, mp2buffer_size, mp2_size);
+                    if (emitted < 0) {
+                        twolame_buffer_deinit(&mybs);
+                        return -1;
+                    }
+                    mp2_size += emitted;
+                } else {
+                    int bytes = encode_frame(glopts, mybs);
+                    if (bytes <= 0) {
+                        twolame_buffer_deinit(&mybs);
+                        return bytes;
+                    }
+                    mp2_size += bytes;
                 }
-                mp2_size += bytes;
                 glopts->samples_in_buffer -= TWOLAME_SAMPLES_PER_FRAME;
             }
         }
@@ -746,6 +888,10 @@ int twolame_encode_buffer_interleaved(twolame_options * glopts,
 
     if (num_samples == 0)
         return 0;
+
+    /* A flushed DAB stream is finished and rejects further audio */
+    if (glopts->dab_streaming && glopts->dab_stream_done)
+        return -1;
 
 
     // now would be a great time to validate the size of the buffer.
@@ -779,12 +925,21 @@ int twolame_encode_buffer_interleaved(twolame_options * glopts,
 
             // is there enough to encode a whole frame ?
             if (glopts->samples_in_buffer >= TWOLAME_SAMPLES_PER_FRAME) {
-                int bytes = encode_frame(glopts, mybs);
-                if (bytes <= 0) {
-                    twolame_buffer_deinit(&mybs);
-                    return bytes;
+                if (glopts->dab_streaming) {
+                    int emitted = dab_stream_frame(glopts, mp2buffer, mp2buffer_size, mp2_size);
+                    if (emitted < 0) {
+                        twolame_buffer_deinit(&mybs);
+                        return -1;
+                    }
+                    mp2_size += emitted;
+                } else {
+                    int bytes = encode_frame(glopts, mybs);
+                    if (bytes <= 0) {
+                        twolame_buffer_deinit(&mybs);
+                        return bytes;
+                    }
+                    mp2_size += bytes;
                 }
-                mp2_size += bytes;
                 glopts->samples_in_buffer -= TWOLAME_SAMPLES_PER_FRAME;
             }
         }
@@ -831,6 +986,10 @@ int twolame_encode_buffer_float32(twolame_options * glopts,
 {
     int mp2_size = 0;
     bit_stream *mybs;
+
+    /* DAB streaming mode only accepts 16-bit PCM */
+    if (glopts->dab_streaming)
+        return -1;
 
     if (num_samples == 0)
         return 0;
@@ -891,6 +1050,10 @@ int twolame_encode_buffer_float32_interleaved(twolame_options * glopts,
     int mp2_size = 0;
     bit_stream *mybs;
 
+    /* DAB streaming mode only accepts 16-bit PCM */
+    if (glopts->dab_streaming)
+        return -1;
+
     if (num_samples == 0)
         return 0;
 
@@ -949,6 +1112,68 @@ int twolame_encode_flush(twolame_options * glopts, unsigned char *mp2buffer, int
     int mp2_size = 0;
     int i;
 
+    if (glopts->dab_streaming) {
+        /* A flushed DAB stream is finished: repeated flushes return nothing */
+        if (glopts->dab_stream_done)
+            return 0;
+
+        if (glopts->samples_in_buffer > 0) {
+            bit_stream *bs;
+            int frame_bytes;
+
+            /* Pad out the PCM buffers with 0 and encode the final frame, exactly
+               like a normal flush would */
+            for (i = glopts->samples_in_buffer; i < TWOLAME_SAMPLES_PER_FRAME; i++) {
+                glopts->buffer[0][i] = glopts->buffer[1][i] = 0;
+            }
+            bs = twolame_buffer_init(glopts->dab_scratch, glopts->dab_frame_bufsize);
+            if (bs == NULL)
+                return -1;
+            frame_bytes = encode_frame(glopts, bs);
+            twolame_buffer_deinit(&bs);
+            glopts->samples_in_buffer = 0;
+            if (frame_bytes <= 0)
+                return -1;
+
+            /* The final frame's ScF-CRC still belongs to the held frame */
+            if (glopts->dab_pending_len > 0) {
+                if (twolame_set_DAB_scf_crc(glopts, glopts->dab_pending,
+                                            glopts->dab_pending_len) < 0)
+                    return -1;
+                if (mp2_size + glopts->dab_pending_len > mp2buffer_size) {
+                    fprintf(stderr, "twolame_encode_flush: output buffer too small\n");
+                    return -1;
+                }
+                memcpy(mp2buffer + mp2_size, glopts->dab_pending, glopts->dab_pending_len);
+                mp2_size += glopts->dab_pending_len;
+                glopts->dab_pending_len = 0;
+            }
+
+            /* The final frame has no successor: its ScF-CRC positions stay zero
+               (the reserved ancillary bytes are already zero), marking the end
+               of the stream */
+            if (mp2_size + frame_bytes > mp2buffer_size) {
+                fprintf(stderr, "twolame_encode_flush: output buffer too small\n");
+                return -1;
+            }
+            memcpy(mp2buffer + mp2_size, glopts->dab_scratch, frame_bytes);
+            mp2_size += frame_bytes;
+        } else if (glopts->dab_pending_len > 0) {
+            /* No PCM tail: hand over the held frame as the last frame. Its
+               ScF-CRC positions stay zero. */
+            if (mp2_size + glopts->dab_pending_len > mp2buffer_size) {
+                fprintf(stderr, "twolame_encode_flush: output buffer too small\n");
+                return -1;
+            }
+            memcpy(mp2buffer + mp2_size, glopts->dab_pending, glopts->dab_pending_len);
+            mp2_size += glopts->dab_pending_len;
+            glopts->dab_pending_len = 0;
+        }
+
+        glopts->dab_stream_done = 1;
+        return mp2_size;
+    }
+
     if (glopts->samples_in_buffer == 0) {
         // No samples left over
         return 0;
@@ -997,6 +1222,8 @@ void twolame_close(twolame_options ** glopts)
     TWOLAME_FREE(opts->subband);
     TWOLAME_FREE(opts->j_sample);
     TWOLAME_FREE(opts->sb_sample);
+    TWOLAME_FREE(opts->dab_pending);
+    TWOLAME_FREE(opts->dab_scratch);
 
     // Free the memory and zero the pointer
     TWOLAME_FREE(opts);

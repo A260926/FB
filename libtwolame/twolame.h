@@ -943,6 +943,45 @@ TL_API int twolame_set_DAB_scf_crc(twolame_options * glopts,
                                        int mp2buffer_size);
 
 
+/** Enable/Disable DAB streaming mode.
+ *
+ *  In DAB streaming mode the library itself inserts the ScF-CRC of each
+ *  encoded frame into the tail of the previous frame, so the caller can feed
+ *  PCM in arbitrarily sized blocks and simply receives finished MP2 frames.
+ *  The caller no longer needs to buffer frames or call
+ *  twolame_set_DAB_scf_crc().
+ *
+ *  Because each frame is only handed out once its successor has been
+ *  encoded, the output lags the input by one frame. The final frame of a
+ *  stream (produced by twolame_encode_flush()) carries zero bytes in its
+ *  ScF-CRC positions, marking the end of the stream.
+ *
+ *  DAB streaming mode requires: DAB extensions enabled, a DAB CRC length of
+ *  2 or 4 bytes, XPAD length 0, CBR (no VBR, no freeformat), no energy
+ *  levels, mono or stereo mode with a matching number of input channels,
+ *  identical input and output samplerates, and a number of reserved
+ *  ancillary bits that is a multiple of 8 and leaves room for the ScF-CRC
+ *  plus 2 bytes of F-PAD. twolame_init_params() fails if any of these
+ *  conditions is not met.
+ *
+ *  Default: FALSE
+ *
+ *  \param glopts          pointer to twolame options pointer
+ *  \param enabled         DAB streaming state (0 or 1)
+ *  \return                0 if successful, -1 on failure (invalid value, or
+ *                         called after twolame_init_params() succeeded)
+ */
+TL_API int twolame_set_DAB_streaming(twolame_options * glopts, int enabled);
+
+
+/** Get the state of DAB streaming mode.
+ *
+ *  \param glopts          pointer to twolame options pointer
+ *  \return                the state of DAB streaming mode (0 or 1)
+ */
+TL_API int twolame_get_DAB_streaming(twolame_options * glopts);
+
+
 #ifdef __cplusplus
 }
 #endif

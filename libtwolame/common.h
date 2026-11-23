@@ -304,6 +304,15 @@ struct twolame_options_struct {
     unsigned int dab_crc[4];    // DAB CRC bytes are inserted here. User must insert them in frame
     unsigned int dab_xpad_len;  // Number of bytes in the XPAD
 
+    // DAB streaming mode: the library itself inserts the ScF-CRC of each frame into the
+    // tail of the previous frame before handing it to the caller [FALSE]
+    int dab_streaming;          // [FALSE]
+    int dab_stream_done;        // Set once the stream has been flushed
+    unsigned char *dab_pending; // Most recent frame, held back until its successor is encoded
+    unsigned char *dab_scratch; // Encode buffer for the frame currently being produced
+    int dab_pending_len;        // Number of bytes held in dab_pending (0 = none held)
+    int dab_frame_bufsize;      // Size of the dab_pending and dab_scratch buffers
+
     // Processing Options
     int verbosity;              // Verbosity of output 0(never output a thing) [2] 100(output
     // everything)

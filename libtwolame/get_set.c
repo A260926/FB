@@ -514,4 +514,22 @@ int twolame_set_DAB_scf_crc(twolame_options * glopts,
 }
 
 
+int twolame_set_DAB_streaming(twolame_options * glopts, int enabled)
+{
+    if (enabled != 0 && enabled != 1)
+        return (-1);
+    if (glopts->twolame_init) {
+        /* The mode is locked in once the encoder has been initialised */
+        return (-1);
+    }
+    glopts->dab_streaming = enabled;
+    return (0);
+}
+
+int twolame_get_DAB_streaming(twolame_options * glopts)
+{
+    return (glopts->dab_streaming);
+}
+
+
 // vim:ts=4:sw=4:nowrap:
