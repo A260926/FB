@@ -8,6 +8,8 @@
   \author Moritz Bunkus <moritz@bunkus.org>
 */
 #include <cassert>
+#include <stdexcept>
+#include <algorithm>
 
 //#include <streams.h>
 
@@ -15,6 +17,7 @@
 #include <ebml/MemReadIOCallback.h>
 #include <ebml/SafeReadIOCallback.h>
 #include "matroska/KaxBlock.h"
+#include "matroska/KaxFrameStore.h"
 #include "matroska/KaxContexts.h"
 #include "matroska/KaxBlockData.h"
 #include "matroska/KaxCluster.h"
@@ -79,6 +82,8 @@ KaxInternalBlock::KaxInternalBlock(const KaxInternalBlock & ElementToClone)
   ,TrackNumber(ElementToClone.TrackNumber)
   ,ParentCluster(ElementToClone.ParentCluster) ///< \todo not exactly
 {
+  if (ElementToClone.mySpoolStore)
+    throw std::logic_error("cloning blocks whose frames were spooled to a KaxFrameStore is not supported");
   // add a clone of the list
   myBuffers.reserve(ElementToClone.myBuffers.size());
   for (const auto& buffer : ElementToClone.myBuffers)
@@ -178,6 +183,9 @@ static std::int64_t ReadSignedVINT(const binary * InBuffer, std::uint32_t & Buff
 */
 bool KaxInternalBlock::AddFrame(const KaxTrackEntry & track, std::uint64_t timestamp, DataBuffer & buffer, LacingType lacing, bool invisible)
 {
+  if (mySpoolStore)
+    // a spooled lace is sealed; further frames have to go into a new block
+    return false;
   SetValueIsSet();
   if (myBuffers.empty()) {
     // first frame
@@ -208,25 +216,33 @@ LacingType KaxInternalBlock::GetBestLacingType() const {
   int XiphLacingSize, EbmlLacingSize, i;
   bool SameSize = true;
 
-  if (myBuffers.size() <= 1)
+  const auto FrameCount = this->FrameCount();
+  if (FrameCount <= 1)
     return LACING_NONE;
 
   XiphLacingSize = 1; // Number of laces is stored in 1 byte.
   EbmlLacingSize = 1;
-  for (i = 0; i < static_cast<int>(myBuffers.size()) - 1; i++) {
-    if (myBuffers[i]->Size() != myBuffers[i + 1]->Size())
+  for (i = 0; i < static_cast<int>(FrameCount) - 1; i++) {
+    if (FramePayloadSize(i) != FramePayloadSize(i + 1))
       SameSize = false;
-    XiphLacingSize += myBuffers[i]->Size() / 255 + 1;
+    XiphLacingSize += FramePayloadSize(i) / 255 + 1;
   }
-  EbmlLacingSize += CodedSizeLength(myBuffers[0]->Size(), 0, IsFiniteSize());
-  for (i = 1; i < static_cast<int>(myBuffers.size()) - 1; i++)
-    EbmlLacingSize += SignedVINTLength(static_cast<std::int64_t>(myBuffers[i]->Size()) - static_cast<std::int64_t>(myBuffers[i - 1]->Size()));
+  EbmlLacingSize += CodedSizeLength(FramePayloadSize(0), 0, IsFiniteSize());
+  for (i=1; i<static_cast<int>(FrameCount) - 1; i++)
+    EbmlLacingSize += SignedVINTLength(static_cast<std::int64_t>(FramePayloadSize(i)) - static_cast<std::int64_t>(FramePayloadSize(i - 1)));
   if (SameSize)
     return LACING_FIXED;
   if (XiphLacingSize < EbmlLacingSize)
     return LACING_XIPH;
 
   return LACING_EBML;
+}
+
+std::uint32_t KaxInternalBlock::FramePayloadSize(std::size_t iIndex) const
+{
+  if (mySpoolStore)
+    return static_cast<std::uint32_t>(SizeList[iIndex]);
+  return myBuffers[iIndex]->Size();
 }
 
 filepos_t KaxInternalBlock::UpdateSize(const ShouldWrite &, bool /* bForceRender */)
@@ -236,13 +252,15 @@ filepos_t KaxInternalBlock::UpdateSize(const ShouldWrite &, bool /* bForceRender
   assert(TrackNumber < 0x4000); // no more allowed for the moment
   unsigned int i;
 
+  const auto FrameCount = this->FrameCount();
+
   // compute the final size of the data
-  switch (myBuffers.size()) {
+  switch (FrameCount) {
     case 0:
       SetSize_(0);
       break;
     case 1:
-      SetSize_(4 + myBuffers[0]->Size());
+      SetSize_(4 + FramePayloadSize(0));
       break;
     default:
       SetSize_(4 + 1); // 1 for the lacing head
@@ -252,19 +270,19 @@ filepos_t KaxInternalBlock::UpdateSize(const ShouldWrite &, bool /* bForceRender
         LacingHere = mLacing;
       switch (LacingHere) {
         case LACING_XIPH:
-          for (i=0; i<myBuffers.size()-1; i++) {
-            SetSize_(GetSize() + myBuffers[i]->Size() + (myBuffers[i]->Size() / 0xFF + 1));
+          for (i=0; i<FrameCount-1; i++) {
+            SetSize_(GetSize() + FramePayloadSize(i) + (FramePayloadSize(i) / 0xFF + 1));
           }
           break;
         case LACING_EBML:
-          SetSize_(GetSize() + myBuffers[0]->Size() + CodedSizeLength(myBuffers[0]->Size(), 0, IsFiniteSize()));
-          for (i=1; i<myBuffers.size()-1; i++) {
-            SetSize_(GetSize() + myBuffers[i]->Size() + SignedVINTLength(static_cast<std::int64_t>(myBuffers[i]->Size()) - static_cast<std::int64_t>(myBuffers[i-1]->Size())));
+          SetSize_(GetSize() + FramePayloadSize(0) + CodedSizeLength(FramePayloadSize(0), 0, IsFiniteSize()));
+          for (i=1; i<FrameCount-1; i++) {
+            SetSize_(GetSize() + FramePayloadSize(i) + SignedVINTLength(static_cast<std::int64_t>(FramePayloadSize(i)) - static_cast<std::int64_t>(FramePayloadSize(i-1))));
           }
           break;
         case LACING_FIXED:
-          for (i=0; i<myBuffers.size()-1; i++) {
-            SetSize_(GetSize() + myBuffers[i]->Size());
+          for (i=0; i<FrameCount-1; i++) {
+            SetSize_(GetSize() + FramePayloadSize(i));
           }
           break;
         default:
@@ -272,7 +290,7 @@ filepos_t KaxInternalBlock::UpdateSize(const ShouldWrite &, bool /* bForceRender
           assert(0);
       }
       // Size of the last frame (not in lace)
-      SetSize_(GetSize() + myBuffers[i]->Size());
+      SetSize_(GetSize() + FramePayloadSize(i));
       break;
   }
 
@@ -333,8 +351,11 @@ filepos_t KaxBlockVirtual::UpdateSize(const ShouldWrite &, bool /* bForceRender 
   \todo more optimisation is possible (render the Block head and don't copy the buffer in memory, care should be taken with the allocation of Data)
   \todo the actual timestamp to write should be retrieved from the Cluster from here
 */
-filepos_t KaxInternalBlock::RenderData(IOCallback & output, bool /* bForceRender */, const ShouldWrite &)
+filepos_t KaxInternalBlock::RenderData(IOCallback & output, bool /* bForceRender */, const ShouldWrite & /* writeFilter */)
 {
+  if (mySpoolStore)
+    return RenderSpooledData(output);
+
   if (myBuffers.empty())
     return 0;
 
@@ -948,6 +969,253 @@ void KaxInternalBlock::ReleaseFrames()
       myBuffers[i] = nullptr;
     }
   }
+  myBuffers.clear();
+  SizeList.clear();
+  mySpoolOffsets.clear();
+  // dropping the store reference is safe in both resident and spooled states:
+  // resident frames never held one, spooled frames no longer need export
+  mySpoolStore.reset();
+}
+
+bool KaxInternalBlock::SpoolFrames(const std::shared_ptr<KaxFrameStore> & aStore)
+{
+  std::vector<std::uint64_t> offsets;
+  if (!SpoolFramesWrite(aStore, offsets))
+    return false;
+  if (offsets.empty())
+    return true;
+
+  std::vector<DataBuffer *> detached;
+  SpoolFramesCommit(aStore, std::move(offsets), detached);
+  try {
+    for (auto * buffer : detached) {
+      buffer->FreeBuffer(*buffer);
+      delete buffer;
+    }
+  } catch (...) {
+    // the payloads are already stored and the block is spooled; the caller gets
+    // the failure but no resident frame is touched from here on
+    return false;
+  }
+  return true;
+}
+
+bool KaxInternalBlock::SpoolFramesWrite(const std::shared_ptr<KaxFrameStore> & aStore,
+                                        std::vector<std::uint64_t> & aOffsets)
+{
+  aOffsets.clear();
+  if (mySpoolStore || myBuffers.empty())
+    return true; // nothing resident to move in this block
+
+  auto & storeStream = aStore->BackingStream();
+  aOffsets.reserve(myBuffers.size());
+
+  // write every payload in frame order, in chunks bounded by the working area;
+  // the store stream may keep uncommitted tail bytes on failure
+  try {
+    for (const auto& myBuf : myBuffers) {
+      const auto frameSize = myBuf->Size();
+      const auto frameOffset = aStore->BeginFrameWrite(frameSize);
+      const binary * cursor = myBuf->Buffer();
+      std::uint32_t left = frameSize;
+      while (left != 0) {
+        const auto chunk = std::min<std::uint32_t>(left,
+                                    static_cast<std::uint32_t>(KaxFrameStore::WorkBufferSize));
+        const auto written = storeStream.write(cursor, chunk);
+        if (written != chunk)
+          return false; // short write: payload stays resident
+        cursor += chunk;
+        left -= static_cast<std::uint32_t>(chunk);
+      }
+      aOffsets.push_back(frameOffset);
+    }
+  } catch (...) {
+    return false; // seek/write failure: payload stays resident
+  }
+
+  return true;
+}
+
+void KaxInternalBlock::SpoolFramesCommit(const std::shared_ptr<KaxFrameStore> & aStore,
+                                         std::vector<std::uint64_t> && aOffsets,
+                                         std::vector<DataBuffer *> & aDetachedBuffers)
+{
+  // SizeList is the frame size authority once the resident buffers are gone;
+  // AddFrame() never filled it, so capture every payload size before detaching
+  SizeList.clear();
+  SizeList.reserve(myBuffers.size());
+  for (const auto& myBuf : myBuffers)
+    SizeList.push_back(static_cast<std::int32_t>(myBuf->Size()));
+
+  // hand the DataBuffer objects back without freeing them so a throwing free
+  // callback cannot leave this block half migrated
+  aDetachedBuffers.reserve(aDetachedBuffers.size() + myBuffers.size());
+  for (auto * buffer : myBuffers)
+    aDetachedBuffers.push_back(buffer);
+  myBuffers.clear();
+
+  mySpoolStore = aStore;
+  mySpoolOffsets = std::move(aOffsets);
+}
+
+/*!
+  \brief render a block whose payloads live in the frame store
+
+  The backing stream is only read here, never written. Payload bytes transit
+  through a single bounded working area; frames larger than the area are moved
+  in chunks. Any short read, read exception or output failure is propagated and
+  must never result in a silently truncated frame.
+*/
+filepos_t KaxInternalBlock::RenderSpooledData(IOCallback & output)
+{
+  assert(mySpoolStore);
+  const auto FrameCount = this->FrameCount();
+  if (FrameCount == 0)
+    return 0;
+
+  assert(TrackNumber < 0x4000);
+  binary BlockHead[5];
+  auto cursor = BlockHead;
+  unsigned int i;
+
+  if (FrameCount == 1) {
+    SetSize_(4);
+    mLacing = LACING_NONE;
+  } else {
+    if (mLacing == LACING_NONE)
+      mLacing = LACING_EBML; // supposedly the best of all
+    SetSize_(4 + 1); // 1 for the lacing head (number of laced elements)
+  }
+  if (TrackNumber >= 0x80)
+    SetSize_(GetSize() + 1);
+
+  // write Block Head
+  if (TrackNumber < 0x80) {
+    *cursor++ = TrackNumber | 0x80; // set the first bit to 1
+  } else {
+    *cursor++ = (TrackNumber >> 8) | 0x40; // set the second bit to 1
+    *cursor++ = TrackNumber & 0xFF;
+  }
+
+  assert(ParentCluster);
+  const std::int16_t ActualTimestamp = ParentCluster->GetBlockLocalTimestamp(Timestamp);
+  endian::to_big16(ActualTimestamp, cursor);
+  cursor += 2;
+
+  *cursor = 0; // flags
+
+  if (mLacing == LACING_AUTO)
+    mLacing = GetBestLacingType();
+
+  // invisible flag
+  if (mInvisible)
+    *cursor = 0x08;
+
+  if (static_cast<const EbmlId&>(*this) == EBML_ID(KaxSimpleBlock)) {
+    auto *s = reinterpret_cast<const KaxSimpleBlock*>(this);
+    if (s->IsKeyframe())
+      *cursor |= 0x80;
+    if (s->IsDiscardable())
+      *cursor |= 0x01;
+  }
+
+  // lacing flag
+  switch (mLacing) {
+    case LACING_XIPH:
+      *cursor++ |= 0x02;
+      break;
+    case LACING_EBML:
+      *cursor++ |= 0x06;
+      break;
+    case LACING_FIXED:
+      *cursor++ |= 0x04;
+      break;
+    case LACING_NONE:
+      break;
+    default:
+      assert(0);
+  }
+
+  output.writeFully(BlockHead, 4 + ((TrackNumber >= 0x80) ? 1 : 0));
+
+  binary tmpValue;
+  switch (mLacing) {
+    case LACING_XIPH:
+      // number of laces
+      tmpValue = FrameCount - 1;
+      output.writeFully(&tmpValue, 1);
+
+      // set the size of each member in the lace
+      for (i = 0; i < FrameCount - 1; i++) {
+        tmpValue = 0xFF;
+        std::uint32_t tmpSize = FramePayloadSize(i);
+        while (tmpSize >= 0xFF) {
+          output.writeFully(&tmpValue, 1);
+          SetSize_(GetSize() + 1);
+          tmpSize -= 0xFF;
+        }
+        tmpValue = static_cast<binary>(tmpSize);
+        output.writeFully(&tmpValue, 1);
+        SetSize_(GetSize() + 1);
+      }
+      break;
+    case LACING_EBML:
+      // number of laces
+      tmpValue = FrameCount - 1;
+      output.writeFully(&tmpValue, 1);
+      {
+        std::int64_t _Size;
+        int _CodedSize;
+        binary _FinalHead[8]; // 64 bits max coded size
+
+        _Size = FramePayloadSize(0);
+        _CodedSize = CodedSizeLength(_Size, 0, IsFiniteSize());
+        CodedValueLength(_Size, _CodedSize, _FinalHead);
+        output.writeFully(_FinalHead, _CodedSize);
+        SetSize_(GetSize() + _CodedSize);
+
+        // set the size of each member in the lace
+        for (i = 1; i < FrameCount - 1; i++) {
+          _Size = static_cast<std::int64_t>(FramePayloadSize(i)) - static_cast<std::int64_t>(FramePayloadSize(i - 1));
+          _CodedSize = SignedVINTLength(_Size);
+          SignedVINTValue(_Size, _CodedSize, _FinalHead);
+          output.writeFully(_FinalHead, _CodedSize);
+          SetSize_(GetSize() + _CodedSize);
+        }
+      }
+      break;
+    case LACING_FIXED:
+      // number of laces
+      tmpValue = FrameCount - 1;
+      output.writeFully(&tmpValue, 1);
+      break;
+    case LACING_NONE:
+      break;
+    default:
+      assert(0);
+  }
+
+  auto & storeStream = mySpoolStore->BackingStream();
+  binary workBuffer[KaxFrameStore::WorkBufferSize];
+
+  // stream the payload of each frame from the store to the output, never
+  // loading a whole frame into memory at once
+  for (i = 0; i < FrameCount; i++) {
+    const auto frameSize = FramePayloadSize(i);
+    storeStream.setFilePointer(static_cast<std::int64_t>(mySpoolOffsets[i]), seek_beginning);
+
+    std::uint32_t left = frameSize;
+    while (left != 0) {
+      const auto chunk = std::min<std::uint32_t>(left,
+                                  static_cast<std::uint32_t>(KaxFrameStore::WorkBufferSize));
+      storeStream.readFully(workBuffer, chunk); // throws on short read
+      output.writeFully(workBuffer, chunk);     // throws on output failure
+      left -= chunk;
+    }
+    SetSize_(GetSize() + frameSize);
+  }
+
+  return GetSize();
 }
 
 void KaxBlockGroup::SetBlockDuration(std::uint64_t TimeLength)

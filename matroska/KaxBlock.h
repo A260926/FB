@@ -11,6 +11,8 @@
 #define LIBMATROSKA_BLOCK_H
 
 #include <vector>
+#include <memory>
+#include <stdexcept>
 
 #include "matroska/KaxTypes.h"
 #include <ebml/EbmlBinary.h>
@@ -21,6 +23,7 @@
 namespace libmatroska {
 
 class KaxCluster;
+class KaxFrameStore;
 class KaxReferenceBlock;
 class KaxInternalBlock;
 class KaxBlockBlob;
@@ -178,6 +181,7 @@ DECLARE_MKX_MASTER(KaxBlockGroup)
 };
 
 class MATROSKA_DLL_API KaxInternalBlock : public libebml::EbmlBinary {
+  friend class KaxCluster;
   public:
     KaxInternalBlock(const libebml::EbmlCallbacks & classInfo)
       :libebml::EbmlBinary(classInfo)
@@ -208,9 +212,57 @@ class MATROSKA_DLL_API KaxInternalBlock : public libebml::EbmlBinary {
     std::uint64_t ReadInternalHead(libebml::IOCallback & input);
 
     unsigned int NumberFrames() const { return SizeList.size();}
-    DataBuffer & GetBuffer(unsigned int iIndex) {return *myBuffers[iIndex];}
+    DataBuffer & GetBuffer(unsigned int iIndex) {
+      if (mySpoolStore)
+        throw std::logic_error("KaxInternalBlock::GetBuffer: frame payloads were moved to a KaxFrameStore");
+      return *myBuffers[iIndex];
+    }
+
+    /*!
+      \return true when the frame payloads live in a KaxFrameStore rather than in memory
+    */
+    bool HasSpooledFrames() const {return static_cast<bool>(mySpoolStore);}
+
+    /*!
+      \return true while the block still owns in-memory frame payloads
+    */
+    bool HasResidentFrames() const {return !mySpoolStore && !myBuffers.empty();}
+
+    /*!
+      \return the store owning the payloads, or nullptr when the frames are resident
+    */
+    const KaxFrameStore * SpoolStore() const {return mySpoolStore.get();}
 
     bool AddFrame(const KaxTrackEntry & track, std::uint64_t timestamp, DataBuffer & buffer, LacingType lacing = LACING_AUTO, bool invisible = false);
+
+    /*!
+      \brief move all resident frame payloads into the given backing store
+      \return false and leave every resident frame untouched on failure
+      \note blocks already attached to another store are rejected by the cluster
+    */
+    bool SpoolFrames(const std::shared_ptr<KaxFrameStore> & aStore);
+
+    /*!
+      \brief render the block head, lacing metadata and the streamed payloads
+
+      Used instead of RenderData() once the payloads have been spooled. Payload
+      bytes pass through a bounded 64 KiB working area regardless of the frame
+      or lace size. Read failures or output failures are thrown to the caller
+      and the backing store is never modified.
+    */
+    libebml::filepos_t RenderSpooledData(libebml::IOCallback & output);
+
+    /*!
+      \brief size of frame \a iIndex, valid for resident and spooled frames
+    */
+    std::uint32_t FramePayloadSize(std::size_t iIndex) const;
+
+    /*!
+      \brief number of frames, resident frames are tracked by myBuffers
+    */
+    std::size_t FrameCount() const {
+      return mySpoolStore ? SizeList.size() : myBuffers.size();
+    }
 
     /*!
       \brief release all the frames of all Blocks
@@ -265,6 +317,31 @@ class MATROSKA_DLL_API KaxInternalBlock : public libebml::EbmlBinary {
     std::uint64_t             FirstFrameLocation;
 
     KaxCluster               *ParentCluster{nullptr};
+
+    // frame payload backing store; when set, myBuffers is empty and the payload
+    // bytes live at mySpoolOffsets in the store stream
+    std::shared_ptr<KaxFrameStore> mySpoolStore;
+    std::vector<std::uint64_t>    mySpoolOffsets;
+
+    /*!
+      \brief first spool phase: write all resident payloads to the store stream
+
+      On failure the block keeps its resident buffers; the store may carry
+      uncommitted tail bytes that are never referenced.
+    */
+    bool SpoolFramesWrite(const std::shared_ptr<KaxFrameStore> & aStore,
+                          std::vector<std::uint64_t> & aOffsets);
+
+    /*!
+      \brief second spool phase: detach the resident buffers and keep the store references
+
+      The DataBuffer objects are handed back untouched so the caller can free
+      them once every block of the transaction is detached. The block becomes
+      fully spooled and exportable without throwing itself.
+    */
+    void SpoolFramesCommit(const std::shared_ptr<KaxFrameStore> & aStore,
+                           std::vector<std::uint64_t> && aOffsets,
+                           std::vector<DataBuffer *> & aDetachedBuffers);
 
     libebml::filepos_t RenderData(libebml::IOCallback & output, bool bForceRender, const ShouldWrite & writeFilter = WriteSkipDefault) override;
 };

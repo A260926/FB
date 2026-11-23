@@ -16,6 +16,9 @@
 #include "matroska/KaxBlock.h"
 #include "matroska/KaxCues.h"
 #include "matroska/KaxDefines.h"
+#include "matroska/KaxFrameStore.h"
+
+#include <memory>
 
 namespace libmatroska {
 
@@ -23,6 +26,7 @@ class KaxSegment;
 
 DECLARE_MKX_MASTER_CONS(KaxCluster)
   public:
+    ~KaxCluster() override;
     /*!
       \brief Addition of a frame without references
 
@@ -60,6 +64,24 @@ DECLARE_MKX_MASTER_CONS(KaxCluster)
       \note this is a convenience to be able to keep Clusters+Blocks in memory (for future reference) withouht being a memory hog
     */
     void ReleaseFrames();
+
+    /*!
+      \brief move all still resident compressed frame payloads into the backing store
+
+      Both frames added through AddFrame() (direct BlockGroups) and frames
+      registered through AddBlockBlob() that have not been rendered yet are
+      handled. On success every moved DataBuffer is freed and its free callback
+      runs exactly once; block identity, frame order, payload lengths, flags,
+      duration, references and registered cue relations are preserved. Calling
+      again with the same store only moves frames added after the previous call
+      and never rewrites old payloads.
+
+      \return false, without modifying any block, when the store is null, the
+              cluster already uses a different store, or a backing stream
+              write/seek or a buffer free callback fails; the cluster stays
+              fully exportable and the operation can be retried
+    */
+    bool SpoolFrames(const std::shared_ptr<KaxFrameStore> & aFrameStore);
 
     /*!
       \brief return the position offset compared to the beggining of the Segment
@@ -102,10 +124,13 @@ DECLARE_MKX_MASTER_CONS(KaxCluster)
     const KaxSegment *GetParentSegment() const { return ParentSegment; }
 
   protected:
-    KaxBlockBlob     * currentNewBlob;
+    KaxBlockBlob     * currentNewBlob{nullptr};
     std::vector<KaxBlockBlob*> Blobs;
     KaxBlockGroup    * currentNewBlock{nullptr};
     const KaxSegment * ParentSegment{nullptr};
+
+    //! buffers detached during a failed spool, freed at destruction
+    std::vector<DataBuffer*> myPendingFreeBuffers;
 
     std::uint64_t MinTimestamp, MaxTimestamp, PreviousTimestamp;
     std::int64_t  TimestampScale;

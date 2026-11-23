@@ -9,7 +9,11 @@
 #include "matroska/KaxBlock.h"
 #include "matroska/KaxContexts.h"
 #include "matroska/KaxSegment.h"
+#include "matroska/KaxFrameStore.h"
 #include "matroska/KaxDefines.h"
+
+#include <utility>
+#include <vector>
 
 using namespace libebml;
 
@@ -19,6 +23,21 @@ namespace libmatroska {
 KaxCluster::KaxCluster()
   :EbmlMaster(KaxCluster::ClassInfos)
 {}
+
+KaxCluster::~KaxCluster()
+{
+  // a failed spool may have detached buffers whose free callback threw; they
+  // belong to nobody else. Retry the reclaim without letting an exception leave
+  // the destructor, then drop the DataBuffer object.
+  for (auto * buffer : myPendingFreeBuffers) {
+    try {
+      buffer->FreeBuffer(*buffer);
+    } catch (...) {
+      // the payload owner could not be notified; nothing else can be done
+    }
+    delete buffer;
+  }
+}
 
 KaxCluster::KaxCluster(const KaxCluster & ElementToClone)
   :EbmlMaster(ElementToClone)
@@ -41,6 +60,108 @@ bool KaxCluster::AddBlockBlob(KaxBlockBlob * NewBlob)
   return true;
 }
 
+namespace {
+
+//! return the internal block of a direct BlockGroup, or nullptr
+KaxInternalBlock * InternalBlockOf(KaxBlockGroup & aBlockGroup)
+{
+  return FindChild<KaxBlock>(aBlockGroup);
+}
+
+//! return the internal block held by a blob, whichever flavour it is
+KaxInternalBlock & InternalBlockOf(KaxBlockBlob & aBlob)
+{
+  return static_cast<KaxInternalBlock &>(aBlob);
+}
+
+} // namespace
+
+bool KaxCluster::SpoolFrames(const std::shared_ptr<KaxFrameStore> & aFrameStore)
+{
+  if (!aFrameStore)
+    // an empty store cannot back any frame
+    return false;
+
+  // collect every block still owning resident payloads, both the direct
+  // BlockGroups and the blobs registered but not rendered yet
+  struct PendingBlock {
+    KaxInternalBlock * myBlock;
+    std::vector<std::uint64_t> myOffsets;
+  };
+  std::vector<PendingBlock> pending;
+  std::vector<KaxInternalBlock *> seen; // a block may be reachable both directly and through a blob
+
+  const auto registerBlock = [&](KaxInternalBlock & aBlock) -> bool {
+    if (std::find(seen.begin(), seen.end(), &aBlock) != seen.end())
+      return true; // already accounted for
+    seen.push_back(&aBlock);
+    if (aBlock.HasSpooledFrames()) {
+      if (aBlock.SpoolStore() != aFrameStore.get())
+        // the cluster already belongs to another store: refuse everything
+        return false;
+      return true; // already stored in this store, nothing to do
+    }
+    if (aBlock.HasResidentFrames())
+      pending.push_back(PendingBlock{&aBlock, {}});
+    return true;
+  };
+
+  for (const auto& element : GetElementList()) {
+    if (EbmlId(*element) == EBML_ID(KaxBlockGroup)) {
+      auto * internal = InternalBlockOf(*static_cast<KaxBlockGroup *>(element));
+      if (internal && !registerBlock(*internal))
+        return false;
+    }
+  }
+  for (const auto& blob : Blobs) {
+    if (!registerBlock(InternalBlockOf(*blob)))
+      return false;
+  }
+
+  if (pending.empty()) {
+    // nothing resident to move; still make sure no new frame can join an old lace
+    currentNewBlock = nullptr;
+    currentNewBlob = nullptr;
+    return true;
+  }
+
+  // first phase: write every resident payload to the backing stream. A failure
+  // leaves all resident buffers in place; the stream may hold tail bytes that
+  // no frame will ever reference.
+  for (auto& entry : pending) {
+    if (!entry.myBlock->SpoolFramesWrite(aFrameStore, entry.myOffsets))
+      return false;
+  }
+
+  // second phase: detach every block before any free callback can run. At this
+  // point no block modification can fail and the cluster is fully spooled.
+  std::vector<DataBuffer *> detached;
+  for (auto& entry : pending)
+    entry.myBlock->SpoolFramesCommit(aFrameStore, std::move(entry.myOffsets), detached);
+
+  // third phase: free the detached payloads, each callback runs exactly once.
+  // a throwing callback fails the call but cannot touch the spooled blocks; the
+  // buffer that threw and every remaining one are reclaimed at destruction.
+  while (!detached.empty()) {
+    auto * buffer = detached.back();
+    detached.pop_back();
+    try {
+      buffer->FreeBuffer(*buffer);
+      delete buffer;
+    } catch (...) {
+      myPendingFreeBuffers.push_back(buffer);
+      myPendingFreeBuffers.insert(myPendingFreeBuffers.end(),
+                                  detached.begin(), detached.end());
+      return false;
+    }
+  }
+
+  // new frames must start a new block, never extend a migrated lace
+  currentNewBlock = nullptr;
+  currentNewBlob = nullptr;
+  return true;
+}
+
 bool KaxCluster::AddFrameInternal(const KaxTrackEntry & track, std::uint64_t timestamp, DataBuffer & buffer, KaxBlockGroup * & MyNewBlock, const KaxBlockGroup * PastBlock, const KaxBlockGroup * ForwBlock, LacingType lacing)
 {
   if (!bFirstFrameInside) {
@@ -59,8 +180,13 @@ bool KaxCluster::AddFrameInternal(const KaxTrackEntry & track, std::uint64_t tim
     currentNewBlock = nullptr;
   }
 
+  // a lace whose payloads were spooled is sealed: a following frame must start
+  // a fresh block rather than joining the migrated one
+  const auto * currentInternal = currentNewBlock ? FindChild<KaxBlock>(*currentNewBlock) : nullptr;
+  const bool currentIsSpooled = currentInternal && currentInternal->HasSpooledFrames();
+
   // force creation of a new block
-  if (!currentNewBlock || static_cast<std::uint32_t>(track.TrackNumber()) != static_cast<std::uint32_t>(currentNewBlock->TrackNumber()) || PastBlock || ForwBlock) {
+  if (!currentNewBlock || currentIsSpooled || static_cast<std::uint32_t>(track.TrackNumber()) != static_cast<std::uint32_t>(currentNewBlock->TrackNumber()) || PastBlock || ForwBlock) {
     KaxBlockGroup & aNewBlock = GetNewBlock();
     MyNewBlock = currentNewBlock = &aNewBlock;
   }

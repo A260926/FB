@@ -68,6 +68,7 @@ set(libmatroska_SOURCES
   src/KaxContexts.cpp
   src/KaxCues.cpp
   src/KaxCuesData.cpp
+  src/KaxFrameStore.cpp
   src/KaxSeekHead.cpp
   src/KaxSegment.cpp
   src/KaxSemantic.cpp
@@ -83,6 +84,7 @@ set(libmatroska_PUBLIC_HEADERS
   matroska/KaxCuesData.h
   matroska/KaxCues.h
   matroska/KaxDefines.h
+  matroska/KaxFrameStore.h
   matroska/KaxSeekHead.h
   matroska/KaxSegment.h
   matroska/KaxSemantic.h
@@ -138,6 +140,10 @@ if(BUILD_EXAMPLES)
   add_executable(test9 test/tags/test9.cpp)
   target_link_libraries(test9 matroska)
   target_include_directories(test9 PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
+
+  add_executable(frame_store_example test/frame_store_example.cpp)
+  target_link_libraries(frame_store_example matroska)
+  target_include_directories(frame_store_example PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
 endif()
 
 install(TARGETS matroska
