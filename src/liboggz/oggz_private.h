@@ -63,6 +63,20 @@ typedef int (*OggzReadPage) (OGGZ * oggz, const ogg_page * og, long serialno,
 /* oggz_stream */
 #include "oggz_stream_private.h"
 
+/*
+ * One back-pressure ledger entry per admitted packet, chained per logical
+ * stream. The entry deliberately outlives the oggz_writer_packet_t it
+ * describes (which is freed as soon as libogg has absorbed it, marking any
+ * guard then): a packet stays on the ledger until the page on which it ends
+ * is delivered in full. Only the original packet byte count is recorded;
+ * page headers are never counted.
+ */
+typedef struct oggz_pending_packet oggz_pending_packet_t;
+struct oggz_pending_packet {
+  ogg_int64_t bytes;
+  oggz_pending_packet_t * next;
+};
+
 typedef ogg_int64_t (*OggzMetric) (OGGZ * oggz, long serialno,
 				   ogg_int64_t granulepos,
 				   void * user_data);
@@ -124,6 +138,11 @@ struct _oggz_stream_t {
   ogg_int64_t page_granulepos;
   void * calculate_data;
   ogg_packet * last_packet;
+
+  /* Back-pressure ledger: packets of this stream whose ending page has not
+   * yet been delivered in full, in admission order. */
+  oggz_pending_packet_t * pending_head;
+  oggz_pending_packet_t * pending_tail;
 };
 
 struct _OggzReader {
@@ -199,6 +218,25 @@ struct _OggzWriter {
 
   int no_more_packets; /* used only in the local oggz_write loop to indicate
                           end of stream */
+
+  /* Back-pressure state. pending_bytes is the sum of the original bytes of
+   * every packet, across all streams, whose ending page has not been
+   * delivered in full; page headers are never counted. pending_limit == 0
+   * disables the limit. Per-stream chains live on the stream structures and
+   * are released whole when their pages complete, so interleaved streams do
+   * not interfere with each other's accounting. */
+  ogg_int64_t pending_bytes;
+  ogg_int64_t pending_limit;
+
+  /* Set once the current page's back-pressure entries have been released,
+   * so an extra zero-length output of the same page cannot release them a
+   * second time. Reset whenever a new page is initialised. */
+  int page_accounted;
+
+  /* Deferred status of the custom write callback. A non-EAGAIN callback
+   * failure (OGGZ_ERR_SYSTEM) is reported once on the next write call after
+   * any bytes already produced have been returned. */
+  int io_pending_error;
 
 };
 

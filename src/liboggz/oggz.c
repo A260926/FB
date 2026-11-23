@@ -185,6 +185,15 @@ oggz_stream_clear (void * data)
 {
   oggz_stream_t * stream = (oggz_stream_t *) data;
 
+  /* Defensive: normally the write-side close has already drained the
+   * back-pressure ledgers. */
+  while (stream->pending_head != NULL) {
+    oggz_pending_packet_t * next = stream->pending_head->next;
+    oggz_free (stream->pending_head);
+    stream->pending_head = next;
+  }
+  stream->pending_tail = NULL;
+
   oggz_comments_free (stream);
 
   if (stream->ogg_stream.serialno != -1)
@@ -368,7 +377,10 @@ oggz_add_stream (OGGZ * oggz, long serialno)
   stream->read_page_user_data = NULL;
 
   stream->calculate_data = NULL;
-  
+
+  stream->pending_head = NULL;
+  stream->pending_tail = NULL;
+
   oggz_vector_insert_p (oggz->streams, stream);
 
   return stream;

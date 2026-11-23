@@ -31,6 +31,8 @@
 		oggz_write;
 		oggz_write_output;
 		oggz_write_get_next_page_size;
+		oggz_write_set_pending_limit;
+		oggz_write_get_pending_bytes;
 
 		oggz_set_metric;
 		oggz_set_metric_linear;

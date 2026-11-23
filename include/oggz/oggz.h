@@ -325,7 +325,9 @@ extern "C" {
  * - Any attempt to call oggz_new(), oggz_open() or oggz_open_stdio()
  *   with \a flags == OGGZ_WRITE will fail, returning NULL
  * - Any attempt to call oggz_write(), oggz_write_output(), oggz_write_feed(),
- *   oggz_write_set_hungry_callback(), or oggz_write_get_next_page_size()
+ *   oggz_write_set_hungry_callback(),
+ *   oggz_write_set_pending_limit(),
+ *   oggz_write_get_pending_bytes(), or oggz_write_get_next_page_size()
  *   will return OGGZ_ERR_DISABLED
  *
  * \subsection no_decode Removing reading support
