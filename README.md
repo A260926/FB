@@ -13,6 +13,44 @@ to think about this. Poly2Tri does not support repeat points within epsilon.
   3. Add Steiner points
   4. Triangulate
 
+Point ownership and the editing phase
+-------------------------------------
+
+The CDT never owns the `p2t::Point` objects you pass in: the polyline, hole
+and Steiner-point pointers you supply stay allocated and owned by your code
+for the whole life of the CDT.  The triangulation only borrows them, and
+dynamic constraint editing reuses those exact same objects as mesh vertices
+without copying, moving or adding any point.  The Triangle objects created by
+`Triangulate()` are owned by the CDT and freed in its destructor.
+
+After `Triangulate()` you may repeatedly add and remove crease lines with the
+dynamic constraint API:
+
+```cpp
+p2t::CDT::ConstraintId line = cdt.InsertConstraint(point_a, point_b);
+if (line == 0) { /* the line was rejected, the mesh is unchanged */ }
+cdt.RemoveConstraint(line);
+```
+
+Restrictions while editing:
+
+* Both endpoints must be two distinct `p2t::Point` objects actually used by
+  the finished triangulation.  Null pointers, foreign points and calls made
+  before `Triangulate()` make `InsertConstraint` return `0`.
+* A line is split at every mesh vertex it passes through; each piece becomes
+  a real constrained edge.  No vertex is ever inserted, so an intersection
+  that is not an existing vertex is not created: a line that crosses a
+  protected edge away from a vertex, enters a hole, or leaves the outer
+  contour is rejected as a whole and leaves the mesh completely unchanged.
+* Outer contour and hole edges stay constrained forever.  Several constraint
+  ids may share a sub-edge; it remains protected until the last sharing id
+  is removed.  Successful ids are never reused, and removing `0`, an unknown
+  id or an already removed id returns `false`.
+* Do not move points, call `AddPoint`/`AddHole` or re-triangulate while
+  editing.  The editor changes only local triangle connectivity (edge flips)
+  and re-legalizes the freed diagonals after each change, preserving the
+  total area, all input point identities and the constrained boundary.
+
 Make sure you understand the preceding notice before posting an issue. If you have
 an issue not covered by the above, include your data-set with the problem.
 The only easy day was yesterday; have a nice day. <Mason Green>

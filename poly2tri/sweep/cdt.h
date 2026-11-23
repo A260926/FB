@@ -32,6 +32,7 @@
 #pragma once
 
 #include "advancing_front.h"
+#include "constraint_editor.h"
 #include "sweep_context.h"
 #include "sweep.h"
 
@@ -48,6 +49,12 @@ namespace p2t {
 class P2T_DLL_SYMBOL CDT
 {
 public:
+
+  /**
+   * Handle of a user-inserted dynamic constraint.  Zero never identifies a
+   * live constraint and successful ids are never reused while the CDT lives.
+   */
+  using ConstraintId = std::uint64_t;
 
   /**
    * Constructor - add polyline with non repeating points
@@ -81,6 +88,28 @@ public:
   void Triangulate();
 
   /**
+   * Insert a dynamic crease line after Triangulate().
+   *
+   * Both endpoints must be distinct Point objects already used by this
+   * triangulation; null pointers, foreign Point objects and calls before
+   * Triangulate() return 0.  A line that leaves the outer contour, enters a
+   * hole or properly crosses a protected edge where no vertex exists is
+   * rejected as a whole, again returning 0 and leaving the mesh unchanged.
+   * On success the line is split at mesh vertices lying on it, every piece
+   * becomes a constrained edge and a non-zero id is returned.
+   */
+  ConstraintId InsertConstraint(Point* a, Point* b);
+
+  /**
+   * Remove the constraint previously returned by InsertConstraint().
+   *
+   * Returns false for 0, unknown ids and ids that were already removed.
+   * Sub-edges still shared with another live constraint stay protected;
+   * freed edges rejoin the local Delaunay legalization.
+   */
+  bool RemoveConstraint(ConstraintId id);
+
+  /**
    * Get CDT triangles
    */
   std::vector<Triangle*> GetTriangles();
@@ -98,6 +127,7 @@ public:
 
   SweepContext* sweep_context_;
   Sweep* sweep_;
+  ConstraintEditor* constraint_editor_;
 
 };
 

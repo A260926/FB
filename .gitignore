@@ -15,3 +15,6 @@ build/
 /.ccls-cache/
 /compile_commands.json
 /.cache/
+/.build/
+*.o
+*.dSYM

@@ -36,6 +36,7 @@ CDT::CDT(const std::vector<Point*>& polyline)
 {
   sweep_context_ = new SweepContext(polyline);
   sweep_ = new Sweep;
+  constraint_editor_ = nullptr;
 }
 
 void CDT::AddHole(const std::vector<Point*>& polyline)
@@ -50,6 +51,24 @@ void CDT::AddPoint(Point* point) {
 void CDT::Triangulate()
 {
   sweep_->Triangulate(*sweep_context_);
+  delete constraint_editor_;
+  constraint_editor_ = new ConstraintEditor(*sweep_context_);
+}
+
+CDT::ConstraintId CDT::InsertConstraint(Point* a, Point* b)
+{
+  if (constraint_editor_ == nullptr) {
+    return 0;
+  }
+  return constraint_editor_->InsertConstraint(a, b);
+}
+
+bool CDT::RemoveConstraint(ConstraintId id)
+{
+  if (constraint_editor_ == nullptr) {
+    return false;
+  }
+  return constraint_editor_->RemoveConstraint(id);
 }
 
 std::vector<p2t::Triangle*> CDT::GetTriangles()
@@ -64,6 +83,7 @@ std::list<p2t::Triangle*> CDT::GetMap()
 
 CDT::~CDT()
 {
+  delete constraint_editor_;
   delete sweep_context_;
   delete sweep_;
 }
