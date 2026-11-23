@@ -411,13 +411,36 @@ int sb_encoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Recursively reset the narrowband encoder (all its analysis,
+            prediction, VBR and DTX history, including its high-pass memory). */
+         speex_encoder_ctl(st->st_low, SPEEX_RESET_STATE, NULL);
          st->first = 1;
+         /* Restore the user-selected high-band mode over the VBR chosen one. */
+         st->submodeID = st->submodeSelect;
          for (i=0;i<st->lpcSize;i++)
             st->old_lsp[i]= DIV32(MULT16_16(QCONST16(3.1415927f, LSP_SHIFT), i+1), st->lpcSize+1);
          for (i=0;i<st->lpcSize;i++)
+         {
+            st->old_qlsp[i]=0;
+            st->interp_qlpc[i]=0;
             st->mem_sw[i]=st->mem_sp[i]=st->mem_sp2[i]=0;
+         }
+         for (i=0;i<st->nbSubframes;i++)
+         {
+            st->pi_gain[i]=0;
+            st->exc_rms[i]=0;
+         }
+         /* High-band input history and QMF analysis memory. */
+         SPEEX_MEMSET(st->high, 0, st->windowSize-st->frame_size);
          for (i=0;i<QMF_ORDER;i++)
             st->h0_mem[i]=0;
+#ifndef DISABLE_VBR
+         /* Adaptation history only; the configured VBR quality stays. */
+         st->relative_quality=0;
+         st->abr_drift=0;
+         st->abr_drift2=0;
+         st->abr_count=0;
+#endif /* #ifndef DISABLE_VBR */
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
@@ -690,7 +713,9 @@ int sb_encode(void *state, void *vin, SpeexBits *bits)
                break;
             modeid--;
          }
-         speex_encoder_ctl(state, SPEEX_SET_HIGH_MODE, &modeid);
+         /* VBR picks the instantaneous high-band mode for this frame only;
+            keep submodeSelect as the user's quality-derived selection. */
+         st->submodeID = modeid;
          if (st->abr_enabled)
          {
             spx_int32_t bitrate;
@@ -1112,11 +1137,28 @@ int sb_decoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Recursively reset the narrowband decoder (synthesis memories, PLC
+            state, seed and high-pass memory) without touching its callbacks. */
+         speex_decoder_ctl(st->st_low, SPEEX_RESET_STATE, NULL);
+         st->first=1;
          for (i=0;i<2*st->lpcSize;i++)
             st->mem_sp[i]=0;
+         for (i=0;i<st->lpcSize;i++)
+         {
+            st->old_qlsp[i]=0;
+            st->interp_qlpc[i]=0;
+         }
+         for (i=0;i<st->nbSubframes;i++)
+         {
+            st->pi_gain[i]=0;
+            st->exc_rms[i]=0;
+         }
+         SPEEX_MEMSET(st->excBuf, 0, st->subframeSize);
+         /* QMF synthesis memory and high-band PLC state. */
          for (i=0;i<QMF_ORDER;i++)
             st->g0_mem[i]=st->g1_mem[i]=0;
          st->last_ener=0;
+         st->seed = 1000;
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:

@@ -2928,8 +2928,20 @@ spx_int32_t
 \end_layout
 
 \begin_layout Description
-SPEEX_RESET_STATE Reset the encoder/decoder state to its original state,
- clearing all memories (no argument)
+SPEEX_RESET_STATE Reset the encoder/decoder to the state of a freshly created
+ handle (no argument, pass NULL).
+ This clears the audio session history only: analysis window, filter and
+ prediction memories, VBR analysis state and DTX counters, decoder PLC random
+ progress and loss recovery, and for wideband/ultra-wideband modes the
+ recursive low band and every QMF stage.
+ User configuration is preserved: encoder quality or explicit mode,
+ complexity, sampling rate, high-pass, VBR switch and VBR quality, VAD/DTX,
+ PLC tuning and submode encoding; decoder enhancement, in-band message
+ handlers and the user handler.
+ VBR-chosen instantaneous modes and DTX counters are session history, not
+ user configuration.
+ Repeated resets are equivalent and a reset immediately after initialization
+ does not change any output.
 \end_layout
 
 \begin_layout Description

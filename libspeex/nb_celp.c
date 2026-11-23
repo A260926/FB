@@ -321,16 +321,43 @@ int nb_encoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Clear all session history so the next frame is encoded exactly as
+            by a freshly created state. Control settings (quality, complexity,
+            VBR/VAD/DTX, sampling rate, high-pass, ...) are intentionally kept. */
          st->bounded_pitch = 1;
          st->first = 1;
+         /* Discard the VBR/VAD chosen instantaneous mode and restore the
+            mode implied by the user's quality or explicit mode setting. */
+         st->submodeID = st->submodeSelect;
+         st->cumul_gain = 1024;
+         for (i=0;i<NB_NB_SUBFRAMES;i++)
+            st->pitch[i]=0;
          for (i=0;i<NB_ORDER;i++)
             st->old_lsp[i]= DIV32(MULT16_16(QCONST16(3.1415927f, LSP_SHIFT), i+1), NB_ORDER+1);
          for (i=0;i<NB_ORDER;i++)
-            st->mem_sw[i]=st->mem_sw_whole[i]=st->mem_sp[i]=st->mem_exc[i]=0;
-         for (i=0;i<NB_FRAME_SIZE+NB_PITCH_END+1;i++)
+         {
+            st->old_qlsp[i]=0;
+            st->mem_sw[i]=st->mem_sw_whole[i]=st->mem_sp[i]=st->mem_exc[i]=st->mem_exc2[i]=0;
+         }
+         st->mem_hp[0]=st->mem_hp[1]=0;
+         for (i=0;i<NB_NB_SUBFRAMES;i++)
+            st->pi_gain[i]=0;
+         for (i=0;i<NB_FRAME_SIZE+NB_PITCH_END+2;i++)
             st->excBuf[i]=st->swBuf[i]=0;
+         st->exc = st->excBuf + NB_PITCH_END + 2;
+         st->sw = st->swBuf + NB_PITCH_END + 2;
          for (i=0;i<NB_WINDOW_SIZE-NB_FRAME_SIZE;i++)
             st->winBuf[i]=0;
+#ifndef DISABLE_VBR
+         /* VBR analysis memory and DTX bookkeeping are session history, not
+            user configuration; restore their post-initialization values. */
+         vbr_init(&st->vbr);
+         st->relative_quality=0;
+         st->dtx_count=0;
+         st->abr_drift=0;
+         st->abr_drift2=0;
+         st->abr_count=0;
+#endif /* #ifndef DISABLE_VBR */
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
@@ -642,7 +669,10 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
             st->dtx_count=0;
          }
 
-         speex_encoder_ctl(state, SPEEX_SET_MODE, &mode);
+         /* VBR picks the instantaneous sub-mode for this frame only; the
+            user-selected submodeSelect must be left untouched so a reset can
+            restore it. */
+         st->submodeID = mode;
          if (st->vbr_max>0)
          {
             spx_int32_t rate;
@@ -1181,10 +1211,34 @@ int nb_decoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Clear all decoder session history (filter memories, PLC state and
+            the random seed) while keeping the user configuration: enhancement,
+            high-pass, submode encoding, callbacks and sampling rate survive. */
+         st->first=1;
+         st->count_lost=0;
+         SPEEX_MEMSET(st->excBuf, 0, NB_DEC_BUFFER);
+         st->exc = st->excBuf + 2*NB_PITCH_END + NB_SUBFRAME_SIZE + 6;
          for (i=0;i<NB_ORDER;i++)
+         {
+            st->old_qlsp[i]=0;
+            st->interp_qlpc[i]=0;
             st->mem_sp[i]=0;
-         for (i=0;i<NB_FRAME_SIZE + NB_PITCH_END + 1;i++)
-            st->excBuf[i]=0;
+         }
+         st->mem_hp[0]=st->mem_hp[1]=0;
+         for (i=0;i<NB_NB_SUBFRAMES;i++)
+            st->pi_gain[i]=0;
+         st->last_ol_gain = 0;
+         st->last_pitch = 40;
+         st->last_pitch_gain = 0;
+         st->pitch_gain_buf[0] = st->pitch_gain_buf[1] = st->pitch_gain_buf[2] = 0;
+         st->pitch_gain_buf_idx = 0;
+         st->seed = 1000;
+         st->level = st->max_level = st->min_level = 0;
+         st->voc_m1=st->voc_m2=st->voc_mean=0;
+         st->voc_offset=0;
+         /* DTX state on the decoder is driven by the received bit-stream, not
+            a user control, so it goes back to its initialized value. */
+         st->dtx_enabled=0;
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
