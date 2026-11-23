@@ -40,6 +40,51 @@ by anyone. With the following tenets in mind.
 * [Interval PLI](https://github.com/pion/interceptor/tree/master/pkg/intervalpli) Generate PLI on a interval. Useful when no decoder is available.
 * [FlexFec](https://github.com/pion/interceptor/tree/master/pkg/flexfec) – [FlexFEC-03](https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03) encoder implementation
 
+### Receive-side repair before the jitter buffer
+
+On the inbound path, register the FlexFEC repair receiver **first**, then the
+jitter buffer (or any other reordering stage). The repair interceptor consumes
+the interleaved media and repair datagrams of one bound stream, solves the
+FlexFEC-03 equations incrementally over GF(2) — including multi-row systems
+where no single equation peels immediately — and only ever hands media RTP to
+the next stage, so the jitter buffer sees original and recovered packets on
+one continuous sequence space.
+
+```go
+repair, err := flexfec.NewRepairReceiver(32 /*window*/, 32 /*maxEquations*/)
+if err != nil { panic(err) }
+
+info := &interceptor.StreamInfo{
+    SSRC:                              mediaSSRC,
+    PayloadType:                       mediaPT,
+    SSRCForwardErrorCorrection:        fecSSRC,
+    PayloadTypeForwardErrorCorrection: fecPT,
+}
+
+// repair first, jitter buffer second
+mediaReader := repair.BindRemoteStream(info, upstreamReader)
+mediaReader = jitterBuffer.BindRemoteStream(info, mediaReader)
+```
+
+`Read` delivers queued media first and otherwise consumes at most one upstream
+datagram. When a read produces no media (for example a repair-only datagram, or
+equations that are not yet full rank) it returns `flexfec.ErrRepairPending`;
+retry the read. Upstream errors are returned unchanged, without dropping media
+that was already recovered.
+
+Attributes:
+
+* Original media packets keep the attributes of the datagram that carried
+  them (each input's attributes are snapshotted, so caller-reused maps cannot
+  mutate stored state).
+* Recovered packets carry a snapshot of the attributes of the last input
+  packet that contributed to solving their equation, plus the boolean
+  attribute `flexfec.recovered=true`. Cached RTP headers from input bytes are
+  never reused on recovered bytes, since those describe a different packet.
+* A complete example is in
+  [examples/flexfec-receive](https://github.com/pion/interceptor/tree/master/examples/flexfec-receive).
+
+
 ### Planned Interceptors
 * Bandwidth Estimation
   - [NADA](https://tools.ietf.org/html/rfc8698)

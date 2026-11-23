@@ -1,0 +1,8 @@
+inbound media delivered to the next stage (e.g. jitter buffer):
+  seq=100  ssrc=5000 pt=96  original  attrs=map[trace:media] payload=61 62 63 00 64
+  seq=102  ssrc=5000 pt=96  original  attrs=map[trace:media] payload=61 62 63 00 66
+  seq=103  ssrc=5000 pt=96  original  attrs=map[trace:media] payload=61 62 63 00 67
+  seq=101  ssrc=5000 pt=96  recovered attrs=map[flexfec.recovered:true trace:repair] payload=61 62 63 00 65
+  seq=104  ssrc=5000 pt=96  recovered attrs=map[flexfec.recovered:true trace:repair] payload=61 62 63 00 68
+  seq=105  ssrc=5000 pt=96  original  attrs=map[trace:media] payload=61 62 63 00 69
+replay complete: 4 original and 2 recovered media packets, 0 repair packets exposed downstream

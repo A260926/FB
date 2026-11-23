@@ -1,0 +1,83 @@
+* Uses proxy env variable no_proxy == 'localhost,127.0.0.1,::1,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'
+* Uses proxy env variable https_proxy == 'http://srt.Y2FsbF9ucW01aDU5ZnBmMWlxM3U0bmo0OHk2OW4%3D:c45f77183f16347deeaf820a855ea5e0@localhost:59016'
+* Host localhost:59016 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+*   Trying [::1]:59016...
+* connect to ::1 port 59016 from ::1 port 59693 failed: Connection refused
+*   Trying 127.0.0.1:59016...
+* Connected to localhost (127.0.0.1) port 59016
+* CONNECT tunnel: HTTP/1.1 negotiated
+* allocate connect buffer
+* Proxy auth using Basic with user 'srt.Y2FsbF9ucW01aDU5ZnBmMWlxM3U0bmo0OHk2OW4='
+* Establish HTTP proxy tunnel to proxy.golang.org:443
+> CONNECT proxy.golang.org:443 HTTP/1.1
+> Host: proxy.golang.org:443
+> Proxy-Authorization: Basic c3J0LlkyRnNiRjl1Y1cwMWFEVTVabkJtTVdseE0zVTBibW8wT0hrMk9XND06YzQ1Zjc3MTgzZjE2MzQ3ZGVlYWY4MjBhODU1ZWE1ZTA=
+> User-Agent: curl/8.7.1
+> Proxy-Connection: Keep-Alive
+> 
+< HTTP/1.1 200 Connection Established
+< 
+* CONNECT phase completed
+* CONNECT tunnel established, response 200
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [321 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [15 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [9998 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [79 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=misc-sni.google.com
+*  start date: Nov  3 08:27:26 2026 GMT
+*  expire date: Jan 26 08:27:25 2027 GMT
+*  subjectAltName: host "proxy.golang.org" matched cert's "*.golang.org"
+*  issuer: C=US; O=Google Trust Services; CN=WE2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://proxy.golang.org/github.com/pion/rtp/@v/list
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: proxy.golang.org]
+* [HTTP/2] [1] [:path: /github.com/pion/rtp/@v/list]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /github.com/pion/rtp/@v/list HTTP/2
+> Host: proxy.golang.org
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-headers: Range
+< access-control-allow-origin: *
+< access-control-expose-headers: Content-Range, Content-Length
+< content-length: 585
+< content-security-policy-report-only: script-src 'none'; form-action 'none'; frame-src 'none'; report-uri https://csp.withgoogle.com/csp/goa-fa2dfb7c_2
+< cross-origin-opener-policy: same-origin
+< x-content-type-options: nosniff
+< x-frame-options: SAMEORIGIN
+< x-xss-protection: 0
+< date: Mon, 23 Nov 2026 00:32:17 GMT
+< expires: Mon, 23 Nov 2026 00:33:17 GMT
+< cache-control: public, max-age=60
+< content-type: text/plain; charset=UTF-8
+< age: 18
+< alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+< 
+{ [585 bytes data]
+* Connection #0 to host localhost left intact

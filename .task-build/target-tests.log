@@ -1,0 +1,55 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestRepairRank
+=== RUN   TestRepairRank/three_independent_rows_recover_three_missing_packets
+=== RUN   TestRepairRank/underdetermined_equations_never_guess_packets
+=== RUN   TestRepairRank/duplicate_and_dependent_equations_produce_no_duplicate_output
+=== RUN   TestRepairRank/production_encoder_single_loss_round_trip_stays_compatible
+=== RUN   TestRepairRank/variable_length_extensions_and_padding_survive_recovery
+=== RUN   TestRepairRank/long_mask_spanning_two_mask_sections_still_peels_a_single_loss
+=== NAME  TestRepairRank
+    check.go:29: TASK_GROUP_DONE TestRepairRank checks=95
+--- PASS: TestRepairRank (0.00s)
+    --- PASS: TestRepairRank/three_independent_rows_recover_three_missing_packets (0.00s)
+    --- PASS: TestRepairRank/underdetermined_equations_never_guess_packets (0.00s)
+    --- PASS: TestRepairRank/duplicate_and_dependent_equations_produce_no_duplicate_output (0.00s)
+    --- PASS: TestRepairRank/production_encoder_single_loss_round_trip_stays_compatible (0.00s)
+    --- PASS: TestRepairRank/variable_length_extensions_and_padding_survive_recovery (0.00s)
+    --- PASS: TestRepairRank/long_mask_spanning_two_mask_sections_still_peels_a_single_loss (0.00s)
+=== RUN   TestRepairWindow
+=== RUN   TestRepairWindow/recovery_works_across_the_65535_to_0_wrap
+=== RUN   TestRepairWindow/unknown_column_sliding_out_discards_the_whole_equation
+=== RUN   TestRepairWindow/equation_quota_evicts_the_oldest_independent_equation
+=== RUN   TestRepairWindow/late_duplicates_inside_and_outside_the_window_deliver_at_most_once
+=== NAME  TestRepairWindow
+    check.go:29: TASK_GROUP_DONE TestRepairWindow checks=50
+--- PASS: TestRepairWindow (0.00s)
+    --- PASS: TestRepairWindow/recovery_works_across_the_65535_to_0_wrap (0.00s)
+    --- PASS: TestRepairWindow/unknown_column_sliding_out_discards_the_whole_equation (0.00s)
+    --- PASS: TestRepairWindow/equation_quota_evicts_the_oldest_independent_equation (0.00s)
+    --- PASS: TestRepairWindow/late_duplicates_inside_and_outside_the_window_deliver_at_most_once (0.00s)
+=== RUN   TestRepairIngress
+=== RUN   TestRepairIngress/constructor_rejects_capacities_outside_2_to_512
+=== RUN   TestRepairIngress/streams_without_complete_FEC_identity_pass_through
+=== RUN   TestRepairIngress/two_streams_stay_isolated_and_conflicts_do_not_mutate_bindings
+=== RUN   TestRepairIngress/payload_type_mismatches_and_unsupported_FEC_formats_are_rejected_without_commit
+=== RUN   TestRepairIngress/buffers_and_attributes_are_snapshotted_before_reuse
+=== RUN   TestRepairIngress/upstream_errors_pass_through_while_queued_data_is_preserved
+=== RUN   TestRepairIngress/unbind_closes_the_old_reader_and_rebinding_starts_with_fresh_state
+=== RUN   TestRepairIngress/close_shuts_down_every_binding
+=== RUN   TestRepairIngress/pre_window_repair_packets_are_bounded_by_the_equation_budget
+=== RUN   TestRepairIngress/inflexible_and_multi_ssrc_repair_formats_are_rejected_explicitly
+=== NAME  TestRepairIngress
+    check.go:29: TASK_GROUP_DONE TestRepairIngress checks=88
+--- PASS: TestRepairIngress (0.00s)
+    --- PASS: TestRepairIngress/constructor_rejects_capacities_outside_2_to_512 (0.00s)
+    --- PASS: TestRepairIngress/streams_without_complete_FEC_identity_pass_through (0.00s)
+    --- PASS: TestRepairIngress/two_streams_stay_isolated_and_conflicts_do_not_mutate_bindings (0.00s)
+    --- PASS: TestRepairIngress/payload_type_mismatches_and_unsupported_FEC_formats_are_rejected_without_commit (0.00s)
+    --- PASS: TestRepairIngress/buffers_and_attributes_are_snapshotted_before_reuse (0.00s)
+    --- PASS: TestRepairIngress/upstream_errors_pass_through_while_queued_data_is_preserved (0.00s)
+    --- PASS: TestRepairIngress/unbind_closes_the_old_reader_and_rebinding_starts_with_fresh_state (0.00s)
+    --- PASS: TestRepairIngress/close_shuts_down_every_binding (0.00s)
+    --- PASS: TestRepairIngress/pre_window_repair_packets_are_bounded_by_the_equation_budget (0.00s)
+    --- PASS: TestRepairIngress/inflexible_and_multi_ssrc_repair_formats_are_rejected_explicitly (0.00s)
+PASS
+ok  	github.com/pion/interceptor/pkg/flexfec	0.282s
