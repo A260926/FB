@@ -1,0 +1,830 @@
+[
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Ac3Parser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Ac3Parser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Ac3Parser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Ac3Parser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Ac4Parser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Ac4Parser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Ac4Parser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Ac4Parser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4AdtsParser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4AdtsParser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4AdtsParser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4AdtsParser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4AvcParser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4AvcParser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4AvcParser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4AvcParser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4BitStream.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4BitStream.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4BitStream.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4BitStream.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Eac3Parser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Eac3Parser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Eac3Parser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Eac3Parser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4HevcParser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4HevcParser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4HevcParser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4HevcParser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Mp4AudioInfo.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Mp4AudioInfo.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4Mp4AudioInfo.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4Mp4AudioInfo.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4NalParser.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4NalParser.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs/Ap4NalParser.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Codecs/Ap4NalParser.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap48bdlAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap48bdlAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap48bdlAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap48bdlAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Ac4Utils.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Ac4Utils.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Ac4Utils.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Ac4Utils.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4AinfAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AinfAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AinfAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4AinfAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Atom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Atom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Atom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Atom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4AtomFactory.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AtomFactory.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AtomFactory.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4AtomFactory.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4AtomSampleTable.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AtomSampleTable.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AtomSampleTable.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4AtomSampleTable.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Av1cAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Av1cAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Av1cAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Av1cAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4AvccAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AvccAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4AvccAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4AvccAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4BlocAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4BlocAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4BlocAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4BlocAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4ByteStream.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ByteStream.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ByteStream.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4ByteStream.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Co64Atom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Co64Atom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Co64Atom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Co64Atom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4ColrAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ColrAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ColrAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4ColrAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Command.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Command.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Command.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Command.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4CommandFactory.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4CommandFactory.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4CommandFactory.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4CommandFactory.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4CommonEncryption.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4CommonEncryption.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4CommonEncryption.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4CommonEncryption.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4ContainerAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ContainerAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ContainerAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4ContainerAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4CttsAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4CttsAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4CttsAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4CttsAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Dac3Atom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Dac3Atom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Dac3Atom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Dac3Atom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Dac4Atom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Dac4Atom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Dac4Atom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Dac4Atom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DataBuffer.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DataBuffer.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DataBuffer.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DataBuffer.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Debug.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Debug.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Debug.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Debug.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Dec3Atom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Dec3Atom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Dec3Atom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Dec3Atom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DecoderConfigDescriptor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DecoderConfigDescriptor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DecoderConfigDescriptor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DecoderConfigDescriptor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DecoderSpecificInfoDescriptor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DecoderSpecificInfoDescriptor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DecoderSpecificInfoDescriptor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DecoderSpecificInfoDescriptor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Descriptor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Descriptor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Descriptor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Descriptor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DescriptorFactory.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DescriptorFactory.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DescriptorFactory.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DescriptorFactory.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DmlpAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DmlpAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DmlpAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DmlpAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DrefAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DrefAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DrefAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DrefAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4DvccAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DvccAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4DvccAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4DvccAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4EditedSampleReader.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4EditedSampleReader.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4EditedSampleReader.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4EditedSampleReader.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4ElstAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ElstAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ElstAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4ElstAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4EsDescriptor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4EsDescriptor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4EsDescriptor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4EsDescriptor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4EsdsAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4EsdsAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4EsdsAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4EsdsAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Expandable.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Expandable.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Expandable.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Expandable.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4File.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4File.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4File.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4File.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4FileCopier.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FileCopier.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FileCopier.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4FileCopier.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4FileWriter.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FileWriter.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FileWriter.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4FileWriter.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4FragmentSampleTable.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FragmentSampleTable.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FragmentSampleTable.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4FragmentSampleTable.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4FrmaAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FrmaAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FrmaAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4FrmaAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4FtypAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FtypAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4FtypAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4FtypAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4GrpiAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4GrpiAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4GrpiAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4GrpiAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4HdlrAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HdlrAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HdlrAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4HdlrAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4HintTrackReader.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HintTrackReader.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HintTrackReader.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4HintTrackReader.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4HmhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HmhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HmhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4HmhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4HvccAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HvccAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4HvccAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4HvccAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4IkmsAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IkmsAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IkmsAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4IkmsAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4IodsAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IodsAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IodsAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4IodsAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Ipmp.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Ipmp.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Ipmp.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Ipmp.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4IproAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IproAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IproAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4IproAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4IsfmAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IsfmAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IsfmAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4IsfmAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4IsltAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IsltAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IsltAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4IsltAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4IsmaCryp.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IsmaCryp.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4IsmaCryp.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4IsmaCryp.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4LinearReader.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4LinearReader.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4LinearReader.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4LinearReader.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Marlin.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Marlin.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Marlin.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Marlin.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MdhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MdhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MdhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MdhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MehdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MehdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MehdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MehdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MfhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MfhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MfhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MfhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MfroAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MfroAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MfroAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MfroAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MoovAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MoovAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MoovAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MoovAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Movie.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Movie.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Movie.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Movie.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MovieFragment.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MovieFragment.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MovieFragment.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MovieFragment.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Mpeg2Ts.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Mpeg2Ts.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Mpeg2Ts.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Mpeg2Ts.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4MvhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MvhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4MvhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4MvhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4NmhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4NmhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4NmhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4NmhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4ObjectDescriptor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ObjectDescriptor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4ObjectDescriptor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4ObjectDescriptor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4OdafAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OdafAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OdafAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4OdafAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4OddaAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OddaAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OddaAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4OddaAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4OdheAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OdheAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OdheAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4OdheAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4OhdrAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OhdrAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OhdrAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4OhdrAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4OmaDcf.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OmaDcf.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4OmaDcf.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4OmaDcf.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4PdinAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4PdinAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4PdinAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4PdinAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Piff.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Piff.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Piff.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Piff.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Processor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Processor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Processor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Processor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Protection.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Protection.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Protection.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Protection.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4PsshAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4PsshAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4PsshAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4PsshAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Results.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Results.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Results.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Results.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4RtpAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4RtpAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4RtpAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4RtpAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4RtpHint.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4RtpHint.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4RtpHint.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4RtpHint.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SLConfigDescriptor.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SLConfigDescriptor.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SLConfigDescriptor.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SLConfigDescriptor.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SaioAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SaioAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SaioAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SaioAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SaizAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SaizAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SaizAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SaizAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Sample.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Sample.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Sample.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Sample.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleDescription.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleDescription.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleDescription.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleDescription.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleEntry.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleEntry.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleEntry.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleEntry.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleSource.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleSource.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleSource.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleSource.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleSpool.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleSpool.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleSpool.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleSpool.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleTable.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleTable.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SampleTable.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SampleTable.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SbgpAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SbgpAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SbgpAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SbgpAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SchmAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SchmAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SchmAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SchmAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SdpAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SdpAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SdpAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SdpAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SegmentBuilder.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SegmentBuilder.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SegmentBuilder.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SegmentBuilder.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SencAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SencAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SencAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SencAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SgpdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SgpdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SgpdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SgpdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SidxAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SidxAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SidxAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SidxAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SmhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SmhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SmhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SmhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4StcoAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StcoAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StcoAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4StcoAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SthdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SthdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SthdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SthdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4String.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4String.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4String.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4String.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4StscAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StscAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StscAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4StscAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4StsdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StsdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StsdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4StsdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4StssAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StssAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StssAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4StssAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4StszAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StszAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4StszAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4StszAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SttsAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SttsAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SttsAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SttsAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Stz2Atom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Stz2Atom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Stz2Atom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Stz2Atom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4SyntheticSampleTable.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SyntheticSampleTable.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4SyntheticSampleTable.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4SyntheticSampleTable.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TencAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TencAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TencAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TencAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TfdtAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TfdtAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TfdtAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TfdtAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TfhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TfhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TfhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TfhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TfraAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TfraAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TfraAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TfraAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TimsAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TimsAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TimsAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TimsAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TkhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TkhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TkhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TkhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Track.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Track.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Track.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Track.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrakAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrakAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrakAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrakAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrefTypeAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrefTypeAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrefTypeAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrefTypeAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrexAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrexAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrexAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrexAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrunAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrunAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4TrunAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4TrunAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4UrlAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4UrlAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4UrlAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4UrlAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4Utils.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Utils.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4Utils.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4Utils.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4UuidAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4UuidAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4UuidAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4UuidAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4VmhdAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4VmhdAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4VmhdAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4VmhdAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Core/Ap4VpccAtom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4VpccAtom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core/Ap4VpccAtom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Core/Ap4VpccAtom.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4AesBlockCipher.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4AesBlockCipher.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4AesBlockCipher.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4AesBlockCipher.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4Hmac.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4Hmac.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4Hmac.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4Hmac.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4KeyWrap.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4KeyWrap.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4KeyWrap.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4KeyWrap.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4StreamCipher.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4StreamCipher.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto/Ap4StreamCipher.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/Crypto/Ap4StreamCipher.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/MetaData/Ap4MetaData.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData/Ap4MetaData.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData/Ap4MetaData.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/MetaData/Ap4MetaData.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/System/StdC/Ap4StdCFileByteStream.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/System/StdC/Ap4StdCFileByteStream.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/System/StdC/Ap4StdCFileByteStream.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/System/StdC/Ap4StdCFileByteStream.cpp.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib",
+  "command": "/usr/bin/c++  -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Core -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Codecs -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/Crypto -I/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/MetaData -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.12 -o CMakeFiles/ap4.dir/Source/C++/System/Posix/Ap4PosixRandom.cpp.o -c /Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/System/Posix/Ap4PosixRandom.cpp",
+  "file": "/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/Source/C++/System/Posix/Ap4PosixRandom.cpp",
+  "output": "CMakeFiles/ap4.dir/Source/C++/System/Posix/Ap4PosixRandom.cpp.o"
+}
+]

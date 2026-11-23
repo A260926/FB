@@ -1,0 +1,9 @@
+prefix=/usr/local
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: bento4
+Description: Full-featured MP4 format, MPEG DASH, HLS, CMAF SDK and tools
+Version: 1.6.0.0
+Libs: -L${libdir} -lap4
+Cflags: -I${includedir}/bento4

@@ -63,6 +63,79 @@ The Bento4 SDK includes several command-line applications/tools that are built u
 |mp42ts	        | converts an MP4 file to an MPEG2-TS file.
 |mp4-dash	    | creates an MPEG DASH output from one or more MP4 files, including encryption.                                                                   
 |mp4-dash-clone	| creates a local clone of a remote or local MPEG DASH presentation, optionally encrypting the segments as they are cloned.
+|editedpreview	| exports the edited (movie timeline) packet sequence of a video track from a fast-start MP4, reading the media forward-only and spooling through a scratch file.
+
+Edited preview (forward-only sample reading)
+--------------------------------------------
+
+`AP4_EditedSampleReader` (Source/C++/Core/Ap4EditedSampleReader.h) delivers the
+compressed samples of a track in edited order — following the track edit list
+(`elst`), including reversed, overlapping and repeated media segments and empty
+(gap) segments — without ever seeking in the source stream. It is meant for
+fast-start MP4 inputs (the `moov` before a single, file-ending `mdat`) whose
+media can only be consumed forward, for example an already-open pipe. Sample
+bytes that are needed again or before their physical position is reached are
+spooled into a caller-supplied scratch stream (`AP4_SampleSpool`,
+Source/C++/Core/Ap4SampleSpool.h), so each source byte passes through the input
+exactly once.
+
+Typical usage:
+
+```cpp
+// open the file and parse the movie (any seekable stream)
+AP4_ByteStream* input = NULL;
+AP4_FileByteStream::Create("in.mp4", AP4_FileByteStream::STREAM_MODE_READ, input);
+AP4_File   file(*input);
+AP4_Track* track = file.GetMovie()->GetTrack(AP4_Track::TYPE_VIDEO);
+
+// position the source at the first byte of the mdat payload; from here
+// on it is consumed with ReadPartial() only (Seek() is never called)
+input->Seek(mdat_payload_offset);
+
+// the scratch stream is empty, readable, writable and seekable;
+// both streams and the track stay owned by the caller
+AP4_ByteStream* scratch = NULL;
+AP4_FileByteStream::Create("spool.bin", AP4_FileByteStream::STREAM_MODE_WRITE, scratch);
+
+AP4_EditedSampleReader* reader = NULL;
+AP4_Result result = AP4_EditedSampleReader::Create(*track,       // track metadata
+                                                   *input,       // forward-only source
+                                                   *scratch,     // scratch spool
+                                                   capacity,     // spool budget in bytes
+                                                   reader);
+if (result == AP4_ERROR_OUT_OF_RANGE) {
+    // capacity is below the planned peak; the streams are untouched
+}
+```
+
+`Create()` only reads track metadata and computes the exact spool peak, which
+is available as `reader->GetRequiredSpoolBytes()`; a `capacity` equal to that
+peak is guaranteed to be sufficient, and anything smaller is rejected with
+`AP4_ERROR_OUT_OF_RANGE` (with `reader` set to NULL and both streams left in
+their original state). Each `ReadNext(packet)` then returns one
+`AP4_EditedSampleReader::Packet`:
+
+* `kind` — `Packet::MEDIA` (compressed sample in `payload`) or `Packet::GAP`
+  (empty edit segment, no payload, `source_sample_index == (AP4_Ordinal)-1`).
+* `edit_index`, `source_sample_index` — zero-based edit and sample indexes.
+* `dts`, `cts`, `duration`, `description_index`, `sync` — the original media
+  timing and attributes of the source sample (`cts` is signed).
+* `movie_begin`, `movie_duration` — the display window in the common timescale
+  `reader->GetTimeScale()` (the least common multiple of the movie and media
+  timescales). Both are zero for decode-only preroll packets that precede the
+  first visible frame of an edit.
+
+After the timeline is fully delivered, `ReadNext()` returns `AP4_ERROR_EOS`.
+I/O failures put the session into a terminal error state: every subsequent
+call returns the same error.
+
+The `editedpreview` app wraps this flow:
+
+    editedpreview <input.mp4> <scratch> <output> <capacity>
+
+It exports the complete packet sequence (headers plus MEDIA payloads) to
+`<output>`, using `<scratch>` as the spool area with the given decimal
+capacity in bytes.
 
 Building
 --------

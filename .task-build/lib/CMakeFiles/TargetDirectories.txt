@@ -1,0 +1,7 @@
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/ap4.dir
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS129F8C99F97AU15368/attempts/20261123T034525320359Z/repo/.task-build/lib/CMakeFiles/install/strip.dir
