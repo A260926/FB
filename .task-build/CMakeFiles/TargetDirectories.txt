@@ -1,0 +1,6 @@
+/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/CMakeFiles/task_mlt.dir
+/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/CMakeFiles/baseline.dir
+/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/CMakeFiles/binding_probe.dir
+/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/CMakeFiles/test.dir
+/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/CMakeFiles/rebuild_cache.dir

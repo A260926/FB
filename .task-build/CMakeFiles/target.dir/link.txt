@@ -1,0 +1,1 @@
+/usr/bin/cc -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/target.dir/driver.c.o CMakeFiles/target.dir/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/src/tests/task_strict_video.c.o -o target  libtask_mlt.a -lm

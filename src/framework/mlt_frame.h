@@ -95,6 +95,16 @@ typedef int (*mlt_convert_image)(mlt_frame self,
  * to the time position of this frame's clip in the playlist
  * \properties \em meta.playlist.clip_length mlt_playlist sets this property to
  * the playlist index of this frame's clip in the playlist
+ * \properties \em consumer.strict_video set to 1 to enable strict video mode
+ * for \p mlt_frame_get_image: a failing get_image callback or image conversion
+ * is reported to the caller instead of being masked by a test card image, an
+ * already-set image property, or a delegating callback's success return. The
+ * strict flag propagates from the outermost frame to the child frames that
+ * participate in its image (tractor track stacking, transitions). A genuinely
+ * blank frame (no image source at all) still produces a test card image.
+ * \properties \em video_error in strict video mode, \p mlt_frame_get_image
+ * sets this to the first error code encountered on this frame. Subsequent
+ * calls return the same code without re-running the consumed image stack.
  */
 
 struct mlt_frame_s

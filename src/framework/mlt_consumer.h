@@ -65,6 +65,12 @@
  * \event \em consumer-thread-stopped The base class fires when a rendering thread has ended.
  * \event \em consumer-stopping This is fired when stop was requested, but before render threads are joined.
  * \event \em consumer-stopped This is fired when the subclass implementation calls mlt_consumer_stopped().
+ * \event \em consumer-video-error In strict video mode (see \p strict_video), fired exactly
+ *   once when the first frame with a video error reaches its delivery position in program
+ *   order. The event data is the failing frame; it fires on the thread calling
+ *   \p mlt_consumer_rt_frame, and the listener may retain the frame with
+ *   \p mlt_properties_inc_ref. The consumer's \p video_error and
+ *   \p video_error_position are already set when the listener runs.
  * \properties \em fps video frames per second as floating point (read only)
  * \properties \em frame_rate_num the numerator of the video frame rate, overrides \p mlt_profile_s
  * \properties \em frame_rate_den the denominator of the video frame rate, overrides \p mlt_profile_s
@@ -85,6 +91,18 @@
  * \properties \em mlt_audio_format the audio format to request in rendering threads, defaults to f32le
  * \properties \em audio_off set non-zero to disable audio processing
  * \properties \em video_off set non-zero to disable video processing
+ * \properties \em strict_video set to 1 for strict video export: every pulled frame is
+ *   rendered with \p consumer.strict_video (see mlt_frame.h), a frame is delivered by
+ *   \p mlt_consumer_rt_frame only after its video rendered successfully (\p rendered=1
+ *   means success), and the first failing frame ends the export in program order -
+ *   \p mlt_consumer_rt_frame returns NULL for it and for every later pull until the next
+ *   \p mlt_consumer_start. Works with real_time 0, -1 and -2; \p video_off=1 disables the
+ *   strict video fetch. After a failure no new frames are pulled, while in-flight renders
+ *   may finish.
+ * \properties \em video_error in strict video mode, the error code of the first failing
+ *   frame, set at its delivery position (read only, cleared by \p mlt_consumer_start)
+ * \properties \em video_error_position in strict video mode, the program position of the
+ *   first failing frame (read only, cleared by \p mlt_consumer_start)
  * \properties \em drop_count the number of video frames not rendered since starting consumer
  * \properties \em color_range the color range as tv/mpeg (limited) or pc/jpeg (full); default is unset, which implies tv/mpeg
  * \properties \em color_trc the color transfer characteristic (gamma), default is unset, use mlt_color_trc string values

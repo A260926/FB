@@ -1,0 +1,88 @@
+Start testing: Nov 23 17:39 JST
+----------------------------------------------------------
+1/5 Testing: binding_image
+1/5 Test: binding_image
+Command: "/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/binding_probe" "image"
+Directory: /Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/task_support/..
+"binding_image" start time: Nov 23 17:39 JST
+Output:
+----------------------------------------------------------
+mlt_repository_init: no plugins found in ".task-build/empty-modules"
+BINDING_IMAGE sticky=73 calls=1 balanced=1
+<end of output>
+Test time =   0.22 sec
+----------------------------------------------------------
+Test Passed.
+"binding_image" end time: Nov 23 17:39 JST
+"binding_image" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/5 Testing: binding_graph
+2/5 Test: binding_graph
+Command: "/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/binding_probe" "graph"
+Directory: /Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/task_support/..
+"binding_graph" start time: Nov 23 17:39 JST
+Output:
+----------------------------------------------------------
+mlt_repository_init: no plugins found in ".task-build/empty-modules"
+[transition 0x102cfdb70] Unable to dissolve incompatible imagesUnable to dissolve incompatible imagesBINDING_GRAPH nested=2 luma=1 sides=2 balanced=1
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"binding_graph" end time: Nov 23 17:39 JST
+"binding_graph" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/5 Testing: binding_export0
+3/5 Test: binding_export0
+Command: "/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/binding_probe" "export0"
+Directory: /Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/task_support/..
+"binding_export0" start time: Nov 23 17:39 JST
+Output:
+----------------------------------------------------------
+mlt_repository_init: no plugins found in ".task-build/empty-modules"
+[transition 0x1055f9c70] Unable to dissolve incompatible imagesBINDING_EXPORT mode=0 prefix=2 error=74 events=1 balanced=1
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"binding_export0" end time: Nov 23 17:39 JST
+"binding_export0" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/5 Testing: binding_export1
+4/5 Test: binding_export1
+Command: "/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/binding_probe" "export1"
+Directory: /Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/task_support/..
+"binding_export1" start time: Nov 23 17:39 JST
+Output:
+----------------------------------------------------------
+mlt_repository_init: no plugins found in ".task-build/empty-modules"
+[transition 0x1054c5c70] Unable to dissolve incompatible imagesBINDING_EXPORT mode=-1 prefix=2 error=74 events=1 balanced=1
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"binding_export1" end time: Nov 23 17:39 JST
+"binding_export1" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/5 Testing: binding_export2
+5/5 Test: binding_export2
+Command: "/Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/.task-build/binding_probe" "export2"
+Directory: /Volumes/UserFBWorkspace/questions/FS695D02577E9AU15359/attempts/20261123T034531707433Z/repo/task_support/..
+"binding_export2" start time: Nov 23 17:39 JST
+Output:
+----------------------------------------------------------
+mlt_repository_init: no plugins found in ".task-build/empty-modules"
+[transition 0x101465d50] Unable to dissolve incompatible imagesBINDING_EXPORT mode=-2 prefix=2 error=74 events=1 balanced=1
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"binding_export2" end time: Nov 23 17:39 JST
+"binding_export2" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 23 17:39 JST

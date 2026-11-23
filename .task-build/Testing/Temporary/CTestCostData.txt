@@ -1,0 +1,6 @@
+binding_image 4 0.0544104
+binding_graph 3 0.00196068
+binding_export0 3 0.00159751
+binding_export1 3 0.00125632
+binding_export2 3 0.000782042
+---

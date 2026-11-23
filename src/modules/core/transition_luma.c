@@ -163,31 +163,40 @@ static void request_transparent_padding(mlt_frame frame)
 /* Fetch both frames as yuv422. Padding is requested before either fetch.
  * A side with no mask gets an opaque one only when fix_background_alpha is on
  * and the other side is translucent.
+ *
+ * Returns the first mlt_frame_get_image() error encountered. Errors only
+ * surface here when a frame runs in strict video mode; in that case the
+ * caller must not blend or publish a composite image.
  */
-static void prepare_yuv422_pair(mlt_frame dst_frame,
-                                mlt_frame src_frame,
-                                int *dst_width,
-                                int *dst_height,
-                                int *src_width,
-                                int *src_height,
-                                int fix_background_alpha,
-                                uint8_t **dst_image,
-                                uint8_t **src_image,
-                                uint8_t **dst_alpha,
-                                uint8_t **src_alpha,
-                                int *is_translucent)
+static int prepare_yuv422_pair(mlt_frame dst_frame,
+                               mlt_frame src_frame,
+                               int *dst_width,
+                               int *dst_height,
+                               int *src_width,
+                               int *src_height,
+                               int fix_background_alpha,
+                               uint8_t **dst_image,
+                               uint8_t **src_image,
+                               uint8_t **dst_alpha,
+                               uint8_t **src_alpha,
+                               int *is_translucent)
 {
     mlt_image_format format = mlt_image_yuv422;
+    int error;
 
     if (fix_background_alpha) {
         request_transparent_padding(dst_frame);
         request_transparent_padding(src_frame);
     }
 
-    mlt_frame_get_image(dst_frame, dst_image, &format, dst_width, dst_height, 1);
+    error = mlt_frame_get_image(dst_frame, dst_image, &format, dst_width, dst_height, 1);
+    if (error)
+        return error;
     *dst_alpha = mlt_frame_get_alpha(dst_frame);
     format = mlt_image_yuv422;
-    mlt_frame_get_image(src_frame, src_image, &format, src_width, src_height, 0);
+    error = mlt_frame_get_image(src_frame, src_image, &format, src_width, src_height, 0);
+    if (error)
+        return error;
     *src_alpha = mlt_frame_get_alpha(src_frame);
     *is_translucent = (*dst_alpha && !is_opaque(*dst_alpha, *dst_width, *dst_height))
                       || (*src_alpha && !is_opaque(*src_alpha, *src_width, *src_height));
@@ -200,6 +209,7 @@ static void prepare_yuv422_pair(mlt_frame dst_frame,
         if (!*src_alpha)
             *src_alpha = add_opaque_alpha(src_frame, *src_width, *src_height);
     }
+    return 0;
 }
 
 static inline int dissolve_yuv422(mlt_frame frame,
@@ -219,18 +229,20 @@ static inline int dissolve_yuv422(mlt_frame frame,
     int is_translucent = 0;
     int mix = weight * (1 << 16);
 
-    prepare_yuv422_pair(frame,
-                        that,
-                        &width,
-                        &height,
-                        &width_src,
-                        &height_src,
-                        fix_background_alpha,
-                        &p_dest,
-                        &p_src,
-                        &alpha_dst,
-                        &alpha_src,
-                        &is_translucent);
+    ret = prepare_yuv422_pair(frame,
+                              that,
+                              &width,
+                              &height,
+                              &width_src,
+                              &height_src,
+                              fix_background_alpha,
+                              &p_dest,
+                              &p_src,
+                              &alpha_dst,
+                              &alpha_src,
+                              &is_translucent);
+    if (ret)
+        return ret;
 
     struct dissolve_slice_context context = {.dst_image = p_dest,
                                              .src_image = p_src,
@@ -385,20 +397,20 @@ static float smoothstep_float(float edge1, float edge2, float a)
     \param field_order -1 = progressive, 0 = lower field first, 1 = top field
    first
 */
-static void luma_composite_yuv422(mlt_frame a_frame,
-                                  mlt_frame b_frame,
-                                  int luma_width,
-                                  int luma_height,
-                                  uint16_t *luma_bitmap,
-                                  float pos,
-                                  float frame_delta,
-                                  float softness,
-                                  int field_order,
-                                  int *width,
-                                  int *height,
-                                  int invert,
-                                  int fix_background_alpha,
-                                  int alpha_over)
+static int luma_composite_yuv422(mlt_frame a_frame,
+                                 mlt_frame b_frame,
+                                 int luma_width,
+                                 int luma_height,
+                                 uint16_t *luma_bitmap,
+                                 float pos,
+                                 float frame_delta,
+                                 float softness,
+                                 int field_order,
+                                 int *width,
+                                 int *height,
+                                 int invert,
+                                 int fix_background_alpha,
+                                 int alpha_over)
 {
     int width_src = *width, height_src = *height;
     int width_dest = *width, height_dest = *height;
@@ -408,27 +420,30 @@ static void luma_composite_yuv422(mlt_frame a_frame,
     int stride_src;
     int stride_dest;
     int is_translucent = 0;
+    int error;
 
     if (mlt_properties_get(&a_frame->parent, "distort"))
         mlt_properties_set(&b_frame->parent,
                            "distort",
                            mlt_properties_get(&a_frame->parent, "distort"));
 
-    prepare_yuv422_pair(a_frame,
-                        b_frame,
-                        &width_dest,
-                        &height_dest,
-                        &width_src,
-                        &height_src,
-                        fix_background_alpha,
-                        &p_dest,
-                        &p_src,
-                        &alpha_dest,
-                        &alpha_src,
-                        &is_translucent);
+    error = prepare_yuv422_pair(a_frame,
+                                b_frame,
+                                &width_dest,
+                                &height_dest,
+                                &width_src,
+                                &height_src,
+                                fix_background_alpha,
+                                &p_dest,
+                                &p_src,
+                                &alpha_dest,
+                                &alpha_src,
+                                &is_translucent);
+    if (error)
+        return error;
 
     if (*width == 0 || *height == 0)
-        return;
+        return 0;
 
     // Blend the overlap. Each image keeps its own full width as the row stride.
     int blend_width = MIN(width_src, width_dest);
@@ -534,6 +549,7 @@ static void luma_composite_yuv422(mlt_frame a_frame,
 
         field++;
     }
+    return 0;
 }
 
 static int luma_composite_rgba32(mlt_frame a_frame,
@@ -1065,20 +1081,20 @@ static int transition_get_image(mlt_frame a_frame,
                                         alpha_over);
         } else {
             *format = mlt_image_yuv422;
-            luma_composite_yuv422(!invert ? a_frame : b_frame,
-                                  !invert ? b_frame : a_frame,
-                                  luma_width,
-                                  luma_height,
-                                  luma_bitmap,
-                                  mix,
-                                  frame_delta,
-                                  luma_softness,
-                                  progressive ? -1 : top_field_first,
-                                  width,
-                                  height,
-                                  invert,
-                                  fix_background_alpha,
-                                  alpha_over);
+            ret = luma_composite_yuv422(!invert ? a_frame : b_frame,
+                                        !invert ? b_frame : a_frame,
+                                        luma_width,
+                                        luma_height,
+                                        luma_bitmap,
+                                        mix,
+                                        frame_delta,
+                                        luma_softness,
+                                        progressive ? -1 : top_field_first,
+                                        width,
+                                        height,
+                                        invert,
+                                        fix_background_alpha,
+                                        alpha_over);
         }
     } else {
         if (mlt_properties_get(&a_frame->parent, "distort"))
@@ -1122,10 +1138,11 @@ static int transition_get_image(mlt_frame a_frame,
         mlt_service_unlock(MLT_TRANSITION_SERVICE(transition));
     }
 
-    // Extract the a_frame image info
+    // Extract the a_frame image info. A failed fetch or blend must not
+    // publish a composite image.
     *width = mlt_properties_get_int(!invert ? a_props : b_props, "width");
     *height = mlt_properties_get_int(!invert ? a_props : b_props, "height");
-    *image = mlt_properties_get_data(!invert ? a_props : b_props, "image", NULL);
+    *image = ret ? NULL : mlt_properties_get_data(!invert ? a_props : b_props, "image", NULL);
 
     return ret;
 }

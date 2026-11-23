@@ -506,6 +506,19 @@ int mlt_frame_get_image(mlt_frame self,
                         int writable)
 {
     mlt_properties properties = MLT_FRAME_PROPERTIES(self);
+    int strict = mlt_properties_get_int(properties, "consumer.strict_video");
+
+    // Strict video: a frame that already failed keeps returning its first
+    // error without re-running the remains of its lazy image stack.
+    if (strict) {
+        int video_error = mlt_properties_get_int(properties, "video_error");
+        if (video_error) {
+            if (buffer)
+                *buffer = NULL;
+            return video_error;
+        }
+    }
+
     mlt_get_image get_image = mlt_frame_pop_get_image(self);
     mlt_image_format requested_format = *format;
     int error = 0;
@@ -515,13 +528,35 @@ int mlt_frame_get_image(mlt_frame self,
                                "image_count",
                                mlt_properties_get_int(properties, "image_count") - 1);
         error = get_image(self, buffer, format, width, height, writable);
+        // A stacked callback (e.g. a transition's get_image_b) may propagate
+        // consumer.strict_video onto this frame while it runs, so re-check.
+        if (!strict)
+            strict = mlt_properties_get_int(properties, "consumer.strict_video");
         if (!error && buffer && *buffer) {
             mlt_properties_set_int(properties, "width", *width);
             mlt_properties_set_int(properties, "height", *height);
-            if (mlt_frame_has_convert_image(self) && requested_format != mlt_image_none)
-                mlt_frame_convert_image(self, buffer, format, requested_format);
-            mlt_properties_set_int(properties, "format", *format);
-        } else {
+            if (mlt_frame_has_convert_image(self) && requested_format != mlt_image_none) {
+                int convert_error = mlt_frame_convert_image(self, buffer, format, requested_format);
+                if (strict && convert_error)
+                    error = convert_error;
+            }
+            if (!error)
+                mlt_properties_set_int(properties, "format", *format);
+        } else if (strict && !error) {
+            // A callback that reports success must provide an image.
+            error = 1;
+        }
+        if (error) {
+            if (strict) {
+                // Strict video: record and return the first failure instead of
+                // substituting a test image or an already-set image property.
+                mlt_properties_set_int(properties, "video_error", error);
+                if (buffer)
+                    *buffer = NULL;
+            } else {
+                error = generate_test_image(properties, buffer, format, width, height, writable);
+            }
+        } else if (!strict && !(buffer && *buffer)) {
             error = generate_test_image(properties, buffer, format, width, height, writable);
         }
     } else if (mlt_properties_get_data(properties, "image", NULL) && buffer) {
@@ -530,10 +565,17 @@ int mlt_frame_get_image(mlt_frame self,
         *width = mlt_properties_get_int(properties, "width");
         *height = mlt_properties_get_int(properties, "height");
         if (mlt_frame_has_convert_image(self) && *buffer && requested_format != mlt_image_none) {
-            mlt_frame_convert_image(self, buffer, format, requested_format);
+            int convert_error = mlt_frame_convert_image(self, buffer, format, requested_format);
+            if (strict && convert_error) {
+                mlt_properties_set_int(properties, "video_error", convert_error);
+                *buffer = NULL;
+                return convert_error;
+            }
             mlt_properties_set_int(properties, "format", *format);
         }
     } else {
+        // A genuinely blank frame (no image source at all) is not a failure:
+        // the test card rules still apply, even in strict mode.
         error = generate_test_image(properties, buffer, format, width, height, writable);
     }
 
@@ -1223,7 +1265,14 @@ static int get_image_from_service(mlt_frame self,
 
     copy_consumer_image_hints(frame, self);
     flatten_foreign_movit(self, frame, format);
-    mlt_frame_get_image(frame, buffer, format, width, height, writable);
+    int error = mlt_frame_get_image(frame, buffer, format, width, height, writable);
+    if (error && mlt_properties_get_int(MLT_FRAME_PROPERTIES(self), "consumer.strict_video")) {
+        // Strict video: propagate the delegated failure instead of returning
+        // success with a fallback image.
+        if (buffer)
+            *buffer = NULL;
+        return error;
+    }
     share_image(self, frame, (buffer && *buffer) ? *buffer : NULL);
     return 0;
 }
