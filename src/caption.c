@@ -143,8 +143,14 @@ libcaption_stauts_t eia608_write_char(caption_frame_t* frame, char* c)
 
 libcaption_stauts_t caption_frame_end(caption_frame_t* frame)
 {
+    // Pop-on: swap displayed and hidden memories. The old displayed memory
+    // survives as the new hidden memory, so the next pop-on can diff against it.
+    // A repeated EOC is discarded as a duplicate command in caption_frame_decode,
+    // so this runs at most once per EOC pair.
+    caption_frame_buffer_t tmp;
+    memcpy(&tmp, &frame->front, sizeof(caption_frame_buffer_t));
     memcpy(&frame->front, &frame->back, sizeof(caption_frame_buffer_t));
-    caption_frame_buffer_clear(&frame->back); // This is required
+    memcpy(&frame->back, &tmp, sizeof(caption_frame_buffer_t));
     return LIBCAPTION_READY;
 }
 
@@ -186,16 +192,15 @@ libcaption_stauts_t caption_frame_backspace(caption_frame_t* frame)
 
 libcaption_stauts_t caption_frame_delete_to_end_of_row(caption_frame_t* frame)
 {
-    int c;
-    if (frame->write) {
-        for (c = frame->state.col; c < SCREEN_COLS; ++c) {
-            caption_frame_write_char(frame, frame->state.row, c, eia608_style_white, 0, EIA608_CHAR_NULL);
+    // DER must really erase every cell from the cursor to the end of the
+    // current row in the memory being written. Writing an empty string through
+    // caption_frame_write_char is a no-op, so clear the cells directly.
+    if (frame->write && 0 <= frame->state.row && SCREEN_ROWS > frame->state.row && 0 <= frame->state.col && SCREEN_COLS > frame->state.col) {
+        for (int c = frame->state.col; c < SCREEN_COLS; ++c) {
+            caption_frame_cell_t* cell = frame_buffer_cell(frame->write, frame->state.row, c);
+            memset(cell, 0, sizeof(caption_frame_cell_t));
         }
     }
-
-    // TODO test this and replace loop
-    //  uint8_t* dst = (uint8_t*)frame_buffer_cell(frame->write, frame->state.row, frame->state.col);
-    //  memset(dst,0,sizeof(caption_frame_cell_t) * (SCREEN_COLS - frame->state.col - 1))
 
     return LIBCAPTION_READY;
 }
