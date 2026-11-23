@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "effects/base.h"
+#include "effectslottail.h"
 #include "flexarray.h"
 #include "intrusive_ptr.h"
 #include "mixparams.hpp"
@@ -44,6 +45,11 @@ struct EffectSlotProps {
 
     al::intrusive_ptr<EffectState> State;
 
+    /* Number of device output frames a replaced EffectState keeps fading out
+     * for. 0 keeps the original replacement behavior.
+     */
+    std::size_t TailBudget;
+
     std::atomic<EffectSlotProps*> next;
 };
 
@@ -67,6 +73,20 @@ struct EffectSlotBase {
     EffectSlotType EffectType{EffectSlotType::None};
     EffectProps mEffectProps;
     al::intrusive_ptr<EffectState> mEffectState;
+
+    /* Device output frames a replaced effect state keeps fading out for, as
+     * published by the last property update.
+     */
+    std::size_t TailBudget{0};
+
+    /* Whether the current EffectState instance has actually run on the mixer.
+     * A state replaced before it ever processed audio makes no sound and must
+     * not be retained as a tail generation. Only touched by the mixer thread.
+     */
+    bool mStateProcessed{false};
+
+    /* Retired effect state generations still rendering their tails. */
+    EffectSlotTail mTail;
 
     float RoomRolloff{0.0f}; /* Added to the source's room rolloff, not multiplied. */
     float DecayTime{0.0f};

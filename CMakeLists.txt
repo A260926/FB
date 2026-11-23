@@ -813,6 +813,7 @@ set(CORE_SRCS
     core/devformat.cpp
     core/device.cpp
     core/effectslot.cpp
+    core/effectslottail.cpp
     core/except.cpp
     core/filters/biquad.cpp
     core/filters/nfc.cpp

@@ -46,6 +46,11 @@ struct EffectSlot {
     al::intrusive_ptr<EffectSlot> mTarget;
     al::intrusive_ptr<al::Buffer> mBuffer;
 
+    /* Number of device output frames a replaced effect state keeps fading out
+     * for. 0 preserves the default replacement behavior.
+     */
+    ALint mTailBudget{0};
+
     struct EffectData {
         EffectSlotType Type{EffectSlotType::None};
         EffectProps Props;

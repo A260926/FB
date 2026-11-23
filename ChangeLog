@@ -1,5 +1,10 @@
 openal-soft-1.25.2:
 
+    Added the AL_SOFT_effectslot_tail_samples extension, allowing an effect
+    slot to keep rendering a replaced effect's tail for a bounded number of
+    device output frames, fading it out linearly while the new effect takes
+    over the live wet input immediately.
+
     Fixed the library version string for builds made without Git repo info.
 
     Fixed an STL hardening assertion in the reverb effect.

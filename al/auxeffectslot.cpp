@@ -502,9 +502,31 @@ try {
         }
         return;
 
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
+        {
+            auto& device = *context.mALDevice;
+            auto const maxbudget = ALint{10} * static_cast<ALint>(device.mSampleRate);
+            if(value < 0 || value > maxbudget)
+                context.throw_error(AL_INVALID_VALUE,
+                    "Effect slot tail sample budget {} out of range [0,{}]", value, maxbudget);
+            /* Tail budgets are only supported for slots that output directly
+             * to the device; chained slots feed another effect slot.
+             */
+            if(value != 0 && slot.mTarget)
+                context.throw_error(AL_INVALID_OPERATION,
+                    "Effect slot tail budget cannot be enabled on a chained effect slot");
+            if(slot.mTailBudget != value)
+                slot.mTailBudget = value;
+        }
+        return;
+
     case AL_EFFECTSLOT_TARGET_SOFT:
         if(value != 0)
         {
+            if(slot.mTailBudget != 0)
+                context.throw_error(AL_INVALID_OPERATION,
+                    "Cannot chain effect slot {} while its tail sample budget is enabled",
+                    slot.mId);
             auto& target = LookupEffectSlot(context, as_unsigned(value));
             if(slot.mTarget.get() == &target)
                 return;
@@ -624,6 +646,7 @@ try {
     case AL_EFFECTSLOT_EFFECT:
     case AL_EFFECTSLOT_AUXILIARY_SEND_AUTO:
     case AL_EFFECTSLOT_TARGET_SOFT:
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
     case AL_BUFFER:
         alAuxiliaryEffectSloti_(context, effectslot, param, *values);
         return;
@@ -716,6 +739,10 @@ try {
             *value = 0;
         return;
 
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
+        *value = slot.mTailBudget;
+        return;
+
     case AL_BUFFER:
         if(auto *buffer = slot.mBuffer.get())
             *value = as_signed(buffer->mId);
@@ -741,6 +768,7 @@ try {
     case AL_EFFECTSLOT_EFFECT:
     case AL_EFFECTSLOT_AUXILIARY_SEND_AUTO:
     case AL_EFFECTSLOT_TARGET_SOFT:
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
     case AL_BUFFER:
         alGetAuxiliaryEffectSloti_(context, effectslot, param, values);
         return;
@@ -823,6 +851,12 @@ al::EffectSlot::EffectSlot(al::Context& context) : mSlot{&context.getEffectSlot(
 #endif
 {
     mSlot->InUse = true;
+    /* EffectSlotBase storage is reused across handle generations; make sure no
+     * state from a previous incarnation (including retired tails) survives.
+     */
+    mSlot->mTail.cancelAll();
+    mSlot->mStateProcessed = false;
+    mSlot->TailBudget = 0;
     try {
         auto state = getFactoryByType(EffectSlotType::None)->create();
         mEffect.State = state;
@@ -838,6 +872,11 @@ al::EffectSlot::~EffectSlot()
 {
     if(auto *slot = mSlot->Update.exchange(nullptr, std::memory_order_relaxed))
         slot->State = nullptr;
+
+    /* The slot has been removed from the active set and the mixer has quiesced,
+     * so any still-audible retired generation is cancelled immediately.
+     */
+    mSlot->mTail.cancelAll();
 
     mSlot->mEffectState = nullptr;
     mSlot->InUse = false;
@@ -899,6 +938,7 @@ void al::EffectSlot::updateProps(Context& context) const
     props->Type = mEffect.Type;
     props->Props = mEffect.Props;
     props->State = mEffect.State;
+    props->TailBudget = static_cast<std::size_t>(mTailBudget);
 
     /* Set the new container for updating internal parameters. */
     props = mSlot->Update.exchange(props, std::memory_order_acq_rel);

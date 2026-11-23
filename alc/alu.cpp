@@ -615,27 +615,52 @@ auto CalcEffectSlotParams(EffectSlotBase *const slot, EffectSlotBase **const sor
     auto *const oldstate = slot->mEffectState.release();
     IGNORE_FUNCTION_EFFECTS(slot->mEffectState.reset(state));
 
-    /* Only release the old state if it won't get deleted, since we can't be
-     * deleting/freeing anything in the mixer.
-     */
-    if(!oldstate->releaseIfNoDelete())
+    /* Capture whether the outgoing instance actually ran before replacing it. */
+    auto const oldstate_processed = slot->mStateProcessed;
+    if(oldstate != state)
+        slot->mStateProcessed = false;
+    slot->TailBudget = props->TailBudget;
+
+    if(oldstate == state)
     {
-        /* Otherwise, if it would be deleted send it off with a release event. */
-        auto *const ring = context->mAsyncEvents.get();
-        if(auto const evt_vec = ring->getWriteVector(); !evt_vec[0].empty()) [[likely]]
+        /* Same EffectState instance: a plain property update, which never
+         * retires. Drop the extra reference held by the old slot pointer.
+         */
+        oldstate->releaseIfNoDelete();
+    }
+    else if(oldstate_processed && slot->Target == nullptr
+        && slot->mTail.retire(*context, oldstate, props->TailBudget))
+    {
+        /* A different instance replaced one that has actually processed audio,
+         * and it is retained as a tail generation keeping the transferred
+         * reference. Never-processed intermediate states make no sound and take
+         * the normal release path below.
+         */
+    }
+    else
+    {
+        /* Only release the old state if it won't get deleted, since we can't be
+         * deleting/freeing anything in the mixer.
+         */
+        if(!oldstate->releaseIfNoDelete())
         {
-            auto &evt = InitAsyncEvent<AsyncEffectReleaseEvent>(evt_vec[0].front());
-            evt.mEffectState = oldstate;
-            ring->writeAdvance(1);
-        }
-        else
-        {
-            /* If writing the event failed, the queue was probably full. Store
-             * the old state in the property object where it can eventually be
-             * cleaned up sometime later (not ideal, but better than blocking
-             * or leaking).
-             */
-            IGNORE_FUNCTION_EFFECTS(props->State.reset(oldstate));
+            /* Otherwise, if it would be deleted send it off with a release event. */
+            auto *const ring = context->mAsyncEvents.get();
+            if(auto const evt_vec = ring->getWriteVector(); !evt_vec[0].empty()) [[likely]]
+            {
+                auto &evt = InitAsyncEvent<AsyncEffectReleaseEvent>(evt_vec[0].front());
+                evt.mEffectState = oldstate;
+                ring->writeAdvance(1);
+            }
+            else
+            {
+                /* If writing the event failed, the queue was probably full. Store
+                 * the old state in the property object where it can eventually be
+                 * cleaned up sometime later (not ideal, but better than blocking
+                 * or leaking).
+                 */
+                IGNORE_FUNCTION_EFFECTS(props->State.reset(oldstate));
+            }
         }
     }
 
@@ -2274,10 +2299,16 @@ void ProcessContexts(DeviceBase const *const device, unsigned const SamplesToDo)
                 }
             }
 
-            std::ranges::for_each(sorted_slots, [SamplesToDo](EffectSlotBase const *const slot)
+            std::ranges::for_each(sorted_slots, [SamplesToDo,ctx](EffectSlotBase *slot)
             {
                 auto *const state = slot->mEffectState.get();
                 state->process(SamplesToDo, slot->Wet.Buffer, state->mOutTarget);
+                slot->mStateProcessed = true;
+
+                /* Retired generations keep rendering their own histories with
+                 * zero input, fading out into the same device output.
+                 */
+                slot->mTail.process(SamplesToDo, *ctx);
             });
         }
 

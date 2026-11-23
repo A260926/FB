@@ -578,6 +578,16 @@ ALC_API void ALC_APIENTRY alcGetInteger64vSOFT(ALCdevice *device, ALCenum pname,
 #define AL_EFFECTSLOT_TARGET_SOFT                0x199C
 #endif
 
+#ifndef AL_SOFT_effectslot_tail_samples
+#define AL_SOFT_effectslot_tail_samples 1
+/* Number of device output frames a replaced effect keeps rendering its tail
+ * for after the effect slot switches to a new effect. A value of 0 keeps the
+ * default behavior of dropping the old effect immediately. The maximum value
+ * is ten times the device's output sample rate.
+ */
+#define AL_EFFECTSLOT_TAIL_SAMPLES_SOFT          0x199E
+#endif
+
 #ifndef AL_SOFT_events
 #define AL_SOFT_events 1
 #define AL_EVENT_CALLBACK_FUNCTION_SOFT          0x19A2

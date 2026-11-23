@@ -1,0 +1,25 @@
+-- {fmt} version: 11.2.0
+-- Build type: Release
+-- 
+-- STL hardening level: Performance
+-- 
+-- Building OpenAL with support for the following backends:
+--     Null
+-- 
+-- Building with support for CPU extensions:
+--     Default, Neon
+-- 
+-- NOT installing library and headers
+-- Installing sample configuration
+-- Installing HRTF data files
+-- Installing AmbDec presets
+-- 
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS80AE109B6D54U15350/attempts/20261123T002820615008Z/repo/.task-build/build
+[  2%] Built target alsoft.fmt
+[ 12%] Built target alsoft.common
+[ 97%] Built target OpenAL
+[100%] Built target task_baseline
+BASELINE LOOPBACK_ECHO first=2528 last=2528 energy=0.0283850715 PCM_OK
+BASELINE CLEANUP_OK

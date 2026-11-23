@@ -1469,4 +1469,16 @@ void aluInitEffectPanning(EffectSlotBase *slot, al::Context *context)
     std::ranges::transform(AmbiIndex::FromACN | std::views::take(count), slot->Wet.AmbiMap.begin(),
         [](std::uint8_t const acn) noexcept { return BFChannelConfig{1.0f, acn}; });
     slot->Wet.Buffer = slot->mWetBuffer;
+
+    /* Pre-allocate the scratch buffers a tail retirement would need. This runs
+     * on a control thread while the mixer is not accessing the slot, so no
+     * allocation is ever needed from the mixer. Size the output scratch for
+     * the largest output target (Dry or RealOut) the state can write into.
+     */
+    if(!slot->Target)
+    {
+        auto const outChannels = std::max(device.Dry.Buffer.size(),
+            device.RealOut.Buffer.size());
+        slot->mTail.ensureBuffers(count, outChannels);
+    }
 }

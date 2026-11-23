@@ -1,0 +1,245 @@
+-- The C compiler identification is AppleClang 21.0.0.21000334
+-- The CXX compiler identification is AppleClang 21.0.0.21000334
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Found PkgConfig: /opt/homebrew/bin/pkg-config (found version "3.0.10")
+-- Looking for __GLIBCXX__
+-- Looking for __GLIBCXX__ - not found
+-- Looking for _LIBCPP_VERSION
+-- Looking for _LIBCPP_VERSION - found
+-- Looking for _MSVC_STL_UPDATE
+-- Looking for _MSVC_STL_UPDATE - not found
+-- {fmt} version: 11.2.0
+-- Build type: Release
+-- Performing Test HAVE_WFUNCTION_EFFECTS
+-- Performing Test HAVE_WFUNCTION_EFFECTS - Success
+-- Performing Test HAVE_LIBATOMIC
+-- Performing Test HAVE_LIBATOMIC - Failed
+-- Performing Test HAVE_WTRAMPOLINES
+-- Performing Test HAVE_WTRAMPOLINES - Failed
+-- Performing Test HAVE_WCONVERSION
+-- Performing Test HAVE_WCONVERSION - Success
+-- Performing Test HAVE_WBIDI_CHARS_ANY
+-- Performing Test HAVE_WBIDI_CHARS_ANY - Failed
+-- Performing Test HAVE_WNO_INTERFERENCE_SIZE
+-- Performing Test HAVE_WNO_INTERFERENCE_SIZE - Failed
+-- Performing Test HAVE_FTRIVIAL_AUTO_VAR_INIT
+-- Performing Test HAVE_FTRIVIAL_AUTO_VAR_INIT - Success
+-- Performing Test HAVE_FNO_MATH_ERRNO
+-- Performing Test HAVE_FNO_MATH_ERRNO - Success
+-- Performing Test HAVE_WL_Z_NOEXECSTACK
+-- Performing Test HAVE_WL_Z_NOEXECSTACK - Failed
+-- Performing Test HAVE_WL_Z_RELRO
+-- Performing Test HAVE_WL_Z_RELRO - Failed
+-- Performing Test HAVE_WL_Z_NOW
+-- Performing Test HAVE_WL_Z_NOW - Failed
+-- Performing Test HAVE_WL_AS_NEEDED
+-- Performing Test HAVE_WL_AS_NEEDED - Failed
+-- Performing Test HAVE_GCC_DEFAULT_VISIBILITY
+-- Performing Test HAVE_GCC_DEFAULT_VISIBILITY - Success
+-- Performing Test HAVE_MSSE2_SWITCH
+-- Performing Test HAVE_MSSE2_SWITCH - Failed
+-- Looking for xmmintrin.h
+-- Looking for xmmintrin.h - not found
+-- Looking for emmintrin.h
+-- Looking for emmintrin.h - not found
+-- Looking for pmmintrin.h
+-- Looking for pmmintrin.h - not found
+-- Looking for smmintrin.h
+-- Looking for smmintrin.h - not found
+-- Looking for arm_neon.h
+-- Looking for arm_neon.h - found
+-- Performing Test HAVE_NEON_INTRINSICS
+-- Performing Test HAVE_NEON_INTRINSICS - Success
+-- Looking for cpuid.h
+-- Looking for cpuid.h - not found
+-- Looking for intrin.h
+-- Looking for intrin.h - not found
+-- Looking for guiddef.h
+-- Looking for guiddef.h - not found
+-- Looking for pow in m
+-- Looking for pow in m - found
+-- Looking for clock_gettime in rt
+-- Looking for clock_gettime in rt - not found
+-- Looking for proc_pidpath
+-- Looking for proc_pidpath - found
+-- Looking for pthread_setschedparam
+-- Looking for pthread_setschedparam - found
+-- Looking for include files pthread.h, pthread_np.h
+-- Looking for include files pthread.h, pthread_np.h - not found
+-- Looking for pthread_setname_np
+-- Looking for pthread_setname_np - found
+-- Found Git: /usr/bin/git (found version "2.54.0 (Apple Git-157)")
+-- Performing Test HAVE_FALIGNED_ALLOCATION
+-- Performing Test HAVE_FALIGNED_ALLOCATION - Success
+-- 
+-- STL hardening level: Performance
+-- 
+-- Building OpenAL with support for the following backends:
+--     Null
+-- 
+-- Building with support for CPU extensions:
+--     Default, Neon
+-- 
+-- NOT installing library and headers
+-- Installing sample configuration
+-- Installing HRTF data files
+-- Installing AmbDec presets
+-- 
+-- Configuring done (8.8s)
+-- Generating done (0.0s)
+CMake Warning (unused-cli):
+  Manually-specified variables were not used by the project:
+
+    ALSOFT_BACKEND_DSOUND
+    ALSOFT_BACKEND_WASAPI
+    ALSOFT_BACKEND_WINMM
+
+
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS80AE109B6D54U15350/attempts/20261123T002820615008Z/repo/.task-build/build
+[  2%] Building CXX object fmt-11.2.0/CMakeFiles/alsoft.fmt.dir/src/os.cc.o
+[  2%] Building CXX object fmt-11.2.0/CMakeFiles/alsoft.fmt.dir/src/format.cc.o
+[  2%] Built target alsoft.fmt
+[  5%] Building CXX object CMakeFiles/alsoft.common.dir/common/alcomplex.cpp.o
+[  5%] Building CXX object CMakeFiles/alsoft.common.dir/common/almalloc.cpp.o
+[  6%] Building CXX object CMakeFiles/alsoft.common.dir/common/alstring.cpp.o
+[  6%] Building CXX object CMakeFiles/alsoft.common.dir/common/althrd_setname.cpp.o
+[  7%] Building CXX object CMakeFiles/alsoft.common.dir/common/dynload.cpp.o
+[  8%] Building CXX object CMakeFiles/alsoft.common.dir/common/envutils.cpp.o
+[  9%] Building CXX object CMakeFiles/alsoft.common.dir/common/filesystem.cpp.o
+[ 10%] Building CXX object CMakeFiles/alsoft.common.dir/common/pffft.cpp.o
+[ 11%] Building CXX object CMakeFiles/alsoft.common.dir/common/polyphase_resampler.cpp.o
+[ 13%] Linking CXX static library libalsoft.common.a
+[ 13%] Built target alsoft.common
+[ 15%] Building CXX object CMakeFiles/OpenAL.dir/al/auxeffectslot.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenAL.dir/al/buffer.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenAL.dir/al/effect.cpp.o
+[ 16%] Building CXX object CMakeFiles/OpenAL.dir/al/debug.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/autowah.cpp.o
+[ 18%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/chorus.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/compressor.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/convolution.cpp.o
+[ 21%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/dedicated.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/distortion.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/echo.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/effects.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/equalizer.cpp.o
+[ 27%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/fshifter.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/modulator.cpp.o
+[ 29%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/null.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/pshifter.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/reverb.cpp.o
+[ 32%] Building CXX object CMakeFiles/OpenAL.dir/al/effects/vmorpher.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenAL.dir/al/error.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenAL.dir/al/event.cpp.o
+[ 35%] Building CXX object CMakeFiles/OpenAL.dir/al/extension.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenAL.dir/al/filter.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenAL.dir/al/listener.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenAL.dir/al/source.cpp.o
+[ 40%] Building CXX object CMakeFiles/OpenAL.dir/al/state.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenAL.dir/alc/alc.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenAL.dir/alc/alu.cpp.o
+[ 43%] Building CXX object CMakeFiles/OpenAL.dir/alc/alconfig.cpp.o
+[ 44%] Building CXX object CMakeFiles/OpenAL.dir/alc/context.cpp.o
+[ 45%] Building CXX object CMakeFiles/OpenAL.dir/alc/device.cpp.o
+[ 46%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/autowah.cpp.o
+[ 47%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/chorus.cpp.o
+[ 48%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/compressor.cpp.o
+[ 48%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/convolution.cpp.o
+[ 50%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/dedicated.cpp.o
+[ 51%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/distortion.cpp.o
+[ 52%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/echo.cpp.o
+[ 53%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/equalizer.cpp.o
+[ 54%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/fshifter.cpp.o
+[ 55%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/modulator.cpp.o
+[ 56%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/null.cpp.o
+[ 57%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/pshifter.cpp.o
+[ 58%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/reverb.cpp.o
+[ 59%] Building CXX object CMakeFiles/OpenAL.dir/alc/effects/vmorpher.cpp.o
+[ 60%] Building CXX object CMakeFiles/OpenAL.dir/alc/events.cpp.o
+[ 61%] Building CXX object CMakeFiles/OpenAL.dir/alc/panning.cpp.o
+[ 63%] Building CXX object CMakeFiles/OpenAL.dir/alc/backends/base.cpp.o
+[ 64%] Building CXX object CMakeFiles/OpenAL.dir/alc/backends/loopback.cpp.o
+[ 65%] Building CXX object CMakeFiles/OpenAL.dir/alc/backends/null.cpp.o
+[ 66%] Building CXX object CMakeFiles/OpenAL.dir/core/ambdec.cpp.o
+[ 67%] Building CXX object CMakeFiles/OpenAL.dir/core/ambidefs.cpp.o
+[ 68%] Building CXX object CMakeFiles/OpenAL.dir/core/bformatdec.cpp.o
+[ 69%] Building CXX object CMakeFiles/OpenAL.dir/core/bs2b.cpp.o
+[ 70%] Building CXX object CMakeFiles/OpenAL.dir/core/context.cpp.o
+[ 71%] Building CXX object CMakeFiles/OpenAL.dir/core/converter.cpp.o
+[ 72%] Building CXX object CMakeFiles/OpenAL.dir/core/cpu_caps.cpp.o
+[ 73%] Building CXX object CMakeFiles/OpenAL.dir/core/devformat.cpp.o
+[ 75%] Building CXX object CMakeFiles/OpenAL.dir/core/device.cpp.o
+[ 76%] Building CXX object CMakeFiles/OpenAL.dir/core/effectslot.cpp.o
+[ 77%] Building CXX object CMakeFiles/OpenAL.dir/core/effectslottail.cpp.o
+[ 78%] Building CXX object CMakeFiles/OpenAL.dir/core/except.cpp.o
+[ 80%] Building CXX object CMakeFiles/OpenAL.dir/core/filters/nfc.cpp.o
+[ 80%] Building CXX object CMakeFiles/OpenAL.dir/core/filters/biquad.cpp.o
+[ 81%] Building CXX object CMakeFiles/OpenAL.dir/core/filters/splitter.cpp.o
+[ 82%] Building CXX object CMakeFiles/OpenAL.dir/core/fpu_ctrl.cpp.o
+[ 83%] Building CXX object CMakeFiles/OpenAL.dir/core/helpers.cpp.o
+[ 84%] Building CXX object CMakeFiles/OpenAL.dir/core/hrtf.cpp.o
+[ 84%] Building CXX object CMakeFiles/OpenAL.dir/core/hrtf_loader.cpp.o
+[ 85%] Building CXX object CMakeFiles/OpenAL.dir/core/hrtf_resource.cpp.o
+[ 86%] Building CXX object CMakeFiles/OpenAL.dir/core/logging.cpp.o
+[ 88%] Building CXX object CMakeFiles/OpenAL.dir/core/mastering.cpp.o
+[ 89%] Building CXX object CMakeFiles/OpenAL.dir/core/mixer.cpp.o
+[ 90%] Building CXX object CMakeFiles/OpenAL.dir/core/storage_formats.cpp.o
+[ 91%] Building CXX object CMakeFiles/OpenAL.dir/core/tsmefilter.cpp.o
+[ 92%] Building CXX object CMakeFiles/OpenAL.dir/core/uhjfilter.cpp.o
+[ 93%] Building CXX object CMakeFiles/OpenAL.dir/core/uiddefs.cpp.o
+[ 94%] Building CXX object CMakeFiles/OpenAL.dir/core/voice.cpp.o
+[ 95%] Building CXX object CMakeFiles/OpenAL.dir/core/mixer/mixer_c.cpp.o
+[ 96%] Building CXX object CMakeFiles/OpenAL.dir/core/mixer/mixer_neon.cpp.o
+[ 97%] Linking CXX shared library libopenal.dylib
+[ 97%] Built target OpenAL
+[ 98%] Building CXX object CMakeFiles/task_baseline.dir/task_support/baseline.cpp.o
+[100%] Linking CXX executable task_baseline
+[100%] Built target task_baseline
+[  2%] Built target alsoft.fmt
+[ 12%] Built target alsoft.common
+[ 95%] Built target OpenAL
+[ 98%] Building CXX object CMakeFiles/task_target.dir/required_tail_header.cpp.o
+[ 98%] Building CXX object CMakeFiles/task_target.dir/tests/task_slot_tail.cpp.o
+[ 98%] Building CXX object CMakeFiles/task_target.dir/task_support/driver.c.o
+[100%] Linking CXX executable task_target
+[100%] Built target task_target
+[  2%] Built target alsoft.fmt
+[ 13%] Built target alsoft.common
+[ 97%] Built target OpenAL
+[ 98%] Building CXX object CMakeFiles/task_example.dir/examples/slot_tail_render.cpp.o
+[100%] Linking CXX executable task_example
+[100%] Built target task_example
+slot_tail_render: wrote 2560 stereo frames to .task-build/slot_tail_render.pcm (tail energy verified)
+CASE handoff enum_lookup checks=10
+CASE handoff echo_to_null checks=3117
+CASE handoff budget_zero_keeps_behavior checks=3092
+CASE handoff echo_to_echo checks=3133
+CASE handoff unconsumed_replacements checks=3122
+CASE handoff two_generations_coexist checks=2616
+CASE handoff third_generation_evicts_oldest checks=3109
+GROUP handoff cases=7 checks=18199 COMPLETE
+CASE clock chunking_matches_whole checks=77
+CASE clock echo_arrival_from_delay checks=46
+CASE clock budget_change_does_not_recompute checks=7992
+GROUP clock cases=3 checks=8115 COMPLETE
+CASE lifetime source_stop_keeps_tail checks=3117
+CASE lifetime source_paused_keeps_tail checks=3116
+CASE lifetime send_removed_keeps_tail checks=3094
+CASE lifetime delete_cancels_and_handle_reuse checks=2080
+CASE lifetime invalid_budget_preserves_state checks=20
+GROUP lifetime cases=5 checks=11427 COMPLETE
+TARGET_COMPLETE cases=15
+BASELINE LOOPBACK_ECHO first=2528 last=2528 energy=0.0283850715 PCM_OK
+BASELINE CLEANUP_OK

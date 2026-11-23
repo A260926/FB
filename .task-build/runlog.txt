@@ -1,0 +1,41 @@
+-- {fmt} version: 11.2.0
+-- Build type: Release
+-- 
+-- STL hardening level: Performance
+-- 
+-- Building OpenAL with support for the following backends:
+--     Null
+-- 
+-- Building with support for CPU extensions:
+--     Default, Neon
+-- 
+-- NOT installing library and headers
+-- Installing sample configuration
+-- Installing HRTF data files
+-- Installing AmbDec presets
+-- 
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS80AE109B6D54U15350/attempts/20261123T002820615008Z/repo/.task-build/build
+[  2%] Built target alsoft.fmt
+[ 13%] Built target alsoft.common
+[ 14%] Building CXX object CMakeFiles/OpenAL.dir/core/effectslottail.cpp.o
+[ 15%] Linking CXX shared library libopenal.dylib
+[ 97%] Built target OpenAL
+[ 98%] Linking CXX executable task_baseline
+[100%] Built target task_baseline
+[  2%] Built target alsoft.fmt
+[ 12%] Built target alsoft.common
+[ 95%] Built target OpenAL
+[ 97%] Building CXX object CMakeFiles/task_target.dir/tests/task_slot_tail.cpp.o
+[ 97%] Building CXX object CMakeFiles/task_target.dir/required_tail_header.cpp.o
+[ 98%] Linking CXX executable task_target
+[100%] Built target task_target
+[  2%] Built target alsoft.fmt
+[ 13%] Built target alsoft.common
+[ 97%] Built target OpenAL
+[ 98%] Building CXX object CMakeFiles/task_example.dir/examples/slot_tail_render.cpp.o
+[100%] Linking CXX executable task_example
+[100%] Built target task_example
+slot_tail_render: wrote 2560 stereo frames to .task-build/slot_tail_render.pcm (tail energy verified)
+mktemp: mkstemp failed on /var/folders/p2/zw2ndsdj6mz28tl3pxkctzy80000gn/T/tmp.cwuZ2BB4KW: Operation not permitted

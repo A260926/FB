@@ -1,0 +1,60 @@
+-- {fmt} version: 11.2.0
+-- Build type: Release
+-- 
+-- STL hardening level: Performance
+-- 
+-- Building OpenAL with support for the following backends:
+--     Null
+-- 
+-- Building with support for CPU extensions:
+--     Default, Neon
+-- 
+-- NOT installing library and headers
+-- Installing sample configuration
+-- Installing HRTF data files
+-- Installing AmbDec presets
+-- 
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS80AE109B6D54U15350/attempts/20261123T002820615008Z/repo/.task-build/build
+[  2%] Built target alsoft.fmt
+[ 13%] Built target alsoft.common
+[ 14%] Building CXX object CMakeFiles/OpenAL.dir/core/effectslottail.cpp.o
+[ 15%] Linking CXX shared library libopenal.dylib
+[ 97%] Built target OpenAL
+[ 98%] Linking CXX executable task_baseline
+[100%] Built target task_baseline
+[  2%] Built target alsoft.fmt
+[ 12%] Built target alsoft.common
+[ 95%] Built target OpenAL
+[ 97%] Building CXX object CMakeFiles/task_target.dir/tests/task_slot_tail.cpp.o
+[ 97%] Building CXX object CMakeFiles/task_target.dir/required_tail_header.cpp.o
+[ 98%] Linking CXX executable task_target
+[100%] Built target task_target
+[  2%] Built target alsoft.fmt
+[ 13%] Built target alsoft.common
+[ 97%] Built target OpenAL
+[ 98%] Building CXX object CMakeFiles/task_example.dir/examples/slot_tail_render.cpp.o
+[100%] Linking CXX executable task_example
+[100%] Built target task_example
+slot_tail_render: wrote 2560 stereo frames to .task-build/slot_tail_render.pcm (tail energy verified)
+CASE handoff enum_lookup checks=10
+CASE handoff echo_to_null checks=3117
+CASE handoff budget_zero_keeps_behavior checks=3092
+CASE handoff echo_to_echo checks=3133
+CASE handoff unconsumed_replacements checks=3122
+CASE handoff two_generations_coexist checks=2616
+CASE handoff third_generation_evicts_oldest checks=3109
+GROUP handoff cases=7 checks=18199 COMPLETE
+CASE clock chunking_matches_whole checks=77
+CASE clock echo_arrival_from_delay checks=46
+CASE clock budget_change_does_not_recompute checks=7992
+GROUP clock cases=3 checks=8115 COMPLETE
+CASE lifetime source_stop_keeps_tail checks=3117
+CASE lifetime send_removed_keeps_tail checks=3094
+CASE lifetime delete_cancels_and_handle_reuse checks=2080
+CASE lifetime invalid_budget_preserves_state checks=20
+GROUP lifetime cases=4 checks=8311 COMPLETE
+TARGET_COMPLETE cases=14
+BASELINE LOOPBACK_ECHO first=2528 last=2528 energy=0.0283850715 PCM_OK
+BASELINE CLEANUP_OK

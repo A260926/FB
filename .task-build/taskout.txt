@@ -1,0 +1,19 @@
+CASE handoff enum_lookup checks=10
+CASE handoff echo_to_null checks=3117
+CASE handoff budget_zero_keeps_behavior checks=3092
+CASE handoff echo_to_echo checks=3133
+CASE handoff unconsumed_replacements checks=3122
+CASE handoff two_generations_coexist checks=2616
+CASE handoff third_generation_evicts_oldest checks=3109
+GROUP handoff cases=7 checks=18199 COMPLETE
+CASE clock chunking_matches_whole checks=77
+CASE clock echo_arrival_from_delay checks=46
+CASE clock budget_change_does_not_recompute checks=7992
+GROUP clock cases=3 checks=8115 COMPLETE
+CASE lifetime source_stop_keeps_tail checks=3117
+CASE lifetime source_paused_keeps_tail checks=3116
+CASE lifetime send_removed_keeps_tail checks=3094
+CASE lifetime delete_cancels_and_handle_reuse checks=2080
+CASE lifetime invalid_budget_preserves_state checks=20
+GROUP lifetime cases=5 checks=11427 COMPLETE
+TARGET_COMPLETE cases=15

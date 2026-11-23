@@ -1837,6 +1837,10 @@ auto UpdateDeviceParams(al::Device& device, std::span<AttributePair const> const
             | std::views::transform(al::dereference{})
             | std::views::join, [](EffectSlotBase &slot)
         {
+            /* Device formats don't change while a tail budget is active; drop
+             * any retained generation before the old output storage goes away.
+             */
+            slot.mTail.cancelAll();
             slot.mWetBuffer.clear();
             slot.mWetBuffer.shrink_to_fit();
             slot.Wet.Buffer = {};
