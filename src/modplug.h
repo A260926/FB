@@ -120,6 +120,16 @@ typedef struct _ModPlug_Settings
 MODPLUG_EXPORT void ModPlug_GetSettings(ModPlug_Settings* settings);
 MODPLUG_EXPORT void ModPlug_SetSettings(const ModPlug_Settings* settings);
 
+/* Change the output sampling rate of an already-loaded module without reloading it or
+ * restarting playback.  Only 11025, 22050 and 44100 Hz are supported and the player must
+ * currently be configured for 16-bit stereo output.  MegaBass must be disabled.  Returns
+ * 1 on success and 0 when the handle is NULL, the rate is unsupported, the output format
+ * is not 16-bit stereo, or MegaBass is enabled.  On failure playback state is unchanged.
+ *
+ * Note: this uses the legacy global settings model: only one module handle should be
+ * loaded at a time and calls must be serialized. */
+MODPLUG_EXPORT int ModPlug_ChangeRate(ModPlugFile* file, int rate);
+
 /* New ModPlug API Functions */
 /* NOTE: Master Volume (1-512) */
 MODPLUG_EXPORT unsigned int ModPlug_GetMasterVolume(ModPlugFile* file) ;

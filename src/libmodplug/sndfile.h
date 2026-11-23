@@ -430,6 +430,10 @@ typedef struct _MODCHANNEL
 	BYTE nRowCommand, nRowParam;
 	BYTE nLeftVU, nRightVU;
 	BYTE nActiveMacro, nPadding;
+	// Rate-change bookkeeping: remaining volume-ramp duration expressed in units of
+	// 1/44100 s (exact for all supported output rates).  Valid while nRateRampValid.
+	LONGLONG nRateRampTime;
+	BYTE nRateRampValid;
 } MODCHANNEL;
 
 
@@ -590,6 +594,14 @@ public:	// for Editing
 	LPSTR m_lpszSongComments, m_lpszPatternNames;
 	char m_szNames[MAX_INSTRUMENTS][32];    // changed from CHAR
 	CHAR CompressionTable[16];
+	// Pending output-rate change (legacy single-handle, serialized playback only).
+	BOOL m_bRateChangePending;
+	UINT m_nRateChangeRate;
+	// Remaining duration of the in-flight tick, in units of 1/44100 s.  Only valid
+	// while m_bRateTimeValid; exact for every supported output rate, so successive
+	// changes made without producing output cannot accumulate rounding drift.
+	BOOL m_bRateTimeValid;
+	LONGLONG m_nRateTimeRemaining;
 
 public:
 	CSoundFile();
@@ -686,6 +698,10 @@ public:
 	BOOL GlobalFadeSong(UINT msec);
 	UINT GetTotalTickCount() const { return m_nTotalCount; }
 	VOID ResetTotalTickCount() { m_nTotalCount = 0; }
+	// Request an output-rate change for the next Read's first output frame.
+	BOOL RequestRateChange(UINT nRate);
+	// Applies a pending rate change (internal, called by Read).
+	void ApplyRateChange();
 
 public:
 	// Mixer Config
@@ -710,6 +726,8 @@ public:
 	static void InitializeDSP(BOOL bReset);
 	static void ProcessStereoDSP(int count);
 	static void ProcessMonoDSP(int count);
+	// Move the long surround/reverb delay lines to a new output rate.
+	static void MigrateDSPDelays(UINT nOldRate, UINT nNewRate);
 	// [Reverb level 0(quiet)-100(loud)], [delay in ms, usually 40-200ms]
 	static BOOL SetReverbParameters(UINT nDepth, UINT nDelay);
 	// [XBass level 0(quiet)-100(loud)], [cutoff in Hz 10-100]
@@ -936,6 +954,9 @@ typedef struct WAVEEXTRAHEADER
 #define MIXING_CLIPMAX		(0x07FFFFFF)
 #define VOLUMERAMPPRECISION	12
 #define FADESONGDELAY		100
+// Exact time base for output-rate changes.  Every supported rate (11025/22050/44100)
+// divides it, so a remaining duration can be carried between rates without drift.
+#define RATE_TIME_GRID		44100
 #define EQ_BUFFERSIZE		(MIXBUFFERSIZE)
 #define AGC_PRECISION		9
 #define AGC_UNITY			(1 << AGC_PRECISION)

@@ -202,6 +202,8 @@ BOOL CSoundFile::FadeSong(UINT msec)
 	if (nsamples <= 0) return FALSE;
 	if (nsamples > 0x100000) nsamples = 0x100000;
 	m_nBufferCount = nsamples;
+	// A freshly created tick's duration already uses the current rate.
+	m_bRateTimeValid = FALSE;
 	LONG nRampLength = m_nBufferCount;
 	// Ramp everything down
 	for (UINT noff=0; noff < m_nMixChannels; noff++)
@@ -214,6 +216,7 @@ BOOL CSoundFile::FadeSong(UINT msec)
 		pramp->nRampRightVol = pramp->nRightVol << VOLUMERAMPPRECISION;
 		pramp->nRampLeftVol = pramp->nLeftVol << VOLUMERAMPPRECISION;
 		pramp->nRampLength = nRampLength;
+		pramp->nRateRampValid = 0;
 		pramp->dwFlags |= CHN_VOLUMERAMP;
 	}
 	m_dwSongFlags |= SONG_FADINGSONG;
@@ -232,6 +235,118 @@ BOOL CSoundFile::GlobalFadeSong(UINT msec)
 }
 
 
+//----------------------------------------------------------------------------
+// Output rate changes without reloading or re-triggering the module.
+//
+// The change is deferred to the next Read() so that the first output frame
+// produced afterwards is already at the new rate.  Everything stored in
+// output-sample units whose meaning depends on the rate is either recomputed
+// (channel step, filter coefficients, tick/ramp duration, amplitude ramps) or
+// resampled (long surround/reverb delay lines).  Everything that only depends on
+// time (order/row/tick, envelopes, sample position and loop direction) is left
+// untouched, so no note is retriggered and no row effect is processed twice.
+//
+// Rounding policy, per the specification:
+//   * tick duration: on the first change the remaining time is measured from the
+//     old-rate frames still owed and rounded UP to whole frames at the new rate.
+//     On later changes the exact remaining time carried from the previous change
+//     is used, and real elapsed output is subtracted from it, so successive
+//     changes (even with no output in between) cannot accumulate rounding drift.
+//   * volume ramp: the current amplitude and target are preserved and spread over
+//     the remaining duration rounded UP to whole frames.
+//----------------------------------------------------------------------------
+
+BOOL CSoundFile::RequestRateChange(UINT nRate)
+//-------------------------------------------
+{
+	if (nRate != 11025 && nRate != 22050 && nRate != 44100) return FALSE;
+	if (gnBitsPerSample != 16 || gnChannels != 2) return FALSE;
+	if (gdwSoundSetup & SNDMIX_MEGABASS) return FALSE;
+	m_nRateChangeRate = nRate;
+	m_bRateChangePending = TRUE;
+	return TRUE;
+}
+
+
+void CSoundFile::ApplyRateChange()
+//--------------------------------
+{
+	if (!m_bRateChangePending) return;
+	m_bRateChangePending = FALSE;
+	UINT nNewRate = m_nRateChangeRate;
+	UINT nOldRate = gdwMixingFreq;
+	if (nNewRate == nOldRate) return;	// successful no-op: no state may change
+
+	// Switch the mixer to the new rate first: the filter coefficients, the DSP delay
+	// migration and the tick/ramp durations below all depend on the new value.
+	gdwMixingFreq = nNewRate;
+	gnVolumeRampSamples = (gdwMixingFreq * VOLUMERAMPLEN) / 100000;
+	if (gnVolumeRampSamples < 8) gnVolumeRampSamples = 8;
+
+	// Tick duration.  On the first change the remaining time is simply the frames
+	// still owed at the old rate; on later changes the exact time carried from the
+	// previous change is authoritative so that changes made without any output in
+	// between cannot accumulate rounding.  The result is rounded UP to whole frames.
+	if (!m_bRateTimeValid)
+	{
+		m_nRateTimeRemaining = (LONGLONG)m_nBufferCount * RATE_TIME_GRID / nOldRate;
+		m_bRateTimeValid = TRUE;
+	}
+	m_nBufferCount = (UINT)((m_nRateTimeRemaining * nNewRate + RATE_TIME_GRID - 1)
+	                        / RATE_TIME_GRID);
+
+	// Volume ramps: keep current amplitude and target, spread the unchanged delta
+	// over the remaining duration rounded UP at the new rate.
+	for (UINT nChn = 0; nChn < MAX_CHANNELS; nChn++)
+	{
+		MODCHANNEL *pChn = &Chn[nChn];
+		if (!pChn->nRampLength) continue;
+		LONGLONG nTime = pChn->nRateRampValid
+			? pChn->nRateRampTime
+			: (LONGLONG)pChn->nRampLength * RATE_TIME_GRID / nOldRate;
+		LONG nNewLength = (LONG)((nTime * nNewRate + RATE_TIME_GRID - 1) / RATE_TIME_GRID);
+		if (nNewLength < 1) nNewLength = 1;
+		LONG nRightDelta = (pChn->nNewRightVol - pChn->nRightVol) << VOLUMERAMPPRECISION;
+		LONG nLeftDelta = (pChn->nNewLeftVol - pChn->nLeftVol) << VOLUMERAMPPRECISION;
+		pChn->nRightRamp = nRightDelta / nNewLength;
+		pChn->nLeftRamp = nLeftDelta / nNewLength;
+		pChn->nRampRightVol = pChn->nRightVol << VOLUMERAMPPRECISION;
+		pChn->nRampLeftVol = pChn->nLeftVol << VOLUMERAMPPRECISION;
+		pChn->nRampLength = nNewLength;
+		// Remember the exact remaining time for any later change in this run.
+		pChn->nRateRampTime = nTime;
+		pChn->nRateRampValid = 1;
+	}
+
+	// Recompute per-channel mixing step and active filter coefficients for the new
+	// rate.  Envelope/sample state is not touched, and no row effect runs.
+	for (UINT nChn = 0; nChn < MAX_CHANNELS; nChn++)
+	{
+		MODCHANNEL *pChn = &Chn[nChn];
+		if ((pChn->nPeriod) && (pChn->nLength))
+		{
+			UINT freq = GetFreqFromPeriod(pChn->nPeriod, pChn->nC4Speed, 0);
+			LONG ninc = _muldiv(freq, 0x10000, nNewRate);
+			if ((ninc >= 0xFFB0) && (ninc <= 0x10090)) ninc = 0x10000;
+			if (m_nFreqFactor != 128) ninc = (ninc * m_nFreqFactor) >> 7;
+			if (ninc > 0xFF0000) ninc = 0xFF0000;
+			LONG nNewInc = (ninc + 1) & ~3;
+			// Preserve the direction of a ping-pong loop already running backwards.
+			if (pChn->nInc < 0) nNewInc = -nNewInc;
+			pChn->nInc = nNewInc;
+		}
+		if (pChn->dwFlags & CHN_FILTER)
+		{
+			// Recompute coefficients; the filter delay values are preserved.
+			SetupChannelFilter(pChn, FALSE);
+		}
+	}
+
+	// Migrate the long delay lines; short DSP history remains intact.
+	MigrateDSPDelays(nOldRate, nNewRate);
+}
+
+
 UINT CSoundFile::Read(LPVOID lpDestBuffer, UINT cbBuffer)
 //-------------------------------------------------------
 {
@@ -240,6 +355,9 @@ UINT CSoundFile::Read(LPVOID lpDestBuffer, UINT cbBuffer)
 	UINT lRead, lMax, lSampleSize, lCount, lSampleCount, nStat=0;
 	LONG nVUMeterMin = 0x7FFFFFFF, nVUMeterMax = -0x7FFFFFFF;
 	UINT nMaxPlugins;
+
+	// A pending rate change takes effect at the first output frame of this Read.
+	ApplyRateChange();
 
 	{
 		nMaxPlugins = MAX_MIXPLUGINS;
@@ -326,6 +444,26 @@ UINT CSoundFile::Read(LPVOID lpDestBuffer, UINT cbBuffer)
 		// Buffer ready
 		lRead -= lCount;
 		m_nBufferCount -= lCount;
+		// Track the exact time still owed by the in-flight tick.  All supported
+		// rates divide RATE_TIME_GRID, so this subtraction is exact.
+		if (m_bRateTimeValid)
+		{
+			m_nRateTimeRemaining -= (LONGLONG)lCount * (RATE_TIME_GRID / gdwMixingFreq);
+			if (m_nRateTimeRemaining < 0) m_nRateTimeRemaining = 0;
+		}
+		// Same for any in-flight volume ramps.
+		for (UINT nChn = 0; nChn < MAX_CHANNELS; nChn++)
+		{
+			MODCHANNEL *pChn = &Chn[nChn];
+			if (!pChn->nRateRampValid) continue;
+			if (!pChn->nRampLength)
+			{
+				pChn->nRateRampValid = 0;
+				continue;
+			}
+			pChn->nRateRampTime -= (LONGLONG)lCount * (RATE_TIME_GRID / gdwMixingFreq);
+			if (pChn->nRateRampTime < 0) pChn->nRateRampTime = 0;
+		}
 	}
 MixDone:
 	if (lRead) memset(lpBuffer, (gnBitsPerSample == 8) ? 0x80 : 0, lRead * lSampleSize);
@@ -467,6 +605,8 @@ BOOL CSoundFile::ReadNote()
 	m_nTotalCount++;
 	if (!m_nMusicTempo) return FALSE;
 	m_nBufferCount = (gdwMixingFreq * 5 * m_nTempoFactor) / (m_nMusicTempo << 8);
+	// A freshly created tick's duration already uses the current rate.
+	m_bRateTimeValid = FALSE;
 	// Master Volume + Pre-Amplification / Attenuation setup
 	DWORD nMasterVol;
 	{
@@ -1175,6 +1315,8 @@ BOOL CSoundFile::ReadNote()
 				if (pChn->nRightRamp|pChn->nLeftRamp)
 				{
 					pChn->nRampLength = nRampLength;
+					// A ramp set up at the current rate needs no exact-time carry.
+					pChn->nRateRampValid = 0;
 				} else
 				{
 					pChn->dwFlags &= ~CHN_VOLUMERAMP;

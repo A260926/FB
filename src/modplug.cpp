@@ -275,3 +275,16 @@ void ModPlug_SetSettings(const ModPlug_Settings* settings)
 	memcpy(&ModPlug::gSettings, settings, sizeof(ModPlug_Settings));
 	ModPlug::UpdateSettings(false); // do not update basic config.
 }
+
+int ModPlug_ChangeRate(ModPlugFile* file, int rate)
+{
+	if (!file) return 0;
+	// Supported rates only, and only with the 16-bit stereo output the seamless
+	// path is defined for (also rejects an unsupported rate/format combination
+	// without touching playback state).
+	if (!file->mSoundFile.RequestRateChange((UINT)rate)) return 0;
+	// Keep the legacy global settings model in sync; Read() publishes the actual
+	// mixing rate once it applies the change.
+	ModPlug::gSettings.mFrequency = rate;
+	return 1;
+}

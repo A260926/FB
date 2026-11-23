@@ -483,3 +483,81 @@ BOOL CSoundFile::SetWaveConfigEx(BOOL bSurround,BOOL bNoOverSampling,BOOL bRever
 	InitPlayer(FALSE);
 	return TRUE;
 }
+
+
+// Resample one delay line from nOldLen to nNewLen samples.  The old ring is read
+// as a periodic sequence of length nOldLen starting at its next-read position
+// nOldPos.  The new sample at index j is the old sequence value at j*L/M, linearly
+// interpolated between neighbouring samples.  All intermediate products use 64
+// bits; the signed division truncates toward zero.  The destination may be the
+// same array, so the result is computed into scratch storage first.
+static void ResampleDelayLine(const LONG *pOld, LONG nOldLen, LONG nOldPos,
+                              LONG *pNew, LONG nNewLen)
+{
+	if (nOldLen <= 0 || nNewLen <= 0) return;
+	// Maximum delay-line size is REVERBBUFFERSIZE; a fixed scratch buffer keeps the
+	// resampling allocation-free.
+	static LONG scratch[REVERBBUFFERSIZE];
+	for (LONG j = 0; j < nNewLen; j++)
+	{
+		LONGLONG scaled = (LONGLONG)j * nOldLen;	// j*L, in units of 1/M sample
+		LONG base = (LONG)(scaled / nNewLen);		// truncates toward zero
+		LONG frac = (LONG)(scaled % nNewLen);		// 0 .. nNewLen-1
+		LONG idx0 = base + nOldPos;
+		while (idx0 >= nOldLen) idx0 -= nOldLen;
+		while (idx0 < 0) idx0 += nOldLen;
+		LONG idx1 = idx0 + 1;
+		if (idx1 >= nOldLen) idx1 -= nOldLen;
+		LONGLONG v0 = pOld[idx0];
+		LONGLONG v1 = pOld[idx1];
+		scratch[j] = (LONG)(v0 + ((v1 - v0) * frac) / nNewLen);
+	}
+	for (LONG j = 0; j < nNewLen; j++) pNew[j] = scratch[j];
+}
+
+
+void CSoundFile::MigrateDSPDelays(UINT nOldRate, UINT nNewRate)
+//------------------------------------------------------------
+{
+#ifndef MODPLUG_NO_REVERB
+	// Reverb: four long delay lines whose lengths follow the existing formulas.
+	if ((gdwSoundSetup & SNDMIX_REVERB) && (nReverbSize > 0))
+	{
+		UINT nNewSize = (nNewRate * m_nReverbDelay) / 1000;
+		if (nNewSize > REVERBBUFFERSIZE) nNewSize = REVERBBUFFERSIZE;
+		UINT nNewSize2 = (nNewSize * 13) / 17;
+		if (nNewSize2 > REVERBBUFFERSIZE2) nNewSize2 = REVERBBUFFERSIZE2;
+		UINT nNewSize3 = (nNewSize * 7) / 13;
+		if (nNewSize3 > REVERBBUFFERSIZE3) nNewSize3 = REVERBBUFFERSIZE3;
+		UINT nNewSize4 = (nNewSize * 7) / 19;
+		if (nNewSize4 > REVERBBUFFERSIZE4) nNewSize4 = REVERBBUFFERSIZE4;
+		ResampleDelayLine(ReverbBuffer, nReverbSize, nReverbBufferPos,
+		                  ReverbBuffer, nNewSize);
+		ResampleDelayLine(ReverbBuffer2, nReverbSize2, nReverbBufferPos2,
+		                  ReverbBuffer2, nNewSize2);
+		ResampleDelayLine(ReverbBuffer3, nReverbSize3, nReverbBufferPos3,
+		                  ReverbBuffer3, nNewSize3);
+		ResampleDelayLine(ReverbBuffer4, nReverbSize4, nReverbBufferPos4,
+		                  ReverbBuffer4, nNewSize4);
+		nReverbSize = nNewSize;
+		nReverbSize2 = nNewSize2;
+		nReverbSize3 = nNewSize3;
+		nReverbSize4 = nNewSize4;
+		nReverbBufferPos = nReverbBufferPos2 = nReverbBufferPos3 = nReverbBufferPos4 = 0;
+	}
+#endif
+	// Surround: one long delay line.
+	if ((gdwSoundSetup & SNDMIX_SURROUND) && (nSurroundSize > 0))
+	{
+		UINT nNewSize = (nNewRate * m_nProLogicDelay) / 1000;
+		if (nNewSize > SURROUNDBUFFERSIZE) nNewSize = SURROUNDBUFFERSIZE;
+		ResampleDelayLine(SurroundBuffer, nSurroundSize, nSurroundPos,
+		                  SurroundBuffer, nNewSize);
+		nSurroundSize = nNewSize;
+		nSurroundPos = 0;
+	}
+	// The short filter rings (Dolby low/high-pass, reverb low-pass, XBass), their
+	// accumulators and the noise-reduction history deliberately keep their values:
+	// re-initialising them would cut off the tails they carry.
+	(void)nOldRate;
+}

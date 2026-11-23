@@ -61,6 +61,10 @@ CSoundFile::CSoundFile()
 	m_nMinPeriod = 0x20;
 	m_nMaxPeriod = 0x7FFF;
 	m_nRepeatCount = 0;
+	m_bRateChangePending = FALSE;
+	m_nRateChangeRate = 0;
+	m_bRateTimeValid = FALSE;
+	m_nRateTimeRemaining = 0;
 	memset(Chn, 0, sizeof(Chn));
 	memset(ChnMix, 0, sizeof(ChnMix));
 	memset(Ins, 0, sizeof(Ins));
@@ -241,6 +245,7 @@ BOOL CSoundFile::Create(LPCBYTE lpStream, DWORD dwMemLength)
 	m_nCurrentPattern = 0;
 	m_nPattern = 0;
 	m_nBufferCount = 0;
+	m_bRateTimeValid = FALSE;
 	m_nTickCount = m_nMusicSpeed;
 	m_nNextRow = 0;
 	m_nRow = 0;
@@ -681,6 +686,7 @@ void CSoundFile::SetCurrentPos(UINT nPos)
 	m_nNextStartRow = 0;
 	m_nTickCount = m_nMusicSpeed;
 	m_nBufferCount = 0;
+	m_bRateTimeValid = FALSE;
 	m_nPatternDelay = 0;
 	m_nFrameDelay = 0;
 }
@@ -711,6 +717,7 @@ void CSoundFile::SetCurrentOrder(UINT nPos)
 		m_nPattern = 0;
 		m_nTickCount = m_nMusicSpeed;
 		m_nBufferCount = 0;
+		m_bRateTimeValid = FALSE;
 		m_nTotalCount = 0;
 		m_nPatternDelay = 0;
 		m_nFrameDelay = 0;
@@ -724,6 +731,7 @@ void CSoundFile::ResetChannels()
 {
 	m_dwSongFlags &= ~(SONG_CPUVERYHIGH|SONG_FADINGSONG|SONG_ENDREACHED|SONG_GLOBALFADE);
 	m_nBufferCount = 0;
+	m_bRateTimeValid = FALSE;
 	for (UINT i=0; i<MAX_CHANNELS; i++)
 	{
 		Chn[i].nROfs = Chn[i].nLOfs = 0;
@@ -746,6 +754,7 @@ void CSoundFile::LoopPattern(int nPat, int nRow)
 		m_nPatternDelay = 0;
 		m_nFrameDelay = 0;
 		m_nBufferCount = 0;
+		m_bRateTimeValid = FALSE;
 		m_dwSongFlags |= SONG_PATTERNLOOP;
 	}
 }

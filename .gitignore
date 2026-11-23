@@ -29,3 +29,4 @@ src/stamp-h1
 *.swo
 m4/libtool.m4
 m4/lt*.m4
+.task-build/
