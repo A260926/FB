@@ -55,8 +55,8 @@ typedef struct
     double v;
 } snrvals;
 
-typedef struct
-{   
+typedef struct yuv_frame_s
+{
     SAMPLE *y;
     SAMPLE *u;
     SAMPLE *v;

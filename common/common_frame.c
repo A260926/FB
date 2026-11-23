@@ -470,9 +470,14 @@ void TEMPLATE(create_yuv_frame)(yuv_frame_t  *frame, int width, int height, int 
 
 void TEMPLATE(close_yuv_frame)(yuv_frame_t  *frame)
 {
-  free(frame->y-frame->offset_y);
+  /*
+   * offset_y/offset_c are stored in SAMPLE units, so scale back to bytes
+   * before freeing.  sizeof(SAMPLE) is 1 for the 8-bit instantiation, so
+   * the low-bitdepth behavior is unchanged.
+   */
+  free((uint8_t *)frame->y - (size_t)frame->offset_y * sizeof(SAMPLE));
   if (frame->subsample != 400)
-    free(frame->u-frame->offset_c);
+    free((uint8_t *)frame->u - (size_t)frame->offset_c * sizeof(SAMPLE));
 }
 
 void TEMPLATE(read_yuv_frame)(yuv_frame_t *frame, FILE *infile)

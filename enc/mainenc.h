@@ -32,7 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "types.h"
 #include "rc.h"
 
-typedef struct
+typedef struct enc_params_s
 {
   unsigned int width;
   unsigned int height;
@@ -42,6 +42,7 @@ typedef struct
   char *outfilestr;
   char *reconfilestr;
   char *statfilestr;
+  int stream_input;
   unsigned int file_headerlen;
   unsigned int frame_headerlen;
   int num_frames;

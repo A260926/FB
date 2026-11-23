@@ -286,6 +286,7 @@ enc_params *parse_config_params(int argc, char **argv)
 
   add_param_to_list(&list, "-cf",                   NULL, ARG_FILENAME, NULL);
   add_param_to_list(&list, "-if",                   NULL, ARG_FILENAME, &params->infilestr);
+  add_param_to_list(&list, "-stream_input",         "0", ARG_INTEGER,  &params->stream_input);
   add_param_to_list(&list, "-ph",                    "0", ARG_INTEGER,  &params->file_headerlen);
   add_param_to_list(&list, "-fh",                    "0", ARG_INTEGER,  &params->frame_headerlen);
   add_param_to_list(&list, "-of",                   NULL, ARG_FILENAME, &params->outfilestr);
@@ -373,8 +374,13 @@ enc_params *parse_config_params(int argc, char **argv)
   if (parse_params(argc, argv, params, &list) < 0)
     return NULL;
 
-  /* Check if input file is y4m and if so use its geometry */
-  if ((infile = fopen(params->infilestr, "rb"))) {
+  /*
+   * Check if a seekable input file is y4m and if so use its geometry.  In
+   * streaming mode the input handle is owned exclusively by the
+   * stream_input_t object, so the stream is never opened here; the Y4M
+   * header is parsed once, by the streaming reader, before frame allocation.
+   */
+  if (!params->stream_input && (infile = fopen(params->infilestr, "rb"))) {
     char buf[256];
     int len = (int)fread(buf, 1, sizeof(buf), infile);
     int pos = 10;

@@ -55,6 +55,7 @@ ENCODER_SOURCES = \
 	enc/encode_block.c \
 	enc/encode_frame.c \
 	enc/mainenc.c \
+	enc/input_stream.c \
 	enc/putbits.c \
 	enc/putvlc.c \
 	enc/strings.c \
