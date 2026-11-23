@@ -1,0 +1,13 @@
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/CMakeFiles/install/strip.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/foonathan_memory.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS3739AB23DC8DU6610R8A9CD2F70/attempts/20261123T165238360736Z/repo/build-stack-baseline/src/CMakeFiles/install/strip.dir

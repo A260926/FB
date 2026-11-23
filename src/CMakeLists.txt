@@ -6,6 +6,7 @@
 set(header_path ${FOONATHAN_MEMORY_SOURCE_DIR}/include/foonathan/memory)
 set(detail_header
         ${header_path}/detail/align.hpp
+        ${header_path}/detail/asan.hpp
         ${header_path}/detail/assert.hpp
         ${header_path}/detail/container_node_sizes.hpp
         ${header_path}/detail/debug_helpers.hpp
@@ -92,6 +93,16 @@ target_compile_definitions(foonathan_memory PUBLIC
                             FOONATHAN_MEMORY_VERSION_PATCH=$CACHE{FOONATHAN_MEMORY_VERSION_PATCH})
 if(NOT MSVC)
 target_compile_features(foonathan_memory PUBLIC cxx_constexpr)
+endif()
+
+# AddressSanitizer is part of the public ABI/contract when enabled: the public
+# memory_stack templates read FOONATHAN_MEMORY_ASAN from the generated header
+# and call the sanitizer interface, so consumers must be instrumented too.
+if(FOONATHAN_MEMORY_ASAN)
+    target_compile_options(foonathan_memory PUBLIC ${FOONATHAN_MEMORY_ASAN_COMPILE_FLAG})
+    if(NOT MSVC)
+        target_link_options(foonathan_memory PUBLIC ${FOONATHAN_MEMORY_ASAN_LINK_FLAG})
+    endif()
 endif()
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")

@@ -11,10 +11,12 @@
 #define FOONATHAN_MEMORY_MEMORY_STACK_HAS_MIN_BLOCK_SIZE
 
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 #include "detail/assert.hpp"
 #include "detail/memory_stack.hpp"
+#include "detail/asan.hpp"
 #include "config.hpp"
 #include "error.hpp"
 #include "memory_arena.hpp"
@@ -124,6 +126,12 @@ namespace foonathan
             : arena_(block_size, detail::forward<Args>(args)...),
               stack_(arena_.allocate_block().memory)
             {
+#if FOONATHAN_MEMORY_ASAN
+                // the freshly obtained block is fully accessible; hide every byte
+                // that has not been handed out as a sub-allocation yet, leaving the
+                // arena management header (which lives before the user region) alone
+                poison_current_block();
+#endif
             }
 
             /// \effects Allocates a memory block of given size and alignment.
@@ -137,6 +145,9 @@ namespace foonathan
             /// \requires \c size and \c alignment must be valid.
             void* allocate(std::size_t size, std::size_t alignment)
             {
+#if FOONATHAN_MEMORY_ASAN
+                return asan_allocate(size, alignment, true);
+#else
                 auto fence  = detail::debug_fence_size;
                 auto offset = detail::align_offset(stack_.top() + fence, alignment);
 
@@ -155,6 +166,7 @@ namespace foonathan
                 }
 
                 return stack_.allocate_unchecked(size, offset);
+#endif
             }
 
             /// \effects Allocates a memory block of given size and alignment,
@@ -164,7 +176,11 @@ namespace foonathan
             /// or `nullptr` if there wasn't enough memory available.
             void* try_allocate(std::size_t size, std::size_t alignment) noexcept
             {
+#if FOONATHAN_MEMORY_ASAN
+                return asan_allocate(size, alignment, false);
+#else
                 return stack_.allocate(block_end(), size, alignment);
+#endif
             }
 
             /// The marker type that is used for unwinding.
@@ -209,15 +225,40 @@ namespace foonathan
                         },
                         info(), m.top);
 
+#if FOONATHAN_MEMORY_ASAN
+                    // the surviving block is the current one; open a narrow window
+                    // for the freed-memory fill and leave the bytes before the
+                    // marker accessible, then poison everything handed back
+                    {
+                        detail::asan_access_guard guard(m.top,
+                                                        std::size_t(m.end - m.top));
+                        detail::debug_fill_free(m.top, std::size_t(m.end - m.top), 0);
+                    }
+                    asan_poison_range(m.top, m.end);
+#else
                     // mark memory from new top to end of the block as freed
                     detail::debug_fill_free(m.top, std::size_t(m.end - m.top), 0);
+#endif
                     stack_ = detail::fixed_memory_stack(m.top);
                 }
                 else // same index
                 {
                     detail::debug_check_pointer([&] { return stack_.top() >= m.top; }, info(),
                                                 m.top);
+#if FOONATHAN_MEMORY_ASAN
+                    auto old_top = stack_.top();
+                    {
+                        // narrow window for the freed-memory debug fill
+                        detail::asan_access_guard guard(m.top,
+                                                        std::size_t(old_top - m.top));
+                        stack_.unwind(m.top);
+                    }
+                    // every byte from the marker up to the old cursor is dead;
+                    // the live prefix [block start, m.top) stays accessible
+                    asan_poison_range(m.top, old_top);
+#else
                     stack_.unwind(m.top);
+#endif
                 }
             }
 
@@ -264,6 +305,151 @@ namespace foonathan
                 auto block = arena_.current_block();
                 return static_cast<const char*>(block.memory) + block.size;
             }
+
+#if FOONATHAN_MEMORY_ASAN
+            // The largest address inside the block that lies on a shadow
+            // granularity boundary.  Only this prefix is ever managed by the
+            // stack, so every cursor stays 8-byte aligned and poisoning never
+            // relies on partial-granule shadow writes.
+            const char* asan_block_end() const noexcept
+            {
+                auto block = arena_.current_block();
+                auto base  = reinterpret_cast<std::uintptr_t>(block.memory);
+                auto end   = base + (block.size & ~(detail::asan_granularity - 1u));
+                return reinterpret_cast<const char*>(end);
+            }
+
+            // Poisons the full managed prefix of the current block.
+            void poison_current_block() noexcept
+            {
+                auto block = arena_.current_block();
+                asan_poison_range(static_cast<const char*>(block.memory), asan_block_end());
+            }
+
+            // Poisons an 8-byte aligned range; the length is a multiple of the
+            // granularity, which is the only poisoning form that is reliable on
+            // every supported sanitizer runtime.
+            static void asan_poison_range(const char* begin, const char* end) noexcept
+            {
+                auto first = reinterpret_cast<std::uintptr_t>(begin);
+                auto last  = reinterpret_cast<std::uintptr_t>(end)
+                             & ~(detail::asan_granularity - 1u);
+                if (last > first)
+                    detail::asan_poison_aligned(begin, std::size_t(last - first));
+            }
+
+            // Rounds a pointer up to the requested (power-of-two) alignment and
+            // reports whether the address arithmetic stayed in range.
+            static bool asan_align_up(std::uintptr_t address, std::size_t alignment,
+                                      std::uintptr_t& result) noexcept
+            {
+                auto pad = alignment - 1u;
+                if (pad > std::numeric_limits<std::uintptr_t>::max() - address)
+                    return false;
+                result = (address + pad) & ~static_cast<std::uintptr_t>(pad);
+                return true;
+            }
+
+            // Computes the placement of a sub-allocation without changing any
+            // state and without ever forming an out-of-range pointer.  The object
+            // pointer is always raised to at least the shadow granularity, so
+            // aligned unpoisoning can encode its exact size even when the
+            // requested alignment is smaller than 8 bytes.  At least one full
+            // granule of redzone is reserved behind the object and the next cursor
+            // again lands on a granularity boundary.
+            //
+            // Returns false if any arithmetic overflows; otherwise sets `head`
+            // (bytes skipped for alignment) and `span` (total bytes consumed from
+            // the cursor, always a granularity multiple).  Both are plain sizes,
+            // so fitting is decided before any object pointer is created.
+            bool asan_layout(std::size_t size, std::size_t alignment, std::size_t& head,
+                             std::size_t& span) const noexcept
+            {
+                constexpr auto gran = detail::asan_granularity;
+                auto           ea   = alignment < gran ? gran : alignment;
+
+                auto base_addr = reinterpret_cast<std::uintptr_t>(stack_.top());
+                std::uintptr_t aligned;
+                if (!asan_align_up(base_addr, ea, aligned))
+                    return false;
+                if (aligned < base_addr)
+                    return false;
+                head = static_cast<std::size_t>(aligned - base_addr);
+
+                std::size_t rounded;
+                if (detail::asan_add_overflow(size, gran - 1u, rounded))
+                    return false;
+                rounded &= ~(gran - 1u);
+
+                std::size_t tail;
+                if (detail::asan_add_overflow(rounded, gran, tail))
+                    return false;
+                if (detail::asan_add_overflow(head, tail, span))
+                    return false;
+                return true;
+            }
+
+            // Shared implementation of allocate()/try_allocate().  When growing is
+            // allowed a block that does not fit triggers arena growth, otherwise
+            // the call fails cleanly with a null result and no state change.
+            void* asan_allocate(std::size_t size, std::size_t alignment, bool allow_growth)
+            {
+                std::size_t head = 0u;
+                std::size_t span = 0u;
+
+                auto capacity = [&] {
+                    return static_cast<std::size_t>(asan_block_end() - stack_.top());
+                };
+
+                auto fits = [&] {
+                    return stack_.top()
+                           && asan_layout(size, alignment, head, span)
+                           && span <= capacity();
+                };
+
+                if (!fits())
+                {
+                    if (!allow_growth)
+                        return nullptr;
+
+                    // need to grow
+                    auto block = arena_.allocate_block();
+                    stack_     = detail::fixed_memory_stack(block.memory);
+                    poison_current_block();
+
+                    if (!asan_layout(size, alignment, head, span))
+                        FOONATHAN_THROW(bad_allocation_size(info(), size, block.size));
+
+                    detail::check_allocation_size<bad_allocation_size>(span, block.size, info());
+                    if (span > capacity())
+                        FOONATHAN_THROW(bad_allocation_size(info(), size, block.size));
+                }
+
+                // fit is proven; only now form the in-range pointers
+                auto base   = stack_.top();
+                auto object = base + head;
+                auto new_top = base + span;
+
+#if FOONATHAN_MEMORY_DEBUG_FILL
+                {
+                    // open one narrow window covering exactly the bytes this
+                    // allocation traverses, apply the debug magic, then close it;
+                    // the object range is reopened below
+                    detail::asan_access_guard guard(base, span);
+                    detail::debug_fill(base, head, debug_magic::alignment_memory);
+                    detail::debug_fill(object, size, debug_magic::new_memory);
+                    detail::debug_fill(object + size, std::size_t(new_top - object) - size,
+                                       debug_magic::fence_memory);
+                }
+#endif
+
+                // hand out exactly the requested bytes; the partial tail of a
+                // short object stays poisoned inside its own granule
+                detail::asan_unpoison_aligned(object, size);
+                stack_.bump(std::size_t(new_top - base));
+                return object;
+            }
+#endif
 
             memory_arena<allocator_type> arena_;
             detail::fixed_memory_stack   stack_;

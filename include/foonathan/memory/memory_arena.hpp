@@ -11,6 +11,7 @@
 
 #include "detail/debug_helpers.hpp"
 #include "detail/assert.hpp"
+#include "detail/asan.hpp"
 #include "detail/utility.hpp"
 #include "allocator_traits.hpp"
 #include "config.hpp"
@@ -216,7 +217,13 @@ namespace foonathan
                         to_dealloc.steal_top(cached_);
                     // now dealloc everything
                     while (!to_dealloc.empty())
-                        alloc.deallocate_block(to_dealloc.pop());
+                    {
+                        auto block = to_dealloc.pop();
+                        // a cached stack block keeps its user region poisoned;
+                        // restore full access so the underlying allocator can free it
+                        detail::asan_unpoison_for_release(block.memory, block.size);
+                        alloc.deallocate_block(block);
+                    }
                 }
 
             private:
@@ -310,7 +317,13 @@ namespace foonathan
                 shrink_to_fit();
                 // now deallocate everything
                 while (!used_.empty())
-                    allocator_type::deallocate_block(used_.pop());
+                {
+                    auto block = used_.pop();
+                    // blocks may still carry stack sub-allocation shadow state;
+                    // the underlying allocator must see the whole range as valid
+                    detail::asan_unpoison_for_release(block.memory, block.size);
+                    allocator_type::deallocate_block(block);
+                }
             }
 
             /// @{
@@ -353,7 +366,13 @@ namespace foonathan
                     used_.push(allocator_type::allocate_block());
 
                 auto block = used_.top();
-                detail::debug_fill_internal(block.memory, block.size, false);
+                {
+                    // a block reused from the stack cache is fully poisoned;
+                    // the internal fill is legitimate book keeping, so open a
+                    // narrow window that restores the shadow state afterwards
+                    detail::asan_block_access_guard guard(block.memory, block.size);
+                    detail::debug_fill_internal(block.memory, block.size, false);
+                }
                 return block;
             }
 
@@ -371,7 +390,14 @@ namespace foonathan
             void deallocate_block() noexcept
             {
                 auto block = used_.top();
-                detail::debug_fill_internal(block.memory, block.size, true);
+                {
+                    // the block may be poisoned by a stack allocator; open a narrow
+                    // window for the internal free fill and restore the cache
+                    // shadow state (user region inaccessible, management header
+                    // untouched) before the block moves into the cache
+                    detail::asan_block_access_guard guard(block.memory, block.size);
+                    detail::debug_fill_internal(block.memory, block.size, true);
+                }
                 this->do_deallocate_block(get_allocator(), used_);
             }
 
