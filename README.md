@@ -168,6 +168,10 @@ Example code for some common use cases is in the [examples](examples) directory:
   (one fragment per GOP)
 * [stream-encrypt](examples/stream-encrypt) is an HTTP server that encrypts and refragments an mp4 file
   on the fly
+* [editcompact](examples/editcompact) removes the media that the edit lists of a progressive mp4 file do
+  not reference, rebuilding the sample tables and mdat with only the used samples.
+  Run it as `go run ./examples/editcompact in.mp4 out.mp4`; the library entry point is
+  `mp4.CompactEditedFile`
 
 ## Contributing
 
