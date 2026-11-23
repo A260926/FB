@@ -33,3 +33,6 @@ hlsProxy/live555HLSProxy
 
 # Test media
 *.264
+
+# Task harness build output
+.task-build/

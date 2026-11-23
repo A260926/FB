@@ -19,6 +19,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 // Implementation
 
 #include "RTPSource.hh"
+#include "RTCPClockSlew.hh"
 #include "GroupsockHelper.hh"
 
 ////////// RTPSource //////////
@@ -48,6 +49,18 @@ Boolean RTPSource::isRTPSource() const {
   return True;
 }
 
+Boolean RTPSource::enableRTCPClockSlew(unsigned maxSlewPPM,
+				       unsigned maxCorrectionUS) {
+  if (fReadStarted) return False; // configuration is fixed once reading begins
+  if (maxSlewPPM == 0 || maxCorrectionUS == 0) return False;
+  if (maxSlewPPM >= 1000000) return False; // must be a proper, sub-100% rate
+
+  fClockSlewEnabled = True;
+  fMaxSlewPPM = maxSlewPPM;
+  fMaxCorrectionUS = maxCorrectionUS;
+  return True;
+}
+
 RTPSource::RTPSource(UsageEnvironment& env, Groupsock* RTPgs,
 		     unsigned char rtpPayloadFormat,
 		     u_int32_t rtpTimestampFrequency)
@@ -56,7 +69,9 @@ RTPSource::RTPSource(UsageEnvironment& env, Groupsock* RTPgs,
     fCurPacketHasBeenSynchronizedUsingRTCP(False), fLastReceivedSSRC(0),
     fRTCPInstanceForMultiplexedRTCPPackets(NULL), fCrypto(NULL),
     fRTPPayloadFormat(rtpPayloadFormat), fTimestampFrequency(rtpTimestampFrequency),
-    fSSRC(our_random32()), fEnableRTCPReports(True) {
+    fSSRC(our_random32()), fEnableRTCPReports(True),
+    fReadStarted(False), fClockSlewEnabled(False),
+    fMaxSlewPPM(0), fMaxCorrectionUS(0) {
   fReceptionStatsDB = new RTPReceptionStatsDB();
 }
 
@@ -103,7 +118,10 @@ void RTPReceptionStatsDB
 		     Boolean useForJitterCalculation,
 		     struct timeval& resultPresentationTime,
 		     Boolean& resultHasBeenSyncedUsingRTCP,
-		     unsigned packetSize) {
+		     unsigned packetSize,
+		     Boolean clockSlewEnabled,
+		     unsigned maxSlewPPM,
+		     unsigned maxCorrectionUS) {
   ++fTotNumPacketsReceived;
   RTPReceptionStats* stats = lookup(SSRC);
   if (stats == NULL) {
@@ -119,25 +137,35 @@ void RTPReceptionStatsDB
   }
 
   stats->noteIncomingPacket(seqNum, rtpTimestamp, timestampFrequency,
-			    useForJitterCalculation,
-			    resultPresentationTime,
-			    resultHasBeenSyncedUsingRTCP, packetSize);
+				    useForJitterCalculation,
+				    resultPresentationTime,
+				    resultHasBeenSyncedUsingRTCP, packetSize,
+				    clockSlewEnabled,
+				    maxSlewPPM,
+				    maxCorrectionUS);
 }
 
 void RTPReceptionStatsDB
 ::noteIncomingSR(u_int32_t SSRC,
 		 u_int32_t ntpTimestampMSW, u_int32_t ntpTimestampLSW,
-		 u_int32_t rtpTimestamp) {
+		 u_int32_t rtpTimestamp,
+		 Boolean clockSlewEnabled,
+		 unsigned maxSlewPPM,
+		 unsigned maxCorrectionUS,
+		 unsigned timestampFrequency) {
   RTPReceptionStats* stats = lookup(SSRC);
   if (stats == NULL) {
     // This is the first time we've heard of this SSRC.
-    // Create a new record for it:
+    // Create a new record for it (this covers SRs that arrive before any RTP
+    // packet, so the slew configuration is applied to it as well):
     stats = new RTPReceptionStats(SSRC);
     if (stats == NULL) return;
     add(SSRC, stats);
   }
 
-  stats->noteIncomingSR(ntpTimestampMSW, ntpTimestampLSW, rtpTimestamp);
+  stats->noteIncomingSR(ntpTimestampMSW, ntpTimestampLSW, rtpTimestamp,
+			clockSlewEnabled, maxSlewPPM, maxCorrectionUS,
+			timestampFrequency);
 }
 
 void RTPReceptionStatsDB::removeRecord(u_int32_t SSRC) {
@@ -195,6 +223,7 @@ RTPReceptionStats::RTPReceptionStats(u_int32_t SSRC) {
 }
 
 RTPReceptionStats::~RTPReceptionStats() {
+  releaseSlewSegments();
 }
 
 void RTPReceptionStats::init(u_int32_t SSRC) {
@@ -215,6 +244,11 @@ void RTPReceptionStats::init(u_int32_t SSRC) {
   fTotalInterPacketGaps.tv_sec = fTotalInterPacketGaps.tv_usec = 0;
   fHasBeenSynchronized = False;
   fSyncTime.tv_sec = fSyncTime.tv_usec = 0;
+  fSlewSegments = NULL;
+  fSlewExtRTP = 0;
+  fSlewLastSR_NTPmsw = fSlewLastSR_NTPlsw = 0;
+  fSlewLastSR_RTP = 0;
+  fSlewHaveAdoptedSR = False;
   reset();
 }
 
@@ -228,13 +262,26 @@ void RTPReceptionStats::initSeqNum(u_int16_t initialSeqNum) {
 #define MILLION 1000000
 #endif
 
+// Convert a (possibly wrapped) 32-bit RTP timestamp to a monotonic 64-bit
+// tick count, using "previousExt" as the count at the most recent packet.
+// The signed 32-bit difference is assumed to span less than half of the
+// 32-bit cycle, as required for a normal I/P stream.
+static u_int64_t extendRTPTimestamp(u_int32_t rtpTimestamp,
+				    u_int64_t previousExt) {
+  int32_t diff = (int32_t)(rtpTimestamp - (u_int32_t)(previousExt & 0xFFFFFFFFu));
+  return (u_int64_t)((int64_t)previousExt + (int64_t)diff);
+}
+
 void RTPReceptionStats
 ::noteIncomingPacket(u_int16_t seqNum, u_int32_t rtpTimestamp,
 		     unsigned timestampFrequency,
 		     Boolean useForJitterCalculation,
 		     struct timeval& resultPresentationTime,
 		     Boolean& resultHasBeenSyncedUsingRTCP,
-		     unsigned packetSize) {
+		     unsigned packetSize,
+		     Boolean clockSlewEnabled,
+		     unsigned maxSlewPPM,
+		     unsigned maxCorrectionUS) {
   if (!fHaveSeenInitialSequenceNumber) initSeqNum(seqNum);
 
   ++fNumPacketsReceivedSinceLastReset;
@@ -252,29 +299,33 @@ void RTPReceptionStats
   unsigned newSeqNum = 0;
   if (seqNumLT((u_int16_t)oldSeqNum, seqNum)) {
     // This packet was not an old packet received out of order, so check it:
-    
+
     if (seqNumDifference >= 0x8000) {
       // The sequence number wrapped around, so start a new cycle:
       seqNumCycle += 0x10000;
     }
-    
+
     newSeqNum = seqNumCycle|seqNum;
     if (newSeqNum > fHighestExtSeqNumReceived) {
       fHighestExtSeqNumReceived = newSeqNum;
     }
   } else if (fTotNumPacketsReceived > 1) {
     // This packet was an old packet received out of order
-    
+
     if ((int)seqNumDifference >= 0x8000) {
       // The sequence number wrapped around, so switch to an old cycle:
       seqNumCycle -= 0x10000;
     }
-    
+
     newSeqNum = seqNumCycle|seqNum;
     if (newSeqNum < fBaseExtSeqNumReceived) {
       fBaseExtSeqNumReceived = newSeqNum;
     }
   }
+
+  // The extended sequence number of this very packet:
+  unsigned packetExtSeqNum = (newSeqNum != 0) ? newSeqNum
+					      : fHighestExtSeqNumReceived;
 
   // Record the inter-packet delay
   struct timeval timeNow;
@@ -283,7 +334,7 @@ void RTPReceptionStats
       || fLastPacketReceptionTime.tv_usec != 0) {
     unsigned gap
       = (timeNow.tv_sec - fLastPacketReceptionTime.tv_sec)*MILLION
-      + timeNow.tv_usec - fLastPacketReceptionTime.tv_usec; 
+      + timeNow.tv_usec - fLastPacketReceptionTime.tv_usec;
     if (gap > fMaxInterPacketGapUS) {
       fMaxInterPacketGapUS = gap;
     }
@@ -316,6 +367,17 @@ void RTPReceptionStats
     fLastTransit = transit;
     if (d < 0) d = -d;
     fJitter += (1.0/16.0) * ((double)d - fJitter);
+  }
+
+  if (clockSlewEnabled) {
+    slewNoteIncomingPacket(rtpTimestamp, timestampFrequency, packetExtSeqNum,
+			   resultPresentationTime,
+			   resultHasBeenSyncedUsingRTCP);
+    // The reorder window advances with every received packet, so segments
+    // that can no longer be needed may be released:
+    pruneSlewSegments();
+    fPreviousPacketRTPTimestamp = rtpTimestamp;
+    return;
   }
 
   // Return the 'presentation time' that corresponds to "rtpTimestamp":
@@ -368,11 +430,24 @@ void RTPReceptionStats
 
 void RTPReceptionStats::noteIncomingSR(u_int32_t ntpTimestampMSW,
 				       u_int32_t ntpTimestampLSW,
-				       u_int32_t rtpTimestamp) {
+				       u_int32_t rtpTimestamp,
+				       Boolean clockSlewEnabled,
+				       unsigned maxSlewPPM,
+				       unsigned maxCorrectionUS,
+				       unsigned timestampFrequency) {
+  // The raw, most-recently-received SR information is always recorded,
+  // even when the report is rejected for clock-slew purposes, so LSR/DLSR
+  // and the reception statistics keep reflecting the actual input:
   fLastReceivedSR_NTPmsw = ntpTimestampMSW;
   fLastReceivedSR_NTPlsw = ntpTimestampLSW;
 
   gettimeofday(&fLastReceivedSR_time, NULL);
+
+  if (clockSlewEnabled) {
+    slewNoteIncomingSR(ntpTimestampMSW, ntpTimestampLSW, rtpTimestamp,
+		       timestampFrequency, maxSlewPPM, maxCorrectionUS);
+    return;
+  }
 
   // Use this SR to update time synchronization information:
   fSyncTimestamp = rtpTimestamp;
@@ -406,4 +481,188 @@ Boolean seqNumLT(u_int16_t s1, u_int16_t s2) {
   } else { // diff == 0
     return False;
   }
+}
+
+
+////////// Clock-slew mode implementation //////////
+
+// The NTP fractional (least-significant) word, truncated downwards to whole
+// microseconds (10^6/2^32 == 15625/2^26):
+static unsigned ntpFractionToMicroseconds(u_int32_t ntpTimestampLSW) {
+  return (unsigned)(((u_int64_t)ntpTimestampLSW*15625u) >> 26);
+}
+
+// Split a microsecond-since-Unix-epoch value into a timeval, keeping the
+// microsecond field in [0, 1000000) even for (unusual) negative values:
+static struct timeval microsecondsToTimeval(int64_t us) {
+  struct timeval tv;
+  int64_t seconds = us/MILLION; // truncates toward zero
+  int64_t micros = us%MILLION;
+  if (micros < 0) {
+    micros += MILLION;
+    --seconds;
+  }
+  tv.tv_sec = (long)seconds;
+  tv.tv_usec = (int)micros;
+  return tv;
+}
+
+void RTPReceptionStats
+::slewNoteIncomingPacket(u_int32_t rtpTimestamp,
+			 unsigned timestampFrequency,
+			 unsigned extSeqNum,
+			 struct timeval& resultPresentationTime,
+			 Boolean& resultHasBeenSyncedUsingRTCP) {
+  // Maintain the wrap-aware 64-bit RTP tick count.  Before the first SR (and
+  // first packet) the anchor tick is arbitrary, so start the count at the
+  // first packet's own tick.
+  if (!fSlewHaveAdoptedSR && fSlewSegments == NULL
+      && fTotNumPacketsReceived == 1) {
+    fSlewExtRTP = (u_int64_t)rtpTimestamp;
+  } else {
+    fSlewExtRTP = extendRTPTimestamp(rtpTimestamp, fSlewExtRTP);
+  }
+
+  if (fSlewHaveAdoptedSR) {
+    resultPresentationTime = slewMapPacket(rtpTimestamp, timestampFrequency,
+					   extSeqNum);
+    resultHasBeenSyncedUsingRTCP = True;
+  } else {
+    // No SR yet: there is no absolute mapping until the first report.
+    resultPresentationTime.tv_sec = 0;
+    resultPresentationTime.tv_usec = 0;
+    resultHasBeenSyncedUsingRTCP = False;
+  }
+}
+
+struct timeval RTPReceptionStats
+::slewMapPacket(u_int32_t rtpTimestamp, unsigned timestampFrequency,
+		unsigned extSeqNum) {
+  u_int64_t rtp64 = extendRTPTimestamp(rtpTimestamp, fSlewExtRTP);
+
+  // The segments' extended-sequence ranges partition the stream in order,
+  // each bounded by "maxExtSeqBeforeNext()" (the tail segment is unbounded).
+  // Pick the unique historical segment this packet belongs to, so a late
+  // packet is never evaluated against a segment that did not exist when it
+  // arrived:
+  RTPClockSlewSegment* chosen = fSlewSegments;
+  for (RTPClockSlewSegment* seg = fSlewSegments; seg != NULL;
+       seg = seg->next()) {
+    if (extSeqNum <= seg->maxExtSeqBeforeNext()) {
+      chosen = seg;
+      break;
+    }
+  }
+
+  int64_t us = chosen->mapToMicroseconds(rtp64);
+  return microsecondsToTimeval(us);
+}
+
+void RTPReceptionStats
+::slewNoteIncomingSR(u_int32_t ntpTimestampMSW, u_int32_t ntpTimestampLSW,
+		     u_int32_t rtpTimestamp,
+		     unsigned timestampFrequency,
+		     unsigned maxSlewPPM, unsigned maxCorrectionUS) {
+  // NTP time in microseconds since the Unix epoch; the fractional word is
+  // truncated downwards to whole microseconds:
+  int64_t ntpUS = (int64_t)(u_int64_t)(ntpTimestampMSW - 0x83AA7E80u)*MILLION
+		+ (int64_t)ntpFractionToMicroseconds(ntpTimestampLSW);
+
+  u_int64_t srRTP64;
+  if (!fSlewHaveAdoptedSR) {
+    // First SR: keep the original NTP anchoring behavior.  Any packets seen
+    // before this point (which had no absolute time) may now switch to it.
+    if (fTotNumPacketsReceived == 0) {
+      // The SR arrived before any RTP packet: anchor the tick count directly.
+      srRTP64 = (u_int64_t)rtpTimestamp;
+    } else {
+      srRTP64 = extendRTPTimestamp(rtpTimestamp, fSlewExtRTP);
+    }
+    fSlewExtRTP = srRTP64;
+    RTPClockSlewSegment* seg
+      = new RTPClockSlewSegment(srRTP64, ntpUS, 0/*no correction yet*/,
+				maxSlewPPM, timestampFrequency);
+    releaseSlewSegments();
+    fSlewSegments = seg;
+    fSlewHaveAdoptedSR = True;
+  } else {
+    // Subsequent SRs must be strictly newer than the last adopted one:
+    u_int64_t prevNTP = ((u_int64_t)fSlewLastSR_NTPmsw << 32)
+		      | (u_int64_t)fSlewLastSR_NTPlsw;
+    u_int64_t thisNTP = ((u_int64_t)ntpTimestampMSW << 32)
+		      | (u_int64_t)ntpTimestampLSW;
+    int32_t rtpDiff = (int32_t)(rtpTimestamp - fSlewLastSR_RTP);
+
+    if (!(thisNTP > prevNTP) || rtpDiff <= 0) {
+      // Non-advancing NTP, or no positive signed-32-bit RTP advance:
+      // reject the report and leave the playback mapping unchanged.
+      return;
+    }
+
+    srRTP64 = extendRTPTimestamp(rtpTimestamp, fSlewExtRTP);
+
+    // The SR's RTP point must not be later than the most advanced media
+    // time received so far (a pre-first-packet SR is the branch above):
+    if (srRTP64 > fSlewExtRTP) return;
+
+    // P: the presentation time the old mapping gives this RTP point.
+    struct timeval ptv = slewMapPacket(rtpTimestamp, timestampFrequency,
+				       fHighestExtSeqNumReceived);
+    int64_t P = (int64_t)ptv.tv_sec*MILLION + ptv.tv_usec;
+    int64_t E = ntpUS - P;
+    int64_t absE = (E < 0) ? -E : E;
+    if (absE > (int64_t)maxCorrectionUS) {
+      // The correction exceeds the configured bound: reject the report and
+      // leave the playback mapping unchanged.
+      return;
+    }
+
+    // Adopt the report: a new segment begins at this point.  Its correction
+    // replaces whatever error the previous segment had not yet consumed;
+    // the old (tail) segment is bounded to the packets already received.
+    RTPClockSlewSegment* tail = fSlewSegments;
+    while (tail != NULL && tail->next() != NULL) tail = tail->next();
+    if (tail != NULL) tail->setMaxExtSeqBeforeNext(fHighestExtSeqNumReceived);
+
+    RTPClockSlewSegment* seg
+      = new RTPClockSlewSegment(srRTP64, P, E, maxSlewPPM,
+				timestampFrequency);
+    if (tail == NULL) {
+      fSlewSegments = seg;
+    } else {
+      tail->setNext(seg);
+    }
+  }
+
+  fSlewLastSR_NTPmsw = ntpTimestampMSW;
+  fSlewLastSR_NTPlsw = ntpTimestampLSW;
+  fSlewLastSR_RTP = rtpTimestamp;
+
+  // Retain only the segments still needed by packets inside the reordering
+  // window (bounded by the 16-bit sequence space):
+  pruneSlewSegments();
+}
+
+void RTPReceptionStats::pruneSlewSegments() {
+  // Any sequence number older than this can no longer arrive within the
+  // 16-bit reordering window, so segments that end before it are obsolete:
+  unsigned neededExtSeq = (fHighestExtSeqNumReceived >= 0x10000)
+			? fHighestExtSeqNumReceived - 0xFFFFu : 0;
+  while (fSlewSegments != NULL && fSlewSegments->next() != NULL) {
+    if (fSlewSegments->maxExtSeqBeforeNext() >= neededExtSeq) break; // still needed
+    RTPClockSlewSegment* old = fSlewSegments;
+    fSlewSegments = old->next();
+    old->setNext(NULL);
+    delete old;
+  }
+}
+
+void RTPReceptionStats::releaseSlewSegments() {
+  RTPClockSlewSegment* seg = fSlewSegments;
+  while (seg != NULL) {
+    RTPClockSlewSegment* next = seg->next();
+    delete seg;
+    seg = next;
+  }
+  fSlewSegments = NULL;
 }

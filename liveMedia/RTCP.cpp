@@ -650,7 +650,11 @@ void RTCPInstance
 	    RTPReceptionStatsDB& receptionStats
 	      = fSource->receptionStatsDB();
 	    receptionStats.noteIncomingSR(reportSenderSSRC,
-					  NTPmsw, NTPlsw, rtpTimestamp);
+					  NTPmsw, NTPlsw, rtpTimestamp,
+					  fSource->clockSlewEnabled(),
+					  fSource->maxSlewPPM(),
+					  fSource->maxCorrectionUS(),
+					  fSource->timestampFrequency());
 	  }
 	  ADVANCE(8); // skip over packet count, octet count
 

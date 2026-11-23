@@ -83,6 +83,9 @@ void MultiFramedRTPSource::reset() {
   fPacketReadInProgress = NULL;
   fNeedDelivery = False;
   fPacketLossInFragmentedFrame = False;
+  fHaveFragmentSnapshot = False;
+  fFragmentPresentationTime.tv_sec = fFragmentPresentationTime.tv_usec = 0;
+  fFragmentHasBeenSyncedUsingRTCP = False;
 }
 
 MultiFramedRTPSource::~MultiFramedRTPSource() {
@@ -116,6 +119,8 @@ void MultiFramedRTPSource::doStopGettingFrames() {
 }
 
 void MultiFramedRTPSource::doGetNextFrame() {
+  noteReadStarted(); // clock-slew configuration can no longer be changed
+
   if (!fAreDoingNetworkReads) {
     // Turn on background read handling of incoming packets:
     fAreDoingNetworkReads = True;
@@ -162,6 +167,9 @@ void MultiFramedRTPSource::doGetNextFrame1() {
 	// Forget any data that we used from it:
 	fTo = fSavedTo; fMaxSize = fSavedMaxSize;
 	fFrameSize = 0;
+	// And drop the snapshot held for the abandoned NAL, so it can
+	// never leak into the following frame:
+	fHaveFragmentSnapshot = False;
       }
       fPacketLossInFragmentedFrame = False;
     } else if (packetLossPrecededThis) {
@@ -183,12 +191,29 @@ void MultiFramedRTPSource::doGetNextFrame1() {
 		    fCurPacketMarkerBit);
     fFrameSize += frameSize;
 
+    if (fCurrentPacketBeginsFrame) {
+      // Fix the presentation time and synchronization flag of the whole
+      // NAL to this first fragment's snapshot, even if an SR arrives before
+      // the final fragment.  (The last fragment still supplies the sequence
+      // number and marker bit via "use()" above.)
+      fHaveFragmentSnapshot = True;
+      fFragmentPresentationTime = fPresentationTime;
+      fFragmentHasBeenSyncedUsingRTCP = fCurPacketHasBeenSynchronizedUsingRTCP;
+    } else if (fHaveFragmentSnapshot) {
+      // A later fragment: restore the first fragment's snapshot:
+      fPresentationTime = fFragmentPresentationTime;
+      fCurPacketHasBeenSynchronizedUsingRTCP = fFragmentHasBeenSyncedUsingRTCP;
+    }
+
     if (!nextPacket->hasUsableData()) {
       // We're completely done with this packet now
       fReorderingBuffer->releaseUsedPacket(nextPacket);
     }
 
     if (fCurrentPacketCompletesFrame && fFrameSize > 0) {
+      // The NAL is complete; its time was fixed at the first fragment, so
+      // the held snapshot must not carry over to the next frame:
+      fHaveFragmentSnapshot = False;
       // We have all the data that the client wants.
       if (fNumTruncatedBytes > 0) {
 	envir() << "MultiFramedRTPSource::doGetNextFrame1(): The total received frame size exceeds the client's buffer size ("
@@ -328,7 +353,8 @@ void MultiFramedRTPSource::networkReadHandler1() {
       .noteIncomingPacket(rtpSSRC, rtpSeqNo, rtpTimestamp,
 			  timestampFrequency(),
 			  usableInJitterCalculation, presentationTime,
-			  hasBeenSyncedUsingRTCP, bPacket->dataSize());
+			  hasBeenSyncedUsingRTCP, bPacket->dataSize(),
+			  clockSlewEnabled(), maxSlewPPM(), maxCorrectionUS());
 
     // Fill in the rest of the packet descriptor, and store it:
     struct timeval timeNow;

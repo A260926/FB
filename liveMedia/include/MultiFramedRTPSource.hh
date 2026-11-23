@@ -51,6 +51,15 @@ protected:
   Boolean fCurrentPacketBeginsFrame;
   Boolean fCurrentPacketCompletesFrame;
 
+  // For a NAL unit split across several RTP packets (e.g. H.264 FU-A), the
+  // presentation time and "has been synchronized" flag are fixed to the
+  // snapshot taken at the first fragment.  A later SR cannot move the time
+  // of an already-buffered NAL; the final fragment still supplies the
+  // sequence number and marker bit.
+  Boolean fHaveFragmentSnapshot;
+  struct timeval fFragmentPresentationTime;
+  Boolean fFragmentHasBeenSyncedUsingRTCP;
+
 protected:
   // redefined virtual functions:
   virtual void doGetNextFrame();

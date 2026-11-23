@@ -14,7 +14,7 @@ rm -f .task-build/clock-slew-example
 c++ -std=c++20 -DNO_OPENSSL=1 "${incs[@]}" examples/clock-slew.cpp "${objects[@]}" -o .task-build/clock-slew-example
 .task-build/clock-slew-example
 c++ -std=c++20 -DNO_OPENSSL=1 "${incs[@]}" -x c++ task_support/driver.c task_tests/clock_slew.cpp -x none "${objects[@]}" -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || echo .task-build/target-output.log)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

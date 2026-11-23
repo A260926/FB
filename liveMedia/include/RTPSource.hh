@@ -44,6 +44,21 @@ public:
 
   virtual Boolean hasBeenSynchronizedUsingRTCP();
 
+  // Optional "clock slewing" mode: Instead of having each incoming RTCP SR
+  // re-anchor the RTP->presentation-time mapping (so that already-synchronized
+  // presentation times jump), subsequent SRs are applied gradually, as a series
+  // of time-mapping "segments" that slew the clock at no more than
+  // "maxSlewPPM" parts-per-million, with each correction bounded by
+  // "maxCorrectionUS" microseconds.  (The raw, most-recently-received SR
+  // information is still recorded unchanged.)  May be called only before the
+  // first "getNextFrame()" call; returns False (and leaves the configuration
+  // unchanged) if the parameters are invalid, or if reading has already begun.
+  Boolean enableRTCPClockSlew(unsigned maxSlewPPM, unsigned maxCorrectionUS);
+
+  Boolean clockSlewEnabled() const { return fClockSlewEnabled; }
+  unsigned maxSlewPPM() const { return fMaxSlewPPM; }
+  unsigned maxCorrectionUS() const { return fMaxCorrectionUS; }
+
   Groupsock* RTPgs() const { return fRTPInterface.gs(); }
 
   // Did the teardown classifier PROVE the far end closed this stream (captured FIN/RST)?
@@ -100,6 +115,9 @@ protected:
       // abstract base class
   virtual ~RTPSource();
 
+  // Called by subclasses when the first "getNextFrame()" is about to start:
+  void noteReadStarted() { fReadStarted = True; }
+
 protected:
   RTPInterface fRTPInterface;
   u_int16_t fCurPacketRTPSeqNum;
@@ -120,6 +138,10 @@ private:
   unsigned fTimestampFrequency;
   u_int32_t fSSRC;
   Boolean fEnableRTCPReports; // whether RTCP "RR" reports should be sent for this source (default: True)
+  Boolean fReadStarted; // set once the first "getNextFrame()" has begun
+  Boolean fClockSlewEnabled;
+  unsigned fMaxSlewPPM;
+  unsigned fMaxCorrectionUS;
 
   RTPReceptionStatsDB* fReceptionStatsDB;
 };
@@ -157,12 +179,19 @@ public:
 			  Boolean useForJitterCalculation,
 			  struct timeval& resultPresentationTime,
 			  Boolean& resultHasBeenSyncedUsingRTCP,
-			  unsigned packetSize /* payload only */);
+			  unsigned packetSize, /* payload only */
+			  Boolean clockSlewEnabled,
+			  unsigned maxSlewPPM,
+			  unsigned maxCorrectionUS);
 
   // The following is called whenever a RTCP SR packet is received:
   void noteIncomingSR(u_int32_t SSRC,
 		      u_int32_t ntpTimestampMSW, u_int32_t ntpTimestampLSW,
-		      u_int32_t rtpTimestamp);
+		      u_int32_t rtpTimestamp,
+		      Boolean clockSlewEnabled,
+		      unsigned maxSlewPPM,
+		      unsigned maxCorrectionUS,
+		      unsigned timestampFrequency);
 
   // The following is called when a RTCP BYE packet is received:
   void removeRecord(u_int32_t SSRC);
@@ -234,14 +263,37 @@ private:
 			  Boolean useForJitterCalculation,
 			  struct timeval& resultPresentationTime,
 			  Boolean& resultHasBeenSyncedUsingRTCP,
-			  unsigned packetSize /* payload only */);
+			  unsigned packetSize, /* payload only */
+			  Boolean clockSlewEnabled,
+			  unsigned maxSlewPPM,
+			  unsigned maxCorrectionUS);
   void noteIncomingSR(u_int32_t ntpTimestampMSW, u_int32_t ntpTimestampLSW,
-		      u_int32_t rtpTimestamp);
+		      u_int32_t rtpTimestamp,
+		      Boolean clockSlewEnabled,
+		      unsigned maxSlewPPM,
+		      unsigned maxCorrectionUS,
+		      unsigned timestampFrequency);
   void init(u_int32_t SSRC);
   void initSeqNum(u_int16_t initialSeqNum);
   void reset();
       // resets periodic stats (called each time they're used to
       // generate a reception report)
+
+  // Clock-slew mode helpers:
+  void slewNoteIncomingPacket(u_int32_t rtpTimestamp,
+			      unsigned timestampFrequency,
+			      unsigned extSeqNum,
+			      struct timeval& resultPresentationTime,
+			      Boolean& resultHasBeenSyncedUsingRTCP);
+  void slewNoteIncomingSR(u_int32_t ntpTimestampMSW, u_int32_t ntpTimestampLSW,
+			  u_int32_t rtpTimestamp,
+			  unsigned timestampFrequency,
+			  unsigned maxSlewPPM, unsigned maxCorrectionUS);
+  struct timeval slewMapPacket(u_int32_t rtpTimestamp,
+			       unsigned timestampFrequency,
+			       unsigned extSeqNum);
+  void pruneSlewSegments();
+  void releaseSlewSegments();
 
 protected:
   u_int32_t fSSRC;
@@ -268,6 +320,15 @@ private:
   Boolean fHasBeenSynchronized;
   u_int32_t fSyncTimestamp;
   struct timeval fSyncTime;
+
+  // Clock-slew mode state (used only when the owning RTPSource has
+  // "enableRTCPClockSlew()" enabled; NULL/zero otherwise):
+  class RTPClockSlewSegment* fSlewSegments; // head = oldest retained segment
+  u_int64_t fSlewExtRTP; // wrap-aware 64-bit RTP tick count of the latest packet
+  u_int32_t fSlewLastSR_NTPmsw; // NTP timestamp of the latest adopted SR
+  u_int32_t fSlewLastSR_NTPlsw;
+  u_int32_t fSlewLastSR_RTP; // RTP timestamp of the latest adopted SR
+  Boolean fSlewHaveAdoptedSR; // whether any SR has been adopted yet
 };
 
 
