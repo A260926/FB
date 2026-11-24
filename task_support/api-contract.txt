@@ -1,0 +1,25 @@
+新增生产头/源 src/rtpretransmit.h/.cpp（标准库C++11）。头公开：
+struct RTPRepairConfig {
+ size_t maxPackets, maxBytes;
+ uint32_t clockRate, baseTimestamp;
+ uint64_t baseTimeUS, delayUS, rttUS, retryUS;
+};
+typedef int (*RTPRepairWrite)(void*, const void*, size_t);
+typedef uint64_t (*RTPRepairClock)(void*);
+class RTPRepairHistory {
+public:
+ int Configure(const RTPRepairConfig&);
+ void Clear();
+ int RememberSent(const void*, size_t, uint64_t nowUS);
+ int Retransmit(RTCPCompoundPacket&, uint64_t nowUS, RTPRepairWrite, void*);
+ size_t PacketCount() const;
+ size_t ByteCount() const;
+};
+maxPackets为1..1024，maxBytes>=12，clockRate/retryUS>0；失败配置不变，成功清旧缓存。
+Clear解除配置。未配置RememberSent/Retransmit返回负值。历史只保留一个SSRC，接受新SSRC先清旧历史但保留配置。输入为成功发送的合法RTP；RememberSent调用生产RTP解析，保存独立完整字节；同一SSRC序号按16位模序严格前进，允许正常发送失败造成跳号，重复提交返回负值且不改内容或配额。
+deadline=baseTimeUS+delayUS+floor(int32_t(timestamp-baseTimestamp)*1000000/clockRate)。时间及中间运算在int64_t内，now单调非负，支持timestamp跨零。now>=deadline、媒体偏移为负、原包超过maxBytes时返回1但不缓存；合法过期清理照常。其他有效提交返回0；先清理deadline<=now，再在需要时淘汰最早原始发送项，直到包数和总原始字节配额都满足。清理不丢失同代次的最高原序号前沿。重发不重新缓存、不延长deadline。
+RTCPCompoundPacket增加 int GetGenericNACKs(uint32_t mediaSSRC,std::vector<uint16_t>& out) const。对生产解析已成功的compound逐子包处理PT205/FMT1；头部、长度、末子包padding及FCI四字节对齐正确且至少一个FCI，才展开PID/BLP。其他FMT/PT跳过；任一NACK结构错误返回负值，out原值不改。成功时out替换为匹配mediaSSRC的去重序号（按首次请求次序）。不要因媒体SSRC不匹配而绕过结构验证。保留原有compound须以SR/RR开头的契约，不要求reduced-size RTCP。
+Retransmit先完整调用该入口，任何解析失败不清缓存、不发送、不扣重试。成功验证后清理过期，按历史原始发送顺序处理请求。仅当now+rttUS<deadline且从未重传或now-lastSuccess>=retryUS才尝试。write返回0才提交该包lastSuccess；任一负值立即返回该负值，之前成功仍提交、失败包及后续未发项无冷却；write不允许重入。全部成功返回本轮实际重传数。未命中、错误SSRC不发。
+RTPPacketBuilder增加 int ConfigureRepair(const RTPRepairConfig&)、int RememberSentForRepair(uint64_t)、int RepairFromFeedback(RTCPCompoundPacket&,uint64_t,RTPRepairWrite,void*)及 const RTPRepairHistory& RepairHistory() const。它们委托同一生产历史；RememberSentForRepair提交最后成功Build的当前原包，连续重复提交不能缓存两份。Init/Destroy解除修复配置；CreateNewSSRC清历史代次但保留配置，非法Build后不能误提交更旧输出。正常Build计数和序号行为保持。
+RTPSession增加 int ConfigureRepair(const RTPRepairConfig&,RTPRepairClock,void*)，时钟非空，仅在Create成功后且当前SSRC首个发送尝试之前配置；新增uint32_t GetNextTimestamp() const只读返回builder.GetTimestamp()以便配置同一参考点；Destroy解除配置。四个SendPacket/SendPacketEx发送入口全部经 protected virtual int WriteRTPData(const void*,size_t)；默认调用原transmitter。成功Write后才调用builder的RememberSentForRepair(clock(ctx))。基于生产ProcessPolledData→RTPSources::ProcessRawPacket→ProcessRTCPCompoundPacket接收链调用同一反馈入口，用此时的clock；重传经WriteRTPData，不能再BuildPacket或调用sources.SentRTPPacket。负值从Poll传播；原SR/RR/SDES源处理保留。默认关闭不调用时钟。
+为内存会话测试可增加protected virtual RTPTransmitter* CreateTransmitter(RTPTransmitter::TransmissionProtocol)，默认保留现有UDP选择与会话所有权；测试提供不联网的transmitter，不另写会话实现。实现可以自行添加内部辅助函数。重传对传输层包计数可以产生真实发送记录，但不得增加builder正常媒体packet/octet计数、移动媒体序号/时间戳或重置正常发送时间；RTCP SR维持正常媒体计数。所有新增入口串行使用，不扩展线程模型。
