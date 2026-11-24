@@ -449,10 +449,29 @@ int xmp_set_player__(xmp_context opaque, int parm, int val)
 		}
 		break;
 	case XMP_PLAYER_INTERP:
-		if (val >= XMP_INTERP_NEAREST && val <= XMP_INTERP_SPLINE) {
-			s->interp = val;
-			ret = 0;
+		if (val < XMP_INTERP_NEAREST || val > XMP_INTERP_SINC)
+			break;
+
+		if (val == XMP_INTERP_SINC) {
+			/* SINC only supports 16-bit mono/stereo output and
+			 * must not replace the A500 BLEP mixer. */
+			int a500 = (p->flags | p->player_flags) & XMP_FLAGS_A500;
+			int bad_format = s->format &
+					  (XMP_FORMAT_8BIT | XMP_FORMAT_32BIT);
+			if (a500 || bad_format)
+				return -XMP_ERROR_INVALID;
+			/* Select before the first audio pass; an idempotent
+			 * re-select of the active SINC mode stays allowed. */
+			if (s->sinc_lock && s->interp != XMP_INTERP_SINC)
+				return -XMP_ERROR_INVALID;
+		} else if (s->interp == XMP_INTERP_SINC && s->sinc_lock) {
+			/* Switching back to a legacy interpolation after
+			 * SINC audio has been generated is not supported. */
+			return -XMP_ERROR_INVALID;
 		}
+
+		s->interp = val;
+		ret = 0;
 		break;
 	case XMP_PLAYER_DSP:
 		s->dsp = val;

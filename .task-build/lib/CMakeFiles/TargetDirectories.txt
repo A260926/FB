@@ -1,0 +1,13 @@
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/xmp_static.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/CMakeFiles/install/strip.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/docs/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/docs/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/docs/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/docs/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/docs/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS96628B8282A1U15366R25933CEE4/attempts/20261124T171526604517Z/repo/.task-build/lib/docs/CMakeFiles/install/strip.dir

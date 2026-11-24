@@ -670,6 +670,7 @@ struct mixer_data {
 	int dtleft;		/* anticlick control, left channel */
 	int bidir_adjust;	/* adjustment for IT bidirectional loops */
 	double pbase;		/* period base */
+	int sinc_lock;		/* first sound rendered: SINC in/out frozen */
 };
 
 struct rng_state {

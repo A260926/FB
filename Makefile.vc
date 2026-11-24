@@ -50,6 +50,7 @@ OBJS	= \
  src\flow.obj \
  src\mixer.obj \
  src\mix_all.obj \
+ src\mix_sinc.obj \
  src\rng.obj \
  src\load_helpers.obj \
  src\load.obj \

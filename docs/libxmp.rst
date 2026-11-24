@@ -1156,6 +1156,17 @@ int xmp_set_player(xmp_context c, int param, int val)
           XMP_INTERP_NEAREST  /* Nearest neighbor */
           XMP_INTERP_LINEAR   /* Linear (default) */
           XMP_INTERP_SPLINE   /* Cubic spline */
+          XMP_INTERP_SINC     /* 64-tap causal windowed sinc */
+
+      ``XMP_INTERP_SINC`` is a generic causal windowed-sinc interpolator.
+      It handles 8- and 16-bit mono/stereo samples and renders to 16-bit
+      mono or stereo output, preserving the IT low-pass filter and the
+      volume ramp. It must be selected after `xmp_start_player()`_ and
+      before the first audio frame is generated. Selecting it while A500
+      (Paula BLEP) mode is active, using 8- or 32-bit output, or switching
+      any context into or out of SINC after audio has started fails with
+      ``-XMP_ERROR_INVALID`` and leaves the current interpolation unchanged.
+      The A500 BLEP mixer is independent and is never substituted by SINC.
 
     * DSP effects flags: enable or disable DSP effects. Valid effects are::
 

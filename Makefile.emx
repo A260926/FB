@@ -69,6 +69,7 @@ OBJS	= \
  src/flow.o \
  src/mixer.o \
  src/mix_all.o \
+ src/mix_sinc.o \
  src/rng.o \
  src/load_helpers.o \
  src/load.o \

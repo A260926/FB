@@ -1,0 +1,4 @@
+#!/bin/bash
+f=".task-build/runlog_$$_$RANDOM.txt"
+: > "$f"
+echo "$f"

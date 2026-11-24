@@ -88,6 +88,7 @@ extern "C" {
 #define XMP_INTERP_NEAREST	0	/* Nearest neighbor */
 #define XMP_INTERP_LINEAR	1	/* Linear (default) */
 #define XMP_INTERP_SPLINE	2	/* Cubic spline */
+#define XMP_INTERP_SINC		3	/* Windowed sinc (causal, 64 taps) */
 
 /* dsp effect types */
 #define XMP_DSP_LOWPASS		(1 << 0) /* Lowpass filter effect */

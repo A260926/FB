@@ -60,13 +60,8 @@ struct loop_data
 };
 
 /* See mix_all.h for a full explanation of these flags. */
-#define FLAG_16_BITS	0x01
-#define FLAG_STEREO	0x02
-#define FLAG_STEREOOUT	0x04
-#define FLAG_FILTER	0x08
-#define FLAG_ACTIVE	0x10
-/* #define FLAG_SYNTH	0x20 */
-#define FIDX_FLAGMASK	(FLAG_16_BITS | FLAG_STEREO | FLAG_STEREOOUT | FLAG_FILTER)
+/* FLAG_16_BITS/FLAG_STEREO/FLAG_STEREOOUT/FLAG_FILTER/FLAG_ACTIVE and
+ * FIDX_FLAGMASK are defined in mixer.h (shared with mix_sinc.c). */
 
 
 /* Downmix 32bit samples to 8bit, signed or unsigned, mono or stereo output */
@@ -229,7 +224,10 @@ static void init_sample_wraparound(struct mixer_data *s, struct loop_data *ld,
 	int bidir;
 	int i;
 
-	if (!vi->sptr || s->interp == XMP_INTERP_NEAREST || (~xxs->flg & XMP_SAMPLE_LOOP)) {
+	/* SINC keeps its own per-voice 64-frame history and folds loops
+	 * itself; never patch the shared sample data for it. */
+	if (!vi->sptr || s->interp == XMP_INTERP_NEAREST ||
+	    s->interp == XMP_INTERP_SINC || (~xxs->flg & XMP_SAMPLE_LOOP)) {
 		ld->active = 0;
 		return;
 	}
@@ -488,6 +486,7 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 	int32 *buf_pos;
 	MIXER_FP  mix_fn;
 	const MIXER_FP *mixerset;
+	int sinc_active = 0;
 
 	switch (s->interp) {
 	case XMP_INTERP_NEAREST:
@@ -499,9 +498,15 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 	case XMP_INTERP_SPLINE:
 		mixerset = libxmp_spline_mixers;
 		break;
+	case XMP_INTERP_SINC:
+		mixerset = libxmp_sinc_mixers;
+		break;
 	default:
 		mixerset = libxmp_linear_mixers;
 	}
+
+	/* This pass generates real audio: SINC selection is now frozen. */
+	s->sinc_lock = 1;
 
 #ifdef LIBXMP_PAULA_SIMULATOR
 	if (p->flags & XMP_FLAGS_A500) {
@@ -514,6 +519,9 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 		}
 	}
 #endif
+
+	/* Pointer comparison also covers an A500 mixer override. */
+	sinc_active = (mixerset == libxmp_sinc_mixers);
 
 #ifndef LIBXMP_CORE_DISABLE_IT
 	/* OpenMPT Bidi-Loops.it: "In Impulse Tracker's software
@@ -635,6 +643,26 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 				step_dir = -step;
 			}
 
+			/* SINC natural-end tail: once the fractional
+			 * scheduler reaches the end of a non-looping voice,
+			 * keep rendering zero-filled FIR frames until the
+			 * 64-source-frame window no longer covers a real
+			 * sample.  Consume the rest of this tick segment. */
+			if (sinc_active && samples == 0 &&
+			    !libxmp_sinc_tail_done(vi) &&
+			    !has_active_loop(ctx, vi, xxs) &&
+			    !(vi->flags & SAMPLE_QUEUED)) {
+				samples = size;
+			}
+
+			if (sinc_active) {
+				vi->sinc.loop_active =
+					has_active_loop(ctx, vi, xxs);
+				vi->sinc.bidir =
+					(vi->flags & VOICE_BIDIR) ? 1 : 0;
+				vi->sinc.bidir_adjust = s->bidir_adjust;
+			}
+
 			if (vi->vol) {
 				int mix_size = samples;
 				int mixer_id = vi->fidx & FIDX_FLAGMASK;
@@ -698,6 +726,11 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 						vi->sleft = buf_pos[-1] - prev_l;
 					}
 				}
+			} else if (sinc_active && samples > 0 && vi->sptr != NULL) {
+				/* Keep the SINC phase/history clock advancing
+				 * even when the voice gain is zero. */
+				libxmp_sinc_advance_silent(vi, samples,
+					step_dir * (1 << SMIX_SHIFT));
 			}
 
 			vi->pos += step_dir * samples;
@@ -706,6 +739,19 @@ void libxmp_mixer_softmixer(struct context_data *ctx)
 			/* One-shot samples do not loop. */
 			if ((!has_active_loop(ctx, vi, xxs) || split_noloop) &&
 			    !(vi->flags & SAMPLE_QUEUED)) {
+				if (sinc_active) {
+					/* If tick slots remain, loop back so
+					 * the zero-fill FIR tail is rendered
+					 * into them; otherwise carry the tail
+					 * into the next softmixer pass. */
+					if (size > 0 &&
+					    !libxmp_sinc_tail_done(vi))
+						continue;
+					if (libxmp_sinc_tail_done(vi))
+						set_sample_end(ctx, voc, 1);
+					size = 0;
+					continue;
+				}
 				if (size > 0) {
 					do_anticlick(ctx, voc, buf_pos, size);
 					set_sample_end(ctx, voc, 1);
@@ -831,6 +877,10 @@ void libxmp_mixer_voicepos(struct context_data *ctx, int voc, double pos, int ac
 		/* Hack: 0 maps to the end for reversed samples. */
 		vi->pos = vi->end;
 	}
+
+	/* Any explicit reposition restarts the logical SINC coordinate and
+	 * invalidates past history. */
+	libxmp_sinc_reposition(vi);
 
 	if (ac) {
 		anticlick(vi);
@@ -1094,6 +1144,7 @@ int libxmp_mixer_on(struct context_data *ctx, int rate, int format, int c4rate)
 	/* s->numvoc = SMIX_NUMVOC; */
 	s->dtright = s->dtleft = 0;
 	s->bidir_adjust = 0;
+	s->sinc_lock = 0;
 
 	return 0;
 

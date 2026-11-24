@@ -19,6 +19,7 @@ set(LIBXMP_SRC_LIST
     src/flow.c
     src/mixer.c
     src/mix_all.c
+    src/mix_sinc.c
     src/rng.c
     src/load_helpers.c
     src/load.c

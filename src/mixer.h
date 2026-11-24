@@ -2,6 +2,7 @@
 #define LIBXMP_MIXER_H
 
 #include "common.h"
+#include "mix_sinc.h"
 
 #define C4_PERIOD	428.0
 
@@ -11,6 +12,15 @@
 
 #define FILTER_SHIFT	22
 #define ANTICLICK_SHIFT	3
+
+/* fidx / mixer-table index bits, see mix_all.h for the full index map. */
+#define FLAG_16_BITS	0x01
+#define FLAG_STEREO	0x02
+#define FLAG_STEREOOUT	0x04
+#define FLAG_FILTER	0x08
+#define FLAG_ACTIVE	0x10
+/* #define FLAG_SYNTH	0x20 */
+#define FIDX_FLAGMASK	(FLAG_16_BITS | FLAG_STEREO | FLAG_STEREOOUT | FLAG_FILTER)
 
 #ifdef LIBXMP_PAULA_SIMULATOR
 #include "paula.h"
@@ -67,6 +77,10 @@ struct mixer_voice {
 		int resonance;
 	} filter;
 #endif
+
+	/* Persistent state for XMP_INTERP_SINC.  Embedded by value so the
+	 * voice array allocation is the only workspace needed. */
+	struct sinc_voice_state sinc;
 };
 
 LIBXMP_BEGIN_DECLS

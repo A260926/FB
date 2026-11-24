@@ -1,0 +1,26 @@
+CASE kernel contract checks=5
+CASE kernel coefficients checks=1410
+CASE kernel steps_phases checks=2592
+CASE kernel spectrum_step4 checks=2
+CASE kernel cutoff_redirect checks=10
+CASE kernel format_matrix checks=1516
+CASE kernel stereo_isolation checks=213
+CASE kernel volume_ramp checks=177
+CASE kernel it_filter checks=89
+GROUP kernel cases=9 checks=6014 COMPLETE
+CASE trajectory xm_forward_fragments checks=4
+CASE trajectory it_bidi checks=6
+CASE trajectory bits8_stereo checks=3
+CASE trajectory reverse checks=4
+CASE trajectory oneshot_tail checks=5
+CASE trajectory offset checks=4
+CASE trajectory sustain_release checks=5
+GROUP trajectory cases=7 checks=31 COMPLETE
+CASE lifecycle error_codes checks=21
+CASE lifecycle contexts_interleave checks=5
+CASE lifecycle slot_reuse checks=3
+CASE lifecycle seek_restart checks=4
+CASE lifecycle nna checks=5
+CASE lifecycle cut_no_tail checks=244
+GROUP lifecycle cases=6 checks=282 COMPLETE
+TARGET_COMPLETE cases=22
