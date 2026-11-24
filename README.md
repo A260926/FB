@@ -26,6 +26,9 @@ Features
 - PLY loading automatically triangulates polygons with more than 3 vertices.
 - Gives useful error info if a file fails to parse, including the line and 
   column number where it failed.
+- Supports nested `ObjectInstance` reuse, forward object names, shutter-time
+  world geometry sampling, and conservative continuous motion bounds through
+  the additional `minipbrt_scene.h/.cpp` API.
 - MIT Licensed.
 
 
@@ -75,6 +78,74 @@ else {
   // Don't delete err, it's still owned by the parser.
 }
 ```
+
+
+Nested objects and shutter-time geometry
+----------------------------------------
+
+Add `minipbrt_scene.h` and `minipbrt_scene.cpp` if you need world-space draws
+or motion bounds. They remain C++11 and use only the standard library.
+
+`ObjectInstance` may appear inside an `ObjectBegin/ObjectEnd` block. The new
+`Instance::ownerObject` field identifies the containing object;
+`kInvalidIndex` (the default) means a world-root instance. Object names are
+resolved after the complete scene and its includes have been read, so forward
+references and diamond sharing work. Undefined names, duplicate object names,
+and reference cycles are load errors with file locations. Shared objects use
+the same `Scene::shapes` entry; geometry is not copied.
+
+```cpp
+#include <minipbrt_scene.h>
+
+std::vector<minipbrt::SceneDraw> draws;
+std::string error;
+if (minipbrt::sample_scene(*scene, shutterTime, draws, error)) {
+  for (const minipbrt::SceneDraw& draw : draws) {
+    // draw.shape indexes Scene::shapes; draw.path lists global instance
+    // indices from the root to the leaf.
+  }
+}
+```
+
+Traversal order is world-direct shapes first, then root instances in order.
+Each object emits its direct shapes first and then its child instances in
+order. `Object::firstShape/numShapes` describe direct shapes only.
+
+Matrices are row major and act on column vectors. For a root-to-leaf path
+`[i0, i1, ...]`, the world matrix is
+
+```
+world = instance[i0](t) * instance[i1](t) * ... * shapeToWorld(t)
+```
+
+Do not multiply `Object::objectToInstance` again; it is already reflected in
+the saved direct shape transforms. Every factor interpolates its start/end
+matrices element by element over `Scene::startTime/endTime`, clamps the sample
+time to that interval, and only then are the factors multiplied. Equal scene
+times use the start endpoint. `SceneDraw::normal` is the inverse transpose of
+the world linear block; `flipOrientation` combines shape/instance reverse
+flags with the sign of the world determinant.
+
+Only `TriangleMesh` shapes can be sampled. Invalid caller-constructed scenes,
+non-finite or non-affine matrices, bad indices, graph cycles, non-invertible
+sampled worlds, and reachable non-triangle shapes cause failure without
+modifying the output vector.
+
+For continuous motion bounds, including the nonlinear trajectories created by
+multiplying several interpolated matrices:
+
+```cpp
+std::vector<minipbrt::SceneMotionBounds> bounds;
+if (!minipbrt::bound_scene_motion(*scene, begin, end, epsilon,
+                                  bounds, error)) {
+  // bounds is unchanged here.
+}
+```
+
+The output order matches `sample_scene`. Each box covers every actual vertex
+trajectory over `[begin, end]` with conservative error-controlled polynomial
+subdivision; source meshes are never expanded or modified. Empty objects
+produce no entries.
 
 
 Loading triangle meshes from external PLY files, single threaded

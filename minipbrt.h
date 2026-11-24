@@ -1440,6 +1440,7 @@ namespace minipbrt {
   struct Instance {
     Transform instanceToWorld;
     uint32_t object          = kInvalidIndex; //!< The object that this is an instance of.
+    uint32_t ownerObject     = kInvalidIndex; //!< Object whose body contains this instance; kInvalidIndex means it is a world-root instance.
     uint32_t areaLight       = kInvalidIndex; //!< If non-null, the instance emits light as described by this area light object.
     uint32_t insideMedium    = kInvalidIndex;
     uint32_t outsideMedium   = kInvalidIndex;

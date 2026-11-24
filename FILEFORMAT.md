@@ -68,13 +68,62 @@ Coordinate Systems
 Objects
 -------
 
-* ObjectBegin does an implicit AttributeBegin. Likewise ObjectEnd does an 
+* ObjectBegin does an implicit AttributeBegin. Likewise ObjectEnd does an
   implicit AttributeEnd.
 
 * ObjectBegin calls cannot be nested.
 
-* No nested instancing: it's an error to use ObjectInstance inside an
-  ObjectBegin/End block.
+* This version extends the older single-level-instance behaviour:
+  ObjectInstance may be used both at world scope and inside an
+  ObjectBegin/ObjectEnd block. An instance written inside an object belongs to
+  that object (`Instance::ownerObject`); `kInvalidIndex` means a root/world
+  instance. Object names are global and may be forward referenced. All names
+  are resolved after the complete file, including includes, has been read.
+
+* Undefined object names, duplicate ObjectBegin names, and direct or indirect
+  object reference cycles make `Loader::load` fail. The resulting `Error`
+  points at the offending ObjectBegin or ObjectInstance directive.
+
+* `Object::firstShape` and `Object::numShapes` describe only the object's
+  direct shapes. They never include child instances. Child order is the order
+  of `Scene::instances` entries with the matching `ownerObject`.
+
+* Include is textual inclusion at the current parser state. An included
+  ObjectBegin/ObjectEnd therefore has the same ownership and transform/attribute
+  state as if its text appeared in the parent file. AttributeBegin/End and
+  ObjectBegin/End restore their pushed transform and attribute state.
+
+
+Nested scene evaluation and motion
+----------------------------------
+
+`minipbrt_scene.h/.cpp` adds `sample_scene` and `bound_scene_motion`.
+
+Matrices in `Transform`, `SceneDraw::world` and `SceneMotionBounds` are row
+major and act on column vectors. For an instance path `[i0, i1, ...]` from root
+to leaf, the sampled world matrix is
+
+```
+world = instance[i0](t) * instance[i1](t) * ... * shapeToWorld(t)
+```
+
+`Object::objectToInstance` is not multiplied again: its transform was already
+pushed onto the stack when the object's direct shape transforms were saved.
+
+Each factor interpolates its own two endpoints element by element using
+`Scene::startTime` and `Scene::endTime`; the interpolated factors are then
+multiplied. This is not equivalent to multiplying the endpoints and
+interpolating those products. Time is clamped to the scene interval, and the
+start endpoint is used when start and end times are equal.
+
+`SceneDraw::normal` is the inverse transpose of the linear 3x3 part of
+`world`. `flipOrientation` XORs the shape and path-instance reverse orientation
+flags with the sign of the world determinant.
+
+Motion bounds multiply the linear endpoint polynomials first. A transformed
+vertex coordinate is therefore a polynomial (generally nonlinear) in shutter
+time. `bound_scene_motion` isolates its extrema/conservatively subdivides it
+rather than using endpoints alone.
 
 
 Named items
@@ -91,10 +140,9 @@ Material and texture names are scoped to the current AttributeBegin/End block
 (ObjectBegin/End counts for this purpose as well). Medium and Object names are
 global, as are Coordinate Systems.
 
-There are no forward references/late binding of any names. Whenever we
-encounter a reference, it's resolved to the object it refers to at that time.
-If the name is later redefined, this has no effect on any references which
-occur before that point.
+Most names are still resolved immediately. Object names are the exception in
+this extended build: ObjectInstance references are late-bound after the full
+scene is parsed, permitting forward references and diamond sharing.
 
 Behaviour with undefined names:
 * If a NamedMaterial directive refers to a material name that hasn't been
@@ -104,8 +152,9 @@ Behaviour with undefined names:
 * If a material parameter uses a texture name that hasn't been defined yet, it
   simply creates an unnamed ConstantTexture with the default value for that
   parameter instead.
-* If an ObjectInstance directive refers to an object name that hasn't been
-  defined yet, PBRT reports an error and doesn't add anything to the scene.
+* If an ObjectInstance directive refers to an object name that is not defined
+  by the end of parsing, minipbrt records a located load error. Duplicate
+  object names and reference cycles are also load errors.
 * If a CoordSysTransform directive uses a name that hasn't been defined yet, a
   warning (not an error) is reported and the current transform is left 
   unchanged.
@@ -114,7 +163,8 @@ Behaviour with undefined names:
 
 Redefining names:
 * Redefining a texture or material name causes a warning in PBRT, not an error.
-* Redefining a medium, object or coordinate system name is silently accepted.
+* Redefining a medium or coordinate system name is silently accepted.
+* Redefining an Object name is a located load error in this extended build.
 
 
 Other

@@ -14,7 +14,7 @@ c++ -std=c++11 -O0 -I. -include minipbrt_scene.h -c minipbrt_scene.cpp -o .task-
 c++ -std=c++11 -O0 -I. -include minipbrt_scene.h task_support/driver.c tests/nested_motion.cpp .task-build/minipbrt.o .task-build/minipbrt_scene.o -o .task-build/target
 c++ -std=c++11 -O0 -I. -include minipbrt_scene.h examples/nested_motion.cpp .task-build/minipbrt.o .task-build/minipbrt_scene.o -o .task-build/example
 .task-build/example
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/minipbrt-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

@@ -2873,6 +2873,7 @@ namespace minipbrt {
   struct TransformStack {
     Mat4 matrices[kMaxTransformStackEntry + 1][2];
     bool active[2] = { true, true };
+    bool savedActive[kMaxTransformStackEntry + 1][2] = {};
     uint32_t entry = 0;
 
     std::unordered_map<std::string, Mat4*> coordinateSystems;
@@ -2972,6 +2973,13 @@ namespace minipbrt {
     /// position. This means there's no line counting overhead during parsing,
     /// you only pay the cost when you need it (usually for error reporting).
     void cursor_location(int64_t* line, int64_t* col);
+
+    /// Absolute byte offset of m_pos in the currently included file.
+    int64_t current_offset() const;
+
+    /// Record an error at a source location captured earlier (possibly in an
+    /// included file that has since been popped).
+    void set_error_at_location(const char* filename, int64_t offset, const char* message);
 
     bool string_literal(char buf[], size_t bufLen);
     bool int_literal(int* val);
@@ -3110,6 +3118,10 @@ namespace minipbrt {
     bool parse_params();
     bool parse_param();
 
+    // Resolve late-bound object names and reject duplicate definitions and
+    // reference cycles after the complete scene has been parsed.
+    bool resolve_object_references();
+
     bool parse_ints(uint32_t* count);
     bool parse_floats(uint32_t* count);
     bool parse_spectrum(uint32_t* count);
@@ -3164,14 +3176,30 @@ namespace minipbrt {
     void push_string(const char* src, size_t len);
 
   private:
+    struct SourceSite {
+      std::string filename;
+      int64_t offset = 0;
+    };
+
+    struct PendingObjectReference {
+      uint32_t instanceIndex = kInvalidIndex;
+      std::string name;
+      SourceSite site;
+    };
+
     Tokenizer m_tokenizer;
     bool m_inWorld               = false;
     TransformStack* m_transforms = nullptr;
     AttributeStack* m_attrs      = nullptr;
     uint32_t m_activeObject      = kInvalidIndex;
     uint32_t m_firstShape        = kInvalidIndex; // Index of the first shape in the currently active object.
+    SourceSite m_statementSite;
+    SourceSite m_activeObjectSite;
 
     Scene* m_scene               = nullptr;
+
+    std::vector<SourceSite> m_objectSites;
+    std::vector<PendingObjectReference> m_pendingObjectReferences;
 
     // Temporary storage for the current directive.
     uint32_t m_statementIndex = uint32_t(-1);
@@ -3932,6 +3960,8 @@ namespace minipbrt {
   {
     matrices[0][0].identity();
     matrices[0][1].identity();
+    active[0] = active[1] = true;
+    savedActive[0][0] = savedActive[0][1] = true;
   }
 
 
@@ -3948,6 +3978,8 @@ namespace minipbrt {
     if (entry == kMaxTransformStackEntry) {
       return false;
     }
+    savedActive[entry][0] = active[0];
+    savedActive[entry][1] = active[1];
     matrices[entry + 1][0] = matrices[entry][0];
     matrices[entry + 1][1] = matrices[entry][1];
     ++entry;
@@ -3961,6 +3993,8 @@ namespace minipbrt {
       return false;
     }
     --entry;
+    active[0] = savedActive[entry][0];
+    active[1] = savedActive[entry][1];
     return true;
   }
 
@@ -3968,6 +4002,8 @@ namespace minipbrt {
   void TransformStack::clear()
   {
     entry = 0;
+    active[0] = active[1] = true;
+    savedActive[0][0] = savedActive[0][1] = true;
     matrices[entry][0].identity();
     matrices[entry][1].identity();
   }
@@ -4829,7 +4865,9 @@ namespace minipbrt {
       return false;
     }
 
-    resolve_file(filename, m_fileData[0].filename, m_tmpBuf, kTempBufferCapacity);
+    // Relative includes are resolved from the file containing this Include
+    // directive; m_includeDepth has not yet been incremented here.
+    resolve_file(filename, m_fileData[m_includeDepth].filename, m_tmpBuf, kTempBufferCapacity);
 
     FILE* f = nullptr;
     if (file_open(&f, m_tmpBuf, "rb") != 0) {
@@ -5148,6 +5186,78 @@ namespace minipbrt {
   }
 
 
+  int64_t Tokenizer::current_offset() const
+  {
+    const FileData& fdata = m_fileData[m_includeDepth];
+    return fdata.bufOffset + static_cast<int64_t>(m_pos - m_buf);
+  }
+
+
+  static void location_for_file_offset(const char* filename, int64_t targetOffset,
+                                       int64_t* line, int64_t* column)
+  {
+    *line = 0;
+    *column = 0;
+    if (filename == nullptr || targetOffset < 0) {
+      return;
+    }
+
+    FILE* f = nullptr;
+    if (file_open(&f, filename, "rb") != 0) {
+      return;
+    }
+
+    int64_t currentLine = 1;
+    int64_t lastNewline = -1;
+    int64_t offset = 0;
+    char buffer[4096];
+
+    while (offset < targetOffset) {
+      int64_t wanted64 = std::min<int64_t>(static_cast<int64_t>(sizeof(buffer)), targetOffset - offset);
+      size_t wanted = static_cast<size_t>(wanted64);
+      size_t count = fread(buffer, 1, wanted, f);
+      if (count == 0) {
+        break;
+      }
+      for (size_t i = 0; i < count; ++i) {
+        if (buffer[i] == '\n') {
+          ++currentLine;
+          lastNewline = offset + static_cast<int64_t>(i);
+        }
+      }
+      offset += static_cast<int64_t>(count);
+      if (count < wanted) {
+        break;
+      }
+    }
+    fclose(f);
+
+    if (offset == targetOffset) {
+      *line = currentLine;
+      *column = targetOffset - lastNewline;
+    }
+  }
+
+
+  void Tokenizer::set_error_at_location(const char* filename, int64_t offset, const char* message)
+  {
+    if (m_error != nullptr) {
+      return;
+    }
+    if (message == nullptr) {
+      message = "Invalid object reference";
+    }
+
+    m_error = new Error(filename, offset, message);
+    int64_t line = 0;
+    int64_t column = 0;
+    location_for_file_offset(filename, offset, &line, &column);
+    if (line > 0) {
+      m_error->set_line_and_column(line, column);
+    }
+  }
+
+
   void Tokenizer::set_error(const char* fmt, ...)
   {
     if (has_error()) {
@@ -5255,6 +5365,17 @@ namespace minipbrt {
       ok = parse_statement();
     }
 
+    if (ok && m_activeObject != kInvalidIndex) {
+      m_tokenizer.set_error_at_location(m_activeObjectSite.filename.c_str(),
+                                        m_activeObjectSite.offset,
+                                        "ObjectBegin without a matching ObjectEnd");
+      ok = false;
+    }
+
+    if (ok) {
+      ok = resolve_object_references();
+    }
+
     return ok;
   }
 
@@ -5297,6 +5418,9 @@ namespace minipbrt {
       m_tokenizer.set_error("Unknown statement");
       return false;
     }
+
+    m_statementSite.filename = m_tokenizer.get_filename() != nullptr ? m_tokenizer.get_filename() : "";
+    m_statementSite.offset = m_tokenizer.current_offset();
 
     if (m_temp.capacity() > kMaxReservedTempSpace) {
       m_temp.resize(kMaxReservedTempSpace);
@@ -6694,6 +6818,7 @@ namespace minipbrt {
     }
 
     m_firstShape = kInvalidIndex;
+    m_activeObjectSite = m_statementSite;
 
     Object* object = new Object();
     save_current_transform_matrices(&object->objectToInstance);
@@ -6701,6 +6826,7 @@ namespace minipbrt {
 
     m_activeObject = static_cast<uint32_t>(m_scene->objects.size());
     m_scene->objects.push_back(object);
+    m_objectSites.push_back(m_statementSite);
     return true;
   }
 
@@ -6733,28 +6859,28 @@ namespace minipbrt {
 
   bool Parser::parse_ObjectInstance()
   {
-    if (m_activeObject != kInvalidIndex) {
-      m_tokenizer.set_error("Nested instances are not allowed");
-      return false;
-    }
-
     const char* name = string_arg(0);
 
-    uint32_t object = find_object(name);
-    if (object == kInvalidIndex) {
-      // TODO: warn that the object isn't defined.
-      return true;
-    }
-
+    // Names are bound after the whole file (and its includes) has been read,
+    // so forward references work.  The instance is still created here so its
+    // index, transform and owner preserve source order.
     Instance* instance = new Instance();
     save_current_transform_matrices(&instance->instanceToWorld);
-    instance->object = object;
+    instance->object = kInvalidIndex;
+    instance->ownerObject = m_activeObject;
     instance->areaLight = m_attrs->top->areaLight;
     instance->insideMedium = m_attrs->top->insideMedium;
     instance->outsideMedium = m_attrs->top->outsideMedium;
     instance->reverseOrientation = m_attrs->top->reverseOrientation;
 
+    uint32_t instanceIndex = static_cast<uint32_t>(m_scene->instances.size());
     m_scene->instances.push_back(instance);
+
+    PendingObjectReference pending;
+    pending.instanceIndex = instanceIndex;
+    pending.name = (name != nullptr) ? name : "";
+    pending.site = m_statementSite;
+    m_pendingObjectReferences.push_back(pending);
     return true;
   }
 
@@ -8091,6 +8217,128 @@ namespace minipbrt {
                     inverse(m_transforms->matrices[m_transforms->entry][1]) };
     std::memcpy(dest->start, inv[0].rows, sizeof(float) * 16);
     std::memcpy(dest->end,   inv[1].rows, sizeof(float) * 16);
+  }
+
+
+  bool Parser::resolve_object_references()
+  {
+    const uint32_t objectCount = static_cast<uint32_t>(m_scene->objects.size());
+
+    std::unordered_map<std::string, uint32_t> objectByName;
+    objectByName.reserve(objectCount * 2u + 1u);
+
+    for (uint32_t i = 0; i < objectCount; ++i) {
+      const Object* object = m_scene->objects[i];
+      const SourceSite& site = (i < m_objectSites.size()) ? m_objectSites[i] : m_statementSite;
+      if (object == nullptr || object->name == nullptr || object->name[0] == '\0') {
+        m_tokenizer.set_error_at_location(site.filename.c_str(), site.offset,
+                                          "ObjectBegin requires a non-empty object name");
+        return false;
+      }
+
+      std::string name(object->name);
+      if (objectByName.find(name) != objectByName.end()) {
+        std::string message = "Duplicate definition of object \"" + name + "\"";
+        m_tokenizer.set_error_at_location(site.filename.c_str(), site.offset, message.c_str());
+        return false;
+      }
+      objectByName[name] = i;
+    }
+
+    std::vector<SourceSite> instanceSites(m_scene->instances.size());
+    for (size_t i = 0; i < m_pendingObjectReferences.size(); ++i) {
+      const PendingObjectReference& ref = m_pendingObjectReferences[i];
+      if (ref.instanceIndex >= m_scene->instances.size() ||
+          m_scene->instances[ref.instanceIndex] == nullptr) {
+        continue;
+      }
+
+      if (ref.instanceIndex < instanceSites.size()) {
+        instanceSites[ref.instanceIndex] = ref.site;
+      }
+
+      std::unordered_map<std::string, uint32_t>::const_iterator found = objectByName.find(ref.name);
+      if (found == objectByName.end()) {
+        std::string message = "ObjectInstance refers to undefined object \"" + ref.name + "\"";
+        m_tokenizer.set_error_at_location(ref.site.filename.c_str(), ref.site.offset, message.c_str());
+        return false;
+      }
+      m_scene->instances[ref.instanceIndex]->object = found->second;
+    }
+
+    // An edge ownerObject -> object means that the owner's body contains an
+    // instance of the target.  Root instances have no owner and therefore do
+    // not add an edge to the object graph.
+    struct GraphEdge {
+      uint32_t target;
+      uint32_t instanceIndex;
+    };
+    std::vector<std::vector<GraphEdge> > edges(objectCount);
+    for (uint32_t instanceIndex = 0; instanceIndex < m_scene->instances.size(); ++instanceIndex) {
+      const Instance* instance = m_scene->instances[instanceIndex];
+      if (instance == nullptr || instance->ownerObject == kInvalidIndex) {
+        continue;
+      }
+      if (instance->ownerObject >= objectCount || instance->object >= objectCount) {
+        SourceSite site = (instanceIndex < instanceSites.size()) ? instanceSites[instanceIndex] : m_statementSite;
+        m_tokenizer.set_error_at_location(site.filename.c_str(), site.offset,
+                                          "ObjectInstance has an invalid object index");
+        return false;
+      }
+      edges[instance->ownerObject].push_back(GraphEdge{ instance->object, instanceIndex });
+    }
+
+    std::vector<uint8_t> color(objectCount, 0); // 0=unvisited, 1=on stack, 2=done
+    struct Frame {
+      uint32_t node;
+      size_t nextEdge;
+    };
+
+    for (uint32_t start = 0; start < objectCount; ++start) {
+      if (color[start] != 0) {
+        continue;
+      }
+
+      std::vector<Frame> stack;
+      color[start] = 1;
+      stack.push_back(Frame{ start, 0 });
+
+      while (!stack.empty()) {
+        Frame& frame = stack.back();
+        uint32_t node = frame.node;
+
+        if (frame.nextEdge >= edges[node].size()) {
+          color[node] = 2;
+          stack.pop_back();
+          continue;
+        }
+
+        GraphEdge edge = edges[node][frame.nextEdge++];
+        if (edge.target >= objectCount) {
+          continue;
+        }
+
+        if (color[edge.target] == 0) {
+          color[edge.target] = 1;
+          stack.push_back(Frame{ edge.target, 0 });
+        }
+        else if (color[edge.target] == 1) {
+          const SourceSite& site = (edge.instanceIndex < instanceSites.size())
+                                     ? instanceSites[edge.instanceIndex]
+                                     : m_statementSite;
+          std::string objectName = "object";
+          const Object* target = m_scene->objects[edge.target];
+          if (target != nullptr && target->name != nullptr) {
+            objectName = std::string("\"") + target->name + "\"";
+          }
+          std::string message = "Cyclic ObjectInstance reference involving object " + objectName;
+          m_tokenizer.set_error_at_location(site.filename.c_str(), site.offset, message.c_str());
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
 
