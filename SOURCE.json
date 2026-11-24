@@ -1,0 +1,16 @@
+{
+  "repo": "https://github.com/xiph/ogg",
+  "commit": "06a5e0262cdc28aa4ae6797627a783b5010440f0",
+  "license": "BSD-3-Clause",
+  "exclusions": [],
+  "support": "task_support/* are build checks and fixed normal consumer; no production solution",
+  "fixture": {
+    "path": "tests/fixtures/frames.ogv",
+    "sha256": "905d07adb39f19f681cdb6c0806dc0c30f13c58c5ceb5cca50f6b53e7917e5e2",
+    "license": "CC0-1.0",
+    "origin": "Synthetic 32x32 YCbCr synthetic sequence, 12 frames at 30000/1001; not downloaded video",
+    "encoder_repo": "https://github.com/xiph/theora",
+    "encoder_commit": "28fd5ec77f0ad0e07a371cef1047828116f6bd8a",
+    "runtime_encoder_required": false
+  }
+}
