@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<automaton>
+    <description name="Linux kernel atomic automaton checker"
+                 desc="Handles sleeping while atomic, e.g. msleep inside
+			spin_lock block. Supports up to 5 levels of
+			make-atomic operations nesting" />
+
+    <start state="N" />
+    <!-- this allows us to track up to 5 nests, e.g.
+	local_irq_disable();
+	...
+	local_irq_save();
+	spin_lock();
+	...
+	spin_unlock();
+	local_irq_restore();
+	...
+	local_irq_enable();
+	-->
+    <transition from="N[A]" by="atomize[A]" to="A[A]" />
+    <transition from="A[A]" by="deatomize[A]" to="N[A]" />
+
+    <transition from="A[A]" by="atomize[A]" to="AA[A]" />
+    <transition from="AA[A]" by="deatomize[A]" to="A[A]" />
+
+    <transition from="AA[A]" by="atomize[A]" to="AAA[A]" />
+    <transition from="AAA[A]" by="deatomize[A]" to="AA[A]" />
+
+    <transition from="AAA[A]" by="atomize[A]" to="AAAA[A]" />
+    <transition from="AAAA[A]" by="deatomize[A]" to="AAA[A]" />
+
+    <transition from="AAAA[A]" by="atomize[A]" to="AAAAA[A]" />
+    <transition from="AAAAA[A]" by="deatomize[A]" to="AAAA[A]" />
+
+    <error  from="A[A]" by="nonatomic[A]"
+            desc="non-atomic operation in atomic"
+            level="0"
+            entry="The function called in a non-atomic state."
+            begin="The atomic section starts here."
+            propag="Not affected ==> still in atomic."
+            end="Here is an attempt to perform non-atomic in atomic." />
+
+    <error  from="AA[A]" by="nonatomic[A]"
+            desc="non-atomic operation in atomic"
+            level="0"
+            entry="The function called in a non-atomic state."
+            begin="The atomic section starts here."
+            propag="Not affected ==> still in atomic."
+            end="Here is an attempt to perform non-atomic in atomic." />
+
+    <error  from="AAA[A]" by="nonatomic[A]"
+            desc="non-atomic operation in atomic"
+            level="0"
+            entry="The function called in a non-atomic state."
+            begin="The atomic section starts here."
+            propag="Not affected ==> still in atomic."
+            end="Here is an attempt to perform non-atomic in atomic." />
+
+    <error  from="AAAA[A]" by="nonatomic[A]"
+            desc="non-atomic operation in atomic"
+            level="0"
+            entry="The function called in a non-atomic state."
+            begin="The atomic section starts here."
+            propag="Not affected ==> still in atomic."
+            end="Here is an attempt to perform non-atomic in atomic." />
+
+    <!-- let's define what is non-atomic operation -->
+    <pattern name="nonatomic">
+	<assignExpression>
+	    <ignore/>
+	    <nested>
+		<functionCall>
+		    <id>kmalloc</id>
+		    <ignore />
+		    <id>__st_GFP_KERNEL_st__</id>
+		</functionCall>
+	    </nested>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<assignExpression>
+	    <ignore/>
+	    <nested>
+		<functionCall>
+		    <id>kzalloc</id>
+		    <ignore />
+		    <id>__st_GFP_KERNEL_st__</id>
+		</functionCall>
+	    </nested>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<assignExpression>
+	    <ignore/>
+	    <nested>
+		<functionCall>
+		    <id>kcalloc</id>
+		    <ignore />
+		    <ignore />
+		    <id>__st_GFP_KERNEL_st__</id>
+		</functionCall>
+	    </nested>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<assignExpression>
+	    <ignore/>
+	    <nested>
+		<functionCall>
+		    <id>vmalloc</id>
+		    <ignore />
+		</functionCall>
+	    </nested>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>vmalloc</id>
+		<ignore />
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>kmap</id>
+		<ignore />
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>copy_from_user</id>
+	    <ignore/>
+	    <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<ifStatement>
+	    <functionCall>
+		<id>copy_to_user</id>
+		<ignore/>
+		<ignore/>
+		<ignore/>
+	    </functionCall>
+	    <ignore/>
+	</ifStatement>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<returnStatement>
+	    <functionCall>
+		<id>__st_put_user_st__</id>
+		<ignore/>
+		<ignore/>
+	    </functionCall>
+	</returnStatement>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<returnStatement>
+	    <functionCall>
+		<id>__st_get_user_st__</id>
+		<ignore/>
+		<ignore/>
+	    </functionCall>
+	</returnStatement>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>lock_page</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>lock_page_killable</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>lock_page_nosync</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>__st_mutex_lock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>msleep</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>msleep_interruptible</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>msleep_interruptible</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>ssleep</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+        <functionCall>
+            <id>schedule</id>
+        </functionCall>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<nested>
+	    <functionCall>
+		<id>schedule_timeout</id>
+		<ignore/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<nested>
+	    <functionCall>
+		<id>schedule_timeout_interruptible</id>
+		<ignore/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<nested>
+	    <functionCall>
+		<id>schedule_timeout_uninterruptible</id>
+		<ignore/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="nonatomic">
+	<nested>
+	    <functionCall>
+		<id>request_irq</id>
+		<any/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_st__</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_nested_st__</id>
+            <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (spin_trylock())' -->
+    <pattern name="atomize">
+        <assert>
+	    <functionCall>
+		<id>__st_spin_trylock_st__</id>
+		<ignore/>
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!spin_trylock())' -->
+    <pattern name="atomize">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_spin_trylock_st__</id>
+			<ignore/>
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_irq_st__</id>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_bh_st__</id>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_irq_nested_st__</id>
+            <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (spin_trylock_irq())' -->
+    <pattern name="atomize">
+        <assert>
+	    <functionCall>
+		<id>__st_spin_trylock_irq_st__</id>
+		<ignore/>
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!spin_trylock_irq())' -->
+    <pattern name="atomize">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_spin_trylock_irq_st__</id>
+			<ignore/>
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_irqsave_st__</id>
+            <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_spin_lock_irqsave_nested_st__</id>
+            <ignore/>
+	    <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (spin_trylock_irqsave())' -->
+    <pattern name="atomize">
+        <assert>
+	    <functionCall>
+		<id>__st_spin_trylock_irqsave_st__</id>
+		<ignore/>
+		<ignore/>
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!spin_trylock_irqsave())' -->
+    <pattern name="atomize">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_spin_trylock_irqsave_st__</id>
+			<ignore/>
+			<ignore/>
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="deatomize">
+        <functionCall>
+            <id>__st_spin_unlock_irqrestore_st__</id>
+            <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="deatomize">
+        <functionCall>
+            <id>__st_spin_unlock_irq_st__</id>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="deatomize">
+        <functionCall>
+            <id>__st_spin_unlock_bh_st__</id>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="deatomize">
+        <functionCall>
+            <id>__st_spin_unlock_st__</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_local_irq_save_st__</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="deatomize">
+        <functionCall>
+            <id>__st_local_irq_restore_st__</id>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="atomize">
+        <functionCall>
+            <id>__st_local_irq_disable_st__</id>
+        </functionCall>
+    </pattern>
+
+    <pattern name="deatomize">
+        <functionCall>
+            <id>__st_local_irq_enable_st__</id>
+        </functionCall>
+    </pattern>
+
+</automaton>

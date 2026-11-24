@@ -1,0 +1,6 @@
+/build/
+/manifest.mf
+*.tokens
+*.preproc
+*.preproc.xml
+.*.swp

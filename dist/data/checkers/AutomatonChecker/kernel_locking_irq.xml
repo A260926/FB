@@ -1,0 +1,587 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<automaton>
+    <description name="Linux kernel lock/unlock/islocked automaton checker"
+                 desc="Handles locking problem (lock/unlock matching)
+                       checks for redundant islocked() calls, detects
+                       cross-locking problem (lock(a)..lock(b)..unlock(a))
+                       and detects leaving function in locked state." />
+
+    <!--
+	HL: had lock on some path
+	HU: had unlock on some path
+    -->
+    <start state="X" />
+    <transition from="X[A]" by="lock[A]" to="L[A]" />
+    <transition from="U[A]" by="lock[A]" to="L[A]" />
+    <transition from="L[A]" by="lock[B]" to="L[A]" />
+    <transition from="L[A]" by="lock[B]" to="LL[A][B]" />
+    <transition from="L[A]" by="unlock[A]" to="U[A]" />
+    <transition from="L[A]" by="unlock[A]" to="HU[A]" />
+    <transition from="LL[A][B]" by="unlock[B]" to="" />
+
+    <transition from="X[A]" by="unlock[A]" to="IU[A]" />
+    <transition from="IL[A]" by="unlock[A]" to="IU[A]" />
+    <transition from="IU[A]" by="lock[A]" to="IL[A]" />
+    <transition from="IU[A]" by="lock[A]" to="HL[A]" />
+    <transition from="IL[A]" by="lock[B]" to="IL[A]" />
+    <transition from="IL[A]" by="lock[B]" to="ILL[A][B]" />
+    <transition from="ILL[A][B]" by="unlock[B]" to="" />
+
+    <transition from="X[A]" by="plock[A]" to="P[A]" />
+    <transition from="U[A]" by="plock[A]" to="P[A]" />
+    <transition from="IU[A]" by="plock[A]" to="P[A]" />
+
+    <!-- depth of five for anonymous locks (cli/sti, BKL, ...) -->
+    <transition from="X[A]" by="anonlock[A]" to="AL[A]" />
+    <transition from="X[A]" by="anonunlock[A]" to="XXXXX[A]" />
+    <transition from="AU[A]" by="anonlock[A]" to="AL[A]" />
+    <transition from="AL[A]" by="anonlock[A]" to="ALL[A]" />
+    <transition from="ALL[A]" by="anonlock[A]" to="ALLL[A]" />
+    <transition from="ALLL[A]" by="anonlock[A]" to="ALLLL[A]" />
+    <transition from="ALLLL[A]" by="anonlock[A]" to="ALLLLL[A]" />
+    <transition from="ALLLLL[A]" by="anonunlock[A]" to="ALLLL[A]" />
+    <transition from="ALLLL[A]" by="anonunlock[A]" to="ALLL[A]" />
+    <transition from="ALLL[A]" by="anonunlock[A]" to="ALL[A]" />
+    <transition from="ALL[A]" by="anonunlock[A]" to="AL[A]" />
+    <transition from="AL[A]" by="anonunlock[A]" to="AU[A]" />
+
+    <error  from="U[A]" by="unlock[A]"
+            desc="double unlock"
+            level="0"
+            entry="The function called in unlocked state."
+            begin="The lock is unlocked here."
+            propag="not affected ==> the lock is still unlocked."
+            end="The lock is unlocked and here is an attempt to unlock it twice." />
+
+    <error  from="IU[A]" by="unlock[A]"
+            desc="double unlock"
+            level="0"
+            entry="The function called in unlocked state."
+            begin="The lock is unlocked here."
+            propag="not affected ==> the lock is still unlocked."
+            end="The lock is unlocked and here is an attempt to unlock it twice." />
+
+    <error  from="L[A]" by="lock[A]"
+            desc="double lock"
+            level="0"
+            entry="The function called in locked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="The lock is locked and here is an attempt to lock it twice." />
+
+    <error  from="IL[A]" by="lock[A]"
+            desc="double lock"
+            level="0"
+            entry="The function called in locked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="The lock is locked and here is an attempt to lock it twice." />
+
+    <error  from="L[*] -P[*]" by=""
+            desc="leaving function in locked state"
+            level="1"
+            entry="The function called in unlocked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="Leaving function in locked state." />
+
+    <error  from="AL[*]" by=""
+            desc="leaving function in locked state"
+            level="1"
+            entry="The function called in unlocked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="Leaving function in locked state." />
+
+    <error  from="ALL[*]" by=""
+            desc="leaving function in locked state"
+            level="1"
+            entry="The function called in unlocked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="Leaving function in locked state." />
+
+    <error  from="ALLL[*]" by=""
+            desc="leaving function in locked state"
+            level="1"
+            entry="The function called in unlocked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="Leaving function in locked state." />
+
+    <error  from="ALLLL[*]" by=""
+            desc="leaving function in locked state"
+            level="1"
+            entry="The function called in unlocked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="Leaving function in locked state." />
+
+    <error  from="ALLLLL[*]" by=""
+            desc="leaving function in locked state"
+            level="1"
+            entry="The function called in unlocked state."
+            begin="The lock is locked here."
+            propag="not affected ==> the lock is still locked."
+            end="Leaving function in locked state." />
+
+    <pattern name="plock">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>__st_mutex_trylock_st__</id>
+		<var name="A" />
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="plock">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>__st_mutex_lock_interruptible_st__</id>
+		<var name="A" />
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="plock">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>__st_mutex_lock_killable_st__</id>
+		<var name="A" />
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="plock">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>__st_spin_trylock_st__</id>
+		<var name="A" />
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+    <pattern name="plock">
+	<assignExpression>
+	    <ignore/>
+	    <functionCall>
+		<id>__st_spin_trylock_irqsave_st__</id>
+		<var name="A" />
+		<ignore/>
+	    </functionCall>
+	</assignExpression>
+    </pattern>
+
+
+
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_mutex_lock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_mutex_lock_nested_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (mutex_trylock())' -->
+    <pattern name="lock">
+        <assert>
+	    <functionCall>
+		<id>__st_mutex_trylock_st__</id>
+		<var name="A" />
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!mutex_trylock())' -->
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_mutex_trylock_st__</id>
+                        <var name="A" />
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<functionCall>
+		    <id>__st_mutex_lock_interruptible_st__</id>
+		    <var name="A" />
+		</functionCall>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<binaryExpression op="&lt;">
+		    <functionCall>
+			<id>__st_mutex_lock_interruptible_st__</id>
+			<var name="A" />
+		    </functionCall>
+		    <intConst>0</intConst>
+		</binaryExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<functionCall>
+		    <id>__st_mutex_lock_killable_st__</id>
+		    <var name="A" />
+		</functionCall>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_nested_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (spin_trylock())' -->
+    <pattern name="lock">
+        <assert>
+	    <functionCall>
+		<id>__st_spin_trylock_st__</id>
+		<var name="A" />
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!spin_trylock())' -->
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_spin_trylock_st__</id>
+                        <var name="A" />
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_irq_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_bh_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_irq_nested_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (spin_trylock_irq())' -->
+    <pattern name="lock">
+        <assert>
+	    <functionCall>
+		<id>__st_spin_trylock_irq_st__</id>
+		<var name="A" />
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!spin_trylock_irq())' -->
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_spin_trylock_irq_st__</id>
+			<var name="A" />
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_irqsave_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_spin_lock_irqsave_nested_st__</id>
+            <var name="A" />
+	    <ignore/>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <!-- true branch of 'if (spin_trylock_irqsave())' -->
+    <pattern name="lock">
+        <assert>
+	    <functionCall>
+		<id>__st_spin_trylock_irqsave_st__</id>
+		<var name="A" />
+		<ignore/>
+	    </functionCall>
+        </assert>
+    </pattern>
+
+    <!-- false branch of 'if (!spin_trylock_irqsave())' -->
+    <pattern name="lock">
+        <assert>
+	    <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <functionCall>
+			<id>__st_spin_trylock_irqsave_st__</id>
+			<var name="A" />
+			<ignore/>
+		    </functionCall>
+		</prefixExpression>
+	    </prefixExpression>
+        </assert>
+    </pattern>
+
+    <pattern name="anonlock">
+        <functionCall>
+            <id>__st_read_lock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_read_unlock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonlock">
+        <functionCall>
+            <id>__st_read_lock_bh_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_read_unlock_bh_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonlock">
+        <functionCall>
+            <id>__st_read_lock_irq_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_read_unlock_irq_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_write_lock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_write_unlock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_write_lock_bh_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_write_unlock_bh_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_write_lock_irq_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_write_unlock_irq_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_write_lock_irqsave_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_write_unlock_irqrestore_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_mutex_unlock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="lock">
+        <functionCall>
+            <id>__st_read_lock_irqsave_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_read_unlock_irqrestore_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_spin_unlock_irqrestore_st__</id>
+            <var name="A" />
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_spin_unlock_irq_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_spin_unlock_bh_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="unlock">
+        <functionCall>
+            <id>__st_spin_unlock_st__</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonlock">
+	<functionCall>
+	    <id>__st_local_irq_disable_st__</id>
+	</functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_local_irq_enable_st__</id>
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonlock">
+	<functionCall>
+	    <id>__st_local_irq_save_st__</id>
+	    <ignore/>
+	</functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_local_irq_restore_st__</id>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonlock">
+        <functionCall>
+            <id>__st_lock_kernel_st__</id>
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_unlock_kernel_st__</id>
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonlock">
+        <functionCall>
+            <id>__st_rcu_read_lock_st__</id>
+        </functionCall>
+    </pattern>
+
+    <pattern name="anonunlock">
+        <functionCall>
+            <id>__st_rcu_read_unlock_st__</id>
+        </functionCall>
+    </pattern>
+
+</automaton>

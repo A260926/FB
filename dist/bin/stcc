@@ -1,0 +1,119 @@
+#!/usr/bin/perl -w
+# took over from cgcc from sparse package
+use strict;
+use File::Basename;
+
+my $realcc = $ENV{'REAL_CC'} || 'cc';
+my $cc = $realcc;
+my $flags = '';
+my $jobfile = $ENV{'JOB_FILE'} || die "define JOB_FILE environment varible pointing to a destination file";
+
+my $output = '-';
+
+my $forbid_check = 0;
+my $do_check = 0;
+my $do_compile = 1;
+my $verbose = 0;
+my $output_next = 0;
+
+foreach (@ARGV) {
+    # Look for a .c file.  We don't want to run the checker on .o or .so files
+    # in the link run.  (This simplistic check knows nothing about options
+    # with arguments, but it seems to do the job.)
+    $do_check = 1 if /^[^-].*\.c$/;
+
+    $forbid_check = 1 if /^-M$/;
+
+    if ($_ eq '-no-compile') {
+	$do_compile = 0;
+	next;
+    }
+
+    $verbose = 1 if $_ eq '-v';
+
+    my $this_arg = ' ' . &quote_arg ($_);
+    $cc .= $this_arg unless &check_only_option ($_);
+
+    next if $_ eq '-c';
+    next if $_ eq '-S';
+
+    if ($output_next) {
+	$output = &quote_arg ($_);
+	$output_next = 0;
+	next;
+    }
+    if ($_ eq '-o') {
+	$output_next = 1;
+	next;
+    }
+    if (length $_ > 2 && substr($_, 0, 2) eq '-o') {
+	$output = &quote_arg(substr($_, 2));
+	next;
+    }
+
+    $flags .= $this_arg unless &cc_only_option ($_);
+}
+#print STDERR "X$cc\n";
+#print STDERR "Y$flags\n";
+
+$forbid_check = 1 if $output eq '-';
+
+if ($forbid_check) {
+    $do_compile = 1;
+    $do_check = 0;
+}
+
+if ($do_check) {
+    print "$flags\n" if $verbose;
+    open(CPP, "$realcc -E -w $flags|") or die "can't exec preprocessor";
+    my $source = <CPP>;
+    close(CPP);
+    chomp $source;
+    $source =~ s/^\s*#\s+[0-9]+\s+"(.*)"\s*$/$1/;
+    $flags =~ s/$source//;
+    my $pwd = `pwd`;
+    chomp $pwd;
+    open(JF, ">>$jobfile") or die "can't open jobfile for writing";
+    print JF "{$source},{$output},{$pwd},{$flags}\n";
+    close(JF);
+}
+
+if ($do_compile) {
+    exec ($cc);
+}
+
+exit 0;
+
+# -----------------------------------------------------------------------------
+# Check if an option is for "check" only.
+
+sub check_only_option {
+    my ($arg) = @_;
+    return 0;
+}
+
+# -----------------------------------------------------------------------------
+# Check if an option is for "cc" only.
+
+sub cc_only_option {
+    my ($arg) = @_;
+    # -Wall turns on all Sparse warnings, including experimental and noisy
+    # ones.  Don't include it just because a project wants to pass -Wall to cc.
+    # If you really want cgcc to run sparse with -Wall, use
+    # CHECK="sparse -Wall".
+    return 1 if $arg =~ /^-Wall$/;
+    return 0;
+}
+
+# -----------------------------------------------------------------------------
+# Simple arg-quoting function.  Just adds backslashes when needed.
+
+sub quote_arg {
+    my ($arg) = @_;
+    return "''" if $arg eq '';
+    return join ('',
+		 map {
+		     m|^[-a-zA-Z0-9._/,=]+$| ? $_ : "\\" . $_;
+		 } (split (//, $arg)));
+}
+

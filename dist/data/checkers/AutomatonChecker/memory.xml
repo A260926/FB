@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<automaton>
+    <description name="pointer analysis automaton checker"
+                 desc="Handles common problems when using pointer such as
+                       null/dangling pointer dereference, double free, and
+                       memory leaks." />
+
+    <start state="X" />
+    <transition from="X[A]"     by="malloc[A]"    to="V[A]" />
+    <transition from="X[A]"     by="malloc[A]"    to="N[A]" />
+    <transition from="D[A]"     by="malloc[A]"    to="V[A]" />
+    <transition from="D[A]"     by="malloc[A]"    to="N[A]" />
+    <transition from="V[A]"     by="malloc[A]"    to="VV[A]"/>
+    <transition from="V[A]"     by="malloc[A]"    to="VN[A]"/>
+    <transition from="N[A]"     by="malloc[A]"    to="V[A]" />
+    <transition from="N[A]"     by="malloc[A]"    to="N[A]" />
+    <transition from="X[A]"     by="free[A]"      to="D[A]" />
+    <transition from="V[A]"     by="free[A]"      to="D[A]" />
+    <transition from="VV[A]"    by="free[A]"      to="V[A]" />
+    <transition from="VN[A]"    by="free[A]"      to="V[A]" />
+    <transition from="X[A]"     by="deref[A]"     to="V[A]" />
+    <transition from="X[A]"     by="isnull[A]"    to="N[A]" />
+    <transition from="D[A]"     by="isnull[A]"    to=""     />
+    <transition from="V[A]"     by="isnull[A]"    to=""     />
+    <transition from="VV[A]"    by="isnull[A]"    to="V[A]" />
+    <transition from="X[A]"     by="isnotnull[A]" to="V[A]" />
+    <transition from="N[A]"     by="isnotnull[A]" to=""     />
+    <transition from="VN[A]"    by="isnotnull[A]" to="V[A]" />
+
+    <error  from="N[A]" by="deref[A]"
+            desc="Dereferencing NULL pointer"
+            level="0"
+            entry="pointer is NULL at function entry."
+            begin="pointer is NULL."
+            propag="not affected ==> pointer is still NULL."
+            end="dereferencing NULL pointer here." />
+
+    <error  from="D[A]" by="deref[A]"
+            desc="Dereferencing dangling pointer."
+            level="0"
+            entry="pointer does not point to valid memory at function entry."
+            begin="pointer does not point to valid memory."
+            propag="not affected ==> pointer still does not point to valid memory."
+            end="dereferencing dangling pointer here." />
+
+    <error  from="D[A] -V[A]" by="free[A]"
+            desc="Releasing already released memory"
+            level="0"
+            entry=""
+            begin="memory is released here -> pointer becames dangling."
+            propag="not affected ==> pointer is still dangling."
+            end="pointer is dangling and releasing it here." />
+
+    <error  from="N[A] -V[A] -X[A] -D[A]" by="isnull[A]"
+            desc="unnecessary check (checking for NULL)."
+            level="4"
+            entry="pointer is NULL at function entry."
+            begin="pointer is NULL here."
+            propag="not affected ==> pointer is still NULL."
+            end="pointer always points to NULL here, but checking for it." />
+
+    <error  from="V[A] -N[A] -X[A] -D[A]" by="isnotnull[A]"
+            desc="Unnecessary check (checking for not NULL)."
+            level="4"
+            entry="pointer is not NULL at function entry."
+            begin="pointer is not NULL here."
+            propag="not affected ==> pointer is still not NULL."
+            end="pointer always points to valid memory here, but checking for not NULL." />
+
+    <error  from="V[*]" by=""
+            desc="Memory leak - leaving function without releasing memory"
+            level="2"
+            entry=""
+            begin="pointer points to valid memory."
+            propag="not affected ==> pointer still points to valid memory."
+            end="Leaving function and only reference to valid memory is lost here." />
+
+
+    <pattern name="malloc">
+        <assignExpression>
+            <var name="A" />
+            <functionCall>
+                <id>malloc</id>
+                <ignore />
+            </functionCall>
+        </assignExpression>
+    </pattern>
+
+    <pattern name="malloc">
+        <assignExpression>
+            <var name="A" />
+            <castExpression>
+                <ignore />
+                <functionCall>
+                    <id>malloc</id>
+                    <ignore />
+                </functionCall>
+            </castExpression>
+        </assignExpression>
+    </pattern>
+
+    <pattern name="free" constructive="false">
+        <functionCall>
+            <id>free</id>
+            <var name="A" />
+        </functionCall>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <derefExpression>
+                <var name="A" />
+            </derefExpression>
+        </nested>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <dotExpression>
+                <var name="A" />
+                <ignore />
+            </dotExpression>
+        </nested>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <arrowExpression>
+                <var name="A" />
+                <ignore />
+            </arrowExpression>
+        </nested>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <arrayAccess>
+                <var name="A" />
+                <ignore />
+            </arrayAccess>
+        </nested>
+    </pattern>
+
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+            <var name="A" match="{id}{arrowExpression}{arrayAccess}{dotExpression}" />
+        </assert>
+    </pattern>
+
+    <pattern name="isnull" constructive="false">
+        <assert>
+            <prefixExpression op="!">
+                <var name="A" match="{id}{arrowExpression}{arrayAccess}{dotExpression}" />
+            </prefixExpression>
+        </assert>
+    </pattern>
+
+</automaton>

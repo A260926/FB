@@ -1,0 +1,108 @@
+Performance statistics
+~~~~~~~~~~~~~~~~~~~~~~
+
+
+(1/4) Files procession profile:
+      (a) Time(s):
+              Count  : 5743
+              Sum    : 3974.2299995422363
+              Min    : 0.06200003623962402
+              Max    : 205.81500005722046
+              Average: 0.6920128851719025
+              Median : 0.4609999656677246
+      (b) Space(MB):
+              Count  : 5743
+              Sum    : 498499.76432037354
+              Min    : 0.0
+              Max    : 831.6158752441406
+              Average: 86.80128231244534
+              Median : 59.58734130859375
+(2/4) Precaching LazyInternals before checker  start checking profile:
+      (a) Time(s):
+              Count  : 22972
+              Sum    : 2268.328006505966
+              Min    : 0.0
+              Max    : 7.0269999504089355
+              Average: 0.09874316587610857
+              Median : 0.0
+      (b) Space(MB):
+              Count  : 22972
+              Sum    : 199144.6304397583
+              Min    : 0.0
+              Max    : 531.9652252197266
+              Average: 8.6690157774577
+              Median : 0.0
+(3/4) Checkers summary working profile:
+      (a) Time(s):
+              Count  : 22972
+              Sum    : 1705.3349888324738
+              Min    : 9.999275207519531E-4
+              Max    : 193.77300000190735
+              Average: 0.07423537301203526
+              Median : 0.015999794006347656
+      (b) Space(MB):
+              Count  : 22972
+              Sum    : 523997.43490600586
+              Min    : 0.0
+              Max    : 551.9003295898438
+              Average: 22.81026618953534
+              Median : 14.875640869140625
+(4/4) Per checker working profile:
+      (a) Time(s):
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_atomic.xml
+                  Count  : 5743
+                  Sum    : 392.721994638443
+                  Min    : 0.0019998550415039062
+                  Max    : 90.51600003242493
+                  Average: 0.06838272586425961
+                  Median : 0.019999980926513672
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_locking_irq.xml
+                  Count  : 5743
+                  Sum    : 528.4809949398041
+                  Min    : 0.0029997825622558594
+                  Max    : 193.77300000190735
+                  Average: 0.09202176474661398
+                  Median : 0.01399993896484375
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_memory.xml
+                  Count  : 5743
+                  Sum    : 660.2339968681335
+                  Min    : 0.0029997825622558594
+                  Max    : 72.00399994850159
+                  Average: 0.11496325907507114
+                  Median : 0.020999908447265625
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_pairing.xml
+                  Count  : 5743
+                  Sum    : 123.89800238609314
+                  Min    : 9.999275207519531E-4
+                  Max    : 10.072999954223633
+                  Average: 0.021573742362196262
+                  Median : 0.010000228881835938
+      (b) Space(MB):
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_atomic.xml
+                  Count  : 5743
+                  Sum    : 146084.7582244873
+                  Min    : 0.0
+                  Max    : 551.9003295898438
+                  Average: 25.437011705465316
+                  Median : 15.021560668945312
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_locking_irq.xml
+                  Count  : 5743
+                  Sum    : 116701.90019226074
+                  Min    : 0.0
+                  Max    : 514.782600402832
+                  Average: 20.320720911067514
+                  Median : 14.787345886230469
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_memory.xml
+                  Count  : 5743
+                  Sum    : 178503.3889465332
+                  Min    : 0.0
+                  Max    : 540.1403656005859
+                  Average: 31.081906485553404
+                  Median : 15.395088195800781
+              AutomatonChecker of /usr/share/stanse/checkers/AutomatonChecker/kernel_pairing.xml
+                  Count  : 5743
+                  Sum    : 82707.38754272461
+                  Min    : 0.0
+                  Max    : 512.3622055053711
+                  Average: 14.40142565605513
+                  Median : 13.732521057128906

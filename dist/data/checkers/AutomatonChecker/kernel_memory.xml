@@ -1,0 +1,635 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<automaton>
+    <description name="Linux kernel pointer analysis automaton checker"
+                 desc="Handles common problems when using pointer such as
+                       null/dangling pointer dereference, double free, and
+                       memory leaks." />
+
+    <start state="X" />
+    <transition from="X[A]"	by="kill[A]"	to="" />
+    <transition from="D[A]"	by="kill[A]"	to="" />
+    <transition from="V[A]"	by="kill[A]"	to="" />
+    <transition from="N[A]"	by="kill[A]"	to="" />
+    <transition from="X[A]"	by="noreturn[A]"	to="R[A]" />
+    <transition from="D[A]"	by="noreturn[A]"	to="R[A]" />
+    <transition from="V[A]"	by="noreturn[A]"	to="R[A]" />
+    <transition from="N[A]"	by="noreturn[A]"	to="R[A]" />
+    <transition from="X[A]"	by="alloc[A]"	to="F[A]" />
+    <transition from="D[A]"	by="alloc[A]"	to="F[A]" />
+    <transition from="V[A]"	by="alloc[A]"	to="F[A]" />
+    <transition from="N[A]"	by="alloc[A]"	to="F[A]" />
+    <transition from="X[A]"     by="alloc[A]"    to="V[A]" />
+    <transition from="X[A]"     by="alloc[A]"    to="N[A]" />
+    <transition from="D[A]"     by="alloc[A]"    to="V[A]" />
+    <transition from="D[A]"     by="alloc[A]"    to="N[A]" />
+    <transition from="V[A]"     by="alloc[A]"    to="V[A]"/>
+    <transition from="V[A]"     by="alloc[A]"    to="N[A]"/>
+    <transition from="N[A]"     by="alloc[A]"    to="V[A]" />
+    <transition from="N[A]"     by="alloc[A]"    to="N[A]" />
+    <transition from="X[A]"     by="free[A]"      to="D[A]" />
+    <transition from="V[A]"     by="free[A]"      to="D[A]" />
+    <transition from="F[A]"     by="free[A]"      to="" />
+    <transition from="X[A]"     by="deref[A]"     to="V[A]" />
+    <transition from="X[A]"     by="isnull[A]"    to="N[A]" />
+    <transition from="D[A]"     by="isnull[A]"    to="MN[A]" />
+    <transition from="V[A]"     by="isnull[A]"    to="MN[A]" />
+    <transition from="X[A]"     by="isnotnull[A]" to="V[A]" />
+    <transition from="N[A]"     by="isnotnull[A]" to="MNN[A]" />
+
+    <error  from="N[A] -R[*]" by="deref[A]"
+            desc="dereferencing NULL pointer"
+            level="0"
+            entry="pointer is NULL at function entry."
+            begin="pointer is NULL."
+            propag="not affected ==> pointer is still NULL."
+            end="dereferencing NULL pointer here." />
+
+    <error  from="D[A]" by="deref[A]"
+            desc="dereferencing dangling pointer"
+            level="0"
+            entry="pointer does not point to valid memory at function entry."
+            begin="pointer does not point to valid memory."
+            propag="not affected ==> pointer still does not point to valid memory."
+            end="dereferencing dangling pointer here." />
+
+    <error  from="D[A] -V[A]" by="free[A]"
+            desc="releasing already released memory"
+            level="0"
+            entry=""
+            begin="memory is released here -> pointer becomes dangling."
+            propag="not affected ==> pointer is still dangling."
+            end="pointer is dangling and releasing it here." />
+
+    <error  from="N[A] -V[A] -X[A] -D[A] -MN[A]" by="isnull[A]"
+            desc="unnecessary check (checking for NULL)"
+            level="4"
+            entry="pointer is NULL at function entry."
+            begin="pointer is NULL here."
+            propag="not affected ==> pointer is still NULL."
+            end="pointer always points to NULL here, but checking for it." />
+
+    <error  from="V[A] -N[A] -X[A] -D[A] -MNN[A]" by="isnotnull[A]"
+            desc="unnecessary check (checking for not NULL)"
+            level="4"
+            entry="pointer is not NULL at function entry."
+            begin="pointer is not NULL here."
+            propag="not affected ==> pointer is still not NULL."
+            end="pointer always points to valid memory here, but checking for not NULL." />
+    <error  from="V[*] F[*] -R[*]" by=""
+            desc="memory leak - leaving function without releasing memory"
+            level="2"
+            entry=""
+            begin="pointer points to valid memory."
+            propag="not affected ==> pointer still points to valid memory."
+            end="Leaving function and only reference to valid memory is lost here." />
+
+    <pattern name="alloc">
+        <assignExpression>
+            <var name="A" match="id" />
+            <functionCall>
+                <id>kmalloc</id>
+                <any />
+            </functionCall>
+        </assignExpression>
+    </pattern>
+
+    <pattern name="alloc">
+        <assignExpression>
+            <var name="A" match="id" />
+            <castExpression>
+                <ignore />
+                <functionCall>
+                    <id>kmalloc</id>
+                    <ignore />
+                    <ignore />
+                </functionCall>
+            </castExpression>
+        </assignExpression>
+    </pattern>
+
+    <pattern name="alloc">
+        <assignExpression>
+            <var name="A" match="id" />
+            <functionCall>
+                <id>kzalloc</id>
+                <any />
+            </functionCall>
+        </assignExpression>
+    </pattern>
+
+    <pattern name="alloc">
+        <assignExpression>
+            <var name="A" match="id" />
+            <castExpression>
+                <ignore />
+                <functionCall>
+                    <id>kzalloc</id>
+                    <ignore />
+                    <ignore />
+                </functionCall>
+            </castExpression>
+        </assignExpression>
+    </pattern>
+
+    <pattern name="free" constructive="false">
+        <functionCall>
+            <id>kfree</id>
+            <var name="A"/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="free" constructive="false">
+        <functionCall>
+            <id>put_device</id>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+        </functionCall>
+    </pattern>
+
+    <pattern name="free" constructive="false">
+        <functionCall>
+            <id>kref_put</id>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+	    <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="free" constructive="true">
+        <functionCall>
+            <id>kfree_skb</id>
+            <var name="A"/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="free" constructive="true">
+        <functionCall>
+            <id>consume_skb</id>
+            <var name="A"/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="free" constructive="true">
+        <functionCall>
+            <id>dev_kfree_skb_any</id>
+            <var name="A"/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="free" constructive="true">
+        <functionCall>
+            <id>dev_kfree_skb_irq</id>
+            <var name="A"/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="noreturn">
+        <functionCall>
+            <id>panic</id>
+	    <any/>
+        </functionCall>
+    </pattern>
+
+    <!-- creating an alias, we won't care about the pointer anymore -->
+    <pattern name="kill" constructive="false">
+        <assignExpression>
+            <ignore/>
+            <var name="A" match="id" />
+        </assignExpression>
+    </pattern>
+    <pattern name="kill" constructive="false">
+        <assignExpression>
+            <ignore/>
+	    <castExpression>
+		<ignore/>
+		<var name="A" match="id"/>
+	    </castExpression>
+        </assignExpression>
+    </pattern>
+    <pattern name="kill" constructive="false">
+	<assignExpression>
+	    <ignore/>
+	    <assignExpression>
+		<var name="A" match="id"/>
+		<ignore/>
+	    </assignExpression>
+	</assignExpression>
+    </pattern>
+    <pattern name="kill" constructive="false">
+	<assignExpression>
+	    <ignore/>
+	    <assignExpression>
+		<ignore/>
+		<var name="A" match="id"/>
+	    </assignExpression>
+	</assignExpression>
+    </pattern>
+
+    <!-- return &id->member; -->
+    <pattern name="kill" constructive="false">
+        <returnStatement>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A" match="id"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+        </returnStatement>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+        <returnStatement>
+            <var name="A" match="id" />
+        </returnStatement>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<functionCall>
+	    <id>dev_set_drvdata</id>
+	    <ignore/>
+	    <var name="A"/>
+	</functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<functionCall>
+	    <id>usb_set_intfdata</id>
+	    <ignore/>
+	    <var name="A"/>
+	</functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<functionCall>
+	    <id>usb_set_serial_data</id>
+	    <ignore/>
+	    <var name="A"/>
+	</functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<functionCall>
+	    <id>hid_set_drvdata</id>
+	    <ignore/>
+	    <var name="A"/>
+	</functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<functionCall>
+	    <id>i2c_set_clientdata</id>
+	    <ignore/>
+	    <var name="A"/>
+	</functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<nested>
+	    <functionCall>
+		<id>input_ff_create_memless</id>
+		<ignore/>
+		<var name="A"/>
+		<ignore/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<nested>
+	    <functionCall>
+		<id>ide_pci_init_one</id>
+		<ignore/>
+		<ignore/>
+		<var name="A"/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<nested>
+	    <functionCall>
+		<id>ide_pci_init_two</id>
+		<ignore/>
+		<ignore/>
+		<ignore/>
+		<var name="A"/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+        <functionCall>
+            <id>list_add</id>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+        <functionCall>
+            <id>list_add_tail</id>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<nested>
+	    <functionCall>
+		<id>kobject_init_and_add</id>
+		<addrExpression>
+		    <arrowExpression>
+			<var name="A"/>
+			<ignore/>
+		    </arrowExpression>
+		</addrExpression>
+		<ignore/>
+		<ignore/>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+        <functionCall>
+            <id>hlist_add_head_rcu</id>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+            <ignore/>
+        </functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+	<nested>
+	    <functionCall>
+		<id>queue_work</id>
+		<ignore/>
+		<addrExpression>
+		    <arrowExpression>
+			<var name="A"/>
+			<ignore/>
+		    </arrowExpression>
+		</addrExpression>
+	    </functionCall>
+	</nested>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+        <functionCall>
+            <id>queue_delayed_work</id>
+	    <ignore/>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+        </functionCall>
+    </pattern>
+
+    <pattern name="kill" constructive="false">
+        <functionCall>
+            <id>schedule_work</id>
+	    <addrExpression>
+		<arrowExpression>
+		    <var name="A"/>
+		    <ignore/>
+		</arrowExpression>
+	    </addrExpression>
+        </functionCall>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <derefExpression>
+                <var name="A" />
+            </derefExpression>
+        </nested>
+    </pattern>
+
+    <pattern name="deref">
+	<initDeclarator>
+	    <nested>
+		<pointer/>
+	    </nested>
+	    <initializer>
+		<nested exclude0="addrExpression">
+		    <arrowExpression>
+			<var name="A" />
+			<ignore />
+		    </arrowExpression>
+		</nested>
+	    </initializer>
+	</initDeclarator>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <dotExpression>
+                <var name="A" />
+                <ignore />
+            </dotExpression>
+        </nested>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <arrowExpression>
+                <var name="A" />
+                <ignore />
+            </arrowExpression>
+        </nested>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <nested exclude0="sizeofExpression">
+            <arrayAccess>
+                <var name="A" />
+                <ignore />
+            </arrayAccess>
+        </nested>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <functionCall>
+	    <id>__st_memcpy_st__</id>
+	    <var name="A" />
+            <ignore />
+            <ignore />
+        </functionCall>
+    </pattern>
+
+    <pattern name="deref" constructive="false">
+        <functionCall>
+	    <id>__st_memset_st__</id>
+	    <var name="A" />
+            <ignore />
+            <ignore />
+        </functionCall>
+    </pattern>
+
+    <!-- BUG_ON(A) -->
+    <pattern name="isnotnull" constructive="false">
+	<functionCall>
+	    <id>__st_BUG_ON_st__</id>
+	    <prefixExpression op="!">
+		<var name="A" match="{id}{arrowExpression}{arrayAccess}{dotExpression}" />
+	    </prefixExpression>
+	</functionCall>
+    </pattern>
+
+    <!-- assert(A) -->
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+<!--	    <nested exclude0="prefixExpression" exclude1="binaryExpression"> useless -->
+	    <var name="A" match="{id}{arrowExpression}{arrayAccess}{dotExpression}" />
+        </assert>
+    </pattern>
+    <!-- assert(!A) -->
+    <pattern name="isnull" constructive="false">
+        <assert>
+	    <prefixExpression op="!">
+		<var name="A" match="{id}{arrowExpression}{arrayAccess}{dotExpression}" />
+	    </prefixExpression>
+        </assert>
+    </pattern>
+    <!-- assert(!!A) i.e. false branch of !A test -->
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+            <prefixExpression op="!">
+		<prefixExpression op="!">
+		    <var name="A" match="{id}{arrowExpression}{arrayAccess}{dotExpression}" />
+		</prefixExpression>
+            </prefixExpression>
+        </assert>
+    </pattern>
+
+    <!-- assert(A == 0) -->
+    <pattern name="isnull" constructive="false">
+        <assert>
+	    <nested exclude0="prefixExpression">
+		<binaryExpression op="==">
+		    <var name="A" />
+		    <intConst>0</intConst>
+		</binaryExpression>
+	    </nested>
+        </assert>
+    </pattern>
+    <!-- assert(!(A == 0)) -->
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+            <prefixExpression op="!">
+		<nested exclude0="prefixExpression">
+		    <binaryExpression op="==">
+			<var name="A" />
+			<intConst>0</intConst>
+		    </binaryExpression>
+		</nested>
+            </prefixExpression>
+        </assert>
+    </pattern>
+
+    <!-- assert(A == (T*)0) -->
+    <pattern name="isnull" constructive="false">
+        <assert>
+	    <binaryExpression op="==">
+		<var name="A" />
+		<castExpression>
+		    <ignore />
+		    <intConst>0</intConst>
+		</castExpression>
+	    </binaryExpression>
+        </assert>
+    </pattern>
+    <!-- assert(!(A == (T*)0)) -->
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+            <prefixExpression op="!">
+		<binaryExpression op="==">
+		    <var name="A" />
+		    <castExpression>
+			<ignore />
+			<intConst>0</intConst>
+		    </castExpression>
+		</binaryExpression>
+            </prefixExpression>
+        </assert>
+    </pattern>
+
+    <!-- assert(A != (T*)0) -->
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+	    <binaryExpression op="!=">
+		<var name="A" />
+		<castExpression>
+		    <ignore />
+		    <intConst>0</intConst>
+		</castExpression>
+	    </binaryExpression>
+        </assert>
+    </pattern>
+    <!-- assert(!(A != (T*)0)) -->
+    <pattern name="isnull" constructive="false">
+        <assert>
+            <prefixExpression op="!">
+		<binaryExpression op="!=">
+		    <var name="A" />
+		    <castExpression>
+			<ignore />
+			<intConst>0</intConst>
+		    </castExpression>
+		</binaryExpression>
+            </prefixExpression>
+        </assert>
+    </pattern>
+
+    <!-- assert((T*)0 == A) -->
+    <pattern name="isnull" constructive="false">
+        <assert>
+	    <binaryExpression op="==">
+		<castExpression>
+		    <ignore />
+		    <intConst>0</intConst>
+		</castExpression>
+		<var name="A" />
+	    </binaryExpression>
+        </assert>
+    </pattern>
+    <!-- assert(!((T*)0 == A)) -->
+    <pattern name="isnotnull" constructive="false">
+        <assert>
+            <prefixExpression op="!">
+		<binaryExpression op="==">
+		    <castExpression>
+			<ignore />
+			<intConst>0</intConst>
+		    </castExpression>
+		    <var name="A" />
+		</binaryExpression>
+            </prefixExpression>
+        </assert>
+    </pattern>
+
+</automaton>
+

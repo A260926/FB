@@ -1,0 +1,143 @@
+#!/usr/bin/perl
+# Copyright (c) 2009 Jiri Slaby <jirislaby@gmail.com>
+#
+# Distributed under GPLv2
+#
+# This script accepts parameters in the following format:
+# {source},{output},{working directory},{cpp flags}
+#
+# preprocessed file can be found at output.preproc
+# types from typedefs might be found on standard output
+
+use strict;
+use warnings;
+use File::Basename qw(dirname);
+
+my @kuntouchables = (
+	"mutex_lock", "mutex_trylock", "mutex_lock_interruptible",
+	"mutex_lock_killable", "mutex_lock_nested",
+	"mutex_lock_interruptible_nested", "mutex_lock_killable_nested",
+	"mutex_unlock",
+	"lock_kernel", "unlock_kernel",
+	"rcu_read_lock", "rcu_read_unlock", "rcu_assign_pointer",
+	"spin_lock", "spin_trylock", "spin_lock_nested", "spin_unlock",
+	"spin_lock_bh", "spin_unlock_bh",
+	"spin_lock_irq", "spin_trylock_irq", "spin_lock_irq_nested",
+		"spin_unlock_irq",
+	"spin_lock_irqsave", "spin_trylock_irqsave", "spin_lock_irqsave_nested",
+		"spin_unlock_irqrestore",
+	"read_lock", "read_unlock", "read_lock_bh", "read_unlock_bh",
+	"read_lock_irq", "read_unlock_irq",
+	"read_lock_irqsave", "read_unlock_irqrestore",
+	"write_lock", "write_unlock", "write_lock_bh", "write_unlock_bh",
+	"write_lock_irq", "write_unlock_irq",
+	"write_lock_irqsave", "write_unlock_irqrestore",
+	"wait_event_lock_irq",
+	"local_irq_save", "local_irq_restore",
+	"local_irq_disable", "local_irq_enable",
+	"preempt_disable", "preempt_enable",
+	"likely", "unlikely",
+	"put_user", "get_user",
+	"put_cpu", "get_cpu",
+	"memcpy", "memset",
+	"BUG", "BUG_ON",
+	"GFP_KERNEL",
+
+	"assert"
+);
+
+die "wrong commandline" if @ARGV != 1;
+
+my $arg = shift @ARGV;
+chomp $arg;
+$arg =~ /^\{(.*)\},\{(.*)\},\{(.*)\},\{(.*)\}$/;
+
+die "commandline mangled" unless defined $4;
+
+my $source = $1;
+my $output = $2;
+chdir $3 if length $3 > 0;
+my $flags = $4;
+
+my $armored = $output . ".armored.c";
+my $includes = $output . ".includes";
+my $nonincludes = $output . ".preproc";
+my $sourcedir = dirname $source;
+
+open(SRC, "$source") || die "can't open '$source'";
+open(ASRC, ">$armored") || die "can't open '$armored' for writing";
+{
+	local $/;
+	my $file = <SRC>;
+	for (@kuntouchables) {
+		$file =~ s/\b$_\b/__st_${_}_st__/g;
+	}
+	print ASRC $file;
+}
+close(ASRC);
+close(SRC);
+
+my $cc = ($ENV{'CROSS_COMPILE'} || ""). "gcc";
+my $cppflags = $ENV{'STANSE_CPPFLAGS'} || "";
+my $cpp = "$cc -E -w $cppflags -I$sourcedir " .
+	"-D__st_unlikely_st__\\(x\\)=x -D__st_likely_st__\\(x\\)=x " .
+	"-D__attribute__\\(x\\)= -D__attribute\\(x\\)= " .
+	"-Dva_list='int' -Dva_arg\\(ap,t\\)=\\(t\\)0 " .
+	"-D__builtin_va_list=int -D__builtin_offsetof\\(x,y\\)=1 " .
+	"-D__builtin_types_compatible_p\\(x,y\\)=0 " .
+	"-D__builtin_va_arg\\(ap,t\\)=\\(t\\)0 $flags";
+open(CPP, "$cpp $armored|") || die "can't exec '$cpp $armored'";
+open(INCS, ">$includes") || die "can't open $includes for writing";
+open(NONINCS, ">$nonincludes") || die "can't open $nonincludes for writing";
+
+my $out = 0;
+my $itself = 1;
+my $blank = 0;
+my $sw = 0;
+
+while (<CPP>) {
+    if (/^\s*#/) {
+	if (/^\s*#\s+[0-9]+\s+"(.*)"\s+([0-9\s]+)$/) {
+	    my $file = $1;
+	    my $fl = $2;
+	    $itself = $fl =~ /\b2\b/ && $file =~ /$armored/;
+	}
+#	for having line markers in NONINCS, uncomment the following line
+#	print NONINCS;
+	$blank = 0;
+	next;
+    }
+    $out = 1 if ($itself && !/^\s*$/);
+
+    if ($out && !$sw) {
+	for (; $blank; $blank--) {
+	    print NONINCS "\n";
+	}
+	$sw = 1;
+    }
+
+    if (/^\s*$/) {
+	$blank++;
+    } else {
+	$blank = 0;
+    }
+
+    if ($out) {
+	print NONINCS;
+    } else {
+	print INCS;
+    }
+}
+
+close(NONINCS);
+close(INCS);
+close(CPP);
+
+if (-s $includes) {
+    system("stcparser-c $includes") && die "can't exec cparser-c";
+}
+
+unlink $includes;
+unlink $armored;
+
+exit 0;
