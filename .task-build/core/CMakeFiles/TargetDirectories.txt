@@ -1,0 +1,6 @@
+/Volumes/UserFBWorkspace/questions/FSD6309758DE50U6601R251D2D8AC0/attempts/20261124T171310434191Z/repo/.task-build/core/CMakeFiles/luz_core.dir
+/Volumes/UserFBWorkspace/questions/FSD6309758DE50U6601R251D2D8AC0/attempts/20261124T171310434191Z/repo/.task-build/core/CMakeFiles/luz.dir
+/Volumes/UserFBWorkspace/questions/FSD6309758DE50U6601R251D2D8AC0/attempts/20261124T171310434191Z/repo/.task-build/core/CMakeFiles/luz_tests.dir
+/Volumes/UserFBWorkspace/questions/FSD6309758DE50U6601R251D2D8AC0/attempts/20261124T171310434191Z/repo/.task-build/core/CMakeFiles/test.dir
+/Volumes/UserFBWorkspace/questions/FSD6309758DE50U6601R251D2D8AC0/attempts/20261124T171310434191Z/repo/.task-build/core/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSD6309758DE50U6601R251D2D8AC0/attempts/20261124T171310434191Z/repo/.task-build/core/CMakeFiles/rebuild_cache.dir

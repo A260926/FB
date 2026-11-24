@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/luz_tests.dir/tests/Tests.cpp.o -o luz_tests  libluz_core.a

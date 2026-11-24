@@ -140,6 +140,89 @@ make benchmark-compare BEFORE=before.csv AFTER=after.csv
 
 For details, see [`docs/benchmarks.md`](docs/benchmarks.md).
 
+## Diffuse Radiance Control Variate
+
+`include/luz/Renderer/ControlVariate.hpp` provides
+`ControlVariate::ControlVariateSession`, a caller-owned, single-threaded
+diffuse-preview estimator that fits a spherical-harmonic control variate over
+the paths already traced.
+
+At every non-emissive diffuse hit it keeps the full Monte Carlo suffix
+estimate `Li`, while a frozen model `g(w)` of the incident radiance is
+integrated analytically.  The returned estimate is
+
+```text
+result = rho * (A(n) + Li - g(w))
+```
+
+where `rho` is the surface albedo, `w` the cosine-weighted continuation
+direction, and `A(n) = integral over the hemisphere of g(w) (n . w) / pi dw`.
+The residual `Li - g` is deliberately signed: negative residuals and negative
+intermediate radiance are never clipped.  Before the first model is published
+both `g` and `A` are zero, so the estimator reduces to plain cosine path
+tracing.
+
+### Supported scope
+
+The session binds a read-only `Scene` and rejects unsupported content at
+construction with `std::invalid_argument`:
+
+- Geometry: only standalone `Sphere` and `Triangle` (the scene's existing BVH
+  is still used for intersection).  Meshes, cubes, planes, rectangles, volumes
+  and other hittables are rejected.
+- Materials: only untextured `Lambertian` and `Emissive`.  Textured or other
+  materials are rejected.
+- Sky: only `SKY_NONE` (constant background color) and `SKY_LINEAR`.
+  Atmosphere and environment-map modes are rejected.
+- Normals are the geometric normals.
+
+Depth means the number of diffuse reflections still available: at depth 0 an
+emissive surface or the sky is still visible, but nothing reflects.  Only
+cosine continuation is used — no next-event estimation, no russian roulette,
+and no luminance clipping.  Emissive geometry terminates through the
+material's `emitted()`.
+
+### Spherical-harmonic convention
+
+The frozen model uses the nine standard orthonormal **real** spherical
+harmonics for `l <= 2` over world-space unit directions `w = (x, y, z)`, in
+the ordering `Y_00, Y_1-1, Y_10, Y_11, Y_2-2, Y_2-1, Y_20, Y_21, Y_22` with
+Condon–Shortley phase:
+
+```text
+Y_00  = 1 / (2 sqrt(pi))
+Y_1-1 = sqrt(3/pi) y / 2          Y_10 = sqrt(3/pi) z / 2
+Y_11  = sqrt(3/pi) x / 2
+Y_2-2 = sqrt(15/pi) xy / 2        Y_2-1 = sqrt(15/pi) yz / 2
+Y_20  = sqrt(5/pi) (3z^2 - 1) / 4
+Y_21  = sqrt(15/pi) xz / 2        Y_22 = sqrt(15/pi) (x^2 - y^2) / 4
+```
+
+Each of the nine coefficients is an RGB triple.  Models are keyed by the
+actual object identity, the geometric front/back face, and the remaining
+depth — never by material pointer, so objects sharing a material stay
+independent.  Each key accumulates averaged normal equations
+`mean(Y Y^T)` and `mean(Y Li)` from labels that are the complete suffix `Li`
+(no local albedo, no camera throughput), then solves the ridge system
+`(mean(Y Y^T) + ridge * I) c = mean(Y Li)` per channel at `finishEpoch()`.
+Slots with fewer than `minSamples` samples publish explicit zero models; an
+empty epoch publishes an empty (all-zero) table.
+
+### Configuration and diagnostics
+
+`ControlVariate::Configuration` exposes `maxDepth` (0–12), `seed`,
+`ridge` (finite and positive), `minSamples` (at least 9) and `enabled`;
+invalid values throw `std::invalid_argument`.  The random stream is derived
+from the seed, epoch, `sampleId` and path depth, so disabling the control
+variate keeps the identical cosine directions.  The session exposes the
+frozen coefficients and normal equations, per-epoch counts and keys, the
+epoch counter, and a read-only record of the vertices of the most recent
+production path (key, direction, `Li`, `g`, `A`, `rho` and the returned
+value) for independent verification.
+
+The example `examples/control_variate.cpp` runs several epochs and writes a
+small PPM.
+
 ## CMake
 
 A CMake build is also available:
