@@ -38,7 +38,48 @@ MyTinyGL is a complete software implementation of the OpenGL 1.x fixed-function 
 - Fog, blending, alpha test, depth test, stencil test
 - Display lists, VBOs, vertex arrays
 - Frustum clipping, perspective-correct interpolation
+- Offscreen name-based picking (`GL_SELECT` render mode)
 - Complete state query API (glGet*)
+
+## Selection / picking (`GL_SELECT`)
+
+MyTinyGL implements the OpenGL selection mechanism for headless,
+name-based geometry picking. It needs no display device and never uses
+color coding or per-pixel depth readback.
+
+- Entry points: `glSelectBuffer`, `glRenderMode` (`GL_RENDER`/`GL_SELECT`),
+  `glInitNames`, `glPushName`, `glPopName`, `glLoadName`. The name stack
+  holds up to 64 names (`GL_MAX_NAME_STACK_DEPTH`).
+- Supported primitives in selection mode: `GL_POINTS`, `GL_LINES`,
+  `GL_LINE_STRIP`, `GL_LINE_LOOP`, `GL_TRIANGLES`, `GL_TRIANGLE_STRIP`,
+  `GL_TRIANGLE_FAN`. Any other primitive raises `GL_INVALID_ENUM` and
+  leaves the render mode and existing results untouched.
+- Geometry still passes through the model-view/projection transform and
+  the six-plane homogeneous clip test (post-clip `w > 0`). A hit means:
+  a point survives the frustum, a line leaves a non-zero segment, or a
+  triangle leaves a positive-area fragment — even if no viewport pixel
+  center is covered. Triangles still honor `glFrontFace`/`glCullFace`;
+  a triangle clipped into a fan counts as a single hit.
+- Depth, stencil, blending, alpha, scissor and color-mask state do not
+  affect hits, and the color, depth and stencil buffers are never read
+  or written during a selection pass.
+- Hit depth is taken from the fully clipped geometry's `z/w`, mapped
+  through `glDepthRange` (including reversed ranges), clamped to `[0,1]`
+  and encoded with `floor(z * 4294967295 + 0.5)`.
+- Multiple draws under the same name stack merge into one record; a
+  record is written when the name stack changes or selection mode is
+  exited. An empty name stack can still produce a record. Records are
+  written whole as `[name count, min depth, max depth, names...]`. If a
+  record does not fit, the buffer locks (its contents and sentinel are
+  preserved) and `glRenderMode(GL_RENDER)` returns `-1`; otherwise it
+  returns the number of records. A zero-capacity buffer is legal and
+  overflows on the first record.
+- Name operations are recorded by display lists and execute according to
+  the mode at replay time; buffer binding and render-mode switches are
+  immediate and are never recorded.
+
+See `examples/select.c` for a complete headless example and
+`tests/selection.c` for the behavioral coverage.
 
 ## Building
 

@@ -2,3 +2,5 @@
 *.a
 *.so
 *.run
+.task-build/
+lib/

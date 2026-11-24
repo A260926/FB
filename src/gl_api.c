@@ -229,6 +229,9 @@ GLState *gl_create_context(int32_t width, int32_t height)
     c->vertices.count = 0;
     c->vertices.capacity = 0;
 
+    /* Selection */
+    selection_init(&c->selection);
+
     /* Error state */
     c->error = GL_NO_ERROR;
 
@@ -622,8 +625,14 @@ void glBegin(GLenum mode)
         return;
     }
 
-    /* Validate primitive mode */
-    if (mode > GL_POLYGON) {
+    /* Selection only accepts a fixed set of primitives. The error leaves
+     * the render mode and any accumulated hit results untouched. */
+    if (ctx->selection.render_mode == GL_SELECT) {
+        if (!selection_primitive_supported(mode)) {
+            gl_set_error(ctx, GL_INVALID_ENUM);
+            return;
+        }
+    } else if (mode > GL_POLYGON) {
         gl_set_error(ctx, GL_INVALID_ENUM);
         return;
     }
@@ -644,6 +653,51 @@ void glEnd(void)
     }
 
     ctx->flags &= ~FLAG_INSIDE_BEGIN_END;
+
+    if (ctx->selection.render_mode == GL_SELECT) {
+        /* Geometric hit testing on the transformed/clipped geometry;
+         * framebuffer buffers are neither read nor written. glEnd does
+         * not finalize a hit record - aggregation continues until the
+         * name stack changes or selection mode is left. */
+        vertex_t *verts = vertex_buffer_data(ctx);
+        size_t count = vertex_buffer_count(ctx);
+
+        switch (ctx->primitive_mode) {
+            case GL_POINTS:
+                selection_observe_points(verts, count);
+                break;
+            case GL_LINES:
+            case GL_LINE_STRIP:
+            case GL_LINE_LOOP:
+                selection_observe_lines(verts, count, ctx->primitive_mode);
+                break;
+            case GL_TRIANGLES:
+                for (size_t i = 0; i + 2 < count; i += 3) {
+                    selection_observe_triangle(&verts[i]);
+                }
+                break;
+            case GL_TRIANGLE_STRIP:
+                for (size_t i = 0; i + 2 < count; i++) {
+                    if (i % 2 == 0) {
+                        selection_observe_triangle(&verts[i]);
+                    } else {
+                        vertex_t swapped[3] = { verts[i + 1], verts[i],
+                                               verts[i + 2] };
+                        selection_observe_triangle(swapped);
+                    }
+                }
+                break;
+            case GL_TRIANGLE_FAN:
+                for (size_t i = 1; i + 1 < count; i++) {
+                    vertex_t fan[3] = { verts[0], verts[i], verts[i + 1] };
+                    selection_observe_triangle(fan);
+                }
+                break;
+        }
+
+        vertex_buffer_clear(ctx);
+        return;
+    }
 
     switch (ctx->primitive_mode) {
         case GL_POINTS:        flush_points(ctx); break;
@@ -1803,6 +1857,11 @@ void glDrawArrays(GLenum mode, GLint first, GLsizei count)
         gl_set_error(ctx, GL_INVALID_VALUE);
         return;
     }
+    if (ctx->selection.render_mode == GL_SELECT &&
+        !selection_primitive_supported(mode)) {
+        gl_set_error(ctx, GL_INVALID_ENUM);
+        return;
+    }
     const void *vertex_base = get_array_pointer(&ctx->vertex_pointer);
     const void *color_base = (ctx->client_state & CLIENT_COLOR_ARRAY) ?
                              get_array_pointer(&ctx->color_pointer) : NULL;
@@ -1861,6 +1920,11 @@ void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indic
 
     /* Validate index type */
     if (type != GL_UNSIGNED_BYTE && type != GL_UNSIGNED_SHORT && type != GL_UNSIGNED_INT) {
+        gl_set_error(ctx, GL_INVALID_ENUM);
+        return;
+    }
+    if (ctx->selection.render_mode == GL_SELECT &&
+        !selection_primitive_supported(mode)) {
         gl_set_error(ctx, GL_INVALID_ENUM);
         return;
     }
@@ -2434,6 +2498,18 @@ static void execute_list(GLuint list_id)
                           cmd->data.frustum.bottom, cmd->data.frustum.top,
                           cmd->data.frustum.near_val, cmd->data.frustum.far_val);
                 break;
+            case CMD_INIT_NAMES:
+                glInitNames();
+                break;
+            case CMD_PUSH_NAME:
+                glPushName(cmd->data.name_op.name);
+                break;
+            case CMD_POP_NAME:
+                glPopName();
+                break;
+            case CMD_LOAD_NAME:
+                glLoadName(cmd->data.name_op.name);
+                break;
         }
     }
 }
@@ -2719,9 +2795,15 @@ void glGetIntegerv(GLenum pname, GLint *params)
             params[0] = ctx->raster_pos_valid;
             break;
 
-        /* Render mode */
+        /* Render mode and selection state */
         case GL_RENDER_MODE:
-            params[0] = 0x1C00;  /* GL_RENDER = 0x1C00 */
+            params[0] = (GLint)ctx->selection.render_mode;
+            break;
+        case GL_NAME_STACK_DEPTH:
+            params[0] = ctx->selection.name_count;
+            break;
+        case GL_SELECTION_BUFFER_SIZE:
+            params[0] = ctx->selection.buffer_size;
             break;
 
         /* Implementation limits */

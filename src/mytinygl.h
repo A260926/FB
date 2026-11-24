@@ -16,6 +16,7 @@
 #include "textures.h"
 #include "vbo.h"
 #include "lists.h"
+#include "selection.h"
 #include <stdint.h>
 
 #define MAX_MATRIX_STACK_DEPTH 24
@@ -218,6 +219,9 @@ typedef struct {
 
     /* Vertex buffer (per-context for thread safety) */
     vertex_buffer_t vertices;
+
+    /* Selection (GL_SELECT render mode, name stack, hit records) */
+    selection_t selection;
 
     /* Error state */
     GLenum error;

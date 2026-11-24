@@ -50,6 +50,10 @@ typedef enum {
     CMD_MATERIALF,
     CMD_MATERIALFV,
     CMD_CALL_LIST,
+    CMD_INIT_NAMES,
+    CMD_PUSH_NAME,
+    CMD_POP_NAME,
+    CMD_LOAD_NAME,
 } list_opcode_t;
 
 /* Display list command - variable size depending on opcode */
@@ -81,6 +85,7 @@ typedef struct {
         struct { GLenum face; GLenum pname; GLfloat param; } materialf;
         struct { GLenum face; GLenum pname; GLfloat params[4]; } materialfv;
         struct { GLuint list; } call_list;
+        struct { GLuint name; } name_op;
     } data;
 } list_command_t;
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0] - 2026-11-25
+
+### Added - OpenGL Selection Mode (GL_SELECT)
+- Name-based offscreen geometry picking, independent of color/depth readback
+  - `glSelectBuffer`, `glRenderMode` (GL_RENDER/GL_SELECT)
+  - `glInitNames`, `glPushName`, `glPopName`, `glLoadName`
+  - Name stack depth of 64 (GL_MAX_NAME_STACK_DEPTH)
+- Geometric hit testing on the transformed and six-plane clipped geometry:
+  points must survive the frustum, lines leave a non-zero segment, triangles
+  leave a positive-area fragment (honoring `glFrontFace`/`glCullFace`), even
+  when no pixel center is covered
+- Hit depth from clipped `z/w` mapped through `glDepthRange` (reversed ranges
+  supported), clamped to [0,1] and encoded as a GLuint
+- Whole-record writes with overflow locking; aggregated records across draws
+  sharing a name stack; empty-name-stack records
+- Display list recording and mode-aware replay of the name operations
+- New files: src/selection.h, src/selection.c, tests/selection.c,
+  examples/select.c
+
 ## [0.5.0] - 2025-12-06
 
 ### Added - OpenGL 1.5 VBO Support

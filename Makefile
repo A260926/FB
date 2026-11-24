@@ -2,13 +2,14 @@ CC = gcc
 AR = ar
 CFLAGS = -Wall -O3 -march=native -ffast-math -std=c99 -I./include
 
-SRC = src/gl_api.c src/raster.c src/textures.c src/vbo.c src/lists.c
+SRC = src/gl_api.c src/raster.c src/textures.c src/vbo.c src/lists.c src/selection.c
 OBJ = $(SRC:.c=.o)
 LIB = lib/libMyTinyGL.a
 
 all: $(LIB)
 
 $(LIB): $(OBJ)
+	mkdir -p lib
 	$(AR) rcs $@ $^
 
 src/%.o: src/%.c

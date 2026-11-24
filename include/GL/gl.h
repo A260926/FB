@@ -254,6 +254,10 @@ typedef long GLintptr;
 #define GL_COMPILE             0x1300
 #define GL_COMPILE_AND_EXECUTE 0x1301
 
+/* Selection modes */
+#define GL_RENDER 0x1C00
+#define GL_SELECT 0x1C01
+
 /* Errors */
 #define GL_NO_ERROR          0
 #define GL_INVALID_ENUM      0x0500
@@ -667,6 +671,14 @@ void glCallList(GLuint list);
 void glCallLists(GLsizei n, GLenum type, const GLvoid *lists);
 void glListBase(GLuint base);
 GLboolean glIsList(GLuint list);
+
+/* Selection (name-based picking, GL_SELECT render mode) */
+void glSelectBuffer(GLsizei size, GLuint *buffer);
+GLint glRenderMode(GLenum mode);
+void glInitNames(void);
+void glPushName(GLuint name);
+void glPopName(void);
+void glLoadName(GLuint name);
 
 #ifdef __cplusplus
 }
