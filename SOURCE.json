@@ -1,0 +1,296 @@
+{
+  "repo": "https://github.com/mltframework/mlt",
+  "commit": "2a51ed9cca0b7edca5f1c34749bad67b76b0051a",
+  "license": "LGPL-2.1-or-later",
+  "scope": "Unmodified framework, CPU luma/composite and original timewarp context; conform implementation absent. The build uses framework only.",
+  "upstream_files": [
+    {
+      "path": "src/framework/mlt.h",
+      "sha256": "7d107108a2f8d5c67a040519fac5629a8d84a986b44e717b0499c637db3aacda"
+    },
+    {
+      "path": "src/framework/mlt_animation.c",
+      "sha256": "e135218f6367a9c60756af9d941caf4a78325934cae05e8967c85b144ba1b126"
+    },
+    {
+      "path": "src/framework/mlt_animation.h",
+      "sha256": "6b7c162b71f500f6c38609546be8307d69ea5a74bbf49f8da79ff874f9751da2"
+    },
+    {
+      "path": "src/framework/mlt_audio.c",
+      "sha256": "1188e6803720e0ac248e2e87a8dd6d9dd598b016b8cef64fcbcc265c81133e04"
+    },
+    {
+      "path": "src/framework/mlt_audio.h",
+      "sha256": "a235f1be1394fab866f370b67f1c3a2fe3ab4fde032bf70c244bdac45745b0d1"
+    },
+    {
+      "path": "src/framework/mlt_cache.c",
+      "sha256": "ff8c700656ccee6455593e57e33aec7683c232d28a0a5393def5bd40848ac4b4"
+    },
+    {
+      "path": "src/framework/mlt_cache.h",
+      "sha256": "60cbd3e25b9a19b74e5ab507aca419d089327de98ba73b75b810ba16ca1b212f"
+    },
+    {
+      "path": "src/framework/mlt_chain.c",
+      "sha256": "1c763a921954a776dfb95ff366b76bd0949375afef1f1c7385ed64a799f23839"
+    },
+    {
+      "path": "src/framework/mlt_chain.h",
+      "sha256": "05a982e6f03e775d722231bec077dc43d78648a11f3739e7ac9e98982e961e04"
+    },
+    {
+      "path": "src/framework/mlt_config.h.in",
+      "sha256": "4b34feee79a6a8d5a85de492bc4d23a7dce7e662cfd68af01f4ee3ace32a0667"
+    },
+    {
+      "path": "src/framework/mlt_consumer.c",
+      "sha256": "3856053eb4ba05294823bd64619be6e7d9c22ea89186f2bd851f7e1b8e9098f1"
+    },
+    {
+      "path": "src/framework/mlt_consumer.h",
+      "sha256": "419618f547af7975479a55f9f03dfe1f2389e21d460982a97aaa8840f34c44a9"
+    },
+    {
+      "path": "src/framework/mlt_deque.c",
+      "sha256": "9cd6c838afd013b09eb71671f26b9084b0ae24d1b39fa27a4fe1ea1940f63b1d"
+    },
+    {
+      "path": "src/framework/mlt_deque.h",
+      "sha256": "067d78d266c498a06c16eb5006a321819a6160e447bd183bf138fd7dbf5aa5a3"
+    },
+    {
+      "path": "src/framework/mlt_events.c",
+      "sha256": "ce69dbca5db2d32c23350848afc98b2be5dd51ef9b433dfbd82cf5ebea9b8d1d"
+    },
+    {
+      "path": "src/framework/mlt_events.h",
+      "sha256": "a00eab08449bec0825c4b6aac76f04bc18a5ee3d24b9014f4d004200029f9a5a"
+    },
+    {
+      "path": "src/framework/mlt_factory.c",
+      "sha256": "48d445769acc5456f428452248f372a0c5f80480990a539978496795542d4aca"
+    },
+    {
+      "path": "src/framework/mlt_factory.h",
+      "sha256": "806971be6c0ef60c08917ae11d138023cc27967b238fa937b48567ada42daa7b"
+    },
+    {
+      "path": "src/framework/mlt_field.c",
+      "sha256": "289ecaf1da88f2043ae2a96bcf5f748f4589732649812e7d502460e878dc186d"
+    },
+    {
+      "path": "src/framework/mlt_field.h",
+      "sha256": "75f8cc6d66b0565cfd8770407c387cb71e1711081dc9e525fa101e27aa9257ad"
+    },
+    {
+      "path": "src/framework/mlt_filter.c",
+      "sha256": "ef5be6ede7eac4d9bef94cb846bcf05e0a901aae4f7afdecacfa7e9188e9135c"
+    },
+    {
+      "path": "src/framework/mlt_filter.h",
+      "sha256": "b0fdb26a27efc8c8187c441bde49250b7b112c0e1cecb45955c5563cda63567f"
+    },
+    {
+      "path": "src/framework/mlt_frame.c",
+      "sha256": "76f7d7ac0ec6ef436d0c7f46b747129bb0bdd4ea08e1aec4c70e1e2c140c2ef9"
+    },
+    {
+      "path": "src/framework/mlt_frame.h",
+      "sha256": "5e12e467d3c557dc87cee089b6648d7c9533fde3e9a87f3a3d6f8833dd4a54b8"
+    },
+    {
+      "path": "src/framework/mlt_image.c",
+      "sha256": "88c39670baf99cbe11edad5d8648b6152027c96361997827ffcb82fae58852d3"
+    },
+    {
+      "path": "src/framework/mlt_image.h",
+      "sha256": "1cb539b400c1adf88e33a0b421ac719dc1126300a01df3645ad89b02159e3f6f"
+    },
+    {
+      "path": "src/framework/mlt_link.c",
+      "sha256": "cceb873f074a53b23a1a1e5eb3b72362952b93e2e4cf6ada875be4dd86ddaf54"
+    },
+    {
+      "path": "src/framework/mlt_link.h",
+      "sha256": "b9b4b7048b9a798dd82d1ff669d2ab6beb98aecb5d94f707c0cb3347b131bea8"
+    },
+    {
+      "path": "src/framework/mlt_log.c",
+      "sha256": "5275fef75d36f8c05b84e0029df0c1b57798eeda70a92fcfaa267e4edb69ced6"
+    },
+    {
+      "path": "src/framework/mlt_log.h",
+      "sha256": "e97a2b47fe4bf950c56116d9cd6ccd6f48afa95e01ccc1e0fa200b4c52ff4e6f"
+    },
+    {
+      "path": "src/framework/mlt_luma_map.c",
+      "sha256": "31a3d59a9c67cbec4d374bb135a0832e40d7f035adbf5ad86c2b49c9f1198155"
+    },
+    {
+      "path": "src/framework/mlt_luma_map.h",
+      "sha256": "56541fb0b3d3bd1df27598470adde2a7b4240b952a90ee34f452004424d48b5b"
+    },
+    {
+      "path": "src/framework/mlt_multitrack.c",
+      "sha256": "b0649ea6704d7281a347e4fcf30bd28950009907e9fbbe9866469b81d2e56523"
+    },
+    {
+      "path": "src/framework/mlt_multitrack.h",
+      "sha256": "bb8a5843bbb50110f275e198806001aae927224e7bc634ce4ca33c411946f401"
+    },
+    {
+      "path": "src/framework/mlt_parser.c",
+      "sha256": "ca86ccb1f3f1a6433fbd12bd3566d31fe06fb1ff76fbaa9bcf35ece5d67b3ce8"
+    },
+    {
+      "path": "src/framework/mlt_parser.h",
+      "sha256": "5c128edbe922b1de3c8e5e20cf6f9fd65ec3d0782477cb3855d905ba1625cf0a"
+    },
+    {
+      "path": "src/framework/mlt_playlist.c",
+      "sha256": "40e707543773ef82ef7df303d6db0fa1de95b4df0f8edb203a93f908ccd28ba3"
+    },
+    {
+      "path": "src/framework/mlt_playlist.h",
+      "sha256": "be6081cd2f31bf4173bf9b3e0c2b5d47e7d3a1b13f7cb46305c2bdd310e484c3"
+    },
+    {
+      "path": "src/framework/mlt_pool.c",
+      "sha256": "ed28b6e609b50ba79113aa82b9c174ac789c82dfffcd3ba04c58d77b5cfc5732"
+    },
+    {
+      "path": "src/framework/mlt_pool.h",
+      "sha256": "e0ad0d8e41e3202246910c8153ca3dff38c6ac77d72b00e8ca1c3769eebd7e98"
+    },
+    {
+      "path": "src/framework/mlt_producer.c",
+      "sha256": "96547ca4e66fdb83c127dd75bc6881143547d624934a687c40e24897ef572404"
+    },
+    {
+      "path": "src/framework/mlt_producer.h",
+      "sha256": "926fdad420bdbdefbadc269a80d8736c5f3a570517739fd9eef4207253d24efc"
+    },
+    {
+      "path": "src/framework/mlt_profile.c",
+      "sha256": "e8ddc0bd8a14fecbf08b9e9dd12db657180e395f9741c2cff010ba5d114c5530"
+    },
+    {
+      "path": "src/framework/mlt_profile.h",
+      "sha256": "993b021ab90d519570fec97c3cdff95b583990386e6134212eadc515f8280ec0"
+    },
+    {
+      "path": "src/framework/mlt_properties.c",
+      "sha256": "7ea0e8af34455739617b82c6c737095f3ddc4137914e8ff5bc121e97b9005cb6"
+    },
+    {
+      "path": "src/framework/mlt_properties.h",
+      "sha256": "56e6c4da2b5b358a945481f6dcc7e1d73231066469ce641cae95ae618195f4af"
+    },
+    {
+      "path": "src/framework/mlt_property.c",
+      "sha256": "9713ec85df1d530d2648da311f42d3ff3d633050f643225ac98f2dd47747ae2b"
+    },
+    {
+      "path": "src/framework/mlt_property.h",
+      "sha256": "491c720c4e8e6e9396e6ed4e1ecd72cb8801f2a42c78939a0fca4ced900ebb84"
+    },
+    {
+      "path": "src/framework/mlt_repository.c",
+      "sha256": "56830005fd0487b700619994763abd51f1b4b35db80cb96de4f75343bb0d0d26"
+    },
+    {
+      "path": "src/framework/mlt_repository.h",
+      "sha256": "dfaa994c717b9e3f5962d24f02abdd8c9b83fecf58a6903e4db97e637bde6c35"
+    },
+    {
+      "path": "src/framework/mlt_service.c",
+      "sha256": "01488777e3489a0cb0d7df60d4b1452120feb6ef35ed211676d4cbc616e34d9c"
+    },
+    {
+      "path": "src/framework/mlt_service.h",
+      "sha256": "7e5000f0b48b4d49a5d06886d8536dd60f3e723efba6cd9319206bf592b5f45e"
+    },
+    {
+      "path": "src/framework/mlt_slices.c",
+      "sha256": "39881115360d5c7d28663cced661b9e11c150d49e76bc57cca17881a40f17bc5"
+    },
+    {
+      "path": "src/framework/mlt_slices.h",
+      "sha256": "d09c05089dbba58afaa2e3992e84ed1c5b0140f8062aaf5df447b0af7661f1d3"
+    },
+    {
+      "path": "src/framework/mlt_tokeniser.c",
+      "sha256": "1345942822b5d75ca6a6a424af749380a971c34f31dfa60b4a26afa7ed87b795"
+    },
+    {
+      "path": "src/framework/mlt_tokeniser.h",
+      "sha256": "c04fdf6444e97a60a985560cbfe8e4da2ad1ea9d33615e8d0c5ec3bad31f7e1b"
+    },
+    {
+      "path": "src/framework/mlt_tractor.c",
+      "sha256": "ef47dc622a5d096d9baccd75c73c52d7193a3a04a491ff60204cd52378bd9b44"
+    },
+    {
+      "path": "src/framework/mlt_tractor.h",
+      "sha256": "c991820575079a11181bd1f238fc3f679197b9633bc29e1ce5ac7a5c54747575"
+    },
+    {
+      "path": "src/framework/mlt_transition.c",
+      "sha256": "23605be3170eef80733845c1a2ddd8862ba2e55aa1668a1cd9d8107a53ae8909"
+    },
+    {
+      "path": "src/framework/mlt_transition.h",
+      "sha256": "90f31f47e1185537baea15085e4aaf76ce28186cf21531ce0c31244e48973a1b"
+    },
+    {
+      "path": "src/framework/mlt_types.c",
+      "sha256": "97a4a617f64916ff8037f253a1a3be4acbff67fed332e245d4dfa212ad937e4a"
+    },
+    {
+      "path": "src/framework/mlt_types.h",
+      "sha256": "106db387f448c9e5cff3933fb3bfc76fbf189b1e5379387dca4cf8eb44a52f85"
+    },
+    {
+      "path": "src/framework/mlt_version.c",
+      "sha256": "f5083b16e88c1a6bd5e93f67075f947559f4c8290bc66c42cce87646c38e77b8"
+    },
+    {
+      "path": "src/framework/mlt_version.h",
+      "sha256": "37b6cef6dc146def76ea38577eb69d21edc00f6a0b89dcdbf9a83befeb899c98"
+    },
+    {
+      "path": "COPYING",
+      "sha256": "592987e8510228d546540b84a22444bde98e48d03078d3b2eefcd889bec5ce8c"
+    },
+    {
+      "path": "src/modules/core/transition_luma.c",
+      "sha256": "dbcff698cf247be51dba792817c0e9119c5c588880a199e93bf7361ef9cf007c"
+    },
+    {
+      "path": "src/modules/core/transition_composite.c",
+      "sha256": "e5c54cfccb0cd4554ad9ef5724e7f6d0226266edb7ebf22af298bd5962cf80b7"
+    },
+    {
+      "path": "src/modules/core/transition_composite.h",
+      "sha256": "cbc2c0e27a2d251d9882669f5c1bef4ddc14f6623fca6aa99a79a6e51bc0457d"
+    },
+    {
+      "path": "src/modules/core/producer_timewarp.c",
+      "sha256": "7edaf50bf14ca41755754849636918e8cffbdd0ec48c6a2787396dd5b7976e69"
+    }
+  ],
+  "excluded": [
+    "upstream .gitmodules and glaxnimate gitlink (never configured or built)",
+    "other modules requiring optional third-party dependencies",
+    "bindings, upstream tests, GUI and external media, upstream top-level build tooling"
+  ],
+  "gitlinks": [
+    {
+      "path": "src/modules/glaxnimate/glaxnimate",
+      "commit": "56c4a3d97978668c41a2fdca8f3b33ed93b06ab1",
+      "included": false
+    }
+  ]
+}
