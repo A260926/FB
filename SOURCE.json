@@ -1,0 +1,447 @@
+{
+  "repo": "https://github.com/jarikomppa/soloud",
+  "commit": "e82fd32c1f62183922f08c14c814a02b58db1873",
+  "license": "Zlib",
+  "files": [
+    {
+      "path": "AUTHORS",
+      "mode": "100644",
+      "git_object": "e8a1b8ebd389b038a8676a4abda51cc407bcb3e9",
+      "sha256": "93c9637db9f080aabd9006e4629f007a0f013e27c9bdb8efb43473b53289aed0"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_object": "45e5942f89e980c320468c61e6aa49e91c8dec45",
+      "sha256": "27e5dfcca945edeff8ed2ac9808baf53ab6c34cfae5d87b48410181b5af57968"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_object": "97234309c92d2685e647df2c5e5dbb3c972bce75",
+      "sha256": "1cbab42d56837a912c895751926725b7f469cd30f871c21778b10809c32898e2"
+    },
+    {
+      "path": "docsrc/basics.mmd",
+      "mode": "100644",
+      "git_object": "6219f965d2c516c9cf226bb7aa0ac16a979658d8",
+      "sha256": "d98eb46c6620d8e17b08c1c31a1e81992e20612375d0b95163526770412074f1"
+    },
+    {
+      "path": "docsrc/newsoundsources.mmd",
+      "mode": "100644",
+      "git_object": "ce03d2660f76905522e7723771364d4531cedc44",
+      "sha256": "5d88eda8ddb422d68eb0b6221f2c208b9a711c91bfa0ff8911ccb92ef3ef964d"
+    },
+    {
+      "path": "docsrc/wavstream.mmd",
+      "mode": "100644",
+      "git_object": "545a9d9346f8f458b2e98be27e4c0ee879165c06",
+      "sha256": "b5e93d1809773ca9ba8282bfeb5e86e2c556e44a0a3fb6e55a8e0ebe504a23f0"
+    },
+    {
+      "path": "include/soloud.h",
+      "mode": "100644",
+      "git_object": "e3b47d8e57c2b5c91887d315827f6657cf8a0844",
+      "sha256": "9a8cd2ef2b9f4d99f6b60addabf837825647144add9cfcb72349e3844345505a"
+    },
+    {
+      "path": "include/soloud_audiosource.h",
+      "mode": "100644",
+      "git_object": "c155705f82ab57cda50030a3ecc5faa0f679dc08",
+      "sha256": "f696954548f8aaf8ccd075f53a423a9af0c58ce04470b78d84153da68404adac"
+    },
+    {
+      "path": "include/soloud_ay.h",
+      "mode": "100644",
+      "git_object": "d683530f9e2746f1df27436eb0d7ff517927566a",
+      "sha256": "3db1501f549de325571a8d11ba1b54f8fc6bacb07c754e40b89c1a294449b295"
+    },
+    {
+      "path": "include/soloud_bassboostfilter.h",
+      "mode": "100644",
+      "git_object": "074f745899a208fd4ec0e4cfe42c71b40d65295d",
+      "sha256": "3b693b6d12b5df607c2bb01842588b24c97e3f36595e22551e1a90256d49d66e"
+    },
+    {
+      "path": "include/soloud_biquadresonantfilter.h",
+      "mode": "100644",
+      "git_object": "53cfe66dd23ce49d6c317cb748eb229779d3e68a",
+      "sha256": "e564dd682039516dfe1181ba2c0d5c345d658fb27dfc24a5e085318f52a5c06b"
+    },
+    {
+      "path": "include/soloud_bus.h",
+      "mode": "100644",
+      "git_object": "dd8de45ab7f65319c3a027cb6b45e521dfaf4345",
+      "sha256": "ca07542288d1da5f2c56fee9184a12feef04ef1ba0c87f27c03bcf64aa160583"
+    },
+    {
+      "path": "include/soloud_c.h",
+      "mode": "100644",
+      "git_object": "bac939cc95a9b0077d055f979a27d56720c961d4",
+      "sha256": "51ad0ce09c508d64e4dd7cda78e3e1dcc11129ff23118b3fb5fad891e58a168d"
+    },
+    {
+      "path": "include/soloud_dcremovalfilter.h",
+      "mode": "100644",
+      "git_object": "77e044c8f6ed8fd8a86fc2e6c65016f2d5a6a188",
+      "sha256": "89e8e645e07424229e10de538a56bc1972f43a8b1693682d32cdf16669836ab1"
+    },
+    {
+      "path": "include/soloud_duckfilter.h",
+      "mode": "100644",
+      "git_object": "ed1297e6aaad4c5d04eda287365b75823fa890fb",
+      "sha256": "6d057a61f7c1fb098fc8c788bfa158e062725343555332540f4144d378f47564"
+    },
+    {
+      "path": "include/soloud_echofilter.h",
+      "mode": "100644",
+      "git_object": "e9fae3b5a3f99a68ea473640bfb781d498009569",
+      "sha256": "c3bfe21914d0673774cdd1c82aa1003b35ce0b6d7d286bd85a6dac4aad3ea6cb"
+    },
+    {
+      "path": "include/soloud_eqfilter.h",
+      "mode": "100644",
+      "git_object": "b858a950f81130d39a97ca728da099616cf58697",
+      "sha256": "18eebdf5a14d7535a339b2d2c57c6b8d1729aa19c2137576a6cdf2af58b55847"
+    },
+    {
+      "path": "include/soloud_error.h",
+      "mode": "100644",
+      "git_object": "1379f8e52ccb5521206c4834932a30fd3104279d",
+      "sha256": "803ff887572b26435e437561b24d7eb96d6569424992d61ad3e6e4aad9c07fe0"
+    },
+    {
+      "path": "include/soloud_fader.h",
+      "mode": "100644",
+      "git_object": "bd1c93efa0bf265bf5d18a3d1c6c1685250526ca",
+      "sha256": "86f1906c76c85153d73bab49403af95c721b74756260e114b0dc02608be9c534"
+    },
+    {
+      "path": "include/soloud_fft.h",
+      "mode": "100644",
+      "git_object": "dd544880aba2c4ecae542ebda0807e3ce8df811f",
+      "sha256": "36f5f650e845fb296d0fb22d24b3c272199abccd96a852cd0b45b5b1d0cef871"
+    },
+    {
+      "path": "include/soloud_fftfilter.h",
+      "mode": "100644",
+      "git_object": "01378b83d72bde27838ee8a0d3427c50d4095bed",
+      "sha256": "d086bffdc063f8dfdbf5582abdfc1dd30f061e5515e9c5bcd43137d97da6de3a"
+    },
+    {
+      "path": "include/soloud_file.h",
+      "mode": "100644",
+      "git_object": "e01f83a2226274992b89e9c368a1553e9d794bc0",
+      "sha256": "f91011e368c69c0b49e8136bea1054d85925333d8d7bfdb16c4497550a73cc2e"
+    },
+    {
+      "path": "include/soloud_file_hack_off.h",
+      "mode": "100644",
+      "git_object": "4433ffcd3a7fd7f5ea0de3768e254a797ab42c7b",
+      "sha256": "40bb1682feeb5f3382c87d7866b264e063334b818a41a85bf160ab0198239e7b"
+    },
+    {
+      "path": "include/soloud_file_hack_on.h",
+      "mode": "100644",
+      "git_object": "50a6b593fc9b20004d1c30fceed2b698a6a6daa7",
+      "sha256": "0a8881398aa21894b02e08b02310003da66b7a759b54ea24678aca68d8b3cbda"
+    },
+    {
+      "path": "include/soloud_filter.h",
+      "mode": "100644",
+      "git_object": "a21c2909ab5446795ea67e1de4a9f07edf7df312",
+      "sha256": "686855a16ea9eed551385c690eec5e088d657ba6737f4780f338b4fb46f7c9c5"
+    },
+    {
+      "path": "include/soloud_flangerfilter.h",
+      "mode": "100644",
+      "git_object": "d28dd9647875c8430942c4fa7a20a6a2bfc2740e",
+      "sha256": "f8cbae00002f039c7bd88c4afb667ab4dd6d75ef0a9f40de13b5ef41ed4359bb"
+    },
+    {
+      "path": "include/soloud_freeverbfilter.h",
+      "mode": "100644",
+      "git_object": "b5e0146562c5a256fa3cf914a1b8f2a501cf9ad0",
+      "sha256": "c3b1f93cafb25d3bb4a47d07817aec71415a2ddc57d954878bc17b03ae7fafc7"
+    },
+    {
+      "path": "include/soloud_internal.h",
+      "mode": "100644",
+      "git_object": "c0589abd76b9a579deb43772dca7ecf47bf0a76f",
+      "sha256": "b9662a226d575ca61c33af9c9e1f010be162dfa976c7e49ad23f2c80d1f7d390"
+    },
+    {
+      "path": "include/soloud_lofifilter.h",
+      "mode": "100644",
+      "git_object": "be3d594bb60aa38361cc65ddf67f0985d00deb99",
+      "sha256": "d1675ebe735b4d187645387adc8c5b4a83b74c80ac2ca38ac4568bf53ed1f0b3"
+    },
+    {
+      "path": "include/soloud_misc.h",
+      "mode": "100644",
+      "git_object": "a50630f2c434bbba83c68448e8064f60b7dc6123",
+      "sha256": "9aa74b3dd15ad2170b90358397f59123c15d5deb110b496608b059d4d70473b1"
+    },
+    {
+      "path": "include/soloud_monotone.h",
+      "mode": "100644",
+      "git_object": "dd0440aff91921d338b4d9f8bdaa3045d4fc81b4",
+      "sha256": "274294ddc5254edbc496813c84fdf2929b4ebff793d2923b73add5204f7c017e"
+    },
+    {
+      "path": "include/soloud_noise.h",
+      "mode": "100644",
+      "git_object": "48f5088a30d21a36f5ba010b3f66cbbc6af79b18",
+      "sha256": "18d90216961135705e7e01d5dc5a33202eab5ff9c559a9e5718af503d903c89f"
+    },
+    {
+      "path": "include/soloud_openmpt.h",
+      "mode": "100644",
+      "git_object": "5c7a2b42fbd9715a7efcb9fe64cbaeae041dbb21",
+      "sha256": "fb08b7304fd565068ce9b35f7fb29e9476b572527dccb53e178aba84ee6a3146"
+    },
+    {
+      "path": "include/soloud_queue.h",
+      "mode": "100644",
+      "git_object": "0491f56321a9963fede29c47fda5f29c9915dcc3",
+      "sha256": "5cde53a81e1e929d072eae491178236c4aa48de234e2f3ffc234b64b371f6ff6"
+    },
+    {
+      "path": "include/soloud_robotizefilter.h",
+      "mode": "100644",
+      "git_object": "735e3325f441223154d568d03f409aba45f0298a",
+      "sha256": "393675ab52dede698d41c6e6b4ba073eda8bd50e3ad925c1730348b6ede319d7"
+    },
+    {
+      "path": "include/soloud_sfxr.h",
+      "mode": "100644",
+      "git_object": "b8ae4427dc88c943215003582dea709a1b691e69",
+      "sha256": "536c952a733c9e2ab175d42ab1dff77138d143c88964b6a84bd4b649dd720ebc"
+    },
+    {
+      "path": "include/soloud_speech.h",
+      "mode": "100644",
+      "git_object": "fa7436c8159754fc60a69ba6a505c9687cbace70",
+      "sha256": "0a00ad3a8c49c43a0010694b768403b2f27e2b007403d7ebb203b4f24b7f30a6"
+    },
+    {
+      "path": "include/soloud_tedsid.h",
+      "mode": "100644",
+      "git_object": "1b28e30e808d5bc80b4dcafffe7bb167f15451fd",
+      "sha256": "b67dc71958beaaa482356f9ed010d9e8f9ec113c5a01a5e884e7f70d7cbc4da4"
+    },
+    {
+      "path": "include/soloud_thread.h",
+      "mode": "100644",
+      "git_object": "566468998916ab43589371a99dc5a4479e63bd28",
+      "sha256": "269fedb245d2b7760e6fe1e4c75fdf3c284efa00c6e715182f1d58c387515fbd"
+    },
+    {
+      "path": "include/soloud_vic.h",
+      "mode": "100644",
+      "git_object": "ef6b4860da2a1957b449bb315965b4d9312e99d0",
+      "sha256": "5e82a29fa6dda317a13f41bcd6695d71dc693dc7e1f6ca7c602e66d8cbab010b"
+    },
+    {
+      "path": "include/soloud_vizsn.h",
+      "mode": "100644",
+      "git_object": "96e9b08331b0089e5121944b2a8b309c9a3c6e4b",
+      "sha256": "81b639033d1ee8051f551290a012df014658c8578ddea05e7e63d1ed60a45981"
+    },
+    {
+      "path": "include/soloud_wav.h",
+      "mode": "100755",
+      "git_object": "ab3be0bc91be0926d2fcbd417aa31415282eba93",
+      "sha256": "6e923c1d40e00d1baccb7ebceb08b0826a90d8906688f9150041d27b936fc3c6"
+    },
+    {
+      "path": "include/soloud_waveshaperfilter.h",
+      "mode": "100644",
+      "git_object": "6b6791c23b3d375725796362743f963b2d28d369",
+      "sha256": "8b097926160d616a606fa4e094f411bdf4942636370bcf5647555905aa277ab8"
+    },
+    {
+      "path": "include/soloud_wavstream.h",
+      "mode": "100644",
+      "git_object": "c3ae8d9cc0d4810f0a3880a984134140cb07666f",
+      "sha256": "e34eb68bfc21e017b0fa6161981eb11bfaa303d2f8180c818a2af4b45daf8241"
+    },
+    {
+      "path": "include/zx7decompress.h",
+      "mode": "100644",
+      "git_object": "3c388aafdb7fb41cb172a092c760f2edf8c44dd4",
+      "sha256": "ec3ffa26a09c75b794f7a28c4100f4580b5e3eec2af9995d40d302bd0dcb64e6"
+    },
+    {
+      "path": "src/audiosource/wav/dr_flac.h",
+      "mode": "100644",
+      "git_object": "e0b3649a20b2d9deef35f8e1d215dd8db7d52812",
+      "sha256": "42a92848af4665e032e67a48a6ee0a8a577ca5adf4e1ff758d8ab1d8e9abdb71"
+    },
+    {
+      "path": "src/audiosource/wav/dr_impl.cpp",
+      "mode": "100644",
+      "git_object": "fa152e17a88575f39d96cb5015b027946268fcc9",
+      "sha256": "167bdca53c59dedef93fd5718fb109f0bd4250c5c01c8a4f87c29e3907849b9f"
+    },
+    {
+      "path": "src/audiosource/wav/dr_mp3.h",
+      "mode": "100644",
+      "git_object": "7d752d0729b6a87cec6d1f4cec042c32729a8952",
+      "sha256": "ecd36b0a325b771f677b5f36b86dbd250c4ef0356480a01d8ec74f68860fc991"
+    },
+    {
+      "path": "src/audiosource/wav/dr_wav.h",
+      "mode": "100644",
+      "git_object": "fed528fb78c7771337919ea2ce5657864265d238",
+      "sha256": "6c001cfc88477ecc18bdd01c449beafc267807f37cd8d542abe8fd20a382492e"
+    },
+    {
+      "path": "src/audiosource/wav/soloud_wav.cpp",
+      "mode": "100755",
+      "git_object": "5c6b3c32b4e5947b18a85dad20c4ecb5467c37d5",
+      "sha256": "200fb32f810afd8c3e521e1c3ef80ca6cb20cb4139970b8ad60aa6777d4cfc26"
+    },
+    {
+      "path": "src/audiosource/wav/soloud_wavstream.cpp",
+      "mode": "100644",
+      "git_object": "3ced545a9aab80c6354ef323ff79d267063d5847",
+      "sha256": "fae5f501bf6546bf485e1effa5734ec08f5e4b82a3ca1955f2c41353838d81fa"
+    },
+    {
+      "path": "src/audiosource/wav/stb_vorbis.c",
+      "mode": "100644",
+      "git_object": "a6916ea6b1c7abaae342d8fee80eb90a70f324e0",
+      "sha256": "6c8e2a82f417444c717f2502d29ec64362b60734138bcb76643696baef7a6780"
+    },
+    {
+      "path": "src/audiosource/wav/stb_vorbis.h",
+      "mode": "100644",
+      "git_object": "90a1570c330dce0c357d986419d35b9c25b2a96d",
+      "sha256": "45cdec861bdb49a29e734e5e18c2be0251741dee9cce9fe521b7c65daf01f84a"
+    },
+    {
+      "path": "src/backend/null/soloud_null.cpp",
+      "mode": "100644",
+      "git_object": "499a8d17908b5666f4b8d299776ba50391368665",
+      "sha256": "2423033dda2a01668880ce8fcc202b844716be4e271d2352cc0e1dc744196f17"
+    },
+    {
+      "path": "src/core/soloud.cpp",
+      "mode": "100644",
+      "git_object": "e25445720796c65a833186a2b92f826de292f168",
+      "sha256": "9bf84f79163ffb988642158091db742cd019432b8c3a1f6393a002aafbfd8d63"
+    },
+    {
+      "path": "src/core/soloud_audiosource.cpp",
+      "mode": "100644",
+      "git_object": "3123f8f93c7498dcf095bad0c7d6a3f15ab083d1",
+      "sha256": "feedf0966c84944c235bc1e52005ab809b4b1a341fec1074bc53451c644f2929"
+    },
+    {
+      "path": "src/core/soloud_bus.cpp",
+      "mode": "100644",
+      "git_object": "60754e70afa99c9d8d1cba42a298921f4a67fe5e",
+      "sha256": "d6006e799948d9b02024987cbf4e4b191846199125173e108c181747ab27fa61"
+    },
+    {
+      "path": "src/core/soloud_core_3d.cpp",
+      "mode": "100644",
+      "git_object": "6894428878aa3f8e6bee56cc3a738d8ef0af7ce3",
+      "sha256": "c0918e5f4045e7c307f147e9d88bcaab87bbec1f57e7a9298c960ce528702b52"
+    },
+    {
+      "path": "src/core/soloud_core_basicops.cpp",
+      "mode": "100644",
+      "git_object": "626c483fc6a67d6c7fa55e1840a30c1929d0b803",
+      "sha256": "81197fcebfd89ceec3d4730cb9bbf6ca7ca3badcee0c8d5757e04bb0284f2e37"
+    },
+    {
+      "path": "src/core/soloud_core_faderops.cpp",
+      "mode": "100644",
+      "git_object": "1f68847accb0486f19e12d1f08f75a8df2bc7cb7",
+      "sha256": "36b235bc490d689f8eb6480cb34863a7106d72cf4f685d595ccc0c11dc6136e8"
+    },
+    {
+      "path": "src/core/soloud_core_filterops.cpp",
+      "mode": "100644",
+      "git_object": "93d562cb522ea8433ea669bb0b9c8e8ad4fee3b9",
+      "sha256": "4f91117bafe67ecd9b162c7664b9a299a4ebe11526e455ea8cc141d3436cab4d"
+    },
+    {
+      "path": "src/core/soloud_core_getters.cpp",
+      "mode": "100644",
+      "git_object": "2fca9a6c72ac18afa67cc74bfa89eb5888b34fe2",
+      "sha256": "beffeb63fb5a4b5693f4737fde9baa865574e4cd7e95467adce05db3e629c315"
+    },
+    {
+      "path": "src/core/soloud_core_setters.cpp",
+      "mode": "100644",
+      "git_object": "718ff8ec1026e99f50602d8ac81d7f936894cb1b",
+      "sha256": "75f89e8d2402cf71aae22cb2aae97193273ae6fcaddbaf7e55a6221250949015"
+    },
+    {
+      "path": "src/core/soloud_core_voicegroup.cpp",
+      "mode": "100644",
+      "git_object": "6d5f4328fdf329af3b66fda9f733c7fb26523ffd",
+      "sha256": "4a6cf2c7f82ec566b9af924d76425eafeb1bf5ee8edfaa5cafdd82a2f1b7c6a6"
+    },
+    {
+      "path": "src/core/soloud_core_voiceops.cpp",
+      "mode": "100644",
+      "git_object": "bb39fbe3db75d25ade1539adcf6749aca62ce42d",
+      "sha256": "7ea373adcd9b5c7e37e9e45280c1f891cf53039ba49a4cc9456250abfd704891"
+    },
+    {
+      "path": "src/core/soloud_fader.cpp",
+      "mode": "100644",
+      "git_object": "79f1278cb255a31955c60966c6d52d90e6836c6b",
+      "sha256": "4b76497e7ea3cb0b08290d498a3df9376e7d9dff7fd2d7b720ae0c771b093180"
+    },
+    {
+      "path": "src/core/soloud_fft.cpp",
+      "mode": "100644",
+      "git_object": "fb566ef8d22ea6d047ce6f3ccba2eccfef37c281",
+      "sha256": "bc03be01602e3f1ac53f037b825edece43414da6451ed8b822c20d7c2bd137ce"
+    },
+    {
+      "path": "src/core/soloud_fft_lut.cpp",
+      "mode": "100644",
+      "git_object": "cfbefa5fd504be452aaffce1a46451088e284e6d",
+      "sha256": "d8bdf5fabd84edab9ed6441a0e67ce6192de4a8c6ec00c885a5d1dbfbf343a79"
+    },
+    {
+      "path": "src/core/soloud_file.cpp",
+      "mode": "100644",
+      "git_object": "865bf3f0ead788cfefbfd8729580b378c26c495f",
+      "sha256": "c52283b8ff2e921953ff47e3bb31c36138d94cc92718b9d2acf0176382f512dc"
+    },
+    {
+      "path": "src/core/soloud_filter.cpp",
+      "mode": "100644",
+      "git_object": "2e52f04e4023d12939aabbd63c3c1dc4947c2818",
+      "sha256": "57d40f980d6d62237526440d52077293b8d9889b4902c11d7e2b08449c117bfc"
+    },
+    {
+      "path": "src/core/soloud_misc.cpp",
+      "mode": "100644",
+      "git_object": "bd295e433e7f78cd9ddb3315a970f353ab092c53",
+      "sha256": "c0447b1641940c5b8826f5033280ee19669a2260f38b1eb03d5a651c1f7075ed"
+    },
+    {
+      "path": "src/core/soloud_queue.cpp",
+      "mode": "100644",
+      "git_object": "b2d1f5aaf1f4df296c4f036c35ab0002108d33f5",
+      "sha256": "0c7b9d32f2d14dfb0ef832f05c5fc23b053fef5a8f5c513836556f5ff06d754f"
+    },
+    {
+      "path": "src/core/soloud_thread.cpp",
+      "mode": "100644",
+      "git_object": "d3dbe4fd653ef3c9e55cb9708034f5d6e4127a20",
+      "sha256": "f18fd3a69723d77e745b05cfa4cec66cfa429c61e87692d3dee4a5066059b354"
+    }
+  ],
+  "gitlinks": [],
+  "gitmodules": "Excluded unused ext/libmodplug descriptor; no gitlinks in fixed tree. No production logic changed."
+}

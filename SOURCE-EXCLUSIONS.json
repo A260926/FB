@@ -1,0 +1,1852 @@
+[
+  {
+    "path": ".gitignore",
+    "mode": "100644",
+    "git_object": "08319ee3d3fac7a9472a0314ca6932aadb018ee7"
+  },
+  {
+    "path": ".gitmodules",
+    "mode": "100644",
+    "git_object": "702fe750fce481e17147d5b7cf18ce5cfe08aad4"
+  },
+  {
+    "path": "CONTRIBUTING",
+    "mode": "100644",
+    "git_object": "ac2c61c8859b6d13913ae2f2ca4a185d6c6bf9ac"
+  },
+  {
+    "path": "PULL_REQUEST_TEMPLATE.md",
+    "mode": "100644",
+    "git_object": "a4260632edeb1c0712ebc4ce55ca79dacf54719c"
+  },
+  {
+    "path": "build/genie.lua",
+    "mode": "100644",
+    "git_object": "572187a957a894eac44f58d2c3ff29b6b728e60b"
+  },
+  {
+    "path": "build/readme.txt",
+    "mode": "100644",
+    "git_object": "57d304de71ceb9a8fb9ce1e79fbe7be8e6b8f724"
+  },
+  {
+    "path": "build/soloud_devel.bat",
+    "mode": "100644",
+    "git_object": "55dc81b3ad2f9615c247870c5479bae2048ef973"
+  },
+  {
+    "path": "contrib/CMakeLists.txt",
+    "mode": "100644",
+    "git_object": "3997ed57151b677e6a32cd2db43266fc86e39017"
+  },
+  {
+    "path": "contrib/Configure.cmake",
+    "mode": "100644",
+    "git_object": "bd68ab5d978a61fbb7628c4b37ef00b52e1bdcda"
+  },
+  {
+    "path": "contrib/README.md",
+    "mode": "100644",
+    "git_object": "f944048bb385fb4e0b9139b5e2917aa254cdf5bf"
+  },
+  {
+    "path": "contrib/cmake/FindSDL2.cmake",
+    "mode": "100644",
+    "git_object": "e43d0766956b716e153559bb02152fcb48ec1679"
+  },
+  {
+    "path": "contrib/cmake/Install.cmake",
+    "mode": "100644",
+    "git_object": "bc2d65275702076c7245c30d7cc35cce5b364e9d"
+  },
+  {
+    "path": "contrib/cmake/InstallExport.cmake",
+    "mode": "100644",
+    "git_object": "a9fa0a8aa9da2967d7ccaa77e3fdf2b0d4fde173"
+  },
+  {
+    "path": "contrib/cmake/OptionDependentOnPackage.cmake",
+    "mode": "100644",
+    "git_object": "88cd3f6e0e97c369d831302e170d02e92869c09e"
+  },
+  {
+    "path": "contrib/cmake/PrintOptionStatus.cmake",
+    "mode": "100644",
+    "git_object": "dc525a8c5b0c3920761e6e618ac415477d2588d8"
+  },
+  {
+    "path": "contrib/demos.cmake",
+    "mode": "100644",
+    "git_object": "43f11442e254369924ccff830c91c84bf924763f"
+  },
+  {
+    "path": "contrib/gen_glue.cmake",
+    "mode": "100644",
+    "git_object": "dc82c2b992f987e9b505718a8ff3161d563f7c72"
+  },
+  {
+    "path": "contrib/src.cmake",
+    "mode": "100644",
+    "git_object": "831fe7556620814fd621d1fbed011bc25e667ebe"
+  },
+  {
+    "path": "demos/android/default.properties",
+    "mode": "100644",
+    "git_object": "8010039f327da569d21e0307e13cebc6a1f84214"
+  },
+  {
+    "path": "demos/android/jni/Android.mk",
+    "mode": "100644",
+    "git_object": "1dbd16e0143b992626ae2f4c92e247ba0c212320"
+  },
+  {
+    "path": "demos/android/jni/Application.mk",
+    "mode": "100644",
+    "git_object": "a304c8f2e5eab64d49e94b1a13ff11d29694e2a2"
+  },
+  {
+    "path": "demos/android/jni/main.cpp",
+    "mode": "100644",
+    "git_object": "6ff8f6d15cc3059f8b5ac5868cc91b9cd33aae8e"
+  },
+  {
+    "path": "demos/c_test/main.c",
+    "mode": "100644",
+    "git_object": "c69efa43e0e8c924bea7b5b71a39f2960f17fe0d"
+  },
+  {
+    "path": "demos/common/glew/GL/LICENSE.txt",
+    "mode": "100644",
+    "git_object": "f7078042e95053d8e5b28a9d2024f43ddddfe89d"
+  },
+  {
+    "path": "demos/common/glew/GL/README.txt",
+    "mode": "100644",
+    "git_object": "ae0be24e9ec01f92ed2d59e6620d2721675b7b1a"
+  },
+  {
+    "path": "demos/common/glew/GL/glew.c",
+    "mode": "100644",
+    "git_object": "6c745da8ac934da3f1b53802c1274db83a9d3c83"
+  },
+  {
+    "path": "demos/common/glew/GL/glew.h",
+    "mode": "100644",
+    "git_object": "9afa5c6759f6e4e47aedcbfb9e7ec177eae6024f"
+  },
+  {
+    "path": "demos/common/glew/GL/glxew.h",
+    "mode": "100644",
+    "git_object": "ca6cf8f1b1928f30797a4ac1cdc3895dc94d6d4c"
+  },
+  {
+    "path": "demos/common/glew/GL/wglew.h",
+    "mode": "100644",
+    "git_object": "650b34c2574532e8564813cfeac353f8b5535070"
+  },
+  {
+    "path": "demos/common/imgui/LICENSE.txt",
+    "mode": "100644",
+    "git_object": "21b6ee7e2a45c29709bacb429dfecebee270839d"
+  },
+  {
+    "path": "demos/common/imgui/imconfig.h",
+    "mode": "100644",
+    "git_object": "afa54914c751884a0b04910ef258d3dfb911d708"
+  },
+  {
+    "path": "demos/common/imgui/imgui.cpp",
+    "mode": "100644",
+    "git_object": "a0eb2d70d6c76e3f5582d25087d03bdcdd88e859"
+  },
+  {
+    "path": "demos/common/imgui/imgui.h",
+    "mode": "100644",
+    "git_object": "1cfd7e697fa85664bbe174e470b4b5db973f0f1f"
+  },
+  {
+    "path": "demos/common/imgui/imgui_demo.cpp",
+    "mode": "100644",
+    "git_object": "ec9fc08e9b9014d87feabcd61f9e924280791718"
+  },
+  {
+    "path": "demos/common/imgui/imgui_draw.cpp",
+    "mode": "100644",
+    "git_object": "10051c4fbd2e3e1c1047a95bcf19d9830c27e425"
+  },
+  {
+    "path": "demos/common/imgui/imgui_internal.h",
+    "mode": "100644",
+    "git_object": "168d337b96f1fdc2341efbf727ca33d4cfeaf3ab"
+  },
+  {
+    "path": "demos/common/imgui/stb_rect_pack.h",
+    "mode": "100644",
+    "git_object": "c75527da1e082805aa994d347416277dfafa4f9c"
+  },
+  {
+    "path": "demos/common/imgui/stb_textedit.h",
+    "mode": "100644",
+    "git_object": "4b731a0c22957691546a82e3da61b97ec815551c"
+  },
+  {
+    "path": "demos/common/imgui/stb_truetype.h",
+    "mode": "100644",
+    "git_object": "92b9a875478fca8e5bd58d26ba3514015c2b37c8"
+  },
+  {
+    "path": "demos/common/soloud_demo_framework.cpp",
+    "mode": "100644",
+    "git_object": "826dcd2f1a2f62416cf5dda145f7cd8c48c06c52"
+  },
+  {
+    "path": "demos/common/soloud_demo_framework.h",
+    "mode": "100644",
+    "git_object": "1d204e8892d522d4163c1322025b89fe4ef6bfbf"
+  },
+  {
+    "path": "demos/common/stb_image.h",
+    "mode": "100644",
+    "git_object": "d6569379e9e3e80e9dd887274bdd309be768bd41"
+  },
+  {
+    "path": "demos/console/generated.inc",
+    "mode": "100644",
+    "git_object": "0f85cd1fe1fa39389a193677dd0973c8ffeabc68"
+  },
+  {
+    "path": "demos/console/main.cpp",
+    "mode": "100644",
+    "git_object": "466c8d1db28a5ea8c429af53a728b77fc0052920"
+  },
+  {
+    "path": "demos/emscripten/build_monotone",
+    "mode": "100644",
+    "git_object": "da7ef10e0c7c0fffcc0cc2e03958f4ed5f24fc8c"
+  },
+  {
+    "path": "demos/emscripten/build_piano",
+    "mode": "100644",
+    "git_object": "268c56533cb6b00da3ebda2c8ffc46c178a52fec"
+  },
+  {
+    "path": "demos/enumerate/main.cpp",
+    "mode": "100644",
+    "git_object": "662a6716213c7b619d49d1e0faba96afae768d81"
+  },
+  {
+    "path": "demos/env/main.cpp",
+    "mode": "100644",
+    "git_object": "9e463dfaae50bc678fc4d1477a8f9b6a063d0fe8"
+  },
+  {
+    "path": "demos/glue/cs/hello.cs",
+    "mode": "100644",
+    "git_object": "0e9a731f34a1de64bccc7bec4ab96e6496d5a208"
+  },
+  {
+    "path": "demos/glue/gamemaker/hello.txt",
+    "mode": "100644",
+    "git_object": "47bcfb598a070c73ceeb76cb3b37deaea2f5eff7"
+  },
+  {
+    "path": "demos/glue/python/test_gfx.py",
+    "mode": "100644",
+    "git_object": "f3d6fb967ff253a079ac7c570bac347421aa5d6b"
+  },
+  {
+    "path": "demos/glue/python/test_python.py",
+    "mode": "100644",
+    "git_object": "929a27081e67e8f62a8ffd484b32b6615ec1fa71"
+  },
+  {
+    "path": "demos/glue/rpgmaker/c_test.rb",
+    "mode": "100644",
+    "git_object": "dcd78c964bcfdc4b04ad814f2318b401030f6815"
+  },
+  {
+    "path": "demos/glue/rpgmaker/simplest.rb",
+    "mode": "100644",
+    "git_object": "1d6aa7b114cecc0607e54a53987e788ca26f9935"
+  },
+  {
+    "path": "demos/glue/rpgmaker/space.rb",
+    "mode": "100644",
+    "git_object": "72d1fdc6073d6dfa2fc924ef620d3859d40322a8"
+  },
+  {
+    "path": "demos/glue/ruby/test_ruby.rb",
+    "mode": "100644",
+    "git_object": "94c0eef339ab80173753e011bd22860796deb5ab"
+  },
+  {
+    "path": "demos/megademo/3dtest.cpp",
+    "mode": "100644",
+    "git_object": "64652ae4f0c9c25a588504e5464d1f2185840fdd"
+  },
+  {
+    "path": "demos/megademo/annex.cpp",
+    "mode": "100644",
+    "git_object": "a639a31033bedc1b7eff4609d8ccbe19d6491171"
+  },
+  {
+    "path": "demos/megademo/ay.cpp",
+    "mode": "100644",
+    "git_object": "855166fe9ac5235556beeea6268f5faafa8881de"
+  },
+  {
+    "path": "demos/megademo/filterfolio.cpp",
+    "mode": "100644",
+    "git_object": "070282b35e945a781884b69b398de940627bd325"
+  },
+  {
+    "path": "demos/megademo/main.cpp",
+    "mode": "100644",
+    "git_object": "b57abcb2a0d72bc1e30f2ce8a807779c855f3d7b"
+  },
+  {
+    "path": "demos/megademo/mixbusses.cpp",
+    "mode": "100644",
+    "git_object": "9467f14779e69625aa4612a867da92e8533c7646"
+  },
+  {
+    "path": "demos/megademo/monotone.cpp",
+    "mode": "100644",
+    "git_object": "9fbb13d1356b22b0315eee3f3349693533fb259a"
+  },
+  {
+    "path": "demos/megademo/multimusic.cpp",
+    "mode": "100644",
+    "git_object": "7e8560ae706a4198531ebe5eac149c26c3886703"
+  },
+  {
+    "path": "demos/megademo/pewpew.cpp",
+    "mode": "100644",
+    "git_object": "bfa86eddba50c8af5c47cc5d97f3151197014068"
+  },
+  {
+    "path": "demos/megademo/radiogaga.cpp",
+    "mode": "100644",
+    "git_object": "ec241142373352ef317415e02a8c31d781cecb84"
+  },
+  {
+    "path": "demos/megademo/space.cpp",
+    "mode": "100644",
+    "git_object": "32b6bc0ef536f66945c231ce47bb9452f9862692"
+  },
+  {
+    "path": "demos/megademo/speakers.cpp",
+    "mode": "100644",
+    "git_object": "9d713ab4919ef093693ecded583df7056fe6fe2b"
+  },
+  {
+    "path": "demos/megademo/speechfilter.cpp",
+    "mode": "100644",
+    "git_object": "b2db155f8f7ecf109c375ae84185e03b06cddcb1"
+  },
+  {
+    "path": "demos/megademo/tedsid.cpp",
+    "mode": "100644",
+    "git_object": "c3ef73158e635a1f44d59ffda381009f5dc9373a"
+  },
+  {
+    "path": "demos/megademo/thebutton.cpp",
+    "mode": "100644",
+    "git_object": "5d4f9ac74f3f70d2cb4285bdd78dd317ba2e2e12"
+  },
+  {
+    "path": "demos/megademo/virtualvoices.cpp",
+    "mode": "100644",
+    "git_object": "9737d44314499f377addecbe77b704ae47b74dd3"
+  },
+  {
+    "path": "demos/megademo/wavformats.cpp",
+    "mode": "100644",
+    "git_object": "ee954e48017f1fb5ff1b950d6c047dbf3b7d3e7b"
+  },
+  {
+    "path": "demos/null/main.cpp",
+    "mode": "100644",
+    "git_object": "3fa7ccbdad64723191a15f7228412c0b69cc9614"
+  },
+  {
+    "path": "demos/piano/RtMidi.cpp",
+    "mode": "100644",
+    "git_object": "fb16ac4a60b47365567443a29c9ef5c396b9543b"
+  },
+  {
+    "path": "demos/piano/RtMidi.h",
+    "mode": "100644",
+    "git_object": "9fc520edbd00e0f1ef0ea0effb0147632c39f0dd"
+  },
+  {
+    "path": "demos/piano/main.cpp",
+    "mode": "100644",
+    "git_object": "59921545bc8c6dbf86a732b706abd20014334bcd"
+  },
+  {
+    "path": "demos/piano/soloud_adsr.h",
+    "mode": "100644",
+    "git_object": "c5de2d6c6ebc3d70f9e114c17b725206e27d4fdd"
+  },
+  {
+    "path": "demos/piano/soloud_basicwave.cpp",
+    "mode": "100644",
+    "git_object": "b7bedeacbefac7a99457a58079be898a1b61b9c8"
+  },
+  {
+    "path": "demos/piano/soloud_basicwave.h",
+    "mode": "100644",
+    "git_object": "878de87229d825659f72d08a98140c4bc29edfcf"
+  },
+  {
+    "path": "demos/piano/soloud_padsynth.cpp",
+    "mode": "100644",
+    "git_object": "ff998bf440f443f48bb21e5f1a4e3a9d8750b317"
+  },
+  {
+    "path": "demos/piano/soloud_padsynth.h",
+    "mode": "100644",
+    "git_object": "c65223feb572717d0908354b9f4a9dad7c978c2c"
+  },
+  {
+    "path": "demos/simplest/main.cpp",
+    "mode": "100644",
+    "git_object": "1f4c7bb2bdab665ca3a48560b993400da43e3629"
+  },
+  {
+    "path": "demos/welcome/main.cpp",
+    "mode": "100644",
+    "git_object": "0f60a30012c416b84f429e12084bf1e84260f91b"
+  },
+  {
+    "path": "docsrc/SoLoud.tex",
+    "mode": "100644",
+    "git_object": "6d99970f4a41ab8c9c57061a69bdae1f56ca03ff"
+  },
+  {
+    "path": "docsrc/attenuator.mmd",
+    "mode": "100644",
+    "git_object": "416c0d450b89732de1d8d9ac3e3b1064523fe6bb"
+  },
+  {
+    "path": "docsrc/attributes.mmd",
+    "mode": "100644",
+    "git_object": "0307e988c1cd499339069c098e3cb8ed17131a3f"
+  },
+  {
+    "path": "docsrc/audiosource.mmd",
+    "mode": "100644",
+    "git_object": "887c316b93537e5182fe506925da46adfab6878f"
+  },
+  {
+    "path": "docsrc/backends.mmd",
+    "mode": "100644",
+    "git_object": "edffdbccaa703474091199d246e76e5ab016a8e4"
+  },
+  {
+    "path": "docsrc/bassboostfilter.mmd",
+    "mode": "100644",
+    "git_object": "976415179d909d000e5b02b76a0e3de1486fba9a"
+  },
+  {
+    "path": "docsrc/biquadfilter.mmd",
+    "mode": "100644",
+    "git_object": "75a77cd9b5f074846a70b2b6973fdc2416ab46d3"
+  },
+  {
+    "path": "docsrc/bmx_api.mmd",
+    "mode": "100644",
+    "git_object": "4e07b28ffbd3acd3a2522fa8e633ee6cd04bb8b1"
+  },
+  {
+    "path": "docsrc/c_api.mmd",
+    "mode": "100644",
+    "git_object": "952f456228fa10349b3d3d3e579e3615a5fad6ac"
+  },
+  {
+    "path": "docsrc/codegen.graphml",
+    "mode": "100644",
+    "git_object": "048241f1079cbb751830c0ff854d0354efc9525e"
+  },
+  {
+    "path": "docsrc/codegen.mmd",
+    "mode": "100644",
+    "git_object": "b2f96e5466ddb43355a063a8e4b1802685f6c2b5"
+  },
+  {
+    "path": "docsrc/collider.mmd",
+    "mode": "100644",
+    "git_object": "cf184286fe1261b0de8efe8521bf4c2cc9597d42"
+  },
+  {
+    "path": "docsrc/concepts.graphml",
+    "mode": "100644",
+    "git_object": "75b20e55ad0c66b0b3d4f190cc465b393cb9da34"
+  },
+  {
+    "path": "docsrc/concepts.mmd",
+    "mode": "100644",
+    "git_object": "95fcf2dc4621976d3483340762ae1e6fcc2338a3"
+  },
+  {
+    "path": "docsrc/concepts3d.mmd",
+    "mode": "100644",
+    "git_object": "066550696ed36a46dbfd404584cd62b99b791093"
+  },
+  {
+    "path": "docsrc/console.mmd",
+    "mode": "100644",
+    "git_object": "77a09d60a8ee3146ccfa2f6baaffc4bdb7462a55"
+  },
+  {
+    "path": "docsrc/core3d.mmd",
+    "mode": "100644",
+    "git_object": "328d56527b512d62ebaee50eac2eacc5a08e4f79"
+  },
+  {
+    "path": "docsrc/coremisc.mmd",
+    "mode": "100644",
+    "git_object": "0923d0260e4fc1f72f17e864c209df4e3123e1b5"
+  },
+  {
+    "path": "docsrc/cs_api.mmd",
+    "mode": "100644",
+    "git_object": "dc877389a64b4464f99c5f9d9b528bf2c9bbea34"
+  },
+  {
+    "path": "docsrc/css/highlight.pack.js",
+    "mode": "100644",
+    "git_object": "598069d2e56789c108b469315a1b74dfd84cbd17"
+  },
+  {
+    "path": "docsrc/css/logo.png",
+    "mode": "100644",
+    "git_object": "493534f25badcbc52ab02e6b08c13415a29391d5"
+  },
+  {
+    "path": "docsrc/css/soloud.css",
+    "mode": "100644",
+    "git_object": "9a54fa4f35f4c43a011c9cc3d9fe2db137c6ddee"
+  },
+  {
+    "path": "docsrc/css/vs.css",
+    "mode": "100644",
+    "git_object": "70845e32f94d4abef72b6b7f65b026de1a5913ae"
+  },
+  {
+    "path": "docsrc/d_api.mmd",
+    "mode": "100644",
+    "git_object": "ca40c21b1f7cc3085cd51e09d583591e2e2f92e1"
+  },
+  {
+    "path": "docsrc/dcremovalfilter.mmd",
+    "mode": "100644",
+    "git_object": "058f8aa8175d4248428b44cd3c093ef173f1b891"
+  },
+  {
+    "path": "docsrc/dirstruct.graphml",
+    "mode": "100644",
+    "git_object": "1adf4fb6c79fa5618c65b24bdf72cf196ae66aba"
+  },
+  {
+    "path": "docsrc/dirstruct.mmd",
+    "mode": "100644",
+    "git_object": "bfd5cf14b2807278bd6acbaef48de0561e4fd156"
+  },
+  {
+    "path": "docsrc/downloads.mmd",
+    "mode": "100644",
+    "git_object": "cad90d11b16767c31e8e47e32985d4d93c0dd680"
+  },
+  {
+    "path": "docsrc/echofilter.mmd",
+    "mode": "100644",
+    "git_object": "3fafa6b68fbdaf21af696fbf1c46fb80c43302e5"
+  },
+  {
+    "path": "docsrc/epub.css",
+    "mode": "100644",
+    "git_object": "b55134ea81235cfa994d4b8a5f4fb9642fecc921"
+  },
+  {
+    "path": "docsrc/examples.mmd",
+    "mode": "100644",
+    "git_object": "502e775e57a0032094e6eae04c9cd9e9144167ee"
+  },
+  {
+    "path": "docsrc/faders.mmd",
+    "mode": "100644",
+    "git_object": "4df15be9838dc3f3db0ec119ce6e9b4b1b90c4e0"
+  },
+  {
+    "path": "docsrc/faq.mmd",
+    "mode": "100644",
+    "git_object": "9aacf2666a4691dfb0b6a6c421b34073b3c97202"
+  },
+  {
+    "path": "docsrc/fftfilter.mmd",
+    "mode": "100644",
+    "git_object": "36a6d68f6bbdd6efab69b3f411f9ff4b1eb9b835"
+  },
+  {
+    "path": "docsrc/file.graphml",
+    "mode": "100644",
+    "git_object": "1ec3def128aee95d232f21ccde624820aade48af"
+  },
+  {
+    "path": "docsrc/file.mmd",
+    "mode": "100644",
+    "git_object": "67201318a30750dbe6c06ac577db569e8be22fc3"
+  },
+  {
+    "path": "docsrc/filters.mmd",
+    "mode": "100644",
+    "git_object": "4085d9c1eb7e7250d0dd8dc63eff4d41863139d0"
+  },
+  {
+    "path": "docsrc/flangerfilter.mmd",
+    "mode": "100644",
+    "git_object": "cb546510a78cd88105c15bfa97c75c1529152eb0"
+  },
+  {
+    "path": "docsrc/foreign_interface.mmd",
+    "mode": "100644",
+    "git_object": "1ad2e28baefbdc08ca5f3a03ae6f35250c10108a"
+  },
+  {
+    "path": "docsrc/freeverbfilter.mmd",
+    "mode": "100644",
+    "git_object": "89419b3d6ba169128ebeca9be258646589d2557f"
+  },
+  {
+    "path": "docsrc/gamemaker_api.mmd",
+    "mode": "100644",
+    "git_object": "74070aae06206c8ddbacbad3e4c06467156a6aab"
+  },
+  {
+    "path": "docsrc/html.pandoc",
+    "mode": "100644",
+    "git_object": "1e229f77377354867cdfe366731c094701cb1903"
+  },
+  {
+    "path": "docsrc/htmlpost.txt",
+    "mode": "100644",
+    "git_object": "af9e699435f73d195a16fc81df73f3ec10663574"
+  },
+  {
+    "path": "docsrc/htmlpre.txt",
+    "mode": "100644",
+    "git_object": "fcca9cd80f26360168f5365e575b8773ddb0d046"
+  },
+  {
+    "path": "docsrc/images/SoLoudLogo.pdf",
+    "mode": "100644",
+    "git_object": "dadb6f1039cc4bb0bb2308015f8e1db6061cf654"
+  },
+  {
+    "path": "docsrc/images/SoLoudLogo.svg",
+    "mode": "100644",
+    "git_object": "e6b964f71de46c35a8e49726164bd36ce232006b"
+  },
+  {
+    "path": "docsrc/images/att_exp_max.pdf",
+    "mode": "100644",
+    "git_object": "da36c0071ee5621aefb3918903af1fce49c096a0"
+  },
+  {
+    "path": "docsrc/images/att_exp_max.png",
+    "mode": "100644",
+    "git_object": "00182c6f9e47b8da847a9e7c7bfd6f11c85b4759"
+  },
+  {
+    "path": "docsrc/images/att_exp_max.svg",
+    "mode": "100644",
+    "git_object": "94709bdb4ce260938393a1989a00fef88229d7c3"
+  },
+  {
+    "path": "docsrc/images/att_exp_min.pdf",
+    "mode": "100644",
+    "git_object": "4903c2e76d9affdae2b04e2c38b4811f13da7c0b"
+  },
+  {
+    "path": "docsrc/images/att_exp_min.png",
+    "mode": "100644",
+    "git_object": "dff2ff52ba9d761f85902a0292d9accdc4137986"
+  },
+  {
+    "path": "docsrc/images/att_exp_min.svg",
+    "mode": "100644",
+    "git_object": "d311dd4705d41c7d81d1ef05902985db35cbed4f"
+  },
+  {
+    "path": "docsrc/images/att_exp_rolloff.pdf",
+    "mode": "100644",
+    "git_object": "01be4729abea478341c0bff8c540d17c088a9e24"
+  },
+  {
+    "path": "docsrc/images/att_exp_rolloff.png",
+    "mode": "100644",
+    "git_object": "564839807a8fe49e52755e67472963fc8923617f"
+  },
+  {
+    "path": "docsrc/images/att_exp_rolloff.svg",
+    "mode": "100644",
+    "git_object": "3fb895f8b6b33e49c24b2f85c55d6b2ada726210"
+  },
+  {
+    "path": "docsrc/images/att_inv_max.pdf",
+    "mode": "100644",
+    "git_object": "5ae35c74c1df7be80ae91ad09bf6259e498656ba"
+  },
+  {
+    "path": "docsrc/images/att_inv_max.png",
+    "mode": "100644",
+    "git_object": "05cac6f93744608ddf260c369f198bcc1584d1ed"
+  },
+  {
+    "path": "docsrc/images/att_inv_max.svg",
+    "mode": "100644",
+    "git_object": "9696595a0ba4016e813711ebbdb42a103403d3e5"
+  },
+  {
+    "path": "docsrc/images/att_inv_min.pdf",
+    "mode": "100644",
+    "git_object": "045af90fc6ff78bb9026d3786dfc7dec2780c8f5"
+  },
+  {
+    "path": "docsrc/images/att_inv_min.png",
+    "mode": "100644",
+    "git_object": "9b29713c784ae0ded27bb9fb3a03381e6bf326f4"
+  },
+  {
+    "path": "docsrc/images/att_inv_min.svg",
+    "mode": "100644",
+    "git_object": "b5c977bffac1bcec532616c6edd93289a7a01fe3"
+  },
+  {
+    "path": "docsrc/images/att_inv_rolloff.pdf",
+    "mode": "100644",
+    "git_object": "5287e2a94baa68c4ada021c51ad4723c32ffd418"
+  },
+  {
+    "path": "docsrc/images/att_inv_rolloff.png",
+    "mode": "100644",
+    "git_object": "f7703d5baa3befc71a6800a2f2273977448833f2"
+  },
+  {
+    "path": "docsrc/images/att_inv_rolloff.svg",
+    "mode": "100644",
+    "git_object": "50c27f69fc32f2905a750c4a395559922f516e7f"
+  },
+  {
+    "path": "docsrc/images/att_lin_max.pdf",
+    "mode": "100644",
+    "git_object": "6945006d9f411010579aef266bbd02c8c57d05cb"
+  },
+  {
+    "path": "docsrc/images/att_lin_max.png",
+    "mode": "100644",
+    "git_object": "9ca08c797f9f7dfb955e21b689e7faf7247d7c4c"
+  },
+  {
+    "path": "docsrc/images/att_lin_max.svg",
+    "mode": "100644",
+    "git_object": "9ee98635d6328668e4ab4bc69c3c5c602778969a"
+  },
+  {
+    "path": "docsrc/images/att_lin_min.pdf",
+    "mode": "100644",
+    "git_object": "599131d8635a49249f9fd770d28b114cf27c8630"
+  },
+  {
+    "path": "docsrc/images/att_lin_min.png",
+    "mode": "100644",
+    "git_object": "072e13475cdcfad1c5363a401dbdd5f4c59d625e"
+  },
+  {
+    "path": "docsrc/images/att_lin_min.svg",
+    "mode": "100644",
+    "git_object": "353b5ce2cf95693d0a4f7858f77554cbce69a90a"
+  },
+  {
+    "path": "docsrc/images/att_lin_rolloff.pdf",
+    "mode": "100644",
+    "git_object": "2566b5f24e863ff7757f617c6a0ec9fd620ef0d7"
+  },
+  {
+    "path": "docsrc/images/att_lin_rolloff.png",
+    "mode": "100644",
+    "git_object": "ba9fb76136337127ea43cde6e830793a741c375a"
+  },
+  {
+    "path": "docsrc/images/att_lin_rolloff.svg",
+    "mode": "100644",
+    "git_object": "9a3b7dbbab25a436424e7748f7863ce2ff75841d"
+  },
+  {
+    "path": "docsrc/images/clipping.pdf",
+    "mode": "100644",
+    "git_object": "9dbd336aae3ed547c2bc1ac147bcb858bb7ea4e4"
+  },
+  {
+    "path": "docsrc/images/clipping.png",
+    "mode": "100644",
+    "git_object": "ff6639bf0fec35697950b4a4f0b036f96f8919f3"
+  },
+  {
+    "path": "docsrc/images/clipping.svg",
+    "mode": "100644",
+    "git_object": "894ca2ecae06ebc4d482c7be426d6af5c906d485"
+  },
+  {
+    "path": "docsrc/images/clocked_1.pdf",
+    "mode": "100644",
+    "git_object": "fa2eacbf97c7dd19c6ca121ad5aa355f1bc00010"
+  },
+  {
+    "path": "docsrc/images/clocked_1.png",
+    "mode": "100644",
+    "git_object": "2d7e6bf1ca0e81b684f17bbbab1326e072573df0"
+  },
+  {
+    "path": "docsrc/images/clocked_1.svg",
+    "mode": "100644",
+    "git_object": "43050f7acfe5caf469e38db0a2f0da9f0e0a1ca6"
+  },
+  {
+    "path": "docsrc/images/clocked_2.pdf",
+    "mode": "100644",
+    "git_object": "0aa297293396d053729066bf1e708e24d5c0d913"
+  },
+  {
+    "path": "docsrc/images/clocked_2.png",
+    "mode": "100644",
+    "git_object": "639fae6d1c8084953df82d0f683018e6b286db1d"
+  },
+  {
+    "path": "docsrc/images/clocked_2.svg",
+    "mode": "100644",
+    "git_object": "6c03f7ccae9ee007f7623e7ea4d7c24fd402a4d0"
+  },
+  {
+    "path": "docsrc/images/clocked_3.pdf",
+    "mode": "100644",
+    "git_object": "2c321f3c63a63872c6d5a23af62755f4aa4f4c24"
+  },
+  {
+    "path": "docsrc/images/clocked_3.png",
+    "mode": "100644",
+    "git_object": "7377feef14988390f94f46e661b6617cf6945028"
+  },
+  {
+    "path": "docsrc/images/clocked_3.svg",
+    "mode": "100644",
+    "git_object": "6c1c80b302867077d285db8cc79f73034e6dbaf8"
+  },
+  {
+    "path": "docsrc/images/codegen.pdf",
+    "mode": "100644",
+    "git_object": "2415ed3c5a60a75beae74ff16920543dbf8c02cb"
+  },
+  {
+    "path": "docsrc/images/codegen.png",
+    "mode": "100644",
+    "git_object": "86522744fc34ecb26cbbe69cc7aa10be2578af5b"
+  },
+  {
+    "path": "docsrc/images/concepts.pdf",
+    "mode": "100644",
+    "git_object": "56aca0761fbaa30f8541469b1de893b425b220ed"
+  },
+  {
+    "path": "docsrc/images/concepts.png",
+    "mode": "100644",
+    "git_object": "d51b8d7a1a3517564775a1d7ed1d8c14dfe4aeac"
+  },
+  {
+    "path": "docsrc/images/cover.png",
+    "mode": "100644",
+    "git_object": "9d1fa6709ffec09d92362c71fd0c7346fdf6f35b"
+  },
+  {
+    "path": "docsrc/images/demo_3dtest.pdf",
+    "mode": "100644",
+    "git_object": "71ff98c1dbb9d21c7bb59e3914638a22638ff118"
+  },
+  {
+    "path": "docsrc/images/demo_3dtest.png",
+    "mode": "100644",
+    "git_object": "b1f2913f056da6ff7e85915143e6dece56ac8f95"
+  },
+  {
+    "path": "docsrc/images/demo_3dtest.svg",
+    "mode": "100644",
+    "git_object": "bd1e965cc03378f60fd9b362c275cd477bb9a8c7"
+  },
+  {
+    "path": "docsrc/images/demo_env.pdf",
+    "mode": "100644",
+    "git_object": "3d694d4e2452198c0efd6a64e2b84582910aaa96"
+  },
+  {
+    "path": "docsrc/images/demo_env.png",
+    "mode": "100644",
+    "git_object": "cd5dc950b132b2e49033c31f04892128e4223eb6"
+  },
+  {
+    "path": "docsrc/images/demo_env.svg",
+    "mode": "100644",
+    "git_object": "de5511a6361cfc0c048f7cca416e0adc2ca9d247"
+  },
+  {
+    "path": "docsrc/images/demo_mixbusses.pdf",
+    "mode": "100644",
+    "git_object": "da7f3cb0f03cdbef13006a65c2d685985cab6b33"
+  },
+  {
+    "path": "docsrc/images/demo_mixbusses.png",
+    "mode": "100644",
+    "git_object": "4293f52f2604a9e3890a394af1d6ecbfa36a857b"
+  },
+  {
+    "path": "docsrc/images/demo_mixbusses.svg",
+    "mode": "100644",
+    "git_object": "da953a2b9cd2652d05850289103ea80be329853a"
+  },
+  {
+    "path": "docsrc/images/demo_monotone.pdf",
+    "mode": "100644",
+    "git_object": "a46d7dfb6f9e5e5ea86413ffcf3f1f97daea9f8e"
+  },
+  {
+    "path": "docsrc/images/demo_monotone.png",
+    "mode": "100644",
+    "git_object": "b11fe4b4f7de4fef65e99f005a2c08c4b36a6615"
+  },
+  {
+    "path": "docsrc/images/demo_monotone.svg",
+    "mode": "100644",
+    "git_object": "844081d64f4bb35de274b98e5cb27ee29faa492e"
+  },
+  {
+    "path": "docsrc/images/demo_multimusic.pdf",
+    "mode": "100644",
+    "git_object": "0c6159bed298ce5f7bd93b201ef585e9ee4ee427"
+  },
+  {
+    "path": "docsrc/images/demo_multimusic.png",
+    "mode": "100644",
+    "git_object": "92118ce1474e0a89dcb2b70419c5b02496ad0c0e"
+  },
+  {
+    "path": "docsrc/images/demo_multimusic.svg",
+    "mode": "100644",
+    "git_object": "94abc39505fe010250b6ca6d0bd2dca0d946562b"
+  },
+  {
+    "path": "docsrc/images/demo_pewpew.pdf",
+    "mode": "100644",
+    "git_object": "20edd90453f37b496e5e4e9901937eee33f706d9"
+  },
+  {
+    "path": "docsrc/images/demo_pewpew.png",
+    "mode": "100644",
+    "git_object": "bb2d34ec6fd2d9b6eee534c4e8bd5baacae182a3"
+  },
+  {
+    "path": "docsrc/images/demo_pewpew.svg",
+    "mode": "100644",
+    "git_object": "8f9fe97acbdd926148060f66860e997ea6d157f4"
+  },
+  {
+    "path": "docsrc/images/demo_piano.pdf",
+    "mode": "100644",
+    "git_object": "39f5b3b863275b3b0320f4054815e3b9df61d300"
+  },
+  {
+    "path": "docsrc/images/demo_piano.png",
+    "mode": "100644",
+    "git_object": "ce0e31d6d46bfa9f97d106731291253aeb621060"
+  },
+  {
+    "path": "docsrc/images/demo_piano.svg",
+    "mode": "100644",
+    "git_object": "c09575215cef2e57f8a6d8b24ee5e3dfa24152a0"
+  },
+  {
+    "path": "docsrc/images/demo_simplest.pdf",
+    "mode": "100644",
+    "git_object": "f5336ca3cfc5376445fe1e4e4fec1f6559a2077b"
+  },
+  {
+    "path": "docsrc/images/demo_simplest.png",
+    "mode": "100644",
+    "git_object": "bd5ce882d162c39a6c856b1edd13d4853739825c"
+  },
+  {
+    "path": "docsrc/images/demo_simplest.svg",
+    "mode": "100644",
+    "git_object": "2f9e972ebdc9354fe948137b4639a3ab538f6011"
+  },
+  {
+    "path": "docsrc/images/demo_space.pdf",
+    "mode": "100644",
+    "git_object": "58c81d7a81aebbaf9adf5785c64b975233605c7d"
+  },
+  {
+    "path": "docsrc/images/demo_space.png",
+    "mode": "100644",
+    "git_object": "974d755499affd9a6a348bf11d6dbcf28b28651d"
+  },
+  {
+    "path": "docsrc/images/demo_space.svg",
+    "mode": "100644",
+    "git_object": "88322f29a4413484f2947d68e6e011029300d947"
+  },
+  {
+    "path": "docsrc/images/demo_tedsid.pdf",
+    "mode": "100644",
+    "git_object": "c42da5e71fcec25c39a77a5c3cbcb4cfedf13247"
+  },
+  {
+    "path": "docsrc/images/demo_tedsid.png",
+    "mode": "100644",
+    "git_object": "f274819d9d6baf8de666a1702f1640114f57dcd0"
+  },
+  {
+    "path": "docsrc/images/demo_tedsid.svg",
+    "mode": "100644",
+    "git_object": "0c7bbf463cc36835349b1fa2548ced95c8af560b"
+  },
+  {
+    "path": "docsrc/images/demo_virtualvoices.pdf",
+    "mode": "100644",
+    "git_object": "10ab255adc4c5e03fe87f0dcfdfc39bf3685ef9b"
+  },
+  {
+    "path": "docsrc/images/demo_virtualvoices.png",
+    "mode": "100644",
+    "git_object": "640da12bed0ecda30784f37e40ac44f385607901"
+  },
+  {
+    "path": "docsrc/images/demo_virtualvoices.svg",
+    "mode": "100644",
+    "git_object": "10eb126980cf9c2db3c77d1f0ca881d65cde1fce"
+  },
+  {
+    "path": "docsrc/images/demo_welcome.pdf",
+    "mode": "100644",
+    "git_object": "9b4b091e3d62b5f3bcb44a1d489f8967af3d4466"
+  },
+  {
+    "path": "docsrc/images/demo_welcome.png",
+    "mode": "100644",
+    "git_object": "22589eda6634fa500fa9adf3d68162bc9b70a0cb"
+  },
+  {
+    "path": "docsrc/images/demo_welcome.svg",
+    "mode": "100644",
+    "git_object": "f23b54402c626820c45c1587ae45d122265b50a3"
+  },
+  {
+    "path": "docsrc/images/dirstruct.pdf",
+    "mode": "100644",
+    "git_object": "190db9f41f9d8a298aa68dae29e6b9df3cb63159"
+  },
+  {
+    "path": "docsrc/images/dirstruct.png",
+    "mode": "100644",
+    "git_object": "ec1a0c8e6e4ed937c73459a581bc00cadb60ef50"
+  },
+  {
+    "path": "docsrc/images/doppler.pdf",
+    "mode": "100644",
+    "git_object": "c58481f66248b449e669633ecf94452fb7a1a0c8"
+  },
+  {
+    "path": "docsrc/images/doppler.png",
+    "mode": "100644",
+    "git_object": "8b73ad9f9c5ad058331db2ff1e1c44a4d68fed8b"
+  },
+  {
+    "path": "docsrc/images/doppler.svg",
+    "mode": "100644",
+    "git_object": "709969bdeeff1d2e51daa493b10fd1f7d12b7d33"
+  },
+  {
+    "path": "docsrc/images/file.pdf",
+    "mode": "100644",
+    "git_object": "bb91289a15ad9a9307c40a3bec7088c8da1efe3a"
+  },
+  {
+    "path": "docsrc/images/file.png",
+    "mode": "100644",
+    "git_object": "c3d3265199d5cb4a091f3e23ac7d32aa76d37ea1"
+  },
+  {
+    "path": "docsrc/images/milestones.png",
+    "mode": "100644",
+    "git_object": "ccb68ce79950dd32b5b6eaa946aea30ba94ff891"
+  },
+  {
+    "path": "docsrc/images/mixbus.pdf",
+    "mode": "100644",
+    "git_object": "a23b34866b45c2102d82acb9c304fcb74c1195a2"
+  },
+  {
+    "path": "docsrc/images/mixbus.png",
+    "mode": "100644",
+    "git_object": "299d89f0870a9270b83d6fa86cade14478a6d826"
+  },
+  {
+    "path": "docsrc/images/pianokeys.pdf",
+    "mode": "100644",
+    "git_object": "7f5081f443c91c2b77d392a4597b4f2f56586a04"
+  },
+  {
+    "path": "docsrc/images/pianokeys.png",
+    "mode": "100644",
+    "git_object": "87bcc9413acdefe5c0db1baf98f0b685ef13f3ca"
+  },
+  {
+    "path": "docsrc/images/pianokeys.svg",
+    "mode": "100644",
+    "git_object": "c8b4d3843312f35babfa646b742fa8e1d392a0ae"
+  },
+  {
+    "path": "docsrc/images/resampler.pdf",
+    "mode": "100644",
+    "git_object": "903a7ffa167a37f108e76c606282fed8494b1289"
+  },
+  {
+    "path": "docsrc/images/resampler.png",
+    "mode": "100644",
+    "git_object": "b0c4272b7b34c064467961a3da48a8a5a831468b"
+  },
+  {
+    "path": "docsrc/images/resampler.svg",
+    "mode": "100644",
+    "git_object": "8d142d902c3c7eec8662cd1ecadec454d8bcc424"
+  },
+  {
+    "path": "docsrc/images/sfxr.pdf",
+    "mode": "100644",
+    "git_object": "7190a5399950bf905708b63764b88d1efbf46259"
+  },
+  {
+    "path": "docsrc/images/sfxr.png",
+    "mode": "100644",
+    "git_object": "98fa60e1d21955518c27bd7e7378278b2a2316c0"
+  },
+  {
+    "path": "docsrc/images/sfxr.svg",
+    "mode": "100644",
+    "git_object": "ae07a11f6fd54468ac1a9cced659227b6549b06d"
+  },
+  {
+    "path": "docsrc/images/source_backend.pdf",
+    "mode": "100644",
+    "git_object": "240063dbeff70d882d7d0d170a649ab2fe413506"
+  },
+  {
+    "path": "docsrc/images/source_backend.png",
+    "mode": "100644",
+    "git_object": "776d52c2998f5b2a2bc3bbe4f94ea342d2861a82"
+  },
+  {
+    "path": "docsrc/images/speaker_dot.pdf",
+    "mode": "100644",
+    "git_object": "078cb86e3e69684bd32c811533dbcec866d66889"
+  },
+  {
+    "path": "docsrc/images/speaker_dot.png",
+    "mode": "100644",
+    "git_object": "962ac10bdf6805c8a4e14cff57e9f6aa205a131c"
+  },
+  {
+    "path": "docsrc/images/speaker_dot.svg",
+    "mode": "100644",
+    "git_object": "3e24821b0b033e36d310f7ebcb97152edc186325"
+  },
+  {
+    "path": "docsrc/images/time.pdf",
+    "mode": "100644",
+    "git_object": "000b40173f3cc5ea63aff5ed62b084eb44102e28"
+  },
+  {
+    "path": "docsrc/images/time.png",
+    "mode": "100644",
+    "git_object": "79f93dca9ee5c40d3c34d3ce581ca7fbd78a76fa"
+  },
+  {
+    "path": "docsrc/images/time.svg",
+    "mode": "100644",
+    "git_object": "243c52da06053a895abb35b4b2fcc0ac8317f387"
+  },
+  {
+    "path": "docsrc/images/virtualvoices.pdf",
+    "mode": "100644",
+    "git_object": "7325e4ec1a69e1b41ddbcf98cdad1cd8a739ee7d"
+  },
+  {
+    "path": "docsrc/images/virtualvoices.png",
+    "mode": "100644",
+    "git_object": "87fd5172c9ec6b47398b54cd4e73e11c8eec66d8"
+  },
+  {
+    "path": "docsrc/images/voicegroups.pdf",
+    "mode": "100644",
+    "git_object": "ba76bf9e608779ce1c6519e158193e47a2b32ead"
+  },
+  {
+    "path": "docsrc/images/voicegroups.png",
+    "mode": "100644",
+    "git_object": "188a9f5b95372a19c5c7090497d886eb8d2487a3"
+  },
+  {
+    "path": "docsrc/intro.mmd",
+    "mode": "100644",
+    "git_object": "d9c85ae726f1cddc53a6a7ca2fb266881de22e1a"
+  },
+  {
+    "path": "docsrc/legal.mmd",
+    "mode": "100644",
+    "git_object": "8fc2d894facf6704811d5919e23deb543656237a"
+  },
+  {
+    "path": "docsrc/lofifilter.mmd",
+    "mode": "100644",
+    "git_object": "1c8ae7da4d5a10584be3a33ac303a443d0021d5c"
+  },
+  {
+    "path": "docsrc/makedoc.py",
+    "mode": "100644",
+    "git_object": "ec271ee613cc7dc015fb9f0608abee3f7a396cad"
+  },
+  {
+    "path": "docsrc/metadata.xml",
+    "mode": "100644",
+    "git_object": "87fb97e9219c96cf1facbe36f0d9ef86567bdd4a"
+  },
+  {
+    "path": "docsrc/mixbus.graphml",
+    "mode": "100644",
+    "git_object": "178b3d9bb1d7f2690b336723b5d83fc56f20b3eb"
+  },
+  {
+    "path": "docsrc/mixbus.mmd",
+    "mode": "100644",
+    "git_object": "0c20bf39eef677b2c0ad34a1b586d86e2c88437a"
+  },
+  {
+    "path": "docsrc/modplug.mmd",
+    "mode": "100644",
+    "git_object": "9ffbbba44e964a73d5abd083d060de9251bb64eb"
+  },
+  {
+    "path": "docsrc/monotone.mmd",
+    "mode": "100644",
+    "git_object": "0d06d707b54db25f82105ac3ae1698e12123def1"
+  },
+  {
+    "path": "docsrc/noise.mmd",
+    "mode": "100644",
+    "git_object": "477d42fa0389f9a5d20127d2fcd261f420f0b63a"
+  },
+  {
+    "path": "docsrc/premake.mmd",
+    "mode": "100644",
+    "git_object": "1e5281621d8de45457a85a738bb9e8d85d14522b"
+  },
+  {
+    "path": "docsrc/python_api.mmd",
+    "mode": "100644",
+    "git_object": "1e46771863bf6d64d0aae584d90119d848fb57d9"
+  },
+  {
+    "path": "docsrc/queue.mmd",
+    "mode": "100644",
+    "git_object": "6da29ae13189c7d909c0ec48f436541b85a241c2"
+  },
+  {
+    "path": "docsrc/quickstart.mmd",
+    "mode": "100644",
+    "git_object": "606fec69a314d7c4ea759b421161e4eecbcc6f86"
+  },
+  {
+    "path": "docsrc/robotizefilter.mmd",
+    "mode": "100644",
+    "git_object": "407e034078c20c546585db63ddac1951194ed93f"
+  },
+  {
+    "path": "docsrc/rpgmaker_api.mmd",
+    "mode": "100644",
+    "git_object": "a325e366dc0831d4e0a1a14fd2f9ad48391d4b83"
+  },
+  {
+    "path": "docsrc/ruby_api.mmd",
+    "mode": "100644",
+    "git_object": "6ffc8f17458be4d3d78c77cfb1440027d27243ba"
+  },
+  {
+    "path": "docsrc/setup.tex",
+    "mode": "100644",
+    "git_object": "ca8dbeb0fa56c41e3f1823007213e2900657eba0"
+  },
+  {
+    "path": "docsrc/sfxr.mmd",
+    "mode": "100644",
+    "git_object": "ded62750ace9303011630d7ae6ffca3b8077e1c3"
+  },
+  {
+    "path": "docsrc/singlehtml_body.txt",
+    "mode": "100644",
+    "git_object": "a627c1e92f155e555c0d32c7c30bf7d9069e18c1"
+  },
+  {
+    "path": "docsrc/singlehtml_head.txt",
+    "mode": "100644",
+    "git_object": "d83247186153975a8d0834ee6b8221ea63f0bda8"
+  },
+  {
+    "path": "docsrc/source_backend.graphml",
+    "mode": "100644",
+    "git_object": "b0edf51c2d14292fa580c41490008ff8078df990"
+  },
+  {
+    "path": "docsrc/speech.mmd",
+    "mode": "100644",
+    "git_object": "193e62ba843d6846503965a1f7d7d343ec6e8263"
+  },
+  {
+    "path": "docsrc/tedsid.mmd",
+    "mode": "100644",
+    "git_object": "0cbe85e9f26dc31b3f2bfcf92c4a42e40e6f8ba4"
+  },
+  {
+    "path": "docsrc/title.txt",
+    "mode": "100644",
+    "git_object": "177de8bcb6bc2c018eaff08afd45784d4d14f22b"
+  },
+  {
+    "path": "docsrc/vic.mmd",
+    "mode": "100644",
+    "git_object": "1da6fb1c1826dcfafb8d4c89411c2f97731bcebf"
+  },
+  {
+    "path": "docsrc/virtualvoices.graphml",
+    "mode": "100644",
+    "git_object": "bae18b5cf079ae6d8a3ae7f4be378363916bbb2d"
+  },
+  {
+    "path": "docsrc/vizsn.mmd",
+    "mode": "100644",
+    "git_object": "c18ffef941a868965e4c81e99c1bb4d0d42c43cf"
+  },
+  {
+    "path": "docsrc/voicegroups.graphml",
+    "mode": "100644",
+    "git_object": "0876088bf4bcd03cbe6f8b1637911418c4ada958"
+  },
+  {
+    "path": "docsrc/voicegroups.mmd",
+    "mode": "100644",
+    "git_object": "ef9e1bad2d6a6d1eec31ad8c41cee064c5c846a0"
+  },
+  {
+    "path": "docsrc/voicemanagement.mmd",
+    "mode": "100644",
+    "git_object": "f4a56b2b47c4b23d69a3db08916d3e9aa422f3a6"
+  },
+  {
+    "path": "docsrc/wav.mmd",
+    "mode": "100644",
+    "git_object": "9bfdb751ebfa523a8a15d0fc82661c38180b0c07"
+  },
+  {
+    "path": "docsrc/waveshaperfilter.mmd",
+    "mode": "100644",
+    "git_object": "dc91d47a7bcc69aba3a94efe0399fda6b1528176"
+  },
+  {
+    "path": "glue/readme.txt",
+    "mode": "100644",
+    "git_object": "20089a74b30d1ea0e9cda9798eb1ce4f9417221a"
+  },
+  {
+    "path": "issue_template.md",
+    "mode": "100644",
+    "git_object": "078aa60317cf23940b0546a628afa4b29aae018b"
+  },
+  {
+    "path": "scripts/checkapidoc.py",
+    "mode": "100644",
+    "git_object": "4c157a9a48ca951ef7b0b888ca28dabed5b20be0"
+  },
+  {
+    "path": "scripts/checksanity.py",
+    "mode": "100644",
+    "git_object": "54601c47a632bed2f666b4ce01015e3acb11435e"
+  },
+  {
+    "path": "scripts/compile_gamemaker_dll.bat",
+    "mode": "100644",
+    "git_object": "02a802cafc62a03ed58d9e731fc40d9be3673808"
+  },
+  {
+    "path": "scripts/gen_autoit.py",
+    "mode": "100644",
+    "git_object": "5850b4284462326d190efbc6abca69a88658aacf"
+  },
+  {
+    "path": "scripts/gen_beef.py",
+    "mode": "100644",
+    "git_object": "f62452ac585f10b8ba6f2b9b7ff39ac4eb7af72a"
+  },
+  {
+    "path": "scripts/gen_blitzmax.py",
+    "mode": "100644",
+    "git_object": "5448e0c917eb5e8089148393cd4a4bcb5fb0ca71"
+  },
+  {
+    "path": "scripts/gen_consoledata.py",
+    "mode": "100644",
+    "git_object": "7f72c84d5f0ff1866f4697025c83fda5fbcf1f42"
+  },
+  {
+    "path": "scripts/gen_cs.py",
+    "mode": "100644",
+    "git_object": "ae4991bfb4f0a882f4f7bb25f3308b04a8534efc"
+  },
+  {
+    "path": "scripts/gen_d.py",
+    "mode": "100644",
+    "git_object": "e7062e6b82f071110bbbea01d30dd8d45f41e7cf"
+  },
+  {
+    "path": "scripts/gen_gamemaker.py",
+    "mode": "100644",
+    "git_object": "464b2257aa702ae094f6edb5c872dc5d7a5ea17f"
+  },
+  {
+    "path": "scripts/gen_python.py",
+    "mode": "100644",
+    "git_object": "65ee4003ab53ff349528e027c781e0fa0d8613c9"
+  },
+  {
+    "path": "scripts/gen_rpgmaker.py",
+    "mode": "100644",
+    "git_object": "107373c57e9e06b0f457a9cdf8fc8bf6f6287636"
+  },
+  {
+    "path": "scripts/gen_ruby.py",
+    "mode": "100644",
+    "git_object": "5dcb353e216685b82c54a503a5809ee87b2b4309"
+  },
+  {
+    "path": "scripts/make_gmez.bat",
+    "mode": "100644",
+    "git_object": "7c8f9b7078fc0259fcaf71992fe6774d631f163a"
+  },
+  {
+    "path": "scripts/makeglue.py",
+    "mode": "100644",
+    "git_object": "e92d2cfd8c51609a1c519d1e2f7b4cde61d41be6"
+  },
+  {
+    "path": "scripts/makerel.py",
+    "mode": "100644",
+    "git_object": "9c41a97217865270a1270a415c08c82734a703db"
+  },
+  {
+    "path": "scripts/readme.txt",
+    "mode": "100644",
+    "git_object": "a1e9034c0b4a0b3b9630b2a0ca0abf70b2413760"
+  },
+  {
+    "path": "soloud.png",
+    "mode": "100644",
+    "git_object": "3b2e875a8fe0010ad265c6f22cd328f055cf5d35"
+  },
+  {
+    "path": "src/audiosource/ay/chipplayer.cpp",
+    "mode": "100644",
+    "git_object": "f5569757c9bff256c1c2cdc9f11fa68336f156c7"
+  },
+  {
+    "path": "src/audiosource/ay/chipplayer.h",
+    "mode": "100644",
+    "git_object": "2ed50ca01fe8faf516288791e8b11fa1ce12387b"
+  },
+  {
+    "path": "src/audiosource/ay/readme.txt",
+    "mode": "100644",
+    "git_object": "e4f43a85ebe7629fdbb281030bc66275ca6c222c"
+  },
+  {
+    "path": "src/audiosource/ay/sndbuffer.cpp",
+    "mode": "100644",
+    "git_object": "35f47989d4f7fcb1159019e6ed32384249ea611b"
+  },
+  {
+    "path": "src/audiosource/ay/sndbuffer.h",
+    "mode": "100644",
+    "git_object": "28c4a6dda5a816775f3aa3cc880251876bccdd3b"
+  },
+  {
+    "path": "src/audiosource/ay/sndchip.cpp",
+    "mode": "100644",
+    "git_object": "4ae23006ccb75caea3e2035cf6e9d245c8600d20"
+  },
+  {
+    "path": "src/audiosource/ay/sndchip.h",
+    "mode": "100644",
+    "git_object": "55d8231858f9032002efacd362ee4e71c2d49e0d"
+  },
+  {
+    "path": "src/audiosource/ay/sndrender.cpp",
+    "mode": "100644",
+    "git_object": "af7ace21a879573f0fcbe5d67b157c9a1af5fde7"
+  },
+  {
+    "path": "src/audiosource/ay/sndrender.h",
+    "mode": "100644",
+    "git_object": "29a88454b394bf4ed8abc42be369af5d53eed425"
+  },
+  {
+    "path": "src/audiosource/ay/soloud_ay.cpp",
+    "mode": "100644",
+    "git_object": "21780ca4e7f6e3708a219fed57bab28040b9dfed"
+  },
+  {
+    "path": "src/audiosource/monotone/soloud_monotone.cpp",
+    "mode": "100644",
+    "git_object": "79d78e33fbeb2212a36e3eb62580902018f4bcc6"
+  },
+  {
+    "path": "src/audiosource/noise/soloud_noise.cpp",
+    "mode": "100644",
+    "git_object": "7155f59b3593b73867b7199965966933dd50aaed"
+  },
+  {
+    "path": "src/audiosource/openmpt/soloud_openmpt.cpp",
+    "mode": "100644",
+    "git_object": "7be457d7bbc3616133bab9c94a4db8d07e4df5e4"
+  },
+  {
+    "path": "src/audiosource/openmpt/soloud_openmpt_dll.c",
+    "mode": "100644",
+    "git_object": "fc788dc193a6c56e0d9ae0fa713d0a87b9d8d9af"
+  },
+  {
+    "path": "src/audiosource/sfxr/soloud_sfxr.cpp",
+    "mode": "100644",
+    "git_object": "232a71b0bba39f62d61544afc932d5f1bb9e3f86"
+  },
+  {
+    "path": "src/audiosource/speech/Elements.def",
+    "mode": "100644",
+    "git_object": "cdeabbd8291329cdd6e21c2111bcac049ebfc736"
+  },
+  {
+    "path": "src/audiosource/speech/darray.cpp",
+    "mode": "100644",
+    "git_object": "cd816faedced4903116bfc5c7fac2f9dfac45dce"
+  },
+  {
+    "path": "src/audiosource/speech/darray.h",
+    "mode": "100644",
+    "git_object": "d3251fbe5947a1f1b4e169cefb528323b1fa6c88"
+  },
+  {
+    "path": "src/audiosource/speech/klatt.cpp",
+    "mode": "100644",
+    "git_object": "c9572f0848c066766368467e40f548210ffb55f0"
+  },
+  {
+    "path": "src/audiosource/speech/klatt.h",
+    "mode": "100644",
+    "git_object": "66210907046a52357095165a94aaf96c7c8166f5"
+  },
+  {
+    "path": "src/audiosource/speech/legal_readme.txt",
+    "mode": "100644",
+    "git_object": "878ec6a160482157b6581b67ba29fad4ff476652"
+  },
+  {
+    "path": "src/audiosource/speech/resonator.cpp",
+    "mode": "100644",
+    "git_object": "62144449a1f78456ce151b641575d6633cbbbedf"
+  },
+  {
+    "path": "src/audiosource/speech/resonator.h",
+    "mode": "100644",
+    "git_object": "2e75e317d1a3829f2f1e73fe70dfb10f93c4708d"
+  },
+  {
+    "path": "src/audiosource/speech/soloud_speech.cpp",
+    "mode": "100644",
+    "git_object": "6affec7ae9e68363a96a9761d489003e301602b6"
+  },
+  {
+    "path": "src/audiosource/speech/tts.cpp",
+    "mode": "100644",
+    "git_object": "8c825b6e927d29c33f2b3c7a5f466d0dd62db429"
+  },
+  {
+    "path": "src/audiosource/speech/tts.h",
+    "mode": "100644",
+    "git_object": "8966e762c622d1d7d44630b23f198d5a8da315b8"
+  },
+  {
+    "path": "src/audiosource/tedsid/readme.txt",
+    "mode": "100644",
+    "git_object": "c9f47b44858c4a4340a2f14d3dc45ea369bacfe7"
+  },
+  {
+    "path": "src/audiosource/tedsid/sid.cpp",
+    "mode": "100644",
+    "git_object": "a53f70fcdbc4156a1e5320135783ccfb7661a87f"
+  },
+  {
+    "path": "src/audiosource/tedsid/sid.h",
+    "mode": "100644",
+    "git_object": "1143fb47a320ee73867c186e07ae1956a1bdc570"
+  },
+  {
+    "path": "src/audiosource/tedsid/soloud_tedsid.cpp",
+    "mode": "100644",
+    "git_object": "319af0a8d70e0412aeab43842358596bc1dfb5cb"
+  },
+  {
+    "path": "src/audiosource/tedsid/ted.cpp",
+    "mode": "100644",
+    "git_object": "121cf8b21828b68466329c8c25e933e43441b231"
+  },
+  {
+    "path": "src/audiosource/tedsid/ted.h",
+    "mode": "100644",
+    "git_object": "8f2b196cdeeeded281c512be8189d9945348f290"
+  },
+  {
+    "path": "src/audiosource/vic/soloud_vic.cpp",
+    "mode": "100644",
+    "git_object": "9e1800772829eded6422b1c157fdefac99e2df13"
+  },
+  {
+    "path": "src/audiosource/vizsn/soloud_vizsn.cpp",
+    "mode": "100644",
+    "git_object": "bb3b7564ce7031d5c220adacdb32389c9f67d161"
+  },
+  {
+    "path": "src/backend/alsa/soloud_alsa.cpp",
+    "mode": "100644",
+    "git_object": "1f5459c83816fb1a67c1efa39e671f11964be9be"
+  },
+  {
+    "path": "src/backend/coreaudio/soloud_coreaudio.cpp",
+    "mode": "100644",
+    "git_object": "53aec139f9983be3a69b125e8d3ec1d331366ca2"
+  },
+  {
+    "path": "src/backend/jack/soloud_jack.cpp",
+    "mode": "100644",
+    "git_object": "a968026e04ff1ed3c446b14c7bf5ddab52518751"
+  },
+  {
+    "path": "src/backend/miniaudio/miniaudio.h",
+    "mode": "100644",
+    "git_object": "5793f20d67fdbed63c6bcbea37c7782da5e58a6d"
+  },
+  {
+    "path": "src/backend/miniaudio/soloud_miniaudio.cpp",
+    "mode": "100644",
+    "git_object": "7afb7a297942ccf01e9a3a0db238ab737ea9ae02"
+  },
+  {
+    "path": "src/backend/nosound/soloud_nosound.cpp",
+    "mode": "100644",
+    "git_object": "e1c1a959b573db352f07a121a34a7456ff5b0a2b"
+  },
+  {
+    "path": "src/backend/openal/soloud_openal.cpp",
+    "mode": "100644",
+    "git_object": "e89c8cea6d865c2f179e618e48d4687eef742ec6"
+  },
+  {
+    "path": "src/backend/openal/soloud_openal_dll.c",
+    "mode": "100644",
+    "git_object": "6d8381f66e5df415f2398e90f84715d901d61462"
+  },
+  {
+    "path": "src/backend/opensles/soloud_opensles.cpp",
+    "mode": "100644",
+    "git_object": "fdb60201db13101c170cd914255bf98de518c590"
+  },
+  {
+    "path": "src/backend/oss/soloud_oss.cpp",
+    "mode": "100644",
+    "git_object": "ecb2973a80fd7a097574271af50dbee5e6e938cd"
+  },
+  {
+    "path": "src/backend/portaudio/soloud_portaudio.cpp",
+    "mode": "100644",
+    "git_object": "1ae298a1e359eb2cb16142c9040f5bd14359bff9"
+  },
+  {
+    "path": "src/backend/portaudio/soloud_portaudio_dll.c",
+    "mode": "100644",
+    "git_object": "8170b3dd549a72cc9b1f1bd3bc45012b554a5878"
+  },
+  {
+    "path": "src/backend/sdl/soloud_sdl1.cpp",
+    "mode": "100644",
+    "git_object": "90daa2af0d4ad456cad18eb855cd080d5fff93d7"
+  },
+  {
+    "path": "src/backend/sdl/soloud_sdl1_dll.c",
+    "mode": "100644",
+    "git_object": "f776a560eaf7ee0c13ffc173207d0d0a945c751f"
+  },
+  {
+    "path": "src/backend/sdl/soloud_sdl2.cpp",
+    "mode": "100644",
+    "git_object": "b3c718673571bdbdaedde83f185bcf8fe2e759a0"
+  },
+  {
+    "path": "src/backend/sdl/soloud_sdl2_dll.c",
+    "mode": "100644",
+    "git_object": "fff2e30ec4faa6e5e673d9b191dafc94bbd086a6"
+  },
+  {
+    "path": "src/backend/sdl2_static/soloud_sdl2_static.cpp",
+    "mode": "100644",
+    "git_object": "1264f55813bbec3d8f222c05b08e0a6f745fa2c5"
+  },
+  {
+    "path": "src/backend/sdl_static/soloud_sdl_static.cpp",
+    "mode": "100644",
+    "git_object": "4fd1538b3b8a2a49779c017410aa7349b5b6b86f"
+  },
+  {
+    "path": "src/backend/vita_homebrew/soloud_vita_homebrew.cpp",
+    "mode": "100644",
+    "git_object": "f1befae671f09f6e99632cf413180831f1b1068f"
+  },
+  {
+    "path": "src/backend/wasapi/soloud_wasapi.cpp",
+    "mode": "100644",
+    "git_object": "2817f1017777dbea8d174536938abc5106502334"
+  },
+  {
+    "path": "src/backend/winmm/soloud_winmm.cpp",
+    "mode": "100644",
+    "git_object": "ac99952c19e7111ad96dc4aac05b0163809145ce"
+  },
+  {
+    "path": "src/backend/xaudio2/soloud_xaudio2.cpp",
+    "mode": "100644",
+    "git_object": "cbea4535c5fe48ffd2508eb82c764b5f053b418a"
+  },
+  {
+    "path": "src/c_api/soloud.def",
+    "mode": "100644",
+    "git_object": "00e2b3522cef9402dd2a1948d3acfceff59e059e"
+  },
+  {
+    "path": "src/c_api/soloud_c.cpp",
+    "mode": "100644",
+    "git_object": "fefb7fc7cdde36fa619dd8e3dae544a68a018719"
+  },
+  {
+    "path": "src/filter/soloud_bassboostfilter.cpp",
+    "mode": "100644",
+    "git_object": "4ee8866545fb628c1010a0cc228ac6415444a65a"
+  },
+  {
+    "path": "src/filter/soloud_biquadresonantfilter.cpp",
+    "mode": "100644",
+    "git_object": "d49eedb4d5d2783cfdd303bec0b4231f6875a525"
+  },
+  {
+    "path": "src/filter/soloud_dcremovalfilter.cpp",
+    "mode": "100644",
+    "git_object": "147d3d58596ebe16f4911499546fc555969bbbfc"
+  },
+  {
+    "path": "src/filter/soloud_duckfilter.cpp",
+    "mode": "100644",
+    "git_object": "656a3c8ec9f1db6e438041b09e4b69671eb39705"
+  },
+  {
+    "path": "src/filter/soloud_echofilter.cpp",
+    "mode": "100644",
+    "git_object": "50eef09775dfbf857d816ef7ff189b6e293fa27a"
+  },
+  {
+    "path": "src/filter/soloud_eqfilter.cpp",
+    "mode": "100644",
+    "git_object": "55d1feeada62450d5254ea4cd46ac422da6590c3"
+  },
+  {
+    "path": "src/filter/soloud_fftfilter.cpp",
+    "mode": "100644",
+    "git_object": "634d541ea788c79470e9ede710e09941e4227c4b"
+  },
+  {
+    "path": "src/filter/soloud_flangerfilter.cpp",
+    "mode": "100644",
+    "git_object": "ef8e621f8bd625a3e615418c401fff78fdd1ed4c"
+  },
+  {
+    "path": "src/filter/soloud_freeverbfilter.cpp",
+    "mode": "100644",
+    "git_object": "f7acbf29ea6156cc2e277b9d0055b8f832d1e31c"
+  },
+  {
+    "path": "src/filter/soloud_lofifilter.cpp",
+    "mode": "100644",
+    "git_object": "e443697f0ed1648df472a0b2a93bf5c9fdf4adfb"
+  },
+  {
+    "path": "src/filter/soloud_robotizefilter.cpp",
+    "mode": "100644",
+    "git_object": "73406d13e9bbf4769c8b687748cab52b7b0d19ca"
+  },
+  {
+    "path": "src/filter/soloud_waveshaperfilter.cpp",
+    "mode": "100644",
+    "git_object": "b9fa71655057846bb6737c69637329586bf12b8f"
+  },
+  {
+    "path": "src/tools/codegen/main.cpp",
+    "mode": "100644",
+    "git_object": "6449dccd73a7eea621135dd3b0eb1d1affd5310d"
+  },
+  {
+    "path": "src/tools/lutgen/main.cpp",
+    "mode": "100644",
+    "git_object": "fda764733e10bee86445ebcb22782afca7d63abc"
+  },
+  {
+    "path": "src/tools/resamplerlab/main.cpp",
+    "mode": "100644",
+    "git_object": "0edb07312aa522de6066f11ae47763646daa3ce9"
+  },
+  {
+    "path": "src/tools/resamplerlab/stb_image_write.c",
+    "mode": "100644",
+    "git_object": "87c663a587060a7bc8ca41d3069b6334eae282e5"
+  },
+  {
+    "path": "src/tools/resamplerlab/stb_image_write.h",
+    "mode": "100644",
+    "git_object": "104897075ee3701f5ac09ea05faeb5a3dc824723"
+  },
+  {
+    "path": "src/tools/sanity/sanity.cpp",
+    "mode": "100644",
+    "git_object": "edf75128d4097cf2ed55e2d8d29873dcf1a63326"
+  }
+]
