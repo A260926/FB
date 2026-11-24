@@ -1,0 +1,11 @@
+{
+  "repo": "https://github.com/splintchecker/splint",
+  "commit": "1d5c503f906f7cf922ffe8476a514b86d77bc1b0",
+  "license": "GPL-2.0-or-later",
+  "export": "fixed production source; optional doc/emacs/os2/win32 omitted",
+  "build_compatibility": [
+    "signature.y pure-parser spelling for Bison 2.3",
+    "Flex yywrap adapter only"
+  ],
+  "contains_target_implementation": false
+}

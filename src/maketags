@@ -1,0 +1,4 @@
+#!/bin/sh
+
+etags *.y  *.l *.c *.i Headers/* || echo "Error creating TAGS file (ignoring)"
+
