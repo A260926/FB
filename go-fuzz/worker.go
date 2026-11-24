@@ -55,6 +55,10 @@ type Worker struct {
 	lastSync time.Time
 	stats    Stats
 	execs    [execCount]uint64
+
+	// ownershipCurrent is the ticket id a triage run belongs to; zero
+	// outside an in-progress OwnershipStep.
+	ownershipCurrent uint64
 }
 
 type Input struct {
@@ -69,6 +73,10 @@ type Input struct {
 	favored         bool
 	score           int
 	runningScoreSum int
+
+	// ownershipTicket tags triage output with the ownership claim it
+	// belongs to. Zero outside ownership mode.
+	ownershipTicket uint64
 }
 
 func workerMain() {
@@ -206,6 +214,24 @@ func (w *Worker) loop() {
 			continue
 		}
 
+		if *flagOwnership {
+			// Ownership mode starts from the already triaged corpus.
+			// Enable is once-only; concurrent workers just lose the race.
+			if !w.hub.ownershipEnabled() {
+				if err := w.hub.EnableOwnership(); err != nil &&
+					err != errOwnershipEnabled && err != errOwnershipAfterClaim {
+					log.Printf("worker %v: ownership enable failed: %v", w.id, err)
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+			}
+			if _, err := w.OwnershipStep(); err != nil {
+				log.Printf("worker %v: ownership step failed: %v", w.id, err)
+				time.Sleep(100 * time.Millisecond)
+			}
+			continue
+		}
+
 		if len(w.triageQueue) > 0 {
 			n := len(w.triageQueue) - 1
 			input := w.triageQueue[n]
@@ -328,6 +354,12 @@ func (w *Worker) triageInput(input CoordinatorInput) {
 		if v != 0 {
 			inp.coverSize++
 		}
+	}
+	// Ownership triage never minimizes or smashes and is always
+	// admitted: a step with no new coverage still keeps its parent edge.
+	if w.ownershipCurrent != 0 {
+		inp.ownershipTicket = w.ownershipCurrent
+		inp.mine = false
 	}
 	w.hub.newInputC <- inp
 }

@@ -42,6 +42,8 @@ var (
 	flagSonar             = flag.Bool("sonar", true, "use sonar hints")
 	flagV                 = flag.Int("v", 0, "verbosity level")
 	flagHTTP              = flag.String("http", "", "HTTP server listen address (coordinator mode only)")
+	flagOwnership         = flag.Bool("ownership", false, "use coverage-ownership scheduling instead of random weighted selection")
+	flagOwnershipExample  = flag.String("ownership-example", "", "run the ownership example and write its trace to DIR/trace.json")
 
 	shutdown        uint32
 	shutdownC       = make(chan struct{})
@@ -50,6 +52,12 @@ var (
 
 func main() {
 	flag.Parse()
+	if dir := *flagOwnershipExample; dir != "" {
+		if err := RunOwnershipExample(dir); err != nil {
+			log.Fatalf("ownership example failed: %v", err)
+		}
+		return
+	}
 	if *flagCoordinator != "" && *flagWorker != "" {
 		log.Fatalf("both -coordinator and -worker are specified")
 	}

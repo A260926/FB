@@ -54,6 +54,9 @@ type Hub struct {
 
 	stats         Stats
 	corpusOrigins [execCount]uint64
+
+	ownershipMu sync.Mutex
+	ownership   *ownershipState
 }
 
 type ROData struct {
@@ -197,7 +200,9 @@ func (hub *Hub) loop() {
 				hub.triageQueue = append(hub.triageQueue, res.Inputs...)
 			}
 			if hub.corpusStale {
-				hub.updateScores()
+				if hub.ownershipState() == nil {
+					hub.updateScores()
+				}
 				hub.corpusStale = false
 			}
 
@@ -220,6 +225,18 @@ func (hub *Hub) loop() {
 
 		case input := <-hub.newInputC:
 			// New interesting input from workers.
+			if hub.ownershipState() != nil {
+				// Ownership mode shares the exact same publish path as
+				// the worker step; the weighted-corpus logic below never
+				// runs, so eliminated seeds cannot come back.
+				if input.ownershipTicket == 0 {
+					break
+				}
+				if err := hub.commitOwnership(input.ownershipTicket, input.data, input.cover, nil, input.res); err != nil {
+					log.Printf("ownership: hub admission rejected: %v", err)
+				}
+				break
+			}
 			ro := hub.ro.Load().(*ROData)
 			if !compareCover(ro.corpusCover, input.cover) {
 				break
