@@ -340,3 +340,106 @@ requires that other threads were outside mimalloc at the fork (if such a thread
 held an allocator lock, its pages are leaked in the child). With
 `MI_NO_PTHREAD_ATFORK=1`, a host can call `_mi_fork_child()` itself after a
 coordinated fork, before resuming allocator use.
+
+## Runtime reader-domain adapter
+
+`doc/qsbr.md` so far describes the compile-time integration and the host
+primitive contract. This repository also ships a concrete, C-callable adapter
+that ties the grace period to *real concurrent read sections* instead of a
+manually advanced counter:
+
+- `include/mimalloc/qsbr-runtime.h` — public API.
+- `src/qsbr/runtime.c` — domains, readers, and `mi_qsbr_poll`.
+- `src/qsbr/allocator.c` — the production allocator entry point: enables
+  `MI_QSBR`, fixes the stable `mi_page_qsbr_t`/`mi_heap_qsbr_t` layout, embeds
+  `src/static.c`, and implements the four host hooks.
+- `example/qsbr_runtime.c` — a minimal legal reader blocking (and then
+  releasing) a retired page.
+- `test/qsbr_runtime_contract.c` — the `epochs`, `domains`, and `lifecycle`
+  contract suites.
+
+`allocator.c` is an *optional* build entry. It does not install a libc malloc
+override (`MI_MALLOC_OVERRIDE` stays undefined), so it is not mixed with the
+ordinary mimalloc library; callers allocate from the adapter heaps explicitly.
+The existing `MI_QSBR=0` build and the hand-written host-hook usage in
+`test/test-qsbr.c` are unchanged.
+
+### Public surface
+
+```c
+mi_qsbr_domain_t* mi_qsbr_domain_new(size_t capacity);   // NULL if capacity==0 / OOM
+bool              mi_qsbr_domain_delete(mi_qsbr_domain_t*);
+mi_qsbr_reader_t* mi_qsbr_register(mi_qsbr_domain_t*);   // NULL if full / OOM
+bool              mi_qsbr_unregister(mi_qsbr_reader_t*); // false inside a section
+bool              mi_qsbr_enter(mi_qsbr_reader_t*);      // nesting-aware
+bool              mi_qsbr_leave(mi_qsbr_reader_t*);      // false outside
+uint64_t          mi_qsbr_poll(mi_qsbr_domain_t*);       // returns completed seq
+mi_heap_t*        mi_qsbr_heap_new(mi_qsbr_domain_t*);
+bool              mi_qsbr_heap_destroy(mi_qsbr_domain_t*, mi_heap_t*);
+```
+
+Registration and slot storage are bounded by `capacity`; slots are reused and a
+reused slot never inherits an old epoch or nesting depth. Registration is not a
+read section, so an idle reader never blocks progress. A single reader's
+`enter`/`leave`/`unregister` calls are serialized by the caller; different
+readers may run concurrently.
+
+### Grace-period algorithm
+
+Goals are numbered `1..MI_QSBR_GOAL_MAX`. Establishing a goal is a release CAS
+on `domain->sequence`; entering an outermost section loads `sequence` with
+acquire into the reader's `epoch` and marks it ACTIVE. `mi_qsbr_poll` takes the
+domain lock, snapshots `sequence` and the minimum epoch of ACTIVE readers, and
+atomically maxes `completed` to that minimum. Because the lock serializes
+enter/leave with the scan, a reader either observed the incremented sequence
+(it began after the goal and must not block it) or an older one (it began before
+and does), and a newly entered reader can never roll `completed` backwards.
+Nested enters do not refresh the boundary. Poll never waits for a reader to
+leave and never collects the heap itself; call the ordinary `mi_heap_collect`
+afterwards so ready pages are actually returned.
+
+`sequence` never wraps: at `MI_QSBR_GOAL_MAX` the domain is marked exhausted,
+further goals become `MI_QSBR_GOAL_NEVER` (greater than any `completed`, hence
+retained conservatively), and `mi_qsbr_poll` stops advancing. Read sections can
+still leave and the domain and its heaps can still be destroyed.
+
+### Heap binding and lifetime
+
+`mi_qsbr_heap_new` binds the heap to its domain once, at initialization, via a
+thread-local hand-off consumed by `mi_heap_qsbr_init`; afterwards the binding
+lives in the heap metadata and is independent of the creating thread. Pages
+abandoned after their owner exits keep that stable domain and never dereference
+a dangling `theap`.
+
+`mi_qsbr_heap_destroy` requires a heap bound to the given domain and takes the
+domain lock to set a `terminating` flag and check that no reader is in a
+section; because admission takes the same lock, a reader either incremented the
+active count before the check (destroy fails, the heap stays fully usable) or
+runs after it and observes `terminating` (its `enter` fails). During the brief
+termination window `enter` may return false. The caller guarantees no concurrent
+allocation, free, collect, or lifecycle operation on that heap. `mi_heap_delete`
+still rejects QSBR heaps and `mi_heap_destroy` still terminates unconditionally;
+the adapter uses its own checked entry point.
+
+The allocator hooks run while allocator locks may be held: they only touch
+`sequence`/`completed` atomically and never scan the registry, take its lock,
+allocate, wait, or collect. All heavier work (the registry scan) happens in
+`mi_qsbr_poll` outside the allocator.
+
+### What is unchanged upstream
+
+The existing page queue, the abandon/reclaim paths
+(`_mi_page_abandon`, `_mi_theap_page_reclaim`, `_mi_arenas_page_free`,
+`_mi_heap_collect_abandoned`), and the delayed-singleton list
+(`_mi_heap_qsbr_delayed_enqueue`/`_mi_heap_qsbr_collect_delayed`) are reused
+as-is; see the earlier sections of this document. In particular:
+
+- Empty-interval goal clearing on the last free (`free.c`) already prevents a
+  reused page from inheriting an old grace period, so block reuse and the
+  fast allocation path need no change.
+- The theap delayed list and the heap `qsbr_delayed` list already establish,
+  preserve, and drain goals; the adapter only supplies `should_delay`.
+- Reclaim-on-free, abandoned-page collection, and heap visitation already
+  consult the hooks; none of those behaviors are rewritten.
+- QSBR still protects only page lifetime: same-heap, same-size-class block
+  reuse is allowed and reads after `mi_free` remain invalid.

@@ -1,0 +1,3 @@
+example: retained while reading=1 poll=0
+example: retained after leaving=0
+QSBR_RUNTIME_EXAMPLE_OK
