@@ -1,0 +1,39 @@
+# v0.2.0 Baseline Benchmarks (November 21, 2025)
+# Platform: Windows 11, Intel Core i7-1255U
+# Go version: 1.21+
+
+goos: windows
+goarch: amd64
+pkg: github.com/kolkov/racedetector/internal/race/shadowmem
+cpu: 12th Gen Intel(R) Core(TM) i7-1255U
+
+# CAS-Based Shadow Memory (Hot Path)
+BenchmarkCASBasedShadow_LoadOrStore_Hit-12     175200742    7.165 ns/op    0 B/op    0 allocs/op
+BenchmarkCASBasedShadow_LoadOrStore_Miss-12      4858537  263.0 ns/op     88 B/op    2 allocs/op
+BenchmarkCASBasedShadow_Load_Hit-12            439609231    2.679 ns/op    0 B/op    0 allocs/op
+BenchmarkCASBasedShadow_Concurrent-12          123055327    9.810 ns/op    0 B/op    0 allocs/op
+BenchmarkCASBasedShadow_CollisionRate-12       115998388   11.15 ns/op     0 B/op    0 allocs/op
+
+# Shadow Memory Wrapper
+BenchmarkShadowMemory_GetOrCreate_Hit-12        78578257   18.43 ns/op     0 B/op    0 allocs/op
+BenchmarkShadowMemory_GetOrCreate_Miss-12        1000000 1108 ns/op      177 B/op    3 allocs/op
+BenchmarkShadowMemory_Get_Hit-12                53566742   30.33 ns/op     0 B/op    0 allocs/op
+BenchmarkShadowMemory_Get_Miss-12               52359218   21.57 ns/op     0 B/op    0 allocs/op
+BenchmarkShadowMemory_Concurrent-12            100000000   11.33 ns/op     0 B/op    0 allocs/op
+BenchmarkShadowMemory_Reset-12                 690067659    1.734 ns/op    0 B/op    0 allocs/op
+
+# VarState Operations
+BenchmarkVarState_SingleReader_Phase2_AlwaysEpoch-12    40184715   30.27 ns/op    0 B/op    0 allocs/op
+BenchmarkVarState_SingleReader_Phase3_Adaptive-12      24447615   48.31 ns/op    0 B/op    0 allocs/op
+BenchmarkVarState_MultipleReaders_Phase2_VectorClock-12   24664 58455 ns/op       0 B/op    0 allocs/op
+BenchmarkVarState_MultipleReaders_Phase3_Promoted-12      16443 108582 ns/op      0 B/op    0 allocs/op
+BenchmarkVarState_Promotion_Overhead-12                    5476 234899 ns/op 262147 B/op    1 allocs/op
+BenchmarkVarState_IsPromoted-12                        41073103   31.96 ns/op     0 B/op    0 allocs/op
+BenchmarkVarState_GetReadEpoch_Unpromoted-12           42653775   25.78 ns/op     0 B/op    0 allocs/op
+BenchmarkVarState_GetReadClock_Promoted-12             38980908   25.95 ns/op     0 B/op    0 allocs/op
+
+# Key Metrics for v0.3.0 Optimization:
+# - Hot path (LoadOrStore_Hit): 7.165 ns/op (TARGET: maintain or improve)
+# - Concurrent access: 9.810 ns/op (TARGET: maintain)
+# - VarState single reader: 30.27 ns/op (TARGET for sampling: skip most checks)
+# - Collision rate: 30.68% at 74.3% load factor

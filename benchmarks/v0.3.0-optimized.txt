@@ -1,0 +1,43 @@
+goos: windows
+goarch: amd64
+pkg: github.com/kolkov/racedetector/internal/race/vectorclock
+cpu: 12th Gen Intel(R) Core(TM) i7-1255U
+BenchmarkVectorClockJoin-12           	100000000	        11.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVectorClockLessOrEqual-12    	107920932	        14.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVectorClockClone-12          	   16900	     65788 ns/op	  270336 B/op	       1 allocs/op
+BenchmarkVectorClockIncrement-12      	1000000000	         0.6562 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVectorClockGetSet/Get-12     	1000000000	         0.3680 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVectorClockGetSet/Set-12     	1000000000	         0.3110 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/kolkov/racedetector/internal/race/vectorclock	7.943s
+goos: windows
+goarch: amd64
+pkg: github.com/kolkov/racedetector/internal/race/shadowmem
+cpu: 12th Gen Intel(R) Core(TM) i7-1255U
+BenchmarkCASBasedShadow_LoadOrStore_Hit-12                 	309470652	         3.879 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCASBasedShadow_LoadOrStore_Miss-12                	 7245470	       261.1 ns/op	     120 B/op	       2 allocs/op
+BenchmarkCASBasedShadow_Load_Hit-12                        	408719624	         2.461 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCASBasedShadow_Concurrent-12                      	160089670	         8.807 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCASBasedShadow_CollisionRate-12                   	136301881	         8.491 ns/op	       0 B/op	       0 allocs/op
+--- BENCH: BenchmarkCASBasedShadow_CollisionRate-12
+    shadow_cas_test.go:552: Load factor: 74.3%, Collision rate: 30.68%
+    shadow_cas_test.go:552: Load factor: 74.3%, Collision rate: 30.68%
+    shadow_cas_test.go:552: Load factor: 74.3%, Collision rate: 30.68%
+    shadow_cas_test.go:552: Load factor: 74.3%, Collision rate: 30.68%
+    shadow_cas_test.go:552: Load factor: 74.3%, Collision rate: 30.68%
+    shadow_cas_test.go:552: Load factor: 74.3%, Collision rate: 30.68%
+BenchmarkShadowMemory_GetOrCreate_Hit-12                   	69320114	        17.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShadowMemory_GetOrCreate_Miss-12                  	 1000000	      1235 ns/op	     209 B/op	       3 allocs/op
+BenchmarkShadowMemory_Get_Hit-12                           	50340027	        22.75 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShadowMemory_Get_Miss-12                          	62571043	        20.56 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShadowMemory_Concurrent-12                        	100000000	        11.98 ns/op	       0 B/op	       0 allocs/op
+BenchmarkShadowMemory_Reset-12                             	1000000000	         1.021 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_SingleReader_Phase2_AlwaysEpoch-12       	61760799	        23.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_SingleReader_Phase3_Adaptive-12          	34160685	        36.01 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_MultipleReaders_Phase2_VectorClock-12    	203924250	         5.889 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_MultipleReaders_Phase3_Promoted-12       	24082603	        67.96 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_Promotion_Overhead-12                    	   14230	     99859 ns/op	  270339 B/op	       1 allocs/op
+BenchmarkVarState_IsPromoted-12                            	36129015	        29.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_GetReadEpoch_Unpromoted-12               	36409423	        31.01 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_GetReadClock_Promoted-12                 	35318632	        36.27 ns/op	       0 B/op	       0 allocs/op
+BenchmarkVarState_Demotion-12                              	

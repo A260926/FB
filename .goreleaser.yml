@@ -1,0 +1,119 @@
+version: 2
+
+project_name: racedetector
+
+before:
+  hooks:
+    # Run tests before building (exclude external Go source tests)
+    - go test ./internal/... ./cmd/... ./race/...
+
+builds:
+  - id: racedetector
+    binary: racedetector
+    main: ./cmd/racedetector
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    # Reproducible builds: https://goreleaser.com/blog/reproducible-builds/
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+      # Inject version into runtime package for go.mod overlay
+      - -X github.com/kolkov/racedetector/cmd/racedetector/runtime.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    # Ignore build errors for unsupported combinations
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats: [tar.gz]
+    name_template: "racedetector_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - docs/INSTALLATION.md
+      - docs/USAGE_GUIDE.md
+      - examples/**/*
+
+checksum:
+  name_template: "racedetector_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: "🚀 Features"
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "⚡ Performance"
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: "📝 Documentation"
+      regexp: "^.*docs[(\\w)]*:+.*$"
+      order: 3
+    - title: "🧪 Tests"
+      regexp: "^.*test[(\\w)]*:+.*$"
+      order: 4
+    - title: "🎨 Other"
+      order: 999
+
+release:
+  github:
+    owner: kolkov
+    name: racedetector
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## Pure-Go Race Detector {{ .Tag }} ({{ .Date }})
+
+    **Production-ready race detection without CGO!**
+
+    Works with `CGO_ENABLED=0` - perfect for Docker, cloud functions, and embedded systems.
+  footer: |
+    ---
+
+    **Installation**:
+    ```bash
+    # Using go install (recommended):
+    go install github.com/kolkov/racedetector/cmd/racedetector@{{ .Tag }}
+
+    # Or download binary for your platform above
+    ```
+
+    **Quick Start**:
+    ```bash
+    # Build with race detection:
+    racedetector build main.go
+
+    # Run with race detection:
+    racedetector run main.go
+    ```
+
+    **Documentation**: https://github.com/kolkov/racedetector#readme
+
+    **Report Issues**: https://github.com/kolkov/racedetector/issues

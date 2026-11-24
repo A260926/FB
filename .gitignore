@@ -1,0 +1,63 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+/bin/
+/dist/
+cmd/racedetector/main
+
+# Test coverage
+*.coverprofile
+coverage.html
+
+# Temporary files
+/tmp/
+*.tmp
+
+# External dependencies (large - downloaded references)
+external/
+
+# GODA/GODE runtime directories (created by tools)
+# Note: .claude/ contains important documentation and should be committed
+.goda/
+.gode/
+
+# Backup files
+*.backup
+*.md.backup
+
+# Race detector examples (generated binaries)
+examples/**/simple_race
+examples/**/simple_race.exe
+examples/**/*.exe
+!examples/**/*.go
+
+# Documentation build artifacts (if added in future)
+docs/_build/
+site/
+
+# Internal developer docs (kept private during development)
+INDEX.md
+.claude/
+docs/dev/
+research/

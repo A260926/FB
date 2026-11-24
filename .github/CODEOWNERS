@@ -1,0 +1,71 @@
+# CODEOWNERS for racedetector
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# This file defines individuals or teams responsible for code in this repository.
+# Code owners are automatically requested for review when someone opens a pull request
+# that modifies code they own.
+
+# Default owner for everything in the repo
+* @kolkov
+
+# Core race detection engine - Critical correctness and performance
+/internal/detector/ @kolkov
+/internal/race/ @kolkov
+
+# Shadow memory and vector clocks - Algorithm implementation
+/internal/race/shadow.go @kolkov
+/internal/race/vector_clock.go @kolkov
+/internal/race/epoch.go @kolkov
+
+# Synchronization tracking - Happens-before relationships
+/internal/race/syncshadow/ @kolkov
+
+# AST instrumentation - Code transformation
+/internal/instrument/ @kolkov
+
+# Runtime integration - Init/Fini lifecycle
+/internal/runtime/ @kolkov
+
+# Public API - Breaking changes require careful review
+/race/ @kolkov
+/race/api.go @kolkov
+
+# CLI tool - User-facing interface
+/cmd/racedetector/ @kolkov
+
+# Examples and demonstrations
+/examples/ @kolkov
+/examples/dogfooding/ @kolkov
+
+# Documentation - Keep synchronized with code
+*.md @kolkov
+/docs/ @kolkov
+
+# GitHub configuration and CI/CD
+/.github/ @kolkov
+
+# Code quality and linting configuration
+/.golangci.yml @kolkov
+/Makefile @kolkov
+
+# Tests - Ensure coverage and reliability
+*_test.go @kolkov
+
+# Benchmarks - Performance validation
+*_bench_test.go @kolkov
+*_benchmark_test.go @kolkov
+
+# Release management - Version control
+/CHANGELOG.md @kolkov
+/RELEASE_NOTES.md @kolkov
+
+# Contributing guidelines
+/CONTRIBUTING.md @kolkov
+/CODE_OF_CONDUCT.md @kolkov
+
+# Go module files - Dependency management (Pure Go - zero CGO!)
+/go.mod @kolkov
+/go.sum @kolkov
+
+# License
+/LICENSE @kolkov

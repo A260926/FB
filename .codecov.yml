@@ -1,0 +1,43 @@
+# Codecov configuration for racedetector
+# Documentation: https://docs.codecov.com/docs/codecovyml-reference
+# Validator: https://api.codecov.io/validate
+
+coverage:
+  precision: 2
+  round: down
+  range: "45...100"  # Current coverage: 45-86% across packages
+
+  status:
+    project:
+      default:
+        target: 50%           # Minimum project coverage (conservative for alpha)
+        threshold: 5%         # Allow 5% drop from target
+        base: auto
+        informational: false  # Fail if below target
+        only_pulls: false
+
+    patch:
+      default:
+        target: auto          # Auto-detect reasonable target for changes
+        threshold: 10%        # Allow 10% variance for patches
+        base: auto
+        informational: true   # Don't fail PRs, just inform
+        only_pulls: false
+
+  ignore:
+    - "examples/**"           # Example code (not covered by tests)
+    - "testdata/**"           # Test data files
+    - "**/*_test.go"          # Test files themselves
+    - "tmp/**"                # Temporary files
+    - "cmd/racedetector/main.go"  # CLI entry point (minimal logic)
+
+comment:
+  layout: "header, diff, flags, files, footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+# GitHub integration
+github_checks:
+  annotations: true
