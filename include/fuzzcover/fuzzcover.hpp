@@ -1,12 +1,16 @@
 #pragma once
 
 #include "FuzzedDataProvider.h" // (convenience to clients)
+#include "coverage.hpp"         // coverage snapshots (convenience to clients)
+#include <algorithm>            // sort, set_difference
 #include <cstddef>              // size_t
 #include <cstdint>              // uint8_t
 #include <cstdlib>              // EXIT_SUCCESS, EXIT_FAILURE, exit
 #include <dirent.h>             // readdir, opendir
 #include <fstream>              // istream_iterator
 #include <iostream>             // cerr, endl
+#include <iterator>             // back_inserter
+#include <map>                  // map
 #include <string>               // string
 #include <vector>               // vector
 #include <nlohmann/json.hpp>    // nlohmann::json
@@ -134,6 +138,16 @@ class fuzzcover_interface
                 return EXIT_SUCCESS;
             }
 
+            if (current == "--coverage-snapshot" && argc == 5)
+            {
+                return record_snapshot(argv[2], argv[3], argv[4]);
+            }
+
+            if (current == "--coverage-compare" && argc == 5)
+            {
+                return verify_snapshot(argv[2], argv[3], argv[4]);
+            }
+
             if (current == "--help")
             {
                 std::cerr << "usage: " << argv[0] << " ARGUMENTS\n\n";
@@ -145,12 +159,18 @@ class fuzzcover_interface
 #endif
                              "  --dump CORPUS_DIRECTORY [CORPUS_FILE]      dump the corpus files as JSON\n"
                              "  --test CORPUS_DIRECTORY                    run the test function on the corpus\n"
+                             "  --coverage-snapshot CORPUS SOURCE OUTPUT   record a per-corpus coverage snapshot\n"
+                             "  --coverage-compare SNAPSHOT SOURCE REPORT  replay a snapshot and write a comparison report\n"
 #ifndef FUZZCOVER_NODOCTEST
                              "  --check [CORPUS_FILE] [DOCTEST_OPTION...]  execute test suite\n"
 #endif
                              "\n"
                              "  CORPUS_DIRECTORY  a corpus directory\n"
                              "  CORPUS_FILE       a corpus file in JSON format as created by --dump\n"
+                             "  SOURCE            a 40-digit lowercase hex identifier of the source being run\n"
+                             "  OUTPUT            snapshot file to write (format fuzzcover-regression-1)\n"
+                             "  SNAPSHOT          snapshot file to replay (format fuzzcover-regression-1)\n"
+                             "  REPORT            comparison report to write (format fuzzcover-comparison-1)\n"
 #ifndef FUZZCOVER_NOFUZZER
                              "  LIBFUZZER_OPTION  an option for LibFuzzer (e.g., '-help=1')\n"
 #endif
@@ -180,6 +200,207 @@ class fuzzcover_interface
             CAPTURE(entry.at("hash"));
             CHECK_EQ(test_function(input), output);
         }
+    }
+
+    /*!
+     * @brief record a per-corpus coverage snapshot
+     *
+     * Every distinct byte sequence in the corpus is converted and executed
+     * exactly once, using the bytes of a single read; files with identical
+     * bytes share one entry. Coverage is collected per item while the test
+     * function runs. The snapshot is written atomically; on any failure the
+     * previous file is kept.
+     *
+     * @param corpus directory with the corpus files (regular files only)
+     * @param source 40-digit lowercase hex source identifier
+     * @param output snapshot file to write
+     * @return 0 on success, 2 on any failure
+     */
+    int record_snapshot(const std::string& corpus, const std::string& source, const std::string& output)
+    {
+        if (!detail::is_lower_hex(source, 40))
+        {
+            return 2; // unknown source identity: refuse to run the corpus
+        }
+        const std::vector<CoverageModuleManifest> manifests = BoundCoverageModules();
+        if (manifests.empty())
+        {
+            return 2; // no valid bound module: no successful snapshot
+        }
+        const auto files = detail::list_corpus_files(corpus);
+        if (!files || files->empty())
+        {
+            return 2; // unreadable directory, non-regular entry, or empty corpus
+        }
+        // group files by their exact bytes; each file is read exactly once
+        std::map<std::vector<std::uint8_t>, std::vector<std::string>> groups;
+        for (const auto& file : *files)
+        {
+            auto bytes = detail::read_file_bytes(file.first);
+            if (!bytes)
+            {
+                return 2;
+            }
+            groups[*bytes].push_back(file.second);
+        }
+        struct RecordedEntry
+        {
+            std::string sha256;
+            std::vector<std::uint8_t> bytes;
+            std::vector<std::string> names;
+            nlohmann::json input;
+            nlohmann::json output;
+            std::vector<CoverageHit> coverage;
+        };
+        std::vector<RecordedEntry> entries;
+        for (const auto& group : groups)
+        {
+            const std::vector<std::uint8_t>& bytes = group.first;
+            RecordedEntry entry;
+            entry.sha256 = detail::sha256_hex(bytes);
+            entry.bytes = bytes;
+            entry.names = group.second;
+            std::sort(entry.names.begin(), entry.names.end());
+            entry.names.erase(std::unique(entry.names.begin(), entry.names.end()), entry.names.end());
+            try
+            {
+                const test_input_t input = value_from_bytes(bytes.data(), bytes.size());
+                entry.input = nlohmann::json(input);
+                test_output_t test_output{};
+                bool scope_ok = false;
+                {
+                    CoverageScope scope;
+                    test_output = test_function(input);
+                    scope_ok = scope.ok();
+                    entry.coverage.assign(scope.hits().begin(), scope.hits().end());
+                }
+                if (!scope_ok)
+                {
+                    return 2; // an unbound module was hit: fail loudly
+                }
+                entry.output = nlohmann::json(test_output);
+            }
+            catch (...)
+            {
+                return 2; // conversion or execution failed
+            }
+            entries.push_back(std::move(entry));
+        }
+        std::sort(entries.begin(), entries.end(), [](const RecordedEntry& lhs, const RecordedEntry& rhs)
+        {
+            return lhs.sha256 < rhs.sha256;
+        });
+        nlohmann::json snapshot;
+        snapshot["format"] = "fuzzcover-regression-1";
+        snapshot["source"] = source;
+        snapshot["modules"] = detail::manifests_to_json(manifests);
+        snapshot["entries"] = nlohmann::json::array();
+        for (const auto& entry : entries)
+        {
+            snapshot["entries"].push_back(nlohmann::json{{"sha256", entry.sha256},
+                                                         {"bytes", detail::hex_encode(entry.bytes.data(), entry.bytes.size())},
+                                                         {"names", entry.names},
+                                                         {"input", entry.input},
+                                                         {"output", entry.output},
+                                                         {"coverage", detail::coverage_hits_to_json(entry.coverage)}});
+        }
+        if (!detail::write_file_atomic(output, snapshot.dump(2) + "\n"))
+        {
+            return 2;
+        }
+        return 0;
+    }
+
+    /*!
+     * @brief replay a coverage snapshot and write a comparison report
+     *
+     * The snapshot is fully validated first (structure, ordering, raw
+     * digests, coverage indices, source and module manifest identity); if
+     * anything is invalid, nothing is executed and an existing report is left
+     * untouched. Each entry is then re-converted from its archived bytes and
+     * re-run; inputs, outputs, and coverage sets are compared separately.
+     *
+     * @param snapshot snapshot file to replay
+     * @param source 40-digit lowercase hex source identifier
+     * @param report comparison report to write
+     * @return 0 if everything matches or only new coverage appeared, 1 if
+     *         values changed or coverage was lost, 2 on format, identity,
+     *         I/O, or execution failures
+     */
+    int verify_snapshot(const std::string& snapshot, const std::string& source, const std::string& report)
+    {
+        if (!detail::is_lower_hex(source, 40))
+        {
+            return 2; // unknown source identity: refuse to run the corpus
+        }
+        const auto text = detail::read_file_text(snapshot);
+        if (!text)
+        {
+            return 2;
+        }
+        const auto parsed = detail::validate_snapshot_text(*text, source);
+        if (!parsed)
+        {
+            return 2; // invalid snapshot: do not execute anything
+        }
+        if (!(parsed->modules == BoundCoverageModules()))
+        {
+            return 2; // the bound modules do not match the archived manifest
+        }
+        nlohmann::json report_entries = nlohmann::json::array();
+        bool any_difference = false;
+        for (const auto& entry : parsed->entries)
+        {
+            nlohmann::json input_json;
+            nlohmann::json output_json;
+            std::vector<CoverageHit> hits;
+            try
+            {
+                // re-convert from the archived bytes; the archived input is
+                // never fed to the test function directly
+                const test_input_t input = value_from_bytes(entry.bytes.data(), entry.bytes.size());
+                input_json = nlohmann::json(input);
+                test_output_t test_output{};
+                bool scope_ok = false;
+                {
+                    CoverageScope scope;
+                    test_output = test_function(input);
+                    scope_ok = scope.ok();
+                    hits.assign(scope.hits().begin(), scope.hits().end());
+                }
+                if (!scope_ok)
+                {
+                    return 2; // an unbound module was hit: fail loudly
+                }
+                output_json = nlohmann::json(test_output);
+            }
+            catch (...)
+            {
+                return 2; // conversion or execution failed
+            }
+            const bool input_changed = (input_json != entry.input);
+            const bool output_changed = (output_json != entry.output);
+            std::vector<CoverageHit> lost;
+            std::vector<CoverageHit> added;
+            std::set_difference(entry.coverage.begin(), entry.coverage.end(), hits.begin(), hits.end(), std::back_inserter(lost));
+            std::set_difference(hits.begin(), hits.end(), entry.coverage.begin(), entry.coverage.end(), std::back_inserter(added));
+            any_difference = any_difference || input_changed || output_changed || !lost.empty();
+            report_entries.push_back(nlohmann::json{{"sha256", entry.sha256},
+                                                    {"input_changed", input_changed},
+                                                    {"output_changed", output_changed},
+                                                    {"lost", detail::coverage_hits_to_json(lost)},
+                                                    {"added", detail::coverage_hits_to_json(added)}});
+        }
+        nlohmann::json report_json;
+        report_json["format"] = "fuzzcover-comparison-1";
+        report_json["source"] = source;
+        report_json["ok"] = !any_difference;
+        report_json["entries"] = std::move(report_entries);
+        if (!detail::write_file_atomic(report, report_json.dump(2) + "\n"))
+        {
+            return 2;
+        }
+        return any_difference ? 1 : 0;
     }
 
   private:
