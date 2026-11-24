@@ -870,6 +870,15 @@ protected:
 	virtual std::string to_interpolation_qualifiers(const Bitset &flags);
 	std::string layout_for_variable(const SPIRVariable &variable);
 	std::string to_combined_image_sampler(VariableID image_id, VariableID samp_id);
+	// Two-axis flattening: emits the combined uniform name with the flattened
+	// element index image_index * M + sampler_index, preserving both axes.
+	std::string to_two_axis_combined_image_sampler(uint32_t sampled_image_id);
+	// Builds the two-axis combined argument for a call site. The callee's shadow
+	// parameter is either the full flattened array (no subscript) or an
+	// already-selected scalar element.
+	std::string to_two_axis_call_argument(const SPIRFunction::CombinedImageSamplerParameter &combined,
+	                                      const uint32_t *args);
+	bool supports_two_axis_combined_image_samplers() const override;
 	virtual bool skip_argument(uint32_t id) const;
 	virtual bool emit_array_copy(const char *expr, uint32_t lhs_id, uint32_t rhs_id,
 	                             StorageClass lhs_storage, StorageClass rhs_storage);

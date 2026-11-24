@@ -1,0 +1,16 @@
+DBG detector uses_sampler_array=0
+compiling
+HOOKS func=31 count=0
+HOOKS done
+HOOKS func=32 count=35
+  invoking hook 0
+SIG 10
+0   tsh                                 0x00000001023f4954 _ZL7handleri + 88
+1   libsystem_platform.dylib            0x000000018a218144 _sigtramp + 56
+2   tsh                                 0x000000010253f7d8 _ZNKSt3__18functionIFvvEEclEv + 24
+3   tsh                                 0x000000010253f7d8 _ZNKSt3__18functionIFvvEEclEv + 24
+4   tsh                                 0x00000001024bb88c _ZN11spirv_cross12CompilerGLSL13emit_functionERNS_12SPIRFunctionERKNS_6BitsetE + 2440
+5   tsh                                 0x00000001024bb074 _ZN11spirv_cross12CompilerGLSL13emit_functionERNS_12SPIRFunctionERKNS_6BitsetE + 368
+6   tsh                                 0x00000001024b57f4 _ZN11spirv_cross12CompilerGLSL7compileEv + 1420
+7   tsh                                 0x00000001023f47cc main + 348
+8   dyld                                0x0000000189e37e80 start + 6688

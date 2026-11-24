@@ -1,0 +1,5 @@
+nmaps=1
+MAPPING combined=58 image=24 sampler=25
+  slots=6
+  array_dims=1 len=6
+compiling...

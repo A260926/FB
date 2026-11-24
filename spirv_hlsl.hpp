@@ -231,6 +231,10 @@ public:
 	bool is_hlsl_aux_buffer_binding_used(HLSLAuxBinding binding) const;
 
 private:
+	bool supports_two_axis_combined_image_samplers() const override
+	{
+		return false;
+	}
 	std::string type_to_glsl(const SPIRType &type, uint32_t id = 0) override;
 	std::string image_type_hlsl(const SPIRType &type, uint32_t id);
 	std::string image_type_hlsl_modern(const SPIRType &type, uint32_t id);

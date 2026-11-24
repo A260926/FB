@@ -152,6 +152,20 @@ struct CombinedImageSampler
 	VariableID sampler_id;
 };
 
+// Per-slot binding of a combined image sampler variable which flattens two
+// independent resource axes (an image axis of length N and a sampler axis of
+// length M) into a one-dimensional sampler2D array of length N * M.
+// Slot combined_index selects image_index of the image root resource and
+// sampler_index of the sampler root resource, i.e.
+// combined_index = image_index * M + sampler_index.
+// A scalar axis has length 1 and always reports index 0.
+struct CombinedImageSamplerBinding
+{
+	uint32_t combined_index;
+	uint32_t image_index;
+	uint32_t sampler_index;
+};
+
 struct SpecializationConstant
 {
 	// The ID of the specialization constant.
@@ -467,6 +481,19 @@ public:
 	{
 		return combined_image_samplers;
 	}
+
+	// For a combined image sampler created by build_combined_image_samplers(), return the
+	// per-slot table describing how the original image axis (length N) and sampler axis
+	// (length M) were flattened into the N * M element sampler2D array.
+	// Entries are ordered by increasing combined_index, with
+	// combined_index = image_index * M + sampler_index.
+	// Scalar image/sampler resources count as an axis of length 1 with index 0, so
+	// pre-existing scalar and image-array-only combinations return a one-entry table.
+	// Throws CompilerError (the same exception channel as the rest of the reflection API)
+	// if combined_id does not identify a combined image sampler.
+	// This query does not modify the IR, its decorations or the active entry point.
+	SmallVector<CombinedImageSamplerBinding>
+	get_combined_image_sampler_bindings(VariableID combined_id) const;
 
 	// Set a new variable type remap callback.
 	// The type remapping is designed to allow global interface variable to assume more special types.
@@ -813,6 +840,53 @@ protected:
 
 	SmallVector<CombinedImageSampler> combined_image_samplers;
 
+	// Two-axis combined image sampler metadata.
+	// For every combined resource which flattens an image axis of length N and a
+	// sampler axis of length M, this records the axis lengths so that the
+	// N * M binding table can be reflected. Scalar axes report length 1.
+	struct CombinedImageSamplerAxes
+	{
+		VariableID combined_id = 0;
+		VariableID image_id = 0;
+		VariableID sampler_id = 0;
+		uint32_t image_count = 1;
+		uint32_t sampler_count = 1;
+	};
+	SmallVector<CombinedImageSamplerAxes> combined_image_sampler_axes;
+	// True while a two-axis (sampler array involved) combined build is in progress.
+	bool building_two_axis_combined = false;
+
+	// Selection recorded for every OpSampledImage handled by the two-axis path.
+	// The GLSL backend consumes it when emitting the sampled-image expression.
+	// Index IDs are the integer selector SSA IDs valid in the function that
+	// performs the OpSampledImage; 0 means a scalar axis (literal 0).
+	struct TwoAxisSelection
+	{
+		VariableID combined_id = 0;
+		uint32_t image_index_id = 0;
+		uint32_t sampler_index_id = 0;
+		uint32_t sampler_count = 1;
+	};
+	std::unordered_map<uint32_t, TwoAxisSelection> two_axis_selections;
+	// Loaded handle SSA ID -> root/index for every function, kept for emission.
+	struct TwoAxisSource
+	{
+		VariableID root = 0;
+		uint32_t index_id = 0;
+		bool is_array = false;
+	};
+	std::unordered_map<uint32_t, TwoAxisSource> two_axis_image_sources;
+	std::unordered_map<uint32_t, TwoAxisSource> two_axis_sampler_sources;
+
+	// Backend hook. Only the non-Vulkan desktop GLSL >= 430 backend supports
+	// flattening two separate resource arrays into one sampler2D array.
+	virtual bool supports_two_axis_combined_image_samplers() const;
+	// Backend hook used during emission to tell whether a combined resource is
+	// a two-axis flattening and what its sampler axis length is.
+	const CombinedImageSamplerAxes *find_two_axis_combined(VariableID combined_id) const;
+	const CombinedImageSamplerAxes *find_two_axis_combined_for_roots(VariableID image_id,
+	                                                                 VariableID sampler_id) const;
+
 	void remap_variable_type_name(const SPIRType &type, const std::string &var_name, std::string &type_name) const
 	{
 		if (variable_remap_callback)
@@ -934,6 +1008,29 @@ protected:
 		void pop_remap_parameters();
 		void register_combined_image_sampler(SPIRFunction &caller, VariableID combined_id, VariableID texture_id,
 		                                     VariableID sampler_id, bool depth);
+
+		// Two-axis (image array x sampler array) flattening support.
+		// The loaded-handle -> root/index maps live on Compiler (two_axis_*_sources)
+		// so the GLSL backend can reuse them during emission. Only the per-call
+		// parameter remapping stack and active-function list are kept here.
+		std::vector<std::unordered_map<uint32_t, uint32_t>> parameter_argument_remap;
+		SmallVector<uint32_t> active_functions;
+
+		// Detection-only pass: reports whether a separate sampler array is indexed.
+		bool detect_only = false;
+		bool uses_sampler_array = false;
+
+		bool two_axis_active = false;
+		bool two_axis_glsl430 = false;
+		void enable_two_axis_support();
+		TwoAxisSource resolve_axis_source(uint32_t id, bool is_sampler);
+		void track_load(uint32_t result_id, uint32_t ptr_id, bool is_sampler);
+		void track_access_chain(uint32_t result_id, uint32_t base_id, uint32_t index_id, bool is_sampler);
+		void handle_two_axis_sampled_image(uint32_t result_id, uint32_t image_id, uint32_t sampler_id,
+		                                   bool is_fetch);
+		uint32_t get_or_create_two_axis_combined(VariableID image_root, uint32_t image_count,
+		                                         VariableID sampler_root, uint32_t sampler_count);
+		void validate_two_axis_resource(uint32_t var_id, bool is_sampler, uint32_t &length) const;
 	};
 
 	struct DummySamplerForCombinedImageHandler : OpcodeHandler

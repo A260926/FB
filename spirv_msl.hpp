@@ -806,6 +806,10 @@ public:
 	uint32_t get_fp_fast_math_flags(bool incl_ops) const;
 
 protected:
+	bool supports_two_axis_combined_image_samplers() const override
+	{
+		return false;
+	}
 	// An enum of SPIR-V functions that are implemented in additional
 	// source code that is added to the shader if necessary.
 	enum SPVFuncImpl : uint8_t

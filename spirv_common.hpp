@@ -1062,6 +1062,24 @@ struct SPIRFunction : IVariant
 		bool global_image;
 		bool global_sampler;
 		bool depth;
+
+		// Two-axis flattening metadata. When two_axis is true, this shadow parameter
+		// represents a combined image sampler that flattens an image axis of length
+		// two_axis_sampler_count * image_count.
+		// If two_axis_array_shadow is true, the shadow is a sampler2D[N * M] array and
+		// this function selects element image_index * M + sampler_index itself;
+		// otherwise the shadow is a scalar sampler2D already selected by the caller.
+		//
+		// The *_index_slot fields record the function-parameter slot of the integer
+		// selector for each axis (~0u when the function receives no such integer, i.e.
+		// it only gets already-selected scalar handles). They index the argument list
+		// of every call site, so emitted subscripts stay in the caller's own scope.
+		bool two_axis = false;
+		VariableID two_axis_combined_id = 0;
+		uint32_t two_axis_sampler_count = 0;
+		bool two_axis_array_shadow = false;
+		uint32_t two_axis_image_index_slot = ~0u;
+		uint32_t two_axis_sampler_index_slot = ~0u;
 	};
 
 	TypeID return_type;

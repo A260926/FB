@@ -1,0 +1,1 @@
+libc++abi: terminating due to uncaught exception of type spirv_cross::CompilerError: Separate image array reported scalar length during combined image sampler flattening.

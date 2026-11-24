@@ -8286,6 +8286,110 @@ string CompilerGLSL::to_combined_image_sampler(VariableID image_id, VariableID s
 	}
 }
 
+bool CompilerGLSL::supports_two_axis_combined_image_samplers() const
+{
+	// Only non-Vulkan desktop GLSL 430+ can express the flattened sampler2D array.
+	return !options.es && !options.vulkan_semantics && options.version >= 430;
+}
+
+string CompilerGLSL::to_two_axis_combined_image_sampler(uint32_t sampled_image_id)
+{
+	auto sel_itr = two_axis_selections.find(sampled_image_id);
+	if (sel_itr == end(two_axis_selections))
+		SPIRV_CROSS_THROW("Two-axis combined image sampler selection is missing.");
+	const auto &sel = sel_itr->second;
+
+	// Resolve the combined resource visible in this function: either a shadow
+	// parameter threaded through the call stack or the global uniform itself.
+	const SPIRFunction::CombinedImageSamplerParameter *param = nullptr;
+	for (auto &p : current_function->combined_parameters)
+	{
+		if (p.two_axis && p.two_axis_combined_id == sel.combined_id)
+		{
+			param = &p;
+			break;
+		}
+	}
+
+	auto index_name = [&](uint32_t index_id) -> string {
+		return index_id ? to_expression(index_id) : string("0");
+	};
+
+	string slot;
+	if (sel.image_index_id == 0 && sel.sampler_index_id == 0)
+		slot = "0";
+	else if (sel.sampler_index_id == 0)
+		slot = index_name(sel.image_index_id);
+	else if (sel.image_index_id == 0)
+		slot = index_name(sel.sampler_index_id);
+	else
+		slot = join("(", index_name(sel.image_index_id), " * ", convert_to_string(sel.sampler_count), " + ",
+		            index_name(sel.sampler_index_id), ")");
+
+	if (param)
+	{
+		// A leaf helper receives an already-selected scalar sampler2D.
+		if (!param->two_axis_array_shadow)
+			return to_expression(param->id);
+		return join(to_expression(param->id), "[", slot, "]");
+	}
+
+	return join(to_expression(sel.combined_id), "[", slot, "]");
+}
+
+string CompilerGLSL::to_two_axis_call_argument(const SPIRFunction::CombinedImageSamplerParameter &combined,
+                                               const uint32_t *args)
+{
+	auto resource_name = [&]() -> string {
+		// Prefer an array shadow already visible in the caller, otherwise the global.
+		for (auto &p : current_function->combined_parameters)
+		{
+			if (p.two_axis && p.two_axis_combined_id == combined.two_axis_combined_id &&
+			    p.two_axis_array_shadow)
+				return to_expression(p.id);
+		}
+		return to_expression(combined.two_axis_combined_id);
+	};
+
+	// The full flattened array is passed straight through.
+	if (combined.two_axis_array_shadow)
+		return resource_name();
+
+	// A scalar shadow argument: select the slot in the caller's own scope. The actual
+	// image/sampler operands are resolved from the call arguments, then their recorded
+	// selector SSA IDs (valid in this function) give the two axis subscripts.
+	auto operand_id = [&](bool global, VariableID id_or_slot) -> uint32_t {
+		return global ? uint32_t(id_or_slot) : args[uint32_t(id_or_slot)];
+	};
+	uint32_t image_operand = operand_id(combined.global_image, combined.image_id);
+	uint32_t sampler_operand = operand_id(combined.global_sampler, combined.sampler_id);
+
+	auto index_expr = [&](uint32_t operand,
+	                      const std::unordered_map<uint32_t, TwoAxisSource> &sources) -> string {
+		auto itr = sources.find(operand);
+		if (itr != sources.end() && itr->second.index_id)
+			return to_expression(itr->second.index_id);
+		// A directly-passed global or scalar parameter carries no subscript.
+		return "0";
+	};
+
+	string image_expr = index_expr(image_operand, two_axis_image_sources);
+	string sampler_expr = index_expr(sampler_operand, two_axis_sampler_sources);
+
+	string slot;
+	if (image_expr == "0" && sampler_expr == "0")
+		slot = "0";
+	else if (sampler_expr == "0")
+		slot = image_expr;
+	else if (image_expr == "0")
+		slot = sampler_expr;
+	else
+		slot = join("(", image_expr, " * ", convert_to_string(combined.two_axis_sampler_count), " + ",
+		            sampler_expr, ")");
+
+	return join(resource_name(), "[", slot, "]");
+}
+
 bool CompilerGLSL::is_supported_subgroup_op_in_opengl(Op op, const uint32_t *ops)
 {
 	switch (op)
@@ -8328,6 +8432,15 @@ bool CompilerGLSL::is_supported_subgroup_op_in_opengl(Op op, const uint32_t *ops
 
 void CompilerGLSL::emit_sampled_image_op(uint32_t result_type, uint32_t result_id, uint32_t image_id, uint32_t samp_id)
 {
+	if (building_two_axis_combined && two_axis_selections.find(result_id) != end(two_axis_selections))
+	{
+		// Two-axis flattening: emit the flattened slot selection, preserving both
+		// the image and sampler indices rather than only the image subscript.
+		emit_op(result_type, result_id, to_two_axis_combined_image_sampler(result_id), true, true);
+		forwarded_temporaries.erase(result_id);
+		return;
+	}
+
 	if (options.vulkan_semantics && combined_image_samplers.empty())
 	{
 		emit_binary_func_op(result_type, result_id, image_id, samp_id,
@@ -13546,6 +13659,12 @@ void CompilerGLSL::emit_instruction(const Instruction &instruction)
 
 		for (auto &combined : callee.combined_parameters)
 		{
+			if (building_two_axis_combined && combined.two_axis)
+			{
+				arglist.push_back(to_two_axis_call_argument(combined, arg));
+				continue;
+			}
+
 			auto image_id = combined.global_image ? combined.image_id : VariableID(arg[combined.image_id]);
 			auto sampler_id = combined.global_sampler ? combined.sampler_id : VariableID(arg[combined.sampler_id]);
 			arglist.push_back(to_combined_image_sampler(image_id, sampler_id));

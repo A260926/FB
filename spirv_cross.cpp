@@ -2889,9 +2889,34 @@ bool Compiler::CombinedImageSamplerHandler::begin_function_scope(const uint32_t 
 	if (length < 3)
 		return false;
 
+	if (detect_only)
+		return true;
+
 	auto &callee = compiler.get<SPIRFunction>(args[2]);
 	args += 3;
 	length -= 3;
+
+	if (two_axis_active)
+	{
+		// Reject recursion. A function which is already active on the call stack
+		// would be re-entered, which the two-axis flattening protocol cannot support.
+		for (auto func_id : active_functions)
+		{
+			if (func_id == callee.self)
+				SPIRV_CROSS_THROW("Recursive functions with separate sampler arrays cannot be flattened into "
+				                  "combined image samplers.");
+		}
+		active_functions.push_back(callee.self);
+
+		// Map every callee parameter to the raw argument SSA ID supplied at this call
+		// site, so parameter-carried resource handles and integer indices can be
+		// resolved against the caller's tracked axis sources.
+		std::unordered_map<uint32_t, uint32_t> param_to_arg;
+		for (uint32_t i = 0; i < length && i < uint32_t(callee.arguments.size()); i++)
+			param_to_arg[callee.arguments[i].id] = args[i];
+		parameter_argument_remap.push_back(std::move(param_to_arg));
+	}
+
 	push_remap_parameters(callee, args, length);
 	functions.push(&callee);
 	return true;
@@ -2901,6 +2926,9 @@ bool Compiler::CombinedImageSamplerHandler::end_function_scope(const uint32_t *a
 {
 	if (length < 3)
 		return false;
+
+	if (detect_only)
+		return true;
 
 	auto &callee = compiler.get<SPIRFunction>(args[2]);
 	args += 3;
@@ -2916,6 +2944,14 @@ bool Compiler::CombinedImageSamplerHandler::end_function_scope(const uint32_t *a
 	// Our callee has now been processed at least once.
 	// No point in doing it again.
 	callee.do_combined_parameters = false;
+
+	if (two_axis_active)
+	{
+		if (!parameter_argument_remap.empty())
+			parameter_argument_remap.pop_back();
+		if (!active_functions.empty())
+			active_functions.pop_back();
+	}
 
 	auto &params = functions.top()->combined_parameters;
 	functions.pop();
@@ -2938,11 +2974,252 @@ bool Compiler::CombinedImageSamplerHandler::end_function_scope(const uint32_t *a
 				sampler_id = s->self;
 
 			register_combined_image_sampler(caller, 0, image_id, sampler_id, param.depth);
+
+			// Two-axis shadow parameters are created by the dedicated two-axis path, which
+			// also creates the global combined resource itself. Nothing else to do here.
 		}
 	}
 
 	return true;
 }
+
+void Compiler::CombinedImageSamplerHandler::enable_two_axis_support()
+{
+	two_axis_active = true;
+	two_axis_glsl430 = compiler.supports_two_axis_combined_image_samplers();
+}
+
+void Compiler::CombinedImageSamplerHandler::validate_two_axis_resource(uint32_t var_id, bool is_sampler,
+                                                                        uint32_t &length) const
+{
+	length = 1;
+	auto *var = compiler.maybe_get<SPIRVariable>(var_id);
+	if (!var)
+		SPIRV_CROSS_THROW("Two-axis combined image samplers require separate images/samplers backed by global "
+		                  "UniformConstant variables.");
+
+	if (var->storage != StorageClassUniformConstant)
+		SPIRV_CROSS_THROW("Two-axis combined image samplers only support UniformConstant separate image and "
+		                  "sampler resources.");
+
+	auto &type = compiler.get<SPIRType>(var->basetype);
+	auto pointee = compiler.get_pointee_type(type);
+	if (is_sampler)
+	{
+		if (pointee.basetype != SPIRType::Sampler)
+			SPIRV_CROSS_THROW("Two-axis combined image samplers expect a separate sampler resource.");
+	}
+	else
+	{
+		if (pointee.basetype != SPIRType::Image || pointee.image.sampled != 1)
+			SPIRV_CROSS_THROW("Two-axis combined image samplers expect a separate sampled image resource.");
+		if (pointee.image.dim != Dim2D || pointee.image.depth || pointee.image.ms || pointee.image.arrayed)
+			SPIRV_CROSS_THROW("Two-axis combined image samplers only support 2D, non-depth, non-multisampled, "
+			                  "non-arrayed floating-point images.");
+	}
+
+	// The variable itself may be scalar or a single-level constant-length array.
+	if (type.array.size() > 1)
+		SPIRV_CROSS_THROW("Multi-dimensional separate image/sampler arrays cannot be flattened into combined "
+		                  "image samplers.");
+	if (type.array.size() == 1)
+	{
+		if (!type.array_size_literal.front())
+			SPIRV_CROSS_THROW("Two-axis combined image samplers require constant-length resource arrays.");
+		length = type.array.front();
+		if (length == 0)
+			SPIRV_CROSS_THROW("Separate image/sampler arrays must have a positive length.");
+	}
+}
+
+Compiler::TwoAxisSource Compiler::CombinedImageSamplerHandler::resolve_axis_source(uint32_t id, bool is_sampler)
+{
+	auto &sources = is_sampler ? compiler.two_axis_sampler_sources : compiler.two_axis_image_sources;
+
+	auto itr = sources.find(id);
+	if (itr != sources.end())
+		return itr->second;
+
+	// A global UniformConstant variable used directly (e.g. passed as a call argument).
+	if (auto *global_var = compiler.maybe_get<SPIRVariable>(id))
+	{
+		if (global_var->storage == StorageClassUniformConstant)
+		{
+			TwoAxisSource src;
+			src.root = global_var->self;
+			src.index_id = 0;
+			src.is_array = !compiler.get<SPIRType>(global_var->basetype).array.empty();
+			return src;
+		}
+	}
+
+	// A function parameter: walk the call-site remapping stack (innermost first)
+	// to find the argument it was bound to, then resolve that argument.
+	auto is_function_parameter = [&](uint32_t param_id) {
+		if (functions.empty())
+			return false;
+		auto &args = functions.top()->arguments;
+		for (auto &p : args)
+			if (p.id == param_id)
+				return true;
+		return false;
+	};
+
+	if (is_function_parameter(id))
+	{
+		uint32_t current = id;
+		for (int frame = int(parameter_argument_remap.size()) - 1; frame >= 0; frame--)
+		{
+			auto &map = parameter_argument_remap[frame];
+			auto arg_itr = map.find(current);
+			if (arg_itr == map.end())
+				break;
+			current = arg_itr->second;
+
+			auto jtr = sources.find(current);
+			if (jtr != sources.end())
+				return jtr->second;
+			if (auto *arg_var = compiler.maybe_get<SPIRVariable>(current))
+			{
+				if (arg_var->storage == StorageClassUniformConstant)
+				{
+					TwoAxisSource src;
+					src.root = arg_var->self;
+					src.index_id = 0;
+					src.is_array = !compiler.get<SPIRType>(arg_var->basetype).array.empty();
+					return src;
+				}
+			}
+			// The argument may itself be a parameter of the enclosing call; keep walking.
+			if (!is_function_parameter(current))
+				break;
+		}
+	}
+
+	SPIRV_CROSS_THROW("Could not resolve separate image/sampler element selection for combined image sampler "
+	                  "flattening. Resources used through Phi/Select or unsupported control flow are not allowed.");
+}
+
+void Compiler::CombinedImageSamplerHandler::track_load(uint32_t result_id, uint32_t ptr_id, bool is_sampler)
+{
+	auto &sources = is_sampler ? compiler.two_axis_sampler_sources : compiler.two_axis_image_sources;
+
+	// Array element load: the pointer is an access chain already tracked.
+	auto chain_itr = sources.find(ptr_id);
+	if (chain_itr != sources.end())
+	{
+		sources[result_id] = chain_itr->second;
+		return;
+	}
+
+	// A direct OpLoad always produces a scalar handle, even when the root resource
+	// is an array (the pointer is the whole array, i.e. an array parameter).
+	TwoAxisSource src = resolve_axis_source(ptr_id, is_sampler);
+	src.is_array = false;
+	sources[result_id] = src;
+}
+
+void Compiler::CombinedImageSamplerHandler::track_access_chain(uint32_t result_id, uint32_t base_id,
+                                                               uint32_t index_id, bool is_sampler)
+{
+	// Resolve the base (a global resource or a parameter carrying a resource pointer)
+	// to its root, then attach the selector used at this access chain.
+	TwoAxisSource src = resolve_axis_source(base_id, is_sampler);
+	src.index_id = index_id;
+	src.is_array = true;
+
+	auto &sources = is_sampler ? compiler.two_axis_sampler_sources : compiler.two_axis_image_sources;
+	sources[result_id] = src;
+}
+
+uint32_t Compiler::CombinedImageSamplerHandler::get_or_create_two_axis_combined(VariableID image_root,
+                                                                                uint32_t image_count,
+                                                                                VariableID sampler_root,
+                                                                                uint32_t sampler_count)
+{
+	auto existing = compiler.find_two_axis_combined_for_roots(image_root, sampler_root);
+	if (existing)
+		return existing->combined_id;
+
+	auto itr = find_if(begin(compiler.combined_image_samplers), end(compiler.combined_image_samplers),
+	                   [image_root, sampler_root](const CombinedImageSampler &combined) {
+		                   return combined.image_id == image_root && combined.sampler_id == sampler_root;
+	                   });
+	if (itr != end(compiler.combined_image_samplers))
+		return itr->combined_id;
+
+	// Create the sampler2D[N * M] global combined resource.
+	uint32_t id = compiler.ir.increase_bound_by(3);
+	auto type_id = id + 0;
+	auto ptr_type_id = id + 1;
+	auto combined_id = id + 2;
+
+	auto &image_type = compiler.get_type_from_variable(image_root);
+	auto &type = compiler.set<SPIRType>(type_id, OpTypeSampledImage);
+	type = image_type;
+	type.self = type_id;
+	type.basetype = SPIRType::SampledImage;
+	type.pointer = false;
+	type.storage = StorageClassGeneric;
+	type.array.clear();
+	type.array_size_literal.clear();
+	if (image_count * sampler_count > 1)
+	{
+		type.array.push_back(image_count * sampler_count);
+		type.array_size_literal.push_back(true);
+	}
+
+	auto &ptr_type = compiler.set<SPIRType>(ptr_type_id, OpTypePointer);
+	ptr_type = type;
+	ptr_type.pointer = true;
+	ptr_type.storage = StorageClassUniformConstant;
+	ptr_type.parent_type = type_id;
+
+	compiler.set<SPIRVariable>(combined_id, ptr_type_id, StorageClassUniformConstant, 0);
+	compiler.set_name(combined_id,
+	                  join("SPIRV_Cross_Combined", compiler.to_name(image_root), compiler.to_name(sampler_root)));
+
+	compiler.combined_image_samplers.push_back(CombinedImageSampler{ combined_id, image_root, sampler_root });
+	CombinedImageSamplerAxes axes;
+	axes.combined_id = combined_id;
+	axes.image_id = image_root;
+	axes.sampler_id = sampler_root;
+	axes.image_count = image_count;
+	axes.sampler_count = sampler_count;
+	compiler.combined_image_sampler_axes.push_back(axes);
+	return combined_id;
+}
+
+void Compiler::CombinedImageSamplerHandler::handle_two_axis_sampled_image(uint32_t result_id, uint32_t image_id,
+                                                                          uint32_t sampler_id, bool is_fetch)
+{
+	if (is_fetch)
+		SPIRV_CROSS_THROW("Two-axis combined image samplers do not support texelFetch-style image operations.");
+
+	if (!two_axis_glsl430)
+		SPIRV_CROSS_THROW("Flattening separate sampler arrays into combined image samplers is only supported for "
+		                  "non-Vulkan desktop GLSL 430 or newer.");
+
+	auto image_src = resolve_axis_source(image_id, false);
+	auto sampler_src = resolve_axis_source(sampler_id, true);
+
+	uint32_t image_count = 1, sampler_count = 1;
+	validate_two_axis_resource(image_src.root, false, image_count);
+	validate_two_axis_resource(sampler_src.root, true, sampler_count);
+
+	uint32_t combined_id =
+	    get_or_create_two_axis_combined(image_src.root, image_count, sampler_src.root, sampler_count);
+
+	// Record the resolved selection for the GLSL backend. Index IDs are the selector
+	// SSA IDs valid in the function performing the OpSampledImage; 0 means scalar.
+	TwoAxisSelection selection;
+	selection.combined_id = combined_id;
+	selection.image_index_id = image_src.is_array ? image_src.index_id : 0u;
+	selection.sampler_index_id = sampler_src.is_array ? sampler_src.index_id : 0u;
+	selection.sampler_count = sampler_count;
+	compiler.two_axis_selections[result_id] = selection;
+}
+
 
 void Compiler::CombinedImageSamplerHandler::register_combined_image_sampler(SPIRFunction &caller,
                                                                             VariableID combined_module_id,
@@ -2952,9 +3229,13 @@ void Compiler::CombinedImageSamplerHandler::register_combined_image_sampler(SPIR
 	// We now have a texture ID and a sampler ID which will either be found as a global
 	// or a parameter in our own function. If both are global, they will not need a parameter,
 	// otherwise, add it to our list.
-	SPIRFunction::CombinedImageSamplerParameter param = {
-		0u, image_id, sampler_id, true, true, depth,
-	};
+	SPIRFunction::CombinedImageSamplerParameter param = {};
+	param.id = 0u;
+	param.image_id = image_id;
+	param.sampler_id = sampler_id;
+	param.global_image = true;
+	param.global_sampler = true;
+	param.depth = depth;
 
 	auto texture_itr = find_if(begin(caller.arguments), end(caller.arguments),
 	                           [image_id](const SPIRFunction::Parameter &p) { return p.id == image_id; });
@@ -2973,7 +3254,7 @@ void Compiler::CombinedImageSamplerHandler::register_combined_image_sampler(SPIR
 		param.sampler_id = uint32_t(sampler_itr - begin(caller.arguments));
 	}
 
-	if (param.global_image && param.global_sampler)
+	if (param.global_image && param.global_sampler && !two_axis_active)
 		return;
 
 	auto itr = find_if(begin(caller.combined_parameters), end(caller.combined_parameters),
@@ -2984,6 +3265,41 @@ void Compiler::CombinedImageSamplerHandler::register_combined_image_sampler(SPIR
 
 	if (itr == end(caller.combined_parameters))
 	{
+		// In two-axis mode, the shadow parameter carries the combined resource.
+		// It is a full sampler2D[N * M] array when this function selects an element
+		// itself (at least one OpSampledImage operand is a load rather than a scalar
+		// parameter); if both operands are already-selected scalar parameters, the
+		// shadow is a plain scalar sampler2D.
+		const CombinedImageSamplerAxes *two_axis = nullptr;
+		bool shadow_is_array = false;
+		if (two_axis_active)
+		{
+			VariableID root_image = image_id;
+			VariableID root_sampler = sampler_id;
+			// Operands may be loaded handles, scalar parameters or raw globals; the
+			// source maps resolve them to the underlying root resources.
+			auto img_src = resolve_axis_source(image_id, false);
+			auto smp_src = resolve_axis_source(sampler_id, true);
+			root_image = img_src.root;
+			root_sampler = smp_src.root;
+			two_axis = compiler.find_two_axis_combined_for_roots(root_image, root_sampler);
+
+			// The shadow carries the full flattened array only when this function
+			// actually performs element selection. That is the case when an operand is
+			// either (a) an array-typed resource pointer parameter, or (b) a global/load
+			// carrying a selector SSA ID visible in this function. A scalar opaque
+			// parameter means the caller already selected the slot.
+			auto selects_in_this_function = [&](uint32_t op_id, const TwoAxisSource &src) -> bool {
+				auto pitr = find_if(begin(caller.arguments), end(caller.arguments),
+				                   [op_id](const SPIRFunction::Parameter &p) { return p.id == op_id; });
+				if (pitr != end(caller.arguments))
+					return !compiler.get<SPIRType>(pitr->type).array.empty();
+				return src.index_id != 0;
+			};
+			shadow_is_array = selects_in_this_function(image_id, img_src) ||
+			                  selects_in_this_function(sampler_id, smp_src);
+		}
+
 		uint32_t id = compiler.ir.increase_bound_by(3);
 		auto type_id = id + 0;
 		auto ptr_type_id = id + 1;
@@ -2998,6 +3314,47 @@ void Compiler::CombinedImageSamplerHandler::register_combined_image_sampler(SPIR
 		type.pointer = false;
 		type.storage = StorageClassGeneric;
 		type.image.depth = depth;
+
+		if (two_axis)
+		{
+			param.two_axis = true;
+			param.two_axis_combined_id = two_axis->combined_id;
+			param.two_axis_sampler_count = two_axis->sampler_count;
+
+			auto slot_of = [&](uint32_t index_id) -> uint32_t {
+				if (!index_id)
+					return ~0u;
+				auto slot_itr = find_if(begin(caller.arguments), end(caller.arguments),
+				                        [index_id](const SPIRFunction::Parameter &p) { return p.id == index_id; });
+				if (slot_itr == end(caller.arguments))
+					return ~0u;
+				return uint32_t(slot_itr - begin(caller.arguments));
+			};
+
+			auto sel_itr = compiler.two_axis_selections.find(combined_module_id);
+			if (sel_itr != end(compiler.two_axis_selections))
+			{
+				param.two_axis_image_index_slot = slot_of(sel_itr->second.image_index_id);
+				param.two_axis_sampler_index_slot = slot_of(sel_itr->second.sampler_index_id);
+			}
+
+			if (shadow_is_array)
+			{
+				// Adopt the flattened array shape of the global combined resource.
+				auto &global_var = compiler.get<SPIRVariable>(two_axis->combined_id);
+				auto &global_ptr_type = compiler.get<SPIRType>(global_var.basetype);
+				type.array = global_ptr_type.array;
+				type.array_size_literal = global_ptr_type.array_size_literal;
+				param.two_axis_array_shadow = true;
+			}
+			else
+			{
+				// A scalar shadow must never carry the array dimension of the
+				// resource pointer the operands were loaded from.
+				type.array.clear();
+				type.array_size_literal.clear();
+			}
+		}
 
 		ptr_type = type;
 		ptr_type.pointer = true;
@@ -3113,6 +3470,49 @@ bool Compiler::CombinedImageSamplerHandler::handle(Op opcode, const uint32_t *ar
 	// We need to figure out where samplers and images are loaded from, so do only the bare bones compilation we need.
 	bool is_fetch = false;
 
+	if (detect_only)
+	{
+		// Read-only probe: only report sampler-array indexing, build no IR state.
+		if ((opcode == OpAccessChain || opcode == OpInBoundsAccessChain) && length >= 4)
+		{
+			auto &type = compiler.get<SPIRType>(args[0]);
+			if (type.basetype == SPIRType::Sampler)
+				uses_sampler_array = true;
+		}
+		return true;
+	}
+
+	if (two_axis_active)
+	{
+		// Only OpSampledImage feeding OpImageSampleExplicitLod is in scope. Reject
+		// every other sampling/image operation rather than silently dropping a resource.
+		switch (opcode)
+		{
+		case OpImageSampleImplicitLod:
+		case OpImageSampleProjImplicitLod:
+		case OpImageSampleProjExplicitLod:
+		case OpImageSampleDrefImplicitLod:
+		case OpImageSampleDrefExplicitLod:
+		case OpImageSampleProjDrefImplicitLod:
+		case OpImageSampleProjDrefExplicitLod:
+		case OpImageGather:
+		case OpImageDrefGather:
+		case OpImageSparseSampleImplicitLod:
+		case OpImageSparseSampleExplicitLod:
+		case OpImageSparseSampleProjImplicitLod:
+		case OpImageSparseSampleProjExplicitLod:
+		case OpImageSparseSampleDrefImplicitLod:
+		case OpImageSparseSampleDrefExplicitLod:
+		case OpImageSparseSampleProjDrefImplicitLod:
+		case OpImageSparseSampleProjDrefExplicitLod:
+			SPIRV_CROSS_THROW("Two-axis combined image sampler flattening only supports "
+			                  "OpImageSampleExplicitLod sampling; implicit-Lod, projection, "
+			                  "depth-compare, gather and sparse variants are not supported.");
+		default:
+			break;
+		}
+	}
+
 	switch (opcode)
 	{
 	case OpLoad:
@@ -3134,6 +3534,9 @@ bool Compiler::CombinedImageSamplerHandler::handle(Op opcode, const uint32_t *ar
 		uint32_t ptr = args[2];
 		compiler.set<SPIRExpression>(id, "", result_type, true);
 		compiler.register_read(id, ptr, true);
+
+		if (two_axis_active)
+			track_load(id, ptr, separate_sampler);
 		return true;
 	}
 
@@ -3144,17 +3547,48 @@ bool Compiler::CombinedImageSamplerHandler::handle(Op opcode, const uint32_t *ar
 		if (length < 3)
 			return false;
 
+		uint32_t result_type = args[0];
+
+		auto &type = compiler.get<SPIRType>(result_type);
+		bool separate_image = type.basetype == SPIRType::Image && type.image.sampled == 1;
+		bool separate_sampler = type.basetype == SPIRType::Sampler;
+
+		if (detect_only)
+		{
+			if (separate_sampler)
+				uses_sampler_array = true;
+			return true;
+		}
+
+		if (two_axis_active && (separate_image || separate_sampler))
+		{
+			if (opcode == OpPtrAccessChain)
+				SPIRV_CROSS_THROW("OpPtrAccessChain on separate image/sampler resources is not supported by "
+				                  "two-axis combined image sampler flattening.");
+
+			// Exactly one selector is allowed: a struct member or a second array level
+			// would leave more than one index, which is outside the supported shape.
+			uint32_t index_count = length - 3;
+			if (index_count != 1)
+				SPIRV_CROSS_THROW("Two-axis combined image samplers only support scalar resources or a single "
+				                  "level of constant-length arrays; struct members and multi-dimensional arrays "
+				                  "are not supported.");
+
+			uint32_t id = args[1];
+			uint32_t base = args[2];
+			uint32_t index = args[3];
+			compiler.set<SPIRExpression>(id, "", result_type, true);
+			compiler.register_read(id, base, true);
+			track_access_chain(id, base, index, separate_sampler);
+			return true;
+		}
+
 		// Technically, it is possible to have arrays of textures and arrays of samplers and combine them, but this becomes essentially
 		// impossible to implement, since we don't know which concrete sampler we are accessing.
 		// One potential way is to create a combinatorial explosion where N textures and M samplers are combined into N * M sampler2Ds,
 		// but this seems ridiculously complicated for a problem which is easy to work around.
 		// Checking access chains like this assumes we don't have samplers or textures inside uniform structs, but this makes no sense.
 
-		uint32_t result_type = args[0];
-
-		auto &type = compiler.get<SPIRType>(result_type);
-		bool separate_image = type.basetype == SPIRType::Image && type.image.sampled == 1;
-		bool separate_sampler = type.basetype == SPIRType::Sampler;
 		if (separate_sampler)
 			SPIRV_CROSS_THROW(
 			    "Attempting to use arrays or structs of separate samplers. This is not possible to statically "
@@ -3201,6 +3635,33 @@ bool Compiler::CombinedImageSamplerHandler::handle(Op opcode, const uint32_t *ar
 		break;
 
 	default:
+		return true;
+	}
+
+	if (two_axis_active)
+	{
+		// Two-axis flattening owns the OpSampledImage analysis. The dedicated handler
+		// validates support, creates the global combined resource and records the
+		// per-sample selection; unsupported operations throw rather than producing a
+		// shader that silently drops a resource.
+		if (opcode == OpSampledImage)
+		{
+			handle_two_axis_sampled_image(args[1], args[2], args[3], false);
+
+			// Build the helper shadow-parameter protocol so the combined resource is
+			// threaded through every function on the call stack with the correct shape.
+			if (!functions.empty())
+			{
+				auto &callee = *functions.top();
+				if (callee.do_combined_parameters)
+					register_combined_image_sampler(callee, args[1], args[2], args[3],
+					                                get<SPIRType>(args[0]).image.depth);
+			}
+		}
+		else
+		{
+			handle_two_axis_sampled_image(args[1], args[2], 0u, true);
+		}
 		return true;
 	}
 
@@ -3342,8 +3803,81 @@ void Compiler::build_combined_image_samplers()
 	});
 
 	combined_image_samplers.clear();
+	combined_image_sampler_axes.clear();
+	two_axis_selections.clear();
+	two_axis_image_sources.clear();
+	two_axis_sampler_sources.clear();
+	building_two_axis_combined = false;
+
+	// First pass: detect whether the entry point indexes into a separate sampler
+	// array. Such a module can only be flattened by the two-axis protocol.
+	CombinedImageSamplerHandler detector(*this);
+	detector.detect_only = true;
+	traverse_all_reachable_opcodes(get<SPIRFunction>(ir.default_entry_point), detector);
+
 	CombinedImageSamplerHandler handler(*this);
+	if (detector.uses_sampler_array)
+	{
+		building_two_axis_combined = true;
+		handler.enable_two_axis_support();
+	}
+
 	traverse_all_reachable_opcodes(get<SPIRFunction>(ir.default_entry_point), handler);
+}
+
+bool Compiler::supports_two_axis_combined_image_samplers() const
+{
+	// The base compiler (and every non-GLSL backend) rejects two-axis flattening.
+	return false;
+}
+
+const Compiler::CombinedImageSamplerAxes *
+Compiler::find_two_axis_combined(VariableID combined_id) const
+{
+	for (auto &axes : combined_image_sampler_axes)
+		if (axes.combined_id == combined_id)
+			return &axes;
+	return nullptr;
+}
+
+const Compiler::CombinedImageSamplerAxes *
+Compiler::find_two_axis_combined_for_roots(VariableID image_id, VariableID sampler_id) const
+{
+	for (auto &axes : combined_image_sampler_axes)
+		if (axes.image_id == image_id && axes.sampler_id == sampler_id)
+			return &axes;
+	return nullptr;
+}
+
+SmallVector<CombinedImageSamplerBinding>
+Compiler::get_combined_image_sampler_bindings(VariableID combined_id) const
+{
+	auto mapping = find_if(begin(combined_image_samplers), end(combined_image_samplers),
+	                       [combined_id](const CombinedImageSampler &combined) {
+		                       return combined.combined_id == combined_id;
+	                       });
+	if (mapping == end(combined_image_samplers))
+		SPIRV_CROSS_THROW("get_combined_image_sampler_bindings(): ID is not a combined image sampler.");
+
+	uint32_t image_count = 1, sampler_count = 1;
+	if (auto *axes = find_two_axis_combined(combined_id))
+	{
+		image_count = axes->image_count;
+		sampler_count = axes->sampler_count;
+	}
+	else
+	{
+		// Scalar and image-array-only combinations keep their historical shape.
+		auto &type = get_type_from_variable(combined_id);
+		if (!type.array.empty())
+			image_count = type.array.front();
+	}
+
+	SmallVector<CombinedImageSamplerBinding> bindings;
+	for (uint32_t i = 0; i < image_count; i++)
+		for (uint32_t j = 0; j < sampler_count; j++)
+			bindings.push_back({ i * sampler_count + j, i, j });
+	return bindings;
 }
 
 SmallVector<SpecializationConstant> Compiler::get_specialization_constants() const

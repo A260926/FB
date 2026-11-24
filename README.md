@@ -403,6 +403,56 @@ for (auto &remap : compiler->get_combined_image_samplers())
 If your target is Vulkan GLSL, `--vulkan-semantics` will emit separate image samplers as you'd expect.
 The command line client calls `Compiler::build_combined_image_samplers` automatically, but if you're calling the library, you'll need to do this yourself.
 
+##### Flattening separate image and sampler arrays (desktop GLSL 430+)
+
+When a shader indexes into both a separate image array (length `N`) and a
+separate sampler array (length `M`), every image/sampler pair has to be made
+available as a single combined sampler. `build_combined_image_samplers()`
+handles this by creating one combined uniform whose type is a one-dimensional
+`sampler2D[N * M]` array. Each root image/sampler pair used by the entry point
+produces exactly one such uniform, and the root resource identities are
+preserved in `get_combined_image_samplers()`.
+
+The flattened slot for image index `i` and sampler index `j` is
+
+```
+k = i * M + j
+```
+
+so a scalar axis (length 1) simply contributes index 0. The per-slot table is
+reflected through:
+
+```c++
+struct CombinedImageSamplerBinding
+{
+    uint32_t combined_index; // k, increasing and covering all N * M slots
+    uint32_t image_index;    // i, index relative to the image root resource
+    uint32_t sampler_index;  // j, index relative to the sampler root resource
+};
+
+SmallVector<CombinedImageSamplerBinding>
+Compiler::get_combined_image_sampler_bindings(VariableID combined_id) const;
+```
+
+The host binds `image[i]` together with `sampler[j]` into combined slot
+`combined_index`. Callers can still rename the combined uniform and assign a
+binding/set with `set_name`/`set_decoration`; the emitted uniform shape matches
+what the host sees. Scalar and image-array-only combinations keep their
+historical shape, and their binding tables report the same single/`N`-entry
+layout.
+
+The flattening is only accepted by the non-Vulkan desktop GLSL backend at
+version 430 or newer. Other targets (Vulkan GLSL, OpenGL ES, HLSL, MSL) and
+older GLSL versions throw during `build_combined_image_samplers()` rather than
+emitting a shader that drops a resource. Supported images are floating-point,
+non-depth, non-multisampled, non-array-texture (`texture2D`, not
+`texture2DArray`) 2D images, and resources must be scalar globals or one level
+of constant-length array (no struct members, no multi-dimensional arrays, no
+runtime-sized arrays, no `OpPtrAccessChain`). Only `OpImageSampleExplicitLod`
+sampling is supported; implicit-Lod, projection, depth-compare, gather and
+sparse variants, as well as `Phi`/`Select`-chosen handles and recursive
+functions, are rejected with an explicit error.
+
 #### Descriptor sets (Vulkan GLSL) for backends which do not support them (pre HLSL 5.1 / GLSL)
 
 Descriptor sets are unique to Vulkan, so make sure that descriptor set + binding is remapped to a flat binding scheme (set always 0), so that other APIs can make sense of the bindings.
