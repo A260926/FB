@@ -1,0 +1,3 @@
+package main
+import("fmt"; "github.com/pion/interceptor/pkg/jitterbuffer"; "github.com/pion/rtp")
+func main(){b:=jitterbuffer.New(jitterbuffer.WithMinimumPacketCount(1)); b.Push(&rtp.Packet{Header:rtp.Header{Version:2,SequenceNumber:65535,Timestamp:900},Payload:[]byte{7}}); b.Push(&rtp.Packet{Header:rtp.Header{Version:2,SequenceNumber:0,Timestamp:1800},Payload:[]byte{8}}); for _,s:=range []uint16{65535,0}{p,e:=b.Pop(); if e!=nil||p==nil||p.SequenceNumber!=s {panic("production Pop mismatch")}; fmt.Printf("baseline sequence=%d payload=%d\n",p.SequenceNumber,p.Payload[0])}; b.Clear(true);fmt.Println("baseline normal jitter path: ok")}
