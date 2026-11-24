@@ -1,0 +1,235 @@
+package main
+
+import (
+	"bytes"
+	"encoding/binary"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Eyevinn/mp4ff/avc"
+	"github.com/Eyevinn/mp4ff/mp4"
+)
+
+func TestOptions(t *testing.T) {
+	cases := []struct {
+		desc        string
+		args        []string
+		expectedErr bool
+		errContains string
+		goldenOut   string
+	}{
+		{desc: "no args", args: []string{appName}, expectedErr: true},
+		{desc: "unknown args", args: []string{appName, "-x"}, expectedErr: true},
+		{desc: "non-existing file", args: []string{appName, "infile.mp4"}, expectedErr: true},
+		{desc: "bad file", args: []string{appName, "main.go"}, expectedErr: true},
+		{desc: "annexB, bad file", args: []string{appName, "-annexb", "main.go"}, expectedErr: true},
+		{desc: "annexB, non-existing file", args: []string{appName, "-annexb", "none.264"}, expectedErr: true},
+		{desc: "annexBH264", args: []string{appName, "-annexb", "-ps", "testdata/4pics.264"},
+			goldenOut: "testdata/golden_4pics_h264.txt", expectedErr: false},
+		{desc: "annexBBadCodec", args: []string{appName, "-annexb", "-c", "av1", "testdata/4pics.264"},
+			expectedErr: true, errContains: `unsupported codec "av1"`},
+		{desc: "annexBH264 alias", args: []string{appName, "-annexb", "-ps", "-c", "h264", "testdata/4pics.264"},
+			goldenOut: "testdata/golden_4pics_h264.txt", expectedErr: false},
+		{desc: "av1 mp4", args: []string{appName, "../../mp4/testdata/av1_init.mp4"},
+			expectedErr: true, errContains: "video sample entry av01 has no NAL units"},
+		{desc: "initFile", args: []string{appName, "../../mp4/testdata/init.mp4"}, expectedErr: false},
+		{desc: "data in other file", args: []string{appName, "../../mp4/testdata/prog_8s_dref.mp4"}, expectedErr: true},
+		{desc: "progH264", args: []string{appName, "-ps", "-m", "4", "../../mp4/testdata/prog_8s.mp4"},
+			goldenOut: "testdata/golden_prot_h264_4pics.txt", expectedErr: false},
+		{desc: "mp4H264", args: []string{appName, "testdata/h264.mp4"},
+			goldenOut: "testdata/golden_h264_mp4.txt", expectedErr: false},
+		{desc: "annexBHEVC", args: []string{appName, "-annexb", "-c", "hevc", "-ps", "testdata/hevc.265"},
+			goldenOut: "testdata/golden_hevc_265.txt", expectedErr: false},
+		{desc: "annexBHEVC with SEI", args: []string{appName, "-annexb", "-c", "hevc", "-sei", "2", "testdata/hevc.265"},
+			goldenOut: "", expectedErr: false},
+		{desc: "mp4HEVC", args: []string{appName, "testdata/hevc.mp4"},
+			goldenOut: "testdata/golden_hevc_mp4.txt", expectedErr: false},
+		{desc: "h264 frag mp4 raw", args: []string{appName, "-m", "6", "-raw", "4", "../../mp4/testdata/prog_8s_dec_dashinit.mp4"},
+			goldenOut: "testdata/golden_h264_frag_raw.txt", expectedErr: false},
+		{desc: "avcSeiTime", args: []string{appName, "-sei", "2", "-annexb", "testdata/4pics.264"},
+			goldenOut: "testdata/golden_4pic_sei_264.txt", expectedErr: false},
+		{desc: "vvc 2s", args: []string{appName, "../../mp4/testdata/vvc_400kbps_2s.mp4"}, expectedErr: false,
+			goldenOut: "testdata/golden_vvc_2s.txt"},
+		{desc: "vvc annexB", args: []string{appName, "-annexb", "-ps", "-c", "vvc", "testdata/annexb.vvc"}, expectedErr: false,
+			goldenOut: "testdata/golden_vvc_annexb.txt"},
+		{desc: "version", args: []string{appName, "-version"}, expectedErr: false},
+		{desc: "help", args: []string{appName, "-h"}, expectedErr: false},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			gotOut := bytes.Buffer{}
+			err := run(c.args, &gotOut)
+			if c.expectedErr {
+				if err == nil {
+					t.Error("expected error but got nil")
+				} else if !strings.Contains(err.Error(), c.errContains) {
+					t.Errorf("expected error containing %q, got %q", c.errContains, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %s", err)
+				return
+			}
+			if c.goldenOut != "" {
+				expectedString := getExpected(t, c.goldenOut)
+				gotString := gotOut.String()
+				if gotString != expectedString {
+					t.Errorf("expected %s, got %s", expectedString, gotString)
+				}
+			}
+		})
+	}
+}
+
+func getExpected(t *testing.T, filename string) string {
+	t.Helper()
+	b, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("could not read golden file %s: %s", filename, err)
+	}
+	r := bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
+	return string(r)
+}
+
+func MakeByteStream(t *testing.T, inFile, outFile string) {
+	t.Helper()
+	ifd, err := os.Open(inFile)
+	if err != nil {
+		t.Fatalf("could not open file %s: %s", inFile, err)
+	}
+	d, err := mp4.DecodeFile(ifd)
+	if err != nil {
+		t.Fatalf("could not decode file %s: %s", inFile, err)
+	}
+	fullSamples, err := d.Segments[0].Fragments[0].GetFullSamples(nil)
+	if err != nil {
+		t.Fatalf("could not get full samples: %s", err)
+	}
+	byteStream := make([]byte, 0, 1024)
+	for i := 0; i <= 5; i++ {
+		fs := fullSamples[i]
+		bs := avc.ConvertSampleToByteStream(fs.Data)
+		byteStream = append(byteStream, bs...)
+	}
+	err = os.WriteFile(outFile, byteStream, 0644)
+	if err != nil {
+		t.Fatalf("could not write file %s: %s", outFile, err)
+	}
+}
+
+// TestBadChunkOffsets checks that a progressive file whose chunk offsets point
+// outside the mdat data gives an error instead of a panic.
+func TestBadChunkOffsets(t *testing.T) {
+	raw, err := os.ReadFile("testdata/h264.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Move every chunk offset in the first stco far beyond the end of the file.
+	stcoPos := bytes.Index(raw, []byte("stco"))
+	if stcoPos < 0 {
+		t.Fatal("no stco box found")
+	}
+	entryCount := binary.BigEndian.Uint32(raw[stcoPos+8 : stcoPos+12])
+	for e := 0; e < int(entryCount); e++ {
+		p := stcoPos + 12 + e*4
+		offset := binary.BigEndian.Uint32(raw[p : p+4])
+		binary.BigEndian.PutUint32(raw[p:p+4], offset+1<<28)
+	}
+	badFile := filepath.Join(t.TempDir(), "bad_stco.mp4")
+	if err := os.WriteFile(badFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := run([]string{appName, badFile}, &bytes.Buffer{}); err == nil {
+		t.Error("expected error for chunk offsets outside mdat, got nil")
+	}
+}
+
+// TestVVCLengthSize checks that a VVC track whose vvcC declares NALU length
+// fields other than 4 bytes gives a clear error instead of misread samples.
+func TestVVCLengthSize(t *testing.T) {
+	raw, err := os.ReadFile("../../mp4/testdata/vvc_400kbps_2s.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vvcCPos := bytes.Index(raw, []byte("vvcC"))
+	if vvcCPos < 0 {
+		t.Fatal("no vvcC box found")
+	}
+	// After the box type and version/flags: reserved(5) + LengthSizeMinusOne(2) + ptl_present_flag(1).
+	p := vvcCPos + 8
+	raw[p] = raw[p]&^0x06 | 1<<1 // 2-byte NALU lengths
+	badFile := filepath.Join(t.TempDir(), "vvc_2byte.mp4")
+	if err := os.WriteFile(badFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = run([]string{appName, badFile}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "2-byte NALU lengths") {
+		t.Errorf("got error %v, want one about 2-byte NALU lengths", err)
+	}
+}
+
+// TestMissingBoxes checks that a file whose video track lacks a box that listing needs gives an error,
+// and that a fragmented file without mvex is listed.
+func TestMissingBoxes(t *testing.T) {
+	cases := []struct {
+		inFile  string
+		boxType string
+		wantErr string
+	}{
+		{inFile: "testdata/h264.mp4", boxType: "moov", wantErr: "no moov box"},
+		{inFile: "testdata/h264.mp4", boxType: "hdlr", wantErr: "no video track"},
+		{inFile: "testdata/h264.mp4", boxType: "minf", wantErr: "no minf, stbl or stsd box"},
+		{inFile: "testdata/h264.mp4", boxType: "stbl", wantErr: "no minf, stbl or stsd box"},
+		{inFile: "testdata/h264.mp4", boxType: "stsd", wantErr: "no minf, stbl or stsd box"},
+		{inFile: "testdata/h264.mp4", boxType: "stts", wantErr: "no stsz or stts box"},
+		{inFile: "testdata/h264.mp4", boxType: "stsz", wantErr: "no stsz or stts box"},
+		{inFile: "testdata/h264.mp4", boxType: "stsc", wantErr: "no stsc or stsz box"},
+		{inFile: "testdata/h264.mp4", boxType: "stco", wantErr: "neither stco nor co64"},
+		{inFile: "../../mp4/testdata/prog_8s_dec_dashinit.mp4", boxType: "tkhd", wantErr: "no tkhd box"},
+		{inFile: "../../mp4/testdata/prog_8s_dec_dashinit.mp4", boxType: "stsd", wantErr: "no minf, stbl or stsd box"},
+		{inFile: "../../mp4/testdata/prog_8s_dec_dashinit.mp4", boxType: "mvex"},
+		{inFile: "../../mp4/testdata/vvc_400kbps_2s.mp4", boxType: "mdhd", wantErr: "empty edit"},
+		{inFile: "../../mp4/testdata/vvc_400kbps_2s.mp4", boxType: "mvhd", wantErr: "empty edit"},
+	}
+	for _, c := range cases {
+		t.Run(filepath.Base(c.inFile)+" without "+c.boxType, func(t *testing.T) {
+			inFile := writeWithFreeBox(t, c.inFile, c.boxType)
+			err := run([]string{appName, inFile}, &bytes.Buffer{})
+			if c.wantErr == "" {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Errorf("got error %v, want one containing %q", err, c.wantErr)
+			}
+		})
+	}
+}
+
+// writeWithFreeBox writes the file at inPath to a temporary file with the first occurrence of
+// boxType changed to free, and returns its path. In the test files, that occurrence is the type
+// of the first box of that type.
+func writeWithFreeBox(t *testing.T, inPath, boxType string) string {
+	t.Helper()
+	raw, err := os.ReadFile(inPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := bytes.Index(raw, []byte(boxType))
+	if pos < 0 {
+		t.Fatalf("no %s box in %s", boxType, inPath)
+	}
+	copy(raw[pos:pos+4], "free")
+	outPath := filepath.Join(t.TempDir(), filepath.Base(inPath))
+	if err := os.WriteFile(outPath, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return outPath
+}

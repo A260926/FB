@@ -1,0 +1,337 @@
+package mp4
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+
+	"github.com/Eyevinn/mp4ff/bits"
+)
+
+// StsdBox - Sample Description Box (stsd - manatory)
+// See ISO/IEC 14496-12 Section 8.5.2.2
+// Full Box + SampleCount
+// All Children are sampleEntries
+type StsdBox struct {
+	Version     byte
+	Flags       uint32
+	SampleCount uint32
+	// AvcX is a pointer to box with name avc1 or avc3
+	AvcX *VisualSampleEntryBox
+	// HvcX is a pointer to a box with name hvc1, hev1, dvh1, or dvhe.
+	// dvh1/dvhe are Dolby Vision sample entries that reuse the HEVC sample
+	// entry structure (hvcC plus a Dolby Vision dvcC/dvvC configuration box).
+	HvcX *VisualSampleEntryBox
+	// VvcX is apointer to a box with name vvc1 or vvi1
+	VvcX *VisualSampleEntryBox
+	// Av01 is a pointer to a box with name av01
+	Av01 *VisualSampleEntryBox
+	// Avs3 is a pointer to a box with name avs3
+	Avs3 *VisualSampleEntryBox
+	// Encv is a pointer to a box with name encv
+	Encv *VisualSampleEntryBox
+	// VpXX is a pointer to a box with name vp08 or vp09 (VP8 or VP9 video)
+	VpXX *VisualSampleEntryBox
+	// Mjpg is a pointer to a box with name mjpg (motion JPEG image sequence, ISO/IEC 23008-12)
+	Mjpg *VisualSampleEntryBox
+	// ProRes is a pointer to a box with name apch, apcn, apcs, apco, ap4h or ap4x (Apple ProRes in QuickTime).
+	// Check Type() to tell which one it is.
+	ProRes *VisualSampleEntryBox
+	// Mp4v is a pointer to a box with name mp4v (MPEG-4 Visual or JPEG signalled via esds)
+	Mp4v *VisualSampleEntryBox
+	// Jpeg is a pointer to a box with name jpeg (QuickTime JPEG video)
+	Jpeg *VisualSampleEntryBox
+	// Mp4a is a pointer to a box with name mp4a
+	Mp4a *AudioSampleEntryBox
+	// Mp3 is a pointer to a box with name .mp3 (QuickTime MP3 audio)
+	Mp3 *AudioSampleEntryBox
+	// QtPcm is a pointer to a box with name lpcm (modern, version 2 style),
+	// twos/sowt (legacy big/little-endian 16-bit PCM), in24/in32 (24- and 32-bit
+	// integer PCM) or fl32/fl64 (32- and 64-bit float PCM) — QuickTime PCM audio.
+	// Check Type() to tell which one it is.
+	QtPcm *AudioSampleEntryBox
+	// AC3 is a pointer to a box with name ac-3
+	AC3 *AudioSampleEntryBox
+	// EC3 is a pointer to a box with name ec-3
+	EC3 *AudioSampleEntryBox
+	// AC4 is a pointer to a box with name ac-4
+	AC4 *AudioSampleEntryBox
+	// Alac is a pointer to a box with name alac (Apple Lossless audio)
+	Alac *AudioSampleEntryBox
+	// Opus is a pointer to a box with name Opus
+	Opus *AudioSampleEntryBox
+	// Iamf is a pointer to a box with name iamf
+	Iamf *AudioSampleEntryBox
+	// MhXX is a pointer to an MPEG-H mha1, mha2, mh1, mh2 sample entry box
+	MhXX *AudioSampleEntryBox
+	// Enca is a pointer to a box with name enca
+	Enca *AudioSampleEntryBox
+	// Wvtt is a pointer to a WvttBox
+	Wvtt *WvttBox
+	// Wvtc is a pointer to a WvttBox with name wvtc (experimental paint-model WebVTT)
+	Wvtc *WvttBox
+	// Stpp is a pointer to a StppBox
+	Stpp *StppBox
+	// Stpc is a pointer to a StppBox with name stpc (experimental paint-model TTML)
+	Stpc *StppBox
+	// Evte is a pointer to an EvteBox
+	Evte *EvteBox
+	// Tmcd is a pointer to a TimecodeSampleEntryBox (QuickTime timecode)
+	Tmcd *TimecodeSampleEntryBox
+	// Tx3g is a pointer to a TextSampleEntryBox: a 3GPP timed text sample entry tx3g, or a text sample entry with
+	// the same layout. Check Type() to tell which one it is.
+	Tx3g *TextSampleEntryBox
+	// QtText is a pointer to a QuickTimeTextSampleEntryBox with name text (QuickTime text)
+	QtText   *QuickTimeTextSampleEntryBox
+	Children []Box
+}
+
+// NewStsdBox - Generate a new empty stsd box
+func NewStsdBox() *StsdBox {
+	return &StsdBox{}
+}
+
+// AddChild - Add a child box, set relevant pointer, and update SampleCount
+func (s *StsdBox) AddChild(box Box) {
+	switch box.Type() {
+	case "avc1", "avc3":
+		s.AvcX = box.(*VisualSampleEntryBox)
+	case "hvc1", "hev1", "dvh1", "dvhe":
+		s.HvcX = box.(*VisualSampleEntryBox)
+	case "vvc1", "vvi1":
+		s.VvcX = box.(*VisualSampleEntryBox)
+	case "encv":
+		s.Encv = box.(*VisualSampleEntryBox)
+	case "av01":
+		s.Av01 = box.(*VisualSampleEntryBox)
+	case "vp08", "vp09":
+		s.VpXX = box.(*VisualSampleEntryBox)
+	case "mjpg":
+		s.Mjpg = box.(*VisualSampleEntryBox)
+	case "apch", "apcn", "apcs", "apco", "ap4h", "ap4x":
+		// A body that does not parse as a visual sample entry falls back to
+		// UnknownBox; it then only lives in Children.
+		if entry, ok := box.(*VisualSampleEntryBox); ok {
+			s.ProRes = entry
+		}
+	case "mp4v":
+		s.Mp4v = box.(*VisualSampleEntryBox)
+	case "jpeg":
+		s.Jpeg = box.(*VisualSampleEntryBox)
+	case "avs3":
+		s.Avs3 = box.(*VisualSampleEntryBox)
+	case "mp4a":
+		s.Mp4a = box.(*AudioSampleEntryBox)
+	case ".mp3":
+		// A legacy body that does not parse as a sound sample description
+		// falls back to UnknownBox; it then only lives in Children.
+		if entry, ok := box.(*AudioSampleEntryBox); ok {
+			s.Mp3 = entry
+		}
+	case "lpcm", "twos", "sowt", "in24", "in32", "fl32", "fl64":
+		if entry, ok := box.(*AudioSampleEntryBox); ok {
+			s.QtPcm = entry
+		}
+	case "ac-3":
+		s.AC3 = box.(*AudioSampleEntryBox)
+	case "ec-3":
+		s.EC3 = box.(*AudioSampleEntryBox)
+	case "ac-4":
+		s.AC4 = box.(*AudioSampleEntryBox)
+	case "alac":
+		if entry, ok := box.(*AudioSampleEntryBox); ok {
+			s.Alac = entry
+		}
+	case "tmcd":
+		if entry, ok := box.(*TimecodeSampleEntryBox); ok {
+			s.Tmcd = entry
+		}
+	case "tx3g", "text":
+		switch entry := box.(type) {
+		case *TextSampleEntryBox:
+			s.Tx3g = entry
+		case *QuickTimeTextSampleEntryBox:
+			s.QtText = entry
+		}
+	case "Opus":
+		s.Opus = box.(*AudioSampleEntryBox)
+	case "iamf":
+		s.Iamf = box.(*AudioSampleEntryBox)
+	case "mha1", "mha2", "mhm1", "mhm2":
+		s.MhXX = box.(*AudioSampleEntryBox)
+	case "enca":
+		s.Enca = box.(*AudioSampleEntryBox)
+	case "wvtt":
+		s.Wvtt = box.(*WvttBox)
+	case "wvtc":
+		s.Wvtc = box.(*WvttBox)
+	case "stpp":
+		s.Stpp = box.(*StppBox)
+	case "stpc":
+		s.Stpc = box.(*StppBox)
+	case "evte":
+		s.Evte = box.(*EvteBox)
+	}
+	s.Children = append(s.Children, box)
+	s.SampleCount++
+}
+
+// GetSampleDescription - get one of multiple descriptions
+func (s *StsdBox) GetSampleDescription(index int) (Box, error) {
+	if index >= len(s.Children) {
+		return nil, fmt.Errorf("beyond limit of sample descriptors")
+	}
+	return s.Children[index], nil
+}
+
+// DecodeStsd - box-specific decode
+func DecodeStsd(hdr BoxHeader, startPos uint64, r io.Reader) (Box, error) {
+	var versionAndFlags, sampleCount uint32
+	err := binary.Read(r, binary.BigEndian, &versionAndFlags)
+	if err != nil {
+		return nil, err
+	}
+	err = binary.Read(r, binary.BigEndian, &sampleCount)
+	if err != nil {
+		return nil, err
+	}
+	// Note higher startPos below since not simple container
+	children, err := DecodeContainerChildren(hdr, startPos+16, startPos+hdr.Size, r)
+	if err != nil {
+		return nil, err
+	}
+	if len(children) != int(sampleCount) {
+		return nil, fmt.Errorf("stsd sample count  mismatch")
+	}
+	stsd := &StsdBox{
+		Version:     byte(versionAndFlags >> 24),
+		Flags:       versionAndFlags & flagsMask,
+		SampleCount: 0,
+	}
+	for _, box := range children {
+		stsd.AddChild(box)
+	}
+	if stsd.SampleCount != sampleCount {
+		return nil, fmt.Errorf("stsd sample count mismatch")
+	}
+	return stsd, nil
+}
+
+// DecodeStsdSR - box-specific decode
+func DecodeStsdSR(hdr BoxHeader, startPos uint64, sr bits.SliceReader) (Box, error) {
+	versionAndFlags := sr.ReadUint32()
+	sampleCount := sr.ReadUint32()
+	// Note higher startPos below since not simple container
+	children, err := DecodeContainerChildrenSR(hdr, startPos+16, startPos+hdr.Size, sr)
+	if err != nil {
+		return nil, err
+	}
+	if len(children) != int(sampleCount) {
+		return nil, fmt.Errorf("stsd sample count  mismatch")
+	}
+	stsd := StsdBox{
+		Version:     byte(versionAndFlags >> 24),
+		Flags:       versionAndFlags & flagsMask,
+		SampleCount: 0, // set by  AddChild
+		Children:    make([]Box, 0, len(children)),
+	}
+	for _, box := range children {
+		stsd.AddChild(box)
+	}
+	if stsd.SampleCount != sampleCount {
+		return nil, fmt.Errorf("stsd sample count mismatch")
+	}
+	return &stsd, nil
+}
+
+// Type - box-specific type
+func (s *StsdBox) Type() string {
+	return "stsd"
+}
+
+// GetChildren - list of child boxes
+func (s *StsdBox) GetChildren() []Box {
+	return s.Children
+}
+
+// Size - box-specific type
+func (s *StsdBox) Size() uint64 {
+	return containerSize(s.Children) + 8
+}
+
+// Encode - box-specific encode of stsd - not a usual container
+func (s *StsdBox) Encode(w io.Writer) error {
+	err := EncodeHeader(s, w)
+	if err != nil {
+		return err
+	}
+	versionAndFlags := (uint32(s.Version) << 24) + s.Flags
+	err = binary.Write(w, binary.BigEndian, versionAndFlags)
+	if err != nil {
+		return err
+	}
+	err = binary.Write(w, binary.BigEndian, s.SampleCount)
+	if err != nil {
+		return err
+	}
+	for _, b := range s.Children {
+		err = b.Encode(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// EncodeSW - box-specific encode of stsd - not a usual container
+func (s *StsdBox) EncodeSW(sw bits.SliceWriter) error {
+	err := EncodeHeaderSW(s, sw)
+	if err != nil {
+		return err
+	}
+	versionAndFlags := (uint32(s.Version) << 24) + s.Flags
+	sw.WriteUint32(versionAndFlags)
+	sw.WriteUint32(s.SampleCount)
+	for _, c := range s.Children {
+		err = c.EncodeSW(sw)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Info - write box-specific information
+func (s *StsdBox) Info(w io.Writer, specificBoxLevels, indent, indentStep string) error {
+	bd := newInfoDumper(w, indent, s, int(s.Version), s.Flags)
+	if bd.err != nil {
+		return bd.err
+	}
+	var err error
+	for _, c := range s.Children {
+		err = c.Info(w, specificBoxLevels, indent+indentStep, indentStep)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// GetBtrt returns the first BtrtBox found in StsdBox children.
+func (s *StsdBox) GetBtrt() *BtrtBox {
+	for _, c := range s.Children {
+		switch child := c.(type) {
+		case *VisualSampleEntryBox:
+			return child.Btrt
+		case *AudioSampleEntryBox:
+			return child.Btrt
+		case *WvttBox:
+			return child.Btrt
+		case *StppBox:
+			return child.Btrt
+		case *EvteBox:
+			return child.Btrt
+		}
+	}
+	return nil
+}

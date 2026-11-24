@@ -1,0 +1,36 @@
+package mp4
+
+// Sample - sample as used in trun box (mdhd timescale)
+type Sample struct {
+	Flags                 uint32 // interpreted as SampleFlags
+	Dur                   uint32 // Sample duration in mdhd timescale
+	Size                  uint32 // Size of sample data
+	CompositionTimeOffset int32  // Signed composition time offset
+}
+
+// NewSample - create Sample with trun data
+func NewSample(flags uint32, dur uint32, size uint32, compositionTimeOffset int32) Sample {
+	return Sample{
+		Flags:                 flags,
+		Dur:                   dur,
+		Size:                  size,
+		CompositionTimeOffset: compositionTimeOffset,
+	}
+}
+
+// IsSync - check sync by masking flags including dependsOn
+func (s *Sample) IsSync() bool {
+	return IsSyncSampleFlags(s.Flags)
+}
+
+// FullSample - include accumulated time and data. Times in mdhd timescale
+type FullSample struct {
+	Sample
+	DecodeTime uint64 // Absolute decode time (offset + accumulated sample Dur)
+	Data       []byte // Sample data
+}
+
+// PresentationTime - DecodeTime displaced by composition time offset (possibly negative)
+func (s *FullSample) PresentationTime() int64 {
+	return int64(s.DecodeTime) + int64(s.CompositionTimeOffset)
+}
