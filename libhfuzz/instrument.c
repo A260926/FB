@@ -881,9 +881,19 @@ static struct {
     size_t   guard;
 } hf8bitcounters[256] = {};
 
+/* Optional multi-process saturation merge, implemented in covmerge.c. */
+extern void hfCovMergeInstrumentHarvest(void);
+
 void instrument8BitCountersCount(void) {
     uint64_t totalEdge = 0;
     uint64_t totalCmp  = 0;
+
+    /*
+     * When covmerge is attached, this consumes the first local round after
+     * hfCovMergeBegin().  It only reads counters here; the existing loop below
+     * performs the usual bucket accounting and clears every counter.
+     */
+    hfCovMergeInstrumentHarvest();
 
     for (size_t i = 0; i < ARRAYSIZE(hf8bitcounters) && hf8bitcounters[i].start; i++) {
         for (size_t j = 0; j < hf8bitcounters[i].cnt; j++) {

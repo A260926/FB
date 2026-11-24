@@ -6,7 +6,7 @@ if [[ $mode == target ]]; then test -s checks/covmerge_tests.c; fi
 bash task_support/build.sh "$mode"
 if [[ $mode == target ]]; then
   bash task_support/link.sh
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/covmerge-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
