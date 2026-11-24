@@ -6,8 +6,8 @@ if [[ $mode == target ]]; then test -s tests/heightfield_target.cpp; fi
 bash task_support/build.sh "$mode"
 if [[ $mode == target ]]; then
   test -s examples/heightfield_render.cpp
-${CXX:-c++} -std=c++17 -O1 -I. -Isrc -include task_support/compat.h -include src/heightfield.h task_support/driver.c tests/heightfield_target.cpp .task-build/production.a -o .task-build/target
-${CXX:-c++} -std=c++17 -O1 -I. -Isrc -include task_support/compat.h -include src/heightfield.h examples/heightfield_render.cpp .task-build/production.a -o .task-build/example
+${CXX:-c++} -std=c++17 -O1 -DTINSEL_TARGET_BUILD -I. -Isrc -include task_support/compat.h -include src/heightfield.h task_support/driver.c tests/heightfield_target.cpp .task-build/production.a -o .task-build/target
+${CXX:-c++} -std=c++17 -O1 -DTINSEL_TARGET_BUILD -I. -Isrc -include task_support/compat.h -include src/heightfield.h examples/heightfield_render.cpp .task-build/production.a -o .task-build/example
 mkdir -p .task-build/example-output
 rm -f .task-build/example-output/before.ppm .task-build/example-output/after.ppm .task-build/example-output/retained.ppm
 .task-build/example .task-build/example-output

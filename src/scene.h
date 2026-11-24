@@ -5,6 +5,7 @@
 #include "bvh.h"
 #include "skylight.h"
 #include "probe.h"
+#include "heightfield.h"
 
 #include <vector>
 
@@ -103,7 +104,8 @@ enum GeometryType
 {
 	eSphere,
 	ePlane,
-	eMesh
+	eMesh,
+	eHeightField
 };
 
 struct SphereGeometry
@@ -151,6 +153,9 @@ struct Primitive
 		PlaneGeometry plane;
 		MeshGeometry mesh;
 	};
+
+	// non-trivial (shared ownership) so it cannot join the union above
+	HeightFieldGeometry heightField;
 
 	Material material;
 

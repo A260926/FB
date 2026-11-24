@@ -836,7 +836,7 @@ CUDA_CALLABLE inline float PrimitiveArea(const Primitive& p)
 	{
 		case eSphere:
 		{
-			float area = 4.0f*kPi*p.sphere.radius*p.sphere.radius;  
+			float area = 4.0f*kPi*p.sphere.radius*p.sphere.radius;
 			return area;
 		}
 		case ePlane:
@@ -846,6 +846,11 @@ CUDA_CALLABLE inline float PrimitiveArea(const Primitive& p)
 		case eMesh:
 		{
 			return p.mesh.area*p.endTransform.s;
+		}
+		case eHeightField:
+		{
+			// height fields use a pointwise area density, not a constant 1/area
+			return 0.0f;
 		}
 	};
 
@@ -900,6 +905,20 @@ CUDA_CALLABLE inline void PrimitiveSample(const Primitive& p, float time, Vec3& 
 	        normal = SafeNormalize(TransformVector(transform, u*n1 + v*n2 + (1.0f-u-v)*n3));
 			return;
 		}
+		case eHeightField:
+		{
+			// uniform parameters over the whole local xz rectangle; the
+			// pointwise density lives in HeightField::Snapshot::WorldAreaPdf
+#ifdef TINSEL_TARGET_BUILD
+			float su, sv;
+			Sample2D(rand, su, sv);
+			HeightFieldSample(p, su, sv, pos, normal);
+			return;
+#else
+			assert(0);
+			return;
+#endif
+		}
 	}
 }
 
@@ -927,6 +946,17 @@ CUDA_CALLABLE inline Bounds PrimitiveBounds(const Primitive& p)
 			// read bounds from bvh root
 			localBounds = p.mesh.nodes[0].bounds;
 			break;
+		}
+		case eHeightField:
+		{
+#ifdef TINSEL_TARGET_BUILD
+			return HeightFieldPrimitiveBounds(p);
+#else
+			assert(0);
+			localBounds.lower = Vec3(0.0f);
+			localBounds.upper = Vec3(0.0f);
+			break;
+#endif
 		}
 	};
 
@@ -1013,6 +1043,15 @@ CUDA_CALLABLE inline bool PrimitiveIntersect(const Primitive& p, const Ray& ray,
 			}			
 
 			return hit;
+		}
+		case eHeightField:
+		{
+#ifdef TINSEL_TARGET_BUILD
+			return HeightFieldPrimitiveIntersect(p, ray, outT, outNormal);
+#else
+			assert(0);
+			return false;
+#endif
 		}
 	}
 

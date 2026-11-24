@@ -174,6 +174,71 @@ Supported Platforms
 
 Tinsel includes makefiles and Visual Studio projects for OSX and Windows respectively. Although not explicitly supported it should be relatively simple to build for Linux.
 
+Editable Height Fields
+----------------------
+
+`src/heightfield.h` / `src/heightfield.cpp` add a height field primitive that is
+traced directly as a smooth bilinear surface rather than a triangle mesh.
+
+A field is an `N x N` grid of cells from `(N+1) x (N+1)` row-major finite
+heights, where `N` is a power of two at least two. Each cell is a bilinear
+Coons patch `y = h(x, z)`. A ray against a cell produces a quadratic in the
+ray parameter; every valid root is solved and tested, so saddle cells with
+multiple roots are handled exactly. A fixed quadtree of cell AABBs prunes the
+ray traversal. No fixed-step marching, single Newton step or triangle proxy is
+used.
+
+Call order:
+
+```cpp
+// 1. Build the field once from the initial heights.
+HeightField field;
+field.Initialize(N, W, D, heights.data(), (int)heights.size());
+
+// 2. Pin an immutable generation. The snapshot shares ownership of the data;
+//    later edits never mutate it.
+HeightField::Snapshot snapshot = field.TakeSnapshot();
+
+// 3. Attach it to a primitive (multiple primitives may share a snapshot).
+//    Instances use static rotation, translation and positive uniform scale.
+Primitive primitive;
+SetHeightField(primitive, snapshot);
+primitive.startTransform = primitive.endTransform = Transform(position, rotation, scale);
+primitive.material.emission = Vec3(4.0f);
+primitive.lightSamples = 2;   // > 0 makes it an explicitly sampled area light
+
+// 4. Add primitives and build as usual; Scene::Build, PrimitiveBounds and the
+//    scene BVH now understand the new geometry type.
+scene.AddPrimitive(primitive);
+scene.Build();
+// CpuRenderer path tracing, shadow rays, direct light sampling and the
+// balance-heuristic MIS on BSDF-emission hits all handle height fields.
+
+// 5. Edit later. The whole batch is validated first; invalid coordinates or
+//    non-finite values leave heights, version and stats untouched. Duplicate
+//    coordinates resolve to the last entry. Only the cells touching changed
+//    vertices and their quadtree ancestors are recomputed.
+hf::EditStats stats;
+field.Update(edits.data(), (int)edits.size(), &stats);
+// stats.leavesRecomputed / stats.nodesRecomputed expose the actual local work.
+
+// 6. New primitives (or re-built scenes) see the new generation; primitives
+//    holding older snapshots keep the old heights, bounds, normals and pdfs.
+```
+
+Light sampling draws `(u, v)` uniformly over the whole local xz rectangle, not
+by triangle or surface area. The matching pointwise densities are
+`Snapshot::LocalAreaPdf`, `Snapshot::WorldAreaPdf` (divided by the instance
+scale squared) and `HeightFieldDirectionPdf` (world area density times the
+true connection distance squared over the absolute cosine). The light emits
+from both sides; an exact zero-cosine connection contributes zero. Edges use
+the cell with the smaller row then smaller column, and the outer border uses
+the single adjacent cell.
+
+The example `examples/heightfield_render.cpp` renders a field before an edit,
+after lifting a vertex beyond the old bounds, and through a snapshot retained
+from before the edit (`before.ppm`, `after.ppm`, `retained.ppm`).
+
 License
 -------
 

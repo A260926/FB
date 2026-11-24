@@ -12,7 +12,7 @@ objects=()
 for src in "${sources[@]}"; do
   obj=".task-build/$(basename "$src").o"
   if [[ ${1:-baseline} == target ]]; then
-    "$cxx" -std=c++17 -O1 -I. -Isrc -include task_support/compat.h -include src/heightfield.h -c "$src" -o "$obj"
+    "$cxx" -std=c++17 -O1 -DTINSEL_TARGET_BUILD -I. -Isrc -include task_support/compat.h -include src/heightfield.h -c "$src" -o "$obj"
   else
     "$cxx" -std=c++17 -O1 -I. -Isrc -include task_support/compat.h -c "$src" -o "$obj"
   fi

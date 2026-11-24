@@ -182,7 +182,7 @@ inline Vec3 SampleLights(const Scene& scene, const Primitive& surfacePrimitive, 
 				const float kTolerance = 1.e-2f;
 
 				if (fabsf(t - sqrtf(dSq)) <= kTolerance)
-				{				
+				{
 					const float nl = Abs(Dot(lightNormal, wi));
 
 					// for glancing rays, note we use abs to include cases
@@ -190,9 +190,18 @@ inline Vec3 SampleLights(const Scene& scene, const Primitive& surfacePrimitive, 
 					if (Abs(nl) < 1.e-6f)
 						continue;
 
-					// light pdf with respect to area and convert to pdf with respect to solid angle
-					float lightArea = PrimitiveArea(lightPrimitive);
-					float lightPdf = ((1.0f/lightArea)*tSq)/nl;
+					// area pdf of the sampling convention; height fields carry
+					// a pointwise density instead of a constant 1/area
+					float areaPdf;
+#ifdef TINSEL_TARGET_BUILD
+					if (lightPrimitive.type == eHeightField)
+						areaPdf = HeightFieldWorldAreaPdf(lightPrimitive, lightPos, time);
+					else
+#endif
+						areaPdf = 1.0f / PrimitiveArea(lightPrimitive);
+
+					// convert to pdf with respect to solid angle
+					float lightPdf = areaPdf*tSq/nl;
 
 					// bsdf pdf for light's direction
 					float bsdfPdf = BSDFPdf(surfacePrimitive.material, etaI, etaO, surfacePos, shadingNormal, wo, wi);
@@ -284,13 +293,36 @@ Vec3 PathTrace(const Scene& scene, const Vec3& startOrigin, const Vec3& startDir
 			}			
 			else if (kBsdfSamples > 0)
 			{
-				// area pdf that this dir was already included by the light sampling from previous step
-				float lightArea = PrimitiveArea(*hit);
-
-				if (lightArea > 0.0f)
+				// area pdf that this dir was already included by the light
+				// sampling from the previous step; height fields use their
+				// pointwise density instead of a constant reciprocal area
+				float areaPdf = 0.0f;
+#ifdef TINSEL_TARGET_BUILD
+				if (hit->type == eHeightField)
+					areaPdf = HeightFieldWorldAreaPdf(*hit, p, rayTime);
+				else
+#endif
 				{
-					// convert to pdf with respect to solid angle
-					float lightPdf = ((1.0f/lightArea)*t*t)/Clamp(Dot(-rayDir, n), 1.e-3f, 1.0f);
+					const float lightArea = PrimitiveArea(*hit);
+					if (lightArea > 0.0f)
+						areaPdf = 1.0f / lightArea;
+				}
+
+				if (areaPdf > 0.0f)
+				{
+					// convert to pdf with respect to solid angle. Height fields
+					// divide by the true absolute cosine; an exact zero cosine
+					// connection carries no energy.
+					float lightPdf;
+#ifdef TINSEL_TARGET_BUILD
+					if (hit->type == eHeightField)
+					{
+						const float cosAbs = Abs(Dot(-rayDir, n));
+						lightPdf = cosAbs > 0.0f ? areaPdf*t*t/cosAbs : REAL_MAX;
+					}
+					else
+#endif
+						lightPdf = areaPdf*t*t/Clamp(Dot(-rayDir, n), 1.e-3f, 1.0f);
 
 					// calculate weight for bsdf sampling
 					int N = hit->lightSamples+kBsdfSamples;
