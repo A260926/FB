@@ -1,0 +1,23 @@
+Experimental XVC version 3.0 is row-restart mode; version 2.0 syntax is unchanged.
+Both versions retain the existing picture-header fields and alignment.
+After aligned picture header, version 3.0 adds:
+  4 bytes ASCII XRST; uint16_be row_count; uint16_be reserved_zero;
+  row_count uint32_be nonzero CABAC byte lengths;
+  row_count independently terminated and byte-aligned CABAC streams, top-to-bottom;
+  existing picture checksum (if the original rules require it).
+row_count = ceil(coded_luma_height / 64); each stream codes exactly its CTU row.
+No extra directory offsets, gaps, row ids, duplicate streams or inter-row alignment.
+Sum lengths with overflow checks and bound against current picture NAL excluding checksum.
+Each row initializes probabilities, arithmetic coder, RDO fractional-bit accounting and
+QP predictor from the picture initial state, not the end of its predecessor.
+All same-picture spatial candidates must be in this row. Reference-picture samples and
+temporal candidates retain their ordinary meaning. Reset affects both CU trees.
+Decode rows in either order into distinct row areas; deblock/checksum/DPB commit only
+once after all row reconstructions succeed. Tests may expose an internal order hook.
+API: add row_restart (int, default 0) to encoder parameters and export from xvcenc.h:
+XVC_ENC_API xvc_enc_return_code
+xvc_encoder_set_row_restart(xvc_encoder_parameters *param, int enabled);
+Return XVC_ENC_OK for 0/1; XVC_ENC_INVALID_ARGUMENT for null/other values.
+Invalid setter calls leave parameters unchanged. parameters_check also checks this field.
+This task does not promise binary struct ABI compatibility for recompiled applications.
+Do not substitute a second complete Encoder/Decoder per row or mask cross-row outputs.

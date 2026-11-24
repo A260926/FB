@@ -1,0 +1,36 @@
+language: cpp
+cache: ccache
+dist: bionic
+osx_image: xcode11
+compiler:
+  - gcc
+  - clang
+os:
+  - linux
+  - osx
+
+addons:
+  homebrew:
+    packages: ccache
+
+env:
+  matrix:
+    - build_type=Release
+    - build_type=Debug
+    - build_type=Release build_shared=ON
+
+install:
+  - if [ $TRAVIS_OS_NAME = osx ]; then brew install ccache; fi
+  - export PATH="/usr/local/opt/ccache/libexec:$PATH"
+
+script:
+  - mkdir build && cd build
+  - cmake .. -DCMAKE_{C,CXX}_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${build_type:-Release} -DBUILD_SHARED_LIBS=${build_shared:-OFF}
+  - make -j 8
+  - make test
+  - sudo make install
+
+matrix:
+  exclude:
+    - os: osx
+      compiler: gcc
