@@ -1,0 +1,110 @@
+_FILENAME=${0##*/}
+CUR_DIR=${0/${_FILENAME}}
+CUR_DIR=$(cd $(dirname ${CUR_DIR}); pwd)/$(basename ${CUR_DIR})/
+
+pushd $CUR_DIR/..
+
+test_executable() {
+
+EXEC=$1
+
+$EXEC vectors/foreman.264 out.mp4
+if ! cmp ./out.mp4 vectors/out_ref.mp4 >/dev/null 2>&1
+then
+    echo test failed
+    exit 1
+fi
+rm out.mp4
+
+$EXEC -s vectors/foreman.264 out.mp4
+if ! cmp ./out.mp4 vectors/out_sequential_ref.mp4 >/dev/null 2>&1
+then
+    echo sequential test failed
+    exit 1
+fi
+rm out.mp4
+
+$EXEC -f vectors/foreman.264 out.mp4
+if ! cmp ./out.mp4 vectors/out_fragmentation_ref.mp4 >/dev/null 2>&1
+then
+    echo fragmentation test failed
+    exit 1
+fi
+rm out.mp4
+
+$EXEC vectors/foreman_slices.264 out.mp4
+if ! cmp ./out.mp4 vectors/out_slices_ref.mp4 >/dev/null 2>&1
+then
+    echo slices test failed
+    exit 1
+fi
+rm out.mp4
+
+$EXEC -d vectors/out_ref.mp4 out.h264
+if ! cmp ./out.h264 vectors/foreman.264 >/dev/null 2>&1
+then
+    echo demux test failed
+    exit 1
+fi
+rm out.h264
+
+$EXEC -d vectors/out_sequential_ref.mp4 out.h264
+if ! cmp ./out.h264 vectors/foreman.264 >/dev/null 2>&1
+then
+    echo demux sequential test failed
+    exit 1
+fi
+rm out.h264
+
+$EXEC -d vectors/out_slices_ref.mp4 out.h264
+if ! cmp ./out.h264 vectors/foreman_slices.264 >/dev/null 2>&1
+then
+    echo demux slices test failed
+    exit 1
+fi
+rm out.h264
+
+}
+
+test_malformed() {
+EXEC=$1
+for f in vectors/malformed/avcc_overflow.mp4 vectors/malformed/spspps_oob.mp4; do
+    $EXEC -d "$f" /dev/null >/dev/null 2>&1
+    if [ $? -ge 128 ]; then
+        echo "malformed demux test failed: $f"
+        exit 1
+    fi
+done
+
+for f in vectors/malformed/startcode_oob.264 vectors/malformed/allzero_nal.264; do
+    $EXEC -m "$f" out.mp4 >/dev/null 2>&1
+    if [ $? -ge 128 ]; then
+        echo "malformed mux test failed: $f"
+        exit 1
+    fi
+    rm -f out.mp4
+done
+}
+
+test_av1() {
+EXEC=$1
+$EXEC -d vectors/av1.mp4 out.av1.obu >/dev/null 2>&1
+if [ $? -ge 128 ]; then
+    echo "av1 demux test failed"
+    exit 1
+fi
+if [ ! -s out.av1.obu ]; then
+    echo "av1 demux produced no output"
+    exit 1
+fi
+rm -f out.av1.obu
+}
+
+test_executable ./minimp4_x86
+test_malformed ./minimp4_x86
+test_av1 ./minimp4_x86
+test_executable "qemu-arm ./minimp4_arm_gcc"
+test_malformed "qemu-arm ./minimp4_arm_gcc"
+test_av1 "qemu-arm ./minimp4_arm_gcc"
+
+echo test passed

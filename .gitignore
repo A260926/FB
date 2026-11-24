@@ -1,0 +1,9 @@
+.vscode
+minimp4_*
+qemu-prof
+*.mp4
+!vectors/malformed/*.mp4
+!vectors/av1.mp4
+*.gcda
+*.gcno
+*.gcov

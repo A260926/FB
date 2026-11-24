@@ -1,0 +1,26 @@
+C API in mp4d_stream.h, with C++ extern "C" guards; definitions in mp4d_stream.c.
+#include <stddef.h>
+#include <stdint.h>
+typedef struct MP4D_stream MP4D_stream_t;
+typedef struct {
+ uint32_t track_id, timescale;
+ uint64_t dts;
+ int64_t pts;
+ uint32_t duration, size, flags;
+} MP4D_stream_sample_t;
+typedef int (*MP4D_stream_cb)(const MP4D_stream_sample_t *, const unsigned char *, void *);
+MP4D_stream_t *MP4D_stream_open(size_t limit, MP4D_stream_cb cb, void *token);
+int MP4D_stream_feed(MP4D_stream_t *, const void *data, size_t bytes);
+int MP4D_stream_finish(MP4D_stream_t *);
+void MP4D_stream_close(MP4D_stream_t *);
+Open rejects zero limit/null callback. feed(NULL,0) is a no-op on a healthy stream.
+feed/finish: 0 success, negative failure. Successful finish is idempotent; subsequent
+nonempty feed is an error. Callback returns 0 on success, nonzero to fail permanently.
+flags is the resolved ISO sample_flags word, not a boolean keyframe flag.
+DTS must fit uint64_t and PTS int64_t, otherwise fail rather than wrap.
+No allocation may scale with total media length: limit independently bounds retained
+init data, all current-moof tables (including derived sample descriptions) and one sample.
+Only complete valid init may be published to the fragment state; use existing MP4D
+configuration parsing rather than another codec-config decoder. Factor internals if needed.
+Independent fragments may be sparse by track. No overlapping runs, no external data,
+no zero-length boxes, encryption, multiple sample descriptions or implicit tfhd base.
