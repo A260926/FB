@@ -6,6 +6,7 @@
 #include "theft_call.h"
 #include "theft_shrink.h"
 #include "theft_autoshrink.h"
+#include "theft_guidance.h"
 
 /* Now that arguments have been generated, run the trial and update
  * counters, call cb with results, etc. */
@@ -20,7 +21,18 @@ theft_trial_run(struct theft *t,
     theft_trial_get_args(t, args);
 
     bool repeated = false;
-    enum theft_trial_res tres = theft_call(t, args);
+    /* The first call here is the actual primary property evaluation.
+     * Guided runs arm feature collection around exactly this call and
+     * publish/admit immediately after its verdict, before shrinking and
+     * before the ordinary trial_post hook. */
+    enum theft_trial_res tres = (t->guidance != NULL)
+        ? theft_guide_primary_call(t, args)
+        : theft_call(t, args);
+
+    if (t->guidance != NULL && !theft_guide_publish(t, tres)) {
+        return false;
+    }
+
     theft_hook_trial_post_cb *trial_post = t->hooks.trial_post;
     void *trial_post_env = (trial_post == theft_hook_trial_post_print_result
         ? t->print_trial_result_env

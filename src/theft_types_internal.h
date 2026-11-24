@@ -76,6 +76,11 @@ struct counter_info {
     size_t dup;
 };
 
+/* Feedback-directed guidance state. Defined in theft_guidance.h.
+ * NULL for ordinary theft_run calls, which leaves their behavior
+ * and random sequence unchanged. */
+struct theft_guidance;
+
 struct prng_info {
     struct theft_rng *rng;      /* random number generator */
     uint64_t buf;               /* buffer for PRNG bits */
@@ -137,6 +142,10 @@ struct theft {
     struct counter_info counters;
     struct trial_info trial;
     struct worker_info workers[1];
+
+    /* Non-NULL only inside theft_run_guided. Owned by the run and
+     * freed by theft_run_free. */
+    struct theft_guidance *guidance;
 };
 
 #endif

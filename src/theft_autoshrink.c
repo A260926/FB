@@ -44,9 +44,15 @@ theft_autoshrink_bit_pool_random(struct theft *t,
         return;
     }
 
-    /* If not shrinking, lazily fill the bit pool. */
+    /* If not shrinking, lazily fill the bit pool. During guided donor
+     * replay, missing bits are appended from the private extension RNG
+     * rather than the main trial PRNG. */
     if (!pool->shrinking) {
-        lazily_fill_bit_pool(t, pool, bit_count);
+        if (pool->guide_replay) {
+            guided_fill_bit_pool(pool, bit_count);
+        } else {
+            lazily_fill_bit_pool(t, pool, bit_count);
+        }
     }
 
     /* Only return as many bits as the pool contains. After reaching the
@@ -98,6 +104,59 @@ static void lazily_fill_bit_pool(struct theft *t,
         bits64[offset] = theft_rng_random(t->prng.rng);
         LOG(3, "filling bit64[%zd]: 0x%016" PRIx64 "\n",
             offset, bits64[offset]);
+        pool->bits_filled += 64;
+    }
+}
+
+/* Return the next low-bit-first extension bit for a guided replay pool,
+ * drawing a fresh word from the private extension RNG as needed. */
+static uint64_t
+guided_extension_bit(struct autoshrink_bit_pool *pool) {
+    if (pool->guide_ext_avail == 0) {
+        assert(pool->guide_ext_rng != NULL);
+        pool->guide_ext_buf = theft_rng_random(pool->guide_ext_rng);
+        pool->guide_ext_avail = 64;
+    }
+    const uint64_t bit = pool->guide_ext_buf & UINT64_C(1);
+    pool->guide_ext_buf >>= 1;
+    pool->guide_ext_avail--;
+    return bit;
+}
+
+/* Ensure the pool contains enough contiguous bits for the next request
+ * during guided donor replay. Positions below guide_stored_bits are the
+ * copied donor tape; positions at/after it are appended, continuously
+ * and low-bit-first, from the private extension RNG. Whole 64-bit words
+ * are materialized so the existing fill_buf machinery works unchanged. */
+static void guided_fill_bit_pool(struct autoshrink_bit_pool *pool,
+    const uint32_t bit_count) {
+    while (pool->consumed + bit_count > pool->bits_ceil) {
+        size_t nceil = 2 * pool->bits_ceil;
+        uint64_t *nbits = realloc(pool->bits, nceil / (64 / sizeof(uint64_t)));
+        if (nbits == NULL) {
+            assert(false);   /* allocation failure */
+            return;
+        }
+        pool->bits = (uint8_t *)nbits;
+        pool->bits_ceil = nceil;
+    }
+
+    uint64_t *words = (uint64_t *)pool->bits;
+    while (pool->consumed + bit_count > pool->bits_filled) {
+        const size_t word_index = pool->bits_filled / 64;
+        uint64_t word = 0;
+        for (uint8_t b = 0; b < 64; b++) {
+            const size_t pos = pool->bits_filled + b;
+            uint64_t bit;
+            if (pos < pool->guide_stored_bits) {
+                /* Copied donor tape, packed low-bit-first. */
+                bit = (words[pos / 64] >> (pos & 63U)) & UINT64_C(1);
+            } else {
+                bit = guided_extension_bit(pool);
+            }
+            word |= bit << b;
+        }
+        words[word_index] = word;
         pool->bits_filled += 64;
     }
 }
@@ -212,6 +271,7 @@ void theft_autoshrink_free_bit_pool(struct theft *t,
     assert(pool);
     assert(pool->bits);
     if (pool->index) { free(pool->index); }
+    if (pool->guide_ext_rng) { theft_rng_free(pool->guide_ext_rng); }
     free(pool->bits);
     free(pool->requests);
     free(pool);
@@ -252,6 +312,80 @@ theft_autoshrink_alloc(struct theft *t, struct autoshrink_env *env,
         return ares;
     }
 
+    *instance = res;
+    return THEFT_ALLOC_OK;
+}
+
+enum theft_alloc_res
+theft_autoshrink_guided_replay_alloc(struct theft *t,
+        struct autoshrink_env *env,
+        const uint64_t *donor_words, size_t donor_bits,
+        bool do_flip, size_t flip_offset,
+        uint64_t ext_seed, void **instance) {
+    assert(env);
+    assert(donor_bits == 0 || donor_words != NULL);
+
+    struct autoshrink_bit_pool *pool =
+        alloc_bit_pool(DEF_POOL_SIZE, DEF_POOL_LIMIT, DEF_REQUESTS_CEIL);
+    if (pool == NULL) {
+        return THEFT_ALLOC_ERROR;
+    }
+    env->bit_pool = pool;
+
+    /* Copy the donor's exact consumed bit prefix (packed low-bit-first
+     * words). guided_fill_bit_pool re-materializes words from this copy
+     * and appends extension bits continuously, so unused donor PRNG
+     * padding is never served. */
+    const size_t word_count = (donor_bits + 63U) / 64U;
+    if (word_count > 0) {
+        while (word_count * 64U > pool->bits_ceil) {
+            size_t nceil = 2 * pool->bits_ceil;
+            uint64_t *nbits = realloc(pool->bits,
+                nceil / (64 / sizeof(uint64_t)));
+            if (nbits == NULL) {
+                return THEFT_ALLOC_ERROR;
+            }
+            pool->bits = (uint8_t *)nbits;
+            pool->bits_ceil = nceil;
+        }
+        uint64_t *words = (uint64_t *)pool->bits;
+        for (size_t i = 0; i < word_count; i++) {
+            words[i] = donor_words[i];
+        }
+    }
+
+    pool->guide_replay = true;
+    pool->guide_stored_bits = donor_bits;
+    pool->guide_ext_rng = theft_rng_init(ext_seed);
+    if (pool->guide_ext_rng == NULL) {
+        return THEFT_ALLOC_ERROR;
+    }
+    pool->guide_ext_buf = 0;
+    pool->guide_ext_avail = 0;
+
+    if (do_flip) {
+        assert(flip_offset < donor_bits);
+        uint64_t *words = (uint64_t *)pool->bits;
+        words[flip_offset / 64U] ^=
+            UINT64_C(1) << (unsigned)(flip_offset % 64U);
+    }
+
+    void *res = NULL;
+    enum theft_alloc_res ares =
+        alloc_from_bit_pool(t, env, pool, &res, false);
+
+    /* Detach the private extension source. The pool remains a normal,
+     * self-contained consumed-bit pool for hashing, bloom checks and
+     * shrinking bit-pool handoff. */
+    if (pool->guide_ext_rng != NULL) {
+        theft_rng_free(pool->guide_ext_rng);
+        pool->guide_ext_rng = NULL;
+    }
+    pool->guide_replay = false;
+
+    if (ares != THEFT_ALLOC_OK) {
+        return ares;
+    }
     *instance = res;
     return THEFT_ALLOC_OK;
 }

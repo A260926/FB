@@ -23,6 +23,17 @@ struct autoshrink_bit_pool {
 
     size_t generation;
     size_t *index;
+
+    /* Guided donor-tape replay. When guide_replay is true, bits at
+     * positions [0, guide_stored_bits) are the copied donor tape and
+     * later bits are appended low-bit-first from guide_ext_rng. This
+     * is only active during the replay alloc callback; afterwards the
+     * pool is a normal self-contained consumed-bit pool. */
+    bool guide_replay;
+    size_t guide_stored_bits;
+    struct theft_rng *guide_ext_rng;
+    uint64_t guide_ext_buf;
+    uint8_t guide_ext_avail;
 };
 
 /* How large should the default autoshrink bit pool be?
@@ -163,6 +174,18 @@ theft_autoshrink_update_model(struct theft *t,
 enum theft_alloc_res
 theft_autoshrink_alloc(struct theft *t, struct autoshrink_env *env,
     void **instance);
+
+/* Guided donor replay: build a pool whose first DONOR_BITS are the
+ * copied DONOR_WORDS tape (with one bit FLIP_OFFSET toggled when
+ * DO_FLIP is set) and whose further bits come from a private RNG seeded
+ * with EXT_SEED, then run the real type allocator against it. The pool
+ * left on ENV is self-contained and records the actual new requests. */
+enum theft_alloc_res
+theft_autoshrink_guided_replay_alloc(struct theft *t,
+    struct autoshrink_env *env,
+    const uint64_t *donor_words, size_t donor_bits,
+    bool do_flip, size_t flip_offset,
+    uint64_t ext_seed, void **instance);
 
 theft_hash
 theft_autoshrink_hash(struct theft *t, const void *instance,

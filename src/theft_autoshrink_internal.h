@@ -63,6 +63,11 @@ static void lazily_fill_bit_pool(struct theft *t,
     struct autoshrink_bit_pool *pool,
     const uint32_t bit_count);
 
+static void guided_fill_bit_pool(struct autoshrink_bit_pool *pool,
+    const uint32_t bit_count);
+
+static uint64_t guided_extension_bit(struct autoshrink_bit_pool *pool);
+
 static void fill_buf(struct autoshrink_bit_pool *pool,
     const uint32_t bit_count, uint64_t *buf);
 

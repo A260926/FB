@@ -20,6 +20,32 @@
 enum theft_run_res
 theft_run(const struct theft_run_config *cfg);
 
+/* Run trials with feedback-directed mutation of request tapes.
+ *
+ * This uses the normal theft run/generation/call/autoshrink machinery.
+ * Every argument must use an alloc callback driven by
+ * theft_random_bits* with autoshrink enabled and no custom shrink
+ * callback; arity is 1..7 and guidance->corpus_limit is 1..16.
+ *
+ * Primary PASS trials that publish previously unseen feature bits via
+ * theft_cover are admitted into a fixed-size FIFO corpus. Later trials
+ * replay a rotated donor's exact consumed request-bit tape through the
+ * real allocator, flipping one selected request bit; bits past the end
+ * of the donor's consumed tape come from a private extension RNG.
+ *
+ * Shrinking, hook reruns, forked post hooks and ordinary theft_run
+ * never publish features or move the donor cursor. See
+ * doc/usage.md for details. */
+enum theft_run_res
+theft_run_guided(const struct theft_run_config *cfg,
+                 const struct theft_guidance_config *guidance);
+
+/* Publish FEATURE (0..63) as observed by the current primary guided
+ * property call. Returns true only while an actual primary guided
+ * property evaluation is active and FEATURE is in [0,63]; otherwise
+ * returns false and records nothing. Safe to call with NULL t. */
+bool theft_cover(struct theft *t, uint8_t feature);
+
 /* Generate the instance based on a given seed, print it to F,
  * and then free it. (If print or free callbacks are NULL,
  * they will be skipped.) */

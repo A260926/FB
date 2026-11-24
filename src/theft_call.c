@@ -1,5 +1,6 @@
 #include "theft_call_internal.h"
 #include "theft_autoshrink.h"
+#include "theft_guidance.h"
 
 #include <time.h>
 #include <sys/time.h>
@@ -59,11 +60,31 @@ theft_call(struct theft *t, void **args) {
             close(t->workers[0].fds[0]);
             int out_fd = t->workers[0].fds[1];
             if (run_fork_post_hook(t, args) == THEFT_HOOK_FORK_POST_ERROR) {
-                uint8_t byte = (uint8_t)THEFT_TRIAL_ERROR;
-                ssize_t wr = write(out_fd, (const void *)&byte, sizeof(byte));
-                (void)wr;
+                if (t->guidance != NULL) {
+                    theft_guide_fork_write_message(out_fd,
+                        THEFT_TRIAL_ERROR, 0);
+                } else {
+                    uint8_t byte = (uint8_t)THEFT_TRIAL_ERROR;
+                    ssize_t wr = write(out_fd, (const void *)&byte, sizeof(byte));
+                    (void)wr;
+                }
                 exit(EXIT_FAILURE);
             }
+
+            if (t->guidance != NULL) {
+                /* Arm feature collection only now, after fork_post, and
+                 * only for the primary call. Shrink/rerun fork calls
+                 * leave it disarmed and report a zero mask. */
+                theft_guide_fork_child_primary_begin(t);
+                res = theft_call_inner(t, args);
+                const uint64_t mask =
+                    theft_guide_fork_child_primary_end(t);
+                const bool wrote =
+                    theft_guide_fork_write_message(out_fd, res, mask);
+                exit(wrote && res == THEFT_TRIAL_PASS
+                    ? EXIT_SUCCESS : EXIT_FAILURE);
+            }
+
             res = theft_call_inner(t, args);
             uint8_t byte = (uint8_t)res;
             ssize_t wr = write(out_fd, (const void *)&byte, sizeof(byte));
@@ -171,6 +192,14 @@ parent_handle_child_call(struct theft *t, pid_t pid, struct worker_info *worker)
         /* As long as the result isn't a timeout, the worker can
          * just be cleaned up by the next batch of waitpid()s. */
         enum theft_trial_res trial_res = THEFT_TRIAL_ERROR;
+
+        if (t->guidance != NULL) {
+            /* Full verdict + feature mask, with full-length I/O and
+             * EINTR handling. An incomplete/abnormal message stores a
+             * zero mask rather than publishing partial features. */
+            return theft_guide_fork_read_message(t, fd);
+        }
+
         uint8_t res_byte = 0xFF;
         ssize_t rd = 0;
         for (;;) {
@@ -331,6 +360,7 @@ run_fork_post_hook(struct theft *t, void **args) {
     }
 
     struct theft_hook_fork_post_info info = {
+        .t = t,
         .prop_name = t->prop.name,
         .total_trials = t->prop.trial_count,
         .failures = t->counters.fail,

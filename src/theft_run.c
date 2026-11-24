@@ -6,6 +6,7 @@
 #include "theft_trial.h"
 #include "theft_random.h"
 #include "theft_autoshrink.h"
+#include "theft_guidance.h"
 
 #include <string.h>
 #include <assert.h>
@@ -125,6 +126,10 @@ cleanup:
 }
 
 void theft_run_free(struct theft *t) {
+    if (t->guidance != NULL) {
+        theft_guide_free(t->guidance);
+        t->guidance = NULL;
+    }
     if (t->bloom) {
         theft_bloom_free(t->bloom);
         t->bloom = NULL;
@@ -295,12 +300,22 @@ run_step(struct theft *t, size_t trial, theft_seed *seed) {
         LOG(3 - LOG_RUN, "gen -- skip\n");
         t->counters.skip++;
         hook_info.result = THEFT_TRIAL_SKIP;
+        if (t->guidance != NULL
+            && !theft_guide_publish(t, THEFT_TRIAL_SKIP)) {
+            res = RUN_STEP_GEN_ERROR;
+            goto cleanup;
+        }
         pres = post_cb(&hook_info, hook_env);
         break;
     case ALL_GEN_DUP:           /* skip these args -- probably already tried */
         LOG(3 - LOG_RUN, "gen -- dup\n");
         t->counters.dup++;
         hook_info.result = THEFT_TRIAL_DUP;
+        if (t->guidance != NULL
+            && !theft_guide_publish(t, THEFT_TRIAL_DUP)) {
+            res = RUN_STEP_GEN_ERROR;
+            goto cleanup;
+        }
         pres = post_cb(&hook_info, hook_env);
         break;
     default:
@@ -427,13 +442,25 @@ static bool init_arg_info(struct theft *t, struct trial_info *trial_info) {
 /* Attempt to instantiate arguments, starting with the current seed. */
 static enum all_gen_res
 gen_all_args(struct theft *t) {
+    if (t->guidance != NULL) {
+        theft_guide_begin_generation(t);
+    }
+
     for (uint8_t i = 0; i < t->prop.arity; i++) {
         struct theft_type_info *ti = t->prop.type_info[i];
         void *p = NULL;
 
-        enum theft_alloc_res res = (ti->autoshrink_config.enable
-            ? theft_autoshrink_alloc(t, t->trial.args[i].u.as.env, &p)
-            : ti->alloc(t, ti->env, &p));
+        enum theft_alloc_res res;
+        if (t->guidance != NULL) {
+            /* Fresh trial-seed generation or donor tape replay. */
+            res = theft_guide_alloc_arg(t, i,
+                t->trial.args[i].u.as.env, &p);
+        } else if (ti->autoshrink_config.enable) {
+            res = theft_autoshrink_alloc(t,
+                t->trial.args[i].u.as.env, &p);
+        } else {
+            res = ti->alloc(t, ti->env, &p);
+        }
 
         if (res == THEFT_ALLOC_SKIP) {
             return ALL_GEN_SKIP;
@@ -443,6 +470,19 @@ gen_all_args(struct theft *t) {
             t->trial.args[i].instance = p;
             LOG(3 - LOG_RUN, "%s: arg %u -- %p\n",
                 __func__, i, p);
+
+            /* Guided tape caps: once the finite allocator has returned,
+             * an over-long consumed tape is a fatal guided error, not
+             * an assertion or a silently truncated admission. The
+             * instance is published first so normal cleanup frees it. */
+            if (t->guidance != NULL
+                && !theft_guide_pool_within_limits(
+                    t->trial.args[i].u.as.env)) {
+                LOG(1 - LOG_RUN,
+                    "%s: guided tape limit exceeded for arg %u\n",
+                    __func__, i);
+                return ALL_GEN_ERROR;
+            }
         }
     }
 

@@ -551,4 +551,68 @@ struct theft_run_config {
     } hooks;
 };
 
+/**********************
+ * Guided execution   *
+ **********************/
+
+/* Snapshot of the guidance feedback/decision for one generated trial.
+ *
+ * An instance of this struct is passed to the optional
+ * theft_guidance_post_cb after the primary verdict and the corpus
+ * admission decision, but before shrinking and the ordinary trial_post
+ * hook. The pointer is borrowed and only valid for the duration of the
+ * callback. */
+struct theft_guidance_info {
+    size_t trial_id;
+    enum theft_trial_res result;
+
+    /* False for fresh generation, true when a corpus donor tape was
+     * replayed with one request bit flipped. */
+    bool mutated;
+
+    /* Monotonic id of the selected donor, or UINT64_MAX when fresh. */
+    uint64_t donor_id;
+    /* Monotonic id assigned to the newly admitted tuple, or
+     * UINT64_MAX when this trial did not admit anything. */
+    uint64_t admitted_id;
+
+    /* Coordinates of the flipped descriptor within the donor.
+     * For fresh generation these are UINT8_MAX / SIZE_MAX /
+     * UINT32_MAX respectively. mutation_request is the request's
+     * index within its own argument's request sequence (not the flat
+     * cross-argument descriptor index). */
+    uint8_t mutation_arg;
+    size_t mutation_request;
+    uint32_t mutation_bit;
+
+    /* Feature bits observed during the actual primary property call
+     * (zero when the property was never evaluated, e.g. gen SKIP/DUP),
+     * and the subset that was novel and caused admission (zero unless
+     * this was an admitted primary PASS). */
+    uint64_t feature_mask;
+    uint64_t novel_mask;
+
+    /* Number of live corpus entries after this trial's decision. */
+    size_t corpus_size;
+};
+
+/* Callback invoked once per completed generated guided trial, in the
+ * parent process when forking. */
+typedef void
+theft_guidance_post_cb(const struct theft_guidance_info *info, void *env);
+
+/* Configuration for a feedback-directed run. */
+struct theft_guidance_config {
+    /* Fixed corpus capacity, in [1, 16]. When full, admitting a new
+     * entry evicts the oldest one. Eviction never clears the run's
+     * set of features already seen. */
+    size_t corpus_limit;
+
+    /* Optional per-trial feedback callback. */
+    theft_guidance_post_cb *post;
+
+    /* Opaque environment passed to post. */
+    void *env;
+};
+
 #endif
