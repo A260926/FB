@@ -1,0 +1,58 @@
+CMake Warning (deprecated) at CMakeLists.txt:10 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+-- BUILD TYPE: Release
+-- CLOCK_MONOTONIC: available, no extra libs needed
+-- LOGGING: ENABLED
+-- USE_BUSY_WAITING: OFF (default)
+-- No WITH_COMPILER_PREFIX - using C++ compiler /usr/bin/c++
+-- Checking for pthread_(g/s)etname_np in 'pthread_np.h':
+-- Looking for pthread_getname_np
+-- Looking for pthread_getname_np - not found
+-- Looking for pthread_setname_np
+-- Looking for pthread_setname_np - not found
+-- Checking for pthread_(g/s)etname_np in 'pthread.h':
+-- Looking for pthread_getname_np
+-- Looking for pthread_getname_np - found
+-- Looking for pthread_setname_np
+-- Looking for pthread_setname_np - found
+-- ENCRYPTION: DISABLED
+-- ENCRYPTION AEAD API: N/A
+-- MAXREXMITBW API: DISABLED
+-- COMPILER: AppleClang (/usr/bin/c++) - GNU compat
+-- NOTE: CLANG 21.0.0.21000334 detected, unsure if >=C++11 is default, forcing C++11 on applications
+-- Looking for __atomic_fetch_add_8 in atomic
+-- Looking for __atomic_fetch_add_8 in atomic - not found
+-- Performing Test HAVE_LIBATOMIC_COMPILES
+-- Performing Test HAVE_LIBATOMIC_COMPILES - Failed
+-- Performing Test HAVE_GCCATOMIC_INTRINSICS
+-- Performing Test HAVE_GCCATOMIC_INTRINSICS - Success
+-- Performing Test HAVE_CXX_ATOMIC
+-- Performing Test HAVE_CXX_ATOMIC - Success
+-- Performing Test HAVE_CXX_ATOMIC_STATIC
+-- Performing Test HAVE_CXX_ATOMIC_STATIC - Failed
+-- Checking for C++ 'std::put_time()':
+-- Performing Test HAVE_CXX_STD_PUT_TIME
+-- Performing Test HAVE_CXX_STD_PUT_TIME - Success
+-- STDCXX_SYNC: ON
+-- MONOTONIC_CLOCK: ON
+-- C++ STANDARD: using C++11 for all
+-- C++: Setting C++ standard for gnu compiler: lib:  apps: 
+-- DETECTED SYSTEM: DARWIN
+-- ENABLE_BONDING: OFF
+-- Pthread library: C++11
+-- APP: srt_virtual: using default C++ standard
+-- C STD: srt_virtual: forced C99 standard - portable way
+-- ADDING TRANSITIVE LINK DEP to:srt_static :  
+-- INSTALL DIRS: bin=bin lib=lib shlib=lib include=include
+-- APPS: DISABLED
+-- Configuring done (1.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FS51ACCD6C248CU15383/attempts/20261123T204044468425Z/repo/.task-build/srt

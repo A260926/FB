@@ -246,6 +246,7 @@ class CUDTUnited
     friend class CRendezvousQueue;
     friend class CCryptoControl;
     friend class TestMockCUDT;
+    friend class LatencyRampTestAccess;
 
 public:
     CUDTUnited();

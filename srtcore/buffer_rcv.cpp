@@ -279,12 +279,19 @@ std::pair<int, int> CRcvBuffer::dropUpTo(int32_t seqno)
 
 int CRcvBuffer::dropAll()
 {
-    if (empty())
-        return 0;
+    int dropped = 0;
+    if (!empty())
+    {
+        const int end_seqno = CSeqNo::incseq(m_iStartSeqNo, m_iMaxPosOff);
+        const std::pair<int, int> numDropped = dropUpTo(end_seqno);
+        dropped = numDropped.first + numDropped.second;
+    }
 
-    const int end_seqno = CSeqNo::incseq(m_iStartSeqNo, m_iMaxPosOff);
-    const std::pair<int, int> numDropped = dropUpTo(end_seqno);
-    return numDropped.first + numDropped.second;
+    // A full clear starts a fresh playout, so a locally scheduled ramp must
+    // not be carried over to the packets that arrive afterwards.
+    m_tsbpd.resetLatencyRamp();
+
+    return dropped;
 }
 
 int CRcvBuffer::dropMessage(int32_t seqnolo, int32_t seqnohi, int32_t msgno, DropActionIfExists actionOnExisting)
@@ -576,7 +583,7 @@ int CRcvBuffer::readBufferTo(int len, copy_to_dst_f funcCopyToDst, void* arg)
 
         if (bTsbPdEnabled)
         {
-            const steady_clock::time_point tsPlay = getPktTsbPdTime(pkt.getMsgTimeStamp());
+            const steady_clock::time_point tsPlay = getPktDueTime(pkt.getMsgTimeStamp(), now);
             HLOGC(rbuflog.Debug,
                 log << "readBuffer: check if time to play:"
                 << " NOW=" << FormatTime(now)
@@ -718,6 +725,11 @@ int CRcvBuffer::getRcvDataSize(int& bytes, int& timespan) const
 
 CRcvBuffer::PacketInfo CRcvBuffer::getFirstValidPacketInfo() const
 {
+    return getFirstValidPacketInfoAt(steady_clock::now());
+}
+
+CRcvBuffer::PacketInfo CRcvBuffer::getFirstValidPacketInfoAt(time_point time_now) const
+{
     const int end_pos = incPos(m_iStartPos, m_iMaxPosOff);
     for (int i = m_iStartPos; i != end_pos; i = incPos(i))
     {
@@ -726,7 +738,7 @@ CRcvBuffer::PacketInfo CRcvBuffer::getFirstValidPacketInfo() const
             continue;
 
         const CPacket& packet = packetAt(i);
-        const PacketInfo info = { packet.getSeqNo(), i != m_iStartPos, getPktTsbPdTime(packet.getMsgTimeStamp()) };
+        const PacketInfo info = { packet.getSeqNo(), i != m_iStartPos, getPktDueTime(packet.getMsgTimeStamp(), time_now) };
         return info;
     }
 
@@ -762,7 +774,9 @@ bool CRcvBuffer::isRcvDataReady(time_point time_now) const
     if (!haveInorderPackets)
         return false;
 
-    const PacketInfo info = getFirstValidPacketInfo();
+    // Evaluate the due time against the same local time used for the readiness
+    // comparison, so a latency ramp and the ready decision cannot disagree.
+    const PacketInfo info = getFirstValidPacketInfoAt(time_now);
 
     return info.tsbpd_time <= time_now;
 }
@@ -794,7 +808,7 @@ CRcvBuffer::PacketInfo CRcvBuffer::getFirstReadablePacketInfo(time_point time_no
     if (!hasInorderPackets)
         return unreadableInfo;
 
-    const PacketInfo info = getFirstValidPacketInfo();
+    const PacketInfo info = getFirstValidPacketInfoAt(time_now);
 
     if (info.tsbpd_time <= time_now)
         return info;
@@ -1185,6 +1199,26 @@ string CRcvBuffer::strFullnessState(int iFirstUnackSeqNo, const time_point& tsNo
 CRcvBuffer::time_point CRcvBuffer::getPktTsbPdTime(uint32_t usPktTimestamp) const
 {
     return m_tsbpd.getPktTime(usPktTimestamp);
+}
+
+CRcvBuffer::time_point CRcvBuffer::getPktDueTime(uint32_t usPktTimestamp, const time_point& now) const
+{
+    return m_tsbpd.getPktDueTime(usPktTimestamp, now);
+}
+
+bool CRcvBuffer::scheduleLatencyRamp(const time_point& t0, int64_t targetUs, int64_t rampUs)
+{
+    return m_tsbpd.scheduleLatencyRamp(t0, targetUs, rampUs);
+}
+
+void CRcvBuffer::resetLatencyRamp()
+{
+    m_tsbpd.resetLatencyRamp();
+}
+
+bool CRcvBuffer::isLatencyRampActive() const
+{
+    return m_tsbpd.isLatencyRampActive();
 }
 
 /* Return moving average of acked data pkts, bytes, and timespan (ms) of the receive buffer */

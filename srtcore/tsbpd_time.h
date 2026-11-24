@@ -13,6 +13,7 @@
 
 #include "platform_sys.h"
 #include "sync.h"
+#include "latency_curve.h"
 #include "utilities.h"
 
 namespace srt
@@ -102,6 +103,36 @@ public:
     /// @return Packet TSBPD time with buffering delay.
     time_point getPktTime(uint32_t usPktTimestamp) const;
 
+    /// @brief Install a locally scheduled receive-latency ramp starting at @a t0.
+    ///
+    /// The currently effective latency (negotiated delay plus any ramp already
+    /// in progress) becomes the new starting point, so repeated calls continue
+    /// the curve instead of jumping. Does not alter the negotiated delay, the
+    /// clock-drift estimate or the wire protocol.
+    ///
+    /// @param t0 local steady-clock time at which the ramp starts.
+    /// @param targetUs target latency in microseconds.
+    /// @param rampUs ramp duration in microseconds.
+    /// @return true if installed, false if TSBPD is disabled or the ramp
+    /// constraints are not satisfied (the previous state is kept).
+    bool scheduleLatencyRamp(const time_point& t0, int64_t targetUs, int64_t rampUs);
+
+    /// Drop any installed latency ramp. Negotiated TSBPD state is untouched.
+    void resetLatencyRamp();
+
+    /// @return true while a locally scheduled latency ramp is installed.
+    bool isLatencyRampActive() const;
+
+    /// @brief First integer local time at which a packet becomes deliverable
+    /// under the installed latency ramp.
+    ///
+    /// The packet's source time B is the regular TSBPD time without buffering
+    /// delay (still including drift and timestamp carryover). When no ramp is
+    /// installed this is equivalent to getPktTime().
+    /// @param [in] usPktTimestamp 32-bit value of packet timestamp field (microseconds).
+    /// @param [in] now local time from which onwards the due time is searched.
+    time_point getPktDueTime(uint32_t usPktTimestamp, const time_point& now) const;
+
     /// @brief Get current drift value.
     /// @return current drift value.
     int64_t    drift() const { return m_DriftTracer.drift(); }
@@ -133,6 +164,11 @@ private:
     ///
     /// @return Packet TSBPD base time without buffering delay.
     time_point getPktBaseTimeNoLock(uint32_t usPktTimestamp) const;
+
+    /// @brief Effective buffering delay in effect at local time @a now.
+    /// This is the negotiated delay while no ramp is installed, otherwise the
+    /// value of the locally scheduled latency curve. Does not lock.
+    duration getEffectiveDelayNoLock(const time_point& now) const;
 
 
     int        m_iFirstRTT;       // First measured RTT sample.
@@ -171,6 +207,10 @@ private:
     /// Number of samples (ACKACK packets) on which to perform drift calculation and compensation.
     static const int TSBPD_DRIFT_MAX_SAMPLES = 1000;
     DriftTracer<TSBPD_DRIFT_MAX_SAMPLES, TSBPD_DRIFT_MAX_VALUE> m_DriftTracer;
+
+    /// Locally scheduled receive-latency ramp. Inactive unless an application
+    /// has scheduled one; never affects the wire protocol or drift estimation.
+    LatencyCurve m_latencyCurve;
 
     /// Protect simultaneous change of state (read/write).
     mutable SharedMutex m_mtxRW;

@@ -198,6 +198,11 @@ public:
     ///                   IF skipseqno == -1, no missing packet but 1st not ready to play.
     PacketInfo getFirstValidPacketInfo() const;
 
+    /// Same as getFirstValidPacketInfo(), but packet due times are evaluated
+    /// against the explicit local time @a time_now, so a scheduled latency
+    /// ramp and the readiness comparison use the same clock reading.
+    PacketInfo getFirstValidPacketInfoAt(time_point time_now) const;
+
     PacketInfo getFirstReadablePacketInfo(time_point time_now) const;
 
     /// @brief Get the sequence number of the first packet that can't be read
@@ -403,6 +408,22 @@ public: // TSBPD public functions
     bool addRcvTsbPdDriftSample(uint32_t usTimestamp, const time_point& tsPktArrival, int usRTTSample);
 
     time_point getPktTsbPdTime(uint32_t usPktTimestamp) const;
+
+    /// @brief Due time of a packet evaluated against local time @a now.
+    /// Equal to getPktTsbPdTime() while no latency ramp is installed; with a
+    /// ramp the due time is the first time at which the packet satisfies the
+    /// scheduled delivery condition at or after @a now.
+    time_point getPktDueTime(uint32_t usPktTimestamp, const time_point& now) const;
+
+    /// @brief Install a receive-latency ramp beginning at local time @a t0.
+    /// @return true if TSBPD is enabled and the ramp constraints are met.
+    bool scheduleLatencyRamp(const time_point& t0, int64_t targetUs, int64_t rampUs);
+
+    /// Drop any installed latency ramp.
+    void resetLatencyRamp();
+
+    /// @return true while a local latency ramp is installed.
+    bool isLatencyRampActive() const;
 
     time_point getTsbPdTimeBase(uint32_t usPktTimestamp) const;
     void       updateTsbPdTimeBase(uint32_t usPktTimestamp);

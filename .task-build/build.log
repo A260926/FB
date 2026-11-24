@@ -1,0 +1,4 @@
+[  3%] Building CXX object CMakeFiles/srt_virtual.dir/srtcore/latency_curve.cpp.o
+[ 93%] Built target srt_virtual
+[ 96%] Linking CXX static library libsrt.a
+[100%] Built target srt_static

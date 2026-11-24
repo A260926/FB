@@ -169,6 +169,7 @@ void CTsbpdTime::setTsbPdMode(const steady_clock::time_point& timebase, bool wra
     // This function is called in the HSREQ reception handler only.
     m_tsTsbPdTimeBase = timebase;
     m_tdTsbPdDelay    = delay;
+    m_latencyCurve.reset();
 }
 
 void CTsbpdTime::applyGroupTime(const steady_clock::time_point& timebase,
@@ -192,6 +193,7 @@ void CTsbpdTime::applyGroupTime(const steady_clock::time_point& timebase,
     m_bTsbPdWrapCheck = wrp;
     m_tdTsbPdDelay    = microseconds_from(delay);
     m_DriftTracer.forceDrift(count_microseconds(udrift));
+    m_latencyCurve.reset();
 }
 
 void CTsbpdTime::applyGroupDrift(const steady_clock::time_point& timebase,
@@ -229,10 +231,62 @@ CTsbpdTime::time_point CTsbpdTime::getBaseTime(uint32_t timestamp_us) const
 
 CTsbpdTime::time_point CTsbpdTime::getPktTime(uint32_t usPktTimestamp) const
 {
+    // Fixed negotiated-delay computation. Deliberately does NOT consult the
+    // latency ramp: srctime, buffer timespan and statistics keep their
+    // original TSBPD meaning. Delivery readiness uses getPktDueTime() instead.
     SharedLock lck(m_mtxRW);
     time_point value = getPktBaseTimeNoLock(usPktTimestamp) + m_tdTsbPdDelay + microseconds_from(m_DriftTracer.drift());
 
     return value;
+}
+
+bool CTsbpdTime::scheduleLatencyRamp(const time_point& t0, int64_t targetUs, int64_t rampUs)
+{
+    ExclusiveLock lck(m_mtxRW);
+    if (!m_bTsbPdMode)
+        return false;
+
+    // Continue from the latency currently in effect: the curve stays
+    // continuous across repeated schedule calls and never falls back to the
+    // originally negotiated delay or jumps to a previous target.
+    const int64_t fromUs = count_microseconds(getEffectiveDelayNoLock(t0));
+    return m_latencyCurve.schedule(t0, fromUs, targetUs, rampUs);
+}
+
+void CTsbpdTime::resetLatencyRamp()
+{
+    ExclusiveLock lck(m_mtxRW);
+    m_latencyCurve.reset();
+}
+
+bool CTsbpdTime::isLatencyRampActive() const
+{
+    SharedLock lck(m_mtxRW);
+    return m_latencyCurve.isActive();
+}
+
+CTsbpdTime::duration CTsbpdTime::getEffectiveDelayNoLock(const time_point& now) const
+{
+    if (m_latencyCurve.isActive())
+        return microseconds_from(m_latencyCurve.latencyAt(now));
+    return m_tdTsbPdDelay;
+}
+
+CTsbpdTime::time_point CTsbpdTime::getPktDueTime(uint32_t usPktTimestamp, const time_point& now) const
+{
+    SharedLock lck(m_mtxRW);
+
+    // B: local source time without buffering delay, still including the
+    // clock-drift estimate and the 32-bit timestamp carryover.
+    const time_point pktBase = getPktBaseTimeNoLock(usPktTimestamp)
+        + microseconds_from(m_DriftTracer.drift());
+
+    if (!m_latencyCurve.isActive())
+        return pktBase + m_tdTsbPdDelay;
+
+    // Search only at t >= now. A packet whose condition already holds gets the
+    // reference time as its due time and is immediately readable.
+    return m_latencyCurve.firstDue(pktBase, now);
 }
 
 CTsbpdTime::time_point CTsbpdTime::getPktBaseTimeNoLock(uint32_t usPktTimestamp) const

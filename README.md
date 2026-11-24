@@ -178,6 +178,31 @@ In live streaming configurations, the SRT protocol maintains a constant end-to-e
 
 For detailed descriptions of the build system and options, please read the [SRT Build Options](./docs/build/build-options.md) document.
 
+## Local Receive-Latency Scheduling
+
+A connected live/message receiver can smoothly change its TSBPD receive
+latency without breaking the connection, through the
+`srt_schedule_rcv_latency(socket, target_ms, ramp_ms)` C API. The change is
+purely local:
+
+- the wire protocol and the peer's sending pace are not touched, and no
+  message is sent to the peer;
+- the negotiated latency, `srctime`, statistics and ABI keep their original
+  behavior until the first successful call;
+- already queued packets are re-scheduled in place — payload, sequence and
+  message numbers never change and no queue entries are duplicated;
+- blocking `recv` calls, the TSBPD wait and epoll read events all follow the
+  new readiness, so no stale readable event survives a latency increase.
+
+The latency follows a piecewise-linear ramp (floored to integer
+microseconds) from the value currently in effect to the target. Re-calling
+while a ramp is running continues seamlessly from that live value. Supported
+sockets are connected, TSBPD-enabled receivers in live/message mode; group
+members, file/stream sockets and sender-only sockets are rejected, as are
+out-of-range parameters, in which case the previous state is preserved. The
+ramp state is local and reset when TSBPD mode is re-established or the
+receiver buffer is cleared. See [`examples/latency_ramp.cpp`](./examples/latency_ramp.cpp).
+
 ## Sample Applications and Tools
 
 The current repo provides [sample applications](./apps) and [code examples](./examples) that demonstrate the usage of the SRT library API. Among them are [`srt-live-transmit`](./apps/srt-live-transmit.cpp), [`srt-file-transmit`](./apps/srt-file-transmit.cpp), and other applications. The respective documentation can be found [here](./docs#sample-applications). Note that all samples are provided for instructional purposes, and should not be used in a production environment.

@@ -849,6 +849,24 @@ SRT_API int srt_recv    (SRTSOCKET u, char* buf, int len);
 SRT_API int srt_recvmsg (SRTSOCKET u, char* buf, int len);
 SRT_API int srt_recvmsg2(SRTSOCKET u, char *buf, int len, SRT_MSGCTRL *mctrl);
 
+//
+// Local receive-latency scheduling.
+//
+// Smoothly changes the TSBPD receive latency of a connected live/message
+// receiver socket without breaking the connection or notifying the peer. The
+// change is local only: the wire protocol and the sender's pacing are
+// untouched, and the negotiated latency, statistics and ABI behaviour are
+// preserved until this function is first called.
+//
+// @param u         connected TSBPD receiver socket (no groups, file or
+//                  sender-only sockets).
+// @param target_ms target receive latency in milliseconds (0..60000).
+// @param ramp_ms   duration of the transition in milliseconds (1..60000).
+//                  For an increase it must be strictly greater than the
+//                  latency difference in milliseconds.
+// @return 0 on success, SRT_ERROR otherwise (the previous state is kept).
+SRT_API int srt_schedule_rcv_latency(SRTSOCKET u, int target_ms, int ramp_ms);
+
 
 // Special send/receive functions for files only.
 #define SRT_DEFAULT_SENDFILE_BLOCK 364000

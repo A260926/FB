@@ -5690,7 +5690,7 @@ void * srt::CUDT::tsbpd(void* param)
         const steady_clock::time_point tnow = steady_clock::now();
 
         self->m_pRcvBuffer->updRcvAvgDataSize(tnow);
-        const srt::CRcvBuffer::PacketInfo info = self->m_pRcvBuffer->getFirstValidPacketInfo();
+        const srt::CRcvBuffer::PacketInfo info = self->m_pRcvBuffer->getFirstValidPacketInfoAt(tnow);
 
         const bool is_time_to_deliver = !is_zero(info.tsbpd_time) && (tnow >= info.tsbpd_time);
         tsNextDelivery = info.tsbpd_time;
@@ -7341,6 +7341,89 @@ bool srt::CUDT::isRcvBufferReady() const
 bool srt::CUDT::isRcvBufferReadyNoLock() const
 {
     return m_pRcvBuffer->isRcvDataReady(steady_clock::now());
+}
+
+bool srt::CUDT::isRcvBufferReadyAt(const time_point& now) const
+{
+    ScopedLock lck(m_RcvBufferLock);
+    if (!m_pRcvBuffer)
+        return false;
+    return m_pRcvBuffer->isRcvDataReady(now);
+}
+
+bool srt::CUDT::scheduleLatencyRampAt(const time_point& t0, int target_ms, int ramp_ms)
+{
+    // Parameter validation. On failure the existing state is left untouched.
+    if (target_ms < LatencyCurve::TARGET_MIN_MS || target_ms > LatencyCurve::TARGET_MAX_MS
+        || ramp_ms < LatencyCurve::RAMP_MIN_MS || ramp_ms > LatencyCurve::RAMP_MAX_MS)
+    {
+        return false;
+    }
+
+    // Only connected, TSBPD-driven live/message receiver sockets are supported.
+    // Groups, file (stream) sockets and sender-only sockets are rejected.
+    if (!m_bConnected || m_bBroken || m_bClosing || !m_bTsbPd || !m_config.bMessageAPI)
+        return false;
+
+#if ENABLE_BONDING
+    if (m_parent && m_parent->m_GroupOf)
+        return false;
+#endif
+
+    const int64_t targetUs = int64_t(target_ms) * 1000;
+    const int64_t rampUs   = int64_t(ramp_ms) * 1000;
+
+    // Lock order follows the TSBPD thread: m_RecvLock then m_RcvBufferLock.
+    ScopedLock recvguard(m_RecvLock);
+
+    bool installed = false;
+    bool ready     = false;
+    {
+        ScopedLock buffguard(m_RcvBufferLock);
+        if (!m_pRcvBuffer || !m_pRcvBuffer->isTsbPd())
+            return false;
+
+        installed = m_pRcvBuffer->scheduleLatencyRamp(t0, targetUs, rampUs);
+        if (installed)
+            ready = m_pRcvBuffer->isRcvDataReady(t0);
+    }
+
+    if (!installed)
+        return false;
+
+    // Wake the TSBPD thread and any blocked recv waiting on the old deadline.
+    // They re-evaluate the due times computed by the new schedule.
+    m_RcvTsbPdCond.notify_all();
+    m_RecvDataCond.notify_all();
+
+    // Refresh the epoll read event from the new schedule. After increasing the
+    // latency a previously readable socket must not keep a stale EPOLL_IN;
+    // after decreasing it the event must appear.
+    uglobal().m_EPoll.update_events(m_SocketID, m_sPollID, SRT_EPOLL_IN, ready);
+    CGlobEvent::triggerEvent();
+
+    return true;
+}
+
+int srt::CUDT::scheduleRcvLatency(SRTSOCKET u, int target_ms, int ramp_ms)
+{
+    try
+    {
+        CUDTSocket* s = uglobal().locateSocket(u, CUDTUnited::ERH_THROW);
+        CUDT&        core = s->core();
+        if (!core.scheduleLatencyRampAt(steady_clock::now(), target_ms, ramp_ms))
+            return APIError(MJ_NOTSUP, MN_INVAL, 0);
+        return 0;
+    }
+    catch (const CUDTException& e)
+    {
+        return APIError(e);
+    }
+    catch (const std::exception& ee)
+    {
+        LOGC(arlog.Fatal, log << "schedule_rcv_latency: UNEXPECTED EXCEPTION: " << typeid(ee).name() << ": " << ee.what());
+        return APIError(MJ_UNKNOWN, MN_NONE, 0);
+    }
 }
 
 bool srt::CUDT::isRcvBufferFull() const

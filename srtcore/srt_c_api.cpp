@@ -182,6 +182,11 @@ int srt_send(SRTSOCKET u, const char * buf, int len) { return CUDT::send(u, buf,
 int srt_recv(SRTSOCKET u, char * buf, int len) { return CUDT::recv(u, buf, len, 0); }
 int srt_sendmsg(SRTSOCKET u, const char * buf, int len, int ttl, int inorder) { return CUDT::sendmsg(u, buf, len, ttl, 0!=  inorder); }
 int srt_recvmsg(SRTSOCKET u, char * buf, int len) { int64_t ign_srctime; return CUDT::recvmsg(u, buf, len, ign_srctime); }
+
+int srt_schedule_rcv_latency(SRTSOCKET u, int target_ms, int ramp_ms)
+{
+    return CUDT::scheduleRcvLatency(u, target_ms, ramp_ms);
+}
 int64_t srt_sendfile(SRTSOCKET u, const char* path, int64_t* offset, int64_t size, int block)
 {
     if (!path || !offset )

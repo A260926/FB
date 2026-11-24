@@ -307,6 +307,7 @@ class CUDT
     friend class CUDTGroup;
     friend class TestMockCUDT; // unit tests
     friend class TestMockControlPackets; // unit tests
+    friend class LatencyRampTestAccess; // task tests for receive-latency ramps
 
     typedef sync::steady_clock::time_point time_point;
     typedef sync::steady_clock::duration duration;
@@ -353,6 +354,11 @@ public: //API
     static int recvmsg(SRTSOCKET u, char* buf, int len, int64_t& srctime);
     static int sendmsg2(SRTSOCKET u, const char* buf, int len, SRT_MSGCTRL& mctrl);
     static int recvmsg2(SRTSOCKET u, char* buf, int len, SRT_MSGCTRL& w_mctrl);
+
+    /// C entry point: schedule a smooth receive-latency ramp. Validates the
+    /// socket state and parameters, then delegates to the per-socket instance
+    /// method using the real steady clock.
+    static int scheduleRcvLatency(SRTSOCKET u, int target_ms, int ramp_ms);
     static int64_t sendfile(SRTSOCKET u, std::fstream& ifs, int64_t& offset, int64_t size, int block = SRT_DEFAULT_SENDFILE_BLOCK);
     static int64_t recvfile(SRTSOCKET u, std::fstream& ofs, int64_t& offset, int64_t size, int block = SRT_DEFAULT_RECVFILE_BLOCK);
     static int select(int nfds, UDT::UDSET* readfds, UDT::UDSET* writefds, UDT::UDSET* exceptfds, const timeval* timeout);
@@ -911,6 +917,20 @@ private:
 
     SRT_ATTR_REQUIRES(m_RcvBufferLock)
     bool isRcvBufferReadyNoLock() const;
+
+    /// Readiness evaluated against an explicit local time, so tests and the
+    /// latency-ramp coordination can drive the exact same ready decision used
+    /// by recv/TSBPD/epoll without waiting for the wall clock.
+    SRT_ATTR_EXCLUDES(m_RcvBufferLock)
+    bool isRcvBufferReadyAt(const time_point& now) const;
+
+    /// Single receive-latency ramp coordination entry. Validates the socket
+    /// state, installs the ramp on the receiver buffer at the explicit local
+    /// monotonic time @a t0, wakes receivers waiting on the old deadline and
+    /// refreshes the epoll read event. The public C API calls this with the
+    /// real clock; tests pass manual time points. Returns true on success.
+    SRT_ATTR_EXCLUDES(m_RcvBufferLock, m_RecvLock)
+    bool scheduleLatencyRampAt(const time_point& t0, int target_ms, int ramp_ms);
 
     SRT_ATTR_EXCLUDES(m_RcvBufferLock)
     bool isRcvBufferFull() const;
