@@ -117,6 +117,58 @@ using t = data::hash_map<child, int>;
 // ... usage, serialization as in the previous examples
 ```
 
+# Validation of Offset Object Graphs
+
+Before reading a native-endian offset object graph, `cista::validation_session`
+(from `cista/validation.h`) proves that every reference stays inside memory the
+caller authorized. It works on reflectable aggregates, scalars, native-endian
+offset pointers, and the existing offset `vector`/`string` state rules. Raw
+pointer graphs, external resources, and cross-endian conversion are out of
+scope, and the walk never calls `deserialize` for pointer or endian conversion
+and never writes.
+
+A session is constructed from a list of regions and a per-call expansion
+budget. Each region is `{std::uint64_t id, const void* data, std::size_t size}`;
+regions must be non-empty, have unique ids, not overlap, and keep both their
+address and bytes unchanged for the lifetime of the session. Empty, duplicate,
+overlapping, or overflowing (`data + size` wraps the address space) descriptors
+make every validation fail with `invalid_regions`. A single object or a
+container's complete contiguous storage must lie inside one region; gaps
+between regions are never treated as readable.
+
+```cpp
+#include "cista/validation.h"
+
+cista::validation_session session(
+    {{/*id=*/1, bytes.data(), bytes.size()}}, /*budget=*/64);
+cista::validation_report report =
+    session.validate(reinterpret_cast<my_struct const*>(bytes.data()));
+if (report.error != cista::validation_error::none) {
+  // report.region_id / report.offset locate the failure.
+}
+```
+
+`validate(const T*)` returns a `validation_report`:
+
+| Field       | Meaning                                                                 |
+| :---------- | :---------------------------------------------------------------------- |
+| `error`     | `none`, `invalid_regions`, `outside_region`, `invalid_state`, or `budget_exhausted`. |
+| `region_id` | Region containing the failure. An unauthorized reference points at its source slot; an unauthorized root uses `region_id = 0`. |
+| `offset`    | Byte position of the failure inside that region (`0` for an unauthorized root). |
+| `expanded`  | Distinct objects reached as the root or through non-null references. Embedded fields and elements are not counted. |
+| `reused`    | Hits on already proven objects and back-edges into shared/cyclic targets. |
+
+Only the root and non-null pointer targets consume the budget; the exact budget
+needed succeeds, one slot less fails with `budget_exhausted`. On any failure the
+whole closure is rejected: `expanded` and `reused` read zero and no proof is
+committed, so `committed_objects()` keeps its previous value. On success the
+root and its full dependency closure are committed as proofs keyed by static
+type and object start. A later call whose whole root is a committed proof
+returns `expanded = 0, reused = 1`; `set_budget(size_t)` changes the next call's
+budget and `clear()` drops all proofs. The caller must end the session or call
+`clear()` before modifying the region contents. See
+`examples/validation_session.cpp` for a complete example.
+
 # Benchmarks
 
 Have a look at the [benchmark repository](https://github.com/felixguendling/cpp-serialization-benchmark) for more details.
