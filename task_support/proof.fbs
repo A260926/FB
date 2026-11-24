@@ -1,0 +1,4 @@
+namespace Proof;
+table Node { value:int; left:Node; right:Node; nested:[ubyte] (nested_flatbuffer:"Node"); }
+root_type Node;
+file_identifier "PREF";

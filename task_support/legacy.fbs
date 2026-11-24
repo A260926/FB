@@ -1,0 +1,4 @@
+namespace Legacy;
+table Item { value:int; }
+root_type Item;
+file_identifier "LEGA";
