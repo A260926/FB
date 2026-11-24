@@ -1,0 +1,236 @@
+{
+  "repo": "https://github.com/golang/go",
+  "commit": "619b8fd7d2c94af12933f409e962b99aa9263555",
+  "license": "BSD-3-Clause",
+  "mapping": "upstream src/ is restored root",
+  "changes": "Internal import prefixes rewritten; no-op runtime comparison hooks renamed to fuzzreplay_fuzz namespace to avoid host testing/internal/fuzz symbol collision. No algorithm changed. libfuzzer instrumentation is outside this replay task.",
+  "exclusions": [
+    "Everything outside src/internal/{fuzz,godebug,race,unsafeheader}, LICENSE, PATENTS, README.md; these packages contain the complete selected production closure."
+  ],
+  "files": [
+    {
+      "upstream": "LICENSE",
+      "path": "LICENSE",
+      "source_sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
+      "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "PATENTS",
+      "path": "PATENTS",
+      "source_sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "README.md",
+      "path": "README.md",
+      "source_sha256": "b55700999cab54c7d9983425983546595c3080da3c92828a2d2f9d34bb6b188c",
+      "sha256": "b55700999cab54c7d9983425983546595c3080da3c92828a2d2f9d34bb6b188c",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/counters_supported.go",
+      "path": "internal/fuzz/counters_supported.go",
+      "source_sha256": "c8c4081011d2b13709b91c5c8f17ae6328b1160cfda6c016a2585160ed9264ba",
+      "sha256": "f15a1b66ffe4de42c61996b1e2b7187f75f4b5a6904ae4a82e3e80d6e5cedabe",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/counters_unsupported.go",
+      "path": "internal/fuzz/counters_unsupported.go",
+      "source_sha256": "254ae53cc432d1c28495b331a21c421bb7267a59daaf9bf7aff71d8e07299692",
+      "sha256": "254ae53cc432d1c28495b331a21c421bb7267a59daaf9bf7aff71d8e07299692",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/coverage.go",
+      "path": "internal/fuzz/coverage.go",
+      "source_sha256": "bca5100e4992d6384133fe900ed6c5ae87cc66d44d0ff0fc5f198513b4a70681",
+      "sha256": "bca5100e4992d6384133fe900ed6c5ae87cc66d44d0ff0fc5f198513b4a70681",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/encoding.go",
+      "path": "internal/fuzz/encoding.go",
+      "source_sha256": "1be3a154c0b6612fba24d76720fa26cb293dbec89b4198167b840b4325979a66",
+      "sha256": "1be3a154c0b6612fba24d76720fa26cb293dbec89b4198167b840b4325979a66",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/encoding_test.go",
+      "path": "internal/fuzz/encoding_test.go",
+      "source_sha256": "468951e533656a8a9756dd45763ffe5218f9ac089eeb915cc0876a5472fefdad",
+      "sha256": "468951e533656a8a9756dd45763ffe5218f9ac089eeb915cc0876a5472fefdad",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/fuzz.go",
+      "path": "internal/fuzz/fuzz.go",
+      "source_sha256": "c345826003f11da6c2235ced2ae41a1a46b7e5c32313d975506b33fdae48f1c7",
+      "sha256": "e6d1a42dc23043ea41bc7d994ed2862e93872110cb16d2624cb60ab24c7ffa88",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/mem.go",
+      "path": "internal/fuzz/mem.go",
+      "source_sha256": "a947d1aed2478308da1b838583193f7914e8f6a534aacc05282fc3841505013d",
+      "sha256": "a947d1aed2478308da1b838583193f7914e8f6a534aacc05282fc3841505013d",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/minimize.go",
+      "path": "internal/fuzz/minimize.go",
+      "source_sha256": "1f7fffe58538f34463fcc125fd713f07527aa6b7cd07603d343249e5e13e2dba",
+      "sha256": "1f7fffe58538f34463fcc125fd713f07527aa6b7cd07603d343249e5e13e2dba",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/minimize_test.go",
+      "path": "internal/fuzz/minimize_test.go",
+      "source_sha256": "aa2f47648729da456bf867e2f7d21c6353dc2eeadf2d7313349a0e1bc60a5094",
+      "sha256": "aa2f47648729da456bf867e2f7d21c6353dc2eeadf2d7313349a0e1bc60a5094",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/mutator.go",
+      "path": "internal/fuzz/mutator.go",
+      "source_sha256": "ae04f22ec52bb456dfcdfe5e4c2a3bf503678d7377da1fea9c089fed9bd6f80b",
+      "sha256": "ae04f22ec52bb456dfcdfe5e4c2a3bf503678d7377da1fea9c089fed9bd6f80b",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/mutator_test.go",
+      "path": "internal/fuzz/mutator_test.go",
+      "source_sha256": "5ec60e67662329fbc71cc251522f510f0afc2eb8a09c94025654645fd9476d5f",
+      "sha256": "5ec60e67662329fbc71cc251522f510f0afc2eb8a09c94025654645fd9476d5f",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/mutators_byteslice.go",
+      "path": "internal/fuzz/mutators_byteslice.go",
+      "source_sha256": "f8c1c66e1e520b1e78b8f84f83ed9e3c2ac03e56024b01cc041eda0647b1a7fd",
+      "sha256": "f8c1c66e1e520b1e78b8f84f83ed9e3c2ac03e56024b01cc041eda0647b1a7fd",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/mutators_byteslice_test.go",
+      "path": "internal/fuzz/mutators_byteslice_test.go",
+      "source_sha256": "4cd450f74dda03ef272047cf3af012b830ed12d72aa8b3be99956b7b1e778881",
+      "sha256": "4cd450f74dda03ef272047cf3af012b830ed12d72aa8b3be99956b7b1e778881",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/pcg.go",
+      "path": "internal/fuzz/pcg.go",
+      "source_sha256": "142b9be47f78468f6b689f8876ecce825176b7fe1ee849b895b72e5988898504",
+      "sha256": "142b9be47f78468f6b689f8876ecce825176b7fe1ee849b895b72e5988898504",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/queue.go",
+      "path": "internal/fuzz/queue.go",
+      "source_sha256": "8aecb15259259955a021238c08f718c236bb060ac183c08cf54795380ece07f4",
+      "sha256": "8aecb15259259955a021238c08f718c236bb060ac183c08cf54795380ece07f4",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/queue_test.go",
+      "path": "internal/fuzz/queue_test.go",
+      "source_sha256": "13677a369b202db042c4ac8ff87403cfdb0ff723ac6e6404f28222fbd865d07c",
+      "sha256": "13677a369b202db042c4ac8ff87403cfdb0ff723ac6e6404f28222fbd865d07c",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/sys_posix.go",
+      "path": "internal/fuzz/sys_posix.go",
+      "source_sha256": "e9f687738b8ade939c556b30461ef8fba0d66a56b9a7bfa0807b2aff72359cdf",
+      "sha256": "e9f687738b8ade939c556b30461ef8fba0d66a56b9a7bfa0807b2aff72359cdf",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/sys_unimplemented.go",
+      "path": "internal/fuzz/sys_unimplemented.go",
+      "source_sha256": "9bc6d5e02fef3009e32880127d4d9953338669b4cb592d09da6104a74024e383",
+      "sha256": "9bc6d5e02fef3009e32880127d4d9953338669b4cb592d09da6104a74024e383",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/sys_windows.go",
+      "path": "internal/fuzz/sys_windows.go",
+      "source_sha256": "6b9f34a891b40ff97538cafb06dcda8a75373d1d3e06afaf0371a5ae3861425d",
+      "sha256": "6b9f34a891b40ff97538cafb06dcda8a75373d1d3e06afaf0371a5ae3861425d",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/trace.go",
+      "path": "internal/fuzz/trace.go",
+      "source_sha256": "d7e988761aee3bd9c81dbfa8357c95a1a4a9e7e7d00a94b87b15f8e992b1da0f",
+      "sha256": "bbe341d9d520799c464d0bac45324a9063fbb9e7ab4eff1081c8687cd817bfe5",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/worker.go",
+      "path": "internal/fuzz/worker.go",
+      "source_sha256": "9c3c3a3d3b8fb1aa954b41f52c5d60a94ee422c4bc7abf1f6ae64f15a5578b03",
+      "sha256": "9c3c3a3d3b8fb1aa954b41f52c5d60a94ee422c4bc7abf1f6ae64f15a5578b03",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/fuzz/worker_test.go",
+      "path": "internal/fuzz/worker_test.go",
+      "source_sha256": "9342ad76ed2261b79bdaec32bd6af19ff17613b76bd3900c7c426d74b54068ad",
+      "sha256": "57015a3852e293c6ef78b8e4489019b739c8344459c4e5b6231e58630a362ee2",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/godebug/godebug.go",
+      "path": "internal/godebug/godebug.go",
+      "source_sha256": "da9ee525257cdf4ae2b9b35458a35578a6026f3dfa4ca7c13d988df751692484",
+      "sha256": "da9ee525257cdf4ae2b9b35458a35578a6026f3dfa4ca7c13d988df751692484",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/godebug/godebug_test.go",
+      "path": "internal/godebug/godebug_test.go",
+      "source_sha256": "c5d5d2141da2dcae5eddd838344674af075fc2be96b4684b5253a91e4974c971",
+      "sha256": "c5d5d2141da2dcae5eddd838344674af075fc2be96b4684b5253a91e4974c971",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/race/doc.go",
+      "path": "internal/race/doc.go",
+      "source_sha256": "4e6670414ce0c94fffd41e26536671f0122f8ac54bdfe65277de014a8d1fd4dd",
+      "sha256": "4e6670414ce0c94fffd41e26536671f0122f8ac54bdfe65277de014a8d1fd4dd",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/race/norace.go",
+      "path": "internal/race/norace.go",
+      "source_sha256": "beff1f42592232df198d48a4be7323b65c329f27211cd22d384e0cfd4ba7bccc",
+      "sha256": "beff1f42592232df198d48a4be7323b65c329f27211cd22d384e0cfd4ba7bccc",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/race/race.go",
+      "path": "internal/race/race.go",
+      "source_sha256": "72efd6fd5a37065e2c50d2d4d50d583617c18592b0c370bec20c3f56e7c89972",
+      "sha256": "72efd6fd5a37065e2c50d2d4d50d583617c18592b0c370bec20c3f56e7c89972",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/unsafeheader/unsafeheader.go",
+      "path": "internal/unsafeheader/unsafeheader.go",
+      "source_sha256": "aeb2bf9d6c18b361ef4d2830dd63675960268432a4c5dd6131a374d654094da4",
+      "sha256": "aeb2bf9d6c18b361ef4d2830dd63675960268432a4c5dd6131a374d654094da4",
+      "mode": "0o644"
+    },
+    {
+      "upstream": "src/internal/unsafeheader/unsafeheader_test.go",
+      "path": "internal/unsafeheader/unsafeheader_test.go",
+      "source_sha256": "013036356d6a08a46700f6121657b7d7e840d759a5ff935c69e7606adef0e77f",
+      "sha256": "00859562aced6341eda36a1399c762374ec0d4e2a4166d7878b4db9d1822fe5f",
+      "mode": "0o644"
+    }
+  ]
+}
