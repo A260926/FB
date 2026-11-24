@@ -1,0 +1,3 @@
+package main
+import("flag";"fmt";"os";"time";f "github.com/bluenviron/gohlslib/v2/task_support/offlinefixture")
+func main(){normal:=flag.Bool("normal-only",false,"");flag.Parse();r,e:=f.Run([]uint64{240000,240048},false,nil);if e!=nil||len(r.PTS)!=2||r.PTS[0]!=0||r.PTS[1]!=48||len(r.Payload)!=2||r.Payload[0]!=0x40||r.Payload[1]!=0x41||r.Times[1].Sub(r.Times[0])!=time.Millisecond{fmt.Fprintln(os.Stderr,"continuous",r,e);os.Exit(20)};fmt.Println("PRODUCTION_FMP4 continuous_callbacks=2 pts=0,48 payload=verified ntp_delta=1ms");if *normal{return};r,e=f.Run([]uint64{240000,0},true,nil);if e!=nil||len(r.PTS)!=1{fmt.Fprintln(os.Stderr,"starting gap",r,e);os.Exit(21)};fmt.Println("CAPABILITY_GAP reset_callbacks=1 second_raw_tfdt=0 dropped_by_initial_anchor")}
