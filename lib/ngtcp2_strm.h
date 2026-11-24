@@ -249,6 +249,28 @@ ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
                                          size_t datalen, uint64_t offset);
 
 /*
+ * ngtcp2_strm_recv_reordering_atomic works like
+ * ngtcp2_strm_recv_reordering, but it is recoverable against
+ * NGTCP2_ERR_NOMEM.  If the reorder buffer is lazily created and its
+ * creation fails, or ngtcp2_rob_push_atomic fails, |strm| is restored
+ * to the state before the call, including a NULL rx.rob pointer, and
+ * the same stream can be retried by calling this function again.
+ * Non-memory errors, including the fragment limit, keep the existing
+ * behavior.
+ *
+ * It returns the number of bytes newly buffered if it succeeds, or
+ * one of the following negative error codes:
+ *
+ * NGTCP2_ERR_NOMEM
+ *     Out of memory.  |strm| is restored to the state before the
+ *     call.
+ */
+ngtcp2_ssize ngtcp2_strm_recv_reordering_atomic(ngtcp2_strm *strm,
+                                                const uint8_t *data,
+                                                size_t datalen,
+                                                uint64_t offset);
+
+/*
  * ngtcp2_strm_update_rx_offset tells that data up to |offset| bytes
  * are received in order.
  */

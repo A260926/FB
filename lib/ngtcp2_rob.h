@@ -83,6 +83,25 @@ ngtcp2_ssize ngtcp2_rob_push(ngtcp2_rob *rob, uint64_t offset,
                              const uint8_t *data, size_t datalen);
 
 /*
+ * ngtcp2_rob_push_atomic works like ngtcp2_rob_push, but it is
+ * recoverable against NGTCP2_ERR_NOMEM.  If memory allocation fails,
+ * every change made during this function call, including the gap
+ * index, the data index, the contiguous front, the already buffered
+ * data and the set of live allocations, is rolled back to the state
+ * before the call, and the same object can be retried by calling this
+ * function again.  Duplicated data, already consumed prefixes and
+ * zero-length calls keep the behavior of ngtcp2_rob_push.
+ *
+ * This function returns the number of data newly buffered if it
+ * succeeds, or one of the following negative error codes:
+ *
+ * NGTCP2_ERR_NOMEM
+ *     Out of memory.  |rob| is restored to the state before the call.
+ */
+ngtcp2_ssize ngtcp2_rob_push_atomic(ngtcp2_rob *rob, uint64_t offset,
+                                    const uint8_t *data, size_t datalen);
+
+/*
  * ngtcp2_rob_remove_prefix removes gap up to |offset|, exclusive.  It
  * also removes buffered data if it is completely included in
  * |offset|.

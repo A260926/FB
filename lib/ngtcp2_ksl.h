@@ -196,6 +196,27 @@ int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
                       const ngtcp2_ksl_key *key, void *data);
 
 /*
+ * ngtcp2_ksl_insert_atomic works like ngtcp2_ksl_insert, but it is
+ * recoverable against NGTCP2_ERR_NOMEM.  If memory allocation fails,
+ * all the changes made during this function call are rolled back, so
+ * that the keys, the traversal order of |ksl| and the iterators which
+ * were valid before this function call remain valid, and the same
+ * object can be retried by calling this function again.  Non-memory
+ * errors, such as NGTCP2_ERR_INVALID_ARGUMENT for a duplicated key,
+ * keep the existing behavior of ngtcp2_ksl_insert.
+ *
+ * This function returns 0 if it succeeds, or one of the following
+ * negative error codes:
+ *
+ * NGTCP2_ERR_NOMEM
+ *     Out of memory.  |ksl| is restored to the state before the call.
+ * NGTCP2_ERR_INVALID_ARGUMENT
+ *     |key| already exists.
+ */
+int ngtcp2_ksl_insert_atomic(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
+                             const ngtcp2_ksl_key *key, void *data);
+
+/*
  * ngtcp2_ksl_remove removes the |key| from |ksl|.
  *
  * This function assigns the iterator to |*it|, which points to the

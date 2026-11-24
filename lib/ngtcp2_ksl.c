@@ -31,6 +31,7 @@
 
 #include "ngtcp2_macro.h"
 #include "ngtcp2_mem.h"
+#include "ngtcp2_err.h"
 
 static ngtcp2_ksl_blk null_blk;
 
@@ -109,6 +110,121 @@ static int ksl_root_init(ngtcp2_ksl *ksl) {
   return 0;
 }
 
+/*
+ * ksl_jentry_kind identifies the structural change recorded in a
+ * ksl_jentry.
+ */
+typedef enum ksl_jentry_kind {
+  /* KSL_JOURNAL_ROOT_INIT records that the root block was lazily
+     created for an initially empty skip list. */
+  KSL_JOURNAL_ROOT_INIT = 1,
+  /* KSL_JOURNAL_ROOT_SPLIT records that a new root block was created
+     and ksl->root was replaced. */
+  KSL_JOURNAL_ROOT_SPLIT,
+  /* KSL_JOURNAL_BLK_SPLIT records that blk was split and the new
+     right block rblk was linked next to it. */
+  KSL_JOURNAL_BLK_SPLIT,
+  /* KSL_JOURNAL_NODE_SPLIT records that a parent block was expanded
+     at the index i to reference rblk. */
+  KSL_JOURNAL_NODE_SPLIT,
+  /* KSL_JOURNAL_KEY_UPDATE records that the bounding key at the
+     index i of blk was overwritten while descending to the rightmost
+     subtree.  rblk is the child block whose maximum key is the value
+     to restore. */
+  KSL_JOURNAL_KEY_UPDATE
+} ksl_jentry_kind;
+
+/*
+ * ksl_jentry is a single rollback record.  Leaf node insertion and key
+ * updates are the final commits of an insertion, so they do not need
+ * entries.
+ */
+typedef struct ksl_jentry {
+  ksl_jentry_kind kind;
+  /* blk is the block kept on the left side, or the old root block. */
+  ngtcp2_ksl_blk *blk;
+  /* rblk is the newly allocated right block, or the new root block. */
+  ngtcp2_ksl_blk *rblk;
+  /* i is the expanded node index for KSL_JOURNAL_NODE_SPLIT. */
+  size_t i;
+  /* n preserves the node count the block had before the change. */
+  uint32_t n;
+} ksl_jentry;
+
+static int ksl_journal_push(ksl_jentry **pjournal, size_t *pcap, size_t *pn,
+                            ksl_jentry entry, const ngtcp2_mem *mem) {
+  ksl_jentry *journal;
+
+  if (*pn == *pcap) {
+    size_t ncap = *pcap ? *pcap * 2 : 8;
+
+    journal = ngtcp2_mem_realloc(mem, *pjournal, ncap * sizeof(*journal));
+    if (journal == NULL) {
+      return NGTCP2_ERR_NOMEM;
+    }
+
+    *pjournal = journal;
+    *pcap = ncap;
+  }
+
+  (*pjournal)[(*pn)++] = entry;
+
+  return 0;
+}
+
+/*
+ * ksl_journal_rollback undoes all the recorded structural changes in
+ * the reverse order.  Every block allocated by the failed operation
+ * is released, and the blocks which existed before the operation keep
+ * their addresses and contents.
+ */
+static void ksl_journal_rollback(ngtcp2_ksl *ksl, ksl_jentry *journal,
+                                 size_t jn) {
+  for (; jn--;) {
+    ksl_jentry *entry = &journal[jn];
+
+    switch (entry->kind) {
+    case KSL_JOURNAL_ROOT_INIT:
+      ksl_blk_objalloc_del(ksl, entry->blk);
+      ksl->root = ksl->front = ksl->back = NULL;
+      break;
+    case KSL_JOURNAL_ROOT_SPLIT:
+      ksl_blk_objalloc_del(ksl, entry->rblk);
+      ksl->root = entry->blk;
+      break;
+    case KSL_JOURNAL_NODE_SPLIT:
+      /* The last key of rblk is the maximum key of the unsplit child,
+         which is the parent key overwritten by the split. */
+      ksl_set_nth_key(ksl, entry->blk, entry->i,
+                      ngtcp2_ksl_blk_nth_key(entry->rblk,
+                                             entry->rblk->n - 1));
+      entry->blk->n = entry->n;
+      break;
+    case KSL_JOURNAL_BLK_SPLIT:
+      entry->blk->next = entry->rblk->next;
+
+      if (entry->rblk->next) {
+        entry->rblk->next->prev = entry->blk;
+      } else if (ksl->back == entry->rblk) {
+        ksl->back = entry->blk;
+      }
+
+      /* The moved node and key arrays were copied, not moved, so
+         restoring n brings back the original entries. */
+      entry->blk->n = entry->n;
+      ksl_blk_objalloc_del(ksl, entry->rblk);
+      break;
+    case KSL_JOURNAL_KEY_UPDATE:
+      /* The child block is still linked at this point of the reverse
+         walk, so its maximum key gives the overwritten bounding key. */
+      ksl_set_nth_key(ksl, entry->blk, entry->i,
+                      ngtcp2_ksl_blk_nth_key(entry->rblk,
+                                             entry->rblk->n - 1));
+      break;
+    }
+  }
+}
+
 #ifdef NOMEMPOOL
 /*
  * ksl_free_blk frees |blk| recursively.
@@ -127,14 +243,20 @@ static void ksl_free_blk(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk) {
 #endif /* defined(NOMEMPOOL) */
 
 void ngtcp2_ksl_free(ngtcp2_ksl *ksl) {
-  if (!ksl || !ksl->root) {
+  if (!ksl) {
     return;
   }
 
 #ifdef NOMEMPOOL
-  ksl_free_blk(ksl, ksl->root);
+  if (ksl->root) {
+    ksl_free_blk(ksl, ksl->root);
+  }
 #endif /* defined(NOMEMPOOL) */
 
+  /* The object allocator is initialized by ngtcp2_ksl_init and owns
+     every block ever allocated, including blocks returned to its free
+     list after an atomic insertion rollback.  A NULL root therefore
+     does not imply an empty allocator, so it must always be freed. */
   ngtcp2_objalloc_free(&ksl->blkalloc);
 }
 
@@ -144,10 +266,14 @@ void ngtcp2_ksl_free(ngtcp2_ksl *ksl) {
  *
  * It returns the pointer to the ngtcp2_ksl_blk created which is the
  * located at the right of |blk|, or NULL which indicates out of
- * memory error.
+ * memory error.  On success, the change is recorded in |journal| so
+ * that it can be rolled back later.
  */
-static ngtcp2_ksl_blk *ksl_split_blk(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk) {
+static ngtcp2_ksl_blk *ksl_split_blk(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk,
+                                     ksl_jentry **pjournal, size_t *pcap,
+                                     size_t *pn) {
   ngtcp2_ksl_blk *rblk;
+  int rv;
 
   rblk = ksl_blk_objalloc_new(ksl);
   if (rblk == NULL) {
@@ -177,24 +303,54 @@ static ngtcp2_ksl_blk *ksl_split_blk(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk) {
   assert(blk->n >= NGTCP2_KSL_MIN_NBLK);
   assert(rblk->n >= NGTCP2_KSL_MIN_NBLK);
 
+  rv = ksl_journal_push(
+    pjournal, pcap, pn,
+    (ksl_jentry){
+      .kind = KSL_JOURNAL_BLK_SPLIT, .blk = blk, .rblk = rblk,
+      /* blk->n was reduced above; the entry stores the original
+         count so that rollback can restore it. */
+      .n = blk->n + rblk->n,
+    },
+    ksl->blkalloc.balloc.mem);
+  if (rv != 0) {
+    /* Undo this split inline so that the tree stays consistent with
+       the journal entries recorded so far; the caller performs the
+       single final rollback. */
+    blk->next = rblk->next;
+
+    if (rblk->next) {
+      rblk->next->prev = blk;
+    } else if (ksl->back == rblk) {
+      ksl->back = blk;
+    }
+
+    blk->n += rblk->n;
+    ksl_blk_objalloc_del(ksl, rblk);
+
+    return NULL;
+  }
+
   return rblk;
 }
 
 /*
  * ksl_split_node splits a node included in |blk| at the position |i|
  * into 2 adjacent nodes.  The new node is always inserted at the
- * position |i+1|.
+ * position |i+1|.  The change is recorded in |journal|.
  *
  * It returns 0 if it succeeds, or one of the following negative error
  * codes:
  *
  * NGTCP2_ERR_NOMEM
- *     Out of memory.
+ *     Out of memory.  All the changes made in this call are rolled
+ *     back.
  */
-static int ksl_split_node(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk, size_t i) {
+static int ksl_split_node(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk, size_t i,
+                          ksl_jentry **pjournal, size_t *pcap, size_t *pn) {
   ngtcp2_ksl_blk *lblk = blk->nodes[i].blk, *rblk;
+  int rv;
 
-  rblk = ksl_split_blk(ksl, lblk);
+  rblk = ksl_split_blk(ksl, lblk, pjournal, pcap, pn);
   if (rblk == NULL) {
     return NGTCP2_ERR_NOMEM;
   }
@@ -211,28 +367,59 @@ static int ksl_split_node(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk, size_t i) {
 
   ksl_set_nth_key(ksl, blk, i, ngtcp2_ksl_blk_nth_key(lblk, lblk->n - 1));
 
+  rv = ksl_journal_push(
+    pjournal, pcap, pn,
+    (ksl_jentry){
+      .kind = KSL_JOURNAL_NODE_SPLIT, .blk = blk, .rblk = rblk, .i = i,
+      /* blk->n was just incremented; the entry stores the previous
+         count. */
+      .n = blk->n - 1,
+    },
+    ksl->blkalloc.balloc.mem);
+  if (rv != 0) {
+    /* Undo the parent expansion inline; the child split stays
+       journaled and is undone by the final rollback. */
+    ksl_set_nth_key(ksl, blk, i,
+                    ngtcp2_ksl_blk_nth_key(rblk, rblk->n - 1));
+
+    memmove(blk->nodes + (i + 1), blk->nodes + (i + 2),
+            (blk->n - (i + 2)) * sizeof(ngtcp2_ksl_node));
+
+    memmove(blk->keys + i * ksl->aligned_keylen,
+            blk->keys + (i + 1) * ksl->aligned_keylen,
+            (blk->n - (i + 1)) * ksl->aligned_keylen);
+
+    blk->n -= 1;
+
+    return NGTCP2_ERR_NOMEM;
+  }
+
   return 0;
 }
 
 /*
  * ksl_split_root splits a root block.  It increases the height of
- * skip list by 1.
+ * skip list by 1.  The change is recorded in |journal|.
  *
  * It returns 0 if it succeeds, or one of the following negative error
  * codes:
  *
  * NGTCP2_ERR_NOMEM
- *     Out of memory.
+ *     Out of memory.  All the changes made in this call are rolled
+ *     back.
  */
-static int ksl_split_root(ngtcp2_ksl *ksl) {
+static int ksl_split_root(ngtcp2_ksl *ksl, ksl_jentry **pjournal,
+                          size_t *pcap, size_t *pn) {
   ngtcp2_ksl_blk *rblk, *lblk, *nroot;
+  ngtcp2_ksl_blk *old_root = ksl->root;
+  int rv;
 
   nroot = ksl_blk_objalloc_new(ksl);
   if (nroot == NULL) {
     return NGTCP2_ERR_NOMEM;
   }
 
-  rblk = ksl_split_blk(ksl, ksl->root);
+  rblk = ksl_split_blk(ksl, ksl->root, pjournal, pcap, pn);
   if (rblk == NULL) {
     ksl_blk_objalloc_del(ksl, nroot);
     return NGTCP2_ERR_NOMEM;
@@ -251,6 +438,48 @@ static int ksl_split_root(ngtcp2_ksl *ksl) {
   nroot->nodes[1].blk = rblk;
 
   ksl->root = nroot;
+
+  rv = ksl_journal_push(
+    pjournal, pcap, pn,
+    (ksl_jentry){
+      .kind = KSL_JOURNAL_ROOT_SPLIT, .blk = old_root, .rblk = nroot,
+    },
+    ksl->blkalloc.balloc.mem);
+  if (rv != 0) {
+    /* Restore the old root inline; nroot is not journaled yet and is
+       released here.  The leaf block split stays journaled and is
+       undone by the final rollback. */
+    ksl->root = old_root;
+    ksl_blk_objalloc_del(ksl, nroot);
+
+    return NGTCP2_ERR_NOMEM;
+  }
+
+  return 0;
+}
+
+/*
+ * ksl_journal_key_update overwrites the bounding key at the index i
+ * of blk with the inserted key and records the previous value, which
+ * is derived from the maximum key of the linked child block.
+ */
+static int ksl_journal_key_update(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk,
+                                  size_t i, ngtcp2_ksl_blk *child,
+                                  const ngtcp2_ksl_key *key,
+                                  ksl_jentry **pjournal, size_t *pcap,
+                                  size_t *pn) {
+  int rv = ksl_journal_push(
+    pjournal, pcap, pn,
+    (ksl_jentry){
+      .kind = KSL_JOURNAL_KEY_UPDATE, .blk = blk, .rblk = child, .i = i,
+    },
+    ksl->blkalloc.balloc.mem);
+
+  if (rv != 0) {
+    return rv;
+  }
+
+  ksl_set_nth_key(ksl, blk, i, key);
 
   return 0;
 }
@@ -278,10 +507,12 @@ static void ksl_insert_node(ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk, size_t i,
   ++blk->n;
 }
 
-int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
-                      const ngtcp2_ksl_key *key, void *data) {
+static int ksl_insert_atomic(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
+                             const ngtcp2_ksl_key *key, void *data) {
   ngtcp2_ksl_blk *blk;
   ngtcp2_ksl_node *node;
+  ksl_jentry *journal = NULL;
+  size_t jcap = 0, jn = 0;
   size_t i;
   int rv;
 
@@ -290,12 +521,27 @@ int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
     if (rv != 0) {
       return rv;
     }
+
+    rv = ksl_journal_push(
+      &journal, &jcap, &jn,
+      (ksl_jentry){
+        .kind = KSL_JOURNAL_ROOT_INIT, .blk = ksl->root,
+      },
+      ksl->blkalloc.balloc.mem);
+    if (rv != 0) {
+      /* The entry could not be recorded, so undo the lazy root
+         creation inline. */
+      ksl_blk_objalloc_del(ksl, ksl->root);
+      ksl->root = ksl->front = ksl->back = NULL;
+      goto fail;
+    }
   }
 
   if (ksl->root->n == NGTCP2_KSL_MAX_NBLK) {
-    rv = ksl_split_root(ksl);
+    rv = ksl_split_root(ksl, &journal, &jcap, &jn);
     if (rv != 0) {
-      return rv;
+      ksl_journal_rollback(ksl, journal, jn);
+      goto fail;
     }
   }
 
@@ -310,15 +556,26 @@ int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
           *it = ngtcp2_ksl_end(ksl);
         }
 
+        /* The duplicated key check happens before the leaf node is
+           published, so roll the structural changes back and keep the
+           original error code. */
+        ksl_journal_rollback(ksl, journal, jn);
+        ngtcp2_mem_free(ksl->blkalloc.balloc.mem, journal);
+
         return NGTCP2_ERR_INVALID_ARGUMENT;
       }
 
+      /* Leaf node insertion and the element count update are the only
+         commits of this operation; from here on no allocation can
+         fail. */
       ksl_insert_node(ksl, blk, i, key, data);
       ++ksl->n;
 
       if (it) {
         ngtcp2_ksl_it_init(it, blk, i);
       }
+
+      ngtcp2_mem_free(ksl->blkalloc.balloc.mem, journal);
 
       return 0;
     }
@@ -328,15 +585,22 @@ int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
       for (; !blk->leaf;) {
         node = &blk->nodes[blk->n - 1];
         if (node->blk->n == NGTCP2_KSL_MAX_NBLK) {
-          rv = ksl_split_node(ksl, blk, blk->n - 1);
+          rv = ksl_split_node(ksl, blk, blk->n - 1, &journal, &jcap, &jn);
           if (rv != 0) {
-            return rv;
+            ksl_journal_rollback(ksl, journal, jn);
+            goto fail;
           }
 
           node = &blk->nodes[blk->n - 1];
         }
 
-        ksl_set_nth_key(ksl, blk, blk->n - 1, key);
+        rv = ksl_journal_key_update(ksl, blk, blk->n - 1, node->blk, key,
+                                    &journal, &jcap, &jn);
+        if (rv != 0) {
+          ksl_journal_rollback(ksl, journal, jn);
+          goto fail;
+        }
+
         blk = node->blk;
       }
 
@@ -347,15 +611,18 @@ int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
         ngtcp2_ksl_it_init(it, blk, blk->n - 1);
       }
 
+      ngtcp2_mem_free(ksl->blkalloc.balloc.mem, journal);
+
       return 0;
     }
 
     node = &blk->nodes[i];
 
     if (node->blk->n == NGTCP2_KSL_MAX_NBLK) {
-      rv = ksl_split_node(ksl, blk, i);
+      rv = ksl_split_node(ksl, blk, i, &journal, &jcap, &jn);
       if (rv != 0) {
-        return rv;
+        ksl_journal_rollback(ksl, journal, jn);
+        goto fail;
       }
 
       if (ksl->compar(ngtcp2_ksl_blk_nth_key(blk, i), key)) {
@@ -365,6 +632,21 @@ int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
 
     blk = node->blk;
   }
+
+fail:
+  ngtcp2_mem_free(ksl->blkalloc.balloc.mem, journal);
+
+  return NGTCP2_ERR_NOMEM;
+}
+
+int ngtcp2_ksl_insert(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
+                      const ngtcp2_ksl_key *key, void *data) {
+  return ksl_insert_atomic(ksl, it, key, data);
+}
+
+int ngtcp2_ksl_insert_atomic(ngtcp2_ksl *ksl, ngtcp2_ksl_it *it,
+                             const ngtcp2_ksl_key *key, void *data) {
+  return ksl_insert_atomic(ksl, it, key, data);
 }
 
 /*

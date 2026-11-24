@@ -88,7 +88,13 @@ void ngtcp2_strm_free(ngtcp2_strm *strm) {
   }
 }
 
-static int strm_rob_init(ngtcp2_strm *strm) {
+/*
+ * strm_rob_create allocates and fully initializes a reorder buffer
+ * without publishing it to strm->rx.rob.  The caller publishes the
+ * pointer only after this function succeeds, so that a failure leaves
+ * strm->rx.rob in its previous state, including NULL.
+ */
+static int strm_rob_create(ngtcp2_strm *strm, ngtcp2_rob **prob) {
   int rv;
   ngtcp2_rob *rob = ngtcp2_mem_malloc(strm->mem, sizeof(*rob));
 
@@ -102,7 +108,7 @@ static int strm_rob_init(ngtcp2_strm *strm) {
     return rv;
   }
 
-  strm->rx.rob = rob;
+  *prob = rob;
 
   return 0;
 }
@@ -132,24 +138,44 @@ static int strm_rob_heavily_fragmented(const ngtcp2_strm *strm) {
   return ngap >= 4000 || ngap > 128 + span / NGTCP2_MIN_STREAM_DATALEN;
 }
 
-ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
-                                         size_t datalen, uint64_t offset) {
+static ngtcp2_ssize strm_recv_reordering_atomic(ngtcp2_strm *strm,
+                                                 const uint8_t *data,
+                                                 size_t datalen,
+                                                 uint64_t offset) {
   int rv;
   ngtcp2_ssize nwrite;
+  ngtcp2_rob *rob = strm->rx.rob;
+  uint64_t cont_offset = strm->rx.cont_offset;
+  int created = rob == NULL;
 
-  if (strm->rx.rob == NULL) {
-    rv = strm_rob_init(strm);
+  if (created) {
+    rv = strm_rob_create(strm, &rob);
     if (rv != 0) {
       return rv;
     }
 
-    if (strm->rx.cont_offset) {
-      ngtcp2_rob_remove_prefix(strm->rx.rob, strm->rx.cont_offset);
+    if (cont_offset) {
+      ngtcp2_rob_remove_prefix(rob, cont_offset);
     }
+
+    /* The reorder buffer is published only when it is fully
+       initialized.  If the push below fails, it is taken back and
+       released so that strm->rx.rob keeps its previous NULL value. */
+    strm->rx.rob = rob;
   }
 
-  nwrite = ngtcp2_rob_push(strm->rx.rob, offset, data, datalen);
+  nwrite = ngtcp2_rob_push_atomic(rob, offset, data, datalen);
   if (nwrite < 0) {
+    if (created) {
+      /* The atomic push rolled every change back, so the freshly
+         created ROB is still in its initialized state and can be
+         discarded to restore the pre-call NULL pointer. */
+      assert(strm->rx.rob == rob);
+      strm->rx.rob = NULL;
+      ngtcp2_rob_free(rob);
+      ngtcp2_mem_free(strm->mem, rob);
+    }
+
     return nwrite;
   }
 
@@ -158,6 +184,18 @@ ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
   }
 
   return nwrite;
+}
+
+ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
+                                         size_t datalen, uint64_t offset) {
+  return strm_recv_reordering_atomic(strm, data, datalen, offset);
+}
+
+ngtcp2_ssize ngtcp2_strm_recv_reordering_atomic(ngtcp2_strm *strm,
+                                                const uint8_t *data,
+                                                size_t datalen,
+                                                uint64_t offset) {
+  return strm_recv_reordering_atomic(strm, data, datalen, offset);
 }
 
 void ngtcp2_strm_update_rx_offset(ngtcp2_strm *strm, uint64_t offset) {
