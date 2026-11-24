@@ -1,0 +1,991 @@
+{
+  "repo": "https://github.com/microsoft/snmalloc",
+  "commit": "8338112ea553549f554b1e666767c2b4540315a8",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "sha256": "27ebda9d51f0a56b7e281ccd8230a27236dcb51c05f64b07869ecf6e965d68b0",
+      "git_blob": "21071075c24599ee98254f702bcfc504cdc275a6"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "sha256": "be04e0b3502fa6492643672d4d9f886a93eb6425b00cb31e48b83bceb4541629",
+      "git_blob": "52dc46ccf882b745ccf69192f4d71dff9ca47e32"
+    },
+    {
+      "path": "docs/security/Randomisation.md",
+      "mode": "100644",
+      "sha256": "2a0bf72dd7db776fac6079be298f8e53e069c604e574b31abcc0bc7ba5ffe5cf",
+      "git_blob": "dc08df94701720321477c2951feded6da490018e"
+    },
+    {
+      "path": "src/snmalloc/README.md",
+      "mode": "100644",
+      "sha256": "38a0e34739b638574622cf1faab4d0c0447751c17b2b325e3b2bd7f530eb111c",
+      "git_blob": "2549320fb6b8140cb51d3f62aae700599e7e7318"
+    },
+    {
+      "path": "src/snmalloc/aal/aal.h",
+      "mode": "100644",
+      "sha256": "9c9bae0050c3e8207e333f0298a588e4ecda690dbcbae52e67da9a5073ac75af",
+      "git_blob": "4c176672f053c988a309156ac43102ca2460666c"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_arm.h",
+      "mode": "100644",
+      "sha256": "bb7eeec13061bc28217c8f052cae2cb9fa77c10ee815a4ce3585edc0524b8eb9",
+      "git_blob": "cc6abab9ababe91801177da845c2a8d7e574241b"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_cheri.h",
+      "mode": "100644",
+      "sha256": "fd0bc17ceb98234518bc96cb094ae5a1dc287a149d2968e3dc803aa801883852",
+      "git_blob": "84f11c038d7ed1e40b946d21a75cf3a966633566"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_concept.h",
+      "mode": "100644",
+      "sha256": "64b174655413b1e14ad107fafd0f865b5fd22cb8c814e28c3845c0c4cf12177e",
+      "git_blob": "1ea35da989eb045c45b1e8e953065e1b7423dd40"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_consts.h",
+      "mode": "100644",
+      "sha256": "aebe44daeb4efe3e84f66dee0e533f5b4cfd04690f292748ebaee14727417409",
+      "git_blob": "a680237297bcf0c0597611d780a193f98ef74942"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_powerpc.h",
+      "mode": "100644",
+      "sha256": "41ba048b37816392a63682149554b090ef655ba481b25d772117d48f22e821b5",
+      "git_blob": "60b9f125d1cd06f33afeb142bf70af2c1d960e71"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_riscv.h",
+      "mode": "100644",
+      "sha256": "e64f40104dada081873272e424d8fdacf580daba4cee329655c87c5532a981f5",
+      "git_blob": "f0dee91f3f9eaa5ee04a3962ceda1ace648681e7"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_sparc.h",
+      "mode": "100644",
+      "sha256": "9f61ab722a181851eedb5bb2f670f5709c96db78c3dfd0fd88178a47566786d4",
+      "git_blob": "3bbf8405edb7f1e2108c0c75c1933df48a60c2e6"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_x86.h",
+      "mode": "100644",
+      "sha256": "13bc71251e6cf8fa74ca1ec088b51cfc3785d8ad481e14508e4c56ba0f446cb3",
+      "git_blob": "150de26451ffc7c5a4cd1597b1157865acf36965"
+    },
+    {
+      "path": "src/snmalloc/aal/aal_x86_sgx.h",
+      "mode": "100644",
+      "sha256": "1b3a7a56240a3737fdaf0d4db46156be5757dd3c6389b7605b3346ff30d6ad0e",
+      "git_blob": "87808a4dea0a4fe3aabab6bdda7f52e8c143108e"
+    },
+    {
+      "path": "src/snmalloc/aal/address.h",
+      "mode": "100644",
+      "sha256": "9f4980fc044d5dfd3878a7a22a382d0399b7eb284b4e302e3807204133571dd6",
+      "git_blob": "91cce942161c01235cdc60137835c0b29bf898f6"
+    },
+    {
+      "path": "src/snmalloc/backend/backend.h",
+      "mode": "100644",
+      "sha256": "e1b20ce3f2134427e531911c1d309a69aa2dd5ab836cb8bc05e299ef65f0f844",
+      "git_blob": "2772cf319d59d442525c17d667b917738baf0d0c"
+    },
+    {
+      "path": "src/snmalloc/backend/base_constants.h",
+      "mode": "100644",
+      "sha256": "1cfa36dc602e2d80151798af13e7b1ab90f3a6c4eaf89d941498abe84809699d",
+      "git_blob": "92385a9601fdafe647071847c8dda2addee47346"
+    },
+    {
+      "path": "src/snmalloc/backend/fixedglobalconfig.h",
+      "mode": "100644",
+      "sha256": "c7c115342c594291b970f402ef1d8e23e978a98b5f260dc0fb01fed09827f3fa",
+      "git_blob": "5bd3b68b5a74063d1950d4b783d59159352339ae"
+    },
+    {
+      "path": "src/snmalloc/backend/globalconfig.h",
+      "mode": "100644",
+      "sha256": "93286b7bceb73a7be9768de8bf3e01d037a8851e3394df6d7bb640a0b73ea1d2",
+      "git_blob": "208210b65014e37dc4bf49df83c0ea8934bed051"
+    },
+    {
+      "path": "src/snmalloc/backend/meta_protected_range.h",
+      "mode": "100644",
+      "sha256": "83ee603af38551cb2123e8043cc13eb4cfa57eef41b60711560502f417d03011",
+      "git_blob": "857e853d28c64a0d05c2cab23b20e81b474b1b16"
+    },
+    {
+      "path": "src/snmalloc/backend/standard_range.h",
+      "mode": "100644",
+      "sha256": "90dd82aaf9e1a292a69c4284fa40d74cdd764f16466d489ab5b9bdfecfed7cb7",
+      "git_blob": "78609ed2d0b365c61bf7bc8f604905db4b0fe84e"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/authmap.h",
+      "mode": "100644",
+      "sha256": "8e922dce28dd2e233cca3edeebbf1721a90feef2c43675efcf0a0324dda1b9ab",
+      "git_blob": "e2a00085bea158a46b481de81d4a0062535459c6"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/backend_helpers.h",
+      "mode": "100644",
+      "sha256": "ac2547f4ad0b3164dd639e76eda6c884ebf91d61455a84aeb294f1e29723f8ed",
+      "git_blob": "ee339337bcd9ae9ff1583f0c6dd2604750e92168"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/buddy.h",
+      "mode": "100644",
+      "sha256": "8b7016c39e22e61748f380c44a562b1453c28210983904512bfc6d4af48d899e",
+      "git_blob": "58cafacb11648866b4dd0112dbbbfb475a8ca647"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/commitrange.h",
+      "mode": "100644",
+      "sha256": "9da39dd7244dc7330fba3840eaf2fc98573b98088965c740ca0cbc96db07d5a7",
+      "git_blob": "4e83a335b5d8d1bcfdb5a154e53fdd292bd4d615"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/commonconfig.h",
+      "mode": "100644",
+      "sha256": "0d225e6b5a457d3122a1bf88c1bf25280e8cbf67ec13a9e0fbc5eda846f8f02e",
+      "git_blob": "d7fc56340a1c96a69d3a358cf2bbb85ad491ed51"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/defaultpagemapentry.h",
+      "mode": "100644",
+      "sha256": "b7f24f0585cf7c2ef9a7a65370ad35b094ed947f6af19a64ee80900b907b9437",
+      "git_blob": "5e1f703d26be5cd60772b89a57b9b611107fe9b6"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/empty_range.h",
+      "mode": "100644",
+      "sha256": "4f877990fffe7707f839ab1276562c1917b91a12f37aad451b4756e815b00dc3",
+      "git_blob": "db91b9dc18a5fc69c1ef73d10bc2ecdd1d3fc9e0"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/globalrange.h",
+      "mode": "100644",
+      "sha256": "5786cc1d9daf7e54fb3dee8475ba26406d2b46a8c6a57b796f8b35c1c729ce81",
+      "git_blob": "b6fdbef8bcbfc52b7ccd78682fb405479704166e"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/indirectrange.h",
+      "mode": "100644",
+      "sha256": "9562b4391db6f66e51dfdf594ca10b8fb1b5b49e7a5df1807ab95dbbebbfc4f5",
+      "git_blob": "932c3b2b4c4901bddaab8742d7b7720734685aac"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/largebuddyrange.h",
+      "mode": "100644",
+      "sha256": "d86a0d08e3db84e27b7ff6c556775223ea7d042ee75b2ece9e537fc5b49326ef",
+      "git_blob": "15324753ff3a140b4e4385e26ff844c729f04eec"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/lockrange.h",
+      "mode": "100644",
+      "sha256": "6bc5d28092078a1148e880d6f2fdf4dddac5df69033378c8411323155998b0d1",
+      "git_blob": "2dc796ac696f258f8ade3e892cdf15c8b22d8200"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/logrange.h",
+      "mode": "100644",
+      "sha256": "5dba51ffc67a19dcb6629fccf5ae4f4ebeab9a80631858cd36b8c1220c25979f",
+      "git_blob": "0a3f907de4dc93732efedd3b6c2da30b755081c9"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/noprange.h",
+      "mode": "100644",
+      "sha256": "d5dd2a095f0bde79ee7b7b537e6a3142c8977d4f391269f23e6adc77f9f08149",
+      "git_blob": "45dcfdcf690dfb79811ead067a54bfc270183a44"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/pagemap.h",
+      "mode": "100644",
+      "sha256": "f4bcaadc4cc368363326aed946dcc599ed0cf17732e0316778bc7f577b17650c",
+      "git_blob": "2d6ed44b034e8cf39d0d47105a3a09e5e8458c95"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/pagemapregisterrange.h",
+      "mode": "100644",
+      "sha256": "bb8e29e9060eb14ac685895711f4b4d357a70153f008b38063faca6a1839e14a",
+      "git_blob": "b4b2a2ded30ec8efc542f63796d3cb7c321ae9e6"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/palrange.h",
+      "mode": "100644",
+      "sha256": "b23a7889908234c4a0801f26c228257eaaabc6855d62080d56a75fa185347694",
+      "git_blob": "ade65294a82ce340d2cb353d766fb38010733c2f"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/range_helpers.h",
+      "mode": "100644",
+      "sha256": "f0715102e45de11593f919f2848b053049cd24b43950b0cfcfce5a139d54d52c",
+      "git_blob": "77455ff493ee66430e83aae30489992f5333b1e6"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/smallbuddyrange.h",
+      "mode": "100644",
+      "sha256": "2e916732d0ca3b54b536d1561082de7193309ba9a19d901e3ece034b37de49a6",
+      "git_blob": "6f8400e83f1bbaf5e5d6754e0627572a6bfab65b"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/staticconditionalrange.h",
+      "mode": "100644",
+      "sha256": "bae6eb51bd0bc154c7b2d38ae1e36e1367e3166b2e75cb85e044c919ee95810c",
+      "git_blob": "682c2f1fb3b25d0ba0f844fe09b5276be5da8f24"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/staticrange.h",
+      "mode": "100644",
+      "sha256": "cebb9da54f6d511ad84dd57bd1800110de994c6fce7549bb131a5cd684f38aba",
+      "git_blob": "2996c0fbe7bc9458d7f1d9e2f6c45606ee289a30"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/statsrange.h",
+      "mode": "100644",
+      "sha256": "c1464cd1c098804c7b8c125c566fecf411dab127264c4abbde38b485c9dd5aac",
+      "git_blob": "d1e2137776da8265c66461ce6bfb4b8289b7ca8b"
+    },
+    {
+      "path": "src/snmalloc/backend_helpers/subrange.h",
+      "mode": "100644",
+      "sha256": "265aa1eb2f04bc497482ae05a10cc0c8d0ac4e41c7f90e54bb4a6cbc5df1a42f",
+      "git_blob": "8d886a2b8d5ab4c52a1686cd99f5be71a88e786b"
+    },
+    {
+      "path": "src/snmalloc/ds/aba.h",
+      "mode": "100644",
+      "sha256": "85795954f536984c1ebe9b52538acd9c6503a98951fed97acf4f02375e5f1c56",
+      "git_blob": "b0f67ecda830f6905799189620fe01a1ca41a58c"
+    },
+    {
+      "path": "src/snmalloc/ds/combininglock.h",
+      "mode": "100644",
+      "sha256": "56668f04ac3f7d4b8d673fa2315a0e2433d1d2703b5071ce84f8d172e4e7c28a",
+      "git_blob": "e979db2b565d8c626bcc5c47310ab0f3bd30f2bf"
+    },
+    {
+      "path": "src/snmalloc/ds/ds.h",
+      "mode": "100644",
+      "sha256": "03f42b969af536c25eb6957b336efadc2e344a789d366ff3cef5adbe93de2a95",
+      "git_blob": "9c9cd0a49bbc696ecefea13f66df7139fb0e554a"
+    },
+    {
+      "path": "src/snmalloc/ds/entropy.h",
+      "mode": "100644",
+      "sha256": "ac52d50e3aa40278f99566109415c31fbe9bdef6494c9d1f8f7364fa7612766b",
+      "git_blob": "1282c295923a8371116e3ba0c62d3190f7606aae"
+    },
+    {
+      "path": "src/snmalloc/ds/mpmcstack.h",
+      "mode": "100644",
+      "sha256": "aa9ab6884d47c415f721a34acf32e5f885e238f2c878edf2787cf5718d31ee14",
+      "git_blob": "57e5876370d915425288b58dcf4f3bccca5316a4"
+    },
+    {
+      "path": "src/snmalloc/ds/pagemap.h",
+      "mode": "100644",
+      "sha256": "b3a46faa664a63c046a63fa97f8aa90cfbb6ba8917beaf9eefb6f614c88b7e1c",
+      "git_blob": "2ee3cdd2972d933ebda8581e17697fc427544c03"
+    },
+    {
+      "path": "src/snmalloc/ds/pool.h",
+      "mode": "100644",
+      "sha256": "d78ecf4ff6af059afa13caf009e518c3ffee7c5a04807ab118385f6cce1ee6c5",
+      "git_blob": "2a94ec440ea0ea4dfa9122f93adf6566c79e226a"
+    },
+    {
+      "path": "src/snmalloc/ds/pooled.h",
+      "mode": "100644",
+      "sha256": "5e513a825f8e22dd242a91be7774670b5cc71352ce015bdca724706d7de2e06a",
+      "git_blob": "d64716783f765e5339364ca3c00338921689c6ee"
+    },
+    {
+      "path": "src/snmalloc/ds/sizeclasstable.h",
+      "mode": "100644",
+      "sha256": "573093ec88fda695091238a1f8228258d97dba806e002e4766dc561caf680150",
+      "git_blob": "2ddd0315fd8866054a677dbe051ca3c91d37635e"
+    },
+    {
+      "path": "src/snmalloc/ds_aal/ds_aal.h",
+      "mode": "100644",
+      "sha256": "7552630da96d749b3d303acc62bfd938c8580cb6eddbfd1ad30860e6fa5b0540",
+      "git_blob": "e0b4ac202ff61eb5a7deb8fe235198fe23745d61"
+    },
+    {
+      "path": "src/snmalloc/ds_aal/flaglock.h",
+      "mode": "100644",
+      "sha256": "9ff61d444458dc416c73551674daa7d259932f5017acbc97c7ea79081b0fc6cc",
+      "git_blob": "c55b80bb12bee68a4206e297f37a562c97802b52"
+    },
+    {
+      "path": "src/snmalloc/ds_aal/prevent_fork.h",
+      "mode": "100644",
+      "sha256": "daaee45553a6ea83d1f6cf57e0adc12b0c473a8406ee5a5b70db2379cf5c28c8",
+      "git_blob": "6e7635cb7c6e33cc79e3d1eea81df475fdab77c6"
+    },
+    {
+      "path": "src/snmalloc/ds_aal/seqset.h",
+      "mode": "100644",
+      "sha256": "f73ab1842442f4f4a71cfa04146b758f9cdb83cd99f3abe02a761853b56f5a14",
+      "git_blob": "4955c2e730052e674c933f683a2dc1a461c69a77"
+    },
+    {
+      "path": "src/snmalloc/ds_aal/singleton.h",
+      "mode": "100644",
+      "sha256": "a27b4e331ddd0d2bfa0e7808ac1f90397cfa516923e265b9d74449cdc6a3c42b",
+      "git_blob": "aebbcd51f422200ca8b1c72a4028d00d30344643"
+    },
+    {
+      "path": "src/snmalloc/ds_core/bits.h",
+      "mode": "100644",
+      "sha256": "8a331e1e2efab6de7e4bf253ce5dfc9201022487fe3f343ed46a891801f99f66",
+      "git_blob": "3391e70f7cf9cdf985b70e4fdc2248b6d42145fb"
+    },
+    {
+      "path": "src/snmalloc/ds_core/concept.h",
+      "mode": "100644",
+      "sha256": "85b0a59fbcc62f29c22af1a87ead5964c0c59ad3b161ecaa0650cfde352e3342",
+      "git_blob": "d20698d307f096ad02b4796a7bec7bbaaca1f45e"
+    },
+    {
+      "path": "src/snmalloc/ds_core/defines.h",
+      "mode": "100644",
+      "sha256": "70491d41f8b44e0676fd6ee63ce338a230e46d7bf80af4f3e7602310c71b6713",
+      "git_blob": "3f654ec0434f7810235360e55a83b2be386e32d9"
+    },
+    {
+      "path": "src/snmalloc/ds_core/ds_core.h",
+      "mode": "100644",
+      "sha256": "5c48b04b83233345dfa1fe59bae20d5c257f3049a61af7af3c9496d37690c3ec",
+      "git_blob": "0c22a35bd210d4206487327b923303864d0cd611"
+    },
+    {
+      "path": "src/snmalloc/ds_core/helpers.h",
+      "mode": "100644",
+      "sha256": "5abc12d0a73ad2bb8f3980815da099a5fa29b3885c4dfb65971f9d9d2ed54d30",
+      "git_blob": "7bddbfa949d1beedd47c0c902eee4c3f786222b9"
+    },
+    {
+      "path": "src/snmalloc/ds_core/ptrwrap.h",
+      "mode": "100644",
+      "sha256": "6855d63a18b2fe1705fc5ea171870dd457375774520fb251bb495f9370b8f2b5",
+      "git_blob": "843eb8d73d7b57a6c36f61dfcd8f2b82b4fc1c53"
+    },
+    {
+      "path": "src/snmalloc/ds_core/redblacktree.h",
+      "mode": "100644",
+      "sha256": "776ae7952c49bafbbe3abf5dafd55007c251898514934ae127903d44410d9a54",
+      "git_blob": "e6ce73c244e1d8f2b51ea794b016d087b906c67c"
+    },
+    {
+      "path": "src/snmalloc/ds_core/sizeclassconfig.h",
+      "mode": "100644",
+      "sha256": "b8a99484473765c104fe797d6850b83af69be009d3857611d2b0416c82e68091",
+      "git_blob": "05224f81ff31e68a946f3c2058f048c04300cf75"
+    },
+    {
+      "path": "src/snmalloc/ds_core/sizeclassstatic.h",
+      "mode": "100644",
+      "sha256": "0ca242e1e1417e8481429b6af3b0431bcbef757e691677423c20812118c0d679",
+      "git_blob": "011f698302c5df62b35fe12de927a13f64a15f61"
+    },
+    {
+      "path": "src/snmalloc/ds_core/tid.h",
+      "mode": "100644",
+      "sha256": "eebfe481282e59f8dec3f3bb6e21bbebc4a5517dd32ce95522808d58ff0aa9d4",
+      "git_blob": "771b58560fda7c53a028d9c454e46c7fb4058b2e"
+    },
+    {
+      "path": "src/snmalloc/global/bounds_checks.h",
+      "mode": "100644",
+      "sha256": "d963264f3d103a4c746480376ea07ff16f7e397b4d9adc108a79b201578871df",
+      "git_blob": "22fdc58942cf2983ccb152ade8cd636c6cfe73d1"
+    },
+    {
+      "path": "src/snmalloc/global/global.h",
+      "mode": "100644",
+      "sha256": "af05ea3f0e7ae078fd94c678f7a93d89a83e5e8453f5c5d949b9a8cbb4c664bb",
+      "git_blob": "17699ca5a7ab792b53682f361ab3bf09e880d3f5"
+    },
+    {
+      "path": "src/snmalloc/global/globalalloc.h",
+      "mode": "100644",
+      "sha256": "117ee307a2e07ef05644154b85822ff8c1de76ff3f48205e8f3d9b4e48e5e5d4",
+      "git_blob": "ca9aaf509ae00f62876a55039969550767ce431a"
+    },
+    {
+      "path": "src/snmalloc/global/libc.h",
+      "mode": "100644",
+      "sha256": "9c219a9ac64f5c95e4c7a1d82f4ba34fdf62c541a656f5eb1d4bff10a352892c",
+      "git_blob": "caa61f010b4e3a1e983735e233b25b207e313e76"
+    },
+    {
+      "path": "src/snmalloc/global/memcpy.h",
+      "mode": "100644",
+      "sha256": "814a681d20871e7c88fd59575a303911f72bb127db4a4ba497fddc084b2b0586",
+      "git_blob": "c1600d5173fa3752f638e22a07b73915395644d2"
+    },
+    {
+      "path": "src/snmalloc/global/scopedalloc.h",
+      "mode": "100644",
+      "sha256": "5d58964f3ec8bb2a99a0ab26e3b0ba5694192dbbe9d3b74e68b07993ddda115c",
+      "git_blob": "460f0c779706edaca41c55142d7a63c608dbab25"
+    },
+    {
+      "path": "src/snmalloc/global/threadalloc.h",
+      "mode": "100644",
+      "sha256": "8d0a311bac6aa8320a89614e4e7336836ab2959786c1d9b4edc2e7e992b3108f",
+      "git_blob": "d037995e528268e11fd0ec378ffd275616670f8d"
+    },
+    {
+      "path": "src/snmalloc/mem/backend_concept.h",
+      "mode": "100644",
+      "sha256": "126947ffa76d1e6f764541f7186430bd7cbad9965d13f7a7d261889bf2fb0521",
+      "git_blob": "03a5667157cfcffb86d67f1b3e62e96334eb229b"
+    },
+    {
+      "path": "src/snmalloc/mem/backend_wrappers.h",
+      "mode": "100644",
+      "sha256": "c30bf58a5718acc48e0640af92f1c040a1c4217646c0b77d30df4495071437ce",
+      "git_blob": "4eb39465fa9b3683d6c2c05a2b0033fdab443fc5"
+    },
+    {
+      "path": "src/snmalloc/mem/check_init.h",
+      "mode": "100644",
+      "sha256": "5e0d9f22e4deb296f8e3c21734b15b87d3c4e6f8adf5839e1cd9a2ba95d92815",
+      "git_blob": "7c5910a73f060c2773c46831aeffe91eb82d395a"
+    },
+    {
+      "path": "src/snmalloc/mem/corealloc.h",
+      "mode": "100644",
+      "sha256": "81233092b99865dfccbb169fddd83c7d330b41e29a049c68f5e677bd07deece7",
+      "git_blob": "a28357cd92b4dc153490ea4f6fa7206baad74f1b"
+    },
+    {
+      "path": "src/snmalloc/mem/entropy.h",
+      "mode": "100644",
+      "sha256": "3b1daef74d36a2b623496f8487fd98364f0f58f00591ebbe2459796e9e49b66c",
+      "git_blob": "d05fb368c08ceef7a0990d1a757908fe48e09f8c"
+    },
+    {
+      "path": "src/snmalloc/mem/freelist.h",
+      "mode": "100644",
+      "sha256": "f3004efb76bb6011783274c5e96a7f5b1835830e985afa7ab000a0aaa0b95b08",
+      "git_blob": "9eb8b02ed9fc70a50202101110296cd0abb3bbdc"
+    },
+    {
+      "path": "src/snmalloc/mem/freelist_queue.h",
+      "mode": "100644",
+      "sha256": "672c4e8978f66b8ebee119e05d4a6783cac40ee3ffd3b447d5fd4b0a8c998a9f",
+      "git_blob": "33f7fa4890c16dec2561d9c846329999b5f16fa8"
+    },
+    {
+      "path": "src/snmalloc/mem/mem.h",
+      "mode": "100644",
+      "sha256": "7cd1349e9156421ffa980cb43335cd52b43f72dadfcea8f0a9f108f2af1e655f",
+      "git_blob": "fb0106a9fd139f5befd3edb15c2dd156e38b0598"
+    },
+    {
+      "path": "src/snmalloc/mem/metadata.h",
+      "mode": "100644",
+      "sha256": "fa7e61bcfcf304b0df84a5fcef420deadb73866cb0e07cf558a2d1843b481661",
+      "git_blob": "e753f125cb3a68e3ebead71a5804e09675900e95"
+    },
+    {
+      "path": "src/snmalloc/mem/remoteallocator.h",
+      "mode": "100644",
+      "sha256": "014f7a6437961ff3e0af747c717218e6c31d96cf1658231dbd2b17ca8f30712c",
+      "git_blob": "efd4ba9428c02882b53aaddb1e422c5a307fa92a"
+    },
+    {
+      "path": "src/snmalloc/mem/remotecache.h",
+      "mode": "100644",
+      "sha256": "2ced90cf3a4bbe0d5a07d427353a573fe899eeaaee3a2f760e4c53339fb78721",
+      "git_blob": "c92c99a6582eadd356e749860aad773104a03114"
+    },
+    {
+      "path": "src/snmalloc/mem/secondary/default.h",
+      "mode": "100644",
+      "sha256": "bfe737a080e59a3a103ffa67efe244d01b1cb19a47c1b20e8f7cb83fa61aff79",
+      "git_blob": "1fc86af46a3ea24b9ad07f6dd82e6574e06c288f"
+    },
+    {
+      "path": "src/snmalloc/mem/secondary/gwp_asan.h",
+      "mode": "100644",
+      "sha256": "59e496d75090384513f892f5d50e18163f2839b53f9116ea1f57da3fc39d1fa8",
+      "git_blob": "716c5793538fc50e7b39fdb68234251798d75dec"
+    },
+    {
+      "path": "src/snmalloc/mem/ticker.h",
+      "mode": "100644",
+      "sha256": "bfacda32d4aa928542b79737ce800a5485d9e8083683aea1400b50d0907bf0d8",
+      "git_blob": "33e3819fb6518a9b53ce161cff4849adb9a8ae28"
+    },
+    {
+      "path": "src/snmalloc/mitigations/allocconfig.h",
+      "mode": "100644",
+      "sha256": "83b3fca9fcae900069914b18b576a19d25543dbb787c1ffb0d42d8de367d195c",
+      "git_blob": "3f326a570b890bb43bbf387e648a3b8dbd503e54"
+    },
+    {
+      "path": "src/snmalloc/mitigations/cheri.h",
+      "mode": "100644",
+      "sha256": "00bcc83da7665c693c56a33ddda7ee935be483859ac14ae74d54c61477394255",
+      "git_blob": "f10acb4e1873178a9a2d60cadb5ad9ce62974ccf"
+    },
+    {
+      "path": "src/snmalloc/mitigations/mitigations.h",
+      "mode": "100644",
+      "sha256": "3d0f5b78bad7ec1503d2258f50a671041a0fb3bf990f9fff2e464a31878526f6",
+      "git_blob": "5cd46911f234f271f54b9d4fd67ef8563d18a311"
+    },
+    {
+      "path": "src/snmalloc/mitigations/mitigations_all.h",
+      "mode": "100644",
+      "sha256": "8d7a2033a29592e54bac7902fccc17c17b3c65eede3d059f8e0b980f8fac72b3",
+      "git_blob": "3794556428b5cad58a8cb038bbbd0b86126f79a3"
+    },
+    {
+      "path": "src/snmalloc/override/jemalloc_compat.cc",
+      "mode": "100644",
+      "sha256": "cddc1543cca731da48c5372c5b469995141b5439a5a39be00f8c5f9c3abb6824",
+      "git_blob": "a238b532fc07ecf00d885985ae3c6ef315b34219"
+    },
+    {
+      "path": "src/snmalloc/override/malloc-extensions.cc",
+      "mode": "100644",
+      "sha256": "d92e23358c94d9f8238f0dcee60c2b7766f2b29c0065ce6b0f4d367ccc41259d",
+      "git_blob": "c40b070e05ee6b9d12eef8288da1ad2ae9618865"
+    },
+    {
+      "path": "src/snmalloc/override/malloc-extensions.h",
+      "mode": "100644",
+      "sha256": "3ea80d68a38b63512243ad4ef53c8d444e867c7fde48c5b4049d3a333ba5f261",
+      "git_blob": "1c0f5c8d99f63e8038cee077458288505c39cd0b"
+    },
+    {
+      "path": "src/snmalloc/override/malloc.cc",
+      "mode": "100644",
+      "sha256": "432f05b7112b6243e833b098257aba27847c70d667f2b1a0fc2974ccae8e3800",
+      "git_blob": "cf949680da64e162e973b1b2d6152925da797872"
+    },
+    {
+      "path": "src/snmalloc/override/memcpy.cc",
+      "mode": "100644",
+      "sha256": "4e143ac4a92930132f46aa75ccc343efd7316deb69013786bb5a27e87bd8d9e5",
+      "git_blob": "c6053ae02abce3eef0c4deec5607395e05510864"
+    },
+    {
+      "path": "src/snmalloc/override/new.cc",
+      "mode": "100644",
+      "sha256": "c03b36fa0c636fe1c8b2763f98359c56ffbfe0a9c6b38b888f188bdf7ecbdc74",
+      "git_blob": "667ca9c459c1d75613cb6de75c1f1f23e402f3e2"
+    },
+    {
+      "path": "src/snmalloc/override/override.h",
+      "mode": "100644",
+      "sha256": "03b9021752109490533582585982cceb4cac045928b7cacf3997fed3437967af",
+      "git_blob": "5dda309c0b7464776d5b62da473ab8c1a06633b1"
+    },
+    {
+      "path": "src/snmalloc/override/rust.cc",
+      "mode": "100644",
+      "sha256": "1839ea097a14f28ee20d5104025d4b29a070ca4ff3f87c02b9555c3a69321554",
+      "git_blob": "f07e51073d70cf3992c065accfa45437bee64299"
+    },
+    {
+      "path": "src/snmalloc/pal/pal.h",
+      "mode": "100644",
+      "sha256": "a0cdd75a641a2a3feb4bb40c0818e0ac60d9515a5ab672d4de48c47e478cc0df",
+      "git_blob": "8847754594dc050d232c10e417d4aad06dcedf49"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_apple.h",
+      "mode": "100644",
+      "sha256": "8127655f270b8d75dd796b046384dc950c2f065e8f3ba9d2467d3946264090ec",
+      "git_blob": "7e800f7618cd617455cec6a9380045453bf74467"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_bsd.h",
+      "mode": "100644",
+      "sha256": "4d458e93da7e8685be43efe35320513a0075c326aa71f839679341685a23bb9a",
+      "git_blob": "454a34211366112f2ac35382eca418b426d1300f"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_bsd_aligned.h",
+      "mode": "100644",
+      "sha256": "5fbc0e3cf43c42f537931d4871c9d313e4b62567ea286b7514c128eeaa5fa13a",
+      "git_blob": "48b28db53dad80b0da318b5fb87a755cf0504eb5"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_concept.h",
+      "mode": "100644",
+      "sha256": "dff6bcf2ce99e502358b3a6e9da61e460f6d754b76eec454eb22f1cf054bdadd",
+      "git_blob": "be5678d4a4e152b6527097ec420db8de9e038b16"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_consts.h",
+      "mode": "100644",
+      "sha256": "cafdbfb452ff7621c74b89a112d661f973b4435dd772309b5763598089a423f6",
+      "git_blob": "293ad3318c74e05f817ed31af2213c94ea7fcee7"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_dragonfly.h",
+      "mode": "100644",
+      "sha256": "6da8d4d65e8b0d991f4f6369579f229e5cc484bd3dd96d722d01f852d43b71ba",
+      "git_blob": "5b572d99c47b0e3809fbe9e3781d6ed662504715"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_ds.h",
+      "mode": "100644",
+      "sha256": "a65d1ab871e63409ccd17248224596cffb9dd881dafe9614feceb261cdc6f7c0",
+      "git_blob": "1c087110faa2a704a166e4d01a03391b9e0f89e3"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_freebsd.h",
+      "mode": "100644",
+      "sha256": "c84288d7e32b9fcd009e881c4a44b54e6d18f03c5f7c3675feb1b5b87f5a6034",
+      "git_blob": "8cb73bc0ea6496680c0f45b061813b2796382d8d"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_freebsd_kernel.h",
+      "mode": "100644",
+      "sha256": "9b1358730eef46ddea03a45f03ce7af0e50dde081f36cd3b1a6c594e5e76bc81",
+      "git_blob": "444ff895ce2399006d8fa8dd918aa3ce42a89be6"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_haiku.h",
+      "mode": "100644",
+      "sha256": "b4f4ae1260cc8caab6d027808ed4cb4c59c5c14a2033a92e355240892eb7ebe6",
+      "git_blob": "bbc9e077c0a0f00c9bc4d5b166d17b99d4e2ddb9"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_linux.h",
+      "mode": "100644",
+      "sha256": "406bc5408f399621faa9cedaacc2e1454b59f0f777987a1b54ab377e60851e2b",
+      "git_blob": "251aaf32151d489e9b37b6a19b191a0165f5cd82"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_netbsd.h",
+      "mode": "100644",
+      "sha256": "f87463b29ae4a85c6192b03a7291572fbb738b204bd7d7365afce2aa2c94e04b",
+      "git_blob": "250826423e521d4eb069efe57d3cf2b1430c093c"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_noalloc.h",
+      "mode": "100644",
+      "sha256": "53a79fe2f9bff11ba6b517d3eaf9021959ad619f608f87099afc0bb8941d4db0",
+      "git_blob": "b6aae783d797813959004525fb45d1e5c273c1d4"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_open_enclave.h",
+      "mode": "100644",
+      "sha256": "5581af0740d464379d03855ebab269c1fdb2e261048a81256b98a027162f481c",
+      "git_blob": "dbfd9ad1e3ff2a1d2b3e0cff03f4a0953ff558bd"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_openbsd.h",
+      "mode": "100644",
+      "sha256": "19464851b1ce5a79c1308ef2168a6bf21178bb3551e4688a251aee11c9711736",
+      "git_blob": "187144f9716c3663d848d2cc898fccccf20938ac"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_plain.h",
+      "mode": "100644",
+      "sha256": "92c1f4e3e5fd8a0f99d6925b058f6b7e5f1c9abe409651a3b2bebe5b913a2280",
+      "git_blob": "ff562af4395b3f8540a7149fa2311b92c85703b6"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_posix.h",
+      "mode": "100644",
+      "sha256": "0f21491fa6c9d6a65fa35623c42783cd97cb18c1c2c9ab7d97cf516033e9dfd1",
+      "git_blob": "3ab85bf6a7b12bf6cd70102a82219b5edaa3fd1d"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_solaris.h",
+      "mode": "100644",
+      "sha256": "0ebae3c7fc7f912b3536bdd272134a444dbcb83c985727faf76126de813ef13d",
+      "git_blob": "a8d0739e71b03fb042f50f45ffaa66c0b4d19dda"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_timer_default.h",
+      "mode": "100644",
+      "sha256": "fe0ad3c3ebdc58ecb4be046fb4fc315b5502d7457ec03a5200bd9e45fe34e15d",
+      "git_blob": "d70abd5262be1ea1d977150466a185fe05ef1ba8"
+    },
+    {
+      "path": "src/snmalloc/pal/pal_windows.h",
+      "mode": "100644",
+      "sha256": "6b6345b396a67b46296620a9bbfd3f1b2227006008e68d64759c9db0ee016df1",
+      "git_blob": "aa20602fc72dbca5beb0c6be4766bd4d17e8d215"
+    },
+    {
+      "path": "src/snmalloc/snmalloc.h",
+      "mode": "100644",
+      "sha256": "f6f968a441d612bd17d873628b5936c1af109a37ad4c34fa6b33bafa68c85c1b",
+      "git_blob": "4781dc7c91d610459ee197378ae7aad021515743"
+    },
+    {
+      "path": "src/snmalloc/snmalloc_core.h",
+      "mode": "100644",
+      "sha256": "40159d9e07987eabbf0213f35055790e1fb49b681545706d3eb4fda109059c2b",
+      "git_blob": "633b7abeaa1892d9f8564567a8ff6d4a1df82ec7"
+    },
+    {
+      "path": "src/snmalloc/snmalloc_front.h",
+      "mode": "100644",
+      "sha256": "c1259314d0c0167ae8b67837559339a544e246b7e7cf9c03a0db88c1435e74c7",
+      "git_blob": "f7cedbb4b9859ea54cb0d504222680034de68fc0"
+    },
+    {
+      "path": "src/snmalloc/stl/README.md",
+      "mode": "100644",
+      "sha256": "0c26f01c9d94ecb58f536bde129e938015d4ffb4276c1339bbf3a7aac59b9e01",
+      "git_blob": "1df92f613a168bce3f94ad32285cfc8106f01fcc"
+    },
+    {
+      "path": "src/snmalloc/stl/array.h",
+      "mode": "100644",
+      "sha256": "747daa1d41c31f6a5f85c372d84e844179ce9ab2487e2ff3f963a3dbe897732e",
+      "git_blob": "8286fda2aa0b56af5604842e7cdc8eb28f3fcfaf"
+    },
+    {
+      "path": "src/snmalloc/stl/atomic.h",
+      "mode": "100644",
+      "sha256": "ea37ef74f243ab4a2ce46d65ff2467c37d6b305593190600e0679a6a93da9aa7",
+      "git_blob": "45dc18a0ffa30bbeb6082904e8356ecfc49ae8dc"
+    },
+    {
+      "path": "src/snmalloc/stl/cxx/README.md",
+      "mode": "100644",
+      "sha256": "28967247759bb5dea3836ef8fffcb26bccf3026384e9d2ceac21cba7e46e3a3e",
+      "git_blob": "d8d5a2b41c37fb9edf8b50e7e124bd476ab8aa22"
+    },
+    {
+      "path": "src/snmalloc/stl/cxx/array.h",
+      "mode": "100644",
+      "sha256": "b0b0f66bfb0935d131eb518cd067abefece10a67a95ed07c60b9a310a83732ec",
+      "git_blob": "f4dac248a0137b5f8327125ea73191807db8ce03"
+    },
+    {
+      "path": "src/snmalloc/stl/cxx/atomic.h",
+      "mode": "100644",
+      "sha256": "9b5112107fa150f8b67c722af929d726827902ed7b4716bb1b86f5fd233e6c2f",
+      "git_blob": "a85d3feb07f4485eef14d456b38d186269c4f366"
+    },
+    {
+      "path": "src/snmalloc/stl/cxx/type_traits.h",
+      "mode": "100644",
+      "sha256": "c73e8975a2c6bece27822c59a4501822cce2e91c1dcacd2c19dbc202a41d8cd2",
+      "git_blob": "4e2fbb4dd902429e753335142712c63c21c4de90"
+    },
+    {
+      "path": "src/snmalloc/stl/cxx/utility.h",
+      "mode": "100644",
+      "sha256": "cf38e3d2571da89ab63f32654898cee090fe7a45d475f64626e8a0b9c4f65e5a",
+      "git_blob": "b51d9e27083efd4efe8319ab501eeb523a85cbec"
+    },
+    {
+      "path": "src/snmalloc/stl/gnu/README.md",
+      "mode": "100644",
+      "sha256": "7f36b98436b68f795827ddad24124f5a5c7eb80ce2f2bc533463df758c48430b",
+      "git_blob": "7c513c1f09399d70d63bf3d8dbbfce3caf23b6ff"
+    },
+    {
+      "path": "src/snmalloc/stl/gnu/array.h",
+      "mode": "100644",
+      "sha256": "c5a206d311f24f61806f64cbcbc335d171bbffd0854385bcaf12a7760f6ade25",
+      "git_blob": "fd176fcd4b73c298d07a35728c5fc0c028beb8e6"
+    },
+    {
+      "path": "src/snmalloc/stl/gnu/atomic.h",
+      "mode": "100644",
+      "sha256": "afc471cf05b24f63d818b1a1e45e22a8138d7fbfe070bf40d9d23111ada2fef4",
+      "git_blob": "7a193972e957624321a14735746849285c32b6da"
+    },
+    {
+      "path": "src/snmalloc/stl/gnu/type_traits.h",
+      "mode": "100644",
+      "sha256": "8aef776a2ec2365e57387767fe670ab18f68cf8fbfe1ca9849264bb9813e0c50",
+      "git_blob": "3840cdbb849f68792a7a226e0680a9ed6edd6b05"
+    },
+    {
+      "path": "src/snmalloc/stl/gnu/utility.h",
+      "mode": "100644",
+      "sha256": "c9323d83294e34919f1465830bb654dd37cac1e7902a4bd77fd8cb0fc6fa3e9a",
+      "git_blob": "346b32c55bf272664f978c48edca67e77100ad68"
+    },
+    {
+      "path": "src/snmalloc/stl/new.h",
+      "mode": "100644",
+      "sha256": "5faed9814a43c00a5ebbdb424ead9451bb6da48be6842002187cb60eeb02cd4d",
+      "git_blob": "421efadaebc1f6f5e6e2624c8ade5a8a68f72274"
+    },
+    {
+      "path": "src/snmalloc/stl/type_traits.h",
+      "mode": "100644",
+      "sha256": "34c905ebe2b6087ad8631cfffdfd1e41f0c344ad9e62c3755f62e1dcae8aa481",
+      "git_blob": "002b173a2e0181f4b08e4f3df01608d22fa72044"
+    },
+    {
+      "path": "src/snmalloc/stl/utility.h",
+      "mode": "100644",
+      "sha256": "10d6b362c9b8f4025231ca5efbed315158b675552bf3528f3a77fc742dbba5fc",
+      "git_blob": "19e1a7c482e4aa058b82075e061aaedee57989d5"
+    }
+  ],
+  "excluded": [
+    ".bazelrc",
+    ".bazelversion",
+    ".clang-format",
+    ".clang-tidy",
+    ".github/copilot-instructions.md",
+    ".github/dependabot.yml",
+    ".github/scripts/merge_coverage.py",
+    ".github/scripts/test_merge_coverage.py",
+    ".github/skills/building_and_testing.md",
+    ".github/workflows/benchmark.yml",
+    ".github/workflows/coverage-comment.yml",
+    ".github/workflows/coverage.yml",
+    ".github/workflows/main.yml",
+    ".github/workflows/morello.yml",
+    ".github/workflows/reusable-cmake-build.yml",
+    ".github/workflows/reusable-vm-build.yml",
+    ".github/workflows/rust.yml",
+    ".gitignore",
+    "BUILD.bazel",
+    "CMakeLists.txt",
+    "Cargo.toml",
+    "MODULE.bazel",
+    "benchmark/Dockerfile",
+    "ci/README.md",
+    "ci/Toolchain.cmake",
+    "cmake/run_coverage.cmake",
+    "docs/AddressSpace.md",
+    "docs/BUILDING.md",
+    "docs/PORTING.md",
+    "docs/StrictProvenance.md",
+    "docs/combininglock.md",
+    "docs/combininglockperf.svg",
+    "docs/release/0.7/README.md",
+    "docs/release/0.7/benchres.csv",
+    "docs/release/0.7/perf-startup.svg",
+    "docs/release/0.7/snmalloc-msgpass.svg",
+    "docs/security/FreelistProtection.md",
+    "docs/security/GuardedMemcpy.md",
+    "docs/security/README.md",
+    "docs/security/VariableSizedChunks.md",
+    "docs/security/data/ChunkMap.png",
+    "docs/security/data/benchres.csv",
+    "docs/security/data/doublefreeprotection.gif",
+    "docs/security/data/memcpy_perf.png",
+    "docs/security/data/perfgraph-memcpy-only.png",
+    "docs/security/data/perfgraph.png",
+    "docs/security/data/res_je.csv",
+    "docs/security/data/res_mi.csv",
+    "docs/security/data/res_scudo.csv",
+    "docs/security/data/res_smi.csv",
+    "docs/security/data/res_sn-0.5.3.csv",
+    "docs/security/data/res_sn-0.6.0-checks.csv",
+    "docs/security/data/res_sn-0.6.0-memcpy.csv",
+    "docs/security/data/res_sn-0.6.0.csv",
+    "examples/bench_contention.rs",
+    "fuzzing/BUILD.bazel",
+    "fuzzing/CMakeLists.txt",
+    "fuzzing/snmalloc-fuzzer.cpp",
+    "fuzztest.bazelrc",
+    "ports/snmalloc/portfile.cmake",
+    "ports/snmalloc/usage",
+    "ports/snmalloc/vcpkg.json",
+    "security.md",
+    "snmalloc-rs/.gitignore",
+    "snmalloc-rs/CHANGELOG.md",
+    "snmalloc-rs/Cargo.toml",
+    "snmalloc-rs/LICENSE",
+    "snmalloc-rs/README.md",
+    "snmalloc-rs/snmalloc-sys/Cargo.toml",
+    "snmalloc-rs/snmalloc-sys/build.rs",
+    "snmalloc-rs/snmalloc-sys/src/lib.rs",
+    "snmalloc-rs/snmalloc-sys/upstream/CMakeLists.txt",
+    "snmalloc-rs/snmalloc-sys/upstream/fuzzing",
+    "snmalloc-rs/snmalloc-sys/upstream/src",
+    "snmalloc-rs/src/lib.rs",
+    "snmalloc-rs/tests/memory_stats.rs",
+    "snmalloc-rs/xtask/Cargo.toml",
+    "snmalloc-rs/xtask/src/main.rs",
+    "snmalloc.pdf",
+    "src/test/func/bits/bits.cc",
+    "src/test/func/cheri/cheri.cc",
+    "src/test/func/client_meta/client_meta.cc",
+    "src/test/func/corruption_detection/corruption_detection.cc",
+    "src/test/func/dll_teardown/dll/alloc.cc",
+    "src/test/func/dll_teardown/dll/touch.cc",
+    "src/test/func/dll_teardown/dll_teardown.cc",
+    "src/test/func/domestication/domestication.cc",
+    "src/test/func/external_pagemap/external_pagemap.cc",
+    "src/test/func/first_operation/first_operation.cc",
+    "src/test/func/fixed_region/fixed_region.cc",
+    "src/test/func/fixed_region_alloc/fixed_region_alloc.cc",
+    "src/test/func/fixed_region_remote_dealloc/fixed_region_remote_dealloc.cc",
+    "src/test/func/fls_teardown/fls_teardown.cc",
+    "src/test/func/freelist_mpscq/freelist_mpscq.cc",
+    "src/test/func/jemalloc/jemalloc.cc",
+    "src/test/func/malloc/malloc.cc",
+    "src/test/func/memcpy/func-memcpy.cc",
+    "src/test/func/memory/memory.cc",
+    "src/test/func/memory_usage/memory_usage.cc",
+    "src/test/func/miracle_ptr/miracle_ptr.cc",
+    "src/test/func/multi_atexit/multi_atexit.cc",
+    "src/test/func/multi_setspecific/multi_setspecific.cc",
+    "src/test/func/multi_threadatexit/multi_threadatexit.cc",
+    "src/test/func/new/new.cc",
+    "src/test/func/pagemap/pagemap.cc",
+    "src/test/func/pool/pool.cc",
+    "src/test/func/protect_fork/protect_fork.cc",
+    "src/test/func/redblack/redblack.cc",
+    "src/test/func/release-rounding/rounding.cc",
+    "src/test/func/sandbox/sandbox.cc",
+    "src/test/func/seqset/seqset.cc",
+    "src/test/func/sizeclass/sizeclass.cc",
+    "src/test/func/statistics/stats.cc",
+    "src/test/func/teardown/teardown.cc",
+    "src/test/func/thread_alloc_external/thread_alloc_external.cc",
+    "src/test/func/two_alloc_types/alloc1.cc",
+    "src/test/func/two_alloc_types/alloc2.cc",
+    "src/test/func/two_alloc_types/main.cc",
+    "src/test/helpers.h",
+    "src/test/measuretime.h",
+    "src/test/opt.h",
+    "src/test/perf/contention/contention.cc",
+    "src/test/perf/external_pointer/externalpointer.cc",
+    "src/test/perf/large_alloc/large_alloc.cc",
+    "src/test/perf/lotsofthreads/lotsofthread.cc",
+    "src/test/perf/low_memory/low-memory.cc",
+    "src/test/perf/memcpy/memcpy.cc",
+    "src/test/perf/msgpass/msgpass.cc",
+    "src/test/perf/post_teardown/post-teardown.cc",
+    "src/test/perf/singlethread/singlethread.cc",
+    "src/test/perf/startup/startup.cc",
+    "src/test/setup.h",
+    "src/test/snmalloc_testlib.cc",
+    "src/test/snmalloc_testlib.h",
+    "src/test/snmalloc_testlib_decl.h",
+    "src/test/usage.h",
+    "src/test/xoroshiro.h",
+    "test/vcpkg-consumer/CMakeLists.txt",
+    "test/vcpkg-consumer/test_header_only.cpp",
+    "test/vcpkg-consumer/test_static_shim.cpp",
+    "vcpkg.json"
+  ],
+  "exclusion_reason": "Unused upstream tests, CI, build/package integrations and other documentation. Complete src/snmalloc production tree retained; direct standard C++ build does not use excluded paths. No submodules, symlinks or binary runtime dependencies."
+}
