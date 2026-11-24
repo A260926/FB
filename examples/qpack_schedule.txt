@@ -1,0 +1,71 @@
+# Deterministic QPACK state-machine schedule.
+# Coverage:
+#  - same-stream consecutive sections (stream 4)
+#  - distinct streams sharing dynamic entries (0, 4, 8)
+#  - request bytes arriving before encoder data and blocking
+#  - one-byte request/encoder/ACK/CANCEL progress plus ICI feedback
+#  - a half-delivered section ACK followed by CANCEL on stream 128
+#  - continued delivery on other streams after cancellation
+INIT 4096 4
+
+# The two-byte field-section prefix arrives first and blocks on RIC 1.
+SECTION 0 61 31
+REQUEST 0 2
+
+# Encoder stream progresses in single bytes, then the bounded remainder.
+ENCODER 1
+ENCODER 1
+ENCODER 1
+ENCODER 4096
+
+# Consume the literal field one byte at a time.  Extra one-byte polls are
+# explicit zero-progress records once the section has reached FINAL.
+REQUEST 0 1
+REQUEST 0 1
+REQUEST 0 1
+REQUEST 0 1
+REQUEST 0 1
+REQUEST 0 1
+REQUEST 0 4096
+FEEDBACK 1
+FEEDBACK 4096
+
+# A fresh insertion makes the real decoder emit an Insert Count Increment.
+SECTION 4 62 32
+ENCODER 4096
+FEEDBACK 1
+
+# Stream 4 has consecutive sections; stream 8 shares the same dynamic items.
+SECTION 4 61 31
+SECTION 8 62 32
+ENCODER 4096
+REQUEST 4 1
+REQUEST 4 1
+REQUEST 4 1
+REQUEST 4 4096
+REQUEST 8 4096
+FEEDBACK 4096
+
+# Stream 128 has a two-byte section ACK because its ID is >= 127.
+SECTION 128 782d6b 76
+ENCODER 4096
+REQUEST 128 4096
+FEEDBACK 1
+
+# The first ACK byte is still pending.  Queue another unfinished section and
+# cancel; the real CANCEL instruction is appended behind the ACK remainder.
+SECTION 128 62 32
+CANCEL 128
+FEEDBACK 1
+FEEDBACK 1
+FEEDBACK 1
+
+# Other streams are unaffected and can receive and complete new work.
+SECTION 4 7a 79
+ENCODER 4096
+REQUEST 4 4096
+REQUEST 0 4096
+REQUEST 8 4096
+FEEDBACK 4096
+
+END

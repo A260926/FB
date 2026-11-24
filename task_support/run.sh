@@ -25,7 +25,7 @@ rm -f .task-build/example.out
 test -s .task-build/example.out
 grep -qx 'CONSISTENT' .task-build/example.out
 cc -std=c11 -O0 -g -DHAVE_CONFIG_H -DNGHTTP3_STATICLIB -I.task-build -I.task-build/include -Ilib/includes -Ilib -I. task_support/driver.c tests/qpack_model_test.c .task-build/stateful_model.o .task-build/stateful_transport.o .task-build/stateful_replay.o .task-build/libnghttp3.a -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/qpack-model-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
