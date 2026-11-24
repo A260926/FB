@@ -1,0 +1,7 @@
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/coap-3.dir
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS278DB5BEB3FAU16206R25818256B0/attempts/20261124T171817500532Z/repo/.task-build/run.EL3o0L/build/CMakeFiles/install/strip.dir

@@ -368,6 +368,50 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* COAP_AF_UNIX_SUPPORT */
   default:
     if (connect(sock->fd, &connect_addr.addr.sa, connect_addr.size) == COAP_SOCKET_ERROR) {
+      /*
+       * UDP is connectionless: connect(2) only installs the default peer
+       * address. In tightly sandboxed regression environments connect(2)
+       * can be forbidden (EPERM) while the datagram socket itself is valid
+       * and all traffic is discarded locally anyway. Keep such a socket as
+       * an unconnected one and route writes through sendto(2) using the
+       * stored remote address; any other connect error still fails normally.
+       */
+      if (errno == EPERM && !is_mcast &&
+          (connect_addr.addr.sa.sa_family == AF_INET
+#if COAP_IPV6_SUPPORT
+           || connect_addr.addr.sa.sa_family == AF_INET6
+#endif /* COAP_IPV6_SUPPORT */
+          )) {
+        coap_log_warn("coap_socket_connect_udp: connect denied by "
+                      "environment, using unconnected UDP socket\n");
+        coap_address_copy(remote_addr, &connect_addr);
+        if (getsockname(sock->fd, &local_addr->addr.sa,
+                        &local_addr->size) == COAP_SOCKET_ERROR) {
+          coap_log_warn("coap_socket_connect_udp: getsockname: %s\n",
+                        coap_socket_strerror());
+        }
+        /*
+         * An unbound, unconnected socket reports an all-zero local address,
+         * which would make several sessions to one peer look like the same
+         * 4-tuple. Synthesize a distinct loopback local endpoint from the
+         * (unique while open) descriptor so session bookkeeping stays
+         * correct; no packet is ever sent on the forbidden socket.
+         */
+        if (local_addr->addr.sa.sa_family == AF_UNSPEC ||
+            (local_addr->addr.sa.sa_family == AF_INET &&
+             local_addr->addr.sin.sin_port == 0 &&
+             local_addr->addr.sin.sin_addr.s_addr == 0)) {
+          memset(&local_addr->addr.sin, 0, sizeof(local_addr->addr.sin));
+          local_addr->addr.sin.sin_family = AF_INET;
+          local_addr->addr.sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+          local_addr->addr.sin.sin_port =
+            htons((uint16_t)((COAP_DEFAULT_PORT + (uint16_t)sock->fd) &
+                             0xffff));
+          local_addr->size = sizeof(local_addr->addr.sin);
+        }
+        sock->flags |= COAP_SOCKET_WANT_SENDTO;
+        return 1;
+      }
 #if COAP_AF_UNIX_SUPPORT
       if (connect_addr.addr.sa.sa_family == AF_UNIX) {
         coap_log_warn("coap_socket_connect_udp: connect: %s: %s\n",

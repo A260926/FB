@@ -357,6 +357,21 @@ coap_queue_t *coap_pop_next(coap_context_t *context);
 coap_mid_t coap_retransmit(coap_context_t *context, coap_queue_t *node);
 
 /**
+ * Handles retransmissions of confirmable messages using an explicit logical
+ * clock value @p now instead of reading the system clock. This is the shared
+ * core of coap_retransmit() used by deterministic, tick driven callers.
+ *
+ * @param context      The CoAP context.
+ * @param node         The node to retransmit.
+ * @param now          The current logical tick.
+ *
+ * @return             The message id of the sent message or @c
+ *                     COAP_INVALID_MID on error.
+ */
+coap_mid_t coap_retransmit_at(coap_context_t *context, coap_queue_t *node,
+                              coap_tick_t now);
+
+/**
  * Parses and interprets a CoAP datagram with context @p ctx. This function
  * returns @c 0 if the datagram was handled, or a value less than zero on
  * error.
@@ -437,6 +452,23 @@ int coap_remove_from_queue(coap_queue_t **queue,
 
 coap_mid_t coap_wait_ack(coap_context_t *context, coap_session_t *session,
                          coap_queue_t *node);
+
+/**
+ * Adds @p node to the context's retransmission queue using an explicit
+ * logical clock value @p now instead of reading the system clock. This is
+ * the shared core of coap_wait_ack() used by deterministic, tick driven
+ * callers.
+ *
+ * @param context      The CoAP context.
+ * @param session      Session of the message to queue.
+ * @param node         The node to enqueue.
+ * @param now          The current logical tick.
+ *
+ * @return             The message id of the queued message or @c
+ *                     COAP_INVALID_MID on error.
+ */
+coap_mid_t coap_wait_ack_at(coap_context_t *context, coap_session_t *session,
+                            coap_queue_t *node, coap_tick_t now);
 
 /**
  * Cancels all outstanding messages for session @p session that have the specified

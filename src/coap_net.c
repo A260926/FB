@@ -1413,10 +1413,8 @@ coap_calc_timeout(coap_session_t *session, unsigned char r) {
 }
 
 coap_mid_t
-coap_wait_ack(coap_context_t *context, coap_session_t *session,
-              coap_queue_t *node) {
-  coap_tick_t now;
-
+coap_wait_ack_at(coap_context_t *context, coap_session_t *session,
+                 coap_queue_t *node, coap_tick_t now) {
   node->session = coap_session_reference_lkd(session);
 
   /* Set timer for pdu retransmission. If this is the first element in
@@ -1427,7 +1425,6 @@ coap_wait_ack(coap_context_t *context, coap_session_t *session,
   * normalized to the base time and then inserted into the queue with
   * an adjusted relative time.
   */
-  coap_ticks(&now);
   if (context->sendqueue == NULL) {
     node->t = node->timeout << node->retransmit_cnt;
     context->sendqueue_basetime = now;
@@ -1448,6 +1445,15 @@ coap_wait_ack(coap_context_t *context, coap_session_t *session,
   coap_update_io_timer(context, node->t);
 
   return node->id;
+}
+
+coap_mid_t
+coap_wait_ack(coap_context_t *context, coap_session_t *session,
+              coap_queue_t *node) {
+  coap_tick_t now;
+
+  coap_ticks(&now);
+  return coap_wait_ack_at(context, session, node, now);
 }
 
 #if COAP_CLIENT_SUPPORT
@@ -2496,7 +2502,8 @@ fail:
 }
 
 coap_mid_t
-coap_retransmit(coap_context_t *context, coap_queue_t *node) {
+coap_retransmit_at(coap_context_t *context, coap_queue_t *node,
+                   coap_tick_t now) {
   if (!context || !node || !node->session)
     return COAP_INVALID_MID;
 
@@ -2510,7 +2517,6 @@ coap_retransmit(coap_context_t *context, coap_queue_t *node) {
   /* re-initialize timeout when maximum number of retransmissions are not reached yet */
   if (node->retransmit_cnt < node->session->max_retransmit) {
     ssize_t bytes_written;
-    coap_tick_t now;
     coap_tick_t next_delay;
     coap_address_t remote;
 
@@ -2527,7 +2533,6 @@ coap_retransmit(coap_context_t *context, coap_queue_t *node) {
       next_delay = context->ping_timeout * COAP_TICKS_PER_SECOND - 255 + byte;
     }
 
-    coap_ticks(&now);
     if (context->sendqueue == NULL) {
       node->t = next_delay;
       context->sendqueue_basetime = now;
@@ -2631,6 +2636,14 @@ coap_retransmit(coap_context_t *context, coap_queue_t *node) {
   /* And finally delete the node */
   coap_delete_node_lkd(node);
   return COAP_INVALID_MID;
+}
+
+coap_mid_t
+coap_retransmit(coap_context_t *context, coap_queue_t *node) {
+  coap_tick_t now;
+
+  coap_ticks(&now);
+  return coap_retransmit_at(context, node, now);
 }
 
 static int
@@ -3365,7 +3378,7 @@ coap_remove_from_queue_token(coap_queue_t **queue, coap_session_t *session,
 
   if (q) {                        /* found token */
     p->next = q->next;
-    if (p->next) {                /* must update relative time of p->next */
+    if (p->next) {                /* preserve removed delta on successor */
       p->next->t += q->t;
     }
     q->next = NULL;
@@ -3391,8 +3404,16 @@ coap_cancel_session_messages(coap_context_t *context, coap_session_t *session,
   coap_queue_t *p, *q;
 
   while (context->sendqueue && context->sendqueue->session == session) {
+    coap_queue_t *succ;
+
     q = context->sendqueue;
-    context->sendqueue = q->next;
+    succ = q->next;
+    /* The successor's delta is relative to this node; absorb it so the
+     * absolute due points of every surviving node stay unchanged. */
+    if (succ)
+      succ->t += q->t;
+    context->sendqueue = succ;
+    q->next = NULL;
     coap_log_debug("** %s: mid=0x%04x: removed (3)\n",
                    coap_session_str(session), q->id);
     if (q->pdu->type == COAP_MESSAGE_CON) {
@@ -3409,7 +3430,14 @@ coap_cancel_session_messages(coap_context_t *context, coap_session_t *session,
 
   while (q) {
     if (q->session == session) {
-      p->next = q->next;
+      coap_queue_t *succ = q->next;
+
+      /* Preserve the removed node's relative delta on its successor so
+       * no other session's absolute due point is moved forward. */
+      if (succ)
+        succ->t += q->t;
+      p->next = succ;
+      q->next = NULL;
       coap_log_debug("** %s: mid=0x%04x: removed (4)\n",
                      coap_session_str(session), q->id);
       if (q->pdu->type == COAP_MESSAGE_CON) {
@@ -3440,7 +3468,15 @@ coap_cancel_all_messages(coap_context_t *context, coap_session_t *session,
   while (q) {
     if (q->session == session &&
         (!token || coap_binary_equal(&q->pdu->actual_token, token))) {
-      *p = q->next;
+      coap_queue_t *succ = q->next;
+
+      /* Carry the removed node's relative delta over to its successor
+       * (including a new queue head) so cancelling one request can never
+       * move the absolute due point of the remaining requests. */
+      if (succ)
+        succ->t += q->t;
+      *p = succ;
+      q->next = NULL;
       coap_log_debug("** %s: mid=0x%04x: removed (6)\n",
                      coap_session_str(session), q->id);
       if (q->pdu->type == COAP_MESSAGE_CON && session->con_active) {
