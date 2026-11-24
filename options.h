@@ -95,6 +95,7 @@ extern int Wcast_truncate;
 extern int Wconstant_suffix;
 extern int Wconstexpr_not_const;
 extern int Wcontext;
+extern int Wcontext_identity;
 extern int Wdecl;
 extern int Wdeclarationafterstatement;
 extern int Wdefault_bitfield_sign;

@@ -49,6 +49,62 @@ The first argument, *ctxt*, is an expression only used as documentation
 to identify the context. Usually, what is used is a pointer to the structure
 containing the context, for example, the structure protected by the lock.
 
+The default ``-Wcontext`` check keeps a single anonymous counter: all
+context attributes, including the anonymous two-argument
+``context(entry, exit)`` form and standalone ``__context__(delta)``
+statements, contribute to the same total. A function that acquires a
+reference on one object and releases it on a different object can
+therefore balance even though neither object's obligation is met.
+
+``-Wcontext-identity``
+~~~~~~~~~~~~~~~~~~~~~~
+The optional ``-Wcontext-identity`` warning turns the first argument of
+a named ``context(ctxt, entry, exit)`` attribute into a real resource
+identity and keeps a separate reference ledger for every object. Taking
+a reference on one resource can then never repay an obligation owed on
+another one. The analysis is purely static; the analyzed code is never
+executed.
+
+A resource identity can be:
+
+* a pointer parameter of the enclosing function,
+* the address of a named object (a global, static or local variable),
+* a direct copy of such a pointer; casts and plain assignments are
+  transparent to the identity. The spelling of a variable is never used
+  to establish an identity.
+
+When an annotated function is called, the parameter expression in its
+declaration is substituted with the identity of the actual argument at
+the call site. All contexts belonging to the same call are first
+substituted and aggregated per resulting identity, then the entry
+counts are verified, and only afterwards are the net changes applied.
+Consequently the result does not depend on the order of the attributes,
+and a call whose net change is zero (for example
+``context(from,1,0), context(to,0,1)`` with both parameters naming the
+same object) still requires the entry reference to be held.
+
+Every function entry and exit, every early return and every control flow
+join is checked per resource. Balanced paths produce no warning, while
+distinct resources' gaps are reported separately and can never cancel.
+Branches carrying the same identity still merge correctly. When an
+identity cannot be determined — a join of different sources, an indirect
+call or an unsupported address expression — sparse says so, keeps the
+known ledgers and continues checking them instead of guessing an object
+or discarding the state.
+
+The anonymous two-argument ``context(entry, exit)`` attributes and
+``__context__(delta)`` statements without a name continue to use the
+independent anonymous counter and never repay a named resource. A named
+``__context__(ctxt, delta)`` statement adjusts the ledger of the named
+resource instead.
+
+The values used only to name a resource are wired into the normal IR use
+lists, so optimization cannot remove an expression whose only use is a
+context annotation.
+
+When the new warning is disabled, the original ``-Wcontext`` diagnostics
+are unchanged.
+
 See also https://lwn.net/Articles/109066/.
 
 noderef

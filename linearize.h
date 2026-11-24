@@ -148,6 +148,16 @@ struct instruction {
 			int increment;
 			int check;
 			struct expression *context_expr;
+			/*
+			 * For OP_CONTEXT emitted after a call: the call
+			 * instruction carrying the context attribute and,
+			 * when the attribute names a parameter, the
+			 * resource pseudo substituted at the call site.
+			 * The resource is held through the normal use
+			 * lists so the optimizer cannot remove it.
+			 */
+			struct instruction *context_call;
+			pseudo_t context_resource;
 		};
 		struct /* asm */ {
 			const char *string;

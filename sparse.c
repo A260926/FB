@@ -39,6 +39,7 @@
 #include "symbol.h"
 #include "expression.h"
 #include "linearize.h"
+#include "context-identity.h"
 
 static int context_increase(struct basic_block *bb, int entry)
 {
@@ -309,6 +310,7 @@ static void check_symbols(struct symbol_list *list)
 				show_entry(ep);
 
 			check_context(ep);
+			cid_check_entrypoint(ep);
 		}
 		if (dbg_compound)
 			list_compound_symbol(sym);

@@ -37,6 +37,7 @@ LIB_OBJS += builtin.o
 LIB_OBJS += char.o
 LIB_OBJS += compat-$(OS).o
 LIB_OBJS += cse.o
+LIB_OBJS += context-identity.o
 LIB_OBJS += dissect.o
 LIB_OBJS += dominate.o
 LIB_OBJS += evaluate.o

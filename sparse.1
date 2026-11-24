@@ -167,6 +167,16 @@ potentially execute with different contexts.
 
 Sparse issues these warnings by default.  To turn them off, use
 \fB\-Wno\-context\fR.
+.TP
+.B \-Wcontext-identity
+Like \fB-Wcontext\fR, but keep a separate reference ledger for every
+resource named by the first argument of a
+.BI context( ctxt , in , out )
+attribute instead of a single anonymous counter.  A reference acquired
+on one object then cannot repay an obligation owed on another object.
+Anonymous \fBcontext(in, out)\fR attributes and \fB__context__(delta)\fR
+statements remain on an independent anonymous counter.  This warning is
+off by default and does not change the \fB-Wcontext\fR diagnostics.
 .
 .TP
 .B \-Wdecl

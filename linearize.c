@@ -22,6 +22,7 @@
 #include "optimize.h"
 #include "flow.h"
 #include "target.h"
+#include "context-identity.h"
 
 static pseudo_t linearize_statement(struct entrypoint *ep, struct statement *stmt);
 static pseudo_t linearize_expression(struct entrypoint *ep, struct expression *expr);
@@ -1537,6 +1538,7 @@ static pseudo_t linearize_call_expression(struct entrypoint *ep, struct expressi
 	add_one_insn(ep, insn);
 
 	if (ctype) {
+		struct instruction *call_insn = insn;
 		FOR_EACH_PTR(ctype->contexts, context) {
 			int in = context->in;
 			int out = context->out;
@@ -1552,10 +1554,28 @@ static pseudo_t linearize_call_expression(struct entrypoint *ep, struct expressi
 			}
 			context_diff = out - in;
 			if (check || context_diff) {
+				pseudo_t resource = VOID;
+
 				insn = alloc_instruction(OP_CONTEXT, 0);
 				insn->increment = context_diff;
 				insn->check = check;
 				insn->context_expr = context->context;
+				insn->context_call = call_insn;
+				/*
+				 * Substitute the annotation's parameter with
+				 * the actual argument of this call and keep it
+				 * on the use list, so the resource value can
+				 * never be optimized away when it is only used
+				 * by an annotation.
+				 */
+				if (Wcontext_identity && context->context)
+					resource = cid_argument_pseudo(fntype,
+							context->context,
+							call_insn);
+				insn->context_resource = resource;
+				if (resource && resource != VOID)
+					use_pseudo(insn, resource,
+						   &insn->context_resource);
 				add_one_insn(ep, insn);
 			}
 		} END_FOR_EACH_PTR(context);
@@ -2064,6 +2084,8 @@ static pseudo_t linearize_context(struct entrypoint *ep, struct statement *stmt)
 
 	insn->increment = get_expression_value(expr);
 	insn->context_expr = stmt->context;
+	insn->context_call = NULL;
+	insn->context_resource = VOID;
 	add_one_insn(ep, insn);
 	return VOID;
 }

@@ -44,6 +44,9 @@ series
 local.mk
 .*.mk
 
+# task support build artifacts
+/.task-build/
+
 # cscope and Qt files
 cscope.out
 *.pro*

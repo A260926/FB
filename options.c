@@ -95,6 +95,7 @@ int Wcast_truncate = 1;
 int Wconstant_suffix = 0;
 int Wconstexpr_not_const = 0;
 int Wcontext = 1;
+int Wcontext_identity = 0;
 int Wdecl = 1;
 int Wdeclarationafterstatement = -1;
 int Wdefault_bitfield_sign = 0;
@@ -854,6 +855,7 @@ static const struct flag warnings[] = {
 	{ "constant-suffix", &Wconstant_suffix },
 	{ "constexpr-not-const", &Wconstexpr_not_const},
 	{ "context", &Wcontext },
+	{ "context-identity", &Wcontext_identity },
 	{ "decl", &Wdecl },
 	{ "declaration-after-statement", &Wdeclarationafterstatement },
 	{ "default-bitfield-sign", &Wdefault_bitfield_sign },
