@@ -39,6 +39,17 @@ struct gsm_state {
 	char		wav_fmt;	/* only used if WAV49 defined	*/
 	unsigned char	frame_index;	/*            odd/even chaining	*/
 	unsigned char	frame_chain;	/*   half-byte to carry forward	*/
+
+	/*
+	 * Deterministic packet-loss concealment.  The cache always belongs
+	 * to the most recent good 160-sample frame decoded on this state.
+	 */
+	unsigned int	plc_loss_count;
+	unsigned char	plc_have_good;
+	word		plc_LARc[8];
+	word		plc_Nc[4];
+	word		plc_bc[4];
+	word		plc_excitation[4][40];
 };
 
 
@@ -191,6 +202,10 @@ extern void Gsm_Decoder P((
 		word	* xmaxcr,	/* [0..3]		IN 	*/
 		word	* xMcr,		/* [0..13*4]		IN	*/
 		word	* s));		/* [0..159]		OUT 	*/
+
+extern void Gsm_Postprocessing P((
+	struct gsm_state * S,
+	word		 * s));	/* [0..159] IN/OUT */
 
 extern void Gsm_Decoding P((
 		struct gsm_state * S,

@@ -63,6 +63,12 @@ extern int  gsm_option  GSM_P((gsm, int, int *));
 extern void gsm_encode  GSM_P((gsm, gsm_signal *, gsm_byte  *));
 extern int  gsm_decode  GSM_P((gsm, gsm_byte   *, gsm_signal *));
 
+extern int  gsm_decode_plc GSM_P((gsm s, const gsm_byte *data,
+				  unsigned int bytes,
+				  unsigned int good_mask,
+				  gsm_signal *pcm,
+				  unsigned int capacity));
+
 extern int  gsm_explode GSM_P((gsm, gsm_byte   *, gsm_signal *));
 extern void gsm_implode GSM_P((gsm, gsm_signal *, gsm_byte   *));
 

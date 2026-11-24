@@ -16,7 +16,7 @@
  *  4.3 FIXED POINT IMPLEMENTATION OF THE RPE-LTP DECODER
  */
 
-static void Postprocessing P2((S,s),
+void Gsm_Postprocessing P2((S,s),
 	struct gsm_state	* S,
 	register word 		* s)
 {
@@ -50,14 +50,23 @@ void Gsm_Decoder P8((S,LARcr, Ncr,bcr,Mcr,xmaxcr,xMcr,s),
 	word		erp[40], wt[160];
 	word		* drp = S->dp0 + 120;
 
+	for (k = 0; k < 8; k++) S->plc_LARc[k] = LARcr[k];
+	S->plc_loss_count = 0;
+	S->plc_have_good = 1;
+
 	for (j=0; j <= 3; j++, xmaxcr++, bcr++, Ncr++, Mcr++, xMcr += 13) {
 
 		Gsm_RPE_Decoding( S, *xmaxcr, *Mcr, xMcr, erp );
+		for (k = 0; k < 40; k++)
+			S->plc_excitation[j][k] = erp[k];
+
 		Gsm_Long_Term_Synthesis_Filtering( S, *Ncr, *bcr, erp, drp );
+		S->plc_Nc[j] = S->nrp;
+		S->plc_bc[j] = *bcr;
 
 		for (k = 0; k <= 39; k++) wt[ j * 40 + k ] =  drp[ k ];
 	}
 
 	Gsm_Short_Term_Synthesis_Filter( S, LARcr, wt, s );
-	Postprocessing(S, s);
+	Gsm_Postprocessing(S, s);
 }
