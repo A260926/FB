@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/microsoft/mimalloc",
+  "commit": "1d8fd85aa3abe719cd9c42c855f1fc27dbccf84d",
+  "license": "MIT",
+  "export": "Full src/include/test/cmake plus top-level build inputs and doc/qsbr.md."
+}
