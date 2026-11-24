@@ -15,7 +15,8 @@ static char task_map_path[128];
 static size_t task_map_size;
 static int task_shmget(key_t key,size_t size,int flags){
  (void)key;(void)flags;
- snprintf(task_map_path,sizeof(task_map_path),"/tmp/afl-task-map-XXXXXX");
+ const char *dir=getenv("TMPDIR");if(!dir||!*dir)dir="/tmp";
+ snprintf(task_map_path,sizeof(task_map_path),"%s/afl-task-map-XXXXXX",dir);
  int fd=mkstemp(task_map_path);if(fd<0)return -1;
  if(ftruncate(fd,(off_t)size)||setenv("TASK_COVER_MAP",task_map_path,1)){close(fd);unlink(task_map_path);return -1;}
  task_map_size=size;return fd;

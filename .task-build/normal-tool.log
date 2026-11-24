@@ -1,0 +1,28 @@
+[0;36mafl-tmin [1;97m2.57b[0m by <lcamtuf@google.com>
+
+[1;92m[+] [0mRead 7 bytes from '.task-build/normal.in'.[0m
+[1;94m[*] [0mPerforming dry run (mem limit = 0 MB, timeout = 1000 ms)...[0m
+[1;92m[+] [0mProgram terminates normally, minimizing in [0;36minstrumented[0m mode.[0m
+[1;94m[*] [0m[1;97mStage #0: [0mOne-time block normalization...[0m
+[1;92m[+] [0mBlock normalization complete, 4 bytes replaced.[0m
+[1;94m[*] [0m[1;93m--- [1;97mPass #1 [1;93m---[0m
+[1;94m[*] [0m[1;97mStage #1: [0mRemoving blocks of data...[0m
+[1;90m    Block length = 1, remaining size = 7
+[0m[1;92m[+] [0mBlock removal complete, 6 bytes deleted.[0m
+[1;94m[*] [0m[1;97mStage #2: [0mMinimizing symbols (1 code point)...[0m
+[1;92m[+] [0mSymbol minimization finished, 0 symbols (0 bytes) replaced.[0m
+[1;94m[*] [0m[1;97mStage #3: [0mCharacter minimization...[0m
+[1;92m[+] [0mCharacter minimization done, 0 bytes replaced.[0m
+[1;94m[*] [0m[1;93m--- [1;97mPass #2 [1;93m---[0m
+[1;94m[*] [0m[1;97mStage #1: [0mRemoving blocks of data...[0m
+[1;90m    Block length = 1, remaining size = 1
+[0m[1;92m[+] [0mBlock removal complete, 0 bytes deleted.[0m
+
+[1;90m     File size reduced by : [0m85.71% (to 1 byte)
+[1;90m    Characters simplified : [0m400.00%
+[1;90m     Number of execs done : [0m13
+[1;90m          Fruitless execs : [0mpath=5 crash=0 hang=0
+
+[1;94m[*] [0mWriting output to '.task-build/normal.out'...[0m
+[1;92m[+] [0mWe're done here. Have a nice day!
+[0m

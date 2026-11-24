@@ -34,6 +34,7 @@
 #include "debug.h"
 #include "alloc-inl.h"
 #include "hash.h"
+#include "afl-struct.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -41,6 +42,7 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <signal.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -83,6 +85,16 @@ static u8  crash_mode,                /* Crash-centric mode?               */
            edges_only,                /* Ignore hit counts?                */
            exact_mode,                /* Require path match for crashes?   */
            use_stdin = 1;             /* Use stdin for program input?      */
+
+static u8 *struct_table,              /* Dependency table for -S           */
+          *state_path;                /* Checkpoint path for -C            */
+
+static u8  struct_mode,               /* Structural reduction requested?   */
+           struct_now_fail;           /* Last run_target could not execute */
+
+static size_t struct_budget;          /* Candidate execution budget        */
+static u8  struct_budget_given,       /* Was -N supplied?                  */
+           struct_budget_unlimited;   /* Reset the budget after each step? */
 
 static volatile u8
            stop_soon,                 /* Ctrl-C pressed?                   */
@@ -348,6 +360,20 @@ static u8 run_target(char** argv, u8* mem, u32 len, u8 first_run) {
   apply_mask((u32*)trace_bits, (u32*)mask_bitmap);
   total_execs++;
 
+  /* Structural mode only runs benign targets that terminate normally. Record
+     abnormal termination here so the observation callback can report it as an
+     execution error rather than as an acceptable or rejected candidate. */
+
+  if (struct_mode) {
+
+    struct_now_fail = 0;
+
+    if (child_timed_out || WIFSIGNALED(status) || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != 0)
+      struct_now_fail = 1;
+
+  }
+
   if (stop_soon) {
 
     SAYF(cRST cLRD "\n+++ Minimization aborted by user +++\n" cRST);
@@ -403,6 +429,107 @@ static u8 run_target(char** argv, u8* mem, u32 len, u8 first_run) {
   
   missed_paths++;
   return 0;
+
+}
+
+
+/****************************
+ * STRUCTURAL FRAGMENT MODE *
+ ****************************/
+
+/* Read the whole -S dependency table. */
+
+static u8* read_text_file(u8* path, size_t* out_len) {
+
+  struct stat st;
+  s32 fd = open(path, O_RDONLY);
+  u8* buf;
+
+  if (fd < 0) PFATAL("Unable to open '%s'", path);
+
+  if (fstat(fd, &st)) PFATAL("fstat() failed on '%s'", path);
+
+  if (st.st_size < 0 || (u64)st.st_size > TMIN_MAX_FILE)
+    FATAL("Dependency table '%s' is too large", path);
+
+  buf = ck_alloc_nozero(st.st_size + 1);
+
+  if (st.st_size) ck_read(fd, buf, st.st_size, path);
+
+  buf[st.st_size] = 0;
+  close(fd);
+
+  *out_len = st.st_size;
+  return buf;
+
+}
+
+
+/*
+  Identity metadata stored in the -C state file. It binds the checkpoint to
+  the exact target invocation, input mode, and coverage-affecting options.
+
+  The target argv must be the raw post-getopt argv (with any @@ token still
+  intact): the auto-generated -f temp name contains the process ID and must
+  never leak into the identity. prog_in is only recorded when -f was supplied.
+*/
+
+/* Append a formatted chunk to a growing ck_alloc() buffer. */
+
+static void meta_append(u8** buf, size_t* len, size_t* cap, const char* fmt,
+                        ...) {
+
+  va_list ap;
+  s32 n;
+  size_t at = *len;
+
+  va_start(ap, fmt);
+  n = vsnprintf(NULL, 0, fmt, ap);
+  va_end(ap);
+
+  if (n <= 0) return;
+
+  if (at + (size_t)n + 1 > *cap) {
+    size_t ncap = *cap ? *cap : 256;
+    while (ncap < at + (size_t)n + 1) ncap *= 2;
+    *buf = ck_realloc(*buf, ncap);
+    *cap = ncap;
+  }
+
+  va_start(ap, fmt);
+  vsnprintf((char*)*buf + at, *cap - at, fmt, ap);
+  va_end(ap);
+
+  *len = at + (size_t)n;
+
+}
+
+
+static u8* build_state_meta(char** raw_argv, size_t* out_len) {
+
+  size_t cap = 0, at = 0, i;
+  u8* buf = NULL;
+
+  meta_append(&buf, &at, &cap, "version=%s\n", VERSION);
+  meta_append(&buf, &at, &cap, "target=%s\n", target_path);
+  meta_append(&buf, &at, &cap, "input=%s\n", use_stdin ? "stdin" : "file");
+  if (!use_stdin)
+    meta_append(&buf, &at, &cap, "prog_in=%s\n",
+                prog_in ? (char*)prog_in : "");
+  meta_append(&buf, &at, &cap, "timeout=%u\n", exec_tmout);
+  meta_append(&buf, &at, &cap, "mem=%llu\n", mem_limit);
+  meta_append(&buf, &at, &cap, "edges=%u\n", edges_only);
+  meta_append(&buf, &at, &cap, "mask=%u\n", mask_bitmap ? 1 : 0);
+  meta_append(&buf, &at, &cap, "crash_mode=%u\n", crash_mode);
+  meta_append(&buf, &at, &cap, "exact=%u\n", exact_mode);
+  meta_append(&buf, &at, &cap, "orig_cksum=%u\n", orig_cksum);
+  meta_append(&buf, &at, &cap, "args=");
+  for (i = 0; raw_argv && raw_argv[i]; i++)
+    meta_append(&buf, &at, &cap, "%s%s", i ? " " : "", raw_argv[i]);
+  meta_append(&buf, &at, &cap, "\n");
+
+  *out_len = at;
+  return buf;
 
 }
 
@@ -659,8 +786,133 @@ finalize_all:
 }
 
 
+/* Structural mode observation: route every candidate through run_target(). */
 
-/* Handle Ctrl-C and the like. */
+static int struct_observe(const unsigned char* mem, size_t len, void* ctx) {
+
+  char** argv = (char**)ctx;
+  u8 res;
+
+  struct_now_fail = 0;
+
+  res = run_target(argv, (u8*)mem, (u32)len, 0);
+
+  if (struct_now_fail || stop_soon) return -1;
+
+  return res ? 1 : 0;
+
+}
+
+
+/*
+  Run the structural search, checkpointing to -C when requested. Returns 0 on
+  completion, 1 when paused (budget exhausted), and never returns on error.
+*/
+
+static int run_struct_minimize(char** argv, const u8* table, size_t table_len,
+                               const char* meta, size_t meta_len) {
+
+  afl_struct_session* session;
+  size_t budget;
+  int r;
+
+  session = afl_struct_create(in_data, in_len, (const char*)table);
+
+  if (!session)
+    FATAL("Invalid structural dependency table '%s'", struct_table);
+
+  if (state_path) {
+
+    afl_struct_session* restored = NULL;
+    u8* stored_meta = NULL;
+    size_t stored_meta_len = 0;
+    int rc;
+
+    stored_meta = ck_alloc(meta_len + 1);
+
+    rc = afl_struct_state_load(state_path, in_data, in_len, (const char*)table,
+                               stored_meta, meta_len, &stored_meta_len,
+                               &restored);
+
+    if (rc == AFL_STRUCT_STATE_OK) {
+
+      if (stored_meta_len != meta_len || memcmp(stored_meta, meta, meta_len))
+        FATAL("State '%s' was recorded with a different target, input mode, "
+              "or coverage-affecting options", state_path);
+
+      afl_struct_destroy(session);
+      session = restored;
+
+      ACTF("Resuming structural session from '%s'.", state_path);
+
+    } else if (rc == AFL_STRUCT_STATE_MISSING) {
+
+      ACTF("Creating new structural checkpoint at '%s'.", state_path);
+
+    } else if (rc == AFL_STRUCT_STATE_MISMATCH) {
+
+      FATAL("State file '%s' is corrupt or does not match this input/table",
+            state_path);
+
+    } else {
+
+      PFATAL("Unable to read state file '%s'", state_path);
+
+    }
+
+    ck_free(stored_meta);
+
+  }
+
+  if (struct_budget_unlimited) budget = (size_t)-1;
+  else budget = struct_budget;
+
+  for (;;) {
+
+    r = afl_struct_step(session, budget, struct_observe, argv);
+
+    if (r < 0)
+      FATAL("Target execution failed during structural reduction");
+
+    if (state_path && afl_struct_state_save(session, (const char*)state_path,
+                                            (const u8*)meta, meta_len))
+      PFATAL("Unable to write state file '%s'", state_path);
+
+    if (r == 0) break;
+
+    /* Budget exhausted: publish the accepted bytes as they stand. */
+
+    {
+      size_t flen;
+      const u8* cur = afl_struct_data(session, &flen);
+      ck_free(in_data);
+      in_data = ck_alloc(flen ? flen : 1);
+      if (flen) memcpy(in_data, cur, flen);
+      in_len = flen;
+    }
+
+    afl_struct_destroy(session);
+
+    SAYF("STRUCT paused\n");
+    return 1;
+
+  }
+
+  {
+    size_t flen;
+    const u8* cur = afl_struct_data(session, &flen);
+    ck_free(in_data);
+    in_data = ck_alloc(flen ? flen : 1);
+    if (flen) memcpy(in_data, cur, flen);
+    in_len = flen;
+  }
+
+  afl_struct_destroy(session);
+
+  SAYF("STRUCT complete\n");
+  return 0;
+
+}
 
 static void handle_stop_sig(int sig) {
 
@@ -833,6 +1085,12 @@ static void usage(u8* argv0) {
        "  -e            - solve for edge coverage only, ignore hit counts\n"
        "  -x            - treat non-zero exit codes as crashes\n\n"
 
+       "Structural fragment mode:\n\n"
+
+       "  -S table      - enable structural reduction with a fragment table\n"
+       "  -N budget     - candidate execution budget (default: unlimited)\n"
+       "  -C state      - checkpoint/restore structural session state\n\n"
+
        "Other stuff:\n\n"
 
        "  -V            - show version number and exit\n\n"
@@ -985,12 +1243,13 @@ int main(int argc, char** argv) {
   s32 opt;
   u8  mem_limit_given = 0, timeout_given = 0, qemu_mode = 0;
   char** use_argv;
+  char** struct_raw_argv;
 
   doc_path = access(DOC_PATH, F_OK) ? "docs" : DOC_PATH;
 
   SAYF(cCYA "afl-tmin " cBRI VERSION cRST " by <lcamtuf@google.com>\n");
 
-  while ((opt = getopt(argc,argv,"+i:o:f:m:t:B:xeQV")) > 0)
+  while ((opt = getopt(argc,argv,"+i:o:f:m:t:B:S:N:C:xeQV")) > 0)
 
     switch (opt) {
 
@@ -1004,6 +1263,47 @@ int main(int argc, char** argv) {
 
         if (out_file) FATAL("Multiple -o options not supported");
         out_file = optarg;
+        break;
+
+      case 'S':
+
+        if (struct_table) FATAL("Multiple -S options not supported");
+        if (!optarg[0]) FATAL("Empty -S table path");
+        struct_table = optarg;
+        struct_mode  = 1;
+        break;
+
+      case 'N': {
+
+          const char* p = optarg;
+          size_t v = 0;
+
+          if (struct_budget_given) FATAL("Multiple -N options not supported");
+          struct_budget_given = 1;
+
+          if (!optarg[0]) FATAL("Empty -N budget");
+
+          while (*p) {
+            unsigned d;
+            if (*p < '0' || *p > '9' || v > ((size_t)-1 - 9) / 10)
+              FATAL("Bad syntax used for -N");
+            d = (unsigned)(*p - '0');
+            v = v * 10 + d;
+            p++;
+          }
+
+          struct_budget = v;
+          struct_budget_unlimited = 0;
+
+        }
+
+        break;
+
+      case 'C':
+
+        if (state_path) FATAL("Multiple -C options not supported");
+        if (!optarg[0]) FATAL("Empty -C state path");
+        state_path = optarg;
         break;
 
       case 'f':
@@ -1115,12 +1415,39 @@ int main(int argc, char** argv) {
 
   if (optind == argc || !in_file || !out_file) usage(argv[0]);
 
+  if (struct_mode) {
+
+    if (qemu_mode || exit_crash)
+      FATAL("Structural mode (-S) is incompatible with -Q and -x");
+
+    if (!struct_budget_given) struct_budget_unlimited = 1;
+
+  } else {
+
+    if (state_path) FATAL("-C requires structural mode (-S)");
+
+    if (struct_budget_given) FATAL("-N requires structural mode (-S)");
+
+  }
+
   setup_shm();
   setup_signal_handlers();
 
   set_up_environment();
 
   find_binary(argv[optind]);
+
+  /* Snapshot the raw target argv before @@ substitution rewrites it, so the
+     checkpoint identity stays stable across processes (no temp paths / PIDs). */
+
+  {
+    size_t n = 0, i;
+    while (argv[optind + n]) n++;
+    struct_raw_argv = ck_alloc(sizeof(char*) * (n + 1));
+    for (i = 0; i < n; i++) struct_raw_argv[i] = ck_strdup(argv[optind + i]);
+    struct_raw_argv[n] = NULL;
+  }
+
   detect_file_args(argv + optind);
 
   if (qemu_mode)
@@ -1142,17 +1469,59 @@ int main(int argc, char** argv) {
   if (child_timed_out)
     FATAL("Target binary times out (adjusting -t may help).");
 
-  if (!crash_mode) {
+  if (struct_mode) {
 
-     OKF("Program terminates normally, minimizing in " 
-         cCYA "instrumented" cRST " mode.");
+    if (crash_mode || struct_now_fail)
+      FATAL("Structural mode requires a target that terminates normally; "
+            "the starting input terminated abnormally");
 
-     if (!anything_set()) FATAL("No instrumentation detected.");
+    OKF("Program terminates normally, reducing structural fragments.");
+
+    if (!anything_set()) FATAL("No instrumentation detected.");
 
   } else {
 
-     OKF("Program exits with a signal, minimizing in " cMGN "%scrash" cRST
-         " mode.", exact_mode ? "EXACT " : "");
+    if (!crash_mode) {
+
+       OKF("Program terminates normally, minimizing in "
+           cCYA "instrumented" cRST " mode.");
+
+       if (!anything_set()) FATAL("No instrumentation detected.");
+
+    } else {
+
+       OKF("Program exits with a signal, minimizing in " cMGN "%scrash" cRST
+           " mode.", exact_mode ? "EXACT " : "");
+
+    }
+
+  }
+
+  if (struct_mode) {
+
+    size_t table_len = 0;
+    size_t meta_len = 0;
+    u8* table = read_text_file(struct_table, &table_len);
+    u8* meta = build_state_meta(struct_raw_argv, &meta_len);
+    int result;
+
+    result = run_struct_minimize(use_argv, table, table_len,
+                                 (const char*)meta, meta_len);
+
+    ck_free(table);
+    ck_free(meta);
+
+    ACTF("Writing output to '%s'...", out_file);
+
+    unlink(prog_in);
+    prog_in = NULL;
+
+    close(write_to_file(out_file, in_data, in_len));
+
+    if (result == 0)
+      OKF("We're done here. Have a nice day!\n");
+
+    exit(0);
 
   }
 
