@@ -3,13 +3,13 @@
 // Author: Mateusz Jurczyk (mjurczyk@google.com)
 //
 // Copyright 2019 Google LLC
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 // https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,18 +20,24 @@
 // ===========
 //
 // A container class for managing code coverage traces registered during the
-// program run time.
+// program run time. In addition to the cumulative, .sancov-compatible log it
+// keeps an explicit per-round journal (see receipt.h), where every comparison
+// is attributed to a (source version, module build, corpus round) triple.
 
 #ifndef CMPCOV_TRACES_H_
 #define CMPCOV_TRACES_H_
 
 #include <cstdint>
 #include <cstdlib>
+#include <map>
 #include <memory>
+#include <set>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
 #include "modules.h"
+#include "receipt.h"
 
 class Traces {
  public:
@@ -40,6 +46,33 @@ class Traces {
   // Saves an execution trace based on a virtual address, and two arguments: a
   // 4-bit and a 12-bit one. The meaning of the arguments is up to the caller.
   void TrySaveTrace(size_t pc, int trace_arg1, int trace_arg2);
+
+  // Opens a coverage round attributed to the given 40-hex-character source
+  // identifier, non-zero round number and 64-hex-character input identifier.
+  // On success the round-local coverage is cleared. Fails (without changing
+  // any state) if a round is already active or an identifier is malformed.
+  bool BeginRound(const std::string &source, uint64_t round,
+                  const std::string &input);
+
+  // Binds the loaded module containing pc to the given 64-hex-character build
+  // identifier. Re-binding the same module to the same identifier is
+  // idempotent; a different identifier is rejected. Two modules sharing a base
+  // name may carry different identifiers, and one build may be loaded at
+  // several addresses. Bindings only last for the current round, which must be
+  // active.
+  bool BindModule(size_t pc, const std::string &build);
+
+  // Serializes the current round to a textual receipt at path. Fails if any
+  // module produced coverage without being bound, or if publication fails; in
+  // either case the round stays active and its state is preserved for a
+  // retry. On success the round ends.
+  bool CommitRound(const std::string &path);
+
+  // Discards the active round and all of its coverage and bindings.
+  bool AbortRound();
+
+  // Indicates whether a coverage round is currently open.
+  bool IsRoundActive() const { return round_active_; }
 
   // Returns the number of modules in which execution traces have been
   // registered.
@@ -64,6 +97,42 @@ class Traces {
 
   // An instance of a class keeping track of executable modules in the process.
   std::unique_ptr<Modules> modules_;
+
+  // Round journal state. A round is active iff round_active_ is true.
+  bool round_active_ = false;
+  std::string round_source_;
+  uint64_t round_number_ = 0;
+  std::string round_input_;
+
+  // Build identifiers bound to module indices of the Modules cache in this
+  // round.
+  std::map<int, std::string> round_bindings_;
+
+  // Module indices that produced at least one trace during this round.
+  std::set<int> round_touched_modules_;
+
+  // Deduplicated round coverage. The key carries the module index, the raw
+  // module-relative offset and both comparison labels separately, so a tagged
+  // trace integer is never mistaken for a full address.
+  struct RoundTrace {
+    int module_index;
+    uint64_t offset;
+    int arg1;
+    int arg2;
+
+    bool operator<(const RoundTrace& other) const {
+      if (module_index != other.module_index) {
+        return module_index < other.module_index;
+      }
+      if (offset != other.offset) return offset < other.offset;
+      if (arg1 != other.arg1) return arg1 < other.arg1;
+      return arg2 < other.arg2;
+    }
+  };
+  std::set<RoundTrace> round_traces_;
+
+  // Clears all round-local state.
+  void ResetRoundState();
 
   // Internal methods for constructing wide traces, output traces, and
   // performing 64->32 bit mixing.

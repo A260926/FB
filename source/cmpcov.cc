@@ -79,6 +79,7 @@
 
 #include "common.h"
 #include "modules.h"
+#include "receipt.h"
 #include "tokenizer.h"
 #include "traces.h"
 
@@ -302,6 +303,13 @@ static void CommonHandleCmpTrace(uint64_t arg1, uint64_t arg2, int arg_length,
   }
 }
 
+// While a round is active, callbacks collect coverage even if ASAN_OPTIONS
+// never enabled instrumentation. Outside of rounds the original configuration
+// gates apply unchanged.
+static bool RoundCollectionActive() {
+  return globals::traces->IsRoundActive();
+}
+
 static void CommonHandleMemcmpTrace(const char *s1, const char *s2, int length,
                                     void *pc) {
   int matching_bytes;
@@ -341,7 +349,11 @@ void __sanitizer_cov_trace_cmp2(uint16_t Arg1, uint16_t Arg2) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled || !globals::config->nonconst_cov_enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
+    return;
+  }
+  if (globals::config->enabled && !globals::config->nonconst_cov_enabled &&
+      !RoundCollectionActive()) {
     return;
   }
 
@@ -355,7 +367,11 @@ void __sanitizer_cov_trace_cmp4(uint32_t Arg1, uint32_t Arg2) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled || !globals::config->nonconst_cov_enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
+    return;
+  }
+  if (globals::config->enabled && !globals::config->nonconst_cov_enabled &&
+      !RoundCollectionActive()) {
     return;
   }
 
@@ -369,7 +385,11 @@ void __sanitizer_cov_trace_cmp8(uint64_t Arg1, uint64_t Arg2) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled || !globals::config->nonconst_cov_enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
+    return;
+  }
+  if (globals::config->enabled && !globals::config->nonconst_cov_enabled &&
+      !RoundCollectionActive()) {
     return;
   }
 
@@ -397,7 +417,7 @@ void __sanitizer_cov_trace_const_cmp2(uint16_t Arg1, uint16_t Arg2) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
     return;
   }
 
@@ -417,7 +437,7 @@ void __sanitizer_cov_trace_const_cmp4(uint32_t Arg1, uint32_t Arg2) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
     return;
   }
 
@@ -438,7 +458,7 @@ void __sanitizer_cov_trace_const_cmp8(uint64_t Arg1, uint64_t Arg2) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
     return;
   }
 
@@ -460,7 +480,7 @@ void __sanitizer_cov_trace_switch(uint64_t Val, uint64_t *Cases) {
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
     return;
   }
 
@@ -536,7 +556,11 @@ void __sanitizer_weak_hook_memcmp(void *caller_pc, const void *s1,
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled || !globals::config->memory_cov_enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
+    return;
+  }
+  if (globals::config->enabled && !globals::config->memory_cov_enabled &&
+      !RoundCollectionActive()) {
     return;
   }
 
@@ -562,7 +586,11 @@ void __sanitizer_weak_hook_strncmp(void *caller_pc, const char *s1,
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled || !globals::config->memory_cov_enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
+    return;
+  }
+  if (globals::config->enabled && !globals::config->memory_cov_enabled &&
+      !RoundCollectionActive()) {
     return;
   }
 
@@ -587,7 +615,11 @@ void __sanitizer_weak_hook_strcmp(void *caller_pc, const char *s1,
   if (!globals::initialized) {
     Initialize();
   }
-  if (!globals::config->enabled || !globals::config->memory_cov_enabled) {
+  if (!globals::config->enabled && !RoundCollectionActive()) {
+    return;
+  }
+  if (globals::config->enabled && !globals::config->memory_cov_enabled &&
+      !RoundCollectionActive()) {
     return;
   }
 
@@ -609,6 +641,63 @@ void __sanitizer_weak_hook_strncasecmp(void *called_pc, const char *s1,
 void __sanitizer_weak_hook_strcasecmp(void *called_pc, const char *s1,
                                       const char *s2, int result) {
   return __sanitizer_weak_hook_strcmp(called_pc, s1, s2, result);
+}
+
+}  // extern "C"
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Explicit round-mode entry points. Every call is serialized on the same
+// mutex as the instrumentation callbacks, including the file publication in
+// CmpCovCommitRound(), so coverage arriving later can never leak into a
+// receipt already committed.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern "C" {
+
+bool CmpCovBeginRound(const char* source, uint64_t round, const char* input) {
+  if (source == nullptr || input == nullptr) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(globals::cov_mutex);
+  if (!globals::initialized) {
+    Initialize();
+  }
+  return globals::traces->BeginRound(source, round, input);
+}
+
+bool CmpCovBindModule(const void* pc, const char* build) {
+  if (pc == nullptr || build == nullptr) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(globals::cov_mutex);
+  if (!globals::initialized) {
+    Initialize();
+  }
+  return globals::traces->BindModule(reinterpret_cast<size_t>(pc), build);
+}
+
+bool CmpCovCommitRound(const char* path) {
+  if (path == nullptr) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(globals::cov_mutex);
+  if (!globals::initialized) {
+    Initialize();
+  }
+  return globals::traces->CommitRound(path);
+}
+
+bool CmpCovAbortRound() {
+  std::lock_guard<std::mutex> lock(globals::cov_mutex);
+  if (!globals::initialized) {
+    Initialize();
+  }
+  return globals::traces->AbortRound();
 }
 
 }  // extern "C"

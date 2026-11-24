@@ -1,7 +1,7 @@
 CXX=clang-cl
 CXXFLAGS=-O2 -Wno-deprecated-declarations
-DEPS=common.h modules.h tokenizer.h traces.h
-SRCS=cmpcov.cc common.cc modules.cc tokenizer.cc traces.cc
+DEPS=common.h modules.h receipt.h tokenizer.h traces.h
+SRCS=cmpcov.cc common.cc modules.cc receipt.cc tokenizer.cc traces.cc
 OBJS=$(subst .cc,.o,$(SRCS))
 LIB=llvm-lib
 
