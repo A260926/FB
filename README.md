@@ -1,0 +1,265 @@
+![](/misc/iso_alloc_logo.png?raw=true)
+
+![unit tests](https://github.com/struct/isoalloc/actions/workflows/testsuite.yml/badge.svg)
+
+# Isolation Alloc
+
+Isolation Alloc (or IsoAlloc) is a secure and fast(ish) memory allocator written in C11. It is a drop in replacement for `malloc` on Linux / Mac OS using `LD_PRELOAD` or `DYLD_INSERT_LIBRARIES` respectively. Its security strategy is originally inspired by Chrome's [PartitionAlloc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/base/allocator/partition_allocator/PartitionAlloc.md). A memory allocation isolation security strategy is best summed up as maintaining spatial separation, or isolation between objects of different sizes or types. While IsoAlloc wraps `malloc` and enforces naive isolation by default very strict isolation of allocations can be achieved using the APIs directly.
+
+IsoAlloc is designed and [tested](https://github.com/struct/isoalloc/actions) for 64 bit Linux and MacOS. The space afforded by a 64 bit process makes this possible, therefore Isolation Alloc does not support 32 bit targets. The number of bits of entropy provided to `mmap` based page allocations is far too low in a 32 bit process to provide much security value. It may work on operating systems other than Linux/MacOS but that is also untested at this time. There is partial FreeBSD support but CI is often flakey. A minimal Solaris/Illumos support is available, LTO not supported by the compilers backends.
+
+## Design
+
+At a high level IsoAlloc creates zones which are used to manage regions of memory that hold individual allocations of a specific size. If you are familiar with the implementation of arenas in other heap allocators then the concepts here will be familiar to you.
+
+There is one `iso_alloc_root` structure which contains a pointer to a fixed number of `iso_alloc_zone` structures. These `iso_alloc_zone` structures are referred to as *zones*. Zones point to user chunks and a bitmap that is used to manage those chunks. The translation between bitmap and user chunks is referred to as *bit slots*. The pages that back both the user chunks and the bitmap are allocated separately. The pointers that reference these in the zone meta data are masked in between allocation and free operations. The bitmap contains 2 bits of state per user chunk. The current bit value specification is as follows:
+
+* `00` free chunk
+* `10` currently in use
+* `01` was used but is now free
+* `11` canary chunk
+
+All user chunk pages and bitmap pages are surrounded by guard page allocations with the `PROT_NONE` permission. Zones are created for specific sizes, or manually created through the exposed API for a particular size or object type. Internally managed zones will live for the entire lifetime of the process, but zones created via the API can be destroyed at any time.
+
+If `DEBUG`, `LEAK_DETECTOR`, or `MEM_USAGE` are specified during compilation a memory leak and memory usage routine will be called from the destructor which will print useful information about the state of the heap at that time. These can also be invoked via the API, which is documented further below.
+
+* All chunk sizes are a multiple of 32 and are always 8 byte aligned.
+* The `iso_alloc_root` structure is thread safe and guarded by a mutex or spinlock when `THREAD_SUPPORT` is enabled.
+* Each zone bitmap contains 2 bits per chunk.
+* All zones are 4 MB in size regardless of the chunk sizes they manage.
+* Default zones are created in the constructor for sizes: 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 bytes.
+* Zones are created on demand for larger allocations or when these default zones are exhausted.
+* The free bit slot cache is 255 entries, it helps speed up allocations.
+* All allocations larger than `SMALL_SIZE_MAX` live in big zones which have a size limitation of 4 GB. See [PERFORMANCE](PERFORMANCE.md).
+
+There is support for Address Sanitizer, Memory Sanitizer, and Undefined Behavior Sanitizer. If you want to enable it just uncomment the `ENABLE_ASAN`, `ENABLE_MSAN`, or `ENABLE_UBSAN` flags in the Makefile. Like any other usage of Address Sanitizer these are mutually exclusive. IsoAlloc will use Address Sanitizer macros to poison and unpoison user chunks appropriately. IsoAlloc still catches a number of issues Address Sanitizer does not, including double/unaligned/wild free's.
+
+A feature similar to [GWP-ASAN](https://www.chromium.org/Home/chromium-security/articles/gwp-asan) can be enabled with `ALLOC_SANITY` in the Makefile. It samples calls to `iso_alloc/malloc` and allocates a page of memory surrounded by guard pages in order to detect Use-After-Free and linear heap overflows. All sampled sanity allocations are verified with canaries to detect over/underflows into the surrounding bytes of the page. A percentage of sanity allocations are allocated at end of the page to detect linear overflows. This feature works on all supported platforms.
+
+You can also enable `UNINIT_READ_SANITY` for detecting uninitialized read vulnerabilities using the `userfaultfd` syscall. You can read more about that feature [here](https://struct.github.io/isoalloc_uninit_read.html). This feature is only available on Linux and requires `ALLOC_SANITY` and `THREAD_SUPPORT` to be enabled.
+
+See the [PERFORMANCE](PERFORMANCE.md) documentation for more information.
+
+## Thread Safety
+
+IsoAlloc is thread safe. Every zone has its own lock, a C11 `atomic_flag`, and allocating from or freeing into a zone takes only that lock. A global root lock, built with either a pthread mutex or an `atomic_flag` when `USE_SPINLOCK` is enabled, is taken only to find a zone for a size class the thread has not used before, to create or destroy zones, and for the sampled debugging features. Frees are cheaper still: a freed chunk goes into the calling thread's quarantine and the zone lock is only taken when that quarantine is full and flushed in a batch. Which zone owns a pointer is answered without any lock through a hash map of zone addresses. You can allocate and free any chunk from any thread with no additional complexity required. Each thread remembers the zone it last used for each size class in a per thread table, so a thread that keeps allocating the same sizes takes the same zone locks every time. When several threads contend for one zone the losers move to another zone of the same class, creating one if the class has fewer than twice as many zones as the machine has CPUs, after which the table keeps them apart. The per thread state is a block the allocator maps for each thread on its first use, surrounded by guard pages, and releases when the thread exits. Without thread support there is a single such block for the process. See the [PERFORMANCE](PERFORMANCE.md) documentation for more information on the various caches in use in IsoAlloc.
+
+When enabled, the `CPU_PIN` feature will restrict allocations from a given zone to the CPU core that created that zone. Free operations are not restricted in this way. This mode is compatible with and without thread support, but is only available on Linux, and will introduce a negative performance hit to the hot path and may increase memory usage. On MacOS the current core cannot be read from user space so pinning is silently disabled. The benefit of this mode is that it introduces an isolation mechanism based on CPU core with no configuration beyond enabling the `CPU_PIN` define in the Makefile.
+
+## Security Properties
+
+* Zones cannot overflow or underflow into one another.
+* All user pages are surrounded by guard pages including big zones.
+* All bitmap pages are surrounded by guard pages.
+* Double free's are checked for on every call to `iso_free`.
+* For zones managing allocations 8192 bytes or smaller around %1 of their chunks are permanent canaries.
+* All free'd chunks get a canary written to them and verified upon reallocation.
+* The state of all zones can be verified at any anytime using `iso_verify_zones` or `iso_verify_zone(zone)`.
+* Canaries are unique and are composed of a 64 bit secret value xor'd by the address of the chunk itself.
+* A reused chunk will always have its canary checked before its returned by `iso_alloc`.
+* The top byte of user chunk canaries is `0x00` to prevent unbounded C string reads from leaking it.
+* A chunk can be permanently free'd with a call to `iso_free_permanently`.
+* If `SANITIZE_CHUNKS` is set all user chunks are cleared when passed to `iso_free` with the constant `0xde`.
+* When freeing a chunk the canary in adjacent chunks above/below are verified.
+* When `MASK_PTRS` is enabled (default) the `user_pages_start` and `bitmap_start` pointers stored in zone metadata are XOR'd with a per-zone random secret between alloc and free operations, making them useless to an attacker who reads or corrupts zone metadata.
+* Passing a pointer to `iso_free` that was not allocated with `iso_alloc` will abort.
+* Pointers passed to `iso_free` must be 8 byte aligned, and a multiple of the zone chunk size.
+* The free bit slot cache provides a chunk quarantine or delayed free mechanism.
+* When private zones are destroyed they are overwritten and marked `PROT_NONE` to prevent use-after-free.
+* Big zone meta data lives at a random offset from its base page.
+* A call to `realloc` will always return a new chunk. Use `PERM_FREE_REALLOC` to make these free's permanent.
+* Enable `FUZZ_MODE` in the Makefile to verify all zones upon alloc/free, and never reuse private zones.
+* When `CPU_PIN` is enabled allocation from a zone will be restricted to the CPU core that created it.
+* When `UAF_PTR_PAGE` is enabled calls to `iso_free` will be sampled to search for dangling references.
+* Enable `VERIFY_FREE_BIT_SLOTS` to verify there are no duplicates in the bit slot cache upon free.
+* When `ALLOC_SANITY` is enabled a percentage of allocations will be sampled to detect UAF/overflows, see above.
+* Randomized hints are passed to `mmap` to ensure contiguous page ranges are not allocated.
+* When `ABORT_ON_NULL` is enabled IsoAlloc will abort instead of returning `NULL`.
+* By default `NO_ZERO_ALLOCATIONS` will return a pointer to a page marked `PROT_NONE` for all `0` sized allocations.
+* When `ABORT_ON_UNOWNED_PTR` is enabled (default) IsoAlloc will abort whenever it is passed a pointer it does not own.
+* When `ABORT_NO_ENTROPY` is enabled IsoAlloc will abort when it can't gather enough entropy.
+* When `RANDOMIZE_FREELIST` is enabled IsoAlloc will randomize the free list upon creation. May have a perf hit.
+* Zones are retired after they've allocated and freed a specific number of chunks. This is calculated as `ZONE_ALLOC_RETIRE * max_chunk_count_for_zone`. A retired zone is reset in place: its pages are returned to the kernel and it gets new secrets, canary positions, free list order and a new offset for its first chunk.
+* A zone that has had no chunks in use for `ZONE_PURGE_DELAY_MS` is reset the same way, so freed memory goes back to the kernel and is zero when it is reused.
+* Every zone starts its chunks at a random, alignment preserving offset into its pages so chunks of one size do not share cache sets across zones and their addresses differ between zones.
+* Every request is served from a zone whose chunk size is exactly its size class, never from a zone of a larger class.
+* Big zones are retired after being allocated and freed a total of `BIG_ZONE_ALLOC_RETIRE` times.
+* `MEMORY_TAGGING` When enabled IsoAlloc will create a 1 byte tag for each chunk in private zones. See the [MEMORY_TAGGING.md](MEMORY_TAGGING.md) documentation, or [this test](tests/tagged_ptr_test.cpp) for an example of how to use it.
+* `MEMCPY_SANITY` and `MEMSET_SANITY` Configures the allocator will hook all calls to `memcpy`/`memset` and check for out of bounds r/w operations when either src or dst points to a chunk allocated by IsoAlloc
+* `STRONG_SIZE_ISOLATION` Makes every 16 byte size its own class instead of grouping sizes above 256 bytes into four classes per power of two
+* `PROTECT_FREE_BIG_ZONES` Marks big zones on the free list as `PROT_NONE` when not in use
+* `BIG_ZONE_META_DATA_GUARD` Enables guard pages for big zone meta data
+* `BIG_ZONE_GUARD` Enables guard pages for big zone user pages
+* `ARM_MTE` Enables support for the ARM v8.5a Memory Tagging Extension
+
+## Building
+
+The Makefile targets are very simple:
+
+`make library` - Builds a release version of the library without C++ support
+
+`make library_less_strict` - Builds a release library with `ABORT_ON_UNOWNED_PTR=0`. Recommended when using IsoAlloc via `LD_PRELOAD`.
+
+`make library_debug` - Builds a debug version of the library
+
+`make library_debug_no_output` - Builds a debug version of the library with no logging output
+
+`make analyze_library_debug` - Builds the library with clang's scan-build if installed
+
+`make tests` - Builds and runs all tests
+
+`make tagging_tests` - Builds and runs the memory tagging tests
+
+`make libc_sanity_tests` - Builds the memcpy/memset libc hook sanity tests
+
+`make perf_tests` - Builds and runs a simple performance test that uses gprof. Linux only
+
+`make malloc_cmp_test` - Builds and runs a test that uses both iso_alloc and malloc for comparison
+
+`make c_library_objects` - Builds .o files to be linked in another compilation step
+
+`make c_library_objects_debug` - Builds debug .o files to be linked in another compilation step
+
+`make cpp_library` - Builds the library with a C++ interface that overloads operators `new` and `delete`
+
+`make cpp_library_debug` - Builds a debug version of the library with a C++ interface that overloads operators `new` and `delete`
+
+`make cpp_tests` - Builds and runs the C++ tests
+
+`make format` - Runs clang formatter according to the specification in .clang-format
+
+`make clean` - Cleans up the root directory
+
+## Android
+
+To build Android libraries for the ARM64 architecture just `cd` into the `android/jni` directory and run `ndk-build`.
+
+For those of you on an M1 based Mac you can still build IsoAlloc with the following command:
+`arch -x86_64 /bin/bash -c $ANDROID_NDK_HOME/build/ndk-build`
+or
+`~/Library/Android/sdk/ndk/26.1.10909125/ndk-build`
+
+## Linking With C++
+
+If you want to use IsoAlloc with a C++ program you can use the `c_library_objects` Makefile target. This will produce .o object files you can pass to your compiler. These targets are used internally to build the library with `new` and `delete` support.
+
+## Debugging
+
+If you try to use Isolation Alloc in an existing program then and you are getting crashes here are some tips to help you get started. If you aren't using `LD_PRELOAD` then first make sure you actually replaced all `malloc, calloc, realloc` and `free` calls to their `iso_alloc` equivalents. Don't forget things like `strdup` that return a pointer from `malloc`.
+
+If you are getting consistent crashes you can build a debug version of the library with `make library_debug` and then catch the crash in GDB with a command similar to this `gdb -q -command=misc/commands.gdb <your_binary>`.
+
+If all else fails please file an issue on the [github project](https://github.com/struct/isoalloc/issues) page.
+
+## API
+
+`void iso_alloc_initialize()` - Initializes the IsoAlloc root. Only needed if `AUTO_CTOR_DTOR` is disabled. See Makefile.
+
+`void iso_alloc_destroy()` - Destroys the IsoAlloc root. Only needed if `AUTO_CTOR_DTOR` is disabled. See Makefile.
+
+`void *iso_alloc(size_t size)` - Equivalent to `malloc`. Returns a pointer to a chunk of memory that is size bytes in size. To free this chunk just pass it to `iso_free`.
+
+`void *iso_calloc(size_t nmemb, size_t size)` - Equivalent to `calloc`. Allocates a chunk big enough for an array of nmemb elements of size bytes. A chunk that has never been handed out is already zero and is not cleared again. The array is zeroized.
+
+`void *iso_realloc(void *p, size_t size)` - Equivalent to `realloc`. Reallocates a new chunk, if necessary, to be size bytes big and copies the contents of p to it.
+
+`void *iso_reallocarray(void *p, size_t nmemb, size_t size)` - Equivalent to `reallocarray`. In the same principles as `iso_realloc`, reallocates a new chunk but for an array of nmemb elements of size bytes and in addition check for possible size overflow.
+
+`void iso_free(void *p)` - Frees any chunk allocated and returned by any API call (e.g. `iso_alloc, iso_calloc, iso_realloc, iso_strdup, iso_strndup`).
+
+`void iso_free_size(void *p, size_t size)` - The same as `iso_free` but requires a size argument so a strict size check can be performed
+
+`void iso_free_permanently(void *p)` - Same as `iso_free` but marks the chunk in such a way that it will not be reallocated
+
+`void iso_free_from_zone(void *p, iso_alloc_zone_handle *zone)` - Free's a chunk from a private zone. Can take a tagged or untagged pointer if `MEMORY_TAGGING` is enabled. These chunks are not quarantined.
+
+`void iso_free_from_zone_permanently(void *p, iso_alloc_zone_handle *zone)` - Permanently free's a chunk from a zone
+
+`size_t iso_chunksz(void *p)` - Returns the size of the chunk returned by `iso_alloc`
+
+`char *iso_strdup(const char *str)` - Equivalent to `strdup`. Returned pointer must be free'd by `iso_free`.
+
+`char *iso_strndup(const char *str, size_t n)` - Equivalent to `strndup`. Returned pointer must be free'd by iso_free.
+
+`iso_alloc_zone_handle *iso_alloc_new_zone(size_t size)` - Allocates a new private zone for allocations up to size bytes. Returns a handle to that zone.
+
+`char *iso_strdup_from_zone(iso_alloc_zone_handle *zone, const char *str)` - Equivalent to `iso_strdup` except string is duplicated in specified zone.
+
+`char *iso_strndup_from_zone(iso_alloc_zone_handle *zone, const char *str, size_t n)` - Equivalent to `iso_strndup` except string is duplicated in specified zone.
+
+`void *iso_alloc_from_zone(iso_alloc_zone_handle *zone)` - Equivalent to `iso_alloc` except allocation is done in specified zone.
+
+`void *iso_alloc_from_zone_tagged(iso_alloc_zone_handle *zone)` - Same as `iso_alloc_from_zone` but returns a tagged pointer if `MEMORY_TAGGING` is enabled.
+
+`void iso_alloc_verify_ptr_tag(void *p, iso_alloc_zone_handle *zone)` - Verifies the tag for a pointer is correct, aborts if not. Requires `MEMORY_TAGGING`.
+
+`void iso_alloc_destroy_zone(iso_alloc_zone_handle *zone)` - Destroy a zone created with `iso_alloc_from_zone`.
+
+`void *iso_alloc_tag_ptr(void *p, iso_alloc_zone_handle *zone)` - Tags a pointer from a private zone if `MEMORY_TAGGING` is enabled.
+
+`void *iso_alloc_untag_ptr(void *p, iso_alloc_zone_handle *zone)` - Untags a pointer from a private zone if `MEMORY_TAGGING` is enabled.
+
+`uint8_t iso_alloc_get_mem_tag(void *p, iso_alloc_zone_handle *zone)` - Retrieves the 1 byte tag for an untagged pointer if `MEMORY_TAGGING` is enabled.
+
+`void iso_alloc_protect_root()` - Temporarily protects the `iso_alloc` root structure by marking it unreadable. Allocation and free fast paths do not take the root lock, so another thread that uses the allocator while the root is protected faults immediately rather than waiting.
+
+`void iso_alloc_unprotect_root()` - Undoes the operation performed by `iso_alloc_protect_root`.
+
+`uint64_t iso_alloc_detect_leaks()` - Returns the total number of leaks detected for all zones. Will print debug logs when compiled with `-DDEBUG`
+
+`uint64_t iso_alloc_detect_zone_leaks(iso_alloc_zone_handle *zone)` - Returns the total number of leaks detected for specified zone. Will print debug logs when compiled with `-DDEBUG`
+
+`uint64_t iso_alloc_mem_usage()` - Returns the total memory usage for all zones. Will print debug logs when compiled with `-DDEBUG`
+
+`uint64_t iso_alloc_zone_mem_usage(iso_alloc_zone_handle *zone)` - Returns the total memory usage for a specified zone. Will print debug logs when compiled with `-DDEBUG`
+
+`void iso_verify_zones()` - Verifies the state of all zones. Will abort if inconsistencies are found.
+
+`void iso_verify_zone(iso_alloc_zone_handle *zone)` - Verifies the state of specified zone. Will abort if inconsistencies are found.
+
+`int32_t iso_alloc_name_zone(iso_alloc_zone_handle *zone, char *name)` - Allows naming of private zones via prctl on Android.
+
+`void iso_flush_caches()` - Flushes all thread specific caches. Intended to be used upon thread destruction. The calling thread's chunk quarantine is also flushed automatically when the thread exits.
+
+`size_t iso_zone_chunk_count(iso_alloc_zone_handle *zone)` - Returns the total number of chunks a private zone can hold not including canary chunks. If canaries are disabled this number is absolute, otherwise it is a safe lower bound and actual number may be higher due to canary creation random seed.
+
+### Experimental APIs
+
+These APIs are exposed via the public header `iso_alloc.h` but are subject to backward breaking changes at any time.
+
+`int32_t iso_get_alloc_traces(iso_alloc_traces_t *traces_out)` - Retrieves the current global `iso_alloc_traces_t` structure from the allocator
+
+`int32_t iso_get_free_traces(iso_free_traces_t *traces_out)` - Retrieves the current global `iso_free_traces_t` structure from the allocator
+
+`void iso_alloc_search_stack(void *p)` - Searches from `p` until the current stack frame in `iso_alloc_search_stack` for any pointers into IsoAlloc user pages. Any pointers found are logged to stdout. If `p` is `NULL` then the entire stack is searched.
+
+### Data Structures
+
+```
+typedef struct {
+    /* The address of the last ALLOC_BTS_DEPTH (8) callers as referenced by stack frames */
+    uint64_t callers[ALLOC_BTS_DEPTH];
+    /* The smallest allocation size requested by this call path */
+    size_t lower_bound_size;
+    /* The largest allocation size requested by this call path */
+    size_t upper_bound_size;
+    /* A 16 bit hash of the back trace */
+    uint16_t backtrace_hash;
+} iso_alloc_traces_t;
+
+typedef struct {
+    /* The address of the last 8 callers as referenced by stack frames */
+    uint64_t callers[BACKTRACE_DEPTH];
+    /* A 16 bit hash of the back trace */
+    uint16_t backtrace_hash;
+    /* Call count */
+    size_t call_count;
+} iso_free_traces_t;
+```
+
+When `HEAP_PROFILER` is enabled these structure will contain information collected by the allocator by sampling `malloc` and `free` calls. This data structure is experimental and is subject to change. See `interfaces_test.c` file for an example of how to retrieve and inspect these structures. Note: On MacOS you may need to use gcc/g++ to compile this functionality without error.
+
+## Memory Isolation Visualized
+
+![Design of IsoAlloc schema](/misc/isoalloc_design.png)
+

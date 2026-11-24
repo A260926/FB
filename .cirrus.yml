@@ -1,0 +1,14 @@
+env:
+  CIRRUS_CLONE_DEPTH: 1
+  ARCH: amd64
+
+freebsd_instance:
+  image_family: freebsd-14-3
+
+task:
+  name: testsuite-freebsd-amd64
+  install_script:
+    - pkg install -y bash gmake
+  script:
+    - gmake tests
+    - gmake cpp_tests

@@ -1,0 +1,52 @@
+name: testsuite
+on: [push, pull_request]
+jobs:
+  testsuite-osx:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: make tests
+      - run: make cpp_tests
+  testsuite-clang:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [15, 16, 17, 18]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt install clang-${{ matrix.version }}
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${{ matrix.version }} 100
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${{ matrix.version }} 100
+      - run: make tests
+      - run: make cpp_tests
+  testsuite-clang18-perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt install clang-18
+      - run: make malloc_cmp_test
+  testsuite-clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt install clang clang-format-18
+      - run: make format-ci
+  testsuite-gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make tests CC=gcc CXX=g++
+      - run: make cpp_tests CC=gcc CXX=g++
+  testsuite-musl:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: apk update && apk add build-base bash musl-dev linux-headers
+      - run: make tests CC=gcc CXX=g++
+      - run: make cpp_tests CC=gcc CXX=g++
+
+
+

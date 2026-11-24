@@ -1,0 +1,205 @@
+# IsoAlloc Performance
+
+## The Basics
+
+Performance is a top priority for any memory allocator. Balancing those performance priorities with security is difficult. Anytime we introduce heavy handed security checks we usually have to pay a performance penalty. But we can be deliberate about our design choices and use good tooling to find places where we can mitigate those tradeoffs. In the end correct code is better than endless security mitigations.
+
+## Configuration and Optimizations
+
+IsoAlloc is only designed and tested for 64 bit, so we don't have to worry about portability hurting our performance. We can assume a large address space will always be present and we can optimize for simple things like always fetching 64 bits of memory as we iterate over an array. This remainder of this section is a basic overview of the performance optimizations in IsoAlloc.
+
+Perhaps the most important optimization in IsoAlloc is the design choice to use a simple bitmap for tracking chunk states. Combining this with zones comprised of contiguous chunks of pages results in good performance at the cost of memory. This is in contrast to typical allocator designs full of linked list code that tends to result far more complex code, slow page faults, and exploitable designs.
+
+All data fetches from a zone bitmap are 64 bits at a time which takes advantage of fast CPU pipelining. Fetching bits at a different bit width will result in slower performance by an order of magnitude in allocation intensive tests. All user chunks are 8 byte aligned no matter how big each chunk is. Accessing this memory with proper alignment will minimize CPU cache flushes.
+
+When `PRE_POPULATE_PAGES` is enabled in the Makefile global caches, the root, and zone bitmaps (but not pages that hold user data) are created with `MAP_POPULATE` which instructs the kernel to pre-populate the page tables which reduces page faults and results in better performance. Note that by default at zone creation time user pages will have canaries written at random aligned offsets. This will cause page faults and populate those PTE's when the pages are first written to whether those pages are ever used at runtime or not. If you disable canaries it will result in lower RSS and a faster runtime performance.
+
+The `MAX_ZONES` value in `conf.h` limits the total number of zones that can be allocated at runtime. If your program is being killed with OOM errors you can safely increase this value, however its max value is 65535. However it will result in a larger allocation for the `root->zones` array which holds meta data for each zone whether that zone is currently mapped and in use or not. To calculate the total number of bytes available for allocations you can do (`MAX_ZONES * ZONE_USER_SIZE`). Note that `ZONE_USER_SIZE` is not configurable in `conf.h`.
+
+Default zones for common sizes are created in the library constructor. This helps speed up allocations for long running programs. New zones are created on demand when needed but this will incur a small performance penalty in the allocation path.
+
+All chunk sizes are multiples of 32 with a minimum value of `SMALLEST_CHUNK_SZ` (32 by default, alignment and smallest chunk size should be in sync) and a maximum value of `SMALL_SIZE_MAX` up to 65536 by default. In a configuration with `SMALL_SIZE_MAX` set to 65536 zones will only be created for 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, and 65536. You can increase `SMALL_SIZE_MAX` up to 131072. If you choose to change this value be mindful of the pages that it can waste (e.g. allocating a chunk of 16385 bytes will result in returning a chunk of 32768 bytes).
+
+Everything above `SMALL_SIZE_MAX` is allocated by the big zone path which has a limitation of 4 GB and a size granularity that is only limited by page size alignment. Big zones have meta data allocated separately. Guard pages for this meta data can be enabled or disabled using `BIG_ZONE_META_DATA_GUARD`. Likewise `BIG_ZONE_GUARD` can be used to enable or disable guard pages for big zone user data pages.
+
+By default user chunks are not sanitized upon free. While this helps mitigate uninitialized memory vulnerabilities it is a very slow operation. You can enable this feature by changing the `SANITIZE_CHUNKS` flag in the Makefile.
+
+When `USE_MLOCK` is enabled in the Makefile the meta data for the IsoAlloc root and other caches will be locked with `mlock`. This means this data will never be swapped to disk. We do this because using these data structures is required for both the alloc and free hot paths. This operation may fail if we are running inside a container with memory limits. Failure to lock the memory will not cause an abort and all failures will be silently ignored.
+
+By default IsoAlloc randomizes the freelist per zone which results in a small performance hit. You can disable this by setting `RANDOMIZE_FREELIST` to 0 in the Makefile.
+
+When enabled `USE_SPINLOCK` will use spinlocks via `atomic_flag` instead of a pthread mutex. Performance and load testing of IsoAlloc has shown spinlocks are slightly slower than a mutex so it is not the preferred default option.
+
+If you know your program will not require multi-threaded access to IsoAlloc you can disable threading support by setting the `THREAD_SUPPORT` define to 0 in the Makefile. This will remove all atomic/mutex lock/unlock operations from the allocator, which will result in significant performance gains in some programs. If you do require thread support then you may want to profile your program to determine what default zone sizes will benefit performance.
+
+Each zone has its own lock and the allocation and free paths take only it, see the Thread Safety section of the README. The root lock is taken when a thread needs a zone for a class it has no zone for yet, when zones are created or destroyed, and by the sampled debugging features. On a machine with enough cores this makes throughput scale with the thread count: eight threads doing alloc/free pairs run about forty times faster than they did when every operation took the root lock. A thread that finds every zone of a class held by other threads gets a zone of its own, up to twice the CPU count per class, so a hot class ends up with one zone per contending thread rather than one lock everybody waits for.
+
+Each thread's zone table and quarantine live in a block the allocator maps for the thread on first use and releases when it exits. It is reached through a pthread key. On macOS the key is read as a direct slot off the thread pointer register, which is two loads, where a `__thread` variable in a dylib costs a call into dyld on every access. On Linux the pointer is cached in a `__thread` variable and the library is built with `-ftls-model=initial-exec` (see `TLS_MODEL` in the Makefile) so the access is one load relative to the thread pointer. A library built this way works when linked at startup or loaded with `LD_PRELOAD`, but a `dlopen()` after startup can fail with `cannot allocate memory in static TLS block` if the static TLS reserve has been used up by other libraries. Clear `TLS_MODEL` if you need to `dlopen()` IsoAlloc.
+
+Every zone has its own random stream, seeded from the OS when the zone is created and mixed with fresh OS entropy every `FREE_LIST_RESEED_REFILLS` free list refills. The free list shuffle, canary positions, chunk offset and zone secrets all come from it. Refilling a free list used to call the OS for entropy every time, a system call per 255 allocations.
+
+Aborts go through one cold, out of line function. Each check in a hot path is a compare and a call rather than the format arguments for its message, which keeps the allocation and free functions small.
+
+`DISABLE_CANARY` can be set to 1 to disable the creation and verification of canary chunks. This removes a useful security feature but will significantly improve performance and RSS.
+
+`MASK_PTRS` is enabled by default and causes the `user_pages_start` and `bitmap_start` pointers stored in every zone's metadata to be XOR'd with a per-zone random secret between alloc and free operations. This protects against attackers who can read or corrupt zone metadata. Each alloc and free pays a small cost for these XOR operations. Setting `MASK_PTRS=0` removes this overhead at the cost of this security property.
+
+`CANARY_COUNT_DIV` in `conf.h` controls what fraction of chunks in a zone are reserved as canaries. It is used as a right-shift on the total chunk count: `chunk_count >> CANARY_COUNT_DIV`. The default value of 7 reserves less than 1% of chunks. Increasing this value reduces canary density and frees more chunks for user allocations; decreasing it increases security coverage at the cost of usable memory.
+
+`ZONE_ALLOC_RETIRE` in `conf.h` controls how frequently zones are retired. A zone is retired once it has completed `ZONE_ALLOC_RETIRE * max_chunk_count_for_zone` total alloc/free cycles and has no chunks in use. A retired zone is reset in place: its user pages are returned to the kernel with `MADV_DONTNEED` on Linux or a fresh mapping on macOS so they read as zero, its bitmap is cleared, and it draws new secrets, canary positions, free list order and a new first chunk offset. Nothing is unmapped or mapped and the zone keeps its address and index. Lowering this value resets zones more often, reducing the window for use-after-free exploitation. `BIG_ZONE_ALLOC_RETIRE` is the equivalent for big zones.
+
+`ZONE_PURGE_DELAY_MS` in `conf.h` returns the memory of idle zones. After a quarantine flush the free path checks a coarse clock at most once per this many milliseconds and, when it is due, one thread walks the zones and resets every zone that has had no chunks in use and no allocations since the previous pass. A zone that is busy, or that just emptied, is left alone. Memory freed by a program therefore goes back to the kernel within one to two delays instead of staying resident until the zone retires, and is zero when the zone is used again. Set it to 0 to disable the purge.
+
+Requests are rounded up to 16 bytes and then to a size class. Sizes up to 256 bytes are their own class, above that there are four classes per power of two, so a chunk is never more than a quarter larger than its request. Every request is served from an internal zone whose chunk size is exactly its class. Zones used to be chosen as the most recently used zone that was big enough, which put 32 byte requests into 1024 byte chunks whenever the two were interleaved. Every power of two is a class and so is every multiple of a power of two alignment up to a page, so aligned requests share zones with plain ones. Each zone's first chunk sits at a random offset below one page that preserves the natural alignment of its chunk size, which spreads the chunks of different zones over different cache sets and costs at most a page of each zone.
+
+`iso_calloc` clears a chunk only if it has been used before. The bitmap records whether a chunk has ever been handed out since its zone was created or reset, and a chunk that has not is still zero from the kernel, as is a big zone that was just mapped.
+
+`SMALL_MEM_STARTUP` reduces the number and size of default zones created at startup. This decreases initial RSS at the cost of more frequent zone creation for programs with diverse allocation sizes.
+
+`STRONG_SIZE_ISOLATION` makes every 16 byte size its own class instead of grouping sizes above 256 bytes into four classes per power of two. Differently sized allocations then never share a zone at all, at the cost of more zones for programs with many distinct sizes.
+
+By default IsoAlloc will attempt to use Huge Pages (for both Linux and Mac OS) for any allocations that are a multiple of 2 mb in size. This is the default huge page size on most systems but it might not be on yours. On Linux you can check the value for your system by running the following command:
+
+```
+cat /proc/meminfo | grep Hugepagesize
+Hugepagesize:       2048 kB
+```
+
+If necessary you can adjust the value of `HUGE_PAGE_SZ` in `conf.h` to reflect the size on your system.
+
+IsoAlloc touches the pages of a zone sparsely by design, so on a Linux kernel with transparent huge pages set to `always` the first allocation from a zone can make up to 2 MB of it resident. If you set `HUGE_PAGES` to 0 IsoAlloc advises the kernel with `MADV_NOHUGEPAGE` on zone user pages so that a barely used zone only costs the pages it touches. The array of zone meta data is always mapped this way because only the structures of zones in use are ever touched.
+
+## Caches and Memoization
+
+There are a few important caches and memoization techniques used in IsoAlloc. These significantly improve the performance of alloc/free hot paths and keep the design as simple as possible.
+
+### Zone Free List
+
+Each zone contains an array of bitslots that represent free chunks in that zone. The allocation hot path searches this list first for a free chunk that can satisfy the allocation request. Allocating chunks from this list is a lot faster than iterating through a zones bitmap for a free bitslot. This cache is refilled whenever it is low. Free'd chunks are added to this list after they've been in the quarantine.
+
+### Zone Map
+
+Zone user pages are mapped aligned to their own size, so the 4 MB window a pointer lies in names exactly one zone. A hash map in the root keyed on that window gives the zone's index in one probe, and readers take no lock: a sequence counter is odd while a writer is inside the map, so a reader that sees the same even value before and after its probes saw a consistent table. Insertions and removals happen under the root lock when zones are created or destroyed. A pointer that is not in any zone is rejected in the same bounded number of probes. The previous table hashed the pointer with no key check, and because zones were only page aligned about half of all chunks missed it and fell back to a scan of every zone. Big zones have a map of their own keyed on their first page, and the used list is doubly linked, so freeing a big zone no longer walks a list of every live big zone.
+
+### Per Thread Zone Table
+
+Each thread keeps the last internal zone it used for each size class. The allocation path reads the one slot for the request's class, tries that zone's lock, and allocates if it has room. Only when the zone is full or held by another thread does the thread take the root lock to walk the chain of zones for the class. Because a slot only ever holds a zone of exactly its class, a request can never land in a bigger chunk than its class. Internal zones are never unmapped, a retired one is reset in place with the same chunk size, so a stale slot still points at a valid zone of the right class.
+
+### Thread Chunk Quarantine
+
+Each thread keeps a quarantine of the chunks it has freed in its thread state. `iso_free` appends to it without taking any lock but its own, so until it holds `CHUNK_QUARANTINE_SZ` chunks (64 by default) frees are very cheap. When it is full the thread frees all of them in a batch, looking each zone up through the zone map and taking only that zone's lock, so the batch never waits on the root. A chunk therefore stays unusable for a while after it is freed, which turns a use after free into a crash or a detected canary corruption rather than a silent reuse. Every thread's quarantine is registered with the root so that destroying a zone flushes all of them first, and a thread's quarantine is flushed when the thread exits. `iso_flush_caches()` flushes the calling thread's quarantine on demand. Without `THREAD_SUPPORT` there is a single quarantine on its own guarded pages.
+
+### Zone Lookup Table
+
+Zones are linked by their `next_sz_index` member which tells the allocator where in the `_root->zones` array it can find the next zone that holds the same size chunks. This lookup table helps us find the first zone that holds a specific size in O(1) time. This is achieved by placing a zone's index value plus one at that zones size index in the table, e.g. `zone_lookup_table[zone->size] = zone->index + 1`, from there we just need to use the next zone's index member and walk it like a singly linked list to find other zones of that size. The plus one lets 0 mean an empty entry while zone 0 stays reachable, it used to be unreachable through the table and the smallest default zone was never used. Zones are added to the front of the list as they are created.
+
+## ARM NEON
+
+IsoAlloc tries to use ARM Neon instructions to make loops in the hot path faster. This code requires AArch64 as it uses across vector reductions that do not exist on 32 bit ARM. If you want to disable any of this code at compile time and rely instead on more portable, but potentially slower code just set `DONT_USE_NEON` to 1 in the Makefile. When `UAF_PTR_PAGE` is enabled the Neon version of the dangling pointer scan is fast enough that it runs 4x as often as the portable version, see `UAF_PTR_PAGE_ODDS` in `conf.h`. That scan also skips the pages of a zone that have never held a chunk, so its cost tracks the memory actually in use rather than the number of zones. When `MEMORY_TAGGING` is enabled the whole zone tag refresh rewrites sixteen tags per step with Neon. The free list refill skips pairs of fully used bitmap qwords with a single 64 bit and, which is as fast as a vector compare, so it does not use Neon.
+
+## Tests
+
+I've spent a good amount of time testing IsoAlloc to ensure its reasonably fast compared to glibc/ptmalloc. But it is impossible for me to model or simulate all the different states a program that uses IsoAlloc may be in. This section briefly covers the existing performance related tests for IsoAlloc and the data I have collected so far.
+
+The `malloc_cmp_test` build target will build 2 different versions of the test/tests.c program which runs roughly 1.4 million alloc/calloc/realloc operations. We free every other allocation and then free the remaining ones once the allocation loop is complete. This helps simulate some fragmentation in the heap. On average IsoAlloc is faster than ptmalloc but the difference is so close it will likely not be noticable.
+
+The following test was run in an Ubuntu 20.04.3 LTS (Focal Fossa) for ARM64 docker container with libc version 2.31-0ubuntu9.2 on a MacOS host. The kernel used was `Linux f7f23ca7dc44 5.10.76-linuxkit`.
+
+```
+IsoAlloc
+build/tests
+iso_alloc/iso_free 1834784 tests completed in 0.081202 seconds
+iso_calloc/iso_free 1834784 tests completed in 1.041517 seconds
+iso_realloc/iso_free 1834784 tests completed in 0.828665 seconds
+
+jemalloc
+LD_PRELOAD=./libjemalloc.so build/tests
+iso_alloc/iso_free 1834784 tests completed in 0.084586 seconds
+iso_calloc/iso_free 1834784 tests completed in 1.461562 seconds
+iso_realloc/iso_free 1834784 tests completed in 0.779396 seconds
+
+scudo
+LD_PRELOAD=./libscudo.so build/malloc_tests
+malloc/free 1834784 tests completed in 0.717936 seconds
+calloc/free 1834784 tests completed in 2.706141 seconds
+realloc/free 1834784 tests completed in 1.840283 seconds
+
+system malloc
+malloc/free 1834784 tests completed in 0.662565 seconds
+calloc/free 1834784 tests completed in 2.728955 seconds
+realloc/free 1834784 tests completed in 1.943556 seconds
+
+```
+
+This same test can be used with the `perf` utility to measure basic stats like page faults and CPU utilization using both heap implementations. The output below is on the same AWS t2.xlarge instance as above.
+
+```
+$ sudo perf stat build/tests
+
+iso_alloc/iso_free 1834784 tests completed in 0.075247 seconds
+iso_calloc/iso_free 1834784 tests completed in 1.100221 seconds
+iso_realloc/iso_free 1834784 tests completed in 0.901481 seconds
+
+ Performance counter stats for 'build/tests':
+
+     2,082,958,624      task-clock                       #    0.874 CPUs utilized             
+                26      context-switches                 #   12.482 /sec                      
+                 0      cpu-migrations                   #    0.000 /sec                      
+           576,000      page-faults                      #  276.530 K/sec                     
+     <not counted>      armv8_pmuv3_0/instructions/                                             (0.00%)
+    10,522,826,144      armv8_pmuv3_1/instructions/      #    1.33  insn per cycle            
+                                                  #    0.61  stalled cycles per insn   
+     <not counted>      armv8_pmuv3_0/cycles/                                                   (0.00%)
+     7,910,463,871      armv8_pmuv3_1/cycles/            #    3.798 GHz                       
+     <not counted>      armv8_pmuv3_0/stalled-cycles-frontend/                                        (0.00%)
+       149,093,549      armv8_pmuv3_1/stalled-cycles-frontend/ #    1.88% frontend cycles idle      
+     <not counted>      armv8_pmuv3_0/stalled-cycles-backend/                                        (0.00%)
+     6,432,153,136      armv8_pmuv3_1/stalled-cycles-backend/ #   81.31% backend cycles idle       
+     <not counted>      armv8_pmuv3_0/branches/                                                 (0.00%)
+     1,914,734,216      armv8_pmuv3_1/branches/          #  919.238 M/sec                     
+     <not counted>      armv8_pmuv3_0/branch-misses/                                            (0.00%)
+         3,870,559      armv8_pmuv3_1/branch-misses/     #    0.20% of all branches           
+
+       2.382450831 seconds time elapsed
+
+       1.325971000 seconds user
+       1.055181000 seconds sys
+```
+
+The following benchmarks were collected from [mimalloc-bench](https://github.com/daanx/mimalloc-bench) with the default configuration of IsoAlloc. As you can see from the data IsoAlloc is competitive with other allocators for some benchmarks but clearly falls behind on others. For any benchmark that IsoAlloc scores poorly on I was able to tweak its build to improve the CPU time and memory consumption. It's worth noting that IsoAlloc was able to stay competitive even with performing many security checks not present in other allocators. Please note these are 'best case' measurements, not averages.
+
+```
+make library_benchmark
+
+#------------------------------------------------------------------
+# test    alloc   time  rss    user  sys  page-faults page-reclaims
+cfrac       je    03.07 4552 3.06 0.00 0 454
+cfrac       mi    02.97 2484 2.96 0.00 0 347
+cfrac       iso   04.78 30612 4.69 0.09 0 7503
+
+espresso    je    02.51 4872 2.50 0.01 0 540
+espresso    mi    02.43 3032 2.42 0.01 0 3630
+espresso    iso   03.16 69608 3.07 0.07 0 30334
+
+barnes      je    01.71 59900 1.67 0.03 0 16686
+barnes      mi    01.65 57672 1.62 0.02 0 16550
+barnes      iso   01.65 74812 1.62 0.03 0 20849
+
+gs          je    00.17 37748 0.15 0.01 0 5814
+gs          mi    00.16 33888 0.14 0.01 0 5109
+gs          iso   00.22 68136 0.15 0.06 0 18916
+
+larsonN     je    1.188 261884 98.91 0.92 0 421848
+larsonN     mi    1.016 299752 99.53 0.38 0 80202
+larsonN     iso   1328.904 121096 6.15 69.78 0 30219
+
+rocksdb     je    02.46 162340 2.05 0.63 0 38383
+rocksdb     mi    02.33 160156 1.92 0.63 0 37585
+rocksdb     iso   02.96 195948 2.64 0.66 0 46584
+
+redis       je    3.160 9492 0.13 0.02 0 1528
+redis       mi    2.780 7084 0.12 0.02 0 1257
+redis       iso   7.579 50516 0.35 0.05 0 15187
+```
+
+IsoAlloc isn't quite ready for performance sensitive server workloads. However it's more than fast enough for client side mobile/desktop applications with risky C/C++ attack surfaces. These environments have threat models similar to what IsoAlloc was designed for.

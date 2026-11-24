@@ -1,0 +1,656 @@
+/* iso_alloc_sanity.c - A secure memory allocator
+ * Copyright 2023 - chris.rohlf@gmail.com */
+
+#include "iso_alloc_internal.h"
+
+#if MEMCPY_SANITY || MEMSET_SANITY
+#define MEM_SANITY_CHK(p, start, sz) (start <= p && (start + ZONE_USER_SIZE) - n > p && n > sz)
+#endif
+
+#if ENABLE_ASAN
+INTERNAL_HIDDEN void verify_all_zones(void) {
+    return;
+}
+
+INTERNAL_HIDDEN void verify_zone(iso_alloc_zone_t *zone) {
+    return;
+}
+
+INTERNAL_HIDDEN void _verify_all_zones(void) {
+    return;
+}
+
+INTERNAL_HIDDEN void _verify_zone(iso_alloc_zone_t *zone) {
+    return;
+}
+#else
+/* Verify the integrity of all canary chunks and the
+ * canary written to all free chunks. This function
+ * either aborts or returns nothing */
+INTERNAL_HIDDEN void verify_all_zones(void) {
+    LOCK_ROOT();
+    _verify_all_zones();
+    UNLOCK_ROOT();
+}
+
+INTERNAL_HIDDEN void verify_zone(iso_alloc_zone_t *zone) {
+    LOCK_ROOT();
+    LOCK_ZONE(zone);
+    _verify_zone(zone);
+    UNLOCK_ZONE(zone);
+    UNLOCK_ROOT();
+}
+
+INTERNAL_HIDDEN void _verify_big_zone_list(iso_alloc_big_zone_t *head) {
+    iso_alloc_big_zone_t *big = head;
+
+    if(big != NULL) {
+        big = UNMASK_BIG_ZONE_NEXT(head);
+    }
+
+    while(big != NULL) {
+        check_big_canary(big);
+
+        if(big->size < SMALL_SIZE_MAX) {
+            LOG_AND_ABORT("Big zone size is too small %d", big->size);
+        }
+
+        if(big->size > BIG_SZ_MAX) {
+            LOG_AND_ABORT("Big zone size is too big %d", big->size);
+        }
+
+        if(big->user_pages_start == NULL) {
+            LOG_AND_ABORT("Big zone %p has NULL user pages", big);
+        }
+
+        if(big->next != NULL) {
+            big = UNMASK_BIG_ZONE_NEXT(big->next);
+        } else {
+            break;
+        }
+    }
+}
+
+INTERNAL_HIDDEN void _verify_all_zones(void) {
+    const uint16_t zones_used = _root->zones_used;
+
+    for(uint16_t i = 0; i < zones_used; i++) {
+        iso_alloc_zone_t *zone = &_root->zones[i];
+
+        if(zone->chunk_size == 0) {
+            break;
+        }
+
+        LOCK_ZONE(zone);
+        _verify_zone(zone);
+        UNLOCK_ZONE(zone);
+    }
+
+    /* Root is locked already */
+    _verify_big_zone_list(_root->big_zone_used);
+    _verify_big_zone_list(_root->big_zone_free);
+}
+
+/* The caller holds the root lock and the zone lock */
+INTERNAL_HIDDEN void _verify_zone(iso_alloc_zone_t *zone) {
+    const bitmap_index_t *bm = (bitmap_index_t *) UNMASK_BITMAP_PTR(zone);
+    const void *user_pages_start = UNMASK_USER_PTR(zone);
+    bit_slot_t bit_slot;
+
+    if(zone->next_sz_index > _root->zones_used) {
+        LOG_AND_ABORT("Detected corruption in zone[%d] next_sz_index=%d", zone->index, zone->next_sz_index);
+    }
+
+    if(zone->next_sz_index != 0) {
+        iso_alloc_zone_t *zt = &_root->zones[ZONE_CHAIN_INDEX(zone->next_sz_index)];
+        if(zone->chunk_size != zt->chunk_size) {
+            LOG_AND_ABORT("Inconsistent chunk sizes for zones %d,%d with chunk sizes %d,%d", zone->index, zt->index, zone->chunk_size, zt->chunk_size);
+        }
+    }
+
+    /* A chunk needs canary verification when the high bit of its 2-bit
+     * slot is set (was-used-now-free=01 or canary=11) — the odd-bit mask. */
+    const uint64_t CANARY_BIT_VECTOR = ~(uint64_t) USED_BIT_VECTOR;
+    const bitmap_index_t max = zone->max_bitmap_idx;
+
+    for(bitmap_index_t i = 0; i < max;) {
+#if USE_NEON
+        /* Two-qword quick-reject: skip 64 chunk slots when none of them
+         * have the high bit set (no canaries to verify in this range). */
+        if(i + 1 < max) {
+            int64x2_t v = vld1q_s64((const int64_t *) &bm[i]);
+            uint64_t lo = (uint64_t) vgetq_lane_s64(v, 0);
+            uint64_t hi = (uint64_t) vgetq_lane_s64(v, 1);
+            if(((lo | hi) & CANARY_BIT_VECTOR) == 0) {
+                i += 2;
+                continue;
+            }
+        }
+#endif
+        const uint64_t bits = (uint64_t) bm[i];
+        uint64_t mask = bits & CANARY_BIT_VECTOR;
+        while(mask) {
+            int j = __builtin_ctzll(mask);
+            mask &= mask - 1;
+            bit_slot = ((bit_slot_t) i << BITS_PER_QWORD_SHIFT) + j;
+
+            /* Bits past the last chunk are set but have no chunk */
+            if((size_t) (bit_slot >> BITS_PER_CHUNK_SHIFT) >= zone->chunk_count) {
+                continue;
+            }
+
+            const void *p = POINTER_FROM_BITSLOT(zone, bit_slot);
+
+#if !DISABLE_CANARY
+            /* A canary chunk (both bits set) on a page the free
+             * list has never reached has no canary written yet.
+             * Nothing on that page was ever handed out so it must
+             * still hold the zeroes the kernel mapped it with.
+             * Without canaries no page is ever marked, and the
+             * only chunks with both bits set were freed for good
+             * and poisoned, so there is nothing to check */
+            if(((bits >> (j - 1)) & 1) != 0 && canary_page_materialized(zone, ((size_t) (p - user_pages_start)) >> g_page_size_shift) == false) {
+                if(UNLIKELY(*(const uint64_t *) p != 0 || *(const uint64_t *) (p + zone->chunk_size - sizeof(uint64_t)) != 0)) {
+                    LOG_AND_ABORT("Untouched canary chunk 0x%p in zone[%d] has been written to", p, zone->index);
+                }
+
+                continue;
+            }
+
+            check_canary(zone, p);
+#else
+            (void) p;
+            (void) user_pages_start;
+#endif
+        }
+        i++;
+    }
+}
+#endif
+
+#if ALLOC_SANITY
+
+#if THREAD_SUPPORT
+#if USE_SPINLOCK
+atomic_flag sane_cache_flag;
+#else
+pthread_mutex_t sane_cache_mutex;
+#endif
+#endif
+
+uint64_t _sanity_canary;
+int32_t _sane_sampled;
+uint8_t _sane_cache[SANE_CACHE_SIZE];
+_sane_allocation_t _sane_allocations[MAX_SANE_SAMPLES];
+
+#if UNINIT_READ_SANITY
+pthread_t _page_fault_thread;
+struct uffdio_api _uffd_api;
+int64_t _uf_fd;
+
+INTERNAL_HIDDEN void _iso_alloc_setup_userfaultfd(void) {
+    int flags = O_CLOEXEC | O_NONBLOCK;
+
+#ifdef UFFD_USER_MODE_ONLY
+    /* Below, the syscall fails not necessarily because lack of kernel support.
+     * By default, the `unprivileged_userfaultfd` flag is disabled.
+     * From Linux 5.11 however, we can handle pages registered from the user-space. */
+    flags |= UFFD_USER_MODE_ONLY;
+#endif
+    _uf_fd = syscall(__NR_userfaultfd, flags);
+
+    if(_uf_fd == ERR) {
+        LOG_AND_ABORT("This kernel does not support userfaultfd or is disallowed in the user-space");
+    }
+
+    _uffd_api.api = UFFD_API;
+    _uffd_api.features = 0;
+
+#if THREAD_SUPPORT
+    _uffd_api.features |= UFFD_FEATURE_THREAD_ID;
+#endif
+
+    if(ioctl(_uf_fd, UFFDIO_API, &_uffd_api) == ERR) {
+        LOG_AND_ABORT("Failed to setup userfaultfd with ioctl");
+    }
+
+#if THREAD_SUPPORT
+    if(!(_uffd_api.features & UFFD_FEATURE_THREAD_ID)) {
+        LOG_AND_ABORT("Failed to setup userfaultfd with thread id report");
+    }
+#endif
+
+    if(_page_fault_thread == 0) {
+        int32_t s = pthread_create(&_page_fault_thread, NULL, _page_fault_thread_handler, NULL);
+
+        if(s != OK) {
+            LOG_AND_ABORT("Cannot create userfaultfd handler thread");
+        }
+    }
+}
+
+INTERNAL_HIDDEN void *_page_fault_thread_handler(void *unused) {
+    static struct uffd_msg umsg;
+    ssize_t n;
+
+    while(true) {
+        struct pollfd pollfd;
+        int32_t ret;
+
+        pollfd.fd = _uf_fd;
+        pollfd.events = POLLIN;
+
+        ret = poll(&pollfd, 1, -1);
+
+        if(ret == ERR) {
+            LOG_AND_ABORT("Failed to poll userfaultfd file descriptor");
+        }
+
+        n = read(_uf_fd, &umsg, sizeof(struct uffd_msg));
+
+        if(n == OK) {
+            LOG_AND_ABORT("Got EOF on userfaultfd file descriptor");
+        }
+
+        if(n == ERR) {
+            LOG_AND_ABORT("Failed to read from userfaultfd file descriptor");
+        }
+
+        if(umsg.event != UFFD_EVENT_PAGEFAULT) {
+            LOG_AND_ABORT("Received non-page-fault event from userfaultfd");
+        }
+
+        LOCK_SANITY_CACHE();
+        _sane_allocation_t *sane_alloc = _get_sane_alloc((void *) umsg.arg.pagefault.address);
+
+        /* This is where we detect uninitialized reads. Whenever we
+         * receive a page fault we check if its a read or a write operation.
+         * If its a write then we unregister the page from userfaultfd
+         * but if its a read then we assume this chunk was not initialized.
+         * It is possible we will receive a read event while we are
+         * unregistering a page that was previously written to */
+        if((umsg.arg.pagefault.flags & UFFD_PAGEFAULT_FLAG_WRITE) == 1) {
+            /* Unregister this page but don't remove it from our cache
+             * of tracked pages, we still need to unmap it at some point */
+            struct uffdio_register reg = {0};
+
+            if(sane_alloc != NULL) {
+                reg.range.start = (uint64_t) sane_alloc->address;
+                reg.range.len = g_page_size;
+            } else {
+                /* We received a page fault for an address we are no
+                 * longer tracking. We don't know why but it's a write
+                 * and we don't care about writes */
+                reg.range.start = umsg.arg.pagefault.address;
+                reg.range.len = g_page_size;
+            }
+
+            if(UNLIKELY((ioctl(_uf_fd, UFFDIO_UNREGISTER, &reg.range)) == ERR)) {
+#if THREAD_SUPPORT
+                LOG_AND_ABORT("Failed to unregister address %p, thread %u", umsg.arg.pagefault.address, umsg.arg.pagefault.feat.ptid);
+#else
+                LOG_AND_ABORT("Failed to unregister address %p", umsg.arg.pagefault.address);
+#endif
+            }
+
+            UNLOCK_SANITY_CACHE();
+            continue;
+        }
+
+        /* Detects a read of an uninitialized page */
+        if((umsg.arg.pagefault.flags & UFFD_PAGEFAULT_FLAG_WRITE) == 0) {
+#ifdef THREAD_SUPPORT
+            LOG_AND_ABORT("Uninitialized read detected on page %p, thread %u", umsg.arg.pagefault.address, umsg.arg.pagefault.feat.ptid);
+#else
+            LOG_AND_ABORT("Uninitialized read detected on page %p", umsg.arg.pagefault.address);
+#endif
+        }
+
+        UNLOCK_SANITY_CACHE();
+    }
+
+    UNLOCK_SANITY_CACHE();
+    return NULL;
+}
+#endif /* UNINIT_READ_SANITY */
+
+INTERNAL_HIDDEN INLINE void write_sanity_canary(void *p) {
+    const uint64_t canary = (_sanity_canary & SANITY_CANARY_VALIDATE_MASK);
+    int32_t qwords = (int32_t) (g_page_size / sizeof(uint64_t));
+
+#if USE_NEON
+    const uint64x2_t cv = vdupq_n_u64(canary);
+    while(qwords >= 2) {
+        vst1q_u64((uint64_t *) p, cv);
+        p += sizeof(uint64x2_t);
+        qwords -= 2;
+    }
+#endif
+
+    while(qwords--) {
+        *(uint64_t *) p = canary;
+        p += sizeof(uint64_t);
+    }
+}
+
+/* Checks the canary bytes in [start, end) one byte at a time.
+ * The canary was written as whole qwords from the page base, so
+ * the expected byte at any address is byte (address & 7) of the
+ * canary value. That assumes little endian byte order, which is
+ * every target IsoAlloc supports */
+static INLINE void check_sanity_canary_bytes(const uint8_t *start, const uint8_t *end, uint64_t canary) {
+    while(start < end) {
+        const uint8_t expected = (uint8_t) (canary >> (((uintptr_t) start & 7) << 3));
+
+        if(UNLIKELY(*start != expected)) {
+            LOG_AND_ABORT("Sanity canary byte at 0x%p has been corrupted! Value: 0x%x Expected: 0x%x", start, (uint64_t) *start, (uint64_t) expected);
+        }
+
+        start++;
+    }
+}
+
+/* Verify the canary value in an allocation */
+INTERNAL_HIDDEN INLINE void check_sanity_canary(_sane_allocation_t *sane_alloc) {
+    void *end = NULL;
+    void *start = NULL;
+
+    if(sane_alloc->right_aligned == true) {
+        end = ((sane_alloc->address + g_page_size) - sane_alloc->orig_size);
+        start = sane_alloc->address;
+    } else {
+        end = sane_alloc->address + g_page_size;
+        start = sane_alloc->address + sane_alloc->orig_size;
+    }
+
+    const uint64_t canary = (_sanity_canary & SANITY_CANARY_VALIDATE_MASK);
+
+    /* orig_size is unaligned in general, so [start, end) may begin
+     * or end mid-qword. Walk the partial bytes at the head until
+     * start is 8-aligned, then compare whole qwords */
+    void *head_end = (void *) (((uintptr_t) start + 7) & ~(uintptr_t) 7);
+
+    if(head_end > end) {
+        head_end = end;
+    }
+
+    check_sanity_canary_bytes(start, head_end, canary);
+    start = head_end;
+
+#if USE_NEON
+    /* Compare two qwords at a time and reduce. On any mismatch, fall
+     * through to the scalar loop which will pinpoint and abort. */
+    const uint64x2_t cv = vdupq_n_u64(canary);
+    while((start + sizeof(uint64x2_t)) <= end) {
+        uint64x2_t v = vld1q_u64((const uint64_t *) start);
+        if(UNLIKELY(vmaxvq_u32(vreinterpretq_u32_u64(veorq_u64(v, cv))) != 0)) {
+            break;
+        }
+        start += sizeof(uint64x2_t);
+    }
+#endif
+
+    while((start + sizeof(uint64_t)) <= end) {
+        uint64_t v = *((uint64_t *) start);
+
+        if(UNLIKELY(v != canary)) {
+            LOG_AND_ABORT("Sanity canary at 0x%p has been corrupted! Value: 0x%x Expected: 0x%x", start, v, canary);
+        }
+
+        start += sizeof(uint64_t);
+    }
+
+    /* Tail: 0 to 7 partial bytes when end isn't 8-aligned */
+    check_sanity_canary_bytes(start, end, canary);
+}
+
+/* Callers of this function should hold the sanity cache lock */
+INTERNAL_HIDDEN _sane_allocation_t *_get_sane_alloc(void *p) {
+    if(_sane_cache[SANE_CACHE_IDX(p)] == 0) {
+        return NULL;
+    }
+
+    void *pa = NULL;
+
+    if(IS_PAGE_ALIGNED((uintptr_t) p)) {
+        pa = (void *) ROUND_DOWN_PAGE((uintptr_t) p);
+    } else {
+        pa = p;
+    }
+
+    for(uint32_t i = 0; i < MAX_SANE_SAMPLES; i++) {
+        if(_sane_allocations[i].address == pa) {
+            return &_sane_allocations[i];
+        }
+    }
+
+    return NULL;
+}
+
+INTERNAL_HIDDEN int32_t _iso_alloc_free_sane_sample(void *p) {
+    LOCK_SANITY_CACHE();
+    _sane_allocation_t *sane_alloc = _get_sane_alloc(p);
+
+    if(sane_alloc != NULL) {
+#if !UNINIT_READ_SANITY
+        /* The canary is only written when we aren't using
+         * userfaultfd to detect uninitialized reads */
+        check_sanity_canary(sane_alloc);
+#endif
+        unmap_guarded_pages(sane_alloc->address, g_page_size);
+        memset(sane_alloc, 0x0, sizeof(_sane_allocation_t));
+        _sane_cache[SANE_CACHE_IDX(p)]--;
+        _sane_sampled--;
+        UNLOCK_SANITY_CACHE();
+        return OK;
+    }
+
+    UNLOCK_SANITY_CACHE();
+    return ERR;
+}
+
+INTERNAL_HIDDEN void *_iso_alloc_sample(const size_t size) {
+#if UNINIT_READ_SANITY
+    if(_page_fault_thread == 0 || LIKELY((us_rand_uint64(&_root->seed) % SANITY_SAMPLE_ODDS) != 1)) {
+#else
+    if(LIKELY((us_rand_uint64(&_root->seed) % SANITY_SAMPLE_ODDS) != 1)) {
+#endif
+        return NULL;
+    }
+
+    _sane_allocation_t *sane_alloc = NULL;
+
+    LOCK_SANITY_CACHE();
+    UNLOCK_ROOT();
+
+    /* Find the first free slot in our sampled storage */
+    for(uint32_t i = 0; i < MAX_SANE_SAMPLES; i++) {
+        if(_sane_allocations[i].address == 0) {
+            sane_alloc = &_sane_allocations[i];
+            break;
+        }
+    }
+
+    /* There are no available slots in the cache */
+    if(sane_alloc == NULL) {
+        LOG_AND_ABORT("There are no free slots in the cache, there should be %d", _sane_sampled);
+    }
+
+    sane_alloc->orig_size = size;
+    void *p = mmap_guarded_rw_pages(g_page_size, false, SAMPLED_ALLOC_NAME);
+
+    if(p == NULL) {
+        LOG_AND_ABORT("Cannot allocate pages for sampled allocation");
+    }
+
+    /* We may right align the mapping to catch overflows */
+    if((us_rand_uint64(&_root->seed) % 2) == 1) {
+        p = (p + g_page_size) - sane_alloc->orig_size;
+        sane_alloc->right_aligned = true;
+        sane_alloc->address = (void *) ROUND_DOWN_PAGE((uintptr_t) p);
+    } else {
+        sane_alloc->address = p;
+    }
+
+#if UNINIT_READ_SANITY
+    struct uffdio_register reg = {0};
+    reg.range.start = (uint64_t) ROUND_DOWN_PAGE((uintptr_t) p);
+    reg.range.len = g_page_size;
+    reg.mode = UFFDIO_REGISTER_MODE_MISSING;
+#endif
+
+    _sane_cache[SANE_CACHE_IDX(p)]++;
+    _sane_sampled++;
+
+#if UNINIT_READ_SANITY
+    if((ioctl(_uf_fd, UFFDIO_REGISTER, &reg)) == ERR) {
+        LOG_AND_ABORT("Failed to register address %p", p);
+    }
+#endif
+
+#if !UNINIT_READ_SANITY
+    write_sanity_canary(sane_alloc->address);
+#endif
+
+    UNLOCK_SANITY_CACHE();
+    return p;
+}
+#endif
+
+INTERNAL_HIDDEN INLINE void *__iso_memcpy(void *restrict dest, const void *restrict src, size_t n) {
+#if MEMCPY_SANITY
+    char *p_dest = (char *) dest;
+    char const *p_src = (char const *) src;
+
+#if USE_NEON
+    while(n >= 16) {
+        vst1q_u8((uint8_t *) p_dest, vld1q_u8((const uint8_t *) p_src));
+        p_dest += 16;
+        p_src += 16;
+        n -= 16;
+    }
+#endif
+
+    while(n--) {
+        *p_dest++ = *p_src++;
+    }
+
+    return dest;
+#else
+    return __builtin_memcpy(dest, src, n);
+#endif
+}
+
+INTERNAL_HIDDEN void *_iso_alloc_memcpy(void *restrict dest, const void *restrict src, size_t n) {
+#if MEMCPY_SANITY
+    if(n > SMALLEST_CHUNK_SZ) {
+        /* The zone map lookup takes no lock. A pointer that is
+         * not in any zone is not checked */
+        iso_alloc_zone_t *zone = iso_find_zone_range(dest);
+
+        if(zone != NULL && MEM_SANITY_CHK(dest, UNMASK_USER_PTR(zone), zone->chunk_size)) {
+            LOG_AND_ABORT("Detected an out of bounds write memcpy: dest=0x%p (%d bytes) src=0x%p size=%d", dest, zone->chunk_size, src, n);
+        }
+
+        zone = iso_find_zone_range((void *) src);
+
+        if(zone != NULL && MEM_SANITY_CHK(src, UNMASK_USER_PTR(zone), zone->chunk_size)) {
+            LOG_AND_ABORT("Detected an out of bounds read memcpy: dest=0x%p src=0x%p (%d bytes) size=%d", dest, src, zone->chunk_size, n);
+        }
+    }
+#endif
+    return __iso_memcpy(dest, src, n);
+}
+
+INTERNAL_HIDDEN INLINE void *__iso_memmove(void *dest, const void *src, size_t n) {
+#if MEMCPY_SANITY
+    char *p_dest = (char *) dest;
+    char const *p_src = (char const *) src;
+
+    if(dest == src) {
+        return dest;
+    }
+
+    if(p_src < p_dest) {
+        /* Overlapping: copy backwards to avoid clobbering src */
+        p_dest += n;
+        p_src += n;
+
+#if USE_NEON
+        while(n >= 16) {
+            p_dest -= 16;
+            p_src -= 16;
+            vst1q_u8((uint8_t *) p_dest, vld1q_u8((const uint8_t *) p_src));
+            n -= 16;
+        }
+#endif
+
+        while(n--) {
+            *--p_dest = *--p_src;
+        }
+    } else {
+        dest = __iso_memcpy(dest, src, n);
+    }
+
+    return dest;
+#else
+    return __builtin_memmove(dest, src, n);
+#endif
+}
+
+INTERNAL_HIDDEN void *_iso_alloc_memmove(void *dest, const void *src, size_t n) {
+#if MEMCPY_SANITY
+    if(n > SMALLEST_CHUNK_SZ) {
+        /* The zone map lookup takes no lock. A pointer that is
+         * not in any zone is not checked */
+        iso_alloc_zone_t *zone = iso_find_zone_range(dest);
+
+        if(zone != NULL && MEM_SANITY_CHK(dest, UNMASK_USER_PTR(zone), zone->chunk_size)) {
+            LOG_AND_ABORT("Detected an out of bounds write memmove: dest=0x%p (%d bytes) src=0x%p size=%d", dest, zone->chunk_size, src, n);
+        }
+
+        zone = iso_find_zone_range((void *) src);
+
+        if(zone != NULL && MEM_SANITY_CHK(src, UNMASK_USER_PTR(zone), zone->chunk_size)) {
+            LOG_AND_ABORT("Detected an out of bounds read memmove: dest=0x%p src=0x%p (%d bytes) size=%d", dest, src, zone->chunk_size, n);
+        }
+    }
+#endif
+    return __iso_memmove(dest, src, n);
+}
+
+INTERNAL_HIDDEN INLINE void *__iso_memset(void *dest, int b, size_t n) {
+#if MEMSET_SANITY
+    char *p_dest = (char *) dest;
+
+#if USE_NEON
+    uint8x16_t vec = vdupq_n_u8((uint8_t) b);
+    while(n >= 16) {
+        vst1q_u8((uint8_t *) p_dest, vec);
+        p_dest += 16;
+        n -= 16;
+    }
+#endif
+
+    while(n--) {
+        *p_dest++ = b;
+    }
+
+    return dest;
+#else
+    return __builtin_memset(dest, b, n);
+#endif
+}
+
+INTERNAL_HIDDEN void *_iso_alloc_memset(void *dest, int b, size_t n) {
+#if MEMSET_SANITY
+    if(n > SMALLEST_CHUNK_SZ) {
+        iso_alloc_zone_t *zone = iso_find_zone_range(dest);
+
+        if(zone != NULL && MEM_SANITY_CHK(dest, UNMASK_USER_PTR(zone), zone->chunk_size)) {
+            LOG_AND_ABORT("Detected an out of bounds write memset: dest=0x%p (%d bytes) size=%d", dest, zone->chunk_size, n);
+        }
+    }
+#endif
+    return __iso_memset(dest, b, n);
+}
