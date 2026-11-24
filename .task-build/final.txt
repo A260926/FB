@@ -1,0 +1,32 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+TASK_REPLAY_API_OK
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+==================
+WARNING: DATA RACE
+Read at 0x0000000000000064 by goroutine 2:
+  main.main()
+      /Volumes/UserFBWorkspace/questions/FS54529DF83F7BU16194R251A20E92/attempts/20261124T171810111669Z/repo/examples/task_replay/main.go:47 +0xfeb
+  [epoch: 2@2]
+
+Previous Write at 0x0000000000000064 by goroutine 1:
+  (previous access stack trace not available)
+  [epoch: 2@1]
+==================
+TASK_REPLAY_EXAMPLE_OK
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestTaskMigration
+    check.go:29: TASK_GROUP_DONE TestTaskMigration checks=18
+--- PASS: TestTaskMigration (0.00s)
+=== RUN   TestTaskCancellation
+    check.go:29: TASK_GROUP_DONE TestTaskCancellation checks=23
+--- PASS: TestTaskCancellation (0.00s)
+=== RUN   TestTaskGeneration
+    check.go:29: TASK_GROUP_DONE TestTaskGeneration checks=17
+--- PASS: TestTaskGeneration (0.00s)
+=== RUN   TestTaskProvenance
+    check.go:29: TASK_GROUP_DONE TestTaskProvenance checks=26
+--- PASS: TestTaskProvenance (0.01s)
+PASS
+ok  	github.com/kolkov/racedetector/internal/race/detector	0.251s

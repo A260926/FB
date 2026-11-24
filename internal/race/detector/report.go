@@ -565,6 +565,19 @@ func (r *RaceReport) String() string {
 // Phase 5 Task 5.3: ✅ Deduplication to prevent duplicate reports
 // v0.2.0 Task 6: ✅ Complete race reports with both stacks.
 func (d *Detector) reportRaceV2(raceType string, addr uintptr, vs interface{}, prevEpoch, currEpoch epoch.Epoch) {
+	// Task replay hook: observe every raw FastTrack judgment before the
+	// production detector's TID-based deduplication and stderr reporting.
+	// Nil outside replay, so existing behavior is unchanged.
+	if d.raceSink != nil {
+		d.raceSink(replayRaceSignal{
+			kind: raceType,
+			addr: addr,
+			vs:   vs,
+			prev: prevEpoch,
+			curr: currEpoch,
+		})
+	}
+
 	// Create structured race report (this generates the deduplication key).
 	report := NewRaceReportWithStacks(raceType, addr, vs, prevEpoch, currEpoch)
 

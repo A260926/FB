@@ -117,6 +117,16 @@ type Detector struct {
 
 	// mu protects racesDetected counter and stats updates.
 	mu sync.Mutex
+
+	// raceSink, when non-nil, receives every FastTrack race judgment from
+	// reportRaceV2 before detector-level deduplication/output. It is used by
+	// deterministic task replay only; nil keeps the original behavior.
+	raceSink func(replayRaceSignal)
+
+	// promotedReader, when non-nil, resolves the concrete conflicting reader
+	// epoch for a write against a promoted read frontier. Task replay installs
+	// a provenance-aware resolver; nil preserves the legacy epoch.Epoch(0).
+	promotedReader func(vs *shadowmem.VarState, current *goroutine.RaceContext) epoch.Epoch
 }
 
 const (
@@ -488,10 +498,14 @@ func (d *Detector) OnWrite(addr uintptr, ctx *goroutine.RaceContext) {
 		// SLOW PATH: Check full read VectorClock.
 		readClock := vs.GetReadClock()
 		if readClock != nil && !readClock.HappensBefore(ctx.C) {
-			// Report race with first conflicting read (use epoch representation for reporting).
-			// For simplicity, we report a synthetic epoch from the VectorClock.
-			// TODO: Improve race reporting to show all conflicting reads in future version.
-			d.reportRaceV2("read-write", addr, vs, epoch.Epoch(0), currentEpoch)
+			// Resolve the actual conflicting reader instead of reporting
+			// epoch 0. Task replay installs a provenance-aware picker;
+			// without it the legacy epoch.Epoch(0) placeholder is preserved.
+			prevReader := epoch.Epoch(0)
+			if d.promotedReader != nil {
+				prevReader = d.promotedReader(vs, ctx)
+			}
+			d.reportRaceV2("read-write", addr, vs, prevReader, currentEpoch)
 			return // Stop on first race
 		}
 	}

@@ -1,0 +1,4 @@
+#!/bin/bash
+d="${MKTEMP_DIR:?}"
+mkdir -p "$d"
+exec /usr/bin/mktemp "$d/tmp.XXXXXX"

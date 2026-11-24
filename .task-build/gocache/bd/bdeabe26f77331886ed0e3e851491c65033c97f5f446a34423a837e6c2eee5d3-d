@@ -1,0 +1,4 @@
+./doc.go
+./shadow_cas.go
+./shadow_map.go
+./varstate.go
