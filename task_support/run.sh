@@ -36,7 +36,7 @@ test -s .task-build/demo/reduced/case.gltf
 .task-build/normal .task-build/demo/reduced/case.gltf
 c++ -std=c++11 -O0 -I. -c task_support/driver.c -o .task-build/test-driver.o
 c++ -std=c++11 -O0 -I. test/structured_target.cpp .task-build/test-driver.o .task-build/model.o .task-build/layout.o .task-build/shrink.o .task-build/driver.o .task-build/upstream.o -lm -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/task-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
