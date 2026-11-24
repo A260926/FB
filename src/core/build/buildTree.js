@@ -1,8 +1,9 @@
 import { getBounds } from './computeBoundsUtils.js';
 import { getOptimalSplit } from './splitUtils.js';
 import { getLongestEdgeIndex } from '../../utils/ArrayBoxUtilities.js';
-import { BYTES_PER_NODE, UINT32_PER_NODE, IS_LEAFNODE_FLAG } from '../Constants.js';
+import { BYTES_PER_NODE, UINT32_PER_NODE, IS_LEAFNODE_FLAG, PLOC } from '../Constants.js';
 import { partition } from './sortUtils.js';
+import { buildPLOCPackedTree } from './PLOCBuilder.js';
 
 const MAX_POINTER = Math.pow( 2, 32 );
 
@@ -146,6 +147,12 @@ export function buildTree( bvh, primitiveBounds, offset, count, options, loadRan
 }
 
 export function buildPackedTree( bvh, options ) {
+
+	if ( options.strategy === PLOC ) {
+
+		return buildPLOCPackedTree( bvh, options );
+
+	}
 
 	// get the range of buffer data to construct / arrange
 	const rootRanges = bvh.getRootRanges( options.range );

@@ -259,6 +259,45 @@ worker.generate( geometry ).then( bvh => {
 } );
 ```
 
+## Bottom-up PLOC Construction
+
+`PLOC` is available as a fourth build strategy alongside `CENTER`, `AVERAGE`, and `SAH`. It quantizes each root range's primitive centroids to 10 bits per axis, sorts them by Morton code and original face order, then performs deterministic bottom-up locally ordered clustering. The result is packed into the same native BVH nodes and is used directly by raycasts, shapecasts, refit, and serialization.
+
+```js
+import { MeshBVH, PLOC } from 'three-mesh-bvh';
+
+const bvh = new MeshBVH( geometry, {
+    strategy: PLOC,
+    targetLeafSize: 8,
+    maxDepth: 40,
+    indirect: false,
+} );
+```
+
+For offline Node.js previews and builds, `NodePLOCWorker` distributes candidate-neighbor evaluation and parent bounds merging across 1–16 Node `worker_threads`. Builds with the same geometry and options produce byte-identical roots, direct index buffers, and indirect buffers for worker counts 1, 2, and 4.
+
+```js
+import { NodePLOCWorker } from 'three-mesh-bvh/src/workers/NodePLOCWorker.js';
+
+const worker = new NodePLOCWorker( { workers: 4 } );
+try {
+
+    const { bvh, stats } = await worker.generate( geometry, { targetLeafSize: 8 } );
+    console.log( stats.activeClustersPerRound, stats.threads );
+
+} finally {
+
+    await worker.dispose();
+
+}
+```
+
+A windowless PPM preview can be generated with:
+
+```bash
+node example/ploc.mjs preview.ppm
+```
+
 ## BVH Queries in a Shader
 
 See the shader implementation in the [simple GPU Path Tracing example](https://github.com/gkjohnson/three-mesh-bvh/blob/master/example/gpuPathTracingSimple.js) for an example on how to perform BVH ray queries in a shader. Or the [GPU SDF Generation example](https://github.com/gkjohnson/three-mesh-bvh/blob/master/example/sdfGeneration.js) for how to perform distance and closest point to point queries in a shader.

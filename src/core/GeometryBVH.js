@@ -1,6 +1,6 @@
 /** @import { BufferGeometry } from 'three' */
-import { Box3 } from 'three';
-import { SKIP_GENERATION, DEFAULT_OPTIONS } from './Constants.js';
+import { Box3, BufferAttribute } from 'three';
+import { SKIP_GENERATION, DEFAULT_OPTIONS, PLOC } from './Constants.js';
 import { isSharedArrayBufferSupported } from '../utils/BufferUtils.js';
 import { ensureIndex, getRootPrimitiveRanges } from './build/geometryUtils.js';
 import { BVH } from './BVH.js';
@@ -141,6 +141,14 @@ export class GeometryBVH extends BVH {
 	init( options ) {
 
 		const { geometry, primitiveStride } = this;
+
+		// An attribute-less BufferGeometry is still a valid empty PLOC input. Give it
+		// a zero-length position attribute so the shared range/index helpers can run.
+		if ( options.strategy === PLOC && ! geometry.attributes.position ) {
+
+			geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 0 ), 3 ) );
+
+		}
 
 		if ( options.indirect ) {
 

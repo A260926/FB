@@ -28,6 +28,15 @@ export const AVERAGE = 1;
  */
 export const SAH = 2;
 
+/**
+ * Option to build the BVH bottom-up using Parallel Locally Ordered Clustering (PLOC).
+ *
+ * PLOC sorts primitive centroids by quantized Morton code, then repeatedly merges
+ * mutually nearest clusters within a fixed local window.
+ * @type {number}
+ */
+export const PLOC = 3;
+
 // Traversal constants
 
 /**
