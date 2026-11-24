@@ -91,3 +91,88 @@ I know it's just a simple toy, ok :)
   * WebAssembly in `Cpp/Emscripten/build.sh`. CPU, single threaded, no SIMD.
 * C# project in `Cs/TestCs.sln`. A command line app that renders some frames and dumps out final TGA screenshot at the end.
 * Unity project in `Unity`. I used Unity 2021.3.16.
+
+### Optional CPU irradiance cache
+
+`Cpp/Source/IrradianceCache.{h,cpp}` adds an optional, explicitly biased
+irradiance cache to the CPU preview. Nearby diffuse (Lambert) hits reuse the
+hemispherical lighting already computed at a nearby record instead of running
+their own hemisphere transport. Metal, dielectric and emissive materials, plus
+the explicit sphere-light direct estimate, always use the production
+`Trace`/`Scatter` path. The cache is **off by default**; when off, the random
+stream, rendered image and `GetSceneDesc` object/material layout are unchanged.
+
+A record stores the original sphere id, hit side (front/back), position `x`,
+the unit normal `n` facing the incoming light, the remaining scatter count, the
+mean probe radiance `H` (i.e. `E/pi`, with no local albedo baked in) and a
+radius `R`. Records with different remaining path depths are never mixed.
+
+Enabling and configuring it:
+
+```cpp
+#include "Cpp/Source/IrradianceCache.h"
+
+ICConfig cfg;
+cfg.enabled      = true;
+cfg.gatherSamples = 32;     // positive integer: hemisphere probes per gather
+cfg.tau          = 0.5f;    // error threshold, 0 < tau <= 1
+cfg.minRadius    = 0.05f;   // 0 < minRadius <= maxRadius, both finite
+cfg.maxRadius    = 0.5f;
+cfg.seed         = 0x1234u; // gather RNG seed
+if (!ConfigureIrradianceCache(cfg)) { /* invalid config: state is unchanged */ }
+
+// Draw with the cache for this frame only:
+DrawTest(time, frame, w, h, pixels, rays, kFlagProgressive | kFlagIrradianceCache);
+```
+
+An invalid configuration is rejected and leaves the current records untouched;
+any accepted configuration change clears all records. `ClearIrradianceCache()`
+clears manually. Camera movement keeps the cache; a sphere position/radius,
+material or emissive change changes the scene signature and invalidates every
+record before the next draw.
+
+Querying, gathering and round semantics:
+
+* A record is usable only for the same sphere id, side and remaining depth, and
+  when the error
+  `e = |x - xr|/Rr + sqrt(max(0, 1 - dot(n, nr)))` is below `tau`, and the
+  finite connecting segment between the two points (each lifted along its own
+  normal by `kMinT`) is not blocked by another sphere. The owning sphere is
+  ignored during that visibility check; every other sphere blocks.
+* The interpolation weight is `1/e - 1/tau`; if any record has `e == 0`, only
+  the zero-error records are averaged.
+* With no usable record the cache runs a real gather of `gatherSamples`
+  cosine-weighted probes. Probe transport reuses the real intersection and
+  recursive `Trace` transport with the cache internally disabled. A probe's
+  direct first hit on an emissive sphere contributes no self-emission (the sky
+  is kept); a light seen after a specular event or a real scatter keeps its
+  contribution. The direct sphere-light estimate at the shading point is still
+  evaluated exactly once, and reuse multiplies the current material albedo by
+  `H` exactly once.
+* The gather radius is
+  `R = clamp(M / sum(1/d_j), minRadius, maxRadius)`, with `M = gatherSamples`,
+  each first-segment distance `d_j` clamped to `[kMinT, maxRadius]` and an
+  escape recorded as `maxRadius`. Later bounce distances never replace the
+  first segment.
+* Each draw freezes the readable set at start; candidates produced during the
+  round are invisible until the next draw, when they are published in stable
+  `(frame, pixel, sample, path depth)` order. The gather random stream is a
+  pure function of that identity and the seed, never of worker thread number or
+  insertion order. Forward, reverse and the default enkiTS row scheduling all
+  produce identical records and linear RGB (`SetRowScheduleMode`).
+
+Read-only and statistics access:
+
+```cpp
+size_t n = 0;
+const ICRecord* recs = GetIrradianceCacheRecords(n); // readable records
+ICStats stats;
+GetIrradianceCacheStats(stats); // queries, hits, gathers, probe/connection rays, ...
+```
+
+A self-contained test world (`ICWorld_*`) lets tests set sphere parameters and
+a sky and fire real single rays through the same production integrator; it does
+not duplicate a second integrator. The example in
+`examples/irradiance_cache.cpp` runs two real `DrawTest` rounds, writes
+`irradiance.ppm` and prints the hit/gather counters. The test suite in
+`tests/irradiance_cache.cpp` is built and run by `task_support/run.sh target`.

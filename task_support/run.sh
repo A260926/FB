@@ -20,7 +20,7 @@ rm -rf .task-build/demo-output
 mkdir -p .task-build/demo-output
 .task-build/demo .task-build/demo-output
 test -s .task-build/demo-output/irradiance.ppm
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/task-irradiance.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

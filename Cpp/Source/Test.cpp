@@ -1,6 +1,7 @@
 #include "Config.h"
 #include "Test.h"
 #include "Maths.h"
+#include "IrradianceCache.h"
 #include <algorithm>
 #if CPU_CAN_DO_THREADS
 #include "enkiTS/TaskScheduler_c.h"
@@ -78,6 +79,124 @@ bool HitWorld(const Ray& r, float tMin, float tMax, Hit& outHit, int& outID)
     outID = HitSpheres(r, s_SpheresSoA, tMin, tMax, outHit);
     return outID != -1;
 }
+
+static uint64_t s_SceneSignature = 0;
+
+static bool Scatter(const Material& mat, const Ray& r_in, const Hit& rec, float3& attenuation,
+                    Ray& scattered, float3& outLightE, int& inoutRayCount, uint32_t& state);
+
+static float3 ProductionSky(const Ray& r)
+{
+#if DO_MITSUBA_COMPARE
+    return float3(0.15f,0.21f,0.3f);
+#else
+    float3 unitDir = r.dir;
+    float t = 0.5f*(unitDir.getY() + 1.0f);
+    return ((1.0f-t)*float3(1.0f, 1.0f, 1.0f) + t*float3(0.5f, 0.7f, 1.0f)) * 0.3f;
+#endif
+}
+
+// Recursive transport for an irradiance-cache probe. The cache is always off
+// in here: it reuses the real intersection and Scatter() transport. A direct
+// first hit on an emissive sphere contributes no self-emission (the current
+// shading point accounts for that light once via explicit sampling), while
+// the sky is kept; after a specular event or a real scatter, light emission
+// keeps the production attribution rules. outFirstT receives the first
+// segment distance; an escape reports a large value the caller clamps.
+static float3 TraceProbeImpl(const Ray& r, int depth, bool firstSegment,
+                             int& inoutRayCount, uint32_t& state, float* outFirstT)
+{
+    Hit rec;
+    int id = 0;
+    ++inoutRayCount;
+    if (HitWorld(r, kMinT, kMaxT, rec, id))
+    {
+        if (outFirstT)
+            *outFirstT = rec.t;
+        const Material& mat = s_SphereMats[id];
+        bool emissive = mat.emissive.x > 0 || mat.emissive.y > 0 || mat.emissive.z > 0;
+        if (firstSegment && emissive)
+            return float3(0, 0, 0); // strip direct first-hit sphere-light emission
+        float3 matE = mat.emissive.toFloat3();
+        Ray scattered;
+        float3 attenuation, lightE;
+        if (depth < kMaxDepth && Scatter(mat, r, rec, attenuation, scattered, lightE, inoutRayCount, state))
+        {
+            (void)0; // deeper bounces retain the production emission attribution
+            return matE + lightE + attenuation * TraceProbeImpl(scattered, depth + 1, false, inoutRayCount, state, nullptr);
+        }
+        return matE;
+    }
+    if (outFirstT)
+        *outFirstT = kMaxT;
+    return ProductionSky(r);
+}
+
+// Explicit sphere-light sampling at a Lambert hit, factored out of Scatter()
+// so both the production path and the cache adapter use the same code.
+static float3 SampleLightsImpl(const Hit& rec, const Ray& rIn, int selfId,
+                               const float3& albedo, int& inoutRayCount, uint32_t& state)
+{
+    float3 lightE(0, 0, 0);
+#if DO_LIGHT_SAMPLING
+    for (int j = 0; j < s_EmissiveSphereCount; ++j)
+    {
+        int i = s_EmissiveSpheres[j];
+        if (i == selfId)
+            continue;
+        const Material& smat = s_SphereMats[i];
+        const Sphere& s = s_Spheres[i];
+        float3 sc = s.center.toFloat3();
+        float3 sw = normalize(sc - rec.pos);
+        float3 su = normalize(cross(fabs(sw.getX())>0.01f ? float3(0,1,0):float3(1,0,0), sw));
+        float3 sv = cross(sw, su);
+        float cosAMax = sqrtf(1.0f - s.radius*s.radius / sqLength(rec.pos-sc));
+        float eps1 = RandomFloat01(state), eps2 = RandomFloat01(state);
+        float cosA = 1.0f - eps1 + eps1 * cosAMax;
+        float sinA = sqrtf(1.0f - cosA*cosA);
+        float phi = 2 * kPI * eps2;
+        float3 l = su * (cosf(phi) * sinA) + sv * (sinf(phi) * sinA) + sw * cosA;
+        Hit lightHit;
+        int hitID;
+        ++inoutRayCount;
+        if (HitWorld(Ray(rec.pos, l), kMinT, kMaxT, lightHit, hitID) && hitID == i)
+        {
+            float omega = 2 * kPI * (1-cosAMax);
+            float3 nl = dot(rec.normal, rIn.dir) < 0 ? rec.normal : -rec.normal;
+            lightE += (albedo * smat.emissive.toFloat3()) * (std::max(0.0f, dot(l, nl)) * omega / kPI);
+        }
+    }
+#else
+    (void)rec; (void)rIn; (void)selfId; (void)albedo; (void)inoutRayCount; (void)state;
+#endif
+    return lightE;
+}
+
+class ProductionSceneAdapter : public ICSceneAdapter
+{
+public:
+    bool HitWorld(const Ray& r, float tMin, float tMax, Hit& outHit, int& outId) override
+    {
+        return ::HitWorld(r, tMin, tMax, outHit, outId);
+    }
+    float3 Sky(const Ray& r) override { return ProductionSky(r); }
+    float3 TraceProbe(const Ray& r, int depth, bool firstSegment, int& inoutRayCount,
+                      uint32_t& state, float* outFirstT) override
+    {
+        return TraceProbeImpl(r, depth, firstSegment, inoutRayCount, state, outFirstT);
+    }
+    int MaterialType(int id) override { return (int)s_SphereMats[id].type; }
+    float3 MaterialAlbedo(int id) override { return s_SphereMats[id].albedo.toFloat3(); }
+    float3 MaterialEmissive(int id) override { return s_SphereMats[id].emissive.toFloat3(); }
+    float3 SampleLights(const Hit& rec, const Ray& rIn, int selfId,
+                        const float3& albedo, int& inoutRayCount, uint32_t& state) override
+    {
+        return SampleLightsImpl(rec, rIn, selfId, albedo, inoutRayCount, state);
+    }
+    uint64_t SceneSignature() override { return s_SceneSignature; }
+};
+
+static ProductionSceneAdapter s_ProductionAdapter;
 
 
 static bool Scatter(const Material& mat, const Ray& r_in, const Hit& rec, float3& attenuation, Ray& scattered, float3& outLightE, int& inoutRayCount, uint32_t& state)
@@ -192,7 +311,8 @@ static bool Scatter(const Material& mat, const Ray& r_in, const Hit& rec, float3
     return true;
 }
 
-static float3 Trace(const Ray& r, int depth, int& inoutRayCount, uint32_t& state, bool doMaterialE = true)
+static float3 Trace(const Ray& r, int depth, int& inoutRayCount, uint32_t& state,
+                    bool doMaterialE = true, const ICPathIdentity* identity = nullptr)
 {
     Hit rec;
     int id = 0;
@@ -204,6 +324,35 @@ static float3 Trace(const Ray& r, int depth, int& inoutRayCount, uint32_t& state
         float3 lightE;
         const Material& mat = s_SphereMats[id];
         float3 matE = mat.emissive.toFloat3();
+        bool matEmissive = mat.emissive.x > 0 || mat.emissive.y > 0 || mat.emissive.z > 0;
+
+        IrradianceCache& cache = GetIrradianceCache();
+        if (identity && cache.IsEnabled() && depth < kMaxDepth &&
+            mat.type == Material::Lambert && !matEmissive)
+        {
+            // Cache path for non-emissive Lambert surfaces. Metal, dielectric
+            // and emissive materials keep the production Scatter() path.
+#if DO_LIGHT_SAMPLING
+            if (!doMaterialE)
+                matE = float3(0, 0, 0);
+#endif
+            bool front = dot(rec.normal, r.dir) < 0;
+            int side = front ? 0 : 1;
+            float3 n = front ? rec.normal : -rec.normal; // faces the incoming light
+            int remaining = kMaxDepth - depth;
+            ICPathIdentity pid = *identity;
+            pid.depth = depth;
+
+            // The sphere-light direct estimate is still evaluated exactly once
+            // here, with the production sampler; the cached H excludes it.
+            float3 albedo = mat.albedo.toFloat3();
+            float3 directE = SampleLightsImpl(rec, r, id, albedo, inoutRayCount, state);
+            float3 H = cache.LookupOrGather(s_ProductionAdapter, id, side,
+                                            rec.pos, n, remaining, pid, inoutRayCount);
+            // Reuse multiplies the local albedo by H a single time.
+            return matE + directE + albedo * H;
+        }
+
         if (depth < kMaxDepth && Scatter(mat, r, rec, attenuation, scattered, lightE, inoutRayCount, state))
         {
 #if DO_LIGHT_SAMPLING
@@ -213,7 +362,7 @@ static float3 Trace(const Ray& r, int depth, int& inoutRayCount, uint32_t& state
             // emission
             doMaterialE = (mat.type != Material::Lambert);
 #endif
-            return matE + lightE + attenuation * Trace(scattered, depth+1, inoutRayCount, state, doMaterialE);
+            return matE + lightE + attenuation * Trace(scattered, depth+1, inoutRayCount, state, doMaterialE, identity);
         }
         else
         {
@@ -237,8 +386,22 @@ static float3 Trace(const Ray& r, int depth, int& inoutRayCount, uint32_t& state
 static enkiTaskScheduler* g_TS;
 #endif
 
+static int s_RowScheduleMode = 0;
+
+void SetRowScheduleMode(int mode)
+{
+    if (mode >= 0 && mode <= 2)
+        s_RowScheduleMode = mode;
+}
+
+int GetRowScheduleMode()
+{
+    return s_RowScheduleMode;
+}
+
 void InitializeTest()
 {
+    s_RowScheduleMode = 0;
     #if CPU_CAN_DO_THREADS
     g_TS = enkiNewTaskScheduler();
     enkiInitTaskScheduler(g_TS);
@@ -261,6 +424,7 @@ struct JobData
     Camera* cam;
     std::atomic<int> rayCount;
     unsigned testFlags;
+    bool cacheOn;
 };
 
 static void TraceRowJob(uint32_t start, uint32_t end, uint32_t threadnum, void* data_)
@@ -286,7 +450,17 @@ static void TraceRowJob(uint32_t start, uint32_t end, uint32_t threadnum, void* 
                 float u = float(x + RandomFloat01(state)) * invWidth;
                 float v = float(y + RandomFloat01(state)) * invHeight;
                 Ray r = data.cam->GetRay(u, v, state);
-                col += Trace(r, 0, rayCount, state);
+                if (data.cacheOn)
+                {
+                    // Gather RNG derives from this identity and the seed, never
+                    // from thread number or candidate order.
+                    ICPathIdentity identity{data.frameCount, x, (int)y, s, 0};
+                    col += Trace(r, 0, rayCount, state, true, &identity);
+                }
+                else
+                {
+                    col += Trace(r, 0, rayCount, state);
+                }
             }
             col *= 1.0f / float(DO_SAMPLES_PER_PIXEL);
 
@@ -319,6 +493,16 @@ void UpdateTest(float time, int frameCount, int screenWidth, int screenHeight, u
 #endif
 
     s_EmissiveSphereCount = 0;
+    uint64_t sig = 1469598103934665603ull;
+    auto foldBytes = [&](const void* p, size_t n)
+    {
+        const unsigned char* b = (const unsigned char*)p;
+        for (size_t k = 0; k < n; ++k)
+        {
+            sig ^= b[k];
+            sig *= 1099511628211ull;
+        }
+    };
     for (int i = 0; i < kSphereCount; ++i)
     {
         Sphere& s = s_Spheres[i];
@@ -329,6 +513,12 @@ void UpdateTest(float time, int frameCount, int screenWidth, int screenHeight, u
         s_SpheresSoA.sqRadius[i] = s.radius * s.radius;
         s_SpheresSoA.invRadius[i] = s.invRadius;
 
+        // The signature covers geometry, materials and emissives but never
+        // the camera, so camera movement keeps the cache valid.
+        foldBytes(&s.center.x, sizeof(float) * 3);
+        foldBytes(&s.radius, sizeof(float));
+        foldBytes(&s_SphereMats[i], sizeof(s_SphereMats[i]));
+
         // Remember IDs of emissive spheres (light sources)
         const Material& smat = s_SphereMats[i];
         if (smat.emissive.x > 0 || smat.emissive.y > 0 || smat.emissive.z > 0)
@@ -337,6 +527,7 @@ void UpdateTest(float time, int frameCount, int screenWidth, int screenHeight, u
             s_EmissiveSphereCount++;
         }
     }
+    s_SceneSignature = sig;
 
     s_Cam = Camera(lookfrom, lookat, float3(0, 1, 0), 60, float(screenWidth) / float(screenHeight), aperture, distToFocus);
 }
@@ -353,15 +544,38 @@ void DrawTest(float time, int frameCount, int screenWidth, int screenHeight, flo
     args.testFlags = testFlags;
     args.rayCount = 0;
 
+    IrradianceCache& cache = GetIrradianceCache();
+    args.cacheOn = (testFlags & kFlagIrradianceCache) != 0 && cache.IsEnabled();
+    if (args.cacheOn)
+    {
+        // Freeze the readable set for this round; this round's candidates are
+        // invisible until the next draw. A scene change invalidates first.
+        cache.BeginDraw(frameCount, screenHeight, s_SceneSignature);
+    }
+
     #if CPU_CAN_DO_THREADS
-    enkiTaskSet* task = enkiCreateTaskSet(g_TS, TraceRowJob);
-    bool threaded = true;
-    enkiAddTaskSetMinRange(g_TS, task, &args, screenHeight, threaded ? 4 : screenHeight);
-    enkiWaitForTaskSet(g_TS, task);
-    enkiDeleteTaskSet(g_TS, task);
+    if (args.cacheOn && s_RowScheduleMode == 1)
+    {
+        TraceRowJob(0, (uint32_t)screenHeight, 0, &args); // sequential forward
+    }
+    else if (args.cacheOn && s_RowScheduleMode == 2)
+    {
+        for (int y = screenHeight - 1; y >= 0; --y) // sequential reverse
+            TraceRowJob((uint32_t)y, (uint32_t)y + 1, 0, &args);
+    }
+    else
+    {
+        enkiTaskSet* task = enkiCreateTaskSet(g_TS, TraceRowJob);
+        enkiAddTaskSetMinRange(g_TS, task, &args, screenHeight, 4);
+        enkiWaitForTaskSet(g_TS, task);
+        enkiDeleteTaskSet(g_TS, task);
+    }
     #else
     TraceRowJob(0, screenHeight, 0, &args);
     #endif
+
+    if (args.cacheOn)
+        cache.EndDraw();
 
     outRayCount = args.rayCount;
 }
