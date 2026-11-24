@@ -1,0 +1,46 @@
+{
+  "reference_source": "https://vcgit.hhi.fraunhofer.de/jvet/HM.git",
+  "reference_commit": "22178e370178133438c0339f57b3b3a29f112909",
+  "tag": "HM-16.20",
+  "build": "HIGHBITDEPTH=1; RExt__HIGH_BIT_DEPTH_SUPPORT=1; release static apps",
+  "configuration": "cfg/encoder_intra_main_rext.cfg",
+  "common_parameters": {
+    "SourceWidth": 64,
+    "SourceHeight": 64,
+    "FrameRate": 30,
+    "FramesToBeEncoded": 3,
+    "QP": -24,
+    "InputBitDepth": 16,
+    "InternalBitDepth": 16,
+    "OutputBitDepth": 16,
+    "ExtendedPrecision": 1,
+    "MaxBitDepthConstraint": 16,
+    "SAO": 0
+  },
+  "mono16": {
+    "InputChromaFormat": 400,
+    "ChromaFormatIDC": 400,
+    "MaxChromaFormatConstraint": 400,
+    "IntraConstraintFlag": 0
+  },
+  "color44416": {
+    "InputChromaFormat": 444,
+    "ChromaFormatIDC": 444,
+    "MaxChromaFormatConstraint": 444,
+    "IntraConstraintFlag": 1
+  },
+  "pixel_generator": "c++ make-pixels.cc -o make-pixels; ./make-pixels mono16-input.yuv 1; ./make-pixels 44416-input.yuv 3",
+  "source_input_sha256": {
+    "mono16-input.yuv": "ade1e2a3e358e2e22a63ba7dc288f6f467b9e77d71690aaacfcbca0890930e25",
+    "44416-input.yuv": "b600337dd2f62e02adaf1cce3701aa447774dcaf1395a55ade8869d516e4640b"
+  },
+  "files_sha256": {
+    "mono16.h265": "67eed4a468e465524f0c314e423cecf8f4fadbc091caedac14a3b3ae6053470b",
+    "mono16.yuv": "31fb8765c6d2caded795c29b07e82868db46db26ffaf2edd75772b6f4ec369cf",
+    "44416.h265": "4515f390e1f81a80e7e7efac366a10bea77eedaca970d2ea86a5528fc41d23db",
+    "44416.yuv": "6e52a2f5f031e07a930ca3144cdf99aa62a2f3c11f79c69a3a8d10e805592dbf",
+    "make-pixels.cc": "0dd4bf272a9d78a352b904a5ec12971d8347e8057e3bcd1c0397c1a5b308f63d",
+    "HM-COPYING": "44a2c5f2ce34d00a30554a44d3e51377852f84bc183dc1b9fb2b48ece976ebef"
+  },
+  "reference_evidence": "独立HM decoder输出经cmp等于encoder重建；运行入口不调用HM。"
+}
