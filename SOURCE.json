@@ -1,0 +1,7 @@
+{
+  "repo": "https://github.com/lucvoo/sparse",
+  "commit": "0196afe16a50c76302921b139d412e82e5be2349",
+  "license": "MIT",
+  "export": "production source and validation retained; unused optional Sphinx/manual tooling excluded",
+  "contains_target_implementation": false
+}
