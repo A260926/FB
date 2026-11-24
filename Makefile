@@ -1,0 +1,82 @@
+.PHONY: ci test lint build vet vuln fmt-check golangci-lint golangci-version checks drill catalog extension-test extension-contract extension-package spec-validate runtime-compat runtime-api runtime-floor release-check
+
+# Must ship x/tools >= v0.46.0, the first that reads Go 1.27 export data.
+# Move it with the Go version the workflows test.
+GOLANGCI_VERSION := v2.14.0
+
+SPECS_DIR ?= specs
+
+include .github/gate.env
+export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' .github/gate.env)
+
+# The whole Go gate, spelled once; the workflows run these same targets.
+ci: checks lint test drill
+
+test:
+	go build ./...
+	go vet ./...
+	go run ./cmd/gotest spec --parallel=$(GATE_PARALLEL) --timeout=$(GATE_TIMEOUT) $(SPEC_FLAGS) --min=$(GATE_MIN_COVERAGE) ./... ./examples/... -race
+
+lint: vet
+	go run ./cmd/gotest lint ./... ./examples/...
+
+drill:
+	bash tests/drill/drill.sh
+
+catalog:
+	go run ./internal/speccatalog/render
+
+# The OpenSpec CLI only reads openspec/specs, so the link lives in a temp copy.
+spec-validate:
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	cp -R "$(SPECS_DIR)" "$$tmp/specs" && mkdir "$$tmp/openspec" && ln -s ../specs "$$tmp/openspec/specs" && \
+	cd "$$tmp" && npx --yes @fission-ai/openspec validate --specs --strict
+
+vet:
+	go vet ./... ./examples/...
+
+build:
+	go build -o gotest ./cmd/gotest
+
+extension-test: extension-contract
+	cd vscode-gotest && npm test && npm run test:integration
+
+# Re-records the CLI/extension contract and fails on drift, as CI's contract
+# workflow does. A CLI change that moves the recorded output surfaces here
+# instead of in a CI job the Go gate never runs.
+extension-contract:
+	cd vscode-gotest && npm run contract:check
+
+extension-package:
+	cd vscode-gotest && npx @vscode/vsce package --no-dependencies
+
+vuln:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./... ./examples/...
+
+fmt-check:
+	@unformatted=$$(find . \( -name testdata -o -name .worktrees -o -name node_modules \) -prune -o -name '*.go' -print | xargs -r gofmt -l); \
+	test -z "$$unformatted" || (echo "gofmt needed on:" && echo "$$unformatted" && exit 1)
+
+golangci-lint:
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run --allow-parallel-runners ./... ./examples/...
+
+golangci-version:
+	@echo $(GOLANGCI_VERSION)
+
+# Generated code and the runtime may come from different releases: an older
+# harness must compile against this runtime, and this tree's generated code
+# against the oldest runtime it accepts. Both read the release tags.
+runtime-compat: runtime-api runtime-floor
+
+runtime-api:
+	bash tests/runtimecompat/api.sh
+
+runtime-floor:
+	bash tests/runtimecompat/floor.sh
+
+# Before tagging: may VERSION be released from SHA (default origin/main)?
+release-check:
+	@test -n "$(VERSION)" || { echo "usage: make release-check VERSION=vX.Y.Z [SHA=<commit>]"; exit 2; }
+	bash .github/scripts/release-preflight.sh $(VERSION) $(SHA)
+
+checks: fmt-check vuln golangci-lint runtime-compat

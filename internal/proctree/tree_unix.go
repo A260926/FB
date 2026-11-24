@@ -1,0 +1,72 @@
+//go:build unix
+
+package proctree
+
+import (
+	"errors"
+	"os"
+	"os/exec"
+	"syscall"
+	"time"
+)
+
+type sysTree struct{}
+
+func prepare(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+	deathSignal(cmd.SysProcAttr)
+}
+
+func (sysTree) adopt(int) {}
+
+func (sysTree) holdJob(*os.Process) {}
+
+func (sysTree) interrupt(pid int, ctrlC bool) error {
+	if ctrlC {
+		return signalGroup(pid, syscall.SIGINT)
+	}
+	return signalGroup(pid, syscall.SIGTERM)
+}
+
+func (sysTree) kill(pid int) error { return signalGroup(pid, syscall.SIGKILL) }
+
+// release kills whatever the root left running in its group: the group's id
+// stays its own while any member lives, so a signal to it after the root was
+// reaped reaches no stranger.
+func (t sysTree) release(pid int) {
+	_ = signalGroup(pid, syscall.SIGKILL)
+	// A killed process exits later: waited for, so the root being done means
+	// its tree is too.
+	for deadline := time.Now().Add(releaseWait); t.alive(pid) && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// releaseWait bounds the wait for a killed group to exit: one stuck in the
+// kernel is left behind rather than holding the caller.
+const releaseWait = 2 * time.Second
+
+// alive reports whether any process of the group led by pid is left. The
+// group's id is not reused while it has a member, so probing it after the
+// root was reaped reaches no stranger. A member that exited but was never
+// reaped — a container whose PID 1 does not reap — still answers the probe,
+// so where the system can say, a group of zombies only is not alive.
+func (sysTree) alive(pid int) bool {
+	if errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH) {
+		return false
+	}
+	live, known := groupHasLiveMember(pid)
+	return !known || live
+}
+
+// signalGroup signals the process group led by pid.
+func signalGroup(pid int, sig syscall.Signal) error {
+	err := syscall.Kill(-pid, sig)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
+	}
+	return err
+}

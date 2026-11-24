@@ -1,0 +1,542 @@
+package main_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+
+	. "github.com/mvrahden/go-test/cmd/gotest"
+	"github.com/mvrahden/go-test/internal/config"
+	"github.com/mvrahden/go-test/internal/gotestgen"
+	"github.com/mvrahden/go-test/internal/gotestrunner"
+	"github.com/mvrahden/go-test/internal/gotestspec"
+	"github.com/mvrahden/go-test/internal/testkit"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// StaticSpecTestSuite covers `spec --static`: the specification read from the
+// source instead of from a run. The corpus is the walker's own testdata, which
+// is written to be adverse — tables, duplicates, slashes, and behaviors the
+// walker deliberately cannot see.
+type StaticSpecTestSuite struct {
+	workDir  string
+	corpus   string
+	rendered map[string]string
+}
+
+func (s *StaticSpecTestSuite) SuiteConfig() gotest.SuiteConfig {
+	return gotest.SuiteConfig{Parallel: true}
+}
+
+// staticCtx is one test's work dir and the overlay a run of the corpus writes.
+type staticCtx struct {
+	dir        string
+	overlayDir string
+}
+
+func (s *StaticSpecTestSuite) BeforeAll(t *gotest.T) {
+	// Every method's run writes an overlay there.
+	testkit.IsolateTempDir(t)
+	corpus, err := filepath.Abs(filepath.Join("..", "..", "internal", "gotestast", "testdata", "behaviors"))
+	gotest.NoError(t, err)
+	s.corpus = corpus
+
+	s.workDir, err = os.MkdirTemp("", "gotest-staticspec-render-")
+	gotest.NoError(t, err)
+
+	s.rendered = map[string]string{}
+	for _, format := range []string{"terminal", "md", "json"} {
+		s.rendered[format] = s.render(t, s.workDir, format, corpus)
+	}
+}
+
+func (s *StaticSpecTestSuite) AfterAll(t *gotest.T) {
+	gotest.NoError(t, os.RemoveAll(s.workDir))
+}
+
+func (s *StaticSpecTestSuite) BeforeEach(t *gotest.T) *staticCtx {
+	dir, err := os.MkdirTemp("", "gotest-staticspec-")
+	gotest.NoError(t, err)
+	return &staticCtx{dir: dir}
+}
+
+func (s *StaticSpecTestSuite) AfterEach(t *gotest.T, ctx *staticCtx) {
+	gotest.NoError(t, os.RemoveAll(ctx.dir))
+	if ctx.overlayDir != "" {
+		gotest.NoError(t, os.RemoveAll(ctx.overlayDir))
+	}
+}
+
+// render runs the subcommand into a file, which is also how a caller publishes
+// a specification, and returns what it wrote.
+func (s *StaticSpecTestSuite) render(t *gotest.T, dir, format, pattern string) string {
+	out := filepath.Join(dir, "spec."+format)
+	code := ExportRunStaticSpec(OwnFlags{}, []string{pattern}, &config.ProjectConfig{}, format, out, true)
+	gotest.Equal(t, 0, code, "spec --static --format=%s", format)
+
+	data, err := os.ReadFile(out) //nolint:gosec // G304: path built in this test
+	gotest.NoError(t, err)
+	return string(data)
+}
+
+// The contract the whole feature rests on: where the walker reports the list is
+// exhaustive, the names it predicts are the names go test actually produces.
+// Anything else puts a behavior in the tree under a name no run will report.
+func (s *StaticSpecTestSuite) TestPredictsTheNamesARunProduces(t *gotest.T, ctx *staticCtx) {
+	t.When("the corpus is both read and run", func(w *gotest.T) {
+		static := s.staticPaths(w)
+		observed := s.observedPaths(w, ctx)
+
+		w.It("predicts every complete method exactly", func(it *gotest.T) {
+			for method, want := range static.complete {
+				gotest.Equal(it, want, observed[method], "method %s", method)
+			}
+			gotest.NotEmpty(it, static.complete, "no complete methods in the corpus")
+		})
+
+		w.It("never claims a behavior a run does not report", func(it *gotest.T) {
+			// An incomplete method may report more at run time — that is what
+			// incomplete means — but never fewer, and never under other names.
+			for method, declared := range static.incomplete {
+				for _, path := range declared {
+					gotest.Contains(it, observed[method], path, "method %s", method)
+				}
+			}
+			gotest.NotEmpty(it, static.incomplete, "no incomplete methods in the corpus")
+		})
+	})
+}
+
+type staticTrees struct {
+	complete   map[string][]string
+	incomplete map[string][]string
+}
+
+// staticPaths renders the corpus as JSON and splits the methods by whether the
+// walker admitted it could not see all of them.
+func (s *StaticSpecTestSuite) staticPaths(t *gotest.T) staticTrees {
+	var doc specDocument
+	gotest.NoError(t, json.Unmarshal([]byte(s.rendered["json"]), &doc))
+
+	trees := staticTrees{complete: map[string][]string{}, incomplete: map[string][]string{}}
+	for _, pkg := range doc.Packages {
+		for _, suite := range pkg.Nodes {
+			for _, method := range suite.Children {
+				bucket := trees.complete
+				if method.Incomplete {
+					bucket = trees.incomplete
+				}
+				bucket[method.Name] = nodePaths(method.Children, "")
+			}
+		}
+	}
+	return trees
+}
+
+// observedPaths runs the corpus for real and reads the same paths back out of
+// the tree the stream produces.
+func (s *StaticSpecTestSuite) observedPaths(t *gotest.T, ctx *staticCtx) map[string][]string {
+	loaded, _, err := gotestgen.LoadPackages([]string{s.corpus}, nil)
+	gotest.NoError(t, err)
+	results, _, err := gotestgen.GenerateFromLoaded(loaded)
+	gotest.NoError(t, err)
+
+	overlayDir, err := gotestrunner.WriteOverlay(results)
+	gotest.NoError(t, err)
+	ctx.overlayDir = overlayDir
+
+	stdout, _, err := gotestrunner.StdlibRunTestsJSON(context.Background(),
+		[]string{"-overlay=" + filepath.Join(overlayDir, "overlay.json"), s.corpus})
+	gotest.NoError(t, err)
+
+	events, err := gotestspec.ParseEvents(bytes.NewReader(stdout))
+	gotest.NoError(t, err)
+	tree := gotestspec.BuildTree(events)
+
+	observed := map[string][]string{}
+	for _, pkg := range tree {
+		for _, suite := range pkg.Nodes {
+			for _, method := range suite.Children {
+				observed[method.Name] = specNodePaths(method.Children, "")
+			}
+		}
+	}
+	gotest.NotEmpty(t, observed, "the corpus produced no test events")
+	return observed
+}
+
+func (s *StaticSpecTestSuite) TestCarriesNoVerdicts(t *gotest.T, _ *staticCtx) {
+	t.When("the terminal spec is rendered from source", func(w *gotest.T) {
+		out := s.rendered["terminal"]
+
+		w.It("shows no status glyph", func(it *gotest.T) {
+			gotest.NotContains(it, out, "✓")
+			gotest.NotContains(it, out, "✗")
+		})
+
+		w.It("shows no duration", func(it *gotest.T) {
+			gotest.NotContains(it, out, "ms)")
+		})
+
+		w.It("counts what it read without claiming a verdict", func(it *gotest.T) {
+			gotest.Contains(it, out, "behaviors")
+			gotest.NotContains(it, out, "passed")
+			gotest.NotContains(it, out, "not run")
+			// A count line ending in a colon reads as a line that lost its tail.
+			gotest.NotContains(it, out, "behaviors: \n")
+		})
+	})
+
+	t.When("the markdown spec is rendered from source", func(w *gotest.T) {
+		out := s.rendered["md"]
+
+		w.It("drops the verdicts and durations", func(it *gotest.T) {
+			gotest.Contains(it, out, "\n  - when a group\n    - has a leaf\n")
+			for _, word := range []string{"PASS", "**FAIL**", "**SKIP**", "**NOT RUN**", "## Needs attention"} {
+				gotest.NotContains(it, out, word)
+			}
+			// The duration of something that never ran is not "<1ms".
+			gotest.NotContains(it, out, "<1ms")
+		})
+
+		w.It("says nothing was executed instead of reporting zero of each", func(it *gotest.T) {
+			gotest.Contains(it, out, "nothing was executed")
+			gotest.NotContains(it, out, "0 passed, 0 failed, 0 skipped")
+		})
+	})
+
+	t.When("the JSON spec is rendered from source", func(w *gotest.T) {
+		var doc specDocument
+		gotest.NoError(w, json.Unmarshal([]byte(s.rendered["json"]), &doc))
+
+		w.It("leaves every node without a status", func(it *gotest.T) {
+			for _, pkg := range doc.Packages {
+				for _, node := range pkg.Nodes {
+					assertStatusNone(it, node)
+				}
+			}
+		})
+
+		w.It("counts nothing as not run", func(it *gotest.T) {
+			gotest.NotContains(it, s.rendered["json"], `"notRun"`)
+			gotest.Contains(it, s.rendered["json"], `"behaviors":`)
+		})
+	})
+}
+
+// A partial list that presents itself as whole is worse than no list, so every
+// surface has to carry the admission — not only the stderr notes.
+func (s *StaticSpecTestSuite) TestDeclaresIncompletenessOnEverySurface(t *gotest.T, _ *staticCtx) {
+	t.When("a method declares behaviors the walker cannot see", func(w *gotest.T) {
+		w.It("marks it in the terminal tree", func(it *gotest.T) {
+			gotest.Contains(it, s.rendered["terminal"], "Conditional — INCOMPLETE")
+		})
+
+		w.It("marks it in markdown", func(it *gotest.T) {
+			gotest.Contains(it, s.rendered["md"], "- **Conditional** — INCOMPLETE: behaviors known only at run time\n  - is always declared\n")
+		})
+
+		w.It("marks a method whose behaviors are all runtime-dependent", func(it *gotest.T) {
+			// Unmarked it reads as a behavior that simply has nothing beneath it.
+			gotest.Contains(it, s.rendered["md"],
+				"- **NonLiteralTable** — INCOMPLETE: behaviors known only at run time\n")
+		})
+
+		w.It("marks it in JSON", func(it *gotest.T) {
+			var doc specDocument
+			gotest.NoError(it, json.Unmarshal([]byte(s.rendered["json"]), &doc))
+			gotest.True(it, findIncomplete(doc, "TestConditional"),
+				"TestConditional is not marked incomplete in JSON")
+			gotest.False(it, findIncomplete(doc, "TestNesting"),
+				"a fully declared method must not be marked incomplete")
+		})
+	})
+}
+
+// A suite the X_ prefix disables is listed as excluded down to its last block,
+// so no reader of the JSON takes a parked behavior for a live one.
+func (s *StaticSpecTestSuite) TestAnExcludedSuiteIsExcludedThroughout(t *gotest.T, ctx *staticCtx) {
+	excluded, err := filepath.Abs(filepath.Join("testdata", "static", "excluded"))
+	gotest.NoError(t, err)
+	var doc specDocument
+	gotest.NoError(t, json.Unmarshal([]byte(s.render(t, ctx.dir, "json", excluded)), &doc))
+	t.When("the static spec renders an X_ suite", func(w *gotest.T) {
+		w.It("marks the suite, its methods and every block under them excluded", func(it *gotest.T) {
+			gotest.Len(it, doc.Packages, 1)
+			gotest.Len(it, doc.Packages[0].Nodes, 1)
+			gotest.True(it, doc.Packages[0].Nodes[0].Excluded)
+			gotest.NotEmpty(it, doc.Packages[0].Nodes[0].Children)
+			gotest.True(it, allExcluded(doc.Packages[0].Nodes[0].Children), "nodes: %+v", doc.Packages[0].Nodes[0].Children)
+		})
+	})
+}
+
+// A slash in a label is part of the label: go test reports one subtest for
+// it, so the static tree has no level for the text before the slash.
+func (s *StaticSpecTestSuite) TestASlashInALabelIsNoLevel(t *gotest.T, ctx *staticCtx) {
+	slashes, err := filepath.Abs(filepath.Join("testdata", "static", "slashes"))
+	gotest.NoError(t, err)
+	md := s.render(t, ctx.dir, "md", slashes)
+	var doc specDocument
+	gotest.NoError(t, json.Unmarshal([]byte(s.render(t, ctx.dir, "json", slashes)), &doc))
+	gotest.Len(t, doc.Packages, 1)
+	read := doc.Packages[0].Nodes[0].Children[0]
+	gotest.Equal(t, "TestRead", read.Name)
+
+	t.When("the static spec reads an It whose label holds a slash", func(w *gotest.T) {
+		w.It("lists it as one It under its When", func(it *gotest.T) {
+			gotest.Equal(it, []string{
+				"a_path_is_read",
+				"a_path_is_read/reads_a/b_paths",
+				"a_path_is_read/keeps_snake_case/paths_whole",
+				"x/y",
+			}, nodePaths(read.Children, ""))
+			gotest.Len(it, read.Children, 2)
+			gotest.Len(it, read.Children[0].Children, 2)
+		})
+
+		w.It("renders it as one line with no invented when", func(it *gotest.T) {
+			gotest.Contains(it, md, "  - when a path is read\n    - reads a/b paths\n    - keeps snake\\_case/paths whole\n  - x/y\n")
+			gotest.NotContains(it, md, "when reads a")
+			gotest.NotContains(it, md, "when x")
+		})
+	})
+
+	t.When("the static spec reads an X_ method", func(w *gotest.T) {
+		w.It("marks its heading and its behaviors EXCLUDED in markdown", func(it *gotest.T) {
+			gotest.Contains(it, md, "- **Parked** — EXCLUDED\n  - when the method is parked — EXCLUDED\n    - never runs — EXCLUDED\n")
+			gotest.Contains(it, md, "- **Read**\n")
+		})
+	})
+}
+
+// A replay reads the declarations the source holds for the stream's subtests,
+// so a slash in a label keeps the label as the developer wrote it.
+func (s *StaticSpecTestSuite) TestAReplayKeepsASlashInALabel(t *gotest.T, ctx *staticCtx) {
+	const pkg = "github.com/mvrahden/go-test/cmd/gotest/testdata/static/slashes"
+	var stream strings.Builder
+	for _, ev := range []struct{ action, test string }{
+		{"run", "TestPathsTestSuite"},
+		{"run", "TestPathsTestSuite/TestRead"},
+		{"run", "TestPathsTestSuite/TestRead/a_path_is_read"},
+		{"run", "TestPathsTestSuite/TestRead/a_path_is_read/keeps_snake_case/paths_whole"},
+		{"pass", "TestPathsTestSuite/TestRead/a_path_is_read/keeps_snake_case/paths_whole"},
+		{"pass", "TestPathsTestSuite/TestRead/a_path_is_read"},
+		{"pass", "TestPathsTestSuite/TestRead"},
+		{"pass", "TestPathsTestSuite"},
+		{"pass", ""},
+	} {
+		line, err := json.Marshal(map[string]string{"Action": ev.action, "Package": pkg, "Test": ev.test})
+		gotest.NoError(t, err)
+		stream.Write(append(line, '\n'))
+	}
+	in := filepath.Join(ctx.dir, "events.json")
+	gotest.NoError(t, os.WriteFile(in, []byte(stream.String()), 0o600))
+	out := filepath.Join(ctx.dir, "spec.md")
+	gotest.Equal(t, 0, ExportRunSpecFromInput(in, "md", out, true, false))
+	md, err := os.ReadFile(out) //nolint:gosec // G304: path built in this test
+	gotest.NoError(t, err)
+
+	t.When("a replayed It's label holds a slash and an underscore", func(w *gotest.T) {
+		w.It("shows the declared label on one line", func(it *gotest.T) {
+			gotest.Contains(it, string(md), "  - when a path is read\n    - PASS keeps snake\\_case/paths whole\n")
+		})
+	})
+}
+
+// A label that ends in a slash is one subtest too, and its declaration is
+// found again by the name go test reported.
+func (s *StaticSpecTestSuite) TestAReplayKeepsATrailingSlashInALabel(t *gotest.T, ctx *staticCtx) {
+	const pkg = "github.com/mvrahden/go-test/cmd/gotest/testdata/static/slashes"
+	var stream strings.Builder
+	for _, ev := range []struct{ action, test string }{
+		{"run", "TestPathsTestSuite"},
+		{"run", "TestPathsTestSuite/TestTrailing"},
+		{"run", "TestPathsTestSuite/TestTrailing/names_each_file,_with_a/_and_b/"},
+		{"pass", "TestPathsTestSuite/TestTrailing/names_each_file,_with_a/_and_b/"},
+		{"pass", "TestPathsTestSuite/TestTrailing"},
+		{"pass", "TestPathsTestSuite"},
+		{"pass", ""},
+	} {
+		line, err := json.Marshal(map[string]string{"Action": ev.action, "Package": pkg, "Test": ev.test})
+		gotest.NoError(t, err)
+		stream.Write(append(line, '\n'))
+	}
+	in := filepath.Join(ctx.dir, "events.json")
+	gotest.NoError(t, os.WriteFile(in, []byte(stream.String()), 0o600))
+	out := filepath.Join(ctx.dir, "spec.json")
+	gotest.Equal(t, 0, ExportRunSpecFromInput(in, "json", out, true, false))
+	raw, err := os.ReadFile(out) //nolint:gosec // G304: path built in this test
+	gotest.NoError(t, err)
+
+	t.When("a replayed It's label ends in a slash", func(w *gotest.T) {
+		w.It("carries the It vocabulary and the source label", func(it *gotest.T) {
+			gotest.Contains(it, string(raw), `"vocab":"it"`)
+			gotest.Contains(it, string(raw), "names each file, with a/ and b/")
+		})
+	})
+}
+
+func (s *StaticSpecTestSuite) TestExitCodes(t *gotest.T, ctx *staticCtx) {
+	t.When("the source can be read", func(w *gotest.T) {
+		w.It("exits 0", func(it *gotest.T) {
+			out := filepath.Join(ctx.dir, "ok.txt")
+			gotest.Equal(it, 0, ExportRunStaticSpec(OwnFlags{}, []string{s.corpus}, &config.ProjectConfig{}, "terminal", out, true))
+		})
+	})
+
+	t.When("a package does not compile", func(w *gotest.T) {
+		broken := filepath.Join(ctx.dir, "broken")
+		gotest.NoError(w, os.MkdirAll(broken, 0o750))
+		gotest.NoError(w, os.WriteFile(filepath.Join(broken, "x_test.go"),
+			[]byte("package broken\n\nfunc Nope() { undefinedSymbol() }\n"), 0o600))
+
+		w.It("exits 2 rather than reporting an empty specification", func(it *gotest.T) {
+			out := filepath.Join(ctx.dir, "broken.txt")
+			gotest.Equal(it, 2, ExportRunStaticSpec(OwnFlags{}, []string{broken}, &config.ProjectConfig{}, "terminal", out, true))
+		})
+	})
+
+	t.When("the output file cannot be created", func(w *gotest.T) {
+		w.It("exits 2", func(it *gotest.T) {
+			out := filepath.Join(ctx.dir, "no-such-dir", "spec.txt")
+			gotest.Equal(it, 2, ExportRunStaticSpec(OwnFlags{}, []string{s.corpus}, &config.ProjectConfig{}, "terminal", out, true))
+		})
+	})
+}
+
+// --static reads the specification in the source, --input the one in a recorded
+// run. Honouring one silently while the caller asked for both hands back a tree
+// they did not ask for.
+func (s *StaticSpecTestSuite) TestStaticAndInputAreMutuallyExclusive(t *gotest.T, _ *staticCtx) {
+	t.It("rejects the pair instead of picking one", func(it *gotest.T) {
+		code := ExportRunSpec(Invocation{Args: []string{"--static", "--input=events.json"}})
+		gotest.Equal(it, 2, code)
+	})
+}
+
+type specDocument struct {
+	Packages []struct {
+		Path  string     `json:"path"`
+		Nodes []specNode `json:"nodes"`
+	} `json:"packages"`
+}
+
+type specNode struct {
+	Name       string     `json:"name"`
+	Status     string     `json:"status"`
+	Incomplete bool       `json:"incomplete"`
+	Excluded   bool       `json:"excluded"`
+	External   bool       `json:"external"`
+	Variant    int        `json:"variant"`
+	Children   []specNode `json:"children"`
+}
+
+// allExcluded reports whether every node of the tree is marked excluded.
+func allExcluded(nodes []specNode) bool {
+	for _, n := range nodes {
+		if !n.Excluded || !allExcluded(n.Children) {
+			return false
+		}
+	}
+	return true
+}
+
+func nodePaths(nodes []specNode, prefix string) []string {
+	var out []string
+	for _, n := range nodes {
+		path := prefix + n.Name
+		out = append(out, path)
+		out = append(out, nodePaths(n.Children, path+"/")...)
+	}
+	return out
+}
+
+func specNodePaths(nodes []*gotestspec.Node, prefix string) []string {
+	var out []string
+	for _, n := range nodes {
+		path := prefix + n.Name
+		out = append(out, path)
+		out = append(out, specNodePaths(n.Children, path+"/")...)
+	}
+	return out
+}
+
+func assertStatusNone(t *gotest.T, n specNode) {
+	gotest.Equal(t, "none", n.Status, "node %s carries a verdict", n.Name)
+	for i := range n.Children {
+		assertStatusNone(t, n.Children[i])
+	}
+}
+
+func findIncomplete(doc specDocument, method string) bool {
+	for _, pkg := range doc.Packages {
+		for _, suite := range pkg.Nodes {
+			for _, node := range suite.Children {
+				if node.Name == method {
+					return node.Incomplete
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (s *StaticSpecTestSuite) TestDeclaresFuzzTargets(t *gotest.T, ctx *staticCtx) {
+	out := s.render(t, ctx.dir, "json", "../../examples/fuzzing")
+	var doc struct {
+		Packages []struct {
+			Nodes []struct {
+				Display  string `json:"display"`
+				Children []struct {
+					Kind    string `json:"kind"`
+					Name    string `json:"name"`
+					Display string `json:"display"`
+				} `json:"children"`
+			} `json:"nodes"`
+		} `json:"packages"`
+		Stats struct {
+			Fuzzers int `json:"fuzzers"`
+		} `json:"stats"`
+	}
+	gotest.NoError(t, json.Unmarshal([]byte(out), &doc))
+
+	t.It("lists every fuzz method under its suite as a fuzz target", func(it *gotest.T) {
+		gotest.Equal(it, 5, doc.Stats.Fuzzers)
+		var kinds []string
+		for _, c := range doc.Packages[0].Nodes[0].Children {
+			if c.Kind == "fuzz" {
+				kinds = append(kinds, c.Name+"="+c.Display)
+			}
+		}
+		gotest.Contains(it, kinds, "FuzzFrameRoundTrip=FrameRoundTrip")
+		gotest.Len(it, kinds, 5)
+	})
+}
+
+// A suite declared in both test packages is two suites: the second, the
+// external one, is marked and ordered after the first.
+func (s *StaticSpecTestSuite) TestTwinSuitesReadAsTwoSuites(t *gotest.T, ctx *staticCtx) {
+	twins, err := filepath.Abs(filepath.Join("testdata", "static", "twins"))
+	gotest.NoError(t, err)
+	var doc specDocument
+	gotest.NoError(t, json.Unmarshal([]byte(s.render(t, ctx.dir, "json", twins)), &doc))
+	gotest.Len(t, doc.Packages, 1)
+	nodes := doc.Packages[0].Nodes
+
+	t.When("a suite is declared in the internal and the external test files", func(w *gotest.T) {
+		w.It("reads as two suites of one name, the second external", func(it *gotest.T) {
+			gotest.Len(it, nodes, 2)
+			gotest.Equal(it, "TestUserRepositoryTestSuite", nodes[0].Name)
+			gotest.Equal(it, "TestUserRepositoryTestSuite", nodes[1].Name)
+			gotest.False(it, nodes[0].External)
+			gotest.True(it, nodes[1].External)
+			gotest.Equal(it, 2, nodes[1].Variant)
+			gotest.Len(it, nodes[0].Children, 1)
+			gotest.Len(it, nodes[1].Children, 2)
+		})
+	})
+}

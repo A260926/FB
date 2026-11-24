@@ -1,0 +1,13 @@
+Expect: ^FAIL .*conformance/spec .* / when a group fails with every behavior under it passing / shows the failure and what it wrote on the group's row \(
+Clause: when a group fails with every behavior under it passing → shows the failure and what it wrote on the group's row
+--- a/internal/gotestspec/markdown.go
++++ b/internal/gotestspec/markdown.go
+@@ -230,7 +230,7 @@
+ 			} else if !leaf && ownFailure(n) {
+ 				output = diagnostic(n.Output)
+ 			}
+-		case ownFailure(n) && !cfg.hidden[StatusFail]:
++		case false:
+ 			word = verdictWord(StatusFail)
+ 			output = diagnostic(n.Output)
+ 		}

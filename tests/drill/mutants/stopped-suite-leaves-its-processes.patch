@@ -1,0 +1,25 @@
+Expect: ^FAIL .*conformance/lifecycle Stop .* / ends that process before gotest exits \(
+Expect: ^FAIL .*conformance/lifecycle Stop .* / interrupts it before killing it \(
+Clause: when the run is interrupted while a holding method has started a process of its own → ends that process before gotest exits
+Clause: when the run is interrupted while a holding method has started a process of its own → interrupts it before killing it
+--- a/internal/gotestrunner/managed_process.go
++++ b/internal/gotestrunner/managed_process.go
+@@ -344,7 +344,7 @@
+ func (p *ManagedProcess) RequestStop() error {
+ 	if p.config.Link != nil && p.awaitHello() && p.config.Link.Stop() == nil {
+ 		// The rest of the tree is ended once the root has exited.
+-		p.Stopped()
++		_ = p.Stopped
+ 		return nil
+ 	}
+ 	p.fellBack.Store(true)
+--- a/internal/proctree/tree_unix.go
++++ b/internal/proctree/tree_unix.go
+@@ -37,7 +37,6 @@
+ // stays its own while any member lives, so a signal to it after the root was
+ // reaped reaches no stranger.
+ func (t sysTree) release(pid int) {
+-	_ = signalGroup(pid, syscall.SIGKILL)
+ 	// A killed process exits later: waited for, so the root being done means
+ 	// its tree is too.
+ 	for deadline := time.Now().Add(releaseWait); t.alive(pid) && time.Now().Before(deadline); {

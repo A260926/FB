@@ -1,0 +1,114 @@
+package main
+
+import (
+	"golang.org/x/tools/go/packages"
+
+	"github.com/mvrahden/go-test/internal/gotestast"
+	"github.com/mvrahden/go-test/internal/gotestgen"
+	"github.com/mvrahden/go-test/internal/gotestspec"
+)
+
+// vocabOf maps a declaration to the vocabulary it renders in. The two enums are
+// deliberately separate — one describes source, the other display — but this is
+// the single place they meet.
+func vocabOf(k gotestast.BehaviorKind) gotestspec.Vocab {
+	switch k {
+	case gotestast.BehaviorWhen:
+		return gotestspec.VocabWhen
+	case gotestast.BehaviorIt:
+		return gotestspec.VocabIt
+	case gotestast.BehaviorEach:
+		return gotestspec.VocabEach
+	default:
+		return gotestspec.VocabNone
+	}
+}
+
+// renderedBehaviorLabel is what a human should see for a declared behavior: the
+// text the developer wrote, spoken in its vocabulary. Discovery and spec
+// rendering must produce it from the same input by the same rule, or the same
+// behavior reads two different ways in the same editor.
+func renderedBehaviorLabel(b *gotestast.Behavior) string {
+	return vocabOf(b.Kind).Apply(b.Display)
+}
+
+// declarationsForStream reads declarations for the packages a captured stream
+// names, from whatever source the working directory can reach. A replay is how
+// the editor's Spec View renders every run, so it must read the labels the
+// live run read, or the two panes spell one behavior two ways. Packages that
+// cannot be loaded here — a stream from another module, a checkout without
+// the source — simply contribute nothing, and their labels are reconstructed
+// from the names as before. Nothing about loading may fail the render.
+// Packages in have are left out: the caller read them already.
+func declarationsForStream(events []gotestspec.TestEvent, have map[string]bool) gotestspec.DeclarationIndex {
+	seen := map[string]bool{}
+	var pkgs []string
+	for i := range events {
+		pkg := events[i].Package
+		if pkg == "" || seen[pkg] || have[pkg] || events[i].RunLevel {
+			continue
+		}
+		seen[pkg] = true
+		pkgs = append(pkgs, pkg)
+	}
+	if len(pkgs) == 0 {
+		return nil
+	}
+	loaded, _, err := gotestgen.LoadPackages(pkgs, nil)
+	if err != nil {
+		return nil
+	}
+	return buildDeclarationIndex(loaded)
+}
+
+// buildDeclarationIndex reads what every declared behavior is called, keyed by
+// the test path go test will print for it. A run's event stream says which
+// subtests happened, but not what the developer called them: by the time a
+// description has become a subtest name, every space in it is an underscore and
+// the ones that were already underscores are indistinguishable.
+//
+// Behaviors that source cannot enumerate — a When inside a condition, a table
+// that is not a literal — are simply absent, and their labels are reconstructed
+// from their names as before. That is the same floor `behaviorsComplete`
+// reports, not a separate failure.
+func buildDeclarationIndex(loadResults []*gotestgen.LoadResult) gotestspec.DeclarationIndex {
+	idx := gotestspec.DeclarationIndex{}
+	collector := gotestgen.NewCollector()
+
+	for _, lr := range loadResults {
+		for _, pkg := range []*packages.Package{lr.Ptest, lr.Pxtest} {
+			if pkg == nil {
+				continue
+			}
+			result := collector.CollectSuiteSpecs(pkg)
+			if len(result.Errs) > 0 {
+				continue
+			}
+			for _, suite := range result.Suites {
+				suitePath := "Test" + suite.Identifier()
+				for _, method := range suite.TestCases() {
+					indexBehaviors(idx, lr.PkgPath, []string{suitePath, method.Identifier()}, suite.BehaviorsOf(method).Behaviors)
+				}
+			}
+		}
+	}
+
+	if len(idx) == 0 {
+		return nil
+	}
+	return idx
+}
+
+func indexBehaviors(idx gotestspec.DeclarationIndex, pkgPath string, parent []string, behaviors []*gotestast.Behavior) {
+	for _, b := range behaviors {
+		// The level is the name as written, without a repeat suffix.
+		path := append(append([]string(nil), parent...), b.Written())
+		paths := idx[pkgPath]
+		if paths == nil {
+			paths = map[string]gotestspec.Declaration{}
+			idx[pkgPath] = paths
+		}
+		paths[gotestspec.DeclKey(path...)] = gotestspec.Declaration{Label: b.Display, Vocab: vocabOf(b.Kind)}
+		indexBehaviors(idx, pkgPath, path, b.Children)
+	}
+}

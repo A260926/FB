@@ -1,0 +1,1393 @@
+# gotest CLI: Architecture Deep Dive
+
+## High-Level Pipeline
+
+```
+ User invokes: gotest ./...
+                  │
+                  ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │  1. DISCOVERY                                               │
+ │     packages.Load(./...) → AST Inspector → Suites/Fixtures  │
+ └──────────────────────────┬──────────────────────────────────┘
+                            │  []*LoadResult (Ptest + Pxtest per pkg)
+                            ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │  2. CODE GENERATION                                         │
+ │     Collector → Binder → Renderer → overlay.json            │
+ │     (Renderer works directly with BoundFixture)             │
+ └──────────────────────────┬──────────────────────────────────┘
+                            │  overlayResult (tmpDir, fixture info)
+                            ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │  3. PREPARE (concurrent)                                    │
+ │                                                             │
+ │  ┌─────────────────────┐    ┌────────────────────────────┐  │
+ │  │ CompilePackages-    │    │ startSharedFixtures        │  │
+ │  │ Stream              │    │   go build → start → read  │  │
+ │  │   go test -c per    │    │   JSON state, own stream   │  │
+ │  │   pkg (NumCPU par)  │    │   → write state.json       │  │
+ │  └────────┬────────────┘    └────────────┬───────────────┘  │
+ │           │ <-chan CompileResult         │ *SharedFixtureProcess
+ └───────────┼──────────────────────────────┼──────────────────┘
+             │    (overlap: exec starts     │
+             │     as packages compile)     │
+             ▼                              │
+ ┌─────────────────────────────────────────────────────────────┐
+ │  4. EXECUTION                                               │
+ │     Per-suite subprocesses, at most GOMAXPROCS at a time    │
+ │     Suites needing shared fixtures block on resolveFixture- │
+ │     Env(); others start immediately with base env           │
+ └──────────────────────────┬──────────────────────────────────┘
+                            │  exit code (worst of all suites)
+                            ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │  5. TEARDOWN                                                │
+ │     `stop` on stdin → shared fixture subprocess             │
+ │     → AfterAll per fixture (reverse order) → exit           │
+ └─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. Discovery
+
+Discovery is fully static -- AST-based, no reflection at runtime.
+
+### Package Loading
+
+```
+cli.go:runTest() / discover.go:runDiscover()
+  │
+  └─ LoadPackages(patterns, buildFlags)
+       mode: NeedModule | NeedSyntax | NeedName | NeedTypes
+              | NeedTypesInfo | NeedImports | NeedFiles
+       (matched packages from source, dependencies from export data;
+        a dependency that declares a fixture with Hydrate is loaded
+        again as a root, so its fields classify from source)
+```
+
+`packages.Load()` with `Tests: true` returns both internal-test (`pkg_test.go`
+in the same package) and external-test (`pkg_test.go` in `pkg_test` package)
+packages. These are grouped into `LoadResult` structs:
+
+```
+LoadResult {
+    PkgDir    "/path/to/pkg"
+    PkgPath   "github.com/example/repo/auth"
+    Ptest     *packages.Package   ← internal test package (same pkg name)
+    Pxtest    *packages.Package   ← external test package (pkg_test name)
+}
+```
+
+### Suite Detection (AST)
+
+The `collector.CollectSuiteSpecs(pkg)` orchestrates a multi-pass AST traversal
+using `go/ast/inspector.Inspector.Preorder()`:
+
+```
+Pass 1: Find Suites
+  ├─ Walk GenDecl nodes
+  ├─ Match: ^(?!ƒƒ_GOTEST_|_)(?:X_|F_)?.+TestSuite$
+  │         (excludes generated wrappers and leading underscores)
+  ├─ Must be a struct type (resolve through aliases for generics)
+  └─ Result: []*TestSuiteSpec
+
+Pass 2: Find Fixtures
+  ├─ Walk GenDecl nodes
+  ├─ Match suffix: *SharedFixture → SharedFixture kind
+  │                *Fixture        → PackageFixture kind
+  └─ Result: []*FixtureSpec
+
+Pass 3: Find Suite Methods (per suite)
+  ├─ Walk FuncDecl nodes
+  ├─ Match pointer receiver to suite type
+  ├─ Classify by name:
+  │   ├─ BeforeAll / AfterAll / BeforeEach / AfterEach
+  │   ├─ SuiteConfig / SuiteGuard
+  │   └─ ^(X_|F_)?Test.+$ → test case method
+  ├─ Validate signatures (param types, return types)
+  └─ Parse SuiteConfig AST for Parallel: true
+
+Pass 4: Validate Context Consistency
+  ├─ If BeforeEach returns a context type:
+  │   all test methods MUST accept it as 2nd param
+  │   AfterEach MUST accept it as 2nd param
+  └─ Parallel: true requires returning BeforeEach
+
+Pass 5: Find Fixture Methods (per fixture)
+  ├─ Lifecycle: BeforeAll, AfterAll, BeforeEach, AfterEach
+  ├─ Config: FixtureConfig() or SharedFixtureConfig()
+  ├─ Hydrate/Dehydrate (shared fixtures only)
+  └─ Validate signatures: all must be (ctx context.Context) error
+
+Pass 6: Validate Fixture Consistency
+  └─ Hydrate and Dehydrate must appear together (or not at all)
+```
+
+### Focus/Exclude System
+
+```
+Name prefix → behavior:
+  F_FooTestSuite     → focused  (only focused suites run)
+  X_BarTestSuite     → excluded (always skipped)
+  F_TestCreateUser   → focused method within suite
+  X_TestDeleteUser   → excluded method within suite
+
+ReduceInRun(focusRun) logic (focusRun: any F_ suite or method in the whole run):
+  1. If focusRun → run ONLY F_ suites and suites with an F_ method, skip rest
+  2. Remove all X_ prefixed suites
+  3. Within each surviving suite, apply same logic to methods; a suite kept
+     for its F_ methods runs those alone
+```
+
+---
+
+## 2. Code Generation
+
+Binding walks the type graph starting from discovered suites,
+building a fixture tree and collecting shared fixture references.
+
+### Fixture Resolution
+
+```
+Resolve(targetPkg, suites, localFixtures)
+  │
+  for each suite:
+  │
+  ├─ Inspect struct fields:
+  │   ├─ *FooSharedFixture → build SharedFixtureRef
+  │   │   ├─ Validate: not in internal/ package
+  │   │   ├─ Register in sharedSeen map (deduped by pkgPath.Name)
+  │   │   └─ Classify transfer vs local fields via Hydrate AST
+  │   │
+  │   └─ *BarFixture → resolveFixture(named)
+  │       ├─ Check resolved cache (avoid re-resolving)
+  │       ├─ Cycle detection via resolving map
+  │       ├─ Lookup method set: BeforeAll (required), AfterAll,
+  │       │   BeforeEach, AfterEach, Hydrate, Dehydrate, Config
+  │       └─ Recurse into fixture struct fields for:
+  │           ├─ Parent fixtures (zero or more, builds DAG)
+  │           └─ SharedFixture references
+  │
+  ├─ Suite gets linked: fixture.ChildSuites ← append(suite)
+  └─ Suite categorized: FixtureBound or Standalone
+```
+
+Fixtures form a **DAG** (directed acyclic graph) via embedding: a fixture may
+have multiple parents, and suites may reference multiple fixtures. The same
+fixture type is deduplicated by identity so each fixture is set up exactly once.
+
+Binding produces both `RootFixtures` (entry points with no parents) and
+`AllFixtures` (every fixture in topological order). The renderer uses
+`AllFixtures` to emit a flat list with `DependsOn` edges for the fixture
+DAG initializer.
+
+### What Gets Generated
+
+For **standalone suites** (no fixture):
+
+```go
+// Generated wrapper struct
+type ƒƒ_GOTEST_FooTestSuite struct { FooTestSuite }
+
+// Generated test function
+func TestFooTestSuite(t *testing.T) {
+    s := &ƒƒ_GOTEST_FooTestSuite{}
+    ƒcfg, ƒbudget := gotestruntime.OpenSuite(t, gotestruntime.Suite{
+        Guard:     s.FooTestSuite.SuiteGuard,  // only if declared
+        Config:    s.FooTestSuite.SuiteConfig, // only if declared
+        BeforeAll: s.BeforeAll,
+        AfterAll:  s.AfterAll,
+    })
+
+    gotestruntime.RunMethods(t, ƒcfg, ƒbudget, gotestruntime.Methods{
+        Parallel: true,                    // only if the config says so
+        Fixtures: []gotestruntime.EachHooks{...}, // fixtures' BeforeEach/AfterEach
+        Cases: []gotestruntime.Method{
+            {Name: "TestCreateUser", Run: func(ttt *gotest.T, run func(func())) {
+                defer gotestruntime.AfterEach(func() { s.AfterEach(ttt) })
+                s.BeforeEach(ttt)
+                run(func() { ƒƒ_GOTEST_exec(s.TestCreateUser, ttt) })
+            }},
+        },
+    })
+}
+```
+
+`OpenSuite` (`pkg/gotestruntime/harness.go`) is the suite frame every Test,
+Benchmark and Fuzz wrapper shares: it runs `SuiteGuard`, holds the suite's
+fixtures (below), resolves
+`SuiteConfig` (zero durations defaulted; the declared value is the budget),
+runs `BeforeAll` under `SetupTimeout`, and registers `AfterAll` as the
+wrapper's cleanup under a context that survives the cancellation testing
+performs before cleanups.
+
+`RunMethods` (`pkg/gotestruntime/methods.go`) is the method loop: one
+subtest per method, `it.Parallel()` and the `FailFast` stop, the method's
+`*gotest.T`, the fixtures' per-method hooks around each method, and the
+`Timeout` budget, which covers those hooks, the suite's and the body. Each case's `Run` is the only part left in generated code,
+because it needs the suite's static types: the suite's `BeforeEach` and
+`AfterEach`, with a returned context, and the method call. Every method call
+goes through the `ƒƒ_GOTEST_exec` trampoline, where an assertion's call-site
+search stops; runtime and generated frames are skipped either way. Benchmark
+wrappers keep their own generated loop, fenced around the timer.
+
+Generated code and the runtime are meant to come from one module version,
+which the tool directive pins. `gotestgen.MinRuntimeVersion` refuses an older
+runtime, but a replaced or main module carries no version to check, so a
+runtime function the generator stops calling stays behind as a deprecated
+shim (`pkg/gotestruntime/deprecated.go`): a harness an older gotest left on
+disk still compiles. A changed signature is a new symbol, never an edit;
+calling one moves the floor to the first release that has it. A change to
+what the runner and the runtime say to each other moves it too: the control
+channel moved it to v1.38.0, and a runtime from v1.38 refuses, at its first
+suite, a runner that still names a stop file. A retracted release is never
+the floor: v1.34.0 is one, so the floor skipped to v1.35.0.
+`make runtime-compat` holds both: `apidiff` fails a runtime that drops or
+changes a symbol of the last release, and a corpus under
+`tests/runtimecompat` runs this tree's generated code against the floor
+release, reaching every runtime symbol the templates call.
+
+For **suites with fixtures**, every generated top-level function — the
+`TestX` function, each `FuzzX_M` seed-replay wrapper, the `BenchmarkX`
+wrapper — holds the fixtures for itself: `OpenSuite` calls the `Fixtures`
+closure right after the guard, and the hold tears them down in its own
+cleanup, which runs after `AfterAll`. A suite its guard skips sets up no
+fixtures, and its guard sees nil fixture fields. All three open the suite
+through one template define (`suiteFrame`), so each holds the same nodes and
+wires the same fields. The nodes are the suite's part of the
+DAG only: the package fixtures it binds with their parents, and the shared
+fixtures those or the suite name. A fixture the suite does not reach is
+never set up for it, so it neither costs the suite time nor fails it.
+
+```go
+// One constructor per DAG node; config methods are called here.
+func ƒ_node_DBFixture() *gotestruntime.FixtureNode { ... }
+
+func ƒ_holdFixtures(tb testing.TB, setupTimeout func() time.Duration, nodes ...func() *gotestruntime.FixtureNode) {
+    gotestruntime.HoldFixtures(tb, func() gotestruntime.MainConfig {
+        // Built per hold: every fixture variable starts from nil, and only
+        // the given nodes are constructed.
+        // Fixtures is a flat list with DependsOn edges forming a DAG.
+        return gotestruntime.MainConfig{Fixtures: ..., MaxSuiteSetupTimeout: setupTimeout()}
+    })
+    // HoldFixtures:
+    // 1. Read shared fixture state (if needed)
+    // 2. DAG wavefront setup: no-dependency fixtures start concurrently;
+    //    each fixture waits for its DependsOn set
+    // 3. BeforeAll on each fixture (retries, timeout)
+    // 4. Compute teardown budget → budget line on the control channel
+    // 5. t.Cleanup: teardown (reverse-wavefront: leaves first, roots last)
+}
+
+func TestQueryTestSuite(t *testing.T) {
+    s := &ƒƒ_GOTEST_QueryTestSuite{}
+    ƒcfg, ƒbudget := gotestruntime.OpenSuite(t, gotestruntime.Suite{
+        Fixtures: func(tb testing.TB) { // after the guard; torn down after AfterAll
+            ƒ_holdFixtures(tb, ƒsetupTimeout, ƒ_node_DBFixture)
+            s.QueryTestSuite.DB = ƒ_DBFixture
+        },
+        // ... Guard, Config, BeforeAll, AfterAll (same as standalone) ...
+    })
+    // ... methods (same as standalone) ...
+}
+```
+
+No `TestMain` is generated — both `package foo` and `package foo_test`
+can define fixture-bound suites without conflict, and a `TestMain` of the
+developer's own needs nothing from gotest. Generated top-level functions
+never run in parallel, so holds follow each other and reuse the fixture
+variables. The testing package runs a top-level function's cleanups when a
+test or subtest below it panics. A benchmark is different: a panicking
+sub-benchmark runs only its own cleanups, and the testing package can lose a
+benchmark's panic altogether (it signals the benchmark done while the panic
+unwinds, and the run may print PASS and exit 0 first). So each generated
+`b.Run` defers `gotestruntime.ReleaseOnPanic(b)`, and `OpenSuite` guards a
+benchmark's guard-to-`BeforeAll` frame and its `AfterAll` cleanup the same
+way: the panic is recovered, printed with its stack, and fails the benchmark.
+While a suite runs, a stop watcher turns a `stop` line on its control
+channel (or Ctrl-C under plain `go test`) into an orderly end of the suite
+and its teardown; see `docs/design/fixtures.md`.
+
+For suites with `Benchmark*` methods, one `Benchmark<Suite>` wrapper is
+generated (standalone or fixture-bound, same shape as above), with one
+`b.Run` per benchmark method and the timer fenced around each:
+
+```go
+func BenchmarkFooTestSuite(b *testing.B) {
+    s := &ƒƒ_GOTEST_FooTestSuite{}
+    gotestruntime.OpenSuite(b, gotestruntime.Suite{...})  // Fixtures only with fixtures
+
+    b.Run("BenchmarkParse", func(b *testing.B) {
+        b.StopTimer()
+        defer func() {
+            b.StopTimer()
+            s.AfterEach(eachT)             // outside timing, even on failure or panic
+        }()
+        s.BeforeEach(eachT)                // outside timing
+        b.StartTimer()
+        b.ResetTimer()
+        s.BenchmarkParse(gotest.NewB(b))   // user's b.Loop() bounds measurement
+    })
+}
+```
+
+A suite must be named `*TestSuite` for its `Benchmark*` methods to be
+collected at all — Pass 1 discovery matches on that suffix regardless of
+whether the struct has `Test*` methods. A bench-only struct without the
+suffix is invisible to the collector and its methods never run; `discover`
+warns about each one that takes `*gotest.B` or `*gotest.F`.
+Only a suite with `Test*` methods gets a `Test<Suite>` function, and only a
+suite with `Test*` or `Fuzz*` methods is scheduled for a test run. A
+bench-only suite is therefore never opened outside `gotest bench`. A suite
+whose every `Test*` method is `X_`-excluded gets a `Test<Suite>` that only
+skips.
+`ValidateContextConsistency` (Pass 4) additionally rejects a suite that
+mixes `Benchmark*` methods with a returning `BeforeEach` (its context type
+can't thread through `*gotest.B`) or with any stdlib `*testing.T` lifecycle
+hook. Binding rejects a fixture with `BeforeEach`/`AfterEach` bound to
+a suite with `Benchmark*` methods — per-method fixture hooks aren't
+supported for benchmarks.
+
+For suites with `Fuzz*` methods, codegen emits one top-level `FuzzX`
+function **per method** — not one wrapper with sub-tests like `Benchmark<Suite>`
+above. Go's fuzzing engine targets exactly one `FuzzX` symbol per invocation,
+so there is no shared enclosing scope to sub-test into; each generated
+function independently repeats fixture setup and `BeforeAll`:
+
+```go
+func FuzzFooTestSuite_FuzzParse(f *testing.F) {
+    s := &ƒƒ_GOTEST_FooTestSuite{}
+    gotestruntime.OpenSuite(f, gotestruntime.Suite{...})  // Fixtures only with fixtures
+    ƒf := gotest.NewF(f, s.BeforeEach, s.AfterEach, <target>)   // the method's FuzzTarget, nil for a native f.Fuzz
+    s.FuzzParse(ƒf)
+}
+```
+
+Naming: `Fuzz<SuiteIdentifier>_<MethodName>`, full method name kept (e.g.
+`FuzzParserTestSuite_FuzzParse`, not `FuzzParserTestSuite_Parse`) — the
+`gotest.NewF(f, s.BeforeEach, s.AfterEach, <target>)` call is what wires
+per-execution lifecycle interposition into `(*gotest.F).Fuzz`
+(`pkg/gotest/f.go`): `BeforeEach` runs immediately before each
+execution's body, `AfterEach` is deferred to run immediately after,
+for every seed replay and every generated input — not once for the whole
+target.
+
+`f.Fuzz` takes `any`, like its stdlib counterpart; the type checking moved
+into generation. The `<target>` above is a generated `gotest.FuzzTarget`
+(`internal/gotestgen/fuzzfan.go`, one per fuzz method): its `Register`
+asserts the callback to the exact `func(*gotest.T, ...)` type read from the
+`f.Fuzz` call at generation time and registers the real `(*testing.F).Fuzz`
+callback with the **fanned** leaf signature — one engine argument per leaf
+field, reassembled into the declared type before each execution — and its
+`Explode` turns a typed `f.Add` tuple into the same leaves. A callback of any
+other type fails the target with both signatures named. The leaf helpers
+(`Leaf*` fixed-width codecs, the packed-slice reader/writer) live in the leaf
+package `pkg/gotestfuzz`, imported only when a target has non-native leaves.
+Without a target — a top-level stdlib `FuzzX` using gotest as a library —
+`f.Fuzz` binds by reflection and accepts native argument types only.
+
+The fan is a pure function of the declared type, depth-first in
+declaration order:
+
+| Declared shape | Engine leaves |
+|---|---|
+| `string`, `[]byte`, `bool` | one leaf, passed through |
+| any number | one fixed-width little-endian `[]byte` (`pkg/gotestfuzz` `Leaf*` codecs; short input zero-extends and long input truncates, so decoding is total) |
+| named type | fans as its underlying kind |
+| nested struct | its leaves, inlined |
+| pointer | a `bool` nil-flag, then the pointee's leaves |
+| `[N]byte` | one `[]byte` leaf |
+| `[N]T` | `T` fanned N times |
+| slice of non-bytes, any other fuzzable shape | one packed `[]byte` leaf |
+| unexported fields, maps, interfaces, channels, funcs, recursive types | refused at generation time with the alternative named (the README's "Struct arguments" table), because generated code that cannot round-trip faithfully would lie |
+
+Numbers ride as bytes on purpose. Go's mutator gives a native integer only
+bounded ±100 arithmetic and a native float only bounded add/sub/mul/div,
+while a `[]byte` gets interesting-value overwrites, bit flips and window
+arithmetic, so a boundary value, `NaN` or `Inf` is one mutation away instead
+of unreachable. The cost is unreadable numeric corpus lines. That is
+acceptable only because a failing execution echoes the decoded literal
+(`Frame{Version: 7, …}`) and `triage`/`promote` decode by field path; the
+two decisions are coupled.
+
+The flatten rules, leaf widths and nil-flag placement are part of the
+versioned generated identifier family (`ƒ_fuzzfan_v1_…`): changing any of
+them re-means every corpus position, so it is a `v1 → v2` bump. Go's corpus
+format is positional, which has three consequences:
+
+- adding or removing a field invalidates the target's on-disk entries loudly
+  (the runner's stale-corpus pre-flight names the entry and the change
+  before the engine's own message);
+- swapping two same-kind fields is the one silent case (the
+  `fuzz-struct-corpus` lint rule and `promote` are the mitigation);
+- a promoted `f.Add(T{…})` literal is the durable artifact, because
+  `Explode` re-derives positions from the current type on every run.
+
+When seed harvesting is enabled (`gotestast.HarvestSeeds`, on by default —
+see the README's "Seed harvesting" section), the renderer additionally
+emits one `f.Add(...)` line per harvested literal directly in the wrapper,
+after `BeforeAll` and before the user method call, so harvested seeds
+replay through the exact same `f.Add` path as hand-written ones.
+
+A suite must be named `*TestSuite` for its `Fuzz*` methods to be collected,
+same as benchmarks. `ValidateContextConsistency` rejects a fuzz suite with a
+returning `BeforeEach`, any lifecycle hook still typed `*testing.T`, and (via
+binding) a fixture with per-method `BeforeEach`/`AfterEach` bound to it —
+mirroring the three benchmark rejections above with fuzz-specific error text.
+Unlike benchmarks, a `Fuzz*` method's parameter type is checked more strictly:
+only `*gotest.F` is accepted, never `*testing.F` — the collector rejects the
+stdlib type outright (`detectParamF` in `internal/gotestast/spec.go`, no
+`usesStdlibT` escape hatch the way `detectParamB` has one for `*testing.B`).
+
+The overlay filesystem (`-overlay=path/overlay.json`) injects generated files
+without modifying source. Go's compiler reads virtual paths from the overlay.
+
+---
+
+## 3. Fixtures: Lifecycle Models
+
+### PackageFixture Lifecycle
+
+```
+┌───── PER TOP-LEVEL FUNCTION (each Test/Benchmark/Fuzz wrapper) ──────┐
+│                                                                      │
+│  DAG wavefront setup (channel-based parallel scheduling):            │
+│                                                                      │
+│  wave 0 (no dependencies):                                           │
+│  ┌─ FixtureA.BeforeAll(ctx) ─┐  ┌─ FixtureB.BeforeAll(ctx) ─┐     │
+│  │  timeout: Config.Timeout  │  │  timeout: Config.Timeout   │     │
+│  │  retries: Config.Retries  │  │  retries: Config.Retries   │     │
+│  └───────────┬───────────────┘  └───────────┬────────────────┘     │
+│              │ done(ch)                      │ done(ch)              │
+│              └──────────┬────────────────────┘                      │
+│                         ▼                                            │
+│  wave 1 (depends on A and B):                                        │
+│  ┌─ FixtureC.BeforeAll(ctx) ────────────────────────────────────┐   │
+│  │  blocks until all DependsOn channels signal                  │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  ┌──── PER SUITE (each TestXxxTestSuite function) ──────────────┐   │
+│  │                                                               │   │
+│  │  Suite.BeforeAll(setupT)    ← deadline: SuiteConfig.SetupTimeout │
+│  │                                                               │   │
+│  │  ┌──── PER TEST METHOD (t.Run subtests) ──────────────────┐  │   │
+│  │  │                                                         │  │   │
+│  │  │  Fixture.BeforeEach(ctx)  ← if fixture has it          │  │   │
+│  │  │  Suite.BeforeEach(ttt)    ← if suite has it            │  │   │
+│  │  │  Suite.TestXxx(ttt)       ← deadline: SuiteConfig.Timeout│ │   │
+│  │  │  Suite.AfterEach(ttt)     ← deferred                   │  │   │
+│  │  │  Fixture.AfterEach(ctx)   ← deferred, if fixture has it│  │   │
+│  │  │                                                         │  │   │
+│  │  └─────────────────────────────────────────────────────────┘  │   │
+│  │                                                               │   │
+│  │  Suite.AfterAll(teardownT)  ← deferred via t.Cleanup         │   │
+│  │                                                               │   │
+│  └───────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  t.Cleanup: reverse-wavefront teardown (idempotent via sync.Once)    │
+│    wave 0: FixtureC.AfterAll(ctx)  ← leaves first                   │
+│    wave 1: FixtureA.AfterAll(ctx), FixtureB.AfterAll(ctx)  ← conc.  │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### SharedFixture Lifecycle
+
+SharedFixtures live in a **separate subprocess** that outlives all test
+binaries. They form a DAG via pointer fields to other SharedFixture types.
+State is transferred via JSON serialization, streamed as each fixture completes.
+
+```
+┌── SETUP SUBPROCESS ──────────────────────────────────────────────────┐
+│                                                                       │
+│  DAG-ordered BeforeAll (parents before children, independent conc.):  │
+│                                                                       │
+│  wave 0 (no dependencies):                                            │
+│  ┌─ PostgresSF.BeforeAll(ctx) ─┐  ┌─ RedisSF.BeforeAll(ctx) ─┐      │
+│  └───────────┬─────────────────┘  └──────────┬────────────────┘      │
+│              │ emit JSON state               │ emit JSON state        │
+│              └──────────┬────────────────────┘                        │
+│                         ▼                                              │
+│  wave 1 (depends on Postgres):                                        │
+│  ┌─ SchemaSF.BeforeAll(ctx) ────────────────────────────────────┐     │
+│  └──────────┬───────────────────────────────────────────────────┘     │
+│             │ emit JSON state                                         │
+│                                                                       │
+│  State to the protocol fd after BeforeAll (stdout on Windows)         │
+│  Include _teardownBudget = 30s + the longest chain of                 │
+│  SupervisorBudget(Timeout) over the fixtures whose setup was reached  │
+│  (a fixture's share plus the longest chain of those depending on it:  │
+│  teardown below runs concurrently, each after its dependents; a share │
+│  leaves once its teardown ran; the budget rides both _done forms — a  │
+│  failed setup still has succeeded siblings to release under it — and  │
+│  the _cmd acknowledging a start or release)                           │
+│                                                                       │
+│  ═══════ block on `stop` (stdin) or SIGTERM/SIGINT ═══════            │
+│                                                                       │
+│  every SharedFixture, concurrently, each after its dependents:        │
+│    sf.AfterAll(ctx)      timeout: SharedFixtureConfig.Timeout         │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+         │ JSON state               │ per-suite state.json files
+         ▼                          ▼
+
+┌── TEST PROCESS (per suite binary) ───────────────────────────────────┐
+│                                                                       │
+│  Read GOTEST_SHARED_STATE_FILE (contains only this suite's entries)   │
+│  json.Unmarshal → SharedFixture struct (transfer fields only)         │
+│  sf.Hydrate(ctx)    ← reconstruct local fields (e.g., DB handles)    │
+│  t.Cleanup → sf.Dehydrate(ctx)   ← release local resources           │
+│                                                                       │
+│  Suite runs with shared fixture pointer available on its struct       │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+**Design intent:** the state file is a connection-parameter snapshot, not a
+general data bus. `Hydrate()` turns those parameters into live connections;
+`Dehydrate()` releases them. This keeps fixture state deterministic across
+the N test processes that read the same snapshot.
+
+Which exported fields transfer and which are local is decided by
+`ClassifyLocalFieldsRaw()`, an AST walk of `Hydrate` and one level of the
+receiver methods it calls; the rule itself is spec.md's Field
+classification.
+
+---
+
+## 4. Process Parallelism
+
+The system has **four levels of parallelism**, each with distinct mechanisms:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Level 1: Package COMPILATION            semaphore: runtime.NumCPU()│
+│                                                                     │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐                                  │
+│  │ go  │ │ go  │ │ go  │ │ go  │  ← goroutines, each runs         │
+│  │test │ │test │ │test │ │test │    `go test -c -overlay=...`      │
+│  │ -c  │ │ -c  │ │ -c  │ │ -c  │                                  │
+│  │pkg1 │ │pkg2 │ │pkg3 │ │pkg4 │                                  │
+│  └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘                                  │
+│     │       │       │       │                                       │
+│     └───────┴───────┴───────┘                                       │
+│               │                                                     │
+│               ▼  CompileResult streamed to channel                  │
+│                  (execution starts as each package finishes)        │
+├─────────────────────────────────────────────────────────────────────┤
+│ Level 2: Shared fixture SETUP           concurrent with compilation│
+│                                                                     │
+│  ┌──────────────────────────────┐                                   │
+│  │ setup subprocess             │  ← single process                 │
+│  │  sf0.BeforeAll() ──┐        │    but fixture BeforeAll calls     │
+│  │  sf1.BeforeAll() ──┤ (conc) │    run concurrently inside it      │
+│  │  sf2.BeforeAll() ──┘        │                                    │
+│  └──────────────────────────────┘                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│ Level 3: Suite EXECUTION     semaphore: min(suites, GOMAXPROCS)    │
+│                                                                     │
+│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐           │
+│  │suite │ │suite │ │suite │ │suite │ │suite │ │suite │  ← OS      │
+│  │proc  │ │proc  │ │proc  │ │proc  │ │proc  │ │proc  │    procs   │
+│  │(bin  │ │(bin  │ │(bin  │ │(bin  │ │(bin  │ │(bin  │            │
+│  │ -run │ │ -run │ │ -run │ │ -run │ │ -run │ │ -run │            │
+│  │ ^A$) │ │ ^B$) │ │ ^C$) │ │ ^D$) │ │ ^E$) │ │ ^F$) │           │
+│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘           │
+│  Each suite = separate OS subprocess with own process tree          │
+│  One compiled binary may serve multiple suites (diff -test.run)     │
+├─────────────────────────────────────────────────────────────────────┤
+│ Level 4: Within-suite test PARALLELISM     (optional, in-process)  │
+│                                                                     │
+│  Enabled by: SuiteConfig{ Parallel: true }                          │
+│  Requires:   BeforeEach returns per-test context struct             │
+│  Mechanism:  it.Parallel() in RunMethods; AfterAll via t.Cleanup    │
+│  Concurrency governed by `-test.parallel` (default: GOMAXPROCS)     │
+│                                                                     │
+│  ┌─ Suite subprocess ──────────────────────────────────────────┐    │
+│  │ BeforeAll()                                                  │    │
+│  │ t.Run("TestA", func() { it.Parallel(); ctx := BeforeEach(); │    │
+│  │                          TestA(t, ctx); AfterEach(t, ctx) }) │    │
+│  │ t.Run("TestB", func() { it.Parallel(); ctx := BeforeEach(); │    │
+│  │                          TestB(t, ctx); AfterEach(t, ctx) }) │    │
+│  │ (testing waits for all parallel subtests before cleanup)     │    │
+│  │ AfterAll()                                                   │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Dispatch Phases and Sanitizer Awareness
+
+Level 3 dispatch runs in **two phases**. The parallel bulk dispatches every
+non-exclusive suite through the semaphore. Suites with
+`SuiteConfig{Exclusive: true}` are held back and run strictly after the bulk
+drains — one at a time, in deterministic order — because their verdicts
+measure wall-clock behavior (timing budgets, contended resources) that
+concurrently running suites would corrupt. Before each tail slot the
+runner starts the shared fixtures it needs that are not up yet, and a
+fixture no remaining planned suite needs is released (see Per-Suite
+Fixture Readiness).
+
+Level 3 is sized from a budget of concurrent test methods, `--parallel`,
+2×GOMAXPROCS by default: at most GOMAXPROCS suite processes run at a time,
+and each gets the budget divided by the process count as its
+`-test.parallel` (`ComputeConcurrency`). A user `-parallel=N` pins that
+in-process value instead; the process count is then 2×GOMAXPROCS, which
+makes it a different axis from `go test -p`. These defaults and Level 1's
+(`NumCPU`) apply to uninstrumented builds; under `-race`/`-msan`/`-asan`
+they halve, since instrumentation at least doubles the CPU cost per
+instruction stream. An explicit `--compile-parallel`/`--parallel` always wins. Two aids keep
+wall-clock verdicts diagnosable: builds running past 15s
+(`GOTEST_SLOW_BUILD_THRESHOLD` moves it) log a slow-build
+notice (a log line, never a verdict), and scheduling context (`schedinfo`)
+is appended to fixture-setup deadline failures — a starved build looks
+exactly like a broken one.
+
+### Bench mode: serial, non-streaming
+
+`gotest bench` runs the same pipeline with `PipelineConfig.Bench: true`, and
+that flag changes two things:
+
+- `RunBenchSuites` dispatches one suite subprocess at a time — Level 3 above
+  collapses, `--parallel`/`-test.parallel` are ignored for scheduling.
+  Running benchmarks concurrently would make their timing numbers
+  meaningless.
+- `RunPipeline` takes `runBench` instead of `runStreaming` — compilation and
+  execution are not overlapped for bench runs; every package is compiled
+  first, then the benchmarks run. `go test -c` never competes with a running
+  benchmark for CPU.
+
+Process-per-suite isolation (Level 3's existing design) is also a
+methodological benefit for benchmarks: GC pressure from one benchmark
+cannot pollute another's numbers, without any extra bench-specific code.
+
+### Fuzz mode: subprocess-per-target, not binary reuse
+
+`gotest fuzz` (`internal/gotestrunner/fuzzrun.go`) does not fit into Levels
+1–3 above at all — it deliberately does **not** reuse the compiled suite
+binaries `BuildSuiteTargets`/`CompilePackagesStream` produce for every other
+subcommand. The reason is a `cmd/go` constraint, not a gotest design choice:
+native fuzz instrumentation (the coverage counters `go test -fuzz` needs to
+drive its mutation engine) is woven in by `cmd/go` at `go test` invocation
+time, only when `-fuzz` is present on *that* invocation. A binary from a
+plain `go test -c` (no `-fuzz`) — exactly what every other gotest subcommand
+compiles once and reuses across suites — has no such instrumentation baked
+in; running it with `-test.fuzz` would silently degrade to undirected random
+input with no crash minimization.
+
+So `RunFuzzTargets` spawns one `go test -fuzz=<Func>` subprocess per
+generated `Fuzz<Suite>_<Method>` target instead, each doing its own
+build+instrument+run via `cmd/go`:
+
+```
+RunFuzzTargets(ctx, targets, cfg)
+  │
+  jobs := resolveFuzzJobs(cfg.Jobs)        // default max(1, GOMAXPROCS/2)
+  budget := PlanFuzzSchedule(cfg.Total, len(targets), jobs)  // jobs-aware share, 10s floor
+  │
+  for each target (bounded by a jobs-sized semaphore):
+    go test <overlay-flag> -run=^$ -fuzz=^<quoted Func>$ [-fuzztime=<budget>] <buildFlags> <pkg>
+      │
+      stdout/stderr → lineWriter → os.Stdout/os.Stderr, each line
+      prefixed "[<Func>] ", flushed live (not buffered to end-of-run)
+      │
+      testdata/fuzz/<Func>/ snapshotted before and after the run;
+      new entries are reported as "[<Func>] new crasher: <path>"
+  │
+  returns per-target outcomes (exit code, canceled?, skipped?, new crashers);
+  the session exit code is the worst *effective* code: a target stopped by
+  the deadline or an interrupt without a finding maps to 0, a new crasher
+  file maps to 1 even if the shutdown killed the process mid-crash
+```
+
+This is slower than the binary-reuse path everywhere else in gotest — every
+target pays its own compile cost — but it is the only way to get real,
+coverage-guided fuzzing. A target whose semaphore slot doesn't open before
+the context is cancelled (all targets share one deadline, derived from
+`--for` plus headroom; the fuzz command refuses `--timeout`) is skipped with `[<Func>] skipped: session ended before this
+target started` rather than silently dropped; `--for` gives every
+target its own explicit budget so a run with more targets than `--jobs`
+doesn't starve later waves. Time exhaustion never fails the session by
+itself: findings do.
+
+### Streaming Execution (Compile-Execute Overlap)
+
+Every run but a bench run streams (`runStreaming`): the plain run, `-json`,
+`spec`, `summary` and `watch`. It overlaps compilation with test execution:
+
+```
+time ─────────────────────────────────────────────────────────────────▶
+
+CompilePackagesStream:
+  [compile pkg1] [compile pkg2] [compile pkg3] [compile pkg4]
+       │              │              │              │
+       ▼              ▼              │              │
+  [run suites    [run suites     │              │
+   from pkg1]    from pkg2]      ▼              │
+                            [run suites         ▼
+                             from pkg3]    [run suites
+                                            from pkg4]
+
+Each CompileResult immediately produces SuiteTargets that enter
+the execution semaphore. No "compile all, then run all" barrier.
+```
+
+### Per-Suite Fixture Readiness
+
+Each suite has a set of shared fixture keys it needs (including transitive
+dependencies). The runner tracks which fixtures have emitted their state
+and dispatches suites as soon as their specific dependencies are all ready:
+
+```
+Suite goroutine:
+  │
+  ├─ needsFixture? ──yes──▶ wait on SharedFixtureProcess.Ready(key)
+  │                          for each declared key
+  │                              │
+  │                              ├─ Blocks until all keys in the suite's
+  │                              │   dependency set have emitted state
+  │                              ├─ WriteStateFileForKeys writes a per-suite
+  │                              │   state file (only the entries it needs)
+  │                              ├─ Returns env with GOTEST_SHARED_STATE_FILE
+  │                              └─ Error? → streamCancel(), return
+  │
+  └─ needsFixture? ──no───▶ use baseEnv directly (no blocking)
+```
+
+Suites that only need `PostgresSharedFixture` start as soon as Postgres
+is ready — they don't wait for `SchemaSharedFixture` or other unrelated
+fixtures. This reduces wall-clock time when fixtures have different
+startup durations.
+
+Fixture *lifetimes* are window-scheduled: `planFixtureWindows` computes,
+from the actual runnable suites, when each shared fixture is first needed
+and when its last consumer finishes. The setup subprocess starts and tears
+fixtures down on command (`StartKeys`/`TeardownKeys` verbs over its stdin),
+so a fixture is resident only while a scheduled suite that declared it can
+still run — never speculatively.
+
+---
+
+## 5. Timeout Architecture
+
+```
+┌────────────────────── Timeout Hierarchy ──────────────────────────────┐
+│                                                                        │
+│  --timeout (CLI flag)                                                  │
+│  └─ Global pipeline deadline (covers compile + setup + test + teardown)│
+│     Default: 15m (0 to disable)                                        │
+│                                                                        │
+│  --setup-timeout (CLI flag)                                            │
+│  └─ Total budget for shared fixture subprocess to emit JSON state      │
+│     Default: the fixtures' declared budgets, 30s until the first       │
+│     reports (0 to disable)                                             │
+│                                                                        │
+│  SharedFixtureConfig.Timeout (per shared fixture)                      │
+│  └─ Deadline on each BeforeAll/AfterAll call in the setup subprocess   │
+│     Default: 2m (DefaultFixtureConfig)                                 │
+│     Container preset: 5m + 1 retry + 5s delay (ContainerFixtureConfig) │
+│                                                                        │
+│  FixtureConfig.Timeout (per package fixture)                           │
+│  └─ Deadline on BeforeAll/AfterAll during fixture setup                │
+│     Default: 2m                                                        │
+│                                                                        │
+│  SuiteConfig.SetupTimeout (per suite)                                  │
+│  └─ Deadline on suite-level BeforeAll/AfterAll                         │
+│     Default: 30s                                                       │
+│                                                                        │
+│  SuiteConfig.Timeout (per test method)                                 │
+│  └─ Deadline on each t.Run subtest body                                │
+│     Default: 30s                                                       │
+│                                                                        │
+│  -timeout (go test flag, per suite process)                            │
+│  └─ The test binary's own -test.timeout, which panics the process      │
+│     Default: 10m, injected when the run passes none                    │
+│                                                                        │
+│  Teardown Budget (per suite subprocess)                                │
+│  └─ Sent as a `budget` line on the control channel after fixture setup │
+│     = max(fixture tree path timeout) + max(suite setup timeout) + 30s  │
+│     Used by RunSingleSuite on context cancellation before SIGKILL      │
+│                                                                        │
+│  GracefulShutdownDelay (hardcoded: 5m30s)                              │
+│  └─ Fallback until the first budget line; the runner keeps the         │
+│     largest, which can name any length, and nothing else bounds        │
+│     a managed process                                                  │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Timeout Enforcement Points
+
+```
+                     ┌─────────────────────────┐
+                     │   CLI invocation         │
+                     │   signal.NotifyContext   │
+                     │   (SIGINT, SIGTERM)      │
+                     └───────────┬─────────────┘
+                                 │ ctx
+                    ┌────────────┼────────────┐
+                    │            │            │
+                    ▼            ▼            ▼
+            ┌──────────┐  ┌──────────┐  ┌──────────┐
+            │ compile  │  │ shared   │  │ suite    │
+            │ cmd      │  │ fixture  │  │ cmd      │
+            │          │  │ cmd      │  │          │
+            │ Cancel:  │  │ Cancel:  │  │ Cancel:  │
+            │ kill     │  │ `stop`   │  │ `stop`   │
+            │ →tree    │  │ →stdin   │  │ →channel │
+            │          │  │          │  │          │
+            │ WaitDly: │  │ WaitDly: │  │ WaitDly: │
+            │ 0 (mgd)  │  │ 0 (mgd)  │  │ 0 (mgd)  │
+            └──────────┘  └──────────┘  └──────────┘
+                                             │
+                                 On ctx.Done():
+                                 ┌───────────┘
+                                 │
+                                 ▼
+                          largest budget line
+                          (or use 5m30s default)
+                                 │
+                                 ▼
+                          time.After(budget)
+                                 │
+                          still running?
+                                 │
+                         yes ────┼──── no
+                          │             │
+                   Kill the tree      normal
+                                      exit
+```
+
+### Process Tree Isolation
+
+Every subprocess the runner starts is the root of its own process tree
+(`internal/proctree`). A tree has two verbs, and both reach the root and
+everything it started, and nothing else:
+
+- **Interrupt** asks the tree to shut down. On Unix it is SIGTERM to the
+  tree's process group. On Windows it is CTRL_BREAK on the tree's own hidden
+  console (`CREATE_NO_WINDOW`), which Go delivers as `os.Interrupt`.
+- **Kill** stops the tree at once: SIGKILL to the group on Unix,
+  `TerminateJobObject` on Windows.
+
+Windows needs the private console because a console control event is
+addressed to a console, not a process. On a shared console an event aimed at
+a group can be held back and then delivered to every attached process, the
+sender included (microsoft/terminal#335); a Go process that has stopped
+listening then exits with `0xC000013A`. A process can only send an event to
+its own console, so the runner starts a short-lived helper run of its own
+executable (`GOTEST_INTERNAL_INTERRUPT_CONSOLE`, handled in an `init` of
+`internal/proctree`) with no console; it attaches to the tree's console and
+sends the event there. The job object, with kill-on-close, is also what stops
+the tree when the runner itself is killed; the root of a suite or
+shared-fixture tree holds a handle to its job as well, so that tree ends
+with its root, after the release a dead runner leaves it.
+
+A suite process is stopped on its control channel (`internal/control`), not
+by Interrupt. The runner creates one channel per suite process, a socket
+pair on Unix whose child end is descriptor 3 and a duplex named pipe on
+Windows whose client handle is inherited, and names it in `GOTEST_CONTROL`.
+The runtime's init moves the descriptor to 1000 or above, close-on-exec (on
+Windows it clears the handle's inheritance), unsets the variable and writes
+`hello`, so nothing a test starts holds the channel. The runner writes
+`stop` for the first stop and `force` for the second; the suite writes
+`budget` once its fixtures are set up and `stopped <reason>` when a stop the
+runner did not send begins, a SIGINT or SIGTERM from outside the runner,
+which then fails the suite's package. Only a suite with no `hello` 3s after
+its start, or a `stop` that cannot be written, gets a signal: one SIGINT to
+its group on Unix, CTRL_BREAK on its console on Windows, neither of which
+reaches the converter. See
+[A stop reaches the suite on its channel](specs/lifecycle/spec.md#requirement-a-stop-reaches-the-suite-on-its-channel),
+[A suite under a wrapper that drops the channel](specs/lifecycle/spec.md#requirement-a-suite-under-a-wrapper-that-drops-the-channel)
+and [A signal from outside the runner](specs/lifecycle/spec.md#requirement-a-signal-from-outside-the-runner).
+
+The runner closes its end only once the tree is released, so the end of the
+channel tells the suite that the runner is gone, on every OS: it stops by
+itself and, on Unix, after its release sends SIGTERM to its own process
+group and SIGKILL 2s later, so what its tests started ends too. On Linux the
+root also gets SIGTERM from the kernel when the runner dies (`Pdeathsig`),
+the backstop for a wrapper that dropped the descriptor; the runtime counts
+it as the same first stop. A shared-fixture process takes `stop` and `force`
+verbs on its stdin, with Interrupt as the fallback when the write fails, and
+tears down when its stdin closes, exiting with status 1 once its setup and
+teardown budgets have passed if a hook never returns. A second signal to the
+CLI sends `force` to every suite and to the shared-fixture process and kills
+every tree it still runs two seconds later, before it exits. See
+[A suite whose runner is gone](specs/lifecycle/spec.md#requirement-a-suite-whose-runner-is-gone),
+[A shared fixture process asked to stop](specs/fixtures/spec.md#requirement-a-shared-fixture-process-asked-to-stop)
+and [A shared fixture process whose CLI is killed](specs/fixtures/spec.md#requirement-a-shared-fixture-process-whose-cli-is-killed).
+
+A tree holds its root until `Release`, which runs once the root has been
+waited for; after it, the root's pid may name another process, so nothing is
+signalled. On Windows, `Release` also kills what the root left running.
+
+`ManagedProcess` stops a tree by one of three grace strategies:
+
+- `GraceFixed` — wait a fixed duration after the interrupt.
+- `GraceBudget` — wait the largest teardown budget the suite sent on its
+  control channel, 5m30s until the first.
+- `GraceKill` — skip the interrupt and kill immediately.
+
+---
+
+## 6. Output Modes
+
+```
+┌─ RunBatchText (default) ────────────────────────────────────────────┐
+│                                                                      │
+│  OutputCollector collects results per package.                       │
+│  When ALL suites for a package complete → flush in deterministic     │
+│  order (by registration index, not completion time).                 │
+│                                                                      │
+│  Trailing PASS/FAIL line stripped from each suite, replaced with     │
+│  a single package summary:  ok  pkg/path  1.234s                    │
+│                                                                      │
+├─ RunStreamJSON (-json flag) ─────────────────────────────────────────┤
+│                                                                      │
+│  Each suite runs as the runner's child; the runner keeps its         │
+│  merged stdout+stderr and feeds it to `test2json -p <pkg> -t`,       │
+│  a filter beside the suite, rerun over the kept bytes if it          │
+│  ends early. The tool's path is resolved once per run                │
+│  (`go tool -n test2json`).                                           │
+│  JSON events streamed to stdout as each suite completes.             │
+│  No batching; order depends on completion time.                      │
+│                                                                      │
+├─ RunCaptureJSON (internal) ───────────────────────────────────────────┤
+│                                                                      │
+│  Same as StreamJSON but captured into bytes.Buffer.                   │
+│  Nothing written to stdout. Used by watch, spec, and summary modes.  │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 7. Suite Target Construction
+
+```
+BuildSuiteTargets(compiled, suitesByPkg, dirsByPkg, fuzzFuncsByPkg, exclusiveByPkg, runFlags, userRunFilter)
+  │
+  for each package:
+    for each suite struct name (e.g., "FooTestSuite"):
+      │
+      ├─ testFuncName = "Test" + "FooTestSuite" = "TestFooTestSuite"
+      │
+      ├─ If userRunFilter set:
+      │   ├─ Split filter on first "/" → topLevel / subtest
+      │   ├─ Match topLevel regex against testFuncName
+      │   └─ Skip suite if no match
+      │
+      └─ SuiteTarget {
+           Package:    "github.com/example/auth"
+           Dir:        "/path/to/auth"
+           BinaryPath: "/tmp/gotest/bin/auth_a1b2c3d4.test"
+           SuiteName:  "TestFooTestSuite"
+           RunFilter:  "" or user's -run value
+           RunFlags:   ["-test.v", "-test.timeout=30s", ...]
+           CoverProfile: "/tmp/gotest/cover/0.out" (if -coverprofile)
+         }
+```
+
+Each target becomes one `exec.Command`, the binary itself (behind the
+`-exec` wrapper, if any), on every pipeline:
+```
+<binary> -test.paniconexit0 -test.run=^TestFooTestSuite$ [flags]
+```
+
+The JSON pipelines add `-test.v=test2json` and start the converter beside
+the suite, as a filter on its merged output:
+```
+<test2json> -p <pkg> -t
+```
+
+```
+runner ──► suite binary (root of its tree: own pgid on Unix, own hidden console + job on Windows)
+ │           │ merged stdout+stderr, one pipe
+ │           ▼
+ ├─ raw buffer ──► test2json -p <pkg> -t   (own pgid on Unix, DETACHED_PROCESS on Windows)
+ │                   │ JSON events
+ │                   ▼
+ │                suite's event buffer
+ │
+ └─ control channel: descriptor 3 on Unix (socket pair), an inherited
+    handle on Windows (named pipe), named by GOTEST_CONTROL
+      down: stop, force      up: hello, budget, stopped <reason>
+```
+
+Nothing aimed at the suite reaches the converter, and the runner holds the
+suite's real exit status: once the suite has exited, it ends the
+converter's input with the result that status gives, so a crash fails the
+package by its status
+([A crash is the package's failure](specs/lifecycle/spec.md#requirement-a-crash-is-the-packages-failure)).
+
+`-test.paniconexit0` is what `go test` passes too: an `os.Exit(0)` during a
+test panics and fails the suite instead of ending the process with a pass.
+
+### Bench Target Construction
+
+`BuildBenchTargets` is the bench-mode sibling of `BuildSuiteTargets` — it
+walks `overlay.BenchesByPkg` (suites with `Benchmark*` methods) instead of
+`overlay.SuitesByPkg`, and filters on two independent regexes matched
+against the same `Benchmark<SuiteName>` function name:
+
+```
+BuildBenchTargets(compiled, benchesByPkg, dirsByPkg, runFlags, userRunFilter, userBenchFilter)
+  │
+  for each package:
+    for each bench-suite name (e.g., "FooTestSuite"):
+      │
+      ├─ benchFuncName = "Benchmark" + "FooTestSuite" = "BenchmarkFooTestSuite"
+      │
+      ├─ userRunFilter set  (from -run)    → must match benchFuncName, else skip
+      ├─ userBenchFilter set (from -bench) → must match benchFuncName, else skip
+      │   (both apply — AND semantics; a -run Test<Suite> value matches nothing
+      │    here since the wrapper is named Benchmark<Suite>, not Test<Suite>)
+      │
+      └─ SuiteTarget{ ..., Bench: true }
+```
+
+A user-supplied `-bench` value is extracted out of `RunFlags` by
+`ExtractBenchFilter`/`StripBenchFilter` before target construction — it must
+not reach `buildSuiteCmd` as a raw `-test.bench` flag, since that would be
+appended after the generated one and silently win, defeating per-suite
+scoping. `buildSuiteCmd` builds the actual test binary invocation for a
+bench target as:
+
+```
+<binary> -test.paniconexit0 -test.run=^$ -test.bench=^BenchmarkFooTestSuite$ -test.benchmem [flags]
+```
+
+`-test.run=^$` disables ordinary tests for the run; `-test.benchmem` is
+appended unless already present in the forwarded flags.
+`RunBenchSuites` dispatches these targets one at a time regardless of
+`--parallel`.
+
+### Fuzz seed replay: run-filter alternation
+
+`BuildSuiteTargets` (the plain, non-bench path) also takes a
+`fuzzFuncsByPkg map[string]map[string][]string` parameter and attaches each
+suite's generated `Fuzz<Suite>_<Method>` names to `SuiteTarget.FuzzFuncs`.
+`buildSuiteCmd` branches on this in `-test.run` construction, in priority
+order:
+
+```
+target.Bench            → "-test.run=^$" -test.bench=^Benchmark<Suite>$"
+target.RunFilter != ""   → "-test.run=" + RunFilter            (user wins, untouched)
+len(target.FuzzFuncs)>0  → "-test.run=^(?:<Suite>|<Fuzz1>|<Fuzz2>|...)$"  (widened)
+default                  → "-test.run=^<Suite>$"
+```
+
+A user-supplied `-run` filter is never widened to also include the suite's
+fuzz funcs — it becomes the entire `-test.run` value as-is, so a fuzz
+target's seed corpus only replays under a user filter if the generated
+`Fuzz<Suite>_<Method>` name happens to match that filter on its own merit
+(controller ruling: user filter wins over replay widening). With no user
+filter, the alternation runs the suite's `Test<Suite>` function and every
+one of its fuzz funcs' seed corpora as ordinary subtests
+(`Fuzz<Suite>_<Method>/seed#0`) in the same subprocess — this is what makes
+`gotest ./...` — and `spec`/`watch`/`summary`, whose `PipelineConfig`
+literals thread `FuzzFuncsByPkg` the same way — replay fuzz seeds for free,
+at zero `-fuzz` cost.
+
+---
+
+## 8. Full Timeline (Happy Path)
+
+```
+t=0s    CLI starts
+        ├─ Parse flags, load config
+        ├─ LoadPackages(./...)
+        ├─ GenerateOverlay → overlay.json
+        ├─ signal.NotifyContext (SIGINT/SIGTERM → ctx cancel)
+        │
+t=0.5s  RunPipeline begins (runStreaming)
+        ├─ Start goroutine: CompilePackagesStream → compileCh
+        ├─ Start goroutine: StartSharedFixtures (if any)
+        │
+t=1s    pkg/auth compiles first → CompileResult on compileCh
+        ├─ BuildSuiteTargets → [AuthTestSuite, TokenTestSuite]
+        ├─ AuthTestSuite needs shared fixtures → blocks on Ready(key)
+        └─ TokenTestSuite doesn't → acquires sem slot, starts subprocess
+           └─ ./auth_hash.test -test.paniconexit0 -test.run=^TestTokenTestSuite$ -test.v=test2json
+              (test2json -p pkg/auth -t beside it; control channel on fd 3)
+        │
+t=2s    pkg/cart compiles → 2 more suites start
+        │
+t=3s    Shared fixture setup completes → JSON state written
+        ├─ Ready(key) unblocks; WriteStateFileForKeys → per-suite state file
+        └─ AuthTestSuite now starts (had been waiting)
+        │
+t=4s    TokenTestSuite finishes (exit 0)
+        ├─ collector.RecordResult("pkg/auth", 1, result) → not all done yet
+        │
+t=5s    AuthTestSuite finishes (exit 0)
+        ├─ collector.RecordResult("pkg/auth", 0, result) → all done!
+        └─ collector flushes pkg/auth → print both suites, package summary
+        │
+t=8s    All suites done, wg.Wait() returns
+        ├─ setupProc.Teardown()
+        │   ├─ `stop` on its stdin (Interrupt if the write fails)
+        │   └─ Shared fixture subprocess runs AfterAll, exits
+        └─ Return worst exit code
+```
+
+---
+
+## 9. Testing gotest
+
+gotest runs its own tests with gotest; there is no `go test` step. A framework
+that tests itself has one structural risk: a bug in the framework can make a
+red run look green, because a check that reports through the broken
+machinery cannot see the break. What keeps the single runner from being
+circular is a small trust base, a rule about which tests may use gotest's
+assertions, and four guards, one per way a broken core could turn red into
+green.
+
+**The trust base.** Everything below relies only on what Go guarantees
+regardless of gotest; everything else is under test.
+
+- `go test` computes the exit status and the `-json` event stream from
+  `testing.T` state. Nothing outside the `testing` package can un-fail a
+  `testing.T`.
+- `gotest.T.Errorf` and `FailNow` delegate to the embedded `*testing.T`
+  (`pkg/gotest/t.go`), and the generated harness invokes every suite method
+  inside a real `t.Run`. A check written as plain `if` plus `t.Errorf`
+  inside a suite method is therefore recorded by Go, not by gotest.
+- `go/ast` parses source without running anything; `encoding/json` decodes
+  the event stream; the CI shell can invert an exit code.
+
+**Two rings.** Ring 0 is the code every other test's *reporting* depends
+on: `pkg/gotest/internal/assert`, `pkg/gotest/internal/snapfile`,
+`pkg/gotestruntime`, the event, tree and stats layer of `internal/gotestspec`,
+and the canary in `tests/canary`. Ring 1 is everything else.
+
+Ring-0 tests are gotest suites, but their bodies check with plain Go:
+`if got != want { t.Errorf(...) }`, and `t.FailNow()` to halt. They never
+call a `gotest.*` assertion, so a broken assertion kernel cannot pass the
+tests of the kernel. The rule is stated on each file's package clause with
+`//nolint:fail-guard`; packages with several such files keep their raw-check
+helpers in a `ring0_suite_test.go`. The rule is an allowlist, not a ban on
+the `gotest` import: a ring-0 suite may call `gotest.DefaultSuiteConfig`,
+`DefaultFixtureConfig`, `Each`, `Must`, the `Export*` shims and, in the
+suite that tests it, `gotest.MatchSnapshot`. Any other exported `gotest`
+function is an assertion and must not appear. Ring-0 suites live in
+external test packages (`assert_test`, `gotestruntime_test`, …) so that the
+harness can import `gotest`; internals reach them through `export_test.go`
+shims. `package gotest` itself cannot host a suite, because the harness
+would import the package it lives in.
+
+Ring-1 tests are ordinary suites: gotest assertions, `When`/`It` structure,
+parallel by default. A ring-1 suite may exercise ring-0 code, and constantly
+does; it may not be the only test of it.
+
+A ring-0 suite protects as well as the stdlib test it replaced. It can fail
+to protect in only two ways: it never ran, which the census catches, or its
+failure was misreported, which the canary catches. Its own checks are
+recorded by `testing`.
+
+**The failure modes.** A broken core can only do harm as a false green; a
+false red fails CI and a person looks. Each way to a false green has one
+guard:
+
+| Failure mode | Example | Guard |
+|---|---|---|
+| Absence: a declared test never runs | the generator omits a method, the harness skips it, discovery misses the suite | census |
+| Swallowed failure: the test runs but its failure is not recorded | a wrong assertion predicate, `fail` is a no-op, `T` wired to the wrong `testing.T` | ring 0 and the canary |
+| Misreported verdict: the failure is recorded but the run says green | exit-code aggregation returns 0, the event parser drops `fail` events, the tree classifies `fail` as `pass` | canary; the tree's classification, its ring-0 suite |
+| Lifecycle: hooks or fixtures misbehave | `BeforeEach` not called, teardown skipped | a swallowed failure, for any test that records the order |
+
+**The guards.**
+
+1. **Census** (`internal/gotestrunner/census.go`) catches absence. The
+   output collector indexes every verdict as the test2json stream is written;
+   after a green run that ran to completion, every unit the source declares
+   must have one, or the run exits 2 and the missing units are booked into
+   the stream. Living in the pipeline, it covers every command and output
+   mode that writes the stream without any of them wiring it. The declared
+   set comes from the AST through `gotestast`, the same source `discover`
+   uses; the executed set is every `Suite/Method` pair with a terminal action.
+   It is exit 2, not 1, because a dropped test is not a failed test but a
+   run that cannot be believed, the same code an uncompilable package gets.
+   Only green runs are censused: a red run is already not a false green.
+   The user-facing rules, when the census stands down and how bench runs
+   are censused, are in spec.md under CI Integration.
+2. **Ring-0 raw checks** catch a swallowed failure in the kernel: the tests
+   of the assertion kernel never call it, so a kernel that always passes
+   cannot pass them.
+3. **Canary** (`tests/canary`) catches a misreported verdict, and a
+   swallowed failure end to end. It builds the CLI, runs it over the
+   fixture packages in its `testdata`, each written to pass or fail in one
+   specific way (a green suite, one failing assertion per family, a halting
+   `FailNow`, `AfterEach` after a failure, lifecycle order,
+   benchmarks, fuzz seeds, an uncompilable package, a panicking method,
+   fixtures torn down and shared fixtures failing to come up or to let go),
+   and compares exit codes and the raw `-json`
+   verdicts with a checked-in golden list (`testdata/expected.txt`), checking
+   with plain Go. Its four suites each run their methods one after another
+   and run side by side only as separate processes, so the canary does not
+   rest on the in-suite parallelism it guards. The golden list is a third
+   source of truth that shares no code with discovery or generation. That closes the census's one blind
+   spot: `discover` and the generator both read `gotestast`, so a bug that
+   broke both identically would make the census agree on the wrong set; the
+   golden list would still disagree.
+4. **Drill** (`make drill`, `tests/drill`) turns the argument into
+   evidence. Each patch in `tests/drill/mutants/` plants one bug in a core
+   component in a scratch copy of the tree; a `gotest` built from the
+   unmodified tree then runs, against the copy, only the checks the patch's
+   header selects, and must report them red. An `Expect:` line anchored to a
+   conformance package's `FAIL` line runs that package, under a `-run` for
+   the suites and methods stating the patch's `Clause:` lines; every other
+   `Expect:` line is judged by the packages and tests the `Judge:` lines
+   name, and a patch whose `Expect:` lines neither route reaches is refused,
+   since nothing runs by default. The judge is built pristine because the
+   first drill showed the alternative: the mutant that zeroes the exit code
+   graded the very run that was judging it. The orchestrator that applies the
+   patches, bounds each worker and counts the verdicts (`internal/drill`) is
+   built pristine too and imports no gotest package. Which check catches which mutant is in
+   `tests/drill/README.md`. A patch that no longer applies exactly, does not
+   compile, names a clause no spec states, or is caught by any
+   check but the one its row names fails the drill, so mutants cannot
+   silently stop testing anything. The clauses no mutant names are held to
+   the budget in `tests/drill/unmutated-allow.txt`, raised only on purpose. The
+   drill runs in CI, split into four shards, on every push and pull request.
+
+**Adding a test.** Four questions decide where a new test goes and what
+protects it:
+
+1. Does any other test's *verdict* depend on the code under test? Then it
+   is ring 0: an external test package, raw checks only, `//nolint:fail-guard`
+   on the package clause. Everything else is a ring-1 suite with gotest
+   assertions and `When`/`It` structure.
+2. Which false green would a bug here produce, and which guard catches it?
+   A dropped test is the census's job; a swallowed failure the ring-0 suites'
+   and the canary's; a misreported verdict the canary's. A guard nothing
+   demonstrates is a claim: a change that adds a new way to drop or
+   misreport a verdict adds a drill mutant for it.
+3. Why is the suite not parallel, and if it is `Exclusive`, which wall-clock
+   verdict does it take? The default is parallel with a returning
+   `BeforeEach`. A suite with more than one test method that is neither
+   `Parallel` nor `Exclusive` says why on a `// Sequential:` line in its doc
+   comment, naming a real constraint: `Setenv`, a swapped `os.Stdout`, a
+   golden that pins output order, state the framework forbids moving into a
+   context. `tests/conventions` fails the run for a suite without one.
+4. Render `gotest spec` once. The suite is a subject, the method a
+   capability, each `It` one behavior. If the render reads as a list of
+   functions, the names are wrong.
+5. A wall-clock bound the body measures itself goes through
+   `testkit.Scaled`, so it follows `GOTEST_TIMEOUT_SCALE` as the budgets do.
+   Scale an upper bound only when its scaled value still tells the outcomes
+   apart: a bound that must stay below a timeout the test also sets, or a
+   lower bound, is left as written.
+
+`tests/e2e` holds one suite, the smoke of a consumer-shaped module: a copy of
+this repository whose examples module reaches gotest through a go.work, run the
+way a user runs it. Every other claim it once made is a scenario in `specs/`.
+`tests/sharedfixture` holds no tests of its own: its packages are shared
+fixtures and the suites binding them, which the runner's, the generator's and
+the CLI's own tests run.
+
+Case accounting for any restructuring is by `gotest -json` capture
+(`Package`+`Test` pairs) before and after, never by grepping sources: grep
+miscounts test functions embedded in string fixtures.
+
+**Boundaries.**
+
+- The plain text run is not censused; that would need test2json in the
+  fast loop.
+- Filtered runs are not censused. Nothing in gotest models `go test`'s
+  selection flags; a filtered census would have to start there.
+- `When`/`It` rows are not censused; that would need the static spec's
+  handling of behaviors it cannot enumerate. The conformance rows need none:
+  the drill counts a catch only when the clause's own failure line appears,
+  so every clause a mutant names is proven to execute, and the unmutated
+  budget caps the rest. The rows without that proof are ring-1 behaviors.
+- The extension's runs use `-json` and inherit the census: the missing
+  units arrive in the stream as failed tests, so the Test Explorer marks
+  the method and the Spec View names it. Nothing in the editor knows the
+  census exists.
+
+The migration that established this found a real defect the stdlib tests could
+not: called under the harness of a parallel suite, the call-site tracer
+reported `harness.go:38` as the user's frame. The tracer now treats
+`pkg/gotestruntime/` as gotest code.
+
+## Key Design Decisions
+
+1. **AST over reflection**: Discovery is compile-time, not runtime. This
+   enables static analysis, IDE integration (`gotest discover` JSON), and
+   code generation without running test code.
+
+2. **One subprocess per suite**: Each suite runs in complete isolation. A
+   panicking suite cannot affect others. The OS enforces memory isolation.
+
+3. **Overlay filesystem**: Generated code is injected via Go's `-overlay` flag.
+   Source files are never modified. Each run writes its overlay into its own
+   work dir (`<work dir>/overlay/`), so runs never share or remove each other's;
+   Go's build cache keys overlaid files by content under their original path,
+   so an overlay at a new path each run costs no rebuild. The test binaries do
+   get reuse: each links into
+   `~/.cache/gotest/bin/<key>/`, keyed by working directory, build flags,
+   platform and Go version, so go skips the link for an unchanged package, and
+   the run copies the binary into its own work dir before executing it. Each
+   key records its checkout in `.cwd`, and every run's start evicts the
+   binaries of a checkout that no longer exists, those unused for 7 days (go
+   touches a binary it finds up to date, so its modification time is its
+   last use), then the least recently used until the cache is under 5 GiB.
+   A binary goes only under its own
+   lock, taken without waiting, and only if unused since the scan; a run
+   that waited on a lock whose file was replaced meanwhile links without the
+   cache. Use `--no-cache` to bypass it.
+
+4. **Streaming compilation**: `CompilePackagesStream` sends results to a
+   channel as each package finishes. Test execution begins before all packages
+   are compiled, reducing total wall-clock time.
+
+5. **Process trees via ManagedProcess**: Every subprocess runs as the root of
+   its own process tree (see Process Tree Isolation): a shutdown request and a
+   force-kill reach the processes tests spawn and never the runner or a
+   sibling. Grace period strategy is configuration, not per-callsite
+   reimplementation.
+
+6. **Budget-based teardown**: Each suite subprocess computes its own teardown
+   budget (max fixture timeout + max suite setup timeout + 30s headroom) and
+   sends it as a `budget` line on its control channel. The runner keeps the
+   largest before deciding when to escalate from the stop to SIGKILL.
+
+7. **No coverage interception needed**: Fixture setup no longer uses
+   `TestMain` + `os.Exit(m.Run())`, so Go's coverage machinery works
+   without interception. The test binary exits normally via `t.Cleanup`.
+
+8. **Unified pipeline entry point**: `cmd/gotest` is a thin CLI shell that
+   delegates to `internal/gotestrunner.RunPipeline`. The pipeline encapsulates
+   the compile -> fixture-setup -> execute -> teardown -> output flow; a
+   bench run compiles before it dispatches, everything else streams.
+
+## Glossary
+
+Project-specific terms, one definition each; the section named elaborates.
+
+- **Verdict** — the recorded outcome of one test in the `go test -json` stream: `pass`, `fail` or `skip`. A run's exit code aggregates verdicts; a declared test with no verdict is what the census catches. (Testing gotest)
+- **False green** — a run that should be red and reports green. The only harm a broken core can do; every guard closes one way to it. (Testing gotest)
+- **Trust base** — what Go guarantees regardless of gotest: `testing.T` cannot be un-failed, `go/ast` and `encoding/json` need nothing of ours, the shell can invert an exit code. (Testing gotest)
+- **Ring 0** — the code every other test's reporting depends on: the assertion kernel, snapshot files, the runtime, the event/tree/stats layer and the canary. Its tests use raw checks. **Ring 1** is everything else. (Testing gotest)
+- **Raw check** — `if got != want { t.Errorf(...) }` and `t.FailNow()`, never a `gotest.*` assertion; declared on a file's package clause with `//nolint:fail-guard`. (Testing gotest)
+- **Guard** — one of the four mechanisms that keep the single runner from grading its own exam: census, ring-0 raw checks, canary, drill. (Testing gotest)
+- **Census** — after a green `spec`, `summary` or `-json` run, every method the source declares must have a verdict, or the run exits 2. Stands down under `-run`, `-skip`, `-list` and `-bench`. (Testing gotest)
+- **Canary** — `tests/canary`: builds the CLI, runs it over fixture packages written to fail in specific ways, and compares exit codes and raw verdicts with the **golden list**, `testdata/expected.txt`, using plain Go. (Testing gotest)
+- **Drill** — `make drill`: applies each **mutant** (a patch planting one bug) to a scratch copy and requires the **judge**, a `gotest` built from the unmodified tree, to report the copy red. (Testing gotest, `tests/drill/README.md`)
+- **Harness** — the generated code that runs a suite: the `Test<Suite>` function, the `t.Run` nesting, lifecycle wiring and the `pkg/gotestruntime` calls it makes. Never committed. (Code Generation)
+- **Overlay** — Go's `-overlay` mechanism, through which the harness reaches the compiler without touching the source tree. (Code Generation)
+- **ptest / pxtest** — the two test-package variants `packages.Load` returns for one directory: the in-package tests (`package foo`) and the external ones (`package foo_test`). Each gets its own generated file. (Discovery)
+- **Bound / budget** — a *bound* is the deadline on a phase's context; a *budget* is the duration the phase is held to by verdict, which applies only when the suite or fixture declared a config of its own. (Timeout Architecture; spec.md, Generated Behavior)
+- **Teardown budget** — the grace period a suite subprocess computes for itself and sends as a `budget` line on its control channel; the runner waits that long after the stop before SIGKILL. (Timeout Architecture)
+- **Bulk / tail** — the two dispatch phases: the parallel bulk of ordinary suites, then the serial tail of `Exclusive` suites, each slot starting the shared fixtures it needs. (Dispatch Phases)
+- **Exclusive** — a suite dispatched strictly alone in the tail, for verdicts that measure wall-clock behavior or contend for a resource. (Dispatch Phases)
+- **Fixture window** — the span during which a shared fixture is resident: from the first phase that needs it to the last, never speculatively. (Per-Suite Fixture Readiness; fixtures.md, Execution Model)
+- **Transfer field / local field / hydrate** — a shared fixture's exported, JSON-serialized fields cross the process boundary; fields assigned in `Hydrate` are local and rebuilt in each test process. (SharedFixture Lifecycle)
+- **Fan / leaf** — the generated decomposition of a fuzz argument into the native values Go's engine accepts, one per leaf field, reassembled before every execution. (Code Generation)
+- **Pass-through / shape-bound target** — a fuzz target whose arguments are all native passes them through unchanged; one with a fanned argument is shape-bound: its corpus positions mean whatever the type's current field order says. (Code Generation; README, Struct arguments)
+- **Seed / crasher / interesting input** — a seed is an `f.Add` value, replayed as an ordinary subtest on every run; a crasher is the corpus file the engine writes under `testdata/fuzz/<Func>/` for a failing input; interesting inputs reached new coverage and live in Go's build cache, never beside the code. (Fuzz mode; README, Fuzzing)
+- **Capturing bench run** — a `gotest bench` run with `--spec`, `--json`, `--save` or `--against`, which captures the event stream and is therefore censused over the declared benchmarks. (Testing gotest)
+- **Subject / capability / behavior** — what a suite, a method and an `It` are in the rendered specification; the full vocabulary is spec.md's Conceptual Model.

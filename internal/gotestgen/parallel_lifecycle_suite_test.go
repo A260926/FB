@@ -1,0 +1,279 @@
+package gotestgen_test
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/gotestgen"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// childTimeout is the -test.timeout of the compiled suite binary. If suite
+// cleanup ever waits on work that is itself blocked behind that cleanup, the
+// child dies here with "test timed out" instead of hanging this package.
+// 60s: generous headroom over the harness's own promptness assertions —
+// under a loaded gate a runnable-but-unscheduled child is starvation, not a
+// hang, and must not be executed by this backstop alarm.
+const childTimeout = 60 * time.Second
+
+// hangTimeout is the alarm for a child that can only be ended by it. A BeforeAll
+// that never returns wedges the binary, so unlike childTimeout this value is paid
+// in full on every run. 1s: the verdict lands at ~250ms — a 200ms budget plus
+// scheduling — and only that scheduling slack varies, because the two-step compile
+// below keeps build time out of the window.
+const hangTimeout = 1 * time.Second
+
+// childWallClock bounds the whole subprocess, so even a child that ignores its
+// own timeout cannot stall the parent run.
+const childWallClock = 90 * time.Second
+
+// ParallelLifecycleTestSuite compiles and runs harnesses produced by the real
+// generator for suites configured with SuiteConfig{Parallel: true}.
+//
+// It guards the deadlock fixed in v1.25.x: the generated parent cleanup used to
+// wg.Wait() on the parallel test methods, but Go's testing package runs every
+// ancestor's cleanup from the goroutine that is panicking, while the test method
+// that would release the barrier is still parked inside t.Run. The two waited on
+// each other until the outer -timeout alarm shot the process.
+type ParallelLifecycleTestSuite struct{}
+
+func (s *ParallelLifecycleTestSuite) SuiteConfig() gotest.SuiteConfig {
+	// Exclusive: these methods hold child suites to wall-clock budgets, and a
+	// budget verdict taken on a saturated machine is not a verdict to act on.
+	return gotest.SuiteConfig{Parallel: true, Exclusive: true}
+}
+
+type childRun struct {
+	output  string
+	elapsed time.Duration
+	passed  bool
+	timeout time.Duration
+}
+
+// runGeneratedSuite renders the harness for a testdata package, drops it next to
+// the sources inside the throwaway module and runs `go test` over it. The alarm
+// defaults to childTimeout; pass one only for a child that cannot exit on its own.
+func runGeneratedSuite(t *gotest.T, name string, timeout ...time.Duration) childRun {
+	limit := childTimeout
+	if len(timeout) > 0 {
+		limit = timeout[0]
+	}
+	return runGeneratedSuiteArgs(t, name, limit)
+}
+
+// runGeneratedSuiteArgs is [runGeneratedSuite] with extra flags for the child,
+// such as -test.bench.
+func runGeneratedSuiteArgs(t *gotest.T, name string, limit time.Duration, args ...string) childRun {
+	return runGeneratedSuiteEnv(t, name, limit, nil, args...)
+}
+
+// runGeneratedSuiteEnv is runGeneratedSuiteArgs with extra variables in the
+// child's environment, such as the shared state file a runner would write.
+func runGeneratedSuiteEnv(t *gotest.T, name string, limit time.Duration, env []string, args ...string) childRun {
+	dir := gotestgen.ExportTestPkgDir(t.T(), name)
+	pkg := gotestgen.ExportMustTestPkg(t.T(), name)
+
+	source, _ := renderTestPkg(t.T(), pkg, false)
+	gotest.NotContains(t, source, "sync.WaitGroup", "generated parallel harness must not gate cleanup on a WaitGroup")
+
+	// Compile and run as two steps. A combined `go test` would fold build time
+	// into the measurement even though -timeout only governs execution, and a
+	// compile error would be indistinguishable from a failing suite.
+	bin, buildOut, buildErr := buildHarness(dir, source)
+	gotest.NoError(t, buildErr, "compiling the generated harness failed:\n%s", buildOut)
+
+	ctx, cancel := context.WithTimeout(context.Background(), childWallClock)
+	defer cancel()
+
+	// -test.v keeps the suite's own stdout markers even when the child passes.
+	cmd := exec.CommandContext(ctx, bin, append([]string{"-test.v", "-test.count=1", "-test.timeout=" + limit.String()}, args...)...) //nolint:gosec // G204: freshly compiled test binary
+	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	run := childRun{output: string(out), elapsed: time.Since(start), passed: err == nil, timeout: limit}
+
+	gotest.NoError(t, ctx.Err(), "child never exited on its own:\n%s", run.output)
+	return run
+}
+
+// harnessLocks serializes writing and compiling a test package's harness.
+// Parallel methods that run the same package share its directory, and
+// rewriting the file while another method compiles it hands the compiler an
+// empty file ("expected 'package', found 'EOF'").
+var harnessLocks sync.Map // dir -> *sync.Mutex
+
+// harnessBuilds holds each harness's compile, keyed by its directory and
+// source: every run of the same harness after the first reuses the binary.
+var harnessBuilds sync.Map // dir + source hash -> *harnessBuild
+
+type harnessBuild struct {
+	once sync.Once
+	bin  string
+	out  []byte
+	err  error
+}
+
+// buildHarness compiles the harness for dir once per source and returns the
+// binary, which lives beside the throwaway module's packages until TestMain
+// removes it.
+func buildHarness(dir, source string) (bin string, out []byte, err error) {
+	sum := sha256.Sum256([]byte(source))
+	key := dir + "\x00" + hex.EncodeToString(sum[:])
+	b, _ := harnessBuilds.LoadOrStore(key, &harnessBuild{})
+	build := b.(*harnessBuild)
+	build.once.Do(func() {
+		build.bin = filepath.Join(filepath.Dir(dir), ".bin", filepath.Base(dir)+"-"+hex.EncodeToString(sum[:6])+".test")
+		if runtime.GOOS == "windows" {
+			build.bin += ".exe"
+		}
+		args := []string{"test", "-c", "-o", build.bin}
+		if raceEnabled {
+			args = append(args, "-race")
+		}
+		build.out, build.err = writeAndBuild(dir, source, append(args, "."))
+	})
+	return build.bin, build.out, build.err
+}
+
+// writeAndBuild writes the harness into dir and compiles the package, holding
+// dir's lock for both.
+func writeAndBuild(dir, source string, buildArgs []string) ([]byte, error) {
+	mu, _ := harnessLocks.LoadOrStore(dir, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
+
+	if err := os.WriteFile(filepath.Join(dir, "gotest_psuite_test.go"), []byte(source), 0o600); err != nil {
+		return nil, err
+	}
+	build := exec.Command("go", buildArgs...) //nolint:gosec // G204: go tool with test-controlled arguments
+	build.Dir = dir
+	build.Env = append(os.Environ(), "GOWORK=off")
+	return build.CombinedOutput()
+}
+
+// assertNoDeadlock is the core regression assertion: the child must report its
+// failure by itself, not be cut down by the test-run alarm.
+func assertNoDeadlock(t *gotest.T, run childRun) {
+	gotest.NotContains(t, run.output, "test timed out",
+		"suite cleanup deadlocked; the run was terminated by the -timeout alarm:\n%s", run.output)
+	gotest.Less(t, run.elapsed, run.timeout,
+		"child ran for %s, at or beyond its own -test.timeout of %s:\n%s", run.elapsed, run.timeout, run.output)
+}
+
+func (s *ParallelLifecycleTestSuite) TestParallelSuccess(t *gotest.T) {
+	t.When("every parallel test method succeeds", func(w *gotest.T) {
+		run := runGeneratedSuite(w, "TestLifecycle_ParallelSuccess")
+
+		w.It("passes without deadlocking", func(it *gotest.T) {
+			assertNoDeadlock(it, run)
+			gotest.True(it, run.passed, "expected the generated suite to pass:\n%s", run.output)
+		})
+
+		w.It("lets every parallel test method complete", func(it *gotest.T) {
+			for _, marker := range []string{"MARK:done alpha", "MARK:done beta", "MARK:done gamma"} {
+				gotest.Contains(it, run.output, marker, "a started test method did not complete:\n%s", run.output)
+			}
+		})
+
+		w.It("runs AfterAll exactly once, after all of them", func(it *gotest.T) {
+			gotest.Equal(it, 1, strings.Count(run.output, "MARK:afterall"), "AfterAll must run exactly once:\n%s", run.output)
+			gotest.Contains(it, run.output, "calls= 1", "AfterAll must observe its own first invocation:\n%s", run.output)
+
+			afterAll := strings.Index(run.output, "MARK:afterall")
+			for _, marker := range []string{"MARK:done alpha", "MARK:done beta", "MARK:done gamma"} {
+				gotest.Less(it, strings.Index(run.output, marker), afterAll,
+					"AfterAll ran before %q:\n%s", marker, run.output)
+			}
+		})
+
+		w.It("hands AfterAll a live context", func(it *gotest.T) {
+			gotest.Contains(it, run.output, "ctxErr= <nil>",
+				"AfterAll received an already-canceled context; the configured SetupTimeout never applies:\n%s", run.output)
+		})
+	})
+}
+
+func (s *ParallelLifecycleTestSuite) TestPanicInParallelMethod(t *gotest.T) {
+	t.When("a parallel test method panics while a sibling is in flight", func(w *gotest.T) {
+		run := runGeneratedSuite(w, "TestLifecycle_ParallelPanic")
+
+		w.It("terminates promptly instead of timing out", func(it *gotest.T) {
+			assertNoDeadlock(it, run)
+			gotest.False(it, run.passed, "a panicking suite must fail:\n%s", run.output)
+		})
+
+		w.It("reports the original panic", func(it *gotest.T) {
+			gotest.Contains(it, run.output, "boom from a parallel test method", "the panic value should reach the output:\n%s", run.output)
+		})
+
+		w.It("still runs AfterAll exactly once", func(it *gotest.T) {
+			gotest.Equal(it, 1, strings.Count(run.output, "MARK:afterall"), "AfterAll must run exactly once:\n%s", run.output)
+		})
+	})
+}
+
+func (s *ParallelLifecycleTestSuite) TestPanicInNestedBehavior(t *gotest.T) {
+	t.When("a nested When/It panics inside a parallel test method", func(w *gotest.T) {
+		run := runGeneratedSuite(w, "TestLifecycle_ParallelNestedPanic")
+
+		w.It("terminates promptly instead of timing out", func(it *gotest.T) {
+			assertNoDeadlock(it, run)
+			gotest.False(it, run.passed, "a panicking suite must fail:\n%s", run.output)
+		})
+
+		w.It("reports the original panic", func(it *gotest.T) {
+			gotest.Contains(it, run.output, "boom from a nested behavior", "the panic value should reach the output:\n%s", run.output)
+		})
+
+		w.It("still runs AfterAll exactly once", func(it *gotest.T) {
+			gotest.Equal(it, 1, strings.Count(run.output, "MARK:afterall"), "AfterAll must run exactly once:\n%s", run.output)
+		})
+	})
+}
+
+func (s *ParallelLifecycleTestSuite) TestMustWithErrorInNestedBehavior(t *gotest.T) {
+	t.When("gotest.Must panics on a non-nil error inside a nested behavior", func(w *gotest.T) {
+		run := runGeneratedSuite(w, "TestLifecycle_ParallelMustError")
+
+		w.It("terminates promptly instead of timing out", func(it *gotest.T) {
+			assertNoDeadlock(it, run)
+			gotest.False(it, run.passed, "a panicking suite must fail:\n%s", run.output)
+		})
+
+		w.It("reports the wrapped error", func(it *gotest.T) {
+			gotest.Contains(it, run.output, "Must: got error", "the Must panic should reach the output:\n%s", run.output)
+			gotest.NotContains(it, run.output, "MARK:unreachable", "Must must not return on a non-nil error:\n%s", run.output)
+		})
+	})
+}
+
+func (s *ParallelLifecycleTestSuite) TestAssertionFailureAndSkip(t *gotest.T) {
+	t.When("a nested behavior fails an assertion and another method skips", func(w *gotest.T) {
+		run := runGeneratedSuite(w, "TestLifecycle_ParallelAssertionFailure")
+
+		w.It("terminates promptly instead of timing out", func(it *gotest.T) {
+			assertNoDeadlock(it, run)
+			gotest.False(it, run.passed, "a failing suite must fail:\n%s", run.output)
+		})
+
+		w.It("lets the unrelated methods finish", func(it *gotest.T) {
+			gotest.Contains(it, run.output, "MARK:done passes", "a passing sibling must still complete:\n%s", run.output)
+		})
+
+		w.It("still runs AfterAll exactly once", func(it *gotest.T) {
+			gotest.Equal(it, 1, strings.Count(run.output, "MARK:afterall"), "AfterAll must run exactly once:\n%s", run.output)
+		})
+	})
+}

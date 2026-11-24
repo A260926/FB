@@ -1,0 +1,18 @@
+Expect: ^FAIL .*conformance/fixtures .* / the wait ends with the run and the run fails \(
+Expect: ^FAIL .*conformance/fixtures .* / leaves no fixture process behind \(
+Clause: when the run's --timeout expires while a shared fixture started for the exclusive tail hangs with no Timeout → the wait ends with the run and the run fails
+Clause: when the run's --timeout expires while a shared fixture started for the exclusive tail hangs with no Timeout → leaves no fixture process behind
+--- a/internal/gotestrunner/sharedfixture.go
++++ b/internal/gotestrunner/sharedfixture.go
+@@ -610,11 +610,6 @@
+ 			return ackErr(verb, msg)
+ 		case <-p.done:
+ 			return fmt.Errorf("shared fixture process exited before acknowledging %s", verb)
+-		case <-ctx.Done():
+-			p.cmdMu.Lock()
+-			p.gaveUp(verb, keys)
+-			p.cmdMu.Unlock()
+-			return fmt.Errorf("shared fixture %s cancelled: %w", verb, ctx.Err())
+ 		case <-clock.C:
+ 			after := clock.expired().After
+ 			if msg, acked := p.expire(id, resp, verb, keys, after); acked {

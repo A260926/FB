@@ -1,0 +1,101 @@
+package protocol
+
+import (
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+const (
+	EnvSharedStateFile = "GOTEST_SHARED_STATE_FILE"
+	// EnvSharedProtocolFD names the descriptor the shared fixture process
+	// writes its protocol lines to; unset, they go to its stdout (Windows,
+	// where exec passes no extra files).
+	EnvSharedProtocolFD = "GOTEST_SHARED_PROTOCOL_FD"
+	EnvUpdateSnapshots  = "GOTEST_UPDATE_SNAPSHOTS"
+	EnvCI               = "GOTEST_CI"
+	EnvCacheDir         = "GOTEST_CACHE_DIR"
+	// EnvSlowBuildThreshold is how long a build runs, as a Go duration,
+	// before the CLI says it is still building.
+	EnvSlowBuildThreshold = "GOTEST_SLOW_BUILD_THRESHOLD"
+
+	// EnvFuzzEchoInput makes the codec path report every execution's decoded
+	// input, not just failing ones. Set by triage/promote when re-running a
+	// single corpus entry, so a no-longer-failing crasher is still readable.
+	EnvFuzzEchoInput = "GOTEST_FUZZ_ECHO_INPUT"
+)
+
+// FuzzInputPrefix marks a line carrying the decoded input of a struct-typed
+// fuzz execution. The runtime emits it on failure; triage and promote scrape it.
+const FuzzInputPrefix = "ƒƒGOTEST_FUZZ_INPUT: "
+
+const (
+	SuffixFixture       = "Fixture"
+	SuffixSharedFixture = "SharedFixture"
+	SuffixTestSuite     = "TestSuite"
+	PrefixFocused       = "F_"
+	PrefixExcluded      = "X_"
+	PrefixBenchmark     = "Benchmark"
+	PrefixFuzz          = "Fuzz"
+)
+
+// SplitTestPath cuts a go test name into its subtest levels. The separator is a
+// single slash: a run of them is left alone, so a description like
+// "https:// URI" stays one level instead of becoming three. Both readers of a
+// test path need this rule — the one parsing a run and the one predicting it
+// from source — and they have to agree, so it lives in one place.
+// A label can still hold a lone slash, so a reported name is placed by
+// Placer from the stream's order; this split is its fallback for a name
+// whose parent never appeared open.
+func SplitTestPath(path string) []string {
+	var segments []string
+	var cur strings.Builder
+	for i := 0; i < len(path); i++ {
+		if path[i] == '/' && (i+1 >= len(path) || path[i+1] != '/') &&
+			(i == 0 || path[i-1] != '/') {
+			segments = append(segments, cur.String())
+			cur.Reset()
+		} else {
+			cur.WriteByte(path[i])
+		}
+	}
+	if cur.Len() > 0 {
+		segments = append(segments, cur.String())
+	}
+	return segments
+}
+
+// IsPackageSummaryLine reports whether s is a go test package-level summary
+// line (e.g. "PASS", "FAIL", "ok  \tpkg\t0.01s") rather than diagnostic
+// output that should be surfaced to the user.
+func IsPackageSummaryLine(s string) bool {
+	s = strings.TrimRight(s, "\n\r")
+	return s == "PASS" || s == "FAIL" ||
+		strings.HasPrefix(s, "ok  \t") ||
+		strings.HasPrefix(s, "FAIL\t") ||
+		strings.HasPrefix(s, "?   \t")
+}
+
+// fuzzWrapperRe matches a generated fuzz wrapper name, Fuzz<Suite>_<Method>.
+var fuzzWrapperRe = regexp.MustCompile(`^Fuzz([A-Za-z0-9_]+TestSuite)_(.+)$`)
+
+// SplitFuzzWrapper splits a generated fuzz wrapper name into its suite type
+// and method ("FuzzCartTestSuite_FuzzAdd" -> "CartTestSuite", "FuzzAdd").
+func SplitFuzzWrapper(name string) (suite, method string, ok bool) {
+	m := fuzzWrapperRe.FindStringSubmatch(name)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
+
+// SwitchOn reads the value of an on/off variable such as GOTEST_CI: empty is
+// off, and so are the false spellings of strconv.ParseBool (0, f, F, false,
+// FALSE, False). Any other value is on, so a mistyped opt-in stays on.
+func SwitchOn(v string) bool {
+	if v == "" {
+		return false
+	}
+	on, err := strconv.ParseBool(v)
+	return on || err != nil
+}

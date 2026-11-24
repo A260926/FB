@@ -1,0 +1,383 @@
+package main_test
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/gotestrunner"
+	"github.com/mvrahden/go-test/pkg/gotest"
+	"github.com/mvrahden/go-test/tests/gotestcli"
+)
+
+// FuzzTriagePromoteTestSuite exercises "gotest fuzz triage" and "gotest fuzz
+// promote" end-to-end on the staged fuzzcrash module, with crasher files
+// planted the way the engine writes them. Each test gets its own copy of
+// the module under t.TempDir(), so promote's source edit and the corpus
+// files never touch the repository and nothing needs restoring.
+// Sequential: BeforeEach stages the per-test module copy on the struct.
+//
+//nolint:lifecycle-pair // BeforeAll only wraps the shared binary, which its fixture removes
+type FuzzTriagePromoteTestSuite struct {
+	CLI              *gotestcli.BinarySharedFixture
+	cli              cliRunner
+	pkgDir           string
+	suiteTestPath    string
+	corpusFile       string
+	structCorpusFile string
+	scaleCorpusFile  string
+	cache            string
+}
+
+func (s *FuzzTriagePromoteTestSuite) SuiteConfig() gotest.SuiteConfig {
+	return gotest.SuiteConfig{Timeout: 45 * time.Second}
+}
+
+func (s *FuzzTriagePromoteTestSuite) BeforeAll(t *gotest.T) {
+	s.cli = newCLIRunner(s.CLI)
+}
+
+// BeforeEach stages the module and plants two crasher fixtures:
+//
+//   - a stale crasher for FuzzTrim — a corpus entry whose recorded input
+//     (`strings.TrimSpace("stale")` is already idempotent) no longer fails
+//     the property, so triage reports it as resolved rather than as a real
+//     regression, and promote has exactly one well-known seed to splice.
+//   - a crasher for FuzzSummary, the struct-typed target: its corpus file
+//     holds one native value per leaf of Message's fan (three strings and
+//     the []byte carrying Priority — the real on-disk shape for any fanned
+//     target), which triage must re-run and report as the decoded
+//     Message{...} literal rather than as the raw per-leaf corpus text.
+func (s *FuzzTriagePromoteTestSuite) BeforeEach(t *gotest.T) {
+	s.pkgDir = stageFuzzModule(t, s.cli.repoRoot, t.TempDir())
+	s.suiteTestPath = filepath.Join(s.pkgDir, "suite_test.go")
+	fuzzRoot := filepath.Join(s.pkgDir, "testdata", "fuzz")
+
+	dir := filepath.Join(fuzzRoot, "FuzzMessageTestSuite_FuzzTrim")
+	gotest.NoError(t, os.MkdirAll(dir, 0o750))
+	s.corpusFile = filepath.Join(dir, "stale-seed")
+	gotest.NoError(t, os.WriteFile(s.corpusFile, []byte("go test fuzz v1\nstring(\"stale\")\n"), 0o600))
+
+	structDir := filepath.Join(fuzzRoot, "FuzzMessageTestSuite_FuzzSummary")
+	gotest.NoError(t, os.MkdirAll(structDir, 0o750))
+	s.structCorpusFile = filepath.Join(structDir, "struct-seed")
+	gotest.NoError(t, os.WriteFile(s.structCorpusFile, []byte("go test fuzz v1\nstring(\"a@b.c\")\nstring(\"welcome\")\nstring(\"\")\n[]byte(\"\\x02\")\n"), 0o600))
+
+	scaleDir := filepath.Join(fuzzRoot, "FuzzMessageTestSuite_FuzzScale")
+	gotest.NoError(t, os.MkdirAll(scaleDir, 0o750))
+	// Reading's one leaf: the little-endian bits of a float64 NaN.
+	s.scaleCorpusFile = filepath.Join(scaleDir, "nan-seed")
+	gotest.NoError(t, os.WriteFile(s.scaleCorpusFile, []byte("go test fuzz v1\n[]byte(\"\\x00\\x00\\x00\\x00\\x00\\x00\\xf8\\x7f\")\n"), 0o600))
+
+	// The three are the latest session's crashers, recorded in a cache of
+	// this test's own.
+	s.cache = t.TempDir()
+	s.record(t, s.corpusFile, s.structCorpusFile, s.scaleCorpusFile)
+}
+
+// record makes files the latest session's crashers, as the session that
+// wrote them would have.
+func (s *FuzzTriagePromoteTestSuite) record(t *gotest.T, files ...string) {
+	var session gotestrunner.FuzzSession
+	for _, file := range files {
+		c, err := gotestrunner.NewSessionCrasher(s.pkgDir, filepath.Base(filepath.Dir(file)), filepath.Base(file))
+		gotest.NoError(t, err)
+		session.Crashers = append(session.Crashers, c)
+	}
+	gotest.NoError(t, gotestrunner.WriteFuzzSession(gotestrunner.FuzzSessionFile(s.cache), session))
+}
+
+// source reads the staged suite file.
+func (s *FuzzTriagePromoteTestSuite) source(t *gotest.T) string {
+	src, err := os.ReadFile(s.suiteTestPath)
+	gotest.NoError(t, err)
+	return string(src)
+}
+
+// vet compiles the staged package with its test files, the way a user's next
+// run would.
+func (s *FuzzTriagePromoteTestSuite) vet(t *gotest.T) (string, error) {
+	cmd := exec.Command("go", "vet", ".")
+	cmd.Dir = s.pkgDir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func (s *FuzzTriagePromoteTestSuite) runCLIExit(t *gotest.T, args ...string) (string, int) {
+	return runGotestIn(t, s.cli.binary, s.pkgDir, []string{"GOTEST_CACHE_DIR=" + s.cache}, args...)
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestTriage_StaleCrasherNoLongerFailing(t *gotest.T) {
+	out, code := s.runCLIExit(t, "fuzz", "triage", ".")
+
+	t.It("reports the crasher and its decoded input", func(it *gotest.T) {
+		gotest.Contains(it, out, "FuzzMessageTestSuite_FuzzTrim: 1 crasher")
+		gotest.Contains(it, out, `input: string("stale")`)
+	})
+	t.It("re-runs it and finds it no longer fails", func(it *gotest.T) {
+		gotest.Contains(it, out, "status: no longer failing")
+	})
+	t.It("exits 0", func(it *gotest.T) {
+		gotest.Equal(it, 0, code)
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestTriage_StructCrasherShowsDecodedInput(t *gotest.T) {
+	out, code := s.runCLIExit(t, "fuzz", "triage", ".")
+
+	t.It("reports the struct crasher and its decoded literal", func(it *gotest.T) {
+		gotest.Contains(it, out, "FuzzMessageTestSuite_FuzzSummary: 1 crasher")
+		gotest.Contains(it, out, "input: Message{")
+	})
+	t.It("does not fall back to the raw []byte corpus display", func(it *gotest.T) {
+		gotest.NotContains(it, out, "[]byte(")
+	})
+	t.It("exits 0", func(it *gotest.T) {
+		gotest.Equal(it, 0, code)
+	})
+}
+
+// TestTriage_UnparseableCrasherFails pins the exit contract shared with
+// promote: a crasher file that cannot even be read is a failure, not a
+// silent skip — a directory of unreadable crashers must not "pass" triage.
+func (s *FuzzTriagePromoteTestSuite) TestTriage_UnparseableCrasherFails(t *gotest.T) {
+	bad := filepath.Join(s.pkgDir, "testdata", "fuzz", "FuzzMessageTestSuite_FuzzTrim", "garbled")
+	gotest.NoError(t, os.WriteFile(bad, []byte("not a corpus file\n"), 0600))
+
+	out, code := s.runCLIExit(t, "fuzz", "triage", ".")
+
+	t.It("reports the unreadable crasher", func(it *gotest.T) {
+		gotest.Contains(it, out, "garbled")
+	})
+	t.It("exits 1 like promote does", func(it *gotest.T) {
+		gotest.Equal(it, 1, code)
+	})
+}
+
+// TestFuzzTargetFlag_UnknownName pins the --target contract end-to-end: a
+// name that matches no generated wrapper is a usage error listing the
+// available targets, never a silent fall-through to fuzzing everything.
+func (s *FuzzTriagePromoteTestSuite) TestFuzzTargetFlag_UnknownName(t *gotest.T) {
+	out, code := s.runCLIExit(t, "fuzz", "--target=FuzzNoSuchTestSuite_FuzzNothing", ".")
+
+	t.It("exits 2 and lists the real targets", func(it *gotest.T) {
+		gotest.Equal(it, 2, code)
+		gotest.Contains(it, out, `no fuzz target named "FuzzNoSuchTestSuite_FuzzNothing"`)
+		gotest.Contains(it, out, "FuzzMessageTestSuite_FuzzTrim")
+	})
+}
+
+// TestSubcommandGrammar pins the strictly positional subcommand grammar: a
+// misplaced or flag-preceded triage/promote is a loud usage error, never a
+// silent reinterpretation — the historical readings either started a fuzz
+// run the user did not ask for or dropped their flags on the floor.
+func (s *FuzzTriagePromoteTestSuite) TestSubcommandGrammar(t *gotest.T) {
+	t.When("the subcommand trails the package pattern", func(it *gotest.T) {
+		out, code := s.runCLIExit(it, "fuzz", ".", "triage")
+
+		it.It("rejects it instead of starting a fuzz run", func(it *gotest.T) {
+			gotest.Equal(it, 2, code)
+			gotest.Contains(it, out, "must come immediately after fuzz")
+		})
+	})
+
+	t.When("a flag precedes the subcommand", func(it *gotest.T) {
+		out, code := s.runCLIExit(it, "fuzz", "--for=5m", "promote")
+
+		it.It("rejects it instead of dropping the flag", func(it *gotest.T) {
+			gotest.Equal(it, 2, code)
+			gotest.Contains(it, out, "must come immediately after fuzz")
+		})
+	})
+
+	t.When("a flag is passed to a subcommand", func(it *gotest.T) {
+		out, code := s.runCLIExit(it, "fuzz", "triage", "--for=5m", ".")
+
+		it.It("rejects it instead of silently ignoring it", func(it *gotest.T) {
+			gotest.Equal(it, 2, code)
+			gotest.Contains(it, out, "takes no flags")
+		})
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestPromote_SplicesSeedAndDeletesCrasher(t *gotest.T) {
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("exits 0 and reports the promotion", func(it *gotest.T) {
+		gotest.Equal(it, 0, code)
+		gotest.Contains(it, out, "promoted FuzzMessageTestSuite_FuzzTrim/stale-seed")
+		gotest.Contains(it, out, `f.Add("stale")`)
+	})
+
+	t.It("splices f.Add(\"stale\") into the suite source", func(it *gotest.T) {
+		got, err := os.ReadFile(s.suiteTestPath)
+		gotest.NoError(it, err)
+		gotest.Contains(it, string(got), `f.Add("stale")`)
+	})
+
+	t.It("deletes the crasher file, since it's now a permanent seed", func(it *gotest.T) {
+		_, err := os.Stat(s.corpusFile)
+		gotest.True(it, os.IsNotExist(err))
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestPromote_SplicesStructSeedAsTypedLiteral(t *gotest.T) {
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("exits 0 and reports the promotion", func(it *gotest.T) {
+		gotest.Equal(it, 0, code)
+		gotest.Contains(it, out, "promoted FuzzMessageTestSuite_FuzzSummary/struct-seed")
+	})
+
+	t.It("splices a typed Message{...} literal into the suite source, not raw bytes", func(it *gotest.T) {
+		rewritten, err := os.ReadFile(s.suiteTestPath)
+		gotest.NoError(it, err)
+		gotest.Contains(it, string(rewritten), "f.Add(Message{")
+		gotest.NotContains(it, string(rewritten), "f.Add([]byte(")
+	})
+
+	t.It("deletes the crasher file, since it's now a permanent seed", func(it *gotest.T) {
+		_, err := os.Stat(s.structCorpusFile)
+		gotest.True(it, os.IsNotExist(err))
+	})
+}
+
+// Promote is the one command that edits user source; what it leaves behind
+// must compile. The Reading crasher echoes as a literal spelled with
+// math.NaN(), which the suite file does not import.
+func (s *FuzzTriagePromoteTestSuite) TestPromote_PromotedSourceCompiles(t *gotest.T) {
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+	gotest.Equal(t, 0, code, out)
+
+	t.It("spells the float special as Go and imports math", func(it *gotest.T) {
+		got, err := os.ReadFile(s.suiteTestPath)
+		gotest.NoError(it, err)
+		gotest.Contains(it, string(got), "f.Add(Reading{")
+		gotest.Contains(it, string(got), "math.NaN()")
+		gotest.Contains(it, string(got), `"math"`)
+	})
+
+	t.It("leaves a package that compiles", func(it *gotest.T) {
+		vetOut, err := s.vet(it)
+		gotest.NoError(it, err, vetOut)
+	})
+}
+
+// A fanned target's crasher is one line per leaf; only the re-run's echo
+// turns those into the typed literal. Without it, promote must refuse
+// rather than splice the raw leaves into a one-argument target.
+func (s *FuzzTriagePromoteTestSuite) TestPromote_RefusesRawLeavesWithoutEcho(t *gotest.T) {
+	// Two leaves for a four-leaf fan: the engine rejects the entry before
+	// the target runs, so the re-run prints no decoded input.
+	short := filepath.Join(filepath.Dir(s.structCorpusFile), "short-seed")
+	gotest.NoError(t, os.WriteFile(short, []byte("go test fuzz v1\nstring(\"a@b.c\")\nstring(\"welcome\")\n"), 0o600))
+	s.record(t, short)
+	before, err := os.ReadFile(s.suiteTestPath)
+	gotest.NoError(t, err)
+
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("exits 1 and says why the entry was skipped", func(it *gotest.T) {
+		gotest.Equal(it, 1, code, out)
+		gotest.Contains(it, out, "short-seed: skipped:")
+		gotest.Contains(it, out, "decodes its input from 4 leaves")
+	})
+
+	t.It("leaves the crasher file and the FuzzSummary source alone", func(it *gotest.T) {
+		_, err := os.Stat(short)
+		gotest.NoError(it, err)
+		after, err := os.ReadFile(s.suiteTestPath)
+		gotest.NoError(it, err)
+		gotest.NotContains(it, string(after), `f.Add("a@b.c", "welcome")`)
+		gotest.Contains(it, string(before), "FuzzSummary")
+	})
+}
+
+// A struct of one leaf takes a crasher of one value: the value count cannot
+// tell a raw leaf from the struct, and only the codec's echo can build it.
+func (s *FuzzTriagePromoteTestSuite) TestPromote_RefusesASingleRawLeafForAStruct(t *gotest.T) {
+	gotest.NoError(t, os.WriteFile(s.scaleCorpusFile, []byte("go test fuzz v1\nstring(\"x\")\n"), 0o600))
+	s.record(t, s.scaleCorpusFile)
+
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("exits 1 and says the target decodes its input", func(it *gotest.T) {
+		gotest.Equal(it, 1, code, out)
+		gotest.Contains(it, out, "nan-seed: skipped: FuzzMessageTestSuite_FuzzScale decodes its input from 1 leaf")
+	})
+	t.It("splices no raw leaf and keeps the crasher file", func(it *gotest.T) {
+		gotest.NotContains(it, s.source(it), `f.Add("x")`)
+		_, err := os.Stat(s.scaleCorpusFile)
+		gotest.NoError(it, err)
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestPromote_LeavesFilesOutsideTheSession(t *gotest.T) {
+	old := filepath.Join(filepath.Dir(s.corpusFile), "old-seed")
+	gotest.NoError(t, os.WriteFile(old, []byte("go test fuzz v1\nstring(\"older\")\n"), 0o600))
+
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("promotes the session's crashers and exits 0", func(it *gotest.T) {
+		gotest.Equal(it, 0, code, out)
+		gotest.Contains(it, out, "promoted FuzzMessageTestSuite_FuzzTrim/stale-seed")
+	})
+	t.It("names the file it left and why", func(it *gotest.T) {
+		gotest.Contains(it, out, filepath.Join("testdata", "fuzz", "FuzzMessageTestSuite_FuzzTrim", "old-seed")+": left in place: not written by the latest fuzz session")
+	})
+	t.It("keeps the file and adds no seed from it", func(it *gotest.T) {
+		_, err := os.Stat(old)
+		gotest.NoError(it, err)
+		gotest.NotContains(it, s.source(it), `"older"`)
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestPromote_WithoutASession(t *gotest.T) {
+	gotest.NoError(t, os.Remove(gotestrunner.FuzzSessionFile(s.cache)))
+	before := s.source(t)
+
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("promotes nothing and exits 0", func(it *gotest.T) {
+		gotest.Equal(it, 0, code, out)
+		gotest.Contains(it, out, "no crashers from the latest fuzz session")
+		gotest.Equal(it, before, s.source(it))
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestPromote_RefusesAChangedCrasher(t *gotest.T) {
+	gotest.NoError(t, os.WriteFile(s.corpusFile, []byte("go test fuzz v1\nstring(\"swapped\")\n"), 0o600))
+	before := s.source(t)
+
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("exits 1, naming the file", func(it *gotest.T) {
+		gotest.Equal(it, 1, code, out)
+		gotest.Contains(it, out, "stale-seed: changed since the fuzz session wrote it")
+	})
+	t.It("promotes no crasher of the run", func(it *gotest.T) {
+		gotest.Equal(it, before, s.source(it))
+		_, err := os.Stat(s.structCorpusFile)
+		gotest.NoError(it, err)
+	})
+}
+
+func (s *FuzzTriagePromoteTestSuite) TestPromote_RefusesCode(t *gotest.T) {
+	gotest.NoError(t, os.WriteFile(s.corpusFile, []byte("go test fuzz v1\nstring(os.Getenv(\"HOME\"))\n"), 0o600))
+	s.record(t, s.corpusFile, s.structCorpusFile, s.scaleCorpusFile)
+	before := s.source(t)
+
+	out, code := s.runCLIExit(t, "fuzz", "promote", ".")
+
+	t.It("exits 1, naming the file and line", func(it *gotest.T) {
+		gotest.Equal(it, 1, code, out)
+		gotest.Contains(it, out, filepath.Join("testdata", "fuzz", "FuzzMessageTestSuite_FuzzTrim", "stale-seed")+":2: ")
+		gotest.Contains(it, out, "nothing promoted")
+	})
+	t.It("splices nothing, the other crashers included", func(it *gotest.T) {
+		after := s.source(it)
+		gotest.Equal(it, before, after)
+		gotest.NotContains(it, after, "os.Getenv")
+	})
+}

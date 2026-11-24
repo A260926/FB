@@ -1,0 +1,281 @@
+package gotestrunner_test
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/gotestgen"
+	"github.com/mvrahden/go-test/internal/gotestrunner"
+	"github.com/mvrahden/go-test/internal/gotestspec"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// BuildFailureVerdictsTestSuite covers the invariant that every matched
+// package ends in exactly one verdict: a package that fails to build is a
+// failed package with exit code 2, in both pipeline modes and in every
+// renderer fed from the collector's stream.
+type BuildFailureVerdictsTestSuite struct{}
+
+type buildFailureCtx struct{ tmpDir string }
+
+func (s *BuildFailureVerdictsTestSuite) SuiteConfig() gotest.SuiteConfig {
+	cfg := gotest.DefaultSuiteConfig()
+	cfg.Parallel = true
+	return cfg
+}
+
+func (s *BuildFailureVerdictsTestSuite) BeforeEach(t *gotest.T) *buildFailureCtx {
+	dir, err := os.MkdirTemp("", "gotest-buildfailure-*")
+	gotest.NoError(t, err)
+	return &buildFailureCtx{tmpDir: dir}
+}
+
+func (s *BuildFailureVerdictsTestSuite) AfterEach(_ *gotest.T, c *buildFailureCtx) {
+	os.RemoveAll(c.tmpDir)
+}
+
+func brokenOverlay(workDir string) *gotestrunner.OverlayResult {
+	return &gotestrunner.OverlayResult{
+		WorkDir: workDir,
+		BrokenPackages: []gotestgen.BrokenPackage{{
+			PkgPath: "example.com/broken",
+			Errors:  []string{"svc.go:4:17: cannot use 42 (untyped int constant) as string value"},
+		}},
+	}
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestBrokenPackageMessage(t *gotest.T, c *buildFailureCtx) {
+	t.It("renders diagnostics in the go build shape", func(it *gotest.T) {
+		msg := gotestrunner.ExportBrokenPackageMessage(&gotestgen.BrokenPackage{
+			PkgPath: "example.com/broken",
+			Errors:  []string{"a.go:1:1: first", "b.go:2:2: second"},
+		})
+		gotest.Equal(it, "# example.com/broken\na.go:1:1: first\nb.go:2:2: second\n", msg)
+	})
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestCollectorBooksBrokenPackages(t *gotest.T, c *buildFailureCtx) {
+	t.When("in batch text mode", func(w *gotest.T) {
+		w.It("prints the diagnostics and a FAIL line, and exits 2", func(it *gotest.T) {
+			var stdout, stderr bytes.Buffer
+			c := gotestrunner.NewOutputCollector(gotestrunner.RunBatchText, false, gotestrunner.WithWriters(&stdout, &stderr))
+			gotestrunner.ExportBookBuildFailures(c, brokenOverlay("").BrokenPackages, nil)
+
+			gotest.Equal(it, 2, c.WorstExitCode())
+			gotest.Contains(it, stderr.String(), "# example.com/broken")
+			gotest.Contains(it, stderr.String(), "cannot use 42")
+			gotest.Contains(it, stdout.String(), "FAIL\texample.com/broken")
+		})
+	})
+
+	t.When("in JSON capture mode", func(w *gotest.T) {
+		w.It("carries the verdict and the diagnostics in the stream", func(it *gotest.T) {
+			var stdout, stderr bytes.Buffer
+			c := gotestrunner.NewOutputCollector(gotestrunner.RunCaptureJSON, false, gotestrunner.WithWriters(&stdout, &stderr))
+			gotestrunner.ExportBookBuildFailures(c, brokenOverlay("").BrokenPackages, nil)
+
+			gotest.Equal(it, 2, c.WorstExitCode())
+			events, err := gotestspec.ParseEvents(bytes.NewReader(c.CapturedJSON()))
+			gotest.NoError(it, err)
+			tree := gotestspec.BuildTree(events)
+			gotest.True(it, gotestspec.HasFailures(tree),
+				"the failure must be derivable from the stream itself")
+			gotest.Len(it, tree, 1)
+			gotest.Equal(it, "example.com/broken", tree[0].Path)
+			gotest.Contains(it, strings.Join(tree[0].Output, ""), "cannot use 42",
+				"renderers fed the stream must carry the diagnostics")
+		})
+	})
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestPipelineFailsOnBrokenPackages(t *gotest.T, c *buildFailureCtx) {
+	for sub, tC := range gotest.Each(t, []struct {
+		Desc  string
+		bench bool
+	}{
+		{"a bench run, which compiles before it dispatches", true},
+		{"a test run, which overlaps the two", false},
+	}) {
+		result, err := gotestrunner.RunPipeline(context.Background(), gotestrunner.PipelineConfig{
+			Bench:      tC.bench,
+			OutputMode: gotestrunner.RunCaptureJSON,
+		}, brokenOverlay(c.tmpDir))
+		gotest.NoError(sub, err)
+		gotest.Equal(sub, 2, result.ExitCode,
+			"a run with an unbuildable package must exit 2, never report success")
+
+		events, perr := gotestspec.ParseEvents(bytes.NewReader(result.CapturedJSON))
+		gotest.NoError(sub, perr)
+		gotest.True(sub, gotestspec.HasFailures(gotestspec.BuildTree(events)))
+	}
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestPipelineCleanWhenNothingMatched(t *gotest.T, c *buildFailureCtx) {
+	for sub, tC := range gotest.Each(t, []struct {
+		Desc  string
+		bench bool
+	}{
+		{"a bench run, which compiles before it dispatches", true},
+		{"a test run, which overlaps the two", false},
+	}) {
+		result, err := gotestrunner.RunPipeline(context.Background(), gotestrunner.PipelineConfig{
+			Bench:      tC.bench,
+			OutputMode: gotestrunner.RunCaptureJSON,
+		}, &gotestrunner.OverlayResult{WorkDir: c.tmpDir})
+		gotest.NoError(sub, err)
+		gotest.Equal(sub, 0, result.ExitCode,
+			"no matched packages and no failures is the only clean empty run")
+	}
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestPipelineCutShortBeforeAnySuite(t *gotest.T, c *buildFailureCtx) {
+	for sub, tC := range gotest.Each(t, []struct {
+		Desc     string
+		bench    bool
+		deadline bool
+		want     int
+	}{
+		{"a bench run, interrupted", true, false, 130},
+		{"a bench run, past its deadline", true, true, 1},
+		{"a test run, interrupted", false, false, 130},
+		{"a test run, past its deadline", false, true, 1},
+	}) {
+		ctx, cancel := context.WithCancel(context.Background())
+		if tC.deadline {
+			ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		}
+		cancel()
+		result, err := gotestrunner.RunPipeline(ctx, gotestrunner.PipelineConfig{
+			Bench:         tC.bench,
+			OutputMode:    gotestrunner.RunCaptureJSON,
+			GlobalTimeout: time.Minute,
+		}, &gotestrunner.OverlayResult{WorkDir: c.tmpDir})
+		gotest.NoError(sub, err)
+		gotest.Equal(sub, tC.want, result.ExitCode, "a run that never reached a verdict must not exit 0")
+	}
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestExitCodeAfterDispatch(t *gotest.T, _ *buildFailureCtx) {
+	for sub, tC := range gotest.Each(t, []struct {
+		Desc  string
+		worst int
+		err   error
+		want  int
+	}{
+		{"no cancellation keeps the verdict", 1, nil, 1},
+		{"an interrupt is 130 over a green run", 0, context.Canceled, 130},
+		{"an interrupt is 130 over the failures it caused", 1, context.Canceled, 130},
+		{"an interrupt is 130 over a build failure", 2, context.Canceled, 130},
+		{"a deadline keeps the verdict for the deadline failure", 0, context.DeadlineExceeded, 0},
+		{"a deadline keeps a red verdict", 1, context.DeadlineExceeded, 1},
+	}) {
+		gotest.Equal(sub, tC.want, gotestrunner.ExportExitCodeAfterDispatch(tC.worst, tC.err))
+	}
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestDeadlineFailsTheRun(t *gotest.T, _ *buildFailureCtx) {
+	// capture books through a capturing collector and returns the result
+	// with the stream snapshot taken afterwards, as the pipeline does.
+	capture := func(exitCode int, err error, running []gotestrunner.CensusCase) gotestrunner.PipelineResult {
+		c := gotestrunner.NewOutputCollector(gotestrunner.RunCaptureJSON, false, gotestrunner.WithWriters(&bytes.Buffer{}, &bytes.Buffer{}))
+		result := gotestrunner.PipelineResult{ExitCode: exitCode}
+		gotestrunner.ExportApplyDeadlineFailure(c, &result, 3*time.Second, err, running)
+		result.CapturedJSON = c.CapturedJSON()
+		return result
+	}
+
+	t.When("the global --timeout expires before a green run's last verdict", func(w *gotest.T) {
+		result := capture(0, context.DeadlineExceeded, nil)
+
+		w.It("exits 1 and books the timeout into the stream every renderer reads", func(it *gotest.T) {
+			gotest.Equal(it, 1, result.ExitCode)
+			gotest.Contains(it, string(result.CapturedJSON), `{"Action":"output","Package":"global --timeout","Output":"FAIL: global --timeout exceeded after 3s\n","RunLevel":true}`)
+			gotest.Contains(it, string(result.CapturedJSON), `{"Action":"fail","Package":"global --timeout","RunLevel":true}`)
+		})
+
+		w.It("books it into the live -json stream too", func(it *gotest.T) {
+			var stdout bytes.Buffer
+			c := gotestrunner.NewOutputCollector(gotestrunner.RunStreamJSON, false, gotestrunner.WithWriters(&stdout, &bytes.Buffer{}))
+			var result gotestrunner.PipelineResult
+			gotestrunner.ExportApplyDeadlineFailure(c, &result, 3*time.Second, context.DeadlineExceeded, nil)
+			gotest.Equal(it, 1, result.ExitCode)
+			gotest.Contains(it, stdout.String(), `{"Action":"fail","Package":"global --timeout","RunLevel":true}`)
+		})
+	})
+
+	t.When("the run was red already", func(w *gotest.T) {
+		result := capture(2, context.DeadlineExceeded, nil)
+
+		w.It("keeps its exit code", func(it *gotest.T) {
+			gotest.Equal(it, 2, result.ExitCode)
+		})
+	})
+
+	t.When("it names the units it cut short", func(w *gotest.T) {
+		result := capture(0, context.DeadlineExceeded, []gotestrunner.CensusCase{{Pkg: "example.com/pkg", Path: "TestXTestSuite/TestHang"}})
+
+		w.It("exits 1 and books no synthetic package: the units carry the failure", func(it *gotest.T) {
+			gotest.Equal(it, 1, result.ExitCode)
+			gotest.Empty(it, result.CapturedJSON)
+		})
+	})
+
+	t.When("no deadline cut the run short", func(w *gotest.T) {
+		for sub, err := range gotest.Each(w, []error{nil, context.Canceled}) {
+			result := capture(0, err, nil)
+			gotest.Equal(sub, 0, result.ExitCode)
+			gotest.Empty(sub, result.CapturedJSON)
+		}
+	})
+}
+
+func (s *BuildFailureVerdictsTestSuite) TestAnInterruptBooksTheStop(t *gotest.T, _ *buildFailureCtx) {
+	// stopped records one suite whose stream ended green, as a suite stopped
+	// by the runner ends, and applies the interrupt to a run ending with code.
+	stream := `{"Action":"run","Package":"example.com/pkg","Test":"TestXTestSuite"}
+{"Action":"pass","Package":"example.com/pkg","Test":"TestXTestSuite"}
+`
+	stopped := func(mode gotestrunner.RunMode, cutShort bool, err error) (string, string, gotestrunner.PipelineResult) {
+		var stdout, stderr bytes.Buffer
+		c := gotestrunner.NewOutputCollector(mode, false, gotestrunner.WithWriters(&stdout, &stderr))
+		c.Register("example.com/pkg", 1)
+		c.RecordResult("example.com/pkg", 0, gotestrunner.SuiteResult{
+			Target:   gotestrunner.SuiteTarget{SuiteSpec: gotestrunner.SuiteSpec{Package: "example.com/pkg", SuiteName: "TestXTestSuite"}},
+			Stdout:   []byte(stream),
+			CutShort: cutShort,
+		})
+		result := gotestrunner.PipelineResult{ExitCode: 130}
+		gotestrunner.ExportApplyInterrupt(c, &result, err)
+		return stdout.String() + string(c.CapturedJSON()), stderr.String(), result
+	}
+
+	t.When("an interrupt cut a suite short", func(w *gotest.T) {
+		for sub, mode := range gotest.Each(w, []gotestrunner.RunMode{gotestrunner.RunStreamJSON, gotestrunner.RunCaptureJSON}) {
+			stream, stderr, result := stopped(mode, true, context.Canceled)
+			gotest.Equal(sub, "FAIL: run interrupted while running: example.com/pkg TestXTestSuite\n", stderr)
+			gotest.Contains(sub, stream, `{"Action":"output","Package":"interrupted","Output":"FAIL: run interrupted while running: example.com/pkg TestXTestSuite\n","RunLevel":true}`)
+			gotest.Contains(sub, stream, `{"Action":"fail","Package":"interrupted","RunLevel":true}`)
+			gotest.Contains(sub, stream, `{"Action":"pass","Package":"example.com/pkg","Test":"TestXTestSuite"}`, "the suite's own verdict is kept")
+			gotest.Equal(sub, 130, result.ExitCode)
+		}
+	})
+
+	t.When("nothing was cut short, or a deadline did it", func(w *gotest.T) {
+		for sub, tC := range gotest.Each(w, []struct {
+			Desc     string
+			cutShort bool
+			err      error
+		}{
+			{"an interrupt after the last suite", false, context.Canceled},
+			{"a deadline", true, context.DeadlineExceeded},
+			{"no stop at all", false, nil},
+		}) {
+			stream, stderr, _ := stopped(gotestrunner.RunCaptureJSON, tC.cutShort, tC.err)
+			gotest.NotContains(sub, stream, `"Package":"interrupted"`)
+			gotest.Empty(sub, stderr)
+		}
+	})
+}

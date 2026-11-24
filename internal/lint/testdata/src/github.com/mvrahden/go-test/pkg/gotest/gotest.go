@@ -1,0 +1,115 @@
+package gotest
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+type R struct{}
+
+func (r *R) Errorf(string, ...any) {}
+func (r *R) FailNow()              {}
+func (r *R) Helper()               {}
+func (r *R) Failed() bool          { return false }
+func (r *R) Message() string       { return "" }
+
+type T struct{}
+
+func (t *T) Errorf(string, ...any)    {}
+func (t *T) FailNow()                 {}
+func (t *T) Skipf(string, ...any)     {}
+func (t *T) Setenv(string, string)    {}
+func (t *T) TempDir() string          { return "" }
+func (t *T) Name() string             { return "" }
+func (t *T) Context() context.Context { return nil }
+func (t *T) T() *testing.T            { return nil }
+func (t *T) It(string, func(*T))      {}
+func (t *T) When(string, func(*T))    {}
+
+type B struct{}
+
+func (b *B) Loop() bool                          { return false }
+func (b *B) B() *testing.B                       { return nil }
+func (b *B) ReportAllocs()                       {}
+func (b *B) Errorf(format string, args ...any)   {}
+func (b *B) FailNow()                            {}
+func (b *B) Context() context.Context            { return nil }
+func (b *B) SetBytes(n int64)                    {}
+func (b *B) ReportMetric(n float64, unit string) {}
+func (b *B) Name() string                        { return "" }
+func (b *B) Setenv(key, value string)            {}
+func (b *B) TempDir() string                     { return "" }
+
+type F struct{}
+
+func (f *F) F() *testing.F                     { return nil }
+func (f *F) Add(args ...any)                   {}
+func (f *F) Errorf(format string, args ...any) {}
+func (f *F) FailNow()                          {}
+func (f *F) Skipf(format string, args ...any)  {}
+func (f *F) Name() string                      { return "" }
+func (f *F) Setenv(key, value string)          {}
+func (f *F) TempDir() string                   { return "" }
+
+func (f *F) Fuzz(fn any) {}
+
+type SuiteConfig struct {
+	Timeout      time.Duration
+	SetupTimeout time.Duration
+	FailFast     bool
+	Parallel     bool
+	Exclusive    bool
+}
+
+type FixtureConfig struct {
+	Timeout    time.Duration
+	Retries    int
+	RetryDelay time.Duration
+}
+
+const NoDeadline time.Duration = -1
+
+func DefaultSuiteConfig() SuiteConfig {
+	return SuiteConfig{Timeout: 30 * time.Second, SetupTimeout: 30 * time.Second}
+}
+
+func IntegrationSuiteConfig() SuiteConfig {
+	return SuiteConfig{Timeout: 2 * time.Minute, SetupTimeout: 5 * time.Minute}
+}
+
+type testingT interface {
+	Errorf(format string, args ...any)
+	FailNow()
+}
+
+func Eventually(t testingT, waitFor, tick time.Duration, fn func(poll *R))   {}
+func Consistently(t testingT, waitFor, tick time.Duration, fn func(poll *R)) {}
+
+func Fail(t testingT, msgAndArgs ...any)                                      {}
+func True(t testingT, value bool, msgAndArgs ...any)                          {}
+func False(t testingT, value bool, msgAndArgs ...any)                         {}
+func Equal(t testingT, expected, actual any, msgAndArgs ...any)               {}
+func NotEqual(t testingT, expected, actual any, msgAndArgs ...any)            {}
+func Same[V any](t testingT, expected, actual *V, msgAndArgs ...any)          {}
+func NotSame[V any](t testingT, expected, actual *V, msgAndArgs ...any)       {}
+func Greater(t testingT, a, b any, msgAndArgs ...any)                         {}
+func GreaterOrEqual(t testingT, a, b any, msgAndArgs ...any)                  {}
+func Less(t testingT, a, b any, msgAndArgs ...any)                            {}
+func LessOrEqual(t testingT, a, b any, msgAndArgs ...any)                     {}
+func Zero(t testingT, value any, msgAndArgs ...any)                           {}
+func NotZero(t testingT, value any, msgAndArgs ...any)                        {}
+func Empty(t testingT, object any, msgAndArgs ...any)                         {}
+func NotEmpty(t testingT, object any, msgAndArgs ...any)                      {}
+func Nil(t testingT, object any, msgAndArgs ...any)                           {}
+func NotNil(t testingT, object any, msgAndArgs ...any)                        {}
+func Len(t testingT, object any, length int, msgAndArgs ...any)               {}
+func Contains(t testingT, s, contains any, msgAndArgs ...any)                 {}
+func NotContains(t testingT, s, contains any, msgAndArgs ...any)              {}
+func NoError(t testingT, err error, msgAndArgs ...any)                        {}
+func Error(t testingT, err error, msgAndArgs ...any)                          {}
+func ErrorIs(t testingT, err, target error, msgAndArgs ...any)                {}
+func ErrorContains(t testingT, err error, contains string, msgAndArgs ...any) {}
+func ErrorAs(t testingT, err error, msgAndArgs ...any)                        {}
+func Regexp(t testingT, rx, str any, msgAndArgs ...any)                       {}
+func MatchSnapshot(t testingT, value any, name ...string)                     {}

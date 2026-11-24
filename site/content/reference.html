@@ -1,0 +1,915 @@
+---
+title: "gotest Reference — Naming Conventions, Lifecycle, Assertions & More"
+description: "Technical reference for gotest: naming conventions, suite lifecycle, fixture model, type-safe assertions, coverage, and CLI commands for Go test suites."
+keywords: "go test lifecycle hooks, go bdd naming conventions, go test assertions, go coverage calculation, go test suite reference, gotest"
+layout: "single"
+aliases: ["/reference.html"]
+---
+
+  <div class="page">
+    <header class="page-header">
+      <h1>Reference</h1>
+      <p>The mental model behind gotest. Learn the conventions once — the rest follows.</p>
+    </header>
+
+    <div class="toc">
+      <div class="toc-title">Contents</div>
+      <ol>
+        <li><a href="#conceptual-model">Conceptual Model</a> <span class="toc-desc">— how Go constructs map to spec concepts</span></li>
+        <li><a href="#naming-conventions">Naming Conventions</a> <span class="toc-desc">— suffixes, prefixes, and lifecycle methods</span></li>
+        <li><a href="#lifecycle">Suite Lifecycle</a> <span class="toc-desc">— execution order, hooks, and parallel modes</span></li>
+        <li><a href="#test-dsl">Test DSL</a> <span class="toc-desc">— When/It, data-driven tests, snapshots, polling</span></li>
+        <li><a href="#fixtures">Fixtures</a> <span class="toc-desc">— package fixtures, DAG ordering, shared fixtures</span></li>
+        <li><a href="#assertions">Assertions</a> <span class="toc-desc">— type-safe generics for equality, errors, collections</span></li>
+        <li><a href="#configuration">Configuration</a> <span class="toc-desc">— project file, suite config, fixture config</span></li>
+        <li><a href="#coverage">Coverage</a> <span class="toc-desc">— statement-weighted calculation and thresholds</span></li>
+        <li><a href="#benchmarking">Benchmarking</a> <span class="toc-desc">— benchmark suites, baselines, deltas, and the gate</span></li>
+        <li><a href="#fuzzing">Fuzzing</a> <span class="toc-desc">— fuzz targets, struct inputs, sessions, crashers</span></li>
+        <li><a href="#cli">CLI Reference</a> <span class="toc-desc">— commands, flags, go test passthrough</span></li>
+        <li><a href="#linter">Linter</a> <span class="toc-desc">— rule tiers, suppression, exit codes</span></li>
+        <li><a href="#ci-integration">CI Integration</a> <span class="toc-desc">— summary output, GitHub Action, PR annotations</span></li>
+      </ol>
+    </div>
+
+    <!-- 1. Conceptual Model -->
+    <section class="ref-section" id="conceptual-model">
+      <h2>Conceptual Model</h2>
+      <p class="lead">Test suites are behavioral specifications. Every level of the hierarchy maps to a concept.</p>
+
+      <table class="ref-table">
+        <thead>
+          <tr><th>Go construct</th><th>Spec concept</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>struct</code></td><td>Subject</td><td><code>UserServiceTestSuite</code></td></tr>
+          <tr><td><code>method</code></td><td>Capability</td><td><code>TestCreate</code></td></tr>
+          <tr><td><code>When()</code></td><td>Context</td><td><code>"email is new"</code></td></tr>
+          <tr><td><code>It()</code></td><td>Behavior</td><td><code>"creates the user"</code></td></tr>
+          <tr><td><code>Each()</code></td><td>Variants</td><td><code>"standard format"</code>, <code>"missing @"</code></td></tr>
+        </tbody>
+      </table>
+
+      <p>Naming conventions at the struct and method level, plus string descriptions in <code>When</code> and <code>It</code>, form a complete specification. The tool generates the wiring and can render the full spec in human-readable form:</p>
+
+      <div class="diagram">UserService
+  Create
+    when email is new
+      <span class="g">&#10003;</span> creates the user
+      <span class="g">&#10003;</span> sends a welcome email
+    when email already exists
+      <span class="g">&#10003;</span> returns ErrDuplicate
+  Delete
+    <span class="g">&#10003;</span> soft-deletes the user</div>
+
+      <p>This isn't a separate reporting layer — it's the same test hierarchy rendered differently. The spec view and the test output always agree because they come from the same source.</p>
+    </section>
+
+    <!-- 2. Naming Conventions -->
+    <section class="ref-section" id="naming-conventions">
+      <h2>Naming Conventions</h2>
+      <p class="lead">The naming conventions are the entire API. There are no config files, struct tags, or annotations.</p>
+
+      <h3>Types</h3>
+      <table class="ref-table">
+        <thead>
+          <tr><th>Pattern</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>*TestSuite</code></td><td>Test suite. Each generates a <code>func Test*</code> entry point.</td></tr>
+          <tr><td><code>*Fixture</code></td><td>Package fixture. Setup each suite of a package can bind; set up per suite.</td></tr>
+          <tr><td><code>*SharedFixture</code></td><td>Cross-package fixture. Runs in a subprocess, state transfers via JSON.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Methods</h3>
+      <table class="ref-table">
+        <thead>
+          <tr><th>Method</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Test*</code></td><td>Test case. Becomes a subtest.</td></tr>
+          <tr><td><code>BeforeAll</code></td><td>Runs once before all tests in the suite.</td></tr>
+          <tr><td><code>AfterAll</code></td><td>Runs once after all tests. Registered as cleanup, so it always runs.</td></tr>
+          <tr><td><code>BeforeEach</code></td><td>Runs before every test case.</td></tr>
+          <tr><td><code>AfterEach</code></td><td>Runs after every test case. Deferred, so it runs even on fatal errors.</td></tr>
+          <tr><td><code>SuiteGuard()</code></td><td>Returns a reason to skip the suite, or empty string to run. Evaluated at runtime, before the suite's fixtures are set up.</td></tr>
+          <tr><td><code>SuiteConfig()</code></td><td>Returns timeout, parallelism, and fail-fast settings.</td></tr>
+          <tr><td><code>FixtureConfig()</code></td><td>Returns timeout and retry settings for package fixtures.</td></tr>
+          <tr><td><code>SharedFixtureConfig()</code></td><td>Returns timeout and retry settings for shared fixtures.</td></tr>
+          <tr><td><code>Hydrate</code> / <code>Dehydrate</code></td><td>Reconstruct / clean up local resources in shared fixtures after state transfer.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Prefixes</h3>
+      <table class="ref-table">
+        <thead>
+          <tr><th>Prefix</th><th>Effect</th><th>Use case</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>F_</code></td><td>Focus — only focused items run</td><td>Tight iteration during development</td></tr>
+          <tr><td><code>X_</code></td><td>Exclude — always skipped</td><td>Temporarily disable a flaky test</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <code>F_</code> and <code>X_</code> work on both types and methods. <code>X_</code> takes precedence over <code>F_</code>. Use <code>--ci</code> to fail the build if any focus prefix is committed and to enable snapshot read-only mode. CI mode is auto-detected from the <code>CI</code> environment variable.
+      </div>
+    </section>
+
+    <!-- 3. Lifecycle -->
+    <section class="ref-section" id="lifecycle">
+      <h2>Suite Lifecycle</h2>
+      <p class="lead">Predictable execution order with guaranteed cleanup — even on panics and fatal errors.</p>
+
+      <h3>Execution order</h3>
+      <div class="diagram">BeforeAll
+<span class="d">├──</span> BeforeEach <span class="d">→</span> Test A <span class="d">→</span> AfterEach <span class="d">(deferred)</span>
+<span class="d">├──</span> BeforeEach <span class="d">→</span> Test B <span class="d">→</span> AfterEach <span class="d">(deferred)</span>
+<span class="d">├──</span> BeforeEach <span class="d">→</span> Test C <span class="d">→</span> AfterEach <span class="d">(deferred)</span>
+AfterAll <span class="d">(via t.Cleanup — always runs)</span></div>
+
+      <p>All hooks are optional. Unimplemented hooks are no-ops. <code>AfterAll</code> is registered before <code>BeforeAll</code> runs, so cleanup happens even if setup fails. <code>AfterEach</code> is deferred, so it runs even on <code>t.Fatal()</code>.</p>
+
+      <h3>Hook signatures</h3>
+      <p>Every hook accepts either <code>*gotest.T</code> (full DSL access) or <code>*testing.T</code> (plain stdlib). Mix freely within the same suite:</p>
+      <div class="code-block">
+        <pre><span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">BeforeAll</span>(t *gotest.T)   {}  <span class="cm">// full DSL</span>
+<span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">BeforeEach</span>(t *testing.T) {}  <span class="cm">// plain stdlib</span>
+<span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">TestPlain</span>(t *testing.T)  {}  <span class="cm">// no gotest import needed</span>
+<span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">TestRich</span>(t *gotest.T)    {}  <span class="cm">// When, It, MatchSnapshot</span></pre>
+      </div>
+
+      <h3>Per-test context</h3>
+      <p>When <code>BeforeEach</code> returns a value, each test receives its own isolated context. This enables safe method-level parallelism without shared mutable state:</p>
+      <div class="code-block">
+        <pre><span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">BeforeEach</span>(t *gotest.T) *<span class="tp">TestCtx</span> {
+    <span class="kw">return</span> &amp;TestCtx{conn: s.pool.Acquire()}
+}
+
+<span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">AfterEach</span>(t *gotest.T, ctx *<span class="tp">TestCtx</span>) {
+    ctx.conn.Release()
+}
+
+<span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">TestCreate</span>(t *gotest.T, ctx *<span class="tp">TestCtx</span>) {
+    <span class="cm">// ctx.conn is unique to this test</span>
+}</pre>
+      </div>
+
+      <h3>Parallel execution</h3>
+      <p><strong>Suite-level:</strong> Each suite runs as a separate subprocess — full process isolation with zero shared state between suites. This is automatic.</p>
+      <p><strong>Method-level:</strong> Opt-in via <code>SuiteConfig{Parallel: true}</code>. Per-test state lives in the context a returning <code>BeforeEach</code> provides, never on the shared suite struct; the generator rejects a <code>BeforeEach</code> that returns nothing in a parallel suite, and a suite without per-test state needs none.</p>
+    </section>
+
+    <!-- 4. Test DSL -->
+    <section class="ref-section" id="test-dsl">
+      <h2>Test DSL</h2>
+      <p class="lead">Methods on <code>*gotest.T</code> for structuring tests. Every method maps to <code>t.Run</code> — the DSL adds semantics, not runtime machinery.</p>
+
+      <h3>When / It</h3>
+      <p><code>When</code> groups context. <code>It</code> specifies behavior. Nest them freely to build a specification tree:</p>
+      <div class="code-block">
+        <pre><span class="kw">func</span> (s *<span class="tp">MySuite</span>) <span class="fn">TestCreate</span>(t *gotest.T) {
+    t.When(<span class="st">"email is new"</span>, <span class="kw">func</span>(w *gotest.T) {
+        w.It(<span class="st">"creates the user"</span>, <span class="kw">func</span>(it *gotest.T) {
+            err := s.svc.Create(ctx, validUser)
+            gotest.NoError(it, err)
+        })
+    })
+
+    t.When(<span class="st">"email already exists"</span>, <span class="kw">func</span>(w *gotest.T) {
+        w.It(<span class="st">"returns ErrDuplicate"</span>, <span class="kw">func</span>(it *gotest.T) {
+            s.svc.Create(ctx, validUser)
+            err := s.svc.Create(ctx, validUser)
+            gotest.ErrorIs(it, err, ErrDuplicate)
+        })
+    })
+}</pre>
+      </div>
+
+      <h3>Data-driven tests</h3>
+      <p><strong>Iterator API</strong> — range over test entries with compile-time type safety:</p>
+      <div class="code-block">
+        <pre><span class="kw">for</span> it, tc := <span class="kw">range</span> gotest.Each(t, []<span class="kw">struct</span> {
+    Desc  <span class="tp">string</span>
+    Input <span class="tp">string</span>
+    Want  <span class="tp">int</span>
+}{
+    {Desc: <span class="st">"single digit"</span>, Input: <span class="st">"5"</span>, Want: 5},
+    {Desc: <span class="st">"negative"</span>,     Input: <span class="st">"-3"</span>, Want: -3},
+}) {
+    gotest.Equal(it, tc.Want, parse(tc.Input))
+}</pre>
+      </div>
+      <div class="callout">
+        Each entry becomes a subtest. Uses the <code>Desc</code> or <code>Name</code> field for the test name, falls back to <code>#0</code>, <code>#1</code>, etc.
+      </div>
+
+      <h3>Snapshot testing</h3>
+      <p>Capture expected output once, verify it on every subsequent run:</p>
+      <div class="code-block">
+        <pre>gotest.MatchSnapshot(t, render(input))              <span class="cm">// auto-named from test path</span>
+gotest.MatchSnapshot(t, render(other), <span class="st">"variant"</span>)  <span class="cm">// explicit snapshot name</span></pre>
+      </div>
+      <p>Snapshots are stored in <code>testdata/__snapshots__/</code> next to the test file. On first run, the snapshot is created. On subsequent runs, the output is compared and failures include a diff. Snapshot entries are written in deterministic order and are thread-safe — parallel test methods can use <code>MatchSnapshot</code> without coordination.</p>
+      <p>Update all snapshots with <code>gotest --update-snapshots ./...</code>.</p>
+
+      <h3>Async polling</h3>
+      <p>Package-level functions for polling conditions. Callbacks receive <code>*gotest.R</code> — an assertion recorder that captures failures without propagating them:</p>
+      <div class="code-block">
+        <div class="code-label">Eventually — poll until assertions pass</div>
+        <pre>gotest.Eventually(t, 5*time.Second, 100*time.Millisecond, <span class="kw">func</span>(poll *gotest.R) {
+    result, err := s.store.Get(<span class="st">"key"</span>)
+    gotest.NoError(poll, err)
+    gotest.Equal(poll, <span class="st">"completed"</span>, result.Status)
+})</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">Consistently — assert condition holds for full duration</div>
+        <pre>gotest.Consistently(t, 2*time.Second, 100*time.Millisecond, <span class="kw">func</span>(poll *gotest.R) {
+    gotest.True(poll, s.cache.IsValid())
+})</pre>
+      </div>
+      <p>On each tick the callback runs; if any assertion fails, it retries on the next tick. On timeout, the last failure is reported. <code>Consistently</code> inverts the logic — it fails on the first assertion failure.</p>
+
+      <h3>Helpers</h3>
+      <table class="ref-table">
+        <thead><tr><th>Method</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>t.T()</code></td><td>Returns the underlying <code>*testing.T</code>. Use when you need to pass it to third-party libraries.</td></tr>
+          <tr><td><code>t.Context()</code></td><td>Returns the test context. Cancelled when the test ends, carries the test deadline.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 5. Fixtures -->
+
+    <section class="ref-section" id="fixtures">
+      <h2>Fixtures</h2>
+      <p class="lead">Expensive setup — databases, containers, external services — defined once, wired into every suite that needs it.</p>
+
+      <h3>Package fixtures</h3>
+      <p>Any struct ending in <code>Fixture</code> is a package fixture. Suites reference it via a named pointer field:</p>
+      <div class="code-block">
+        <pre><span class="kw">type</span> <span class="tp">E2EFixture</span> <span class="kw">struct</span> {
+    Pool *pgxpool.Pool
+}
+
+<span class="kw">func</span> (f *<span class="tp">E2EFixture</span>) <span class="fn">BeforeAll</span>(ctx context.Context) <span class="tp">error</span> {
+    <span class="cm">// start database, populate f.Pool</span>
+}
+
+<span class="kw">type</span> <span class="tp">BatchTestSuite</span> <span class="kw">struct</span> {
+    Fixture *E2EFixture  <span class="cm">// automatically wired</span>
+}</pre>
+      </div>
+
+      <p>Fixture hooks use <code>(ctx context.Context) error</code> signatures. Errors are reported with automatic attribution — <code>E2EFixture.BeforeAll failed: connection refused</code>.</p>
+
+      <p>A package fixture lives as long as the suite that binds it: set up before the suite's <code>BeforeAll</code>, torn down after its <code>AfterAll</code>, also when a test panics or the run is stopped. Setup that must happen once per run belongs in a shared fixture. A suite sets up only the fixtures it binds and their dependencies, so a fixture it does not use never delays or fails it.</p>
+
+      <p>Package fixtures support all four lifecycle hooks. <code>BeforeEach</code>/<code>AfterEach</code> wrap every individual test case, running outside the suite's own hooks:</p>
+      <div class="diagram">Fixture.BeforeEach
+  <span class="d">└──</span> Suite.BeforeEach <span class="d">→</span> Test <span class="d">→</span> Suite.AfterEach
+Fixture.AfterEach</div>
+
+      <h3>Nesting</h3>
+      <p>Fixtures compose through named pointer fields — the same pattern suites use to reference fixtures. A fixture can depend on multiple other fixtures. The generator resolves dependencies and wires the lifecycle automatically:</p>
+      <div class="code-block">
+        <pre><span class="kw">type</span> <span class="tp">DBFixture</span> <span class="kw">struct</span> {
+    Pool *pgxpool.Pool
+}
+
+<span class="kw">func</span> (f *<span class="tp">DBFixture</span>) <span class="fn">BeforeAll</span>(ctx context.Context) <span class="tp">error</span> {
+    <span class="cm">// start database container, populate f.Pool</span>
+}
+
+<span class="kw">type</span> <span class="tp">CacheFixture</span> <span class="kw">struct</span> {
+    Client *redis.Client
+}
+
+<span class="kw">func</span> (f *<span class="tp">CacheFixture</span>) <span class="fn">BeforeAll</span>(ctx context.Context) <span class="tp">error</span> {
+    <span class="cm">// start Redis container, populate f.Client</span>
+}
+
+<span class="kw">type</span> <span class="tp">APIFixture</span> <span class="kw">struct</span> {
+    DB        *DBFixture    <span class="cm">// dependency — wired automatically</span>
+    Cache     *CacheFixture <span class="cm">// dependency — wired automatically</span>
+    ServerURL <span class="tp">string</span>
+}
+
+<span class="kw">func</span> (f *<span class="tp">APIFixture</span>) <span class="fn">BeforeAll</span>(ctx context.Context) <span class="tp">error</span> {
+    <span class="cm">// start API server using f.DB.Pool and f.Cache.Client</span>
+}
+
+<span class="kw">type</span> <span class="tp">OrderTestSuite</span> <span class="kw">struct</span> {
+    Fixture *APIFixture <span class="cm">// accesses DB, Cache, and ServerURL</span>
+}</pre>
+      </div>
+      <p>Dependencies are set up first. Independent fixtures set up in parallel; teardown runs in reverse:</p>
+      <div class="diagram">DBFixture.BeforeAll <span class="d">───┐</span>
+                       <span class="d">├──</span> APIFixture.BeforeAll
+CacheFixture.BeforeAll <span class="d">┘</span>
+                             <span class="d">└──</span> Suite.BeforeAll
+                                   <span class="d">├──</span> Suite.BeforeEach <span class="d">→</span> Test <span class="d">→</span> Suite.AfterEach
+                             <span class="d">└──</span> Suite.AfterAll
+                       <span class="d">┌──</span> APIFixture.AfterAll
+DBFixture.AfterAll <span class="d">────┘</span>
+CacheFixture.AfterAll <span class="d">─┘</span></div>
+
+      <h3>Shared fixtures</h3>
+      <p>Structs ending in <code>SharedFixture</code> run in a subprocess and share state across packages via JSON serialization. Resources that can't serialize (connection pools, caches) are reconstructed in each test process via <code>Hydrate</code>:</p>
+      <div class="code-block">
+        <pre><span class="kw">type</span> <span class="tp">PostgresSharedFixture</span> <span class="kw">struct</span> {
+    ConnStr <span class="tp">string</span>        <span class="cm">// serialized — transfers across processes</span>
+    Pool    *pgxpool.Pool <span class="cm">// local — reconstructed via Hydrate</span>
+}
+
+<span class="kw">func</span> (f *<span class="tp">PostgresSharedFixture</span>) <span class="fn">BeforeAll</span>(ctx context.Context) <span class="tp">error</span> {
+    f.ConnStr = startPostgres(ctx)
+    <span class="kw">return</span> f.connect(ctx)
+}
+
+<span class="kw">func</span> (f *<span class="tp">PostgresSharedFixture</span>) <span class="fn">Hydrate</span>(ctx context.Context) <span class="tp">error</span>   { <span class="kw">return</span> f.connect(ctx) }
+<span class="kw">func</span> (f *<span class="tp">PostgresSharedFixture</span>) <span class="fn">Dehydrate</span>(ctx context.Context) <span class="tp">error</span> { f.Pool.Close(); <span class="kw">return</span> <span class="kw">nil</span> }
+
+<span class="kw">func</span> (f *<span class="tp">PostgresSharedFixture</span>) <span class="fn">connect</span>(ctx context.Context) <span class="tp">error</span> {
+    <span class="kw">var</span> err <span class="tp">error</span>
+    f.Pool, err = pgxpool.New(ctx, f.ConnStr)
+    <span class="kw">return</span> err
+}</pre>
+      </div>
+      <div class="callout">
+        <code>BeforeAll</code> always sets transfer fields. Local fields only need to be set in <code>BeforeAll</code> when a dependent shared fixture accesses them in the DAG — otherwise they may add an idle resource to the subprocess. <code>Hydrate</code> handles local field reconstruction in test processes.
+      </div>
+      <div class="callout">
+        Fields assigned in <code>Hydrate</code> are automatically classified as local and excluded from serialization. Everything else transfers. No annotations needed.
+      </div>
+
+      <h3>SharedFixture dependencies</h3>
+      <p>SharedFixtures can depend on other SharedFixtures via pointer fields — the same pattern used by package fixtures. <code>BeforeAll</code> runs in dependency order (parents first, independent fixtures in parallel). Cyclic dependencies are rejected at generation time.</p>
+      <div class="code-block">
+        <pre><span class="kw">type</span> <span class="tp">SchemaSharedFixture</span> <span class="kw">struct</span> {
+    Postgres *<span class="tp">PostgresSharedFixture</span>  <span class="cm">// dependency — Postgres starts first</span>
+    Version  <span class="tp">string</span>
+}
+
+<span class="kw">func</span> (f *<span class="tp">SchemaSharedFixture</span>) <span class="fn">BeforeAll</span>(ctx context.Context) <span class="tp">error</span> {
+    <span class="cm">// f.Postgres.ConnStr is available</span>
+    <span class="kw">return</span> migrate(f.Postgres.ConnStr)
+}</pre>
+      </div>
+      <div class="callout">
+        Within the setup subprocess, dependent fixtures receive in-memory pointers — not serialized state. <code>B.BeforeAll()</code> can access all of <code>A</code>'s fields, including local fields like connection pools — provided <code>A.BeforeAll()</code> set them. When a dependent only needs transfer fields, skipping local setup in the parent avoids idle resources in the subprocess.
+      </div>
+      <p>Suites are dispatched as soon as their specific shared fixture dependencies are ready — they don't wait for unrelated fixtures. Transitive dependencies are included automatically: if a suite needs <code>SchemaSharedFixture</code>, it also gets <code>PostgresSharedFixture</code>.</p>
+    </section>
+
+    <!-- 5. Assertions -->
+    <section class="ref-section" id="assertions">
+      <h2>Assertions</h2>
+      <p class="lead">Type-safe generics with compile-time checking. Zero external dependencies. Works with <code>*gotest.T</code>, <code>*testing.T</code>, <code>*gotest.B</code> and <code>*gotest.F</code>.</p>
+      <div class="callout">
+        Assertion failures automatically trace back to the test call site. Helper functions don't need <code>t.Helper()</code> — the failure is located at the line that failed, a helper's included, and the message names the outermost caller from the test file.
+      </div>
+
+      <h3>Equality &amp; identity</h3>
+      <table class="ref-table">
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Equal(t, expected, actual)</code></td><td>Deep equality. Cross-type comparison is a compile error. Failures include a diff.</td></tr>
+          <tr><td><code>NotEqual(t, a, b)</code></td><td>Inverse of Equal.</td></tr>
+          <tr><td><code>Zero(t, value)</code></td><td>Value equals its zero value.</td></tr>
+          <tr><td><code>NotZero(t, value)</code></td><td>Value is not zero.</td></tr>
+          <tr><td><code>Nil(t, obj)</code></td><td>Nil check for non-comparable nilables (slices, maps, funcs). Type-guarded; comparable nilables use <code>Zero</code>.</td></tr>
+          <tr><td><code>NotNil(t, obj)</code></td><td>Inverse of Nil.</td></tr>
+          <tr><td><code>Empty(t, obj)</code></td><td>Slice, map, string, or channel is empty.</td></tr>
+          <tr><td><code>NotEmpty(t, obj)</code></td><td>Not empty.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Errors</h3>
+      <table class="ref-table">
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>NoError(t, err)</code></td><td>Error is nil.</td></tr>
+          <tr><td><code>Error(t, err)</code></td><td>Error is not nil.</td></tr>
+          <tr><td><code>ErrorIs(t, err, target)</code></td><td>Wraps <code>errors.Is</code>.</td></tr>
+          <tr><td><code>ErrorAs[E](t, err)</code></td><td>Wraps <code>errors.As</code>. Returns the matched error.</td></tr>
+          <tr><td><code>ErrorContains(t, err, substr)</code></td><td>Error message contains substring.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Collections</h3>
+      <table class="ref-table">
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Contains(t, haystack, needle)</code></td><td>String, slice, or map contains value.</td></tr>
+          <tr><td><code>NotContains(t, s, v)</code></td><td>Inverse of Contains.</td></tr>
+          <tr><td><code>Len(t, obj, n)</code></td><td>Collection has exactly n elements.</td></tr>
+          <tr><td><code>ElementsMatch(t, a, b)</code></td><td>Same elements regardless of order.</td></tr>
+          <tr><td><code>Subset(t, list, sub)</code></td><td>All elements of sub exist in list.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Comparison &amp; numeric</h3>
+      <table class="ref-table">
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Greater(t, a, b)</code></td><td>a &gt; b. Constrained to <code>cmp.Ordered</code> — comparing incomparable types is a compile error.</td></tr>
+          <tr><td><code>GreaterOrEqual(t, a, b)</code></td><td>a &ge; b.</td></tr>
+          <tr><td><code>Less(t, a, b)</code></td><td>a &lt; b.</td></tr>
+          <tr><td><code>LessOrEqual(t, a, b)</code></td><td>a &le; b.</td></tr>
+          <tr><td><code>InDelta(t, expected, actual, delta)</code></td><td>Difference within delta. Works with any numeric type.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Strings, time &amp; other</h3>
+      <table class="ref-table">
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Regexp(t, pattern, str)</code></td><td>String matches regex pattern.</td></tr>
+          <tr><td><code>JSONEq(t, expected, actual)</code></td><td>JSON-equal. Accepts string, []byte, io.Reader, or any marshalable value.</td></tr>
+          <tr><td><code>TimeWithin(t, expected, actual, tol)</code></td><td>Times within tolerance.</td></tr>
+          <tr><td><code>TimeIsNow(t, ts, tolerance)</code></td><td>Timestamp is approximately now.</td></tr>
+          <tr><td><code>True(t, v)</code> / <code>False(t, v)</code></td><td>Boolean checks.</td></tr>
+          <tr><td><code>Panics(t, fn)</code></td><td>Function panics. Returns the recovered value.</td></tr>
+          <tr><td><code>Fail(t, msgAndArgs...)</code></td><td>Explicit immediate failure.</td></tr>
+          <tr><td><code>Must(val, ok)</code></td><td>Unwraps <code>(T, error)</code> and <code>(T, bool)</code> pairs. Panics on error or false — for test setup, not assertions.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Async</h3>
+      <table class="ref-table">
+        <thead><tr><th>Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Eventually(t, timeout, tick, fn)</code></td><td>Poll <code>func(poll *R)</code> until assertions pass or timeout.</td></tr>
+          <tr><td><code>Consistently(t, duration, tick, fn)</code></td><td>Assert <code>func(poll *R)</code> holds for the full duration.</td></tr>
+          <tr><td><code>Go(t, fn)</code></td><td>Run <code>fn</code> on a goroutine that captures panics and re-raises them on the test's goroutine. Returns a <code>wait</code> func; also registered as cleanup.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        All assertions work inside polling callbacks — use <code>poll</code> (a <code>*gotest.R</code>) exactly as you would use <code>t</code>. Failures are collected, not propagated, enabling retry semantics.
+      </div>
+
+      <div class="callout">
+        All assertions call <code>t.Helper()</code>, so failures report the caller's file and line — not the assertion library internals.
+      </div>
+    </section>
+
+    <!-- 6. Configuration -->
+    <section class="ref-section" id="configuration">
+      <h2>Configuration</h2>
+      <p class="lead">Sensible defaults. Override only what you need — via project file, marker methods, or CLI flags.</p>
+
+      <h3>Precedence</h3>
+      <p>There are two independent configuration scopes:</p>
+      <p><strong>Project scope</strong> — CLI flags override the project file. These control the test runner itself:</p>
+      <div class="diagram">1. CLI flags            <span class="d">--setup-timeout=2m, --min=80, --debounce=500ms</span>
+2. Project file         <span class="d">.gotest.yml — checked into the repo</span></div>
+      <p><strong>Code scope</strong> — marker methods override built-in presets. These control individual suites and fixtures:</p>
+      <div class="diagram">1. In-code config       <span class="d">SuiteConfig(), FixtureConfig(), SharedFixtureConfig()</span>
+2. Built-in defaults    <span class="d">DefaultSuiteConfig(), DefaultFixtureConfig()</span></div>
+      <p>The two scopes are independent — they don't override each other. For shared fixture timeouts specifically, <code>--setup-timeout</code> is an outer wall-clock budget on the entire setup phase, while <code>SharedFixtureConfig().Timeout</code> is an inner per-fixture deadline. Both run concurrently — whichever fires first wins. When <code>--setup-timeout</code> is omitted, the outer budget is the fixtures' declared budgets, 30s until the first reports; set it to <code>0</code> to disable the outer budget and let only the per-fixture timeouts govern.</p>
+
+      <h3>Project file — <code>.gotest.yml</code></h3>
+      <p>Place a <code>.gotest.yml</code> in your project root. gotest finds it by walking up from the working directory, stopping at the first match or at a <code>go.mod</code> boundary. CLI flags always take precedence; zero or omitted fields use defaults.</p>
+      <table class="ref-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>CLI override</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>tags</code></td><td>string</td><td><em>none</em></td><td><code>-tags</code></td><td>Build tags, comma-separated (e.g. <code>"integration,e2e"</code>).</td></tr>
+          <tr><td><code>setup-timeout</code></td><td>duration</td><td>the fixtures' declared budgets, 30s until the first reports</td><td><code>--setup-timeout</code></td><td>Total budget for all shared fixture setup. <code>0</code> disables.</td></tr>
+          <tr><td><code>timeout</code></td><td>duration</td><td>15m</td><td><code>--timeout</code></td><td>Global pipeline deadline. <code>0</code> disables.</td></tr>
+          <tr><td><code>min-coverage</code></td><td>int</td><td>0 (off)</td><td><code>--min</code></td><td>Minimum coverage percentage, 0–100.</td></tr>
+          <tr><td><code>parallel</code></td><td>int</td><td>0 (auto)</td><td><code>--parallel</code></td><td>Total concurrent test method budget. 0 means 2×GOMAXPROCS, auto-halved under <code>-race</code>/<code>-msan</code>/<code>-asan</code>.</td></tr>
+          <tr><td><code>compile-parallel</code></td><td>int</td><td>0 (auto)</td><td><code>--compile-parallel</code></td><td>Concurrent compilation processes. 0 means NumCPU, auto-halved under <code>-race</code>/<code>-msan</code>/<code>-asan</code>.</td></tr>
+          <tr><td><code>debounce</code></td><td>duration</td><td>200ms</td><td><code>--debounce</code></td><td>Watch mode re-run delay.</td></tr>
+          <tr><td><code>lint.skip</code></td><td>[string]</td><td><em>none</em></td><td>—</td><td>Non-integrity lint rules to disable: <code>assertion-simplify</code>, <code>assertion-redundant</code>, <code>fail-guard</code>, <code>t-escape</code>, <code>stdlib-test</code>, <code>testify</code>.</td></tr>
+        </tbody>
+      </table>
+      <div class="code-block">
+        <div class="code-label">.gotest.yml</div>
+        <pre>tags: integration
+setup-timeout: 2m
+min-coverage: 80
+parallel: 12
+debounce: 500ms
+lint:
+  skip:
+    - testify</pre>
+      </div>
+
+      <h3>Suite configuration</h3>
+      <table class="ref-table">
+        <thead><tr><th>Field</th><th>Default</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>Timeout</code></td><td>30s</td><td>Per-test-case deadline.</td></tr>
+          <tr><td><code>SetupTimeout</code></td><td>30s</td><td>BeforeAll / AfterAll deadline.</td></tr>
+          <tr><td><code>FailFast</code></td><td>false</td><td>Stop the suite on first failure.</td></tr>
+          <tr><td><code>Parallel</code></td><td>false</td><td>Run test methods concurrently.</td></tr>
+          <tr><td><code>Exclusive</code></td><td>false</td><td>Schedule the suite's process strictly alone — after every non-exclusive suite has finished, one exclusive suite at a time. For wall-clock-sensitive or resource-contended suites.</td></tr>
+          <tr><td><code>ExclusiveGroup</code></td><td>""</td><td>Run the suite in a named group: the default group first, then each named group by name, never two at once; a group's suites run in parallel, its <code>Exclusive</code> suites after them. A string literal or string constant.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Fixture configuration</h3>
+      <table class="ref-table">
+        <thead><tr><th>Field</th><th>Default</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>Timeout</code></td><td>2 min</td><td>BeforeAll / AfterAll deadline.</td></tr>
+          <tr><td><code>Retries</code></td><td>0</td><td>BeforeAll retry attempts.</td></tr>
+          <tr><td><code>RetryDelay</code></td><td>0</td><td>Pause between retries.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Presets</h3>
+      <p>Start with a preset, override individual fields:</p>
+      <table class="ref-table">
+        <thead><tr><th>Preset</th><th>Timeout</th><th>SetupTimeout</th><th>Retries</th><th>Use case</th></tr></thead>
+        <tbody>
+          <tr><td><code>DefaultSuiteConfig()</code></td><td>30s</td><td>30s</td><td>0</td><td>Unit and integration tests</td></tr>
+          <tr><td><code>IntegrationSuiteConfig()</code></td><td>2 min</td><td>5 min</td><td>0</td><td>Heavier integration tests</td></tr>
+          <tr><td><code>DefaultFixtureConfig()</code></td><td>2 min</td><td>—</td><td>0</td><td>Standard fixtures</td></tr>
+          <tr><td><code>ContainerFixtureConfig()</code></td><td>5 min</td><td>—</td><td>1</td><td>Testcontainers, image pulls</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        A duration the returned config leaves at zero (omitted or explicit) gets the default, as if the marker were absent; <code>gotest.NoDeadline</code> disables a deadline. Booleans, <code>Retries</code> and <code>RetryDelay</code> are used as written, so <code>gotest.SuiteConfig{Parallel: true}</code> runs in parallel with the 30s defaults.
+      </div>
+    </section>
+
+    <!-- 7. Coverage -->
+    <section class="ref-section" id="coverage">
+      <h2>Coverage</h2>
+      <p class="lead">Statement-weighted coverage from the Go coverage profile. One source of truth, no heuristics.</p>
+
+      <h3>How it's calculated</h3>
+      <p>The Go compiler instruments code into basic blocks. Each block records how many statements it contains and how many times it was executed. Coverage at any scope — file, directory, workspace — is:</p>
+
+      <div class="diagram">covered = statements in blocks executed at least once
+total   = all instrumented statements
+percentage = covered / total</div>
+
+      <p>A directory's percentage is the weighted sum of its children, weighted by statement count. This means a parent's number is always derivable from its children — no rounding surprises, no averaging artifacts.</p>
+
+      <h3>Merged and cross-package profiles</h3>
+      <p>Merged profiles — concatenated per-suite profiles, or overlapping <code>-coverpkg</code> runs — can repeat the same block. Each unique file and range is counted once, keeping the maximum execution count, matching <code>go tool cover</code> behavior. <code>-coverpkg</code> itself is a standard <code>go test</code> flag and passes through unchanged.</p>
+
+      <div class="callout">
+        Coverage uses the profile's <code>numStatements</code> as the sole metric. No line counting, no token scanning, no filesystem heuristics. The profile is the source of truth.
+      </div>
+    </section>
+
+    <!-- 8. Benchmarking -->
+    <section class="ref-section" id="benchmarking">
+      <h2>Benchmarking</h2>
+      <p class="lead">Benchmarks are suite methods. A baseline is a file. A gate is a number.</p>
+
+      <h3>Writing benchmarks</h3>
+      <p>A <code>Benchmark</code>-prefixed method on any suite takes a <code>*gotest.B</code>. The suite's fixtures and lifecycle hooks apply as they do to tests, so setup happens where it always does — outside the measured loop.</p>
+      <div class="code-block">
+        <pre><span class="kw">func</span> (s *<span class="tp">CacheTestSuite</span>) <span class="fn">BenchmarkGetHit</span>(b *gotest.B) {
+    key := s.Corpus.Keys[0]        <span class="cm">// read fixture state above the loop</span>
+    <span class="kw">for</span> b.Loop() {
+        s.cache.Get(key)
+    }
+}</pre>
+      </div>
+      <div class="callout">
+        Reading fixture-backed state <em>inside</em> <code>b.Loop()</code> times the fixture, not the code under test. The <code>bench-fixture-io</code> lint rule flags it.
+      </div>
+
+      <h3>Running them</h3>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>gotest bench ./...</code></td><td>Run every suite's generated <code>Benchmark&lt;SuiteName&gt;</code> wrapper, one suite at a time.</td></tr>
+          <tr><td><code>gotest bench --spec ./...</code></td><td>Render the results as a spec tree instead of raw benchmark lines.</td></tr>
+          <tr><td><code>-bench='^BenchmarkCacheTestSuite$/^BenchmarkGetHit$'</code></td><td>Scope to one method: the wrapper runs each method under <code>b.Run</code> with its own name.</td></tr>
+          <tr><td><code>-benchtime=100x</code>, <code>-count=3</code></td><td>Standard <code>go test</code> flags, forwarded unchanged.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        Benchmark suites dispatch serially, one at a time: concurrent benchmarks measure each other. <code>-test.benchmem</code> is on by default, so every line carries <code>B/op</code> and <code>allocs/op</code>.
+      </div>
+
+      <h3>Baselines, deltas, and the gate</h3>
+      <table class="ref-table">
+        <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>--save=&lt;path&gt;</code></td><td>Write this run's results as a JSON baseline. Bare <code>--save=</code> uses <code>bench.baseline</code> from <code>.gotest.yml</code>.</td></tr>
+          <tr><td><code>--against=&lt;path&gt;</code></td><td>Compare this run to a saved baseline and print a delta table. Defaults to <code>bench.baseline</code>.</td></tr>
+          <tr><td><code>--gate=&lt;pct&gt;</code></td><td>Exit 1 when the worst significant regression exceeds <code>pct</code> percent. Needs a comparison; defaults to <code>bench.gate</code>, where <code>0</code> disables.</td></tr>
+          <tr><td><code>--json</code></td><td>One versioned JSON document: the run's results, every delta when a comparison ran, and the gate verdict when a gate is active. For tooling, including the editor.</td></tr>
+        </tbody>
+      </table>
+      <p>In <code>.gotest.yml</code>, <code>bench.baseline</code> and <code>bench.gate</code> set the defaults, so CI and a laptop agree on what a regression is without repeating flags.</p>
+      <div class="callout">
+        A baseline records the <code>goos</code>, <code>goarch</code> and Go version that produced it. Compare against one recorded elsewhere and <code>--against</code> says so on stderr — <code>WARN: baseline was recorded in a different environment</code>, naming each field — while <code>--json</code> carries the same under <code>envMismatch</code>. The comparison still runs and the exit code is unchanged: across machine classes the deltas measure the machines too, and only you know whether two runners are alike enough for that to matter.
+      </div>
+    </section>
+
+    <!-- 9. Fuzzing -->
+    <section class="ref-section" id="fuzzing">
+      <h2>Fuzzing</h2>
+      <p class="lead">Fuzz targets are suite methods, and their inputs are Go types — including structs the engine cannot take.</p>
+
+      <h3>Writing a fuzz target</h3>
+      <p>A <code>Fuzz</code>-prefixed method takes a <code>*gotest.F</code>. Seeds go in with <code>f.Add</code>, the property goes in <code>f.Fuzz</code>, and the generator emits one <code>Fuzz&lt;SuiteName&gt;_&lt;MethodName&gt;</code> wrapper per method.</p>
+      <div class="code-block">
+        <pre><span class="kw">func</span> (s *<span class="tp">FrameCodecTestSuite</span>) <span class="fn">FuzzFrameRoundTrip</span>(f *gotest.F) {
+    f.Add(<span class="tp">Frame</span>{Version: 1, Topic: <span class="st">"orders.created"</span>, Payload: []<span class="tp">byte</span>(<span class="st">`{"id":1}`</span>)})
+    f.Fuzz(<span class="kw">func</span>(t *gotest.T, in <span class="tp">Frame</span>) {
+        out, err := Decode(Encode(in))
+        gotest.NoError(t, err)
+        gotest.Equal(t, in, out)   <span class="cm">// property: round trip</span>
+    })
+}</pre>
+      </div>
+
+      <h3>Struct inputs</h3>
+      <p>Go's fuzzing engine accepts fifteen types, none of them a struct. gotest fans a struct into one engine argument per leaf field at generation time and reassembles the value before each execution. Two consequences follow: a type the fan cannot express is refused when you generate, not hours into a session, and a seed stays an ordinary Go literal instead of a byte blob.</p>
+
+      <h3>Sessions</h3>
+      <table class="ref-table">
+        <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>--for=&lt;dur&gt;</code></td><td>Wall-clock budget for the whole session (default 1m), split across targets — never less than 10s each. <code>--for=0</code> fuzzes until interrupted.</td></tr>
+          <tr><td><code>--jobs=&lt;n&gt;</code></td><td>Concurrent targets (default <code>max(1, GOMAXPROCS/2)</code>). Each target is its own <code>go test -fuzz</code> process.</td></tr>
+          <tr><td><code>--target=&lt;Fuzz...&gt;</code></td><td>Fuzz one target by wrapper name; an unmatched name lists what exists.</td></tr>
+          <tr><td><code>--no-harvest</code></td><td>Skip mining table-test literals into seeds for this run (<code>fuzz.harvest</code> in <code>.gotest.yml</code>).</td></tr>
+        </tbody>
+      </table>
+      <p>Exit codes: <code>0</code> when the budget ran out with nothing found, <code>1</code> for a finding — a failing target or a new crasher file — and <code>2</code> when the session could not run as asked.</p>
+      <div class="callout">
+        Seeds replay without this command: every <code>f.Add</code> seed and every corpus entry under <code>testdata/fuzz/</code> runs as an ordinary subtest of a plain <code>gotest</code> run. <code>gotest fuzz</code> is how you spend time looking for new inputs.
+      </div>
+
+      <h3>Crashers</h3>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>gotest fuzz triage ./...</code></td><td>Re-run every corpus entry, printing its decoded input and the failure cause, or <code>status: no longer failing</code>. Exits 1 while any crasher still fails.</td></tr>
+          <tr><td><code>gotest fuzz promote ./...</code></td><td>Splice each crasher into its method as a permanent <code>f.Add(...)</code> seed, after the last existing seed, and delete the corpus file.</td></tr>
+        </tbody>
+      </table>
+      <p>A crasher whose method cannot be located with confidence is left in place with a warning; promote never partially edits source.</p>
+    </section>
+
+    <!-- 10. CLI Reference -->
+    <section class="ref-section" id="cli">
+      <h2>CLI Reference</h2>
+      <p class="lead">One command, multiple modes. All <code>go test</code> flags pass through unchanged.</p>
+
+      <h3>Commands</h3>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>gotest ./...</code></td><td>Generate overlays and run tests. The default workflow.</td></tr>
+          <tr><td><code>gotest watch ./...</code></td><td>Re-run on file changes. Only affected packages re-run.</td></tr>
+          <tr><td><code>gotest spec ./...</code></td><td>Run tests and render the behavioral specification. With <code>--static</code>, render it from source without running.</td></tr>
+          <tr><td><code>gotest discover ./...</code></td><td>Discover test suites and output JSON (feeds editor integrations).</td></tr>
+          <tr><td><code>gotest summary ./...</code></td><td>Failure-focused summary for CI. Shows only failing tests with assertion output.</td></tr>
+          <tr><td><code>gotest bench ./...</code></td><td>Run <code>Benchmark*</code> suite methods serially; <code>--save</code>, <code>--against</code> and <code>--gate</code> keep and compare baselines.</td></tr>
+          <tr><td><code>gotest fuzz ./...</code></td><td>Search for new failing inputs with <code>Fuzz*</code> suite methods for a time budget (<code>--for</code>); <code>fuzz triage</code> and <code>fuzz promote</code> handle what it finds.</td></tr>
+          <tr><td><code>gotest lint ./...</code></td><td>Static analysis for test suites — see <a href="#linter">Linter</a>.</td></tr>
+          <tr><td><code>gotest scaffold ./pkg/user.Svc</code></td><td>Generate a suite skeleton from any Go type.</td></tr>
+          <tr><td><code>gotest migrate ./...</code></td><td>Convert testify/suite tests automatically.</td></tr>
+          <tr><td><code>gotest generate ./...</code></td><td>Generate suite files without running tests.</td></tr>
+          <tr><td><code>gotest clean ./...</code></td><td>Remove orphaned generated files.</td></tr>
+          <tr><td><code>gotest refactor toggle-focus &lt;file&gt; &lt;id&gt;</code></td><td>Toggle <code>F_</code>/<code>X_</code> prefixes programmatically.</td></tr>
+          <tr><td><code>gotest skill install</code></td><td>Install the coding-agent skill shipped with this version (v1.34+); <code>--dir</code> picks the skills directory.</td></tr>
+          <tr><td><code>gotest prepare ./...</code></td><td>Start shared fixtures for debugging; blocks until SIGTERM.</td></tr>
+          <tr><td><code>gotest version</code></td><td>Print version information.</td></tr>
+          <tr><td><code>gotest help [subcommand]</code></td><td>General or subcommand-specific help.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Flags</h3>
+      <table class="ref-table">
+        <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>--ci</code></td><td>CI mode: fail on focus prefixes, snapshot read-only. Auto-detected from <code>CI</code> env var; opt out with <code>GOTEST_CI=0</code>.</td></tr>
+          <tr><td><code>--spec</code></td><td>Render the spec view in place of the default output.</td></tr>
+          <tr><td><code>--update-snapshots</code></td><td>Regenerate all snapshot files.</td></tr>
+          <tr><td><code>--no-cache</code></td><td>Disable the test binary cache.</td></tr>
+          <tr><td><code>--min=&lt;pct&gt;</code></td><td>Fail if coverage falls below threshold.</td></tr>
+          <tr><td><code>--format=&lt;fmt&gt;</code></td><td>Output format for <code>spec</code> command: <code>md</code> (Markdown) or <code>json</code> (structured JSON).</td></tr>
+          <tr><td><code>--output=&lt;path&gt;</code></td><td>Write formatted output to file.</td></tr>
+          <tr><td><code>--no-color</code></td><td>Strip ANSI codes from output.</td></tr>
+          <tr><td><code>--debug</code></td><td>Keep the run's work dir and overlay for inspection; a later run removes them after 7 days.</td></tr>
+          <tr><td><code>--setup-timeout=&lt;dur&gt;</code></td><td>Total budget for all shared fixture setup (default: the fixtures' declared budgets, 30s until the first reports; <code>0</code> to disable).</td></tr>
+          <tr><td><code>--timeout=&lt;dur&gt;</code></td><td>Global pipeline deadline (default: 15m, <code>0</code> to disable).</td></tr>
+          <tr><td><code>--parallel=&lt;n&gt;</code></td><td>Total concurrent test method budget (default: 2×GOMAXPROCS, auto-halved for <code>-race</code>/<code>-msan</code>/<code>-asan</code>).</td></tr>
+          <tr><td><code>--compile-parallel=&lt;n&gt;</code></td><td>Concurrent compilation processes (default: NumCPU, auto-halved for <code>-race</code>/<code>-msan</code>/<code>-asan</code>).</td></tr>
+          <tr><td><code>--group=&lt;name&gt;</code></td><td>Run only the suites of this <code>ExclusiveGroup</code>; repeatable. An unknown name exits 2 before any build.</td></tr>
+          <tr><td><code>--skip-group=&lt;name&gt;</code></td><td>Leave the suites of this <code>ExclusiveGroup</code> out; repeatable.</td></tr>
+          <tr><td><code>--save=&lt;path&gt;</code></td><td>Save a benchmark run as a JSON baseline (<code>bench</code>).</td></tr>
+          <tr><td><code>--against=&lt;path&gt;</code></td><td>Compare a benchmark run against a saved baseline and print the delta table (<code>bench</code>).</td></tr>
+          <tr><td><code>--gate=&lt;pct&gt;</code></td><td>Fail if the worst significant benchmark regression exceeds the threshold (<code>bench</code>).</td></tr>
+          <tr><td><code>--json</code></td><td>Emit one versioned JSON report instead of human output (<code>bench</code>).</td></tr>
+          <tr><td><code>--for=&lt;dur&gt;</code></td><td>Approximate wall-clock budget for the whole fuzz session, split across targets (<code>fuzz</code>; default 1m, <code>0</code> removes the budget).</td></tr>
+          <tr><td><code>--jobs=&lt;n&gt;</code></td><td>Maximum concurrent fuzz targets (<code>fuzz</code>; default max(1, GOMAXPROCS/2)).</td></tr>
+          <tr><td><code>--target=&lt;name&gt;</code></td><td>Fuzz exactly one generated target by its wrapper name (<code>fuzz</code>).</td></tr>
+          <tr><td><code>--no-harvest</code></td><td>Do not mine table-test literals into fuzz seeds for this run.</td></tr>
+          <tr><td><code>--static</code></td><td>Read the specification from source without running the suites; nodes carry no verdict (<code>spec</code> command).</td></tr>
+          <tr><td><code>--render-only</code></td><td>With <code>--input</code>, exit 0 on a failing or incomplete stream: report whether rendering succeeded, not the test verdict.</td></tr>
+          <tr><td><code>--debounce=&lt;dur&gt;</code></td><td>Watch mode debounce interval (default 200ms).</td></tr>
+          <tr><td><code>--input=&lt;path&gt;</code></td><td>Read test output from file instead of running tests (<code>spec</code>, <code>summary</code>). Exits 2 when the input holds no test events, a package or failed build never reported its verdict, or a package failed to build.</td></tr>
+          <tr><td><code>--events-file=&lt;path&gt;</code></td><td>Also write the run's <code>go test -json</code> event stream to the file as <code>-json</code> prints it, a suite's events when its process ends, making its directories and replacing a file there; <code>summary --input</code> reads it back (<code>-json</code> runs and <code>summary</code>). An unwritable path exits 2 before anything is built.</td></tr>
+          <tr><td><code>--github</code></td><td>GitHub CI mode: emit <code>::error</code> annotations and write step summary (<code>summary</code> command). Auto-detected via <code>$GITHUB_ACTIONS</code>.</td></tr>
+          <tr><td><code>--coverage=&lt;file&gt;</code></td><td>Include coverage from profile in summary output (<code>summary</code> command).</td></tr>
+          <tr><td><code>--badge=&lt;file&gt;</code></td><td>Write a self-contained coverage badge SVG; enables <code>-coverprofile</code> when nothing else does (<code>summary</code> command).</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        Standard <code>go test</code> flags work unchanged: <code>-v</code>, <code>-race</code>, <code>-cover</code>, <code>-count</code>, <code>-run</code>, <code>-skip</code>, <code>-json</code>, <code>-short</code>, <code>-timeout</code>.
+        Every matched package ends in a verdict, as with <code>go test</code>, printed in package order: one gotest runs nothing in reports <code>[no test files]</code>, <code>[no suites]</code> (stdlib tests only, standard library packages too) or <code>0.000s [no tests to run]</code> (benchmarks only, every suite excluded with <code>X_</code>, or <code>-run</code> deselected every suite), in text and in <code>-json</code>, where each package opens with one <code>start</code> event as in <code>go test -json</code>.
+        Patterns that match no package at all verified nothing: every run mode exits <code>2</code> with <code>FAIL: "&lt;pattern&gt;" matched no packages</code> on stderr. A pattern that matches nothing beside others that did only warns, as with <code>go test</code>. <code>generate</code> and <code>discover</code>, which verify nothing, only warn and exit <code>0</code>. An empty pattern (<code>""</code>) is the current directory, as with <code>go test</code>. gotest takes packages, not files: a <code>.go</code> file argument exits <code>2</code> and names it.
+      </div>
+    </section>
+
+    <!-- 11. Linter -->
+    <section class="ref-section" id="linter">
+      <h2>Linter</h2>
+      <p class="lead">Thirty-three rules in three tiers. A rule's tier determines how it may be suppressed.</p>
+
+      <h3>Integrity rules</h3>
+      <p>Violations can make test outcomes unreliable or leak resources. These rules can only be suppressed per line — never project-wide.</p>
+      <table class="ref-table">
+        <thead><tr><th>Rule</th><th>Detects</th></tr></thead>
+        <tbody>
+          <tr><td><code>focus</code></td><td>Committed <code>F_</code> prefixes on suites or on Test, Benchmark and Fuzz methods.</td></tr>
+          <tr><td><code>receiver</code></td><td>Suite methods with value receivers instead of pointer receivers.</td></tr>
+          <tr><td><code>lifecycle-typo</code></td><td>Method names one typo away from a lifecycle hook (<code>BeforAll</code>, <code>AfterEeach</code>).</td></tr>
+          <tr><td><code>lifecycle-pair</code></td><td><code>BeforeAll</code> without <code>AfterAll</code> — resources may leak.</td></tr>
+          <tr><td><code>x-lifecycle</code></td><td><code>X_</code> prefix on a lifecycle hook — a no-op.</td></tr>
+          <tr><td><code>test-signature</code></td><td>Test methods not accepting <code>*gotest.T</code> (or <code>*testing.T</code>).</td></tr>
+          <tr><td><code>suite-lifecycle</code></td><td><code>Cleanup</code>/<code>Parallel</code>/<code>Run</code> via <code>t.T()</code> and <code>Cleanup</code> via <code>b.B()</code> or <code>f.F()</code> — they bypass the suite lifecycle. <code>Run</code> is flagged in any function, since its subtests drop the suite's deadline.</td></tr>
+          <tr><td><code>poll-scope</code></td><td>Assertions inside <code>Eventually</code>/<code>Consistently</code> callbacks using the outer <code>t</code> instead of <code>poll</code>.</td></tr>
+          <tr><td><code>assertion-type-guard</code></td><td><code>Nil</code>/<code>Empty</code> on types their runtime guards would reject.</td></tr>
+          <tr><td><code>shared-fixture-undeclared</code></td><td>Suite reads a shared fixture it never declared — window scheduling only starts declared fixtures, so the read may hit one that never started or is already released.</td></tr>
+          <tr><td><code>generated-file</code></td><td>Generated overlay files present in source control.</td></tr>
+          <tr><td><code>bench-loop</code></td><td><code>Benchmark*</code> methods that never touch <code>b.Loop()</code>/<code>b.N</code> — nothing iterates, so the numbers lie.</td></tr>
+          <tr><td><code>fuzz-determinism</code></td><td>Fuzz targets reading <code>time.Now</code>, <code>math/rand</code> or <code>os.Getenv</code> — corpus replay and coverage guidance degrade.</td></tr>
+          <tr><td><code>generation-rejects</code></td><td>Every shape the generator rejects, at the place and with the message it gives — such a package does not run at all.</td></tr>
+          <tr><td><code>suite-declaration</code></td><td>A suite or fixture declared inside a <code>type ( … )</code> block — the fix gives it its own declaration, doc comment kept.</td></tr>
+          <tr><td><code>no-embedding</code></td><td>An embedded suite, fixture or type carrying a method gotest reads, or a suite-typed field — reported at the field with the alternative.</td></tr>
+          <tr><td><code>fixture-hook-call</code></td><td>A suite or fixture method calling a lifecycle hook of its own or of a fixture it holds — the harness calls it too, so it runs twice; a shared fixture's <code>BeforeAll</code> or <code>AfterAll</code> may call its own <code>Hydrate</code> or <code>Dehydrate</code>, which its process never runs.</td></tr>
+          <tr><td><code>nolint-unknown</code></td><td>A <code>//nolint</code> id that names no gotest rule and no golangci-lint linter — it suppresses nothing, and the comment cannot suppress this finding.</td></tr>
+          <tr><td><code>fuzz-struct-corpus</code></td><td>On-disk corpus entries for a struct-typed fuzz target — bound to the field order; <code>gotest fuzz promote</code> turns them into typed seeds.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Expressiveness rules</h3>
+      <p>The test is correct but its syntax can be improved. These rules can be suppressed per line or project-wide via <code>lint.skip</code>; <code>-fix</code> applies the safe rewrites in one run, overlapping ones included, then reports what it could not fix (exit 3 while findings remain); <code>-diff</code> prints exactly what <code>-fix</code> would write, as a unified diff with paths relative to the current directory, and writes nothing — <code>gotest lint -diff ./... | git apply</code> applies it (a file outside that directory needs <code>git apply --unsafe-paths</code>; a symlink is named by the file it leads to, which <code>-fix</code> writes).</p>
+      <table class="ref-table">
+        <thead><tr><th>Rule</th><th>Detects</th></tr></thead>
+        <tbody>
+          <tr><td><code>assertion-simplify</code></td><td>Simplifiable assertions: <code>True(t, a == b)</code> → <code>Equal</code>, <code>Len(t, x, 0)</code> → <code>Empty</code>, …</td></tr>
+          <tr><td><code>assertion-redundant</code></td><td>An assertion made redundant by the next one on the same argument.</td></tr>
+          <tr><td><code>fail-guard</code></td><td><code>if cond { Fail/Fatal(...) }</code> guards — the assertion expresses the check directly.</td></tr>
+          <tr><td><code>t-escape</code></td><td>Unnecessary <code>t.T()</code>, <code>b.B()</code> and <code>f.F()</code> convenience escapes (<code>Errorf</code>, <code>Helper</code>, <code>Log</code>, <code>Fatal</code>, …), and <code>t.T().Context()</code>/<code>t.T().Deadline()</code>, which drop the suite's <code>Timeout</code> — also inside <code>*testing.T</code> helpers handed <code>t.T()</code>. Through <code>b.B()</code> and <code>f.F()</code> it reports what <code>gotest.B</code> and <code>gotest.F</code> offer (<code>Loop</code>, <code>ReportAllocs</code>, <code>SetBytes</code>, <code>ReportMetric</code>, <code>Name</code>, <code>Add</code>, <code>Context</code>, <code>Errorf</code>, <code>FailNow</code>, <code>Skipf</code>), also inside <code>*testing.B</code> and <code>*testing.F</code> helpers handed the escape, and the no-fix set as through <code>t.T()</code>; <code>Setenv</code>, <code>TempDir</code> and <code>Run</code> are not flagged through <code>b.B()</code>.</td></tr>
+          <tr><td><code>config-no-deadline</code></td><td>A literal negative duration on <code>SuiteConfig.Timeout</code>/<code>SetupTimeout</code> or <code>FixtureConfig.Timeout</code> — every negative disables the deadline; the fix spells it <code>gotest.NoDeadline</code>.</td></tr>
+          <tr><td><code>behavior-wording</code></td><td><code>When("when …")</code> or <code>It("it …")</code> — the spec renders the connective and the ✓ glyph plays "it"; the fix drops the word.</td></tr>
+          <tr><td><code>bench-fixture-io</code></td><td>Fixture-backed reads inside the measured loop — times the fixture, not the code.</td></tr>
+          <tr><td><code>bench-wait</code></td><td><code>time.Sleep</code>/<code>Eventually</code>/<code>Consistently</code> inside the measured loop — times the wait.</td></tr>
+          <tr><td><code>fuzz-no-oracle</code></td><td>Fuzz callbacks that assert nothing — only panics are caught.</td></tr>
+          <tr><td><code>fuzz-seed</code></td><td>Fuzz targets with no <code>f.Add</code> seed — exploration starts blind.</td></tr>
+          <tr><td><code>fuzz-hook-io</code></td><td>IO in <code>BeforeEach</code>/<code>AfterEach</code> of a fuzzing suite — the hooks replay around every execution.</td></tr>
+          <tr><td><code>fuzz-raw-seed</code></td><td>Raw <code>[]byte</code> seeds on a position that does not take <code>[]byte</code> — write a typed literal.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Migration rules</h3>
+      <p>Adoption aids for codebases moving to gotest — coexistence is legitimate. These rules can be suppressed per line or project-wide via <code>lint.skip</code>.</p>
+      <table class="ref-table">
+        <thead><tr><th>Rule</th><th>Detects</th></tr></thead>
+        <tbody>
+          <tr><td><code>stdlib-test</code></td><td><code>func TestX(*testing.T)</code> — consider a suite method; coexisting stdlib tests are legitimate.</td></tr>
+          <tr><td><code>testify</code></td><td>Any <code>github.com/stretchr/testify/*</code> import — migration incomplete.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Suppression</h3>
+      <p>Silence a single diagnostic with <code>//nolint:&lt;rule&gt;</code> on its line or in a comment block of its own ending on the line directly above it; on the <code>package</code> line it applies file-wide. A bare <code>//nolint</code> (a reason may follow after <code>//</code>) or <code>//nolint:all</code> silences every rule there. Non-integrity rules can also be disabled per run (<code>-skip-&lt;rule&gt;</code>) or project-wide (<code>.gotest.yml</code> → <code>lint.skip</code>).</p>
+
+      <h3>Exit codes</h3>
+      <table class="ref-table">
+        <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>0</code></td><td>No findings (with <code>-fix</code> or <code>-diff</code>: none left after fixing).</td></tr>
+          <tr><td><code>1</code></td><td>Nothing analyzable: one or more target packages do not compile — they could not be analyzed, so the run fails instead of passing silently; patterns that match no package, or name a directory or package that does not exist (a pattern matching nothing beside others that do only warns on stderr, as <code>go</code> does); fixed sources that no longer compile; or fixed files that could not be written (<code>-fix</code> writes them all or none; on a failure stderr names any that were).</td></tr>
+          <tr><td><code>2</code></td><td>Usage or configuration error (e.g. an integrity rule in <code>lint.skip</code>).</td></tr>
+          <tr><td><code>3</code></td><td>Findings reported (with <code>-fix</code> or <code>-diff</code>: the findings left after fixing).</td></tr>
+          <tr><td><code>130</code></td><td><code>-fix</code> or <code>-diff</code> stopped by a signal; nothing was written (once the fixed files are being written, they all are first).</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        The linter is a standard <code>go/analysis</code> analyzer, built into the CLI as <code>gotest lint</code>. There is no golangci-lint plugin — run it as its own CI step alongside your existing linter. In GitHub Actions, <code>gotest lint</code> auto-detects the runner (<code>GITHUB_ACTIONS=true</code>, or explicitly via <code>--github</code>) and additionally emits inline PR annotations per finding plus a findings table in the step summary; exit codes and suppression are unchanged.
+      </div>
+    </section>
+
+    <!-- 12. CI Integration -->
+    <section class="ref-section" id="ci-integration">
+      <h2>CI Integration</h2>
+      <p class="lead">Failure-focused summaries, inline PR annotations, and coverage reports — out of the box.</p>
+
+      <h3>gotest summary</h3>
+      <p>The <code>summary</code> subcommand shows only failing tests with their assertion output, filtering out <code>=== RUN</code>, <code>=== CONT</code>, <code>--- PASS</code> noise. When all tests pass, it prints a single success line:</p>
+      <div class="code-block">
+        <div class="code-label">All tests pass</div>
+        <pre>147 tests passed (2.3s)
+Coverage: 82.4%</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label">Failures show assertion output only</div>
+        <pre>3 of 147 tests failed
+
+FAIL  pkg/foo TestValidateInput / empty string (12ms)
+      foo_test.go:42: expected error, got nil
+
+FAIL  pkg/bar TestProcessOrder / concurrent writes (1.2s)
+      bar_test.go:88:
+        expected: []string{"a", "b", "c"}
+             got: []string{"a", "c", "b"}</pre>
+      </div>
+
+      <p>In GitHub Actions, <code>--github</code> (auto-detected via <code>$GITHUB_ACTIONS</code>) emits <code>::error</code> annotations that appear inline on PR diffs and writes a markdown summary to the job summary panel.</p>
+
+      <h3>GitHub Action</h3>
+      <p>The repository includes a composite action at <code>mvrahden/go-test@v1</code> that wraps <code>gotest summary --github</code>:</p>
+      <div class="code-block">
+        <div class="code-label">.github/workflows/test.yml</div>
+        <pre>- uses: actions/checkout@v7
+- uses: actions/setup-go@v7
+  with:
+    go-version-file: go.mod
+
+- uses: mvrahden/go-test@v1
+  with:
+    packages: ./...
+    race: true
+    coverage: true
+    min-coverage: 80</pre>
+      </div>
+
+      <h3>Action inputs</h3>
+      <table class="ref-table">
+        <thead><tr><th>Input</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>packages</code></td><td><code>./...</code></td><td>Package patterns to test.</td></tr>
+          <tr><td><code>race</code></td><td><code>false</code></td><td>Enable the race detector.</td></tr>
+          <tr><td><code>coverage</code></td><td><code>false</code></td><td>Enable coverage profiling and reporting.</td></tr>
+          <tr><td><code>min-coverage</code></td><td><em>none</em></td><td>Minimum coverage percentage (0–100). Fails the step if below.</td></tr>
+          <tr><td><code>flags</code></td><td><em>none</em></td><td>Additional gotest flags (<code>--double-dash</code> style).</td></tr>
+          <tr><td><code>go-test-flags</code></td><td><em>none</em></td><td>Additional go test flags (<code>-single-dash</code> style).</td></tr>
+          <tr><td><code>badge</code></td><td><code>false</code></td><td>Render a coverage badge and publish it as <code>coverage.svg</code> to <code>badge-branch</code>, from the default branch only. Turns <code>coverage</code> on; needs <code>contents: write</code>.</td></tr>
+          <tr><td><code>badge-branch</code></td><td><code>ci/badges</code></td><td>Branch the badge is published to; created automatically on first use.</td></tr>
+          <tr><td><code>bench</code></td><td><code>false</code></td><td>Run benchmarks after the tests (<code>gotest bench --spec --json</code>).</td></tr>
+          <tr><td><code>bench-baseline</code></td><td><em>none</em></td><td>Baseline JSON file to compare benchmarks against (<code>--against</code>).</td></tr>
+          <tr><td><code>bench-gate</code></td><td><em>none</em></td><td>Fail the run if a benchmark regresses by more than this percent (<code>--gate</code>).</td></tr>
+          <tr><td><code>bench-save</code></td><td><code>false</code></td><td>Save the benchmark run as a JSON baseline at this path (<code>--save</code>); an empty string saves to <code>bench.baseline</code> from <code>.gotest.yml</code>.</td></tr>
+          <tr><td><code>fuzz</code></td><td><code>false</code></td><td>Run a budgeted fuzz session after the tests (<code>gotest fuzz --for</code>); a new crasher fails the step.</td></tr>
+          <tr><td><code>fuzz-for</code></td><td><em>none</em></td><td>Approximate wall-clock budget for the fuzz session; empty uses the CLI's default of one minute.</td></tr>
+          <tr><td><code>fuzz-cache</code></td><td><code>true</code></td><td>Carry Go's fuzz cache between runs, so each session resumes where the last one stopped.</td></tr>
+          <tr><td><code>events-file</code></td><td></td><td>Also save the run's <code>go test -json</code> event stream to this path, for <code>upload-artifact</code>, gotestsum or <code>gotest summary --input</code>; prefer a path under <code>runner.temp</code>. Needs gotest v1.36.0 or newer. Artifacts are not masked like logs: a token a test prints ends up in the file.</td></tr>
+          <tr><td><code>version</code></td><td><code>gomod</code></td><td>Version to install, or <code>gomod</code> to resolve from <code>go.mod</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Action outputs</h3>
+      <table class="ref-table">
+        <thead><tr><th>Output</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>exit-code</code></td><td>Test process exit code.</td></tr>
+          <tr><td><code>coverage</code></td><td>Coverage percentage (empty if coverage not enabled).</td></tr>
+          <tr><td><code>events-file</code></td><td>Absolute path of the saved event stream (empty unless <code>events-file</code> is set and the file was written).</td></tr>
+          <tr><td><code>badge</code></td><td>Path of the rendered coverage badge SVG (empty unless <code>badge</code> is enabled and the tests ran).</td></tr>
+          <tr><td><code>bench-report</code></td><td>Path to the <code>gotest bench --json</code> report file (empty if <code>bench</code> is not enabled).</td></tr>
+          <tr><td><code>bench-breached-keys</code></td><td>Comma-joined benchmark keys that breached the gate (empty if none or no gate).</td></tr>
+          <tr><td><code>fuzz-crashers</code></td><td>Comma-joined workspace-relative paths of the corpus files the fuzz session added (empty if none or <code>fuzz</code> is not enabled).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Version resolution</h3>
+      <p>By default (<code>version: gomod</code>), the action runs the gotest your project's <code>go.mod</code> selects: <code>go&nbsp;tool</code> when the tool is declared there, <code>go&nbsp;run</code> otherwise. This keeps the CLI version in sync with the library you already depend on — no version drift between CI and local development.</p>
+      <p>Set <code>version: latest</code> or a specific tag (e.g. <code>v1.2.0</code>) to install a standalone binary via <code>go install</code> instead. This is useful when your project doesn't depend on go-test as a library.</p>
+
+      <div class="callout">
+        To use the <code>gomod</code> default, ensure gotest is in your <code>go.mod</code>: declare it as a tool with <code>go get -tool github.com/mvrahden/go-test/cmd/gotest@&lt;version&gt;</code>, naming a release whose go line your module takes (a bare or <code>@latest</code> <code>go get</code> can raise your module's go line).
+      </div>
+
+      <h3>Manual CI setup</h3>
+      <p>For non-GitHub CI systems, run <code>gotest summary</code> directly:</p>
+      <div class="code-block">
+        <pre>gotest summary ./... -race -coverprofile=coverage.out</pre>
+      </div>
+      <p>Or pipe from <code>go test -json</code> to summarize existing output without re-running tests:</p>
+      <div class="code-block">
+        <pre>go test -json ./... | gotest summary --input=-</pre>
+      </div>
+    </section>
+  </div>

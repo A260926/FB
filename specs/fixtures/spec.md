@@ -1,0 +1,347 @@
+# Fixtures Specification
+
+## Purpose
+Which shared fixtures a run starts for the suites it selects, guarded suites included, that a suite of either test package sees a shared fixture it binds through a package fixture, how a package fixture's per-method hooks run and where their failures are reported, how a fixture whose setup or Hydrate went wrong is released, how long the runner waits for shared fixture setup and that a setup it gives up fails the run, how a shared fixture started late comes up and is released, how a shared fixture process is asked to stop, and that shared fixtures need the gotest runner.
+
+## Requirements
+
+### Requirement: Selection decides which shared fixtures start
+A shared fixture SHALL start only when a selected suite binds it, and a suite with a skipped method SHALL still get its fixture for the methods that run.
+
+#### Scenario: Skipping the only suite that binds a shared fixture
+- **WHEN** -skip names the only suite binding a shared fixture
+- **THEN** the fixture is never started and the other suite passes
+
+#### Scenario: Skipping one method of a suite that binds a shared fixture
+- **WHEN** -skip names one method of the suite binding a shared fixture
+- **THEN** the fixture starts and the suite's other method passes against it
+
+### Requirement: Selection follows go test's matching
+A suite SHALL be selected when go test would enter one of its top-level functions: -run enters a function the first level of an alternative matches, -skip keeps go test out of it only when the first alternative matching it has no further level, and a repeated -run or -skip counts by its last value. A bench run SHALL select a benchmark suite by its Benchmark function the same way.
+
+#### Scenario: A repeated -skip
+- **WHEN** -skip is given twice, naming the fixture-free suite last
+- **THEN** the last one counts: the fixture starts, its suite passes and the other suite does not run
+
+#### Scenario: A -skip whose first matching alternative names a method
+- **WHEN** -skip's first alternative matching a suite names one of its methods and a later one names the suite
+- **THEN** go test still enters the suite, so its fixture starts and the suite passes
+
+#### Scenario: A -run whose alternatives name two suites
+- **WHEN** -run's first alternative names a method of one suite and a later one names the other suite
+- **THEN** both suites run, the one binding the fixture against it
+
+#### Scenario: Skipping the only benchmark suite that binds a shared fixture
+- **WHEN** -skip names the only benchmark suite binding a shared fixture
+- **THEN** a bench run never starts the fixture and benchmarks the other suite
+
+### Requirement: A guard does not hold back a shared fixture
+A shared fixture bound by a guard-skipped suite SHALL still be started, and its setup failure SHALL fail the run and that suite without the guard being evaluated.
+
+#### Scenario: A guarded suite whose shared fixture fails
+- **WHEN** a guard-skipped suite binds a shared fixture whose setup fails
+- **THEN** the fixture is started for it and its failure fails the run and the suite, whose guard never runs
+
+### Requirement: A shared fixture bound through a package fixture
+A suite SHALL see a shared fixture it binds through a package fixture hydrated, set up after the shared fixtures it depends on, from the internal and the external test package of one package alike; a shared fixture SHALL need no AfterAll.
+
+#### Scenario: Suites in both test packages
+- **WHEN** a suite in the internal and one in the external test package each bind a package fixture that binds a shared fixture depending on another
+- **THEN** both suites pass, seeing the shared fixture hydrated and set up after its dependency
+
+### Requirement: A package fixture's BeforeAll or AfterAll going wrong
+A package fixture whose BeforeAll returns an error or panics SHALL fail the run and its suite, which never opens, and SHALL still get its AfterAll; one whose AfterAll returns an error or panics SHALL fail the run after every other hook ran. The cases are the table in `tests/conformance/fixtures/hooks_suite_test.go`.
+
+#### Scenario: Each way a package fixture's BeforeAll or AfterAll goes wrong
+- **WHEN** a package fixture's BeforeAll or AfterAll returns an error or panics
+- **THEN** fails the run with exit 1, runs the hooks its row names and gives the verdicts its row names
+
+### Requirement: Where a fixture hook failure is reported
+An error a fixture BeforeEach or AfterEach returns SHALL be reported at the hook's declaration, not inside the runtime, wherever it is declared: in the suite's package or in another package. The file is named by its base name, or by its full path under -fullpath.
+
+#### Scenario: A fixture BeforeEach error
+- **WHEN** a fixture BeforeEach returns an error
+- **THEN** is reported at the hook's declaration, not in the runtime's file
+
+#### Scenario: A fixture AfterEach error
+- **WHEN** a fixture AfterEach returns an error
+- **THEN** is reported at the hook's declaration, not in the runtime's file
+
+#### Scenario: A hook declared in another package
+- **WHEN** a hook another package's fixture declares returns an error
+- **THEN** is reported at the hook's declaration, named by its file's base name
+
+#### Scenario: A hook declared in another package, under -fullpath
+- **WHEN** a hook another package declares returns an error under -fullpath
+- **THEN** names the hook's file by its full path, as go test -fullpath does
+
+### Requirement: Fixture per-method hooks in dependency order
+A suite's package fixtures SHALL take their per-method turns in dependency order, a fixture's turn coming only once every BeforeEach before it returned without an error inside the Timeout. In its turn a fixture runs its BeforeEach, if it has one; its AfterEach SHALL run, in reverse, exactly when its turn came and that BeforeEach returned without an error.
+
+#### Scenario: A BeforeEach overruns ahead of another fixture's
+- **WHEN** a fixture's BeforeEach overruns the Timeout ahead of another fixture's
+- **THEN** starts no later fixture's BeforeEach, fails the method once, at the hook that overran, and runs that fixture's AfterEach
+
+#### Scenario: An AfterEach-only fixture before the one that fails
+- **WHEN** a fixture with only an AfterEach comes before a fixture whose BeforeEach fails
+- **THEN** runs its AfterEach, as every BeforeEach before it returned
+
+#### Scenario: An AfterEach-only fixture after the one that fails
+- **WHEN** a fixture with only an AfterEach comes after a fixture whose BeforeEach fails
+- **THEN** does not run its AfterEach, as its turn never came
+
+### Requirement: A failed shared setup is released
+A shared fixture whose setup fails on its last attempt SHALL fail the run and SHALL run its AfterAll after every attempt, before the next one starts.
+
+#### Scenario: The last setup attempt fails
+- **WHEN** a shared fixture's setup fails on its last attempt
+- **THEN** fails the run
+- **AND** runs AfterAll after each of its 2 attempts, releasing what each reached before the next
+
+### Requirement: A failed release between attempts
+A fixture whose AfterAll fails between two setup attempts, or outlives there the Timeout the fixture declares, SHALL fail the run and report why, even when a later attempt comes up.
+
+#### Scenario: A package fixture's release fails
+- **WHEN** a package fixture's AfterAll fails between its attempts and the second attempt comes up
+- **THEN** fails the run
+- **AND** reports that AfterAll's error
+
+#### Scenario: A shared fixture's release fails
+- **WHEN** a shared fixture's AfterAll fails between its attempts and the second attempt comes up
+- **THEN** fails the run
+- **AND** reports that AfterAll's error
+
+#### Scenario: A package fixture's release outlives its Timeout
+- **WHEN** a package fixture's AfterAll between its attempts outlives the fixture's declared Timeout and the second attempt comes up
+- **THEN** fails the run
+- **AND** reports that the release exceeded the Timeout
+
+### Requirement: A shared fixture's teardown verdict
+A shared fixture's teardown SHALL fail the run for an AfterAll that returned an error, panicked or outlived its declared Timeout, also when a sibling's setup failed, and never for what a fixture writes.
+
+#### Scenario: An AfterAll that writes a failure's words
+- **WHEN** a shared fixture's AfterAll writes the line a failed AfterAll is reported with and returns nil
+- **THEN** the run passes
+
+#### Scenario: An AfterAll that fails beside a failed setup
+- **WHEN** a shared fixture's AfterAll returns an error while a sibling's setup failed
+- **THEN** fails the run on the teardown as well, reporting that AfterAll's error
+
+### Requirement: A stop during the release between attempts
+A fixture whose AfterAll runs between two setup attempts when the run is stopped SHALL finish that AfterAll under a context the stop does not cancel, bounded by the fixture's Timeout, and SHALL then start no further attempt and run no second AfterAll.
+
+#### Scenario: A stop while a shared fixture releases a failed attempt
+- **WHEN** a run is stopped while a shared fixture's AfterAll releases a failed attempt before its retry
+- **THEN** lets that AfterAll finish under a context the stop does not cut short
+- **AND** starts no further attempt and releases the fixture once
+
+### Requirement: A setup that ends before BeforeAll
+A shared fixture whose setup ends before its BeforeAll runs SHALL get no AfterAll, while a dependency whose BeforeAll ran SHALL get its AfterAll.
+
+#### Scenario: A shared fixture's setup ends first
+- **WHEN** a run is interrupted while a shared fixture's dependency sets up, before the fixture's own BeforeAll runs
+- **THEN** runs no AfterAll for the fixture, and the dependency's AfterAll
+
+### Requirement: A failed Hydrate is dehydrated
+A shared fixture whose Hydrate fails or panics in a suite's process SHALL fail the run before any of the suite's methods runs, and SHALL still get its Dehydrate there.
+
+#### Scenario: Hydrate fails partway
+- **WHEN** a shared fixture's Hydrate fails after reaching part of what it opens
+- **THEN** fails the run, runs no method and still runs its Dehydrate
+
+### Requirement: Shared fixtures need the gotest runner
+A suite binding a shared fixture SHALL fail under plain go test before any method runs, naming the fixture and go tool gotest.
+
+#### Scenario: A shared-fixture suite under plain go test
+- **WHEN** a suite binding a shared fixture runs under plain go test
+- **THEN** fails naming the shared fixture it binds and go tool gotest, before any method runs
+
+### Requirement: A shared fixture's declared setup budget
+When no --setup-timeout is given, the wait for a shared fixture's setup SHALL be the budget the fixture declares, counting every attempt and every release between them, for a setup at the start of the run and for one started later for the exclusive tail or a bench slot; a fixture that hangs past that budget SHALL fail the run, which SHALL end within 60s, and the suites that read it SHALL never run.
+
+#### Scenario: A container fixture slower than the default budget
+- **WHEN** a shared fixture declaring ContainerFixtureConfig takes 35s to come up and no --setup-timeout is given
+- **THEN** the run passes: the wait is the fixture's declared budget
+
+#### Scenario: A fixture that hangs past its budget
+- **WHEN** a shared fixture declaring a 2s Timeout hangs in BeforeAll and no --setup-timeout is given
+- **THEN** fails the run within 60s, saying the setup timed out
+- **AND** never runs the suite reading the fixture
+
+#### Scenario: Releases between attempts
+- **WHEN** a shared fixture with a 2s Timeout and 1 retry spends 1.6s on each attempt and on the release between them, and no --setup-timeout is given
+- **THEN** the run passes: the wait counts the release
+
+#### Scenario: A fixture started for the exclusive tail
+- **WHEN** a shared fixture started for the exclusive tail hangs past its declared 2s Timeout and no --setup-timeout is given
+- **THEN** the wait ends at the declared budget and the run fails
+- **AND** never runs the suite reading it
+- **AND** ends the run within 60s
+
+#### Scenario: A fixture started for a bench slot
+- **WHEN** a shared fixture started for a bench slot hangs past its declared 2s Timeout and no --setup-timeout is given
+- **THEN** the wait ends at the declared budget and the run fails
+- **AND** never runs the benchmark reading it
+- **AND** ends the run within 60s
+
+### Requirement: A late fixture's dependencies
+Shared fixtures started late SHALL start concurrently, each after what it depends on: one started for the exclusive tail together with a dependency only the tail needs SHALL come up after that dependency, serve the suites that read it, and be torn down before it.
+
+#### Scenario: A tail fixture with a tail-only dependency
+- **WHEN** a shared fixture started for the exclusive tail depends on a shared fixture only the tail needs
+- **THEN** both come up, the dependency first, and the suite reading them passes
+- **AND** both are torn down, the dependent first
+
+### Requirement: A shared fixture released at its last use
+A shared fixture SHALL be released once no remaining planned suite needs it, while unrelated suites still run, and SHALL be started for a serial slot just before it. It SHALL be started at most once in a run: a fixture a later suite still needs SHALL stay up until that suite has run, and the setup process SHALL refuse to start one it already released.
+
+#### Scenario: The last reader finishes first
+- **WHEN** the only suite reading a shared fixture finishes while an unrelated suite still runs
+- **THEN** releases the fixture before the unrelated suite ends
+
+#### Scenario: A reader that never runs
+- **WHEN** a shared fixture's reader is in a package that never links, while an unrelated suite still runs
+- **THEN** releases the fixture once its readers that can run have finished, before the unrelated suite ends
+
+#### Scenario: A dependency outlasts its dependents
+- **WHEN** the suite binding a shared fixture directly finishes while a suite reading a dependent of it still runs
+- **THEN** releases the fixture only after its dependent, once neither is needed
+
+#### Scenario: A suite that leaves a process running
+- **WHEN** the last suite reading a shared fixture returns while a process it started still runs
+- **THEN** releases the fixture only once that process is gone
+
+#### Scenario: A fixture only a later exclusive suite reads
+- **WHEN** only the second of two exclusive suites reads a shared fixture
+- **THEN** starts the fixture after the first suite ran, and releases it after the second
+
+#### Scenario: A fixture the exclusive tail still needs
+- **WHEN** a shared fixture is read by a concurrent suite and by an exclusive suite after it
+- **THEN** keeps it up through the exclusive suite, starting and releasing it once
+
+#### Scenario: A slow release beside a slot
+- **WHEN** a shared fixture's release takes its time while an exclusive suite needs a fixture of its own
+- **THEN** starts that fixture and runs the suite while the release still runs
+
+### Requirement: Releases as a run ends
+A stop SHALL let a shared fixture's release in flight finish, release each fixture once, and leave no fixture process behind. Releases still pending when the run ends SHALL go to the final teardown, which releases them all at once.
+
+#### Scenario: A stop while a release runs
+- **WHEN** a run is stopped while a shared fixture's release runs and another fixture is still held
+- **THEN** lets that release finish and releases each fixture once
+- **AND** leaves no fixture process behind
+
+#### Scenario: Releases pending as the run ends
+- **WHEN** a shared fixture's release still runs as the run ends and another fixture is still held
+- **THEN** releases the other beside it, not after it
+
+### Requirement: Releasing shared fixtures
+Shared fixtures SHALL be released concurrently, each after the fixtures that depend on it, under a teardown budget of 30s plus the longest chain still resident: a fixture's share, its declared Timeout or the default, plus the longest chain among the fixtures depending on it. A fixture's share SHALL leave the budget once it is released.
+
+#### Scenario: Two independent fixtures released at once
+- **WHEN** two independent shared fixtures and a dependent of one are released at the end of a run
+- **THEN** releases the independent ones at once and the dependent before its dependency
+
+#### Scenario: A budget computed from the longest chain
+- **WHEN** shared fixtures declaring 2s, 3s on a 2s one, and a released 10s one are resident and an AfterAll never returns
+- **THEN** their process is force-killed after 30s plus the longest chain still resident, 35s, and the run fails
+
+### Requirement: A late fixture's teardown budget
+A shared fixture started for the exclusive tail or a bench slot SHALL be released under the teardown budget its declared Timeout gives, that Timeout and 30s more, not the default's; an AfterAll that never returns SHALL be given up once that budget has passed and SHALL fail the run. A process holding nothing but releases given up that way SHALL be force-killed at the end of the run without waiting a budget out again.
+
+#### Scenario: A tail fixture whose AfterAll never returns
+- **WHEN** a shared fixture started for the exclusive tail declares a 2s Timeout and its AfterAll never returns
+- **THEN** its process is force-killed once its 32s teardown budget has passed, and the run fails
+- **AND** ends the run within 60s, without a second wait for the release given up
+
+#### Scenario: A bench slot's fixture whose AfterAll never returns
+- **WHEN** a shared fixture started for a bench slot declares a 2s Timeout and its AfterAll never returns
+- **THEN** the slot's release is given up once its 32s teardown budget has passed, and the run fails
+- **AND** ends the run within 60s, without a second wait for the release given up
+
+### Requirement: A stopped run ends the wait for a late fixture
+A run whose --timeout expires while a shared fixture started for the exclusive tail hangs SHALL end the wait, fail, and leave no fixture process behind.
+
+#### Scenario: The run's --timeout expires during the wait
+- **WHEN** the run's --timeout expires while a shared fixture started for the exclusive tail hangs with no Timeout
+- **THEN** the wait ends with the run and the run fails
+- **AND** leaves no fixture process behind
+
+### Requirement: Shared fixture state reaches its suites
+The state a shared fixture's setup produces SHALL reach the suites that bind it when the setup prints to stdout, with or without a trailing newline and in a JSON-shaped line, and when the state is 2 MiB, and nothing the setup prints SHALL become an event of the run.
+
+#### Scenario: Setup output without a trailing newline
+- **WHEN** a shared fixture's setup prints to stdout without a newline
+- **THEN** its suite receives the state
+
+#### Scenario: Setup logs a JSON-shaped line
+- **WHEN** a shared fixture's setup logs a JSON-shaped line
+- **THEN** its suite receives the state
+- **AND** the line is not an event of the run
+
+#### Scenario: Large state
+- **WHEN** a shared fixture carries 2 MiB of state
+- **THEN** its suite receives the state
+
+#### Scenario: Every protocol fixture comes up
+- **WHEN** every protocol fixture comes up despite its output
+- **THEN** the run passes
+
+### Requirement: A shared fixture is built with the run's build flags
+gotest SHALL build the shared fixture process with the build flags of the run, leaving out the flags only go test takes, so a shared fixture declared behind a build tag comes up when the run sets the tag. The cases are the table in `tests/conformance/fixtures/fixs_buildflags_suite_test.go`.
+
+#### Scenario: A shared fixture behind a build tag
+- **WHEN** a shared fixture is declared in a file behind a build tag and the run sets the tag
+- **THEN** the fixture comes up and the suite that binds it passes
+
+### Requirement: A process a shared fixture's setup starts
+A process a shared fixture's setup starts SHALL get neither the protocol descriptor nor the variable naming it, and the run SHALL NOT wait for it, on Unix.
+
+#### Scenario: A process that outlives the setup
+- **WHEN** a shared fixture's setup starts a process that outlives it
+- **THEN** the run passes before that process ends
+- **AND** the process sees no protocol variable, and what it writes to descriptor 3 is not read
+
+### Requirement: Siblings of a setup that is given up
+When the run gives up on a shared fixture's setup, a sibling that came up SHALL be released under the teardown budget the shared fixture process reports once its setups return.
+
+#### Scenario: A sibling still to be released
+- **WHEN** a shared fixture's setup is given up while a sibling that came up is still to be released
+- **THEN** fails the run
+- **AND** the sibling's 8s AfterAll runs to its end under the teardown budget the process reports
+
+### Requirement: A shared fixture process whose CLI is killed
+When the CLI is killed, its shared fixture process SHALL end the setup's context, run the AfterAll of every fixture whose BeforeAll ran, and exit, on Unix; on Linux, a process whose hook never returns SHALL exit with status 1 once it has had its setup budget and the teardown budget it reported.
+
+#### Scenario: Killed while a fixture is up
+- **WHEN** the CLI is killed while a shared fixture is up
+- **THEN** the fixture's AfterAll runs to its end, then its process exits
+
+#### Scenario: Killed while a setup waits on its context
+- **WHEN** the CLI is killed while a shared fixture's BeforeAll waits on its context
+- **THEN** the setup's context ends, the fixture's AfterAll runs, then its process exits
+
+#### Scenario: An AfterAll that never returns
+- **WHEN** the CLI is killed and the shared fixture's AfterAll never returns
+- **THEN** the fixture process exits with status 1 once the 31s teardown budget it reported has passed
+
+#### Scenario: A BeforeAll that ignores its context
+- **WHEN** the CLI is killed while a shared fixture's BeforeAll ignores its context
+- **THEN** the fixture process exits with status 1 once its 1s setup budget and 31s teardown budget have passed
+
+### Requirement: A shared fixture process asked to stop
+A `stop` line on the shared fixture process's standard input SHALL end its setups' contexts and run every AfterAll as a stop signal does, and the runner SHALL stop it by that line, by a signal only when the line cannot be written; a `force` line SHALL end the releases' contexts, so an AfterAll that honours its context returns at once, and SHALL first stop a process no stop is under way in; the end of its standard input SHALL still mean the runner is gone.
+
+#### Scenario: A stopped run
+- **WHEN** a run is interrupted while a suite bound to a shared fixture holds
+- **THEN** the fixture's AfterAll runs and its process exits on its own
+- **AND** no signal reaches the fixture process
+
+#### Scenario: A second Ctrl-C during the release
+- **WHEN** a second SIGINT reaches gotest while a shared fixture's AfterAll waits on its context for 20s
+- **THEN** the AfterAll's context ends and it returns, and gotest exits 130 within 1.5s
+- **AND** no process is killed and none is left behind
+
+#### Scenario: A second Ctrl-C while the suite still runs
+- **WHEN** a second SIGINT reaches gotest while a suite bound to a shared fixture ignores the first and its package fixture takes 10s to release
+- **THEN** the fixture's AfterAll runs with its context ended, and its process exits on its own

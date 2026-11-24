@@ -1,0 +1,16 @@
+Expect: stop: TestStopTestSuite/TestSecond verdict "[a-z]*", want skip
+Expect: runnergone: a method that had not started ran
+Judge: ./tests/canary CanaryLifecycleTestSuite/TestAStopSkipsTheMethodsNotStarted CanaryLifecycleTestSuite/TestASuiteWhoseRunnerIsKilledStops
+Clause: when the run is interrupted while a method holds → skips the methods that have not started with the reason run stopping
+Clause: when the runner of a suite process is killed while a method holds → the methods that have not started never run
+--- a/pkg/gotestruntime/methods.go
++++ b/pkg/gotestruntime/methods.go
+@@ -89,7 +89,7 @@
+ 					skipFailFast(it, first)
+ 				}
+ 			}
+-			if runstate.StopContext().Err() != nil {
++			if false && runstate.StopContext().Err() != nil {
+ 				skipStopping(it)
+ 			}
+ 			// The budget covers the fixture hooks, the suite hooks and the body:

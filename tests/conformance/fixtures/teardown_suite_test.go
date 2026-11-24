@@ -1,0 +1,59 @@
+package fixtures_test
+
+import (
+	"time"
+
+	"github.com/mvrahden/go-test/internal/testkit"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// FixtureTeardownTestSuite: a shared fixture whose setup ran is released,
+// however the setup came out, and so is one whose Hydrate ran.
+type FixtureTeardownTestSuite struct{}
+
+func (s *FixtureTeardownTestSuite) SuiteConfig() gotest.SuiteConfig {
+	return gotest.SuiteConfig{Parallel: true, Timeout: 30 * time.Second}
+}
+
+func (s *FixtureTeardownTestSuite) TestFailedSharedSetupIsReleased(t *gotest.T) {
+	run, err := testkit.RunPackage(t.Context(), t.TempDir(), "../testdata/failingshared/")
+	gotest.NoError(t, err)
+	t.When("a shared fixture's setup fails on its last attempt", func(w *gotest.T) {
+		w.It("fails the run", func(it *gotest.T) {
+			gotest.Equal(it, 1, run.Exit, "stdout: %s\nstderr: %s", run.Stdout, run.Stderr)
+		})
+		w.It("runs AfterAll after each of its 2 attempts, releasing what each reached before the next", func(it *gotest.T) {
+			gotest.Equal(it, []string{"leak.BeforeAll", "leak.AfterAll", "leak.BeforeAll", "leak.AfterAll"}, run.Markers)
+		})
+	})
+}
+
+func (s *FixtureTeardownTestSuite) TestFailedHydrateIsDehydrated(t *gotest.T) {
+	t.When("a shared fixture's Hydrate fails after reaching part of what it opens", func(w *gotest.T) {
+		run, err := testkit.RunPackage(w.Context(), w.TempDir(), "../testdata/fixahydrate/")
+		gotest.NoError(w, err)
+		w.It("fails the run, runs no method and still runs its Dehydrate", func(it *gotest.T) {
+			gotest.Equal(it, 1, run.Exit, "stdout: %s\nstderr: %s", run.Stdout, run.Stderr)
+			gotest.Equal(it, []string{"pool.Hydrate", "pool.Dehydrate"}, run.Markers)
+		})
+	})
+}
+
+func (s *FixtureTeardownTestSuite) TestSharedTeardownVerdict(t *gotest.T) {
+	t.When("a shared fixture's AfterAll writes the line a failed AfterAll is reported with and returns nil", func(w *gotest.T) {
+		run, err := testkit.RunPackage(w.Context(), w.TempDir(), "../testdata/sharedteardowntext/")
+		gotest.NoError(w, err)
+		w.It("the run passes", func(it *gotest.T) {
+			gotest.Equal(it, 0, run.Exit, "stdout: %s\nstderr: %s", run.Stdout, run.Stderr)
+		})
+	})
+	t.When("a shared fixture's AfterAll returns an error while a sibling's setup failed", func(w *gotest.T) {
+		run, err := testkit.RunPackage(w.Context(), w.TempDir(), "../testdata/sharedteardownsibling/")
+		gotest.NoError(w, err)
+		w.It("fails the run on the teardown as well, reporting that AfterAll's error", func(it *gotest.T) {
+			gotest.Equal(it, 1, run.Exit, "stdout: %s\nstderr: %s", run.Stdout, run.Stderr)
+			gotest.Contains(it, run.Stdout, "shared fixture teardown failed")
+			gotest.Contains(it, run.Stdout, "StuckSharedFixture.AfterAll failed: the volume is still attached")
+		})
+	})
+}

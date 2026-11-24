@@ -1,0 +1,1810 @@
+# gotest Specification
+
+> **Rationale.** Every behavioral promise gotest makes is stated once in [`specs/`](../../specs/README.md), where a test binds to each scenario; this document links there.
+> Its sections hold the design's principles, architecture and non-goals. A behavior stated here without a link to a requirement in `specs/` is not yet verified.
+> One drift guard covers this file directly: the CLI-surface test in `cmd/gotest` (subcommand/flag table membership, both directions).
+
+Go tests that write themselves, organize themselves, and explain themselves.
+
+`gotest` closes the gap between `func TestX(t *testing.T)` and a well-organized test suite through code generation.
+Developers write structs, name them well, and the tool handles the rest.
+No third-party runtime dependencies.
+No reflection in suite discovery or registration.
+No lock-in.
+Just standard Go tests with lifecycle management and structured organization.
+
+A Go developer should be able to declare this tool with `go get -tool` and immediately write better-organized tests without learning a framework.
+The naming conventions are the API.
+The generated code is the implementation.
+The output is `go test` output.
+
+---
+
+## Design Principles
+
+Ranked. When they conflict, higher-ranked principles win.
+
+### 1. Standard Go output, always
+
+Every generated test is a `func Test*(t *testing.T)`.
+Every line of output is standard `go test` output.
+Every CI system, IDE, coverage tool, and profiler works unchanged.
+
+### 2. The naming IS the API
+
+No config files for test semantics.
+No struct tags.
+No annotations.
+No registration calls.
+A developer reads the naming conventions once and never opens documentation again.
+(The optional `.gotest.yml` holds only tool defaults — every key mirrors a CLI flag; deleting it changes no test's meaning.)
+
+### 3. Zero runtime magic
+
+The tool generates code at build time and cleans it up after.
+No reflection, no interface dispatch, no type assertions, no registration.
+At test execution time the call stack holds the thin `gotest.T` wrapper, and — for fixture-bound suites only — the small `pkg/gotestruntime` package that orchestrates fixture DAG setup/teardown.
+Both are plain Go, visible in the generated code, which is what a careful developer would write by hand.
+
+### 4. Invisible until needed
+
+A developer who has never heard of `go-test` can read a test suite struct and understand what it does.
+Plain `go test` keeps working untouched: it runs stdlib tests and ignores suites entirely — suite tests are *methods*, and the standard runner only executes top-level `func Test*` functions.
+Running suites is exclusively `gotest`'s job (see The Two Runners).
+
+### 5. Adopt incrementally, eject freely
+
+Existing `func Test*` tests coexist with suites in the same package.
+They keep running under `go test`; `gotest` reports them but does not execute them (see The Two Runners).
+Removing the tool means deleting suite structs and writing the equivalent `func Test*` functions — the generated code shows exactly what to write.
+
+---
+
+## Conceptual Model
+
+Test suites are behavioral specifications.
+Every level of the test hierarchy maps to a specification concept:
+
+```
+struct  = Subject     "UserService"
+method  = Capability  "Create"
+When()  = Context     "when email is valid"
+It()    = Behavior    "creates the user"
+Each()  = Variants    "standard format", "missing @", "empty string"
+```
+
+The naming conventions at the struct/method level and the string descriptions at the `It`/`When` level together form a complete behavioral specification.
+The tool generates the bridge code (lifecycle, parallel coordination, focus/exclude) and can render the full specification in human-readable form.
+
+---
+
+## The Two Runners
+
+`go test` and `gotest` partition the test universe — each runs its half and ignores the other's:
+
+| | stdlib `func Test*` | Suites |
+|---|---|---|
+| `go test` | **runs** | ignores (suite methods are not test functions) |
+| `gotest` | reports, does not run | **runs** (via generated code) |
+
+This is deliberate: `go test` stays fully usable with its caching and ecosystem, and `gotest` stays a focused suite runner rather than a `go test` wrapper.
+A complete run is both commands; the canonical CI shape is two steps — `go test ./...` followed by `gotest`.
+
+`gotest` reports the half it does not run:
+packages with stdlib tests but no suites print `?   <pkg>  [no suites]` (never the false `[no test files]`; `-json` gives them a `skip` verdict), and a run that skipped stdlib tests ends with a note on stderr naming the affected packages (sorted, truncated after three with `… N more`):
+
+```
+note: 8 stdlib test(s) in pkg/legacy, pkg/util not run — gotest runs suites; use 'go test' for stdlib tests
+```
+
+---
+
+## CLI Interface
+
+```
+gotest [subcommand] [packages...] [go-test-flags...] [--gotest-flags...]
+```
+
+### Subcommands
+
+| Command | Effect |
+|---------|--------|
+| *(default)* | Generate suites, run `go test`, cleanup |
+| `watch` | Re-run on file changes |
+| `clean` | Remove orphaned generated files |
+| `generate` | Generate suite files without running tests |
+| `scaffold` | Generate test suite skeleton from a Go type |
+| `migrate` | Convert testify/suite tests to go-test suites |
+| `spec` | Run tests and render behavioral specification |
+| `summary` | Run tests and render a failure-focused summary (CI mode) |
+| `bench` | Run `BenchmarkX` suite methods serially via `go test -bench` |
+| `fuzz` | Orchestrate `FuzzX` suite targets with a shared time budget |
+| `lint` | Run gotest-specific linter checks |
+| `refactor` | Toggle focus prefixes: `refactor toggle-focus <file> <Suite[.Method]>` |
+| `skill` | Install the agent skill shipped with this version: `skill install [--dir=<skills-dir>]` |
+| `discover` | Discover test suites and output JSON metadata |
+| `prepare` | Start shared fixtures for debug (blocks until SIGTERM) |
+| `version` | Print version information |
+| `help` | Show help |
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--debug` | Keep generated files after run |
+| `--ci` | CI mode: fail on `F_` prefixes, snapshot read-only |
+| `--no-cache` | Bypass the test binary cache (generation is not cached) |
+| `--spec` | Render the spec view instead of the default output (default and watch modes) |
+| `--update-snapshots` | Regenerate snapshot files |
+| `--format=<fmt>` | Output format for `spec`/`summary` (terminal, md/markdown, json) |
+| `--output=<path>` | Write formatted output to file |
+| `--no-color` | Strip ANSI codes from terminal output |
+| `--min=<pct>` | Fail if coverage below threshold (enables `-coverprofile`) |
+| `--setup-timeout=<dur>` | Flat budget for shared fixture setup (default: the fixtures' declared budgets, 30s until the first reports; 0 disables) |
+| `--timeout=<dur>` | Global pipeline deadline (default: 15m; 0 disables); refused by `fuzz`, whose deadline follows `--for` |
+| `--debounce=<dur>` | Debounce interval for watch mode (default 200ms) |
+| `--parallel=<n>` | Total concurrent test method budget (default: 2×GOMAXPROCS, auto-halved for -race/-msan/-asan) |
+| `--compile-parallel=<n>` | Concurrent compilation processes (default: NumCPU, auto-halved for -race/-msan/-asan) |
+| `--group=<name>` | Run only the suites of this `ExclusiveGroup` (repeatable; default runs, `spec`, `summary`); a name no suite declares exits 2 before any build |
+| `--skip-group=<name>` | Leave the suites of this `ExclusiveGroup` out (repeatable) |
+| `--input=<path>` | Replay a saved `go test -json` stream in `spec`/`summary` (`-` reads stdin); exit 2 when it holds no test events, a package or failed build has no verdict, or a package failed to build |
+| `--events-file=<path>` | With `-json`, or in `summary`, also write the run's `go test -json` event stream to the file as `-json` prints it (a suite's events when its process ends), making its directories and replacing a file there; `summary --input` reads it back. A text run refuses it (exit 2) |
+| `--control=stdin` | Read `stop` and `force` lines on standard input, a first and a second interrupt, counted with the signals; the input's end is a stop when none is under way. Taken by every command that stops on an interrupt (runs, `spec`, `summary`, `watch`, `bench`, `fuzz` and its `triage` and `promote`, `prepare`); any other value, or beside `--input=-`, exits 2. Without it standard input is never read ([Stopping gotest through its standard input](../../specs/lifecycle/spec.md#requirement-stopping-gotest-through-its-standard-input)) |
+| `--github` | Emit GitHub annotations and step summary (auto-enabled in GitHub Actions) |
+| `--coverage=<path>` | Coverage profile path for `summary` subcommand |
+| `--badge=<path>` | Write a self-contained coverage badge SVG (`summary`); adds `-coverprofile` when neither the caller nor `--min` did |
+| `--render-only` | With `--input`, exit 0 on a failing or incomplete stream: the code reports whether rendering succeeded, not whether the tests passed (requires `--input`) |
+| `--stamp` | With `--input`, write the stream back with each test event placed as `gotest -json` places it, instead of rendering it (`spec`; [Stamping a saved stream](../../specs/cli/spec.md#requirement-stamping-a-saved-stream)) |
+| `--static` | Render the specification from source without running the suites (`spec`); nodes carry no verdict, and methods whose behaviors depend on runtime values are reported as incomplete on stderr |
+| `--declared` | With `--input`, lay the stream's verdicts over the specification the packages' source declares (`spec`; [The declared specification under a run's verdicts](../../specs/spec/spec.md#requirement-the-declared-specification-under-a-runs-verdicts)) |
+| `--hide=<statuses>` | Leave out of the `spec` rendering the rows whose status is one of `pass`, `fail`, `skip`, `none`, without changing what is counted ([Hiding rows by status](../../specs/spec/spec.md#requirement-hiding-rows-by-status)) |
+| `--match=<text>` | Keep of the `spec` rendering the behaviors whose label holds the text, and their groups; counts are those of what is kept ([Searching and picking rows](../../specs/spec/spec.md#requirement-searching-and-picking-rows)) |
+| `--only=<import path>[:<i>.<j>…]` | Keep of the `spec` rendering one package, or the node at that position among the shown children, with what is under it; counts are those of what is kept ([Searching and picking rows](../../specs/spec/spec.md#requirement-searching-and-picking-rows)) |
+| `--bench` | Benchmark mode for `watch`: re-run benchmarks on change with ns/op deltas |
+| `--save=<path>` | Save a benchmark run as a JSON baseline (`bench`; a bare `--save=` uses `bench.baseline` from `.gotest.yml`, and saving to the configured baseline promotes the run without comparing it) |
+| `--against=<path>` | Compare a benchmark run against a saved baseline and print the delta table (`bench`; defaults to `bench.baseline`). A baseline whose `goos`, `goarch`, `goVersion`, `cpu` or `gomaxprocs` differs warns on stderr and reports `envMismatch`; the comparison still runs and the exit code is unchanged. What the comparison does with benchmarks on one side alone, with few samples and with one file for both flags is pinned below |
+| `--gate=<pct>` | Fail (exit 1) if the worst significant benchmark regression exceeds the threshold (`bench`); needs `-count=4` or more, the samples a significance test takes (pinned below) |
+| `--json` | Emit one versioned JSON report to stdout — results, deltas, gate verdict, environment mismatch, failures — instead of human output (`bench`; for tooling) |
+| `--for=<dur>` | Approximate wall-clock fuzz budget for the session, split jobs-aware across targets (`fuzz`; default 1m or half of a shorter `--timeout`; `0` removes the budget; per-target share floors at 10s) |
+| `--target=<name>` | Fuzz exactly one generated wrapper by name; unmatched names error with the available list (`fuzz`) |
+| `--jobs=<n>` | Max concurrent fuzz targets (`fuzz`; default: max(1, GOMAXPROCS/2)) |
+| `--no-harvest` | Disable table-test seed harvesting for this run |
+| `--fuzz` | Generate fuzz round-trip skeletons (`scaffold`) |
+| `--dry-run` | Print the unified diff of every edit instead of writing it (`migrate`) |
+| `--dir` | Skills directory to install into, default `.agents/skills` (`skill install`) |
+
+### Disambiguation
+
+The first argument is checked (literally) against the known subcommand set.
+If it matches, it's consumed.
+Otherwise, it's a package pattern.
+`gotest ./watch` tests the `watch` package; `gotest watch` enters watch mode.
+A first word that is almost a subcommand is suggested, a help topic is answered, and a package named like nothing runs as a pattern ([Mistyped subcommands](../../specs/cli/spec.md#requirement-mistyped-subcommands)).
+Past the first argument, every positional argument that is not a flag's value is a package pattern, as `go test` reads it: import paths such as `fmt` and the meta patterns `all`, `std`, `cmd`, `tool` and `work` included. A flag gotest does not know takes the non-flag after it as its value, as `go test` assumes, and everything after `-args` goes to the test binary.
+
+### Examples
+
+```bash
+gotest ./... -v -race                    # run tests (default mode)
+gotest watch ./... -v                    # watch mode with verbose output
+gotest clean ./...                       # remove orphaned generated files
+gotest generate ./...                    # generate, no test execution
+gotest scaffold ./pkg/user.UserService   # generate suite skeleton
+gotest spec ./...                        # run tests, show behavioral spec
+gotest spec ./... --format=md --output=docs/spec.md
+gotest ./... --min=80                    # fail if coverage below 80%
+gotest ./... --ci -v -race               # CI mode (fail on F_ prefixes)
+gotest ./... --debug                     # keep generated files for inspection
+```
+
+Registered `go test` flags pass through to the underlying run; a single-dash flag gotest does not know is a usage error (exit 2) unless it follows a bare `--` or `-args`, which forward it to the test binary verbatim ([Flags for the test binary](../../specs/cli/spec.md#requirement-flags-for-the-test-binary)). The flags gotest implements itself — `-run` on a fuzz wrapper, `-exec`, `-p`, the refused `-o` — are stated in [Go test flags gotest implements](../../specs/cli/spec.md#requirement-go-test-flags-gotest-implements).
+How a `--gotest` flag is spelled and that the last spelling wins are stated in [Boolean flags](../../specs/cli/spec.md#requirement-boolean-flags), and that a flag another command owns is refused with `flag <name> is not valid for this subcommand` in [Value flags and unknown flags](../../specs/cli/spec.md#requirement-value-flags-and-unknown-flags); the commands each flag belongs to are the table above.
+`-json` is intercepted and re-emitted by the runner, and the stream it writes holds JSON lines only ([the go test -json stream requirement](../../specs/cli/spec.md#requirement-the-go-test--json-stream)).
+Every other document gotest writes stays pure the same way ([JSON documents](../../specs/cli/spec.md#requirement-json-documents)), and color follows the terminal rather than the command ([Color follows the terminal](../../specs/cli/spec.md#requirement-color-follows-the-terminal)).
+gotest adds no link flag of its own to a `go test` invocation, so a build go test refuses fails here too ([the build rules requirement](../../specs/cli/spec.md#requirement-build-rules)).
+A module that imports gotest without requiring it is told what to run ([the module requirement](../../specs/cli/spec.md#requirement-a-module-without-gotest)), and `gotest version` answers as [the version requirement](../../specs/cli/spec.md#requirement-version) states.
+
+**Benchmark comparison and gate** (`bench`): a run never saves over the baseline it compares against ([the baseline requirement](../../specs/bench/spec.md#requirement-the-baseline-is-not-the-runs-own-output)).
+A gate with no benchmark in common fails and says what each side lacks ([the nothing-to-compare requirement](../../specs/bench/spec.md#requirement-a-gate-with-nothing-to-compare)).
+A gate judges only with four samples or more ([the sample requirement](../../specs/bench/spec.md#requirement-a-gate-needs-four-samples)), while a comparison without a gate compares whatever the count and marks thin rows as a heuristic ([the comparison requirement](../../specs/bench/spec.md#requirement-a-comparison-without-a-gate)).
+
+---
+
+## Project Configuration (`.gotest.yml`)
+
+Tool defaults can live in a `.gotest.yml`, found by walking up from the working directory to the first match or a `go.mod` boundary.
+Precedence: CLI flag > `.gotest.yml` > built-in default.
+Omitted keys fall back to the defaults; duration keys are pointers, so an explicit `0` is distinguishable from omission and disables the deadline.
+
+```yaml
+tags: "integration,e2e"    # -tags
+timeout: 15m               # --timeout   (0 disables)
+setup-timeout: 5m          # --setup-timeout (flat; absent: the fixtures' declared budgets; 0 disables)
+min-coverage: 80           # --min
+parallel: 12               # --parallel
+compile-parallel: 4        # --compile-parallel
+debounce: 500ms            # --debounce (watch)
+lint:
+  skip: [stdlib-test, testify]   # lint rule IDs to disable project-wide
+```
+
+The file configures tool behavior only — never test semantics (see Design Principle 2).
+Note: `--min=0` cannot override a yml `min-coverage` (0 is the flag's "unset" sentinel); remove the yml key to disable the gate.
+
+---
+
+## Test Suites
+
+### Definition
+
+A test suite is a Go struct whose name ends in `TestSuite`:
+
+```go
+type MyTestSuite struct {
+    sut *MyService
+}
+```
+
+Requirements:
+- Name matches `^(?!ƒƒ_GOTEST_|_)(?:X_|F_)?.+TestSuite$`
+- Methods use pointer receivers (`*MyTestSuite`, not `MyTestSuite`); an alias of the suite stands for it, a defined type over it does not ([Aliases and signatures](../../specs/discovery/spec.md#requirement-aliases-and-signatures))
+- Each suite and fixture is a `type` declaration of its own (not block-style) and composes through named fields, never by embedding a suite or fixture; tests are shared through Generic Suites instead ([Suite and fixture declarations](../../specs/discovery/spec.md#requirement-suite-and-fixture-declarations))
+- A suite binds each fixture once, through a pointer field ([Fixture fields and case names](../../specs/discovery/spec.md#requirement-fixture-fields-and-case-names)); a fixture from another package is held to the same signature rules ([Declarations from other packages](../../specs/discovery/spec.md#requirement-declarations-from-other-packages))
+- Type names must be exported when the suite has test cases — otherwise a generation error (`go test` would never run its generated `Test` function).
+- A suite declares at least one `Test*`, `Benchmark*` or `Fuzz*` method, an excluded one included; a `*TestSuite` type with none, exported or not, is refused at its declaration, so a helper type takes a name that does not end in `TestSuite` ([Suites without a case](../../specs/discovery/spec.md#requirement-suites-without-a-case))
+
+### Lifecycle Hooks
+
+All hooks are optional.
+Unimplemented hooks become no-ops in the generated code.
+
+| Method | Signature | Semantics |
+|--------|-----------|-----------|
+| `BeforeAll` | `func (s *Suite) BeforeAll(t *gotest.T)` | Once before the first test case |
+| `AfterAll` | `func (s *Suite) AfterAll(t *gotest.T)` | Once after the last test case (via `t.Cleanup`) |
+| `BeforeEach` | `func (s *Suite) BeforeEach(t *gotest.T)` | Before each test case (void form) |
+| `BeforeEach` | `func (s *Suite) BeforeEach(t *gotest.T) *Ctx` | Before each test case (returning form — typed per-test context) |
+| `AfterEach` | `func (s *Suite) AfterEach(t *gotest.T)` | After each test case (void form, via `defer`) |
+| `AfterEach` | `func (s *Suite) AfterEach(t *gotest.T, ctx *Ctx)` | After each test case (context-aware form, via `defer`) |
+
+**Void BeforeEach** (legacy form):
+
+```
+BeforeAll
+├── BeforeEach → Test A → AfterEach (deferred)
+├── BeforeEach → Test B → AfterEach (deferred)
+AfterAll (via t.Cleanup — LIFO, runs after all subtests)
+```
+
+**Returning BeforeEach** (per-test context form):
+
+```
+BeforeAll
+├── ctx := BeforeEach → Test A(ctx) → AfterEach(ctx) (deferred)
+├── ctx := BeforeEach → Test B(ctx) → AfterEach(ctx) (deferred)
+AfterAll (via t.Cleanup — LIFO, runs after all subtests)
+```
+
+The returning form creates a typed per-test context that flows through the lifecycle bracket.
+Each test method receives its own context instance, enabling safe method-level parallelism without shared mutable state on the suite struct.
+
+`AfterAll` is registered via `t.Cleanup` before `BeforeAll` runs, ensuring it executes even if `BeforeAll` registers its own cleanup functions (LIFO ordering).
+`AfterEach` is `defer`-ed, ensuring it runs even when `t.Fatal()` triggers `runtime.Goexit()`.
+
+Hooks accept either `*gotest.T` or `*testing.T`.
+Under a benchmark every hook's `t.T()` is nil, and under a fuzz target `BeforeAll`'s and `AfterAll`'s, so a hook there must not call it ([Hooks that call t.T() where it is nil](../../specs/cli/spec.md#requirement-hooks-that-call-tt-where-it-is-nil)).
+
+A per-method fixture hook that fails is the method's failure, located where the hook produced it ([Where a fixture hook failure is reported](../../specs/fixtures/spec.md#requirement-where-a-fixture-hook-failure-is-reported)).
+
+A stop — Ctrl-C, gotest's `--timeout` — reaches the running method through its context and the suite through its teardown; a method body or `BeforeAll` that has not returned five seconds after its context ended is cut short, the fixtures torn down and the process ended by the signal; the five seconds bound only the body and `BeforeAll`, so a slow `AfterEach` runs to its end and `AfterAll` after it (see fixtures.md, Execution Model, [Stopping a run](../../specs/lifecycle/spec.md#requirement-stopping-a-run) and [The grace a stopped method gets](../../specs/lifecycle/spec.md#requirement-the-grace-a-stopped-method-gets)).
+
+A method that panics ends the suite as it would under `go test`: its own teardown and `AfterAll` run, and in a parallel suite the siblings still running are cut short with it ([A panic among parallel methods](../../specs/lifecycle/spec.md#requirement-a-panic-among-parallel-methods)).
+
+#### Context Consistency Rules
+
+When `BeforeEach` returns a value, the following rules are enforced at generation time:
+
+1. **Parallel requires per-test isolation** — `SuiteConfig{Parallel: true}` with a void `BeforeEach` is an error (its whole purpose is mutating shared suite state).
+   A parallel suite with no `BeforeEach` is legal; its struct fields must then be write-once (set in `BeforeAll`, read-only in tests) — the generator cannot verify this, so it is the author's responsibility.
+2. **All methods must accept context** — if `BeforeEach` returns a context, every test method must accept it as its second parameter
+3. **AfterEach must accept context** — if `BeforeEach` returns a context and `AfterEach` exists, it must accept the context as its second parameter
+4. **No orphan context** — `AfterEach` cannot accept a context parameter if `BeforeEach` does not return one
+5. **Type consistency** — context parameter types must match `BeforeEach`'s return type across all methods
+6. **Context type must be a pointer** — the context return/parameter type must be a pointer type
+
+### Test Cases
+
+Any exported method matching `^(?:X_|F_)?Test.+$` is a test case, provided go test would run its name: `Testify` is none ([Fixture fields and case names](../../specs/discovery/spec.md#requirement-fixture-fields-and-case-names)).
+Each becomes a `t.Run` subtest in the generated code.
+
+```go
+func (s *Suite) TestSomething(t *gotest.T) {}
+```
+
+Test methods accept an optional typed context parameter as their second argument when the suite uses a returning `BeforeEach`:
+
+```go
+func (s *Suite) TestSomething(t *gotest.T, ctx *MyCtx) {}
+```
+
+### Focus and Exclude
+
+| Prefix | Effect |
+|--------|--------|
+| `F_` | **Focus** — only focused items run; all unfocused are skipped |
+| `X_` | **Exclude** — always skipped, even if focused |
+| *(none)* | Normal — runs unless something else is focused |
+
+Rules:
+1. Focus is run-wide: if any `F_` suite or `F_` method exists in any package of the run, internal or external test package alike, only focused items run — an `F_` suite, and the `F_` methods of any other suite; every other suite is skipped
+2. If any test case within a suite has an `F_` prefix, all non-`F_` cases in that suite are skipped
+3. `X_`-prefixed items are always skipped, regardless of focus state
+4. Exclude takes precedence over focus: an `F_` method of an `X_` suite focuses nothing
+
+That focus spans packages and test package variants is stated in [Focus across a run](../../specs/discovery/spec.md#requirement-focus-across-a-run).
+`refactor toggle-focus` adds or removes the prefix at every reference to the suite, so the package still compiles ([Toggling focus](../../specs/discovery/spec.md#requirement-toggling-focus)); the `focus` lint fix removes it the same way ([The focus fix](../../specs/lint/spec.md#requirement-the-focus-fix)).
+
+Skipped suites produce a `t.Skipf("test suite was excluded by user")` stub, which starts no fixture ([Focus across a run](../../specs/discovery/spec.md#requirement-focus-across-a-run)).
+
+Skipped test *cases* are simply omitted from the generated code — no per-case skip stub appears in the output.
+
+The `--ci` flag performs a static analysis scan before generation and enables
+snapshot read-only mode (missing baselines fail instead of being generated):
+
+```
+$ gotest --ci ./...
+FAIL: focus prefix detected — remove F_ before merging:
+  pkg/user/user_test.go:12    type F_UserServiceTestSuite
+  pkg/payment/pay_test.go:28  PaymentTestSuite.F_TestCharge
+```
+
+CI mode is auto-detected from the standard `CI` environment variable when
+`GOTEST_CI` is unset. Set `GOTEST_CI=0` to opt out.
+
+### SuiteGuard
+
+A suite can define a `SuiteGuard()` method that returns a reason string.
+If non-empty, the entire suite is skipped at runtime with `t.Skipf("suite guard: %s", reason)`, before its fixtures are set up (its fixture fields are still nil in the guard):
+
+```go
+func (s *MySuite) SuiteGuard() string {
+    if os.Getenv("INTEGRATION_DB") == "" {
+        return "INTEGRATION_DB not set"
+    }
+    return ""
+}
+```
+
+Unlike `X_` (compile-time exclusion), `SuiteGuard` evaluates at runtime — useful for environment-dependent tests that should compile everywhere but only run when prerequisites are available.
+
+### Parallel Execution
+
+**Suite-level parallelism** is handled by the `gotest` CLI runner, which executes each suite's test binary as a separate subprocess.
+This provides process-level isolation between suites.
+The generated `func Test*` does **not** call `t.Parallel()` — parallelism is at the runner level, not the Go test scheduler level.
+
+**Method-level parallelism** is opt-in via `SuiteConfig{Parallel: true}`.
+`gotestruntime.RunMethods` calls `it.Parallel()` in each method's subtest; no explicit coordination is needed, because
+`testing` itself only returns from the parent `t.Run` — and therefore only runs
+`t.Cleanup` — after every parallel child has finished.
+Under method-level parallelism, per-test state lives in the context a returning `BeforeEach` provides, not on the shared suite struct; the generator rejects a `BeforeEach` that returns nothing in a parallel suite, and a suite without per-test state needs none.
+
+```go
+// Default: methods run sequentially within the suite
+type MyTestSuite struct{}
+
+func (s *MyTestSuite) TestAlpha(t *gotest.T) {}
+func (s *MyTestSuite) TestBeta(t *gotest.T)  {}
+
+// Opt-in: method-level parallel (per-test state in a returning BeforeEach's context)
+type ParallelMethodTestSuite struct{}
+
+type TestCtx struct{ conn *sql.Conn }
+
+func (s *ParallelMethodTestSuite) SuiteConfig() gotest.SuiteConfig {
+    cfg := gotest.DefaultSuiteConfig()
+    cfg.Parallel = true
+    return cfg
+}
+func (s *ParallelMethodTestSuite) BeforeEach(t *gotest.T) *TestCtx {
+    return &TestCtx{conn: s.pool.Acquire()}
+}
+func (s *ParallelMethodTestSuite) AfterEach(t *gotest.T, ctx *TestCtx) {
+    ctx.conn.Release()
+}
+func (s *ParallelMethodTestSuite) TestCreate(t *gotest.T, ctx *TestCtx) {}
+func (s *ParallelMethodTestSuite) TestDelete(t *gotest.T, ctx *TestCtx) {}
+```
+
+When method-level parallelism is enabled, `AfterAll` still waits for every parallel
+subtest to complete, but nothing in the generated code makes it wait: `t.Cleanup` — where
+`AfterAll` runs — only fires after `TestMyTestSuite` returns, and `testing` does not
+return from a parent test until all of its `t.Parallel()` children have finished. The
+method loop must never wait on the parallel subtests itself (a `sync.WaitGroup`, a
+channel): on panic, `testing` runs ancestor cleanups from the panicking goroutine while
+the subtest that would release such a wait is still parked inside `t.Run`, so any
+wait deadlocks against the panic unwind.
+With `FailFast`, the parallel subtests of a suite additionally share a failure flag: a failed subtest sets it from its last cleanup, so a failure the others record counts too, and subtests that start afterwards skip themselves, naming it ([FailFast](../../specs/lifecycle/spec.md#requirement-failfast)).
+
+On Windows, suite subprocesses run on a hidden console of their own and under a job object, so that a shutdown request and a force-kill reach the whole process tree and nothing outside it.
+
+### Generic Suites
+
+Generic struct definitions are not code generation targets, but their instantiated type aliases are:
+
+```go
+type GenericTestSuite[T any] struct { value T }
+
+func (s *GenericTestSuite[T]) TestSomething(t *gotest.T) {}
+
+type StringTestSuite = GenericTestSuite[string]
+type IntTestSuite    = GenericTestSuite[int]
+```
+
+Each alias produces an independent test suite.
+An alias of an alias counts too ([Aliases and signatures](../../specs/discovery/spec.md#requirement-aliases-and-signatures)), and the generic suite may be declared in another package ([Declarations from other packages](../../specs/discovery/spec.md#requirement-declarations-from-other-packages)).
+The alias may also be declared in the external test package ([Declarations from other packages](../../specs/discovery/spec.md#requirement-declarations-from-other-packages)).
+
+### Fixtures
+
+Structs ending in `Fixture` are package fixtures.
+Structs ending in `SharedFixture` are cross-package shared fixtures.
+Both use `(ctx context.Context) error` lifecycle signatures:
+
+```go
+// Package fixtures — run in test process
+func (f *MyFixture) BeforeAll(ctx context.Context) error  { return nil }
+func (f *MyFixture) AfterAll(ctx context.Context) error   { return nil }
+
+// Shared fixtures — run in subprocess, shared across packages
+func (f *MySharedFixture) BeforeAll(ctx context.Context) error  { return nil }
+func (f *MySharedFixture) AfterAll(ctx context.Context) error   { return nil }
+```
+
+Package fixture `BeforeAll`/`AfterAll` receive `context.Background()` bounded by the fixture's configured timeout.
+`BeforeEach` receives the test's `t.Context()`; `AfterEach` receives `context.Background()` (cleanup must proceed after test context cancellation).
+Shared fixture hooks receive a context with the configured timeout (from `SharedFixtureConfig()` or defaults).
+
+Package fixtures additionally support `BeforeEach`/`AfterEach`.
+Shared fixtures do not — they run once in the subprocess, not per test case.
+
+Test suites reference fixtures via named pointer fields:
+
+```go
+type BatchTestSuite struct {
+    Fixture *E2ESetupFixture
+}
+```
+
+Shared fixtures can be wired directly into standalone suites (without a package fixture) or into package fixtures:
+
+```go
+// Standalone — shared fixture wired directly into suite
+type UserTestSuite struct {
+    Postgres *PostgresSharedFixture
+}
+
+// Fixture-bound — shared fixture wired into package fixture, suite accesses it via fixture chain
+type E2EFixture struct {
+    Postgres *PostgresSharedFixture
+}
+type BatchTestSuite struct {
+    Fixture *E2EFixture
+}
+```
+
+Both paths produce the same lifecycle: deserialize from state file, call `Hydrate`, run tests, call `Dehydrate`.
+The state file is the runner's to write, so a suite binding a shared fixture is not plain `go test`'s to run ([Shared fixtures need the gotest runner](../../specs/fixtures/spec.md#requirement-shared-fixtures-need-the-gotest-runner)).
+
+Fixtures may be defined in a different package from the suite.
+Binding walks the type graph from targeted suites to discover all required fixtures, including cross-package dependencies.
+
+Fixtures nest — a root fixture's hooks run first, wrapping the child's:
+
+```
+InfraFixture.BeforeAll
+  APIFixture.BeforeAll
+    Suite.BeforeAll
+      InfraFixture.BeforeEach
+        APIFixture.BeforeEach
+          Suite.BeforeEach → Test → Suite.AfterEach
+        APIFixture.AfterEach
+      InfraFixture.AfterEach
+    Suite.AfterAll
+  APIFixture.AfterAll
+InfraFixture.AfterAll
+```
+
+A shared fixture starts for the suites the run dispatches — `-skip` decides that as `-run` does — and a guard the runner cannot evaluate does not take a suite out of it ([Selection decides which shared fixtures start](../../specs/fixtures/spec.md#requirement-selection-decides-which-shared-fixtures-start), [A guard does not hold back a shared fixture](../../specs/fixtures/spec.md#requirement-a-guard-does-not-hold-back-a-shared-fixture)).
+
+#### Fixture Runtime
+
+Generated fixture code imports `pkg/gotestruntime`, the DAG runtime: `SetupFixtureDAG` (topological setup, parallel independent nodes, panic-to-error recovery), `Teardown` (reverse order), and `HoldFixtures` (each generated top-level function sets the DAG up and tears it down in its own cleanup; a stop during the hold releases it and ends the process by the signal).
+Its exported node types (`FixtureNode`, `SharedStateNode`, `MainConfig`, `FixtureDAG`) are the struct literals generated code populates.
+Users never import it; it appears only in generated files.
+
+#### SharedFixture State Transfer
+
+SharedFixtures run in a generated subprocess.
+State crosses the process boundary via JSON serialization.
+The `Hydrate` method determines which fields are local (reconstructed in the test process) versus transferable (serialized from the subprocess).
+
+**Additional lifecycle hooks for shared fixtures:**
+
+| Method | Runs in | Signature | Semantics |
+|--------|---------|-----------|-----------|
+| `Hydrate` | Test process | `(ctx context.Context) error` | Reconstruct local resources from transferred state |
+| `Dehydrate` | Test process | `(ctx context.Context) error` | Clean up locally-created resources |
+
+`Hydrate` and `Dehydrate` are optional.
+If a SharedFixture has only JSON-serializable exported fields, all fields transfer automatically and no `Hydrate` is needed.
+
+**Field classification:**
+
+Fields assigned to the receiver in `Hydrate` — directly, or in receiver methods called from `Hydrate` (one level deep) — are **local**.
+They are excluded from serialization and reconstructed in the test process.
+All other exported fields are **transferable**.
+
+```go
+type PostgresSharedFixture struct {
+    ConnStr string            // transferable — read in Hydrate, not assigned
+    Pool    *pgxpool.Pool     // local — assigned in connect(), called from Hydrate
+}
+
+func (f *PostgresSharedFixture) BeforeAll(ctx context.Context) error {
+    container, err := postgres.Run(ctx, "postgres:16")
+    if err != nil {
+        return err
+    }
+    f.ConnStr = container.MustConnectionString(ctx)
+    return f.connect(ctx)
+}
+
+func (f *PostgresSharedFixture) AfterAll(ctx context.Context) error {
+    if f.Pool != nil { // nil when the setup failed before connecting
+        f.Pool.Close()
+    }
+    return nil
+}
+
+func (f *PostgresSharedFixture) Hydrate(ctx context.Context) error {
+    return f.connect(ctx)
+}
+
+func (f *PostgresSharedFixture) Dehydrate(ctx context.Context) error {
+    if f.Pool != nil { // nil when the setup failed before connecting
+        f.Pool.Close()
+    }
+    return nil
+}
+
+func (f *PostgresSharedFixture) connect(ctx context.Context) error {
+    var err error
+    f.Pool, err = pgxpool.New(ctx, f.ConnStr)
+    return err
+}
+```
+
+**Convention:** In `Hydrate`, assign to local fields.
+Read transferred fields but do not reassign them — use local variables for any transformation.
+
+**Classification algorithm:**
+
+1. Parse `Hydrate`'s function body AST
+2. Walk all statements (including inside `if`/`for`/`switch` blocks) to find receiver field assignments: `f.FieldName = expr` or `f.FieldName, _ = expr`
+3. For method calls on the receiver (`f.methodName(...)`), look up the method on the same type and walk its body (same as step 2, without recursing further)
+4. Fields found in steps 2–3 are **local**. All other exported fields are **transferable**
+
+**Transfer lifecycle:**
+
+```
+Subprocess (compiled binary):
+  sf.BeforeAll(ctx)              → provisions infrastructure, populates all fields
+  serialize transferable fields  → JSON (local fields excluded)
+  write to the protocol stream, wait for the runner's signal (or a teardown verb)
+  sf.AfterAll(ctx)               → tears down infrastructure
+
+CLI (gotest):
+  read JSON from the subprocess's protocol stream
+  write state files in the work dir — per-suite shared/<Suite>.json in the
+  test run; one global shared/state.json in a bench run
+  set GOTEST_SHARED_STATE_FILE env var for test process
+
+Test process:
+  read shared/state.json         → deserialize into struct (transferable fields populated, local fields zero-valued)
+  sf.Hydrate(ctx)                → reconstructs local resources from transferred state
+  ... run test suites ...
+  sf.Dehydrate(ctx)              → cleans up local resources
+```
+
+**DAG dependencies within the subprocess:**
+
+When SharedFixture B depends on SharedFixture A, both run in the same subprocess.
+After A.BeforeAll() completes, B receives an in-memory pointer to A — not serialized state.
+B.BeforeAll() can access all fields that A.BeforeAll() set, including local fields like connection pools.
+The serialization boundary only exists between the subprocess and test processes.
+
+`BeforeAll` always sets transfer fields. Local fields only need to be set in `BeforeAll` when a dependent shared fixture accesses them — otherwise they may add an idle resource to the subprocess.
+`Hydrate` is not called within the subprocess — it runs only in test processes after JSON deserialization.
+
+The protocol stream is a descriptor of its own (on Windows, the process's own stdout, taken from fixture code before any of it runs), so the subprocess's stdout and stderr stay the fixture's to print to, and the state is read whole however large it is ([Shared fixture state reaches its suites](../../specs/fixtures/spec.md#requirement-shared-fixture-state-reaches-its-suites)).
+
+The runner waits for setup as long as the fixture's declared config allows, not for a number of its own ([A shared fixture's declared setup budget](../../specs/fixtures/spec.md#requirement-a-shared-fixtures-declared-setup-budget)).
+
+**Validation at generation time:**
+
+- Shared fixture types must not live in `internal/` packages.
+  The setup subprocess compiles outside the module tree and cannot import `internal/` paths.
+  Shared fixtures may freely depend on `internal/` packages — only the fixture type's own package path is restricted.
+- Transferable field types are validated for JSON serializability: channels, funcs, and maps with non-string/non-integer keys are rejected recursively, with a suggestion to handle the field in `Hydrate` instead.
+  Opaque types with zero exported fields serialize as `{}` (see Known Limitations)
+- If `Hydrate` exists without `Dehydrate`, the generator emits an error
+- `Hydrate`/`Dehydrate` signatures must be `(ctx context.Context) error` with pointer receiver
+
+### Configuration
+
+Every fixture and suite runs with sensible defaults.
+The optional marker method states the config; a duration it leaves at zero behaves as if the marker were absent and gets the default, and `gotest.NoDeadline` (any negative duration) disables that deadline. Booleans, `Retries` and `RetryDelay` are used as written.
+
+#### Config Types
+
+```go
+type FixtureConfig struct {
+    Timeout    time.Duration // applied to BeforeAll/AfterAll via context.WithTimeout
+    Retries    int           // additional BeforeAll attempts on failure
+    RetryDelay time.Duration // pause between retry attempts
+}
+
+type SuiteConfig struct {
+    Timeout      time.Duration // per-test-case deadline via t.Context()
+    SetupTimeout time.Duration // BeforeAll/AfterAll deadline
+    FailFast     bool          // stop suite on first failure
+    Parallel     bool          // method-level parallelism (per-test state in a returning BeforeEach's context)
+    Exclusive    bool          // dispatched strictly alone, after every non-exclusive suite
+}
+```
+
+`Exclusive` is resolved statically like `Parallel` and consumed by the runner, not the harness:
+
+- Exclusive suites are held back until every non-exclusive suite has finished, then dispatched one at a time in deterministic (package, suite) order, in batch and streaming pipelines alike.
+- It exists for suites whose verdicts measure wall-clock behavior or fight over resources (timing budgets, containers, ports, per-invocation child builds): a budget verdict taken on a saturated machine is not a verdict you can act on.
+- Shared fixture processes stay up for exclusive suites; they are infrastructure, not competing suites.
+
+(Test-case retries are deliberately not offered — retrying flaky tests hides real defects; fixture `Retries` exist because infrastructure setup is legitimately flaky.)
+
+#### Value Semantics
+
+One rule for every timeout in the system:
+
+| Value | Meaning |
+|-------|---------|
+| `> 0` | Use this duration |
+| `0` (including an omitted field) | No timeout — the zero value opts out |
+| `< 0` | Also no timeout (accepted side-effect; all gates check `> 0`) |
+
+Defaults come from *absence*, uniformly at every layer: no marker method → `DefaultSuiteConfig()`/`DefaultFixtureConfig()`; no CLI flag → the flag's default; no `.gotest.yml` key → the CLI default.
+This matches `go test -timeout 0` semantics.
+
+#### Marker Methods
+
+The code generator recognizes these exact signatures:
+
+```go
+func (f *MyFixture)       FixtureConfig()       gotest.FixtureConfig
+func (f *MySharedFixture) SharedFixtureConfig()  gotest.FixtureConfig
+func (s *MySuite)         SuiteConfig()          gotest.SuiteConfig
+```
+
+All three return the same `FixtureConfig` type for fixtures (package and shared) and `SuiteConfig` for suites.
+The method name follows the type suffix convention.
+
+Requirements (same conventions as lifecycle hooks):
+- Pointer receiver matching the fixture/suite type name
+- No parameters
+- Single return value of the exact config struct type
+- Invalid signatures produce a collector error
+
+`SuiteConfig()` bodies are parsed statically (the generator needs `Parallel` at generation time), so they are restricted to: a literal return, a gotest preset call (`DefaultSuiteConfig`/`IntegrationSuiteConfig` — custom helpers would silently drop `Parallel`), or the compose form `cfg := <literal|preset>` followed by plain `cfg.<Field> = <value>` assignments (`Parallel` must be assigned a boolean literal).
+`FixtureConfig()`/`SharedFixtureConfig()` bodies are ordinary Go — they run at test time.
+
+#### Presets
+
+| Preset | Timeout | Retries | Use case |
+|--------|---------|---------|----------|
+| `DefaultFixtureConfig()` | 2 min | 0 | Standard fixtures |
+| `ContainerFixtureConfig()` | 5 min | 1 (5s delay) | Testcontainers, image pulls |
+| `DefaultSuiteConfig()` | 30s (+ 30s setup) | — | Unit/integration tests |
+| `IntegrationSuiteConfig()` | 2 min (+ 5 min setup) | — | Heavier integration tests |
+
+#### Composing with Presets
+
+Defaults and overrides combine through plain Go — start from a preset, override fields, return the result:
+
+```go
+func (s *OrderTestSuite) SuiteConfig() gotest.SuiteConfig {
+    cfg := gotest.DefaultSuiteConfig() // 30s / 30s
+    cfg.Parallel = true
+    return cfg
+}
+
+func (f *InfraFixture) FixtureConfig() gotest.FixtureConfig {
+    cfg := gotest.ContainerFixtureConfig()
+    if os.Getenv("CI") != "" {
+        cfg.Timeout = 10 * time.Minute
+        cfg.Retries = 2
+    }
+    return cfg
+}
+```
+
+A partial literal gets the default for every duration it omits: `SuiteConfig{Parallel: true}` runs with the 30s deadlines, but is held to no budget by verdict, like a suite without a marker. Before v1.30 an omitted duration meant no deadline.
+
+#### Generated Behavior
+
+**Package fixtures:** The test harness uses the marker's config when present (otherwise `DefaultFixtureConfig()`) to wrap `BeforeAll` in a retry loop with `context.WithTimeout` and wrap `AfterAll` cleanup with timeout.
+Retry attempts are logged with attempt number.
+As with suites, bounding the context is not being held to it: a fixture that declared its own config is additionally held to its `Timeout` *by verdict*, on both `BeforeAll` (`gotestruntime.RunFixtureSetup`) and `AfterAll` (`gotestruntime.RunFixtureTeardown`) — a lifecycle call that ignores its context and outruns the declared budget fails the fixture rather than passing.
+A fixture with no marker gets the default bounds and no verdict; it is never failed against a number its author did not write.
+A setup overrun on a *successful* return is terminal (`gotestruntime.ErrSetupOverran`): it is not retried — the work completed and the overrun is deterministic — and the fixture still gets its `AfterAll`, because the resources it built exist.
+
+**Shared fixtures:** The generated subprocess uses `SharedFixtureConfig()` when present (otherwise `DefaultFixtureConfig()`), wrapping each SharedFixture's `BeforeAll(ctx)` in the same retry loop with `context.WithTimeout`, under the same declared-budget verdicts as package fixtures.
+After `BeforeAll`, transferable fields (determined by Hydrate-assignment analysis) are serialized as JSON on the protocol stream.
+`AfterAll(ctx)` runs through `gotestruntime.RunFixtureTeardown` in the teardown handler: context-bounded always, and held to a declared `Timeout` by verdict, with a failed teardown reaching the runner through the process exit status.
+The subprocess is shutdown-capable from birth and, while the runner lives, never tears down on its own initiative: it reports setup outcome (and its teardown budget) on the `_done` line, then waits for the runner's signal — only the runner knows when every suite has stopped using the fixtures — and a clean exit is the runner's sole proof that teardown ran and passed. A runner that is gone (killed, crashed, its end of stdin closed) leaves nobody to send that signal, so the subprocess then ends its setup's context, runs `AfterAll` for every fixture whose `BeforeAll` ran, and exits; past its setup and teardown budgets it exits with status 1 regardless ([A shared fixture process whose CLI is killed](../../specs/fixtures/spec.md#requirement-a-shared-fixture-process-whose-cli-is-killed)). A process the setup starts inherits neither the protocol descriptor nor its variable, so it can neither hold the run open nor write protocol lines ([A process a shared fixture's setup starts](../../specs/fixtures/spec.md#requirement-a-process-a-shared-fixtures-setup-starts)); a setup the runner gives up on leaves its siblings the teardown budget the process reports ([Siblings of a setup that is given up](../../specs/fixtures/spec.md#requirement-siblings-of-a-setup-that-is-given-up)).
+In the test harness, the deserialized fixture is hydrated via `Hydrate(ctx)` if present, and `Dehydrate(ctx)` is deferred for cleanup.
+
+**Suites:** The test harness uses the marker's config when present (otherwise `DefaultSuiteConfig()`) to bound each phase's context — `gotestruntime.SetupT`/`TestT` bound it by the timeout when positive, and end it when the runner announces a stop — and, when `FailFast` is set, skips every method not yet started once one has failed, naming that method ([FailFast](../../specs/lifecycle/spec.md#requirement-failfast)).
+Bounding the context is not the same as being held to it: `gotestruntime.RunSetup`, `RunMethods` and `RunTeardown` additionally take a *budget* duration and fail the phase by verdict if it is still running once the budget elapses — located where the phase is running, and also written to stderr, unbuffered, with that location, unless test2json streams the verdict (`-json`), where a raw line would be attributed to whichever test printed last — but that budget is the zero value — nothing enforced — unless the suite declared a `SuiteConfig()` of its own. A suite with no marker gets bounded but unenforced defaults; a suite with a marker gets its own values as both the bound and the budget, verbatim.
+
+**`NewTWithDeadline(t, d)`:** Creates a `*gotest.T` with a context deadline derived from `t.Context()`: for a `*gotest.T` the suite's context, its deadline and stop included; for a `*testing.T` the testing package's, which carries neither.
+`gotest.Go` on the derived `T` is waited for where it would be on `t`, so a goroutine started on it in `BeforeAll` is waited for after `AfterAll` ([Goroutines BeforeAll starts](../../specs/lifecycle/spec.md#requirement-goroutines-beforeall-starts)).
+`t.Context()` returns the deadline-aware context.
+
+**`NewTWithContext`:** Creates a `*gotest.T` whose `t.Context()` is the context supplied by the caller, for the cases a deadline off `t.Context()` cannot express — injected values, or a lifetime that must outlive the test's own.
+The caller owns the context; nothing in `gotest` cancels it.
+`gotest.Go` finds a `BeforeAll`'s waits through the `T`'s context or its `testing.TB`: around the hook's own `t`, or with a context derived from the hook's, its goroutines are waited for after `AfterAll`; around a subtest's `testing.TB` with an unrelated context, by that subtest's cleanup, before `AfterAll`.
+This is what lets `AfterAll` run under a context that survives the cancellation the testing package performs immediately before cleanups.
+
+#### Feature Interactions
+
+- **Parallel suites:** in sequential suites, `FailFast` is checked between subtests: each method after the first failed one is reported as skipped with the reason `FailFast: <that method>`. Only a method's own verdict trips it, never a failure `BeforeAll` recorded without stopping.
+  In method-parallel suites, a failed subtest sets a shared failure flag; parallel subtests that start afterwards skip themselves (best-effort — already-running subtests complete).
+  Suite-level parallelism does not affect `FailFast` (each suite's subtests are independent).
+- **Focus/Exclude:** Config applies after focus/exclude filtering.
+  Skipped suites get unchanged skip stubs.
+- **Global timeouts:** fixture/suite timeouts and the outer bounds are independent — fixture contexts derive from `context.Background()`, not from any parent deadline.
+  `go test -timeout` acts by panicking the test binary; gotest's own `--timeout` cancels the whole pipeline at the process level.
+  Whichever bound expires first ends the run.
+- **Nested fixtures:** Each level resolves config independently — no inheritance between fixture levels.
+- **Hydrate/Dehydrate:** state is deserialized and hydrated as part of the fixture setup each top-level function holds (see fixtures.md, Execution Model).
+  `Dehydrate` runs in that function's cleanup, after the suite's `AfterAll`.
+  `Hydrate` receives a context with the SharedFixture's configured timeout; `Dehydrate` receives `context.Background()`.
+
+---
+
+## The gotest.T Type
+
+`*gotest.T` wraps `*testing.T` with a deliberately small surface:
+
+| Method | Purpose |
+|--------|---------|
+| `T() *testing.T` | Escape hatch to the underlying `*testing.T` |
+| `Context() context.Context` | Test-scoped context (deadline-aware under a suite timeout) |
+| `Errorf`, `FailNow`, `Skipf` | Failure/skip primitives (assertions call these) |
+| `Setenv(key, value)` | Delegates to `testing.T.Setenv` |
+| `TempDir() string` | Delegates to `testing.T.TempDir` |
+| `Name() string` | The test's name; in a hook under a benchmark or fuzz target, the wrapper's |
+| `When(desc, fn)`, `It(desc, fn)` | BDD vocabulary (see below) |
+
+(`gotestruntime.TestCase` — `func(*gotest.T)` — is the exported function type the generated exec trampoline accepts.)
+
+Deliberately absent — the suite lifecycle replaces them:
+`Log`/`Logf` (use assertions' message args), `Error`/`Fail`/`Fatal`/`Fatalf` (use assertions), `Deadline` (use `t.Context().Deadline()`), `Cleanup` (use `AfterEach`/`AfterAll`), `Run` (use `When`/`It`), `Parallel` (use `SuiteConfig.Parallel`), `Helper` (the call-site tracer makes it unnecessary and harmful).
+The `t-escape` lint rule flags escapes to these via `t.T()`, and `t.T().Context()`, which has no suite deadline — also inside a `*testing.T` helper a suite method hands `t.T()` to.
+
+---
+
+## Goroutines Started by Tests
+
+A panic on a goroutine a test starts directly is unrecoverable: Go terminates the whole
+process without running any other goroutine's deferred work, so no `AfterEach`, no
+`AfterAll` and no fixture teardown happens, and the panic is attributed to nothing in
+particular. No framework can guard a goroutine it did not create.
+
+`gotest.Go(t *gotest.T, fn func()) (wait func())` creates the goroutine for the caller
+instead. It captures a panic in `fn` with the stack from where it happened and re-raises
+it on the test's own goroutine, where `testing` reports it like any other test panic and
+every cleanup still runs.
+
+<!-- fence:pseudo -->
+```go
+// Work that finishes on its own: wait where the panic should surface.
+wait := gotest.Go(t, func() { report = build(input) })
+defer wait()
+
+// Work that runs until something stops it — a server, a poller: do not wait
+// inside the test. gotest.Go also registers the wait as t.Cleanup, which runs
+// after AfterEach, so whatever stops the goroutine has already run by the time
+// anything waits for it.
+gotest.Go(t, func() { srv.Serve(l) }) // AfterEach closes the listener
+```
+
+A `defer wait()` in the second shape deadlocks instead: the test's own defers run before
+`AfterEach`, so it would wait for a goroutine nothing has stopped yet. Calling the
+returned `wait` more than once is safe.
+
+In `BeforeAll` the same shape serves the whole suite: the waits of goroutines started on
+the hook's `T`, or on any `T` derived from it, are drained after `AfterAll`, held to a
+declared `SetupTimeout`, and so is one a goroutine starts while the drain runs
+([Goroutines BeforeAll starts](../../specs/lifecycle/spec.md#requirement-goroutines-beforeall-starts)).
+A fatal assertion or a skip in `fn` exits the goroutine, not the test; the wait carries it
+over, and a `runtime.Goexit` with neither fails the test, saying so
+([Goroutines started by gotest.Go](../../specs/lifecycle/spec.md#requirement-goroutines-started-by-gotestgo)).
+
+`Go` accepts the T of any hook, the TB-backed one a benchmark or fuzz wrapper hands its
+hooks included.
+
+The cleanup-registered `wait` has no timeout of its own: a goroutine that never
+returns hangs the binary until `go test -timeout` fires, with no named verdict, unless
+`BeforeAll` started it and the suite declared a `SetupTimeout`.
+
+---
+
+## Assertions
+
+### Functional API
+
+Type-safe generics with compile-time safety.
+All functions accept any type implementing `testingT` (`Errorf()` + `FailNow()`) — works with `*gotest.T`, `*testing.T`, and `*gotest.R`.
+Failure messages always include the user call site, resolved by an internal stack-frame tracer.
+The failure is located (`file.go:line:` before the message, as `go test` prints it) at the line that failed, whichever testing type the assertion got — `*gotest.T`, `*testing.T`, `*gotest.B`, `*gotest.F`, or a fuzz body's `t` — inside a helper too, and never at a file of gotest's, reflect's or the runtime's. When that line is in a helper, the message names the test's own call site after it. Both honour `-fullpath`.
+Never call `t.T().Helper()` — it degrades location reporting; the `t-escape` lint rule flags it.
+A module whose path has no dot, built with `-trimpath`, is located the same way ([Failure locations](../../specs/assertions/spec.md#requirement-failure-locations)).
+
+<!-- fence:pseudo -->
+```go
+// Equality — [V any] catches cross-type comparison at compile time
+gotest.Equal[V any](t, expected, actual V, msgAndArgs ...any)
+gotest.NotEqual[V any](t, expected, actual V, msgAndArgs ...any)
+
+// Zero / Empty
+gotest.Zero[V comparable](t, value V, msgAndArgs ...any)
+gotest.NotZero[V comparable](t, value V, msgAndArgs ...any)
+gotest.Empty(t, object any, msgAndArgs ...any)
+gotest.NotEmpty(t, object any, msgAndArgs ...any)
+
+// Nil — for non-comparable nilables (slices, maps, funcs); runtime type guard
+// rejects non-nilable types. Use Zero/NotZero for comparable nilables.
+gotest.Nil(t, object any, msgAndArgs ...any)
+gotest.NotNil(t, object any, msgAndArgs ...any)
+
+// Bool
+gotest.True(t, value bool, msgAndArgs ...any)
+gotest.False(t, value bool, msgAndArgs ...any)
+
+// Error
+gotest.NoError(t, err error, msgAndArgs ...any)
+gotest.Error(t, err error, msgAndArgs ...any)
+gotest.ErrorIs(t, err, target error, msgAndArgs ...any)
+gotest.ErrorAs[E error](t, err error, msgAndArgs ...any) E
+gotest.ErrorContains(t, err error, contains string, msgAndArgs ...any)
+
+// Collection
+gotest.Contains(t, s, contains any, msgAndArgs ...any)
+gotest.NotContains(t, s, contains any, msgAndArgs ...any)
+gotest.Len(t, object any, length int, msgAndArgs ...any)
+gotest.ElementsMatch[V comparable](t, listA, listB []V, msgAndArgs ...any)
+gotest.Subset[V comparable](t, list, subset []V, msgAndArgs ...any)
+
+// Comparison — [V cmp.Ordered] prevents comparing incomparable types
+gotest.Greater[V cmp.Ordered](t, a, b V, msgAndArgs ...any)
+gotest.GreaterOrEqual[V cmp.Ordered](t, a, b V, msgAndArgs ...any)
+gotest.Less[V cmp.Ordered](t, a, b V, msgAndArgs ...any)
+gotest.LessOrEqual[V cmp.Ordered](t, a, b V, msgAndArgs ...any)
+
+// String / Regex
+gotest.Regexp[P regexpPattern](t, rx P, str string, msgAndArgs ...any)
+
+// Numeric
+gotest.InDelta[V numeric](t, expected, actual V, delta float64, msgAndArgs ...any)
+
+// Serialization — accepts string, []byte, json.RawMessage, io.Reader, or marshalable
+gotest.JSONEq(t, expected, actual any, msgAndArgs ...any)
+
+// Time
+gotest.TimeWithin(t, expected, actual time.Time, tolerance time.Duration, msgAndArgs ...any)
+gotest.TimeIsNow(t, ts time.Time, tolerance time.Duration, msgAndArgs ...any)
+
+// Panic
+gotest.Panics(t, f func(), msgAndArgs ...any) any
+
+// Snapshot — auto-named from test path, or custom name
+gotest.MatchSnapshot(t, value any, name ...string)
+
+// Polling — see Async Assertions section
+gotest.Eventually(t, waitFor, tick time.Duration, fn func(poll *gotest.R))
+gotest.Consistently(t, waitFor, tick time.Duration, fn func(poll *gotest.R))
+
+// Explicit failure
+gotest.Fail(t, msgAndArgs ...any)
+
+// Unwrap — panics on failure (no t parameter, enables multi-return expansion)
+gotest.Must[V any](val V, ok any) V
+```
+
+Equality failures on values that each fit one short line (80 bytes) show both in Go literal syntax:
+
+```
+Equal failed:
+  expected: order{ID:"A-1", Amount:100}
+  actual:   order{ID:"A-1", Amount:150}
+```
+
+Anything longer is rendered one field, element or entry per line at every depth — pointers followed, unexported fields included, map keys sorted (keys that render alike by their values), strings and byte slices of text split at their newlines, other bytes as hex rows of eight, unsigned integers in decimal (a `uintptr` in hex), values of package `sync` as their type alone (`sync.Mutex{…}`), no addresses — and the lines that differ are marked in hunks with three lines of context, separated by `…`, each hunk led by the path of its first changed line:
+
+```
+Equal failed:
+  diff (-expected +actual):
+    at .Customer.Zip:
+       ID: "A-0001",
+       Customer: shop.Customer{
+         Name: "Ada",
+    -    Zip: "SW1Y 4JH",
+    +    Zip: "SW1Y 4JJ",
+       },
+```
+
+Both renderings are printed above the diff when each has at most 10 lines of at most 80 bytes. A single changed line longer than 80 bytes is shown around its first difference with a caret under it, and any other line is cut at 160 bytes. Two long single-line strings, or byte slices of text, are shown around their first differing byte instead, the caret counting a wide character as two columns. Values of different dynamic types are named first (`types differ: int vs float64`) and shown in their types. Values whose renderings are identical are rendered again without their `GoString` methods and with `sync` values opened, and that is diffed; when even that agrees (a NaN, a func, a channel), the message says where the values differ and that the rendering does not show it, and prints the value once. Lines deeper than 32 levels keep the indent of level 32 and name their depth (`‹depth 40›`). A rendering stops at 50,000 lines or 4 MiB; when the values agree up to there, the message names the path of their first difference. `NotEqual` shows the shared value in the same rendering.
+The same diff presentation serves snapshot mismatches ([Mismatch diffs](../../specs/assertions/spec.md#requirement-mismatch-diffs), [Renderings](../../specs/assertions/spec.md#requirement-renderings)).
+How the extra arguments enter the message is stated in [Failure messages](../../specs/assertions/spec.md#requirement-failure-messages).
+
+Runtime argument guards — each fails with a type error instead of guessing:
+
+- `Contains`/`NotContains` accept a string (substring), slice/array (element, `DeepEqual`), or map (**key** presence; a nil needle is the nil element or key only where the element or key type can be nil, see [A nil needle](../../specs/assertions/spec.md#requirement-a-nil-needle))
+- `JSONEq` takes one JSON value per input ([One JSON value](../../specs/assertions/spec.md#requirement-one-json-value))
+- `Len` accepts slice, array, map, chan, string
+- `Empty`/`NotEmpty` accept slice, map, array, chan, string, or pointer (recursively); other types are rejected — use `Nil`/`Zero`
+- `ErrorIs` with a nil target and `ErrorContains` with an empty string are rejected — use `NoError`/`Error`
+- `Must`'s second argument may be `nil`, `bool`, or `error`; anything else panics
+
+A guard refuses a kind, never a named type of an accepted kind ([Named string types](../../specs/assertions/spec.md#requirement-named-string-types), [A needle of the wrong type](../../specs/assertions/spec.md#requirement-a-needle-of-the-wrong-type)), and a comparison reads the value, not its spelling ([InDelta at the edges of float64](../../specs/assertions/spec.md#requirement-indelta-at-the-edges-of-float64), [JSON numbers](../../specs/assertions/spec.md#requirement-json-numbers)); `ErrorAs` names the type it expected ([Failure messages](../../specs/assertions/spec.md#requirement-failure-messages)).
+
+The assertion engine has zero external dependencies — `reflect.DeepEqual`, `cmp.Compare`, `fmt.Sprintf("%#v")`, and a minimal inline diff renderer.
+
+---
+
+## BDD Vocabulary
+
+### t.When() / t.It()
+
+`When` groups context.
+`It` specifies behavior.
+Both map to `t.Run` under the hood — the distinction is purely semantic.
+
+```go
+func (s *UserServiceTestSuite) TestCreate(t *gotest.T) {
+    t.When("email is valid", func(w *gotest.T) {
+        w.It("creates the user", func(it *gotest.T) {
+            err := s.svc.Create(ctx, validUser)
+            gotest.NoError(it, err)
+        })
+    })
+
+    t.When("email already exists", func(w *gotest.T) {
+        w.It("returns ErrDuplicate", func(it *gotest.T) {
+            s.svc.Create(ctx, validUser)
+            err := s.svc.Create(ctx, validUser)
+            gotest.ErrorIs(it, err, ErrDuplicate)
+        })
+    })
+}
+```
+
+### gotest.Each()
+
+Table-driven tests with automatic subtest naming.
+
+Iterator API (Go 1.23+):
+
+```go
+for it, tc := range gotest.Each(t, []struct {
+    Desc  string
+    Input string
+    Want  int
+}{
+    {Desc: "single digit", Input: "5", Want: 5},
+    {Desc: "negative",     Input: "-3", Want: -3},
+}) {
+    gotest.Equal(it, tc.Want, parse(tc.Input))
+}
+```
+
+Uses `Desc` or `Name` field for the subtest name, falls back to `#0`, `#1`, etc.
+
+A row is a subtest, and the loop carries its verdict to the method ([Each rows](../../specs/lifecycle/spec.md#requirement-each-rows)).
+
+---
+
+## Async Assertions
+
+### *gotest.R — Assertion Recorder
+
+`*R` is an assertion recorder that captures assertion outcomes without propagating them to the test runner.
+It satisfies the same `testingT` contract as `*testing.T` (`Errorf` + `FailNow`), making it the callback type for `Eventually` and `Consistently`.
+All assertion functions work with `*R` just as they do with `*T` or `*testing.T`.
+
+<!-- fence:pseudo -->
+```go
+type R struct { ... }
+func (r *R) Errorf(format string, args ...any)
+func (r *R) FailNow()
+func (r *R) Failed() bool
+func (r *R) Message() string
+
+func Record(fn func(*R)) *R
+```
+
+`Record` runs `fn` with a fresh `*R` in a dedicated goroutine (required because `FailNow` calls `runtime.Goexit`).
+
+### Polling
+
+```go
+gotest.Eventually(t, 5*time.Second, 100*time.Millisecond, func(poll *gotest.R) {
+    result, err := s.store.Get("key")
+    gotest.NoError(poll, err)
+    gotest.Equal(poll, "completed", result.Status)
+})
+
+gotest.Consistently(t, 2*time.Second, 100*time.Millisecond, func(poll *gotest.R) {
+    gotest.Equal(poll, 0, s.counter.Value())
+})
+```
+
+The `poll *gotest.R` captures assertion failures without propagating them to the test runner.
+On timeout, `Eventually` reports the last poll's assertion failures.
+`Consistently` fails on first assertion failure and reports which poll failed.
+
+A poll that started before the deadline is judged by its result, and one still running `waitFor` past it fails as still running ([Polls and their deadline](../../specs/assertions/spec.md#requirement-polls-and-their-deadline)); the arguments are checked before the first poll ([Polling arguments](../../specs/assertions/spec.md#requirement-polling-arguments)).
+
+---
+
+## Snapshot Testing
+
+```go
+gotest.MatchSnapshot(t, result)               // auto-named from test
+gotest.MatchSnapshot(t, result, "variant")    // custom snapshot name
+```
+
+- One `.snap` file per **top-level** test at `testdata/__snapshots__/<TestName>.snap` (suffix `_ext` for external `_test` packages); subtests become `=== SNAP <subtest path> ===` sections within it, with the custom name appended to the key
+- Accepted value types: `string` (including named string types), `[]byte`, `encoding.TextMarshaler`, `fmt.Stringer`, `json.Marshaler`, `error`, `io.Reader` — arbitrary structs and nil values are rejected with a type error
+- First run: create snapshot, pass; subsequent runs: compare, fail with diff and the hint `Run with GOTEST_UPDATE_SNAPSHOTS=1 to update`
+- Update: `gotest --update-snapshots ./...` (sets `GOTEST_UPDATE_SNAPSHOTS=1`; use the env var directly under plain `go test`)
+- CI mode (`--ci` / `GOTEST_CI=1`): read-only — a missing baseline fails instead of being created
+- Safe under parallel tests: snapshot files are guarded by per-file mutexes
+
+Each subtest reads a section of its own, the baselines are found beside the test, under `-trimpath` in the package directory go test runs in, and a name that could not be a section header is refused ([Snapshot sections](../../specs/assertions/spec.md#requirement-snapshot-sections), [Snapshot names](../../specs/assertions/spec.md#requirement-snapshot-names)).
+With `GOTEST_UPDATE_SNAPSHOTS` off (unset, `0`, `false` and the other `strconv.ParseBool` spellings of false) nothing is updated ([Snapshot updates switched off](../../specs/assertions/spec.md#requirement-snapshot-updates-switched-off)).
+
+---
+
+## Scaffolding
+
+```
+$ gotest scaffold ./pkg/user.UserService
+```
+
+Generates a test suite skeleton with `BeforeEach`, per-method `Test*` stubs, and method signatures as comments.
+Methods returning `error` get happy-path and error-case stubs.
+
+Interface targets are detected automatically and generate a generic contract suite:
+
+```
+$ gotest scaffold io.ReadCloser
+```
+
+File targets scaffold a suite over the file's exported package-level functions:
+
+```
+$ gotest scaffold ./pkg/user/service.go
+```
+
+Output is written as `<snake_case>_suite_test.go` next to the target; existing files are never overwritten.
+`--fuzz` is the subcommand's only flag (a fuzz skeleton for a package-level function); unknown flags are rejected.
+Uses `packages.Load` for type introspection.
+Exit codes: 0 when the skeleton was written, 1 when the target could not be scaffolded (not found, a method, or its file exists, and the refusals of [Scaffolds that compile](../../specs/cli/spec.md#requirement-scaffolds-that-compile)), 2 on a usage error (no target, more than one, a target naming no type or function, an unknown flag), as everywhere in the CLI.
+
+---
+
+## Migration
+
+```
+$ gotest migrate ./...
+```
+
+Patterns name directories, by one rule for every spelling: a path (`.`, `./x`, `../x`, `/x`, and `.\x` or `C:\x` on Windows) is read from disk, an import path of the main module names that module's directory. A trailing `/...` (or `\...`) adds every directory below that holds Go files, leaving out `testdata`, `vendor`, hidden and `_` directories and nested modules, as `./...` does. A directory counts when it holds Go files under any build constraint, so a package whose files are all tagged is migrated however it is named (the go command's own `./...` skips it). A pattern that names no such directory, or an import path outside the main module, fails with exit 2: migrate edits files in place, and a dependency's are not its to edit.
+
+Converts testify/suite tests. A directory's test files are migrated together, the package's own and its external `_test` package: a suite's methods, runner and helpers are converted in whichever of those files declares them.
+1. Renames suite struct to `*TestSuite` convention, exported (`thingSuite` → `ThingTestSuite`: gotest runs only exported suites), along with every identifier that resolves to it (an external `_test` package's `pkg.XSuite` included); a struct field, composite-literal key or local variable spelled the same is left alone. A free helper taking the suite is annotated like one of its methods
+2. Renames lifecycle hooks (`SetupSuite` → `BeforeAll`, `TearDownSuite` → `AfterAll`, etc.), and the calls of them: `s.SetupTest()` becomes `s.BeforeEach(t)`, `s.TestA()` becomes `s.TestA(t)`
+3. Transforms assertion calls (`s.Require().Equal(a, b)` → `gotest.Equal(t, a, b)`)
+4. Removes the `suite.Suite` embedding (or `*suite.Suite`), every runner that does nothing but `suite.Run(t, new(S))` or `suite.Run(t, &S{})` (a `t.Parallel()` aside; `&S{Suite: new(suite.Suite)}` counts) and every package-level `var _ suite.SetupAllSuite = (*S)(nil)`-style contract the suite no longer implements, and drops the testify and `testing` imports nothing refers to any more ([Imports](../../specs/migrate/spec.md#requirement-imports)). Only an identifier that resolves to the import counts: a local variable named `suite` is not the package, and a dot import stays while a name it provides is still used (a plain `*testing.T` helper that still calls `assert.X` keeps its imports). The gotest import goes in a group of its own, apart from the standard library, as goimports would put it
+5. Injects a `*gotest.T` parameter into lifecycle and test methods, named `t` unless the method already uses that name (a receiver, a local `t := s.T()`, a loop variable), then `gt`; rewrites `s.T()` to `t.T()` inside those methods. A hook or test with a value receiver gets a pointer receiver, since gotest calls only those; one that changes the suite is marked instead, as testify ran it on a copy
+6. Transforms `s.Require().X(...)`/`s.Assert().X(...)` chains, the suite's own `s.X(...)` and `assert.X(s.T(), ...)`/`require.X(...)` forms wherever a `t` is in scope: a method that gained `t`, or a helper that already takes `t *testing.T`
+7. Turns an `s.Run(name, func() {...})` statement in a test method into `t.It(name, func(t *gotest.T) {...})`: the assertions inside name the closure's own `t`
+8. Keeps a suite behind its runner's build constraint: when every runner it had sat in a `//go:build`-constrained file, gotest's generated runner would run it in every build, so the constraint moves onto the suite's file, provided the suite and all its methods live in that one file and it declares no other suite or test function; otherwise the suite is marked
+
+The mapped assertions are `Equal`, `NotEqual`, `NoError`, `Error`, `ErrorIs`, `ErrorContains`, `True`, `False`, `Nil`, `NotNil`, `Empty`, `NotEmpty`, `Len`, `Contains`, `NotContains`, `Zero`, `NotZero`, `Greater`, `GreaterOrEqual`, `Less`, `LessOrEqual`, `Same`, `NotSame`, `ElementsMatch`, `Subset`, `Regexp`, `InDelta`, `JSONEq` and `Panics`, and their formatted `...f` variants (`Equalf`, `NoErrorf`, ...), with testify's argument order, which gotest shares: a variant's message and args trail as gotest's `msgAndArgs`, which gotest formats as testify did. A format followed by spread args (`msg, args...`) has no spelling in one variadic and is marked. Where gotest's assertion is stricter, the argument's type picks the gotest assertion that keeps testify's verdict: `Zero`/`NotZero` on a slice, map or func become `Nil`/`NotNil`, and on a non-comparable struct or array `Equal`/`NotEqual` against `T{}`; `Empty`/`NotEmpty` on an array, struct, number or bool become `Zero`/`NotZero`; `Equal`/`NotEqual` of an interface and a value of another type is instantiated with the interface (`gotest.Equal[any](t, want, got)`). A call no gotest assertion matches is marked with the reason instead: `NotNil` on a type that can never be nil, which testify always passed; `NotZero`/`NotEmpty` on an interface, a pointer to a non-collection or a type parameter. What else is left or marked because gotest would judge or order it differently is stated in [Kept verdicts](../../specs/migrate/spec.md#requirement-kept-verdicts).
+
+**The result is type-checked.** Every directory with a testify suite is type-checked for real before and after the migration, from the migrated sources in memory, against its real dependencies (export data, as `go vet` uses): its internal and external test packages, in the default build and in each tag set the `//go:build` lines of its test files ask for. A package that does not compile before is left untouched and listed under `Not migrated: these packages do not compile as they are`, with its errors; the run exits 2, since nothing about a migration could be proven. After the migration, every type error the result has gets a marker on its line, `// TODO(gotest-migrate): does not compile: <error>`, unless a marker naming the cause already stands there; an error with no line in a test file of the directory is printed under `The migrated code does not compile, with errors no marker could carry` and the run exits 1. A test file no checked build compiles (another GOOS, a combination of tags) has no types to check: when it uses testify or names a suite it gets a marker, and the suites it names are left as they are. The builds checked are the host's GOOS and GOARCH, so the result depends on the OS migrate runs on: a test file only another platform builds is refused there; run migrate on each platform whose test files differ. A test file headed `// Code generated ... DO NOT EDIT.` is left to its generator: it is named on stderr as skipped, which changes no exit code, and a suite it uses is refused (`<Suite> is used in <file>, which is generated — ...`). The module must require `github.com/mvrahden/go-test`, as `go get -tool` does: the migrated imports resolve through it, and a missing requirement is marked on the import with the go command's fix. Migrate never writes `go.mod` or `go.sum` ([Module files](../../specs/migrate/spec.md#requirement-module-files)).
+
+Exit 0 therefore means: every migrated package compiles in each build configuration migrate checked, no marker is left, and every hook and test method testify ran is one gotest calls (renamed, with `t` and a pointer receiver; hooks gotest lacks, methods promoted from an embedded type and suites testify never ran are marked) under the same build constraints. It does not run the tests. The migrated files are written all or none, as `lint -fix` writes its fixes: a file that cannot be written, or that changed on disk since it was read, fails the run with exit 2 and nothing written. A signal while they are written waits until they all are; before then, it ends migrate with nothing written. The price is two type-checks of the test packages: on a package of 400 suites in 68,000 lines, about 3 s and 400 MB.
+
+Anything the tool cannot convert is annotated in place, so nothing is silently skipped:
+
+- `// TODO(gotest-migrate): does not compile: <error>` above any line the migrated code fails to compile on
+- `// TODO(gotest-migrate): unsupported testify hook <Name> — convert manually` above unconverted lifecycle hooks (`SetupSubTest`, `TearDownSubTest`, `BeforeTest`, `AfterTest`, `HandleStats`)
+- `// TODO(gotest-migrate): <Names> are promoted from <Embedded>; gotest calls only methods <Suite> declares itself, so they no longer run — ...` above an embedded field that gives the suite a testify hook or `Test` method
+- `// TODO(gotest-migrate): unmapped assertion <Name> — convert manually` above assertion calls outside the mapping table (e.g. `ErrorAs`, `Eventually`, `EqualValues`)
+- `// TODO(gotest-migrate): gotest takes a suite method named <Name> for <role>; testify did not — rename it` above a suite method testify never ran whose name gotest reserves: `BeforeAll`, `AfterAll`, `BeforeEach`, `AfterEach`, `SuiteConfig`, `SuiteGuard`, `Benchmark…`, `Fuzz…` and `F_`/`X_`-prefixed tests; and `testify ran Test as a test; ...` above a method named just `Test`, which gotest does not run
+- `// TODO(gotest-migrate): s.Run has no gotest equivalent — use t.It(name, func(t *gotest.T) {...}); the assertions inside already name t` above an `s.Run` whose result is used, which is left in place (outside a method with `t`: `... in a method with t`)
+- `// TODO(gotest-migrate): s.T() outside a migrated method — no t is in scope here` above an `s.T()` in a helper; only methods that gained `t` have theirs rewritten to `t.T()` (in a helper taking `t *testing.T` the marker reads `s.T() where t is a *testing.T — use t`)
+- `// TODO(gotest-migrate): assertion <Name> outside a migrated method — no t is in scope here; pass t in and rewrite as gotest.<Name>(t, ...)` above a mapped `s.Require().X(...)` in a helper without `t`, which is left as it was
+- `// TODO(gotest-migrate): s.<Name> came from the suite.Suite embedding, which is gone — convert manually` above any other use of what the embedding provided, such as `r := s.Require()`
+- `// TODO(gotest-migrate): method value s.<Name>: <Name> now takes t *gotest.T, so it has a new type — call it with t instead` above a hook or test taken as a method value
+- `// TODO(gotest-migrate): <Name> has a value receiver: ...` above a hook or test that changes a suite it received by value
+- `// TODO(gotest-migrate): <Suite>'s runner in <files> built only with //go:build <expr>; ...` above a suite whose build constraint cannot move with it, and `no suite.Run ran <Suite>, so testify never did; gotest runs every suite — prefix it with X_ to keep it off` above a suite without a runner
+- `// TODO(gotest-migrate): suite.Run cannot run a gotest suite — gotest generates the runner; move what <Func> sets up into the suite (BeforeAll, SuiteGuard) and delete it` above the `suite.Run` of a runner that does more than run a migrated suite, such as a guard or field values for the suite, which is left in place
+- A package-level struct embedding a testify base suite of the migrated test files, by value, by a pointer every `suite.Run` sets to a fresh base, or as an instance of a generic base, migrates with it ([Base suites](../../specs/migrate/spec.md#requirement-base-suites)): the field is named `base <Base>`, every selector through it is spelled out by its `types.Selection` path, and a keyed literal's key and an explicit `s.<Base>.SetupTest()` follow. A base no `suite.Run` ran loses `suite.Suite`, its methods that used it take `t`, and one named like a suite has its `TestSuite` suffix turned into `SuiteHelper` (`BaseTestSuite` → `BaseSuiteHelper`; a name already declared leaves the file under a marker). A suite that declares no test, of its own or from a base, is left under a marker: gotest refuses a suite without a case. An embedding migrate cannot carry over leaves the file unconverted under a marker giving the reason ([Base suites left as they are](../../specs/migrate/spec.md#requirement-base-suites-left-as-they-are)): any other pointer (`<Child> embeds *<Base>, which not every suite.Run sets to a fresh &<Base>{}, ...`), a struct inside a function or an anonymous struct (`gotest runs only suites declared at package level`), a base in a non-test file of the directory (`migrate changes only test files`). Renaming a refused base would strand its child, so a child goes with its base and a base with its child: the files declaring both are refused whole, and so is every suite those files declare or refer to. A refused file without a marker of its own names the suite that holds it back (`<Base> is embedded by <Child> in <file>`, `<Child> embeds <Base>, which is left for hand migration`, `<Suite> is used in <file>, which is left for hand migration`); a suite whose new name is already declared (`renaming <Suite> to <NewName> collides with another declaration`), or that cannot take an exported name, is refused the same way. A generic testify suite run directly and a file no checked build compiles (`migrate cannot type-check this file: ...`) are refused the same way. A suite whose base suite is declared in a package of another directory fails the run instead (see the exit codes)
+
+Exit codes: 0 as above; 1 while any marker is left, including one an earlier run placed in a file it no longer needs to convert (the run lists those apart, and counts the markers of a package an earlier run left not compiling instead of refusing it), or while an error has no line to carry one; 2 when a pattern names no directory with Go files or an import path outside the main module, a directory lies outside a module, a package does not compile before the migration, a suite's base suite is declared in a package of another directory ([Base suites left as they are](../../specs/migrate/spec.md#requirement-base-suites-left-as-they-are)), a file could not be parsed or written, or a flag is unknown. `--dry-run` prints the unified diff of every edit to stdout, writes nothing, and exits the same way; the diff applies with `git apply` run in the same directory, a symlink named by the file it points to.
+
+---
+
+## Behavior Specification
+
+```
+$ gotest spec ./pkg/user
+
+=== pkg/user — 4 passed, 1 skipped ===
+
+UserService — 4 passed, 1 skipped
+  Create
+    when email is valid
+      ✓ creates the user
+      ✓ sends a welcome email
+    when email already exists
+      ✓ returns ErrDuplicate
+  Delete
+    ✓ soft-deletes the user
+    – hard-deletes after 30 days — SKIPPED
+
+1 suite, 5 behaviors: 4 passed, 1 skipped
+```
+
+Internally runs `go test -json`, parses the event stream, reconstructs the suite→method→When/It hierarchy from where each test sits ([Where a test event's test sits](../../specs/cli/spec.md#requirement-where-a-test-events-test-sits), [A slash in a label](../../specs/spec/spec.md#requirement-a-slash-in-a-label)), and strips Go naming conventions for display.
+
+**Labels come from the source.** A subtest name cannot be turned back into the description that produced it: `go test` writes an underscore for every space, so `returns snake_case keys` and `returns snake case keys` arrive as the same name. The renderer therefore reads the declared descriptions from source, with the same walker that backs `--static` and `discover`, and shows each behavior under the words the developer wrote.
+
+- A stream replayed with `--input` reads declarations too: the packages the stream names are loaded from the working directory, so an editor rendering a captured run shows the labels the run showed.
+- Behaviors the source cannot enumerate (a `When` behind a condition, a table that is not a literal) and packages a replay cannot reach (a stream from another module, a checkout without the source) fall back to reconstructing the label from the name. Loading never fails a render.
+- Subtest *names* are untouched either way, so `-run` filters, snapshot keys and saved baselines are unaffected.
+
+**Vocabulary.** The `when` prefix above is applied by the renderer, not written in the label: `t.When("email is valid")` displays as `when email is valid`, while `It` labels render verbatim (the ✓/✗/– mark plays the role of "it"). You write the condition; gotest supplies the connective.
+
+- Which call declared a subtest is read from source alongside the description and travels with it, so `gotest spec`, `gotest discover` and a replayed stream render one behavior one way.
+- A label that already opens with a connective of its own is left alone rather than doubled. The connectives: when, with, without, given, if, unless, after, before, while, once, on, upon, as, for, during, under, whenever, matched as a whole word in any case, with a space or an underscore after it. "with an empty cache" stays as written; "withdrawing funds" becomes "when withdrawing funds".
+- The vocabulary is display metadata only (`vocab` in the JSON tree, `kind` in discovery) and never reaches a subtest name. The `behavior-wording` lint rule flags a description that spells the connective anyway.
+
+### Durations
+
+A row carries the wall clock it occupied from one second up, and never the sum of the rows beneath it.
+A sum is an integral over occupancy rather than an interval, so under parallelism it reports more time than the clock did: three 50ms methods sharing 58ms of one suite cost 58ms, not 160ms.
+The difference between a row and its children is therefore information — time the row held itself (the subprocess a `When` starts before its assertions), or children that overlapped.
+
+Which of a node's two measures says that depends on one fact about it.
+A node that called `t.Parallel` reports what `go test` measured, because its own bracket in the event stream is unusable twice over: it opens when the node was registered rather than when it began, and `go test` flushes a parked test's report through its parent, which can delay the close by however long a slower sibling runs — measured at 55s on a test that executed for 300ms.
+Every other node reports its bracket, because a measure that stops when the function returns cannot see parallel children — a suite of parallel methods measures ~0 — while the bracket encloses the whole subtree.
+Descendants of a parked node keep clean timestamps; only the parked node's own terminal event is delayed.
+
+A package row is not something that executes, so it is worth the clock during which one of its suites was running: the union of their windows, overlap counted once, which also drops the gap between windows when a tree holds results from more than one run.
+No row is ever shorter than what it contains — `go test` reports a parked node's measure to 10ms while a child's bracket is exact, so a row is floored by its children, which can only repair that rounding and never invent time.
+
+The same numbers reach the `duration` field of `--format=json`, in seconds; `--format=md` shows them from one second up ([A report a person reads](../../specs/spec/spec.md#requirement-a-report-a-person-reads)).
+
+Output formats:
+
+```bash
+gotest spec ./...                                    # terminal (color tree)
+gotest spec ./... --no-color                         # terminal (plain)
+gotest spec ./... --format=md --output=behavior.md   # markdown
+gotest spec ./... --format=json                      # machine-readable tree
+gotest spec --input=events.json                      # replay a saved go test -json stream (no test run)
+gotest spec ./... --static                           # read the spec from source (nothing runs)
+gotest ./... -v --spec                               # spec view instead of default output
+```
+
+### `--static`
+
+Builds the same tree from the source instead of from a run: no node carries a status or a duration, because nothing executed.
+The names are the ones `go test` would produce, including the `#01` it appends to a description repeated among its siblings — a statically read behavior and an observed one have to be the same node, not two. How a label with a slash and a suite declared in both test packages read on every surface: [A slash in a label](../../specs/spec/spec.md#requirement-a-slash-in-a-label), [Suites of both test packages](../../specs/spec/spec.md#requirement-suites-of-both-test-packages).
+
+Where a method declares behaviors whose names or existence depend on runtime values — a `When` behind a condition, a non-literal description, an `Each` over a table that is not a literal — the method node is marked incomplete and the detail goes to stderr as `incomplete: …` lines.
+That marking is on the node, not only on stderr, so it survives into every format, as `"incomplete": true` in JSON ([Table rows named by constants](../../specs/spec/spec.md#requirement-table-rows-named-by-constants)).
+A run-derived tree never sets the field, since what ran is by definition all there was.
+
+`--static` and `--input` are mutually exclusive: one asks for the specification in the source, the other for the one in a recorded run.
+Exit code is 0 when the source could be read and 2 when a package does not compile or the patterns match no package.
+
+---
+
+## Failure Summary
+
+```
+$ gotest summary ./...
+```
+
+The CI-facing counterpart to `spec`: passing runs collapse to a one-line summary; failing runs show the failed behaviors plus package-level diagnostics, and nothing that passed.
+Runs the same pipeline as `spec` over `go test -json` events.
+
+Flags:
+
+```bash
+gotest summary ./... --coverage=coverage.out   # append a per-package coverage table
+gotest summary ./... --min=80                  # fail below the coverage threshold
+gotest summary ./... --github                  # ::error annotations + $GITHUB_STEP_SUMMARY
+go test -json ./... | gotest summary --input=- # post-process an existing JSON stream
+```
+
+A `go test -json` stream — replayed or gotest's own — carries a failed build as `build-output` and `build-fail` events keyed by the build's `ImportPath`, which the failing package names in its verdict's `FailedBuild` (Go 1.24+). `spec` and `summary` route those diagnostics to every package the build failed, so a compile error renders with its cause.
+
+`--github` is auto-enabled when `GITHUB_ACTIONS=true`; a `--format json` document carries no annotations and no color codes there or anywhere ([JSON documents](../../specs/cli/spec.md#requirement-json-documents)), and two output modes asked for at once are refused ([One output mode](../../specs/cli/spec.md#requirement-one-output-mode)).
+The coverage table is statement-weighted with block deduplication (see Coverage Model); the profile is read under either `-coverprofile` spelling ([Coverage profile spellings](../../specs/cli/spec.md#requirement-coverage-profile-spellings)).
+A package holding stdlib tests alone is noted on stderr, in `summary` as in every other mode ([Packages with only stdlib tests](../../specs/cli/spec.md#requirement-packages-with-only-stdlib-tests)).
+Formats: terminal (default), `md`, `json`.
+The repository's composite GitHub Action (`action.yml`) wraps this subcommand.
+
+---
+
+## Machine-Readable Discovery
+
+```
+$ gotest discover ./...
+```
+
+Emits the static suite model as JSON — the integration surface for editors and AI tooling (the VS Code extension's test explorer runs on it).
+No tests are executed.
+
+`behaviors` carries the `When`/`It` tree each method declares, read from source:
+
+- `name` is the subtest level `go test` will produce, so it matches an observed run byte for byte: a description repeated among its siblings gains the `#01` suffix the testing package appends, which the source does not spell out. A label with a slash is one behavior ([Behaviors in discover](../../specs/discovery/spec.md#requirement-behaviors-in-discover), [A slash in a label](../../specs/spec/spec.md#requirement-a-slash-in-a-label)).
+- `display` is the text the developer wrote, spoken in its vocabulary: the same string `gotest spec` renders for this node, so an editor showing both spells one behavior one way.
+- `kind` names the call it came from (`when`, `it`, `each`); `line` locates it.
+- `behaviorsComplete` reports whether the tree is exhaustive. `false` means the method declares behaviors whose names or existence depend on runtime values (a condition, a loop, a non-literal description, a table that is not a literal), so the list is a floor rather than a total and the remainder appears once the method has run. Consumers must not present an incomplete list as the whole specification.
+
+```
+{ "version": …,
+  "packages": [ {
+    "importPath": …, "dir": …, "modulePath": …, "testOnly": bool, "broken": bool,
+    "suites": [ {
+      "name": …, "file": …, "line": …, "col": …,
+      "parallel": bool, "focused": bool, "excluded": bool, "guarded": bool, "external": bool,
+      "lifecycle": ["BeforeAll", …],
+      "fixtures": ["E2ESetupFixture", …],
+      "methods": [ { "name": …, "testName": …, "file": …, "line": …, "col": …,
+                     "focused": bool, "excluded": bool, "parallel": bool,
+                     "behaviors": [ { "name": …, "display": …, "kind": …, "line": …,
+                                      "children": [ … ] } ],
+                     "behaviorsComplete": bool } ],
+      "benchmarks": [ { "name": …, "file": …, "line": …, "col": …,
+                        "focused": bool, "excluded": bool, "parallel": bool } ],
+      "fuzzers": [ … as "benchmarks" … ]
+    } ]
+  } ],
+  "warnings": [ { "importPath": …, "file": …, "line": …, "col": …, "message": … } ] }
+```
+
+File paths are basenames; positions are 1-based.
+`external` is present, and true, on each suite of the external test package ([Behaviors in discover](../../specs/discovery/spec.md#requirement-behaviors-in-discover)); `testName` is present on a method of such a suite when go test names it otherwise, as `TestCreate#01` for a method its internal twin also declares.
+`warnings` carries what a run would refuse and what it would pass over in silence, each with its position:
+
+- a package that fails to load (`"broken": true`) and a suite the generator refuses — an unsupported hook signature, a method out of step with the suite's context, a fuzz argument that cannot be fuzzed. A refused suite is left out of `suites`, except for a fuzz refusal, which keeps the suite listed;
+- a method that reads like part of the harness and does not run as one: a lifecycle hook that is misspelled or carries `X_` (what `lifecycle-typo` and `x-lifecycle` report, and a `//nolint` for the rule silences the warning as well), and a `Benchmark*`/`Fuzz*` method taking `*gotest.B`/`*gotest.F` on a type that is no test suite.
+
+A run names the same position in front of a generation error (`path/suite_test.go:13:24: …`), relative to the working directory.
+`methods[].parallel` is reserved and `false` (parallelism is a suite-level property).
+Respects `-tags`.
+
+Every JSON gotest emits — `discover`, `spec --format=json`, `summary --format=json`, `prepare` — is one compact line, not an indented document, and it opens with `version`: the CLI that produced it, as `gotest version` reports it ([Version](../../specs/cli/spec.md#requirement-version)), so a consumer can gate on the producer before it reads the rest. The flags `discover` refuses are stated in [Value flags and unknown flags](../../specs/cli/spec.md#requirement-value-flags-and-unknown-flags).
+The behavior trees carried here make indentation more than half the bytes, and the readers are programs; a human reading it by hand can pipe through `jq`.
+Nothing bounds the size of this payload, so a consumer must stream it: reading it through a fixed buffer is what once cost the VS Code extension its whole test tree on a repository large enough to exceed the buffer's default.
+
+---
+
+## Debugging Shared Fixtures (`prepare`)
+
+```
+$ gotest prepare ./tests/e2e
+```
+
+Starts the shared-fixture subprocess, then prints a machine-readable JSON line and blocks until SIGTERM/SIGINT, or with `--control=stdin` a `stop` line or the end of its standard input (teardown runs on either):
+
+```
+{"overlayFile": "<path to overlay.json>", "dir": "<workdir>", "stateFile": "<shared state file>"}
+```
+
+IDE debuggers (e.g. Delve via the VS Code extension) use this contract to run individual suites against live shared fixtures.
+
+---
+
+## Watch Mode
+
+```bash
+gotest watch ./... -v
+gotest watch ./... --spec
+```
+
+1. Initial run: full generate → test → cleanup cycle
+2. Watch the directories the patterns name, a `/...` tree included, for `.go` files written, created, renamed or removed (via `fsnotify`); dot-directories, `vendor/`, `testdata/` and `node_modules/` are skipped, and a directory created while watching is added
+3. On change: re-run the changed directories and the test packages that import them (reverse dependencies from `go list`, recomputed after each run)
+4. Debounce on rapid changes (default 200ms; `--debounce` flag or `.gotest.yml` `debounce`)
+5. Terminal clear between runs; under `-json` each cycle ends with a `watch-end` event carrying that run's exit code
+6. An interrupt ends the loop with exit 130
+
+Focus integration: with an `F_`-prefixed suite present, each save re-runs the focused suites alone — a tight feedback loop.
+
+---
+
+## Code Generation
+
+**Generate only** (no test execution):
+
+```bash
+gotest generate ./...
+```
+
+Writes generated files directly to package directories, in main modules only (a go.work's modules count): a matched package of a dependency, e.g. a `replace`d one under `all`, is skipped with `note: skipped <pkg>: not in a main module` on stderr. A run still overlay-generates and runs a dependency's suites; nothing is written.
+Use case: `//go:generate gotest generate ./...` for checked-in generated files.
+
+**Clean up** orphaned files:
+
+```bash
+gotest clean ./...
+```
+
+Removes files matching `gotest_p(x)?suite_test.go` from the packages the patterns match, expanded as `generate` expands them (`go list`, without loading, so a package broken by a stale generated file is cleaned too): `clean all` removes what `generate all` wrote. A package outside the main modules keeps its files, with the same note on stderr.
+
+### Generated Files
+
+Per package directory, up to two files:
+
+| File | Purpose |
+|------|---------|
+| `gotest_psuite_test.go` | Same-package (white-box) test suites |
+| `gotest_pxsuite_test.go` | External-package (black-box) test suites |
+
+The `gotest_` prefix prevents naming collisions with user code.
+Files contain a `// Code generated` header.
+The harness compiles beside any name the package declares, a name Go predeclares that it uses aside, and `generate` keeps it in step with the suites ([The generated harness](../../specs/discovery/spec.md#requirement-the-generated-harness)).
+A generated file an earlier `generate` left on disk is read past, never compiled into a run, and `--tags` selects the suite files built with a tag ([Stale generated files and build constraints](../../specs/discovery/spec.md#requirement-stale-generated-files-and-build-constraints)).
+
+### Generated Structure
+
+For each suite, the generated code creates a wrapper struct with no-op fallbacks for unimplemented hooks, then a `func Test*` that wires lifecycle and inline `t.Run` blocks:
+
+```go
+type ƒƒ_GOTEST_MyTestSuite struct { MyTestSuite }
+
+func TestMyTestSuite(t *testing.T) {
+    s := &ƒƒ_GOTEST_MyTestSuite{}
+    ƒcfg, ƒbudget := gotestruntime.OpenSuite(t, gotestruntime.Suite{
+        BeforeAll: s.BeforeAll,
+        AfterAll:  s.AfterAll,
+    })
+
+    gotestruntime.RunMethods(t, ƒcfg, ƒbudget, gotestruntime.Methods{
+        Cases: []gotestruntime.Method{
+            {Name: "TestSomething", Run: func(ttt *gotest.T, run func(func())) {
+                defer gotestruntime.AfterEach(func() { s.AfterEach(ttt) })
+                s.BeforeEach(ttt)
+                run(func() {
+                    ƒƒ_GOTEST_exec(s.TestSomething, ttt)
+                })
+            }},
+        },
+    })
+}
+```
+
+The sample shows a sequential suite without a config marker. `gotestruntime.OpenSuite` is
+the suite frame every Test, Benchmark and Fuzz wrapper shares; a suite with a `SuiteGuard()`
+or `SuiteConfig()` method also passes it as `Guard`/`Config`, and a fixture-bound suite
+passes a `Fixtures` closure that holds its fixtures and wires its fields after the guard. `ƒcfg` always carries a
+config — the declared one, or `DefaultSuiteConfig()` when there is no `SuiteConfig()`
+method — and its `Timeout`/`SetupTimeout` bound the context that `gotestruntime.TestT`
+and `OpenSuite` hand to each phase. `ƒbudget` is different: it is the
+config `RunMethods`, `RunSetup` and `RunTeardown` are told to *enforce by verdict*, and it
+stays a zero-value `gotest.SuiteConfig{}` unless the suite declared one. With a
+`SuiteConfig()` marker, `ƒbudget` holds the values the author wrote as the enforced
+budget, and `ƒcfg` is `gotestruntime.WithSuiteDefaults(ƒbudget)` for the
+contexts: a duration left at zero gets the default and no verdict, exactly as without a marker,
+and a negative one (`gotest.NoDeadline`) gets neither. Fixture markers are normalized the same
+way through `WithFixtureDefaults`, with the declared `Timeout` as their `Budget`.
+`RunMethods` owns the loop: the subtests, `it.Parallel()` and `FailFast`, the method's `*gotest.T`, the fixtures' per-method hooks, and the watch that holds the whole method — the fixtures' and the suite's per-method hooks and the body — to `ƒbudget.Timeout`. Under a declared `Timeout` the method's context ends only once that watch has judged an overrun, so a hook waiting on it is still waiting, and located, when the verdict is written; the verdict names the phase that overran. Once a hook overran, nothing after it starts but the `AfterEach` hooks: `run` never starts the body, and after a fixture's `BeforeEach` the case's `Run` is not called at all. A case's `Run` keeps only what needs the suite's static types.
+Ordering nuance: in the returning-`BeforeEach` form, `ctx := s.BeforeEach(ttt)` runs *before* the deferred `AfterEach` is registered — a fatal failure inside `BeforeEach` means `AfterEach` never runs.
+In the void form shown above, the deferred `AfterEach` is registered first and runs even when `BeforeEach` fails fatally. `gotestruntime.AfterEach` recovers a panic of `BeforeEach` or the method first and re-raises it once `AfterEach` returns, so a fatal assertion in `AfterEach` cannot discard it.
+Method-parallel suites pass `Parallel: true`; `RunMethods` then coordinates `FailFast` as described under Parallel Execution.
+
+---
+
+## Linter
+
+Available as the `gotest lint` subcommand, built on `go/analysis`. `pkg/lint` exports the analyzer for external `go/analysis` drivers; there is no golangci-lint plugin — the linter runs as its own step alongside a project's existing linter:
+
+```bash
+gotest lint ./...                                        # installed
+go run github.com/mvrahden/go-test/cmd/gotest lint ./... # without installing
+```
+
+Rules (IDs are canonical — used by `//nolint:<rule>`; `.gotest.yml` `lint.skip` accepts any non-integrity rule):
+
+Rules are grouped into three tiers by what breaks when a finding is ignored; the tier derives the suppression policy.
+
+**Integrity** — test outcomes can lie or resources can leak. Suppressible per line only, never project-wide.
+
+| Rule ID | Detects |
+|---------|---------|
+| `focus` | Committed `F_` prefixes on suites or Test, Benchmark and Fuzz methods; the fix renames every reference ([The focus fix](../../specs/lint/spec.md#requirement-the-focus-fix)) |
+| `receiver` | Suite methods with value receivers instead of pointer receivers |
+| `lifecycle-typo` | Method names within Levenshtein distance ≤ 2 of a lifecycle hook (`BeforAll`, `AfterEeach`) |
+| `lifecycle-pair` | `BeforeAll` without `AfterAll` — resources may leak |
+| `x-lifecycle` | `X_` prefix on a lifecycle hook — a no-op |
+| `test-signature` | Test methods not accepting `*gotest.T` (or `*testing.T`) |
+| `suite-lifecycle` | `Cleanup`/`Parallel`/`Run` via `t.T()` and `Cleanup` via `b.B()` or `f.F()` in suite methods, and `Run` in any function — they bypass the suite lifecycle, and `Run`'s subtests drop the suite's deadline (split out of `t-escape`; committed `//nolint:t-escape` comments still suppress it) |
+| `poll-scope` | Assertions inside `Eventually`/`Consistently` callbacks using the outer `t` instead of `poll`, a helper's included ([Misuse reached through a helper](../../specs/lint/spec.md#requirement-misuse-reached-through-a-helper)) |
+| `assertion-type-guard` | `Nil`/`Empty` on types their runtime guards would reject |
+| `generated-file` | `gotest_p(x)suite_test.go` files present in source control ([Generated files](../../specs/lint/spec.md#requirement-generated-files)) |
+| `shared-fixture-undeclared` | Suite-method reads of a `*SharedFixture` value the suite never declared as a pointer field (directly or through the fixture DAG) — window scheduling starts only declared fixtures, so the value may be absent; locally-constructed fixtures (fixture self-tests) are exempt |
+| `bench-loop` | `Benchmark*` suite methods that never touch `b.Loop()`/`b.N` — nothing iterates, so the numbers lie |
+| `fuzz-determinism` | Fuzz targets (one hop into same-package callees) reading nondeterministic state — `time.Now`, `math/rand{,/v2}`, `os.Getenv` — corpus replay and coverage guidance degrade |
+| `generation-rejects` | Every shape the generator rejects (a suite in a type block, embedding, a nested suite, a fixture field by value, …), at the position and with the message the generator gives — such a package does not run at all ([Shapes the generator rejects](../../specs/lint/spec.md#requirement-shapes-the-generator-rejects)); a testify suite is left to `testify` and to `go test` ([Rules skip what is not gotest's](../../specs/lint/spec.md#requirement-rules-skip-what-is-not-gotests)) |
+| `suite-declaration` | A `*TestSuite` or `*Fixture` type declared inside a grouped `type ( … )` block, which the generator refuses (a package fixture only when a suite binds it) — the fix moves it, doc comment kept, into its own declaration right after the block ([Suite and fixture declarations](../../specs/lint/spec.md#requirement-suite-and-fixture-declarations)) |
+| `no-embedding` | A field of a suite or bound fixture the generator refuses: an embedded suite, fixture or type whose method set carries a name gotest reads, and a field of suite type — reported at the field with the alternative ([Suite and fixture declarations](../../specs/lint/spec.md#requirement-suite-and-fixture-declarations)) |
+| `fixture-hook-call` | A suite or fixture method calling a lifecycle hook (`BeforeAll`, `AfterAll`, `BeforeEach`, `AfterEach`, `Hydrate`, `Dehydrate`) of its own or of a fixture it holds — the harness calls it too, so it runs twice; a fixture the method builds itself is not reported, nor a shared fixture's `BeforeAll` or `AfterAll` calling its own `Hydrate` or `Dehydrate`, which the process that owns it never runs ([Suite and fixture declarations](../../specs/lint/spec.md#requirement-suite-and-fixture-declarations)) |
+| `nolint-unknown` | A `//nolint` comment naming an id that is neither a gotest rule, `all`, nor a golangci-lint linter — it suppresses nothing; reported at the comment, which cannot suppress it (not reported under `-disable-nolint`; [Nolint comments](../../specs/lint/spec.md#requirement-nolint-comments)) |
+| `fuzz-struct-corpus` | On-disk corpus entries for a shape-bound fuzz target (struct, pointer, array, non-byte slice) — one value per leaf in field order, so a same-kind reorder silently reinterprets them and an added or removed field rejects them; delete them or write them as typed `f.Add` seeds; `gotest fuzz promote` does so only for the crashers the latest `gotest fuzz` session wrote ([Promote takes the latest session's crashers only](../../specs/fuzz/spec.md#requirement-promote-takes-the-latest-sessions-crashers-only)) |
+
+**Expressiveness** — the test is correct but says it worse. Suppressible per line or project-wide via `lint.skip`.
+
+| Rule ID | Detects |
+|---------|---------|
+| `assertion-simplify` | Simplifiable assertions: `True(t, a == b)` → `Equal`, `Len(t, x, 0)` → `Empty`, … — never one that changes the verdict ([Assertion rewrites keep the verdict](../../specs/lint/spec.md#requirement-assertion-rewrites-keep-the-verdict)); the fix keeps the messages and comments ([Messages and fixes keep what the source said](../../specs/lint/spec.md#requirement-messages-and-fixes-keep-what-the-source-said)) |
+| `assertion-redundant` | An assertion made redundant by the next one on the same argument |
+| `fail-guard` | `if cond { gotest.Fail(…) }` guards (also halting `Fatal`/`Fatalf`/`FailNow` bodies) — the assertion expresses the check directly; `\|\|` conditions and `else if` chains decompose into sequential assertions, non-halting `Errorf` bodies and init-scoped guards report without a fix; fires only in files that import gotest |
+| `t-escape` | Unnecessary `t.T()`, `b.B()` and `f.F()` convenience escapes: `Errorf`/`FailNow`/`Skipf`/`Setenv`/`TempDir`/`Name` (available on `gotest.T`), `Context` (drops the suite's `Timeout`), `Deadline` (reports `go test -timeout`; fixed to `t.Context().Deadline()`), `Skip`/`SkipNow` (use `Skipf`), `Helper` (degrades call-site reporting), `Log`/`Logf`/`Error`/`Fail`/`Fatal`/`Fatalf` (use assertions and their message args). `Context` and `Deadline` are also flagged inside `*testing.T` helpers reached from a suite method. Through `b.B()` and `f.F()` it reports what `gotest.B` and `gotest.F` offer (`Loop`, `ReportAllocs`, `SetBytes`, `ReportMetric`, `Name`, `Setenv`, `TempDir`, `Add`, `Context`, `Errorf`, `FailNow`, `Skipf`), also inside `*testing.B` and `*testing.F` helpers handed the escape, and `Skip`/`SkipNow`, `Helper` and `Log` to `Fatalf` as through `t.T()`; `Run` is not flagged through `b.B()`; a `T` method of the user's own type is not gotest's ([Rules skip what is not gotest's](../../specs/lint/spec.md#requirement-rules-skip-what-is-not-gotests)) |
+| `config-no-deadline` | A literal negative duration on `SuiteConfig.Timeout`/`SetupTimeout` or `FixtureConfig.Timeout`, in a keyed literal or a field assignment (aliases and pointers included) — every negative disables the deadline, so the fix spells it `gotest.NoDeadline`, which reads as what it does and makes every unbounded suite greppable. The rewrite keeps the meaning; the fix is withheld in a file that does not import gotest. `NoDeadline` itself, zeros, runtime values and non-deadline fields are not reported |
+| `behavior-wording` | A `When` description that opens with "when", or an `It` description that opens with "it" — the spec renders the connective and the ✓ glyph plays "it", so the word is said twice; the fix drops it (whole word, any case except all capitals — `IT department…` is an acronym — space or underscore after it; a description that is only the word is left alone) |
+| `bench-fixture-io` | `Benchmark*` methods reading fixture-backed state inside the measured loop — times whatever backs the fixture, not the code under test (heuristic; hoist the read above the loop) |
+| `bench-wait` | `time.Sleep`/`gotest.Eventually`/`gotest.Consistently` inside the measured loop — times the wait, not the code |
+| `fuzz-no-oracle` | `f.Fuzz` callbacks that never use their `*gotest.T` — only panics are caught, which defeats property-based fuzzing |
+| `fuzz-seed` | Fuzz targets that never call `f.Add` — coverage-guided exploration starts blind (table-test harvesting may still seed them) |
+| `fuzz-hook-io` | IO-shaped calls (`net/*`, `os/exec`, `database/sql`, `time.Sleep`, filesystem `os` functions) in `BeforeEach`/`AfterEach` of fuzz-declaring suites — the hooks replay around every execution and throttle the fuzzer |
+| `fuzz-raw-seed` | Raw `[]byte` seeds on a fuzz position that does not take `[]byte` — seeds are target-directed, so `f.Fuzz` rejects them outright; write a typed literal instead |
+
+**Migration** — legitimate coexistence, nudged. Suppressible per line or project-wide via `lint.skip`.
+
+| Rule ID | Detects |
+|---------|---------|
+| `stdlib-test` | `func TestX(*testing.T)` — migration aid suggesting a suite method (fires in any package; coexisting stdlib tests are legitimate, see The Two Runners) |
+| `testify` | Any `github.com/stretchr/testify/*` import — migration incomplete |
+
+One construct yields one finding: integrity rules own the constructs they flag, and expressiveness rules stand down on them (a guard whose body escapes the poll scope gets the `poll-scope` finding, not a `fail-guard` rewrite). The assertion surface itself is derived from the gotest package's type information, so the linter cannot drift from the API and lookalike names from other packages never match expressiveness rules. `poll-scope` is the deliberate exception: as an integrity rule it also matches assertion-shaped names from foreign libraries (an escaping testify assertion breaks the poll loop exactly as a gotest one would), and it recognizes polling contexts by the callback's typed `*gotest.R` parameter rather than the callee, so wrapped or re-exported polling helpers stay covered.
+
+Suppression and configuration:
+
+- `//nolint:<rule>` on the diagnostic's line, or in a standalone comment block ending on the line directly above it (a comment trailing other code does not reach the next line); on the `package` line it applies file-wide
+- `//nolint` naming no rule and `//nolint:all` suppress every rule, both reaching as far as `//nolint:<rule>`; a reason may follow after ` //` (`//nolint // kept on purpose`). What one naming an unknown rule or only another linter's rule suppresses is stated in [Nolint comments](../../specs/lint/spec.md#requirement-nolint-comments)
+- `.gotest.yml` → `lint.skip: [<rule>, ...]` disables non-integrity rules project-wide
+- `.gotest.yml` `lint.skip` naming an integrity rule is a hard error — integrity rules can only be suppressed per line; unknown rule IDs are also a hard error
+- Flags: `-fix` applies suggested fixes, then reports the findings left exactly as a plain run would (exit `3` if any remain). A fix pass holds back a fix that overlaps another, so `-fix` repeats the pass until no fix is left or a pass changes nothing (at most 10 passes): one run applies them all. `-diff` (alone or with `-fix`) prints what `-fix` would write as one unified diff on stdout, writes nothing, and reports on stderr and exits exactly as `-fix` would: `0` when every finding has a fix, `3` when some would be left. The diff's paths are `a/` and `b/` plus the path from the working directory, with no `diff --git` header: `git apply` resolves such paths against the directory it runs in, inside a repository or outside one, so the diff applies where lint ran. A file outside the working directory (a `go.work` sibling) gets a `../` path, which `git apply` rejects unless given `--unsafe-paths`; stderr then says so. A symlink is named by the file it leads to, which `-fix` writes: `git apply` and `patch` refuse to write through one. `-json` prints the findings as JSON on stdout and, like the `go/analysis` driver, exits `0` with findings, with or without `-fix`; `-diff -json` is a usage error (exit `2`), as is `-fix` with a flag only the `go/analysis` driver implements; `-tags` names build tags as for `go build`, for the first load and every load of the fixed sources alike (`GOFLAGS=-tags=…` works too); `-skip-<rule>` for every non-integrity rule (`-skip-<integrity rule>` is refused with exit `2` and the message `.gotest.yml` gives, naming the flag: [Integrity rules](../../specs/lint/spec.md#requirement-integrity-rules)); `-disable-nolint`
+- Exit codes: `0` no findings; `1` nothing analyzable — uncompilable target packages (every one is named — nothing was proven about them — and so is a dependency that does not compile; each compiler error is listed once, its file relative to its module: [A target that does not compile](../../specs/lint/spec.md#requirement-a-target-that-does-not-compile)), patterns that match no package (`FAIL: "<pattern>" matched no packages`), or a pattern naming a directory or package that does not exist (said as `go` says it, e.g. `FAIL: stat …/nonexist: directory not found`) — or fixed sources that no longer load, or fixed files that could not be written (none was written, or stderr names those that were); `2` usage or configuration error; `3` findings reported; `130` a fix run stopped by a signal, before anything was written (a signal while the fixed files are written waits until they all are). A pattern that matches no package while others do only warns on stderr (`warning: "<pattern>" matched no packages`), as `go` does.
+- Findings print on stderr as `file:line:col: message`, the way the `go/analysis` driver prints them; a `//line` directive moves a finding to the position it names, as in `go vet`, and one without a column leaves `file:line`.
+- A run loads the targets once — type-checked from source, dependencies read from export data — and that load proves they compile. `-fix` and `-diff` share one in-process fix engine, run only when some finding carries a fix: a pass applies each finding's first fix that merges cleanly with the ones before it — none that edits a generated file — formats each fixed file, removing the imports nothing references any more (it never adds one), and re-analyzes the fixed sources in memory (the go command's `-overlay`), one load per pass. When a pass's fixed sources do not compile, its fixes are halved until each one whose result does not compile stands alone; that fix is dropped and reported as a finding of its own, `fix for <rule> at <file>:<line> was not applied: it does not compile (<first compiler error>)` with the file relative to its module, the finding it fixes stays, and the other fixes apply (with `-json` the dropped fix is named on stderr; [A fix that does not compile](../../specs/lint/spec.md#requirement-a-fix-that-does-not-compile)). Where every fix compiles, the result is byte-for-byte what the `go/analysis` driver's `-fix` writes when re-run until it converges. Files are written, or diffed, only after the last pass, so a failure or a signal leaves every file as it was. They are written as a set: every fixed file is checked to be writable and unchanged on disk since it was read, and its new contents readied, before the first is written; a file that is not fails the run with nothing written. A file goes to a temporary file beside it, with its permissions, renamed over it once all are ready, when that keeps all it has: no second hard link, our owner and group, no extended attributes (ACLs among them; on Windows only the link count matters). Otherwise, as in a directory that cannot be written, it is written in place. A symlink keeps pointing at the fixed file. A second signal while the files are written waits until they all are; a second signal before then ends the run at once, still with nothing written. The load's temporary files, the go command's work directories included, live in one directory that is removed however the run ends. A flag only that driver implements (`-debug`, `-V`, the profiling flags) hands the run to it, which loads the targets itself after they are proven to compile
+
+GitHub annotations (subcommand only): `gotest lint --github` additionally emits one `::error file=…,line=…,col=…,title=<rule>::<message>` workflow command per finding on stdout and appends a findings table (rule, location, message) to `$GITHUB_STEP_SUMMARY` — the complete record when GitHub caps rendered annotations. Like `summary`, the mode is implied when `GITHUB_ACTIONS=true`, so an existing CI lint step gains PR annotations without workflow changes. Annotation paths are relative to `$GITHUB_WORKSPACE`, where GitHub resolves them, whatever directory the step runs in (relative to the working directory outside a workflow); how messages and properties are escaped and cut is stated in [GitHub annotations](../../specs/lint/spec.md#requirement-github-annotations). Plain-text findings, exit codes, `.gotest.yml` handling, and `//nolint` semantics are unchanged. `-fix` applies its fixes first and then annotates what is left. `-json` takes precedence over this mode, and `-diff` turns it off, since the diff owns stdout; flags only the `go/analysis` driver implements (`-debug`, `-V`, …) defer to that driver, which keeps their exact semantics but cannot emit annotations.
+
+---
+
+## CI Integration
+
+The repository root ships a composite GitHub Action (`action.yml`, "Go - Test Suites") that resolves `gotest` from your `go.mod` by default (`version: gomod` runs it via `go run`; a tag installs a binary) and runs `gotest summary --github`:
+
+```yaml
+- uses: mvrahden/go-test@<version>
+  with:
+    packages: ./...
+    race: true
+    coverage: true
+    min-coverage: "80"
+```
+
+Inputs: `packages`, `race`, `coverage`, `min-coverage`, `flags`, `go-test-flags`, `badge`, `badge-branch`, `bench`, `bench-baseline`, `bench-gate`, `bench-save`, `fuzz`, `fuzz-for`, `fuzz-cache`, `version`.
+Outputs: `exit-code`, `coverage`, `badge`, `bench-report`, `bench-breached-keys`, `fuzz-crashers`.
+README.md's input and output tables are canonical; a drift guard keeps them in step with `action.yml`.
+
+Manual setup works without the action, once the tool is declared in `go.mod` (`go get -tool`, see README.md); in a bash step, `exec` lets a cancelled job's signal reach gotest instead of the step's shell:
+
+```yaml
+- run: exec go tool gotest --ci ./... -v -race -coverprofile=coverage.out
+- run: exec go tool gotest spec ./... --format=md --output=behavior-spec.md
+```
+
+Exit codes: 0 = pass, 1 = test failure — a test that panics or calls `os.Exit` included, whatever status the suite binary exits with (suite binaries run with `-test.paniconexit0`, as under `go test`, so `os.Exit(0)` fails too), and a benchmark that panics: the testing package can lose a benchmark's panic and exit 0, so the generated benchmark recovers a panic from its method, `BeforeEach`/`AfterEach`, `BeforeAll` or `AfterAll`, prints it with its stack and fails the benchmark, under `gotest bench` and plain `go test -bench` alike — a suite binary the race detector failed after its tests (exit status 66, read as a failed suite), a suite process a SIGINT or SIGTERM from outside the runner stopped (`suite stopped by SIGTERM from outside the runner`, [A signal from outside the runner](../../specs/lifecycle/spec.md#requirement-a-signal-from-outside-the-runner)), a shared fixture that failed to set up or tear down (booked into the event stream as the failed package `shared fixtures`), or a `--timeout` that expired before the last verdict (`FAIL: global --timeout exceeded after <d> while running: <pkg> <test>, …` names up to five units still running: the method, or the suite itself when it hung in its `BeforeAll` or a package fixture's before any method started ([A hung hook is named by its suite](../../specs/lifecycle/spec.md#requirement-a-hung-hook-is-named-by-its-suite)); a plain text test run names the suites, a text bench run the benchmark ([What an expired --timeout names in a bench run](../../specs/bench/spec.md#requirement-what-an-expired---timeout-names-in-a-bench-run)). It never names a test whose suite process had already ended on its own ([What an expired --timeout names](../../specs/lifecycle/spec.md#requirement-what-an-expired---timeout-names)), nor one still waiting for a `-parallel` slot ([A test waiting to run is not running](../../specs/lifecycle/spec.md#requirement-a-test-waiting-to-run-is-not-running)); each is booked into the event stream as failed at the method, followed by its suite and package, and a deadline with nothing to name, during compilation or shared fixture setup, is booked as a failed `global --timeout` package), 2 = usage, generation, or build error (stricter than `go test`, which exits 1 on build errors), a census failure, or patterns that match no package, 130 = run interrupted (SIGINT, SIGTERM or SIGHUP; on Windows Ctrl-C or the console closing) before the last verdict, whatever the suites the interrupt stopped reported; their failures are the interrupt's, not verdicts, and the event stream books the stop as the failed package `interrupted`, naming the suites it cut short. An interrupt that arrives later, while fixtures tear down, leaves the verdict alone. A second interrupt sends each suite process `force` on its control channel, which releases its fixtures at once on every OS, sends the shared fixture process `force` on its standard input, kills what still runs two seconds later, or at a third interrupt, and ends the CLI with 130; whatever the fixtures still held then is left behind. With `--control=stdin` a `stop` line on standard input is an interrupt and a `force` line the second, never taken for a repeat of the first. A suite binary the run stopped from outside — a signal on Unix, the console interrupt or a forced stop on Windows — reports a status it never chose (`-1`, `0xC000013A`); it is read as a failed suite, named on stderr, and never becomes the run's own exit code.
+
+**Census.** A green run is believed only when every declared test method produced a verdict. After a green run that writes a test2json stream (`spec`, `summary`, `-json`, `watch --spec` or `--json`, a capturing `bench`), the pipeline compares two sets as the stream is written:
+
+- declared: the suite methods and the fuzz targets the source declares, read from the AST after focus and exclusion (the same set `discover` reports); a fuzz target counts through its `Fuzz<Suite>_<Method>` wrapper, whose seeds replay as subtests;
+- executed: the `Suite/Method` pairs for which the event stream carries a `pass`, `fail` or `skip`; a suite skipped as a whole covers its methods.
+
+A declared method without a verdict makes the run exit 2, printing `FAIL: census: N declared test(s) never ran` and the missing methods. It is exit 2, not 1, because a harness that silently dropped a test did not produce a failed test; it produced a run that cannot be believed, the same situation as a package that failed to build. The missing units are also booked into the event stream, each as a test that ran and failed with `census: declared test never ran` as its output, followed by a `fail` verdict for its suite (when the run streamed one) and for its package, each carrying the time and duration the overridden verdict had: the stream is what the spec, the summary, a saved `--input` replay and the editor's Spec View derive from, so every one of them shows the missing method beside the exit code, and `-json` consumers see the same events appended after the run's own.
+
+The census applies to green runs that ran to completion: a red run is already not a false green, a `FailFast` stop or a `-failfast` run legitimately leaves methods unexecuted, and an interrupt or an expired `--timeout` cut the run short; a deadline books the tests it cut short instead (see the exit codes above). It stands down under `-run`, `-skip` and `-list`, printing `note: census skipped under -run/-skip/-list/-bench` on stderr, because those flags change the declared set. The text run (`gotest ./...`) streams suite output without test2json and is not censused; every CI path (`summary --github` through the action, `spec` in `make test`) is. Benchmarks never run in a test run; when the packages declare some, the run ends with `note: N benchmark(s) not run — gotest runs tests; use 'gotest bench'` on stderr, so silence never implies the packages were fully exercised.
+
+A `bench` run that captures events (`--spec`, `--json`, `--save`, `--against`) is censused the same way over the declared benchmark methods. go test emits no `pass` event for a benchmark, so its verdict is a result line — any `<value> <unit>/op` pair, a sub-benchmark's line crediting the method that opened it — or a `fail`; `-bench` stands the census down like `-run` does.
+
+The exit code of `spec --input` and `summary --input` answers two questions at once: whether the stream carried failures (1) and whether the command itself failed (2). A client that renders a stream rather than gating on it needs only the second, and passes `--render-only` to drop the first; 2 is never suppressed for an unreadable input. A stream that holds no verdict also exits 2 — one with no test events at all (empty, or not `go test -json`), or one that ends before a package reported its own pass/fail/skip (cut short; the packages are named on stderr). A `build-fail` counts as a package that has not reported until a verdict names it in `FailedBuild`, so a stream cut short after a build failure, or a `go build -json` stream, is not whole. Events for a package after its verdict open it again: a second run appended to a saved one must reach its own verdict. A package that failed to build (a `build-fail` event or a `FailedBuild` verdict) exits 2, as the live run does; failures without that mark, including a census booked into the stream, exit 1. A valid stream that ran no tests is whole and exits 0; gotest's own carries a verdict for every matched package. A stream written by gotest before v1.33.0 left out the packages without suites, so one from a run of nothing but those is empty and exits 2: replay it with `--render-only`. A live run whose patterns match no package writes no stream and exits 2 itself. `--render-only` drops this verdict too: the editor renders whatever a stopped run left. Consumers that treat any non-zero exit as "the command broke" — rather than reading the rendered document on stdout — will misread a failing test run as a broken tool.
+
+Every package a pattern matches ends in exactly one verdict. A package that fails to load or compile (a syntax error, a type error, a nonexistent path) is a failed package, exit 2:
+
+- Its diagnostics are the compiler's own report, as `go test` prints it: a `# <build>` header and one line per error, relative to the directory the command ran in. Text output ends the package with `FAIL\t<pkg> [build failed]`.
+- In `-json` the failure takes the shape `go test -json` gives it (Go 1.24+): one `build-output` event per line keyed by the build's `ImportPath` (`pkg` or `pkg_test [pkg.test]`), a `build-fail` event, then the package's `start`, its `FAIL … [build failed]` output and a `fail` verdict whose `FailedBuild` names the build. `spec`, `summary`, `--input` replays, the editor and converters such as gotestsum read it as they read `go test`'s.
+- Packages that did build still run; one broken package never blocks the rest. `run`, `watch`, `spec` and `summary` book and continue this way.
+- `generate` and `prepare` fail fast instead, because generated output for an unbuildable package is meaningless.
+- `discover` reports such packages with `"broken": true` and their diagnostics as warnings.
+- A package it runs nothing in gets the verdict `go test` gives it, in text and in `-json` (the line as `output`, then the verdict): `?   <pkg>  [no test files]` (skip) without test files, `?   <pkg>  [no suites]` (skip) with stdlib tests only, and `ok  <pkg>  0.000s [no tests to run]` (pass) when it has test files but runs none: it declares only benchmarks, every suite is excluded (`X_`), or `-run` deselects every suite. No binary ran for it, so its elapsed time is `0.000s` (`Elapsed` 0); the line keeps go test's shape for every parser that reads it. A package whose binaries ran but whose tests `-run` deselected (`-run 'Suite/NoMethod'`) keeps its real elapsed time and gets the same note, as go test reads it off the binary's `testing: warning: no tests to run`. `gotest bench` passes a package that runs no benchmark (`ok  <pkg>  0.000s`, no note), as `go test -bench` does. So a green `-json` run never writes an empty stream. Packages outside any module (the standard library, matched by `std` or an import path such as `fmt`) hold no suites and are reported the same way.
+- Text output prints the verdicts in package order, as `go test` does: the order `go list` expands several patterns in, or the order go walks a single one. A verdict is printed as soon as every package before it has its own. In `-json` each package opens with one `start` event before any other event of it, however many suite processes report for it; a package whose verdict needs no run gets it at once.
+- Patterns that match no package at all verified nothing, so the run is not green: every run mode (text, `-json`, `spec`, `spec --static`, `summary`, `bench`, `fuzz`) exits 2, prints `FAIL: "<pattern>" matched no packages` on stderr and writes nothing on stdout. `go test` exits 1 here (`no packages to test`); gotest's 2 puts it beside a pattern naming a nonexistent path, which already fails to load: in both the pattern named nothing to verify, the run is not a test that failed. `migrate` exits 2 for a pattern that names no directory with Go files too, naming the pattern on stderr; its patterns count a directory whose files are all build-tagged, which the go command's own patterns skip. `generate` and `discover` verify nothing either and exit 0 with the same warning on stderr: `generate` has nothing to write, as `go generate` has nothing to run, and `discover` writes its document with `"packages": []`, since an editor's workspace may hold no package yet and its consumer reads any non-zero exit as a failed discovery.
+- A pattern that matches nothing beside others that did warns on stderr, `warning: "<pattern>" matched no packages`, and the rest runs, as in `go test`.
+- An empty pattern (`""`, e.g. an unset `"$PKG"`) is the current directory, as `go test` reads it (`go list` rejects it); in every mode that takes patterns, `lint` included. A `.go` file argument is a usage error in every mode but `lint` (which, like `go vet`, accepts files): exit 2, `FAIL: gotest takes packages, not files: <files>` on stderr. `go test` builds files as the ad-hoc package `command-line-arguments`, which has no suites to generate for.
+- `watch` reports a run that matched no package like any failed load, on stderr or as a `watch-error` event under `-json`, and keeps watching: the first package written into a watched directory runs.
+
+The `--ci` flag fails the run when any `F_` (focus) prefix is committed, preventing accidental focus leaks in CI.
+
+---
+
+## Environment Variables
+
+User-facing:
+
+| Variable | Effect |
+|----------|--------|
+| `GOTEST_UPDATE_SNAPSHOTS=1` | Regenerate snapshot baselines (what `--update-snapshots` sets; the only mechanism under plain `go test`) |
+| `GOTEST_CI` | `1`/`true` forces CI mode; any value suppresses auto-detection from `CI`; unset → auto-detect |
+| `GOTEST_CACHE_DIR` | Cache location for test binaries (default `os.UserCacheDir()/gotest`; a run evicts the binaries of a gone checkout, those unused for 7 days, then the least recently used above 5 GiB) |
+| `GOTEST_SLOW_BUILD_THRESHOLD` | How long a build runs, as a Go duration, before the CLI says it is still building (default `15s`; unparsable or not positive → the default) |
+
+Internal protocol between the CLI and test/subprocess boundaries (may change without notice): `GOTEST_SHARED_STATE_FILE` (shared-fixture state file for the test process), `GOTEST_CONTROL` (the suite process's control channel: the stop, the forced stop and the teardown budget travel on it as lines).
+
+Consumed (read-only): `CI` (CI-mode auto-detection), `GITHUB_ACTIONS` (auto-enables `--github`), `GITHUB_STEP_SUMMARY` (step-summary target for `summary --github`).
+
+---
+
+## Coverage Model
+
+The Go coverage profile is the single source of truth at every level of aggregation.
+No filesystem scanning, line counting heuristics, or mixed data sources.
+
+Two components implement this model: the **VS Code extension** (`vscode-gotest/` — Test Coverage sidebar, Copy Coverage report, gutter annotations) implements all of it; the **CLI** implements the statement-weighted metric with block deduplication in `summary --coverage`, and delegates `--min` to `go tool cover -func`.
+The primary/supplementary file-scope rule below is extension-only: the CLI consumes a single merged profile with no origin information, so it cannot distinguish supplementary entries.
+
+### Primary Metric: Statement-Weighted Coverage
+
+Each profile entry has the form:
+
+```
+file:startLine.startCol,endLine.endCol numStatements count
+```
+
+`numStatements` is the number of Go statements in a basic block as determined by the compiler's instrumentation.
+Coverage at any scope (file, directory, workspace) is:
+
+```
+covered = sum of numStatements for all blocks in scope where count > 0
+total   = sum of numStatements for all blocks in scope
+percentage = covered / total (or 0% if total == 0)
+```
+
+A directory's percentage is the weighted sum of its children (weighted by statement count, not an average of percentages).
+A parent's number is always derivable from its children.
+
+This is the sole numeric metric displayed in both the Test Coverage sidebar bar and the Copy Coverage report.
+The sidebar and report must always show identical `covered/total` values for the same scope.
+
+Declaration (function) coverage is not a sidebar or report metric.
+Function-level annotations are available in the editor gutter via `loadDetailedCoverage` for navigation purposes only.
+
+### Block Deduplication
+
+When `-coverpkg` is used, each file may appear in multiple test binary profiles.
+Blocks are deduplicated by `file + startLine.startCol,endLine.endCol` identity: for each unique block, take `max(count)` across all entries.
+This matches `go tool cover` behavior.
+
+### Supplementary Coverage (Cross-Package Profiles)
+
+Test-only packages (packages with no production `.go` files) run with `-coverpkg=./...`, which instruments all packages in the module.
+This cross-package profile is **supplementary**: it can increase block counts for files that primary profiles already cover, but does not add new files to the aggregate.
+
+- **Primary profiles** come from a package's own `go test` run.
+  They define the file scope.
+- **Supplementary profiles** come from test-only packages with `-coverpkg=./...`.
+  After block deduplication, only files present in the primary scope are retained.
+- If no primary profiles exist, supplementary profiles are treated as primary (fallback).
+
+### Breadth Indicator
+
+A supplementary signal showing how many source files have coverage data vs. how many exist:
+
+- **Source files:** Non-test Go files (`*.go` excluding `*_test.go`) per directory, from the filesystem.
+- **Profile files:** Files from the source file set with at least one entry in the primary coverage scope, regardless of whether that entry has `count > 0`.
+  A file at 0% was instrumented and counts as profiled.
+
+The percentage answers: *"How well-tested is the code my tests reach?"*
+The file count answers: *"How much of my codebase do my tests reach at all?"*
+
+### What NOT to Do
+
+- Do not count lines of code, lines with tokens, or non-blank lines as a denominator.
+  The profile's `numStatements` is the only valid statement metric.
+- Do not include `_test.go` files in any denominator.
+- Do not average per-file percentages to compute a directory percentage.
+  Use weighted sums by statement count.
+- Do not invent a filesystem-based metric as a fallback when the profile is sparse.
+  A sparse profile is honest.
+- Do not display declaration/function coverage as a separate metric in the sidebar or report.
+- Do not let supplementary (cross-package) profiles expand the file scope beyond what primary profiles define.
+
+---
+
+## Advanced Patterns
+
+### Contract Testing via Generic Suites
+
+Generic type definitions + instantiated aliases = reusable behavioral specifications:
+
+```go
+type StorageTestSuite[T Storage] struct {
+    store T
+}
+
+// A type alias cannot set fields, so the suite constructs T per instantiation.
+func (s *StorageTestSuite[T]) BeforeEach(t *gotest.T) {
+    switch any(s.store).(type) {
+    case *MemoryStorage:
+        s.store = any(NewMemoryStorage()).(T)
+    case *RedisStorage:
+        s.store = any(NewRedisStorage()).(T)
+    default:
+        gotest.Fail(t, "no constructor for %v: add a case to BeforeEach", reflect.TypeFor[T]())
+    }
+}
+
+func (s *StorageTestSuite[T]) TestPutAndGet(t *gotest.T) { /* ... */ }
+
+type MemoryStorageTestSuite = StorageTestSuite[*MemoryStorage]
+type RedisStorageTestSuite = StorageTestSuite[*RedisStorage]
+```
+
+Each alias produces an independent conformance report.
+
+### Resource Lifecycle Guarantees
+
+1. `AfterAll` is registered via `t.Cleanup` BEFORE `BeforeAll` runs
+2. `t.Cleanup` runs in LIFO order — user cleanups in `BeforeAll` run before `AfterAll`
+3. `AfterEach` is `defer`-ed — runs even on `t.Fatal()` / `runtime.Goexit()`
+4. In method-parallel suites (`Parallel: true`), every `t.Parallel()` subtest completes before `AfterAll` — `testing` does not return from the parent test, and therefore does not run `t.Cleanup`, until they have
+5. `t.Fatal()` in `BeforeAll` skips the entire suite
+6. `t.Skip()` in `BeforeAll` marks the suite as skipped
+7. In context-aware suites (returning `BeforeEach`), each test receives its own context — `AfterEach` receives the same context for cleanup
+
+---
+
+## Non-Goals
+
+### Test dependency ordering
+
+Tests that depend on other tests are brittle.
+Each test sets up its own preconditions via `BeforeEach`.
+
+### Mocking framework
+
+Mocking is orthogonal to test organization.
+`gomock`, `mockery`, `moq`, and counterfeiter all work inside suites unchanged.
+
+### Decorator / annotation syntax
+
+Go doesn't have decorators.
+Naming conventions are grepped, autocompleted, and understood at a glance.
+Struct tags are hidden in backtick strings.
+
+### Runtime suite registration
+
+`suite.Run(t, new(MySuite))` is testify's approach.
+The entire point of `go-test` is to generate that boilerplate.
+
+### Cross-package suite inheritance
+
+Breaks Go's package isolation model.
+Cross-package sharing uses helper functions or fixtures, not suite inheritance.
+
+### Replacing `go test` output
+
+The `spec` subcommand and `--spec` flag are post-processing views over `go test -json` data.
+They never alter how the tests themselves are executed — the spec view is rendered from the same `go test -json` event stream.
+
+---
+
+## Architecture
+
+### Package Graph
+
+```
+cmd/gotest/                  CLI entrypoint, subcommands, arg handling
+  ├── internal/lint/           go/analysis analyzer (lint subcommand)
+  └── internal/gotestrunner/   Suite generation I/O, go test execution, overlay
+        ├── internal/gotestgen/   Package loading, collection, fixture resolution, rendering
+        │     └── internal/gotestast/   AST analysis, spec model, regex classification
+        └── internal/proctree/    Subprocess trees stopped as a whole and alone (group, console, job)
+
+internal/config/             .gotest.yml project configuration loading
+internal/gotestspec/         Spec tree builder and renderers (terminal, markdown, json)
+internal/gotestbench/        Benchmark baseline format, deltas and the gate (bench subcommand)
+internal/goversion/          Refuses a gotest binary built by an older Go than the module declares
+internal/schedinfo/          Scheduling context appended to deadline failures
+internal/x/                  Small generic helper libraries (slices)
+internal/scaffold/           Type-to-suite skeleton generator
+internal/migrate/            testify/suite AST transformer
+internal/refactor/           AST refactoring tools (focus/exclude toggle)
+
+pkg/gotest/                  User-facing API (T, R, assertions, Each, Eventually, Consistently, MatchSnapshot)
+  └── internal/assert/         Core assertion implementation (pure stdlib)
+  └── internal/snapfile/       Snapshot file I/O and diffing
+
+pkg/gotestruntime/           Fixture DAG runtime imported by generated fixture code
+pkg/gotestfuzz/              Leaf codecs imported by generated fuzz fans
+pkg/lint/                    Exported analyzer for external go/analysis drivers
+internal/protocol/           CLI↔test-process env var and naming constants
+internal/about/              Build metadata, file naming constants
+```
+
+### Code Generation Pipeline
+
+| Stage | Input | Output |
+|-------|-------|--------|
+| **Load** | Package pattern (e.g., `./...`) | `[]*LoadResult` wrapping `*packages.Package` with syntax, types, module info |
+| **Collect** | Package AST | `TestSuiteSpecSet` — suites with attached methods, local fixture specs |
+| **Reduce** | `TestSuiteSpecSet` | Effective set after focus/exclude applied |
+| **Bind** | Effective suites + local fixtures | `Binding` — fixture trees, shared fixture info, suite→fixture bindings |
+| **Render** | Reduced spec + resolve result | Formatted Go source bytes |
+
+Collection is a two-pass AST traversal: find type declarations matching suite patterns, then attach methods by matching receiver types.
+Resolution is demand-driven: it starts from targeted suites and walks the Go type graph recursively (via `types.Named`, `types.Struct`, `types.MethodSet`) to discover all required fixtures, including cross-package dependencies.
+
+### Key Invariant
+
+The pipeline is always: **static analysis → code generation → standard `go test`**.
+The only runtime components are the thin `gotest.T` wrapper (with its assertion engine), for fixture-bound suites the `pkg/gotestruntime` DAG orchestrator, and for fanned fuzz arguments the `pkg/gotestfuzz` leaf codecs.
+If a feature can't be implemented as (a) generated code, (b) a method on `gotest.T`, (c) runtime support in `pkg/gotestruntime` or `pkg/gotestfuzz`, or (d) post-processing of `go test -json`, it doesn't belong in this project.
+
+---
+
+## Known Limitations
+
+1. **`go.work` required for cross-module tests:** The generator golden tests require `go.work` (`go work init . && go work use ./examples`) and fail without it.
+
+2. **No incremental generation:** The tool regenerates all suite files on every run.
+   There is no staleness detection.
+   (Each run writes its overlay into its own work dir; nothing generated is cached.
+   The test binary cache — `--no-cache`, `GOTEST_CACHE_DIR` — keeps each package's linked binary at a path keyed by working directory, build flags, platform and Go version, so a run over unchanged code skips the link; each run copies the binary into its own work dir before executing it.)
+
+3. **Hydrate method walking depth:** The generator follows receiver method calls from `Hydrate` one level deep to classify local fields.
+   Assignments hidden behind two or more levels of indirection are not detected.
+   Opaque types (zero exported fields) are unaffected — they serialize harmlessly as `{}` and `Hydrate` overwrites the value.

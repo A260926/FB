@@ -1,0 +1,731 @@
+package gotestgen_test
+
+import (
+	"go/parser"
+	"go/token"
+	"strings"
+
+	"github.com/mvrahden/go-test/internal/gotestgen"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// SharedFixtureTestSuite tests shared-fixture setup binary generation
+// from SharedFixtureInfo inputs.
+type SharedFixtureTestSuite struct{}
+
+func (s *SharedFixtureTestSuite) SuiteConfig() gotest.SuiteConfig {
+	cfg := gotest.DefaultSuiteConfig()
+	cfg.Parallel = true
+	return cfg
+}
+
+func (s *SharedFixtureTestSuite) TestGenerateSharedSetup(t *gotest.T) {
+	t.When("single fixture with one transfer field", func(w *gotest.T) {
+		w.It("generates valid Go with expected structure", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PostgresFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/project/tests/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+			gotest.NotEmpty(it, src)
+
+			code := string(src)
+
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+
+	t.When("multiple fixtures from different packages", func(w *gotest.T) {
+		w.It("generates imports and lifecycle for both", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PostgresFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/project/tests/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+				{
+					Identifier:     "RedisFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/project/tests/redis",
+					TransferFields: []string{"Addr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+			gotest.NotEmpty(it, src)
+
+			code := string(src)
+
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+
+	t.When("no fixtures", func(w *gotest.T) {
+		w.It("returns an error", func(it *gotest.T) {
+			_, err := gotestgen.GenerateSharedSetup(nil)
+			gotest.ErrorContains(it, err, "no shared fixtures")
+		})
+	})
+
+	t.When("no transfer fields", func(w *gotest.T) {
+		w.It("generates valid Go with lifecycle calls", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "SetupFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: nil,
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+
+	t.When("multiple transfer and local fields", func(w *gotest.T) {
+		w.It("serializes only transfer fields", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PostgresFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr", "Port"},
+					LocalFields:    []string{"Pool"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+
+			gotest.NotContains(it, code, "sf0.Pool", "Pool is local and should not be serialized")
+		})
+	})
+
+	t.When("two fixtures from same package", func(w *gotest.T) {
+		w.It("deduplicates the import", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PostgresFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/shared",
+					TransferFields: []string{"DSN"},
+				},
+				{
+					Identifier:     "RedisFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/shared",
+					TransferFields: []string{"Addr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+
+			gotest.Equal(it, 1, strings.Count(code, `"github.com/example/shared"`),
+				"same-package fixtures should produce exactly one import")
+			gotest.NotContains(it, code, "sfpkg1",
+				"should not have sfpkg1 alias when both fixtures share the same package")
+		})
+	})
+}
+
+func (s *SharedFixtureTestSuite) TestGeneratedCodeStructure(t *gotest.T) {
+	t.When("context lifecycle", func(w *gotest.T) {
+		w.It("generates context-aware lifecycle calls", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			gotest.MatchSnapshot(it, string(src))
+		})
+	})
+
+	t.When("fixture declares no AfterAll", func(w *gotest.T) {
+		w.It("tears down without calling one", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			// AfterAll is optional; referencing it fails the setup build.
+			gotest.NotContains(it, string(src), "sf0.AfterAll")
+		})
+	})
+
+	t.When("default timeout", func(w *gotest.T) {
+		w.It("uses default fixture config", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+
+			gotest.NotContains(it, code, "SharedFixtureConfig()",
+				"should not call SharedFixtureConfig when HasConfig is false")
+		})
+	})
+
+	t.When("with config marker", func(w *gotest.T) {
+		w.It("uses the marker config for the timeout", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					HasConfig:      true,
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			// A bare marker call at the top of main would panic before the
+			// handshake, killing the process attributed to nothing.
+			gotest.Contains(it, code, `gotestruntime.DeriveFixtureConfig("PGFixture", sf0.SharedFixtureConfig)`,
+				"the config marker must run inside the containment frame")
+			gotest.NotContains(it, code, "ƒcfg_sf0 := sf0.SharedFixtureConfig()",
+				"the marker must not be called outside the containment frame")
+
+			// A zero Timeout bounds the context with the default, as if the marker
+			// were absent; only the declared value becomes a verdict.
+			gotest.Contains(it, code, "ƒbudget_sf0 = ƒcfg.Timeout\n\t\tƒcfg_sf0 = gotestruntime.WithFixtureDefaults(ƒcfg)",
+				"the declared Timeout is the budget; the defaulted one bounds the context")
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+
+	t.When("teardown budget", func(w *gotest.T) {
+		w.It("floors an undeclared timeout instead of reporting a bare 30s", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					HasConfig:      true,
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+
+			// A NoDeadline Timeout means "no deadline", not "takes no time",
+			// so each member's contribution goes through the shared floor, and
+			// into the chain of the fixtures released after one another.
+			gotest.Contains(it, code, "ƒshares[i] = gotestruntime.SupervisorBudget(timeout)",
+				"each member's budget must go through the shared floor")
+			gotest.Contains(it, code, "ƒchains[ƒi], ƒknown[ƒi] = ƒshares[ƒi]+ƒafter, true",
+				"and into the chain")
+			gotest.NotContains(it, code, "func ƒsupervisorBudget(",
+				"no local copy of the floor may remain")
+			gotest.NotContains(it, code, "ƒb > ƒmaxTimeout",
+				"a max would under-budget a sequential teardown chain")
+		})
+
+		w.It("reports the budget on the failure handshake too", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			// A failed setup still has succeeded siblings to release, and the
+			// runner sizes its wait from this field; an error line without it
+			// left the runner guessing with a flat 30s.
+			gotest.Contains(it, string(src),
+				`"{\"key\":\"_done\",\"error\":\"one or more shared fixtures failed\",\"teardownBudget\":%s}\n"`,
+				"the failure handshake must carry the teardown budget")
+		})
+	})
+
+	t.When("shutdown protocol", func(w *gotest.T) {
+		w.It("reports first and waits for the runner's signal even on failure", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+
+			// The runner owns shutdown timing — only it knows when every suite
+			// has stopped using the fixtures. A subprocess that tore down on its
+			// own after a setup failure raced the suites of its healthy siblings.
+			gotest.Contains(it, code, "ƒctx, ƒstop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)",
+				"the process must be shutdown-capable from birth")
+			gotest.Contains(it, code, "<-ƒctx.Done()",
+				"teardown must wait for the runner's signal")
+			gotest.Equal(it, 1, strings.Count(code, "RunFixtureTeardown"),
+				"one teardown epilogue — a separate failure-path copy tears down behind the runner's back")
+			gotest.NotContains(it, code, "signal.Notify(sig",
+				"the late signal registration left a window where SIGTERM killed the process mid-setup")
+		})
+
+		w.It("ends its command loop when the runner's end of stdin closes", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{Identifier: "PGFixture", HasAfterAll: true, PkgPath: "github.com/example/fixtures", TransferFields: []string{"ConnStr"}},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			// Without a death signal, stdin is the one sign the runner is gone.
+			gotest.Contains(it, code, "defer close(ƒeof)")
+			gotest.Regexp(it, `case <-ƒeof:\s+break ƒloop`, code)
+		})
+
+		w.It("stops on a stop line and ends the releases' context on a force line, outside the command queue", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{Identifier: "PGFixture", HasAfterAll: true, PkgPath: "github.com/example/fixtures", TransferFields: []string{"ConnStr"}},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			// Served by the reader itself: a send on ƒcmds is dropped once
+			// ƒctx is done, and a force line must still land then.
+			gotest.Regexp(it, `switch ƒc\.Verb \{\s+case "stop":\s+ƒend\(\)\s+case "force":\s+ƒforce\(\)\s+ƒend\(\)\s+default:\s+select \{\s+case ƒcmds <- ƒc:`, code)
+			gotest.Contains(it, code, "ƒreleaseCtx, ƒforce := context.WithCancel(context.Background())",
+				"the releases' context must end on force alone, not with ƒctx")
+			gotest.Less(it, strings.Index(code, "ƒreleaseCtx, ƒforce :="), strings.Index(code, "go func() {\n\t\tdefer ƒend()"),
+				"the releases' context must exist before the reader can force it")
+			gotest.Equal(it, 1, strings.Count(code, "ƒreleaseCtx, gotestruntime.FixtureTeardown{"),
+				"every release, by command or terminal, runs under the context a force line ends")
+			gotest.Contains(it, code, "ƒctx, ƒstop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)",
+				"a signal from outside still stops the process")
+		})
+
+		w.It("exits on its own once the teardown budget has passed with the runner gone", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{Identifier: "PGFixture", HasAfterAll: true, PkgPath: "github.com/example/fixtures", TransferFields: []string{"ConnStr"}},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			gotest.Contains(it, code, "ƒparent := os.Getppid()")
+			gotest.Contains(it, code, "if os.Getppid() == ƒparent {")
+			gotest.Regexp(it, `ƒlife\.Reported\(ƒbudget\)\s+return ƒbudget`, code,
+				"the bound is the budget the runner was told")
+			gotest.Contains(it, code, `ƒbudgetStr := ƒquote(ƒteardownBudget().String())`)
+		})
+
+		w.It("bounds a setup that hangs once the runner is gone", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{Identifier: "PGFixture", HasAfterAll: true, HasConfig: true, PkgPath: "github.com/example/fixtures", TransferFields: []string{"ConnStr"}},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			setupWait := strings.Index(code, "ƒwg.Wait()")
+			gotest.Contains(it, code, "go ƒlife.ExitWhenOrphaned(ƒgone)")
+			gotest.Less(it, strings.Index(code, "go ƒlife.ExitWhenOrphaned(ƒgone)"), setupWait,
+				"the bound must hold while setup runs, not only after it")
+			gotest.Less(it, strings.Index(code, "defer close(ƒeof)"), setupWait,
+				"the end of stdin must be seen during setup")
+			gotest.Regexp(it, `ƒlife\.SetupBegins\(0, ƒsetup\)\s+fmt\.Fprintf\(ƒproto, "\{\\"key\\":\\"_setup\\"`, code)
+			gotest.Regexp(it, `RunFixtureSetup\(ƒctx, ƒsetup\)\s+ƒlife\.SetupEnds\(0\)`, code)
+			gotest.Contains(it, code, "ƒlife.Released(0)")
+		})
+	})
+
+	t.When("teardown policy", func(w *gotest.T) {
+		w.It("delegates teardown to the same policy the in-process DAG runs", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					HasConfig:      true,
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+
+			// The inlined ƒteardown was the copy that never learned to hold an
+			// AfterAll to its declared Timeout — the DAG side gained the
+			// verdict while the subprocess kept context-bounding alone.
+			gotest.Contains(it, code, "gotestruntime.RunFixtureTeardown(ƒreleaseCtx, gotestruntime.FixtureTeardown{",
+				"teardown must go through the shared policy, under the context a force line ends")
+			gotest.NotContains(it, code, "func ƒteardown(",
+				"no second copy of the teardown policy may remain")
+			gotest.Contains(it, code, "Budget:   ƒbudget_sf0,",
+				"a declared Timeout must become a teardown verdict")
+			gotest.Contains(it, code, "ƒskip := ƒtorn[0] || !ƒattempted[0]",
+				"a fixture whose BeforeAll never ran has nothing to release")
+			gotest.NotContains(it, code, "if ƒerrs[0] == nil",
+				"a fixture whose BeforeAll ran is released however it came out: a failed attempt may hold what it reached")
+		})
+
+		w.It("marks a fixture for release only while an entered BeforeAll is unreleased", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			// A shutdown that cancels setup before BeforeAll runs leaves
+			// nothing to release, and neither does one cancelling it right
+			// after a release between attempts.
+			gotest.Contains(it, code, "Held: func(ƒheld bool) {")
+			gotest.Contains(it, code, "ƒattempted[0] = ƒheld\n")
+			gotest.Equal(it, 1, strings.Count(code, "ƒattempted[0] ="))
+		})
+
+		w.It("gives an undeclared config no teardown verdict", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			// A fixture with no config of its own declared no deadline, so it
+			// gets no overrun verdict — only the context bound the default gives.
+			gotest.Contains(it, string(src), "Budget:   0,",
+				"an undeclared Timeout must not become a teardown verdict")
+		})
+	})
+
+	t.When("retry logic", func(w *gotest.T) {
+		w.It("delegates setup to the same policy the in-process DAG runs", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+
+			// An inlined second copy of the loop is how the subprocess ended up
+			// without panic containment, retry-on-panic or a Timeout verdict
+			// while the DAG had all three.
+			gotest.Contains(it, code, "gotestruntime.RunFixtureSetup(ƒctx, ƒsetup)",
+				"setup must go through the shared policy")
+			gotest.NotContains(it, code, "ƒattempts := 1 + ƒcfg_sf0.Retries",
+				"no second copy of the retry loop may remain")
+
+			// A fixture with no config of its own declared no deadline, so it
+			// gets no overrun verdict — only the context bound the default gives.
+			gotest.Contains(it, code, "Budget:     0,",
+				"an undeclared Timeout must not become a verdict")
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+
+	t.When("imports", func(w *gotest.T) {
+		w.It("declares exactly what the generated program still uses", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					HasConfig:      true,
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+
+			// format.Source does not type-check, so a stale import renders
+			// cleanly here and only fails when the program is built in a
+			// throwaway directory during a real run. Assert on the import block
+			// itself rather than on "rendering returned no error".
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "setup.go", code, parser.ImportsOnly)
+			gotest.NoError(it, err)
+
+			var paths, locals []string
+			for _, imp := range file.Imports {
+				path := strings.Trim(imp.Path.Value, `"`)
+				paths = append(paths, path)
+				if imp.Name != nil {
+					locals = append(locals, imp.Name.Name)
+				} else {
+					locals = append(locals, path[strings.LastIndex(path, "/")+1:])
+				}
+			}
+			gotest.Equal(it, []string{
+				"bufio",
+				"context",
+				"encoding/json",
+				"fmt",
+				"os",
+				"os/signal",
+				"strings",
+				"sync",
+				"syscall",
+				"time",
+				"github.com/mvrahden/go-test/pkg/gotest",
+				"github.com/mvrahden/go-test/pkg/gotestruntime",
+				"github.com/example/fixtures",
+			}, paths)
+
+			funcIdx := strings.Index(code, "\nfunc ")
+			gotest.NotEqual(it, -1, funcIdx, "generated program declares no functions")
+			body := code[funcIdx:]
+			for i, local := range locals {
+				gotest.Contains(it, body, local+".",
+					"import %q is declared but never used; the generated program will not build", paths[i])
+			}
+		})
+	})
+
+	t.When("state key format", func(w *gotest.T) {
+		w.It("uses fully qualified package path and identifier", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			gotest.MatchSnapshot(it, string(src))
+		})
+	})
+
+	t.When("marshal error handling", func(w *gotest.T) {
+		w.It("generates error handling for marshal", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			gotest.MatchSnapshot(it, string(src))
+		})
+	})
+
+	t.When("determinism", func(w *gotest.T) {
+		w.It("generates byte-identical output on repeated runs", func(it *gotest.T) {
+			// Two parent assignments is the smallest input where Go map
+			// iteration order could shuffle the emitted statements.
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "AlphaSharedFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"A"},
+				},
+				{
+					Identifier:     "BetaSharedFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"B"},
+				},
+				{
+					Identifier:  "GammaSharedFixture",
+					HasAfterAll: true,
+					PkgPath:     "github.com/example/fixtures",
+					Dependencies: []string{
+						"github.com/example/fixtures.AlphaSharedFixture",
+						"github.com/example/fixtures.BetaSharedFixture",
+					},
+					DependencyFields: map[string]string{
+						"github.com/example/fixtures.AlphaSharedFixture": "Alpha",
+						"github.com/example/fixtures.BetaSharedFixture":  "Beta",
+					},
+					TransferFields: []string{"C"},
+				},
+			}
+
+			first, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+			for range 25 {
+				again, err := gotestgen.GenerateSharedSetup(fixtures)
+				gotest.NoError(it, err)
+				gotest.Equal(it, string(first), string(again),
+					"generated code must be a pure function of its input; map order shuffled it run to run")
+			}
+		})
+	})
+
+	t.When("reverse teardown on error", func(w *gotest.T) {
+		w.It("tears down sf0 in reverse order", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PGFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/fixtures",
+					TransferFields: []string{"ConnStr"},
+				},
+				{
+					Identifier:     "RedisFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/redis",
+					TransferFields: []string{"Addr"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+			fset := token.NewFileSet()
+			_, err = parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, err, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+}
+
+func (s *SharedFixtureTestSuite) TestIntegrationGeneratedSetupBinary(t *gotest.T) {
+	t.When("multi-fixture setup binary", func(w *gotest.T) {
+		w.It("generates valid Go with correct structure", func(it *gotest.T) {
+			fixtures := []gotestgen.SharedFixtureInfo{
+				{
+					Identifier:     "PostgresFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/project/tests/fixtures",
+					TransferFields: []string{"DSN"},
+				},
+				{
+					Identifier:     "GCSFixture",
+					HasAfterAll:    true,
+					PkgPath:        "github.com/example/project/tests/gcs",
+					TransferFields: []string{"Endpoint", "Bucket"},
+				},
+			}
+
+			src, err := gotestgen.GenerateSharedSetup(fixtures)
+			gotest.NoError(it, err)
+
+			code := string(src)
+
+			fset := token.NewFileSet()
+			_, parseErr := parser.ParseFile(fset, "setup.go", code, parser.AllErrors)
+			gotest.NoError(it, parseErr, "generated code should be valid Go: %s", code)
+
+			gotest.MatchSnapshot(it, code)
+		})
+	})
+}

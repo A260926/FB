@@ -1,0 +1,280 @@
+package withtescape
+
+import (
+	"testing"
+
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+type EscapeTestSuite struct{}
+
+func (s *EscapeTestSuite) TestMethodEscape(t *gotest.T) {
+	t.T().Errorf("msg")          // want `Errorf is available on gotest.T — unnecessary T escape`
+	t.T().FailNow()              // want `FailNow is available on gotest.T — unnecessary T escape`
+	t.T().Skip()                 // want `must use Skipf instead — unnecessary T escape`
+	t.T().SkipNow()              // want `must use Skipf instead — unnecessary T escape`
+	t.T().Skipf("reason")        // want `Skipf is available on gotest.T — unnecessary T escape`
+	t.T().Setenv("KEY", "VALUE") // want `Setenv is available on gotest.T — unnecessary T escape`
+	_ = t.T().TempDir()          // want `TempDir is available on gotest.T — unnecessary T escape`
+	_ = t.T().Name()             // want `Name is available on gotest.T — unnecessary T escape`
+	_ = t.T().Context()          // want `Context is available on gotest.T — t.T\(\).Context\(\) drops the suite's Timeout`
+	t.T().Helper()               // want `never call Helper — gotest resolves call sites automatically; Helper degrades failure locations`
+	t.T().Log("msg")             // want `use assertion message args instead — T.Log bypasses the failure report`
+	t.T().Fatal("msg")           // want `use assertions instead — T.Fatal bypasses the assertion tracer`
+	t.T().Fatalf("msg %d", 1)    // want `use assertions instead — T.Fatalf bypasses the assertion tracer`
+	_, _ = t.T().Deadline()      // want `use t.Context\(\).Deadline\(\) — t.T\(\).Deadline\(\) reports go test's -timeout, not the suite's Timeout`
+	t.T().Error("msg")           // want `use assertions instead — T.Error bypasses the assertion tracer`
+	t.T().Fail()                 // want `use assertions instead — T.Fail bypasses the assertion tracer`
+	t.T().Logf("msg %d", 1)      // want `use assertion message args instead — T.Logf bypasses the failure report`
+}
+
+func (s *EscapeTestSuite) TestAliasEscape(t *gotest.T) {
+	tt := t.T()
+	tt.Errorf("msg")      // want `Errorf is available on gotest.T — unnecessary T escape`
+	tt.Skip()             // want `must use Skipf instead — unnecessary T escape`
+	tt.SkipNow()          // want `must use Skipf instead — unnecessary T escape`
+	_ = tt.Context()      // want `Context is available on gotest.T — t.T\(\).Context\(\) drops the suite's Timeout`
+	gotest.True(tt, true) // want `pass gotest.T directly to True — unnecessary T escape`
+}
+
+func (s *EscapeTestSuite) TestAssertionEscape(t *gotest.T) {
+	gotest.True(t.T(), true)  // want `pass gotest.T directly to True — unnecessary T escape`
+	gotest.Equal(t.T(), 1, 2) // want `pass gotest.T directly to Equal — unnecessary T escape`
+}
+
+func (s *EscapeTestSuite) TestNoEscape(t *gotest.T) {
+	t.Errorf("msg")
+	gotest.True(t, true)
+}
+
+func (s *EscapeTestSuite) BeforeEach(t *gotest.T) {}
+func (s *EscapeTestSuite) AfterEach(t *gotest.T)  {}
+
+func (s *EscapeTestSuite) TestInterproceduralTestingT(t *gotest.T) {
+	helperErrorf(t.T())
+}
+
+func (s *EscapeTestSuite) TestInterproceduralGotestT(t *gotest.T) {
+	helperGotestErrorf(t)
+}
+
+func (s *EscapeTestSuite) TestInterproceduralChain(t *gotest.T) {
+	wrapperErrorf(t)
+}
+
+func (s *EscapeTestSuite) TestInterproceduralMultiMethod(t *gotest.T) {
+	helperMultiMethod(t.T())
+}
+
+func (s *EscapeTestSuite) TestInterproceduralNonFirstParam(t *gotest.T) {
+	helperNonFirstParam("ctx", t.T())
+}
+
+func (s *EscapeTestSuite) TestInterproceduralDeepChain(t *gotest.T) {
+	deepOuterErrorf(t.T())
+}
+
+func (s *EscapeTestSuite) TestNestedContextEscape(t *gotest.T) {
+	t.It("x", func(it *gotest.T) {
+		_ = it.T().Context() // want `Context is available on gotest.T — t.T\(\).Context\(\) drops the suite's Timeout`
+	})
+}
+
+// A stdlib helper handed t.T() sees none of the suite's deadline either.
+func (s *EscapeTestSuite) TestInterproceduralContext(t *gotest.T) {
+	helperContext(t.T())
+}
+
+func helperContext(t *testing.T) {
+	_ = t.Context()     // want `Context is available on gotest.T — t.T\(\).Context\(\) drops the suite's Timeout`
+	_, _ = t.Deadline() // want `use t.Context\(\).Deadline\(\) — t.T\(\).Deadline\(\) reports go test's -timeout, not the suite's Timeout`
+}
+
+// A stdlib test owns its context; nothing reaches it from a suite.
+func helperUnreached(t *testing.T) { //nolint:unused
+	_ = t.Context()
+	_, _ = t.Deadline()
+}
+
+func (s *EscapeTestSuite) TestInterproceduralMethodHelper(t *gotest.T) {
+	var h escapeHelper
+	h.doErrorf(t.T())
+}
+
+func standaloneEscape(t *gotest.T) { //nolint:unused
+	t.T().Errorf("msg") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+func standaloneAssertionEscape(t *gotest.T) { //nolint:unused
+	gotest.True(t.T(), true) // want `pass gotest.T directly to True — unnecessary T escape`
+}
+
+// Standalone functions must not be flagged for suite-only rules; Run is not
+// one, since its subtests drop the suite's deadline anywhere.
+func standaloneCleanup(t *gotest.T) { //nolint:unused
+	t.T().Cleanup(func() {})
+}
+
+func standaloneParallel(t *gotest.T) { //nolint:unused
+	t.T().Parallel()
+}
+
+func standaloneRun(t *gotest.T) { //nolint:unused
+	t.T().Run("sub", func(st *testing.T) {}) // want `use It or When instead — T.Run bypasses gotest wrapping`
+}
+
+func helperErrorf(t *testing.T) {
+	t.Errorf("msg") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+func helperGotestErrorf(t *gotest.T) {
+	t.T().Errorf("msg") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+func wrapperErrorf(t *gotest.T) {
+	helperErrorf(t.T())
+}
+
+func helperMultiMethod(t *testing.T) {
+	t.FailNow()              // want `FailNow is available on gotest.T — unnecessary T escape`
+	t.Skip()                 // want `must use Skipf instead — unnecessary T escape`
+	t.SkipNow()              // want `must use Skipf instead — unnecessary T escape`
+	t.Skipf("reason")        // want `Skipf is available on gotest.T — unnecessary T escape`
+	t.Setenv("KEY", "VALUE") // want `Setenv is available on gotest.T — unnecessary T escape`
+	_ = t.TempDir()          // want `TempDir is available on gotest.T — unnecessary T escape`
+}
+
+func helperNonFirstParam(name string, t *testing.T) {
+	t.Errorf("msg") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+func deepLeafErrorf(t *testing.T) {
+	t.Errorf("msg") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+func deepMiddleErrorf(t *testing.T) {
+	deepLeafErrorf(t)
+}
+
+func deepOuterErrorf(t *testing.T) {
+	deepMiddleErrorf(t)
+}
+
+type escapeHelper struct{}
+
+func (h *escapeHelper) doErrorf(t *testing.T) {
+	t.Errorf("msg") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+// Package-level var function literals are part of the traversal too.
+var packageLevelCheck = func(t *gotest.T) {
+	t.T().Errorf("boom") // want `Errorf is available on gotest.T — unnecessary T escape`
+}
+
+// A helper taking gotest.T and calling its own Errorf is the recommended
+// shape, not an escape, even when a suite method hands it its t.
+func (s *EscapeTestSuite) TestInterproceduralGotestTOwnMethod(t *gotest.T) {
+	helperGotestOwnErrorf(t)
+}
+
+func helperGotestOwnErrorf(t *gotest.T) {
+	t.Errorf("msg")
+	t.FailNow()
+}
+
+// A type of its own with a T method is no gotest.T.
+type harness struct{ t *testing.T }
+
+func (h *harness) T() *testing.T { return h.t }
+
+func ownHelper(tt *testing.T) { tt.Errorf("msg") }
+
+func (s *EscapeTestSuite) TestOwnTMethod(t *gotest.T) {
+	h := &harness{}
+	h.T().Errorf("msg")
+	h.T().Helper()
+	tt := h.T()
+	tt.Errorf("msg")
+	gotest.True(h.T(), true)
+	ownHelper(h.T())
+}
+
+type EscapeBenchTestSuite struct{}
+
+func (s *EscapeBenchTestSuite) BenchmarkDirect(b *gotest.B) {
+	b.B().ReportAllocs() // want `ReportAllocs is available on gotest.B — unnecessary B escape`
+	for b.B().Loop() {   // want `Loop is available on gotest.B — unnecessary B escape`
+		gotest.Equal(b.B(), 1, 1) // want `pass gotest.B directly to Equal — unnecessary B escape`
+	}
+	b.B().Helper()                          // want `never call Helper — gotest resolves call sites automatically; Helper degrades failure locations`
+	b.B().Cleanup(func() {})                // want `use AfterEach or AfterAll for cleanup — T.Cleanup bypasses suite lifecycle`
+	_ = b.B().N                             // by design: no finding
+	b.B().ResetTimer()                      // by design: no finding
+	b.B().Run("sub", func(b *testing.B) {}) // by design: no finding
+	_ = b.B().TempDir()                     // want `TempDir is available on gotest.B — unnecessary B escape`
+	b.B().Setenv("KEY", "VALUE")            // want `Setenv is available on gotest.B — unnecessary B escape`
+}
+
+func (s *EscapeBenchTestSuite) BenchmarkAlias(b *gotest.B) {
+	tb := b.B()
+	tb.ReportAllocs() // want `ReportAllocs is available on gotest.B — unnecessary B escape`
+	for tb.Loop() {   // want `Loop is available on gotest.B — unnecessary B escape`
+	}
+}
+
+func (s *EscapeBenchTestSuite) BenchmarkViaHelper(b *gotest.B) {
+	for b.Loop() {
+	}
+	benchHelper(b.B())
+}
+
+func benchHelper(b *testing.B) {
+	b.Helper()       // directOnly: no finding through a helper
+	b.ReportAllocs() // want `ReportAllocs is available on gotest.B — unnecessary B escape`
+}
+
+// benchHelperUncalled is never handed b.B() by a suite method: no finding.
+func benchHelperUncalled(b *testing.B) {
+	b.ReportAllocs()
+}
+
+func benchHelperCleanup(b *gotest.B) {
+	b.B().Cleanup(func() {}) // suiteOnly: no finding outside a suite method
+	b.B().Errorf("x")        // want `Errorf is available on gotest.B — unnecessary B escape`
+}
+
+func (s *EscapeBenchTestSuite) BenchmarkStd(b *testing.B) {
+	b.Helper() // *testing.B directly: no finding
+	for i := 0; i < b.N; i++ {
+	}
+}
+
+type EscapeFuzzTestSuite struct{}
+
+func (s *EscapeFuzzTestSuite) FuzzDirect(f *gotest.F) {
+	f.F().Add("seed")   // want `Add is available on gotest.F — f.F\(\).Add skips the seed buffer: a struct seed panics inside testing, and the Add-after-Fuzz check is bypassed`
+	_ = f.F().Name()    // want `Name is available on gotest.F — unnecessary F escape`
+	_ = f.F().TempDir() // want `TempDir is available on gotest.F — unnecessary F escape`
+	f.F().Log("x")      // want `use assertion message args instead — T.Log bypasses the failure report`
+	f.Fuzz(func(t *gotest.T, in string) { gotest.Equal(t, in, in) })
+}
+
+func (s *EscapeBenchTestSuite) BenchmarkMore(b *gotest.B) {
+	_ = b.B().Context()        // want `Context is available on gotest.B — unnecessary B escape`
+	b.B().SetBytes(1)          // want `SetBytes is available on gotest.B — unnecessary B escape`
+	b.B().ReportMetric(1, "x") // want `ReportMetric is available on gotest.B — unnecessary B escape`
+	_ = b.B().Name()           // want `Name is available on gotest.B — unnecessary B escape`
+	b.B().Skip()               // want `must use Skipf instead — unnecessary B escape`
+	for b.Loop() {
+	}
+}
+
+func (s *EscapeFuzzTestSuite) FuzzViaHelper(f *gotest.F) {
+	f.Add("t")
+	fuzzHelper(f.F())
+	f.Fuzz(func(t *gotest.T, in string) { gotest.Equal(t, in, in) })
+}
+
+func fuzzHelper(f *testing.F) {
+	f.Add("s") // want `Add is available on gotest.F — f.F\(\).Add skips the seed buffer: a struct seed panics inside testing, and the Add-after-Fuzz check is bypassed`
+}

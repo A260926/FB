@@ -1,0 +1,1181 @@
+package gotestgen
+
+import (
+	"fmt"
+	"go/types"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/mvrahden/go-test/internal/gotestast"
+	"github.com/mvrahden/go-test/internal/protocol"
+	"golang.org/x/tools/go/packages"
+)
+
+// BoundFixture represents a fixture resolved from the type graph.
+// It carries all data needed for rendering and setup subprocess generation.
+type BoundFixture struct {
+	Kind            gotestast.FixtureKind
+	Identifier      string // unqualified type name, e.g. "InfraFixture"
+	QualifiedType   string // "pkg.Name" for cross-package, "Name" for same
+	ParentFieldName string // field name in this fixture's struct that holds the parent fixture pointer (single-parent compat)
+	PkgPath         string // import path, empty if same package
+	PkgName         string // package name for qualified refs, empty if same package
+
+	Pkg   *packages.Package
+	Named *types.Named
+	Spec  *gotestast.FixtureSpec // non-nil only for locally collected fixtures
+
+	HasConfig    bool
+	BeforeAll    bool
+	AfterAll     bool
+	BeforeEach   bool
+	AfterEach    bool
+	HasHydrate   bool
+	HasDehydrate bool
+	// BeforeEachAt and AfterEachAt locate the hooks as file:line, the file
+	// relative to the suite's package directory, where a failure of theirs
+	// is reported.
+	BeforeEachAt string
+	AfterEachAt  string
+
+	TransferFields []string // shared fixtures only
+	LocalFields    []string // shared fixtures only
+
+	Parent         *BoundFixture            // single parent (backward compat)
+	Parents        []*BoundFixture          // all parent fixtures
+	ParentFields   map[*BoundFixture]string // parent fixture → field name in this fixture's struct
+	Children       []*BoundFixture
+	SharedFixtures []SharedFixtureRef
+	ChildSuites    []*gotestast.TestSuiteSpec
+}
+
+func (rf *BoundFixture) DependsOn() []string {
+	ids := make([]string, 0, len(rf.Parents)+len(rf.SharedFixtures))
+	for _, p := range rf.Parents {
+		ids = append(ids, p.Identifier)
+	}
+	for _, sf := range rf.SharedFixtures {
+		ids = append(ids, sf.Identifier)
+	}
+	return ids
+}
+
+func (rf *BoundFixture) ParentFieldNames() map[string]string {
+	if len(rf.ParentFields) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(rf.ParentFields))
+	for p, name := range rf.ParentFields {
+		m[p.Identifier] = name
+	}
+	return m
+}
+
+// FixtureFieldBinding maps a fixture identifier to its field name in a suite struct.
+type FixtureFieldBinding struct {
+	FixtureIdentifier string
+	FieldName         string
+}
+
+// Binding is the output of fixture resolution for a target package.
+type Binding struct {
+	RootFixtures                   []*BoundFixture
+	AllFixtures                    []*BoundFixture     // topologically sorted, all fixtures
+	RequiredSharedFixtures         []SharedFixtureInfo // deduplicated, for setup subprocess
+	FixtureBound                   []*gotestast.TestSuiteSpec
+	Standalone                     []*gotestast.TestSuiteSpec
+	SuiteSharedFixtures            map[string][]SharedFixtureRef    // suite identifier → direct shared fixture refs
+	SuiteFixtureFields             map[string][]FixtureFieldBinding // suite identifier → fixture→field bindings
+	SuiteRequiredSharedFixtureKeys map[string][]string              // suite identifier → all required state keys (transitive)
+}
+
+type binder struct {
+	targetPkg       *packages.Package
+	sources         *sourceLoader
+	localFixtures   []*gotestast.FixtureSpec
+	resolved        map[*types.Named]*BoundFixture
+	resolving       map[*types.Named]bool         // cycle detection
+	sharedSeen      map[string]*SharedFixtureInfo // key: pkgPath.Name
+	sharedResolving map[string]bool               // cycle detection for shared fixtures
+	prefixes        map[string]string             // package path → identifier prefix
+	prefixTaken     map[string]bool
+	result          *Binding
+}
+
+// prefix names the identifiers of another package's fixtures: its package
+// name, numbered when a second package of that name binds fixtures too.
+func (r *binder) prefix(p *types.Package) string {
+	if pre, ok := r.prefixes[p.Path()]; ok {
+		return pre
+	}
+	pre := p.Name()
+	for i := 1; r.prefixTaken[pre]; i++ {
+		pre = p.Name() + strconv.Itoa(i)
+	}
+	r.prefixes[p.Path()] = pre
+	r.prefixTaken[pre] = true
+	return pre
+}
+
+// Bind performs demand-driven fixture resolution starting from targeted test
+// suites. It walks the type graph recursively to discover all required fixtures
+// (both package and shared), validates constraints, and builds the fixture tree.
+func Bind(targetPkg *packages.Package, suites []*gotestast.TestSuiteSpec, localFixtures []*gotestast.FixtureSpec) (*Binding, error) {
+	return bind(targetPkg, nil, suites, localFixtures)
+}
+
+func bind(targetPkg *packages.Package, sources *sourceLoader, suites []*gotestast.TestSuiteSpec, localFixtures []*gotestast.FixtureSpec) (*Binding, error) {
+	result := &Binding{}
+	r := &binder{
+		targetPkg:       targetPkg,
+		sources:         sources,
+		localFixtures:   localFixtures,
+		resolved:        make(map[*types.Named]*BoundFixture),
+		resolving:       make(map[*types.Named]bool),
+		sharedSeen:      make(map[string]*SharedFixtureInfo),
+		sharedResolving: make(map[string]bool),
+		prefixes:        make(map[string]string),
+		prefixTaken:     make(map[string]bool),
+		result:          result,
+	}
+
+	for _, suite := range suites {
+		fixtures, err := r.resolveFixturesForSuite(suite)
+		if err != nil {
+			return nil, gotestast.At(suite.Pos(), err)
+		}
+		if len(fixtures) > 0 {
+			if len(suite.Benchmarks()) > 0 {
+				for _, fm := range fixtures {
+					if bad := findHookedFixture(fm.resolved); bad != nil {
+						return nil, gotestast.At(suite.Pos(), fmt.Errorf("suite %s has benchmark methods but fixture %s defines BeforeEach/AfterEach — per-method fixture hooks are not supported for benchmarks", suite.Identifier(), bad.Identifier))
+					}
+				}
+			}
+
+			if len(suite.Fuzzers()) > 0 {
+				for _, fm := range fixtures {
+					if bad := findHookedFixture(fm.resolved); bad != nil {
+						return nil, gotestast.At(suite.Pos(), fmt.Errorf("suite %s has fuzz methods but fixture %s defines BeforeEach/AfterEach — per-execution fixture hooks are not supported for fuzz targets", suite.Identifier(), bad.Identifier))
+					}
+				}
+			}
+
+			if result.SuiteFixtureFields == nil {
+				result.SuiteFixtureFields = make(map[string][]FixtureFieldBinding)
+			}
+			var bindings []FixtureFieldBinding
+			for _, fm := range fixtures {
+				fm.resolved.ChildSuites = append(fm.resolved.ChildSuites, suite)
+				bindings = append(bindings, FixtureFieldBinding{
+					FixtureIdentifier: fm.resolved.Identifier,
+					FieldName:         fm.fieldName,
+				})
+			}
+			result.SuiteFixtureFields[suite.Identifier()] = bindings
+			suite.SetFixture(r.findLocalSpec(fixtures[0].resolved))
+			suite.SetFixtureFieldName(fixtures[0].fieldName)
+			result.FixtureBound = append(result.FixtureBound, suite)
+		} else {
+			result.Standalone = append(result.Standalone, suite)
+		}
+	}
+
+	// Collect unique root fixtures: every parentless fixture reachable from a
+	// package fixture, through all of its parents.
+	seen := make(map[*types.Named]bool)
+	var addRoots func(rf *BoundFixture)
+	addRoots = func(rf *BoundFixture) {
+		if len(rf.Parents) > 0 {
+			for _, p := range rf.Parents {
+				addRoots(p)
+			}
+			return
+		}
+		if seen[rf.Named] {
+			return
+		}
+		seen[rf.Named] = true
+		if hasChildSuitesRecursive(rf) {
+			result.RootFixtures = append(result.RootFixtures, rf)
+		}
+	}
+	for _, rf := range r.resolved {
+		if rf.Kind == gotestast.PackageFixture {
+			addRoots(rf)
+		}
+	}
+
+	// Topological sort all fixtures
+	allFixtures, err := topologicalSort(r.resolved)
+	if err != nil {
+		return nil, err
+	}
+	result.AllFixtures = allFixtures
+
+	// Collect deduplicated shared fixtures in deterministic topological order
+	// (dependencies before dependents, ties broken by identifier).
+	result.RequiredSharedFixtures, err = topoSortSharedFixtures(r.sharedSeen)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute per-suite transitive shared fixture keys
+	suiteKeys := make(map[string][]string)
+	sfInfoByKey := make(map[string]*SharedFixtureInfo)
+	for i := range result.RequiredSharedFixtures {
+		sf := &result.RequiredSharedFixtures[i]
+		sfInfoByKey[sf.PkgPath+"."+sf.Identifier] = sf
+	}
+
+	var collectTransitive func(key string, seen map[string]bool)
+	collectTransitive = func(key string, seen map[string]bool) {
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		if info, ok := sfInfoByKey[key]; ok {
+			for _, dep := range info.Dependencies {
+				collectTransitive(dep, seen)
+			}
+		}
+	}
+
+	rfByID := make(map[string]*BoundFixture, len(result.AllFixtures))
+	for _, rf := range result.AllFixtures {
+		rfByID[rf.Identifier] = rf
+	}
+	needed := make(map[string]map[string]bool, len(suites))
+	for _, suite := range suites {
+		needed[suite.Identifier()] = collectTransitiveDepsRF(suite.Identifier(), result.SuiteFixtureFields, rfByID)
+	}
+
+	for _, suite := range suites {
+		id := suite.Identifier()
+		seen := make(map[string]bool)
+
+		// From direct suite shared fixture refs
+		if refs, ok := result.SuiteSharedFixtures[id]; ok {
+			for _, ref := range refs {
+				collectTransitive(ref.StateKey, seen)
+			}
+		}
+
+		// From the fixture tree: every package fixture the suite's bindings
+		// reach through their parents may name a shared fixture.
+		for _, rf := range result.AllFixtures {
+			if !needed[id][rf.Identifier] {
+				continue
+			}
+			for _, sf := range rf.SharedFixtures {
+				collectTransitive(sf.StateKey, seen)
+			}
+		}
+
+		if len(seen) > 0 {
+			var keys []string
+			for k := range seen {
+				keys = append(keys, k)
+			}
+			suiteKeys[id] = keys
+		}
+	}
+	if len(suiteKeys) > 0 {
+		result.SuiteRequiredSharedFixtureKeys = suiteKeys
+	}
+
+	return result, nil
+}
+
+// findHookedFixture walks a fixture and its transitive parents looking for one
+// that defines BeforeEach/AfterEach. Per-method fixture hooks assume a fresh
+// invocation per test case; benchmarks run their body in a tight b.Loop(), so
+// wiring fixture BeforeEach/AfterEach around each benchmark method is out of
+// scope for now (see docs/design/bench-fuzz.md Part 1) — reject it at
+// resolve-time instead of generating code that silently ignores the hooks.
+func findHookedFixture(rf *BoundFixture) *BoundFixture {
+	if rf == nil {
+		return nil
+	}
+	if rf.BeforeEach || rf.AfterEach {
+		return rf
+	}
+	for _, p := range rf.Parents {
+		if bad := findHookedFixture(p); bad != nil {
+			return bad
+		}
+	}
+	return nil
+}
+
+func hasChildSuitesRecursive(rf *BoundFixture) bool {
+	if len(rf.ChildSuites) > 0 {
+		return true
+	}
+	for _, child := range rf.Children {
+		if hasChildSuitesRecursive(child) {
+			return true
+		}
+	}
+	return false
+}
+
+type suiteFixtureMatch struct {
+	resolved  *BoundFixture
+	fieldName string
+}
+
+func (r *binder) resolveFixturesForSuite(suite *gotestast.TestSuiteSpec) ([]suiteFixtureMatch, error) {
+	typ := suite.StructType()
+	if typ == nil {
+		return nil, nil
+	}
+
+	var fixtures []suiteFixtureMatch
+	var sharedRefs []SharedFixtureRef
+	sfIdx := 0
+	bound := map[*types.Named]string{}
+
+	for i := 0; i < typ.NumFields(); i++ {
+		field := typ.Field(i)
+		named, err := fixtureField("suite", suite.Identifier(), field, bound)
+		if err != nil {
+			return nil, err
+		}
+		if named == nil {
+			continue
+		}
+		name := named.Obj().Name()
+
+		if strings.HasSuffix(name, protocol.SuffixSharedFixture) {
+			ref, err := r.buildSharedFixtureRef(named, sfIdx)
+			if err != nil {
+				return nil, err
+			}
+			ref.FieldName = field.Name()
+			sharedRefs = append(sharedRefs, ref)
+			sfIdx++
+		} else if strings.HasSuffix(name, protocol.SuffixFixture) {
+			rf, err := r.resolveFixture(named)
+			if err != nil {
+				return nil, err
+			}
+			fixtures = append(fixtures, suiteFixtureMatch{resolved: rf, fieldName: field.Name()})
+		}
+	}
+
+	if len(sharedRefs) > 0 {
+		if r.result.SuiteSharedFixtures == nil {
+			r.result.SuiteSharedFixtures = make(map[string][]SharedFixtureRef)
+		}
+		r.result.SuiteSharedFixtures[suite.Identifier()] = sharedRefs
+	}
+
+	return fixtures, nil
+}
+
+func (r *binder) resolveFixture(named *types.Named) (_ *BoundFixture, err error) {
+	defer func() { err = gotestast.At(named.Obj().Pos(), err) }()
+	if rf, ok := r.resolved[named]; ok {
+		return rf, nil
+	}
+
+	if r.resolving[named] {
+		return nil, fmt.Errorf("cycle detected in fixture embedding: %q", named.Obj().Name())
+	}
+	r.resolving[named] = true
+	defer delete(r.resolving, named)
+
+	baseName := named.Obj().Name()
+	identifier := fixtureIdentifier(named)
+	typePkgPath := named.Obj().Pkg().Path()
+	isLocal := typePkgPath == r.targetPkg.PkgPath
+
+	st, ok := named.Underlying().(*types.Struct)
+	if !ok {
+		return nil, fmt.Errorf("%s: fixture must be a struct type", identifier)
+	}
+
+	kind := gotestast.PackageFixture
+	if strings.HasSuffix(baseName, protocol.SuffixSharedFixture) {
+		kind = gotestast.SharedFixture
+	}
+
+	pkg := r.findPackageForType(named)
+
+	var spec *gotestast.FixtureSpec
+	if isLocal {
+		for _, lf := range r.localFixtures {
+			if lf.Identifier() == baseName {
+				spec = lf
+				break
+			}
+		}
+	}
+
+	typePkg := named.Obj().Pkg()
+
+	// A referenced fixture with value-receiver hooks would silently run no-ops;
+	// reject it here. Unreferenced *Fixture-named types are never resolved and
+	// stay unaffected.
+	if err := rejectValueReceiverHooks(named, typePkg, identifier); err != nil {
+		return nil, err
+	}
+
+	// The collector checks local methods; one from another package is read
+	// by method set alone, so it is checked here.
+	if kind == gotestast.PackageFixture && !isLocal {
+		for _, hook := range []string{"BeforeAll", "AfterAll", "BeforeEach", "AfterEach"} {
+			if fn := declaredMethod(named, hook); fn != nil && !hasCtxErrSignature(fn) {
+				return nil, gotestast.At(fn.Pos(), fmt.Errorf("package fixture %q: %s must have signature (ctx context.Context) error", identifier, hook))
+			}
+		}
+		for _, name := range []string{"FixtureConfig", "SharedFixtureConfig", "Hydrate", "Dehydrate"} {
+			if fn := declaredMethod(named, name); fn != nil {
+				if err := gotestast.FixtureMethodError(kind, identifier, name, fn.Signature()); err != nil {
+					return nil, gotestast.At(fn.Pos(), err)
+				}
+			}
+		}
+	}
+
+	rf := &BoundFixture{
+		Kind:         kind,
+		Identifier:   identifier,
+		Named:        named,
+		Pkg:          pkg,
+		Spec:         spec,
+		BeforeAll:    declaredMethod(named, "BeforeAll") != nil,
+		AfterAll:     declaredMethod(named, "AfterAll") != nil,
+		BeforeEach:   declaredMethod(named, "BeforeEach") != nil,
+		AfterEach:    declaredMethod(named, "AfterEach") != nil,
+		BeforeEachAt: hookAt(r.targetPkg, declaredMethod(named, "BeforeEach")),
+		AfterEachAt:  hookAt(r.targetPkg, declaredMethod(named, "AfterEach")),
+		HasHydrate:   declaredMethod(named, "Hydrate") != nil,
+		HasDehydrate: declaredMethod(named, "Dehydrate") != nil,
+		HasConfig:    detectConfigMethod(named, kind),
+	}
+
+	if isLocal {
+		rf.QualifiedType = fixtureQualifiedType(named, "")
+	} else {
+		rf.PkgName = named.Obj().Pkg().Name()
+		rf.QualifiedType = fixtureQualifiedType(named, rf.PkgName)
+		rf.PkgPath = typePkgPath
+		rf.Identifier = r.prefix(named.Obj().Pkg()) + "_" + identifier
+	}
+
+	if !rf.BeforeAll {
+		kindStr := "package fixture"
+		if kind == gotestast.SharedFixture {
+			kindStr = "shared fixture"
+		}
+		return nil, fmt.Errorf("%s %q must have a BeforeAll(ctx context.Context) error method", kindStr, identifier)
+	}
+
+	if kind == gotestast.PackageFixture {
+		if err := r.resolvePackageFixtureFields(rf, st); err != nil {
+			return nil, err
+		}
+	}
+
+	r.resolved[named] = rf
+	return rf, nil
+}
+
+func (r *binder) resolvePackageFixtureFields(rf *BoundFixture, st *types.Struct) error {
+	sfIdx := 0
+	bound := map[*types.Named]string{}
+
+	for i := 0; i < st.NumFields(); i++ {
+		field := st.Field(i)
+		named, err := fixtureField("fixture", rf.Named.Obj().Name(), field, bound)
+		if err != nil {
+			return err
+		}
+		if named == nil {
+			continue
+		}
+		typeName := named.Obj().Name()
+
+		if strings.HasSuffix(typeName, protocol.SuffixSharedFixture) {
+			sfRef, err := r.buildSharedFixtureRef(named, sfIdx)
+			if err != nil {
+				return err
+			}
+			sfRef.FieldName = field.Name()
+			rf.SharedFixtures = append(rf.SharedFixtures, sfRef)
+			sfIdx++
+		} else if strings.HasSuffix(typeName, protocol.SuffixFixture) {
+			parent, err := r.resolveFixture(named)
+			if err != nil {
+				return err
+			}
+			rf.Parents = append(rf.Parents, parent)
+			if rf.ParentFields == nil {
+				rf.ParentFields = make(map[*BoundFixture]string)
+			}
+			rf.ParentFields[parent] = field.Name()
+			parent.Children = append(parent.Children, rf)
+		}
+	}
+
+	if len(rf.Parents) > 0 {
+		rf.Parent = rf.Parents[0]
+		rf.ParentFieldName = rf.ParentFields[rf.Parents[0]]
+	}
+	return nil
+}
+
+// rejectValueReceiverHooks errors when a fixture's own lifecycle/marker methods
+// use value receivers — collection would silently skip them, leaving a
+// zero-value fixture. Only explicitly declared methods are checked; methods
+// promoted from embedded fixtures are legitimate and ignored.
+func rejectValueReceiverHooks(named *types.Named, _ *types.Package, identifier string) error {
+	hooks := map[string]bool{
+		"BeforeAll": true, "AfterAll": true, "BeforeEach": true, "AfterEach": true,
+		"Hydrate": true, "Dehydrate": true, "FixtureConfig": true, "SharedFixtureConfig": true,
+	}
+	for i := 0; i < named.NumMethods(); i++ {
+		m := named.Method(i)
+		if !hooks[m.Name()] {
+			continue
+		}
+		sig, ok := m.Type().(*types.Signature)
+		if !ok || sig.Recv() == nil {
+			continue
+		}
+		if _, isPtr := sig.Recv().Type().(*types.Pointer); !isPtr {
+			return fmt.Errorf("fixture %q: %s has an unsupported value type receiver — use a pointer receiver", identifier, m.Name())
+		}
+	}
+	return nil
+}
+
+// declaresHook reports whether the named type itself (not via embedding)
+// declares a method with the given name.
+func declaresHook(named *types.Named, name string) bool { return declaredMethod(named, name) != nil }
+
+// declaredMethod returns the method named declares itself, never one promoted
+// through an embedded field: what gotest reads off a type is what the type
+// declares.
+func declaredMethod(named *types.Named, name string) *types.Func {
+	for i := range named.NumMethods() {
+		if m := named.Method(i); m.Name() == name {
+			return m
+		}
+	}
+	return nil
+}
+
+// hasCtxErrSignature reports whether fn is func(context.Context) error.
+func hasCtxErrSignature(fn *types.Func) bool {
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok {
+		return false
+	}
+	return sig.Params().Len() == 1 && sig.Params().At(0).Type().String() == "context.Context" &&
+		sig.Results().Len() == 1 && sig.Results().At(0).Type().String() == "error"
+}
+
+func isInternalPkgPath(pkgPath string) bool {
+	return strings.HasPrefix(pkgPath, "internal/") ||
+		strings.HasSuffix(pkgPath, "/internal") ||
+		strings.Contains(pkgPath, "/internal/")
+}
+
+func (r *binder) buildSharedFixtureRef(named *types.Named, idx int) (_ SharedFixtureRef, err error) {
+	defer func() { err = gotestast.At(named.Obj().Pos(), err) }()
+	identifier := fixtureIdentifier(named)
+	typePkg := named.Obj().Pkg()
+	typePkgPath := typePkg.Path()
+
+	if isInternalPkgPath(typePkgPath) {
+		return SharedFixtureRef{}, fmt.Errorf(
+			"shared fixture %q is in an internal package (%s); "+
+				"shared fixtures must live in a non-internal package so the setup subprocess can import them",
+			identifier, typePkgPath,
+		)
+	}
+
+	isLocal := typePkgPath == r.targetPkg.PkgPath
+
+	hasHydrate := declaredMethod(named, "Hydrate") != nil
+	hasDehydrate := declaredMethod(named, "Dehydrate") != nil
+
+	var qualifiedType, pkgPath string
+	if isLocal {
+		qualifiedType = fixtureQualifiedType(named, "")
+	} else {
+		qualifiedType = fixtureQualifiedType(named, typePkg.Name())
+		pkgPath = typePkgPath
+	}
+
+	stateKey := typePkgPath + "." + identifier
+
+	sfIdentifier := identifier
+	if !isLocal {
+		sfIdentifier = r.prefix(typePkg) + "_" + identifier
+	}
+
+	ref := SharedFixtureRef{
+		LocalVar:      fmt.Sprintf("sf%d", idx),
+		QualifiedType: qualifiedType,
+		FieldName:     named.Obj().Name(),
+		StateKey:      stateKey,
+		Identifier:    sfIdentifier,
+		HasHydrate:    hasHydrate,
+		HasDehydrate:  hasDehydrate,
+		PkgPath:       pkgPath,
+	}
+
+	if err := r.registerSharedFixture(named); err != nil {
+		return SharedFixtureRef{}, err
+	}
+
+	return ref, nil
+}
+
+func (r *binder) registerSharedFixture(named *types.Named) (err error) {
+	defer func() { err = gotestast.At(named.Obj().Pos(), err) }()
+	typePkg := named.Obj().Pkg()
+	identifier := fixtureIdentifier(named)
+	baseName := named.Obj().Name()
+	key := typePkg.Path() + "." + identifier
+
+	if _, ok := r.sharedSeen[key]; ok {
+		return nil
+	}
+	if r.sharedResolving[key] {
+		return fmt.Errorf("cycle detected in shared fixture dependencies involving %q", key)
+	}
+	r.sharedResolving[key] = true
+	defer delete(r.sharedResolving, key)
+
+	if err := rejectValueReceiverHooks(named, typePkg, identifier); err != nil {
+		return err
+	}
+	if err := gotestast.SharedEachHook(named); err != nil {
+		return err
+	}
+
+	// Same restriction as buildSharedFixtureRef — also applies to fixtures that are
+	// only reachable transitively, which would otherwise fail later as a confusing
+	// subprocess compile error.
+	if isInternalPkgPath(typePkg.Path()) {
+		return fmt.Errorf(
+			"shared fixture %q is in an internal package (%s); "+
+				"shared fixtures must live in a non-internal package so the setup subprocess can import them",
+			identifier, typePkg.Path(),
+		)
+	}
+
+	hasHydrate := declaredMethod(named, "Hydrate") != nil
+	hasDehydrate := declaredMethod(named, "Dehydrate") != nil
+	hasConfig := detectConfigMethod(named, gotestast.SharedFixture)
+	hasAfterAll := declaredMethod(named, "AfterAll") != nil
+
+	// Validate here (not only in the collector) so cross-package shared fixtures,
+	// which are resolved by method-set lookup alone, get clean errors instead of
+	// subprocess compile failures or silent misbehavior.
+	for _, hook := range []string{"BeforeAll", "AfterAll", "Hydrate", "Dehydrate"} {
+		fn := declaredMethod(named, hook)
+		if fn == nil {
+			continue
+		}
+		if !hasCtxErrSignature(fn) {
+			return fmt.Errorf("shared fixture %q: %s must have signature (ctx context.Context) error", identifier, hook)
+		}
+	}
+	if declaredMethod(named, "BeforeAll") == nil {
+		return fmt.Errorf("shared fixture %q must define BeforeAll(ctx context.Context) error", identifier)
+	}
+	if hasHydrate != hasDehydrate {
+		present, missing := "Hydrate", "Dehydrate"
+		if hasDehydrate {
+			present, missing = "Dehydrate", "Hydrate"
+		}
+		return fmt.Errorf("shared fixture %q has %s but no %s; both must be defined together", identifier, present, missing)
+	}
+
+	isLocal := typePkg.Path() == r.targetPkg.PkgPath
+	pkgName, idPrefix := "", ""
+	var qualifiedType string
+	if isLocal {
+		qualifiedType = fixtureQualifiedType(named, "")
+	} else {
+		pkgName = typePkg.Name()
+		idPrefix = r.prefix(typePkg)
+		qualifiedType = fixtureQualifiedType(named, pkgName)
+	}
+
+	st, ok := named.Underlying().(*types.Struct)
+	if !ok {
+		r.sharedSeen[key] = &SharedFixtureInfo{
+			Identifier:    identifier,
+			PkgPath:       typePkg.Path(),
+			PkgName:       pkgName,
+			IDPrefix:      idPrefix,
+			Named:         named,
+			QualifiedType: qualifiedType,
+			HasConfig:     hasConfig,
+			HasAfterAll:   hasAfterAll,
+			HasHydrate:    hasHydrate,
+			HasDehydrate:  hasDehydrate,
+		}
+		return nil
+	}
+
+	var allExported []string
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		if f.Exported() && !f.Anonymous() {
+			allExported = append(allExported, f.Name())
+		}
+	}
+
+	var localFields map[string]bool
+	if hasHydrate {
+		pkg := r.findPackageForType(named)
+		if pkg != nil && len(pkg.Syntax) > 0 {
+			hydrateDecl := gotestast.FindMethodDecl(pkg, baseName, "Hydrate")
+			if hydrateDecl != nil {
+				localFields = gotestast.ClassifyLocalFieldsRaw(hydrateDecl, baseName, pkg.Syntax, pkg.TypesInfo)
+			}
+		}
+	}
+
+	var transfer, local []string
+	for _, fieldName := range allExported {
+		if localFields[fieldName] {
+			local = append(local, fieldName)
+		} else {
+			transfer = append(transfer, fieldName)
+		}
+	}
+
+	// Detect shared fixture pointer fields as dependencies.
+	var deps []string
+	depFields := make(map[string]bool)
+	depFieldMap := make(map[string]string) // dep state key → field name
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		depNamed := pointerNamed(f)
+		if depNamed == nil {
+			continue
+		}
+		depName := depNamed.Obj().Name()
+		if strings.HasSuffix(depName, protocol.SuffixSharedFixture) {
+			depKey := depNamed.Obj().Pkg().Path() + "." + fixtureIdentifier(depNamed)
+			// Only one parent instance of a type ever exists in the DAG, and
+			// the wiring maps parent type → field. A second field of the same
+			// type silently won last-writer-wins, leaving the first nil at
+			// BeforeAll — reject the ambiguity at generation time instead.
+			if prev, dup := depFieldMap[depKey]; dup {
+				return fmt.Errorf("shared fixture %q declares two fields of the same parent fixture type %s (%s and %s); keep one wired field and derive the other from it in BeforeAll",
+					identifier, depName, prev, f.Name())
+			}
+			deps = append(deps, depKey)
+			depFields[f.Name()] = true
+			depFieldMap[depKey] = f.Name()
+			if err := r.registerSharedFixture(depNamed); err != nil {
+				return err
+			}
+		} else if strings.HasSuffix(depName, protocol.SuffixFixture) && declaresHook(depNamed, "BeforeAll") {
+			// Only reject actual package fixtures (they declare BeforeAll);
+			// a plain data type that merely ends in "Fixture" stays an
+			// ordinary field, classifiable as Hydrate-local.
+			return fmt.Errorf("shared fixture %q cannot depend on package fixture %q — they run in different processes", identifier, depName)
+		}
+	}
+
+	// Remove dependency fields from transfer (they are pointers and not JSON-serializable).
+	if len(depFields) > 0 {
+		filtered := transfer[:0]
+		for _, name := range transfer {
+			if !depFields[name] {
+				filtered = append(filtered, name)
+			}
+		}
+		transfer = filtered
+	}
+
+	for _, fieldName := range transfer {
+		for i := 0; i < st.NumFields(); i++ {
+			f := st.Field(i)
+			if f.Name() == fieldName {
+				if err := validateTransferFieldType(identifier, f); err != nil {
+					return err
+				}
+				break
+			}
+		}
+	}
+
+	r.sharedSeen[key] = &SharedFixtureInfo{
+		Identifier:       identifier,
+		PkgPath:          typePkg.Path(),
+		PkgName:          pkgName,
+		IDPrefix:         idPrefix,
+		Named:            named,
+		QualifiedType:    qualifiedType,
+		HasConfig:        hasConfig,
+		HasAfterAll:      hasAfterAll,
+		HasHydrate:       hasHydrate,
+		HasDehydrate:     hasDehydrate,
+		TransferFields:   transfer,
+		LocalFields:      local,
+		Dependencies:     deps,
+		DependencyFields: depFieldMap,
+	}
+	return nil
+}
+
+func (r *binder) findPackageForType(named *types.Named) *packages.Package {
+	targetPath := named.Obj().Pkg().Path()
+	if targetPath == r.targetPkg.PkgPath {
+		return r.targetPkg
+	}
+	if pkg := findImportedPackage(r.targetPkg, targetPath, make(map[string]bool)); pkg != nil && len(pkg.Syntax) > 0 {
+		return pkg
+	}
+	return r.sources.load(targetPath)
+}
+
+func findImportedPackage(pkg *packages.Package, targetPath string, visited map[string]bool) *packages.Package {
+	if visited[pkg.PkgPath] {
+		return nil
+	}
+	visited[pkg.PkgPath] = true
+	for path, imp := range pkg.Imports {
+		if path == targetPath {
+			return imp
+		}
+	}
+	for _, imp := range pkg.Imports {
+		if found := findImportedPackage(imp, targetPath, visited); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func (r *binder) findLocalSpec(rf *BoundFixture) *gotestast.FixtureSpec {
+	if rf.Spec != nil {
+		return rf.Spec
+	}
+	for _, lf := range r.localFixtures {
+		if lf.Identifier() == rf.Identifier {
+			return lf
+		}
+	}
+	return nil
+}
+
+func validateTransferFieldType(fixtureName string, field *types.Var) error {
+	if reason := nonSerializable(field.Type()); reason != "" {
+		return fmt.Errorf("shared fixture %q: transfer field %q has non-JSON-serializable type %s (%s) — assign it in Hydrate to make it a local field instead", fixtureName, field.Name(), field.Type(), reason)
+	}
+	return nil
+}
+
+func nonSerializable(t types.Type) string {
+	switch u := t.Underlying().(type) {
+	case *types.Chan:
+		return "channel"
+	case *types.Signature:
+		return "function"
+	case *types.Array:
+		return nonSerializable(u.Elem())
+	case *types.Slice:
+		return nonSerializable(u.Elem())
+	case *types.Map:
+		if r := nonSerializable(u.Key()); r != "" {
+			return r + " in map key"
+		}
+		if !isJSONMapKey(u.Key()) {
+			return "non-string/integer map key"
+		}
+		return nonSerializable(u.Elem())
+	case *types.Pointer:
+		return nonSerializable(u.Elem())
+	case *types.Struct:
+		for i := 0; i < u.NumFields(); i++ {
+			f := u.Field(i)
+			if !f.Exported() {
+				continue
+			}
+			if r := nonSerializable(f.Type()); r != "" {
+				return r + " in field " + f.Name()
+			}
+		}
+	}
+	return ""
+}
+
+func isJSONMapKey(t types.Type) bool {
+	if u, ok := t.Underlying().(*types.Basic); ok {
+		return u.Info()&(types.IsString|types.IsInteger) != 0
+	}
+	return false
+}
+
+// topoSortSharedFixtures returns shared fixtures sorted in topological order
+// (dependencies before dependents), with ties broken by identifier for stability.
+func topoSortSharedFixtures(seen map[string]*SharedFixtureInfo) ([]SharedFixtureInfo, error) {
+	if len(seen) == 0 {
+		return nil, nil
+	}
+
+	// Collect all keys and sort for deterministic tie-breaking.
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	inDegree := make(map[string]int, len(keys))
+	for _, k := range keys {
+		inDegree[k] = len(seen[k].Dependencies)
+	}
+
+	// Adjacency: depKey → list of nodes that depend on it.
+	children := make(map[string][]string)
+	for _, k := range keys {
+		for _, dep := range seen[k].Dependencies {
+			children[dep] = append(children[dep], k)
+		}
+	}
+
+	// Build initial queue of zero-degree nodes (sorted for determinism).
+	var queue []string
+	for _, k := range keys {
+		if inDegree[k] == 0 {
+			queue = append(queue, k)
+		}
+	}
+
+	var result []SharedFixtureInfo
+	for len(queue) > 0 {
+		// Pop first element.
+		node := queue[0]
+		queue = queue[1:]
+		result = append(result, *seen[node])
+		// Reduce in-degree of dependents.
+		deps := children[node]
+		sort.Strings(deps)
+		for _, child := range deps {
+			inDegree[child]--
+			if inDegree[child] == 0 {
+				queue = append(queue, child)
+				sort.Strings(queue) // keep queue sorted for determinism
+			}
+		}
+	}
+
+	if len(result) < len(seen) {
+		// Collect cycle participants for error reporting
+		var cycled []string
+		for _, k := range keys {
+			if inDegree[k] > 0 {
+				cycled = append(cycled, k)
+			}
+		}
+		return nil, fmt.Errorf("cycle detected in shared fixture dependencies: %v", cycled)
+	}
+
+	return result, nil
+}
+
+func topologicalSort(resolved map[*types.Named]*BoundFixture) ([]*BoundFixture, error) {
+	inDegree := make(map[*BoundFixture]int)
+	var all []*BoundFixture
+	for _, rf := range resolved {
+		if rf.Kind != gotestast.PackageFixture {
+			continue
+		}
+		all = append(all, rf)
+		if _, ok := inDegree[rf]; !ok {
+			inDegree[rf] = 0
+		}
+		for _, child := range rf.Children {
+			inDegree[child]++
+		}
+	}
+
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].Identifier < all[j].Identifier
+	})
+
+	var queue []*BoundFixture
+	for _, rf := range all {
+		if inDegree[rf] == 0 {
+			queue = append(queue, rf)
+		}
+	}
+
+	var sorted []*BoundFixture
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+		sorted = append(sorted, node)
+		for _, child := range node.Children {
+			inDegree[child]--
+			if inDegree[child] == 0 {
+				queue = append(queue, child)
+				sort.Slice(queue, func(i, j int) bool {
+					return queue[i].Identifier < queue[j].Identifier
+				})
+			}
+		}
+	}
+
+	if len(sorted) != len(all) {
+		return nil, fmt.Errorf("cycle detected in fixture dependency graph")
+	}
+	return sorted, nil
+}
+
+func detectConfigMethod(named *types.Named, kind gotestast.FixtureKind) bool {
+	switch kind {
+	case gotestast.PackageFixture:
+		return declaredMethod(named, "FixtureConfig") != nil
+	case gotestast.SharedFixture:
+		return declaredMethod(named, "SharedFixtureConfig") != nil
+	}
+	return false
+}
+
+func fixtureIdentifier(named *types.Named) string {
+	name := named.Obj().Name()
+	if targs := named.TypeArgs(); targs != nil && targs.Len() > 0 {
+		parts := make([]string, targs.Len())
+		for i := range targs.Len() {
+			arg := targs.At(i)
+			if n, ok := arg.(*types.Named); ok {
+				parts[i] = n.Obj().Name()
+			} else {
+				parts[i] = arg.String()
+			}
+		}
+		name += "_" + strings.Join(parts, "_")
+	}
+	return name
+}
+
+func fixtureQualifiedType(named *types.Named, pkgName string) string {
+	name := named.Obj().Name()
+	if targs := named.TypeArgs(); targs != nil && targs.Len() > 0 {
+		parts := make([]string, targs.Len())
+		for i := range targs.Len() {
+			arg := targs.At(i)
+			if n, ok := arg.(*types.Named); ok {
+				argPkg := n.Obj().Pkg()
+				if argPkg != nil && argPkg.Name() != pkgName {
+					parts[i] = argPkg.Name() + "." + n.Obj().Name()
+				} else {
+					parts[i] = n.Obj().Name()
+				}
+			} else {
+				parts[i] = arg.String()
+			}
+		}
+		name += "[" + strings.Join(parts, ", ") + "]"
+	}
+	if pkgName != "" {
+		return pkgName + "." + name
+	}
+	return name
+}
+
+// pointerNamed returns the named type a field points to, through aliases,
+// or nil.
+func pointerNamed(field *types.Var) *types.Named {
+	ptr, ok := types.Unalias(field.Type()).(*types.Pointer)
+	if !ok {
+		return nil
+	}
+	named, ok := types.Unalias(ptr.Elem()).(*types.Named)
+	if !ok {
+		return nil
+	}
+	return named
+}
+
+// fixtureField returns the fixture a named field binds, or nil for a field of
+// any other type. A fixture held by value, or a package fixture a second field
+// names again, is rejected at the field; bound records the fields seen.
+func fixtureField(kind, owner string, field *types.Var, bound map[*types.Named]string) (*types.Named, error) {
+	if field.Anonymous() {
+		return pointerNamed(field), nil
+	}
+	if named, ok := types.Unalias(field.Type()).(*types.Named); ok {
+		if name := named.Obj().Name(); strings.HasSuffix(name, protocol.SuffixFixture) {
+			return nil, gotestast.At(field.Pos(), fmt.Errorf("%s %s has fixture field %s of value type %s; a fixture is bound through a pointer field (*%s)", kind, owner, field.Name(), name, name))
+		}
+		return nil, nil
+	}
+	named := pointerNamed(field)
+	if named == nil {
+		return nil, nil
+	}
+	name := named.Obj().Name()
+	if !strings.HasSuffix(name, protocol.SuffixFixture) || strings.HasSuffix(name, protocol.SuffixSharedFixture) {
+		return named, nil
+	}
+	if prev, dup := bound[named]; dup {
+		return nil, gotestast.At(field.Pos(), fmt.Errorf("%s %s declares two fields of the same fixture type %s (%s and %s); keep one", kind, owner, name, prev, field.Name()))
+	}
+	bound[named] = field.Name()
+	return named, nil
+}
+
+// collectTransitiveDepsRF lists the package fixtures a suite's bindings reach,
+// following every parent. The renderer orders fixture setup by it and the
+// binder derives the suite's shared-fixture keys from it: one walk, so the
+// two cannot disagree.
+func collectTransitiveDepsRF(suiteID string, suiteFixtureFields map[string][]FixtureFieldBinding, rfByID map[string]*BoundFixture) map[string]bool {
+	needed := make(map[string]bool)
+	bindings := suiteFixtureFields[suiteID]
+	var visit func(id string)
+	visit = func(id string) {
+		if needed[id] {
+			return
+		}
+		needed[id] = true
+		rf := rfByID[id]
+		if rf == nil {
+			return
+		}
+		for _, p := range rf.Parents {
+			visit(p.Identifier)
+		}
+	}
+	for _, b := range bindings {
+		visit(b.FixtureIdentifier)
+	}
+	return needed
+}
+
+// hookAt locates a fixture hook as file:line, the file relative to target's
+// directory (its base name when it is there), or "" for a hook the fixture
+// does not declare. The hook's position belongs to target's FileSet, where
+// target's type-check put every type it reached, other packages' included.
+func hookAt(target *packages.Package, fn *types.Func) string {
+	if fn == nil || target == nil || target.Fset == nil {
+		return ""
+	}
+	p := target.Fset.Position(fn.Pos())
+	if !p.IsValid() {
+		return ""
+	}
+	file := filepath.Base(p.Filename)
+	if len(target.GoFiles) > 0 {
+		if rel, err := filepath.Rel(filepath.Dir(target.GoFiles[0]), p.Filename); err == nil {
+			file = filepath.ToSlash(rel)
+		}
+	}
+	return file + ":" + strconv.Itoa(p.Line)
+}

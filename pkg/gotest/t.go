@@ -1,0 +1,162 @@
+package gotest
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/setupwaits"
+	"github.com/mvrahden/go-test/pkg/gotest/internal/assert"
+)
+
+func NewT(t *testing.T) *T {
+	return &T{t: t, tb: t}
+}
+
+// NewTFromTB adapts a non-*testing.T testing type (*testing.B, *testing.F)
+// so suite lifecycle hooks written against *gotest.T can run under
+// benchmarks and fuzz targets. T() returns nil and It/When panic on a
+// TB-backed T; the generator rejects a hook that calls T() in a suite with
+// benchmark or fuzz methods.
+func NewTFromTB(tb testing.TB) *T { return &T{tb: tb} }
+
+type T struct {
+	t   *testing.T
+	tb  testing.TB
+	ctx context.Context
+}
+
+// T returns the underlying *testing.T. It is nil when a suite hook runs under
+// a Benchmark* or Fuzz* method, where the wrapper's own testing type stands in;
+// the generator rejects a hook that calls T() in such a suite. It is also nil
+// inside Eventually and Consistently.
+func (t *T) T() *testing.T {
+	return t.t
+}
+
+func (t *T) testingTB() testing.TB {
+	if t.t != nil {
+		return t.t
+	}
+	return t.tb
+}
+
+func (t *T) Context() context.Context {
+	if t.ctx != nil {
+		return t.ctx
+	}
+	return t.testingTB().Context()
+}
+
+// NewTWithDeadline wraps t with a context that expires after timeout, so a test
+// can hold work to a tighter budget than the suite's own. The context is derived
+// from t.Context() and is released when the test ends: for a *gotest.T that is
+// the suite's context, its deadline and stop included; for a *testing.T it is
+// the testing package's, which carries neither. [Go] on the result is waited
+// for where it would be on t.
+func NewTWithDeadline[TB *testing.T | *T](t TB, timeout time.Duration) *T {
+	var base *T
+	switch v := any(t).(type) {
+	case *T:
+		base = v
+	case *testing.T:
+		base = NewT(v)
+	}
+	ctx, cancel := context.WithTimeout(base.Context(), timeout)
+	base.testingTB().Cleanup(cancel)
+	return &T{t: base.t, tb: base.tb, ctx: ctx}
+}
+
+// NewTWithContext wraps t, overriding what [T.Context] reports. Use it when the
+// context cannot be expressed as a deadline off t.Context() — injected values,
+// or a lifetime that has to differ from the test's own.
+//
+// The caller owns the context; nothing here cancels it. A *testing.B or
+// *testing.F yields a TB-backed T, as [NewTFromTB] does.
+func NewTWithContext(tb testing.TB, ctx context.Context) *T {
+	t, _ := tb.(*testing.T)
+	return &T{t: t, tb: tb, ctx: ctx}
+}
+
+func (t *T) Errorf(format string, args ...any) {
+	report(t.testingTB(), fmt.Sprintf(format, args...))
+}
+
+// report fails tb with msg at the user's line: gotest's own frames are
+// marked as helpers, and msg's leading location is dropped when it names
+// that same line.
+func report(tb testing.TB, msg string) {
+	if goFrame := assert.SkipInternalFrames(tb); goFrame != "" {
+		msg = strings.TrimPrefix(msg, goFrame+": ")
+	}
+	tb.Errorf("%s", msg)
+}
+
+func (t *T) FailNow() {
+	t.testingTB().FailNow()
+}
+
+func (t *T) Skipf(format string, args ...any) {
+	assert.SkipInternalFrames(t.testingTB())
+	t.testingTB().Skipf(format, args...)
+}
+
+// Setenv sets the environment variable key to value and restores it when the
+// test ends.
+func (t *T) Setenv(key, value string) {
+	t.testingTB().Setenv(key, value)
+}
+
+// TempDir returns a new temporary directory, removed when the test ends.
+func (t *T) TempDir() string {
+	return t.testingTB().TempDir()
+}
+
+// Name returns the test's name as testing gave it; in a hook under a benchmark
+// or fuzz target, the wrapper's.
+func (t *T) Name() string {
+	return t.testingTB().Name()
+}
+
+//go:noinline
+func execTestFn(testFn func(it *T), it *T) { testFn(it) }
+
+// sub builds the *T for a nested behavior. A nested subtest gets its own context
+// from the testing package, which carries none of the parent's deadline — so a
+// suite's configured Timeout would silently stop applying the moment a test
+// entered a When or an It. Deriving from the parent keeps its deadline and
+// values, and registering the cancel on the child ends it with the child.
+//
+// A T without a context of its own may still be BeforeAll's, wrapped around a
+// hook's *testing.T: the child then carries the suite's [Go] waits.
+func (t *T) sub(tt *testing.T) *T {
+	if t.ctx == nil {
+		if set := setupwaits.Of(context.Background(), t.testingTB()); set != nil {
+			return NewTWithContext(tt, setupwaits.With(tt.Context(), set))
+		}
+		return NewT(tt)
+	}
+	ctx, cancel := context.WithCancel(t.ctx)
+	tt.Cleanup(cancel)
+	return NewTWithContext(tt, ctx)
+}
+
+func (t *T) It(description string, testFn func(it *T)) {
+	if t.t == nil {
+		panic("gotest: It/When are unavailable in benchmark/fuzz lifecycle hooks")
+	}
+	t.t.Run(description, func(tt *testing.T) {
+		execTestFn(testFn, t.sub(tt))
+	})
+}
+
+func (t *T) When(description string, fn func(w *T)) {
+	if t.t == nil {
+		panic("gotest: It/When are unavailable in benchmark/fuzz lifecycle hooks")
+	}
+	t.t.Run(description, func(tt *testing.T) {
+		execTestFn(fn, t.sub(tt))
+	})
+}

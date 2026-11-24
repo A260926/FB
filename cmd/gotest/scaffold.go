@@ -1,0 +1,159 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/mvrahden/go-test/internal/scaffold"
+)
+
+func runScaffold(inv Invocation) int { //nolint:gocritic // hugeParam: stable API
+	own, rest, err := SplitArgs(inv.Args, scaffoldAllowed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %v\n", err)
+		return 2
+	}
+
+	// SplitArgs routes unrecognized flags into rest rather than erroring, so
+	// the hardening lives here: anything flag-shaped that is not --fuzz is a
+	// usage error, and real targets stay countable.
+	var targets []string
+	for _, arg := range rest {
+		if isFlag(arg) {
+			fmt.Fprintf(os.Stderr, "FAIL: unknown flag %s — scaffold accepts only --fuzz\n", arg)
+			return 2
+		}
+		targets = append(targets, arg)
+	}
+
+	if len(targets) > 1 {
+		fmt.Fprintf(os.Stderr, "FAIL: scaffold takes exactly one target, got %d\n", len(targets))
+		return 2
+	}
+	var target string
+	if len(targets) == 1 {
+		target = targets[0]
+	}
+
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "usage: gotest scaffold [--fuzz] <./pkg/path.TypeName | ./pkg/path/file.go | ./pkg/path.FuncName>")
+		return 2
+	}
+
+	if own.Bool("--fuzz") {
+		return runScaffoldFuzz(target)
+	}
+
+	if strings.HasSuffix(target, ".go") {
+		return runScaffoldFile(target)
+	}
+	return runScaffoldType(target)
+}
+
+func runScaffoldFuzz(target string) int {
+	pkgPattern, funcName, err := scaffold.ParseTarget(target)
+	if err != nil {
+		// A target that names no function is a usage error.
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 2
+	}
+
+	info, err := scaffold.IntrospectFuzzTarget(pkgPattern, funcName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 1
+	}
+
+	out, status, err := scaffold.GenerateFuzzScaffold(info)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 1
+	}
+	if status != "" {
+		fmt.Println(status)
+	}
+
+	filename := scaffold.ToSnakeCase(funcName) + "_fuzz_test.go"
+	return writeScaffoldFile(info.PkgDir, filename, out)
+}
+
+func runScaffoldType(target string) int {
+	pkgPattern, typeName, err := scaffold.ParseTarget(target)
+	if err != nil {
+		// A target that names no type is a usage error.
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 2
+	}
+
+	info, err := scaffold.IntrospectType(pkgPattern, typeName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 1
+	}
+
+	var out []byte
+	if info.IsInterface {
+		out, err = scaffold.GenerateContractScaffold(info)
+	} else {
+		out, err = scaffold.GenerateScaffold(info)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 1
+	}
+
+	filename := scaffold.ToSnakeCase(typeName) + "_suite_test.go"
+	return writeScaffoldFile(info.PkgDir, filename, out)
+}
+
+func runScaffoldFile(target string) int {
+	// The package is loaded from the file's directory as named, so a path
+	// through a symlink (macOS's temp directories) or a short name (Windows's)
+	// still lands in the module and workspace go finds from there.
+	dir := filepath.Dir(target)
+	filename := filepath.Base(target)
+
+	info, err := scaffold.IntrospectFile(dir, filename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 1
+	}
+
+	out, err := scaffold.GenerateFileScaffold(info)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %v\n", err)
+		return 1
+	}
+
+	outFilename := scaffold.ToSnakeCase(strings.TrimSuffix(filename, ".go")) + "_suite_test.go"
+	return writeScaffoldFile(info.PkgDir, outFilename, out)
+}
+
+func writeScaffoldFile(pkgDir, filename string, content []byte) int {
+	outPath := filepath.Join(pkgDir, filename)
+
+	if _, err := os.Stat(outPath); err == nil {
+		fmt.Fprintf(os.Stderr, "scaffold: %s already exists, refusing to overwrite\n", outPath)
+		return 1
+	}
+
+	if err := os.WriteFile(outPath, content, 0644); err != nil { //nolint:gosec // G306: not sensitive data
+		fmt.Fprintf(os.Stderr, "scaffold: failed to write %s: %v\n", outPath, err)
+		return 1
+	}
+	cwd, cwdErr := os.Getwd()
+	if cwdErr == nil {
+		if rel, err := filepath.Rel(cwd, outPath); err == nil {
+			fmt.Printf("Generated: %s\n", rel)
+			return 0
+		}
+	}
+	fmt.Printf("Generated: %s\n", outPath)
+	return 0
+}
+
+func isFlag(s string) bool {
+	return len(s) > 0 && s[0] == '-'
+}

@@ -1,0 +1,13 @@
+Expect: snapshotting: verdicts differ from the golden list
+Judge: ./tests/canary CanaryTestSuite/TestASnapshotMismatchFails
+--- a/pkg/gotest/snapshot.go
++++ b/pkg/gotest/snapshot.go
+@@ -249,7 +249,7 @@
+ 		}
+ 		return
+ 	}
+-	if got != want {
++	if got != want && false {
+ 		if d := assert.DiffSection(want, got); d != "" {
+ 			failf(t, "MatchSnapshot: snapshot mismatch [%s]:\n%s\nRun with GOTEST_UPDATE_SNAPSHOTS=1 to update", sectionKey, d)
+ 		} else {

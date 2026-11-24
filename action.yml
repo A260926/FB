@@ -1,0 +1,518 @@
+name: "Go - Test Suites"
+description: "Run your test suites with a failure-focused summary, GitHub annotations, and coverage reporting"
+
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  packages:
+    description: "Package patterns to test"
+    default: "./..."
+  race:
+    description: "Enable race detector"
+    default: "false"
+  coverage:
+    description: "Enable coverage profiling and reporting"
+    default: "false"
+  min-coverage:
+    description: "Minimum coverage percentage (0-100, fails if below)"
+    required: false
+  flags:
+    description: "Additional gotest flags (--double-dash style)"
+    required: false
+  go-test-flags:
+    description: "Additional go test flags (-single-dash style)"
+    required: false
+  badge:
+    description: "Render a coverage badge and, on the default branch, publish it as coverage.svg to the badge-branch of this repository (needs contents: write). Turns coverage on."
+    default: "false"
+  badge-branch:
+    description: "Branch the coverage badge is published to; created automatically on first use"
+    default: "ci/badges"
+  bench:
+    description: "Run benchmarks after tests (gotest bench --spec)"
+    default: "false"
+  bench-baseline:
+    description: "Baseline JSON file to compare benchmarks against (gotest bench --against)"
+    required: false
+  bench-gate:
+    description: "Fail the run if any benchmark regresses by more than this percent (gotest bench --gate); needs -count=4 or more in flags"
+    required: false
+  bench-save:
+    description: "Save the benchmark run as a JSON baseline at this path (gotest bench --save); an explicit empty string saves to bench.baseline from .gotest.yml"
+    default: "false"
+  fuzz:
+    description: "Run a budgeted fuzz session after tests (gotest fuzz --for); a new crasher fails the step"
+    default: "false"
+  fuzz-for:
+    description: "Approximate wall-clock budget for the whole fuzz session (gotest fuzz --for); empty uses the CLI's default of one minute"
+    default: ""
+  fuzz-cache:
+    description: "Carry Go's fuzz cache (the inputs a session found interesting) between runs, so each session resumes where the last one stopped; set to false for a from-seeds run"
+    default: "true"
+  events-file:
+    description: "Also save the run's go test -json event stream to this path, for upload-artifact, gotestsum or gotest summary --input; empty (the default) saves nothing. Prefer a path under runner.temp so it stays out of the checkout. Artifacts are not masked like logs: a token a test prints ends up in the file."
+    default: ""
+  version:
+    description: "gotest version: 'gomod' (default) runs the CLI go.mod declares; or a version tag such as v1.33.0 to install that binary. Pin the version go.mod requires: a binary that drifts from it is refused or runs the wrong runtime."
+    default: "gomod"
+
+outputs:
+  exit-code:
+    description: "Test process exit code"
+    value: ${{ steps.test.outputs.exit-code }}
+  coverage:
+    description: "Coverage percentage (empty if coverage not enabled)"
+    value: ${{ steps.test.outputs.coverage }}
+  badge:
+    description: "Path of the rendered coverage badge SVG (empty unless badge is enabled and the tests ran)"
+    value: ${{ steps.test.outputs.badge }}
+  events-file:
+    description: "Absolute path of the saved event stream (empty unless events-file is set and the file was written)"
+    value: ${{ steps.test.outputs.events-file }}
+  bench-report:
+    description: "Path to the gotest bench --json report file (empty if bench not enabled)"
+    value: ${{ steps.bench.outputs.bench-report }}
+  bench-breached-keys:
+    description: "Comma-joined benchmark keys that breached the gate (empty if none or no gate)"
+    value: ${{ steps.bench.outputs.bench-breached-keys }}
+  fuzz-crashers:
+    description: "Comma-joined workspace-relative paths of the corpus files the fuzz session added (empty if none or fuzz not enabled)"
+    value: ${{ steps.fuzz.outputs.fuzz-crashers }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install gotest
+      if: ${{ inputs.version != 'gomod' }}
+      shell: bash
+      env:
+        GOTEST_VERSION: ${{ inputs.version }}
+      run: go install github.com/mvrahden/go-test/cmd/gotest@"$GOTEST_VERSION"
+
+    - name: Resolve the gotest command
+      id: resolve
+      if: ${{ inputs.version == 'gomod' }}
+      shell: bash
+      run: |
+        # Bare `go run <pkg>` fails on a tidy consumer (the CLI's own deps are
+        # pruned from go.sum); -mod=mod lets this throwaway checkout add them,
+        # except in workspace mode, where the flag is rejected and the
+        # workspace go.sum is the union of its modules'.
+        pkg=github.com/mvrahden/go-test/cmd/gotest
+        notice="::notice title=gotest::go.mod does not declare the gotest tool; declare it with: go get -tool $pkg@<pinned version>"
+        # Read from go.mod, of every use module in a workspace: the go tool
+        # listing differs between Go releases.
+        declared=
+        while IFS= read -r gomod; do
+          json=$(go mod edit -json "$gomod" 2>/dev/null) || continue
+          case "$json" in *"\"Path\": \"$pkg\""*) declared=1 ;; esac
+        done < <(go list -m -f '{{.GoMod}}' 2>/dev/null)
+        if [ -n "$declared" ]; then
+          echo "GOTEST_CMD=go tool $pkg" >> "$GITHUB_ENV"
+        elif [ -n "$(go env GOWORK)" ]; then
+          go list -m 2>/dev/null | grep -qx github.com/mvrahden/go-test || echo "$notice"
+          echo "GOTEST_CMD=go run $pkg" >> "$GITHUB_ENV"
+        else
+          echo "$notice"
+          echo "GOTEST_CMD=go run -mod=mod $pkg" >> "$GITHUB_ENV"
+        fi
+
+    - name: Run tests
+      id: test
+      shell: bash
+      env:
+        INPUT_PACKAGES: ${{ inputs.packages }}
+        INPUT_RACE: ${{ inputs.race }}
+        INPUT_COVERAGE: ${{ inputs.coverage }}
+        INPUT_MIN_COVERAGE: ${{ inputs.min-coverage }}
+        INPUT_FLAGS: ${{ inputs.flags }}
+        INPUT_GO_TEST_FLAGS: ${{ inputs.go-test-flags }}
+        INPUT_BADGE: ${{ inputs.badge }}
+        INPUT_EVENTS_FILE: ${{ inputs.events-file }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        if [ "$INPUT_VERSION" != "gomod" ]; then
+          cmd=(gotest)
+        else
+          read -ra cmd <<< "$GOTEST_CMD"
+        fi
+
+        args=(summary --github)
+
+        events_file=""
+        if [ -n "$INPUT_EVENTS_FILE" ]; then
+          if ! "${cmd[@]}" summary --help 2>/dev/null | grep -q -- --events-file; then
+            have="$INPUT_VERSION"
+            if [ "$have" = "gomod" ]; then
+              have="$(go list -m -f '{{.Version}}' github.com/mvrahden/go-test 2>/dev/null || true)"
+              echo "::error::events-file needs gotest v1.36.0 or newer; go.mod pins ${have:-an older version}"
+            else
+              echo "::error::events-file needs gotest v1.36.0 or newer; the version input is ${have}"
+            fi
+            exit 2
+          fi
+          events_file="$INPUT_EVENTS_FILE"
+          case "$events_file" in
+            /* | [A-Za-z]:[\\/]*) ;;
+            *) events_file="$PWD/$events_file" ;;
+          esac
+          if command -v cygpath > /dev/null; then
+            events_file="$(cygpath -m "$events_file")"
+          fi
+          rm -f "$events_file"
+          args+=("--events-file=$events_file")
+        fi
+
+        gtflags=()
+        if [ -n "$INPUT_GO_TEST_FLAGS" ]; then
+          case "$INPUT_GO_TEST_FLAGS" in *\"*|*\'*)
+            echo "::error::go-test-flags must not contain quotes: one entry per word or line"; exit 2;;
+          esac
+          read -ra gtflags -d '' <<< "$INPUT_GO_TEST_FLAGS" || true
+        fi
+
+        # A -coverprofile the caller passes through go-test-flags is the
+        # run's profile; the action only adds a temporary one when nobody did.
+        user_profile=""
+        for ((i = 0; i < ${#gtflags[@]}; i++)); do
+          case "${gtflags[i]}" in
+            -coverprofile=*) user_profile="${gtflags[i]#-coverprofile=}" ;;
+            -coverprofile) user_profile="${gtflags[i+1]:-}" ;;
+          esac
+        done
+
+        cover_profile=""
+        temp_profile=""
+        if [ "$INPUT_COVERAGE" = "true" ] || [ "$INPUT_BADGE" = "true" ]; then
+          if [ -n "$user_profile" ]; then
+            cover_profile="$user_profile"
+          else
+            cover_profile="$(mktemp -t gotest-cover-XXXXXX.out)"
+            temp_profile="$cover_profile"
+          fi
+          args+=("--coverage=$cover_profile")
+        fi
+
+        badge_file=""
+        if [ "$INPUT_BADGE" = "true" ]; then
+          badge_file="${RUNNER_TEMP}/gotest-coverage-badge.svg"
+          rm -f "$badge_file"
+          args+=("--badge=$badge_file")
+        fi
+
+        if [ -n "$INPUT_MIN_COVERAGE" ]; then
+          args+=("--min=$INPUT_MIN_COVERAGE")
+        fi
+
+        if [ -n "$INPUT_FLAGS" ]; then
+          case "$INPUT_FLAGS" in *\"*|*\'*)
+            echo "::error::flags must not contain quotes: one entry per word or line"; exit 2;;
+          esac
+          read -ra extra -d '' <<< "$INPUT_FLAGS" || true
+          args+=("${extra[@]}")
+        fi
+
+        case "$INPUT_PACKAGES" in *\"*|*\'*)
+          echo "::error::packages must not contain quotes: one entry per word or line"; exit 2;;
+        esac
+        read -ra pkgs -d '' <<< "$INPUT_PACKAGES" || true
+        args+=("${pkgs[@]}")
+
+        if [ "$INPUT_RACE" = "true" ]; then
+          args+=(-race)
+        fi
+
+        if [ -n "$temp_profile" ]; then
+          args+=("-coverprofile=$temp_profile")
+        fi
+
+        if [ ${#gtflags[@]} -gt 0 ]; then
+          args+=("${gtflags[@]}")
+        fi
+
+        set +e
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          "${cmd[@]}" "${args[@]}"
+          exit_code=$?
+        else
+          # A cancelled job signals this shell alone: pass it on to gotest's process group, as a terminal does.
+          trap 'kill -INT -- -"$pid" 2>/dev/null || kill -INT "$pid" 2>/dev/null' INT
+          trap 'kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null' TERM
+          set -m
+          "${cmd[@]}" "${args[@]}" < /dev/null &
+          pid=$!
+          set +m
+          while :; do
+            wait "$pid"; exit_code=$?
+            kill -0 "$pid" 2>/dev/null || break
+          done
+          trap - INT TERM
+        fi
+        set -e
+
+        echo "exit-code=$exit_code" >> "$GITHUB_OUTPUT"
+
+        if [ -n "$cover_profile" ] && [ -f "$cover_profile" ]; then
+          # A profile go tool cover rejects must not fail a step whose tests
+          # already have their verdict; the coverage output just stays empty.
+          if cov=$(go tool cover -func="$cover_profile" | tail -1 | awk '{print $NF}' | sed 's/%//'); then
+            echo "coverage=$cov" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not compute the coverage output from ${cover_profile}"
+          fi
+          [ -n "$temp_profile" ] && rm -f "$temp_profile"
+        fi
+
+        if [ -n "$badge_file" ] && [ -f "$badge_file" ]; then
+          echo "badge=$badge_file" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ -n "$events_file" ] && [ -f "$events_file" ]; then
+          echo "events-file=$events_file" >> "$GITHUB_OUTPUT"
+        fi
+
+        exit "$exit_code"
+
+    # The badge follows the default branch only: a pull request or feature
+    # branch must never rewrite it. Exit code 2 means the suites did not run
+    # to completion (build failure, bad invocation), so there is nothing
+    # trustworthy to publish; 0 and 1 (tests failed or the minimum was
+    # missed) still describe the real coverage of the branch.
+    - name: Publish coverage badge
+      if: ${{ !cancelled() && inputs.badge == 'true' && steps.test.outputs.badge != '' && steps.test.outputs.exit-code != '2' }}
+      shell: bash
+      env:
+        BADGE_FILE: ${{ steps.test.outputs.badge }}
+        BADGE_BRANCH: ${{ inputs.badge-branch }}
+        COVERAGE: ${{ steps.test.outputs.coverage }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ -z "$DEFAULT_BRANCH" ] && command -v gh >/dev/null 2>&1; then
+          DEFAULT_BRANCH=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch 2>/dev/null || true)
+        fi
+        if [ "$GITHUB_REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+          echo "Coverage badge is published from ${DEFAULT_BRANCH:-the default branch} only; skipping on ${GITHUB_REF}"
+          exit 0
+        fi
+
+        remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        work="${RUNNER_TEMP}/gotest-badge-publish"
+        trap 'rm -rf "$work"' EXIT
+
+        # Each attempt starts from the branch's current tip, so a concurrent
+        # job's push (e.g. another matrix cell) only costs a retry.
+        for attempt in 1 2 3; do
+          rm -rf "$work"
+          mkdir -p "$work"
+          cd "$work"
+          git init -q
+          git remote add origin "$remote"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git fetch -q --depth 1 origin "refs/heads/${BADGE_BRANCH}" 2>/dev/null; then
+            git checkout -q -B "$BADGE_BRANCH" FETCH_HEAD
+          else
+            git checkout -q --orphan "$BADGE_BRANCH"
+          fi
+
+          cp "$BADGE_FILE" coverage.svg
+          {
+            echo "# ${BADGE_BRANCH}"
+            echo
+            echo "Files on this branch are written by the gotest GitHub Action (\`badge: true\`); edits are overwritten on the next run."
+            echo
+            echo "![Coverage](https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${BADGE_BRANCH}/coverage.svg)"
+          } > README.md
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Coverage badge unchanged (${COVERAGE}%)"
+            exit 0
+          fi
+          git commit -q -m "coverage: ${COVERAGE}%"
+          if git push -q origin "HEAD:refs/heads/${BADGE_BRANCH}" 2>push.log; then
+            echo "Coverage badge published: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${BADGE_BRANCH}/coverage.svg"
+            exit 0
+          fi
+          echo "push attempt ${attempt} failed:"
+          cat push.log
+          sleep "$attempt"
+        done
+
+        echo "::warning::Coverage badge not published: could not push to ${BADGE_BRANCH}. Does the job grant 'contents: write'?"
+        exit 0
+
+    - name: Run benchmarks
+      id: bench
+      if: ${{ inputs.bench == 'true' }}
+      shell: bash
+      env:
+        INPUT_PACKAGES: ${{ inputs.packages }}
+        INPUT_BENCH_BASELINE: ${{ inputs.bench-baseline }}
+        INPUT_BENCH_GATE: ${{ inputs.bench-gate }}
+        INPUT_BENCH_SAVE: ${{ inputs.bench-save }}
+        INPUT_FLAGS: ${{ inputs.flags }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        if [ "$INPUT_VERSION" != "gomod" ]; then
+          cmd=(gotest)
+        else
+          read -ra cmd <<< "$GOTEST_CMD"
+        fi
+
+        # gotest bench writes its own markdown to $GITHUB_STEP_SUMMARY
+        # automatically (mirroring how `gotest summary --github` does it
+        # above): results table, delta table, gate verdict. Under --json
+        # the human rendering moves entirely into the step summary: stdout
+        # carries the versioned report document, captured to a file.
+        report="$(mktemp -t gotest-bench-XXXXXX.json)"
+        args=(bench --spec --json)
+
+        if [ -n "$INPUT_BENCH_BASELINE" ]; then
+          args+=("--against=$INPUT_BENCH_BASELINE")
+        fi
+
+        if [ -n "$INPUT_BENCH_GATE" ]; then
+          args+=("--gate=$INPUT_BENCH_GATE")
+        fi
+
+        # bench-save: "false" (the default) skips saving; an explicit empty
+        # string becomes bare --save= (the bench.baseline config fallback);
+        # anything else is the baseline path.
+        if [ "$INPUT_BENCH_SAVE" != "false" ]; then
+          args+=("--save=$INPUT_BENCH_SAVE")
+        fi
+
+        if [ -n "$INPUT_FLAGS" ]; then
+          case "$INPUT_FLAGS" in *\"*|*\'*)
+            echo "::error::flags must not contain quotes: one entry per word or line"; exit 2;;
+          esac
+          read -ra extra -d '' <<< "$INPUT_FLAGS" || true
+          args+=("${extra[@]}")
+        fi
+
+        case "$INPUT_PACKAGES" in *\"*|*\'*)
+          echo "::error::packages must not contain quotes: one entry per word or line"; exit 2;;
+        esac
+        read -ra pkgs -d '' <<< "$INPUT_PACKAGES" || true
+        args+=("${pkgs[@]}")
+
+        set +e
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          "${cmd[@]}" "${args[@]}" > "$report"
+          exit_code=$?
+        else
+          trap 'kill -INT -- -"$pid" 2>/dev/null || kill -INT "$pid" 2>/dev/null' INT
+          trap 'kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null' TERM
+          set -m
+          "${cmd[@]}" "${args[@]}" > "$report" < /dev/null &
+          pid=$!
+          set +m
+          while :; do
+            wait "$pid"; exit_code=$?
+            kill -0 "$pid" 2>/dev/null || break
+          done
+          trap - INT TERM
+        fi
+        set -e
+
+        echo "bench-report=$report" >> "$GITHUB_OUTPUT"
+
+        # Comma-join gate.breachedKeys from the report without requiring
+        # jq on the runner (python3 ships on all hosted images).
+        breached=""
+        if [ -s "$report" ]; then
+          breached=$(python3 -c 'import json, sys; r = json.load(open(sys.argv[1])); g = r.get("gate") or {}; print(",".join(g.get("breachedKeys") or []), end="")' "$report" 2>/dev/null || true)
+        fi
+        echo "bench-breached-keys=$breached" >> "$GITHUB_OUTPUT"
+
+        exit "$exit_code"
+
+    # Go keeps the inputs a session found interesting in its build cache.
+    # setup-go's cache is keyed on go.sum and never re-saved on a hit, so a
+    # corpus would only survive a dependency bump; this pair restores the
+    # latest corpus of the branch or its base and saves this run's under a
+    # key of its own, so a short budget compounds across runs.
+    - name: Locate the Go fuzz cache
+      id: fuzz-cache-dir
+      if: ${{ inputs.fuzz == 'true' && inputs.fuzz-cache == 'true' }}
+      shell: bash
+      run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the fuzz cache
+      if: ${{ inputs.fuzz == 'true' && inputs.fuzz-cache == 'true' }}
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.fuzz-cache-dir.outputs.dir }}
+        key: gotest-fuzz-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: gotest-fuzz-${{ runner.os }}-
+
+    - name: Run fuzz session
+      id: fuzz
+      if: ${{ inputs.fuzz == 'true' }}
+      shell: bash
+      env:
+        INPUT_PACKAGES: ${{ inputs.packages }}
+        INPUT_FUZZ_FOR: ${{ inputs.fuzz-for }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        if [ "$INPUT_VERSION" != "gomod" ]; then
+          cmd=(gotest)
+        else
+          read -ra cmd <<< "$GOTEST_CMD"
+        fi
+
+        # gotest fuzz writes its own session table to $GITHUB_STEP_SUMMARY.
+        # The session exits 1 on a finding and 0 when the budget ran out
+        # with nothing found; the crasher files it names stay in the
+        # checkout for a later upload-artifact step or `gotest fuzz promote`.
+        log="$(mktemp -t gotest-fuzz-XXXXXX.log)"
+        case "$INPUT_PACKAGES" in *\"*|*\'*)
+          echo "::error::packages must not contain quotes: one entry per word or line"; exit 2;;
+        esac
+        read -ra pkgs -d '' <<< "$INPUT_PACKAGES" || true
+
+        set +e
+        args=(fuzz)
+        if [ -n "$INPUT_FUZZ_FOR" ]; then
+          args+=("--for=$INPUT_FUZZ_FOR")
+        fi
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          "${cmd[@]}" "${args[@]}" "${pkgs[@]}" 2>&1 | tee "$log"
+          exit_code=${PIPESTATUS[0]}
+        else
+          fifo="$log.fifo"
+          mkfifo "$fifo"
+          tee "$log" < "$fifo" &
+          tee_pid=$!
+          trap 'kill -INT -- -"$pid" 2>/dev/null || kill -INT "$pid" 2>/dev/null' INT
+          trap 'kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null' TERM
+          set -m
+          "${cmd[@]}" "${args[@]}" "${pkgs[@]}" > "$fifo" 2>&1 < /dev/null &
+          pid=$!
+          set +m
+          while :; do
+            wait "$pid"; exit_code=$?
+            kill -0 "$pid" 2>/dev/null || break
+          done
+          trap - INT TERM
+          wait "$tee_pid"
+          rm -f "$fifo"
+        fi
+        set -e
+
+        crashers=$(sed -n 's/^\[[^]]*\] new crasher: //p' "$log" | python3 -c 'import os, sys; print(",".join(os.path.relpath(p.strip()) for p in sys.stdin if p.strip()), end="")')
+        echo "fuzz-crashers=$crashers" >> "$GITHUB_OUTPUT"
+
+        exit "$exit_code"
+
+    - name: Save the fuzz cache
+      if: ${{ always() && inputs.fuzz == 'true' && inputs.fuzz-cache == 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.fuzz-cache-dir.outputs.dir }}
+        key: gotest-fuzz-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}

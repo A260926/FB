@@ -1,0 +1,13 @@
+Expect: ^FAIL .*conformance/fixtures .* / fails the run on the teardown as well, reporting that AfterAll's error \(
+Clause: when a shared fixture's AfterAll returns an error while a sibling's setup failed → fails the run on the teardown as well, reporting that AfterAll's error
+--- a/internal/gotestrunner/sharedfixture.go
++++ b/internal/gotestrunner/sharedfixture.go
+@@ -738,7 +738,7 @@
+ 	// for it: a sibling's AfterAll that failed beside it is known from the
+ 	// process's _teardown line alone.
+ 	if setupErr != nil {
+-		return tornErr
++		return nil
+ 	}
+ 
+ 	// A clean exit is the only proof of a completed teardown: the epilogue runs

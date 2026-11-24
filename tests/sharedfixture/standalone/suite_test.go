@@ -1,0 +1,76 @@
+package standalone
+
+import (
+	"io"
+
+	"github.com/mvrahden/go-test/pkg/gotest"
+	"github.com/mvrahden/go-test/tests/sharedfixture/fixtures"
+)
+
+type AlphaTestSuite struct {
+	Alpha *fixtures.AlphaSharedFixture
+}
+
+func (s *AlphaTestSuite) SuiteConfig() gotest.SuiteConfig {
+	cfg := gotest.DefaultSuiteConfig()
+	cfg.Parallel = true
+	return cfg
+}
+
+func (s *AlphaTestSuite) TestDataPathSet(t *gotest.T) {
+	gotest.NotEmpty(t, s.Alpha.DataPath)
+}
+
+func (s *AlphaTestSuite) TestHandleHydrated(t *gotest.T) {
+	gotest.NotEmpty(t, s.Alpha.Handle)
+	_, err := s.Alpha.Handle.Seek(0, 0)
+	gotest.NoError(t, err)
+	b, err := io.ReadAll(s.Alpha.Handle)
+	gotest.NoError(t, err)
+	gotest.Equal(t, "alpha-data", string(b))
+}
+
+type MultiTestSuite struct {
+	Alpha *fixtures.AlphaSharedFixture
+	Beta  *fixtures.BetaSharedFixture
+}
+
+func (s *MultiTestSuite) SuiteConfig() gotest.SuiteConfig {
+	cfg := gotest.DefaultSuiteConfig()
+	cfg.Parallel = true
+	return cfg
+}
+
+func (s *MultiTestSuite) TestAlphaAvailable(t *gotest.T) {
+	gotest.NotEmpty(t, s.Alpha.DataPath)
+	gotest.NotEmpty(t, s.Alpha.Handle)
+}
+
+func (s *MultiTestSuite) TestBetaAvailable(t *gotest.T) {
+	gotest.Equal(t, "beta-shared", s.Beta.Label)
+	gotest.Equal(t, 42, s.Beta.Count)
+}
+
+type GammaTestSuite struct {
+	Gamma *fixtures.GammaSharedFixture
+}
+
+func (s *GammaTestSuite) SuiteConfig() gotest.SuiteConfig {
+	cfg := gotest.DefaultSuiteConfig()
+	cfg.Parallel = true
+	return cfg
+}
+
+func (s *GammaTestSuite) TestDerivedFromAlpha(t *gotest.T) {
+	gotest.Contains(t, s.Gamma.Derived, "gamma-")
+}
+
+func (s *GammaTestSuite) TestAlphaWired(t *gotest.T) {
+	gotest.NotEmpty(t, s.Gamma.Alpha.DataPath)
+}
+
+type PlainTestSuite struct{}
+
+func (s *PlainTestSuite) TestPlainWorks(t *gotest.T) {
+	gotest.True(t, true)
+}

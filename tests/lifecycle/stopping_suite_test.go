@@ -1,0 +1,143 @@
+package lifecycle_test
+
+import (
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/proctree"
+	"github.com/mvrahden/go-test/internal/testkit"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// StoppingTestSuite stops a run at the moments a stop used to leave fixtures
+// up: while they come up, while a test holds what a teardown needs.
+type StoppingTestSuite struct {
+	bin map[string]string // per testdata/stopping package
+}
+
+func (s *StoppingTestSuite) SuiteConfig() gotest.SuiteConfig {
+	return gotest.SuiteConfig{Parallel: true, SetupTimeout: time.Minute}
+}
+
+func (s *StoppingTestSuite) BeforeAll(t *gotest.T) {
+	sigintForChildren()
+	root, err := filepath.Abs("../..")
+	gotest.NoError(t, err)
+	cli, err := testkit.BuildCLI(t.Context(), root, t.TempDir())
+	gotest.NoError(t, err)
+	testkit.ScrubActionsEnv()
+	gotest.NoError(t, testkit.PrivateCache(t.TempDir()))
+	staged := stageTestdata(t, root)
+	s.bin = map[string]string{}
+	for _, pkg := range []string{"setup", "hold", "quick"} {
+		dir := "./testdata/stopping/" + pkg + "/"
+		gen := exec.Command(cli, "generate", dir) //nolint:gosec // G204: controlled binary with fixed args
+		gen.Dir = staged
+		out, err := gen.CombinedOutput()
+		gotest.NoError(t, err, string(out))
+		name := pkg + ".test"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		s.bin[pkg] = filepath.Join(t.TempDir(), name)
+		build := exec.Command("go", "test", "-c", "-o", s.bin[pkg], dir) //nolint:gosec // G204: fixed args
+		build.Dir = staged
+		out, err = build.CombinedOutput()
+		gotest.NoError(t, err, string(out))
+	}
+}
+
+// AfterAll has nothing to release: the staged module is a temp dir.
+func (s *StoppingTestSuite) AfterAll(t *gotest.T) {}
+
+// announced prepares the binary as the runner starts it, with its channel.
+func (s *StoppingTestSuite) announced(t *gotest.T, pkg, run string, env ...string) (*exec.Cmd, *channel) {
+	cmd := exec.Command(s.bin[pkg], "-test.run="+run) //nolint:gosec // G204: binary built by this suite
+	cmd.Env = append(ownEnv(), env...)
+	return cmd, attach(t, cmd)
+}
+
+// A stop while a fixture is still coming up cancels it; the fixtures that ran
+// their setup, the cancelled one included, are torn down in order, nothing is
+// left behind, and the process ends with the failure the cancelled setup is.
+func (s *StoppingTestSuite) TestAStopDuringSetupReleasesWhatCameUp(t *gotest.T) {
+	cmd, c := s.announced(t, "setup", "TestSlowSetupTestSuite")
+	tree, log := startTreeUntil(t, cmd, "STOPPING_LOG", "container starting")
+	c.started()
+
+	stopAsTheRunnerDoes(t, c, tree, cmd)
+	err := wait(tree, cmd)
+	c.close()
+
+	// The container's setup was cancelled: it ran, so it is released, before
+	// the fixture it depends on.
+	gotest.Equal(t, []string{"db up", "container starting", "container down", "db down"}, readEvents(log))
+	gotest.True(t, endedOnItsOwn(err), "the process ends with its own status, not by the signal: %v", err)
+}
+
+// A test holding what a fixture's teardown waits for is told to stop first —
+// its context ends — so the teardown gets it back instead of waiting it out.
+func (s *StoppingTestSuite) TestAStopStopsTheTestsFirst(t *gotest.T) {
+	cmd, c := s.announced(t, "hold", "TestHoldingTestSuite", "STOPPING_HOLD=1")
+	tree, log := startTreeUntil(t, cmd, "STOPPING_LOG", "running")
+	c.started()
+
+	began := time.Now()
+	stopAsTheRunnerDoes(t, c, tree, cmd)
+	err := wait(tree, cmd)
+	c.close()
+
+	gotest.Equal(t, []string{"db up", "running", "pool down", "db down"}, readEvents(log))
+	gotest.Less(t, time.Since(began), 10*time.Second, "the teardown waited for the test")
+	gotest.True(t, endedOnItsOwn(err), "the process ends with its own status, not by the signal: %v", err)
+}
+
+// The runner's channel is taken once and its variable out of the
+// environment: a process a test starts must not answer to it.
+func (s *StoppingTestSuite) TestTheRunnersChannelStaysWithTheRunner(t *gotest.T) {
+	cmd, c := s.announced(t, "quick", "TestEnvTestSuite", "STOPPING_ENV=1")
+	log := filepath.Join(t.TempDir(), "events")
+	cmd.Env = append(cmd.Env, "STOPPING_LOG="+log)
+	out, err := cmd.CombinedOutput()
+	c.started()
+	c.close()
+	gotest.NoError(t, err, string(out))
+	gotest.Equal(t, []string{"env="}, readEvents(log))
+}
+
+// A method that ignores its context cannot be stopped: the stop waits a grace
+// for it to return, then cuts it short, releasing the fixtures and ending the
+// process by the signal, so the runner books the method as cut short instead
+// of waiting its budget out.
+func (s *StoppingTestSuite) TestAMethodIgnoringItsContextIsCutShort(t *gotest.T) {
+	cmd, c := s.announced(t, "hold", "TestHoldingTestSuite", "STOPPING_HOLD=1", "STOPPING_IGNORE_CONTEXT=1")
+	tree, log := startTreeUntil(t, cmd, "STOPPING_LOG", "running")
+	c.started()
+	began := time.Now()
+	stopAsTheRunnerDoes(t, c, tree, cmd)
+	err := waitWithin(t, tree, cmd, 20*time.Second)
+	c.close()
+	gotest.Equal(t, []string{"db up", "running", "pool down", "db down"}, readEvents(log))
+	gotest.Less(t, time.Since(began), 15*time.Second, "the stop waited for the method")
+	gotest.False(t, endedOnItsOwn(err), "the process ends by the signal, its method cut short: %v", err)
+}
+
+// waitWithin waits for cmd, killing its tree when d passes first so nothing
+// outlives the test.
+func waitWithin(t *gotest.T, tree *proctree.Tree, cmd *exec.Cmd, d time.Duration) error {
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+	select {
+	case err := <-exited:
+		tree.Release()
+		return err
+	case <-time.After(d):
+		_ = tree.Kill()
+		err := <-exited
+		tree.Release()
+		gotest.Fail(t, "the process was still running %s after the stop: %v", d, err) //nolint:fail-guard // the tree is killed before the test fails
+		return err
+	}
+}

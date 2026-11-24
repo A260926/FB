@@ -1,0 +1,20 @@
+Expect: fuzzing: verdicts differ from the golden list
+Judge: ./tests/canary CanaryTestSuite/TestSeedsReplayWithVerdicts
+--- a/internal/gotestgen/static/gotest.fuzz.tpl
++++ b/internal/gotestgen/static/gotest.fuzz.tpl
+@@ -2,7 +2,7 @@
+ {{ . }}
+ {{- end }}
+ {{ range $i, $ts := .Spec.EffectiveTestSuites }}
+-{{- range $fz := $ts.Fuzzers }}
++{{- range $i, $fz := $ts.Fuzzers }}{{ if ne $i 0 }}
+ func Fuzz{{ $ts.Identifier }}_{{ $fz.Identifier }}(f *ƒtesting.F) {
+ {{- template "suiteFrame" (dict "Suite" $ts "Fixtures" (index $.Fixtures $ts.Identifier) "TB" "f" "Assign" "") }}
+ {{- $funcName := printf "Fuzz%s_%s" $ts.Identifier $fz.Identifier }}
+@@ -19,5 +19,5 @@
+ {{- end }}
+   s.{{ $fz.Identifier }}(ƒf)
+ }
+-{{ end }}
++{{ end }}{{ end }}
+ {{- end }}

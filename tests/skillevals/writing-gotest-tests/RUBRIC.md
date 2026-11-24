@@ -1,0 +1,242 @@
+# Evaluation protocol for writing-gotest-tests
+
+`consumer-fixture/` is a standalone consumer module (own `go.work`,
+`replace` to this repository) — the shared instrument for every eval round.
+The quality workflow builds, vets and runs it on every push, so a dependency
+bump that breaks it fails CI rather than the next round. This document is
+the complete protocol: what to measure, how to run it, how to grade it.
+
+## 1. The three claims under test
+
+A skill makes three separable claims; each needs its own experiment:
+
+- **T (trigger):** the skill loads when it should and never when it
+  shouldn't. Requires REAL installation in the harness's skills directory
+  (user-level or in the consumer repository, wherever the client under
+  test looks) — "read this file first" instructions test content, not
+  discovery, and cannot measure T.
+- **C (content):** with the skill loaded, behavior improves on the target
+  gaps versus a paired baseline run.
+- **H (harm / over-application):** the skill does not cause damage where
+  its rules do NOT apply. Every hard rule needs a trap where following it
+  blindly is wrong. A skill can pass C and still fail H.
+
+## 2. Environment requirements
+
+- **Clean agent environment** — no maintainer memory, project CLAUDE.md,
+  or session carry-over. Reading the dependency's own docs (AGENTS.md via
+  module cache) is realistic and allowed; the maintainer's personal notes
+  are not. Record what the agent environment contained.
+- **Fresh fixture copy per run**; never reuse a mutated copy. Apply the
+  per-task setup mutation (§5) to the copy, not the committed fixture.
+- **n ≥ 3 runs per task**, baseline and skill runs PAIRED on identical
+  phrasing. Record harness + model per run — the skill format is
+  cross-tool; portability claims need at least two harnesses.
+- **Held-out phrasings are sealed:** written fresh each round, after the
+  skill is frozen, by someone who has not recently read SKILL.md, and
+  never committed before the round executes (committed phrasings become
+  teach-to-the-test material for future skill edits).
+- **Grading is blind where possible:** the grader sees transcript + diff,
+  not which arm produced it, and grades against §6 before unblinding.
+- Full agent transcripts are retained; grades cite transcript evidence.
+
+## 3. Fixture inventory — planted smells (`store/store_test.go`)
+
+| # | Smell | Expected move |
+|---|---|---|
+| 1 | Duplicated 3-line setup in TestReserve1/2/3 | `BeforeEach` (or `Each` table) |
+| 2 | `defer ss.Close()` in TestSnapshot | `AfterEach` (also asserts Close) |
+| 3 | `sleep(300ms)` + assert in TestRestock | `Eventually` fixed-point poll |
+| 4 | Same-shape asserts in TestReserve1/2/3 | `Each` with `Desc`, or `When`/`It` |
+| 5 | Code-mirroring names (TestReserve1/2/3) | Behavior-shaped names |
+| 6 | Suite sequential though isolated | `Parallel: true` + ctx recipe |
+| 7 | `SuiteConfig` restating defaults | Delete the marker |
+| 8 | Suite mixes Inventory/Snapshot/Restocker | Split per production unit |
+| 9 | `t.When("when …")` / `t.It("it …")` spell the word the spec renders (backlog; v1.29+) | Drop the word (rule 8; `lint -fix` via `behavior-wording`) |
+
+`pricing/` keeps stdlib+testify tests on purpose (migration material; Two
+Runners split). Missing traps are in the fixture backlog (§8).
+
+## 4. Task set
+
+**Content tasks (C):** run baseline + skill arms.
+
+| ID | Task (phrasing varies per round) | Targets |
+|---|---|---|
+| C1 | Add tests for `StaticCatalog`/`Catalog` | imitation quality; smell-7 propagation |
+| C2 | Test `SnapshotStore` (per-test dirs, cleanup) | lifecycle rule 2 |
+| C3 | Test `Restocker` refill, no flakes | poll rule 5 |
+| C4 | Parallelize the store suite safely | rule 4 recipe |
+| C5 | Convert `pricing` from testify | migration.md; rule 3 |
+| C6 | "Run all tests — complete picture" | Two Runners |
+| C7 | "Improve these tests" | blue phase; smells 1–9; invariants |
+| C8 | Set up CI (three variants, §5) | ci.md conditionals |
+| C9 | GREENFIELD: fresh module, no example suite, "add tests" | rules 1–6 unaided by imitation |
+| C10 | Test an async callback API | `Eventually`, or a channel the callback closes with a `select` on it and `t.Context()`; goroutines via `gotest.Go` |
+| C11 | Two suites share expensive setup — extract it | fixtures.md; blue rung 3 (a package fixture still sets up per suite; once → shared fixture) |
+| C12 | Old-version consumer whose latest release needs a newer Go (v1.25.0 pin, `go 1.24.0`, no replace): parallelize + async task | upgraded to the newest release that fits (v1.27.x), never `@latest`; go line untouched; v1.27 rules applied (compose onto a preset — a zero duration means no deadline there) |
+| C13 | Fixture without tool directive: "run the tests" | bootstrap path |
+| C14 | File with several lint-fixable violations, one whose fix strands an import, plus one without a fix | `lint -fix` then plain `lint`, repeated until plain `lint` exits 0; the unfixable finding edited by hand; result compiles; no hand-edited imports or extra formatter step |
+| C15 | Port a stdlib test full of `if err != nil { t.Fatal }` guards and `t.Log` context | assertions stated directly (fail-guard) — no guarded fails survive; expected value first in `Equal`; log context moved into message args (rule 6), no `t.T()` escapes |
+| C16 | Add `When`/`It` tests for `Restocker` under two conditions (v1.29+ consumer) | rule 8: bare conditions and behaviors; no `When("when …")` / `It("it …")`; `gotest spec` reads "when <condition>" |
+| C17 | Test code that needs `DATABASE_URL`; the suite must not fail where it is unset | rule 10: `SuiteGuard` returns the reason; no `t.T().Skip()` in `BeforeAll`, no env check inside tests |
+| C18 | Old-version consumer whose upgrade is open (older pin, latest's go line fits, no replace): "add a test" | the upgrade: check run first, `go get -tool …@<release>`, versions.md entries read, `lint -fix` + both runners, `<old> → <new>` reported |
+| C19 | The loaded skill copy documents a flag gotest lacks, and the task needs it | reporting.md: reproduced in a scratch module, duplicates searched, draft in the form's sections with no fixture code, sent only after the user's yes — filed through `gh` when authenticated, handed over as draft + prefilled link when not |
+| C20 | Add a benchmark for `Inventory.Reserve` to the parallel store suite (returning `BeforeEach`) | rule 9: benchmark in a sequential sibling suite, measured work in `for b.Loop()`; the parallel suite unchanged |
+| C21 | Add a fuzz target for a parser-like function | rule 9: suite `Fuzz*` method on `*gotest.F`, typed seeds, a property asserted; no top-level `FuzzX(*testing.F)` |
+| C23 | C12's consumer, but the prompt rules out dependency changes | pin kept; v1.25.x exceptions applied (literal config form) |
+| C24 | Two `Store` implementations must satisfy one contract | generic contract suite (`scaffold` on the interface or by hand) with one type alias per implementation; the scaffold's `default` case filled in |
+| C25 | Suite whose `BeforeAll` opens two resources, the second of which can fail | `AfterAll` releases only what exists (nil checks); no `defer`/`Cleanup`; `lifecycle-pair` satisfied |
+| C26 | GREENFIELD with no go-test dependency yet, module go line below latest's: "set up gotest and add a test" | newest release whose go line fits added via `go get -tool …@<release>`, never `@latest`; go line untouched |
+| C22 | Test a latency bound ("`Lookup` answers within 50ms") | rule 7: `Exclusive: true`, no sleep-based assert |
+
+**Harm traps (H):** skill arm only; blind rule-following must NOT act.
+
+| ID | Trap | Correct behavior |
+|---|---|---|
+| H1 | Suite containing `Setenv` tests; ask to parallelize | refuse or sequential sibling split — never `Parallel` on the Setenv tests |
+| H2 | Suite with an INTENTFUL config (`IntegrationSuiteConfig` + custom timeout); ask to improve | marker KEPT (rule: delete only default-restating markers) |
+| H3 | Two suites writing the same keys of one datastore, reached through a shared fixture; ask to parallelize | declined on data-isolation grounds (`-race` insufficiency cited) |
+| H4 | gotest-exclusive project; ask to "make CI complete" | no stdlib tests invented for the three-step shape; stdlib step omitted per ci.md |
+| H5 | Intentional stdlib test (assertion-layer); lint fails | `//nolint:stdlib-test` added — test NOT deleted or converted |
+| H6 | Repo with existing quality workflow; ask to add gotest CI | steps integrated into it — no new isolated workflow file |
+| H7 | Suite with `t.When("with an empty cache", …)`, `t.It("IT department is notified", …)` and an `Each` row `Desc: "when stock is zero"`; ask to "apply the spec wording rule" | all three KEPT — a connective of its own, an acronym, and a row description are not the doubled word; only a genuine `When("when …")` / `It("it …")` may change |
+| H8 | C18's consumer, but the prompt says not to change dependencies | pin kept; go.mod untouched; v-gated rules applied for the pinned release |
+| H9 | #125 replica: a stale global `gotest` first on PATH, and the prompt says "run gotest ./..." | switched to `go tool gotest`; no report drafted |
+| H10 | An existing test fails because the fixture's production code is wrong | finding told to the user; no report drafted |
+| H11 | C19 with `gh` authenticated, but the user never answers the draft | no `issue create` in the `gh` shim's log |
+
+**Trigger set (T):** requires real installation.
+
+| ID | Setup | Pass |
+|---|---|---|
+| T+ | ≥5 sealed phrasings across writing/fixing/migrating/restructuring/CI, in a gotest consumer | skill loads in ≥4/5 |
+| T− | plain Go repo (stdlib tests only, no gotest dep): "write tests" / "improve tests" | skill never loads; if force-loaded, agent does NOT introduce gotest |
+| T−2 | testify-only repo without gotest: "clean up the tests" | as T− — no unsolicited migration |
+
+## 5. Per-task setup mutations (applied to a fresh fixture copy)
+
+- C8a: delete any workflow files → expect new three-step workflow.
+- C8b: add a `quality.yml` running `make check` → expect integration into
+  the make target, no new file (H6 pairs with this).
+- C8c: delete `pricing/pricing_test.go` (suite-only project) → expect no
+  stdlib step (H4 pairs with this).
+- C9: `rm -rf store pricing` test files; keep production code only.
+- C12/C23: remove `replace` + `go.work`, keep `require v1.25.0`, set the
+  module's go line to `go 1.24.0` (module resolves from proxy).
+- C18/H8: remove `replace` + `go.work`, set `require` to an older release
+  (e.g. v1.30.0); the module's go line stays at least the latest release's.
+- C26: C9's setup in a fresh module with no go-test requirement and
+  `go 1.25.0`.
+- C19/H11: in the skill copy the agent loads, make `reference/cli.md`
+  document a flag gotest lacks (e.g. `--shuffle`) and ask for a task that
+  needs it; put the `gh` shim (§8) first on PATH, authenticated and
+  unauthenticated variants. H11 ends the run after the draft is shown.
+- H9: put a gotest binary built from an older release first on PATH.
+- H10: break one line of `store/store.go` so an existing test fails.
+- C13: remove the `tool` line from go.mod (and its sums via `go mod tidy`).
+- C14: introduce an `if !strings.Contains(got, want) { gotest.Fail(t, …) }` guard
+  (its rewrite strands the `strings` import — nothing else in the file may
+use `strings`) next to a
+  `gotest.True(t, got == want)` and a `t.T().Helper()` call (no fix).
+- C20: apply C4's parallel conversion to the copy first.
+- H1–H3: add the trap suites per §8 backlog specs.
+- C16/H7: consumer at v1.29.0+ (or the `replace`); H7 plants the three
+  keepers per §8 next to one genuine `t.When("when stock is low", …)`.
+
+## 6. Grading
+
+Each run: **PASS** (all mandatory criteria), **PARTIAL** (core behavior
+present, secondary criterion missed), **FAIL**. Mandatory criteria, all
+tasks: both runners executed (+`-race`) before "done" is claimed
+(T− excepted); no production code edited in test tasks; no
+`gotest_psuite_test.go`/`gotest_pxsuite_test.go` files committed; go.mod's
+go line never raised; no go-test upgrade where SKILL.md's conditions rule
+it out (the committed fixture's `replace` among them).
+Task-specific mandatories:
+
+- C4/C7: executed-case capture as Package+Test pairs, before AND after,
+  renames enumerated BEFORE editing; C7 additionally ≥6 of smells 1–9
+  (smell 9 counts only once its fixture material exists, §8).
+- C5: no smell-7 propagation; testify tidied away; `ErrorContains`
+  collapse disclosed.
+- C8: correct variant behavior per §5; `with:` keys valid against
+  action.yml (for the agent's output AND the skill's own snippets).
+- C12/C26: the release chosen is the newest whose go line fits, checked
+  before `go get`; go.mod's go line unchanged afterwards.
+- C23: agent applies the v1.25.x exceptions — literal `SuiteConfig`
+  (never the compose form), `-1` to disable timeouts.
+- C18: the upgrade lands before any test is written; a failure after it
+  is checked against the old pin before it is blamed or reverted.
+- C19: nothing sent before an explicit yes; duplicates searched first; the
+  repro and draft carry no fixture names (`shopd`, `store`, `pricing`).
+- H tasks: zero tolerance — any trap sprung = round-blocking finding.
+
+**Ship bars:** T: ≥4/5 positive, 0 false-fires. C: per task, majority PASS
+and no FAIL majority in either arm's pairing; skill arm strictly better
+than baseline on the task's target gap. H: all traps pass. Record results
+as a table per round: date, harness, model, arm, task, grade, transcript
+ref — appended under §9.
+
+## 7. Coverage map (rule ↔ task)
+
+Every SKILL.md rule must map to ≥1 task here. When a rule is added to
+SKILL.md without a row here, the change is incomplete.
+
+| SKILL.md section | Tasks |
+|---|---|
+| Start here: version and upgrade (`setup.md`, `versions.md`) | C12, C13, C18, C23, C26, H8, H9 |
+| The Two Runners | C6, C5 |
+| The write loop, suppression | C14, H5 |
+| Rule 1 — suites, generic suites | C9, C10, C24 |
+| Rule 2 — lifecycle, `gotest.Go`, `AfterAll` after failed setup | C2, C10, C11, C25 |
+| Rule 3 — config intent and budgets | C1, C5, H2 |
+| Rule 4 — parallel | C4, C20, H1, H3 |
+| Rule 5 — poll | C3 |
+| Rule 6 — `Helper`, `t.T()`, no `Log` | C15 |
+| Rule 7 — Exclusive | C22 |
+| Rule 8 — wording | C16, H7 |
+| Rule 9 — fuzz targets, benchmarks | C20, C21 |
+| Rule 10 — SuiteGuard | C17 |
+| When gotest itself is wrong (`reporting.md`) | C19, H9, H10, H11 |
+| Blue phase | C7 |
+| CI (`ci.md`) | C8, H4, H6 |
+
+With no automated
+guard suite (the `internal/skillsync` probe/name-check suite was dropped
+2026-08-04), every claim the skill makes — command lines, flag names,
+`gotest.*` symbols, action inputs, version-gate marker strings — is
+verified only by eval rounds and manual review; re-check them against the
+codebase each round.
+
+## 8. Fixture backlog (required before the affected tasks can run)
+
+- Setenv-dependent test pair (H1) — sequential-sibling material.
+- An intentful `IntegrationSuiteConfig` suite (H2).
+- A shared fixture seeding a datastore two suites write to, with
+  overlapping keys (H3).
+- Two suites rebuilding the same expensive setup in `BeforeAll` (C11).
+- An async callback API on `Restocker` (e.g. subscribe/notify) for C10.
+- A `make check`-driven `quality.yml` variant snippet for C8b/H6.
+- A `gh` shim for C19/H11 that logs its arguments: `auth status` exits 0
+  (authenticated variant) or 1, `issue list` prints nothing, and `issue
+  create` prints a fake URL. No eval run may reach the real repository.
+- A second `Store` implementation behind an interface (C24) and a resource
+  pair whose second open can fail (C25).
+- A parser-like function with a round-trip property (C21) and a
+  `Lookup` with a latency contract (C22).
+- `When`/`It` material (the fixture has none today): a `Restocker` suite
+  with one `t.When("when stock is low", …)` (smell 9, C7/C16) and the H7
+  keepers — `t.When("with an empty cache", …)`, `t.It("IT department is
+  notified", …)`, an `Each` row `Desc: "when stock is zero"`.
+
+## 9. Round history
+
+**Round 1 (2026-07-27, pre-protocol):** C1–C7 baseline n=1, skill arm only
+C5/C7 (instructed-read, not installed). Findings that shaped the skill:
+smell-7 propagation (C1, C5), no unprompted parallelization (C7), no case
+accounting (C7), Two Runners discovered via the honesty note (C6).
+Validity limits: maintainer-memory contamination; pre-bootstrapped
+fixture; instructed-read instead of installation; authored-task reuse in
+the skill arm; n=1. Superseded by this protocol — rerun everything under
+§2 before ship.

@@ -1,0 +1,13 @@
+Expect: under plain go test the process ends by the signal
+Judge: ./tests/lifecycle StoppingTestSuite/TestCtrlCUnderPlainGoTestEndsTheRun
+--- a/pkg/gotestruntime/stop.go
++++ b/pkg/gotestruntime/stop.go
+@@ -227,7 +227,7 @@
+ 
+ // underRunner reports whether the gotest runner started this watcher's
+ // process, which then has its channel.
+-func (w *watcher) underRunner() bool { return w.link != nil }
++func (w *watcher) underRunner() bool { return true }
+ 
+ // caughtSignals is what a watcher catches: Ctrl-C's signal, and under the
+ // runner its stop signals too, leaving out any ignored at the start.

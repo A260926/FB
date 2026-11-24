@@ -1,0 +1,292 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/gotestrunner"
+	"github.com/mvrahden/go-test/internal/gotestspec"
+)
+
+func runSummary(inv Invocation) int { //nolint:gocritic // hugeParam: stable API
+	own, goTestArgs, err := SplitArgs(inv.DefaultArgs(), summaryAllowed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+
+	format := own.ValueOr("--format", "terminal")
+	if err := checkFormat(format); err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	if jsonMode, _ := stripJSONFlag(goTestArgs); jsonMode {
+		fmt.Fprintln(os.Stderr, "FAIL: -json cannot be combined with summary; use --format=json for the summary as JSON")
+		return 2
+	}
+	output := own.Value("--output")
+	input := own.Value("--input")
+	if refuseControl(own, input) {
+		return 2
+	}
+	coverageProfile := own.Value("--coverage")
+	badgePath := own.Value("--badge")
+	noColor := colorDisabled(own.Bool("--no-color"))
+	github := own.Bool("--github") || os.Getenv("GITHUB_ACTIONS") == "true"
+	renderOnly := own.Bool("--render-only")
+
+	if renderOnly && input == "" {
+		fmt.Fprintf(os.Stderr, "FAIL: --render-only requires --input\n")
+		return 2
+	}
+
+	if input != "" {
+		if refuseGroups(own, "--input") {
+			return 2
+		}
+		if own.Given("--events-file") {
+			fmt.Fprintln(os.Stderr, "FAIL: --events-file saves a run's event stream, and --input runs nothing")
+			return 2
+		}
+		return runSummaryFromInput(input, format, output, coverageProfile, noColor, github, renderOnly, badgePath)
+	}
+
+	eventsFile, err := openEventsFile(own)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	if eventsFile != nil {
+		defer eventsFile.Close()
+	}
+
+	minCoverage, err := parseMinFlag(own)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	if minCoverage == 0 {
+		minCoverage = inv.Config.MinCoverage
+	}
+
+	goTestArgs, coverProfile, coverCleanup, err := ensureCoverProfile(goTestArgs, minCoverage > 0 || badgePath != "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	defer coverCleanup()
+
+	cfg, err := parseExecFlags(own, goTestArgs, &inv.Config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+
+	classified := gotestrunner.ClassifyGoTestArgs(goTestArgs)
+	loadFlags := gotestrunner.StripNonLoadFlags(classified.BuildFlags)
+	pkgs, err := loadRunPackages(cfg.PackagePatterns, loadFlags)
+	loaded, broken, noTestFiles := pkgs.Loaded, pkgs.Broken, pkgs.NoTestFiles
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+
+	if cfg.CI {
+		if code, err := enforceFocusGuard(loaded); err != nil {
+			fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+			return 2
+		} else if code != 0 {
+			return code
+		}
+	}
+
+	overlay, cleanup, err := gotestrunner.GenerateOverlay(loaded, broken, cfg.Debug, cfg.NoCache, cfg.HarvestSeeds)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	defer cleanup()
+
+	ctx, cancel := shutdownContext(cfg.Control)
+	defer cancel()
+
+	if cfg.GlobalTimeout > 0 {
+		var timeoutCancel context.CancelFunc
+		ctx, timeoutCancel = context.WithTimeout(ctx, cfg.GlobalTimeout)
+		defer timeoutCancel()
+	}
+
+	pipelineStart := time.Now()
+	result, err := gotestrunner.RunPipeline(ctx, gotestrunner.PipelineConfig{
+		GoTestArgs:      cfg.GoTestArgs,
+		SetupTimeout:    cfg.SetupTimeout,
+		UpdateSnapshots: cfg.UpdateSnapshots,
+		CI:              cfg.CI,
+		Parallel:        cfg.Parallel,
+		CompileParallel: cfg.CompileParallel,
+		OutputMode:      gotestrunner.RunCaptureJSON,
+		Events:          eventsWriter(eventsFile),
+		FuzzFuncsByPkg:  overlay.FuzzFuncsByPkg,
+		GlobalTimeout:   cfg.GlobalTimeout,
+		NoTestFiles:     noTestFiles,
+		PackageOrder:    pkgs.Order,
+		Groups:          cfg.Groups,
+		SkipGroups:      cfg.SkipGroups,
+	}, overlay)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+
+	code := result.ExitCode
+	events, err := gotestspec.ParseEvents(bytes.NewReader(result.CapturedJSON))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: parsing test events: %s\n", err)
+		return 2
+	}
+	noteStdlibTests(overlay.StdlibTestsByPkg)
+	gotestrunner.NoteBenchmarksNotRun(os.Stderr, goTestArgs, len(overlay.Declared.Benchmarks))
+
+	tree := gotestspec.BuildTree(events, gotestspec.WithDeclarations(buildDeclarationIndex(loaded)))
+
+	if coverageProfile == "" {
+		coverageProfile = gotestrunner.ExtractCoverProfile(goTestArgs)
+	}
+
+	elapsed := time.Since(pipelineStart)
+	if err := writeSummaryOutput(tree, format, output, coverageProfile, noColor, github, elapsed, badgePath, groupRuns(result.Groups)); err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+
+	return enforceCoverage(coverProfile, minCoverage, code)
+}
+
+func runSummaryFromInput(input, format, output, coverageProfile string, noColor, github, renderOnly bool, badgePath string) int {
+	var r io.Reader
+	if input == "-" {
+		r = os.Stdin
+	} else {
+		f, err := os.Open(input)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "FAIL: opening input file: %s\n", err)
+			return 2
+		}
+		defer f.Close()
+		r = f
+	}
+
+	events, err := gotestspec.ParseEvents(r)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: parsing test events: %s\n", err)
+		return 2
+	}
+
+	tree := gotestspec.BuildTree(events, gotestspec.WithDeclarations(declarationsForStream(events, nil)))
+
+	if err := writeSummaryOutput(tree, format, output, coverageProfile, noColor, github, 0, badgePath, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+
+	return replayExitCode(events, tree, renderOnly)
+}
+
+// writeSummaryOutput renders the summary to stdout or --output; an --output
+// it cannot create is the command's failure, exit 2 at the callers.
+// groupRuns converts the pipeline's group timings for the renderers.
+func groupRuns(groups []gotestrunner.GroupRun) []gotestspec.GroupRun {
+	out := make([]gotestspec.GroupRun, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, gotestspec.GroupRun{Name: g.Name, Suites: g.Suites, Wall: g.Wall})
+	}
+	return out
+}
+
+func writeSummaryOutput(tree []*gotestspec.Package, format, output, coverageProfile string, noColor, github bool, elapsed time.Duration, badgePath string, groups []gotestspec.GroupRun) error {
+	var w io.Writer = os.Stdout
+	var closeFunc func()
+	if output != "" {
+		f, err := os.Create(output)
+		if err != nil {
+			return fmt.Errorf("creating output file: %w", err)
+		}
+		closeFunc = func() { f.Close() }
+		w = f
+	}
+	if closeFunc != nil {
+		defer closeFunc()
+	}
+
+	var renderOpts []gotestspec.RenderOption
+	if elapsed > 0 {
+		renderOpts = append(renderOpts, gotestspec.WithElapsed(elapsed))
+	}
+	if noColor {
+		renderOpts = append(renderOpts, gotestspec.WithNoColor())
+	}
+	if len(groups) > 0 {
+		renderOpts = append(renderOpts, gotestspec.WithGroups(groups))
+	}
+
+	if coverageProfile != "" {
+		report, err := gotestspec.ParseCoverageProfile(coverageProfile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: reading coverage profile: %s\n", err)
+		} else {
+			renderOpts = append(renderOpts, gotestspec.WithCoverage(report))
+			if badgePath != "" {
+				writeCoverageBadge(badgePath, report.Total)
+			}
+		}
+	}
+
+	switch format {
+	case "md", "markdown":
+		gotestspec.RenderMarkdownSummary(w, tree, renderOpts...)
+	case "json":
+		gotestspec.RenderJSON(w, tree, renderOpts...)
+	default:
+		gotestspec.RenderSummary(w, tree, renderOpts...)
+	}
+
+	// Annotations are workflow commands for a human-readable log; a JSON or
+	// markdown document on stdout must stay the document alone.
+	if github && format == "terminal" {
+		modulePath := gotestspec.ReadModulePath(".")
+		annotations := gotestspec.CollectAnnotations(tree, modulePath)
+		gotestspec.WriteGitHubAnnotations(os.Stdout, annotations)
+
+		if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
+			sf, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err == nil {
+				gotestspec.RenderMarkdownSummary(sf, tree, renderOpts...)
+				sf.Close()
+			}
+		}
+	}
+	return nil
+}
+
+// writeCoverageBadge renders the badge SVG to path. It never fails the run:
+// the badge is a by-product of the summary, so problems are warnings.
+func writeCoverageBadge(path string, pct float64) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: writing coverage badge: %s\n", err)
+		return
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: writing coverage badge: %s\n", err)
+		return
+	}
+	defer f.Close()
+	if err := gotestspec.RenderCoverageBadge(f, pct); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: writing coverage badge: %s\n", err)
+	}
+}

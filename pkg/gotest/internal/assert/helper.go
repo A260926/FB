@@ -1,0 +1,107 @@
+package assert
+
+import (
+	"reflect"
+	"runtime"
+	"sync"
+	"testing"
+	"unsafe"
+
+	"github.com/mvrahden/go-test/internal/callsite"
+)
+
+var (
+	rwMutexType     = reflect.TypeFor[sync.RWMutex]()
+	helperPCsType   = reflect.TypeFor[map[uintptr]struct{}]()
+	helperNamesType = reflect.TypeFor[map[string]struct{}]()
+)
+
+// SkipInternalFrames walks the call stack and registers all gotest-internal
+// frame PCs in tb's helperPCs map. This causes Go's decoration to skip those
+// frames when choosing the file:line prefix for error output.
+//
+// Returns the "file:line" of the first non-gotest user frame — the frame
+// Go's decoration will show. Returns "" on any failure or if no user frame
+// is found, or when tb is not a *testing.T, *testing.B or *testing.F.
+//
+// Uses reflect + unsafe to access unexported fields. Runtime type guards
+// ensure a silent no-op if Go's testing internals change.
+func SkipInternalFrames(tb testing.TB) string {
+	switch tb.(type) {
+	case *testing.T, *testing.B, *testing.F:
+	default:
+		return ""
+	}
+	v := reflect.ValueOf(tb)
+	if v.IsNil() {
+		return ""
+	}
+	v = v.Elem()
+
+	muField := v.FieldByName("mu")
+	hpField := v.FieldByName("helperPCs")
+	hnField := v.FieldByName("helperNames")
+
+	if !muField.IsValid() || !muField.CanAddr() || muField.Type() != rwMutexType {
+		return ""
+	}
+	if !hpField.IsValid() || !hpField.CanAddr() || hpField.Type() != helperPCsType {
+		return ""
+	}
+
+	pcs := make([]uintptr, 32)
+	n := runtime.Callers(2, pcs) // skip runtime.Callers + SkipInternalFrames
+	if n == 0 {
+		return ""
+	}
+
+	var toMark []uintptr
+	var firstUserFrame string
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		frame, more := frames.Next()
+		if IsGotestSource(frame.File) || IsGeneratedBridge(frame.File) {
+			if pc, ok := helperPC(&frame); ok {
+				toMark = append(toMark, pc)
+			}
+		} else if firstUserFrame == "" {
+			firstUserFrame = callsite.Format(frame.File, frame.Line)
+		}
+		if !more {
+			break
+		}
+	}
+
+	if len(toMark) == 0 {
+		return firstUserFrame
+	}
+
+	mu := (*sync.RWMutex)(unsafe.Pointer(muField.UnsafeAddr()))
+	mu.Lock()
+	defer mu.Unlock()
+
+	hp := (*map[uintptr]struct{})(unsafe.Pointer(hpField.UnsafeAddr()))
+	if *hp == nil {
+		*hp = make(map[uintptr]struct{})
+	}
+	for _, pc := range toMark {
+		(*hp)[pc] = struct{}{}
+	}
+
+	if hnField.IsValid() && hnField.CanAddr() && hnField.Type() == helperNamesType {
+		hn := (*map[string]struct{})(unsafe.Pointer(hnField.UnsafeAddr()))
+		*hn = nil
+	}
+
+	return firstUserFrame
+}
+
+// helperPC returns frame's PC in the return-address form Helper records, and
+// whether testing resolves it to frame's function. frame.PC is already backed
+// up into the call; testing backs it up again, which next to an inlined call
+// lands in the callee and would hide the user's frame instead.
+func helperPC(frame *runtime.Frame) (uintptr, bool) {
+	pc := frame.PC + 1
+	at, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	return pc, at.Function == frame.Function
+}

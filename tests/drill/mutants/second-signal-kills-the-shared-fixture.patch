@@ -1,0 +1,13 @@
+Judge: ./internal/gotestrunner AbandonTestSuite/TestATreeWithoutAWayOfItsOwnIsAskedFirst
+Expect: ^FAIL .*internal/gotestrunner Abandon .* / asks it to stop and waits for it \(
+--- a/internal/gotestrunner/abandon.go
++++ b/internal/gotestrunner/abandon.go
+@@ -89,7 +89,7 @@
+ 	if l.again != nil {
+ 		return l.again() == nil
+ 	}
+-	return tree.Interrupt() == nil
++	return false
+ }
+ 
+ // writeGate lets an event reach stdout and the events file whole before the

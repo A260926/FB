@@ -1,0 +1,13 @@
+Expect: orphan: sleep 4242 outlived the run
+Judge: ./tests/canary CanaryLifecycleTestSuite/TestNothingOutlivesTheRun
+Clause: when a test starts sleep 4242 and never waits for it → the test passes and no such process outlives the run
+--- a/internal/proctree/tree_unix.go
++++ b/internal/proctree/tree_unix.go
+@@ -35,7 +35,6 @@
+ // stays its own while any member lives, so a signal to it after the root was
+ // reaped reaches no stranger.
+ func (t sysTree) release(pid int) {
+-	_ = signalGroup(pid, syscall.SIGKILL)
+ 	// A killed process exits later: waited for, so the root being done means
+ 	// its tree is too.
+ 	for deadline := time.Now().Add(releaseWait); t.alive(pid) && time.Now().Before(deadline); {

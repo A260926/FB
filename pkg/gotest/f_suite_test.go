@@ -1,0 +1,571 @@
+package gotest_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/mvrahden/go-test/internal/protocol"
+	"github.com/mvrahden/go-test/pkg/gotest"
+	"github.com/mvrahden/go-test/pkg/gotestfuzz"
+)
+
+// The top-level fuzz functions in this file run under plain go test only: the
+// gotest runner ignores stdlib functions by design, so FWrapperTestSuite
+// starts each of them in a go test subprocess, the armed ones to fail on
+// purpose and the rest to pass.
+
+// FuzzAdapterLifecycle is a top-level stdlib fuzz target using gotest as a
+// plain library: no generated target, so f.Fuzz binds the callback by
+// reflection. It replays two seeds and proves beforeEach/afterEach
+// interpose around EACH execution, not once around the whole target.
+func FuzzAdapterLifecycle(f *testing.F) {
+	var order []string
+	gf := gotest.NewF(f,
+		func(*gotest.T) { order = append(order, "before") },
+		func(*gotest.T) { order = append(order, "after") },
+		nil)
+	gf.Add("ab")
+	gf.Add("cd")
+
+	gotest.Same(f, f, gf.F(), "identity passthrough broken")
+
+	gf.Fuzz(func(t *gotest.T, s string) {
+		order = append(order, "body:"+s)
+		gotest.Equal(t, "before", order[len(order)-2])
+		gotest.Equal(t, "body:"+s, order[len(order)-1])
+		if len(order) > 3 {
+			gotest.Equal(t, []string{"before", "body:ab", "after"}, order[:3])
+		}
+	})
+
+	// Under go test the seeds replay synchronously, so the last afterEach
+	// has run by now.
+	gotest.Equal(f, []string{"before", "body:ab", "after", "before", "body:cd", "after"}, order)
+}
+
+// FuzzAdapterAfterEachRunsWhenBeforeEachLeaves: a beforeEach that leaves
+// through Goexit — Skipf here, FailNow in a failing suite — still gets its
+// afterEach, as a test method's hooks do.
+func FuzzAdapterAfterEachRunsWhenBeforeEachLeaves(f *testing.F) {
+	var after int
+	gf := gotest.NewF(f,
+		func(t *gotest.T) { t.Skipf("not this seed") },
+		func(*gotest.T) { after++ },
+		nil)
+	gf.Add("ab")
+	gf.Fuzz(func(t *gotest.T, s string) { gotest.Fail(t, "the body ran after a skipping beforeEach") })
+	gotest.Equal(f, 1, after, "afterEach runs after a beforeEach that skipped")
+}
+
+// FuzzAdapterNilHooks proves nil before/after hooks don't panic.
+func FuzzAdapterNilHooks(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	gf.Add("x")
+	gf.Fuzz(func(t *gotest.T, s string) {
+		gotest.NotZero(t, s)
+	})
+}
+
+// FuzzAdapter2Args proves the reflective binding passes every native
+// argument through, seeds included.
+func FuzzAdapter2Args(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	gf.Add("a", 7)
+	gf.Fuzz(func(t *gotest.T, s string, n int) {
+		gotest.Equal(t, "a", s)
+		gotest.Equal(t, 7, n)
+	})
+}
+
+// fanReq is a struct Go's fuzzing engine cannot handle natively. fanReqTarget
+// is what codegen emits for a target over it: Email stays a native string
+// leaf, Age rides as an 8-byte leaf, and the callback is bound by its exact
+// type.
+type fanReq struct {
+	Email string
+	Age   int
+}
+
+func fanReqLiteral(v fanReq) string {
+	return fmt.Sprintf("fanReq{Email: %q, Age: %d}", v.Email, v.Age)
+}
+
+func fanReqTarget() *gotest.FuzzTarget {
+	return &gotest.FuzzTarget{
+		Signature: "func(*gotest.T, fanReq)",
+		Register: func(tf *testing.F, fn any, each gotest.FuzzEach) bool {
+			run, ok := fn.(func(*gotest.T, fanReq))
+			if !ok {
+				return false
+			}
+			tf.Fuzz(func(t *testing.T, email string, age []byte) {
+				v := fanReq{Email: email, Age: gotestfuzz.LeafInt(age)}
+				each(t, func() string { return fanReqLiteral(v) }, func(tt *gotest.T) { run(tt, v) })
+			})
+			return true
+		},
+		Explode: func(seed []any) ([]any, error) {
+			if len(seed) != 1 {
+				return nil, fmt.Errorf("f.Add was given %d values, but this fuzz target takes 1", len(seed))
+			}
+			v, err := gotest.SeedArg[fanReq](seed, 0)
+			if err != nil {
+				return nil, err
+			}
+			return []any{v.Email, gotestfuzz.LeafBytesInt(v.Age)}, nil
+		},
+	}
+}
+
+// FuzzTargetDispatch proves the mechanism end to end: a typed seed is
+// exploded into leaves, the callback is bound through the target's own
+// (*testing.F).Fuzz call, and it receives the fanned-in struct with the
+// lifecycle interposed per execution.
+func FuzzTargetDispatch(f *testing.F) {
+	var order []string
+	gf := gotest.NewF(f,
+		func(*gotest.T) { order = append(order, "before") },
+		func(*gotest.T) { order = append(order, "after") },
+		fanReqTarget())
+
+	gf.Add(fanReq{Email: "a@b.c", Age: 30})
+
+	gf.Fuzz(func(t *gotest.T, req fanReq) {
+		order = append(order, "body")
+		gotest.Equal(t, "before", order[len(order)-2])
+		if len(order) == 3 {
+			gotest.Equal(t, "a@b.c", req.Email)
+			gotest.Equal(t, 30, req.Age)
+		}
+	})
+
+	gotest.GreaterOrEqual(f, len(order), 3, "order = %v", order)
+	gotest.Equal(f, []string{"before", "body", "after"}, order[:3], "the per-execution triple")
+}
+
+// FuzzTargetMixed proves a two-value target fans one position and passes
+// the other through, seeds included.
+func FuzzTargetMixed(f *testing.F) {
+	target := &gotest.FuzzTarget{
+		Signature: "func(*gotest.T, fanReq, string)",
+		Register: func(tf *testing.F, fn any, each gotest.FuzzEach) bool {
+			run, ok := fn.(func(*gotest.T, fanReq, string))
+			if !ok {
+				return false
+			}
+			tf.Fuzz(func(t *testing.T, email string, age []byte, topic string) {
+				v := fanReq{Email: email, Age: gotestfuzz.LeafInt(age)}
+				each(t, nil, func(tt *gotest.T) { run(tt, v, topic) })
+			})
+			return true
+		},
+		Explode: func(seed []any) ([]any, error) {
+			if len(seed) != 2 {
+				return nil, fmt.Errorf("f.Add was given %d values, but this fuzz target takes 2", len(seed))
+			}
+			v, err := gotest.SeedArg[fanReq](seed, 0)
+			if err != nil {
+				return nil, err
+			}
+			s, err := gotest.SeedArg[string](seed, 1)
+			if err != nil {
+				return nil, err
+			}
+			return []any{v.Email, gotestfuzz.LeafBytesInt(v.Age), s}, nil
+		},
+	}
+	gf := gotest.NewF(f, nil, nil, target)
+	gf.Add(fanReq{Email: "x@y.z", Age: 7}, "orders")
+	gf.Fuzz(func(t *gotest.T, req fanReq, topic string) {
+		gotest.Equal(t, "x@y.z", req.Email)
+		gotest.Equal(t, 7, req.Age)
+		gotest.Equal(t, "orders", topic)
+	})
+}
+
+// FuzzTargetReportsDecodedInputOnFailure proves a failing execution prints
+// the fanned-in literal — go test itself prints only the corpus path. Armed
+// by GOTEST_TEST_FUZZ_FAIL_INPUT; unarmed it replays its seed and passes.
+func FuzzTargetReportsDecodedInputOnFailure(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, fanReqTarget())
+	gf.Add(fanReq{Email: "boom"})
+	gf.Fuzz(func(t *gotest.T, v fanReq) {
+		if v.Email == "boom" && os.Getenv("GOTEST_TEST_FUZZ_FAIL_INPUT") != "" { //nolint:fail-guard // a deliberate failure trigger, not an assertion about v
+			t.Errorf("deliberate failure for input reporting")
+		}
+	})
+}
+
+// FuzzHandleContext proves the handle's context is the engine's own.
+func FuzzHandleContext(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	gotest.Equal(f, f.Context(), gf.Context())
+	gf.Add("x")
+	gf.Fuzz(func(t *gotest.T, s string) {})
+}
+
+// FuzzHandleSkipf is armed by GOTEST_TEST_FUZZ_SKIP: Skipf must skip the
+// whole target before any seed replays.
+func FuzzHandleSkipf(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	if os.Getenv("GOTEST_TEST_FUZZ_SKIP") != "" {
+		gf.Skipf("no corpus on %s", "this host")
+	}
+	gf.Add("x")
+	gf.Fuzz(func(t *gotest.T, s string) {
+		gotest.Empty(t, os.Getenv("GOTEST_TEST_FUZZ_SKIP"), "a seed replayed after Skipf")
+	})
+}
+
+// FuzzHandleErrorf is armed by GOTEST_TEST_FUZZ_ERRORF: Errorf marks the
+// target failed and returns; testing.F then runs no seeds for a failed
+// target, so the callback never executes.
+func FuzzHandleErrorf(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	if os.Getenv("GOTEST_TEST_FUZZ_ERRORF") != "" {
+		gf.Errorf("setup broke: %d", 7)
+		fmt.Println("continued after Errorf")
+	}
+	gf.Add("x")
+	gf.Fuzz(func(t *gotest.T, s string) {
+		fmt.Println("seed replayed after Errorf")
+	})
+}
+
+// FuzzHandleFailNow is armed by GOTEST_TEST_FUZZ_FAILNOW: FailNow stops the
+// target at once, so nothing after it runs.
+func FuzzHandleFailNow(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	if os.Getenv("GOTEST_TEST_FUZZ_FAILNOW") != "" {
+		gf.Errorf("giving up")
+		gf.FailNow()
+		fmt.Println("unreachable after FailNow")
+	}
+	gf.Add("x")
+	gf.Fuzz(func(t *gotest.T, s string) {})
+}
+
+// FuzzSeedTypeMismatch proves a seed of the wrong type is rejected against
+// the target's own type, naming both. Armed by env.
+func FuzzSeedTypeMismatch(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, fanReqTarget())
+	if os.Getenv("GOTEST_TEST_FUZZ_BAD_SEED") != "" {
+		gf.Add("not a fanReq")
+	} else {
+		gf.Add(fanReq{Email: "ok"})
+	}
+	gf.Fuzz(func(t *gotest.T, v fanReq) {})
+}
+
+// FuzzNativeSeedTypeMismatch is FuzzSeedTypeMismatch without a generated
+// target: the reflective binding checks the seed's type itself. Armed by env.
+func FuzzNativeSeedTypeMismatch(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	if os.Getenv("GOTEST_TEST_FUZZ_BAD_NATIVE_SEED") != "" {
+		gf.Add(int64(5))
+	} else {
+		gf.Add(5)
+	}
+	gf.Fuzz(func(t *gotest.T, n int) {})
+}
+
+// FuzzWrongCallbackShape proves a callback the generated target was not
+// built for fails the target with the expected signature named. Armed by
+// env.
+func FuzzWrongCallbackShape(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, fanReqTarget())
+	gf.Add(fanReq{Email: "ok"})
+	if os.Getenv("GOTEST_TEST_FUZZ_WRONG_SHAPE") != "" {
+		gf.Fuzz(func(t *gotest.T, s string) {})
+		return
+	}
+	gf.Fuzz(func(t *gotest.T, v fanReq) {})
+}
+
+// FuzzAddAfterFuzz proves a late f.Add is refused with a message. Armed by env.
+func FuzzAddAfterFuzz(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	gf.Add("early")
+	gf.Fuzz(func(t *gotest.T, s string) {})
+	if os.Getenv("GOTEST_TEST_FUZZ_LATE_ADD") != "" {
+		gf.Add("late")
+	}
+}
+
+// FuzzHandleTempDirInsideFuzz is armed by GOTEST_TEST_FUZZ_INNER_TEMPDIR:
+// f.TempDir inside the fuzz function panics, as testing has it.
+func FuzzHandleTempDirInsideFuzz(f *testing.F) {
+	gf := gotest.NewF(f, nil, nil, nil)
+	gf.Add("x")
+	gf.Fuzz(func(t *gotest.T, s string) {
+		if os.Getenv("GOTEST_TEST_FUZZ_INNER_TEMPDIR") != "" {
+			_ = gf.TempDir()
+		}
+	})
+}
+
+// FWrapperTestSuite covers what is assertable about *gotest.F outside a
+// real fuzz target: the assertion contract and the buffered-seed logic.
+type FWrapperTestSuite struct{}
+
+func (s *FWrapperTestSuite) SuiteConfig() gotest.SuiteConfig {
+	return gotest.SuiteConfig{Parallel: true, Timeout: 30 * time.Second}
+}
+
+func (s *FWrapperTestSuite) TestAssertionContract(t *gotest.T) {
+	t.It("satisfies Errorf/FailNow/Skipf/Context like B and T", func(it *gotest.T) {
+		var _ interface {
+			Errorf(format string, args ...any)
+			FailNow()
+			Skipf(format string, args ...any)
+			Context() context.Context
+		} = (*gotest.F)(nil)
+	})
+}
+
+func (s *FWrapperTestSuite) TestSeedBuffering(t *gotest.T) {
+	identity := func(seed []any) ([]any, error) { return seed, nil }
+
+	t.It("keeps every f.Add tuple in order until the target flushes it", func(it *gotest.T) {
+		f := gotest.NewF(nil, nil, nil, nil)
+		f.Add("a", 1)
+		f.Add("b", 2)
+		gotest.Equal(it, [][]any{{"a", 1}, {"b", 2}}, gotest.ExportSeeds(f))
+	})
+
+	t.It("copies the caller's slice, so f.Add(vals...) is safe to reuse", func(it *gotest.T) {
+		f := gotest.NewF(nil, nil, nil, nil)
+		vals := []any{"a"}
+		f.Add(vals...)
+		vals[0] = "mutated"
+		gotest.Equal(it, [][]any{{"a"}}, gotest.ExportSeeds(f))
+	})
+
+	t.It("explodes each tuple through the target's own explode function", func(it *gotest.T) {
+		f := gotest.NewF(nil, nil, nil, nil)
+		f.Add(fanReq{Email: "e", Age: 3})
+		out, err := gotest.ExportExplodeSeeds(f, fanReqTarget().Explode)
+		gotest.NoError(it, err)
+		gotest.Equal(it, [][]any{{"e", gotestfuzz.LeafBytesInt(3)}}, out)
+	})
+
+	t.It("numbers the seed an explode error came from", func(it *gotest.T) {
+		f := gotest.NewF(nil, nil, nil, nil)
+		f.Add("fine")
+		f.Add("bad")
+		_, err := gotest.ExportExplodeSeeds(f, func(seed []any) ([]any, error) {
+			if seed[0] == "bad" {
+				return nil, errors.New("f.Add was given string, but this fuzz target takes fanReq")
+			}
+			return seed, nil
+		})
+		gotest.ErrorContains(it, err, "seed #2: f.Add was given string, but this fuzz target takes fanReq")
+		_, err = gotest.ExportExplodeSeeds(f, identity)
+		gotest.NoError(it, err)
+	})
+
+	t.It("names the position and both types when a seed value has the wrong type", func(it *gotest.T) {
+		_, err := gotest.SeedArg[fanReq]([]any{"x", "y"}, 1)
+		gotest.ErrorContains(it, err, "value 2: f.Add was given string, but this fuzz target takes gotest_test.fanReq")
+	})
+}
+
+// sourceLine is "f_suite_test.go:<line>" of the line in this file holding
+// needle.
+func sourceLine(t *gotest.T, needle string) string {
+	src, err := os.ReadFile("f_suite_test.go")
+	gotest.NoError(t, err)
+	for i, line := range strings.Split(string(src), "\n") {
+		if strings.Contains(line, needle) && !strings.Contains(line, "sourceLine") {
+			return "f_suite_test.go:" + strconv.Itoa(i+1)
+		}
+	}
+	gotest.Fail(t, "no line holds "+needle)
+	return ""
+}
+
+// runFuzzTargets runs the top-level fuzz functions pattern selects in a go
+// test subprocess, with env added, and returns the output and the exit error.
+// -count=1 defeats the cache.
+func runFuzzTargets(pattern string, env ...string) (string, error) {
+	cmd := exec.Command("go", "test", "-count=1", "-v", "-run", pattern, ".") //nolint:gosec // G204: pattern is a test-local constant, not user input
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// runArmedFuzzTarget re-runs one of the env-armed targets above in a
+// subprocess with the arming variable set. The target fails deliberately
+// once armed, so the non-zero exit is expected.
+func runArmedFuzzTarget(target, armEnv string) string {
+	out, _ := runFuzzTargets("^"+target+"$", armEnv+"=1")
+	return out
+}
+
+// unarmedFuzzTargets are the top-level targets that pass as written.
+var unarmedFuzzTargets = []string{
+	"FuzzAdapterLifecycle",
+	"FuzzAdapterAfterEachRunsWhenBeforeEachLeaves",
+	"FuzzAdapterNilHooks",
+	"FuzzAdapter2Args",
+	"FuzzTargetDispatch",
+	"FuzzTargetMixed",
+	"FuzzHandleContext",
+}
+
+func (s *FWrapperTestSuite) TestUnarmedTargets(t *gotest.T) {
+	t.When("the top-level targets that take no arming variable run under go test", func(w *gotest.T) {
+		out, err := runFuzzTargets("^(" + strings.Join(unarmedFuzzTargets, "|") + ")$")
+		w.It("every one of them passes", func(it *gotest.T) {
+			gotest.NoError(it, err, out)
+			for _, target := range unarmedFuzzTargets {
+				gotest.Contains(it, out, "--- PASS: "+target+" ", out)
+			}
+		})
+	})
+}
+
+func (s *FWrapperTestSuite) TestDecodedInputReporting(t *gotest.T) {
+	t.It("prints the fanned-in literal to stderr when an execution fails", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzTargetReportsDecodedInputOnFailure", "GOTEST_TEST_FUZZ_FAIL_INPUT")
+		gotest.Contains(it, out, protocol.FuzzInputPrefix+`fanReq{Email: "boom", Age: 0}`)
+	})
+}
+
+func (s *FWrapperTestSuite) TestHandleDelegation(t *gotest.T) {
+	t.It("skips the whole target on Skipf, before any seed replays", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzHandleSkipf", "GOTEST_TEST_FUZZ_SKIP")
+		gotest.Contains(it, out, "--- SKIP: FuzzHandleSkipf")
+		gotest.Contains(it, out, "no corpus on this host")
+		gotest.NotContains(it, out, "a seed replayed after Skipf")
+	})
+
+	t.It("fails the target on Errorf and returns; the engine then runs no seeds", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzHandleErrorf", "GOTEST_TEST_FUZZ_ERRORF")
+		gotest.Contains(it, out, "--- FAIL: FuzzHandleErrorf")
+		gotest.Contains(it, out, "setup broke: 7")
+		gotest.Contains(it, out, "continued after Errorf")
+		gotest.NotContains(it, out, "seed replayed after Errorf")
+	})
+
+	t.It("stops the target at FailNow", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzHandleFailNow", "GOTEST_TEST_FUZZ_FAILNOW")
+		gotest.Contains(it, out, "--- FAIL: FuzzHandleFailNow")
+		gotest.Contains(it, out, "giving up")
+		gotest.NotContains(it, out, "unreachable after FailNow")
+	})
+
+	t.It("attributes a diagnostic to the caller, not to the handle", func(it *gotest.T) {
+		// Without Helper() every Errorf/Skipf would read "f.go:44:", which
+		// sends the user into gotest's source instead of their own.
+		for _, target := range [][2]string{
+			{"FuzzHandleErrorf", "GOTEST_TEST_FUZZ_ERRORF"},
+			{"FuzzHandleSkipf", "GOTEST_TEST_FUZZ_SKIP"},
+		} {
+			out := runArmedFuzzTarget(target[0], target[1])
+			gotest.Contains(it, out, "f_suite_test.go:", "%s output:\n%s", target[0], out)
+			gotest.NotContains(it, out, "f.go:", "%s output:\n%s", target[0], out)
+		}
+	})
+}
+
+func (s *FWrapperTestSuite) TestSeedGuards(t *gotest.T) {
+	t.It("fails the target when a seed is not the target's type", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzSeedTypeMismatch", "GOTEST_TEST_FUZZ_BAD_SEED")
+		gotest.Contains(it, out, "seed #1: value 1: f.Add was given string, but this fuzz target takes gotest_test.fanReq")
+		gotest.Contains(it, out, "FAIL")
+	})
+
+	t.It("locates a seed of the wrong type at its f.Add call", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzSeedTypeMismatch", "GOTEST_TEST_FUZZ_BAD_SEED")
+		gotest.Contains(it, out, sourceLine(it, `gf.Add("not a fanReq")`)+": seed #1: value 1:")
+		gotest.NotContains(it, out, "f.go:")
+	})
+
+	t.It("locates a seed of the wrong type at its f.Add call without a generated target", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzNativeSeedTypeMismatch", "GOTEST_TEST_FUZZ_BAD_NATIVE_SEED")
+		gotest.Contains(it, out, sourceLine(it, "gf.Add(int64(5))")+": seed #1: value 1: f.Add was given int64, but this fuzz target takes int")
+		gotest.NotContains(it, out, "fuzztarget.go:")
+	})
+
+	t.It("panics on f.TempDir inside the fuzz function, naming t.TempDir", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzHandleTempDirInsideFuzz", "GOTEST_TEST_FUZZ_INNER_TEMPDIR")
+		gotest.Contains(it, out, "testing: f.TempDir was called inside the fuzz target, use t.TempDir instead")
+		gotest.Contains(it, out, "FAIL")
+	})
+
+	t.It("fails the target when f.Add is called after f.Fuzz", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzAddAfterFuzz", "GOTEST_TEST_FUZZ_LATE_ADD")
+		gotest.Contains(it, out, "f.Add called after f.Fuzz")
+		gotest.Contains(it, out, "FAIL")
+	})
+
+	t.It("fails the target when the callback is not the shape it was generated for", func(it *gotest.T) {
+		out := runArmedFuzzTarget("FuzzWrongCallbackShape", "GOTEST_TEST_FUZZ_WRONG_SHAPE")
+		gotest.Contains(it, out, "f.Fuzz: callback is func(*gotest.T, string), but this target was generated for func(*gotest.T, fanReq)")
+		gotest.Contains(it, out, "FAIL")
+	})
+}
+
+func (s *FWrapperTestSuite) TestPanicOutlivesALeavingAfterEach(t *gotest.T) {
+	var after bool
+	var got any
+	gf := gotest.NewF(nil,
+		func(*gotest.T) { panic("boom") },
+		func(et *gotest.T) { after = true; et.Skipf("leaves") },
+		nil)
+	t.T().Run("execution", func(et *testing.T) { //nolint:suite-lifecycle // the execution under test is a subtest of this one
+		defer func() { got = recover() }()
+		gotest.ExportEach(gf, et, func(*gotest.T) {})
+	})
+	// SkipNow here, FailNow in a failing suite: either leaves through Goexit.
+	t.When("BeforeEach panics and AfterEach leaves through Goexit", func(w *gotest.T) {
+		w.It("runs AfterEach, and the panic still ends the execution", func(it *gotest.T) {
+			gotest.True(it, after)
+			p, ok := got.(interface{ Unwrap() any })
+			gotest.True(it, ok, "recovered %v", got)
+			gotest.Equal(it, any("boom"), p.Unwrap())
+		})
+	})
+}
+
+// FSeedingTestSuite: what F sets up while it seeds holds through the fuzz
+// function and is undone after the target; a hook outside the executions is
+// named after the target.
+type FSeedingTestSuite struct {
+	hookName string
+	dir      string
+}
+
+const fSeedingKey = "GOTEST_TEST_F_SETENV"
+
+func (s *FSeedingTestSuite) BeforeAll(t *gotest.T) {
+	s.hookName = t.Name()
+}
+
+func (s *FSeedingTestSuite) AfterAll(t *gotest.T) {
+	gotest.Equal(t, s.hookName, t.Name())
+	_, set := os.LookupEnv(fSeedingKey)
+	gotest.False(t, set, "the variable outlived the target")
+	_, err := os.Stat(s.dir)
+	gotest.True(t, os.IsNotExist(err), "%s outlived the target", s.dir)
+}
+
+func (s *FSeedingTestSuite) FuzzSetenvAndTempDir(f *gotest.F) {
+	gotest.Equal(f, f.Name(), s.hookName)
+	f.Setenv(fSeedingKey, "set")
+	s.dir = f.TempDir()
+	f.Add(0)
+	f.Fuzz(func(t *gotest.T, _ int) {
+		gotest.Equal(t, "set", os.Getenv(fSeedingKey)) //nolint:fuzz-determinism // the seeding phase's variable is what the test reads
+		_, err := os.Stat(s.dir)
+		gotest.NoError(t, err)
+	})
+}

@@ -1,0 +1,94 @@
+package cli_test
+
+import (
+	"time"
+
+	"github.com/mvrahden/go-test/internal/testkit"
+	"github.com/mvrahden/go-test/pkg/gotest"
+)
+
+// CLIFlagsTestSuite: every gotest flag is read the same way by every command.
+// A boolean takes --x, --x=true and --x=false, the last occurrence wins, a
+// value flag without a value and an unknown flag are usage errors, and the
+// commands that take packages validate their flags before doing anything.
+type CLIFlagsTestSuite struct{}
+
+func (s *CLIFlagsTestSuite) SuiteConfig() gotest.SuiteConfig {
+	return gotest.SuiteConfig{Parallel: true, Timeout: 30 * time.Second}
+}
+
+type flagRow struct {
+	Desc      string
+	args      []string
+	exit      int
+	stdoutHas string
+	stdoutNot string
+	stderrHas string
+}
+
+func (s *CLIFlagsTestSuite) TestBooleanFlagSpellings(t *gotest.T) {
+	t.When("a boolean flag is spelled in each accepted form", func(w *gotest.T) {
+		w.It("reads --x, --x=true and --x=false, lets the last occurrence win and refuses any other value", func(it *gotest.T) {
+			for sub, row := range gotest.Each(it, []flagRow{
+				{Desc: "--ci guards a focused run", args: []string{"--ci", "../testdata/focused/"}, exit: 1, stderrHas: "F_"},
+				{Desc: "--ci=true guards a focused run", args: []string{"--ci=true", "../testdata/focused/"}, exit: 1, stderrHas: "F_"},
+				{Desc: "--ci=false lets a focused run pass", args: []string{"--ci=false", "../testdata/focused/"}, exit: 0},
+				{Desc: "the last occurrence wins", args: []string{"--ci", "--ci=false", "../testdata/focused/"}, exit: 0},
+				{Desc: "a non-boolean value is a usage error", args: []string{"--ci=maybe", "../testdata/focused/"}, exit: 2, stderrHas: `invalid boolean value "maybe" for --ci`},
+				{Desc: "summary --no-color=true prints no color codes", args: []string{"summary", "--no-color=true", "../testdata/passing/"}, exit: 0, stdoutNot: "\x1b["},
+			}) {
+				run, err := testkit.RunCLI(sub.Context(), ".", row.args...)
+				gotest.NoError(sub, err)
+				gotest.Equal(sub, row.exit, run.Exit, "stderr: %s", run.Stderr)
+				if row.stderrHas != "" {
+					gotest.Contains(sub, run.Stderr, row.stderrHas)
+				}
+				if row.stdoutNot != "" {
+					gotest.NotContains(sub, run.Stdout, row.stdoutNot)
+				}
+			}
+		})
+	})
+}
+
+func (s *CLIFlagsTestSuite) TestValueFlagsAndUnknownFlags(t *gotest.T) {
+	t.When("a value flag or an unknown flag is given to a command", func(w *gotest.T) {
+		w.It("refuses a missing value, an unknown flag and another command's flag with exit 2", func(it *gotest.T) {
+			for sub, row := range gotest.Each(it, []flagRow{
+				{Desc: "a value flag at the end without a value is a usage error", args: []string{"../testdata/passing/", "--min"}, exit: 2, stderrHas: "needs a value"},
+				{Desc: "an unknown flag is a usage error for a run", args: []string{"--bogus", "../testdata/passing/"}, exit: 2, stderrHas: "--bogus"},
+				{Desc: "an unknown flag is a usage error for clean", args: []string{"clean", "--bogus", "../testdata/passing/"}, exit: 2, stderrHas: "--bogus"},
+				{Desc: "an unknown flag is a usage error for generate", args: []string{"generate", "--bogus", "../testdata/passing/"}, exit: 2, stderrHas: "--bogus"},
+				{Desc: "an unknown flag is a usage error for discover", args: []string{"discover", "--bogus", "../testdata/passing/"}, exit: 2, stderrHas: "--bogus"},
+				{Desc: "an unknown flag is a usage error for prepare", args: []string{"prepare", "--bogus", "../testdata/passing/"}, exit: 2, stderrHas: "--bogus"},
+				{Desc: "a flag another command owns is refused", args: []string{"clean", "--debug", "../testdata/passing/"}, exit: 2, stderrHas: "not valid for this subcommand"},
+			}) {
+				run, err := testkit.RunCLI(sub.Context(), ".", row.args...)
+				gotest.NoError(sub, err)
+				gotest.Equal(sub, row.exit, run.Exit, "stdout: %s stderr: %s", run.Stdout, run.Stderr)
+				gotest.Contains(sub, run.Stderr, row.stderrHas)
+			}
+		})
+	})
+}
+
+func (s *CLIFlagsTestSuite) TestTestNamePatterns(t *gotest.T) {
+	t.When("a -skip pattern compiles whole but one of its alternatives does not", func(w *gotest.T) {
+		run, err := testkit.RunCLI(w.Context(), ".", "-json", "../testdata/passing/", "-skip=[]|Nothing]")
+		gotest.NoError(w, err)
+		w.It("is refused with exit 2 before anything runs, naming that alternative as go test does", func(it *gotest.T) {
+			gotest.Equal(it, 2, run.Exit, "stdout: %s\nstderr: %s", run.Stdout, run.Stderr)
+			gotest.Contains(it, run.Stderr, `invalid regexp for alternation 0 of element 0 of -skip ("[]")`)
+			gotest.Empty(it, run.Events)
+		})
+	})
+	t.When("a -list pattern does not compile", func(w *gotest.T) {
+		run, err := testkit.RunCLI(w.Context(), ".", "-json", "../testdata/passing/", "-list=(")
+		gotest.NoError(w, err)
+		w.It("is refused with exit 2 before anything runs, naming the pattern as go test does", func(it *gotest.T) {
+			gotest.Equal(it, 2, run.Exit, "stdout: %s\nstderr: %s", run.Stdout, run.Stderr)
+			gotest.Contains(it, run.Stderr, `invalid regexp in -list ("(")`)
+			gotest.Empty(it, run.Events)
+		})
+	})
+}

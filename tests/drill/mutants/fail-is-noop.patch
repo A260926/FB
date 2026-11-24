@@ -1,0 +1,15 @@
+Expect: failing: exit code 0, want 1
+Expect: ^ *failing pass TestFailingTestSuite$
+Judge: ./tests/canary CanaryTestSuite/TestEveryAssertionFamilyFails
+--- a/pkg/gotest/assertions.go
++++ b/pkg/gotest/assertions.go
+@@ -23,6 +23,9 @@
+ }
+ 
+ func fail(t testingT, msg string, msgAndArgs []any) {
++	if t != nil {
++		return
++	}
+ 	if userMsg := assert.FormatMessage(msgAndArgs); userMsg != "" {
+ 		msg = msg + "\n  message: " + userMsg
+ 	}

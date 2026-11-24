@@ -1,0 +1,68 @@
+=== SNAP TestOutputGolden/json_streaming/multi-package_mixed ===
+{"Action":"start","Package":"example.com/a","Time":"«TIME»"}
+{"Action":"run","Gotest":{"Subtest":"TestA"},"Package":"example.com/a","Test":"TestA","Time":"«TIME»"}
+{"Action":"pass","Elapsed":"«ELAPSED»","Package":"example.com/a","Test":"TestA","Time":"«TIME»"}
+{"Action":"output","Output":"ok  \texample.com/a\t«TS»\n","Package":"example.com/a","Time":"«TIME»"}
+{"Action":"pass","Elapsed":"«ELAPSED»","Package":"example.com/a","Time":"«TIME»"}
+{"Action":"start","Package":"example.com/b","Time":"«TIME»"}
+{"Action":"run","Gotest":{"Subtest":"TestB"},"Package":"example.com/b","Test":"TestB","Time":"«TIME»"}
+{"Action":"fail","Elapsed":"«ELAPSED»","Package":"example.com/b","Test":"TestB","Time":"«TIME»"}
+{"Action":"output","Output":"FAIL\texample.com/b\t«TS»\n","Package":"example.com/b","Time":"«TIME»"}
+{"Action":"fail","Elapsed":"«ELAPSED»","Package":"example.com/b","Time":"«TIME»"}
+
+=== SNAP TestOutputGolden/json_streaming/single_passing_package ===
+{"Action":"start","Package":"example.com/ok","Time":"«TIME»"}
+{"Action":"run","Gotest":{"Subtest":"TestFoo"},"Package":"example.com/ok","Test":"TestFoo","Time":"«TIME»"}
+{"Action":"output","Output":"=== RUN   TestFoo\n","Package":"example.com/ok","Test":"TestFoo","Time":"«TIME»"}
+{"Action":"pass","Elapsed":"«ELAPSED»","Package":"example.com/ok","Test":"TestFoo","Time":"«TIME»"}
+{"Action":"output","Output":"ok  \texample.com/ok\t«TS»\n","Package":"example.com/ok","Time":"«TIME»"}
+{"Action":"pass","Elapsed":"«ELAPSED»","Package":"example.com/ok","Time":"«TIME»"}
+
+=== SNAP TestOutputGolden/text_non-verbose/multi-package_mixed_with_no-test-files ===
+--- FAIL: TestBad (0.00s)
+    bad_test.go:5: nope
+FAIL
+FAIL	example.com/a	0.300s
+ok  	example.com/b	0.020s
+?   	example.com/c	[no test files]
+FAIL
+
+=== SNAP TestOutputGolden/text_non-verbose/single_failing_package ===
+--- FAIL: TestBad (0.00s)
+    bad_test.go:5: assertion failed
+FAIL
+FAIL	example.com/fail	0.100s
+FAIL
+
+=== SNAP TestOutputGolden/text_non-verbose/single_passing_package ===
+ok  	example.com/ok	0.050s
+
+=== SNAP TestOutputGolden/text_verbose/multi-package_mixed_with_no-test-files ===
+=== RUN   TestGoodA
+--- PASS: TestGoodA (0.00s)
+=== RUN   TestBadA
+--- FAIL: TestBadA (0.00s)
+    bad_test.go:5: nope
+FAIL
+FAIL	example.com/a	0.300s
+=== RUN   TestGoodB
+--- PASS: TestGoodB (0.00s)
+PASS
+ok  	example.com/b	0.020s
+?   	example.com/c	[no test files]
+FAIL
+
+=== SNAP TestOutputGolden/text_verbose/single_failing_package ===
+=== RUN   TestBad
+--- FAIL: TestBad (0.00s)
+    bad_test.go:5: assertion failed
+FAIL
+FAIL	example.com/fail	0.100s
+FAIL
+
+=== SNAP TestOutputGolden/text_verbose/single_passing_package ===
+=== RUN   TestOK
+--- PASS: TestOK (0.00s)
+PASS
+ok  	example.com/ok	0.050s
+

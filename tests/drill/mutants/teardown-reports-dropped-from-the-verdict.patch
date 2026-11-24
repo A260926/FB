@@ -1,0 +1,13 @@
+Judge: ./internal/gotestrunner TeardownVerdictTestSuite/TestReportsExplainAFailure
+Expect: ^FAIL .*internal/gotestrunner TeardownVerdict .* / keeps it and attaches the AfterAll reports \(
+--- a/internal/gotestrunner/pipeline.go
++++ b/internal/gotestrunner/pipeline.go
+@@ -165,7 +165,7 @@
+ // attached. The reports are stderr, free text a fixture can write as well:
+ // they explain a failure, they never make one.
+ func teardownVerdict(teardownErr error, reports []string) error {
+-	return withReports(teardownErr, reports, true)
++	return teardownErr
+ }
+ 
+ // applyTeardownFailure surfaces a shared fixture teardown failure and makes a

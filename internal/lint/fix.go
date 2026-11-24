@@ -1,0 +1,610 @@
+package lint
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
+	"go/types"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/mvrahden/go-test/internal/filewrite"
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/checker"
+	"golang.org/x/tools/go/ast/astutil"
+	"golang.org/x/tools/go/packages"
+)
+
+// fixPasses bounds the passes of one Fix. A pass applies every fix that
+// overlaps no other; the next applies what it held back or revealed.
+const fixPasses = 10
+
+// analyzed, when set, sees the package paths each analysis covers.
+var analyzed func(paths []string)
+
+// noteAnalyzed hands analyzed the paths of roots, test mains left out.
+func noteAnalyzed(roots []*checker.Action) {
+	if analyzed == nil {
+		return
+	}
+	var paths []string
+	for _, act := range roots {
+		if !isTestMain(act.Package) && !slices.Contains(paths, act.Package.PkgPath) {
+			paths = append(paths, act.Package.PkgPath)
+		}
+	}
+	analyzed(paths)
+}
+
+// isTestMain reports whether p is the main package go test generates.
+func isTestMain(p *packages.Package) bool {
+	return p.Name == "main" && strings.HasSuffix(p.PkgPath, ".test")
+}
+
+// Change is one file Fix rewrote.
+type Change = filewrite.Change
+
+// Fix applies the fixes res carries in memory, exactly as the go/analysis
+// driver's -fix would write them, and re-analyzes the packages each pass
+// changed until no fix is left or a pass changes nothing. It writes nothing:
+// it returns the analysis of the fixed sources and the files that changed,
+// sorted. A fix whose result does not compile is dropped and named in the
+// result's Unapplied; the others apply. Fixed sources that no longer load
+// otherwise are an error, with no changes.
+func Fix(ctx context.Context, t *Targets, res *Result) (*Result, []Change, error) {
+	f := &fixer{current: map[string][]byte{}, original: map[string][]byte{}, dropped: map[string]int{}}
+	defer f.forget()
+	var unapplied []Finding
+	for range fixPasses {
+		if len(res.FixFiles) == 0 {
+			break
+		}
+		p, err := f.collect(res.graph, buildTags(t.BuildFlags))
+		if err != nil {
+			return nil, nil, err
+		}
+		unapplied = append(unapplied, p.refused...)
+		if len(p.fixes) == 0 {
+			break
+		}
+		kept, dropped, err := f.settle(ctx, t, p, nil, p.fixes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("after applying fixes: %w", err)
+		}
+		unapplied = append(unapplied, dropped...)
+		contents, err := p.contents(kept)
+		if err != nil {
+			return nil, nil, err
+		}
+		changed := f.set(p, contents)
+		if len(changed) == 0 {
+			break
+		}
+		if res, err = reanalyze(ctx, t, res, changed, f.current); err != nil {
+			return nil, nil, fmt.Errorf("after applying fixes: %w", err)
+		}
+	}
+	res.Unapplied = unapplied
+	return res, f.changes(), nil
+}
+
+// settle returns accepted with every fix of group whose result compiles
+// alongside them, halving group until each fix that does not compile stands
+// alone; those it returns as findings.
+func (f *fixer) settle(ctx context.Context, t *Targets, p *fixPass, accepted, group []pendingFix) (kept []pendingFix, dropped []Finding, err error) {
+	if len(group) == 0 {
+		return accepted, nil, nil
+	}
+	trial := slices.Concat(accepted, group)
+	contents, err := p.contents(trial)
+	if err != nil {
+		return nil, nil, err
+	}
+	overlay := maps.Clone(f.current)
+	maps.Copy(overlay, contents)
+	_, err = load(ctx, t, overlay)
+	var ce *compileError
+	switch {
+	case err == nil:
+		return trial, nil, nil
+	case !errors.As(err, &ce) || len(ce.broken) == 0:
+		return nil, nil, err
+	case len(group) == 1:
+		fix := group[0]
+		f.dropped[fix.key]++
+		return accepted, []Finding{{
+			File: fix.file, Line: fix.line, Col: fix.col, EndLine: fix.line, Rule: fix.rule,
+			Message: fmt.Sprintf("fix for %s at %s:%d was not applied: it does not compile (%s)", fix.rule, fix.rel, fix.line, ce.firstMessage()),
+		}}, nil
+	}
+	mid := len(group) / 2
+	accepted, first, err := f.settle(ctx, t, p, accepted, group[:mid])
+	if err != nil {
+		return nil, nil, err
+	}
+	accepted, second, err := f.settle(ctx, t, p, accepted, group[mid:])
+	if err != nil {
+		return nil, nil, err
+	}
+	return accepted, slices.Concat(first, second), nil
+}
+
+// fixer holds the fixed contents across passes.
+type fixer struct {
+	current  map[string][]byte // fixed contents, by file
+	original map[string][]byte // disk contents of the files in current
+	dropped  map[string]int    // the fixes that did not compile, counted by key
+}
+
+// sources are the fixed contents analyzers read instead of the disk: the
+// checker hands them os.ReadFile as Pass.ReadFile, which sees no overlay.
+var sources sync.Map
+
+// passSource reads file the way the analyzed syntax was parsed.
+func passSource(pass *analysis.Pass, file string) ([]byte, error) {
+	if src, ok := sources.Load(file); ok {
+		return src.([]byte), nil
+	}
+	return pass.ReadFile(file)
+}
+
+func (f *fixer) forget() {
+	for file := range f.current {
+		sources.Delete(file)
+	}
+}
+
+// changes returns the files whose fixed contents differ from the disk.
+func (f *fixer) changes() []Change {
+	var out []Change
+	for file, after := range f.current {
+		if before := f.original[file]; !bytes.Equal(before, after) {
+			out = append(out, Change{File: file, Before: before, After: after})
+		}
+	}
+	slices.SortFunc(out, func(a, b Change) int { return cmp.Compare(a.File, b.File) })
+	return out
+}
+
+// edit replaces the bytes [start, end) of a file.
+type edit struct {
+	start, end int
+	text       string
+}
+
+// pendingFix is one diagnostic's fix a pass applies.
+type pendingFix struct {
+	edits     map[string][]edit // by file
+	rule      string
+	file, rel string // the diagnostic's file; rel is relative to its module
+	line, col int
+	key       string // names the fix across passes, whose positions shift
+}
+
+// fixPass is the fixes one pass applies and the sources they edit.
+type fixPass struct {
+	fixes []pendingFix
+	// refused are the fixes that cannot rename every reference, named.
+	refused   []Finding
+	baselines map[string][]byte
+	filePkgs  map[string]*types.Package
+}
+
+// contents returns every file p's fixes touch as fixes leave it.
+func (p *fixPass) contents(fixes []pendingFix) (map[string][]byte, error) {
+	accumulated := map[string][]edit{}
+	for file := range p.baselines {
+		accumulated[file] = nil
+	}
+	for _, fix := range fixes {
+		for file, edits := range fix.edits {
+			if prev := accumulated[file]; len(prev) > 0 {
+				merged, ok := mergeEdits(prev, edits)
+				if !ok {
+					return nil, fmt.Errorf("applying fixes to %s: conflicting edits", file)
+				}
+				edits = merged
+			}
+			accumulated[file] = edits
+		}
+	}
+	out := map[string][]byte{}
+	for file, edits := range accumulated {
+		src := p.baselines[file]
+		if len(edits) == 0 {
+			out[file] = src
+			continue
+		}
+		fixed, err := applyEdits(src, edits)
+		if err != nil {
+			return nil, fmt.Errorf("applying fixes to %s: %w", file, err)
+		}
+		if formatted, err := formatRemovingImports(p.filePkgs[file], fixed); err == nil {
+			fixed = formatted
+		}
+		out[file] = fixed
+	}
+	return out, nil
+}
+
+// set makes contents the fixed sources and returns the files that changed.
+func (f *fixer) set(p *fixPass, contents map[string][]byte) []string {
+	var changed []string
+	for _, file := range slices.Sorted(maps.Keys(contents)) {
+		fixed := contents[file]
+		src := p.baselines[file]
+		if _, ok := f.original[file]; !ok {
+			f.original[file] = src
+		}
+		if !bytes.Equal(src, fixed) {
+			changed = append(changed, file)
+		}
+		f.current[file] = fixed
+		sources.Store(file, fixed)
+	}
+	return changed
+}
+
+// reanalyze returns prev with the packages changed touches analysed anew,
+// along with the target packages that import them: the analyzer exports no
+// facts, so a package's findings rest on its own files and the types of
+// its imports alone. Where affectedPatterns cannot name them it analyses
+// every target again.
+func reanalyze(ctx context.Context, t *Targets, prev *Result, changed []string, overlay map[string][]byte) (*Result, error) {
+	patterns, ok := affectedPatterns(t, prev.graph.Roots, changed)
+	if !ok {
+		return analyze(ctx, t, overlay)
+	}
+	sub := *t
+	sub.Patterns = patterns
+	pkgs, err := load(ctx, &sub, overlay)
+	if err != nil {
+		return nil, err
+	}
+	graph, err := checker.Analyze([]*analysis.Analyzer{Analyzer}, pkgs, nil)
+	if err != nil {
+		return nil, fmt.Errorf("analyze: %w", err)
+	}
+	noteAnalyzed(graph.Roots)
+	// Each root keeps its place, so the next pass meets the fixes in the
+	// order a full analysis lists them.
+	fresh := map[string]*checker.Action{}
+	for _, act := range graph.Roots {
+		fresh[act.Package.ID] = act
+	}
+	var roots []*checker.Action
+	for _, act := range prev.graph.Roots {
+		if next, ok := fresh[act.Package.ID]; ok {
+			act = next
+			delete(fresh, act.Package.ID)
+		}
+		roots = append(roots, act)
+	}
+	for _, act := range graph.Roots {
+		if fresh[act.Package.ID] != nil {
+			roots = append(roots, act)
+		}
+	}
+	return newResult(&checker.Graph{Roots: roots})
+}
+
+// affectedPatterns returns a directory pattern, relative to t.Dir, for each
+// root holding a changed file and each root importing one of those; false
+// when one of them lies outside t.Dir or the targets name files, whose
+// directory holds more than they do.
+func affectedPatterns(t *Targets, roots []*checker.Action, changed []string) ([]string, bool) {
+	if slices.ContainsFunc(t.Patterns, func(p string) bool { return strings.HasSuffix(p, ".go") }) {
+		return nil, false
+	}
+	base, err := filepath.Abs(cmp.Or(t.Dir, "."))
+	if err != nil {
+		return nil, false
+	}
+	affected := map[string]bool{} // by package ID
+	for _, act := range roots {
+		if slices.ContainsFunc(act.Package.CompiledGoFiles, func(f string) bool { return slices.Contains(changed, f) }) {
+			affected[act.Package.ID] = true
+		}
+	}
+	for grown := true; grown; {
+		grown = false
+		for _, act := range roots {
+			if affected[act.Package.ID] {
+				continue
+			}
+			for _, imp := range act.Package.Imports {
+				if affected[imp.ID] {
+					affected[act.Package.ID] = true
+					grown = true
+					break
+				}
+			}
+		}
+	}
+	var patterns []string
+	for _, act := range roots {
+		if !affected[act.Package.ID] || isTestMain(act.Package) || len(act.Package.GoFiles) == 0 {
+			continue
+		}
+		rel, err := filepath.Rel(base, filepath.Dir(act.Package.GoFiles[0]))
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil, false
+		}
+		pattern := "./" + filepath.ToSlash(rel)
+		if rel == "." {
+			pattern = "."
+		}
+		if !slices.Contains(patterns, pattern) {
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns, len(patterns) > 0
+}
+
+// collect gathers one pass of the driver's -fix over graph (x/tools
+// internal/analysis/driverutil.ApplyFixes): each diagnostic's first fix, in
+// order, merged onto the fixes before it, skipping any that touches a
+// generated file, conflicts or did not compile before. contents then
+// formats each file with the imports the edits left unused removed.
+func (f *fixer) collect(graph *checker.Graph, tags string) (*fixPass, error) {
+	type fixAct struct {
+		diag *analysis.Diagnostic
+		act  *checker.Action
+	}
+	generated := map[*token.File]bool{}
+	var fixes []fixAct
+	for _, act := range graph.Roots {
+		for _, file := range act.Package.Syntax {
+			tf := act.Package.Fset.File(file.FileStart)
+			if _, seen := generated[tf]; !seen {
+				generated[tf] = ast.IsGenerated(file)
+			}
+		}
+		for i := range act.Diagnostics {
+			if d := &act.Diagnostics[i]; len(d.SuggestedFixes) > 0 {
+				fixes = append(fixes, fixAct{d, act})
+			}
+		}
+	}
+
+	p := &fixPass{baselines: map[string][]byte{}, filePkgs: map[string]*types.Package{}}
+	baseline := func(file string) ([]byte, error) {
+		if src, ok := p.baselines[file]; ok {
+			return src, nil
+		}
+		src, ok := f.current[file]
+		if !ok {
+			var err error
+			if src, err = os.ReadFile(file); err != nil {
+				return nil, err
+			}
+		}
+		p.baselines[file] = src
+		return src, nil
+	}
+
+	accumulated := map[string][]edit{}
+	seen := map[string]bool{} // by key and position: test variants repeat a diagnostic
+	skipped := map[string]int{}
+fixes:
+	for _, fa := range fixes {
+		fix := &fa.diag.SuggestedFixes[0]
+		fset := fa.act.Package.Fset
+		edits := make([]fileEdit, 0, len(fix.TextEdits))
+		for _, e := range fix.TextEdits {
+			edits = append(edits, fileEdit{tf: fset.File(e.Pos), pkg: fa.act.Package.Types, edit: e})
+		}
+		focus := fa.diag.Category == string(Focus)
+		if focus {
+			edits = append(edits, focusReferences(graph.Roots, fa.act, fix.TextEdits)...)
+		}
+		for _, e := range edits {
+			if generated[e.tf] {
+				continue fixes
+			}
+		}
+		pos := fset.Position(fa.diag.Pos)
+		key := fa.diag.Category + "\x00" + pos.Filename + "\x00" + fa.diag.Message
+		for _, e := range fix.TextEdits {
+			key += "\x00" + string(e.NewText)
+		}
+		at := fmt.Sprintf("%s\x00%d", key, pos.Offset)
+		if seen[at] {
+			continue
+		}
+		seen[at] = true
+		// The first ones in order stand for those dropped before.
+		if skipped[key] < f.dropped[key] {
+			skipped[key]++
+			continue
+		}
+		if focus {
+			constrained, err := constrainedFocusReferences(graph.Roots, fa.act, fix.TextEdits, tags, f.current)
+			if err != nil {
+				f.dropped[key]++
+				p.refused = append(p.refused, Finding{
+					File: pos.Filename, Line: pos.Line, Col: pos.Column, EndLine: pos.Line, Rule: fa.diag.Category,
+					Message: fmt.Sprintf("fix for %s at %s:%d was not applied: %v", fa.diag.Category, (&errorPaths{module: moduleDir(fa.act)}).rel(pos.Filename), pos.Line, err),
+				})
+				continue
+			}
+			edits = append(edits, constrained...)
+		}
+		fileEdits := map[string][]edit{}
+		for _, fe := range edits {
+			tf, e := fe.tf, fe.edit
+			src, err := baseline(tf.Name())
+			if err != nil {
+				continue fixes
+			}
+			// A size mismatch means the file changed since it was parsed.
+			if tf.Size() != len(src) {
+				return nil, fmt.Errorf("concurrent file modification detected in file %s (size changed from %d -> %d bytes); aborting fix",
+					tf.Name(), tf.Size(), len(src))
+			}
+			p.filePkgs[tf.Name()] = fe.pkg
+			fileEdits[tf.Name()] = append(fileEdits[tf.Name()], edit{tf.Offset(e.Pos), tf.Offset(e.End), string(e.NewText)})
+		}
+		merged := map[string][]edit{}
+		for file, edits := range fileEdits {
+			if prev := accumulated[file]; len(prev) > 0 {
+				var ok bool
+				if edits, ok = mergeEdits(prev, edits); !ok {
+					continue fixes
+				}
+			}
+			merged[file] = edits
+		}
+		maps.Copy(accumulated, merged)
+		p.fixes = append(p.fixes, pendingFix{
+			edits: fileEdits, rule: fa.diag.Category,
+			file: pos.Filename, rel: (&errorPaths{module: moduleDir(fa.act)}).rel(pos.Filename),
+			line: pos.Line, col: pos.Column, key: key,
+		})
+	}
+	return p, nil
+}
+
+// moduleDir is the directory of act's module, "" outside one.
+func moduleDir(act *checker.Action) string {
+	if m := act.Package.Module; m != nil {
+		return m.Dir
+	}
+	return ""
+}
+
+// mergeEdits merges two sorted edit lists as a three-way merge would:
+// identical edits coalesce, and edits that overlap otherwise conflict.
+func mergeEdits(x, y []edit) ([]edit, bool) {
+	x, y = slices.Clone(x), slices.Clone(y)
+	var merged []edit
+	var xi, yi int
+	for xi < len(x) && yi < len(y) {
+		px, py := &x[xi], &y[yi]
+		switch {
+		case *px == *py:
+			merged = append(merged, *px)
+			xi++
+			yi++
+		case px.end <= py.start: // x before y, or an insertion at its start
+			merged = append(merged, *px)
+			xi++
+		case py.end <= px.start:
+			merged = append(merged, *py)
+			yi++
+		case px.start < py.start: // split off the part of x before y
+			merged = append(merged, edit{px.start, py.start, ""})
+			px.start = py.start
+		case py.start < px.start:
+			merged = append(merged, edit{py.start, px.start, ""})
+			py.start = px.start
+		default: // different edits of the same bytes
+			return nil, false
+		}
+	}
+	merged = append(merged, x[xi:]...)
+	return append(merged, y[yi:]...), true
+}
+
+// applyEdits applies edits, stably sorted by position, to src.
+func applyEdits(src []byte, edits []edit) ([]byte, error) {
+	edits = slices.Clone(edits)
+	slices.SortStableFunc(edits, func(a, b edit) int {
+		return cmp.Or(cmp.Compare(a.start, b.start), cmp.Compare(a.end, b.end))
+	})
+	var out []byte
+	last := 0
+	for _, e := range edits {
+		if e.start < last || e.start > e.end || e.end > len(src) {
+			return nil, fmt.Errorf("invalid edit [%d,%d)", e.start, e.end)
+		}
+		out = append(out, src[last:e.start]...)
+		out = append(out, e.text...)
+		last = e.end
+	}
+	return append(out, src[last:]...), nil
+}
+
+// formatRemovingImports formats src as gofmt does, first deleting the
+// imports nothing in it references any more. It never adds an import.
+func formatRemovingImports(pkg *types.Package, src []byte) ([]byte, error) {
+	fset := token.NewFileSet()
+	// Object resolution stays on: file.Unresolved is what references imports.
+	file, err := parser.ParseFile(fset, "fixed.go", src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+	ast.SortImports(fset, file)
+	removeUnusedImports(fset, pkg, file)
+
+	// go/format's printer settings; 1<<30 is its unexported number
+	// normalization mode.
+	cfg := &printer.Config{Mode: printer.UseSpaces | printer.TabIndent | 1<<30, Tabwidth: 8}
+	var buf bytes.Buffer
+	if err := cfg.Fprint(&buf, fset, file); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// removeUnusedImports deletes the imports whose name nothing in file
+// references. An import's name comes from pkg's dependency graph, so an
+// import pkg does not know yet, a dot and a blank import all stay.
+func removeUnusedImports(fset *token.FileSet, pkg *types.Package, file *ast.File) {
+	names := map[string]string{} // import path → package name
+	var visit func(*types.Package)
+	visit = func(p *types.Package) {
+		if names[p.Path()] == "" {
+			names[p.Path()] = p.Name()
+			for _, imp := range p.Imports() {
+				visit(imp)
+			}
+		}
+	}
+	if pkg != nil {
+		for _, imp := range pkg.Imports() {
+			visit(imp)
+		}
+	}
+
+	// The parser leaves a reference unresolved when no declaration in the
+	// file binds it: a package name, among others.
+	used := map[string]bool{}
+	for _, id := range file.Unresolved {
+		used[id.Name] = true
+	}
+
+	var unused []func()
+	for _, spec := range file.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		explicit := ""
+		if spec.Name != nil {
+			explicit = spec.Name.Name
+		}
+		name := cmp.Or(explicit, names[path])
+		switch name {
+		case "", ".", "_":
+			continue
+		}
+		if !used[name] {
+			unused = append(unused, func() { astutil.DeleteNamedImport(fset, file, explicit, path) })
+		}
+	}
+	for _, del := range unused {
+		del()
+	}
+}

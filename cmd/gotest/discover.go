@@ -1,0 +1,434 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"go/token"
+	"go/types"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"golang.org/x/tools/go/packages"
+
+	"github.com/mvrahden/go-test/internal/about"
+	"github.com/mvrahden/go-test/internal/gotestast"
+	"github.com/mvrahden/go-test/internal/gotestgen"
+	"github.com/mvrahden/go-test/internal/lint"
+)
+
+// discoverOutput is the top-level JSON structure emitted by "gotest discover".
+// Version opens it: the CLI that produced the document.
+type discoverOutput struct {
+	Version  string            `json:"version"`
+	Packages []discoverPackage `json:"packages"`
+	Warnings []discoverWarning `json:"warnings,omitempty"`
+}
+
+type discoverWarning struct {
+	ImportPath string `json:"importPath"`
+	File       string `json:"file,omitempty"`
+	Line       int    `json:"line,omitempty"`
+	Col        int    `json:"col,omitempty"`
+	Message    string `json:"message"`
+}
+
+type discoverPackage struct {
+	ImportPath string `json:"importPath"`
+	Dir        string `json:"dir"`
+	ModulePath string `json:"modulePath,omitempty"`
+	TestOnly   bool   `json:"testOnly,omitempty"`
+	// Broken marks a package that failed to load or whose suites the
+	// generator rejects; its diagnostics are in the top-level warnings. Suite discovery needs a successful parse, so a
+	// broken package's suite list is unknowable, not empty — consumers must
+	// render the package as broken rather than as having no suites.
+	Broken bool            `json:"broken,omitempty"`
+	Suites []discoverSuite `json:"suites"`
+}
+
+type discoverSuite struct {
+	Name     string `json:"name"`
+	Parallel bool   `json:"parallel"`
+	Focused  bool   `json:"focused"`
+	Excluded bool   `json:"excluded"`
+	Guarded  bool   `json:"guarded"`
+	// External marks a suite of the package's external test files; go test
+	// runs it as a suite of its own, a second one when the internal files
+	// declare the same name.
+	External   bool             `json:"external,omitempty"`
+	File       string           `json:"file"`
+	Line       int              `json:"line"`
+	Col        int              `json:"col"`
+	Lifecycle  []string         `json:"lifecycle"`
+	Fixtures   []string         `json:"fixtures"`
+	Methods    []discoverMethod `json:"methods"`
+	Benchmarks []discoverMethod `json:"benchmarks"`
+	Fuzzers    []discoverMethod `json:"fuzzers"`
+}
+
+type discoverMethod struct {
+	Name string `json:"name"`
+	// TestName is the name go test reports when it differs from Name: a
+	// method both twins declare runs a second time as Name#01.
+	TestName string `json:"testName,omitempty"`
+	Parallel bool   `json:"parallel"`
+	Focused  bool   `json:"focused"`
+	Excluded bool   `json:"excluded"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Col      int    `json:"col"`
+	// Behaviors are the When/It blocks the method declares, read from source.
+	// BehaviorsComplete reports whether that list is exhaustive: when false the
+	// method declares behaviors whose names or existence depend on runtime
+	// values, and a consumer must treat the list as a floor rather than a total.
+	Behaviors         []discoverBehavior `json:"behaviors"`
+	BehaviorsComplete bool               `json:"behaviorsComplete"`
+}
+
+// discoverBehavior mirrors one node of the specification a method declares.
+// Name is the subtest segment go test will produce, so it lines up with the
+// runtime tree byte for byte; Display is the text the developer wrote, the same
+// string `gotest spec` renders for this node. Kind names the call it came from,
+// which the names cannot say: a context and an expectation both arrive as
+// subtests, and a consumer that wants to tell them apart has nowhere else to
+// look.
+type discoverBehavior struct {
+	Name     string             `json:"name"`
+	Display  string             `json:"display"`
+	Kind     string             `json:"kind"`
+	Line     int                `json:"line"`
+	Children []discoverBehavior `json:"children,omitempty"`
+}
+
+func newDiscoverOutput() discoverOutput {
+	return discoverOutput{Version: about.ResolvedVersion(), Packages: []discoverPackage{}}
+}
+
+func runDiscover(inv Invocation) int { //nolint:gocritic // hugeParam: stable API
+	_, args, err := SplitArgs(inv.TagArgs(), noOwnFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	tags, remaining := extractTagsFlag(args)
+	patterns, err := ExtractPackagePatterns(remaining)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	var buildFlags []string
+	if tags != "" {
+		buildFlags = append(buildFlags, "-tags="+tags)
+	}
+
+	out, err := discover(patterns, buildFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	enc := json.NewEncoder(os.Stdout)
+	if err := enc.Encode(out); err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL: %s\n", err)
+		return 2
+	}
+	return 0
+}
+
+// discover reads the suites the patterns match from source. What would stop
+// a run (a broken package, a generation error) and what a run passes over in
+// silence (see gotestast.HarnessWarnings) are both warnings here.
+func discover(patterns, buildFlags []string) (discoverOutput, error) {
+	out := newDiscoverOutput()
+
+	loadResults, broken, matched, err := gotestgen.LoadPackagesMatching(patterns, buildFlags)
+	if err != nil {
+		return out, err
+	}
+	if !matched {
+		// An editor's workspace may hold no package yet: an empty document,
+		// not an error.
+		warnMatchedNothing(patterns)
+	}
+	for i := range broken {
+		for _, msg := range broken[i].Errors {
+			out.Warnings = append(out.Warnings, discoverWarning{
+				ImportPath: broken[i].PkgPath,
+				Message:    msg,
+			})
+		}
+		out.Packages = append(out.Packages, discoverPackage{
+			ImportPath: broken[i].PkgPath,
+			Dir:        broken[i].Dir,
+			Broken:     true,
+			Suites:     []discoverSuite{},
+		})
+	}
+
+	c := gotestgen.NewCollector()
+
+	for _, lr := range loadResults {
+		pkgEntry := discoverPackage{
+			ImportPath: lr.PkgPath,
+			Dir:        lr.PkgDir,
+			TestOnly:   lr.IsTestOnly(),
+		}
+		if lr.Ptest != nil && lr.Ptest.Module != nil {
+			pkgEntry.ModulePath = lr.Ptest.Module.Path
+		} else if lr.Pxtest != nil && lr.Pxtest.Module != nil {
+			pkgEntry.ModulePath = lr.Pxtest.Module.Path
+		}
+
+		hasWarnings := false
+		warn := func(pkg *packages.Package, pos token.Pos, msg string) {
+			hasWarnings = true
+			w := discoverWarning{ImportPath: lr.PkgPath, Message: msg}
+			if pos.IsValid() {
+				p := pkg.Fset.Position(pos)
+				w.File = filepath.Base(p.Filename)
+				w.Line = p.Line
+				w.Col = p.Column
+			}
+			out.Warnings = append(out.Warnings, w)
+		}
+		pkgs := []*packages.Package{lr.Ptest, lr.Pxtest}
+		for _, pkg := range pkgs {
+			if pkg == nil {
+				continue
+			}
+			result := c.CollectSuiteSpecs(pkg)
+			// Listed before the rejection check, which reduces each suite to the
+			// methods a run would select, in place: discover lists what the
+			// source declares, excluded and unfocused methods marked as such.
+			internalSuites := pkgEntry.Suites
+			for _, suite := range result.Suites {
+				ds := buildDiscoverSuite(suite)
+				ds.Fixtures = discoverFixtureNames(suite)
+				if pkg == lr.Pxtest {
+					ds.External = true
+					nameTwinMethods(&ds, internalSuites)
+				}
+				pkgEntry.Suites = append(pkgEntry.Suites, ds)
+			}
+			if rejected := c.Rejections(pkg, result); len(rejected) > 0 {
+				for _, ce := range rejected {
+					warn(pkg, ce.Pos, ce.Err.Error())
+				}
+				pkgEntry.Broken = true
+				continue
+			}
+			for _, w := range result.Warnings {
+				if w.Rule != "" && lint.Suppressed(pkg.Fset, pkg.Syntax, w.Pos, lint.Rule(w.Rule)) {
+					continue
+				}
+				warn(pkg, w.Pos, w.Msg)
+			}
+			for _, ce := range gotestgen.FuzzRejections(pkg, result.Suites) {
+				warn(pkg, ce.Pos, ce.Err.Error())
+			}
+		}
+
+		if pkgEntry.Broken {
+			pkgEntry.Suites = []discoverSuite{}
+		}
+		if len(pkgEntry.Suites) > 0 || hasWarnings {
+			out.Packages = append(out.Packages, pkgEntry)
+		}
+	}
+	return out, nil
+}
+
+// nameTwinMethods gives the methods of an external suite that an internal
+// suite of the same name also declares the names go test reports.
+func nameTwinMethods(ds *discoverSuite, internalSuites []discoverSuite) {
+	for i := range internalSuites {
+		in := &internalSuites[i]
+		if in.Name != ds.Name {
+			continue
+		}
+		var internal, external []string
+		for _, m := range in.Methods {
+			internal = append(internal, m.Name)
+		}
+		for _, m := range ds.Methods {
+			external = append(external, m.Name)
+		}
+		names := twinTestNames(internal, external)
+		for i := range ds.Methods {
+			ds.Methods[i].TestName = names[ds.Methods[i].Name]
+		}
+		return
+	}
+}
+
+// twinTestNames is the name go test gives each method of the external
+// twin: one the internal twin also runs gains #01.
+func twinTestNames(internal, external []string) map[string]string {
+	ran := map[string]bool{}
+	for _, n := range internal {
+		ran[n] = true
+	}
+	out := map[string]string{}
+	for _, n := range external {
+		if ran[n] {
+			out[n] = n + "#01"
+		}
+	}
+	return out
+}
+
+func buildDiscoverSuite(suite *gotestast.TestSuiteSpec) discoverSuite {
+	pkg := suite.Package()
+	fset := pkg.Fset
+	pos := fset.Position(suite.TypeSpecPos())
+
+	ds := discoverSuite{
+		Name:     suite.Identifier(),
+		Parallel: suite.IsMethodParallel(),
+		Focused:  suite.IsFocused(),
+		Excluded: suite.IsExcluded(),
+		Guarded:  suite.HasGuard(),
+		File:     filepath.Base(pos.Filename),
+		Line:     pos.Line,
+		Col:      pos.Column,
+	}
+
+	// Lifecycle hooks
+	var lifecycle []string
+	if suite.BeforeAll() != nil {
+		lifecycle = append(lifecycle, "BeforeAll")
+	}
+	if suite.AfterAll() != nil {
+		lifecycle = append(lifecycle, "AfterAll")
+	}
+	if suite.BeforeEach() != nil {
+		lifecycle = append(lifecycle, "BeforeEach")
+	}
+	if suite.AfterEach() != nil {
+		lifecycle = append(lifecycle, "AfterEach")
+	}
+	if lifecycle == nil {
+		lifecycle = []string{}
+	}
+	ds.Lifecycle = lifecycle
+
+	ds.Fixtures = []string{}
+
+	// Methods (test cases)
+	var methods []discoverMethod
+	for _, tc := range suite.TestCases() {
+		mPos := fset.Position(tc.Pos())
+		spec := suite.BehaviorsOf(tc)
+		methods = append(methods, discoverMethod{
+			Name:              tc.Identifier(),
+			Parallel:          false,
+			Focused:           tc.IsFocused(),
+			Excluded:          tc.IsExcluded(),
+			File:              filepath.Base(mPos.Filename),
+			Line:              mPos.Line,
+			Col:               mPos.Column,
+			Behaviors:         discoverBehaviors(spec.Behaviors),
+			BehaviorsComplete: spec.Complete,
+		})
+	}
+	if methods == nil {
+		methods = []discoverMethod{}
+	}
+	ds.Methods = methods
+
+	// Benchmarks (Benchmark* methods)
+	var benchmarks []discoverMethod
+	for _, bm := range suite.Benchmarks() {
+		bPos := fset.Position(bm.Pos())
+		benchmarks = append(benchmarks, discoverMethod{
+			Name:     bm.Identifier(),
+			Parallel: false,
+			Focused:  bm.IsFocused(),
+			Excluded: bm.IsExcluded(),
+			File:     filepath.Base(bPos.Filename),
+			Line:     bPos.Line,
+			Col:      bPos.Column,
+		})
+	}
+	if benchmarks == nil {
+		benchmarks = []discoverMethod{}
+	}
+	ds.Benchmarks = benchmarks
+
+	// Fuzzers (Fuzz* methods). The editor needs these for the same reasons
+	// it needs benchmarks — CodeLens targets, test-tree items, and building
+	// run filters that include the generated Fuzz<Suite>_<Method> wrappers.
+	var fuzzers []discoverMethod
+	for _, fz := range suite.Fuzzers() {
+		fPos := fset.Position(fz.Pos())
+		fuzzers = append(fuzzers, discoverMethod{
+			Name:     fz.Identifier(),
+			Parallel: false,
+			Focused:  fz.IsFocused(),
+			Excluded: fz.IsExcluded(),
+			File:     filepath.Base(fPos.Filename),
+			Line:     fPos.Line,
+			Col:      fPos.Column,
+		})
+	}
+	if fuzzers == nil {
+		fuzzers = []discoverMethod{}
+	}
+	ds.Fuzzers = fuzzers
+
+	return ds
+}
+
+func discoverFixtureNames(suite *gotestast.TestSuiteSpec) []string {
+	st := suite.StructType()
+	if st == nil {
+		return []string{}
+	}
+	var names []string
+	for i := 0; i < st.NumFields(); i++ {
+		field := st.Field(i)
+		ptr, ok := field.Type().(*types.Pointer)
+		if !ok {
+			continue
+		}
+		named, ok := ptr.Elem().(*types.Named)
+		if !ok {
+			continue
+		}
+		name := named.Obj().Name()
+		if strings.HasSuffix(name, "Fixture") && !strings.HasSuffix(name, "SharedFixture") {
+			names = append(names, name)
+		}
+	}
+	if names == nil {
+		return []string{}
+	}
+	return names
+}
+
+// discoverBehaviors converts the walker's tree into the discovery wire shape.
+func discoverBehaviors(in []*gotestast.Behavior) []discoverBehavior {
+	out := make([]discoverBehavior, 0, len(in))
+	for _, b := range in {
+		out = append(out, discoverBehavior{
+			Name:     b.Name,
+			Display:  renderedBehaviorLabel(b),
+			Kind:     behaviorKindString(b.Kind),
+			Line:     b.Line,
+			Children: discoverBehaviors(b.Children),
+		})
+	}
+	return out
+}
+
+func behaviorKindString(k gotestast.BehaviorKind) string {
+	switch k {
+	case gotestast.BehaviorWhen:
+		return "when"
+	case gotestast.BehaviorIt:
+		return "it"
+	case gotestast.BehaviorEach:
+		return "each"
+	default:
+		return ""
+	}
+}

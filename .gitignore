@@ -1,0 +1,17 @@
+go.work.sum
+bin/
+dist/
+/gotest
+*.out
+spec.txt
+.vite
+.worktrees/
+site/public/
+site/resources/
+site/.hugo_build.lock
+gotest_psuite_test.go
+gotest_pxsuite_test.go
+# Stale generated files are fixtures here.
+!tests/conformance/testdata/shapes/stale*/gotest_psuite_test.go
+!tests/conformance/testdata/shapes/stale*/gotest_pxsuite_test.go
+!tests/canary/testdata/shapes/stale*/gotest_psuite_test.go
