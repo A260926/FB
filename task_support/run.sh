@@ -7,7 +7,7 @@ bash task_support/build.sh "$mode"
 if [[ $mode == target ]]; then
   bash task_support/probe.sh
 ${CC:-cc} -std=c99 -I. task_support/driver.c test/result_state_contract.c -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/result-state-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

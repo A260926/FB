@@ -34,6 +34,9 @@
 # include "cscanner.h"
 # include "cgrammar_tokens.h"
 # include "osd.h"
+#ifdef RS_WITH_RESULT_STATE
+# include "resultState.h"
+#endif
 
 static int lminput (void);
 static int s_tokLength = 0;
@@ -1434,10 +1437,16 @@ int cscannerHelp_handleLlSpecial (void)
 		}
 	    }
 	}
+#ifdef RS_WITH_RESULT_STATE
+      else if (resultState_isContractComment (os))
+	{
+	  /* Parsed and checked by resultState.c after the C parse. */
+	}
+#endif
       else
 	{
-	  voptgenerror (FLG_UNRECOGCOMMENTS, 
-			message ("Semantic comment unrecognized: %s", 
+	  voptgenerror (FLG_UNRECOGCOMMENTS,
+			message ("Semantic comment unrecognized: %s",
 				 cstring_fromChars (os)),
 			loc);
 	  /*@-branchstate@*/

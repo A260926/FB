@@ -72,6 +72,9 @@
 # include "cgrammar.h"
 # include "rcfiles.h"
 # include "llmain.h"
+#ifdef RS_WITH_RESULT_STATE
+# include "resultState.h"
+#endif
 
 extern /*@external@*/ int yydebug;
 static void cleanupFiles (void);
@@ -765,7 +768,29 @@ int main (int argc, char *argv[])
   */
 
   context_setInCommandLine ();
-  
+
+#ifdef RS_WITH_RESULT_STATE
+  resultState_configure (cstring_toCharsSafe (context_getDump ()),
+			 cstring_toCharsSafe (context_getMerge ()));
+  if (context_doMerge ())
+    resultState_loadLibrary (cstring_toCharsSafe (context_getMerge ()));
+  fileIdList_elements (cfiles, rsInputFile)
+    {
+      resultState_notePath (cstring_toCharsSafe (fileTable_fileName (rsInputFile)));
+    } end_fileIdList_elements;
+  if (resultState_sourcesHaveContracts ()
+      || resultState_contractCount () > 0)
+    {
+      /* The conditional state is modeled by resultState.c; do not let the
+         older unconditional branch/null heuristics reject healthy paths. */
+      context_setFlagTemp (FLG_NULLPASS, FALSE);
+      context_setFlagTemp (FLG_COMPDEF, FALSE);
+      context_setFlagTemp (FLG_BRANCHSTATE, FALSE);
+      context_setFlagTemp (FLG_MUSTFREEFRESH, FALSE);
+      context_setFlagTemp (FLG_USERELEASED, FALSE);
+    }
+#endif
+
   DPRINTF (("Pass through: %s", cstringSList_unparse (passThroughArgs)));
   
   cstringList_elements (passThroughArgs, thisarg)
@@ -937,6 +962,18 @@ int main (int argc, char *argv[])
       usymtab_displayAllUses ();
     }
 
+#ifdef RS_WITH_RESULT_STATE
+  {
+    int rsErrors = resultState_run ();
+    int rsIndex;
+
+    for (rsIndex = 0; rsIndex < rsErrors; ++rsIndex)
+      {
+	context_hasError ();
+      }
+  }
+#endif
+
   context_checkSuppressCounts ();
 
   if (context_doDump ())
@@ -944,6 +981,9 @@ int main (int argc, char *argv[])
       cstring dump = context_getDump ();
 
       dumpState (dump);
+#ifdef RS_WITH_RESULT_STATE
+      resultState_saveLibrary (cstring_toCharsSafe (dump));
+#endif
     }
 
 # ifdef DOANNOTS
