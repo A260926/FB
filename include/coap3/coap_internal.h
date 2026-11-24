@@ -1,0 +1,174 @@
+/*
+ * coap_internal.h -- Structures, Enums & Functions that are not exposed to
+ * application programming
+ *
+ * Copyright (C) 2019-2026 Jon Shallow <supjps-libcoap@jpshallow.com>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * This file is part of the CoAP library libcoap. Please see README for terms
+ * of use.
+ */
+
+/*
+ * All libcoap library files should include this file which then pulls in all
+ * of the other appropriate header files.
+ *
+ * Note: This file should never be included in application code (with the
+ * possible exception of internal test suites).
+ */
+
+/**
+ * @file coap_internal.h
+ * @brief Pulls together all the internal only header files
+ */
+
+#ifndef COAP_INTERNAL_H_
+#define COAP_INTERNAL_H_
+
+#include "coap_config.h"
+
+/*
+ * Correctly set up assert() based on NDEBUG for libcoap
+ */
+#if defined(HAVE_ASSERT_H) && !defined(assert)
+# include <assert.h>
+#endif
+
+#if defined(HAVE_ERRNO_H)
+# include <errno.h>
+#endif
+
+#if defined(HAVE_LIMITS_H)
+# include <limits.h>
+#endif
+
+#ifdef HAVE_INTTYPES_H
+#include <inttypes.h>
+#else /* ! HAVE_INTTYPES_H */
+#ifndef PRIx32
+#define PRIx32 "x"
+#endif /* ! PRIx32 */
+#ifndef PRIu32
+#define PRIu32 "u"
+#endif /* ! PRIu32 */
+#ifndef PRIx64
+#define PRIx64 "lx"
+#endif /* ! PRIx64 */
+#ifndef PRIu64
+#define PRIu64 "lu"
+#endif /* ! PRIu64 */
+#endif /* ! HAVE_INTTYPES_H */
+/*
+ * To handle compilers / libraries that cannot handle %zu/%zd formats.
+ * Define these separately to whatver the compiler / library can work with.
+ */
+#ifndef PRIuS
+#define PRIuS "zu"
+#endif /* PRIuS */
+#ifndef PRIdS
+#define PRIdS "zd"
+#endif /* PRIdS */
+
+#if defined(HAVE_STDDEF_H)
+# include <stddef.h>
+#endif
+
+#if defined(HAVE_STDLIB_H)
+# include <stdlib.h>
+#endif
+
+#if defined(HAVE_STDINT_H)
+# include <stdint.h>
+#endif
+
+#if defined(HAVE_STDIO_H)
+# include <stdio.h>
+#endif
+
+#if defined(HAVE_STRING_H)
+# include <string.h>
+#endif
+
+#if defined(HAVE_STRINGS_H)
+# include <strings.h>
+#endif
+
+#if defined(HAVE_SYS_TYPES_H)
+# include <sys/types.h>
+#endif
+
+/* By default without either configured, these need to be set */
+#if ! COAP_SERVER_SUPPORT
+#if ! COAP_CLIENT_SUPPORT
+#define COAP_SERVER_SUPPORT 1
+#define COAP_CLIENT_SUPPORT 1
+#endif /* ! COAP_CLIENT_SUPPORT */
+#endif /* ! COAP_SERVER_SUPPORT */
+
+/* By default without either configured, these need to be set */
+#if ! COAP_IPV4_SUPPORT
+#if ! COAP_IPV6_SUPPORT
+#define COAP_IPV4_SUPPORT 1
+#define COAP_IPV6_SUPPORT 1
+#endif /* ! COAP_IPV6_SUPPORT */
+#endif /* ! COAP_IPV4_SUPPORT */
+
+#if ! COAP_SERVER_SUPPORT
+#if COAP_ASYNC_SUPPORT
+/* ASYNC is only there for Server code */
+#undef COAP_ASYNC_SUPPORT
+#define COAP_ASYNC_SUPPORT 0
+#endif /* COAP_ASYNC_SUPPORT */
+#endif /* ! COAP_SERVER_SUPPORT */
+
+#include "coap3/coap.h"
+
+/*
+ * Include all the header files that are for internal use only.
+ */
+
+#if COAP_OSCORE_SUPPORT
+/* Specific OSCORE general .h files */
+typedef struct oscore_ctx_t oscore_ctx_t;
+#include "oscore/oscore.h"
+#include "oscore/oscore_cbor.h"
+#include "oscore/oscore_cose.h"
+#include "oscore/oscore_context.h"
+#include "oscore/oscore_crypto.h"
+#endif /* COAP_OSCORE_SUPPORT */
+
+/* Specifically defined internal .h files */
+#include "coap_asn1_internal.h"
+#include "coap_async_internal.h"
+#include "coap_block_internal.h"
+#include "coap_cache_internal.h"
+#if COAP_OSCORE_SUPPORT || COAP_WS_SUPPORT
+#include "coap_crypto_internal.h"
+#endif /* COAP_OSCORE_SUPPORT || COAP_WS_SUPPORT */
+#include "coap_debug_internal.h"
+#include "coap_dgrm_internal.h"
+#include "coap_dtls_internal.h"
+#include "coap_io_internal.h"
+#include "coap_layers_internal.h"
+#include "coap_mutex_internal.h"
+#include "coap_net_internal.h"
+#include "coap_netif_internal.h"
+#if COAP_OSCORE_SUPPORT
+#include "coap_oscore_internal.h"
+#endif /* COAP_OSCORE_SUPPORT */
+#include "coap_pdu_internal.h"
+#include "coap_prng_internal.h"
+#include "coap_proxy_internal.h"
+#include "coap_resource_internal.h"
+#include "coap_session_internal.h"
+#include "coap_sha1_internal.h"
+#include "coap_strm_internal.h"
+#include "coap_subscribe_internal.h"
+#include "coap_threadsafe_internal.h"
+#include "coap_uri_internal.h"
+#include "coap_utlist_internal.h"
+#include "coap_uthash_internal.h"
+#include "coap_ws_internal.h"
+
+#endif /* COAP_INTERNAL_H_ */
