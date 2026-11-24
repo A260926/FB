@@ -1,0 +1,795 @@
+{
+  "repo": "https://github.com/libgme/game-music-emu",
+  "commit": "8238afd9503a59ffcec0e2685584d5ce819ad7c6",
+  "license": "LGPL-2.1-or-later",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "37328b5e3edfa4eb4974c17e1de3616f4c2d8a7e",
+      "sha256": "d2fec31c03a470e1e0590da227306cb3d914240e5c50ff49255081250627d17c"
+    },
+    {
+      "path": "changes.txt",
+      "mode": "100644",
+      "git_object": "854dfde882de03aa9247a0249d7b26da5fbd6b84",
+      "sha256": "3fe8e2b47c48520edce6dac7c521c48e259a5edf7d64ddb691c1e3f0d41490d6"
+    },
+    {
+      "path": "cmake/FindUNRAR.cmake",
+      "mode": "100644",
+      "git_object": "462cd2b6490f585b5cf3442e61232d6c18a16ade",
+      "sha256": "3c2c885ced23bb44eda62e7197570965db8f6c20692a09460a8b857844cc54ca"
+    },
+    {
+      "path": "design.txt",
+      "mode": "100644",
+      "git_object": "d42cadb120e95cfff66682a372f71307d61fceb5",
+      "sha256": "942def005032f4128056c2ff08639fa2b28b60c840a42c0ec7429ee215ffdf7b"
+    },
+    {
+      "path": "gme.txt",
+      "mode": "100644",
+      "git_object": "58979fd6c892963f4615ca87c4cde0a65f128dbc",
+      "sha256": "e816467e0df1c6a028a254c16df2d80e61779db8cddec04b31e8598009a6a087"
+    },
+    {
+      "path": "gme/Ay_Apu.cpp",
+      "mode": "100644",
+      "git_object": "9d60eb81258ce79f2384d80aca96c8104cd33b67",
+      "sha256": "3e1329e4fdea8e6ec35d507e19b0098f032872084bcd3f675654e5182e0b4781"
+    },
+    {
+      "path": "gme/Ay_Apu.h",
+      "mode": "100644",
+      "git_object": "65f3b7f8cc11a3299785ffac0b2934a4356964fd",
+      "sha256": "c42dc3a0741c7bd5b064372cea735dcc20a1af00abce4e84584cefd4638fa7f0"
+    },
+    {
+      "path": "gme/Ay_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "a2c6b3b53e8153223b1f3218badd1dc9e8fb0824",
+      "sha256": "1cd6eb1d23a4b4e1da56d1e356cd22fa08868730c71fac67c5c6cdc9987ed84f"
+    },
+    {
+      "path": "gme/Ay_Cpu.h",
+      "mode": "100644",
+      "git_object": "5180a0d6b377987a3ad773f12201e33091db7f05",
+      "sha256": "7653a37fc093a1b33f0574ef8444c6568ceb91a316cf30b057370e1e035b63a4"
+    },
+    {
+      "path": "gme/Ay_Emu.cpp",
+      "mode": "100644",
+      "git_object": "af290fbc2ae205d8c9e34244451f6bbf9ecc48d4",
+      "sha256": "4eb268f5db14cb7cb70de39e8984142a176490b60fb5ce5bd7329a4431bc892a"
+    },
+    {
+      "path": "gme/Ay_Emu.h",
+      "mode": "100644",
+      "git_object": "5266d9cb938f7a03a7a06703a2fceb6eaeb9d8b1",
+      "sha256": "8576d1c2d134d14fe6b78f0a6d9d9f168a82d093d029bbcc340c5f19a344279d"
+    },
+    {
+      "path": "gme/Blip_Buffer.cpp",
+      "mode": "100644",
+      "git_object": "f3467159087919d82da129f1b9fc22c074cf5d65",
+      "sha256": "f0d398443d21369520f5813167b686c8165926b7f21afe9398b0c24ce54c17f5"
+    },
+    {
+      "path": "gme/Blip_Buffer.h",
+      "mode": "100644",
+      "git_object": "7c82d5e33ff7426fda6fb7c3e504e8d9d261d4fa",
+      "sha256": "603f3e01644659cdc09d1f8be50a32ce1dd74299c4ccb94dfb8270086cdd3b73"
+    },
+    {
+      "path": "gme/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "825fec6b707dfea2fe2c13c78617e0ceee63e2fb",
+      "sha256": "3b580fbcdf94f87a35e35e6f855e5df47af5fde9a6334f3a17c5e6b32b9eb704"
+    },
+    {
+      "path": "gme/Classic_Emu.cpp",
+      "mode": "100644",
+      "git_object": "518dd9bcab6db22f683d96730c9ae1280f6dd01c",
+      "sha256": "9c415302593f90fc4a6174f6dc400e047a2148c8521143ecad0bb32e3dcb9b39"
+    },
+    {
+      "path": "gme/Classic_Emu.h",
+      "mode": "100644",
+      "git_object": "ea8ff361b7cc99ee570ee77510e91c1b06bc08c6",
+      "sha256": "744b99510edae709b184226f306556e66bd3ab1d18a2540d4bf3f69d9d365c0a"
+    },
+    {
+      "path": "gme/Data_Reader.cpp",
+      "mode": "100644",
+      "git_object": "6c4e608cc75558fcd969b4e4af8985a85c6f77ae",
+      "sha256": "fc4725627ad96e5ca29bbb93a80ed381e7181797b77112b8dbc1f04f58d5f014"
+    },
+    {
+      "path": "gme/Data_Reader.h",
+      "mode": "100644",
+      "git_object": "45a87f292cb5bbd155803d1928b830aa87faf618",
+      "sha256": "bfce740ffead16fe4c992007ef59a3a027675ca9d02dd14667b3d6960d1de10f"
+    },
+    {
+      "path": "gme/Dual_Resampler.cpp",
+      "mode": "100644",
+      "git_object": "9af40be7de7171409a367dd40dbb61961a04251d",
+      "sha256": "7b517c6c38940ec7de593f3d84cdfd81369686969c54ff4ef6ea0dc0e1d3d83a"
+    },
+    {
+      "path": "gme/Dual_Resampler.h",
+      "mode": "100644",
+      "git_object": "9979b330ebbe39de34464c2e6559be705254577a",
+      "sha256": "e9edb3f748fee3dc3afa53f95d5252a9f792aae8983ef62f878cfcd61cb5aef8"
+    },
+    {
+      "path": "gme/Effects_Buffer.cpp",
+      "mode": "100644",
+      "git_object": "4e018df739ed74f8dc6402dcea3f911af908a41a",
+      "sha256": "878247fd7876412460a4afcf275f7d9b6b3b194e345c49b1af4b1b62361d95a4"
+    },
+    {
+      "path": "gme/Effects_Buffer.h",
+      "mode": "100644",
+      "git_object": "e7feb3b90266d309d67dd1243b0edc848dffcee5",
+      "sha256": "73fb1b68fb44f51784f0d60beaf791eecfe192ed7e02d9afbf7459f734dda6c0"
+    },
+    {
+      "path": "gme/Fir_Resampler.cpp",
+      "mode": "100644",
+      "git_object": "915017e064203e362ff091ba763b49c5bcf0ab60",
+      "sha256": "ff50f293a930f1160c013473acac61eb110c0f3264b5dc23f91711739667e5cf"
+    },
+    {
+      "path": "gme/Fir_Resampler.h",
+      "mode": "100644",
+      "git_object": "9ec50c8c0d77f18d6528e9e4ef424a9c6d5e74a2",
+      "sha256": "e700f48eaa5f868c2987de73a2f1b80b59139836318ce9d8a9ae4c43c1aab6e2"
+    },
+    {
+      "path": "gme/Gb_Apu.cpp",
+      "mode": "100644",
+      "git_object": "60688e4aa8f69f8fc7dcfe15ea09ca531cd4f8c2",
+      "sha256": "85b3bd6260b62ac5b70ffd1018db0c64fe09b4ec68db28f18761a60974d0e59a"
+    },
+    {
+      "path": "gme/Gb_Apu.h",
+      "mode": "100644",
+      "git_object": "cde3d80275320374c7a3a6435a34b1277f057a41",
+      "sha256": "0a8fb501a97719dcfb5867412e045f842b49afec7b5c9da0b1d6855011191c41"
+    },
+    {
+      "path": "gme/Gb_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "cea1a6a13ee7f96f62aa22981062d482248897b0",
+      "sha256": "050d09f7ce0953a123bebcaf47e142c447fd20ce22f79d20c6e1fb9b270f1e79"
+    },
+    {
+      "path": "gme/Gb_Cpu.h",
+      "mode": "100644",
+      "git_object": "6c2e0616f55f04f8d05dbf12f60c9a1ac4dcbd39",
+      "sha256": "aefd01dba2375de3b10372a80f74680375ed8f3cc026121fdb8e743d23666293"
+    },
+    {
+      "path": "gme/Gb_Oscs.cpp",
+      "mode": "100644",
+      "git_object": "e38ccb2373556734023956693b3e9b28d57f1613",
+      "sha256": "8ab988ca76abbdde2b0f9bfbd06a754fd3e4e09065da1a63ceb249f3ea3fcaa0"
+    },
+    {
+      "path": "gme/Gb_Oscs.h",
+      "mode": "100644",
+      "git_object": "cd5c1c3eedcde45be476d748c142b792e9b897b2",
+      "sha256": "de4b8f942d47c374278000e416a2e6d8cb498a7bc8897a5c21fb7b966db7ed33"
+    },
+    {
+      "path": "gme/Gbs_Emu.cpp",
+      "mode": "100644",
+      "git_object": "3e2a7eab6ded88cf3ae65beefd7d05070cd81823",
+      "sha256": "21b03fd6220a7ffa68cd0dee832a4e8a218eb614dda01159d87c22bb41f4b9e4"
+    },
+    {
+      "path": "gme/Gbs_Emu.h",
+      "mode": "100644",
+      "git_object": "d963f40772fc4bf6f629912457086cd12fe94bd1",
+      "sha256": "741f6686695d470dd89c7f62be4ca7ff338d3baef06f8e39cbb9f63986d10612"
+    },
+    {
+      "path": "gme/Gme_File.cpp",
+      "mode": "100644",
+      "git_object": "d027b5aafd2e0c1b1c3764da913abd00cb963000",
+      "sha256": "236488e3f4617d06103f09d03f662bf55491afbbc255f04133a3e6a83f4f7648"
+    },
+    {
+      "path": "gme/Gme_File.h",
+      "mode": "100644",
+      "git_object": "6ce3935a12bec92306f6d3796fba40ca66a9c2e5",
+      "sha256": "155ab3c50f8e7bf3342e0e15444b860a9ff901a256f83144ad95c8243aa6149e"
+    },
+    {
+      "path": "gme/Gym_Emu.cpp",
+      "mode": "100644",
+      "git_object": "2e12fb3ebfb89f37ac341cd2dc21d0d2ffb64423",
+      "sha256": "c463b19a136ee331cd82067ce22ba26379291f5f8d1cb24a5eb25adc5bd32391"
+    },
+    {
+      "path": "gme/Gym_Emu.h",
+      "mode": "100644",
+      "git_object": "8d74adb37106f61f30a5f5af12b649cd002ce84f",
+      "sha256": "c29619c1dbe2cb2e2f791631d8ffc0ac093474aa4f608777708b7796a82f2650"
+    },
+    {
+      "path": "gme/Hes_Apu.cpp",
+      "mode": "100644",
+      "git_object": "39b3fd2d953f9bfbcaf00836377889b5f1fdc4b0",
+      "sha256": "aac072839193c9eafeab2a62d4f7cf38d4c73c567de770c37d2811ce8e64979f"
+    },
+    {
+      "path": "gme/Hes_Apu.h",
+      "mode": "100644",
+      "git_object": "4d9d1d15866a3a5d3acb4e2e9f268ba78b753231",
+      "sha256": "de216b70ac23cb14fec748f901b47ea29a9f0d4e23854b9360dfcb01c96692d6"
+    },
+    {
+      "path": "gme/Hes_Apu_Adpcm.cpp",
+      "mode": "100644",
+      "git_object": "387658dca5f307ff84f4fdb1b943ab1535416fdf",
+      "sha256": "67e025e62fc3ff7c2be712b076c73e13b807f16b7f446c200c562fc39fd9dfbe"
+    },
+    {
+      "path": "gme/Hes_Apu_Adpcm.h",
+      "mode": "100644",
+      "git_object": "9518c83b86bbebe9edf2ce33cf13b5a6110d9007",
+      "sha256": "be333b7079054fb88893ccc794de010ac9f0b60fd9bdee9e444335d704f3873d"
+    },
+    {
+      "path": "gme/Hes_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "985f033aa3d9be34252d96640523abaac8490c90",
+      "sha256": "522654818f3247bdf763415b5ef5c63f639c94a55732af721264e0c3f920da74"
+    },
+    {
+      "path": "gme/Hes_Cpu.h",
+      "mode": "100644",
+      "git_object": "9f0b05555b65d1b989367a663407111da3efe817",
+      "sha256": "7560343b8834bf4e1f275f9c19b5278c1104e697da15a9bec575331e5b065725"
+    },
+    {
+      "path": "gme/Hes_Emu.cpp",
+      "mode": "100644",
+      "git_object": "15115481ff2267f253f9022db53c66cb798d6fd5",
+      "sha256": "689bc315f7a26dff8cdf33f31e285d050bf09c2296f299ded34dd2716220d801"
+    },
+    {
+      "path": "gme/Hes_Emu.h",
+      "mode": "100644",
+      "git_object": "39685f4e1238020d13c64ca82d1023e1e0568a06",
+      "sha256": "05aebcb711109c5ced311406e2f4ccfe66cd8b38384356755bc3553775c5906e"
+    },
+    {
+      "path": "gme/Kss_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "e88369026487cbb9f1261fcb890711e4c436803a",
+      "sha256": "82216b80bf7590e0a25b9d1bc31d6377fd411b26e4d513c5bfeb6986aa7be25c"
+    },
+    {
+      "path": "gme/Kss_Cpu.h",
+      "mode": "100644",
+      "git_object": "40d754f3de23ce03e0e67bb6864bf1720aa81460",
+      "sha256": "5ef904ccccc1dc16dbe0c2156638c3d52a4eb0c5b130df1a18cae449d87bee24"
+    },
+    {
+      "path": "gme/Kss_Emu.cpp",
+      "mode": "100644",
+      "git_object": "a6834181384d7786670dbba2391801e86832fdd8",
+      "sha256": "b15e0526c991793bee3254c7bd49de3a84f99120c8b9a49a93e32d8fca9aa81e"
+    },
+    {
+      "path": "gme/Kss_Emu.h",
+      "mode": "100644",
+      "git_object": "9e6f191f170f811d66a5d8ab6f2c131481a05128",
+      "sha256": "3159e8effc0e2c63489d7839ab978f4b7961844003127cf2b84a7d09384d8cc2"
+    },
+    {
+      "path": "gme/Kss_Scc_Apu.cpp",
+      "mode": "100644",
+      "git_object": "37c87857d0d4f4f735fbb4a29676211472159d8e",
+      "sha256": "939b94fefc361ac1c57337e9299979be4448c44a01fd8dbeacfa0a8495f2d340"
+    },
+    {
+      "path": "gme/Kss_Scc_Apu.h",
+      "mode": "100644",
+      "git_object": "865a300fddf7c4cd4702228581fc1b3239bdf87d",
+      "sha256": "4f617c0b13157a10adcd1650698a3a4539a9d4ef0f157f5c1dcd24f165f1d70e"
+    },
+    {
+      "path": "gme/M3u_Playlist.cpp",
+      "mode": "100644",
+      "git_object": "874343ca2be754f9c86b8ada17b182fceeb99b75",
+      "sha256": "2f00dae2fb3f0607574f9481e9ac0e22a5b5773e794a73602637bc43d5e6feee"
+    },
+    {
+      "path": "gme/M3u_Playlist.h",
+      "mode": "100644",
+      "git_object": "2af748085eabdad591deed5b173139ffa3abbab6",
+      "sha256": "187ebd8ae6dc041ecea049df2f36b3cf81378c861cb41f9c45d1fec43b70bf93"
+    },
+    {
+      "path": "gme/Multi_Buffer.cpp",
+      "mode": "100644",
+      "git_object": "f6a72ef3a1f38280b7d1b723dd1a0a5f0fd1e7fa",
+      "sha256": "a6b8729f227dee723b784e0ade2e7d1a25a34e5a95348fd731ad40a7fc19cdea"
+    },
+    {
+      "path": "gme/Multi_Buffer.h",
+      "mode": "100644",
+      "git_object": "d29b5cc8b7fdfdba4a5e66a2ea6408ab81ee91c7",
+      "sha256": "6220a0f04770f0b5c90c5024d262448bbc9682e491881f6b7ba0b4a5bcb7268c"
+    },
+    {
+      "path": "gme/Music_Emu.cpp",
+      "mode": "100644",
+      "git_object": "c42f9ad72519500a0cbc9d818d5117dac1996977",
+      "sha256": "aa8ab92f2860914022ad01ace2416da616bb15c30f0e8d5085c3e8dc3fa1396a"
+    },
+    {
+      "path": "gme/Music_Emu.h",
+      "mode": "100644",
+      "git_object": "91af0149ae6dbe0c97f278cfabf52dea5a678d26",
+      "sha256": "2af2453e07abc4d2555347e44a64de0acd9853d17b9aa92de23b3064e4bb5dd7"
+    },
+    {
+      "path": "gme/Nes_Apu.cpp",
+      "mode": "100644",
+      "git_object": "0718aa05129dd758625869681e0c01ebdb78d1d0",
+      "sha256": "bbbe11b99b542e780bc161803f05f4c77ff711998390711bfaaf1bbaeab4346a"
+    },
+    {
+      "path": "gme/Nes_Apu.h",
+      "mode": "100644",
+      "git_object": "1650e6be8fe8d97192717938b53fdab8430614e9",
+      "sha256": "3e1cf8ba24d503416370aad7593dd114c9bb645152452fd06f960c94f86d38ef"
+    },
+    {
+      "path": "gme/Nes_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "c3c7e8aa34be6eccaa802ad9b08300a10e5b6003",
+      "sha256": "fd8c98788f86a42ac75d2ad2fc2de07913e715e7bff87763cbe6166617e72542"
+    },
+    {
+      "path": "gme/Nes_Cpu.h",
+      "mode": "100644",
+      "git_object": "231a9f4544e61dd1f327d208469448d737f06fac",
+      "sha256": "b00c712631f3480d2885195509317bfcaad9c01520a8aaad59efe0ecd9907082"
+    },
+    {
+      "path": "gme/Nes_Fds_Apu.cpp",
+      "mode": "100644",
+      "git_object": "82632a6b336751103b526579d3c4529c0ef83149",
+      "sha256": "f9e906f62594c4303ae31e8447c9534ceda7d81abb702bed27b7926cbd4752b0"
+    },
+    {
+      "path": "gme/Nes_Fds_Apu.h",
+      "mode": "100644",
+      "git_object": "b12cf93bf595e019590e40c16af4de779f21387a",
+      "sha256": "510bc0252b6ff782a94c14677b534bcc5fa27467919a711269aaa73f1de6b7cd"
+    },
+    {
+      "path": "gme/Nes_Fme7_Apu.cpp",
+      "mode": "100644",
+      "git_object": "a51f54e794b2bf5cabd7089f197c56c21b40f656",
+      "sha256": "a29580d8431aa67e524bf5e12b661902c9dc7abddc8c5d496a581f6d3d1ef140"
+    },
+    {
+      "path": "gme/Nes_Fme7_Apu.h",
+      "mode": "100644",
+      "git_object": "adadc1d7f15a62fc1506f7cdc2db079677f52dd1",
+      "sha256": "e27a3c6b1935bf1e0767f2a6c07fc8637843b636560b70034f3970a58edb32c3"
+    },
+    {
+      "path": "gme/Nes_Mmc5_Apu.h",
+      "mode": "100644",
+      "git_object": "c3350719847a7136104c7c067ebd748ad16f5446",
+      "sha256": "6d0af76ab83d6465f16dce498e0c0dc31d50eb090da92592e155c57ee2022d73"
+    },
+    {
+      "path": "gme/Nes_Namco_Apu.cpp",
+      "mode": "100644",
+      "git_object": "61d59312db98669981a76aa558e1c9eba9fb7b85",
+      "sha256": "767d89b8c858bcbd0238b009c0b4804eba97ff99721a7f951777a5375fdfd529"
+    },
+    {
+      "path": "gme/Nes_Namco_Apu.h",
+      "mode": "100644",
+      "git_object": "83be1ab173b30650b23b6eac15705d6e02f35a7d",
+      "sha256": "6ac9d7473cd503f5a1cf06749291200d56d0d58887456d00fec5223830aa9557"
+    },
+    {
+      "path": "gme/Nes_Oscs.cpp",
+      "mode": "100644",
+      "git_object": "153606d0a59b8e2a00aa073ab43a5c80f4fc7a33",
+      "sha256": "77d1695a02a30b52cbf015dc04df282b2e1c0c15a0b8f16bb26a2a796551363f"
+    },
+    {
+      "path": "gme/Nes_Oscs.h",
+      "mode": "100644",
+      "git_object": "36a0d7d77394cc57d1bf903e64e94b901813e66e",
+      "sha256": "25c52ce9a5acfade5573a57de7e572553d6f993087c9aae18884c889c5e0a89d"
+    },
+    {
+      "path": "gme/Nes_Vrc6_Apu.cpp",
+      "mode": "100644",
+      "git_object": "d0268a489c6268ea0fac78da9c613112590f2609",
+      "sha256": "bf0817bb1c840946e37da216030c016e47f873b87e3833d9c004108cc7ba79f6"
+    },
+    {
+      "path": "gme/Nes_Vrc6_Apu.h",
+      "mode": "100644",
+      "git_object": "59520440e90ac0a19bb867ba1647f5d83a403f43",
+      "sha256": "744b82b89b52623b1280370a55e3a1de89420ac0f124b1e28d97e621c4f0a0e9"
+    },
+    {
+      "path": "gme/Nes_Vrc7_Apu.cpp",
+      "mode": "100644",
+      "git_object": "94eeb8adf3deaf0c3485740379c75aa6dc5c735f",
+      "sha256": "65cb80543dfcc42266ace51905ce279f9ae71a7a84e30099eef23284eabf0110"
+    },
+    {
+      "path": "gme/Nes_Vrc7_Apu.h",
+      "mode": "100644",
+      "git_object": "52a3489c3aad7eb188d485f9351ba0e51dca9022",
+      "sha256": "6f6669b6f96cedd8ee279299df5d0d1fc802245ef31fc0df8d8a26731349bd95"
+    },
+    {
+      "path": "gme/Nsf_Emu.cpp",
+      "mode": "100644",
+      "git_object": "796de610d77b75cd75758ef1d44c14242334e54f",
+      "sha256": "380857679b888e34a4ce17b2d47af0680de451fe7cbae51f9ee973be120a29a9"
+    },
+    {
+      "path": "gme/Nsf_Emu.h",
+      "mode": "100644",
+      "git_object": "7ecabcf270613c8a622f77cee311ee4a5a331b96",
+      "sha256": "26770c9acf216ccfa5e5f0b8f97ce71eec6ca79850031f0b0ca0c7d0260074f8"
+    },
+    {
+      "path": "gme/Nsfe_Emu.cpp",
+      "mode": "100644",
+      "git_object": "8f36605b6e15854ae0d43cda846d54acb59974a3",
+      "sha256": "194abdfe6db44fae07bde7cbaf6066c56712c131acc2a36d7d1a497108053b65"
+    },
+    {
+      "path": "gme/Nsfe_Emu.h",
+      "mode": "100644",
+      "git_object": "3ca616781a2eafb99cbe11d7c4652859c5bf65c8",
+      "sha256": "9528f5e9a8f32f70e18f2b9a71427b8c0e68e9e3947ebb556e2a2b95faf672af"
+    },
+    {
+      "path": "gme/Sap_Apu.cpp",
+      "mode": "100644",
+      "git_object": "f3122582e43572fa06588e4ada3f353b29cb8556",
+      "sha256": "5a7e5c46b2862fd349975b846d6fe6cacd60b84571accdb0f406686cb201862e"
+    },
+    {
+      "path": "gme/Sap_Apu.h",
+      "mode": "100644",
+      "git_object": "f4511435306428fcb2db644bc69da38fb6e151ca",
+      "sha256": "c56ef90d604994d42bc069e978b3da78be313a1e9139329b4921f4da884f34ce"
+    },
+    {
+      "path": "gme/Sap_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "4febfdba14e02dc35ad9a8a6180433e714e55d32",
+      "sha256": "d18e6adbb0af77bb963f1cb9c28d28dbfe3dc8ee7a024f8037fd9f3331f548a9"
+    },
+    {
+      "path": "gme/Sap_Cpu.h",
+      "mode": "100644",
+      "git_object": "355b6e1fab229812057b45f2194a20fc0987f9fa",
+      "sha256": "8f8742d2ae400de4c603f89464ada9ded895223b2a56b912ff3630ee4f4230a8"
+    },
+    {
+      "path": "gme/Sap_Emu.cpp",
+      "mode": "100644",
+      "git_object": "c1a2c87220f65c8a916cbf90351a518b0f59dc23",
+      "sha256": "90945562eec90f53832483f610e082c98455d4077cf5c769f135cafa725e0ce3"
+    },
+    {
+      "path": "gme/Sap_Emu.h",
+      "mode": "100644",
+      "git_object": "d4be14a1b6bacd8d106624fb61e1acf4c3332954",
+      "sha256": "1823de79185da2b95af4edd0fb24e0ca90734627c5438c9d2f77b413efc78c69"
+    },
+    {
+      "path": "gme/Sms_Apu.cpp",
+      "mode": "100644",
+      "git_object": "f42bdad1babdbb2e8f424b6b8b055e817075d72b",
+      "sha256": "32ad7b3c29028587529758fdd1136d2cd3657877afdb726a246ffad518f657e8"
+    },
+    {
+      "path": "gme/Sms_Apu.h",
+      "mode": "100644",
+      "git_object": "ec8bc87ec379dea62d7d0ed6fc927efbd3a46914",
+      "sha256": "46425c8fd62afeaab811ce453e5db9ab1dfecd234e75ae49a3071d64b49bcdf5"
+    },
+    {
+      "path": "gme/Sms_Oscs.h",
+      "mode": "100644",
+      "git_object": "282cb18a0af4ae0177fbfbe7194aa13529d16541",
+      "sha256": "3ff3124307fb61394e1a0eec9aae2735a8526866da3d9fe3000206c7d08b4da6"
+    },
+    {
+      "path": "gme/Snes_Spc.cpp",
+      "mode": "100644",
+      "git_object": "a2a7597ef5b691ab765eecfa43625ac10a0255f8",
+      "sha256": "71734188f7946773bd76238418b1e56ce2577500f4e31b3ab1202b6b99b9eaae"
+    },
+    {
+      "path": "gme/Snes_Spc.h",
+      "mode": "100644",
+      "git_object": "ec2db1b63b0917ab0df9634eccaefee77003d894",
+      "sha256": "b136d48be0039fad00937bbcb20a603cb95d8ea410bb4d9900061e40f46ccbf5"
+    },
+    {
+      "path": "gme/Spc_Cpu.cpp",
+      "mode": "100644",
+      "git_object": "206601b52c1ccc927bc3c0dd0d9ad6db0906ddec",
+      "sha256": "c14d396e7f4c579047b7cc307b916fcb670f2d36980b185ab5b29616e2258bcc"
+    },
+    {
+      "path": "gme/Spc_Cpu.h",
+      "mode": "100644",
+      "git_object": "48e173e60103a7a5a097d29511001a1fd9a7c076",
+      "sha256": "2f76eacf55f7e3fe684ac051b2b76454c5bd23e9188ffb2009deb30f718e6e40"
+    },
+    {
+      "path": "gme/Spc_Dsp.cpp",
+      "mode": "100644",
+      "git_object": "6b41eadb297c54d9c24f7a3d442bc3cbc9156b72",
+      "sha256": "f42be04184870f10be655be786c26f254c49dbdaa4604a6b75132abf934e5da2"
+    },
+    {
+      "path": "gme/Spc_Dsp.h",
+      "mode": "100644",
+      "git_object": "8e05114517c64643f7d94ecfef504ec71417c4b2",
+      "sha256": "529937d6bfe6a3dba62fdc7f16cd9edf8117d98f56959f276e16216bdbef040a"
+    },
+    {
+      "path": "gme/Spc_Emu.cpp",
+      "mode": "100644",
+      "git_object": "0b69e308d4907be0b9d22e7ba01987818672f704",
+      "sha256": "b6bd0bbed193825b04138abf29912d59f5032d8b8c4918dc3fe259299909f8de"
+    },
+    {
+      "path": "gme/Spc_Emu.h",
+      "mode": "100644",
+      "git_object": "c83cd45ac48d34f2d688e3004553b5e1a8c85f4f",
+      "sha256": "3e1ead9459511ea7e1b0d3c2e5195ae06c6e27c987c33dfc4dfe74eed8ee1dec"
+    },
+    {
+      "path": "gme/Spc_Filter.cpp",
+      "mode": "100644",
+      "git_object": "1951bd13a0231c1c4fa1c0fc7d2468bb36768022",
+      "sha256": "b4b471e79c92e2636484e59aa8d57101f17e538fcdd0d1ec52ec31a2ccff62c0"
+    },
+    {
+      "path": "gme/Spc_Filter.h",
+      "mode": "100644",
+      "git_object": "a4c682c96ea8a588031606b95e84a902fb899108",
+      "sha256": "d16071c3d9ec7b7d224a2dc9bf76014c3f8515870834fca9b6521a7608ce7f30"
+    },
+    {
+      "path": "gme/Vgm_Emu.cpp",
+      "mode": "100644",
+      "git_object": "213b214c93c0289a319106e1d28e0b58e235f811",
+      "sha256": "bb946c954dc303caa97303b4db9c2221ed314fef1c066fa4b431ec3f69ce9fcd"
+    },
+    {
+      "path": "gme/Vgm_Emu.h",
+      "mode": "100644",
+      "git_object": "a2d847d79c353d4cd610ee4aeb88799c014a5e29",
+      "sha256": "fbf142400ef7f09a5757f54b6513ea021297630d3f426a8d3beb5d9cf33d260d"
+    },
+    {
+      "path": "gme/Vgm_Emu_Impl.cpp",
+      "mode": "100644",
+      "git_object": "81a3a61aabac88b5453da0b27f14d89c32ded554",
+      "sha256": "fb92721188e692c848fb717ded3193dfa70ca4c8e3cdd2aa31437626651a73fd"
+    },
+    {
+      "path": "gme/Vgm_Emu_Impl.h",
+      "mode": "100644",
+      "git_object": "589a8e867d67fcc4799dd295445178b06545a832",
+      "sha256": "21b653367fc4cf3860538fe6ec7ca4060ac8b2a1cc4801853d70a986faf5b937"
+    },
+    {
+      "path": "gme/Ym2413_Emu.cpp",
+      "mode": "100644",
+      "git_object": "01e796d9511da7de54a830d04f8aeba2ba62916d",
+      "sha256": "93ef27d5c799a8d2901ced9d82a3a9aa48cbade162110c98a9511c46ee97f172"
+    },
+    {
+      "path": "gme/Ym2413_Emu.h",
+      "mode": "100644",
+      "git_object": "c7024454fd706ef33e3911692b1e486378f1b874",
+      "sha256": "e422fc72b81e1a5cc49a53b5d736847ea045d768f1202507a71108c202d7ce60"
+    },
+    {
+      "path": "gme/Ym2612_Emu.h",
+      "mode": "100644",
+      "git_object": "6acacc8740e741acdeba76e322e51d80847fad9f",
+      "sha256": "0da0ecdb4cadb087ad67b30d59d2a4a62966c60b18fab720b2946571b8079bba"
+    },
+    {
+      "path": "gme/Ym2612_GENS.cpp",
+      "mode": "100644",
+      "git_object": "30fa8871d70dba2481d2b703c14422e731368ea0",
+      "sha256": "e9bb8453f96dcaddbcf65105506d4346cd7acd6ec9b7470df07cff9fe129420b"
+    },
+    {
+      "path": "gme/Ym2612_GENS.h",
+      "mode": "100644",
+      "git_object": "4cb2e8ae3478075f70fa11d4fe31dd8bfb0303fc",
+      "sha256": "c7ce2e2e10f67d9987e2d18034a7bdf003f83df9b5cfd77ff4008d02b8b7ee62"
+    },
+    {
+      "path": "gme/Ym2612_MAME.cpp",
+      "mode": "100644",
+      "git_object": "7b99107d29b8f5ba867cad41a2f402f9a6858bfc",
+      "sha256": "d9c15bc360f0861b386c795968f7b254df9cbf5302eba38b5c364577c12db557"
+    },
+    {
+      "path": "gme/Ym2612_MAME.h",
+      "mode": "100644",
+      "git_object": "03831065abd456b75f77bf989233bad827c8bf5d",
+      "sha256": "89611d962ebf92a2078bc17ec401a75fcb47a34ab2c9feaeed0d6c39ce999c77"
+    },
+    {
+      "path": "gme/Ym2612_Nuked.cpp",
+      "mode": "100644",
+      "git_object": "d691fe6b567091440ecf20365cbd4f96470ab4d5",
+      "sha256": "a3fdbfe7b37b3fd7ede083e5e89e1c7ba517540279f19b8bc21af7d3fc479e57"
+    },
+    {
+      "path": "gme/Ym2612_Nuked.h",
+      "mode": "100644",
+      "git_object": "6c265b138150ebe64a218700123c57f1874c9c96",
+      "sha256": "0bbe2ddbe23c6d720db3c99b2e4cd90adbe8ce1642eca78e2f2990af9de027d0"
+    },
+    {
+      "path": "gme/blargg_common.h",
+      "mode": "100644",
+      "git_object": "3b356853c67244a765942fe329a74296ff61c7b9",
+      "sha256": "53a779dc5d0fb233cf9eaab9db6840e6b838b4e1094e76ceef2a91970f8a3491"
+    },
+    {
+      "path": "gme/blargg_config.h",
+      "mode": "100644",
+      "git_object": "28d7f26228788555922e934b4b9a81bff71155d0",
+      "sha256": "19f316b379d98f27f36deb86f83279309aa3a324e8bf5dccb41a2ea3076628bf"
+    },
+    {
+      "path": "gme/blargg_endian.h",
+      "mode": "100644",
+      "git_object": "c81f551a48addbd10c3f81743da5876c60b90b53",
+      "sha256": "d36fe696104a048579b791fe90ea4a33bb8a0fb5232665dd977ee5a4dca0f4fa"
+    },
+    {
+      "path": "gme/blargg_source.h",
+      "mode": "100644",
+      "git_object": "8c28a0d2d5df9b7c75bbeb7518509206024888f9",
+      "sha256": "de05c7a00b69e55810195e355e6ef164a0bef326b8cdf4a6c995dc8905b764f2"
+    },
+    {
+      "path": "gme/ext/CHANGELOG.md",
+      "mode": "100644",
+      "git_object": "425a48e84ef8a4c2aca14634230e63ba79475cb4",
+      "sha256": "bb36bbc23d48985dd36244d418dfc34a53bbc63f596c8aefe98e4106ece8b3b8"
+    },
+    {
+      "path": "gme/ext/LICENSE",
+      "mode": "100644",
+      "git_object": "df4ae1cbb9b0d0e4ccec521bc1775e52465414c1",
+      "sha256": "8fb093f26ed0d78c8ca033bbec7063ac5b34c5d2475e6bd121d03ccfaaf2355f"
+    },
+    {
+      "path": "gme/ext/README.md",
+      "mode": "100644",
+      "git_object": "7abfc3b0324866e762c2b7418192a4bd57fc8e3a",
+      "sha256": "79b34ffc2e0112659cfeb69eb6b623a3d726213a34479faf5bfe2d93f71c6903"
+    },
+    {
+      "path": "gme/ext/emu2413.c",
+      "mode": "100644",
+      "git_object": "d48d2f7f098c661437d41bad741b275ea9e6f532",
+      "sha256": "51bf77d324bb4bafcf05a28fa9957811ea4bc8686647db8fa45529fb7ed4e963"
+    },
+    {
+      "path": "gme/ext/emu2413.h",
+      "mode": "100644",
+      "git_object": "6dbee11caad86b81fa601eab6455148b1f31d1c0",
+      "sha256": "7325f6f3e80831c9260bef9b93562d5985f2a1ba2cd22014c75e3116605f4f37"
+    },
+    {
+      "path": "gme/gb_cpu_io.h",
+      "mode": "100644",
+      "git_object": "8bd69aa2db32a688582ec0d71307449037278470",
+      "sha256": "2a7e75fd6da08be5c7cb1335b90a4d97510dd1411e03ee761d75a8f34e2f0170"
+    },
+    {
+      "path": "gme/gme.cpp",
+      "mode": "100644",
+      "git_object": "78914b26403f77c2b27145749aeb48dc97ce288b",
+      "sha256": "efb355d301a4ad2a91fed6fe22a5095a90f9575c44f8b361b569afe5835976df"
+    },
+    {
+      "path": "gme/gme.exports",
+      "mode": "100644",
+      "git_object": "2da5a1b1858a666fd6b851fb424175dff6ca69f4",
+      "sha256": "2afb41e6e1a1114be4ad3fe4ee941bf6a0641454b30f881d133f5f9445901ff5"
+    },
+    {
+      "path": "gme/gme.h",
+      "mode": "100644",
+      "git_object": "5f75d407de6bb77ecd0de0c468acd238b176eef1",
+      "sha256": "cb6b836eaf5380fb0aa286c3c3ed1b4b3d4c6a3a41a52347c048c30c51bcaf4e"
+    },
+    {
+      "path": "gme/gme_types.h",
+      "mode": "100644",
+      "git_object": "06226f4aa175a3d341dcdef4498afff993188ec3",
+      "sha256": "8d186c181e8e4e499636f45f33804d9ce2bf938c3d7180e4e9e4135e99818896"
+    },
+    {
+      "path": "gme/gme_types.h.in",
+      "mode": "100644",
+      "git_object": "4829b3e168b7116c10203ade600dcec42225d9c8",
+      "sha256": "4180f9dd66d6f84d88c34b1e7936e83b6823e4b674056ae715e394268a495e83"
+    },
+    {
+      "path": "gme/hes_cpu_io.h",
+      "mode": "100644",
+      "git_object": "db01f3d89a5b89464b6f45ea09007fc3fa8e018b",
+      "sha256": "ad38ca6ab32fedd1f9551c0f260c0993e1e44bd5934e96f7ea398b464d89c170"
+    },
+    {
+      "path": "gme/libgme.pc.in",
+      "mode": "100644",
+      "git_object": "0f379d7f6df79c6759a28abdff42da880fe37275",
+      "sha256": "3275ac91790be802485e87df08f2122682288344aa3d6d0a4bd0b9f8a214dc96"
+    },
+    {
+      "path": "gme/nes_cpu_io.h",
+      "mode": "100644",
+      "git_object": "6f8b08ff3f9944ef6cc5dd4c8c620a80cabe15f4",
+      "sha256": "9b3156f00ce6651b744d09300f5f1061cf9d95fbdcaf4f35ed0f7ecba20f84f1"
+    },
+    {
+      "path": "gme/sap_cpu_io.h",
+      "mode": "100644",
+      "git_object": "3103ecdb6fad9a147c36282a0c37e0f2896e9fcf",
+      "sha256": "1352e4285f70dbf8b977bf0e82e16759e1d6fa7b31aec5d98fdcb99958873aa8"
+    },
+    {
+      "path": "license.gpl2.txt",
+      "mode": "100644",
+      "git_object": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "path": "license.txt",
+      "mode": "100644",
+      "git_object": "53afb04e5a0c9776c1640c9bd9ac10bea1bad987",
+      "sha256": "d2efc89fbb7533572a472d34e07964951810a3a4f8d3159ecc2dcaa1452c5c26"
+    },
+    {
+      "path": "readme.txt",
+      "mode": "100644",
+      "git_object": "3f32234acc653aeadd7c2e99365222797fb964c3",
+      "sha256": "ebb2ccb9a60e178b24cbd815d187cbfd6d30fbda04cfc09346bbaf84e6b936bc"
+    }
+  ],
+  "gitlinks": [],
+  "gitmodules": false
+}

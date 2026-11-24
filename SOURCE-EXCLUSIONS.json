@@ -1,0 +1,172 @@
+[
+  {
+    "path": ".github/workflows/CI-Android.yml",
+    "mode": "100644",
+    "git_object": "0dc329fb3f9e8500bc74bc66ed196b5e30d747e4"
+  },
+  {
+    "path": ".github/workflows/CI-Linux.yml",
+    "mode": "100644",
+    "git_object": "e032d36294a5050305bc308361df7e78aa0a9d7d"
+  },
+  {
+    "path": ".github/workflows/CI-MacOS.yml",
+    "mode": "100644",
+    "git_object": "85a6f2e4d670233e7ae01b55df0fbbb13ff53bb4"
+  },
+  {
+    "path": ".github/workflows/CI-MinGW.yml",
+    "mode": "100644",
+    "git_object": "267cacaeb8aaf829c6de8a920b6d68b16b339d2b"
+  },
+  {
+    "path": ".github/workflows/CI-Windows.yml",
+    "mode": "100644",
+    "git_object": "0cb9ecc6bbdd1230da1166cf954d13741ea896b2"
+  },
+  {
+    "path": ".gitignore",
+    "mode": "100644",
+    "git_object": "3af3c0e6338ef5df44bd37783cd47b53c0a3026d"
+  },
+  {
+    "path": "AGENTS.md",
+    "mode": "100644",
+    "git_object": "6a288d2df8270ea2ef44c0f222ce8d7a39d724f7"
+  },
+  {
+    "path": "Android.mk",
+    "mode": "100644",
+    "git_object": "b8c3925f197629a2aac9c04a8e4ecbf6e4883d26"
+  },
+  {
+    "path": "SECURITY.md",
+    "mode": "100644",
+    "git_object": "43969b77bb2d133ef95c7bcec9af4a231aa03f88"
+  },
+  {
+    "path": "demo/CMakeLists.txt",
+    "mode": "100644",
+    "git_object": "1195e94aaf1bc96f37525529dc68faecf8700366"
+  },
+  {
+    "path": "demo/Wave_Writer.cpp",
+    "mode": "100644",
+    "git_object": "4b8c61167d080f935ee06efa63b1b08f6e9ae0df"
+  },
+  {
+    "path": "demo/Wave_Writer.h",
+    "mode": "100644",
+    "git_object": "8e2875733c874b588513c59d957a0d5b69e3faf0"
+  },
+  {
+    "path": "demo/basics.c",
+    "mode": "100644",
+    "git_object": "8906a2c103e8e6e2aec1c7c193518b2aae68564a"
+  },
+  {
+    "path": "demo/basics_mem.c",
+    "mode": "100644",
+    "git_object": "6e638ff35ef8ff36c527fd39ca97419cbf642b41"
+  },
+  {
+    "path": "demo/basics_multi.c",
+    "mode": "100644",
+    "git_object": "bf5da1955a2fbc69bba7ef83bef763bed9974609"
+  },
+  {
+    "path": "demo/features.c",
+    "mode": "100644",
+    "git_object": "9afb59cc0c7ad0d6a6309edc1eb98aaac9c216a4"
+  },
+  {
+    "path": "player/Archive_Reader.cpp",
+    "mode": "100644",
+    "git_object": "5513299a70a59165c588f03c25b93a06bc2f3101"
+  },
+  {
+    "path": "player/Archive_Reader.h",
+    "mode": "100644",
+    "git_object": "c5e04f7e80eff1cc1aadabcd1beb6cac232e4c25"
+  },
+  {
+    "path": "player/Audio_Scope.cpp",
+    "mode": "100644",
+    "git_object": "cf483b777c5c5373eb93ba7a1523e3f669949557"
+  },
+  {
+    "path": "player/Audio_Scope.h",
+    "mode": "100644",
+    "git_object": "43ffc12e1caffe5d87db315888d1b33b23e1360e"
+  },
+  {
+    "path": "player/CMakeLists.txt",
+    "mode": "100644",
+    "git_object": "38c45ea1d3e4f0c357020085c89d9588ca278c42"
+  },
+  {
+    "path": "player/Music_Player.cpp",
+    "mode": "100644",
+    "git_object": "0c2e00dd72d97ad93076da0753f70acfca99d8cd"
+  },
+  {
+    "path": "player/Music_Player.h",
+    "mode": "100644",
+    "git_object": "6bf68ee48b586fc2d1bef3c73757754293382370"
+  },
+  {
+    "path": "player/player.cpp",
+    "mode": "100644",
+    "git_object": "5b44da1dccdf3bd89cd500cf4dd0eff4a5059b8c"
+  },
+  {
+    "path": "test.m3u",
+    "mode": "100644",
+    "git_object": "19938a6f692e82cd8ba28cc7da71b70b5fc46254"
+  },
+  {
+    "path": "test.nsf",
+    "mode": "100644",
+    "git_object": "da5fcedd2c4686494aad9892e869618ce11e5a60"
+  },
+  {
+    "path": "test.vgz",
+    "mode": "100644",
+    "git_object": "d67ba30e75fb0c8c76e50cfcffce8227c55704e0"
+  },
+  {
+    "path": "test/Makefile",
+    "mode": "100644",
+    "git_object": "2d4341b779dcf544cfb712e386ce4ae1bb8d4438"
+  },
+  {
+    "path": "test/Wave_Writer.cpp",
+    "mode": "100644",
+    "git_object": "9cd435b6012dbf7651a9fa66a22b5c252a1cdd28"
+  },
+  {
+    "path": "test/Wave_Writer.h",
+    "mode": "100644",
+    "git_object": "8e2875733c874b588513c59d957a0d5b69e3faf0"
+  },
+  {
+    "path": "test/basics.c",
+    "mode": "100644",
+    "git_object": "a81c7210d6999bd293e23e5144009f938e018c90"
+  },
+  {
+    "path": "test/basics_mem.c",
+    "mode": "100644",
+    "git_object": "7d46e15e2bcabf7d677c4ac8d3338b21f9676e7d"
+  },
+  {
+    "path": "test/checksums",
+    "mode": "100644",
+    "git_object": "56dfdcaa67108439112b13c7cb7019bff83cced1"
+  },
+  {
+    "path": "test/test.sh",
+    "mode": "100755",
+    "git_object": "2009a8f90bf5f0b2ae92642f756dab391b5eccc7"
+  }
+]
