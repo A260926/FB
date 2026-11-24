@@ -1,0 +1,14 @@
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/frame_budget.o codec/encoder/core/src/frame_budget.cpp
+sh ./codec/common/generate_version.sh ./
+Keeping existing codec/common/inc/version_gen.h
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/plus/src/welsEncoderExt.o codec/encoder/plus/src/welsEncoderExt.cpp
+codec/encoder/plus/src/welsEncoderExt.cpp:71:3: error: no member named 'memset' in namespace 'std'; did you mean simply 'memset'?
+   71 |   std::memset (&m_sFrameBudget, 0, sizeof (m_sFrameBudget));
+      |   ^~~~~~~~~~~
+      |   memset
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_string.h:84:3: note: 'memset' declared here
+   84 |                 memset(void *_LIBC_SIZE(__len) __b, int __c, size_t __len);
+      |                 ^
+1 error generated.
+make: *** [codec/encoder/plus/src/welsEncoderExt.o] Error 1
+make: *** Waiting for unfinished jobs....

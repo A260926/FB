@@ -10,6 +10,7 @@ ENCODER_CPP_SRCS=\
 	$(ENCODER_SRCDIR)/core/src/encoder.cpp\
 	$(ENCODER_SRCDIR)/core/src/encoder_data_tables.cpp\
 	$(ENCODER_SRCDIR)/core/src/encoder_ext.cpp\
+	$(ENCODER_SRCDIR)/core/src/frame_budget.cpp\
 	$(ENCODER_SRCDIR)/core/src/get_intra_predictor.cpp\
 	$(ENCODER_SRCDIR)/core/src/md.cpp\
 	$(ENCODER_SRCDIR)/core/src/mv_pred.cpp\

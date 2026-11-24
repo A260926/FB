@@ -167,7 +167,8 @@ enum {
   ENC_RETURN_INVALIDINPUT = 0x10, //invalid input
   ENC_RETURN_MEMOVERFLOWFOUND = 0x20,
   ENC_RETURN_VLCOVERFLOWFOUND = 0x40,
-  ENC_RETURN_KNOWN_ISSUE = 0x80
+  ENC_RETURN_KNOWN_ISSUE = 0x80,
+  ENC_RETURN_FRAME_BUDGET_EXCEEDED = 0x100 //all fixed-QP candidates exceeded the frame byte budget; encoder state rolled back
 };
 //TODO: need to complete the return checking in encoder and fill in more types if needed
 

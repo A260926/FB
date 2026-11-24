@@ -83,7 +83,8 @@ typedef enum {
   cmUnknownReason,
   cmMallocMemeError,        ///< malloc a memory error
   cmInitExpected,           ///< initial action is expected
-  cmUnsupportedData
+  cmUnsupportedData,
+  cmFrameBudgetExceeded     ///< no fixed-QP candidate fit the configured frame byte budget
 } CM_RETURN;
 
 /**

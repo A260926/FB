@@ -1,0 +1,29 @@
+tight budget -> EncodeFrame returned 6 (cmFrameBudgetExceeded=6)
+retried same picture fits: 7506 Annex-B bytes (cap 60000), decoded OK
+FRAME_BUDGET_DEMO_COMPLETE decoded=13 final_normal_au=12668 bytes
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+[OpenH264] this = 0x0x100b48c10, Error:SetOption(FRAME_BUDGET): invalid {-5,10,20}, keep previous setting
+[OpenH264] this = 0x0x100b48c10, Error:SetOption(FRAME_BUDGET): invalid {100,40,10}, keep previous setting
+[OpenH264] this = 0x0x100b48c10, Error:SetOption(FRAME_BUDGET): invalid {100,-1,10}, keep previous setting
+[OpenH264] this = 0x0x100b48c10, Error:SetOption(FRAME_BUDGET): invalid {100,10,52}, keep previous setting
+[OpenH264] this = 0x0x100b48c10, Error:SetOption(FRAME_BUDGET): invalid {100,40,10}, keep previous setting
+[OpenH264] this = 0x0x76e2cb0000, Error:SetOption(EXT): rejected unsupported config change while FRAME_BUDGET active; old config kept
+CASE budget option_validation checks=15
+CASE budget boundary_cavlc_single checks=48
+CASE budget boundary_cabac_fixedslice checks=48
+CASE budget qp_retry_selection checks=7
+CASE budget unsupported_change_rejected checks=10
+CASE budget entropy_multislice_decode checks=104
+GROUP budget cases=6 checks=232 COMPLETE
+CASE rollback fail_retry_same_compare checks=82
+CASE rollback fail_change_image_compare checks=21
+CASE rollback force_idr_pending_survives checks=29
+CASE rollback statistics_counters checks=22
+GROUP rollback cases=4 checks=154 COMPLETE
+CASE reference temporal_two_periods_compare checks=154
+CASE reference clear_budget_normal_rc checks=30
+GROUP reference cases=2 checks=184 COMPLETE
+TARGET_COMPLETE cases=12
+NORMAL_SEQUENCE entropy=CAVLC frames=16 decoded=16 annexb=19253 pixel_fnv=d6c49874d4b6c2c0
+NORMAL_SEQUENCE entropy=CABAC frames=16 decoded=16 annexb=18037 pixel_fnv=d6c49874d4b6c2c0
+BASELINE_COMPLETE production=EncodeFrame+DecodeFrameNoDelay

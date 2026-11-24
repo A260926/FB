@@ -1,0 +1,23 @@
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/au_set.o codec/encoder/core/src/au_set.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/deblocking.o codec/encoder/core/src/deblocking.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/decode_mb_aux.o codec/encoder/core/src/decode_mb_aux.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/encode_mb_aux.o codec/encoder/core/src/encode_mb_aux.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/encoder.o codec/encoder/core/src/encoder.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/encoder_data_tables.o codec/encoder/core/src/encoder_data_tables.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/encoder_ext.o codec/encoder/core/src/encoder_ext.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/frame_budget.o codec/encoder/core/src/frame_budget.cpp
+In file included from codec/encoder/core/src/frame_budget.cpp:13:
+./codec/encoder/core/inc/frame_budget.h:18:10: fatal error: 'codec/api/wels/codec_app_def.h' file not found
+   18 | #include "codec/api/wels/codec_app_def.h"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/get_intra_predictor.o codec/encoder/core/src/get_intra_predictor.cpp
+c++ -O3 -DNDEBUG -Wall -fPIC -MMD -MP -arch arm64 -fstack-protector-all -DGENERATED_VERSION_HEADER -stdlib=libc++ -std=c++17 -I./codec/api/wels -I./codec/common/inc -Icodec/common/inc  -I./codec/encoder/core/inc -I./codec/encoder/plus/inc -I./codec/processing/interface -c -o codec/encoder/core/src/md.o codec/encoder/core/src/md.cpp
+In file included from codec/encoder/core/src/encoder_ext.cpp:47:
+./codec/encoder/core/inc/frame_budget.h:18:10: fatal error: 'codec/api/wels/codec_app_def.h' file not found
+   18 | #include "codec/api/wels/codec_app_def.h"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+make: *** [codec/encoder/core/src/encoder_ext.o] Error 1
+make: *** Waiting for unfinished jobs....
+1 error generated.
+make: *** [codec/encoder/core/src/frame_budget.o] Error 1

@@ -1,0 +1,2 @@
+#!/bin/bash
+d="/Volumes/UserFBWorkspace/questions/FS5335B00DD911U15355R2514C0D1B0/attempts/20261124T172011977408Z/repo/.task-build/tmp"; mkdir -p "$d"; f="$d/mt.$$.$RANDOM"; : > "$f"; echo "$f"

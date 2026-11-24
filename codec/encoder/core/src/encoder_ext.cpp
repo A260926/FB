@@ -44,6 +44,7 @@
 #include "svc_enc_golomb.h"
 #include "au_set.h"
 #include "picture_handle.h"
+#include "frame_budget.h"
 #include "svc_base_layer_md.h"
 #include "svc_encode_slice.h"
 #include "svc_mode_decision.h"
@@ -3658,6 +3659,7 @@ int32_t WelsEncoderEncodeExt (sWelsEncCtx* pCtx, SFrameBSInfo* pFbi, const SSour
                          eFrameType); //get reordering syntax used for writing slice header and transmit to encoder.
     PrefetchReferencePicture (pCtx, eFrameType); // update reference picture for current pDq layer
     pCtx->pFuncList->pfRc.pfWelsRcPictureInit (pCtx, pFbi->uiTimeStamp);
+    FrameBudgetAfterRcPictureInit (pCtx); // fixed-QP pin for ENCODER_OPTION_FRAME_BUDGET
     PreprocessSliceCoding (pCtx); // MUST be called after pfWelsRcPictureInit() and WelsInitCurrentLayer()
 
     //TODO Complexity Calculation here for screen content

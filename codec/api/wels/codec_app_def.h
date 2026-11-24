@@ -101,6 +101,25 @@ typedef enum {
 } DECODING_STATE;
 
 /**
+* @brief Fixed byte budget for one encoded access unit (ENCODER_OPTION_FRAME_BUDGET)
+*
+* When iMaxBytes is 0 the frame budget mode is switched off and the remaining
+* fields are ignored. When iMaxBytes is positive the encoder, on each
+* EncodeFrame() call, really encodes the frame once per QP from iFirstQp through
+* iLastQp (every macroblock using that QP) and returns the first candidate whose
+* complete Annex-B access unit size (parameter sets, prefix NALs, start codes,
+* emulation prevention bytes and slice tails included) is at most iMaxBytes.
+* A valid enabled setting requires 0 <= iFirstQp <= iLastQp <= 51.
+* SetOption() copies the structure synchronously; an invalid setting is rejected
+* and the previously active configuration is kept.
+*/
+typedef struct TagFrameBudget {
+  int iMaxBytes;    ///< maximum complete access unit size in bytes; 0 disables the mode
+  int iFirstQp;     ///< first (lowest) QP to try when enabled, in [0, 51]
+  int iLastQp;      ///< last (highest) QP to try when enabled, iFirstQp <= iLastQp <= 51
+} SFrameBudget;
+
+/**
 * @brief Option types introduced in SVC encoder application
 */
 typedef enum {
@@ -142,7 +161,9 @@ typedef enum {
 
   ENCODER_OPTION_IS_LOSSLESS_LINK,            ///< advanced algorithmetic settings
 
-  ENCODER_OPTION_BITS_VARY_PERCENTAGE        ///< bit vary percentage
+  ENCODER_OPTION_BITS_VARY_PERCENTAGE,        ///< bit vary percentage
+
+  ENCODER_OPTION_FRAME_BUDGET                 ///< SFrameBudget: per-frame hard Annex-B byte cap with fixed-QP retries; appended to preserve existing enum values
 } ENCODER_OPTION;
 
 /**

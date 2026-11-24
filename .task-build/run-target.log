@@ -1,0 +1,5 @@
+tight budget -> EncodeFrame returned 6 (cmFrameBudgetExceeded=6)
+retried same picture fits: 7506 Annex-B bytes (cap 60000), decoded OK
+FRAME_BUDGET_DEMO_COMPLETE decoded=13 final_normal_au=12668 bytes
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+mktemp: mkstemp failed on /var/folders/p2/zw2ndsdj6mz28tl3pxkctzy80000gn/T/tmp.Q2iyhmYZfQ: Operation not permitted

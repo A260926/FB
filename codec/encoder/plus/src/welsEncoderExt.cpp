@@ -40,6 +40,7 @@
 #include "version.h"
 #include "crt_util_safe_x.h" // Safe CRT routines like util for cross platforms
 #include "ref_list_mgr_svc.h"
+#include "frame_budget.h"
 #include "codec_ver.h"
 
 #include <time.h>
@@ -65,7 +66,9 @@ CWelsH264SVCEncoder::CWelsH264SVCEncoder()
     m_iMaxPicWidth (0),
     m_iMaxPicHeight (0),
     m_iCspInternal (0),
-    m_bInitialFlag (false) {
+    m_bInitialFlag (false),
+    m_sFrameBudget() {
+  memset (&m_sFrameBudget, 0, sizeof (m_sFrameBudget));
 #ifdef REC_FRAME_COUNT
   int32_t m_uiCountFrameNum = 0;
 #endif//REC_FRAME_COUNT
@@ -359,10 +362,12 @@ int32_t CWelsH264SVCEncoder::Uninitialize() {
            VERSION_NUMBER);
 
   if (NULL != m_pEncContext) {
+    FrameBudgetDestroyBob (m_pEncContext);
     WelsUninitEncoderExt (&m_pEncContext);
     m_pEncContext = NULL;
   }
 
+  m_sFrameBudget.iMaxBytes = 0;
   m_bInitialFlag = false;
 
   return 0;
@@ -385,6 +390,12 @@ int CWelsH264SVCEncoder::EncodeFrame (const SSourcePicture* kpSrcPic, SFrameBSIn
 
   const int32_t kiEncoderReturn = EncodeFrameInternal (kpSrcPic, pBsInfo);
 
+  if (kiEncoderReturn == cmFrameBudgetExceeded) {
+    // Expected budget control-flow outcome (state rolled back), not an encoder fault.
+    WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_INFO,
+             "CWelsH264SVCEncoder::EncodeFrame(), frame budget exceeded.");
+    return kiEncoderReturn;
+  }
   if (kiEncoderReturn != cmResultSuccess) {
     WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_ERROR, "CWelsH264SVCEncoder::EncodeFrame(), kiEncoderReturn %d",
              kiEncoderReturn);
@@ -410,12 +421,25 @@ int CWelsH264SVCEncoder ::EncodeFrameInternal (const SSourcePicture*  pSrcPic, S
   }
 
   const int64_t kiBeforeFrameUs = WelsTime();
-  const int32_t kiEncoderReturn = WelsEncoderEncodeExt (m_pEncContext, pBsInfo, pSrcPic);
+  int32_t kiEncoderReturn = ENC_RETURN_SUCCESS;
+  if (m_sFrameBudget.iMaxBytes > 0) {
+    kiEncoderReturn = FrameBudgetEncodeFrame (m_pEncContext, pBsInfo, pSrcPic, &m_sFrameBudget);
+    if (kiEncoderReturn == ENC_RETURN_FRAME_BUDGET_EXCEEDED) {
+      // Rejected candidates were rolled back; statistics/counters untouched.
+      return cmFrameBudgetExceeded;
+    }
+    if (kiEncoderReturn == ENC_RETURN_UNSUPPORTED_PARA) {
+      return cmUnsupportedData;
+    }
+  } else {
+    kiEncoderReturn = WelsEncoderEncodeExt (m_pEncContext, pBsInfo, pSrcPic);
+  }
   const int64_t kiCurrentFrameMs = (WelsTime() - kiBeforeFrameUs) / 1000;
   if ((kiEncoderReturn == ENC_RETURN_MEMALLOCERR) || (kiEncoderReturn == ENC_RETURN_MEMOVERFLOWFOUND)
       || (kiEncoderReturn == ENC_RETURN_VLCOVERFLOWFOUND)) {
     WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_DEBUG, "CWelsH264SVCEncoder::EncodeFrame() not succeed, err=%d",
              kiEncoderReturn);
+    FrameBudgetDestroyBob (m_pEncContext);
     WelsUninitEncoderExt (&m_pEncContext);
     return cmMallocMemeError;
   } else if (kiEncoderReturn == ENC_RETURN_INVALIDINPUT) {
@@ -695,7 +719,8 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
   }
 
   if ((NULL == m_pEncContext || false == m_bInitialFlag) && eOptionId != ENCODER_OPTION_TRACE_LEVEL
-      && eOptionId != ENCODER_OPTION_TRACE_CALLBACK && eOptionId != ENCODER_OPTION_TRACE_CALLBACK_CONTEXT) {
+      && eOptionId != ENCODER_OPTION_TRACE_CALLBACK && eOptionId != ENCODER_OPTION_TRACE_CALLBACK_CONTEXT
+      && eOptionId != ENCODER_OPTION_FRAME_BUDGET) {
     return cmInitExpected;
   }
 
@@ -767,6 +792,11 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
                "CWelsH264SVCEncoder::SetOption():ENCODER_OPTION_SVC_ENCODE_PARAM_BASE, DetermineTemporalSettings failed!");
       return cmInitParaError;
     }
+    if (m_sFrameBudget.iMaxBytes > 0 && !FrameBudgetParamSupported (&sConfig)) {
+      WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_ERROR,
+               "SetOption(BASE): rejected unsupported config change while FRAME_BUDGET active; old config kept");
+      return cmUnsupportedData;
+    }
     WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_INFO,
              "CWelsH264SVCEncoder::SetOption():ENCODER_OPTION_SVC_ENCODE_PARAM_BASE iUsageType = %d,iPicWidth= %d;iPicHeight= %d;iTargetBitrate= %d;fMaxFrameRate=  %.6ff;iRCMode= %d",
              sEncodingParam.iUsageType,
@@ -794,6 +824,12 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
 
     memcpy (&sEncodingParam, pOption, sizeof (SEncParamExt)); // confirmed_safe_unsafe_usage
     TraceParamInfo (&sEncodingParam);
+    // Frame budget mode must not silently degrade: refuse unsupported replacement configs.
+    if (m_sFrameBudget.iMaxBytes > 0 && !FrameBudgetParamSupported (&sEncodingParam)) {
+      WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_ERROR,
+               "SetOption(EXT): rejected unsupported config change while FRAME_BUDGET active; old config kept");
+      return cmUnsupportedData;
+    }
 #ifdef OUTPUT_BIT_STREAM
     if ((sEncodingParam.sSpatialLayers[sEncodingParam.iSpatialLayerNum - 1].iVideoWidth !=
          m_pEncContext->pSvcParam->sDependencyLayers[m_pEncContext->pSvcParam->iSpatialLayerNum - 1].iActualWidth) ||
@@ -953,6 +989,9 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
   break;
   case ENCODER_OPTION_RC_MODE: { // 0:quality mode;1:bit-rate mode;2:bitrate limited mode
     int32_t iValue = * ((int32_t*)pOption);
+    if (m_sFrameBudget.iMaxBytes > 0 && iValue != RC_BITRATE_MODE) {
+      return cmUnsupportedData; // frame budget requires RC_BITRATE_MODE; keep old mode
+    }
     m_pEncContext->pSvcParam->iRCMode = (RC_MODES) iValue;
     WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_INFO,
              "CWelsH264SVCEncoder::SetOption():ENCODER_OPTION_RC_MODE iRCMode= %d (Note: not suggest changing RC-mode in middle of encoding)",
@@ -962,6 +1001,9 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
   break;
   case ENCODER_OPTION_RC_FRAME_SKIP: { // 0:FRAME-SKIP disabled;1:FRAME-SKIP enabled
     bool bValue = * ((bool*)pOption);
+    if (m_sFrameBudget.iMaxBytes > 0 && bValue) {
+      return cmUnsupportedData; // frame budget requires frame skip disabled
+    }
     if (m_pEncContext->pSvcParam->iRCMode != RC_OFF_MODE) {
       m_pEncContext->pSvcParam->bEnableFrameSkip = bValue;
       WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_INFO,
@@ -976,6 +1018,9 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
   break;
   case ENCODER_PADDING_PADDING: { // 0:disable padding;1:padding
     int32_t iValue = * ((int32_t*)pOption);
+    if (m_sFrameBudget.iMaxBytes > 0 && iValue != 0) {
+      return cmUnsupportedData; // frame budget requires padding disabled
+    }
     m_pEncContext->pSvcParam->iPaddingFlag = iValue;
     WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_INFO,
              "CWelsH264SVCEncoder::SetOption():ENCODER_PADDING_PADDING iPaddingFlag= %d ",
@@ -1002,6 +1047,9 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
   break;
   case ENCODER_OPTION_LTR: {
     SLTRConfig* pLTRValue = ((SLTRConfig*) (pOption));
+    if (m_sFrameBudget.iMaxBytes > 0 && pLTRValue->bEnableLongTermReference) {
+      return cmUnsupportedData; // frame budget requires LTR disabled
+    }
     if (WelsEncoderApplyLTR (&m_pWelsTrace->m_sLogCtx, &m_pEncContext, pLTRValue)) {
       return cmInitParaError;
     }
@@ -1190,6 +1238,33 @@ int CWelsH264SVCEncoder::SetOption (ENCODER_OPTION eOptionId, void* pOption) {
   }
   break;
 
+  case ENCODER_OPTION_FRAME_BUDGET: {
+    const SFrameBudget* pNewBudget = static_cast<const SFrameBudget*> (pOption);
+    // Invalid integer settings are rejected and the previous value is kept.
+    if (!FrameBudgetOptionValid (pNewBudget)) {
+      WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_ERROR,
+               "SetOption(FRAME_BUDGET): invalid {%d,%d,%d}, keep previous setting",
+               pNewBudget->iMaxBytes, pNewBudget->iFirstQp, pNewBudget->iLastQp);
+      return cmInitParaError;
+    }
+    // Enabling on an unsupported live configuration is refused, not degraded.
+    if (pNewBudget->iMaxBytes > 0 && m_pEncContext != NULL && m_bInitialFlag
+        && !FrameBudgetConfigSupported (m_pEncContext)) {
+      WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_ERROR,
+               "SetOption(FRAME_BUDGET): active configuration is outside the supported envelope, keep previous setting");
+      return cmUnsupportedData;
+    }
+    m_sFrameBudget = *pNewBudget; // synchronous copy; iMaxBytes == 0 disables
+    if (pNewBudget->iMaxBytes == 0 && m_pEncContext != NULL) {
+      // Return the per-MB RC hook to its production function and drop storage.
+      FrameBudgetDestroyBob (m_pEncContext);
+    }
+    WelsLog (&m_pWelsTrace->m_sLogCtx, WELS_LOG_INFO,
+             "SetOption(FRAME_BUDGET): maxBytes=%d qp=[%d,%d]",
+             m_sFrameBudget.iMaxBytes, m_sFrameBudget.iFirstQp, m_sFrameBudget.iLastQp);
+  }
+  break;
+
   default:
     return cmInitParaError;
   }
@@ -1303,6 +1378,10 @@ int CWelsH264SVCEncoder::GetOption (ENCODER_OPTION eOptionId, void* pOption) {
   break;
   case ENCODER_OPTION_COMPLEXITY: {
     * ((int32_t*)pOption) =  m_pEncContext->pSvcParam->iComplexityMode;
+  }
+  break;
+  case ENCODER_OPTION_FRAME_BUDGET: {
+    * (static_cast<SFrameBudget*> (pOption)) = m_sFrameBudget;
   }
   break;
   default:

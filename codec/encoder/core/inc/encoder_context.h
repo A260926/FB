@@ -174,6 +174,13 @@ typedef struct TagWelsEncCtx {
   bool              bCheckWindowShiftResetFlag;
   int32_t           iGlobalQp;      // global qp
 
+  // Frame budget mode (ENCODER_OPTION_FRAME_BUDGET) per-attempt fixed-QP hook.
+  // When bFrameBudgetConstQp is true the RC per-MB QP hook pins every macroblock
+  // to iFrameBudgetForceQp and no adaptive/macroblock QP adjustment is layered on.
+  bool              bFrameBudgetConstQp;
+  int32_t           iFrameBudgetForceQp;
+  void*             pFrameBudgetBob; // owned SFrameBudgetBob memento, opaque to the context
+
 // VAA
   SVAAFrameInfo*    pVaa;           // VAA information of reference
   CWelsPreProcess*  pVpp;

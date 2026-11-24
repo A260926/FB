@@ -1,0 +1,2 @@
+sh ./codec/common/generate_version.sh ./
+Keeping existing codec/common/inc/version_gen.h

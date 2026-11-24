@@ -111,6 +111,9 @@ class CWelsH264SVCEncoder : public ISVCEncoder {
   int32_t           m_iCspInternal;
   bool              m_bInitialFlag;
 
+  // ENCODER_OPTION_FRAME_BUDGET active value; iMaxBytes == 0 means off.
+  SFrameBudget      m_sFrameBudget;
+
 #ifdef OUTPUT_BIT_STREAM
   FILE*             m_pFileBs;
   FILE*             m_pFileBsSize;
