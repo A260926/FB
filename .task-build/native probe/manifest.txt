@@ -1,0 +1,7 @@
+CASE normal 1 2
+RUN normal 1 0 worker 12 COMPLETE
+LOG normal log.log
+ENDRUN
+RUN normal 1 1 worker 12 COMPLETE
+LOG normal log.log
+ENDRUN

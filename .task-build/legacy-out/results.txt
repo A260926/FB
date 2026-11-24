@@ -1,0 +1,29 @@
+Dr. Memory results for task_support/fixtures/DrMemory-sim
+~~Dr.M~~ Leaks are only listed if -check_leaks is on and app exited cleanly or a nudge was invoked.
+~~Dr.M~~ 
+~~Dr.M~~ Error #1: UNADDRESSABLE ACCESS: reading 0x1234-0x1238 4 byte(s)
+~~Dr.M~~ # 0 <not in a module>                              
+~~Dr.M~~ Note: elapsed time = 0:00:00.001 in thread 1
+~~Dr.M~~ 
+~~Dr.M~~ Error #2: UNADDRESSABLE ACCESS: reading 0x4321-0x4325 4 byte(s)
+~~Dr.M~~ # 0 <not in a module>                              
+~~Dr.M~~ Note: elapsed time = 0:00:00.002 in thread 2
+
+===========================================================================
+FINAL SUMMARY:
+~~Dr.M~~ 
+~~Dr.M~~ Grouping errors that may be the same or related:
+
+~~Dr.M~~ Group 1:  2
+~~Dr.M~~ Group 2:  1
+~~Dr.M~~ Group 3: 
+~~Dr.M~~ 
+~~Dr.M~~ DUPLICATE ERROR COUNTS:
+
+~~Dr.M~~ 
+~~Dr.M~~ SUPPRESSIONS USED:
+~~Dr.M~~ 
+~~Dr.M~~ ERRORS FOUND:
+~~Dr.M~~       2 unique,     2 total unaddressable access(es)
+~~Dr.M~~       0 unique,     0 total warning(s)
+~~Dr.M~~ ERRORS IGNORED:

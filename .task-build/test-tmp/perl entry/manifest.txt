@@ -1,0 +1,6 @@
+CASE mapped 1 1
+IMAGE worker token 1 artifact 4096 4096 10 20
+RUN mapped 1 0 worker 12 COMPLETE
+STACK shared stack.log
+LOG error.log
+ENDRUN

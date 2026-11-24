@@ -30,6 +30,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Glob ':glob';
 use FileHandle;
+use File::Temp qw(tempfile);
 use IPC::Open3;
 use Cwd qw(abs_path);
 use Symbol; # for gensym
@@ -111,6 +112,20 @@ my $default_suppress_file = "$bindir/suppress-default.txt";
 my $drmem_disabled = 0;
 my $callstack_style = "0x101"; # should keep in sync, but normally passed even if default
 my $warned_legacy_supp = 0;
+
+# Offline regression mode (see task_support/regression-contract.md).  When
+# enabled the script only parses inert simulated logs and delegates the
+# structured events to the C++ regression engine.
+my $reg_manifest = undef;
+my $reg_engine = undef;
+my $reg_report = undef;
+my $reg_state = undef;
+# Mode flags consumed by the shared native parser below; $regression_mode
+# switches process_one_error to structured emission and @regression_errors
+# collects one [code, [pcs...]] record per native error block.
+our $regression_mode = 0;
+our @regression_errors = ();
+our @reg_run_header = ();
 
 # Use an error cache to prevent processing duplicates; indexed by error info
 # excluding read/write message in the first line.  PR 420942.
@@ -196,8 +211,29 @@ if (!GetOptions("p=s" => \$prefix,
                 "aggregate" => \$aggregate,
                 "callstack_style=s" => \$callstack_style,
                 "replace_malloc" => \$replace_malloc,
-                "leaks_only" => \$leaks_only)) {
+                "leaks_only" => \$leaks_only,
+                "regression_manifest=s" => \$reg_manifest,
+                "regression_engine=s" => \$reg_engine,
+                "regression_report=s" => \$reg_report,
+                "regression_state=s" => \$reg_state)) {
     die $usage;
+}
+
+# The offline regression mode is a fully separate pipeline: dispatch before
+# legacy argument validation and before results.txt/results-summary.txt/
+# suppress.txt are created.
+my $reg_count = 0;
+$reg_count++ if (defined $reg_manifest);
+$reg_count++ if (defined $reg_engine);
+$reg_count++ if (defined $reg_report);
+if ($reg_count != 0) {
+    die "Error: -regression_manifest, -regression_engine and ".
+        "-regression_report are required together\n" unless ($reg_count == 3);
+    die "Error: regression mode is incompatible with -aggregate\n"
+        if ($aggregate);
+    run_regression_mode($reg_manifest, $reg_engine, $reg_report,
+                        $reg_state);
+    exit 0;
 }
 
 if ($aggregate) {
@@ -457,7 +493,9 @@ sub process_all_errors()
     my $found_summary_start = 0;
     my $found_ignored_start = 0;
 
-    if (defined $logs{$logfile}) {
+    # Regression mode re-reads every named LOG in full for each RUN (the same
+    # file may back several trials), so it bypasses the live-tail cache.
+    if (!$regression_mode && defined $logs{$logfile}) {
         # PR 453867: child may write to fork logfile after LOG END
         return 1 if ($logs{$logfile}{"done"} == 1 && !%pending_fork);
     } else {
@@ -482,8 +520,9 @@ sub process_all_errors()
     #
     seek($fh, $logs{$logfile}{"bytes read"}, 0) || die "seek on $logfile failed: $!\n";
     while (<$fh>) {
-        # PR 453867: fork a new copy of this script
-        if (!$aggregate && (/^FORK/ || /^EXEC/)) {
+        # PR 453867: fork a new copy of this script.  Regression mode only
+        # replays inert logs, so FORK/EXEC/NUDGE directives are ignored.
+        if (!$regression_mode && !$aggregate && (/^FORK/ || /^EXEC/)) {
             if (/^FORK\s+child=(\d+)\s+logdir=(.*)/) {
                 my $childpid = $1;
                 delete $pending_fork{$childpid};
@@ -518,7 +557,7 @@ sub process_all_errors()
             next;
         }
         # PR 474554: mid-run summary/output on nudge (esp for daemon apps)
-        elsif (!$aggregate && /^NUDGE/) {
+        elsif (!$regression_mode && !$aggregate && /^NUDGE/) {
             print "\n===========================================================================\nSUMMARY AFTER NUDGE #$nudge_count:\n";
             print_final_summary();
             $nudge_count++;
@@ -528,19 +567,29 @@ sub process_all_errors()
         }
         elsif (/^DISABLING MEMORY CHECKING/) {
             # PR 574018: Dr. Memory instrumentation disabled
-            print "\n\n****************\nMEMORY CHECKS DISABLED FROM THIS POINT ON\n\n";
+            if (!$regression_mode) {
+                print "\n\n****************\nMEMORY CHECKS DISABLED FROM THIS POINT ON\n\n";
+            }
             $drmem_disabled = 1;
             $logs{$logfile}{"bytes read"} = tell $fh;   # tell shouldn't fail
             next;
         }
         elsif (/^Dr. Memory version/ || /ASSERT FAILURE/ || /FATAL ERROR/) {
            # propagate version string or errors into results file
-           print "$_\n"; # extra \n is deliberate
+           print "$_\n" unless ($regression_mode); # extra \n is deliberate
             $logs{$logfile}{"bytes read"} = tell $fh;   # tell shouldn't fail
            next;
         }
         # PR 425858: skip non-error-related lines in logfile
         if (!$found_error_start && is_line_start_of_error($_)) {
+            if ($regression_mode) {
+                # Only the three memory-safety error classes have structured
+                # codes; warnings and leaks are unsupported in this mode.
+                unless (/^Error #\s*\d+: (UNADDRESSABLE ACCESS|UNINITIALIZED READ|INVALID HEAP ARGUMENT)/) {
+                    die "Error: unsupported error type in regression log ".
+                        "$logfile: $_";
+                }
+            }
             $found_error_start = 1;
             # summary might be missing
             # XXX: should DR give us an exit event on app crash?
@@ -550,8 +599,18 @@ sub process_all_errors()
             $report_uninit = 1 if (/UNINIT/);
             $report_leaks = 1 if (/LEAK/);
         }
+        elsif ($regression_mode && $found_error_start &&
+               is_line_start_of_error($_)) {
+            # A new error block starting before the previous one ended is a
+            # malformed log, not something to silently merge.
+            die "Error: nested error start without error end in $logfile\n";
+        }
         if ($found_error_start) {
             if (/^\s*callstack=(\d+)/) {
+                if ($regression_mode && !defined $cstack[$1]) {
+                    die "Error: unknown shared callstack reference ".
+                        "callstack=$1 in $logfile\n";
+                }
                 foreach $l (split('\n', $cstack[$1])) {
                     push @lines, $l;
                 }
@@ -673,9 +732,15 @@ sub process_all_errors()
         }
         if (/^LOG END/) {
             $logs{$logfile}{"done"} = 1;
-            $global_done = 1 if ($logfile =~ /global.\d+.log$/);
+            $global_done = 1 if (!$regression_mode &&
+                                 $logfile =~ /global.\d+.log$/);
             last;
         }
+    }
+
+    if ($regression_mode && $found_error_start) {
+        # Reject incomplete blocks rather than silently ignoring EOF.
+        die "Error: incomplete error block at end of $logfile\n";
     }
 
     close $fh;
@@ -690,6 +755,35 @@ sub process_one_error($raw_error_lines_array_ref)
 {
     my ($lines) = @_;
     my $first_line = ${$lines}[0];
+
+    if ($regression_mode) {
+        # Structured emission branch: reuse parse_error for the block, but
+        # never touch the legacy error/symbolizer/suppression machinery and
+        # never let the global cache drop repeated blocks.
+        parse_error($lines, $first_line);
+        my %code_map = ("UNADDRESSABLE ACCESS" => "UNADDR",
+                        "UNINITIALIZED READ" => "UNINIT",
+                        "INVALID HEAP ARGUMENT" => "HEAP");
+        my $code = $code_map{$error{"type"}};
+        die "Error: unsupported error type \"$error{'type'}\"\n"
+            unless (defined $code);
+        # Take PCs straight from the native frame lines in frame order.  This
+        # preserves zero-address frames that parse_error intentionally drops
+        # for symbolization (a zero return address must stay unresolved in
+        # the engine) and rejects frames without a numeric PC.
+        my @pcs = ();
+        foreach my $frame (@{$lines}) {
+            next unless ($frame =~ /^#\s*\d+/);
+            unless ($frame =~ /\((0x[0-9a-fA-F]+)(?:\s+<[^>]*>)?\)\s*$/) {
+                die "Error: nonnumeric frame address in regression log: ".
+                    "$frame";
+            }
+            push @pcs, hex($1);
+        }
+        die "Error: error block has no usable frames\n" if (@pcs == 0);
+        push @regression_errors, [$code, \@pcs];
+        return;
+    }
 
     # Is the callstack identical to a previously seen one?  PR 420942.
     # Ignore the read/write info in the first line of an error - they change;
@@ -2064,4 +2158,299 @@ sub process_callstack_log($log_file_in)
         }
     }
     close LOG;
+}
+
+#-------------------------------------------------------------------------------
+# Offline regression mode (see task_support/regression-contract.md).
+#
+# Everything below only reads inert simulated logs and the manifest: no
+# target process, DrFuzz, DynamoRIO, symbolizer or mutator is ever launched,
+# and no trigger inputs are generated.  Native error blocks still flow through
+# process_all_errors/process_one_error/parse_error above; this driver turns
+# the structured results into the C++ engine event protocol.
+
+# Strict unsigned decimal bounded to uint64; no sign, junk or overflow.
+sub reg_parse_u64($)
+{
+    my ($s) = @_;
+    return undef unless (defined $s && $s =~ /^\d+$/);
+    if (length($s) < 20) {
+        return $s + 0;
+    }
+    if (length($s) > 20 || $s gt "18446744073709551615") {
+        return undef;
+    }
+    return $s + 0;
+}
+
+sub reg_valid_identifier($)
+{
+    my ($s) = @_;
+    return defined $s && length($s) >= 1 && length($s) <= 128 &&
+           $s =~ /^[A-Za-z0-9_.\-]+$/;
+}
+
+# Resolve a manifest path: absolute paths are taken as-is, relative ones are
+# anchored at the manifest's parent directory (never the current cwd).
+sub reg_resolve_path($$)
+{
+    my ($path, $base_dir) = @_;
+    return $path if ($path =~ m{^/} || $path =~ /^[A-Za-z]:[\\\/]/);
+    return "$base_dir/$path";
+}
+
+# Validate that every CALLSTACK block in a shared-stack file is closed by an
+# "error end" line, matching process_callstack_log's framing, and return the
+# list of callstack ids the file defines.
+sub reg_stack_file_ids($)
+{
+    my ($path) = @_;
+    open(my $fh, '<', $path) or die "can't open $path: $!\n";
+    my $opens = 0;
+    my $closes = 0;
+    my @ids = ();
+    my %seen = ();
+    while (<$fh>) {
+        if (/^CALLSTACK\s*(\d+)/) {
+            die "Error: duplicate callstack id $1 in $path\n"
+                if (defined $seen{$1});
+            $seen{$1} = 1;
+            $opens++;
+            push @ids, $1;
+        }
+        $closes++ if (/^\s*error end/);
+    }
+    close $fh;
+    die "Error: incomplete callstack file $path\n"
+        unless ($opens > 0 && $opens == $closes);
+    return @ids;
+}
+
+sub run_regression_mode($$$$)
+{
+    my ($manifest_path, $engine_path, $report_path, $state_path) = @_;
+
+    # Switch the shared native parser onto structured emission.
+    $regression_mode = 1;
+    %error_cache = ();   # never reuse legacy dedup in this mode
+
+    open(my $manifest, '<', $manifest_path) or
+        die "Error: cannot open regression manifest $manifest_path: $!\n";
+    my ($mname, $mdir) = fileparse($manifest_path);
+
+    # Owned event file handed to the C++ engine.
+    my ($event_fh, $event_path) =
+        tempfile(DIR => $mdir, SUFFIX => '.events', UNLINK => 0);
+
+    my $cleanup = sub {
+        close($event_fh) if ($event_fh);
+        unlink($event_path) if (defined $event_path && -e $event_path);
+    };
+
+    my $fail = sub {
+        my ($msg) = @_;
+        $cleanup->();
+        die "$msg";
+    };
+
+    my $in_run = 0;
+    my $run_had_log = 0;
+    my %stack_labels = ();
+    my %stack_ids = ();   # callstack ids already defined in this RUN
+    my $run_outcome = "";
+    my $line_no = 0;
+
+    while (my $raw = <$manifest>) {
+        $line_no++;
+        $raw =~ s/\r?\n$//;                 # CR/LF are the only stripped chars
+        next if ($raw =~ /^\s*$/ || $raw =~ /^\s*#/);
+
+        my @fields = split(' ', $raw);
+        my $directive = $fields[0];
+
+        if ($directive eq "CASE") {
+            $fail->("Error: manifest line $line_no: CASE inside RUN\n")
+                if ($in_run);
+            $fail->("Error: manifest line $line_no: bad CASE directive\n")
+                unless (@fields == 4);
+            my ($id, $gen, $repeats) = @fields[1..3];
+            my $genv = reg_parse_u64($gen);
+            my $repv = reg_parse_u64($repeats);
+            $fail->("Error: manifest line $line_no: invalid CASE fields\n")
+                unless (reg_valid_identifier($id) && defined $genv &&
+                        $genv >= 1 && defined $repv && $repv >= 1 &&
+                        $repv <= 64);
+            print $event_fh "CASE $id $genv $repv\n";
+        }
+        elsif ($directive eq "IMAGE") {
+            $fail->("Error: manifest line $line_no: IMAGE inside RUN\n")
+                if ($in_run);
+            # IMAGE worker token generation build base size begin end
+            $fail->("Error: manifest line $line_no: bad IMAGE directive\n")
+                unless (@fields == 9);
+            my ($worker, $token, $gen, $build, $base, $size, $begin, $end) =
+                @fields[1..8];
+            my $genv = reg_parse_u64($gen);
+            my $basev = reg_parse_u64($base);
+            my $sizev = reg_parse_u64($size);
+            my $beginv = reg_parse_u64($begin);
+            my $endv = reg_parse_u64($end);
+            $fail->("Error: manifest line $line_no: invalid IMAGE fields\n")
+                unless (reg_valid_identifier($worker) &&
+                        reg_valid_identifier($token) &&
+                        reg_valid_identifier($build) &&
+                        defined $genv && defined $basev && defined $sizev &&
+                        defined $beginv && defined $endv);
+            print $event_fh "IMAGE $worker $token $genv $build $basev ".
+                            "$sizev $beginv $endv\n";
+        }
+        elsif ($directive eq "RUN") {
+            $fail->("Error: manifest line $line_no: nested RUN block\n")
+                if ($in_run);
+            # RUN case generation slot worker tick outcome
+            $fail->("Error: manifest line $line_no: bad RUN directive\n")
+                unless (@fields == 7);
+            my ($case, $gen, $slot, $worker, $tick, $outcome) =
+                @fields[1..6];
+            my $genv = reg_parse_u64($gen);
+            my $slotv = reg_parse_u64($slot);
+            my $tickv = reg_parse_u64($tick);
+            $fail->("Error: manifest line $line_no: invalid RUN fields\n")
+                unless (reg_valid_identifier($case) &&
+                        reg_valid_identifier($worker) && defined $genv &&
+                        defined $slotv && defined $tickv &&
+                        ($outcome eq "COMPLETE" || $outcome eq "TIMEOUT" ||
+                         $outcome eq "TOOLERROR"));
+            $in_run = 1;
+            $run_had_log = 0;
+            %stack_labels = ();
+            %stack_ids = ();
+            @cstack = ();                    # indices reset per RUN
+            @regression_errors = ();
+            $run_outcome = $outcome;
+            # Stash the TRIAL header fields until ENDRUN proves the block is
+            # complete.
+            @reg_run_header =
+                ($case, $genv, $slotv, $worker, $tickv, $outcome);
+        }
+        elsif ($directive eq "STACK") {
+            $fail->("Error: manifest line $line_no: STACK outside RUN\n")
+                unless ($in_run);
+            $fail->("Error: manifest line $line_no: STACK after a LOG\n")
+                if ($run_had_log);
+            # Label is one identifier; the filename is the remainder of the
+            # line verbatim (a single space separates them) and may itself
+            # contain spaces.
+            unless ($raw =~ /^STACK ([A-Za-z0-9_.\-]+) (.*)$/) {
+                $fail->("Error: manifest line $line_no: bad STACK ".
+                        "directive\n");
+            }
+            my ($label, $filename) = ($1, $2);
+            $fail->("Error: manifest line $line_no: conflicting repeated ".
+                    "STACK label \"$label\"\n")
+                if (defined $stack_labels{$label});
+            my $full = reg_resolve_path($filename, $mdir);
+            $fail->("Error: manifest line $line_no: cannot read stack ".
+                    "file $full\n") unless (-f $full && -r $full);
+            my @ids = reg_stack_file_ids($full);
+            foreach my $id (@ids) {
+                $fail->("Error: manifest line $line_no: conflicting repeated ".
+                        "callstack id $id in $full\n")
+                    if (defined $stack_ids{$id});
+            }
+            &process_callstack_log($full);   # original shared-stack parser
+            foreach my $id (@ids) {
+                $stack_ids{$id} = 1;
+            }
+            $stack_labels{$label} = $full;
+        }
+        elsif ($directive eq "LOG") {
+            $fail->("Error: manifest line $line_no: LOG outside RUN\n")
+                unless ($in_run);
+            # The filename is the remainder of the line verbatim.
+            unless ($raw =~ /^LOG (.*)$/) {
+                $fail->("Error: manifest line $line_no: bad LOG ".
+                        "directive\n");
+            }
+            my $filename = $1;
+            $fail->("Error: manifest line $line_no: bad LOG directive\n")
+                if ($filename eq "");
+            my $full = reg_resolve_path($filename, $mdir);
+            $fail->("Error: manifest line $line_no: cannot read log ".
+                    "$full\n") unless (-f $full && -r $full);
+            # The original parser extracts complete native error blocks;
+            # regression emission appends to @regression_errors in frame
+            # order, repeated blocks included.
+            &process_all_errors($full);
+            $run_had_log = 1;
+        }
+        elsif ($directive eq "ENDRUN") {
+            $fail->("Error: manifest line $line_no: ENDRUN outside RUN\n")
+                unless ($in_run);
+            $fail->("Error: manifest line $line_no: RUN needs at least one ".
+                    "LOG\n") unless ($run_had_log);
+            if ($run_outcome ne "COMPLETE" && @regression_errors != 0) {
+                $fail->("Error: manifest line $line_no: $run_outcome trial ".
+                        "must have no errors\n");
+            }
+            my ($case, $genv, $slotv, $worker, $tickv, $outcome) =
+                @reg_run_header;
+            print $event_fh "TRIAL $case $genv $slotv $worker $tickv ".
+                            "$outcome ".scalar(@regression_errors)."\n";
+            foreach my $rec (@regression_errors) {
+                my ($code, $pcs) = @$rec;
+                print $event_fh "ERROR $code ".scalar(@$pcs);
+                foreach my $pc (@$pcs) {
+                    print $event_fh " $pc";
+                }
+                print $event_fh "\n";
+            }
+            print $event_fh "ENDTRIAL\n";
+            $in_run = 0;
+            @cstack = ();
+            @regression_errors = ();
+            %stack_labels = ();
+            %stack_ids = ();
+        }
+        else {
+            $fail->("Error: manifest line $line_no: unknown directive ".
+                    "\"$directive\"\n");
+        }
+    }
+    close($manifest);
+    $fail->("Error: EOF inside RUN block\n") if ($in_run);
+    close($event_fh) or $fail->("Error: failed writing event file: $!\n");
+    $event_fh = undef;
+
+    # List-form invocation: paths (including spaces) are passed as single
+    # argv elements and never touch a shell.  The child's failure propagates
+    # as our own nonzero status; an existing report is never mistaken for a
+    # fresh result because the engine writes atomically.
+    my @cmd = ($engine_path, $event_path, $report_path);
+    push(@cmd, $state_path) if (defined $state_path);
+    my ($child_in, $child_out, $child_err);
+    my $pid = eval {
+        open3($child_in = gensym(), $child_out = gensym(),
+              $child_err = gensym(), @cmd);
+    };
+    if ($@ || !defined $pid) {
+        $fail->("Error: failed to launch regression engine $engine_path: ".
+                "$@\n");
+    }
+    close($child_in); # the engine reads the event file, not stdin
+    my $out_text = do { local $/; <$child_out> };
+    my $err_text = do { local $/; <$child_err> };
+    close($child_out);
+    close($child_err);
+    waitpid($pid, 0);
+    my $status = $?;
+    if ($status != 0) {
+        my $code = ($status == -1) ? 1 : ($status >> 8);
+        $code = 1 if ($code == 0);
+        print stderr $err_text if (defined $err_text && $err_text ne "");
+        print stderr $out_text if (defined $out_text && $out_text ne "");
+        $cleanup->();
+        exit($code);
+    }
+    $cleanup->();
 }

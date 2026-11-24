@@ -1,0 +1,2 @@
+TRIAL ghost 1 0 worker 12 COMPLETE 0
+ENDTRIAL

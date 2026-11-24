@@ -1,0 +1,5 @@
+Error #1: UNADDRESSABLE ACCESS: reading simulated metadata
+  info: @0:00:00.001 in thread 1
+  callstack=7
+  error end
+LOG END

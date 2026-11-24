@@ -1,0 +1,4 @@
+Error #1: UNADDRESSABLE ACCESS: reading
+# 0 benign!? (0x1004 <benign+0x4>)
+  error end
+LOG END

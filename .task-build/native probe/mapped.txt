@@ -1,0 +1,2 @@
+CASE mapped 1 STABLE
+GROUP UNADDR|artifact@4,artifact@fff mapped

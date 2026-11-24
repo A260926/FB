@@ -25,7 +25,7 @@ rm -f .task-build/demo/transcript.txt
 test -s .task-build/demo/transcript.txt
 clang++ -std=c++17 -I. -x c++ -c task_support/driver.c -o .task-build/test-driver.o
 clang++ -std=c++17 -I. checks/regression_tests.cpp .task-build/test-driver.o .task-build/regression.a -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp 2>/dev/null || mktemp .task-build/run-output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

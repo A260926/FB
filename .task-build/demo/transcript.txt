@@ -1,0 +1,6 @@
+stage 1: saved unfinished candidate 'replay' (1 of 2 slots, no image declared)
+stage 2: restored state, late-declared image build-one [4096,8192) lifetime [0,10)
+stage 2: observed slot 1, both slots map to the same signature
+final report:
+CASE replay 1 STABLE
+GROUP UNADDR|build-one@4 replay

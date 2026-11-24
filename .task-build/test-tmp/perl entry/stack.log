@@ -1,0 +1,4 @@
+CALLSTACK 7
+# 0 benign!? (0x1004 <benign+0x4>)
+# 1 benign!? (0x2000 <benign+0x1000>)
+  error end

@@ -1,0 +1,7 @@
+Producing results for task_support/fixtures/DrMemory-sim
+~~Dr.M~~ 
+~~Dr.M~~ ERRORS FOUND:
+~~Dr.M~~       2 unique,     2 total unaddressable access(es)
+~~Dr.M~~       0 unique,     0 total warning(s)
+~~Dr.M~~ ERRORS IGNORED:
+~~Dr.M~~ Details: .task-build/legacy-out/results.txt
