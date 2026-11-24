@@ -131,6 +131,8 @@ amm-info@iis.fraunhofer.de
 
 #include "tpenc_lib.h"
 
+#include "aacenc_adts_seal.h"
+
 #include "metadata_main.h"
 #include "mps_main.h"
 #include "sacenc_lib.h"
@@ -277,6 +279,12 @@ struct AACENCODER {
 
   /* Capability flags */
   UINT CAPF_tpEnc;
+
+  /* ADTS short-group sealing ledger.  End positions are absolute bit
+     positions in hTpEnc's writer buffer after each raw block's CRC. */
+  UCHAR adtsSealCount;
+  UCHAR adtsSealAncillary;
+  UINT adtsSealEndBits[AACENC_ADTS_SEAL_MAX_AUS];
 };
 
 typedef struct {
@@ -1408,6 +1416,10 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
                           &hAacEncoder->coderConfig, flags) != 0) {
       return AACENC_INIT_TP_ERROR;
     }
+    hAacEncoder->adtsSealCount = 0;
+    hAacEncoder->adtsSealAncillary = 0;
+    FDKmemclear(hAacEncoder->adtsSealEndBits,
+                sizeof(hAacEncoder->adtsSealEndBits));
 
   } /* transport initialization */
 
@@ -1990,6 +2002,30 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
     goto bail;
   }
 
+  /* Maintain the observational ledger used by aacEncSealAdts().  The
+     production transport state remains the authoritative staging store. */
+  {
+    UINT stagedValidBits =
+        FDKgetValidBits(transportEnc_GetBitstream(hAacEncoder->hTpEnc));
+    if (outBytes[0] > 0) {
+      /* Keep the final end position for diagnostics/reference payload
+         extraction, while clearing the pending-group count. */
+      if (hAacEncoder->adtsSealCount < AACENC_ADTS_SEAL_MAX_AUS) {
+        hAacEncoder->adtsSealEndBits[hAacEncoder->adtsSealCount] =
+            stagedValidBits;
+      }
+      hAacEncoder->adtsSealCount = 0;
+      hAacEncoder->adtsSealAncillary = 0;
+    } else if (hAacEncoder->adtsSealCount < AACENC_ADTS_SEAL_MAX_AUS) {
+      hAacEncoder->adtsSealEndBits[hAacEncoder->adtsSealCount] =
+          stagedValidBits;
+      hAacEncoder->adtsSealCount++;
+      if (ancDataExtIdx >= 0) {
+        hAacEncoder->adtsSealAncillary = 1;
+      }
+    }
+  }
+
   if (ancDataExtIdx >= 0) {
     outargs->numAncBytes =
         inargs->numAncBytes -
@@ -2042,6 +2078,211 @@ bail:
   }
 
   return err;
+}
+
+static AACENC_ERROR aacEncSeal_CheckSupported(HANDLE_AACENCODER h) {
+  AACENC_CONFIG *cfg = &h->aacConfig;
+  USER_PARAM *user = &h->extParam;
+  const UINT rates[3] = {96000u, 128000u, 192000u};
+  int rateOk = 0;
+  UINT i;
+
+  if (user->userTpType != TT_MP4_ADTS ||
+      user->userTpNsubFrames < 2 || user->userTpNsubFrames > 4) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+  if (cfg->audioObjectType != AOT_AAC_LC || cfg->framelength != 1024 ||
+      cfg->bitrateMode != AACENC_BR_MODE_CBR) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+  if (cfg->nChannels < 1 || cfg->nChannels > 2 ||
+      (cfg->channelMode != MODE_1 && cfg->channelMode != MODE_2)) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+  if (cfg->sampleRate != 32000 && cfg->sampleRate != 44100 &&
+      cfg->sampleRate != 48000) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+  for (i = 0; i < sizeof(rates) / sizeof(rates[0]); i++) {
+    if (cfg->bitRate == (INT)rates[i]) rateOk = 1;
+  }
+  if (!rateOk) return AACENC_UNSUPPORTED_PARAMETER;
+
+  if (cfg->sbrRatio != 0 || isSbrActive(cfg) ||
+      isPsActive(cfg->audioObjectType) ||
+      (cfg->syntaxFlags & (AC_SBR_PRESENT | AC_LD_MPS | AC_ER))) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+  if (user->userTpProtection > 1 || user->userPceAdditions != 0 ||
+      h->coderConfig.channelConfigZero != 0 ||
+      user->userAncDataRate != 0 || cfg->anc_Rate != 0 ||
+      h->adtsSealAncillary || user->userMetaDataMode != 0) {
+    return AACENC_UNSUPPORTED_PARAMETER;
+  }
+
+  return AACENC_OK;
+}
+
+AACENC_ERROR aacEncSealAdts(HANDLE_AACENCODER hAacEncoder, UCHAR *out,
+                            UINT capacity, AACENC_AdtsSealInfo *info) {
+  AACENC_ERROR err;
+  AACENC_ADTS_SEAL_PLAN plan;
+  QC_STATE *qc;
+  INT bitResBefore, availableRes;
+  UINT k, credited = 0;
+
+  if (hAacEncoder == NULL) {
+    return AACENC_INVALID_HANDLE;
+  }
+  if (info == NULL) {
+    return AACENC_INVALID_CONFIG;
+  }
+  FDKmemclear(info, sizeof(*info));
+
+  if (hAacEncoder->InitFlags != AACENC_INIT_NONE ||
+      hAacEncoder->hAacEnc == NULL ||
+      hAacEncoder->hAacEnc->qcKernel == NULL ||
+      hAacEncoder->hTpEnc == NULL) {
+    return AACENC_INVALID_CONFIG;
+  }
+
+  err = aacEncSeal_CheckSupported(hAacEncoder);
+  if (err != AACENC_OK) return err;
+
+  qc = hAacEncoder->hAacEnc->qcKernel;
+  bitResBefore = qc->bitResTot;
+  info->bitResBefore = bitResBefore;
+  info->bitResAfter = bitResBefore;
+
+  k = hAacEncoder->adtsSealCount;
+  info->numAUs = k;
+  if (k == 0) {
+    return AACENC_OK;
+  }
+  if (k >= hAacEncoder->extParam.userTpNsubFrames) {
+    /* A full group is delivered by the ordinary encode path; sealing it is
+       not part of the incomplete-group contract. */
+    return AACENC_INVALID_CONFIG;
+  }
+
+  FDKmemclear(&plan, sizeof(plan));
+  plan.nominalBlocks = hAacEncoder->extParam.userTpNsubFrames;
+  plan.numAUs = k;
+  plan.protection = hAacEncoder->extParam.userTpProtection ? 1u : 0u;
+  plan.sampleFreqIndex = 0; /* static header is preserved from staging */
+  plan.channelConfig = (hAacEncoder->aacConfig.nChannels == 1) ? 1u : 2u;
+  plan.stagedBuffer = hAacEncoder->outBuffer;
+  FDKmemcpy(plan.stagedEndBits, hAacEncoder->adtsSealEndBits,
+            k * sizeof(UINT));
+
+  if (aacEncAdtsSeal_MakePlan(&plan) != 0) {
+    return AACENC_ENCODE_ERROR;
+  }
+
+  info->numBytes = plan.finalBytes;
+  info->removedBits = plan.removedBits;
+
+  /* Read-only query. */
+  if (out == NULL) {
+    return AACENC_OK;
+  }
+
+  /* Capacity failure is non-destructive and reports the required size. */
+  if (capacity < plan.finalBytes) {
+    return AACENC_OUTPUT_BUFFER_TOO_SMALL;
+  }
+
+  if (aacEncAdtsSeal_Build(&plan, out) != 0) {
+    return AACENC_ENCODE_ERROR;
+  }
+
+  /* Return the eliminated staging overhead to the production QC reservoir,
+     capped by its configured maximum. */
+  availableRes = qc->bitResTotMax - bitResBefore;
+  if (availableRes > 0) {
+    credited = fixMin(plan.removedBits, (UINT)availableRes);
+  }
+  qc->bitResTot = bitResBefore + (INT)credited;
+  info->creditedBits = credited;
+  info->bitResAfter = qc->bitResTot;
+
+  /* Commit: restart transport aggregation at block zero.  Core/psychoacoustic
+     state and the unconsumed PCM input ledger are deliberately untouched. */
+  if (transportEnc_Init(hAacEncoder->hTpEnc, hAacEncoder->outBuffer,
+                       hAacEncoder->outBufferInBytes, TT_MP4_ADTS,
+                       &hAacEncoder->coderConfig, 0) != TRANSPORTENC_OK) {
+    return AACENC_ENCODE_ERROR;
+  }
+  FDKmemclear(hAacEncoder->outBuffer, hAacEncoder->outBufferInBytes);
+  hAacEncoder->adtsSealCount = 0;
+  hAacEncoder->adtsSealAncillary = 0;
+  FDKmemclear(hAacEncoder->adtsSealEndBits,
+              sizeof(hAacEncoder->adtsSealEndBits));
+
+  return AACENC_OK;
+}
+
+INT aacEncAdtsSeal_DebugState(
+    HANDLE_AACENCODER hAacEncoder, UINT *numAUs, UINT *nominalBlocks,
+    UCHAR **stagedBuffer, UINT *endBits, INT endBitCapacity, INT *bitRes,
+    INT *bitResMax, AACENC_AdtsSealCrcDomain *domains, INT domainCapacity,
+    INT *numDomains) {
+  TPENC_ADTS_CRC_REGION tpRegions[3];
+  INT tpCount = 0, i;
+
+  if (hAacEncoder == NULL) return -1;
+  if (numAUs) *numAUs = hAacEncoder->adtsSealCount;
+  if (nominalBlocks)
+    *nominalBlocks = hAacEncoder->extParam.userTpNsubFrames;
+  if (stagedBuffer) *stagedBuffer = hAacEncoder->outBuffer;
+  if (endBits && endBitCapacity > 0) {
+    INT nEnd = fixMin((INT)AACENC_ADTS_SEAL_MAX_AUS, endBitCapacity);
+    FDKmemcpy(endBits, hAacEncoder->adtsSealEndBits, nEnd * sizeof(UINT));
+  }
+  if (bitRes && hAacEncoder->hAacEnc && hAacEncoder->hAacEnc->qcKernel)
+    *bitRes = hAacEncoder->hAacEnc->qcKernel->bitResTot;
+  if (bitResMax && hAacEncoder->hAacEnc && hAacEncoder->hAacEnc->qcKernel)
+    *bitResMax = hAacEncoder->hAacEnc->qcKernel->bitResTotMax;
+
+  if (numDomains) *numDomains = 0;
+  if (domains && domainCapacity > 0 && hAacEncoder->hTpEnc) {
+    if (transportEnc_GetAdtsCrcRegions(hAacEncoder->hTpEnc, tpRegions, 3,
+                                      &tpCount) != 0)
+      return -1;
+    for (i = 0; i < tpCount && i < domainCapacity; i++) {
+      domains[i].startBit = tpRegions[i].startBit;
+      domains[i].fixedBits = tpRegions[i].fixedBits;
+      domains[i].actualBits = tpRegions[i].actualBits;
+    }
+    if (numDomains) *numDomains = fixMin(tpCount, domainCapacity);
+  }
+  return 0;
+}
+
+INT aacEncAdtsSeal_DebugBudget(HANDLE_AACENCODER hAacEncoder,
+                               INT *grantedDynBits, INT *usedDynBits) {
+  if (hAacEncoder == NULL || hAacEncoder->hAacEnc == NULL ||
+      hAacEncoder->hAacEnc->qcOut[0] == NULL)
+    return -1;
+  if (grantedDynBits)
+    *grantedDynBits = hAacEncoder->hAacEnc->qcOut[0]->grantedDynBits;
+  if (usedDynBits)
+    *usedDynBits = hAacEncoder->hAacEnc->qcOut[0]->usedDynBits;
+  return 0;
+}
+
+INT aacEncAdtsSeal_DebugResetAssembly(HANDLE_AACENCODER hAacEncoder) {
+  if (hAacEncoder == NULL || hAacEncoder->hTpEnc == NULL) return -1;
+  if (transportEnc_Init(hAacEncoder->hTpEnc, hAacEncoder->outBuffer,
+                        hAacEncoder->outBufferInBytes, TT_MP4_ADTS,
+                        &hAacEncoder->coderConfig, 0) != TRANSPORTENC_OK)
+    return -1;
+  hAacEncoder->adtsSealCount = 0;
+  hAacEncoder->adtsSealAncillary = 0;
+  FDKmemclear(hAacEncoder->adtsSealEndBits,
+              sizeof(hAacEncoder->adtsSealEndBits));
+  FDKmemclear(hAacEncoder->outBuffer, hAacEncoder->outBufferInBytes);
+  return 0;
 }
 
 static AAC_ENCODER_ERROR aacEncGetConf(HANDLE_AACENCODER hAacEncoder,

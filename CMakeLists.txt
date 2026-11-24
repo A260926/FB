@@ -147,6 +147,7 @@ set(AACENC_SRC
   libAACenc/src/aacEnc_ram.cpp
   libAACenc/src/aacEnc_rom.cpp
   libAACenc/src/aacenc.cpp
+  libAACenc/src/aacenc_adts_seal.cpp
   libAACenc/src/aacenc_lib.cpp
   libAACenc/src/aacenc_pns.cpp
   libAACenc/src/aacenc_tns.cpp
@@ -178,6 +179,7 @@ set(AACENC_SRC
   libAACenc/src/tonality.cpp
   libAACenc/src/transform.cpp
   libAACenc/src/aacenc.h
+  libAACenc/src/aacenc_adts_seal.h
   libAACenc/src/aacenc_pns.h
   libAACenc/src/aacEnc_ram.h
   libAACenc/src/aacEnc_rom.h

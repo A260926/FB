@@ -349,6 +349,28 @@ HANDLE_FDK_BITSTREAM transportEnc_GetBitstream(HANDLE_TRANSPORTENC hTp) {
   return &hTp->bitStream;
 }
 
+int transportEnc_GetAdtsCrcRegions(HANDLE_TRANSPORTENC hTp,
+                                   TPENC_ADTS_CRC_REGION *regions,
+                                   int capacity, int *count) {
+  int i, n = 0;
+  if (hTp == NULL || count == NULL) return -1;
+  if (capacity > 0 && regions == NULL) return -1;
+
+  if (hTp->transportFmt == TT_MP4_ADTS) {
+    for (i = 0; i < MAX_CRC_REGS && n < capacity; i++) {
+      const CCrcRegData *r = &hTp->writer.adts.crcInfo.crcRegData[i];
+      if (r->maxBits > 0 && r->bitBufCntBits > 0) {
+        regions[n].startBit = (UINT)r->validBits;
+        regions[n].fixedBits = (UINT)r->maxBits;
+        regions[n].actualBits = (UINT)r->bitBufCntBits;
+        n++;
+      }
+    }
+  }
+  *count = n;
+  return 0;
+}
+
 int transportEnc_RegisterSbrCallback(HANDLE_TRANSPORTENC hTpEnc,
                                      const cbSbr_t cbSbr, void *user_data) {
   if (hTpEnc == NULL) {

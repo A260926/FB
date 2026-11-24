@@ -19,7 +19,7 @@ c++ -std=c++11 -I cpp/libAACenc/include -I cpp/libAACdec/include -I cpp/libSYS/i
 rm -f .task-build/adts-seal-example.aac
 .task-build/adts-seal-example .task-build/adts-seal-example.aac
 test -s .task-build/adts-seal-example.aac
-  output_log=$(mktemp)
+  output_log=$(mktemp .task-build/target-output.XXXXXX)
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1

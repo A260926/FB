@@ -235,6 +235,16 @@ TRANSPORTENC_ERROR transportEnc_AddOtherDataBits(HANDLE_TRANSPORTENC hTpEnc,
  */
 HANDLE_FDK_BITSTREAM transportEnc_GetBitstream(HANDLE_TRANSPORTENC hTp);
 
+typedef struct {
+  UINT startBit;
+  UINT fixedBits;
+  UINT actualBits;
+} TPENC_ADTS_CRC_REGION;
+
+int transportEnc_GetAdtsCrcRegions(HANDLE_TRANSPORTENC hTp,
+                                   TPENC_ADTS_CRC_REGION *regions,
+                                   int capacity, int *count);
+
 /**
  * \brief         Get amount of bits required by the transport headers.
  * \param hTp     Handle of transport encoder.

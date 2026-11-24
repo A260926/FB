@@ -1031,6 +1031,8 @@ typedef enum {
 
   AACENC_ENCODE_ERROR = 0x0060, /*!< The encoding process was interrupted by an
                                    unexpected error. */
+  AACENC_OUTPUT_BUFFER_TOO_SMALL =
+      0x0061, /*!< ADTS seal output capacity is insufficient. */
 
   AACENC_ENCODE_EOF = 0x0080 /*!< End of file reached. */
 
@@ -1630,6 +1632,29 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
                           const AACENC_BufDesc *inBufDesc,
                           const AACENC_BufDesc *outBufDesc,
                           const AACENC_InArgs *inargs, AACENC_OutArgs *outargs);
+
+/**
+ *  Information returned by aacEncSealAdts().
+ */
+typedef struct {
+  UINT numAUs;       /*!< Encoded access units in the sealed short group. */
+  UINT numBytes;     /*!< Required/actual complete ADTS frame size in bytes. */
+  UINT removedBits;  /*!< Bit difference between staging and short frame. */
+  UINT creditedBits; /*!< Bits returned to the production QC reservoir. */
+  INT bitResBefore;  /*!< Reservoir level before the successful credit. */
+  INT bitResAfter;   /*!< Reservoir level after the operation. */
+} AACENC_AdtsSealInfo;
+
+/**
+ * \brief Seal the currently staged, incomplete ADTS raw-data-block group.
+ *
+ * This is a transactional operation. A NULL output address queries the
+ * required size without changing state. A non-NULL output with insufficient
+ * capacity returns AACENC_OUTPUT_BUFFER_TOO_SMALL and also leaves encoder,
+ * assembly, PCM and reservoir state untouched.
+ */
+AACENC_ERROR aacEncSealAdts(HANDLE_AACENCODER hAacEncoder, UCHAR *out,
+                            UINT capacity, AACENC_AdtsSealInfo *info);
 
 /**
  * \brief  Acquire info about present encoder instance.

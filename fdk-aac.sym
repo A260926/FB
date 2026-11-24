@@ -14,5 +14,6 @@ aacEncEncode
 aacEncGetLibInfo
 aacEncInfo
 aacEncOpen
+aacEncSealAdts
 aacEncoder_GetParam
 aacEncoder_SetParam
