@@ -1,0 +1,283 @@
+#pragma once
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <io.h>
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
+#include <cstdlib>
+#include <string>
+
+#include "cista/next_power_of_2.h"
+#include "cista/targets/file.h"
+
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
+
+namespace cista {
+
+struct mmap {
+  static constexpr auto const OFFSET = 0ULL;
+  static constexpr auto const ENTIRE_FILE =
+      std::numeric_limits<std::size_t>::max();
+  enum class protection {
+    READ,
+    COPY_ON_WRITE,  // writable private pages; never changes or resizes the file
+    WRITE,
+    MODIFY,
+    TMPFILE  // requires directory path
+  };
+
+  static constexpr bool is_writable(protection const p) noexcept {
+    return p == protection::WRITE || p == protection::MODIFY ||
+           p == protection::TMPFILE;
+  }
+
+  static char const* fopen_mode(protection const p) noexcept {
+    switch (p) {
+      case protection::MODIFY: return "r+";
+      case protection::READ: return "r";
+      case protection::COPY_ON_WRITE: return "r";
+      case protection::WRITE:
+      case protection::TMPFILE: return "w+";
+    }
+    return "w+";
+  }
+
+  mmap() = default;
+
+  // note: protection::TMPFILE requires directory as path!
+  explicit mmap(char const* path, protection const prot = protection::WRITE)
+      : f_{prot == protection::TMPFILE ? open_tmpfile(path)
+                                       : file{path, fopen_mode(prot)}},
+        prot_{prot},
+        size_{f_.size()},
+        used_size_{f_.size()},
+        addr_{size_ == 0U ? nullptr : map()} {}
+
+  ~mmap() {
+    if (addr_ != nullptr) {
+      sync();
+      size_ = used_size_;
+      unmap();
+      if (size_ != f_.size() && prot_ != protection::TMPFILE) {
+        resize_file();
+      }
+    }
+  }
+
+  mmap(mmap const&) = delete;
+  mmap& operator=(mmap const&) = delete;
+
+  mmap(mmap&& o)
+      : f_{std::move(o.f_)},
+        prot_{o.prot_},
+        size_{o.size_},
+        used_size_{o.used_size_},
+        addr_{o.addr_} {
+#ifdef _WIN32
+    file_mapping_ = o.file_mapping_;
+#endif
+    o.addr_ = nullptr;
+  }
+
+  mmap& operator=(mmap&& o) {
+    f_ = std::move(o.f_);
+    prot_ = o.prot_;
+    size_ = o.size_;
+    used_size_ = o.used_size_;
+    addr_ = o.addr_;
+#ifdef _WIN32
+    file_mapping_ = o.file_mapping_;
+#endif
+    o.addr_ = nullptr;
+    return *this;
+  }
+
+  static file open_tmpfile(char const* dir) {
+#if !defined(_WIN32)
+#if defined(__linux__) && defined(O_TMPFILE)
+    // Unnamed temporary file. Not supported by all filesystems
+    // (e.g. overlayfs in containers) - fall back to mkstemp below.
+    if (auto const fd = ::open(dir, O_TMPFILE | O_RDWR, 0600); fd != -1) {
+      auto* f = ::fdopen(fd, "w+");
+      verify(f != nullptr, "fdopen failed");
+      return file{f};
+    }
+    // Fallback:
+#endif
+    // macOS/BSD or no O_TMPFILE support: create + unlink a temp file in `dir`.
+    auto tmpl = std::string{dir} + "/cista-tmpfile-XXXXXX";
+    auto const fd = ::mkstemp(tmpl.data());
+    verify(fd != -1, "mkstemp failed");
+    ::unlink(tmpl.c_str());
+    auto* f = ::fdopen(fd, "w+");
+    verify(f != nullptr, "fdopen failed");
+    return file{f};
+#else
+    char path[MAX_PATH];
+    verify(::GetTempFileNameA(dir, "cis", 0, path) != 0,
+           "GetTempFileName failed");
+    auto const h = ::CreateFileA(
+        path, GENERIC_READ | GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+        FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+    verify(h != INVALID_HANDLE_VALUE, "tmpfile create failed");
+    return file{h};
+#endif
+  }
+
+  void sync() {
+    if ((prot_ == protection::WRITE || prot_ == protection::MODIFY) &&
+        addr_ != nullptr) {
+#ifdef _WIN32
+      verify(::FlushViewOfFile(addr_, size_) != 0, "flush error");
+      verify(::FlushFileBuffers(f_.f_) != 0, "flush error");
+#else
+      verify(::msync(addr_, size_, MS_SYNC) == 0, "sync error");
+#endif
+    }
+  }
+
+  void resize(std::size_t const new_size) {
+    verify(is_writable(prot_), "read-only not resizable");
+    if (size_ < new_size) {
+      resize_map(next_power_of_two(new_size));
+    }
+    used_size_ = new_size;
+  }
+
+  void reserve(std::size_t const new_size) {
+    verify(is_writable(prot_), "read-only not resizable");
+    if (size_ < new_size) {
+      resize_map(next_power_of_two(new_size));
+    }
+  }
+
+  std::size_t size() const noexcept { return used_size_; }
+
+  std::string_view view() const noexcept {
+    return {static_cast<char const*>(addr_), size()};
+  }
+  std::uint8_t* data() noexcept { return static_cast<std::uint8_t*>(addr_); }
+  std::uint8_t const* data() const noexcept {
+    return static_cast<std::uint8_t const*>(addr_);
+  }
+
+  std::uint8_t* begin() noexcept { return data(); }
+  std::uint8_t* end() noexcept { return data() + used_size_; }
+  std::uint8_t const* begin() const noexcept { return data(); }
+  std::uint8_t const* end() const noexcept { return data() + used_size_; }
+
+  std::uint8_t& operator[](std::size_t const i) noexcept { return data()[i]; }
+  std::uint8_t const& operator[](std::size_t const i) const noexcept {
+    return data()[i];
+  }
+
+private:
+  void unmap() {
+#ifdef _WIN32
+    if (addr_ != nullptr) {
+      verify(::UnmapViewOfFile(addr_), "unmap error");
+      addr_ = nullptr;
+
+      verify(::CloseHandle(file_mapping_), "close file mapping error");
+      file_mapping_ = nullptr;
+    }
+#else
+    if (addr_ != nullptr) {
+      ::munmap(addr_, size_);
+      addr_ = nullptr;
+    }
+#endif
+  }
+
+  void* map() {
+#ifdef _WIN32
+    auto const size_low = static_cast<DWORD>(size_);
+#ifdef _WIN64
+    auto const size_high = static_cast<DWORD>(size_ >> 32U);
+#else
+    auto const size_high = static_cast<DWORD>(0U);
+#endif
+    const auto fm = ::CreateFileMapping(
+        f_.f_, 0,
+        prot_ == protection::READ            ? PAGE_READONLY
+        : prot_ == protection::COPY_ON_WRITE ? PAGE_WRITECOPY
+                                             : PAGE_READWRITE,
+        size_high, size_low, 0);
+    verify(fm != NULL, "file mapping error");
+    file_mapping_ = fm;
+
+    auto const addr =
+        ::MapViewOfFile(fm,
+                        prot_ == protection::READ            ? FILE_MAP_READ
+                        : prot_ == protection::COPY_ON_WRITE ? FILE_MAP_COPY
+                                                             : FILE_MAP_WRITE,
+                        OFFSET, OFFSET, size_);
+    verify(addr != nullptr, "map error");
+
+    return addr;
+#else
+    auto const addr =
+        ::mmap(nullptr, size_,
+               prot_ == protection::READ ? PROT_READ : PROT_READ | PROT_WRITE,
+               prot_ == protection::COPY_ON_WRITE ? MAP_PRIVATE : MAP_SHARED,
+               f_.fd(), OFFSET);
+    verify(addr != MAP_FAILED, "map error");
+    return addr;
+#endif
+  }
+
+  void resize_file() {
+    if (!is_writable(prot_)) {
+      return;
+    }
+
+#ifdef _WIN32
+    LARGE_INTEGER Size{};
+    verify(::GetFileSizeEx(f_.f_, &Size), "resize: get file size error");
+
+    LARGE_INTEGER Distance{};
+    Distance.QuadPart = size_ - Size.QuadPart;
+    verify(::SetFilePointerEx(f_.f_, Distance, nullptr, FILE_END),
+           "resize error");
+    verify(::SetEndOfFile(f_.f_), "resize set eof error");
+#else
+    verify(::ftruncate(f_.fd(), static_cast<off_t>(size_)) == 0,
+           "resize error");
+#endif
+  }
+
+  void resize_map(std::size_t const new_size) {
+    if (!is_writable(prot_)) {
+      return;
+    }
+
+    unmap();
+    size_ = new_size;
+    resize_file();
+    addr_ = map();
+  }
+
+  file f_;
+  protection prot_;
+  std::size_t size_;
+  std::size_t used_size_;
+  void* addr_;
+#ifdef _WIN32
+  HANDLE file_mapping_;
+#endif
+};
+
+}  // namespace cista
