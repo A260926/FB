@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/jerryscript-project/jerryscript",
+  "commit": "b7069350c2e52e7dc721dfb75f067147bd79b39b",
+  "license": "Apache-2.0",
+  "export": "Fixed native production source; optional tooling and unrelated tests excluded; CMake version extraction uses CMake instead of Python."
+}
