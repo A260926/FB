@@ -39,6 +39,7 @@ public interface ExpressionVisitor {
     void visit(PostOperatorExpression expression);
     void visit(PreOperatorExpression expression);
     void visit(StringConstantExpression expression);
+    void visit(SwitchExpression expression);
     void visit(SuperConstructorInvocationExpression expression);
     void visit(SuperExpression expression);
     void visit(TernaryOperatorExpression expression);

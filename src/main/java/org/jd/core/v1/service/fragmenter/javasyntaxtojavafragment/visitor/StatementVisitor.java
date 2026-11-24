@@ -13,6 +13,7 @@ import org.jd.core.v1.model.javafragment.StartSingleStatementBlockFragment;
 import org.jd.core.v1.model.javafragment.StartStatementsBlockFragment;
 import org.jd.core.v1.model.javafragment.TokensFragment;
 import org.jd.core.v1.model.javasyntax.expression.Expression;
+import org.jd.core.v1.model.javasyntax.expression.SwitchExpression;
 import org.jd.core.v1.model.javasyntax.statement.*;
 import org.jd.core.v1.model.javasyntax.type.BaseType;
 import org.jd.core.v1.model.token.*;
@@ -44,6 +45,7 @@ public class StatementVisitor extends ExpressionVisitor {
     public static final KeywordToken TRY = new KeywordToken("try");
     public static final KeywordToken VOLATILE = new KeywordToken("volatile");
     public static final KeywordToken WHILE = new KeywordToken("while");
+    public static final KeywordToken YIELD = new KeywordToken("yield");
 
     public StatementVisitor(Loader loader, String mainInternalTypeName, int majorVersion, ImportsFragment importsFragment) {
         super(loader, mainInternalTypeName, majorVersion, importsFragment);
@@ -455,6 +457,111 @@ public class StatementVisitor extends ExpressionVisitor {
     }
 
     @Override
+    public void visit(SwitchExpression expression) {
+        tokens.add(SWITCH);
+        tokens.add(TextToken.SPACE);
+        tokens.add(StartBlockToken.START_PARAMETERS_BLOCK);
+
+        expression.getCondition().accept(this);
+
+        tokens.add(EndBlockToken.END_PARAMETERS_BLOCK);
+        fragments.addTokensFragment(tokens);
+
+        StartStatementsBlockFragment.Group switchGroup = JavaFragmentFactory.addStartStatementsBlock(fragments);
+        boolean first = true;
+
+        for (SwitchExpression.Arm arm : expression.getArms()) {
+            if (!first) {
+                JavaFragmentFactory.addSpacerBetweenSwitchLabelBlock(fragments);
+            }
+            first = false;
+
+            BaseStatement body = arm.getStatements();
+            YieldStatement yieldStatement = asSingleYield(body);
+            Statement throwStatement = asSingleThrow(body);
+
+            tokens = new Tokens();
+            appendSwitchLabels(arm);
+            tokens.add(TextToken.SPACE_ARROW_SPACE);
+
+            if (yieldStatement != null) {
+                yieldStatement.getExpression().accept(this);
+                tokens.add(TextToken.SEMICOLON);
+                fragments.addTokensFragment(tokens);
+            } else if (throwStatement != null) {
+                fragments.addTokensFragment(tokens);
+                tokens = new Tokens();
+                throwStatement.accept(this);
+            } else {
+                fragments.addTokensFragment(tokens);
+
+                StartStatementsBlockFragment.Group armGroup = JavaFragmentFactory.addStartStatementsBlock(fragments);
+                tokens = new Tokens();
+                body.accept(this);
+                JavaFragmentFactory.addEndStatementsBlock(fragments, armGroup);
+            }
+        }
+
+        JavaFragmentFactory.addEndStatementsBlock(fragments, switchGroup);
+        JavaFragmentFactory.addSpacerAfterEndStatementsBlock(fragments);
+        tokens = new Tokens();
+    }
+
+    protected YieldStatement asSingleYield(BaseStatement body) {
+        if (body instanceof YieldStatement) {
+            return (YieldStatement) body;
+        }
+        if (body != null && body.isStatements() && body.size() == 1) {
+            Statement statement = body.getFirst();
+            if (statement instanceof YieldStatement) {
+                return (YieldStatement) statement;
+            }
+        }
+        return null;
+    }
+
+    protected Statement asSingleThrow(BaseStatement body) {
+        if (body instanceof ThrowStatement) {
+            return (ThrowStatement) body;
+        }
+        if (body != null && body.isStatements() && body.size() == 1) {
+            Statement statement = body.getFirst();
+            if (statement.isThrowStatement()) {
+                return statement;
+            }
+        }
+        return null;
+    }
+
+    protected void appendSwitchLabels(SwitchExpression.Arm arm) {
+        if (arm.isDefault() && arm.getLabels().size() == 1) {
+            tokens.add(DEFAULT);
+            return;
+        }
+
+        boolean firstLabel = true;
+
+        for (SwitchStatement.Label label : arm.getLabels()) {
+            if (label == SwitchStatement.DEFAULT_LABEL) {
+                if (!firstLabel) {
+                    tokens.add(TextToken.COMMA_SPACE);
+                }
+                tokens.add(DEFAULT);
+            } else if (label instanceof SwitchStatement.ExpressionLabel) {
+                if (firstLabel) {
+                    tokens.add(CASE);
+                    tokens.add(TextToken.SPACE);
+                } else {
+                    tokens.add(TextToken.COMMA_SPACE);
+                }
+                ((SwitchStatement.ExpressionLabel) label).getExpression().accept(this);
+            }
+
+            firstLabel = false;
+        }
+    }
+
+    @Override
     public void visit(SwitchStatement.LabelBlock statement) {
         statement.getLabel().accept(this);
         JavaFragmentFactory.addSpacerAfterSwitchLabel(fragments);
@@ -669,5 +776,18 @@ public class StatementVisitor extends ExpressionVisitor {
         statement.getCondition().accept(this);
 
         visitLoopStatements(statement.getStatements());
+    }
+
+    @Override
+    public void visit(YieldStatement statement) {
+        tokens = new Tokens();
+        tokens.add(StartBlockToken.START_DECLARATION_OR_STATEMENT_BLOCK);
+        tokens.addLineNumberToken(statement.getLineNumber());
+        tokens.add(YIELD);
+        tokens.add(TextToken.SPACE);
+        statement.getExpression().accept(this);
+        tokens.add(TextToken.SEMICOLON);
+        tokens.add(EndBlockToken.END_DECLARATION_OR_STATEMENT_BLOCK);
+        fragments.addTokensFragment(tokens);
     }
 }

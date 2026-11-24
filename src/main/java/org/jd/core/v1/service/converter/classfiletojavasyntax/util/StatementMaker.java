@@ -53,6 +53,8 @@ public class StatementMaker {
     protected String internalTypeName;
     protected ClassFileBodyDeclaration bodyDeclaration;
     protected DefaultStack<Expression> stack = new DefaultStack<>();
+    protected Deque<BasicBlock> activeSwitchMerges = new ArrayDeque<>();
+    protected Deque<SwitchArmContext> switchArmContexts = new ArrayDeque<>();
     protected RemoveFinallyStatementsVisitor removeFinallyStatementsVisitor;
     protected RemoveBinaryOpReturnStatementsVisitor removeBinaryOpReturnStatementsVisitor;
     protected UpdateIntegerConstantTypeVisitor updateIntegerConstantTypeVisitor;
@@ -182,6 +184,10 @@ public class StatementMaker {
                 DefaultStack<Expression> backup = new DefaultStack<>(stack);
                 watchdog.check(basicBlock, basicBlock.getSub1());
                 subStatements = makeSubStatements(watchdog, basicBlock.getSub1(), statements, jumps);
+                SwitchArmContext ifElseArmContext = switchArmContexts.peek();
+                if ((ifElseArmContext != null) && (stack.size() == backup.size() + 1)) {
+                    ifElseArmContext.yields.add(new CapturedSwitchYield(subStatements, stack.peek()));
+                }
                 if (!basicBlock.getSub2().matchType(TYPE_LOOP_END|TYPE_LOOP_CONTINUE|TYPE_LOOP_START) && (stack.size() != backup.size())) {
                     stack.copy(backup);
                 }
@@ -339,7 +345,15 @@ public class StatementMaker {
         Type conditionType = condition.getType();
         List<SwitchStatement.Block> blocks = switchStatement.getBlocks();
         DefaultStack<Expression> localStack = new DefaultStack<Expression>(stack);
+        List<SwitchArmData> armDataList = new DefaultList<>();
+        boolean expressionSwitch = majorVersion >= 61;
+        int normalArmCount = 0;
+        boolean hasDefaultCase = false;
+        boolean consumedNext = false;
+        BasicBlock switchMerge = basicBlock.getNext();
+        boolean sharedSwitchMerge = activeSwitchMerges.contains(switchMerge);
 
+        activeSwitchMerges.push(switchMerge);
         switchCases.sort(SWITCH_CASE_COMPARATOR);
 
         for (int i=0, len=switchCases.size(); i<len; i++) {
@@ -351,27 +365,141 @@ public class StatementMaker {
                 j++;
             }
 
-            Statements subStatements = new Statements();
-
-            stack.copy(localStack);
-            makeStatements(watchdog, bb, subStatements, jumps);
-            replacePreOperatorWithPostOperator(subStatements);
+            DefaultList<SwitchStatement.Label> labels = new DefaultList<>(j - i);
 
             if (sc.isDefaultCase()) {
-                blocks.add(new SwitchStatement.LabelBlock(SwitchStatement.DEFAULT_LABEL, subStatements));
-            } else if (j == i + 1) {
-                SwitchStatement.Label label = new SwitchStatement.ExpressionLabel(new IntegerConstantExpression(conditionType, sc.getValue()));
-                blocks.add(new SwitchStatement.LabelBlock(label, subStatements));
+                hasDefaultCase = true;
+                labels.add(SwitchStatement.DEFAULT_LABEL);
             } else {
-                DefaultList<SwitchStatement.Label> labels = new DefaultList<>(j - i);
+                for (int k=i; k<j; k++) {
+                    labels.add(new SwitchStatement.ExpressionLabel(new IntegerConstantExpression(conditionType, switchCases.get(k).getValue())));
+                }
+            }
 
-                for (; i<j; i++) {
-                    labels.add(new SwitchStatement.ExpressionLabel(new IntegerConstantExpression(conditionType, switchCases.get(i).getValue())));
+            Statements subStatements = new Statements();
+            SwitchArmContext armContext = new SwitchArmContext();
+
+            localVariableMaker.pushFrame(subStatements);
+            switchArmContexts.push(armContext);
+            stack.copy(localStack);
+            makeStatements(watchdog, bb, subStatements, jumps);
+            switchArmContexts.pop();
+            localVariableMaker.popFrame();
+            replacePreOperatorWithPostOperator(subStatements);
+
+            if (labels.size() == 1) {
+                blocks.add(new SwitchStatement.LabelBlock(labels.get(0), subStatements));
+            } else {
+                blocks.add(new SwitchStatement.MultiLabelsBlock(labels, subStatements));
+            }
+
+            Expression armValue = null;
+            boolean throwingArm = false;
+            int stackDelta = stack.size() - localStack.size();
+
+            if (stackDelta == 1) {
+                armValue = stack.peek();
+                normalArmCount++;
+            } else if ((stackDelta == 0) && !subStatements.isEmpty() && subStatements.getLast().isThrowStatement()) {
+                throwingArm = true;
+            } else {
+                expressionSwitch = false;
+            }
+
+            armDataList.add(new SwitchArmData(labels, subStatements, armValue, throwingArm, armContext));
+
+            if (labels.size() > 1) {
+                i = j - 1;
+            }
+        }
+        activeSwitchMerges.pop();
+
+        if (expressionSwitch && !hasDefaultCase && (basicBlock.getNext() != BasicBlock.END)) {
+            DefaultList<SwitchStatement.Label> labels = new DefaultList<>(1);
+            labels.add(SwitchStatement.DEFAULT_LABEL);
+            Statements subStatements = new Statements();
+            SwitchArmContext armContext = new SwitchArmContext();
+
+            localVariableMaker.pushFrame(subStatements);
+            switchArmContexts.push(armContext);
+            stack.copy(localStack);
+            makeStatements(watchdog, basicBlock.getNext(), subStatements, jumps);
+            switchArmContexts.pop();
+            localVariableMaker.popFrame();
+            replacePreOperatorWithPostOperator(subStatements);
+
+            int stackDelta = stack.size() - localStack.size();
+            Expression armValue = null;
+            boolean throwingArm = false;
+
+            if (stackDelta == 1) {
+                armValue = stack.peek();
+                normalArmCount++;
+                consumedNext = true;
+            } else if ((stackDelta == 0) && !subStatements.isEmpty() && subStatements.getLast().isThrowStatement()) {
+                throwingArm = true;
+                consumedNext = true;
+            } else {
+                expressionSwitch = false;
+                consumedNext = true;
+            }
+
+            armDataList.add(new SwitchArmData(labels, subStatements, armValue, throwingArm, armContext));
+        }
+
+        boolean allArmsThrow = !armDataList.isEmpty();
+        for (SwitchArmData armData : armDataList) {
+            allArmsThrow &= armData.throwing && (armData.value == null);
+        }
+
+        if (expressionSwitch && (normalArmCount > 0 || allArmsThrow)) {
+            DefaultList<SwitchExpression.Arm> arms = new DefaultList<>(armDataList.size());
+            DefaultList<Expression> resultValues = new DefaultList<>();
+
+            for (SwitchArmData armData : armDataList) {
+                Statements armStatements = armData.statements;
+
+                for (CapturedSwitchYield capturedYield : armData.context.yields) {
+                    Expression yieldValue = capturedYield.value;
+                    if (yieldValue.isIntegerConstantExpression() && !yieldValue.isLongConstantExpression()) {
+                        ((IntegerConstantExpression) yieldValue).setType(PrimitiveType.TYPE_INT);
+                    }
+                    capturedYield.target.add(new YieldStatement(yieldValue.getLineNumber(), yieldValue));
                 }
 
-                blocks.add(new SwitchStatement.MultiLabelsBlock(labels, subStatements));
-                i--;
+                if (armData.value != null) {
+                    if (!armStatements.isEmpty() && armStatements.getLast().isBreakStatement()) {
+                        armStatements.removeLast();
+                    }
+
+                    resultValues.add(armData.value);
+
+                    BaseStatement body;
+                    if (armStatements.isEmpty()) {
+                        body = new YieldStatement(armData.value.getLineNumber(), armData.value);
+                    } else {
+                        armStatements.add(new YieldStatement(armData.value.getLineNumber(), armData.value));
+                        body = armStatements;
+                    }
+
+                    arms.add(new SwitchExpression.Arm(armData.labels, body));
+                } else {
+                    arms.add(new SwitchExpression.Arm(armData.labels, armStatements));
+                }
             }
+
+            Type resultType = makeSwitchExpressionType(resultValues);
+            SwitchExpression switchExpression = new SwitchExpression(
+                    switchStatement.getLineNumber(), resultType, condition, arms);
+
+            statements.remove(switchStatement);
+            stack.copy(localStack);
+            stack.push(switchExpression);
+
+            if (!sharedSwitchMerge && !consumedNext) {
+                makeStatements(watchdog, basicBlock.getNext(), statements, jumps);
+            }
+            return;
         }
 
         int size = statements.size();
@@ -384,7 +512,70 @@ public class StatementMaker {
             SwitchStatementMaker.makeSwitchEnum(bodyDeclaration, switchStatement);
         }
 
-        makeStatements(watchdog, basicBlock.getNext(), statements, jumps);
+        if (consumedNext && !armDataList.isEmpty()) {
+            statements.addAll(armDataList.get(armDataList.size() - 1).statements);
+        } else {
+            makeStatements(watchdog, basicBlock.getNext(), statements, jumps);
+        }
+    }
+
+    protected Type makeSwitchExpressionType(List<Expression> values) {
+        boolean hasLong = false;
+        boolean hasReference = false;
+        Type referenceType = null;
+
+        for (Expression value : values) {
+            Type type = value.getType();
+
+            if (value.isIntegerConstantExpression() && !value.isLongConstantExpression()) {
+                ((IntegerConstantExpression) value).setType(PrimitiveType.TYPE_INT);
+                type = PrimitiveType.TYPE_INT;
+            }
+
+            if (PrimitiveType.TYPE_LONG.equals(type) || value.isLongConstantExpression()) {
+                hasLong = true;
+            } else if (type != null && type.isObjectType()) {
+                hasReference = true;
+                if (!value.isNullExpression() && referenceType == null) {
+                    referenceType = type;
+                }
+            }
+        }
+
+        if (hasReference) {
+            return referenceType != null ? referenceType : ObjectType.TYPE_UNDEFINED_OBJECT;
+        }
+        return hasLong ? PrimitiveType.TYPE_LONG : PrimitiveType.TYPE_INT;
+    }
+
+    protected static final class SwitchArmData {
+        protected final DefaultList<SwitchStatement.Label> labels;
+        protected final Statements statements;
+        protected final Expression value;
+        protected final boolean throwing;
+        protected final SwitchArmContext context;
+
+        protected SwitchArmData(DefaultList<SwitchStatement.Label> labels, Statements statements, Expression value, boolean throwing, SwitchArmContext context) {
+            this.labels = labels;
+            this.statements = statements;
+            this.value = value;
+            this.throwing = throwing;
+            this.context = context;
+        }
+    }
+
+    protected static final class SwitchArmContext {
+        protected final List<CapturedSwitchYield> yields = new DefaultList<>();
+    }
+
+    protected static final class CapturedSwitchYield {
+        protected final Statements target;
+        protected final Expression value;
+
+        protected CapturedSwitchYield(Statements target, Expression value) {
+            this.target = target;
+            this.value = value;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -572,9 +763,17 @@ public class StatementMaker {
             Expression cond = stack.pop();
             DefaultStack<Expression> backup = new DefaultStack<Expression>(stack);
             Statements subStatements = makeSubStatements(watchdog, basicBlock.getSub1(), statements, jumps);
+            SwitchArmContext armContext = switchArmContexts.peek();
+            int thenStackDelta = stack.size() - backup.size();
+
+            if ((armContext != null) && (thenStackDelta == 1)) {
+                armContext.yields.add(new CapturedSwitchYield(subStatements, stack.peek()));
+            }
+
             if (stack.size() != backup.size()) {
                 stack.copy(backup);
             }
+
             statements.add(new IfStatement(cond, subStatements));
             int index = statements.size();
             makeStatements(watchdog, basicBlock.getNext(), statements, jumps);

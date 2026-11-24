@@ -3,6 +3,7 @@
 
 # JD
 debug*
+.task-build/
 
 # Idea
 .idea/

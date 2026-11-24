@@ -568,6 +568,17 @@ public class ExpressionVisitor extends TypeVisitor {
     }
 
     @Override
+    public void visit(SwitchExpression expression) {
+        expression.getCondition().accept(this);
+
+        for (SwitchExpression.Arm arm : expression.getArms()) {
+            if (arm.getStatements() != null) {
+                arm.getStatements().accept(this);
+            }
+        }
+    }
+
+    @Override
     public void visit(SuperConstructorInvocationExpression expression) {
         tokens.addLineNumberToken(expression);
         tokens.add(SUPER);
@@ -751,6 +762,7 @@ public class ExpressionVisitor extends TypeVisitor {
         @Override public void visit(PostOperatorExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(PreOperatorExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(StringConstantExpression expression) { ExpressionVisitor.this.visit(expression); }
+        @Override public void visit(SwitchExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(SuperConstructorInvocationExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(SuperExpression expression) { ExpressionVisitor.this.visit(expression); }
         @Override public void visit(TernaryOperatorExpression expression) { ExpressionVisitor.this.visit(expression); }

@@ -22,6 +22,8 @@ import org.jd.core.v1.service.converter.classfiletojavasyntax.model.javasyntax.e
 import org.jd.core.v1.service.converter.classfiletojavasyntax.util.TypeMaker;
 import org.jd.core.v1.util.DefaultList;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 
 import static org.jd.core.v1.model.javasyntax.declaration.Declaration.FLAG_BRIDGE;
@@ -36,6 +38,7 @@ public class AddCastExpressionVisitor extends AbstractJavaSyntaxVisitor {
     protected Type returnedType;
     protected BaseType exceptionTypes;
     protected Type type;
+    protected final Deque<Type> switchExpressionTypes = new ArrayDeque<>();
 
     public AddCastExpressionVisitor(TypeMaker typeMaker) {
         this.typeMaker = typeMaker;
@@ -328,6 +331,32 @@ public class AddCastExpressionVisitor extends AbstractJavaSyntaxVisitor {
         expression.setFalseExpression(updateExpression(expressionType, expression.getFalseExpression(), false, true));
     }
 
+    @Override
+    public void visit(SwitchExpression expression) {
+        switchExpressionTypes.push(expression.getType());
+        expression.getCondition().accept(this);
+
+        for (SwitchExpression.Arm arm : expression.getArms()) {
+            if (arm.getStatements() != null) {
+                arm.getStatements().accept(this);
+            }
+        }
+
+        switchExpressionTypes.pop();
+    }
+
+    @Override
+    public void visit(YieldStatement statement) {
+        Type target = switchExpressionTypes.peek();
+
+        if (target != null) {
+            statement.setType(target);
+            statement.setExpression(updateExpression(target, statement.getExpression(), false, true));
+        } else {
+            statement.getExpression().accept(this);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     protected BaseExpression updateParameters(BaseType types, BaseExpression expressions, boolean forceCast, boolean unique) {
         if (expressions != null) {
@@ -371,6 +400,12 @@ public class AddCastExpressionVisitor extends AbstractJavaSyntaxVisitor {
     }
 
     private Expression updateExpression(Type type, Expression expression, boolean forceCast, boolean unique) {
+        if (expression.isSwitchExpression() && (type != null)) {
+            ((SwitchExpression) expression).setType(type);
+            expression.accept(this);
+            return expression;
+        }
+
         if (expression.isNullExpression()) {
             if (forceCast) {
                 searchFirstLineNumberVisitor.init();

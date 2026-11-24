@@ -60,6 +60,7 @@ public class MergeTryWithResourcesStatementVisitor implements StatementVisitor {
     @Override public void visit(SynchronizedStatement statement) { safeAccept(statement.getStatements()); }
     @Override public void visit(TryStatement.CatchClause statement) { safeAccept(statement.getStatements()); }
     @Override public void visit(WhileStatement statement) { safeAccept(statement.getStatements()); }
+    @Override public void visit(YieldStatement statement) {}
 
     @Override public void visit(SwitchStatement.LabelBlock statement) { statement.getStatements().accept(this); }
     @Override public void visit(SwitchStatement.MultiLabelsBlock statement) { statement.getStatements().accept(this); }

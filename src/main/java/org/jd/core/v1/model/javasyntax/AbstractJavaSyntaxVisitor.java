@@ -375,6 +375,16 @@ public abstract class AbstractJavaSyntaxVisitor extends AbstractTypeArgumentVisi
     public void visit(StringConstantExpression expression) {}
 
     @Override
+    public void visit(SwitchExpression expression) {
+        expression.getCondition().accept(this);
+
+        for (SwitchExpression.Arm arm : expression.getArms()) {
+            safeAcceptListStatement(arm.getLabels());
+            safeAccept(arm.getStatements());
+        }
+    }
+
+    @Override
     public void visit(SuperConstructorInvocationExpression expression) {
         BaseType type = expression.getType();
 
@@ -619,6 +629,11 @@ public abstract class AbstractJavaSyntaxVisitor extends AbstractTypeArgumentVisi
     public void visit(WhileStatement statement) {
         statement.getCondition().accept(this);
         safeAccept(statement.getStatements());
+    }
+
+    @Override
+    public void visit(YieldStatement statement) {
+        statement.getExpression().accept(this);
     }
 
     @Override
