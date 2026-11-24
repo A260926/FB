@@ -56,6 +56,12 @@
 
 
         /*
+        * getPosition
+        */
+        void getPosition(Vec3<float>* const position) const;
+
+
+        /*
         * Apply translation to a given coordinates
         */
         void reajust(Vec3<float>* const coordinates);
@@ -64,6 +70,12 @@
         private:
         Mat3f basis;
         Vec3<float> nearcenter;
+        /*
+        * Per-instance accumulated rotation/translation matrix. It used to be
+        * a file-scope static shared by every camera, which mixed rotations
+        * between instances.
+        */
+        float rotation[16];
 
 
         private:

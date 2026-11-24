@@ -57,16 +57,20 @@
 
         /*
         * initBit
+        * The treeHalf argument is the half size owned by the tree being
+        * edited, so insertion bounds never borrow another tree's state.
         */
-        static void initBit(Octant* const octant, const Voxel voxel);
-        static void initBit(Octant* const octant, Voxel* const voxel);
+        static void initBit(Octant* const octant, const Voxel voxel,
+        const SI treeHalf);
+        static void initBit(Octant* const octant, Voxel* const voxel,
+        const SI treeHalf);
 
 
         /*
         * Set bit space, corresponding to the current voxel
         */
         static void setBit(Octant* const octant,
-        Voxel* const voxel, const bool dynamic = true);
+        Voxel* const voxel, const SI treeHalf, const bool dynamic = true);
 
 
         /*

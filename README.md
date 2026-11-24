@@ -59,3 +59,76 @@ or with powershell:
     accelerate fps:30
 
 Enjoy!
+
+
+Headless CPU multi-viewport rendering
+-------------------------------------
+The GL-free renderer lives in `headers/CPUFrame.h` / `CPUFrame.cpp` and uses
+only the C++17 standard library, so no window or GPU is required.
+
+### Per-instance ownership and the read-only period
+- An `Octree` owns its own root bounds (`getSize`/`getHalf`), ray length and
+  accelerator. The accelerator is sized, addressed and released from the
+  tree that built it instead of the global `Options::OCTREE_SIZE`, so trees
+  of different edges (for example 16/depth 4 and 32/depth 5) can coexist.
+  `initRoot` may be called only once per tree; inserts afterwards keep using
+  that tree's own bounds.
+- A `Camera` accumulates its own rotation matrix; rotating one camera never
+  changes another camera's basis.
+- Building and `initAccelerator` are the only mutating phase. Once a tree and
+  its accelerator are prepared, they stay read-only for the whole batch. The
+  new read-only query does not use any instance scratch, so several worker
+  threads may trace rays through the same `const Octree` at the same time.
+  Concurrent editing is not required.
+- `Options` still provides the defaults for the old window entry point. The
+  new API takes every behavior switch (transparency, minimum layer spacing,
+  scan glitch repair, perspective, zoom, ...) on the query/viewport, so later
+  changes to the `Options` defaults do not affect a call already configured.
+
+### Read-only ray query
+`Octree::traceRay(const RayQuery&) const` takes the tree's own origin, unit
+direction, positive maximum step distance, transparency switch, minimum
+layer spacing and scan glitch repair switch. It returns depth/color copies
+(`RayHit`) ordered by the original stepping sequence. The caller's inputs are
+copied and never modified, and no scratch is retained for the next ray. It
+shares the exact `getBit`, `avoidScanGlitches` and `getNextEntryDot` stepping
+rules (minimum step, depth darkening, transparent layer filtering) with the
+legacy `setRay`/`initBasis`/`setPerspectiveRay`/`rayTrace` path; both the
+plain octree walk and the accelerator walk go through this entry. The legacy
+entry points still work and may still mutate the ray they are given; only the
+new entry supports concurrency.
+
+### Batch frames
+`cpuframe::renderBatch` renders several viewports in one call. Each
+`ViewportInput` carries a `const Octree*`, a snapshot of the camera basis and
+position, positive even width/height, `PIXEL_STEP == 1`, a non-negative
+perspective factor, a positive zoom, a background RGBA and the blending
+parameters. Every viewport is validated (sizes, finite parameters, non-zero
+orthonormal basis) before any thread starts; invalid input throws
+`std::invalid_argument` and no partial frame is returned.
+
+Workers (1 to 32) pull configurable positive row blocks, never one thread per
+pixel, and the extra scheduling storage scales with row blocks rather than
+pixels. Worker count (1/2/4) and block order never change the pixels. The
+returned `BatchResult` holds one `ViewportFrame` per input viewport, in input
+order; each frame owns its own row-major RGBA buffer (`4 * width * height`
+bytes) and the buffers are never shared. `BatchStats` reports the real number
+of completed viewports, pixel queries and worker threads created.
+
+`Core::process` now routes its `pixels != NULL` with `PIXEL_STEP == 1` path
+through this shared pixel implementation; GL only displays the buffer. The
+quads path and any other `PIXEL_STEP` keep their original behavior.
+
+### Example and tests
+`examples/cpu_frame.cpp` builds two trees and two cameras and renders them
+with four workers into the PPM path given on the command line:
+
+    c++ -std=c++17 -O2 -pthread -I. -include headers/CPUFrame.h \
+        examples/cpu_frame.cpp CPUFrame.cpp Octree.cpp Octant.cpp \
+        Camera.cpp Options.cpp math.cpp voxeldisplays.cpp -o cpu_frame
+    ./cpu_frame frame.ppm
+
+The headless checks (ownership, read-only queries and batch frames) run with:
+
+    bash task_support/run.sh target
+

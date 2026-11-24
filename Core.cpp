@@ -1,15 +1,16 @@
 /*
  * Cloud of Voxels (CoV) project
- * Author: m-c/d, mcidclan
+ * Author: mcidclan, mcidclan
  * Creation Date: 2011
  * Modification Date: 2025
  */
 
 #include "./headers/Core.h"
+#include "./headers/CPUFrame.h"
 #include "./headers/voxelmodels.h"
 
 extern Voxel monkey[MESH_SIZE] __attribute__((aligned(8)));
- 
+
 /*
  * Constructor
  */
@@ -48,20 +49,20 @@ void Core::init()
         !Options::QUADS_AS_PIXELS
     };
     printf("Number of level in the octree: %i\n", level);
-    
+
     if(warning[0]) {
         printf("!!!Warning!!! Octree size is not a power of 2\n");
     }
     if(warning[1]) {
         printf("!!!Warning!!! Texture rendering size is not a power of 2\n");
     }
-    
+
     this->octree = new Octree();
     this->camera = new Camera();
     printf("Adding voxels, please wait...\n");
     this->octree->initRoot(Options::OCTREE_SIZE, level, Options::MAX_RAY_LENGTH);
     this->octree->addVoxels(monkey, MESH_SIZE);
-    
+
     if(Options::ACCELERATED)
     {
         this->octree->initAccelerator();
@@ -74,7 +75,7 @@ void Core::transform()
     this->camera->resetTransformation();
     this->camera->rotate({0.0f, 1.0f, 0.0f}, this->yangle);
     this->camera->rotate({1.0f, 0.0f, 0.0f}, this->xangle);
-    
+
     this->camera->translate({
         Options::nomotion ? 0.0f : this->xtrans,
         Options::nomotion ? 0.0f : this->ytrans,
@@ -125,13 +126,39 @@ void Core::setPixel(Vec2<SI>* const curpix, DynamicVoxel* const voxel)
     glVertex2i(curpix->x - step, curpix->y + step);
     glEnd();
 }
- 
- 
+
+
 /*
- * process
+ * The pixels path with PIXEL_STEP == 1 shares the GL-free cpuframe pixel
+ * implementation. GL only displays the produced buffer; the quads path and
+ * any other PIXEL_STEP keep their original behavior below.
  */
 void Core::process(UC* const pixels)
 {
+    if(pixels != NULL && Options::PIXEL_STEP == cpuframe::PIXEL_STEP)
+    {
+        cpuframe::ViewportInput viewport;
+        viewport.tree = this->octree;
+        this->camera->getBasis(&viewport.basis);
+        this->camera->getPosition(&viewport.position);
+        viewport.width = Options::SCR_WIDTH;
+        viewport.height = Options::SCR_HEIGHT;
+        viewport.perspectiveFactor = Options::PERSPECTIVE_FACTOR;
+        viewport.zoom = Options::ZOOM_FACTOR;
+        viewport.maxRayDistance = (float)this->octree->getRayLength();
+        viewport.maxVoxelsByRay = Options::MAX_VOXELS_BY_RAY;
+        viewport.minVoxelProximity = Options::MIN_VOXELS_PROXIMITY;
+        viewport.transparency = Options::TRANSPARENCY;
+        viewport.avoidGlitches = Options::AVOID_SCAN_GLITCHES;
+        /*
+        * Render memsets the buffer to transparent black before each frame,
+        * so misses used to stay (0, 0, 0, 0); keep that exact background.
+        */
+        viewport.background = {0, 0, 0, 0};
+        cpuframe::renderPixelBuffer(viewport, pixels);
+        return;
+    }
+
     Mat3f basis = {
         {1.0f, 0.0f, 0.0f},
         {0.0f, 1.0f, 0.0f},
@@ -141,10 +168,10 @@ void Core::process(UC* const pixels)
         (SI)-Options::SCR_HALF_WIDTH,
         (SI)-Options::SCR_HALF_HEIGHT
     };
-    
+
     this->camera->getBasis(&basis);
     this->octree->initBasis(&basis);
-    
+
     vector<DynamicVoxel> voxels;
     do
     {
@@ -155,12 +182,12 @@ void Core::process(UC* const pixels)
         this->camera->reajust(&ray);
         this->octree->setRay(&ray);
         // Display a pixel if the ray hits a voxel.
-        
+
         if (Options::PERSPECTIVE_FACTOR > 0.0f) {
             this->octree->setPerspectiveRay(Options::ZOOM_FACTOR * (float)curpix.x,
             Options::ZOOM_FACTOR * (float)curpix.y, Options::PERSPECTIVE_FACTOR);
         }
-        
+
         voxels.clear();
         if(this->octree->rayTrace(&voxels))
         {
@@ -169,14 +196,14 @@ void Core::process(UC* const pixels)
             {
                 end = i - Options::MAX_VOXELS_BY_RAY;
             }
-            
+
             if(Options::INTERNAL_BLENDING || !Options::QUADS_AS_PIXELS)
             {
                 Voxel voxel = *(voxels[i-1].voxel);
                 const float depth = voxels[0].depth;
-                
+
                 UC ro = 0, go = 0, bo = 0, alpha = 0;
-                
+
                 while(i-- > end)
                 {
                     const UI r = (voxels[i].voxel->color & 0xFF000000) >> 24;
@@ -186,26 +213,26 @@ void Core::process(UC* const pixels)
                     if(a > alpha) {
                         alpha = a;
                     }
-                    
+
                     const float d = this->octree->getDarkness(voxels[i].depth);
                     a = (a / 255.0f) * d;
-                    
+
                     ro = (UC)(r * a + (1.0f - a) * ro);
                     go = (UC)(g * a + (1.0f - a) * go);
                     bo = (UC)(b * a + (1.0f - a) * bo);
                 }
-                
+
                 if(pixels == NULL)
                 {
                     voxel.color = (ro << 24) | (go << 16) | (bo << 8 ) | alpha;
                     DynamicVoxel dynamic = {depth, &voxel};
                     this->setPixel(&curpix, &dynamic);
                 } else
-                {   
+                {
                     const SUI x = (curpix.x / Options::PIXEL_STEP) + Options::SCR_HALF_WIDTH;
                     const SUI y = (curpix.y / Options::PIXEL_STEP) + Options::SCR_HALF_HEIGHT;
                     const UI offset = COLOR_BYTES_NUMBER * (x + y * Options::SCR_WIDTH);
-                    
+
                     pixels[offset] = ro;
                     pixels[offset+1] = go;
                     pixels[offset+2] = bo;

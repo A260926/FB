@@ -93,18 +93,20 @@ void OctantManager::setFacesCenter(Octant* const octant)
 /*
  * Set the bit space corresponding to the current voxel
  */
-void OctantManager::initBit(Octant* const octant, const Voxel voxel)
+void OctantManager::initBit(Octant* const octant, const Voxel voxel,
+const SI treeHalf)
 {
     Voxel* v = new Voxel();
     v->coordinates = voxel.coordinates;
     v->color = voxel.color;
-    OctantManager::setBit(octant, v);
+    OctantManager::setBit(octant, v, treeHalf);
 }
 
 
-void OctantManager::initBit(Octant* const octant, Voxel* const voxel)
+void OctantManager::initBit(Octant* const octant, Voxel* const voxel,
+const SI treeHalf)
 {
-    OctantManager::setBit(octant, voxel, false);
+    OctantManager::setBit(octant, voxel, treeHalf, false);
 }
 
 
@@ -112,11 +114,11 @@ void OctantManager::initBit(Octant* const octant, Voxel* const voxel)
  * Set the bit space corresponding to the current voxel
  */
 void OctantManager::setBit(Octant* const octant, Voxel* const voxel,
-const bool dynamic)
+const SI treeHalf, const bool dynamic)
 {
-    if(math::absf(voxel->coordinates.x) >= (Octree::half - 2) ||
-        math::absf(voxel->coordinates.y) >= (Octree::half - 2) ||
-        math::absf(voxel->coordinates.z) >= (Octree::half - 2)) return;
+    if(math::absf(voxel->coordinates.x) >= (treeHalf - 2) ||
+        math::absf(voxel->coordinates.y) >= (treeHalf - 2) ||
+        math::absf(voxel->coordinates.z) >= (treeHalf - 2)) return;
             
     if(octant->depth == 0)
     {
@@ -144,7 +146,7 @@ const bool dynamic)
             }
         }
         OctantManager::setBit(OctantManager::getChildAt(
-        octant, voxel->coordinates), voxel, dynamic);
+        octant, voxel->coordinates), voxel, treeHalf, dynamic);
     }
 }
 

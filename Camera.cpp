@@ -1,6 +1,6 @@
 /*
  * Cloud of voxels (CoV) project
- * Author: mcidclan, m [.D'O'T.] cid [.D'O'T.] clan [.A'T.] gmail [.D'O'T.] com
+ * Author: mcidclan, m [.D'O'T.] cid [.D'O'T.] clan [.A'T.] gmail [.A'T.] com
  * Creation Date: 2011
  * Modification Date: 2020
  */
@@ -15,26 +15,18 @@ extern const float midentity[16];
 
 
 /*
-* rotation matrix
-*/
-static float matrot[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-
-
-/*
-* temporaries matrix
-*/
-static float mattmp_1[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-static float mattmp_2[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-
-
-/*
 * Constructor
 */
 Camera::Camera()
 {
     this->resetTransformation();
+    this->basis = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f}
+    };
     this->nearcenter.x =
-    this->nearcenter.y = 
+    this->nearcenter.y =
     this->nearcenter.z = 0.0f;
 }
 
@@ -77,11 +69,11 @@ void Camera::setPosition(const float x, const float y , const float z)
 */
 void Camera::resetTransformation()
 {
-    memset(matrot, 0x0, sizeof(matrot));
-    matrot[0] =
-    matrot[5] =
-    matrot[10] =
-    matrot[15] = 1.0f;
+    memset(this->rotation, 0x0, sizeof(this->rotation));
+    this->rotation[0] =
+    this->rotation[5] =
+    this->rotation[10] =
+    this->rotation[15] = 1.0f;
 }
 
 
@@ -89,12 +81,14 @@ void Camera::resetTransformation()
 * rotate
 */
 void Camera::rotate(const Vec3<float> axis, float angle)
-{	
+{
+    float mattmp_1[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
+    float mattmp_2[16] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
     math::eulerorientation(axis, angle, mattmp_1);
-    math::mat4xmat4(matrot, mattmp_1, mattmp_2);
+    math::mat4xmat4(this->rotation, mattmp_1, mattmp_2);
 
-    memcpy(matrot, mattmp_2, sizeof(matrot));
-    this->updateNearInfo(matrot);
+    memcpy(this->rotation, mattmp_2, sizeof(this->rotation));
+    this->updateNearInfo(this->rotation);
 }
 
 
@@ -103,10 +97,10 @@ void Camera::rotate(const Vec3<float> axis, float angle)
 */
 void Camera::translate(const Vec3<float> v)
 {
-    math::translate(v, matrot);
-    this->nearcenter.x = matrot[12];
-    this->nearcenter.y = matrot[13];
-    this->nearcenter.z = matrot[14];
+    math::translate(v, this->rotation);
+    this->nearcenter.x = this->rotation[12];
+    this->nearcenter.y = this->rotation[13];
+    this->nearcenter.z = this->rotation[14];
 }
 
 
@@ -116,6 +110,15 @@ void Camera::translate(const Vec3<float> v)
 void Camera::getBasis(Mat3f* const basis)
 {
     *basis = this->basis;
+}
+
+
+/*
+* getPosition
+*/
+void Camera::getPosition(Vec3<float>* const position) const
+{
+    *position = this->nearcenter;
 }
 
 
