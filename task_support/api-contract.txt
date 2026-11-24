@@ -1,0 +1,26 @@
+公开新头liveMedia/include/HLSPartPublisher.hh：
+struct HLSPartInfo {
+ unsigned segmentNumber; // 沿用HLSSegmenter，从1开始
+ unsigned partNumber; // 每段从0开始
+ std::string fileName; // 此次事件自己拥有文件名
+ uint64_t offset, length, durationUS;
+};
+typedef void HLSPartCallback(void*, const HLSPartInfo&);
+struct HLSFileOps {
+ void* context;
+ FILE* (*open)(void*, const char*, const char*);
+ size_t (*write)(void*, const void*, size_t, size_t, FILE*);
+ int (*flush)(void*, FILE*);
+ int (*close)(void*, FILE*);
+};
+新实现落在liveMedia/HLSPartPublisher.cpp，管理sink的发布状态，与HLSSegmenter和MPEG2TransportStreamMultiplexor共用生产链。
+HLSSegmenter新增：
+ Boolean enablePartialSegments(unsigned partDurationUS, HLSPartCallback* cb, void* clientData,
+                               const HLSFileOps* ops = NULL);
+partDurationUS>0、cb非空，ops为空表示默认stdio；非空则四函数全部非空。只允许第一次startPlaying之前配置；非法/重复/已经开始后配置返回False，原状态不变。ops及文件名前缀复制保存；旧构造和整段回调继续可用。
+partial模式要求segmentationDuration>0且partDurationUS<=segmentationDuration*1000000，比较不溢出。
+底层可重构multiplexor的分段接口或增加内部边界回调，但两层只用同一份PCR展开时间，不能在sink重新解析一份TS时钟。保持旧setTimedSegmentation行为；新模式可用独立入口启用精确切分。仍以原来选出的fPCR_PID提供时钟，不修改ES编码数据。首个有效PCR建立0时刻（base为0也有效）；后续按27MHz模圈(2^33*300)的正向差展开，差小于半圈，时钟单调。SCR.isValid为False视为无PCR；扩展为0..299。没有后继时钟的尾范围duration为max(0,lastPCR-partStart)，27MHz差向下取整到微秒。
+边界只在PCR所属的一个新PES进入生产输出之前处理。若elapsed>=wholeTarget，优先结束旧段：先结清旧非空part并flush/close，旧整段回调，然后下一段从PAT、PMT开始，并在新段这个PCR建立part/whole起点；否则若elapsed>=partTarget，仅结束旧非空part并flush，继续同一文件写新part。大跨度不补造空范围、不追赶多次边界；数据PES的TS包不可一半在旧范围一半在新范围。同一次边界的旧范围时长由当前边界PCR减各自起点；各part时长和等于该整段时长。
+PAT/PMT均归实际写入的段/part，不额外插入每part表。TS PID连续计数遵守原连续流，不在文件边界随意重置。没有PCR的PES也必须输出；它们归正在累积的范围，首个PCR之前的表及数据归首段首part。还没有任何输入时EOF不得创建空.ts或发事件。
+part发布在完整范围write和fflush成功之后；最后part先发布，然后成功close，再调用旧整段回调。回调期间只允许读文件/复制事件，不支持重入start/stop/close。成功part事件fileName、offset、length之后不再改写；不要求fsync。write返回小于nmemb算失败，即使曾写一部分；flush非0/close非0算失败。失败停止源读取并调用标准关闭通知一次，UsageEnvironment保留可读错误，不能发失败part/整段事件；已经成功发布的part保留。不回滚落盘的失败尾字节，但不能把它广告成成功范围。所有文件句柄最多close一次，含close失败。stopPlaying或销毁是中止：关闭句柄但不补发未公布范围、不发整段完成；EOF为正常结束，恰好结清一次，末次时长可0。正常EOF没有输入不发事件。
+实现和新增材料采用C++20（此源码现有工具链要求）；无OpenSSL构建。不增加HTTP或m3u8清单功能。
