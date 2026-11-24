@@ -155,6 +155,23 @@ typedef struct encoder_state_config_frame_t {
   //! L0 reference index list size
   uint8_t ref_LX_size[2];
 
+  //! Snapshot of the input LTR mark command for this coding order.
+  int ltr_mark;
+  //! Snapshot of the input LTR use command for this coding order.
+  int ltr_use;
+
+  //! Short-term POCs written to this slice RPS, nearest first.
+  int ltr_short_count;
+  int32_t ltr_short_poc[16];
+
+  //! Distinct long-term pictures written to this slice RPS.
+  int ltr_lt_count;
+  struct {
+    int32_t poc;
+    int slot;
+    int used_by_curr;
+  } ltr_lt[2];
+
   bool is_irap;
   uint8_t pictype;
   enum kvz_slice_type slicetype;

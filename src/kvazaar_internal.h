@@ -42,6 +42,7 @@
 
 #include "kvazaar.h"
 #include "input_frame_buffer.h"
+#include "ltr.h"
 
 
 // Forward declarations.
@@ -78,6 +79,9 @@ struct kvz_encoder {
   bool scenecut_pending;
   /** \brief The input buffer has been restarted for the next scene cut picture. */
   bool scenecut_ready;
+
+  /** \brief Dual-slot long-term reference state. */
+  kvz_ltr_t ltr;
 };
 
 #endif // KVAZAAR_INTERNAL_H_

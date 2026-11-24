@@ -79,6 +79,8 @@ static void kvazaar_close(kvz_encoder *encoder)
     }
     FREE_POINTER(encoder->states);
 
+    kvz_ltr_destroy(&encoder->ltr);
+
     // Discard const from the pointer.
     kvz_encoder_control_free((void*) encoder->control);
     encoder->control = NULL;
@@ -87,9 +89,36 @@ static void kvazaar_close(kvz_encoder *encoder)
 }
 
 
+static int ltr_config_supported(const kvz_config *cfg)
+{
+  if (cfg->ltr_slots == 0) return 1;
+  if (cfg->ltr_slots != 2) return 0;
+
+  return KVZ_BIT_DEPTH == 8 &&
+         cfg->input_bitdepth == 8 &&
+         cfg->input_format == KVZ_FORMAT_P420 &&
+         cfg->chroma_format == KVZ_CSP_420 &&
+         cfg->source_scan_type == KVZ_INTERLACING_NONE &&
+         cfg->gop_len == 0 &&
+         cfg->intra_period == 0 &&
+         cfg->bipred == 0 &&
+         cfg->tmvp_enable == 0 &&
+         cfg->ref_frames >= 1 &&
+         cfg->ref_frames <= 4;
+}
+
 static kvz_encoder * kvazaar_open(const kvz_config *cfg)
 {
   kvz_encoder *encoder = NULL;
+
+  if (!ltr_config_supported(cfg)) {
+    if (cfg->enable_logging_output) {
+      fprintf(stderr,
+              "ltr-slots=2 requires 8-bit progressive I420, gop=0, "
+              "intra-period=0, bipred=0, tmvp=0 and ref in 1..4.\n");
+    }
+    return NULL;
+  }
 
   //Initialize strategies
   // TODO: Make strategies non-global
@@ -113,6 +142,9 @@ static kvz_encoder * kvazaar_open(const kvz_config *cfg)
   encoder->out_state_num = 0;
   encoder->frames_started = 0;
   encoder->frames_done = 0;
+
+  kvz_ltr_init(&encoder->ltr, cfg->ltr_slots == 2);
+  ((encoder_control_t *)encoder->control)->ltr = &encoder->ltr;
 
   kvz_init_input_frame_buffer(&encoder->input_buffer);
 
@@ -416,6 +448,18 @@ static int kvazaar_encode(kvz_encoder *enc,
                           kvz_picture **src_out,
                           kvz_frame_info *info_out)
 {
+  if (enc->ltr.enabled && pic_in != NULL) {
+    if (!kvz_ltr_validate_input(&enc->ltr, pic_in)) {
+      if (data_out) *data_out = NULL;
+      if (len_out) *len_out = 0;
+      if (pic_out) *pic_out = NULL;
+      if (src_out) *src_out = NULL;
+      if (info_out) memset(info_out, 0, sizeof(*info_out));
+      return 0;
+    }
+    ++enc->ltr.accepted_pics;
+  }
+
   if (enc->control->lookahead) {
     return encode_with_lookahead(enc, pic_in, data_out, len_out, pic_out, src_out, info_out);
   }

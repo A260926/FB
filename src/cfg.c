@@ -214,6 +214,7 @@ int kvz_config_init(kvz_config *cfg)
   cfg->mctf = 0;
   cfg->cutree_qg32 = -1;
   cfg->adaptive_gop = 0;
+  cfg->ltr_slots = 0;
 
   return 1;
 }
@@ -835,6 +836,11 @@ int kvz_config_parse(kvz_config *cfg, const char *name, const char *value)
     cfg->vps_period = atoi(value);
   else if OPT("ref")
     cfg->ref_frames = atoi(value);
+  else if OPT("ltr-slots") {
+    int ltr_slots = atoi(value);
+    if (ltr_slots != 0 && ltr_slots != 2) return 0;
+    cfg->ltr_slots = ltr_slots;
+  }
   else if OPT("deblock") {
     int beta, tc;
     if (2 == sscanf(value, "%d:%d", &beta, &tc)) {

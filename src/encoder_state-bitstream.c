@@ -46,6 +46,7 @@
 #include "imagelist.h"
 #include "kvazaar.h"
 #include "kvz_math.h"
+#include "ltr.h"
 #include "lookahead.h"
 #include "nal.h"
 #include "scalinglist.h"
@@ -155,6 +156,10 @@ static uint8_t max_required_dpb_size(const encoder_control_t * const encoder)
   }
 
   if (encoder->cfg.gop_len == 0) max_buffer = encoder->cfg.ref_frames + 1;
+
+  // The two LTR slots can add at most two retained pictures in addition to
+  // the sliding window and the current picture. Aliases/overlap use less.
+  if (encoder->cfg.ltr_slots == 2) max_buffer += KVZ_LTR_MAX_SLOTS;
 
   if (encoder->cfg.adaptive_gop) {
     // The pictures at the ends of the enclosing intervals and the current one.
@@ -549,13 +554,14 @@ static void encoder_state_write_bitstream_seq_parameter_set(bitstream_t* stream,
 
   WRITE_UE(stream, 0, "num_short_term_ref_pic_sets");
 
-  //IF num short term ref pic sets
-  //ENDIF
+  WRITE_U(stream, encoder->cfg.ltr_slots == 2 ? 1 : 0, 1,
+          "long_term_ref_pics_present_flag");
 
-  WRITE_U(stream, 0, 1, "long_term_ref_pics_present_flag");
-
-  //IF long_term_ref_pics_present
-  //ENDIF
+  if (encoder->cfg.ltr_slots == 2) {
+    // No SPS long-term POC table: every LTR picture is identified explicitly
+    // in the slice header.
+    WRITE_UE(stream, 0, "num_long_term_ref_pics_sps");
+  }
 
   WRITE_U(stream, state->encoder_control->cfg.tmvp_enable, 1,
           "sps_temporal_mvp_enable_flag");
@@ -864,6 +870,48 @@ static void kvz_encoder_state_write_bitstream_slice_header_independent(
     int poc_shift = 0;
 
     WRITE_U(stream, 0, 1, "short_term_ref_pic_set_sps_flag");
+
+    const bool ltr_mode = encoder->cfg.ltr_slots == 2;
+    if (ltr_mode) {
+      WRITE_UE(stream, state->frame->ltr_short_count, "num_negative_pics");
+      WRITE_UE(stream, 0, "num_positive_pics");
+
+      int last_delta = 0;
+      for (int i = 0; i < state->frame->ltr_short_count; ++i) {
+        const int32_t ref_poc = state->frame->ltr_short_poc[i];
+        const int delta_poc = state->frame->poc - ref_poc;
+        int used = 0;
+        for (int r = 0; r < state->frame->ref_LX_size[0]; ++r) {
+          const uint8_t idx = state->frame->ref_LX[0][r];
+          if (idx < state->frame->ref->used_size &&
+              state->frame->ref->pocs[idx] == ref_poc) {
+            used = 1;
+          }
+        }
+        WRITE_UE(stream, delta_poc - last_delta - 1, "delta_poc_s0_minus1");
+        last_delta = delta_poc;
+        WRITE_U(stream, used, 1, "used_by_curr_pic_s0_flag");
+      }
+
+      // num_long_term_sps is absent because the SPS LT picture count is zero.
+      WRITE_UE(stream, state->frame->ltr_lt_count, "num_long_term_pics");
+
+      const int poc_mask = (1 << encoder->poc_lsb_bits) - 1;
+      for (int i = 0; i < state->frame->ltr_lt_count; ++i) {
+        const int32_t lt_poc = state->frame->ltr_lt[i].poc;
+        WRITE_U(stream, lt_poc & poc_mask, encoder->poc_lsb_bits, "poc_lsb_lt");
+        WRITE_U(stream, state->frame->ltr_lt[i].used_by_curr, 1,
+                "used_by_curr_pic_lt_flag");
+        const int msb_present = kvz_ltr_msb_present(state, lt_poc);
+        WRITE_U(stream, msb_present, 1, "delta_poc_msb_present_flag");
+        if (msb_present) {
+          WRITE_UE(stream, kvz_ltr_msb_cycle_delta(state, lt_poc),
+                   "delta_poc_msb_cycle_lt");
+        }
+      }
+    }
+
+    if (!ltr_mode) {
     WRITE_UE(stream, ref_negative, "num_negative_pics");
     WRITE_UE(stream, ref_positive, "num_positive_pics");
     const bool agop_rps = encoder->cfg.adaptive_gop && state->frame->la &&
@@ -945,9 +993,10 @@ static void kvz_encoder_state_write_bitstream_slice_header_independent(
       last_poc = delta_poc;
       WRITE_U(stream, !state->frame->is_irap, 1, "used_by_curr_pic_s1_flag");
     }
+    } // !ltr_mode
     //WRITE_UE(stream, 0, "short_term_ref_pic_set_idx");
-    
-    if (state->encoder_control->cfg.tmvp_enable) {
+
+    if (!ltr_mode && state->encoder_control->cfg.tmvp_enable) {
       WRITE_U(stream, ref_negative ? 1 : 0, 1, "slice_temporal_mvp_enabled_flag");
     }
   }

@@ -1799,10 +1799,30 @@ static void search_pu_inter(encoder_state_t * const state,
     // Don't add duplicates to list
     bool active_L0 = cur_pu->inter.mv_dir & 1;
     bool active_L1 = cur_pu->inter.mv_dir & 2;
+    uint8_t merge_dpb0 = 0xff, merge_dpb1 = 0xff;
+    bool bad_ref = false;
+    if (active_L0) {
+      if (cur_pu->inter.mv_ref[0] >= state->frame->ref_LX_size[0]) bad_ref = true;
+      else {
+        merge_dpb0 = state->frame->ref_LX[0][cur_pu->inter.mv_ref[0]];
+        if (merge_dpb0 >= state->frame->ref->used_size ||
+            !state->frame->ref->images[merge_dpb0]) bad_ref = true;
+      }
+    }
+    if (active_L1) {
+      if (cur_pu->inter.mv_ref[1] >= state->frame->ref_LX_size[1]) bad_ref = true;
+      else {
+        merge_dpb1 = state->frame->ref_LX[1][cur_pu->inter.mv_ref[1]];
+        if (merge_dpb1 >= state->frame->ref->used_size ||
+            !state->frame->ref->images[merge_dpb1]) bad_ref = true;
+      }
+    }
+    if (bad_ref) continue;
+
     if ((active_L0 && !fracmv_within_tile(info, cur_pu->inter.mv[0][0], cur_pu->inter.mv[0][1],
-          state->frame->ref_LX[0][cur_pu->inter.mv_ref[0]])) ||
+          merge_dpb0)) ||
         (active_L1 && !fracmv_within_tile(info, cur_pu->inter.mv[1][0], cur_pu->inter.mv[1][1],
-          state->frame->ref_LX[1][cur_pu->inter.mv_ref[1]])) ||
+          merge_dpb1)) ||
         is_duplicate)
     {
       continue;
@@ -1900,11 +1920,23 @@ static void search_pu_inter(encoder_state_t * const state,
     }
   }
 
-  for (int ref_idx = 0; ref_idx < state->frame->ref->used_size; ref_idx++) {
-    info->ref_idx = ref_idx;
-    info->ref = state->frame->ref->images[ref_idx];
+  if (cfg->ltr_slots == 2) {
+    // The DPB image list also contains retained-but-inactive LTR pictures.
+    // Search only the signalled active L0 list and map its list index to the
+    // DPB image index.
+    for (int i = 0; i < state->frame->ref_LX_size[0]; ++i) {
+      int ref_idx = state->frame->ref_LX[0][i];
+      info->ref_idx = ref_idx;
+      info->ref = state->frame->ref->images[ref_idx];
+      search_pu_inter_ref(info, depth, lcu, cur_pu, amvp);
+    }
+  } else {
+    for (int ref_idx = 0; ref_idx < state->frame->ref->used_size; ref_idx++) {
+      info->ref_idx = ref_idx;
+      info->ref = state->frame->ref->images[ref_idx];
 
-    search_pu_inter_ref(info, depth, lcu, cur_pu, amvp);
+      search_pu_inter_ref(info, depth, lcu, cur_pu, amvp);
+    }
   }
 
   assert(amvp[0].size <= MAX_UNIT_STATS_MAP_SIZE);

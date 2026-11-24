@@ -1565,6 +1565,12 @@ uint8_t kvz_inter_get_merge_cand(const encoder_state_t * const state,
   }
 
   int num_ref = state->frame->ref->used_size;
+  if (state->encoder_control->cfg.ltr_slots == 2 &&
+      state->frame->slicetype == KVZ_SLICE_P) {
+    // Retained-but-inactive LTR pictures stay in the DPB image list but are
+    // not allowed to enlarge the signalled/active L0 list.
+    num_ref = state->frame->ref_LX_size[0];
+  }
 
   if (candidates < max_num_cands && state->frame->slicetype == KVZ_SLICE_B) {
     uint32_t j;

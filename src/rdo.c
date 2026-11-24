@@ -1081,6 +1081,12 @@ double kvz_calc_mvd_cost_cabac(const encoder_state_t * state,
     uint32_t ref_list_idx;
     uint32_t j;
     int ref_list[2] = { 0, 0 };
+    if (state->encoder_control->cfg.ltr_slots == 2) {
+      // Retained-but-inactive LTR pictures are in the DPB image list but do
+      // not enlarge the active reference list used to code ref_idx.
+      ref_list[0] = state->frame->ref_LX_size[0];
+      ref_list[1] = state->frame->ref_LX_size[1];
+    } else
     for (j = 0; j < state->frame->ref->used_size; j++) {
       if (state->frame->ref->pocs[j] < state->frame->poc) {
         ref_list[0]++;

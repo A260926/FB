@@ -1,0 +1,11 @@
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/kvazaar_objects.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/kvazaar.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/dist.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/distcheck.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/test.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS67B073226934U15385R25FFB9C2B0/attempts/20261124T171545389872Z/repo/.task-build/kvz/CMakeFiles/install/strip.dir

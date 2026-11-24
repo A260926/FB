@@ -95,6 +95,8 @@ KVZ_LIB_SOURCES = \
 	kvazaar.c \
 	kvazaar_internal.h \
 	kvz_math.h \
+	ltr.c \
+	ltr.h \
 	ml_intra_cu_depth_pred.c \
 	ml_intra_cu_depth_pred.h \
 	nal.c \

@@ -1,0 +1,2 @@
+#!/bin/bash
+f=".task-build/mktemp-logs/log.$$.$RANDOM"; : > "$f"; echo "$PWD/$f"

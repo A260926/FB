@@ -547,6 +547,9 @@ typedef struct kvz_config
    *         access mini-GOP and places the periodic key pictures. */
   int8_t adaptive_gop;
 
+  /** \brief Number of long-term reference slots: 0 disables LTR, 2 enables. */
+  int ltr_slots;
+
 } kvz_config;
 
 /**
@@ -598,6 +601,12 @@ typedef struct kvz_picture {
   } roi;
 
   int8_t gop_layer; //!< \brief GOP layer of a reconstructed picture (adaptive GOP).
+
+  /** \brief Long-term slot to replace with this picture's reconstruction, or -1. */
+  int ltr_mark;
+
+  /** \brief Long-term slot used as the only L0 reference, or -1 for short-term. */
+  int ltr_use;
 
 } kvz_picture;
 

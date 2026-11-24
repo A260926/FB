@@ -106,6 +106,9 @@ kvz_picture * kvz_image_alloc(enum kvz_chroma_format chroma_format, const int32_
   im->pts = 0;
   im->dts = 0;
 
+  im->ltr_mark = -1;
+  im->ltr_use = -1;
+
   im->interlacing = KVZ_INTERLACING_NONE;
 
   im->roi.roi_array = NULL;
@@ -212,6 +215,8 @@ kvz_picture *kvz_image_make_subimage(kvz_picture *const orig_image,
 
   im->pts = 0;
   im->dts = 0;
+  im->ltr_mark = -1;
+  im->ltr_use = -1;
 
   im->roi = orig_image->roi;
 

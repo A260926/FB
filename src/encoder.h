@@ -161,6 +161,9 @@ typedef struct encoder_control_t
   //! Lookahead, NULL if not used. Accessed only from the API thread.
   struct kvz_lookahead *lookahead;
 
+  //! Dual-slot long-term reference manager, owned by the public encoder.
+  struct kvz_ltr *ltr;
+
 } encoder_control_t;
 
 encoder_control_t* kvz_encoder_control_init(const kvz_config *cfg);

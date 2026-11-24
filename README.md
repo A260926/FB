@@ -506,6 +506,68 @@ must be defined. On other platforms it's not strictly required.
 
 The needed linker and compiler flags can be obtained with pkg-config.
 
+### Long-term reference slots
+
+`kvz_config.ltr_slots` selects the experimental dual-slot long-term
+reference mode:
+
+- `0` (default): old behavior. `kvz_picture.ltr_mark` and
+  `kvz_picture.ltr_use` are ignored, including invalid values, and streams
+  remain unchanged.
+- `2`: enable slots `0` and `1`. `config_parse(cfg, "ltr-slots", "2")`
+  enables the same mode through the string API.
+
+Each input picture has two appended value fields, initialized to `-1` by
+`kvz_picture_alloc`:
+
+- `ltr_mark = -1`: do not change a slot. `ltr_mark = 0` or `1`: make that
+  slot point to this picture's reconstruction for subsequent inputs. The
+  mark takes effect after the current picture, so `ltr_mark == s` and
+  `ltr_use == s` on one picture makes the current picture use the old slot
+  version and lets later pictures see the newly marked version.
+- `ltr_use = -1`: use the normal short-term sliding window.
+  `ltr_use = 0` or `1`: make L0 contain only the previously stored picture
+  in that slot.
+
+Both fields accept only `-1`, `0`, and `1`. The first IDR may mark a slot
+but may not use one. Using an uninitialized slot or any illegal value makes
+`encoder_encode()` return `0` with all outputs cleared before the input is
+consumed; correcting the fields and retrying the same input is supported.
+Commands are copied by value when the input is accepted, so releasing the
+caller's picture immediately, reusing PTS values, OWF state-ring reuse, and
+NULL draining do not rebind a command.
+
+The stream writes standard HEVC long-term reference syntax: SPS sets
+`long_term_ref_pics_present_flag` and contains no SPS LTR POC table; slice
+headers list retained short-term POC deltas and explicit LTR
+`poc_lsb_lt`/`delta_poc_msb_cycle_lt` values. Initialized but unused slots
+remain in the RPS retention set with `used_by_curr_pic_lt_flag = 0`.
+Distinct slot pictures are deduplicated in the DPB, including aliases.
+
+In this restricted mode the DPB contains the current picture, at most
+`ref_frames` sliding-window pictures, and at most two additional distinct
+LTR pictures, so the worst-case bound is `ref_frames + 3` pictures and
+`sps_max_dec_pic_buffering_minus1 + 1 = ref_frames + 3`. Aliases and
+overlap between a slot and the sliding window use less space.
+
+`ltr_slots = 2` is accepted by `encoder_open()` only for 8-bit progressive
+I420, `gop_len = 0`, `intra_period = 0`, `bipred = 0`,
+`tmvp_enable = 0`, and `ref_frames` in `1..4`. WPP, `owf = 0` or `2`, and
+two or more encoder threads are supported. Other configurations are
+rejected at open time.
+
+A runnable Annex-B example is in
+[`examples/ltr_example.c`](examples/ltr_example.c):
+
+```sh
+cc -std=c11 -DKVZ_STATIC_LIB -I src examples/ltr_example.c \
+  build/libkvazaar.a -lm -lpthread -o ltr-example
+./ltr-example ltr-example.h265
+```
+
+`tests/ltr_cases.c` contains the `slots`, `syntax`, `pipeline`, and
+`compat` task suites and is exercised by `bash task_support/run.sh target`.
+
 
 ## Compiling Kvazaar
 If you have trouble regarding compiling the source code, please make an

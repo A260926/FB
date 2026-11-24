@@ -47,6 +47,7 @@
 #include "encoder_state-bitstream.h"
 #include "filter.h"
 #include "image.h"
+#include "ltr.h"
 #include "rate_control.h"
 #include "lookahead.h"
 #include "kvz_math.h"
@@ -1265,6 +1266,11 @@ static void encoder_state_remove_refs(encoder_state_t *state) {
     return;
   }
 
+  if (encoder->cfg.ltr_slots == 2) {
+    kvz_ltr_reconcile_refs(state);
+    return;
+  }
+
   int neg_refs = encoder->cfg.gop[state->frame->gop_offset].ref_neg_count;
   int pos_refs = encoder->cfg.gop[state->frame->gop_offset].ref_pos_count;
 
@@ -1598,6 +1604,12 @@ static void encoder_state_init_new_frame(encoder_state_t * const state, kvz_pict
 
   const kvz_config * const cfg = &state->encoder_control->cfg;
 
+  // Copy LTR commands by value so later caller mutations cannot rebind them.
+  state->frame->ltr_mark = frame->ltr_mark;
+  state->frame->ltr_use = frame->ltr_use;
+  state->frame->ltr_short_count = 0;
+  state->frame->ltr_lt_count = 0;
+
   if (state->frame->new_segment) {
     state->frame->segment_start = state->frame->num;
   }
@@ -1835,6 +1847,9 @@ static void encoder_state_init_new_frame(encoder_state_t * const state, kvz_pict
 
   encoder_state_remove_refs(state);
   kvz_encoder_create_ref_lists(state);
+  if (cfg->ltr_slots == 2) {
+    kvz_ltr_apply_ref_lists(state);
+  }
 
   // Set slicetype.
   if (state->frame->is_irap) {
@@ -1983,6 +1998,10 @@ void kvz_encode_one_frame(encoder_state_t * const state, kvz_picture* frame)
   kvz_threadqueue_submit(state->encoder_control->threadqueue, job);
   assert(!state->tqj_bitstream_written);
   state->tqj_bitstream_written = job;
+
+  if (state->encoder_control->cfg.ltr_slots == 2) {
+    kvz_ltr_commit_mark(state);
+  }
 
   state->frame->done = 0;
 }
