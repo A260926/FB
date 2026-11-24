@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/quickjs-ng/quickjs",
+  "commit": "a71d444be5f72cb6b3418aff4f05cffb8af3690f",
+  "license": "MIT",
+  "export": "Native source snapshot; optional test262 gitlink and .gitmodules excluded."
+}
