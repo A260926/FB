@@ -1,0 +1,21 @@
+mtllib local.mtl
+o base
+v 9 9 9
+v 0 0 0
+v 1 0 0
+v 0 1 0
+vt 0 0
+vt 1 0
+vt 0 1
+vn 0 0 1
+usemtl red
+s 7
+g anchor
+f -3/-3/-1 -2/-2/-1 -1/-1/-1
+v 7 7 7
+vt 0.5 0.5
+vn 0 1 0
+g later
+usemtl blue
+s off
+f 2 3 4
