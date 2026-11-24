@@ -1,0 +1,45 @@
+{
+  "repo": "https://github.com/Matroska-Org/libmatroska",
+  "commit": "f5315fddda2d434e47035c038549a808d8b8eac7",
+  "license": "LGPL-2.1-or-later",
+  "dependencies": [
+    {
+      "repo": "https://github.com/Matroska-Org/libebml",
+      "commit": "1878e784321673561039a6a37076b2736f4dc98f",
+      "license": "LGPL-2.1-or-later",
+      "path": "third_party/libebml"
+    }
+  ],
+  "exclusions": [],
+  "gitlinks": [],
+  "gitmodules": false,
+  "symlinks": [],
+  "fixtures": [
+    {
+      "path": "test/fixtures/LICENSE",
+      "sha256": "11bc83f6f89c55bea57a159a767bc4b315c5b70d0223f7488f001dfc94f4d58c",
+      "license": "CC0-1.0",
+      "origin": "Synthetic Theora frames and Xiph-laced CodecPrivate extracted from a synthetic frames.ogv; encoder not needed at runtime"
+    },
+    {
+      "path": "test/fixtures/codec-private.bin",
+      "sha256": "e6aaadc6c8d2e26e60850ea1313721d243cea9ecc4c0fd11325701b7b94d5185",
+      "license": "CC0-1.0",
+      "origin": "Synthetic Theora frames and Xiph-laced CodecPrivate extracted from a synthetic frames.ogv; encoder not needed at runtime"
+    },
+    {
+      "path": "test/fixtures/frame0.packet",
+      "sha256": "9e22cfdc349108ccd5fcb24a5b1c8b55119b9fb188743bce3e9f63aabdae4c3a",
+      "license": "CC0-1.0",
+      "origin": "Synthetic Theora frames and Xiph-laced CodecPrivate extracted from a synthetic frames.ogv; encoder not needed at runtime"
+    },
+    {
+      "path": "test/fixtures/frame1.packet",
+      "sha256": "80b43722ac16179f5a5c0943fb9bdf5904cb298b095137551c3fb262d25db011",
+      "license": "CC0-1.0",
+      "origin": "Synthetic Theora frames and Xiph-laced CodecPrivate extracted from a synthetic frames.ogv; encoder not needed at runtime"
+    }
+  ],
+  "build": "task_support/cmake adds bundled ebml target; FindEBML refuses host package lookup. No runtime download, account or cache dependency.",
+  "support": "Production goal header/sources/tests/example are absent. Fixed consumer supplies calls and normal assertions, never implementation."
+}

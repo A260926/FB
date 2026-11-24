@@ -1,0 +1,7 @@
+if(NOT TARGET EBML::ebml)
+  message(FATAL_ERROR "Only the bundled libebml target is supported")
+endif()
+set(EBML_VERSION 1.4.5)
+set(EBML_LOCAL_TARGET TRUE)
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(EBML REQUIRED_VARS EBML_LOCAL_TARGET VERSION_VAR EBML_VERSION)
