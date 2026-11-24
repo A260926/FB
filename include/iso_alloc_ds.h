@@ -314,16 +314,48 @@ typedef struct {
     iso_alloc_zone_t *by_class[SIZE_CLASS_COUNT];
 } __attribute__((aligned(sizeof(int64_t)))) iso_zone_cache_t;
 
+/* One chunk held in a transferable FIFO quarantine. Records live in
+ * allocator owned metadata (thread state or a ticket slot), never
+ * threaded through the freed user chunk itself. zone is the small
+ * zone that owns ptr, or NULL for a big zone chunk */
+typedef struct iso_quarantine_record {
+    uintptr_t ptr;
+    size_t bytes;
+    iso_alloc_zone_t *zone;
+} iso_quarantine_record_t;
+
 /* Chunks passed to iso_free wait here until the quarantine
  * is full, then they are freed in one batch under the root
  * lock. With THREAD_SUPPORT each thread owns one of these in
  * thread local storage so the common free path never takes
  * the root lock. The busy flag serializes the owning thread
  * against another thread flushing this quarantine when it
- * destroys a zone, see flush_all_quarantines */
+ * destroys a zone, see flush_all_quarantines
+ *
+ * A thread that never called iso_quarantine_configure uses only
+ * the legacy chunks[] ring and keeps the original batch-at-64
+ * behaviour. Once configured non-zero the transferable FIFO in
+ * records[] is used instead, with byte accounting and cumulative
+ * counters. iso_quarantine_configure(0, 0) drains and switches the
+ * FIFO off so frees return immediately */
 typedef struct iso_quarantine_t {
+    /* Legacy fixed batch for unconfigured threads */
     uintptr_t chunks[CHUNK_QUARANTINE_SZ];
     uint32_t count;
+
+    /* Transferable FIFO for configured threads and tickets. One extra
+     * slot holds the incoming record before budget eviction compacts it */
+    iso_quarantine_record_t records[CHUNK_QUARANTINE_SZ + 1];
+    uint32_t fifo_count;
+    size_t pending_bytes;
+    size_t max_chunks;
+    size_t max_bytes;
+    uint64_t released_budget;
+    uint64_t released_flush;
+    uint64_t released_zone;
+    /* 0 = never configured (legacy ring), 1 = configured FIFO,
+     * 2 = explicitly switched off with configure(0, 0) */
+    uint8_t mode;
 #if THREAD_SUPPORT
     atomic_flag busy;
     struct iso_quarantine_t *next;

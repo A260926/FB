@@ -316,6 +316,26 @@ EXTERNAL_API FLATTEN void iso_flush_caches(void) {
     flush_caches();
 }
 
+EXTERNAL_API int iso_quarantine_configure(size_t max_chunks, size_t max_bytes) {
+    return _iso_quarantine_configure(max_chunks, max_bytes);
+}
+
+EXTERNAL_API uint64_t iso_quarantine_detach(void) {
+    return _iso_quarantine_detach();
+}
+
+EXTERNAL_API int iso_quarantine_adopt(uint64_t ticket) {
+    return _iso_quarantine_adopt(ticket);
+}
+
+EXTERNAL_API int iso_quarantine_discard(uint64_t ticket) {
+    return _iso_quarantine_discard(ticket);
+}
+
+EXTERNAL_API int iso_quarantine_snapshot(uint64_t ticket, iso_quarantine_stats *out) {
+    return _iso_quarantine_snapshot(ticket, out);
+}
+
 #if HEAP_PROFILER
 EXTERNAL_API FLATTEN size_t iso_get_alloc_traces(iso_alloc_traces_t *traces_out) {
     return _iso_get_alloc_traces(traces_out);

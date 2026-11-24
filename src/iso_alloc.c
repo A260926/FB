@@ -379,12 +379,11 @@ INTERNAL_HIDDEN void _iso_alloc_destroy_zone(iso_alloc_zone_t *zone) {
 
     /* Clearing this threads cache needs no lock but happens
      * here so another thread cannot cache the zone we are
-     * about to unmap. Every threads quarantine is flushed so
-     * none of them holds a chunk from it, and that happens
-     * before the zone lock is taken because the flush frees
-     * chunks that may live in this very zone */
+     * about to unmap. Only quarantine records that belong to
+     * this zone are returned, from every thread and ticket;
+     * records of other zones stay queued in order */
     clear_zone_cache();
-    flush_all_quarantines();
+    quarantine_purge_for_zone(zone);
 
     LOCK_ZONE(zone);
     _iso_alloc_destroy_zone_unlocked(zone, true);
@@ -2188,6 +2187,12 @@ INTERNAL_HIDDEN void _iso_free_from_zone(void *p, iso_alloc_zone_t *zone, bool p
         LOG_AND_ABORT("Chunk at 0x%p does not belong to zone[%d] for chunk size %d", p, zone->index, zone->chunk_size);
     }
 
+    /* Permanent zone frees still return at once; a configured FIFO
+     * takes every ordinary zone free */
+    if(permanent == false && quarantine_offer(p, zone) == true) {
+        return;
+    }
+
     _iso_free_internal_unlocked(p, permanent, zone, false);
 }
 
@@ -2199,13 +2204,19 @@ INTERNAL_HIDDEN void flush_caches(void) {
     iso_quarantine_t *q = THREAD_QUARANTINE();
 
     LOCK_QUARANTINE(q);
+    /* An explicit flush is accounted as released_flush. Count both
+     * storages even though only one is active for a given mode */
+    const uint64_t held = (uint64_t) q->count + q->fifo_count;
     flush_quarantine(q, false);
+    q->released_flush += held;
     UNLOCK_QUARANTINE(q);
 }
 
 /* Frees every chunk in the quarantine. The caller holds the
  * quarantine lock and says whether it holds the root lock,
- * which the free path must then not take again */
+ * which the free path must then not take again. This is the
+ * low level drain used by explicit flushes, thread exit and
+ * global teardown; it does no counter accounting itself */
 INTERNAL_HIDDEN void flush_quarantine(iso_quarantine_t *q, bool root_held) {
     const uint32_t count = q->count;
 
@@ -2215,12 +2226,540 @@ INTERNAL_HIDDEN void flush_quarantine(iso_quarantine_t *q, bool root_held) {
 
     __iso_memset(q->chunks, 0x0, sizeof(q->chunks));
     q->count = 0;
+
+    const uint32_t fifo_count = q->fifo_count;
+
+    for(uint32_t i = 0; i < fifo_count; i++) {
+        _iso_free_internal_unlocked((void *) q->records[i].ptr, false, q->records[i].zone, root_held);
+    }
+
+    q->fifo_count = 0;
+    q->pending_bytes = 0;
+}
+
+/* ===================== transferable quarantine batches =====================
+ *
+ * A configured thread keeps a FIFO of iso_quarantine_record_t in its
+ * own state block. detach copies that FIFO into one of the ticket
+ * slots below, which live in static metadata: they are neither
+ * iso_alloc allocations nor libc malloc memory, so creating or
+ * consuming a ticket never recurses into this library. Ticket
+ * identity is a process wide monotonic id that is never reset, not
+ * even by iso_alloc_destroy with ISO_DTOR_CLEANUP, so an old ticket
+ * can never validate after a reinitialization.
+ *
+ * Lock order: root, then thread registry, then a thread quarantine.
+ * The ticket table lock is taken before a thread quarantine by
+ * detach/adopt, and while root is held by zone destruction after the
+ * registry has been released: root -> ticket table -> ticket/quarantine
+ * -> zone. Nothing ever takes the ticket table or root while holding
+ * a thread quarantine, so the orders never form a cycle. */
+
+#define ISO_QUARANTINE_TICKET_MAX 64
+
+typedef struct iso_quarantine_ticket {
+    /* Monotonic identity handed to the caller, 0 means a free slot */
+    uint64_t id;
+    iso_quarantine_t q;
+} iso_quarantine_ticket_t;
+
+static iso_quarantine_ticket_t q_tickets[ISO_QUARANTINE_TICKET_MAX];
+static uint64_t q_ticket_next_id = 1;
+
+#if THREAD_SUPPORT
+/* Zero initialized atomic_flag reads as clear, like thread_registry_flag */
+static atomic_flag q_ticket_lock;
+
+#define LOCK_TICKETS() \
+    do {               \
+    } while(atomic_flag_test_and_set_explicit(&q_ticket_lock, memory_order_acquire))
+
+#define UNLOCK_TICKETS() \
+    atomic_flag_clear_explicit(&q_ticket_lock, memory_order_release)
+#else
+#define LOCK_TICKETS()
+#define UNLOCK_TICKETS()
+#endif
+
+/* Caller holds q. Removes the oldest prefix until both configured
+ * limits are met, billing every removed chunk to released_budget */
+static void q_enforce_budgets_locked(iso_quarantine_t *q, bool root_held) {
+    while(q->fifo_count > q->max_chunks || q->pending_bytes > q->max_bytes) {
+        iso_quarantine_record_t old = q->records[0];
+
+        q->released_budget++;
+        q->pending_bytes -= old.bytes;
+        q->fifo_count--;
+
+        _iso_free_internal_unlocked((void *) old.ptr, false, old.zone, root_held);
+
+        /* At most CHUNK_QUARANTINE_SZ records so a compaction is cheap */
+        memmove(&q->records[0], &q->records[1],
+                q->fifo_count * sizeof(iso_quarantine_record_t));
+    }
+}
+
+/* Returns true when p belongs to a configured transferable FIFO and
+ * this call has fully handled it (queued it, evicted a prefix, or
+ * immediately returned an oversized chunk). Returns false when the
+ * caller must run its original free path. known_zone may be supplied
+ * by a caller that already resolved and validated the zone */
+INTERNAL_HIDDEN bool quarantine_offer(void *p, iso_alloc_zone_t *known_zone) {
+    iso_quarantine_t *q = THREAD_QUARANTINE();
+
+    if(q->mode != 1) {
+        return false;
+    }
+
+    /* Bill by the real iso_chunksz before the release. Resolve the
+     * owning small zone once; a NULL zone means a big zone chunk and
+     * _iso_chunk_size resolves its size */
+    iso_alloc_zone_t *zone = known_zone;
+    size_t bytes;
+
+    if(zone != NULL) {
+        bytes = zone->chunk_size;
+    } else {
+        zone = iso_find_zone_range(p);
+        bytes = (zone != NULL) ? zone->chunk_size : _iso_chunk_size(p);
+    }
+
+    LOCK_QUARANTINE(q);
+
+    /* A chunk that alone exceeds the byte budget is returned at once
+     * without evicting or disturbing the older FIFO */
+    if(UNLIKELY(bytes > q->max_bytes)) {
+        q->released_budget++;
+        UNLOCK_QUARANTINE(q);
+        _iso_free_internal_unlocked(p, false, zone, false);
+        return true;
+    }
+
+    q->records[q->fifo_count].ptr = (uintptr_t) p;
+    q->records[q->fifo_count].bytes = bytes;
+    q->records[q->fifo_count].zone = zone;
+    q->fifo_count++;
+    q->pending_bytes += bytes;
+
+    q_enforce_budgets_locked(q, false);
+
+    UNLOCK_QUARANTINE(q);
+
+#if ZONE_PURGE_DELAY_MS > 0
+    /* Mirrors the legacy full flush path */
+    maybe_purge_idle_zones();
+#endif
+
+    return true;
+}
+
+INTERNAL_HIDDEN int _iso_quarantine_configure(size_t max_chunks, size_t max_bytes) {
+    /* Accept only (0, 0) or 1..64 chunks together with positive bytes */
+    if(!((max_chunks == 0 && max_bytes == 0) ||
+         (max_chunks >= 1 && max_chunks <= CHUNK_QUARANTINE_SZ && max_bytes > 0))) {
+        return -1;
+    }
+
+    iso_quarantine_t *q = THREAD_QUARANTINE();
+    LOCK_QUARANTINE(q);
+
+    if(max_chunks == 0) {
+        /* Explicitly switched off: drain anything held as an explicit
+         * flush and enter mode 2 so later ordinary frees return at once */
+        const uint64_t held = (uint64_t) q->count + q->fifo_count;
+        flush_quarantine(q, false);
+        q->released_flush += held;
+        q->mode = 2;
+        q->max_chunks = 0;
+        q->max_bytes = 0;
+        UNLOCK_QUARANTINE(q);
+        return 0;
+    }
+
+    /* The first configure on a thread that already accumulated legacy
+     * ring records converts them to FIFO records in release order */
+    if(q->mode == 0 && q->count != 0) {
+        for(uint32_t i = 0; i < q->count; i++) {
+            void *p = (void *) q->chunks[i];
+            iso_alloc_zone_t *z = iso_find_zone_range(p);
+            size_t b = (z != NULL) ? z->chunk_size : _iso_chunk_size(p);
+
+            q->records[q->fifo_count].ptr = (uintptr_t) p;
+            q->records[q->fifo_count].bytes = b;
+            q->records[q->fifo_count].zone = z;
+            q->pending_bytes += b;
+            q->fifo_count++;
+        }
+
+        q->count = 0;
+        __iso_memset(q->chunks, 0x0, sizeof(q->chunks));
+    }
+
+    q->mode = 1;
+    q->max_chunks = max_chunks;
+    q->max_bytes = max_bytes;
+
+    /* Tightening runs the same oldest prefix eviction */
+    q_enforce_budgets_locked(q, false);
+
+    UNLOCK_QUARANTINE(q);
+    return 0;
+}
+
+INTERNAL_HIDDEN uint64_t _iso_quarantine_detach(void) {
+    iso_quarantine_t *q = THREAD_QUARANTINE();
+
+    LOCK_TICKETS();
+
+    int slot = -1;
+
+    for(int i = 0; i < ISO_QUARANTINE_TICKET_MAX; i++) {
+        if(q_tickets[i].id == 0) {
+            slot = i;
+            break;
+        }
+    }
+
+    /* No ticket slot: leave the thread state completely untouched */
+    if(slot == -1) {
+        UNLOCK_TICKETS();
+        return 0;
+    }
+
+    LOCK_QUARANTINE(q);
+
+    /* Only a configured FIFO queue carries budgets worth transferring */
+    if(q->mode != 1) {
+        UNLOCK_QUARANTINE(q);
+        UNLOCK_TICKETS();
+        return 0;
+    }
+
+    /* Monotonic identity. The counter is never reset, including by full
+     * destroy/reinitialize, so an old ticket value can never validate
+     * again. The 2^64 wrap is unreachable but keep zero an invalid id */
+    const uint64_t id = q_ticket_next_id++;
+
+    if(q_ticket_next_id == 0) {
+        q_ticket_next_id = 1;
+    }
+
+    iso_quarantine_ticket_t *t = &q_tickets[slot];
+    iso_quarantine_t *tq = &t->q;
+
+    t->id = id;
+    memcpy(tq->records, q->records, sizeof(tq->records));
+    tq->fifo_count = q->fifo_count;
+    tq->pending_bytes = q->pending_bytes;
+    tq->max_chunks = q->max_chunks;
+    tq->max_bytes = q->max_bytes;
+    tq->released_budget = q->released_budget;
+    tq->released_flush = q->released_flush;
+    tq->released_zone = q->released_zone;
+    tq->mode = 1;
+
+    /* The thread returns to the unconfigured legacy state with its
+     * cumulative counters cleared, the records now belong to the ticket */
+    q->fifo_count = 0;
+    q->pending_bytes = 0;
+    q->max_chunks = 0;
+    q->max_bytes = 0;
+    q->released_budget = 0;
+    q->released_flush = 0;
+    q->released_zone = 0;
+    q->mode = 0;
+    q->count = 0;
+    __iso_memset(q->records, 0x0, sizeof(q->records));
+    __iso_memset(q->chunks, 0x0, sizeof(q->chunks));
+
+    UNLOCK_QUARANTINE(q);
+    UNLOCK_TICKETS();
+    return id;
+}
+
+INTERNAL_HIDDEN int _iso_quarantine_adopt(uint64_t ticket) {
+    if(ticket == 0) {
+        return -1;
+    }
+
+    LOCK_TICKETS();
+
+    iso_quarantine_ticket_t *t = NULL;
+
+    for(int i = 0; i < ISO_QUARANTINE_TICKET_MAX; i++) {
+        if(q_tickets[i].id == ticket) {
+            t = &q_tickets[i];
+            break;
+        }
+    }
+
+    /* Invalid or already consumed ticket. Resolve this before touching
+     * thread state so a bad id never forces state creation */
+    if(t == NULL) {
+        UNLOCK_TICKETS();
+        return -1;
+    }
+
+    iso_quarantine_t *q = THREAD_QUARANTINE();
+    LOCK_QUARANTINE(q);
+
+    /* Adoption target must itself be configured */
+    if(q->mode != 1) {
+        UNLOCK_QUARANTINE(q);
+        UNLOCK_TICKETS();
+        return -1;
+    }
+
+    iso_quarantine_t *tq = &t->q;
+
+    /* Atomic all-or-nothing fit against the target budgets. Adoption
+     * never evicts to make room */
+    if((q->fifo_count + tq->fifo_count) > q->max_chunks ||
+       (q->pending_bytes + tq->pending_bytes) > q->max_bytes) {
+        UNLOCK_QUARANTINE(q);
+        UNLOCK_TICKETS();
+        return -1;
+    }
+
+    /* Target queue stays first, ticket FIFO is appended after it */
+    memcpy(&q->records[q->fifo_count], tq->records,
+           tq->fifo_count * sizeof(iso_quarantine_record_t));
+    q->fifo_count += tq->fifo_count;
+    q->pending_bytes += tq->pending_bytes;
+    q->released_budget += tq->released_budget;
+    q->released_flush += tq->released_flush;
+    q->released_zone += tq->released_zone;
+
+    /* Exactly once the merge succeeded consume the ticket */
+    t->id = 0;
+    __iso_memset(tq, 0x0, sizeof(*tq));
+
+    UNLOCK_QUARANTINE(q);
+    UNLOCK_TICKETS();
+    return 0;
+}
+
+INTERNAL_HIDDEN int _iso_quarantine_discard(uint64_t ticket) {
+    if(ticket == 0) {
+        return -1;
+    }
+
+    iso_quarantine_record_t local[CHUNK_QUARANTINE_SZ];
+    uint32_t count = 0;
+
+    LOCK_TICKETS();
+
+    iso_quarantine_ticket_t *t = NULL;
+
+    for(int i = 0; i < ISO_QUARANTINE_TICKET_MAX; i++) {
+        if(q_tickets[i].id == ticket) {
+            t = &q_tickets[i];
+            break;
+        }
+    }
+
+    if(t == NULL) {
+        UNLOCK_TICKETS();
+        return -1;
+    }
+
+    /* Detach the records and consume the ticket under the table lock,
+     * then return them without holding the ticket table lock. A discard
+     * is an explicit drain and would account to released_flush on the
+     * ticket, but the consumed ticket and its counters no longer exist */
+    count = t->q.fifo_count;
+    memcpy(local, t->q.records, count * sizeof(iso_quarantine_record_t));
+    t->id = 0;
+    __iso_memset(&t->q, 0x0, sizeof(t->q));
+
+    UNLOCK_TICKETS();
+
+    for(uint32_t i = 0; i < count; i++) {
+        _iso_free_internal_unlocked((void *) local[i].ptr, false, local[i].zone, false);
+    }
+
+    return 0;
+}
+
+INTERNAL_HIDDEN int _iso_quarantine_snapshot(uint64_t ticket, iso_quarantine_stats *out) {
+    if(out == NULL) {
+        return -1;
+    }
+
+    iso_quarantine_stats s;
+    __iso_memset(&s, 0x0, sizeof(s));
+
+    if(ticket == 0) {
+        iso_quarantine_t *q = THREAD_QUARANTINE();
+        LOCK_QUARANTINE(q);
+
+        s.max_chunks = q->max_chunks;
+        s.max_bytes = q->max_bytes;
+        s.released_budget = q->released_budget;
+        s.released_flush = q->released_flush;
+        s.released_zone = q->released_zone;
+
+        if(q->mode == 1) {
+            s.pending_chunks = q->fifo_count;
+            s.pending_bytes = q->pending_bytes;
+        } else {
+            /* Truthfully describe a legacy ring too */
+            s.pending_chunks = q->count;
+
+            for(uint32_t i = 0; i < q->count; i++) {
+                void *p = (void *) q->chunks[i];
+                iso_alloc_zone_t *z = iso_find_zone_range(p);
+                s.pending_bytes += (z != NULL) ? z->chunk_size : _iso_chunk_size(p);
+            }
+        }
+
+        UNLOCK_QUARANTINE(q);
+    } else {
+        LOCK_TICKETS();
+
+        iso_quarantine_ticket_t *t = NULL;
+
+        for(int i = 0; i < ISO_QUARANTINE_TICKET_MAX; i++) {
+            if(q_tickets[i].id == ticket) {
+                t = &q_tickets[i];
+                break;
+            }
+        }
+
+        /* Invalid, consumed or voided ticket: leave out untouched */
+        if(t == NULL) {
+            UNLOCK_TICKETS();
+            return -1;
+        }
+
+        iso_quarantine_t *tq = &t->q;
+        s.pending_chunks = tq->fifo_count;
+        s.pending_bytes = tq->pending_bytes;
+        s.max_chunks = tq->max_chunks;
+        s.max_bytes = tq->max_bytes;
+        s.released_budget = tq->released_budget;
+        s.released_flush = tq->released_flush;
+        s.released_zone = tq->released_zone;
+
+        UNLOCK_TICKETS();
+    }
+
+    /* Value copy only after the whole snapshot succeeded */
+    *out = s;
+    return 0;
+}
+
+/* Removes only records owned by zone from one queue while preserving
+ * the order and byte accounting of every other record. The caller
+ * holds q. root_held is passed to the internal free path */
+static void q_purge_zone_locked(iso_quarantine_t *q, iso_alloc_zone_t *zone, bool root_held) {
+    if(q->fifo_count != 0) {
+        uint32_t w = 0;
+        size_t removed_bytes = 0;
+
+        for(uint32_t i = 0; i < q->fifo_count; i++) {
+            iso_quarantine_record_t r = q->records[i];
+
+            if(r.zone == zone) {
+                q->released_zone++;
+                removed_bytes += r.bytes;
+                _iso_free_internal_unlocked((void *) r.ptr, false, zone, root_held);
+            } else {
+                q->records[w++] = r;
+            }
+        }
+
+        q->fifo_count = w;
+        q->pending_bytes -= removed_bytes;
+    }
+
+    /* The legacy ring stores only pointers so identify ownership by
+     * probing the zone map */
+    if(q->count != 0) {
+        uint32_t w = 0;
+
+        for(uint32_t i = 0; i < q->count; i++) {
+            void *p = (void *) q->chunks[i];
+
+            if(iso_find_zone_range(p) == zone) {
+                q->released_zone++;
+                _iso_free_internal_unlocked(p, false, zone, root_held);
+            } else {
+                q->chunks[w++] = q->chunks[i];
+            }
+        }
+
+        for(uint32_t i = w; i < q->count; i++) {
+            q->chunks[i] = 0;
+        }
+
+        q->count = w;
+    }
+}
+
+/* Returns only the records of zone from every thread queue and live
+ * ticket. Called with the root lock held by iso_alloc_destroy_zone so
+ * no record of the zone survives before its pages are unmapped, while
+ * records of every other zone stay queued in order */
+INTERNAL_HIDDEN void quarantine_purge_for_zone(iso_alloc_zone_t *zone) {
+#if THREAD_SUPPORT
+    LOCK_THREAD_REGISTRY();
+
+    for(iso_quarantine_t *q = _root->quarantines; q != NULL; q = q->next) {
+        LOCK_QUARANTINE(q);
+        q_purge_zone_locked(q, zone, true);
+        UNLOCK_QUARANTINE(q);
+    }
+
+    UNLOCK_THREAD_REGISTRY();
+#else
+    iso_quarantine_t *q = THREAD_QUARANTINE();
+    LOCK_QUARANTINE(q);
+    q_purge_zone_locked(q, zone, true);
+    UNLOCK_QUARANTINE(q);
+#endif
+
+    LOCK_TICKETS();
+
+    for(int i = 0; i < ISO_QUARANTINE_TICKET_MAX; i++) {
+        if(q_tickets[i].id != 0) {
+            /* The ticket table lock serializes all access to t->q */
+            q_purge_zone_locked(&q_tickets[i].q, zone, true);
+        }
+    }
+
+    UNLOCK_TICKETS();
+}
+
+/* Full process teardown entry point: drain and invalidate every
+ * ticket before the global allocator goes away. Called with root held */
+INTERNAL_HIDDEN void quarantine_tickets_destroy_all(void) {
+    LOCK_TICKETS();
+
+    for(int i = 0; i < ISO_QUARANTINE_TICKET_MAX; i++) {
+        iso_quarantine_ticket_t *t = &q_tickets[i];
+
+        if(t->id == 0) {
+            continue;
+        }
+
+        for(uint32_t j = 0; j < t->q.fifo_count; j++) {
+            _iso_free_internal_unlocked((void *) t->q.records[j].ptr, false,
+                                       t->q.records[j].zone, true);
+        }
+
+        /* Identity dies here; q_ticket_next_id is intentionally not
+         * reset so reinitialization never reuses an old ticket value */
+        t->id = 0;
+        __iso_memset(&t->q, 0x0, sizeof(t->q));
+    }
+
+    UNLOCK_TICKETS();
 }
 
 /* Flushes the quarantine of every thread. Called with the
- * root lock held before a zone is unmapped, otherwise a
- * chunk from that zone could surface later from another
- * threads quarantine and look like a foreign pointer */
+ * root lock held during global teardown. Zone destruction uses
+ * quarantine_purge_for_zone instead so unrelated records survive */
 INTERNAL_HIDDEN void flush_all_quarantines(void) {
 #if THREAD_SUPPORT
     LOCK_THREAD_REGISTRY();
@@ -2287,7 +2826,18 @@ INTERNAL_HIDDEN void _iso_free(void *p, bool permanent) {
         return;
     }
 
+    /* A configured transferable FIFO owns the whole release path */
+    if(quarantine_offer(p, NULL) == true) {
+        return;
+    }
+
     iso_quarantine_t *q = THREAD_QUARANTINE();
+
+    /* configure(0, 0) explicitly switched quarantine off */
+    if(UNLIKELY(q->mode == 2)) {
+        _iso_free_internal(p, false);
+        return;
+    }
 
     /* Only this thread ever grows the count and only a
      * flush shrinks it, so a full reading here is reliable
@@ -2333,6 +2883,27 @@ INTERNAL_HIDDEN void _iso_free_size(void *p, size_t size) {
 #endif
 
     if(UNLIKELY(size > SMALL_SIZE_MAX)) {
+        /* A configured FIFO must own the big chunk before the used
+         * list entry is removed, so validate with a non-removing find */
+        if(THREAD_QUARANTINE()->mode == 1) {
+            iso_alloc_big_zone_t *held_big = iso_find_big_zone(p, false);
+
+            if(UNLIKELY(held_big == NULL)) {
+#if ABORT_ON_UNOWNED_PTR
+                LOG_AND_ABORT("Could not find any zone for allocation at 0x%p", p);
+#else
+                return;
+#endif
+            }
+
+            if(UNLIKELY(held_big->size < size)) {
+                LOG_AND_ABORT("Invalid big zone size (expected %d, got %d) for chunk 0x%p", held_big->size, size, p);
+            }
+
+            quarantine_offer(p, NULL);
+            return;
+        }
+
         iso_alloc_big_zone_t *big_zone = iso_find_big_zone(p, true);
 
         if(UNLIKELY(big_zone == NULL)) {
@@ -2365,6 +2936,11 @@ INTERNAL_HIDDEN void _iso_free_size(void *p, size_t size) {
      * served, its class may be larger */
     if(UNLIKELY(zone->chunk_size < size)) {
         LOG_AND_ABORT("Invalid size (expected %d, got %d) for chunk 0x%p", zone->chunk_size, size, p);
+    }
+
+    /* Configured threads hold sized frees in the FIFO too */
+    if(quarantine_offer(p, zone) == true) {
+        return;
     }
 
     _iso_free_internal_unlocked(p, false, zone, false);
@@ -2950,6 +3526,10 @@ INTERNAL_HIDDEN void _free_big_zone_list(iso_alloc_big_zone_t *head) {
 INTERNAL_HIDDEN void _iso_alloc_destroy(void) {
     LOCK_ROOT();
 
+    /* Full teardown: drain and invalidate every transfer ticket
+     * before the thread quarantines and global zones go away */
+    quarantine_tickets_destroy_all();
+
     flush_all_quarantines();
 
     const uint16_t zones_used = _root->zones_used;
@@ -3045,6 +3625,11 @@ INTERNAL_HIDDEN void _iso_alloc_destroy(void) {
     }
 
     unmap_guarded_pages(_root, sizeof(iso_alloc_root));
+
+    /* Drop the dangling root so a later iso_alloc_initialize builds a
+     * fresh one. Ticket identities stay monotonic in static storage so
+     * tickets from the destroyed epoch never validate again */
+    _root = NULL;
 #endif
     UNLOCK_ROOT();
 

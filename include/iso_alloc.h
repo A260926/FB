@@ -78,6 +78,41 @@ EXTERNAL_API void iso_verify_zone(iso_alloc_zone_handle *zone);
 EXTERNAL_API int32_t iso_alloc_name_zone(iso_alloc_zone_handle *zone, char *name);
 EXTERNAL_API void iso_flush_caches(void);
 
+/* Snapshot of a transferable quarantine batch. ticket 0 names the
+ * calling thread, any other value a live detach ticket. The three
+ * released_* counters are all in chunks, not bytes */
+typedef struct iso_quarantine_stats {
+    size_t pending_chunks;
+    size_t pending_bytes;
+    size_t max_chunks;
+    size_t max_bytes;
+    uint64_t released_budget;
+    uint64_t released_flush;
+    uint64_t released_zone;
+} iso_quarantine_stats;
+
+/* Configure this threads transferable FIFO quarantine. (0, 0)
+ * disables it and drains the queue. Otherwise max_chunks is 1..64
+ * and max_bytes must be positive. Returns 0 on success, -1 if the
+ * arguments are invalid (the current configuration is left intact) */
+EXTERNAL_API int iso_quarantine_configure(size_t max_chunks, size_t max_bytes);
+
+/* Move this threads configured queue, budgets and cumulative
+ * counters onto an independent ticket the caller can hand to
+ * another thread. Returns a non-zero ticket, or 0 on failure */
+EXTERNAL_API uint64_t iso_quarantine_detach(void);
+
+/* Append a detached ticket to this threads queue. The target thread
+ * must be configured and the combined queue must already fit the
+ * target budgets, otherwise nothing changes. Consumes the ticket */
+EXTERNAL_API int iso_quarantine_adopt(uint64_t ticket);
+
+/* Return every record on a ticket to the allocator and consume it */
+EXTERNAL_API int iso_quarantine_discard(uint64_t ticket);
+
+/* Copy the stats of ticket, or the calling thread when ticket is 0 */
+EXTERNAL_API int iso_quarantine_snapshot(uint64_t ticket, iso_quarantine_stats *out);
+
 #if HEAP_PROFILER
 #define BACKTRACE_DEPTH 8
 
