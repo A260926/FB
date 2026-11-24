@@ -1,0 +1,25 @@
+// Fixed compile/link consumer. No scheduler implementation is supplied here.
+package main
+import (
+ "testing"
+ "fmt"
+ . "github.com/dvyukov/go-fuzz/go-fuzz-defs"
+)
+func TestOwnershipAPIProbe(t *testing.T) {
+ h:=authorOwnershipHub()
+ if err:=h.EnableOwnership();err!=nil {t.Fatal(err)}
+ ticket,err:=h.NextOwnership();if err!=nil {t.Fatal(err)}
+ if ticket.ID!=1 || ticket.Parent!=fmt.Sprintf("%x",hash([]byte("A"))) || string(ticket.Data)!="A" || ticket.Slot!=7 || ticket.Bucket!=1 {t.Fatal("normal root selection")}
+ cover:=make([]byte,CoverSize);cover[7]=2
+ if err=h.ObserveOwnership(ticket.ID,[]byte("B"),cover,nil,0);err!=nil {t.Fatal(err)}
+ snap:=h.OwnershipSnapshot()
+ if snap.Issued!=1 || snap.Completed!=1 || len(snap.Owners)!=1 || snap.Owners[0].Seed!=fmt.Sprintf("%x",hash([]byte("B"))) || snap.Owners[0].Debt!=1 {t.Fatal("normal coverage confirmation")}
+ ro:=h.ro.Load().(*ROData)
+ if len(ro.corpus)!=1 || string(ro.corpus[0].data)!="B" || ro.corpusCover[7]!=2 || h.maxCover.Load().([]byte)[7]!=2 {t.Fatal("scheduler not bound to live Hub corpus and cover")}
+ w:=authorOwnershipWorker(t,h)
+ next,err:=w.OwnershipStep();if err!=nil {t.Fatal(err)}
+ if next.ID!=2 || next.Parent!=fmt.Sprintf("%x",hash([]byte("B"))) || w.execs[execFuzz]!=1 || w.execs[execTriageInput]!=3 {t.Fatal("real worker path counters")}
+ after:=h.OwnershipSnapshot()
+ if after.Issued!=2 || after.Completed!=2 || len(after.Owners)==0 {t.Fatal("real feedback not committed")}
+ t.Log("OWNERSHIP_PROBE_OK")
+}
