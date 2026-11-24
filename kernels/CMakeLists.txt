@@ -35,6 +35,7 @@ SET(EMBREE_LIBRARY_FILES
   embree.rc
 
   common/device.cpp
+  common/photon_beam.cpp
   common/stat.cpp
   common/acceln.cpp
   common/accelset.cpp
@@ -72,6 +73,7 @@ SET(EMBREE_LIBRARY_FILES
   builders/primrefgen.cpp
 
   bvh/bvh.cpp
+  bvh/bvh_photon_beam.cpp
   bvh/bvh_statistics.cpp
   bvh/bvh4_factory.cpp
   bvh/bvh8_factory.cpp
