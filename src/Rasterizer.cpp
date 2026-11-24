@@ -1,6 +1,7 @@
 #include "Rasterizer.h"
 #include "OrthographicCamera.h"
 #include "ForwardRasterizer.h"
+#include <stdexcept>
 
 Rasterizer::Rasterizer()
   : Renderer() {
@@ -13,6 +14,155 @@ Rasterizer::Rasterizer(const World* world)
 }
 
 Rasterizer::~Rasterizer() {
+}
+
+void Rasterizer::enableSection(const Vector3D& n, const double d,
+                               const RGBColor& color, const RGBColor& diffuse,
+                               const RGBColor& specular) {
+  // Validation happens first: on failure the previous configuration and the
+  // existing images are left untouched.
+  m_section_config =
+    section_pass::validateConfig(n, d, color, diffuse, specular);
+  m_section_enabled = true;
+  clearSectionFrameData();
+}
+
+void Rasterizer::updateSection(const Vector3D& n, const double d,
+                               const RGBColor& color, const RGBColor& diffuse,
+                               const RGBColor& specular) {
+  const SectionConfig next =
+    section_pass::validateConfig(n, d, color, diffuse, specular);
+  m_section_config = next;
+  m_section_enabled = true;
+  clearSectionFrameData();
+}
+
+void Rasterizer::disableSection() {
+  m_section_enabled = false;
+  clearSectionFrameData();
+}
+
+void Rasterizer::clearSectionFrameData() {
+  m_section_caps.clear();
+  m_section_cap_mask.clear();
+  m_section_cap_object.clear();
+}
+
+void Rasterizer::validateSectionRenderArgs(const bool use_shade,
+                                           const bool use_shadow_maps) const {
+  if (m_section_enabled && (!use_shade || use_shadow_maps)) {
+    throw std::invalid_argument(
+      "Sectioning requires render(true, false): shading must be enabled and "
+      "shadow maps are not extended to section caps");
+  }
+}
+
+const double Rasterizer::fragmentDepth(const Triangle3D& triangle_world,
+                                       const Triangle2D& triangle_raster,
+                                       const Point2D& pixel_raster) const {
+  if (m_section_enabled &&
+      dynamic_cast<const OrthographicCamera*>(m_camera) != nullptr) {
+    // Orthographic projection: axis depth is affine in screen space, so it
+    // is interpolated linearly from the camera-space vertex depths.
+    const double z1 = m_camera->viewTransform(triangle_world.v1.position).z;
+    const double z2 = m_camera->viewTransform(triangle_world.v2.position).z;
+    const double z3 = m_camera->viewTransform(triangle_world.v3.position).z;
+    double u, v, w;
+    triangle_raster.calculateBarycentricCoords(u, v, w, pixel_raster);
+    return z1 * u + z2 * v + z3 * w;
+  }
+  // Perspective: depth is reconstructed from inverse axis depths.
+  return calculateDepth(triangle_world, triangle_raster, pixel_raster);
+}
+
+// For every pixel whose camera ray meets the section plane inside the
+// frustum, accumulate the directed crossings of each object's triangles
+// lying between the section point and the far plane. A non-zero integer
+// winding number means the section point is solid for that object. Objects
+// are evaluated independently and caps compete in the same axis-depth
+// buffer as the ordinary surfaces.
+void Rasterizer::buildSectionCaps() {
+  const uint16_t image_width = m_camera->get_width();
+  const uint16_t image_height = m_camera->get_height();
+  const uint32_t pixel_count =
+    static_cast<uint32_t>(image_width) * image_height;
+
+  clearSectionFrameData();
+  m_section_caps.resize(pixel_count);
+  m_section_cap_mask.assign(pixel_count, 0);
+  m_section_cap_object.assign(pixel_count, SECTION_INVALID_OBJECT);
+
+  // Camera ray / section plane intersection for every integer pixel.
+  std::vector<Point3D> hit_positions(pixel_count);
+  std::vector<double> hit_depths(pixel_count, 0.0);
+  std::vector<char> hit_valid(pixel_count, 0);
+  for (int32_t pixel_y = 0; pixel_y < image_height; ++pixel_y) {
+    for (int32_t pixel_x = 0; pixel_x < image_width; ++pixel_x) {
+      const uint32_t index =
+        static_cast<uint32_t>(pixel_y) * image_width + pixel_x;
+      const Point2D pixel_raster(static_cast<double>(pixel_x),
+                                 static_cast<double>(pixel_y));
+      Point3D hit_world;
+      double hit_depth = 0.0;
+      if (section_pass::rayPlaneHit(*m_camera, pixel_raster, m_section_config,
+                                    hit_world, hit_depth)) {
+        hit_positions[index] = hit_world;
+        hit_depths[index] = hit_depth;
+        hit_valid[index] = 1;
+      }
+    }
+  }
+
+  std::vector<int32_t> winding(pixel_count, 0);
+  Vector3D cap_normal = m_section_config.n * -1.0;
+  cap_normal.normalize();
+
+  for (uint32_t object_index = 0;
+       object_index < m_world->m_objects.size(); ++object_index) {
+    GeometryObject* object = m_world->m_objects[object_index];
+    std::fill(winding.begin(), winding.end(), 0);
+
+    const std::vector<Triangle3D> triangles = object->triangles();
+    for (const Triangle3D& triangle_world : triangles) {
+      const Triangle2D triangle_raster = rasterize(triangle_world);
+      traverseTriangle(triangle_world, triangle_raster, image_width,
+                       image_height,
+                       [&](const uint32_t index, const double depth,
+                           const Point3D& /*pixel_world*/,
+                           const PreparedTriangle& prepared,
+                           const Triangle3D& /*triangle*/) {
+        if (!hit_valid[index] || depth <= hit_depths[index]) {
+          return;
+        }
+        // Projected-degenerate triangles never reach this visitor.
+        winding[index] += prepared.front ? 1 : -1;
+      });
+    }
+
+    // Non-zero winding (never parity): the section point lies inside this
+    // object. Earlier objects win equal-depth caps because the depth test is
+    // strict and objects are visited in world order.
+    for (uint32_t index = 0; index < pixel_count; ++index) {
+      if (!hit_valid[index] || winding[index] == 0) {
+        continue;
+      }
+      if (hit_depths[index] < m_depth_buffer[index]) {
+        m_depth_buffer[index] = hit_depths[index];
+        SectionCap cap;
+        cap.position = hit_positions[index];
+        cap.normal = cap_normal;
+        cap.depth = hit_depths[index];
+        cap.object_index = object_index;
+        cap.color = m_section_config.color;
+        cap.diffuse = m_section_config.diffuse;
+        cap.specular = m_section_config.specular;
+        m_section_caps[index] = cap;
+        m_section_cap_mask[index] = 1;
+        m_section_cap_object[index] =
+          static_cast<int32_t>(object_index);
+      }
+    }
+  }
 }
 
 

@@ -36,6 +36,7 @@ I've implement some basic features that I consider relevant for any graphics pro
 * A depth-buffer to solve the visibility surface problem
 * Two rendering paths: Forward and deferred
 * Shadow mapping for directional lights with PCF
+* World-space single-plane section preview with solid caps and cavity holes (CPU only)
 
 # Build instructions
 
@@ -305,6 +306,74 @@ _If you want to know more, this is by far [best tutorial](https://www.youtube.co
 PCF (Percentage Closer Filtering) help us to create soft shadows and making them less "blocky". The idea is, instead of taking only one sample from the shadow map, we take many of them and we calculate the average. In my case I took nine samples: the center point and neighbors. The result has a much better quality:
 
 <p align="center">  <img src="https://github.com/mtrebi/Rasterizer/blob/master/docs/images/readme/shadows_jaggy_pcf.PNG"> </p>
+
+## World-space section preview
+
+The rasterizers can cut closed parts with a single world-space section plane
+for preview images. This is an image-only effect: triangle meshes are never
+modified and no cap geometry is generated or exported.
+
+### Scope and rules
+
+* The plane keeps the closed half-space `n · p + d >= 0`. `n` and `d` are
+  normalized together and the configuration (plane plus cap color, diffuse
+  and specular RGB) is stored by value on the `Rasterizer`.
+* Non-finite values, a zero normal or non-finite cap colors make
+  `enableSection` / `updateSection` throw `std::invalid_argument`; the
+  previous configuration and the existing image are preserved.
+* Each `GeometryObject` is treated as a set of finite, non-self-intersecting,
+  non-degenerate closed oriented triangle shells. Outer shells face outward
+  and cavity shells are reversed. Solidity uses the non-zero integer winding
+  number evaluated per object independently; odd-even parity is never used,
+  so same-orientation nested shells add up and cavity shells subtract.
+* At every integer pixel sample, the camera ray is intersected with the
+  plane. Parallel rays, or intersections outside the camera near/far range,
+  produce no cap candidate. Directed triangle crossings between the section
+  point and the far plane are accumulated through a shared production
+  traversal (top-left edge rule with explicit crossing orientation): a
+  non-zero winding makes a cap at the real plane intersection, with normal
+  `-normalize(n)`. Perspective depths use inverse axis-depth reconstruction;
+  orthographic depths use linear axis-depth interpolation.
+* Ordinary surface fragments on the negative side are clipped; retained
+  fragments keep their original attributes and material. Caps compete in the
+  same axis-depth buffer: smaller depth wins, equal depth keeps the ordinary
+  surface, and equal-depth caps of several objects follow `world.m_objects`
+  order. Caps never paint over a shell in front and never fill cavities.
+* The deferred path writes the winning cap position, normal and material into
+  the same GBuffer before the single lighting pass; the cap is lit with the
+  existing multi-light `Material::shade` formula. Shadow maps are not
+  extended, so sectioning requires `render(true, false)`; any other argument
+  combination is rejected before buffers are modified. With sectioning
+  disabled, all original render behaviors are unchanged.
+* The latest frame's visible cap mask and owning object index
+  (`SECTION_INVALID_OBJECT` where there is no cap) can be read back together
+  with the depth buffer. The data is rebuilt on every sectioned frame (plane
+  changes, object transforms, object list changes, interleaved renderers)
+  and cleared when sectioning is disabled; geometry, materials and the world
+  are never touched.
+
+### API and example
+
+```cpp
+renderer.enableSection(normal, d, cap_color, cap_diffuse, cap_specular);
+renderer.updateSection(new_normal, new_d, cap_color, cap_diffuse, cap_specular);
+renderer.render(true, false);
+const auto& mask  = renderer.sectionCapMask();    // 1 where a cap won
+const auto& owner = renderer.sectionCapObject();  // object index or -1
+renderer.disableSection();
+```
+
+`examples/section_preview.cpp` renders an oblique-cut box with an internal
+cavity (the cavity stays open in the cap) to a PPM file:
+
+```
+.task-build/example output.ppm
+```
+
+The target checks in `tests/section_target.cpp` are registered in the
+`winding`, `projection` and `composition` groups and run through
+`bash task_support/run.sh target`, which also builds the example and the
+original forward/deferred baseline.
 
 # Gallery
 

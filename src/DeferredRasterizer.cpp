@@ -13,6 +13,10 @@ DeferredRasterizer::~DeferredRasterizer() {
 
 
 void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps) {
+  // Reject unsupported sectioning parameter combinations before touching any
+  // buffer, so the previous configuration and image stay intact on failure.
+  this->validateSectionRenderArgs(use_shade, use_shadow_maps);
+
   const uint16_t image_width = m_camera->get_width();
   const uint16_t image_height = m_camera->get_height();
 
@@ -22,6 +26,7 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
   m_color_buffer = std::vector<RGBColor>(image_height * image_width, BACKGROUND_COLOR);
   m_diffuse_buffer = std::vector<RGBColor>(image_height * image_width, BACKGROUND_COLOR);
   m_specular_buffer = std::vector<RGBColor>(image_height * image_width, BACKGROUND_COLOR);
+  this->clearSectionFrameData();
 
   if (use_shadow_maps) {
     this->createShadowMaps();
@@ -32,29 +37,44 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
     const std::vector<Triangle3D> triangles = object->triangles();
     for (auto& triangle_world : triangles) {
       const Triangle2D triangle_raster = this->rasterize(triangle_world);
-      const BoundingBox2D bbox_raster = triangle_raster.bbox();
-      for (int32_t pixel_raster_x = bbox_raster.min.x; pixel_raster_x <= bbox_raster.max.x; ++pixel_raster_x) {
-        for (int32_t pixel_raster_y = bbox_raster.min.y; pixel_raster_y <= bbox_raster.max.y; ++pixel_raster_y) {
-          const Point2D pixel_raster = { (double)pixel_raster_x, (double)pixel_raster_y };
-          if (triangle_raster.contains(pixel_raster)) {
-            const double depth = calculateDepth(triangle_world, triangle_raster, pixel_raster);
-            const Point3D pixel_world = unrasterize(pixel_raster, depth);
-            if (m_camera->insideFrustrum(pixel_raster, depth)) {
-              const uint32_t i = pixel_raster_y * image_width + pixel_raster_x;
-              if (depth < m_depth_buffer[i]) {
-                const Fragment fragment = calculateFragmentAttributes(triangle_world, pixel_world, triangle_raster, pixel_raster, *object->material());
-
-                //TODO: Use one-single buffer of fragment objects
-                m_depth_buffer[i] = depth;
-                m_normal_buffer[i] = (RGBColor) fragment.normal;
-                m_color_buffer[i] = fragment.color;
-                m_diffuse_buffer[i] = fragment.diffuse;
-                m_specular_buffer[i] = fragment.specular;
-              }
-            }
+      this->traverseTriangle(triangle_world, triangle_raster, image_width,
+        image_height,
+        [&](const uint32_t i, const double depth, const Point3D& pixel_world,
+            const PreparedTriangle& /*prepared*/,
+            const Triangle3D& triangle) {
+          // Ordinary surfaces keep only the retained half-space n.p + d >= 0.
+          if (m_section_enabled &&
+              m_section_config.n * Vector3D(pixel_world) + m_section_config.d < 0.0) {
+            return;
           }
-        }
+          if (depth < m_depth_buffer[i]) {
+            const Fragment fragment = calculateFragmentAttributes(triangle, pixel_world, triangle_raster, Point2D(i % image_width, i / image_width), *object->material());
+
+            //TODO: Use one-single buffer of fragment objects
+            m_depth_buffer[i] = depth;
+            m_normal_buffer[i] = (RGBColor) fragment.normal;
+            m_color_buffer[i] = fragment.color;
+            m_diffuse_buffer[i] = fragment.diffuse;
+            m_specular_buffer[i] = fragment.specular;
+          }
+        });
+    }
+  }
+
+  if (m_section_enabled) {
+    // Winning caps compete in the same axis-depth buffer and are written into
+    // the same GBuffer before lighting: no final color override.
+    this->buildSectionCaps();
+    for (uint32_t i = 0; i < m_section_caps.size(); ++i) {
+      if (!m_section_cap_mask[i]) {
+        continue;
       }
+      const SectionCap& cap = m_section_caps[i];
+      m_depth_buffer[i] = cap.depth;
+      m_normal_buffer[i] = (RGBColor)cap.normal;
+      m_color_buffer[i] = cap.color;
+      m_diffuse_buffer[i] = cap.diffuse;
+      m_specular_buffer[i] = cap.specular;
     }
   }
 
@@ -65,7 +85,7 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
       const double depth = m_depth_buffer[i];
       if (depth < m_camera->get_far_plane()) {
         const Point2D pixel_raster(x, y);
-        const Point3D pixel_world = unrasterize(pixel_raster, m_depth_buffer[i]);  
+        const Point3D pixel_world = unrasterize(pixel_raster, m_depth_buffer[i]);
 
         Fragment fragment{
           pixel_world,
