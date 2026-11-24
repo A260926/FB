@@ -1,0 +1,49 @@
+-- CMAKE_BUILD_TYPE               Debug
+-- CMAKE_C_COMPILER_ID            AppleClang
+-- CMAKE_SYSTEM_NAME              Darwin
+-- CMAKE_SYSTEM_PROCESSOR         arm64
+-- BUILD_SHARED_LIBS              OFF
+-- ENABLE_AMALGAM                 OFF
+-- ENABLE_LTO                     OFF (FORCED BY PLATFORM)
+-- ENABLE_STRIP                   OFF (FORCED BY PLATFORM)
+-- ENABLE_STATIC_CRT              
+-- ENABLE_COMPILE_COMMANDS        ON
+-- JERRY_VERSION                  3.0.0
+-- JERRY_CMDLINE                  OFF
+-- JERRY_CMDLINE_TEST             OFF
+-- JERRY_CMDLINE_SNAPSHOT         OFF
+-- JERRY_LIBFUZZER                OFF
+-- JERRY_PORT                     ON
+-- JERRY_EXT                      ON
+-- JERRY_MATH                     OFF
+-- UNITTESTS                      OFF
+-- DOCTESTS                       OFF
+-- JERRY_CPOINTER_32_BIT          ON (FORCED BY HEAP SIZE)
+-- JERRY_DEBUGGER                 OFF
+-- JERRY_ERROR_MESSAGES           OFF
+-- JERRY_EXTERNAL_CONTEXT         OFF
+-- JERRY_PARSER                   ON
+-- JERRY_FUNCTION_TO_STRING       OFF
+-- JERRY_LINE_INFO                OFF
+-- JERRY_LOGGING                  OFF
+-- JERRY_MEM_STATS                OFF
+-- JERRY_MEM_GC_BEFORE_EACH_ALLOC OFF
+-- JERRY_PARSER_DUMP_BYTE_CODE    OFF
+-- JERRY_PROFILE                  es.next
+-- JERRY_PROMISE_CALLBACK         OFF
+-- JERRY_REGEXP_STRICT_MODE       OFF
+-- JERRY_REGEXP_DUMP_BYTE_CODE    OFF
+-- JERRY_SNAPSHOT_EXEC            OFF
+-- JERRY_SNAPSHOT_SAVE            OFF
+-- JERRY_SYSTEM_ALLOCATOR         OFF
+-- JERRY_VALGRIND                 OFF
+-- JERRY_VM_HALT                  OFF
+-- JERRY_VM_THROW                 OFF
+-- JERRY_GLOBAL_HEAP_SIZE         4096
+-- JERRY_GC_LIMIT                 (0)
+-- JERRY_STACK_LIMIT              (0)
+-- JERRY_GC_MARK_LIMIT            (8)
+-- FEATURE_INIT_FINI              OFF
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Volumes/UserFBWorkspace/questions/FSF31CF3C501DBU16205R2578E8A34/attempts/20261124T180752893129Z/repo/.task-build/engine
