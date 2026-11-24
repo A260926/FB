@@ -31,3 +31,36 @@ There's also a collection of [example 3dm files](example_files/) available for t
 ## Questions?
 
 For technical support, please head over to [Discourse](https://discourse.mcneel.com/category/opennurbs).
+
+## Periodic BRep face reseaming
+
+`ON_ReseamBrepFace()` is implemented in `opennurbs_brep_reseam.h/.cpp`. It moves
+the parameter seam of one face while keeping that face as a single BRep face.
+
+Supported inputs are valid, compact, oriented manifold BReps whose target face
+uses a three-dimensional, positive-weight `ON_NurbsSurface` with degrees 1–3 in
+both directions. The selected direction must be closed and the other direction
+open, with no singular side. Target trims are exact axis-aligned 2-D line
+loci (plain line curves or restricted/reversed proxies). The periodic material
+may contain several disjoint rectangular holes, including holes intersected by
+the current seam or by the requested cut. Non-seam edges may be shared with
+other faces; split parameters are propagated to every adjacent trim. Neighbor
+surfaces and C2 curves are not restricted.
+
+The call duplicates the target surface before moving its seam, so other faces
+that shared the original surface keep their geometry. `ON_ReseamMap` reports
+source edge/trim images (including one-to-many splits), empty images for removed
+old seam elements, and the exact new seam edges. On invalid arguments or
+unsupported topology the call returns false without modifying `source`,
+`result`, or `map`.
+
+Build and run the contract checks and example through:
+
+```sh
+bash task_support/run.sh target
+```
+
+`examples/reseam.cpp <output.3dm>` creates a rational non-unit cylinder with a
+seam-crossing rectangular hole, reseams it, writes a `.3dm` file, reads it back,
+and reseams the loaded BRep again.
+

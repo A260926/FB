@@ -1,0 +1,120 @@
+neighbor_face=1
+SOURCE
+BREP F=2 L=4 T=16 E=13 V=12 C2=16 C3=13 S=2 valid=1
+ F0 si=0 loops=3 N deg=2,1 closed=1,0 dom0=[10,15] dom1=[-2,4] rat=1
+  L0 type=1 n=4: 0 1 2 3
+  L1 type=2 n=4: 4 5 6 7
+  L2 type=2 n=4: 8 9 10 11
+ F1 si=1 loops=1 N deg=2,1 closed=1,0 dom0=[0,6.2831853071795862] dom1=[0,1] rat=1
+  L3 type=1 n=4: 12 13 14 15
+ T0 idx=0 li=0 ei=0 rev=0 type=2 iso=4 dom=[10,15] p0=(10,-2) p1=(15,-2) proxyRev=0
+ T1 idx=1 li=0 ei=1 rev=0 type=3 iso=5 dom=[-2,4] p0=(15,-2) p1=(15,4) proxyRev=0
+ T2 idx=2 li=0 ei=2 rev=0 type=1 iso=6 dom=[10,15] p0=(15,4) p1=(10,4) proxyRev=0
+ T3 idx=3 li=0 ei=1 rev=1 type=3 iso=3 dom=[-2,4] p0=(10,4) p1=(10,-2) proxyRev=0
+ T4 idx=4 li=1 ei=3 rev=0 type=1 iso=1 dom=[0,1.6] p0=(11.2,-0.8) p1=(11.2,0.8) proxyRev=0
+ T5 idx=5 li=1 ei=4 rev=0 type=1 iso=2 dom=[0,1.2] p0=(11.2,0.8) p1=(12.4,0.8) proxyRev=0
+ T6 idx=6 li=1 ei=5 rev=0 type=1 iso=1 dom=[0,1.6] p0=(12.4,0.8) p1=(12.4,-0.8) proxyRev=0
+ T7 idx=7 li=1 ei=6 rev=0 type=1 iso=2 dom=[0,1.2] p0=(12.4,-0.8) p1=(11.2,-0.8) proxyRev=0
+ T8 idx=8 li=2 ei=7 rev=0 type=1 iso=1 dom=[0,1.5] p0=(13,1.1) p1=(13,2.6) proxyRev=0
+ T9 idx=9 li=2 ei=8 rev=0 type=1 iso=2 dom=[0,1.2] p0=(13,2.6) p1=(14.2,2.6) proxyRev=0
+ T10 idx=10 li=2 ei=9 rev=0 type=1 iso=1 dom=[0,1.5] p0=(14.2,2.6) p1=(14.2,1.1) proxyRev=0
+ T11 idx=11 li=2 ei=10 rev=0 type=1 iso=2 dom=[0,1.2] p0=(14.2,1.1) p1=(13,1.1) proxyRev=0
+ T12 idx=12 li=3 ei=11 rev=0 type=1 iso=4 dom=[0,6.28] p0=(0,0) p1=(6.28319,0) proxyRev=0
+ T13 idx=13 li=3 ei=12 rev=0 type=3 iso=5 dom=[0,1] p0=(6.28319,0) p1=(6.28319,1) proxyRev=0
+ T14 idx=14 li=3 ei=0 rev=1 type=2 iso=6 dom=[0,6.28] p0=(6.28319,1) p1=(0,1) proxyRev=0
+ T15 idx=15 li=3 ei=12 rev=1 type=3 iso=3 dom=[0,1] p0=(0,1) p1=(0,0) proxyRev=0
+ E0 idx=0 c3=0 v=(0,0) nti=2 dom=[10,15] revProxy=0
+ E1 idx=1 c3=1 v=(0,1) nti=2 dom=[-2,4] revProxy=0
+ E2 idx=2 c3=2 v=(1,1) nti=1 dom=[-15,-10] revProxy=0
+ E3 idx=3 c3=3 v=(2,3) nti=1 dom=[-0.8,0.8] revProxy=0
+ E4 idx=4 c3=4 v=(3,4) nti=1 dom=[11.2,12.4] revProxy=0
+ E5 idx=5 c3=5 v=(4,5) nti=1 dom=[-0.8,0.8] revProxy=1
+ E6 idx=6 c3=6 v=(5,2) nti=1 dom=[-12.4,-11.2] revProxy=1
+ E7 idx=7 c3=7 v=(6,7) nti=1 dom=[1.1,2.6] revProxy=0
+ E8 idx=8 c3=8 v=(7,8) nti=1 dom=[13,14.2] revProxy=0
+ E9 idx=9 c3=9 v=(8,9) nti=1 dom=[-2.6,-1.1] revProxy=1
+ E10 idx=10 c3=10 v=(9,6) nti=1 dom=[-14.2,-13] revProxy=1
+ E11 idx=11 c3=11 v=(10,10) nti=1 dom=[0,6.28] revProxy=0
+ E12 idx=12 c3=12 v=(10,0) nti=2 dom=[0,1] revProxy=0
+SPLIT ti=0 rev3=0 edgeF=0.36999999999999994 trimF=0.36999999999999994 dom=[10,15] tt=11.85 proxyRev=0 realDom=[10,15]
+SPLIT ti=14 rev3=1 edgeF=0.36999999999999994 trimF=0.63000000000000012 dom=[0,6.2831853071795862] tt=3.95840674352314 proxyRev=0 realDom=[0,6.2831853071795862]
+SPLIT ti=2 rev3=0 edgeF=0.63000000000000012 trimF=0.63000000000000012 dom=[10,15] tt=13.15 proxyRev=0 realDom=[10,15]
+SPLIT ti=5 rev3=0 edgeF=0.54166666666666652 trimF=0.54166666666666652 dom=[0,1.2000000000000011] tt=0.65000000000000036 proxyRev=0 realDom=[0,1.2000000000000011]
+SPLIT ti=7 rev3=0 edgeF=0.45833333333333354 trimF=0.45833333333333354 dom=[0,1.2000000000000011] tt=0.55000000000000071 proxyRev=0 realDom=[0,1.2000000000000011]
+PRECOMPACT T0 idx0 li4 ei0 dom[0,1] p(15,-2)->(16.85,-2) real[0,1] rev0
+PRECOMPACT T1 idx-1 li0 ei-1 dom[-2,4] p(15,-2)->(15,4) real[-2,4] rev0
+PRECOMPACT T2 idx2 li4 ei2 dom[0,1] p(15,4)->(11.85,4) real[0,1] rev0
+PRECOMPACT T3 idx-1 li0 ei-1 dom[-2,4] p(10,4)->(10,-2) real[-2,4] rev0
+PRECOMPACT T4 idx4 li4 ei3 dom[0,1] p(16.2,-0.8)->(16.2,0.8) real[0,1] rev0
+PRECOMPACT T5 idx5 li4 ei4 dom[0,1] p(16.2,0.8)->(16.85,0.8) real[0,1] rev0
+PRECOMPACT T6 idx6 li4 ei5 dom[0,1] p(12.4,0.8)->(12.4,-0.8) real[0,1] rev0
+PRECOMPACT T7 idx7 li4 ei6 dom[0,1] p(12.4,-0.8)->(11.85,-0.8) real[0,1] rev0
+PRECOMPACT T8 idx8 li5 ei7 dom[0,1] p(13,1.1)->(13,2.6) real[0,1] rev0
+PRECOMPACT T9 idx9 li5 ei8 dom[0,1] p(13,2.6)->(14.2,2.6) real[0,1] rev0
+PRECOMPACT T10 idx10 li5 ei9 dom[0,1] p(14.2,2.6)->(14.2,1.1) real[0,1] rev0
+PRECOMPACT T11 idx11 li5 ei10 dom[0,1] p(14.2,1.1)->(13,1.1) real[0,1] rev0
+PRECOMPACT T12 idx12 li3 ei11 dom[0,6.28] p(0,0)->(6.28319,0) real[0,6.28] rev0
+PRECOMPACT T13 idx13 li3 ei12 dom[0,1] p(6.28319,0)->(6.28319,1) real[0,1] rev0
+PRECOMPACT T14 idx14 li3 ei13 dom[0,3.96] p(6.28319,1)->(2.32478,1) real[0,3.96] rev0
+PRECOMPACT T15 idx15 li3 ei12 dom[0,1] p(0,1)->(0,0) real[0,1] rev0
+PRECOMPACT T16 idx16 li4 ei13 dom[0,1] p(11.85,-2)->(15,-2) real[0,1] rev0
+PRECOMPACT T17 idx17 li3 ei0 dom[3.96,6.28] p(2.32478,1)->(0,1) real[3.96,6.28] rev0
+PRECOMPACT T18 idx18 li4 ei14 dom[0,1] p(16.85,4)->(15,4) real[0,1] rev0
+PRECOMPACT T19 idx19 li4 ei15 dom[0,1] p(11.85,0.8)->(12.4,0.8) real[0,1] rev0
+PRECOMPACT T20 idx20 li4 ei16 dom[0,1] p(16.85,-0.8)->(16.2,-0.8) real[0,1] rev0
+PRECOMPACT T21 idx21 li4 ei17 dom[0,1] p(11.85,-0.8)->(11.85,-2) real[0,1] rev0
+PRECOMPACT T22 idx22 li4 ei17 dom[0,1] p(16.85,-2)->(16.85,-0.8) real[0,1] rev0
+PRECOMPACT T23 idx23 li4 ei18 dom[0,1] p(11.85,4)->(11.85,0.8) real[0,1] rev0
+PRECOMPACT T24 idx24 li4 ei18 dom[0,1] p(16.85,0.8)->(16.85,4) real[0,1] rev0
+POSTCOMPACT T12 idx12 c2i2 li0 ei12 dom[0,3.96] p(6.28319,1)->(2.32478,1) real[0,3.96] rev0 proxy=0x7bdd0207e0 c2=0x7bdd0207e0
+POSTCOMPACT T14 idx14 c2i5 li1 ei12 dom[0,1] p(11.85,-2)->(15,-2) real[0,1] rev0 proxy=0x1015834f0 c2=0x1015834f0
+POSTCOMPACT T15 idx15 c2i2 li0 ei0 dom[3.96,6.28] p(2.32478,1)->(0,1) real[3.96,6.28] rev0 proxy=0x7bdd0207e0 c2=0x7bdd0207e0
+reseam ok=1 seam=11.85 seam_edges=2
+RESULT
+BREP F=2 L=3 T=23 E=18 V=16 C2=22 C3=13 S=2 valid=1
+ F0 si=0 loops=2 N deg=2,1 closed=1,0 dom0=[11.85,16.850000000000001] dom1=[-2,4] rat=1
+  L1 type=1 n=14: 0 20 18 2 3 22 16 1 21 17 4 5 19 14
+  L2 type=2 n=4: 6 7 8 9
+ F1 si=1 loops=1 N deg=2,1 closed=1,0 dom0=[0,6.2831853071795862] dom1=[0,1] rat=1
+  L0 type=1 n=5: 10 11 12 15 13
+ T0 idx=0 li=1 ei=0 rev=0 type=2 iso=4 dom=[0,1] p0=(15,-2) p1=(16.85,-2) proxyRev=0
+ T1 idx=1 li=1 ei=1 rev=0 type=1 iso=6 dom=[0,1] p0=(15,4) p1=(11.85,4) proxyRev=0
+ T2 idx=2 li=1 ei=2 rev=0 type=1 iso=1 dom=[0,1] p0=(16.2,-0.8) p1=(16.2,0.8) proxyRev=0
+ T3 idx=3 li=1 ei=3 rev=0 type=1 iso=2 dom=[0,1] p0=(16.2,0.8) p1=(16.85,0.8) proxyRev=0
+ T4 idx=4 li=1 ei=4 rev=0 type=1 iso=1 dom=[0,1] p0=(12.4,0.8) p1=(12.4,-0.8) proxyRev=0
+ T5 idx=5 li=1 ei=5 rev=0 type=1 iso=2 dom=[0,1] p0=(12.4,-0.8) p1=(11.85,-0.8) proxyRev=0
+ T6 idx=6 li=2 ei=6 rev=0 type=1 iso=1 dom=[0,1] p0=(13,1.1) p1=(13,2.6) proxyRev=0
+ T7 idx=7 li=2 ei=7 rev=0 type=1 iso=2 dom=[0,1] p0=(13,2.6) p1=(14.2,2.6) proxyRev=0
+ T8 idx=8 li=2 ei=8 rev=0 type=1 iso=1 dom=[0,1] p0=(14.2,2.6) p1=(14.2,1.1) proxyRev=0
+ T9 idx=9 li=2 ei=9 rev=0 type=1 iso=2 dom=[0,1] p0=(14.2,1.1) p1=(13,1.1) proxyRev=0
+ T10 idx=10 li=0 ei=10 rev=0 type=1 iso=4 dom=[0,6.28] p0=(0,0) p1=(6.28319,0) proxyRev=0
+ T11 idx=11 li=0 ei=11 rev=0 type=3 iso=5 dom=[0,1] p0=(6.28319,0) p1=(6.28319,1) proxyRev=0
+ T12 idx=12 li=0 ei=12 rev=1 type=2 iso=6 dom=[0,3.96] p0=(6.28319,1) p1=(2.32478,1) proxyRev=0
+ T13 idx=13 li=0 ei=11 rev=1 type=3 iso=3 dom=[0,1] p0=(0,1) p1=(0,0) proxyRev=0
+ T14 idx=14 li=1 ei=12 rev=0 type=2 iso=4 dom=[0,1] p0=(11.85,-2) p1=(15,-2) proxyRev=0
+ T15 idx=15 li=0 ei=0 rev=1 type=2 iso=6 dom=[3.96,6.28] p0=(2.32478,1) p1=(0,1) proxyRev=0
+ T16 idx=16 li=1 ei=13 rev=0 type=1 iso=6 dom=[0,1] p0=(16.85,4) p1=(15,4) proxyRev=0
+ T17 idx=17 li=1 ei=14 rev=0 type=1 iso=2 dom=[0,1] p0=(11.85,0.8) p1=(12.4,0.8) proxyRev=0
+ T18 idx=18 li=1 ei=15 rev=0 type=1 iso=2 dom=[0,1] p0=(16.85,-0.8) p1=(16.2,-0.8) proxyRev=0
+ T19 idx=19 li=1 ei=16 rev=1 type=3 iso=3 dom=[0,1] p0=(11.85,-0.8) p1=(11.85,-2) proxyRev=0
+ T20 idx=20 li=1 ei=16 rev=0 type=3 iso=5 dom=[0,1] p0=(16.85,-2) p1=(16.85,-0.8) proxyRev=0
+ T21 idx=21 li=1 ei=17 rev=1 type=3 iso=3 dom=[0,1] p0=(11.85,4) p1=(11.85,0.8) proxyRev=0
+ T22 idx=22 li=1 ei=17 rev=0 type=3 iso=5 dom=[0,1] p0=(16.85,0.8) p1=(16.85,4) proxyRev=0
+ E0 idx=0 c3=0 v=(0,12) nti=2 dom=[10,11.8] revProxy=0
+ E1 idx=1 c3=1 v=(1,13) nti=1 dom=[-15,-11.8] revProxy=0
+ E2 idx=2 c3=2 v=(2,3) nti=1 dom=[-0.8,0.8] revProxy=0
+ E3 idx=3 c3=3 v=(3,14) nti=1 dom=[11.2,11.8] revProxy=0
+ E4 idx=4 c3=4 v=(4,5) nti=1 dom=[-0.8,0.8] revProxy=1
+ E5 idx=5 c3=5 v=(5,15) nti=1 dom=[-12.4,-11.9] revProxy=1
+ E6 idx=6 c3=6 v=(6,7) nti=1 dom=[1.1,2.6] revProxy=0
+ E7 idx=7 c3=7 v=(7,8) nti=1 dom=[13,14.2] revProxy=0
+ E8 idx=8 c3=8 v=(8,9) nti=1 dom=[-2.6,-1.1] revProxy=1
+ E9 idx=9 c3=9 v=(9,6) nti=1 dom=[-14.2,-13] revProxy=1
+ E10 idx=10 c3=10 v=(10,10) nti=1 dom=[0,6.28] revProxy=0
+ E11 idx=11 c3=11 v=(10,0) nti=2 dom=[0,1] revProxy=0
+ E12 idx=12 c3=0 v=(12,0) nti=2 dom=[11.8,15] revProxy=0
+ E13 idx=13 c3=1 v=(13,1) nti=1 dom=[-11.8,-10] revProxy=0
+ E14 idx=14 c3=3 v=(14,4) nti=1 dom=[11.8,12.4] revProxy=0
+ E15 idx=15 c3=5 v=(15,2) nti=1 dom=[-11.9,-11.2] revProxy=1
+ E16 idx=16 c3=12 v=(12,15) nti=2 dom=[-2,-0.8] revProxy=0
+ E17 idx=17 c3=12 v=(14,13) nti=2 dom=[0.8,4] revProxy=0

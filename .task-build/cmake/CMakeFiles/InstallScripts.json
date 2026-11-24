@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSC058DF3D8F89U6623R25345320A0/attempts/20261124T171357371896Z/repo/.task-build/cmake/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC058DF3D8F89U6623R25345320A0/attempts/20261124T171357371896Z/repo/.task-build/cmake/core/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSC058DF3D8F89U6623R25345320A0/attempts/20261124T171357371896Z/repo/.task-build/cmake/core/zlib/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

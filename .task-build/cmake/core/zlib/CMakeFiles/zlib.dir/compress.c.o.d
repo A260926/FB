@@ -1,0 +1,5 @@
+core/zlib/CMakeFiles/zlib.dir/compress.c.o: \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json \
+  /Volumes/UserFBWorkspace/questions/FSC058DF3D8F89U6623R25345320A0/attempts/20261124T171357371896Z/repo/zlib/compress.c \
+  /Volumes/UserFBWorkspace/questions/FSC058DF3D8F89U6623R25345320A0/attempts/20261124T171357371896Z/repo/zlib/zlib.h \
+  /Volumes/UserFBWorkspace/questions/FSC058DF3D8F89U6623R25345320A0/attempts/20261124T171357371896Z/repo/zlib/zconf.h

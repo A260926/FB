@@ -1,0 +1,12 @@
+CASE quotient dir0_multiple_holes checks=1039
+CASE quotient dir1 checks=1039
+CASE quotient restricted_reverse_proxy checks=1040
+CASE quotient shared_surface_and_mesh checks=159
+GROUP quotient cases=4 checks=3277 COMPLETE
+CASE adjacency shared_edge_split_propagation checks=1985
+GROUP adjacency cases=1 checks=1985 COMPLETE
+CASE continuation twice_and_back_to_original_seam checks=890
+CASE continuation persistence_then_reedit checks=12
+CASE continuation failure_preserves_and_continues checks=15
+GROUP continuation cases=3 checks=917 COMPLETE
+TARGET_COMPLETE cases=8
