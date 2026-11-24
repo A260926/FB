@@ -1,0 +1,131 @@
+{
+  "repo": "DynamoRIO/drmemory",
+  "commit": "3d2b5f9b055dba86c41a75e58c53b59760cc2a6e",
+  "scope": "Unmodified offline Perl postprocessor and licenses; fixed error/callstack/DrFuzz source context. No runtime or SDK build; gitlinks excluded. Offline legacy baseline explicitly uses -nodefault_suppress. New C++ feature is absent, not patched into seed.",
+  "included": [
+    {
+      "path": "ACKNOWLEDGEMENTS",
+      "git_object": "0cc57d1b7ae1f7e6392e1864f56fdf401a2fe9ed",
+      "mode": "100644",
+      "sha256": "7ca638a0c4e64d93044000c98a169f234cba35f3bcd180b8ae0d5bed2e3cbaf5"
+    },
+    {
+      "path": "README",
+      "git_object": "b4c21a679248dfb95768be7ee6fc78df550ec588",
+      "mode": "100644",
+      "sha256": "459579445ceb1ba7bb406596b3f272919c8b9b7335b9f2bb5ac412abb502338f"
+    },
+    {
+      "path": "README.md",
+      "git_object": "2b5d834e9620756d76f4fcf9e8842c97dea128fc",
+      "mode": "100644",
+      "sha256": "13ab1641335b3995bf7a844f2dc85f805373bf6f64a68ac9f70d2e2d102a6008"
+    },
+    {
+      "path": "common/callstack.c",
+      "git_object": "da99594e07239cb11506b0660efee0adf3f7d8ed",
+      "mode": "100644",
+      "sha256": "c6ce4ff5e51c59189421ce67f268c326dd329432107cea80727c8902bf0f5553"
+    },
+    {
+      "path": "common/callstack.h",
+      "git_object": "33438b28f819d6586e62f9737c7b4eda8bf85535",
+      "mode": "100644",
+      "sha256": "752be4d0a5865dbbb64626e6edf87fbfaa011fb5e7711b0b40135970edefb9ec"
+    },
+    {
+      "path": "drfuzz/drfuzz.c",
+      "git_object": "7a69d77eebdba636e002a04ff98fafc761c3111d",
+      "mode": "100644",
+      "sha256": "823a82510af109a00732c379927c4fedc01adcd3306e271a63251f596288604b"
+    },
+    {
+      "path": "drfuzz/drfuzz.dox",
+      "git_object": "10eee59d5626e913d1d45bdd456fa70e7d2eb647",
+      "mode": "100644",
+      "sha256": "0f98a5da6047ad593874399d054cc1f2183a5c70fd5588341b222ff953bd8553"
+    },
+    {
+      "path": "drfuzz/drfuzz.h",
+      "git_object": "285863a91586e9aaacc14b63120c1b0b928cfb85",
+      "mode": "100644",
+      "sha256": "4127a4946b77094228f3c8b796a1bb0c75f44c0e30091dcd9f6461166e3dd6f4"
+    },
+    {
+      "path": "drfuzz/drfuzz_internal.h",
+      "git_object": "030e69a74105f5deb9d28176d0e743b8ee4717fd",
+      "mode": "100644",
+      "sha256": "ac13377e14f621eacdf67c73fa89d95afcd752cd0ae95ed0b395b4a9626dcc97"
+    },
+    {
+      "path": "drmemory/fuzzer.c",
+      "git_object": "9b1c4567bb9002f1b3a725f34f17e2a08bc9ad3b",
+      "mode": "100755",
+      "sha256": "0038919c595afe8feac9eb6846eabaf72b3c58ddb68935e5b0a542c7b5790208"
+    },
+    {
+      "path": "drmemory/fuzzer.h",
+      "git_object": "c7d20ca31cc707be165efcc23c7ec4c52de54e48",
+      "mode": "100644",
+      "sha256": "e1484b456b45388397dbf629a401e8489efad1634c1b0c4085e3ff5637b8491f"
+    },
+    {
+      "path": "drmemory/postprocess.pl",
+      "git_object": "51b1e126e77f1a6c88c0a117b2670cd2248945a3",
+      "mode": "100755",
+      "sha256": "9e83f92c314beb9c70bf9a8f219f37443a71fdd152ee187554b816dd6445dfc1"
+    },
+    {
+      "path": "drmemory/report.c",
+      "git_object": "e999444357c70c0f6aca291e883153f4c6cbca63",
+      "mode": "100755",
+      "sha256": "765d6ad40653fe670c80fdf8d4e0fbe7d00c2f1785a240a45c0c41ced05e625a"
+    },
+    {
+      "path": "drmemory/report.h",
+      "git_object": "3a4f721d4dbd42aaf42a8424a216254b30b00e1c",
+      "mode": "100755",
+      "sha256": "16ae70872e6cecad883f3e7ae9b3511af9069eafc112836874ac3df4c7503774"
+    },
+    {
+      "path": "drmemory/suppress-default.lin.txt",
+      "git_object": "273c704e871bb192b8b3a502bd5ca48740cf4da1",
+      "mode": "100644",
+      "sha256": "884e0f929fc10a04579d4e8463a56e675d46de2e328640340c0baef0d6500c23"
+    },
+    {
+      "path": "drmemory/suppress-default.mac.txt",
+      "git_object": "4fbc277751aa0864d9aade23c34aec90aa9b08e9",
+      "mode": "100644",
+      "sha256": "0a84849013004a8ed9de0aa29c6592adb47c8185197d9127f69029ad48323549"
+    },
+    {
+      "path": "drmemory/suppress-default.win.txt",
+      "git_object": "7da619764c80dcdb8aa91af054c33ca0ede82631",
+      "mode": "100644",
+      "sha256": "6ab4029bd21e08dfb078ba68cd3a4070a70b43015f916c5057550c1d3d0a9485"
+    },
+    {
+      "path": "lgpl-2.1.txt",
+      "git_object": "390989c61eb579ec153c67a5534e5444273b68d9",
+      "mode": "100644",
+      "sha256": "4cdcb7b26278a3e642d5c8a704a4ee962d96a8fff295b3a992b272423b015f8d"
+    },
+    {
+      "path": "license.txt",
+      "git_object": "3b36f15a0b5019862ac5d1260f1fa8ac3d23bbf4",
+      "mode": "100644",
+      "sha256": "a09d15989d3972d312e65a2a03b6a42d32583d7e62dfd89e668795a3ed19db00"
+    }
+  ],
+  "original_gitlinks": [
+    {
+      "path": "dynamorio",
+      "commit": "92be9e40f209525031b5407095f1f81abf483bac"
+    },
+    {
+      "path": "third_party/googletest",
+      "commit": "12ddfca458945b8fcffa7ed416076ed55bf669b1"
+    }
+  ]
+}

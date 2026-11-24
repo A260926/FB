@@ -1,0 +1,9 @@
+Error #1: UNADDRESSABLE ACCESS: reading 0x1234-0x1238 4 byte(s)
+  info: @0:00:00.001 in thread 1
+# 0 <not in a module> (0x1234)
+  error end
+Error #2: UNADDRESSABLE ACCESS: reading 0x4321-0x4325 4 byte(s)
+  info: @0:00:00.002 in thread 2
+# 0 <not in a module> (0x1234)
+  error end
+LOG END
