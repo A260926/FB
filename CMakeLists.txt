@@ -30,6 +30,7 @@ add_library(model_checker
     src/model/action.cpp
     src/model/vector_clock.cpp
     src/model/checker.cpp
+    src/model/causal_trace.cpp
 )
 target_include_directories(model_checker PUBLIC include)
 target_compile_options(model_checker PRIVATE -Wall -Wextra -Wpedantic)

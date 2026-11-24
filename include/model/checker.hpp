@@ -10,6 +10,8 @@ namespace model {
 
 enum class MemoryModel { SC, TSO, PSO };
 
+struct CausalTrace;
+
 struct RaceReport {
     std::string address;
     ScheduleStep first;
@@ -203,6 +205,15 @@ public:
     std::vector<Schedule> collect_dpor_schedules(std::size_t max_schedules = 100000) const;
     std::vector<EffectiveScheduleStep> replay_effective_trace(const Schedule& schedule) const;
     std::vector<InspectedScheduleStep> inspect_schedule(const Schedule& schedule) const;
+
+    // Happens-before evidence graph for an SC replay. max_events == 0 replays
+    // the whole schedule; a positive value commits at most that many dynamic
+    // events and marks the result cancelled iff schedule suffix steps remain.
+    // Throws std::invalid_argument for non-SC checkers or for synchronization
+    // kinds without causal evidence support. Replay error boundaries match
+    // inspect_schedule/replay for the committed prefix.
+    CausalTrace causal_trace(const Schedule& schedule,
+                             std::size_t max_events = 0) const;
     bool dpor_transitions_independent(ThreadId lhs_thread,
                                       const Action& lhs,
                                       ThreadId rhs_thread,

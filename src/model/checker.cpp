@@ -1,5 +1,6 @@
 #include "model/checker.hpp"
 
+#include "model/causal_trace.hpp"
 #include "model/vector_clock.hpp"
 
 #if defined(DPOR_EXPLORATION_METRICS)
@@ -2395,7 +2396,8 @@ void wake_waiter(const Program& program,
 void signal_one_waiter(const Program& program,
                        ExecutionState& state,
                        const Action& action,
-                       ThreadId signaler) {
+                       ThreadId signaler,
+                       causal_detail::CausalRecorder* causal) {
     auto& waiters = state.condition_waiters[action.condition];
     if (waiters.empty()) {
         return;
@@ -2404,17 +2406,24 @@ void signal_one_waiter(const Program& program,
     const ThreadId waiter = waiters.front();
     waiters.erase(waiters.begin());
     wake_waiter(program, state, signaler, waiter);
+    if (causal != nullptr) {
+        causal->woke(waiter, "condition-signal '" + action.condition + "'");
+    }
 }
 
 void broadcast_waiters(const Program& program,
                        ExecutionState& state,
                        const Action& action,
-                       ThreadId signaler) {
+                       ThreadId signaler,
+                       causal_detail::CausalRecorder* causal) {
     auto& waiters = state.condition_waiters[action.condition];
     const std::vector<ThreadId> to_wake = waiters;
     waiters.clear();
     for (const ThreadId waiter : to_wake) {
         wake_waiter(program, state, signaler, waiter);
+        if (causal != nullptr) {
+            causal->woke(waiter, "condition-broadcast '" + action.condition + "'");
+        }
     }
 }
 
@@ -2440,7 +2449,10 @@ Value read_plain_value(const ExecutionState& state, ThreadId tid, const std::str
     return value->second;
 }
 
-StepReport execute_enabled_step(const Program& program, ExecutionState& state, const ScheduleStep& step) {
+StepReport execute_enabled_step(const Program& program,
+                                ExecutionState& state,
+                                const ScheduleStep& step,
+                                causal_detail::CausalRecorder* causal = nullptr) {
 #if defined(DPOR_EXPLORATION_METRICS)
     ++profile_metrics().executed_steps;
 #endif
@@ -2505,6 +2517,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
         advance_pc(program, state, tid);
         state.mutex_owner[action.mutex] = tid;
         state.thread_clock.at(tid).join(state.mutex_clock[action.mutex]);
+        if (causal != nullptr) {
+            causal->mutex_acquire(action.mutex);
+        }
         break;
     case ActionKind::TryLock: {
         advance_pc(program, state, tid);
@@ -2517,6 +2532,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
             // the stored release frontier or the live owner's clock.
             state.mutex_owner[action.mutex] = tid;
             state.thread_clock.at(tid).join(state.mutex_clock[action.mutex]);
+            if (causal != nullptr) {
+                causal->mutex_acquire(action.mutex);
+            }
         }
         break;
     }
@@ -2600,6 +2618,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
             break;
         }
         state.thread_clock.at(tid).join(state.thread_clock.at(action.target));
+        if (causal != nullptr) {
+            causal->joined(action.target);
+        }
         break;
     case ActionKind::Spawn:
         advance_pc(program, state, tid);
@@ -2611,6 +2632,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
         normalize_pc(program, state, action.target);
         state.thread_clock.at(action.target).join(state.thread_clock.at(tid));
         report.spawned_thread = action.target;
+        if (causal != nullptr) {
+            causal->spawned(action.target);
+        }
         break;
     case ActionKind::Unlock: {
         advance_pc(program, state, tid);
@@ -2621,6 +2645,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
         }
         state.mutex_clock[action.mutex] = state.thread_clock.at(tid);
         state.mutex_owner.erase(owner);
+        if (causal != nullptr) {
+            causal->mutex_release(action.mutex);
+        }
         break;
     }
     case ActionKind::RUnlock: {
@@ -2716,6 +2743,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
         assert(inserted && "one thread arrived twice in one barrier generation");
         (void)inserted;
         barrier.arrival_releases.join(state.thread_clock.at(tid));
+        if (causal != nullptr) {
+            causal->barrier_arrival(action.barrier, barrier.generation, tid);
+        }
         if (barrier.arrivals.size() < barrier.parties) {
             // A non-last arrival remains at this source action. Enabledness
             // excludes it until the last participant atomically releases the
@@ -2727,6 +2757,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
         const std::vector<ThreadId> participants(
             barrier.arrivals.begin(), barrier.arrivals.end());
         const VectorClock release_clock = barrier.arrival_releases;
+        if (causal != nullptr) {
+            causal->barrier_released(action.barrier, barrier.generation, participants);
+        }
         for (const ThreadId participant : participants) {
             assert(state.started.at(participant));
             assert(has_next_action(program, state, participant));
@@ -2751,6 +2784,9 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
             assert(state.mutex_owner.find(action.mutex) == state.mutex_owner.end());
             state.mutex_owner[action.mutex] = tid;
             state.thread_clock.at(tid).join(state.mutex_clock[action.mutex]);
+            if (causal != nullptr) {
+                causal->mutex_acquire(action.mutex);
+            }
             state.wait_phase.at(tid) = WaitPhase::None;
             advance_pc(program, state, tid);
             break;
@@ -2776,17 +2812,22 @@ StepReport execute_enabled_step(const Program& program, ExecutionState& state, c
 
         state.mutex_clock[action.mutex] = state.thread_clock.at(tid);
         state.mutex_owner.erase(action.mutex);
+        if (causal != nullptr) {
+            // Parking releases the mutex; the later reacquire joins this
+            // frontier unless an interposed owner published a newer one.
+            causal->mutex_release(action.mutex);
+        }
         insert_waiter(state, action.condition, tid);
         state.wait_phase.at(tid) = WaitPhase::Waiting;
         break;
     }
     case ActionKind::Signal:
         advance_pc(program, state, tid);
-        signal_one_waiter(program, state, action, tid);
+        signal_one_waiter(program, state, action, tid, causal);
         break;
     case ActionKind::Broadcast:
         advance_pc(program, state, tid);
-        broadcast_waiters(program, state, action, tid);
+        broadcast_waiters(program, state, action, tid, causal);
         break;
     case ActionKind::AtomicLoad:
         advance_pc(program, state, tid);
@@ -4462,6 +4503,142 @@ void minimize_result_reports(const Program& program,
 }
 
 } // namespace
+
+namespace causal_detail {
+
+// Synchronization families whose clock merges the evidence recorder does not
+// (yet) attribute to source events. Silently omitting their edges would emit
+// a graph that disagrees with the interpreter's happens-before clocks, so an
+// explained replay that actually commits one fails loudly instead.
+std::optional<std::string> unsupported_causal_sync_kind(const Action& action) {
+    switch (action.kind) {
+    case ActionKind::RLock:
+        return "read-lock acquire";
+    case ActionKind::RUnlock:
+        return "read-lock release";
+    case ActionKind::WLock:
+        return "write-lock acquire";
+    case ActionKind::WUnlock:
+        return "write-lock release";
+    case ActionKind::Upgrade:
+        return "rwlock upgrade";
+    case ActionKind::Downgrade:
+        return "rwlock downgrade";
+    case ActionKind::SemPost:
+        return "semaphore post";
+    case ActionKind::SemWait:
+        return "semaphore wait";
+    case ActionKind::AtomicLoad:
+    case ActionKind::AtomicStore:
+    case ActionKind::AtomicRmw:
+    case ActionKind::CompareExchange:
+        // Atomic release/acquire sequences merge the per-location clock. They
+        // are not part of the first supported evidence family set.
+        return "atomic synchronization";
+    default:
+        return std::nullopt;
+    }
+}
+
+CausalTrace run_causal_trace(const Program& program,
+                             const Schedule& schedule,
+                             std::size_t step_bound,
+                             MemoryModel memory_model,
+                             std::size_t max_events) {
+    if (memory_model != MemoryModel::SC) {
+        throw std::invalid_argument(
+            "causal_trace evidence is only supported under sequential consistency (SC)");
+    }
+
+    CausalRecorder recorder;
+    ExecutionState state = initial_state(program, memory_model);
+    recorder.initialize(program.threads.size());
+
+    const bool detect_cycles = requires_cycle_detection(program);
+    StateHistory state_history =
+        detect_cycles ? initial_state_history(state) : StateHistory{};
+
+    // max_events == 0 means a complete replay. A cap larger than the schedule
+    // simply commits the whole schedule and is not cancelled.
+    const std::size_t wanted =
+        max_events == 0 ? schedule.size() : std::min(max_events, schedule.size());
+    std::size_t committed = 0;
+
+    for (std::size_t index = 0; index < wanted; ++index) {
+        const ScheduleStep& endpoint = schedule.at(index);
+        // The committed prefix is validated exactly like inspect_schedule;
+        // suffix steps past `wanted` are neither checked nor executed.
+        validate_replay_step(program, state, endpoint, index);
+
+        if (step_bound_reached(state, endpoint.thread, step_bound)) {
+            if (index + 1 < schedule.size()) {
+                throw invalid_schedule(
+                    index + 1, "schedule continues after a step-bound outcome");
+            }
+            break;
+        }
+
+        const Action effective_action =
+            effective_action_for_step(program, state, endpoint);
+        if (const auto unsupported = unsupported_causal_sync_kind(effective_action)) {
+            throw std::invalid_argument(
+                "causal_trace cannot explain " + *unsupported +
+                " actions yet; supported synchronization is program order, mutex, "
+                "spawn/join, cyclic barriers, and condition variables");
+        }
+
+        std::optional<std::uint64_t> barrier_generation;
+        if (effective_action.kind == ActionKind::BarrierWait) {
+            const auto barrier = state.barriers.find(effective_action.barrier);
+            if (barrier != state.barriers.end()) {
+                barrier_generation = barrier->second.generation;
+            }
+        }
+        const std::optional<TimedWaitOccurrence> timed_wait_occurrence =
+            timed_wait_occurrence_for(state, endpoint, effective_action);
+
+        const std::size_t event_id = recorder.begin_commit(
+            endpoint.thread,
+            endpoint,
+            effective_action,
+            barrier_generation,
+            timed_wait_occurrence);
+
+        // The very same production interpreter commit used by replay and
+        // inspect_schedule; recorder hooks inside it attribute clock merges.
+        const StepReport report =
+            execute_enabled_step(program, state, endpoint, &recorder);
+
+        recorder.finish_commit(
+            event_id,
+            dense_clock(state.thread_clock.at(endpoint.thread),
+                        program.threads.size()));
+        ++committed;
+
+        if (report.error.has_value() || report.assertion.has_value()) {
+            if (index + 1 < schedule.size()) {
+                throw invalid_schedule(
+                    index + 1, "schedule continues after a terminal execution report");
+            }
+            break;
+        }
+
+        if (detect_cycles &&
+            observe_behavioral_state(state, state_history).has_value()) {
+            if (index + 1 < schedule.size()) {
+                throw invalid_schedule(
+                    index + 1, "schedule continues after a nontermination cycle");
+            }
+            break;
+        }
+    }
+
+    // Cancelled only when schedule entries were genuinely left uncommitted.
+    recorder.trace.cancelled = committed < schedule.size();
+    return std::move(recorder.trace);
+}
+
+} // namespace causal_detail
 
 ModelChecker::ModelChecker(Program program, std::size_t step_bound, MemoryModel memory_model)
     : program_(std::move(program)), step_bound_(step_bound), memory_model_(memory_model) {

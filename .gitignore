@@ -3,3 +3,4 @@ build/
 build-profile/
 build-restore/
 build-rel/
+.task-build/
