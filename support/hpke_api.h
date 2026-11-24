@@ -2,7 +2,9 @@
 #ifndef CHECK_HPKE_API_H
 #define CHECK_HPKE_API_H
 #include <stddef.h>
+#ifndef crypto_hpke_H
 typedef struct crypto_hpke_ctx crypto_hpke_ctx;
+#endif
 int crypto_hpke_sender_setup(crypto_hpke_ctx **out,unsigned char enc[32],const unsigned char pkR[32],const unsigned char *skS,const unsigned char *info,size_t info_len,const unsigned char *ikmE,size_t ikmE_len);
 int crypto_hpke_receiver_setup(crypto_hpke_ctx **out,const unsigned char enc[32],const unsigned char skR[32],const unsigned char *pkS,const unsigned char *info,size_t info_len);
 int crypto_hpke_seal(crypto_hpke_ctx *ctx,unsigned char *c,unsigned long long *clen,const unsigned char *m,unsigned long long mlen,const unsigned char *aad,unsigned long long aadlen);

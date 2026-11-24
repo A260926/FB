@@ -306,6 +306,8 @@ am__libsodium_la_SOURCES_DIST =  \
 	crypto_hash/sha256/cp/hash_sha256_cp.c \
 	crypto_hash/sha512/hash_sha512.c \
 	crypto_hash/sha512/cp/hash_sha512_cp.c \
+	crypto_hpke.c \
+	crypto_hpke_local.h \
 	crypto_kdf/blake2b/kdf_blake2b.c crypto_kdf/crypto_kdf.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha256.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha512.c crypto_kx/crypto_kx.c \
@@ -473,6 +475,7 @@ am_libsodium_la_OBJECTS =  \
 	crypto_hash/sha256/cp/libsodium_la-hash_sha256_cp.lo \
 	crypto_hash/sha512/libsodium_la-hash_sha512.lo \
 	crypto_hash/sha512/cp/libsodium_la-hash_sha512_cp.lo \
+	libsodium_la-crypto_hpke.lo \
 	crypto_kdf/blake2b/libsodium_la-kdf_blake2b.lo \
 	crypto_kdf/libsodium_la-crypto_kdf.lo \
 	crypto_kdf/hkdf/libsodium_la-kdf_hkdf_sha256.lo \
@@ -1008,6 +1011,8 @@ libsodium_la_SOURCES = crypto_aead/aegis128l/aead_aegis128l.c \
 	crypto_hash/sha256/cp/hash_sha256_cp.c \
 	crypto_hash/sha512/hash_sha512.c \
 	crypto_hash/sha512/cp/hash_sha512_cp.c \
+	crypto_hpke.c \
+	crypto_hpke_local.h \
 	crypto_kdf/blake2b/kdf_blake2b.c crypto_kdf/crypto_kdf.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha256.c \
 	crypto_kdf/hkdf/kdf_hkdf_sha512.c crypto_kx/crypto_kx.c \
@@ -2449,6 +2454,9 @@ crypto_scalarmult/curve25519/sandy2x/libsodium_la-sandy2x.lo: crypto_scalarmult/
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+libsodium_la-crypto_hpke.lo: crypto_hpke.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libsodium_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $@ `test -f 'crypto_hpke.c' || echo '$(srcdir)/'`crypto_hpke.c
 
 crypto_aead/aegis128l/libaesni_la-aegis128l_aesni.lo: crypto_aead/aegis128l/aegis128l_aesni.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libaesni_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT crypto_aead/aegis128l/libaesni_la-aegis128l_aesni.lo -MD -MP -MF crypto_aead/aegis128l/$(DEPDIR)/libaesni_la-aegis128l_aesni.Tpo -c -o crypto_aead/aegis128l/libaesni_la-aegis128l_aesni.lo `test -f 'crypto_aead/aegis128l/aegis128l_aesni.c' || echo '$(srcdir)/'`crypto_aead/aegis128l/aegis128l_aesni.c
