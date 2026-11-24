@@ -151,6 +151,9 @@ typedef struct GLVertex {
     GLint edge_flag;
 } GLVertex;
 
+/* fragment bytecode shader program (include/TGL/glshader.h) */
+struct TGLShaderProgram;
+
 typedef struct GLImage {
     PIXEL pixmap[TGL_FEATURE_TEXTURE_DIM * TGL_FEATURE_TEXTURE_DIM];
     GLint xsize, ysize;
@@ -340,6 +343,11 @@ typedef struct GLContext {
     GLint boundcolorbuffer;
     GLint boundtexcoordbuffer;
     GLubyte rasterposvalid;
+    /* programmable fragment stage (see include/TGL/glshader.h).
+     * shader_program is the currently bound program (context holds a
+     * reference); shader_error is the sticky last production error. */
+    struct TGLShaderProgram *shader_program;
+    GLint shader_error;
 #if TGL_HAS(ERROR_CHECK)
     GLenum error_flag;
 #endif
@@ -396,6 +404,12 @@ void gl_draw_triangle_line(GLVertex *p0, GLVertex *p1, GLVertex *p2);
 void gl_draw_triangle_fill(GLVertex *p0, GLVertex *p1, GLVertex *p2);
 void gl_draw_triangle_select(GLVertex *p0, GLVertex *p1, GLVertex *p2);
 void gl_draw_triangle_feedback(GLVertex *p0, GLVertex *p1, GLVertex *p2);
+
+/* shader.c: fragment bytecode integration */
+void tgl_shader_fill_triangle(GLContext *c, GLVertex *p0, GLVertex *p1,
+                              GLVertex *p2);
+void tgl_shader_reject(GLContext *c);
+void tgl_shader_context_shutdown(GLContext *c);
 /* matrix.c */
 void gl_print_matrix(const GLfloat *m);
 /*

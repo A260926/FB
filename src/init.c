@@ -371,6 +371,8 @@ void glInit(void *zbuffer1)
 void glClose(void)
 {
     GLContext *c = gl_get_context();
+    /* release the context's shader program reference */
+    tgl_shader_context_shutdown(c);
     for (GLuint i = 0; i < 3; i++) {
         gl_free(c->matrix_stack[i]);
     }
