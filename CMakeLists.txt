@@ -222,6 +222,7 @@ set(BUILD_SHARED_LIBS ${SDLMIXER_BUILD_SHARED_LIBS})
 add_library(${sdl3_mixer_target_name}
     src/SDL_mixer.c
     src/SDL_mixer_metadata_tags.c
+    src/SDL_mixer_recording.c
     src/SDL_mixer_spatialization.c
     src/decoder_aiff.c
     src/decoder_au.c

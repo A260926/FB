@@ -193,6 +193,46 @@ typedef struct MIX_Track MIX_Track;
 typedef struct MIX_Group MIX_Group;
 
 /**
+ * An opaque object that records a mixer's final output.
+ *
+ * A MIX_Recorder taps the final, interleaved float32 PCM stream of a
+ * MIX_Mixer, after the postmix callback has run and before the data is sent
+ * to the output stream. The same tap is used by mixers created with
+ * MIX_CreateMixerDevice() and MIX_CreateMixer(), so recording does not depend
+ * on an audio device being open.
+ *
+ * Each mixer may have at most one recorder attached at a time.
+ *
+ * \since This datatype is available since SDL_mixer 3.3.0.
+ */
+typedef struct MIX_Recorder MIX_Recorder;
+
+/**
+ * The current state of a MIX_Recorder.
+ *
+ * All frame numbers are absolute, measured in sample frames relative to the
+ * moment the MIX_Recorder was created. Frame zero is the first output frame
+ * the mixer produced after the recorder existed; silence produced while no
+ * tracks are active is counted like any other output frame.
+ *
+ * \since This struct is available since SDL_mixer 3.3.0.
+ */
+typedef struct MIX_RecorderState
+{
+    /** true while a recording session is active, false before starting and after stopping. */
+    bool active;
+
+    /** Absolute origin frame of the session, including its preroll window. Frames missing inside this window surface as read gaps. */
+    Uint64 start_frame;
+
+    /** Exclusive absolute frame tail: one past the last frame of this session. */
+    Uint64 end_frame;
+
+    /** Frames dropped by this session because the queue was full. */
+    Uint64 dropped_frames;
+} MIX_RecorderState;
+
+/**
  * The current major version of SDL_mixer headers.
  *
  * If this were SDL_mixer version 3.2.1, this value would be 3.
@@ -3358,6 +3398,225 @@ extern SDL_DECLSPEC bool SDLCALL MIX_GetAudioDecoderFormat(MIX_AudioDecoder *aud
  * \since This function is available since SDL_mixer 3.0.0.
  */
 extern SDL_DECLSPEC int SDLCALL MIX_DecodeAudio(MIX_AudioDecoder *audiodecoder, void *buffer, int buflen, const SDL_AudioSpec *spec);
+
+
+/* Output recording with preroll ... */
+
+/**
+ * Create a recorder attached to a mixer's final output stream.
+ *
+ * The recorder taps the mixer's interleaved float32 output after any
+ * MIX_PostMixCallback has modified it and before the data is handed to the
+ * output stream. It does not install or replace any user callback, and the
+ * mixer's playback behavior is unchanged. Both device mixers
+ * (MIX_CreateMixerDevice()) and in-memory mixers (MIX_CreateMixer(), driven
+ * through MIX_Generate()) use the same code path.
+ *
+ * All frame counts in this API are complete sample frames (one sample per
+ * channel), never individual samples. The channel order and sample rate are
+ * those of the mixer's own spec.
+ *
+ * All storage this recorder needs is allocated up front, at creation time;
+ * the hot mixing path performs no allocation.
+ *
+ * From creation onward, the recorder counts every output frame the mixer
+ * produces, starting at absolute frame zero, including silence generated
+ * while no tracks are active. It continuously keeps the most recent
+ * `preroll_frames` frames available so that a later MIX_StartRecorder() call
+ * can begin with audio that already happened. While no session is active,
+ * this rolling preroll keeps updating forever.
+ *
+ * Each mixer may have at most one recorder attached; attempting to attach a
+ * second one fails and leaves the existing recorder and all sounds intact.
+ *
+ * \param mixer the mixer whose output will be recorded.
+ * \param preroll_frames number of most-recent frames always retained for the
+ *                       next recording start; must be smaller than
+ *                       `capacity_frames`.
+ * \param capacity_frames total number of sample frames the recording queue
+ *                        can hold, including the preroll segment; must be
+ *                        larger than `preroll_frames`.
+ * \returns a new recorder on success, or NULL on invalid parameters,
+ *          integer overflow, allocation failure, or if the mixer already has
+ *          a recorder; call SDL_GetError() for more information.
+ *
+ * \ownership The returned recorder is owned by the caller and must be
+ *            destroyed with MIX_DestroyRecorder(); destroying the owning
+ *            mixer also destroys any attached recorder, after which the
+ *            handle must not be used.
+ *
+ * \threadsafety It is safe to call this function from any thread.
+ *
+ * \since This function is available since SDL_mixer 3.3.0.
+ *
+ * \sa MIX_StartRecorder
+ * \sa MIX_ReadRecorder
+ * \sa MIX_StopRecorder
+ * \sa MIX_GetRecorderState
+ * \sa MIX_DestroyRecorder
+ */
+extern SDL_DECLSPEC MIX_Recorder * SDLCALL MIX_CreateRecorder(MIX_Mixer *mixer, Uint64 preroll_frames, Uint64 capacity_frames);
+
+/**
+ * Start a recording session on a recorder.
+ *
+ * The start point is the mixer's current output frame tail at the moment
+ * this call acquires the mixer's synchronization lock. The session's first
+ * readable data is the up-to-`preroll_frames` most recent frames that
+ * actually exist immediately before that tail, followed continuously by the
+ * newly mixed output. The queue's capacity covers the preroll segment as
+ * well, so MIX_ReadRecorder() can never read more than `capacity_frames`
+ * frames ahead of the consumer.
+ *
+ * Starting fails if a session is currently active, or if the previous
+ * session's queue has not been fully drained yet. On failure no history is
+ * discarded and the recorder's state is unchanged. After a stopped session
+ * has been drained, this function can be called again: it takes a fresh
+ * preroll snapshot and resets this session's dropped-frame counter.
+ *
+ * \param recorder the recorder to start.
+ * \returns true on success, false on failure (including a NULL recorder, an
+ *          active session, or an undrained queue); call SDL_GetError() for
+ *          more information.
+ *
+ * \threadsafety This is a control call; the app must serialize it with
+ *               MIX_StopRecorder(), MIX_GetRecorderState() and
+ *               MIX_DestroyRecorder() on a single control thread. It may run
+ *               concurrently with MIX_ReadRecorder() on another thread and
+ *               with the mixer's own mixing.
+ *
+ * \since This function is available since SDL_mixer 3.3.0.
+ *
+ * \sa MIX_CreateRecorder
+ * \sa MIX_ReadRecorder
+ * \sa MIX_StopRecorder
+ */
+extern SDL_DECLSPEC bool SDLCALL MIX_StartRecorder(MIX_Recorder *recorder);
+
+/**
+ * Read recorded sample frames from a recorder without blocking.
+ *
+ * This function never takes the mixer lock and never waits for the mixing
+ * thread: it returns immediately with whatever contiguous frames are
+ * available right now. A return value of zero means no data is currently
+ * available; a return value of -1 signals an error, in which case no data is
+ * consumed.
+ *
+ * On a positive return, `first_frame` is set to the absolute frame number,
+ * relative to recorder creation, of the first returned frame, and the
+ * interleaved float32 frames are written to `dst` (one frame is
+ * `spec.channels` floats). A single read only ever contains contiguous
+ * frames: if frames were dropped because the queue filled, the read stops at
+ * the gap and the frames after the gap become readable on a later call.
+ *
+ * When the queue is full, newly produced frames are dropped; frames already
+ * waiting to be read are never overwritten, and playback never pauses. Once
+ * the consumer frees space, the recorder resumes accepting frames.
+ *
+ * After MIX_StopRecorder(), the remaining queue can still be read to empty,
+ * including frames dropped at the very tail for which no successor PCM can
+ * be reported. A read returning zero while MIX_GetRecorderState() reports
+ * `active == false` means the queue is fully drained.
+ *
+ * \param recorder the recorder to read from.
+ * \param dst destination buffer, must not be NULL.
+ * \param max_frames maximum number of complete sample frames to write; must
+ *                   be greater than zero.
+ * \param first_frame on success, set to the absolute frame number of the
+ *                    first returned frame; must not be NULL.
+ * \returns the number of contiguous frames written, zero if none are
+ *          available, or -1 on error; call SDL_GetError() for more
+ *          information.
+ *
+ * \threadsafety This is the only recorder call intended for a dedicated
+ *               reader thread. It does not take the mixer lock and may run
+ *               concurrently with the mixing thread and with the serialized
+ *               control calls. Recorder control functions must never be
+ *               called from a mixer callback.
+ *
+ * \since This function is available since SDL_mixer 3.3.0.
+ *
+ * \sa MIX_StartRecorder
+ * \sa MIX_StopRecorder
+ * \sa MIX_GetRecorderState
+ */
+extern SDL_DECLSPEC int SDLCALL MIX_ReadRecorder(MIX_Recorder *recorder, float *dst, int max_frames, Uint64 *first_frame);
+
+/**
+ * Stop the active recording session on a recorder.
+ *
+ * Recording stops on a frame boundary synchronized with the mixer: after
+ * this call returns, the recorder accepts no further frames into the session
+ * and `end_frame` in MIX_GetRecorderState() stays fixed. Frames already
+ * queued, including any dropped tail with no successor PCM, remain available
+ * to MIX_ReadRecorder() until drained.
+ *
+ * It is legal to call this before MIX_StartRecorder(), or after the session
+ * has already stopped: both succeed without changing the existing state.
+ *
+ * \param recorder the recorder to stop.
+ * \returns true on success, false for a NULL recorder or another failure;
+ *          call SDL_GetError() for more information.
+ *
+ * \threadsafety This is a control call; serialize it with
+ *               MIX_StartRecorder(), MIX_GetRecorderState() and
+ *               MIX_DestroyRecorder() on the control thread. The rolling
+ *               preroll continues to update while stopped.
+ *
+ * \since This function is available since SDL_mixer 3.3.0.
+ *
+ * \sa MIX_StartRecorder
+ * \sa MIX_ReadRecorder
+ */
+extern SDL_DECLSPEC bool SDLCALL MIX_StopRecorder(MIX_Recorder *recorder);
+
+/**
+ * Query the current state of a recorder.
+ *
+ * The returned state reports whether a session is active, the absolute
+ * start frame (including preroll), the exclusive absolute end frame reached
+ * so far (fixed after stopping), and the number of frames dropped by the
+ * current session because the queue was full. The dropped counter resets on
+ * each successful MIX_StartRecorder().
+ *
+ * \param recorder the recorder to query.
+ * \param state destination for the state snapshot; must not be NULL.
+ * \returns true on success, false on a NULL argument or another failure;
+ *          call SDL_GetError() for more information.
+ *
+ * \threadsafety This is a control call; serialize it with the other
+ *               recorder control functions on the control thread.
+ *
+ * \since This function is available since SDL_mixer 3.3.0.
+ */
+extern SDL_DECLSPEC bool SDLCALL MIX_GetRecorderState(MIX_Recorder *recorder, MIX_RecorderState *state);
+
+/**
+ * Detach a recorder from its mixer and release its resources.
+ *
+ * After this call the recorder no longer touches the mixer's output. Any
+ * unread recorded data is discarded.
+ *
+ * Destroying the owning mixer also destroys its attached recorder; the
+ * caller must guarantee no control or reader thread is using the recorder at
+ * that point and must not use the handle afterward.
+ *
+ * Passing a NULL recorder is a legal no-op.
+ *
+ * \param recorder the recorder to destroy, or NULL.
+ *
+ * \threadsafety This is a control call; serialize it with
+ *               MIX_StartRecorder(), MIX_StopRecorder() and
+ *               MIX_GetRecorderState(). No concurrent MIX_ReadRecorder() may
+ *               be in progress, and recorder controls must not be called
+ *               from a mixer callback.
+ *
+ * \since This function is available since SDL_mixer 3.3.0.
+ *
+ * \sa MIX_CreateRecorder
+ */
+extern SDL_DECLSPEC void SDLCALL MIX_DestroyRecorder(MIX_Recorder *recorder);
+
 
 /* Ends C function definitions when using C++ */
 #ifdef __cplusplus

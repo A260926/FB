@@ -212,6 +212,7 @@ struct MIX_Mixer
     int actual_mixed_bytes;   // on each iteration of the mixer, number of bytes of real mixed audio, ignoring silence at end if no audio was available to mix there.
     float gain;
     MIX_VBAP2D vbap2d;
+    struct MIX_Recorder *recorder;  // attached output recorder, or NULL. At most one per mixer.
     MIX_Mixer *prev;  // double-linked list for all_mixers.
     MIX_Mixer *next;
 };
@@ -281,6 +282,15 @@ void *MIX_SlurpConstIO(SDL_IOStream *io, size_t *datalen, bool *copied);
 // mu-Law and a-Law lookup tables.
 extern const float MIX_alawToFloat[256];
 extern const float MIX_ulawToFloat[256];
+
+// Output recording (implemented in SDL_mixer_recording.c).
+// Feed one postmix batch (interleaved float32, `frames` sample frames) to the
+// mixer's attached recorder, if any. Called only from the mixing path with
+// the mixer lock held.
+extern void MIX_RecordMixedFrames(MIX_Mixer *mixer, const float *pcm, int frames);
+
+// Destroy the recorder attached to a mixer, if any. Called from MIX_DestroyMixer.
+extern void MIX_DestroyMixerRecorder(MIX_Mixer *mixer);
 
 // these might not all be available, but they are all declared here as if they are.
 extern const MIX_Decoder MIX_Decoder_AU;

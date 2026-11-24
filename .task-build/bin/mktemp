@@ -1,0 +1,5 @@
+#!/bin/sh
+if [ "$#" -eq 0 ]; then
+  exec /usr/bin/mktemp "${TMPDIR:-/tmp}/tmp.XXXXXX"
+fi
+exec /usr/bin/mktemp "$@"

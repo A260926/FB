@@ -642,6 +642,11 @@ static void SDLCALL MixerCallback(void *userdata, SDL_AudioStream *stream, int a
         mixer->postmix_callback(mixer->postmix_callback_userdata, mixer, &mixer->spec, final_mixbuf, additional_amount / sizeof (float));
     }
 
+    // Tap the final, post-postmix output for any attached recorder. The
+    // recorder stores what is about to be sent to the output stream; playback
+    // data and the MIX_Generate() return value are unaffected.
+    MIX_RecordMixedFrames(mixer, final_mixbuf, additional_amount / (sizeof (float) * mixer->spec.channels));
+
     SDL_PutAudioStreamData(stream, final_mixbuf, additional_amount);
 }
 
@@ -900,6 +905,9 @@ void MIX_DestroyMixer(MIX_Mixer *mixer)
     while (mixer->all_groups) {
         MIX_DestroyGroup(mixer->all_groups);
     }
+
+    // Any attached recorder goes away with the mixer.
+    MIX_DestroyMixerRecorder(mixer);
 
     if (mixer->device_id) {
         SDL_RemoveEventWatch(AudioDeviceChangeEventWatcher, mixer);

@@ -94,6 +94,12 @@ SDL3_mixer_0.0.0 {
     MIX_LoadAudioNoCopy;
     MIX_LockMixer;
     MIX_UnlockMixer;
+    MIX_CreateRecorder;
+    MIX_StartRecorder;
+    MIX_ReadRecorder;
+    MIX_StopRecorder;
+    MIX_GetRecorderState;
+    MIX_DestroyRecorder;
     # extra symbols go here (don't modify this line)
   local: *;
 };
