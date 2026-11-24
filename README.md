@@ -38,7 +38,54 @@ by anyone. With the following tenets in mind.
 * [Google Congestion Control](https://github.com/pion/interceptor/tree/master/pkg/gcc)
 * [Stats](https://github.com/pion/interceptor/tree/master/pkg/stats) A [webrtc-stats](https://www.w3.org/TR/webrtc-stats/) compliant statistics generation
 * [Interval PLI](https://github.com/pion/interceptor/tree/master/pkg/intervalpli) Generate PLI on a interval. Useful when no decoder is available.
-* [FlexFec](https://github.com/pion/interceptor/tree/master/pkg/flexfec) – [FlexFEC-03](https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03) encoder implementation
+* [FlexFec](https://github.com/pion/interceptor/tree/master/pkg/flexfec) – [FlexFEC-03](https://datatracker.ietf.org/doc/html/draft-ietf-payload-flexible-fec-scheme-03) encoder and a rank-based repair receiver.
+
+### Receiving FlexFEC
+
+On the inbound RTP path place the FlexFEC repair receiver **before** the jitter
+buffer. The repair receiver consumes the interleaved media and repair
+(`SSRCForwardErrorCorrection` / `PayloadTypeForwardErrorCorrection`) datagrams
+from one upstream reader, runs incremental GF(2) elimination, and exposes only
+original and recovered media RTP packets. Those clean media packets then enter
+the jitter buffer:
+
+```go
+repairReceiver, err := flexfec.NewRepairReceiver(256, 256) // window, maxEquations (2..512)
+if err != nil {
+    panic(err)
+}
+jbFactory, err := jitterbuffer.NewInterceptor()
+if err != nil {
+    panic(err)
+}
+jb, err := jbFactory.NewInterceptor("")
+if err != nil {
+    panic(err)
+}
+
+// Repair first; only original/recovered media RTP reaches the jitter buffer.
+chain := interceptor.NewChain([]interceptor.Interceptor{repairReceiver, jb})
+
+reader := chain.BindRemoteStream(&interceptor.StreamInfo{
+    SSRC:                              mediaSSRC,
+    PayloadType:                       mediaPayloadType,
+    SSRCForwardErrorCorrection:        flexfecSSRC,
+    PayloadTypeForwardErrorCorrection: flexfecPayloadType,
+}, rtpReader) // same socket/reader carries both SSRCs interleaved
+```
+
+`Read` delivers queued recoveries first, otherwise performs at most one upstream
+read. A normal media packet is returned immediately; repair packets are only used
+for solving and are never exposed. When no media packet is available it returns
+`0, nil, flexfec.ErrRepairPending` and the caller should read again.
+
+A packet reconstructed from repair rather than received directly carries the
+Attributes key `flexfec.recovered` set to `true`
+(`flexfec.AttributeRecovered`). Original packets do not set it. Recovered
+packets inherit an independent snapshot of the Attributes of the last input
+packet that completed their solution; any cached `rtp.Header` in those
+Attributes is discarded so downstream `Attributes.GetRTPHeader` reparses the
+new recovered bytes instead of reusing the input header.
 
 ### Planned Interceptors
 * Bandwidth Estimation

@@ -1,0 +1,6 @@
+=== RUN   TestZZEquationBeforeMedia
+--- PASS: TestZZEquationBeforeMedia (0.00s)
+=== RUN   TestZZEOFStable
+--- PASS: TestZZEOFStable (0.00s)
+PASS
+ok  	github.com/pion/interceptor/pkg/flexfec	0.235s

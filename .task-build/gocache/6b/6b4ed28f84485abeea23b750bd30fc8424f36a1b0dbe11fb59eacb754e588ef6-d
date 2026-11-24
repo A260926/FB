@@ -1,0 +1,11 @@
+=== RUN   TestZZScratchRank
+    zz_scratch_test.go:110: base delivered n=16
+    zz_scratch_test.go:114: feed 0 err=flexfec: repair pending, no media packet ready
+    zz_scratch_test.go:114: feed 1 err=flexfec: repair pending, no media packet ready
+    zz_scratch_test.go:114: feed 2 err=flexfec: repair pending, no media packet ready
+    zz_scratch_test.go:136: recovered seq=101 attrRec=true len=24
+    zz_scratch_test.go:136: recovered seq=102 attrRec=true len=30
+    zz_scratch_test.go:136: recovered seq=103 attrRec=true len=61
+--- PASS: TestZZScratchRank (0.00s)
+PASS
+ok  	github.com/pion/interceptor/pkg/flexfec	0.235s

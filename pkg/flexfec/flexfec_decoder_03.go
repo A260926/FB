@@ -33,6 +33,11 @@ type fecDecoder struct {
 	maxFECPackets       int
 	recoveredPackets    []rtp.Packet
 	receivedFECPackets  []fecPacketState
+
+	// rank is the incremental multi-equation GF(2) production solving path. It
+	// is enabled by the RepairReceiverInterceptor; the legacy single-missing
+	// peeling path above is left intact for compatibility.
+	rank *gfRankTable
 }
 
 func newFECDecoder(ssrc uint32, protectedStreamSSRC uint32, loggerFactory logging.LoggerFactory) *fecDecoder {

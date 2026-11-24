@@ -1,0 +1,13 @@
+# test log
+getenv PION_LOG_INFO
+getenv PIONS_LOG_INFO
+getenv PION_LOG_DEBUG
+getenv PIONS_LOG_DEBUG
+getenv PION_LOG_TRACE
+getenv PIONS_LOG_TRACE
+getenv PION_LOG_DISABLE
+getenv PIONS_LOG_DISABLE
+getenv PION_LOG_ERROR
+getenv PIONS_LOG_ERROR
+getenv PION_LOG_WARN
+getenv PIONS_LOG_WARN

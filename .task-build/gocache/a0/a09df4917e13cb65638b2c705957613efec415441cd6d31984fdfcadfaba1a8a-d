@@ -1,0 +1,8 @@
+=== RUN   TestZZQuotaDebug
+receiver drain err EOF seqs [600 604 602 603]
+eq 0 accepted=true recovered=[] neq=1
+eq 1 accepted=true recovered=[] neq=2
+eq 2 accepted=true recovered=[602 603] neq=0
+--- PASS: TestZZQuotaDebug (0.00s)
+PASS
+ok  	github.com/pion/interceptor/pkg/flexfec	0.277s

@@ -1,0 +1,33 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+FlexFEC receive replay: delivering original and recovered media
+  seq=  100 ssrc=40001 pt=96 recovered=false payload="base media"
+  seq=  104 ssrc=40001 pt=96 recovered=false payload="edge media"
+  seq=  101 ssrc=40001 pt=96 recovered=true  payload="A original media bytes"
+  seq=  102 ssrc=40001 pt=96 recovered=true  payload="B"
+  seq=  103 ssrc=40001 pt=96 recovered=true  payload="\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+OK: delivered=5 media packets, 3 jointly recovered (A,B,C)
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestRepairRank
+    check.go:29: TASK_GROUP_DONE TestRepairRank checks=51
+--- PASS: TestRepairRank (0.00s)
+=== RUN   TestRepairWindow
+    check.go:29: TASK_GROUP_DONE TestRepairWindow checks=41
+--- PASS: TestRepairWindow (0.00s)
+=== RUN   TestRepairIngress
+    check.go:29: TASK_GROUP_DONE TestRepairIngress checks=75
+--- PASS: TestRepairIngress (0.00s)
+PASS
+ok  	github.com/pion/interceptor/pkg/flexfec	0.088s
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestFlexFec03_SimpleRoundTrip
+=== RUN   TestFlexFec03_SimpleRoundTrip/first
+=== RUN   TestFlexFec03_SimpleRoundTrip/last
+=== RUN   TestFlexFec03_SimpleRoundTrip/wrap
+--- PASS: TestFlexFec03_SimpleRoundTrip (0.00s)
+    --- PASS: TestFlexFec03_SimpleRoundTrip/first (0.00s)
+    --- PASS: TestFlexFec03_SimpleRoundTrip/last (0.00s)
+    --- PASS: TestFlexFec03_SimpleRoundTrip/wrap (0.00s)
+PASS
+ok  	github.com/pion/interceptor/pkg/flexfec	0.091s
