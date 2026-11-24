@@ -95,6 +95,15 @@ typedef struct skip_alloc_st {
   void			*sa_mem;	/* pointer to the memory in question */
   const char		*sa_file;	/* .c filename where allocated */
   unsigned long		sa_use_iter;	/* when last ``used'' */
+
+  /*
+   * Release-contract metadata.  sa_family is one of the
+   * DMALLOC_RELEASE_* values (0 on free/admin slots).
+   * sa_requested_align records the caller's explicit alignment
+   * request; 0 marks an ordinary (non-aligned) allocation.
+   */
+  unsigned int		sa_requested_align;
+  unsigned char		sa_family;
   
 #if LOG_PNT_SEEN_COUNT
   unsigned long		sa_seen_c;	/* times pointer was seen */

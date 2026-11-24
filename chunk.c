@@ -52,6 +52,7 @@
 #include "dmalloc.h"
 
 #include "append.h"
+#include "allocation-contract.h"
 #include "chunk.h"
 #include "chunk_loc.h"
 #include "compat.h"
@@ -62,6 +63,65 @@
 #include "error.h"
 #include "error_val.h"
 #include "heap.h"
+
+#include <limits.h>		/* UINT_MAX */
+
+#if LOCK_THREADS
+#if IDENT_WORKS
+#ident "@(#) $Information: lock-threads is enabled $"
+#else
+static char *information = "@(#) $Information: lock-threads is enabled $";
+#endif
+#endif
+
+/*
+ * The historical ALLOC_FLAG_VALLOC (bit 6) keeps its meaning for
+ * page-aligned blocks so old fence/reuse paths stay valid; the exact
+ * requested alignment and the allocation family live in dedicated
+ * slot fields (see chunk_loc.h).
+ */
+
+/* map a dmalloc function-id to a release family, 0 if not releasable */
+static	unsigned	chunk_func_family(const int func_id)
+{
+  switch (func_id) {
+  case DMALLOC_FUNC_MALLOC:
+  case DMALLOC_FUNC_CALLOC:
+  case DMALLOC_FUNC_REALLOC:
+  case DMALLOC_FUNC_RECALLOC:
+  case DMALLOC_FUNC_MEMALIGN:
+  case DMALLOC_FUNC_VALLOC:
+  case DMALLOC_FUNC_STRDUP:
+  case DMALLOC_FUNC_FREE:
+  case DMALLOC_FUNC_CFREE:
+    return DMALLOC_RELEASE_C;
+  case DMALLOC_FUNC_NEW:
+  case DMALLOC_FUNC_DELETE:
+    return DMALLOC_RELEASE_SCALAR;
+  case DMALLOC_FUNC_NEW_ARRAY:
+  case DMALLOC_FUNC_DELETE_ARRAY:
+    return DMALLOC_RELEASE_ARRAY;
+  default:
+    return 0;
+  }
+}
+
+/*
+ * Validate an explicit alignment request.  0 means "ordinary
+ * allocation"; otherwise it must be a power of two of at least
+ * sizeof(void *) and no more than 1 MiB.
+ */
+static	int	chunk_alignment_valid(const unsigned long alignment)
+{
+  if (alignment == 0) {
+    return 1;
+  }
+  if (alignment < sizeof(void *)
+      || alignment > DMALLOC_CONTRACT_MAX_ALIGNMENT) {
+    return 0;
+  }
+  return (alignment & (alignment - 1)) == 0;
+}
 
 /*
  * Library Copyright and URL information for ident and what programs
@@ -790,34 +850,46 @@ static	int	expand_chars(const void *buf, const int buf_size,
  */
 static	void	get_pnt_info(const skip_alloc_t *slot_p, pnt_info_t *info_p)
 {
+  unsigned int	align;
+  char		*start_p;
+
   info_p->pi_fence_b = BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_FENCE);
   info_p->pi_valloc_b = BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_VALLOC);
   info_p->pi_blanked_b = BIT_IS_SET(slot_p->sa_flags, ALLOC_FLAG_BLANK);
-  
+
   info_p->pi_alloc_start = slot_p->sa_mem;
-  
+  start_p = (char *)info_p->pi_alloc_start;
+
+  /* leave room for the bottom fence before aligning the user area */
   if (info_p->pi_fence_b) {
-    if (info_p->pi_valloc_b) {
-      info_p->pi_user_start = (char *)info_p->pi_alloc_start + BLOCK_SIZE;
-      info_p->pi_fence_bottom = (char *)info_p->pi_user_start -
-	FENCE_BOTTOM_SIZE;
-    }
-    else {
-      info_p->pi_fence_bottom = info_p->pi_alloc_start;
-      info_p->pi_user_start = (char *)info_p->pi_alloc_start +
-	FENCE_BOTTOM_SIZE;
-    }
+    start_p += FENCE_BOTTOM_SIZE;
+  }
+
+  align = slot_p->sa_requested_align;
+  if (align > 0) {
+    PNT_ARITH_TYPE	addr;
+
+    /* round up to the explicitly requested alignment */
+    addr = (PNT_ARITH_TYPE)start_p;
+    addr = (addr + align - 1) & ~((PNT_ARITH_TYPE)align - 1);
+    start_p = (char *)addr;
+  }
+
+  info_p->pi_user_start = start_p;
+
+  if (info_p->pi_fence_b) {
+    info_p->pi_fence_bottom = (char *)info_p->pi_user_start -
+      FENCE_BOTTOM_SIZE;
   }
   else {
     info_p->pi_fence_bottom = NULL;
-    info_p->pi_user_start = info_p->pi_alloc_start;
   }
-  
+
   info_p->pi_user_bounds = (char *)info_p->pi_user_start +
     slot_p->sa_user_size;
-  
+
   info_p->pi_alloc_bounds = (char *)slot_p->sa_mem + slot_p->sa_total_size;
-  
+
   if (info_p->pi_fence_b) {
     info_p->pi_fence_top = info_p->pi_user_bounds;
     info_p->pi_upper_bounds = (char *)info_p->pi_alloc_bounds - FENCE_TOP_SIZE;
@@ -1541,21 +1613,23 @@ static	int	check_used_slot(const skip_alloc_t *slot_p,
   }
   
   /*
-   * If we have a valloc allocation then the _user_ pnt should be
-   * block aligned otherwise the chunk_pnt should be.
+   * An aligned allocation must present a user start that is a multiple
+   * of the recorded alignment request.  A valloc block additionally
+   * occupies at least one full block.
    */
-  if (pnt_info.pi_valloc_b) {
-    
-    if ((PNT_ARITH_TYPE)pnt_info.pi_user_start % BLOCK_SIZE != 0) {
+  if (slot_p->sa_requested_align > 0) {
+
+    if ((PNT_ARITH_TYPE)pnt_info.pi_user_start %
+	slot_p->sa_requested_align != 0) {
       dmalloc_errno = DMALLOC_ERROR_NOT_ON_BLOCK;
       return 0;
     }
-    if (slot_p->sa_total_size < BLOCK_SIZE) {
+    if (pnt_info.pi_valloc_b && slot_p->sa_total_size < BLOCK_SIZE) {
       dmalloc_errno = DMALLOC_ERROR_SLOT_CORRUPT;
       return 0;
     }
-    
-    /* now check the below space to make sure it is still clear */
+
+    /* the slack below the bottom fence must remain untouched */
     if (pnt_info.pi_fence_b && pnt_info.pi_blanked_b) {
       num = (char *)pnt_info.pi_fence_bottom - (char *)pnt_info.pi_alloc_start;
       if (num > 0) {
@@ -2184,36 +2258,39 @@ int	_dmalloc_chunk_pnt_check(const char *func, const void *user_pnt,
  */
 void	*_dmalloc_chunk_malloc(const char *file, const unsigned int line,
 			       const unsigned long size, const int func_id,
-			       const unsigned int alignment)
+			       const unsigned long alignment)
 {
   unsigned long	needed_size;
+  unsigned int	requested_align;
+  unsigned	family;
   int		valloc_b = 0, fence_b = 0;
   char		where_buf[MAX_FILE_LENGTH + 64], disp_buf[64];
   skip_alloc_t	*slot_p;
   pnt_info_t	pnt_info;
   const char	*trans_log;
-  
-  // TOTO: is alignment used here appropriately?
-  
+
+  family = chunk_func_family(func_id);
+
   /* counts calls to malloc */
   if (func_id == DMALLOC_FUNC_CALLOC) {
     func_calloc_c++;
   }
-  else if (alignment == BLOCK_SIZE) {
+  else if (func_id == DMALLOC_FUNC_VALLOC) {
     func_valloc_c++;
     valloc_b = 1;
   }
-  else if (alignment > 0) {
+  else if (func_id == DMALLOC_FUNC_MEMALIGN) {
     func_memalign_c++;
   }
-  else if (func_id == DMALLOC_FUNC_NEW) {
+  else if (func_id == DMALLOC_FUNC_NEW
+	   || func_id == DMALLOC_FUNC_NEW_ARRAY) {
     func_new_c++;
   }
   else if (func_id != DMALLOC_FUNC_REALLOC
 	   && func_id != DMALLOC_FUNC_RECALLOC) {
     func_malloc_c++;
   }
-  
+
 #if ALLOW_ALLOC_ZERO_SIZE == 0
   if (size == 0) {
     dmalloc_errno = DMALLOC_ERROR_BAD_SIZE;
@@ -2222,7 +2299,7 @@ void	*_dmalloc_chunk_malloc(const char *file, const unsigned int line,
     return MALLOC_ERROR;
   }
 #endif
-  
+
 #if LARGEST_ALLOCATION
   /* have we exceeded the upper bounds */
   if (size > LARGEST_ALLOCATION) {
@@ -2231,36 +2308,63 @@ void	*_dmalloc_chunk_malloc(const char *file, const unsigned int line,
     return MALLOC_ERROR;
   }
 #endif
-  
+
+  /*
+   * Validate the explicit alignment before any rounding or narrowing.
+   * 0 means an ordinary allocation; otherwise it must be a power of
+   * two of at least sizeof(void *) and at most 1 MiB.
+   */
+  if (! chunk_alignment_valid(alignment)) {
+    dmalloc_errno = DMALLOC_ERROR_BAD_SIZE;
+    log_error_info(file, line, NULL, NULL, "bad alignment value", "malloc");
+    return MALLOC_ERROR;
+  }
+  requested_align = (unsigned int)alignment;
+
+  /*
+   * Reject before any rounding or narrowing if the request plus its
+   * fence/alignment overhead could not be represented.  This stays
+   * correct even if LARGEST_ALLOCATION is disabled at configuration
+   * time.
+   */
+  if (size > UINT_MAX - FENCE_OVERHEAD_SIZE -
+      (unsigned long)DMALLOC_CONTRACT_MAX_ALIGNMENT) {
+    dmalloc_errno = DMALLOC_ERROR_TOO_BIG;
+    log_error_info(file, line, NULL, NULL,
+		   "allocation too big after alignment/fence overhead",
+		   "malloc");
+    return MALLOC_ERROR;
+  }
+
   needed_size = size;
-  
-  /* adjust the size */
+
+  /* adjust the size for the fence posts */
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_CHECK_FENCE)) {
     needed_size += FENCE_OVERHEAD_SIZE;
     fence_b = 1;
-    
-    /*
-     * If the user is requesting a page-aligned block of data then we
-     * will need another block below the allocation just for the fence
-     * information.  Ugh.
-     */
-    if (valloc_b) {
-      needed_size += BLOCK_SIZE;
-    }
   }
-  else if (valloc_b && needed_size <= BLOCK_SIZE / 2) {
-    /*
-     * If we are valloc-ing, make sure that we get a blocksized chunk
-     * because they are always block aligned.  We know here that fence
-     * posting is not on otherwise it would have been set above.
-     */
-    needed_size = BLOCK_SIZE;
+
+  /*
+   * Reserve enough slack to advance the user start up to the requested
+   * alignment.  This replaces the old valloc-only BLOCK_SIZE bump and
+   * handles every power-of-two alignment uniformly.  Reject before the
+   * unsigned-int narrowing used by the block layer.
+   */
+  if (requested_align > 0) {
+    needed_size += (unsigned long)requested_align - 1;
   }
-  
+  if (needed_size > UINT_MAX) {
+    dmalloc_errno = DMALLOC_ERROR_TOO_BIG;
+    log_error_info(file, line, NULL, NULL,
+		   "allocation too big after alignment/fence overhead",
+		   "malloc");
+    return MALLOC_ERROR;
+  }
+
   /* get some space for our memory */
-  slot_p = get_memory(needed_size);
+  slot_p = get_memory((unsigned int)needed_size);
   if (slot_p == NULL) {
-    /* errno set in get_slot */
+    /* errno set in get_memory */
     return MALLOC_ERROR;
   }
   if (fence_b) {
@@ -2269,7 +2373,9 @@ void	*_dmalloc_chunk_malloc(const char *file, const unsigned int line,
   if (valloc_b) {
     BIT_SET(slot_p->sa_flags, ALLOC_FLAG_VALLOC);
   }
-  slot_p->sa_user_size = size;
+  slot_p->sa_user_size = (unsigned int)size;
+  slot_p->sa_requested_align = requested_align;
+  slot_p->sa_family = (unsigned char)family;
   
   /* initialize the bblocks */
   alloc_cur_given += slot_p->sa_total_size;
@@ -2347,119 +2453,157 @@ void	*_dmalloc_chunk_malloc(const char *file, const unsigned int line,
 }
 
 /*
- * int _dmalloc_chunk_free
+ * int chunk_contract_args_valid
  *
- * Free a user pointer from the heap.
- *
- * Returns FREE_NOERROR on success or FREE_ERROR on failure
- *
- * ARGUMENTS:
- *
- * file -> File-name or return-address location of the allocation.
- *
- * line -> Line-number location of the allocation.
- *
- * user_pnt -> Pointer we are freeing.
- *
- * func_id -> Function ID
+ * Validate the family and flag arguments of a contract call.  This
+ * runs before any heap operation so an illegal request can never touch
+ * allocator state.
  */
-int	_dmalloc_chunk_free(const char *file, const unsigned int line,
-			    void *user_pnt, const int func_id)
+static	int	chunk_contract_args_valid(const unsigned family,
+					  const unsigned flags)
+{
+  if (family != DMALLOC_RELEASE_C
+      && family != DMALLOC_RELEASE_SCALAR
+      && family != DMALLOC_RELEASE_ARRAY) {
+    return 0;
+  }
+  if (flags & ~DMALLOC_RELEASE_FLAG_KNOWN) {
+    return 0;
+  }
+  return 1;
+}
+
+/*
+ * int chunk_contract_classify
+ *
+ * Lock-held classification shared by the query, release and the
+ * ordinary free/delete entry points.  It never allocates, never writes
+ * the user area or the slots and never changes dmalloc_errno.
+ *
+ * Returns 1 when the proposed release is compatible, 0 when refused.
+ * *out is always fully initialized on a legal call.
+ */
+static	int	chunk_contract_classify(const void *user_pnt,
+					const unsigned family,
+					const unsigned long size,
+					const unsigned long alignment,
+					const unsigned flags,
+					dmalloc_release_report *out,
+					skip_alloc_t **slot_out)
+{
+  skip_alloc_t	*slot_p;
+  pnt_info_t	pnt_info;
+  unsigned	mismatch = 0;
+  unsigned	slot_family;
+  unsigned int	slot_align;
+
+  if (slot_out != NULL) {
+    *slot_out = NULL;
+  }
+
+  out->code = DMALLOC_RELEASE_OK;
+  out->mismatch = 0;
+  out->allocation_family = 0;
+  out->requested_size = 0;
+  out->requested_alignment = 0;
+
+  /* NULL is always a compatible no-op and never touches the tables */
+  if (user_pnt == NULL) {
+    out->code = DMALLOC_RELEASE_NULL;
+    return 1;
+  }
+
+  /* loose match: an interior pointer still resolves to its live slot */
+  slot_p = find_address(user_pnt, 0 /* used list */, 0 /* not exact */,
+				skip_update);
+  if (slot_p == NULL) {
+    /* not in the live table; we never dereference user_pnt here */
+    out->code = DMALLOC_RELEASE_NOT_LIVE;
+    return 0;
+  }
+
+  get_pnt_info(slot_p, &pnt_info);
+
+  slot_family = slot_p->sa_family;
+  slot_align = slot_p->sa_requested_align;
+
+  /* record the facts about the real live object */
+  out->allocation_family = slot_family;
+  out->requested_size = slot_p->sa_user_size;
+  out->requested_alignment = slot_align;
+
+  /* an interior address is not the base: rounding slack is not capacity */
+  if (user_pnt != pnt_info.pi_user_start) {
+    out->code = DMALLOC_RELEASE_NOT_BASE;
+    return 0;
+  }
+
+  /* accumulate every mismatch independently; do not short-circuit */
+  if (slot_family != family) {
+    mismatch |= DMALLOC_RELEASE_BAD_FAMILY;
+  }
+  if ((flags & DMALLOC_RELEASE_HAS_SIZE)
+      && (unsigned long)slot_p->sa_user_size != size) {
+    mismatch |= DMALLOC_RELEASE_BAD_SIZE;
+  }
+  if ((flags & DMALLOC_RELEASE_HAS_ALIGNMENT)
+      && (unsigned long)slot_align != alignment) {
+    mismatch |= DMALLOC_RELEASE_BAD_ALIGNMENT;
+  }
+
+  if (mismatch != 0) {
+    out->mismatch = mismatch;
+    out->code = DMALLOC_RELEASE_MISMATCH;
+    return 0;
+  }
+
+  if (slot_out != NULL) {
+    *slot_out = slot_p;
+  }
+  out->code = DMALLOC_RELEASE_OK;
+  return 1;
+}
+
+/*
+ * int chunk_release_locked
+ *
+ * The historical release mechanics: detach the slot, update counters,
+ * blank the memory, and queue it for delayed reuse.  The caller has
+ * already classified user_pnt as a compatible live base, passes the
+ * exact live slot that classification found and still holds the
+ * allocator lock, so no second address lookup is needed.
+ */
+static	int	chunk_release_locked(const char *file, const unsigned int line,
+				    skip_alloc_t *slot_p, void *user_pnt,
+				    const int func_id)
 {
   char		where_buf[MAX_FILE_LENGTH + 64];
   char		where_buf2[MAX_FILE_LENGTH + 64], disp_buf[64];
-  skip_alloc_t	*slot_p, *update_p;
-  
+  skip_alloc_t	*update_p;
+
   /* counts calls to free */
-  if (func_id == DMALLOC_FUNC_DELETE) {
+  if (func_id == DMALLOC_FUNC_DELETE
+      || func_id == DMALLOC_FUNC_DELETE_ARRAY) {
     func_delete_c++;
   }
   else if (func_id == DMALLOC_FUNC_REALLOC
 	   || func_id == DMALLOC_FUNC_RECALLOC) {
-    /* ignore these because they will alredy be accounted for in realloc */
+    /* ignore these because they will already be accounted for in realloc */
   }
   else {
     func_free_c++;
   }
-  
-  if (user_pnt == NULL) {
-    
-#if ALLOW_FREE_NULL_MESSAGE
-    /* does the user want a specific message? */
-    dmalloc_message("WARNING: tried to free(0) from '%s'",
-		    _dmalloc_chunk_desc_pnt(where_buf, sizeof(where_buf),
-					    file, line));
-#endif
-    
-    /*
-     * NOTE: we have here both a default in the settings.h file and a
-     * runtime token in case people want to turn it on or off at
-     * runtime.
-     */
-    if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_ERROR_FREE_NULL)) {
-      dmalloc_errno = DMALLOC_ERROR_IS_NULL;
-      log_error_info(file, line, user_pnt, NULL, "invalid 0L pointer", "free");
-      return FREE_ERROR;
-    }
-    
-#if ALLOW_FREE_NULL == 0
-    dmalloc_errno = DMALLOC_ERROR_IS_NULL;
-#endif
-    return FREE_ERROR;
-  }
-  
+
   update_p = skip_update;
-  
-  /* try to find the address with loose match */
-  slot_p = find_address(user_pnt, 0 /* used list */, 0 /* not exact pointer */,
-			skip_update);
-  if (slot_p == NULL) {
-#if FREED_POINTER_DELAY
-    skip_alloc_t	*del_p;
-    
-    /* search the delay list */
-    for (del_p = free_wait_list_head;
-	 del_p != NULL;
-	 del_p = del_p->sa_next_p[0]) {
-      if (del_p->sa_mem <= user_pnt
-	  && (char *)del_p->sa_mem + del_p->sa_total_size > (char *)user_pnt) {
-	pnt_info_t	info;
-	get_pnt_info(del_p, &info);
-	if (info.pi_user_start == user_pnt) {
-	  dmalloc_errno = DMALLOC_ERROR_ALREADY_FREE;
-	}
-	else {
-	  dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
-	}
-	break;
-      }
-    }
-    if (del_p == NULL) {
-#endif
-      /* not in the used list so check the free list */
-      if (find_address(user_pnt, 1 /* free list */, 0 /* not exact pointer */,
-		       skip_update) == NULL) {
-	dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
-      }
-      else {
-	dmalloc_errno = DMALLOC_ERROR_ALREADY_FREE;
-      }
-#if FREED_POINTER_DELAY
-    }
-#endif
-    log_error_info(file, line, user_pnt, NULL, "finding address in heap",
-		   "free");
-    return FREE_ERROR;
-  }
-  
+
   if (! check_used_slot(slot_p, user_pnt, 1 /* exact pnt */, 0 /* no strlen */,
-			0 /* no min-size */)) {
+				0 /* no min-size */)) {
     /* error set in check slot */
     log_error_info(file, line, user_pnt, slot_p, "checking pointer admin",
 		   "free");
     return FREE_ERROR;
   }
-  
+
   if (! remove_slot(slot_p, update_p)) {
     /* error set and dumped in remove_slot */
     return FREE_ERROR;
@@ -2474,14 +2618,17 @@ int	_dmalloc_chunk_free(const char *file, const unsigned int line,
   else {
     slot_p->sa_flags = ALLOC_FLAG_FREE;
   }
-  
+  /* the released slot no longer carries a live contract */
+  slot_p->sa_family = 0;
+  slot_p->sa_requested_align = 0;
+
   alloc_cur_pnts--;
-  
+
   slot_p->sa_use_iter = _dmalloc_iter_c;
 #if LOG_PNT_SEEN_COUNT
   slot_p->sa_seen_c++;
 #endif
-  
+
   /* do we need to print transaction info? */
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_LOG_TRANS)) {
     dmalloc_message("*** free: at '%s' pnt '%s': size %u, alloced at '%s'",
@@ -2492,21 +2639,21 @@ int	_dmalloc_chunk_free(const char *file, const unsigned int line,
 		    _dmalloc_chunk_desc_pnt(where_buf2, sizeof(where_buf2),
 					    slot_p->sa_file, slot_p->sa_line));
   }
-  
+
 #if MEMORY_TABLE_TOP_LOG
   _dmalloc_table_delete(&mem_table_alloc, slot_p->sa_file, slot_p->sa_line,
-			slot_p->sa_user_size);
+				slot_p->sa_user_size);
 #endif
-  
+
   /* update the file/line -- must be after _dmalloc_table_delete */
   slot_p->sa_file = file;
   slot_p->sa_line = line;
-  
+
   /* monitor current allocation level */
   alloc_current -= slot_p->sa_user_size;
   alloc_cur_given -= slot_p->sa_total_size;
   free_space_bytes += slot_p->sa_total_size;
-  
+
   /* clear the memory */
   if (BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_FREE_BLANK)
       || BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_CHECK_BLANK)) {
@@ -2514,20 +2661,7 @@ int	_dmalloc_chunk_free(const char *file, const unsigned int line,
     /* set our slot blank flag */
     BIT_SET(slot_p->sa_flags, ALLOC_FLAG_BLANK);
   }
-  
-  /*
-   * The question is should we combine multiple free chunks together
-   * into one.  This would help we with fragmentation but it would
-   * screwup the seen counter.
-   *
-   * Check above and below the free bblock looking for neighbors that
-   * are free so we can add them together and put them in a different
-   * free slot.
-   *
-   * NOTE: all of these block's reuse-iter count will be moved ahead
-   * because we are encorporating in this newly freed block.
-   */
-  
+
   if (! BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_NEVER_REUSE)) {
 #if FREED_POINTER_DELAY
     slot_p->sa_next_p[0] = NULL;
@@ -2546,8 +2680,138 @@ int	_dmalloc_chunk_free(const char *file, const unsigned int line,
     }
 #endif
   }
-  
+
   return FREE_NOERROR;
+}
+
+/*
+ * int _dmalloc_chunk_contract_classify
+ *
+ * Lock-held contract query.  See allocation-contract.h for the public
+ * semantics.
+ */
+int	_dmalloc_chunk_contract_classify(const void *user_pnt,
+					unsigned family,
+					unsigned long size,
+					unsigned long alignment,
+					unsigned flags,
+					dmalloc_release_report *out)
+{
+  if (! chunk_contract_args_valid(family, flags)) {
+    return -1;
+  }
+  return chunk_contract_classify(user_pnt, family, size, alignment, flags,
+				 out, NULL);
+}
+
+/*
+ * int _dmalloc_chunk_contract_release
+ *
+ * Lock-held classify-and-release.  The lookup, the judgment and the
+ * real free happen in one lock hold; a refusal leaves everything
+ * untouched.
+ */
+int	_dmalloc_chunk_contract_release(const char *file,
+					const unsigned int line,
+					void *user_pnt, unsigned family,
+					unsigned long size,
+					unsigned long alignment,
+					unsigned flags, const int func_id,
+					dmalloc_release_report *out)
+{
+  int		compatible;
+  skip_alloc_t	*slot_p = NULL;
+
+  if (! chunk_contract_args_valid(family, flags)) {
+    return -1;
+  }
+
+  compatible = chunk_contract_classify(user_pnt, family, size, alignment,
+				       flags, out, &slot_p);
+  if (! compatible) {
+    return 0;
+  }
+  if (user_pnt == NULL) {
+    /* compatible no-op */
+    return 1;
+  }
+
+  return chunk_release_locked(file, line, slot_p, user_pnt,
+			      func_id) == FREE_NOERROR ? 1 : 0;
+}
+
+/*
+ * int _dmalloc_chunk_realloc_family_ok
+ *
+ * Lock-held predicate: is user_pnt a live base of the C family?
+ */
+int	_dmalloc_chunk_realloc_family_ok(const void *user_pnt)
+{
+  skip_alloc_t	*slot_p;
+  pnt_info_t	pnt_info;
+
+  if (user_pnt == NULL) {
+    return 1;
+  }
+  slot_p = find_address(user_pnt, 0 /* used list */, 0 /* not exact */,
+				skip_update);
+  if (slot_p == NULL) {
+    return 0;
+  }
+  get_pnt_info(slot_p, &pnt_info);
+  if (user_pnt != pnt_info.pi_user_start) {
+    return 0;
+  }
+  return slot_p->sa_family == DMALLOC_RELEASE_C;
+}
+
+int	_dmalloc_chunk_free(const char *file, const unsigned int line,
+			    void *user_pnt, const int func_id)
+{
+  dmalloc_release_report	report;
+  skip_alloc_t			*slot_p = NULL;
+  unsigned			family;
+  int				compatible;
+
+  if (user_pnt == NULL) {
+
+#if ALLOW_FREE_NULL_MESSAGE
+    {
+      char	where_buf[MAX_FILE_LENGTH + 64];
+      /* does the user want a specific message? */
+      dmalloc_message("WARNING: tried to free(0) from '%s'",
+		      _dmalloc_chunk_desc_pnt(where_buf, sizeof(where_buf),
+					      file, line));
+    }
+#endif
+
+    /* NULL is a compatible no-op for every release family */
+    return FREE_NOERROR;
+  }
+
+  family = chunk_func_family(func_id);
+  if (family == 0) {
+    family = DMALLOC_RELEASE_C;
+  }
+
+  compatible = chunk_contract_classify(user_pnt, family, 0, 0, 0, &report,
+				       &slot_p);
+  if (! compatible) {
+    if (report.code == DMALLOC_RELEASE_NOT_LIVE) {
+      dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
+    }
+    else if (report.code == DMALLOC_RELEASE_NOT_BASE) {
+      dmalloc_errno = DMALLOC_ERROR_NOT_START_BLOCK;
+    }
+    else {
+      dmalloc_errno = DMALLOC_ERROR_BAD_SIZE;
+    }
+    log_error_info(file, line, user_pnt, NULL,
+		   "release contract rejected pointer", "free");
+    return FREE_ERROR;
+  }
+
+  return chunk_release_locked(file, line, slot_p, user_pnt, func_id);
 }
 
 /*
@@ -2607,23 +2871,43 @@ void	*_dmalloc_chunk_realloc(const char *file, const unsigned int line,
   
   /* find the old pointer with loose checking for fence post stuff */
   slot_p = find_address(old_user_pnt, 0 /* used list */,
-			0 /* not exact pointer */, skip_update);
+				0 /* not exact pointer */, skip_update);
   if (slot_p == NULL) {
     dmalloc_errno = DMALLOC_ERROR_NOT_FOUND;
     log_error_info(file, line, old_user_pnt, NULL, "finding address in heap",
 		   "realloc");
     return 0;
   }
-  
+
   /* get info about the pointer */
   get_pnt_info(slot_p, &pnt_info);
+
+  /*
+   * realloc/recalloc only accept a live base of the C family.  Refuse
+   * before allocating a new block, copying or releasing the old one.
+   */
+  if (slot_p->sa_family != DMALLOC_RELEASE_C
+      || old_user_pnt != pnt_info.pi_user_start) {
+    dmalloc_errno = DMALLOC_ERROR_BAD_SIZE;
+    log_error_info(file, line, old_user_pnt, slot_p,
+		   "realloc requires a live C-family base pointer",
+		   "realloc");
+    return REALLOC_ERROR;
+  }
+
   old_file = slot_p->sa_file;
   old_line = slot_p->sa_line;
   old_size = slot_p->sa_user_size;
-  
-  /* if we are not realloc copying and the size is the same */
+
+  /*
+   * An aligned block cannot keep its alignment identity through an
+   * in-place resize (the new layout is an ordinary C allocation with
+   * no alignment promise), so it always takes the copy path.  This
+   * guarantees the new report matches the actual new layout.
+   */
   if ((char *)pnt_info.pi_user_start + new_size >
       (char *)pnt_info.pi_upper_bounds
+      || slot_p->sa_requested_align > 0
       || BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_REALLOC_COPY)
       || BIT_IS_SET(_dmalloc_flags, DMALLOC_DEBUG_NEVER_REUSE)) {
     int	min_size;
@@ -2672,6 +2956,9 @@ void	*_dmalloc_chunk_realloc(const char *file, const unsigned int line,
     
     /* change the slot information */
     slot_p->sa_user_size = new_size;
+    /* an in-place resize is an ordinary C block: drop any old alignment */
+    slot_p->sa_requested_align = 0;
+    BIT_CLEAR(slot_p->sa_flags, ALLOC_FLAG_VALLOC);
     get_pnt_info(slot_p, &pnt_info);
     
     clear_alloc(slot_p, &pnt_info, old_size, func_id);

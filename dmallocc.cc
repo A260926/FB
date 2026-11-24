@@ -1,36 +1,20 @@
 /*
- * File that facilitates C++ program debugging.
+ * C++17 allocation adapter for the dmalloc library.
  *
- * Copyright 2020 by Gray Watson
- *
- * This file is part of the dmalloc package.
- *
- * Permission to use, copy, modify, and distribute this software for
- * any purpose and without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies, and that the name of Gray Watson not be used in advertising
- * or publicity pertaining to distribution of the document or software
- * without specific, written prior permission.
- *
- * Gray Watson makes no representations about the suitability of the
- * software described herein for any purpose.  It is provided "as is"
- * without express or implied warranty.
- *
- * The author may be contacted via https://dmalloc.com/
- */
-
-/*
- * This file is used to effectively redirect new to the more familiar
- * malloc and delete to the more familiar free so they can be debugged
- * with the debug malloc library..  They also give the known error
- * behavior, too.
+ * This file redirects the global operator new/delete family through
+ * the debug allocator so C++ allocations get the same fence checks,
+ * delayed reuse and release-contract enforcement as the C entry
+ * points.  It implements the throwing and nothrow, scalar and array,
+ * sized and aligned C++17 de/allocation functions plus the matching
+ * failure-cleanup deallocators.  The placement new/delete pair
+ * (operator new(size_t, void*)) is deliberately not provided.
  *
  * Compile and link this in with the C++ program you want to debug.
- *
- * NOTE: I am not a C++ hacker so feedback in the form of other hints
- * and ideas for C++ users would be much appreciated.
  */
- 
+
+#include <cstddef>
+#include <new>
+
 extern "C" {
 #include <stdlib.h>
 
@@ -40,48 +24,239 @@ extern "C" {
 #include "return.h"
 }
 
+#include "allocation-contract.h"
+
+namespace {
+
 /*
- * An overload function for the C++ new.
+ * Core allocation loop shared by every throwing operator new.
+ *
+ * dmalloc_malloc takes and releases the allocator lock internally, so
+ * when it returns NULL the lock is free.  The current new_handler is
+ * therefore invoked outside the lock and may legitimately release
+ * existing memory through operator delete without deadlocking.  With
+ * no handler installed, a throwing allocation reports std::bad_alloc.
  */
 void *
-operator new(size_t size)
+dmalloc_cxx_allocate(std::size_t size, const int func_id,
+		     std::size_t alignment)
 {
   char	*file;
   GET_RET_ADDR(file);
-  return dmalloc_malloc(file, 0, size, DMALLOC_FUNC_NEW,
-			0 /* no alignment */, 0 /* no xalloc messages */);
+
+  for (;;) {
+    void	*pnt;
+
+    pnt = dmalloc_malloc(file, 0 /* line */, size, func_id,
+			 alignment, 0 /* no xalloc messages */);
+    if (pnt != NULL) {
+      return pnt;
+    }
+
+    std::new_handler	handler = std::get_new_handler();
+    if (handler == nullptr) {
+      throw std::bad_alloc();
+    }
+    handler();
+    /* the handler may have freed memory; retry the allocation */
+  }
 }
 
 /*
- * An overload function for the C++ new[].
+ * Core release path.  The known size/alignment are forwarded to the
+ * shared contract decision; unknown values simply do not participate.
+ * A refusal leaves the block and all allocator state untouched.
  */
+void
+dmalloc_cxx_deallocate(void *pnt, const unsigned family,
+		       std::size_t size, std::size_t alignment,
+		       unsigned flags)
+{
+  char			*file;
+  dmalloc_release_report	report;
+
+  GET_RET_ADDR(file);
+  (void)dmalloc_contract_release(file, 0 /* line */, pnt, family, size,
+				 alignment, flags, &report);
+}
+
+} /* anonymous namespace */
+
+/******************************** scalar new ********************************/
+
 void *
-operator new[](size_t size)
+operator new(std::size_t size)
 {
-  char	*file;
-  GET_RET_ADDR(file);
-  return dmalloc_malloc(file, 0, size, DMALLOC_FUNC_NEW_ARRAY,
-			0 /* no alignment */, 0 /* no xalloc messages */);
+  return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW, 0 /* ordinary */);
 }
 
-/*
- * An overload function for the C++ delete.
- */
-void
-operator delete(void *pnt)
+void *
+operator new(std::size_t size, std::align_val_t alignment)
 {
-  char	*file;
-  GET_RET_ADDR(file);
-  dmalloc_free(file, 0, pnt, DMALLOC_FUNC_DELETE);
+  return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW,
+			      static_cast<std::size_t>(alignment));
 }
 
-/*
- * An overload function for the C++ delete[].  Thanks to Jens Krinke.
- */
-void
-operator delete[](void *pnt)
+void *
+operator new(std::size_t size, const std::nothrow_t &) noexcept
 {
-  char	*file;
-  GET_RET_ADDR(file);
-  dmalloc_free(file, 0, pnt, DMALLOC_FUNC_DELETE_ARRAY);
+  try {
+    return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW, 0 /* ordinary */);
+  }
+  catch (const std::bad_alloc &) {
+    return nullptr;
+  }
+}
+
+void *
+operator new(std::size_t size, std::align_val_t alignment,
+	     const std::nothrow_t &) noexcept
+{
+  try {
+    return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW,
+				static_cast<std::size_t>(alignment));
+  }
+  catch (const std::bad_alloc &) {
+    return nullptr;
+  }
+}
+
+/********************************* array new *********************************/
+
+void *
+operator new[](std::size_t size)
+{
+  return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW_ARRAY, 0 /* ordinary */);
+}
+
+void *
+operator new[](std::size_t size, std::align_val_t alignment)
+{
+  return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW_ARRAY,
+			      static_cast<std::size_t>(alignment));
+}
+
+void *
+operator new[](std::size_t size, const std::nothrow_t &) noexcept
+{
+  try {
+    return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW_ARRAY,
+				0 /* ordinary */);
+  }
+  catch (const std::bad_alloc &) {
+    return nullptr;
+  }
+}
+
+void *
+operator new[](std::size_t size, std::align_val_t alignment,
+	       const std::nothrow_t &) noexcept
+{
+  try {
+    return dmalloc_cxx_allocate(size, DMALLOC_FUNC_NEW_ARRAY,
+				static_cast<std::size_t>(alignment));
+  }
+  catch (const std::bad_alloc &) {
+    return nullptr;
+  }
+}
+
+/****************************** scalar operator delete **********************/
+
+void
+operator delete(void *pnt) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_SCALAR, 0, 0, 0);
+}
+
+void
+operator delete(void *pnt, std::size_t size) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_SCALAR, size, 0,
+			 DMALLOC_RELEASE_HAS_SIZE);
+}
+
+void
+operator delete(void *pnt, std::align_val_t alignment) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_SCALAR, 0,
+			 static_cast<std::size_t>(alignment),
+			 DMALLOC_RELEASE_HAS_ALIGNMENT);
+}
+
+void
+operator delete(void *pnt, std::size_t size,
+		std::align_val_t alignment) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_SCALAR, size,
+			 static_cast<std::size_t>(alignment),
+			 DMALLOC_RELEASE_HAS_SIZE |
+			 DMALLOC_RELEASE_HAS_ALIGNMENT);
+}
+
+/* nothrow new failure-cleanup deallocator */
+void
+operator delete(void *pnt, const std::nothrow_t &) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_SCALAR, 0, 0, 0);
+}
+
+/* aligned nothrow new failure-cleanup deallocator */
+void
+operator delete(void *pnt, std::align_val_t alignment,
+		const std::nothrow_t &) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_SCALAR, 0,
+			 static_cast<std::size_t>(alignment),
+			 DMALLOC_RELEASE_HAS_ALIGNMENT);
+}
+
+/******************************* array operator delete **********************/
+
+void
+operator delete[](void *pnt) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_ARRAY, 0, 0, 0);
+}
+
+void
+operator delete[](void *pnt, std::size_t size) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_ARRAY, size, 0,
+			 DMALLOC_RELEASE_HAS_SIZE);
+}
+
+void
+operator delete[](void *pnt, std::align_val_t alignment) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_ARRAY, 0,
+			 static_cast<std::size_t>(alignment),
+			 DMALLOC_RELEASE_HAS_ALIGNMENT);
+}
+
+void
+operator delete[](void *pnt, std::size_t size,
+		  std::align_val_t alignment) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_ARRAY, size,
+			 static_cast<std::size_t>(alignment),
+			 DMALLOC_RELEASE_HAS_SIZE |
+			 DMALLOC_RELEASE_HAS_ALIGNMENT);
+}
+
+/* nothrow new[] failure-cleanup deallocator */
+void
+operator delete[](void *pnt, const std::nothrow_t &) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_ARRAY, 0, 0, 0);
+}
+
+/* aligned nothrow new[] failure-cleanup deallocator */
+void
+operator delete[](void *pnt, std::align_val_t alignment,
+		  const std::nothrow_t &) noexcept
+{
+  dmalloc_cxx_deallocate(pnt, DMALLOC_RELEASE_ARRAY, 0,
+			 static_cast<std::size_t>(alignment),
+			 DMALLOC_RELEASE_HAS_ALIGNMENT);
 }

@@ -119,7 +119,6 @@ char		*dmalloc_logpath = NULL;
 static	int		enabled_b = 0;		/* have we started yet? */
 static	int		in_alloc_b = 0;		/* can't be here twice */
 static	int		do_shutdown_b = 0;	/* execute shutdown soon */
-static	int		memalign_warn_b = 0;	/* memalign warning printed?*/
 static	dmalloc_track_t	tracking_func = NULL;	/* memory trxn tracking func */
 
 /* debug variables */
@@ -710,8 +709,7 @@ DMALLOC_PNT	dmalloc_malloc(const char *file, const int line,
 			       const int xalloc_b)
 {
   void		*new_p;
-  DMALLOC_SIZE	align;
-  
+
 #if DMALLOC_SIZE_UNSIGNED == 0
   if (size < 0) {
     dmalloc_errno = DMALLOC_ERROR_BAD_SIZE;
@@ -722,44 +720,34 @@ DMALLOC_PNT	dmalloc_malloc(const char *file, const int line,
     return MALLOC_ERROR;
   }
 #endif
-  
+
   if (! dmalloc_in(file, line, 1)) {
     if (tracking_func != NULL) {
       tracking_func(file, line, func_id, size, alignment, NULL, NULL);
     }
     return MALLOC_ERROR;
   }
-  
-  if (alignment == 0) {
-    if (func_id == DMALLOC_FUNC_VALLOC) {
+
+  /*
+   * valloc is the page-aligned special case.  Every other non-zero
+   * alignment is the caller's explicit request and is passed down
+   * unchanged; the chunk layer validates and records it.
+   */
+  {
+    DMALLOC_SIZE	align;
+
+    if (alignment == 0 && func_id == DMALLOC_FUNC_VALLOC) {
       align = BLOCK_SIZE;
     }
     else {
-      align = 0;
+      align = alignment;
     }
+
+    new_p = _dmalloc_chunk_malloc(file, line, size, func_id, align);
   }
-  else if (alignment >= BLOCK_SIZE) {
-    align = BLOCK_SIZE;
-  }
-  else {
-    /*
-     * NOTE: Currently, there is no support in the library for
-     * memalign on less than block boundaries.  It will be non-trivial
-     * to support valloc with fence-post checking and the lack of the
-     * flag width for dblock allocations.
-     */
-    if (! memalign_warn_b) {
-      dmalloc_message("WARNING: memalign called without library support");
-      memalign_warn_b = 1;
-    }
-    align = 0;
-    /* align = alignment */
-  }
-  
-  new_p = _dmalloc_chunk_malloc(file, line, size, func_id, align);
-  
+
   check_pnt(file, line, new_p, "malloc");
-  
+
   dmalloc_out();
   
   if (tracking_func != NULL) {
@@ -828,7 +816,7 @@ DMALLOC_PNT	dmalloc_realloc(const char *file, const int line,
   }
   
   check_pnt(file, line, old_pnt, "realloc-in");
-  
+
 #if ALLOW_REALLOC_NULL
   if (old_pnt == NULL) {
     int		new_func_id;
@@ -843,8 +831,19 @@ DMALLOC_PNT	dmalloc_realloc(const char *file, const int line,
   }
   else
 #endif
+  {
+    /*
+     * realloc/recalloc only accept a live C-family base.  This gate
+     * runs before any new allocation, copy or release, and covers the
+     * new_size == 0 branch as well.
+     */
+    if (! _dmalloc_chunk_realloc_family_ok(old_pnt)) {
+      dmalloc_errno = DMALLOC_ERROR_BAD_SIZE;
+      dmalloc_error("realloc");
+      new_p = REALLOC_ERROR;
+    }
 #if ALLOW_REALLOC_SIZE_ZERO
-    if (new_size == 0) {
+    else if (new_size == 0) {
       /*
        * If realloc(old_pnt, 0) then free(old_pnt).  Thanks to Stefan
        * Froehlich for patiently pointing that the realloc in just
@@ -853,9 +852,11 @@ DMALLOC_PNT	dmalloc_realloc(const char *file, const int line,
       (void)_dmalloc_chunk_free(file, line, old_pnt, func_id);
       new_p = NULL;
     }
-    else
 #endif
+    else {
       new_p = _dmalloc_chunk_realloc(file, line, old_pnt, new_size, func_id);
+    }
+  }
   
   if (new_p != NULL) {
     check_pnt(file, line, new_p, "realloc-out");
@@ -904,25 +905,58 @@ int	dmalloc_free(const char *file, const int line, DMALLOC_PNT pnt,
 		     const int func_id)
 {
   int		ret;
-  
+
   if (! dmalloc_in(file, line, 1)) {
     if (tracking_func != NULL) {
       tracking_func(file, line, func_id, 0, 0, pnt, NULL);
     }
     return FREE_ERROR;
   }
-  
+
   check_pnt(file, line, pnt, "free");
-  
+
   ret = _dmalloc_chunk_free(file, line, pnt, func_id);
-  
+
   dmalloc_out();
-  
+
+  /*
+   * The success-release tracking callback only fires on an actual
+   * release; a NULL no-op never entered the release/fill/reuse path.
+   */
+  if (ret == FREE_NOERROR && pnt != NULL && tracking_func != NULL) {
+    tracking_func(file, line, DMALLOC_FUNC_FREE, 0, 0, pnt, NULL);
+  }
+
+  return ret;
+}
+
+/*
+ * Internal entry points used by allocation-contract.c so that the
+ * public query/release wrappers share the same startup, locking and
+ * tracking machinery as the rest of the user-level allocator.
+ */
+
+/* enter the allocator domain; 1 on success, 0 if the library is aborting */
+int	_dmalloc_contract_enter(const char *file, const int line,
+			       const int check_heap_b)
+{
+  return dmalloc_in(file, line, check_heap_b);
+}
+
+/* leave the allocator domain */
+void	_dmalloc_contract_exit(void)
+{
+  dmalloc_out();
+}
+
+/* invoke the success-release tracking callback outside the lock */
+void	_dmalloc_contract_track_release(const char *file,
+				       const unsigned int line,
+				       const DMALLOC_PNT pnt)
+{
   if (tracking_func != NULL) {
     tracking_func(file, line, DMALLOC_FUNC_FREE, 0, 0, pnt, NULL);
   }
-  
-  return ret;
 }
 
 /*
