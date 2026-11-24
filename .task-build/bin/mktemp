@@ -1,0 +1,10 @@
+#!/bin/bash
+# Sandbox shim: the platform mktemp targets a per-user directory the
+# sandbox cannot write to, so honor $TMPDIR (a writable scratch path).
+if [ "$1" = "-d" ]; then
+  d="$TMPDIR/mktmp.$$.$RANDOM"
+  mkdir -p "$d" && printf '%s\n' "$d"
+else
+  f="$TMPDIR/mktmp.$$.$RANDOM"
+  : > "$f" && printf '%s\n' "$f"
+fi
