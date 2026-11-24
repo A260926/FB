@@ -1,0 +1,1604 @@
+#include <sys/wait.h>
+
+#include <cassert>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <initializer_list>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace {
+
+struct CommandResult {
+    int exit_code{0};
+    std::string stdout_text;
+    std::string stderr_text;
+};
+
+std::string read_file(const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("could not read test file");
+    }
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+void write_file(const std::filesystem::path& path, const std::string& text) {
+    std::ofstream output(path);
+    if (!output) {
+        throw std::runtime_error("could not write test file");
+    }
+    output << text;
+}
+
+std::string shell_quote(const std::filesystem::path& path) {
+    std::string input = path.string();
+    std::string quoted = "'";
+    for (const char character : input) {
+        if (character == '\'') {
+            quoted += "'\\''";
+        } else {
+            quoted += character;
+        }
+    }
+    quoted += "'";
+    return quoted;
+}
+
+int decode_exit_status(int status) {
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    return 128;
+}
+
+CommandResult run_command(const std::filesystem::path& binary,
+                          const std::vector<std::string>& args,
+                          const std::filesystem::path& stdout_path,
+                          const std::filesystem::path& stderr_path) {
+    std::string command = shell_quote(binary);
+    for (const std::string& arg : args) {
+        command += " ";
+        command += shell_quote(arg);
+    }
+    command += " > ";
+    command += shell_quote(stdout_path);
+    command += " 2> ";
+    command += shell_quote(stderr_path);
+
+    const int status = std::system(command.c_str());
+    return CommandResult{
+        decode_exit_status(status),
+        read_file(stdout_path),
+        read_file(stderr_path),
+    };
+}
+
+std::filesystem::path example(const std::filesystem::path& source_dir, const std::string& name) {
+    return source_dir / "examples" / name;
+}
+
+[[maybe_unused]] std::filesystem::path golden(const std::filesystem::path& source_dir,
+                                              const std::string& name) {
+    return source_dir / "tests" / "golden" / name;
+}
+
+std::string first_line(const std::string& text) {
+    const std::size_t newline = text.find('\n');
+    if (newline == std::string::npos) {
+        return text;
+    }
+    return text.substr(0, newline);
+}
+
+[[maybe_unused]] std::string details_for_round_trip(const std::string& report) {
+    std::istringstream input(report);
+    std::ostringstream details;
+    std::string line;
+    bool copying = true;
+    while (copying && std::getline(input, line)) {
+        if (line.rfind("schedules_explored:", 0) == 0 ||
+            line.rfind("cycles_detected:", 0) == 0 ||
+            line.rfind("bound_exceeded_executions:", 0) == 0 ||
+            line.rfind("exploration_capped:", 0) == 0 ||
+            line.rfind("also_found:", 0) == 0 ||
+            line == "trace:" ||
+            line == "schedule:") {
+            if (line == "trace:" || line == "schedule:") {
+                copying = false;
+            }
+            continue;
+        }
+        details << line << '\n';
+    }
+    return details.str();
+}
+
+std::string schedule_block(const std::string& report) {
+    const std::string marker = "schedule:\n";
+    const std::size_t offset = report.find(marker);
+    if (offset == std::string::npos) {
+        throw std::runtime_error("report did not contain schedule block");
+    }
+    return report.substr(offset + marker.size());
+}
+
+void assert_clean_program_exits_zero(const std::filesystem::path& binary,
+                                     const std::filesystem::path& source_dir,
+                                     const std::filesystem::path& work_dir) {
+    const auto result = run_command(
+        binary,
+        {"check", example(source_dir, "clean_locked_counter.dpor").string(),
+         "--explorer", "dpor", "--max-schedules", "1000"},
+        work_dir / "cli_clean.out",
+        work_dir / "cli_clean.err");
+    assert(result.exit_code == 0);
+    assert(result.stderr_text.empty());
+    assert(first_line(result.stdout_text) == "verdict: clean");
+}
+
+void assert_race_golden_and_round_trip(const std::filesystem::path& binary,
+                                       const std::filesystem::path& source_dir,
+                                       const std::filesystem::path& work_dir) {
+    const auto check = run_command(
+        binary,
+        {"check", example(source_dir, "data_race.dpor").string(), "--explorer", "naive"},
+        work_dir / "cli_race.out",
+        work_dir / "cli_race.err");
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(check.stdout_text == read_file(golden(source_dir, "data_race_naive.txt")));
+
+    const auto schedule_path = work_dir / "cli_race.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", example(source_dir, "data_race.dpor").string(), "--schedule", schedule_path.string()},
+        work_dir / "cli_race_replay.out",
+        work_dir / "cli_race_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_deadlock_golden_and_round_trip(const std::filesystem::path& binary,
+                                           const std::filesystem::path& source_dir,
+                                           const std::filesystem::path& work_dir) {
+    const auto check = run_command(
+        binary,
+        {"check", example(source_dir, "ab_ba_deadlock.dpor").string(), "--explorer", "naive"},
+        work_dir / "cli_deadlock.out",
+        work_dir / "cli_deadlock.err");
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(check.stdout_text == read_file(golden(source_dir, "ab_ba_deadlock_naive.txt")));
+
+    const auto schedule_path = work_dir / "cli_deadlock.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", example(source_dir, "ab_ba_deadlock.dpor").string(), "--schedule", schedule_path.string()},
+        work_dir / "cli_deadlock_replay.out",
+        work_dir / "cli_deadlock_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_lost_wakeup_round_trips_with_wait_phases(const std::filesystem::path& binary,
+                                                     const std::filesystem::path& source_dir,
+                                                     const std::filesystem::path& work_dir) {
+    const auto check = run_command(
+        binary,
+        {"check", example(source_dir, "lost_wakeup.dpor").string(), "--explorer", "naive"},
+        work_dir / "cli_lost_wakeup.out",
+        work_dir / "cli_lost_wakeup.err");
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(first_line(check.stdout_text) == "verdict: deadlock");
+    assert(check.stdout_text.find("wait cv m (sleep)") != std::string::npos);
+    assert(check.stdout_text.find("wait cv m (reacquire)") != std::string::npos);
+
+    const auto schedule_path = work_dir / "cli_lost_wakeup.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", example(source_dir, "lost_wakeup.dpor").string(), "--schedule", schedule_path.string()},
+        work_dir / "cli_lost_wakeup_replay.out",
+        work_dir / "cli_lost_wakeup_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_modeled_error_reports_exit_one(const std::filesystem::path& binary,
+                                           const std::filesystem::path& source_dir,
+                                           const std::filesystem::path& work_dir) {
+    const auto result = run_command(
+        binary,
+        {"check", example(source_dir, "unlock_error.dpor").string()},
+        work_dir / "cli_error.out",
+        work_dir / "cli_error.err");
+    assert(result.exit_code == 1);
+    assert(result.stderr_text.empty());
+    assert(first_line(result.stdout_text) == "verdict: error");
+    assert(result.stdout_text.find("attempted to unlock mutex 'm' but it is not owned") != std::string::npos);
+}
+
+void assert_parse_error_has_line_number(const std::filesystem::path& binary,
+                                        const std::filesystem::path& source_dir,
+                                        const std::filesystem::path& work_dir) {
+    const auto program_path = work_dir / "cli_bad_parse.dpor";
+    write_file(program_path, "thread:\n  write x\n  wriet x\n");
+    const auto result = run_command(
+        binary,
+        {"check", program_path.string()},
+        work_dir / "cli_parse.out",
+        work_dir / "cli_parse.err");
+    assert(result.exit_code == 2);
+    assert(result.stdout_text.empty());
+    assert(result.stderr_text.find("line 3") != std::string::npos);
+    assert(result.stderr_text.find("unknown keyword") != std::string::npos);
+    (void)source_dir;
+}
+
+void assert_invalid_schedule_exits_two(const std::filesystem::path& binary,
+                                       const std::filesystem::path& source_dir,
+                                       const std::filesystem::path& work_dir) {
+    const auto schedule_path = work_dir / "cli_invalid.schedule";
+    write_file(schedule_path, "0 0\n1 0\n");
+    const auto result = run_command(
+        binary,
+        {"replay", example(source_dir, "clean_locked_counter.dpor").string(), "--schedule", schedule_path.string()},
+        work_dir / "cli_invalid.out",
+        work_dir / "cli_invalid.err");
+    assert(result.exit_code == 2);
+    assert(result.stdout_text.empty());
+    assert(result.stderr_text.find("invalid replay schedule") != std::string::npos);
+}
+
+void assert_explorer_flags_work_and_agree(const std::filesystem::path& binary,
+                                          const std::filesystem::path& source_dir,
+                                          const std::filesystem::path& work_dir) {
+    const auto naive = run_command(
+        binary,
+        {"check", example(source_dir, "message_passing_atomics.dpor").string(), "--explorer", "naive"},
+        work_dir / "cli_naive.out",
+        work_dir / "cli_naive.err");
+    const auto dpor = run_command(
+        binary,
+        {"check", example(source_dir, "message_passing_atomics.dpor").string(), "--explorer", "dpor"},
+        work_dir / "cli_dpor.out",
+        work_dir / "cli_dpor.err");
+    const auto defaulted = run_command(
+        binary,
+        {"check", example(source_dir, "message_passing_atomics.dpor").string()},
+        work_dir / "cli_default.out",
+        work_dir / "cli_default.err");
+    assert(naive.exit_code == 1);
+    assert(dpor.exit_code == 1);
+    assert(defaulted.exit_code == 1);
+    assert(naive.stderr_text.empty());
+    assert(dpor.stderr_text.empty());
+    assert(defaulted.stderr_text.empty());
+    assert(first_line(naive.stdout_text) == first_line(dpor.stdout_text));
+    assert(first_line(dpor.stdout_text) == first_line(defaulted.stdout_text));
+}
+
+void assert_assertion_reports_round_trip(const std::filesystem::path& binary,
+                                         const std::filesystem::path& work_dir) {
+    const auto program_path = work_dir / "cli_assertion.dpor";
+    write_file(program_path, "thread:\n  assert r0\n");
+
+    const auto check = run_command(
+        binary,
+        {"check", program_path.string(), "--explorer", "dpor"},
+        work_dir / "cli_assertion.out",
+        work_dir / "cli_assertion.err");
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(first_line(check.stdout_text) == "verdict: assertion");
+    assert(check.stdout_text.find("assertion:") != std::string::npos);
+    assert(check.stdout_text.find("register: r0") != std::string::npos);
+    assert(check.stdout_text.find("value: 0") != std::string::npos);
+
+    const auto schedule_path = work_dir / "cli_assertion.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", program_path.string(), "--schedule", schedule_path.string()},
+        work_dir / "cli_assertion_replay.out",
+        work_dir / "cli_assertion_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_tso_report_renders_flush_and_replays(const std::filesystem::path& binary,
+                                                 const std::filesystem::path& work_dir) {
+    const auto program_path = work_dir / "cli_tso_flush.dpor";
+    write_file(program_path,
+               "thread:\n"
+               "  write x 1\n"
+               "thread:\n"
+               "  read x -> r0\n");
+
+    const auto check = run_command(
+        binary,
+        {"check", program_path.string(), "--explorer", "dpor", "--memory-model", "tso"},
+        work_dir / "cli_tso_flush.out",
+        work_dir / "cli_tso_flush.err");
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(first_line(check.stdout_text) == "verdict: race");
+    assert(check.stdout_text.find("memory_model: tso\n") != std::string::npos);
+    assert(check.stdout_text.find("flush x") != std::string::npos);
+    assert(check.stdout_text.find("0 4294967295") != std::string::npos);
+
+    const auto schedule_path = work_dir / "cli_tso_flush.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", program_path.string(), "--schedule", schedule_path.string(), "--memory-model", "tso"},
+        work_dir / "cli_tso_flush_replay.out",
+        work_dir / "cli_tso_flush_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_pso_report_renders_address_tagged_flush_and_replays(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    const auto program_path = work_dir / "cli_pso_flush.dpor";
+    write_file(program_path,
+               "thread:\n"
+               "  write x 1\n"
+               "thread:\n"
+               "  read x -> r0\n");
+
+    const auto check = run_command(
+        binary,
+        {"check", program_path.string(), "--explorer", "dpor", "--memory-model", "pso"},
+        work_dir / "cli_pso_flush.out",
+        work_dir / "cli_pso_flush.err");
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(first_line(check.stdout_text) == "verdict: race");
+    assert(check.stdout_text.find("memory_model: pso\n") != std::string::npos);
+    assert(check.stdout_text.find("flush x") != std::string::npos);
+    assert(check.stdout_text.find("0 4294967295 0") != std::string::npos);
+
+    const auto schedule_path = work_dir / "cli_pso_flush.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", program_path.string(), "--schedule", schedule_path.string(), "--memory-model", "pso"},
+        work_dir / "cli_pso_flush_replay.out",
+        work_dir / "cli_pso_flush_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_spin_cycle_reports_nontermination_and_round_trips(const std::filesystem::path& binary,
+                                                              const std::filesystem::path& work_dir) {
+    const auto program_path = work_dir / "cli_spin_bound.dpor";
+    write_file(program_path,
+               "thread:\n"
+               "  set r1 1\n"
+               "spin:\n"
+               "  atomic_load f -> r0\n"
+               "  bnz r0 done\n"
+               "  bnz r1 spin\n"
+               "done:\n"
+               "  assert r1\n"
+               "thread:\n"
+               "  atomic_store f 1\n");
+
+    const auto check = run_command(
+        binary,
+        {"check", program_path.string(), "--explorer", "dpor", "--step-bound", "5"},
+        work_dir / "cli_spin_bound.out",
+        work_dir / "cli_spin_bound.err");
+    // Formerly clean up to bound: the unfair schedule that postpones thread 1
+    // now closes an exact cycle. Residual short-bound outcomes may coexist,
+    // but nontermination has the stronger verdict priority.
+    assert(check.exit_code == 1);
+    assert(check.stderr_text.empty());
+    assert(first_line(check.stdout_text) == "verdict: nontermination");
+    assert(check.stdout_text.find("cycles_detected: ") != std::string::npos);
+    assert(check.stdout_text.find("nontermination:\n"
+                                  "  fairness: unfair-schedule witness\n"
+                                  "  stem:\n") != std::string::npos);
+    assert(check.stdout_text.find("  cycle:\n") != std::string::npos);
+    assert(check.stdout_text.find("bound_exceeded_executions: ") != std::string::npos);
+
+    const auto schedule_path = work_dir / "cli_spin_cycle.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", program_path.string(), "--schedule", schedule_path.string()},
+        work_dir / "cli_spin_cycle_replay.out",
+        work_dir / "cli_spin_cycle_replay.err");
+    assert(replay.exit_code == 1);
+    assert(replay.stderr_text.empty());
+    assert(details_for_round_trip(replay.stdout_text) == details_for_round_trip(check.stdout_text));
+}
+
+void assert_growing_loop_reports_clean_up_to_bound(const std::filesystem::path& binary,
+                                                   const std::filesystem::path& work_dir) {
+    const auto program_path = work_dir / "cli_growing_bound.dpor";
+    write_file(program_path,
+               "thread:\n"
+               "  set r1 1\n"
+               "grow:\n"
+               "  atomic_rmw counter 1 -> r0\n"
+               "  bnz r1 grow\n");
+
+    const auto check = run_command(
+        binary,
+        {"check", program_path.string(), "--explorer", "dpor", "--step-bound", "5"},
+        work_dir / "cli_growing_bound.out",
+        work_dir / "cli_growing_bound.err");
+    assert(check.exit_code == 0);
+    assert(check.stderr_text.empty());
+    assert(first_line(check.stdout_text) == "verdict: clean up to bound");
+    assert(check.stdout_text.find("cycles_detected:") == std::string::npos);
+    assert(check.stdout_text.find("bound_exceeded_executions: 1\n") != std::string::npos);
+}
+
+void require_cli(bool condition, const std::string& message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+
+void assert_check_replay_byte_identity(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir,
+    const std::string& stem,
+    const std::string& program_text,
+    const std::string& verdict,
+    std::initializer_list<std::string> required_text) {
+    const auto program_path = work_dir / (stem + ".dpor");
+    write_file(program_path, program_text);
+
+    const auto check = run_command(
+        binary,
+        {"check", program_path.string(), "--explorer", "dpor"},
+        work_dir / (stem + ".check.out"),
+        work_dir / (stem + ".check.err"));
+    require_cli(check.exit_code == 1, stem + " check should report a witness");
+    require_cli(check.stderr_text.empty(), stem + " check wrote stderr: " + check.stderr_text);
+    require_cli(first_line(check.stdout_text) == "verdict: " + verdict,
+                stem + " check verdict mismatch");
+    for (const std::string& required : required_text) {
+        require_cli(check.stdout_text.find(required) != std::string::npos,
+                    stem + " report omitted '" + required + "'");
+    }
+
+    const auto schedule_path = work_dir / (stem + ".schedule");
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {"replay", program_path.string(), "--schedule", schedule_path.string()},
+        work_dir / (stem + ".replay.out"),
+        work_dir / (stem + ".replay.err"));
+    require_cli(replay.exit_code == 1, stem + " replay should reproduce a witness");
+    require_cli(replay.stderr_text.empty(), stem + " replay wrote stderr: " + replay.stderr_text);
+    require_cli(replay.stdout_text == check.stdout_text,
+                stem + " check and replay reports were not byte-identical");
+}
+
+void assert_rwlock_syntax_and_witnesses_round_trip_byte_identically(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    // This assertion witness exercises both parsing and report rendering for
+    // all six strict spellings. A one-thread trace also makes the entire
+    // check and replay reports byte-identical, including exploration counts.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_rwlock_spellings",
+        "thread:\n"
+        "  rlock rw\n"
+        "  upgrade rw\n"
+        "  downgrade rw\n"
+        "  runlock rw\n"
+        "  wlock rw\n"
+        "  wunlock rw\n"
+        "  assert r0\n",
+        "assertion",
+        {"rlock rw",
+         "upgrade rw",
+         "downgrade rw",
+         "runlock rw",
+         "wlock rw",
+         "wunlock rw"});
+
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_runlock_error",
+        "thread:\n"
+        "  runlock rw\n",
+        "error",
+        {"rwlock 'rw'", "runlock rw"});
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_wunlock_error",
+        "thread:\n"
+        "  wunlock rw\n",
+        "error",
+        {"rwlock 'rw'", "wunlock rw"});
+
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_rwlock_waiting_writer",
+        "thread:\n"
+        "  wlock rw\n"
+        "  spawn 1\n"
+        "  join 1\n"
+        "thread:\n"
+        "  rlock rw\n",
+        "deadlock",
+        {"rwlock rw waiting_for_writer owned_by 0"});
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_rwlock_waiting_readers",
+        "thread:\n"
+        "  rlock rw\n"
+        "  spawn 1\n"
+        "  join 1\n"
+        "thread:\n"
+        "  wlock rw\n",
+        "deadlock",
+        {"rwlock rw waiting_for_readers_to_drain"});
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_rwlock_self_wait",
+        "thread:\n"
+        "  rlock rw\n"
+        "  wlock rw\n",
+        "deadlock",
+        {"rwlock rw waiting_for_readers_to_drain self_wait"});
+
+    const auto double_upgrade_path = work_dir / "cli_rwlock_double_upgrade.dpor";
+    write_file(
+        double_upgrade_path,
+        "thread:\n"
+        "  rlock rw\n"
+        "  barrier_wait ready 2\n"
+        "  upgrade rw\n"
+        "thread:\n"
+        "  rlock rw\n"
+        "  barrier_wait ready 2\n"
+        "  upgrade rw\n");
+    const auto double_upgrade_check = run_command(
+        binary,
+        {"check", double_upgrade_path.string(), "--explorer", "dpor"},
+        work_dir / "cli_rwlock_double_upgrade.check.out",
+        work_dir / "cli_rwlock_double_upgrade.check.err");
+    require_cli(double_upgrade_check.exit_code == 1,
+                "double-upgrade check should report a witness");
+    require_cli(double_upgrade_check.stderr_text.empty(),
+                "double-upgrade check wrote stderr: " +
+                    double_upgrade_check.stderr_text);
+    require_cli(first_line(double_upgrade_check.stdout_text) == "verdict: deadlock",
+                "double-upgrade check verdict mismatch");
+    const std::vector<std::string> exact_blockers = {
+        "    thread 0: rwlock rw upgrade_waiting_for_readers_to_drain\n",
+        "    thread 1: rwlock rw upgrade_waiting_for_readers_to_drain\n",
+    };
+    for (const std::string& blocker : exact_blockers) {
+        require_cli(double_upgrade_check.stdout_text.find(blocker) !=
+                        std::string::npos,
+                    "double-upgrade report omitted exact blocker '" + blocker + "'");
+    }
+
+    const auto double_upgrade_schedule =
+        work_dir / "cli_rwlock_double_upgrade.schedule";
+    write_file(double_upgrade_schedule,
+               schedule_block(double_upgrade_check.stdout_text));
+    const auto double_upgrade_replay = run_command(
+        binary,
+        {"replay",
+         double_upgrade_path.string(),
+         "--schedule",
+         double_upgrade_schedule.string()},
+        work_dir / "cli_rwlock_double_upgrade.replay.out",
+        work_dir / "cli_rwlock_double_upgrade.replay.err");
+    require_cli(double_upgrade_replay.exit_code == 1,
+                "double-upgrade replay should reproduce the witness");
+    require_cli(double_upgrade_replay.stderr_text.empty(),
+                "double-upgrade replay wrote stderr: " +
+                    double_upgrade_replay.stderr_text);
+    require_cli(details_for_round_trip(double_upgrade_replay.stdout_text) ==
+                    details_for_round_trip(double_upgrade_check.stdout_text),
+                "double-upgrade check and replay witness details differ");
+    require_cli(schedule_block(double_upgrade_replay.stdout_text) ==
+                    schedule_block(double_upgrade_check.stdout_text),
+                "double-upgrade check and replay schedules differ");
+}
+
+void assert_rwlock_parser_is_strict_and_namespaces_are_distinct(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    struct ParseCase {
+        std::string stem;
+        std::string action;
+        std::string expected;
+    };
+    const std::vector<ParseCase> parse_cases = {
+        {"rlock_uppercase", "RLock rw", "unknown keyword 'RLock'"},
+        {"upgrade_uppercase", "Upgrade rw", "unknown keyword 'Upgrade'"},
+        {"downgrade_uppercase", "Downgrade rw", "unknown keyword 'Downgrade'"},
+        {"upgrade_missing", "upgrade", "keyword 'upgrade' expects 1 operand"},
+        {"upgrade_extra", "upgrade rw extra", "keyword 'upgrade' expects 1 operand"},
+        {"downgrade_missing", "downgrade", "keyword 'downgrade' expects 1 operand"},
+        {"downgrade_extra", "downgrade rw extra", "keyword 'downgrade' expects 1 operand"},
+    };
+    for (const ParseCase& parse_case : parse_cases) {
+        const auto program_path = work_dir / ("cli_rwlock_" + parse_case.stem + ".dpor");
+        write_file(program_path, "thread:\n  " + parse_case.action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_rwlock_" + parse_case.stem + ".out"),
+            work_dir / ("cli_rwlock_" + parse_case.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    parse_case.stem + " rwlock syntax should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    parse_case.stem + " rwlock syntax wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    parse_case.stem + " rwlock syntax omitted its line");
+        require_cli(result.stderr_text.find(parse_case.expected) != std::string::npos,
+                    parse_case.stem + " rwlock diagnostic mismatch: " +
+                        result.stderr_text);
+    }
+
+    const std::vector<std::pair<std::string, std::string>> collisions = {
+        {
+            "mutex_then_rwlock",
+            "thread:\n"
+            "  wait cv shared\n"
+            "  rlock shared\n",
+        },
+        {
+            "rwlock_then_mutex",
+            "thread:\n"
+            "  wlock shared\n"
+            "  wait cv shared\n",
+        },
+        {
+            "upgrade_then_mutex",
+            "thread:\n"
+            "  upgrade shared\n"
+            "  lock shared\n",
+        },
+        {
+            "mutex_then_upgrade",
+            "thread:\n"
+            "  lock shared\n"
+            "  upgrade shared\n",
+        },
+        {
+            "downgrade_then_mutex",
+            "thread:\n"
+            "  downgrade shared\n"
+            "  lock shared\n",
+        },
+        {
+            "mutex_then_downgrade",
+            "thread:\n"
+            "  lock shared\n"
+            "  downgrade shared\n",
+        },
+    };
+    for (const auto& [stem, program_text] : collisions) {
+        const auto program_path = work_dir / ("cli_" + stem + ".dpor");
+        write_file(program_path, program_text);
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + stem + ".out"),
+            work_dir / ("cli_" + stem + ".err"));
+        require_cli(result.exit_code == 2, stem + " namespace collision should be rejected");
+        require_cli(result.stdout_text.empty(), stem + " namespace collision wrote stdout");
+        require_cli(result.stderr_text.find("line 3") != std::string::npos,
+                    stem + " namespace collision omitted the conflict line");
+        require_cli(result.stderr_text.find("mutex") != std::string::npos,
+                    stem + " namespace collision omitted mutex");
+        require_cli(result.stderr_text.find("rwlock") != std::string::npos,
+                    stem + " namespace collision omitted rwlock");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    stem + " namespace collision omitted the first-use line");
+    }
+}
+
+void assert_semaphore_syntax_and_witnesses_round_trip_byte_identically(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    // The assertion witness exercises parsing and canonical trace rendering
+    // for both semaphore actions. With one thread, check and replay reports
+    // are byte-identical, including the exploration count.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_semaphore_spellings",
+        "thread:\n"
+        "  sem_post permits\n"
+        "  sem_wait permits\n"
+        "  assert r0\n",
+        "assertion",
+        {"sem_post permits", "sem_wait permits"});
+
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_semaphore_zero_permit",
+        "thread:\n"
+        "  sem_wait permits\n",
+        "deadlock",
+        {"semaphore permits waiting_for_post"});
+}
+
+void assert_semaphore_parser_is_strict_and_namespace_is_distinct(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    const std::vector<std::pair<std::string, std::string>> uppercase_cases = {
+        {"SemPost", "SemPost permits"},
+        {"SemWait", "SemWait permits"},
+    };
+    for (const auto& [keyword, action] : uppercase_cases) {
+        const auto program_path = work_dir / ("cli_" + keyword + ".dpor");
+        write_file(program_path, "thread:\n  " + action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + keyword + ".out"),
+            work_dir / ("cli_" + keyword + ".err"));
+        require_cli(result.exit_code == 2, keyword + " should be rejected");
+        require_cli(result.stdout_text.empty(), keyword + " wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    keyword + " error omitted its line");
+        require_cli(result.stderr_text.find("unknown keyword '" + keyword + "'") !=
+                        std::string::npos,
+                    keyword + " was not reported as unknown");
+    }
+
+    const std::vector<std::pair<std::string, std::string>> arity_cases = {
+        {"sem_post_missing", "sem_post"},
+        {"sem_post_extra", "sem_post permits extra"},
+        {"sem_wait_missing", "sem_wait"},
+        {"sem_wait_extra", "sem_wait permits extra"},
+    };
+    for (const auto& [stem, action] : arity_cases) {
+        const auto program_path = work_dir / ("cli_" + stem + ".dpor");
+        write_file(program_path, "thread:\n  " + action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + stem + ".out"),
+            work_dir / ("cli_" + stem + ".err"));
+        require_cli(result.exit_code == 2, stem + " should be rejected");
+        require_cli(result.stdout_text.empty(), stem + " wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    stem + " error omitted its line");
+        const std::string keyword = stem.rfind("sem_post", 0) == 0
+            ? "sem_post"
+            : "sem_wait";
+        require_cli(result.stderr_text.find("keyword '" + keyword +
+                                            "' expects 1 operand") != std::string::npos,
+                    stem + " did not report strict arity");
+    }
+
+    struct CollisionCase {
+        std::string stem;
+        std::string program_text;
+        std::string other_namespace;
+    };
+    const std::vector<CollisionCase> collisions = {
+        {
+            "semaphore_then_mutex",
+            "thread:\n"
+            "  sem_post shared\n"
+            "  lock shared\n",
+            "mutex",
+        },
+        {
+            "mutex_then_semaphore",
+            "thread:\n"
+            "  lock shared\n"
+            "  sem_wait shared\n",
+            "mutex",
+        },
+        {
+            "semaphore_then_rwlock",
+            "thread:\n"
+            "  sem_wait shared\n"
+            "  rlock shared\n",
+            "rwlock",
+        },
+        {
+            "rwlock_then_semaphore",
+            "thread:\n"
+            "  wlock shared\n"
+            "  sem_post shared\n",
+            "rwlock",
+        },
+        {
+            "semaphore_then_upgrade",
+            "thread:\n"
+            "  sem_wait shared\n"
+            "  upgrade shared\n",
+            "rwlock",
+        },
+        {
+            "downgrade_then_semaphore",
+            "thread:\n"
+            "  downgrade shared\n"
+            "  sem_post shared\n",
+            "rwlock",
+        },
+    };
+    for (const CollisionCase& collision : collisions) {
+        const auto program_path = work_dir / ("cli_" + collision.stem + ".dpor");
+        write_file(program_path, collision.program_text);
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + collision.stem + ".out"),
+            work_dir / ("cli_" + collision.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    collision.stem + " namespace collision should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    collision.stem + " namespace collision wrote stdout");
+        require_cli(result.stderr_text.find("line 3") != std::string::npos,
+                    collision.stem + " collision omitted the conflict line");
+        require_cli(result.stderr_text.find("semaphore") != std::string::npos,
+                    collision.stem + " collision omitted semaphore");
+        require_cli(result.stderr_text.find(collision.other_namespace) != std::string::npos,
+                    collision.stem + " collision omitted " + collision.other_namespace);
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    collision.stem + " collision omitted the first-use line");
+    }
+}
+
+void assert_barrier_syntax_and_witnesses_round_trip_byte_identically(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    // parties==1 exercises immediate cyclic-barrier release and canonical
+    // action rendering while preserving exact check/replay report identity.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_barrier_spelling",
+        "thread:\n"
+        "  barrier_wait phase 1\n"
+        "  assert r0\n",
+        "assertion",
+        {"barrier_wait phase 1"});
+
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_barrier_waiting",
+        "thread:\n"
+        "  barrier_wait phase 2\n",
+        "deadlock",
+        {"barrier_wait phase 2", "barrier phase waiting_on_barrier"});
+}
+
+void assert_barrier_parser_is_strict_and_namespace_is_distinct(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    struct ParseCase {
+        std::string stem;
+        std::string action;
+        std::string expected;
+    };
+    const std::vector<ParseCase> parse_cases = {
+        {"uppercase", "BarrierWait phase 2", "unknown keyword 'BarrierWait'"},
+        {"missing_name_and_parties", "barrier_wait", "expects 2 operands"},
+        {"missing_parties", "barrier_wait phase", "expects 2 operands"},
+        {"extra", "barrier_wait phase 2 extra", "expects 2 operands"},
+        {"zero", "barrier_wait phase 0", "parties must be greater than zero"},
+        {"negative", "barrier_wait phase -1", "invalid barrier parties '-1'"},
+        {"nonnumeric", "barrier_wait phase two", "invalid barrier parties 'two'"},
+        {"overflow", "barrier_wait phase 4294967296", "barrier parties is too large"},
+    };
+    for (const ParseCase& parse_case : parse_cases) {
+        const auto program_path = work_dir / ("cli_barrier_" + parse_case.stem + ".dpor");
+        write_file(program_path, "thread:\n  " + parse_case.action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_barrier_" + parse_case.stem + ".out"),
+            work_dir / ("cli_barrier_" + parse_case.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    parse_case.stem + " barrier syntax should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    parse_case.stem + " barrier syntax wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    parse_case.stem + " barrier syntax omitted its line");
+        require_cli(result.stderr_text.find(parse_case.expected) != std::string::npos,
+                    parse_case.stem + " barrier syntax diagnostic mismatch: " +
+                        result.stderr_text);
+    }
+
+    const auto mismatch_path = work_dir / "cli_barrier_party_mismatch.dpor";
+    write_file(mismatch_path,
+               "thread:\n"
+               "  barrier_wait phase 2\n"
+               "thread:\n"
+               "  barrier_wait phase 3\n");
+    const auto mismatch = run_command(
+        binary,
+        {"check", mismatch_path.string()},
+        work_dir / "cli_barrier_party_mismatch.out",
+        work_dir / "cli_barrier_party_mismatch.err");
+    require_cli(mismatch.exit_code == 2, "barrier party mismatch should be rejected");
+    require_cli(mismatch.stdout_text.empty(), "barrier party mismatch wrote stdout");
+    require_cli(mismatch.stderr_text.find("line 4") != std::string::npos,
+                "barrier party mismatch omitted the mismatch line");
+    require_cli(mismatch.stderr_text.find("requires 2 parties") != std::string::npos,
+                "barrier party mismatch omitted the required party count");
+    require_cli(mismatch.stderr_text.find("first use on line 2") != std::string::npos,
+                "barrier party mismatch omitted the first-use line");
+    require_cli(mismatch.stderr_text.find("specifies 3") != std::string::npos,
+                "barrier party mismatch omitted the conflicting party count");
+
+    struct CollisionCase {
+        std::string stem;
+        std::string program_text;
+        std::string other_namespace;
+    };
+    const std::vector<CollisionCase> collisions = {
+        {"barrier_then_mutex", "thread:\n  barrier_wait shared 1\n  lock shared\n", "mutex"},
+        {"mutex_then_barrier", "thread:\n  lock shared\n  barrier_wait shared 1\n", "mutex"},
+        {"barrier_then_rwlock", "thread:\n  barrier_wait shared 1\n  rlock shared\n", "rwlock"},
+        {"rwlock_then_barrier", "thread:\n  wlock shared\n  barrier_wait shared 1\n", "rwlock"},
+        {"barrier_then_upgrade", "thread:\n  barrier_wait shared 1\n  upgrade shared\n", "rwlock"},
+        {"downgrade_then_barrier", "thread:\n  downgrade shared\n  barrier_wait shared 1\n", "rwlock"},
+        {"barrier_then_semaphore", "thread:\n  barrier_wait shared 1\n  sem_post shared\n", "semaphore"},
+        {"semaphore_then_barrier", "thread:\n  sem_wait shared\n  barrier_wait shared 1\n", "semaphore"},
+        {"barrier_then_condition", "thread:\n  barrier_wait shared 1\n  signal shared\n", "condition variable"},
+        {"condition_then_barrier", "thread:\n  broadcast shared\n  barrier_wait shared 1\n", "condition variable"},
+    };
+    for (const CollisionCase& collision : collisions) {
+        const auto program_path = work_dir / ("cli_" + collision.stem + ".dpor");
+        write_file(program_path, collision.program_text);
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + collision.stem + ".out"),
+            work_dir / ("cli_" + collision.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    collision.stem + " namespace collision should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    collision.stem + " namespace collision wrote stdout");
+        require_cli(result.stderr_text.find("line 3") != std::string::npos,
+                    collision.stem + " collision omitted the conflict line");
+        require_cli(result.stderr_text.find("barrier") != std::string::npos,
+                    collision.stem + " collision omitted barrier");
+        require_cli(result.stderr_text.find(collision.other_namespace) != std::string::npos,
+                    collision.stem + " collision omitted " + collision.other_namespace);
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    collision.stem + " collision omitted the first-use line");
+    }
+}
+
+void assert_broadcast_syntax_and_consumer_differential(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    // An empty Broadcast is still a fired, canonically rendered source
+    // action. The following assertion makes its trace available for an exact
+    // check/replay spelling check without manufacturing a condition permit.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_broadcast_spelling",
+        "thread:\n"
+        "  broadcast work_available\n"
+        "  assert r0\n",
+        "assertion",
+        {"broadcast work_available"});
+
+    struct ParseCase {
+        std::string stem;
+        std::string action;
+        std::string expected;
+    };
+    const std::vector<ParseCase> parse_cases = {
+        {"uppercase", "Broadcast work_available", "unknown keyword 'Broadcast'"},
+        {"missing", "broadcast", "keyword 'broadcast' expects 1 operand"},
+        {"extra",
+         "broadcast work_available extra",
+         "keyword 'broadcast' expects 1 operand"},
+    };
+    for (const ParseCase& parse_case : parse_cases) {
+        const auto program_path =
+            work_dir / ("cli_broadcast_" + parse_case.stem + ".dpor");
+        write_file(program_path, "thread:\n  " + parse_case.action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_broadcast_" + parse_case.stem + ".out"),
+            work_dir / ("cli_broadcast_" + parse_case.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    parse_case.stem + " Broadcast syntax should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    parse_case.stem + " Broadcast syntax wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    parse_case.stem + " Broadcast syntax omitted its line");
+        require_cli(result.stderr_text.find(parse_case.expected) !=
+                        std::string::npos,
+                    parse_case.stem + " Broadcast diagnostic mismatch: " +
+                        result.stderr_text);
+    }
+
+    // The differential uses two Signals without depending on a lucky prefix:
+    // the first fires before either worker is spawned and must leave no
+    // permit, while the readiness/mutex handshake forces both workers to park
+    // before the final wake. One Broadcast wakes that exact set; two Signals
+    // with the first lost leave the higher-id waiter asleep.
+    const auto two_signal_correct =
+        work_dir / "cli_broadcast_two_signal_correct.dpor";
+    const auto two_signal_broken =
+        work_dir / "cli_broadcast_two_signal_broken.dpor";
+    write_file(
+        two_signal_correct,
+        "thread:\n"
+        "  spawn 1\n"
+        "  spawn 2\n"
+        "  sem_wait ready\n"
+        "  sem_wait ready\n"
+        "  lock m\n"
+        "  unlock m\n"
+        "  broadcast cv\n"
+        "\n"
+        "thread:\n"
+        "  lock m\n"
+        "  sem_post ready\n"
+        "  wait cv m\n"
+        "  unlock m\n"
+        "\n"
+        "thread:\n"
+        "  lock m\n"
+        "  sem_post ready\n"
+        "  wait cv m\n"
+        "  unlock m\n");
+    write_file(
+        two_signal_broken,
+        "thread:\n"
+        "  signal cv\n"
+        "  spawn 1\n"
+        "  spawn 2\n"
+        "  sem_wait ready\n"
+        "  sem_wait ready\n"
+        "  lock m\n"
+        "  unlock m\n"
+        "  signal cv\n"
+        "\n"
+        "thread:\n"
+        "  lock m\n"
+        "  sem_post ready\n"
+        "  wait cv m\n"
+        "  unlock m\n"
+        "\n"
+        "thread:\n"
+        "  lock m\n"
+        "  sem_post ready\n"
+        "  wait cv m\n"
+        "  unlock m\n");
+
+    struct DifferentialCount {
+        const char* explorer;
+        std::size_t clean_count;
+        std::size_t broken_count;
+    };
+    const std::vector<DifferentialCount> differential_counts = {
+        {"dpor", 30, 15},
+    };
+    for (const DifferentialCount& expected : differential_counts) {
+        const std::string explorer = expected.explorer;
+        const auto clean = run_command(
+            binary,
+            {"check",
+             two_signal_correct.string(),
+             "--explorer",
+             explorer,
+             "--step-bound",
+             "30",
+             "--max-schedules",
+             "100000"},
+            work_dir / ("cli_two_signal_correct_" + explorer + ".out"),
+            work_dir / ("cli_two_signal_correct_" + explorer + ".err"));
+        require_cli(clean.exit_code == 0 && clean.stderr_text.empty() &&
+                        first_line(clean.stdout_text) == "verdict: clean",
+                    "two-Signal differential Broadcast side was not clean under " +
+                        explorer);
+        require_cli(
+            clean.stdout_text.find(
+                "schedules_explored: " +
+                std::to_string(expected.clean_count) + "\n") !=
+                std::string::npos,
+            "two-Signal differential Broadcast count changed under " +
+                explorer);
+
+        const auto broken = run_command(
+            binary,
+            {"check",
+             two_signal_broken.string(),
+             "--explorer",
+             explorer,
+             "--step-bound",
+             "30",
+             "--max-schedules",
+             "100000"},
+            work_dir / ("cli_two_signal_broken_" + explorer + ".out"),
+            work_dir / ("cli_two_signal_broken_" + explorer + ".err"));
+        require_cli(
+            broken.exit_code == 1 && broken.stderr_text.empty() &&
+                first_line(broken.stdout_text) == "verdict: deadlock",
+            "two-Signal differential lost its deadlock under " + explorer);
+        require_cli(
+            broken.stdout_text.find(
+                "schedules_explored: " +
+                std::to_string(expected.broken_count) + "\n") !=
+                std::string::npos,
+            "two-Signal differential deadlock count changed under " +
+                explorer);
+        require_cli(
+            broken.stdout_text.find("thread 2: condition cv mutex m") !=
+                std::string::npos,
+            "two-Signal differential reported the wrong parked waiter under " +
+                explorer);
+    }
+}
+
+void assert_try_lock_syntax_and_witnesses_round_trip_byte_identically(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    // One-thread witnesses keep every exploration metric identical between
+    // check and replay while exercising canonical success and failure traces.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_try_lock_success_spelling",
+        "thread:\n"
+        "  try_lock spin -> r7\n"
+        "  unlock spin\n"
+        "  assert r0\n",
+        "assertion",
+        {"try_lock spin -> r7", "unlock spin"});
+
+    // Lock and TryLock deliberately share the mutex namespace. Self-try fails,
+    // leaving r7 == 0 and producing a deterministic assertion witness.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_try_lock_failure_spelling",
+        "thread:\n"
+        "  lock spin\n"
+        "  try_lock spin -> r7\n"
+        "  unlock spin\n"
+        "  assert r7\n",
+        "assertion",
+        {"lock spin", "try_lock spin -> r7", "unlock spin"});
+}
+
+void assert_try_lock_parser_is_strict_and_uses_the_mutex_namespace(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    struct ParseCase {
+        std::string stem;
+        std::string action;
+        std::string expected;
+    };
+    const std::vector<ParseCase> parse_cases = {
+        {"uppercase", "TryLock spin -> r0", "unknown keyword 'TryLock'"},
+        {"missing_name", "try_lock", "keyword 'try_lock' expects 3 operands"},
+        {"missing_arrow", "try_lock spin r0", "keyword 'try_lock' expects 3 operands"},
+        {"missing_register", "try_lock spin ->", "keyword 'try_lock' expects 3 operands"},
+        {"wrong_arrow", "try_lock spin => r0", "expects mutex -> register"},
+        {"extra", "try_lock spin -> r0 extra", "keyword 'try_lock' expects 3 operands"},
+        {"invalid_register", "try_lock spin -> rx", "invalid destination register 'rx'"},
+        {"out_of_range_register", "try_lock spin -> r8", "destination register is out of range"},
+    };
+    for (const ParseCase& parse_case : parse_cases) {
+        const auto program_path = work_dir / ("cli_try_lock_" + parse_case.stem + ".dpor");
+        write_file(program_path, "thread:\n  " + parse_case.action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_try_lock_" + parse_case.stem + ".out"),
+            work_dir / ("cli_try_lock_" + parse_case.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    parse_case.stem + " try_lock syntax should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    parse_case.stem + " try_lock syntax wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    parse_case.stem + " try_lock syntax omitted its line");
+        require_cli(result.stderr_text.find(parse_case.expected) != std::string::npos,
+                    parse_case.stem + " try_lock diagnostic mismatch: " +
+                        result.stderr_text);
+    }
+
+    struct CollisionCase {
+        std::string stem;
+        std::string program_text;
+        std::string other_namespace;
+    };
+    const std::vector<CollisionCase> collisions = {
+        {"try_lock_then_rwlock",
+         "thread:\n  try_lock shared -> r0\n  rlock shared\n",
+         "rwlock"},
+        {"rwlock_then_try_lock",
+         "thread:\n  wlock shared\n  try_lock shared -> r0\n",
+         "rwlock"},
+        {"try_lock_then_semaphore",
+         "thread:\n  try_lock shared -> r0\n  sem_post shared\n",
+         "semaphore"},
+        {"semaphore_then_try_lock",
+         "thread:\n  sem_wait shared\n  try_lock shared -> r0\n",
+         "semaphore"},
+        {"try_lock_then_barrier",
+         "thread:\n  try_lock shared -> r0\n  barrier_wait shared 1\n",
+         "barrier"},
+        {"barrier_then_try_lock",
+         "thread:\n  barrier_wait shared 1\n  try_lock shared -> r0\n",
+         "barrier"},
+    };
+    for (const CollisionCase& collision : collisions) {
+        const auto program_path = work_dir / ("cli_" + collision.stem + ".dpor");
+        write_file(program_path, collision.program_text);
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + collision.stem + ".out"),
+            work_dir / ("cli_" + collision.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    collision.stem + " namespace collision should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    collision.stem + " namespace collision wrote stdout");
+        require_cli(result.stderr_text.find("line 3") != std::string::npos,
+                    collision.stem + " collision omitted the conflict line");
+        require_cli(result.stderr_text.find("mutex") != std::string::npos,
+                    collision.stem + " collision omitted mutex");
+        require_cli(result.stderr_text.find(collision.other_namespace) != std::string::npos,
+                    collision.stem + " collision omitted " + collision.other_namespace);
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    collision.stem + " collision omitted the first-use line");
+    }
+}
+
+void assert_timedwait_syntax_and_outcome_traces_round_trip(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    // With no signaler, the only parked outcome is the explicit timeout.
+    // The assertion therefore supplies a deterministic witness whose three
+    // TimedWait phases must remain byte-identical through schedule replay.
+    assert_check_replay_byte_identity(
+        binary,
+        work_dir,
+        "cli_timedwait_timeout_spelling",
+        "thread:\n"
+        "  lock m\n"
+        "  timedwait cv m -> r7\n"
+        "  assert r7\n",
+        "assertion",
+        {
+            "timedwait cv m -> r7 (sleep)",
+            "timedwait cv m -> r7 (timeout)",
+            "timedwait cv m -> r7 (reacquire)",
+            "register: r7",
+            "value: 0",
+        });
+
+    // A readiness handshake forces the signaler to wait until the mutex owner
+    // can park. The timeout path exits cleanly; only r6==1 branches to the
+    // assertion failure, so the selected witness is necessarily the wake
+    // outcome and must not contain a timeout phase.
+    const auto program_path = work_dir / "cli_timedwait_wake_spelling.dpor";
+    write_file(
+        program_path,
+        "thread:\n"
+        "  lock m\n"
+        "  sem_post ready\n"
+        "  timedwait cv m -> r6\n"
+        "  unlock m\n"
+        "  set r5 1\n"
+        "  bnz r6 woke\n"
+        "  assert r5\n"
+        "  bnz r5 done\n"
+        "woke:\n"
+        "  assert r0\n"
+        "done:\n"
+        "  yield\n"
+        "\n"
+        "thread:\n"
+        "  sem_wait ready\n"
+        "  lock m\n"
+        "  signal cv\n"
+        "  unlock m\n");
+
+    const auto check = run_command(
+        binary,
+        {
+            "check",
+            program_path.string(),
+            "--explorer",
+            "dpor",
+            "--step-bound",
+            "30",
+            "--max-schedules",
+            "100000",
+        },
+        work_dir / "cli_timedwait_wake_spelling.check.out",
+        work_dir / "cli_timedwait_wake_spelling.check.err");
+    require_cli(check.exit_code == 1,
+                "timedwait wake check should report the wake-only assertion");
+    require_cli(check.stderr_text.empty(),
+                "timedwait wake check wrote stderr: " + check.stderr_text);
+    require_cli(first_line(check.stdout_text) == "verdict: assertion",
+                "timedwait wake check verdict mismatch");
+    require_cli(
+        check.stdout_text.find("timedwait cv m -> r6 (sleep)") !=
+            std::string::npos,
+        "timedwait wake trace omitted its sleep phase");
+    require_cli(
+        check.stdout_text.find("timedwait cv m -> r6 (reacquire)") !=
+            std::string::npos,
+        "timedwait wake trace omitted its reacquire phase");
+    require_cli(
+        check.stdout_text.find("timedwait cv m -> r6 (timeout)") ==
+            std::string::npos,
+        "timedwait wake trace incorrectly rendered a timeout phase");
+    require_cli(
+        check.stdout_text.find("bnz r6 woke") != std::string::npos,
+        "timedwait wake trace did not branch on the result register");
+
+    const auto schedule_path =
+        work_dir / "cli_timedwait_wake_spelling.schedule";
+    write_file(schedule_path, schedule_block(check.stdout_text));
+    const auto replay = run_command(
+        binary,
+        {
+            "replay",
+            program_path.string(),
+            "--schedule",
+            schedule_path.string(),
+        },
+        work_dir / "cli_timedwait_wake_spelling.replay.out",
+        work_dir / "cli_timedwait_wake_spelling.replay.err");
+    require_cli(replay.exit_code == 1,
+                "timedwait wake replay should reproduce the assertion");
+    require_cli(replay.stderr_text.empty(),
+                "timedwait wake replay wrote stderr: " + replay.stderr_text);
+    require_cli(
+        details_for_round_trip(replay.stdout_text) ==
+            details_for_round_trip(check.stdout_text),
+        "timedwait wake check/replay details differed");
+    require_cli(
+        schedule_block(replay.stdout_text) == schedule_block(check.stdout_text),
+        "timedwait wake replay changed the schedule");
+}
+
+void assert_timedwait_parser_is_strict_and_uses_both_namespaces(
+    const std::filesystem::path& binary,
+    const std::filesystem::path& work_dir) {
+    struct ParseCase {
+        std::string stem;
+        std::string action;
+        std::string expected;
+    };
+    const std::vector<ParseCase> parse_cases = {
+        {
+            "uppercase",
+            "TimedWait cv m -> r0",
+            "unknown keyword 'TimedWait'",
+        },
+        {
+            "underscored",
+            "timed_wait cv m -> r0",
+            "unknown keyword 'timed_wait'",
+        },
+        {
+            "missing_all",
+            "timedwait",
+            "keyword 'timedwait' expects 4 operands",
+        },
+        {
+            "missing_mutex",
+            "timedwait cv",
+            "keyword 'timedwait' expects 4 operands",
+        },
+        {
+            "missing_arrow",
+            "timedwait cv m r0",
+            "keyword 'timedwait' expects 4 operands",
+        },
+        {
+            "missing_register",
+            "timedwait cv m ->",
+            "keyword 'timedwait' expects 4 operands",
+        },
+        {
+            "wrong_arrow",
+            "timedwait cv m => r0",
+            "expects condition mutex -> register",
+        },
+        {
+            "extra",
+            "timedwait cv m -> r0 extra",
+            "keyword 'timedwait' expects 4 operands",
+        },
+        {
+            "invalid_register",
+            "timedwait cv m -> rx",
+            "invalid destination register 'rx'",
+        },
+        {
+            "out_of_range_register",
+            "timedwait cv m -> r8",
+            "destination register is out of range",
+        },
+    };
+    for (const ParseCase& parse_case : parse_cases) {
+        const auto program_path =
+            work_dir / ("cli_timedwait_" + parse_case.stem + ".dpor");
+        write_file(program_path, "thread:\n  " + parse_case.action + "\n");
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_timedwait_" + parse_case.stem + ".out"),
+            work_dir / ("cli_timedwait_" + parse_case.stem + ".err"));
+        require_cli(result.exit_code == 2,
+                    parse_case.stem + " timedwait syntax should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    parse_case.stem + " timedwait syntax wrote stdout");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    parse_case.stem + " timedwait syntax omitted its line");
+        require_cli(
+            result.stderr_text.find(parse_case.expected) != std::string::npos,
+            parse_case.stem + " timedwait diagnostic mismatch: " +
+                result.stderr_text);
+    }
+
+    struct CollisionCase {
+        std::string stem;
+        std::string program_text;
+        std::string expected_namespace;
+    };
+    const std::vector<CollisionCase> collisions = {
+        {
+            "timedwait_mutex_then_rwlock",
+            "thread:\n"
+            "  timedwait cv shared -> r0\n"
+            "  rlock shared\n",
+            "rwlock",
+        },
+        {
+            "rwlock_then_timedwait_mutex",
+            "thread:\n"
+            "  wlock shared\n"
+            "  timedwait cv shared -> r0\n",
+            "rwlock",
+        },
+        {
+            "timedwait_mutex_then_semaphore",
+            "thread:\n"
+            "  timedwait cv shared -> r0\n"
+            "  sem_post shared\n",
+            "semaphore",
+        },
+        {
+            "semaphore_then_timedwait_mutex",
+            "thread:\n"
+            "  sem_wait shared\n"
+            "  timedwait cv shared -> r0\n",
+            "semaphore",
+        },
+        {
+            "timedwait_mutex_then_barrier",
+            "thread:\n"
+            "  timedwait cv shared -> r0\n"
+            "  barrier_wait shared 1\n",
+            "barrier",
+        },
+        {
+            "barrier_then_timedwait_mutex",
+            "thread:\n"
+            "  barrier_wait shared 1\n"
+            "  timedwait cv shared -> r0\n",
+            "barrier",
+        },
+        {
+            "timedwait_condition_then_barrier",
+            "thread:\n"
+            "  timedwait shared m -> r0\n"
+            "  barrier_wait shared 1\n",
+            "condition variable",
+        },
+        {
+            "barrier_then_timedwait_condition",
+            "thread:\n"
+            "  barrier_wait shared 1\n"
+            "  timedwait shared m -> r0\n",
+            "barrier",
+        },
+    };
+    for (const CollisionCase& collision : collisions) {
+        const auto program_path =
+            work_dir / ("cli_" + collision.stem + ".dpor");
+        write_file(program_path, collision.program_text);
+        const auto result = run_command(
+            binary,
+            {"check", program_path.string()},
+            work_dir / ("cli_" + collision.stem + ".out"),
+            work_dir / ("cli_" + collision.stem + ".err"));
+        require_cli(
+            result.exit_code == 2,
+            collision.stem + " namespace collision should be rejected");
+        require_cli(result.stdout_text.empty(),
+                    collision.stem + " namespace collision wrote stdout");
+        require_cli(result.stderr_text.find("line 3") != std::string::npos,
+                    collision.stem + " collision omitted the conflict line");
+        require_cli(result.stderr_text.find("line 2") != std::string::npos,
+                    collision.stem + " collision omitted the first-use line");
+        require_cli(
+            result.stderr_text.find(collision.expected_namespace) !=
+                std::string::npos,
+            collision.stem + " collision omitted " +
+                collision.expected_namespace);
+    }
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    assert(argc == 3);
+    (void)argc;
+    const std::filesystem::path binary = argv[1];
+    const std::filesystem::path source_dir = argv[2];
+    const std::filesystem::path work_dir = std::filesystem::current_path();
+
+    assert_clean_program_exits_zero(binary, source_dir, work_dir);
+    assert_race_golden_and_round_trip(binary, source_dir, work_dir);
+    assert_deadlock_golden_and_round_trip(binary, source_dir, work_dir);
+    assert_lost_wakeup_round_trips_with_wait_phases(binary, source_dir, work_dir);
+    assert_modeled_error_reports_exit_one(binary, source_dir, work_dir);
+    assert_parse_error_has_line_number(binary, source_dir, work_dir);
+    assert_invalid_schedule_exits_two(binary, source_dir, work_dir);
+    assert_explorer_flags_work_and_agree(binary, source_dir, work_dir);
+    assert_assertion_reports_round_trip(binary, work_dir);
+    assert_tso_report_renders_flush_and_replays(binary, work_dir);
+    assert_pso_report_renders_address_tagged_flush_and_replays(binary, work_dir);
+    assert_spin_cycle_reports_nontermination_and_round_trips(binary, work_dir);
+    assert_growing_loop_reports_clean_up_to_bound(binary, work_dir);
+    assert_rwlock_syntax_and_witnesses_round_trip_byte_identically(binary, work_dir);
+    assert_rwlock_parser_is_strict_and_namespaces_are_distinct(binary, work_dir);
+    assert_semaphore_syntax_and_witnesses_round_trip_byte_identically(binary, work_dir);
+    assert_semaphore_parser_is_strict_and_namespace_is_distinct(binary, work_dir);
+    assert_barrier_syntax_and_witnesses_round_trip_byte_identically(binary, work_dir);
+    assert_barrier_parser_is_strict_and_namespace_is_distinct(binary, work_dir);
+    assert_broadcast_syntax_and_consumer_differential(binary, work_dir);
+    assert_try_lock_syntax_and_witnesses_round_trip_byte_identically(binary, work_dir);
+    assert_try_lock_parser_is_strict_and_uses_the_mutex_namespace(binary, work_dir);
+    assert_timedwait_syntax_and_outcome_traces_round_trip(binary, work_dir);
+    assert_timedwait_parser_is_strict_and_uses_both_namespaces(binary, work_dir);
+    return 0;
+}

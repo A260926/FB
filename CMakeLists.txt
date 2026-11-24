@@ -1,0 +1,371 @@
+cmake_minimum_required(VERSION 3.20)
+project(dpor_model_checker LANGUAGES CXX)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+# The verification gates are exhaustive sweeps; unoptimized builds make them
+# ~10x slower. Default to Release when the user does not choose.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+option(DPOR_BUILD_EXPLORATION_PROFILE
+       "Build deterministic exploration-cost instrumentation targets"
+       OFF)
+option(DPOR_ENABLE_RESTORE_ASSERTS
+       "Enable deterministic sampled full-state/history restore assertions"
+       OFF)
+option(DPOR_BUILD_SYMMETRY_DIAGNOSIS
+       "Build default-off thread-symmetry opportunity diagnostics"
+       OFF)
+option(DPOR_BUILD_SANITIZER_SMOKE_TESTS
+       "Register bounded smoke tests for sanitizer builds"
+       OFF)
+
+add_library(model_checker
+    src/model/action.cpp
+    src/model/vector_clock.cpp
+    src/model/checker.cpp
+)
+target_include_directories(model_checker PUBLIC include)
+target_compile_options(model_checker PRIVATE -Wall -Wextra -Wpedantic)
+if(DPOR_ENABLE_RESTORE_ASSERTS)
+    target_compile_definitions(model_checker PRIVATE DPOR_RESTORE_ASSERTS=1)
+endif()
+
+add_library(dpor_cli_lib
+    src/cli/program_parser.cpp
+    src/cli/report.cpp
+)
+target_include_directories(dpor_cli_lib PUBLIC src/cli)
+target_link_libraries(dpor_cli_lib PUBLIC model_checker)
+target_compile_options(dpor_cli_lib PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(dpor
+    src/cli/main.cpp
+)
+target_link_libraries(dpor PRIVATE dpor_cli_lib)
+target_compile_options(dpor PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(dpor_smoke tests/smoke.cpp)
+target_link_libraries(dpor_smoke PRIVATE model_checker)
+
+add_executable(dpor_phase1 tests/phase1.cpp)
+target_link_libraries(dpor_phase1 PRIVATE model_checker)
+
+add_executable(vector_clock_tests tests/vector_clock_tests.cpp)
+target_link_libraries(vector_clock_tests PRIVATE model_checker)
+
+add_executable(independence_tests tests/independence.cpp)
+target_link_libraries(independence_tests PRIVATE model_checker)
+
+add_executable(dpor_oracle tests/dpor_oracle.cpp)
+target_link_libraries(dpor_oracle PRIVATE model_checker)
+
+add_executable(dpor_optimality tests/dpor_optimality.cpp)
+target_link_libraries(dpor_optimality PRIVATE model_checker)
+
+add_executable(dpor_oracle_3threads tests/dpor_oracle_3threads.cpp)
+target_link_libraries(dpor_oracle_3threads PRIVATE model_checker)
+
+add_executable(minimize_tests tests/minimize.cpp)
+target_link_libraries(minimize_tests PRIVATE model_checker)
+
+add_executable(condvar_tests tests/condvar.cpp)
+target_link_libraries(condvar_tests PRIVATE model_checker)
+
+add_executable(condvar_broadcast_tests tests/condvar_broadcast.cpp)
+target_link_libraries(condvar_broadcast_tests PRIVATE model_checker)
+
+add_executable(timedwait_tests tests/timedwait_tests.cpp)
+target_link_libraries(timedwait_tests PRIVATE model_checker)
+
+add_executable(rwlock_tests tests/rwlock_tests.cpp)
+target_link_libraries(rwlock_tests PRIVATE model_checker)
+
+add_executable(rwlock_upgrade_tests tests/rwlock_upgrade_tests.cpp)
+target_link_libraries(rwlock_upgrade_tests PRIVATE model_checker)
+
+add_executable(semaphore_tests tests/semaphore_tests.cpp)
+target_link_libraries(semaphore_tests PRIVATE model_checker)
+
+add_executable(barrier_tests tests/barrier_tests.cpp)
+target_link_libraries(barrier_tests PRIVATE model_checker)
+
+add_executable(trylock_tests tests/trylock_tests.cpp)
+target_link_libraries(trylock_tests PRIVATE model_checker)
+
+add_executable(hb_edge_probes tests/hb_edge_probes.cpp)
+target_link_libraries(hb_edge_probes PRIVATE model_checker)
+
+add_executable(atomics_tests tests/atomics.cpp)
+target_link_libraries(atomics_tests PRIVATE model_checker)
+
+add_executable(values_tests tests/values.cpp)
+target_link_libraries(values_tests PRIVATE model_checker)
+
+add_executable(tso_litmus tests/tso_litmus.cpp)
+target_link_libraries(tso_litmus PRIVATE model_checker)
+
+add_executable(pso_litmus tests/pso_litmus.cpp)
+target_link_libraries(pso_litmus PRIVATE model_checker)
+
+add_executable(tso_oracle tests/tso_oracle.cpp)
+target_link_libraries(tso_oracle PRIVATE model_checker)
+
+add_executable(pso_oracle tests/pso_oracle.cpp)
+target_link_libraries(pso_oracle PRIVATE model_checker)
+
+add_executable(model_inclusion tests/model_inclusion.cpp)
+target_link_libraries(model_inclusion PRIVATE model_checker)
+
+add_executable(nontermination_tests tests/nontermination.cpp)
+target_link_libraries(nontermination_tests PRIVATE dpor_cli_lib)
+
+add_executable(fairness_tests tests/fairness.cpp)
+target_link_libraries(fairness_tests PRIVATE dpor_cli_lib)
+
+add_executable(spawn_tests tests/spawn.cpp)
+target_link_libraries(spawn_tests PRIVATE dpor_cli_lib)
+
+add_executable(cli_tests tests/cli.cpp)
+target_compile_options(cli_tests PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(classic_gallery_tests tests/classic_gallery.cpp)
+target_link_libraries(classic_gallery_tests PRIVATE dpor_cli_lib)
+target_compile_options(classic_gallery_tests PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(showcase_export_api_tests showcase/tests/export_api.cpp)
+target_link_libraries(showcase_export_api_tests PRIVATE model_checker)
+target_compile_options(showcase_export_api_tests PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(dpor_showcase_export showcase/exporter.cpp)
+target_include_directories(dpor_showcase_export PRIVATE showcase)
+target_link_libraries(dpor_showcase_export PRIVATE dpor_cli_lib)
+target_compile_options(dpor_showcase_export PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(dpor_fuzz_differential
+    tests/fuzz_differential.cpp
+)
+target_link_libraries(dpor_fuzz_differential PRIVATE dpor_cli_lib)
+target_compile_options(dpor_fuzz_differential PRIVATE -Wall -Wextra -Wpedantic)
+
+if(DPOR_BUILD_EXPLORATION_PROFILE)
+    add_library(model_checker_profiled
+        src/model/action.cpp
+        src/model/vector_clock.cpp
+        src/model/checker.cpp
+        src/model/exploration_metrics.cpp
+    )
+    target_include_directories(model_checker_profiled PUBLIC include)
+    target_compile_definitions(model_checker_profiled PRIVATE DPOR_EXPLORATION_METRICS=1)
+    if(DPOR_ENABLE_RESTORE_ASSERTS)
+        target_compile_definitions(model_checker_profiled PRIVATE DPOR_RESTORE_ASSERTS=1)
+    endif()
+    target_compile_options(model_checker_profiled PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_library(dpor_cli_lib_profiled
+        src/cli/program_parser.cpp
+        src/cli/report.cpp
+    )
+    target_include_directories(dpor_cli_lib_profiled PUBLIC src/cli)
+    target_link_libraries(dpor_cli_lib_profiled PUBLIC model_checker_profiled)
+    target_compile_options(dpor_cli_lib_profiled PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_executable(exploration_metrics_tests tests/exploration_metrics.cpp)
+    target_link_libraries(exploration_metrics_tests PRIVATE model_checker_profiled)
+
+    add_executable(dpor_oracle_profile tests/dpor_oracle.cpp)
+    target_link_libraries(dpor_oracle_profile PRIVATE model_checker_profiled)
+
+    add_executable(dpor_optimality_profile tests/dpor_optimality.cpp)
+    target_link_libraries(dpor_optimality_profile PRIVATE model_checker_profiled)
+
+    add_executable(dpor_oracle_3threads_profile tests/dpor_oracle_3threads.cpp)
+    target_link_libraries(dpor_oracle_3threads_profile PRIVATE model_checker_profiled)
+
+    add_executable(tso_oracle_profile tests/tso_oracle.cpp)
+    target_link_libraries(tso_oracle_profile PRIVATE model_checker_profiled)
+
+    add_executable(pso_oracle_profile tests/pso_oracle.cpp)
+    target_link_libraries(pso_oracle_profile PRIVATE model_checker_profiled)
+
+    add_executable(classic_gallery_tests_profile tests/classic_gallery.cpp)
+    target_link_libraries(classic_gallery_tests_profile PRIVATE dpor_cli_lib_profiled)
+    target_compile_options(classic_gallery_tests_profile PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_executable(dpor_fuzz_differential_profile tests/fuzz_differential.cpp)
+    target_link_libraries(dpor_fuzz_differential_profile PRIVATE dpor_cli_lib_profiled)
+    target_compile_options(dpor_fuzz_differential_profile PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(DPOR_BUILD_SYMMETRY_DIAGNOSIS)
+    add_library(symmetry_diagnosis_support
+        tests/symmetry_diagnosis.cpp
+    )
+    target_include_directories(symmetry_diagnosis_support PUBLIC tests)
+    target_link_libraries(symmetry_diagnosis_support PUBLIC model_checker)
+    target_compile_options(symmetry_diagnosis_support PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_executable(symmetry_diagnosis_tests
+        tests/symmetry_diagnosis_tests.cpp
+    )
+    target_link_libraries(symmetry_diagnosis_tests PRIVATE symmetry_diagnosis_support)
+    target_compile_options(symmetry_diagnosis_tests PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_executable(dpor_oracle_symmetry tests/dpor_oracle.cpp)
+    target_compile_definitions(dpor_oracle_symmetry PRIVATE DPOR_SYMMETRY_DIAGNOSIS=1)
+    target_link_libraries(dpor_oracle_symmetry PRIVATE symmetry_diagnosis_support)
+
+    add_executable(dpor_oracle_3threads_symmetry tests/dpor_oracle_3threads.cpp)
+    target_compile_definitions(dpor_oracle_3threads_symmetry PRIVATE DPOR_SYMMETRY_DIAGNOSIS=1)
+    target_link_libraries(dpor_oracle_3threads_symmetry PRIVATE symmetry_diagnosis_support)
+
+    add_executable(tso_oracle_symmetry tests/tso_oracle.cpp)
+    target_compile_definitions(tso_oracle_symmetry PRIVATE DPOR_SYMMETRY_DIAGNOSIS=1)
+    target_link_libraries(tso_oracle_symmetry PRIVATE symmetry_diagnosis_support)
+
+    add_executable(pso_oracle_symmetry tests/pso_oracle.cpp)
+    target_compile_definitions(pso_oracle_symmetry PRIVATE DPOR_SYMMETRY_DIAGNOSIS=1)
+    target_link_libraries(pso_oracle_symmetry PRIVATE symmetry_diagnosis_support)
+
+    add_executable(dpor_fuzz_differential_symmetry tests/fuzz_differential.cpp)
+    target_compile_definitions(dpor_fuzz_differential_symmetry PRIVATE DPOR_SYMMETRY_DIAGNOSIS=1)
+    target_link_libraries(dpor_fuzz_differential_symmetry PRIVATE dpor_cli_lib symmetry_diagnosis_support)
+    target_compile_options(dpor_fuzz_differential_symmetry PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_executable(classic_gallery_tests_symmetry tests/classic_gallery.cpp)
+    target_compile_definitions(classic_gallery_tests_symmetry PRIVATE DPOR_SYMMETRY_DIAGNOSIS=1)
+    target_link_libraries(classic_gallery_tests_symmetry PRIVATE dpor_cli_lib symmetry_diagnosis_support)
+    target_compile_options(classic_gallery_tests_symmetry PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+include(CTest)
+add_test(NAME dpor_smoke COMMAND dpor_smoke)
+add_test(NAME dpor_phase1 COMMAND dpor_phase1)
+add_test(NAME vector_clock_tests COMMAND vector_clock_tests)
+add_test(NAME independence_tests COMMAND independence_tests)
+add_test(NAME dpor_oracle COMMAND dpor_oracle)
+add_test(NAME dpor_optimality COMMAND dpor_optimality)
+add_test(NAME dpor_oracle_3threads COMMAND dpor_oracle_3threads)
+add_test(NAME minimize_tests COMMAND minimize_tests)
+add_test(NAME condvar_tests COMMAND condvar_tests)
+add_test(NAME condvar_broadcast_tests COMMAND condvar_broadcast_tests)
+add_test(NAME timedwait_tests COMMAND timedwait_tests)
+add_test(NAME rwlock_tests COMMAND rwlock_tests)
+add_test(NAME rwlock_upgrade_tests COMMAND rwlock_upgrade_tests)
+add_test(NAME semaphore_tests COMMAND semaphore_tests)
+add_test(NAME barrier_tests COMMAND barrier_tests)
+add_test(NAME trylock_tests COMMAND trylock_tests)
+add_test(NAME hb_edge_probes COMMAND hb_edge_probes)
+add_test(NAME atomics_tests COMMAND atomics_tests)
+add_test(NAME values_tests COMMAND values_tests)
+add_test(NAME tso_litmus COMMAND tso_litmus)
+add_test(NAME pso_litmus COMMAND pso_litmus)
+add_test(NAME tso_oracle COMMAND tso_oracle)
+add_test(NAME pso_oracle COMMAND pso_oracle)
+set_tests_properties(
+    dpor_oracle
+    dpor_oracle_3threads
+    tso_oracle
+    pso_oracle
+    PROPERTIES LABELS exhaustive
+)
+
+if(DPOR_BUILD_SANITIZER_SMOKE_TESTS)
+    add_test(
+        NAME dpor_oracle_sanitizer_smoke
+        COMMAND dpor_oracle --program-cap 8
+    )
+    set_tests_properties(
+        dpor_oracle_sanitizer_smoke
+        PROPERTIES
+            LABELS sanitizer_smoke
+            PASS_REGULAR_EXPRESSION "cap_per_length_pair=8"
+    )
+
+    add_test(
+        NAME dpor_oracle_3threads_sanitizer_smoke
+        COMMAND dpor_oracle_3threads --program-cap 64
+    )
+    set_tests_properties(
+        dpor_oracle_3threads_sanitizer_smoke
+        PROPERTIES
+            LABELS sanitizer_smoke
+            PASS_REGULAR_EXPRESSION "cap=64"
+    )
+
+    add_test(
+        NAME tso_oracle_sanitizer_smoke
+        COMMAND tso_oracle --program-cap 8
+    )
+    set_tests_properties(
+        tso_oracle_sanitizer_smoke
+        PROPERTIES
+            LABELS sanitizer_smoke
+            PASS_REGULAR_EXPRESSION "cap_per_length_pair=8"
+    )
+
+    add_test(
+        NAME pso_oracle_sanitizer_smoke
+        COMMAND pso_oracle --program-cap 8
+    )
+    set_tests_properties(
+        pso_oracle_sanitizer_smoke
+        PROPERTIES
+            LABELS sanitizer_smoke
+            PASS_REGULAR_EXPRESSION "cap_per_length_pair=8"
+    )
+endif()
+
+add_test(NAME model_inclusion COMMAND model_inclusion)
+add_test(NAME nontermination_tests COMMAND nontermination_tests)
+add_test(NAME fairness_tests COMMAND fairness_tests)
+add_test(NAME spawn_tests COMMAND spawn_tests)
+add_test(NAME cli_tests COMMAND cli_tests $<TARGET_FILE:dpor> ${CMAKE_SOURCE_DIR})
+add_test(NAME classic_gallery_tests COMMAND classic_gallery_tests $<TARGET_FILE:dpor> ${CMAKE_SOURCE_DIR})
+set_tests_properties(classic_gallery_tests PROPERTIES LABELS exhaustive)
+if(DPOR_BUILD_SANITIZER_SMOKE_TESTS)
+    add_test(
+        NAME classic_gallery_sanitizer_smoke
+        COMMAND classic_gallery_tests
+                $<TARGET_FILE:dpor>
+                ${CMAKE_SOURCE_DIR}
+                --sanitizer-smoke
+    )
+    set_tests_properties(
+        classic_gallery_sanitizer_smoke
+        PROPERTIES
+            LABELS sanitizer_smoke
+            PASS_REGULAR_EXPRESSION "sanitizer smoke cases=6"
+    )
+endif()
+add_test(NAME dpor_fuzz_differential COMMAND dpor_fuzz_differential)
+add_test(NAME showcase_export_api_tests COMMAND showcase_export_api_tests)
+add_test(
+    NAME showcase_python_tests
+    COMMAND ${Python3_EXECUTABLE} -m unittest
+            showcase.tests.test_generate showcase.tests.test_verify -v
+)
+set_tests_properties(showcase_python_tests PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_test(
+    NAME showcase_verifier
+    COMMAND ${Python3_EXECUTABLE} showcase/verify.py
+            --source-dir ${CMAKE_SOURCE_DIR}
+            --showcase-dir ${CMAKE_SOURCE_DIR}/showcase
+            --build-dir ${CMAKE_BINARY_DIR}
+            --skip-build
+)
+set_tests_properties(showcase_verifier PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+if(DPOR_BUILD_EXPLORATION_PROFILE)
+    add_test(NAME exploration_metrics_tests COMMAND exploration_metrics_tests)
+endif()
+
+if(DPOR_BUILD_SYMMETRY_DIAGNOSIS)
+    add_test(NAME symmetry_diagnosis_tests COMMAND symmetry_diagnosis_tests)
+endif()

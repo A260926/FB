@@ -1,0 +1,216 @@
+#include "model/action.hpp"
+
+namespace model {
+namespace {
+
+bool is_plain_memory_action(const Action& action) {
+    return action.kind == ActionKind::Read ||
+           action.kind == ActionKind::Write ||
+           action.kind == ActionKind::Flush;
+}
+
+bool is_atomic_action(const Action& action) {
+    return action.kind == ActionKind::AtomicLoad ||
+           action.kind == ActionKind::AtomicStore ||
+           action.kind == ActionKind::AtomicRmw ||
+           action.kind == ActionKind::CompareExchange;
+}
+
+bool is_memory_action(const Action& action) {
+    return is_plain_memory_action(action) || is_atomic_action(action);
+}
+
+bool is_write_like(const Action& action) {
+    return action.kind == ActionKind::Write ||
+           action.kind == ActionKind::Flush ||
+           action.kind == ActionKind::AtomicStore ||
+           action.kind == ActionKind::AtomicRmw ||
+           action.kind == ActionKind::CompareExchange;
+}
+
+bool is_mutex_action(const Action& action) {
+    return action.kind == ActionKind::Lock ||
+           action.kind == ActionKind::TryLock ||
+           action.kind == ActionKind::Unlock ||
+           action.kind == ActionKind::Wait ||
+           action.kind == ActionKind::TimedWait;
+}
+
+bool is_rwlock_action(const Action& action) {
+    return action.kind == ActionKind::RLock ||
+           action.kind == ActionKind::RUnlock ||
+           action.kind == ActionKind::WLock ||
+           action.kind == ActionKind::WUnlock ||
+           action.kind == ActionKind::Upgrade ||
+           action.kind == ActionKind::Downgrade;
+}
+
+bool is_semaphore_action(const Action& action) {
+    return action.kind == ActionKind::SemPost ||
+           action.kind == ActionKind::SemWait;
+}
+
+bool is_barrier_action(const Action& action) {
+    return action.kind == ActionKind::BarrierWait;
+}
+
+bool is_condition_action(const Action& action) {
+    return action.kind == ActionKind::Wait ||
+           action.kind == ActionKind::TimedWait ||
+           action.kind == ActionKind::Signal ||
+           action.kind == ActionKind::Broadcast;
+}
+
+bool is_thread_local_action(const Action& action) {
+    return action.kind == ActionKind::Set ||
+           action.kind == ActionKind::BranchNonzero ||
+           action.kind == ActionKind::Assert ||
+           action.kind == ActionKind::Label ||
+           action.kind == ActionKind::Fence;
+}
+
+} // namespace
+
+bool may_conflict(const Action& lhs, const Action& rhs) {
+    if (!is_memory_action(lhs) || !is_memory_action(rhs)) {
+        return false;
+    }
+    if (lhs.address.empty() || rhs.address.empty() || lhs.address != rhs.address) {
+        return false;
+    }
+    if (is_atomic_action(lhs) && is_atomic_action(rhs)) {
+        return false;
+    }
+    return is_write_like(lhs) || is_write_like(rhs);
+}
+
+bool independent(const Action& lhs, const Action& rhs) {
+    if (is_thread_local_action(lhs) || is_thread_local_action(rhs)) {
+        // Register-only operations touch no shared modeled state and do not
+        // change another thread's enabledness. Branches can change only their
+        // own thread's pc, and same-thread transitions are rejected before the
+        // public action predicate is used by DPOR.
+        return true;
+    }
+
+    if (is_memory_action(lhs) && is_memory_action(rhs) &&
+        !lhs.address.empty() && lhs.address == rhs.address) {
+        if (is_atomic_action(lhs) && is_atomic_action(rhs)) {
+            if (lhs.kind == ActionKind::AtomicLoad && rhs.kind == ActionKind::AtomicLoad) {
+                // Two acquire loads of one atomic location are independent:
+                // neither mutates the per-location clock, and each only joins
+                // that same clock into its own thread. Running them in either
+                // order leaves modeled state and enabledness unchanged.
+                return true;
+            }
+
+            // Atomic Store and RMW pairs on one location are dependent even
+            // though atomic-vs-atomic never reports a data race. Their order
+            // changes the location clock, which can change downstream HB and
+            // mixed plain/atomic race verdicts. Extra independence here would
+            // skip a schedule class, so we keep the edge.
+            return false;
+        }
+
+        if (is_atomic_action(lhs) || is_atomic_action(rhs)) {
+            // Any mixed plain/atomic access to one address is dependent. The
+            // order determines whether the plain access is HB-ordered with the
+            // atomic acquire/release edge before the mixed-race check runs.
+            return false;
+        }
+
+        if (may_conflict(lhs, rhs)) {
+            // Conflicting plain memory operations on the same modeled address
+            // are dependent as before: swapping them can change the observed
+            // value, race endpoint ordering, and read/write metadata.
+            return false;
+        }
+    }
+
+    if (lhs.kind == ActionKind::Join || rhs.kind == ActionKind::Join) {
+        // A precise Join(t) rule needs the owner thread of the other action.
+        // The public action-only predicate cannot prove that fact, so every
+        // Join pair is conservatively dependent. This over-approximates the
+        // required dependency with every action of target thread t and protects
+        // enabledness because Join becomes enabled exactly when t is finished.
+        return false;
+    }
+
+    if (lhs.kind == ActionKind::Spawn || rhs.kind == ActionKind::Spawn) {
+        // Spawn creates a start/enabledness edge and copies the spawner's
+        // happens-before frontier into the target. The public action-only
+        // predicate cannot know which target owns the other action, so every
+        // Spawn pair is conservatively dependent.
+        return false;
+    }
+
+    if (is_condition_action(lhs) && is_condition_action(rhs) && lhs.condition == rhs.condition) {
+        // Operations on one condition variable are dependent: Wait and
+        // TimedWait mutate the ordered wait set, TimedWait timeout removes its
+        // exact episode, Signal wakes the lowest-numbered waiter, and Broadcast
+        // wakes all waiters. Reordering can change the resulting wait/woken
+        // set, a TimedWait result, and whether future reacquires are enabled.
+        return false;
+    }
+
+    if (is_mutex_action(lhs) && is_mutex_action(rhs) && lhs.mutex == rhs.mutex) {
+        // Operations on one mutex are dependent because ownership, blocking,
+        // TryLock's success result, release/acquire vector-clock state, Wait
+        // and TimedWait's atomic release and later reacquire, and future
+        // enabledness all depend on their order. State-dependent refinements
+        // belong in the checker, not this action-only public predicate.
+        return false;
+    }
+
+    if (is_rwlock_action(lhs) && is_rwlock_action(rhs) && lhs.rwlock == rhs.rwlock) {
+        // Same-name rwlock operations start dependent. In particular, the
+        // action-only relation cannot classify RLock/RLock without knowing
+        // whether either thread can next issue Upgrade: after the first read
+        // acquisition that thread's Upgrade is enabled, while after both
+        // acquisitions neither Upgrade is enabled. The checker restores the
+        // RLock/RLock diamond only for a statically Upgrade-free rwlock.
+        return false;
+    }
+
+    if (is_semaphore_action(lhs) && is_semaphore_action(rhs) &&
+        lhs.semaphore == rhs.semaphore) {
+        if (lhs.kind == ActionKind::SemPost && rhs.kind == ActionKind::SemPost) {
+            // Two cross-thread posts are always enabled and commute: both
+            // orders add two permits and componentwise-join the same two
+            // post-tick release clocks. Posters never acquire the accumulator,
+            // so their own clocks are unchanged by the other post. A waiter
+            // becomes enabled after either first post and remains enabled
+            // after both. The checker keeps the waiter-between-posts classes
+            // through disabled-transition repair at the earlier zero-permit
+            // prefix; only the adjacent post/post order is collapsed.
+            return true;
+        }
+
+        // A successful wait consumes a permit and acquires the accumulated
+        // release frontier. Its order with either a post or another wait can
+        // therefore change count, enabledness, and downstream HB verdicts.
+        return false;
+    }
+
+    if (is_barrier_action(lhs) && is_barrier_action(rhs) &&
+        lhs.barrier == rhs.barrier) {
+        // Whether two arrivals commute depends on the current generation's
+        // arrival count. The public action-only predicate cannot see that
+        // state, so it keeps same-name barriers conservative. DPOR applies
+        // the proved low-count refinement with a historical node snapshot.
+        return false;
+    }
+
+    // Remaining pairs commute for this IR when both transitions are enabled:
+    // non-conflicting memory accesses update disjoint or read-only metadata;
+    // atomic accesses on different addresses touch disjoint location clocks;
+    // mutex, TryLock, and Wait operations on distinct mutexes touch disjoint
+    // ownership and synchronization clocks; rwlock and semaphore operations
+    // on distinct names do likewise; different barriers touch disjoint generations;
+    // Signal/Broadcast on different condition variables do
+    // not queue permits and mutate disjoint wait sets; Yield has no modeled
+    // shared-state or enabledness effect.
+    return true;
+}
+
+} // namespace model

@@ -1,0 +1,239 @@
+#pragma once
+
+#include "model/action.hpp"
+
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace model {
+
+enum class MemoryModel { SC, TSO, PSO };
+
+struct RaceReport {
+    std::string address;
+    ScheduleStep first;
+    ScheduleStep second;
+    Schedule schedule;
+
+    bool operator==(const RaceReport&) const = default;
+};
+
+enum class BlockedOnKind {
+    Mutex,
+    Thread,
+    ConditionVariable,
+    RwLockWriter,
+    RwLockReaders,
+    Semaphore,
+    Barrier,
+    RwLockUpgrade
+};
+
+struct BlockedThread {
+    ThreadId thread{0};
+    std::string mutex;
+    std::string rwlock;
+    std::string semaphore;
+    std::optional<ThreadId> owner;
+    BlockedOnKind kind{BlockedOnKind::Mutex};
+    std::optional<ThreadId> target;
+    std::string condition;
+    bool self_wait{false};
+    // Kept at the end so existing aggregate initializers retain their fields.
+    std::string barrier;
+
+    bool operator==(const BlockedThread&) const = default;
+};
+
+struct DeadlockReport {
+    std::vector<BlockedThread> blocked_threads;
+    Schedule schedule;
+
+    bool operator==(const DeadlockReport&) const = default;
+};
+
+struct ModelErrorReport {
+    ScheduleStep endpoint;
+    std::string message;
+    Schedule schedule;
+
+    bool operator==(const ModelErrorReport&) const = default;
+};
+
+struct AssertionFailureReport {
+    ScheduleStep endpoint;
+    RegisterId reg{0};
+    Value value{0};
+    Schedule schedule;
+
+    bool operator==(const AssertionFailureReport&) const = default;
+};
+
+enum class Fairness {
+    UnfairScheduleWitness = 0,
+    FairDivergence = 1,
+    StronglyUnfairScheduleWitness = 2
+};
+
+struct NonTerminationReport {
+    Fairness fairness{Fairness::UnfairScheduleWitness};
+    Schedule stem;
+    Schedule cycle;
+    // The replayable lasso witness is exactly stem followed by one cycle.
+    Schedule schedule;
+
+    bool operator==(const NonTerminationReport&) const = default;
+};
+
+struct CheckResult {
+    std::size_t schedules_explored{0};
+    std::size_t cycles_detected{0};
+    std::size_t fair_cycles{0};
+    std::size_t unfair_cycles{0};
+    std::size_t bound_exceeded_executions{0};
+    // True when exploration stopped at the max_schedules cap: the verdict may
+    // be incomplete because unexplored schedules remain (or the space finished
+    // exactly at the cap, which cannot be distinguished cheaply — the flag
+    // errs toward reporting possible incompleteness, never toward hiding it).
+    bool exploration_capped{false};
+    std::optional<RaceReport> first_race;
+    std::optional<DeadlockReport> first_deadlock;
+    std::optional<ModelErrorReport> first_error;
+    std::optional<AssertionFailureReport> first_assertion;
+    std::optional<NonTerminationReport> first_nontermination;
+    // Appended to preserve the positional meaning of the legacy aggregate.
+    std::size_t strongly_unfair_cycles{0};
+};
+
+enum class TimedWaitTransition {
+    Park,
+    Timeout,
+};
+
+struct TimedWaitOccurrence {
+    TimedWaitTransition transition{TimedWaitTransition::Park};
+    std::uint64_t episode{0};
+
+    bool operator==(const TimedWaitOccurrence&) const = default;
+};
+
+struct EffectiveScheduleStep {
+    ScheduleStep endpoint;
+    Action effective_action;
+    // Verification-only dynamic occurrence identity. nullopt means that the
+    // action is not Broadcast; an engaged vector is the exact sorted set of
+    // waiters parked when Broadcast fired, including the engaged empty set.
+    std::optional<std::vector<ThreadId>> broadcast_waking_set;
+
+    // Verification-only identity for the two non-reacquire transitions of a
+    // TimedWait episode. Reacquisition remains distinguishable as the same
+    // numeric endpoint with an effective Lock action.
+    std::optional<TimedWaitOccurrence> timed_wait_occurrence;
+
+    bool operator==(const EffectiveScheduleStep&) const = default;
+};
+
+// Read-only replay observations for external evidence renderers. These are
+// derived by the existing interpreter and never participate in scheduling,
+// enabledness, happens-before, or bug detection.
+struct RegisterEffect {
+    ThreadId thread{0};
+    RegisterId reg{0};
+    Value before{0};
+    Value after{0};
+
+    bool operator==(const RegisterEffect&) const = default;
+};
+
+struct MemoryEffect {
+    std::string address;
+    std::optional<Value> before;
+    std::optional<Value> after;
+
+    bool operator==(const MemoryEffect&) const = default;
+};
+
+struct BufferedStoreObservation {
+    std::string address;
+    Value value{0};
+
+    bool operator==(const BufferedStoreObservation&) const = default;
+};
+
+struct BufferEffect {
+    ThreadId thread{0};
+    std::vector<BufferedStoreObservation> before;
+    std::vector<BufferedStoreObservation> after;
+
+    bool operator==(const BufferEffect&) const = default;
+};
+
+struct InspectedScheduleStep {
+    ScheduleStep endpoint;
+    Action effective_action;
+    bool executed{true};
+    std::vector<ScheduleStep> enabled_before;
+    std::vector<std::uint64_t> clock_before;
+    std::vector<std::uint64_t> clock_after;
+    std::vector<RegisterEffect> register_effects;
+    std::vector<MemoryEffect> memory_effects;
+    std::vector<BufferEffect> buffer_effects;
+    std::optional<std::vector<ThreadId>> broadcast_waking_set;
+    std::optional<TimedWaitOccurrence> timed_wait_occurrence;
+
+    bool operator==(const InspectedScheduleStep&) const = default;
+};
+
+class ModelChecker {
+public:
+    static constexpr std::size_t kDefaultStepBound = 2000;
+
+    explicit ModelChecker(Program program,
+                          std::size_t step_bound = kDefaultStepBound,
+                          MemoryModel memory_model = MemoryModel::SC);
+    CheckResult explore_naive(std::size_t max_schedules = 100000) const;
+    CheckResult explore_dpor(std::size_t max_schedules = 100000) const;
+    CheckResult replay(const Schedule& schedule) const;
+
+    // Verification-meter helpers. These are read-only observations of the
+    // existing interpreter and DPOR transition predicate; they do not alter
+    // exploration state or schedule choice.
+    std::vector<Schedule> collect_naive_schedules(std::size_t max_schedules = 100000) const;
+    std::vector<Schedule> collect_dpor_schedules(std::size_t max_schedules = 100000) const;
+    std::vector<EffectiveScheduleStep> replay_effective_trace(const Schedule& schedule) const;
+    std::vector<InspectedScheduleStep> inspect_schedule(const Schedule& schedule) const;
+    bool dpor_transitions_independent(ThreadId lhs_thread,
+                                      const Action& lhs,
+                                      ThreadId rhs_thread,
+                                      const Action& rhs) const;
+
+    // Bug identity for minimization:
+    // - race: same modeled address and same unordered pair of
+    //   (thread, action_index) endpoints;
+    // - deadlock: same set of BlockedThread entries;
+    // - modeled error: same (thread, action_index) endpoint.
+    //
+    // minimize_schedule first replays schedule. Non-termination lasso
+    // witnesses are returned unchanged: greedy step deletion cannot honestly
+    // promise to preserve equality between the end-of-stem and end-of-cycle
+    // states. If replay reports no race, deadlock, modeled error, or assertion,
+    // the input is returned unchanged. If replay rejects the input schedule,
+    // the replay exception is propagated.
+    //
+    // Otherwise the result is found by deterministic greedy fixed-point
+    // deletion: for each thread in ascending id order, try removing the last
+    // remaining step from that thread's subsequence, except race/error
+    // endpoint steps, and keep the removal only when an actual replay still
+    // reproduces the same bug identity. This protects the replay invariant and
+    // failure-output reproducibility, but it is intentionally only 1-minimal
+    // with respect to that deletion operator, not globally minimal.
+    Schedule minimize_schedule(const Schedule& schedule) const;
+
+private:
+    Program program_;
+    std::size_t step_bound_{kDefaultStepBound};
+    MemoryModel memory_model_{MemoryModel::SC};
+};
+
+} // namespace model
