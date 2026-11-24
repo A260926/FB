@@ -34,6 +34,8 @@
 #include <ostream>
 #include <sstream>
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 
 
 //---------------------------------------------------------------------
@@ -1131,6 +1133,16 @@ typedef std::function<Vec4f(int index, ShaderContext &output)> VertexShader;
 typedef std::function<Vec4f(ShaderContext &input)> PixelShader;
 
 
+// 矩透明帧（moment_oit.h）挂接的片元回调：矩帧期间 DrawPrimitive 不再写
+// 普通帧缓存，而是把经过同一套裁剪/覆盖/属性遍历得到的片元交给回调。
+// 阶段取值：1 = 不透明阶段，2 = 透明收集阶段（与 MomentOITFrame::Phase 对应）
+typedef std::function<void(int x, int y, double depth,
+	double r, double g, double b)> MomentOpaqueHook;
+typedef std::function<void(int x, int y, double depth,
+	double r, double g, double b, double alpha)> MomentTransparentHook;
+typedef std::function<void()> MomentCancelHook;
+
+
 //---------------------------------------------------------------------
 // RenderHelp
 //---------------------------------------------------------------------
@@ -1159,6 +1171,11 @@ public:
 
 	// 复位状态
 	inline void Reset() {
+		// Clear/Init/Reset 都会取消活动中的矩帧
+		if (_moment_active && _moment_cancel_hook != NULL) {
+			MomentCancelHook hook = _moment_cancel_hook;
+			hook();
+		}
 		_vertex_shader = NULL;
 		_pixel_shader = NULL;
 		if (_frame_buffer) delete _frame_buffer;
@@ -1190,6 +1207,11 @@ public:
 
 	// 清空 FrameBuffer 和深度缓存
 	inline void Clear() {
+		// Clear/Init/Reset 都会取消活动中的矩帧
+		if (_moment_active && _moment_cancel_hook != NULL) {
+			MomentCancelHook hook = _moment_cancel_hook;
+			hook();
+		}
 		if (_frame_buffer) {
 			_frame_buffer->Fill(_color_bg);
 		}
@@ -1235,9 +1257,57 @@ public:
 
 public:
 
+	// 帧缓存只读访问，矩透明帧需要读取尺寸
+	inline int GetWidth() const { return _fb_width; }
+	inline int GetHeight() const { return _fb_height; }
+	inline Bitmap* GetFrameBuffer() const { return _frame_buffer; }
+
+public:
+
+	// ---- 矩透明帧挂接接口（由 moment_oit.cpp 使用，普通帧保持原行为）----
+
+	// 绑定矩帧回调，phase 为初始阶段（1 不透明 / 2 透明）
+	inline void _momentAttach(int phase,
+		const MomentOpaqueHook& opaque_hook,
+		const MomentTransparentHook& transparent_hook,
+		const MomentCancelHook& cancel_hook) {
+		_moment_active = true;
+		_moment_phase = phase;
+		_moment_opaque_hook = opaque_hook;
+		_moment_transparent_hook = transparent_hook;
+		_moment_cancel_hook = cancel_hook;
+	}
+
+	inline void _momentDetach() {
+		_moment_active = false;
+		_moment_phase = 0;
+		_moment_opaque_hook = NULL;
+		_moment_transparent_hook = NULL;
+		_moment_cancel_hook = NULL;
+	}
+
+	inline void _momentSetPhase(int phase) { _moment_phase = phase; }
+	inline bool _momentActive() const { return _moment_active; }
+
+public:
+
 	// 绘制一个三角形，必须先设定好着色器函数
 	inline bool DrawPrimitive() {
-		if (_frame_buffer == NULL || _vertex_shader == NULL) 
+		if (_frame_buffer == NULL || _vertex_shader == NULL)
+			return false;
+		// 矩透明帧挂接期间走共享裁剪/覆盖/属性遍历的离屏路径，
+		// 普通帧保持原有光栅化行为不变
+		if (_moment_active) {
+			return DrawPrimitiveMoment();
+		}
+		return DrawPrimitiveNormal();
+	}
+
+protected:
+
+	// 普通帧光栅化：矩帧未挂接时的原始 RenderHelp 行为
+	inline bool DrawPrimitiveNormal() {
+		if (_frame_buffer == NULL || _vertex_shader == NULL)
 			return false;
 
 		// 顶点初始化
@@ -1450,6 +1520,324 @@ public:
 
 protected:
 
+	// =================================================================
+	// 矩透明帧离屏光栅化
+	// 不透明/透明两个阶段共用同一套齐次裁剪、fan 半开覆盖和透视属性
+	// 遍历，区别只在片元回调，因此裁后内部边上的半透明 alpha 不会被
+	// 重复累加。整条路径不读写普通帧的颜色与深度缓存。
+	// =================================================================
+
+	// 齐次空间裁剪顶点：坐标用 double 保存，varying 随交点一起插值
+	struct MClipVertex {
+		double x, y, z, w;
+		ShaderContext ctx;
+	};
+
+	// 六个裁剪半空间的有符号距离，>=0 表示位于内侧
+	// 0: x>=-w  1: x<=w  2: y>=-w  3: y<=w  4: z>=0  5: z<=w
+	static inline double mClipDistance(int plane, const MClipVertex& v) {
+		switch (plane) {
+		case 0: return v.w + v.x;
+		case 1: return v.w - v.x;
+		case 2: return v.w + v.y;
+		case 3: return v.w - v.y;
+		case 4: return v.z;
+		default: return v.w - v.z;
+		}
+	}
+
+	// 两个 ShaderContext 在齐次空间按 t 线性插值
+	static inline void mLerpContext(const ShaderContext& a,
+		const ShaderContext& b, double t, ShaderContext& out) {
+		float ft = (float)t;
+		for (auto const& kv : a.varying_float) {
+			int key = kv.first;
+			out.varying_float[key] = kv.second +
+				(b.varying_float.find(key)->second - kv.second) * ft;
+		}
+		for (auto const& kv : a.varying_vec2f) {
+			int key = kv.first;
+			out.varying_vec2f[key] = kv.second +
+				(b.varying_vec2f.find(key)->second - kv.second) * ft;
+		}
+		for (auto const& kv : a.varying_vec3f) {
+			int key = kv.first;
+			out.varying_vec3f[key] = kv.second +
+				(b.varying_vec3f.find(key)->second - kv.second) * ft;
+		}
+		for (auto const& kv : a.varying_vec4f) {
+			int key = kv.first;
+			out.varying_vec4f[key] = kv.second +
+				(b.varying_vec4f.find(key)->second - kv.second) * ft;
+		}
+	}
+
+	// 求裁剪平面与线段 A->B 的交点，da/db 为两端在该平面上的有符号距离
+	static inline MClipVertex mClipIntersect(
+		const MClipVertex& A, const MClipVertex& B, double da, double db) {
+		double t = da / (da - db);
+		MClipVertex P;
+		P.x = A.x + (B.x - A.x) * t;
+		P.y = A.y + (B.y - A.y) * t;
+		P.z = A.z + (B.z - A.z) * t;
+		P.w = A.w + (B.w - A.w) * t;
+		mLerpContext(A.ctx, B.ctx, t, P.ctx);
+		return P;
+	}
+
+	// 裁剪后凸多边形的覆盖判定与透视属性遍历，opaque/transparent 共用。
+	// 半开覆盖只在整个多边形的外边上做一次：fan 的内部边从不参与覆盖，
+	// 只用于定位像素所在的子三角形，因此内部边上的半透明 alpha 不会被
+	// 相邻子三角形重复累加。
+	inline void rasterMomentPolygon(std::vector<MClipVertex> poly) {
+		int n = (int)poly.size();
+		if (n < 3) return;
+
+		struct Scr { double sx, sy, depth, rhw; };
+		std::vector<Scr> scr(n);
+		for (int i = 0; i < n; i++) {
+			double nx = poly[i].x / poly[i].w;
+			double ny = poly[i].y / poly[i].w;
+			scr[i].sx = (nx + 1.0) * _fb_width * 0.5;
+			scr[i].sy = (1.0 - ny) * _fb_height * 0.5;
+			scr[i].depth = poly[i].z / poly[i].w;
+			scr[i].rhw = 1.0 / poly[i].w;
+		}
+
+		// 所有屏幕点就绪后再求有向面积与外接矩形
+		double minsx = 1e300, maxsx = -1e300, minsy = 1e300, maxsy = -1e300;
+		double signedArea2 = 0.0;
+		for (int i = 0; i < n; i++) {
+			int j = (i + 1) % n;
+			signedArea2 += scr[i].sx * scr[j].sy - scr[j].sx * scr[i].sy;
+			minsx = Min(minsx, scr[i].sx); maxsx = Max(maxsx, scr[i].sx);
+			minsy = Min(minsy, scr[i].sy); maxsy = Max(maxsy, scr[i].sy);
+		}
+		if (signedArea2 == 0.0) return;
+		if (signedArea2 < 0.0) {
+			// 统一成屏幕上有向面积为正（CCW）的绕序
+			std::reverse(poly.begin(), poly.end());
+			std::reverse(scr.begin(), scr.end());
+			signedArea2 = -signedArea2;
+		}
+
+		// 每条外边的半开属性：向上的边和向右的水平边包含边界
+		std::vector<bool> topleft(n);
+		for (int e = 0; e < n; e++) {
+			int e2 = (e + 1) % n;
+			topleft[e] = ((scr[e].sy == scr[e2].sy) &&
+			              (scr[e].sx < scr[e2].sx)) ||
+			             (scr[e].sy > scr[e2].sy);
+		}
+
+		int x0 = Between(0, _fb_width - 1, (int)std::floor(minsx - 0.5));
+		int x1 = Between(0, _fb_width - 1, (int)std::ceil(maxsx - 0.5));
+		int y0 = Between(0, _fb_height - 1, (int)std::floor(minsy - 0.5));
+		int y1 = Between(0, _fb_height - 1, (int)std::ceil(maxsy - 0.5));
+
+		for (int py = y0; py <= y1; py++) {
+			for (int px = x0; px <= x1; px++) {
+				double pcx = px + 0.5;
+				double pcy = py + 0.5;
+
+				// 整多边形一次性半开覆盖（屏幕 y 向下，边方程符号取反）
+				bool inside = true;
+				for (int e = 0; e < n; e++) {
+					int e2 = (e + 1) % n;
+					double dx = scr[e2].sx - scr[e].sx;
+					double dy = scr[e2].sy - scr[e].sy;
+					double E = -(pcx - scr[e].sx) * dy +
+					           (pcy - scr[e].sy) * dx;
+					if (topleft[e]) {
+						if (E < 0.0) { inside = false; break; }
+					} else {
+						if (!(E > 0.0)) { inside = false; break; }
+					}
+				}
+				if (!inside) continue;
+
+				// 在 fan 中定位包含该像素的子三角形，并取透视重心
+				int chosen = -1;
+				double lam[3] = { 0, 0, 0 };
+				for (int f = 0; f + 2 < n; f++) {
+					int ia = 0, ib = f + 1, ic = f + 2;
+					double dax = scr[ib].sx - scr[ia].sx;
+					double day = scr[ib].sy - scr[ia].sy;
+					double dbx = scr[ic].sx - scr[ia].sx;
+					double dby = scr[ic].sy - scr[ia].sy;
+					double area2 = dax * dby - day * dbx;
+					if (area2 == 0.0) continue;
+					double pqx = pcx - scr[ia].sx;
+					double pqy = pcy - scr[ia].sy;
+					double lb = (pqx * dby - pqy * dbx) / area2;
+					double lc = (dax * pqy - day * pqx) / area2;
+					double la = 1.0 - lb - lc;
+					// 覆盖已保证像素在多边形内，留极小容差吸收舍入
+					if (la >= -1e-12 && lb >= -1e-12 && lc >= -1e-12) {
+						chosen = f;
+						lam[0] = la; lam[1] = lb; lam[2] = lc;
+						break;
+					}
+				}
+				if (chosen < 0) continue;
+				int ia = 0, ib = chosen + 1, ic = chosen + 2;
+
+				double r = lam[0] * scr[ia].rhw + lam[1] * scr[ib].rhw
+				         + lam[2] * scr[ic].rhw;
+				double wcur = 1.0 / r;
+				float fw[3] = {
+					(float)(scr[ia].rhw * lam[0] * wcur),
+					(float)(scr[ib].rhw * lam[1] * wcur),
+					(float)(scr[ic].rhw * lam[2] * wcur)
+				};
+				// 深度是屏幕空间线性插值的 z/w
+				double depth = lam[0] * scr[ia].depth
+				             + lam[1] * scr[ib].depth
+				             + lam[2] * scr[ic].depth;
+
+				const ShaderContext* ctxs[3] = {
+					&poly[ia].ctx, &poly[ib].ctx, &poly[ic].ctx
+				};
+
+				// 按透视权重恢复当前像素的全部 varying
+				ShaderContext input;
+				for (auto const& kv : ctxs[0]->varying_float) {
+					int key = kv.first;
+					input.varying_float[key] =
+						fw[0] * ctxs[0]->varying_float.find(key)->second +
+						fw[1] * ctxs[1]->varying_float.find(key)->second +
+						fw[2] * ctxs[2]->varying_float.find(key)->second;
+				}
+				for (auto const& kv : ctxs[0]->varying_vec2f) {
+					int key = kv.first;
+					input.varying_vec2f[key] =
+						fw[0] * ctxs[0]->varying_vec2f.find(key)->second +
+						fw[1] * ctxs[1]->varying_vec2f.find(key)->second +
+						fw[2] * ctxs[2]->varying_vec2f.find(key)->second;
+				}
+				for (auto const& kv : ctxs[0]->varying_vec3f) {
+					int key = kv.first;
+					input.varying_vec3f[key] =
+						fw[0] * ctxs[0]->varying_vec3f.find(key)->second +
+						fw[1] * ctxs[1]->varying_vec3f.find(key)->second +
+						fw[2] * ctxs[2]->varying_vec3f.find(key)->second;
+				}
+				for (auto const& kv : ctxs[0]->varying_vec4f) {
+					int key = kv.first;
+					input.varying_vec4f[key] =
+						fw[0] * ctxs[0]->varying_vec4f.find(key)->second +
+						fw[1] * ctxs[1]->varying_vec4f.find(key)->second +
+						fw[2] * ctxs[2]->varying_vec4f.find(key)->second;
+				}
+
+				Vec4f color(0.0f, 0.0f, 0.0f, 0.0f);
+				if (_pixel_shader != NULL) color = _pixel_shader(input);
+				if (!isfinite(color.r) || !isfinite(color.g) ||
+					!isfinite(color.b) || !isfinite(color.a))
+					continue;
+
+				if (_moment_phase == 1) {
+					// 不透明：alpha<=0 丢弃，其余一律按不透明处理；
+					// 严格更近判定在帧一侧的封存深度上完成
+					if (color.a <= 0.0f) continue;
+					_moment_opaque_hook(px, py, depth,
+						(double)color.r, (double)color.g, (double)color.b);
+				} else {
+					// 透明：RGB 钳 [0,1]，alpha 钳 [0, 1-1e-6]，
+					// 零 alpha 与深度判定都在帧一侧处理，不做全局门槛
+					double cr = Between(0.0, 1.0, (double)color.r);
+					double cg = Between(0.0, 1.0, (double)color.g);
+					double cb = Between(0.0, 1.0, (double)color.b);
+					double ca = Between(0.0, 1.0 - 1e-6, (double)color.a);
+					_moment_transparent_hook(px, py, depth, cr, cg, cb, ca);
+				}
+			}
+		}
+	}
+
+	// 矩帧路径入口：VS 每顶点执行一次，完整齐次裁剪后按凸多边形光栅化
+	inline bool DrawPrimitiveMoment() {
+		if (_frame_buffer == NULL || _vertex_shader == NULL)
+			return false;
+
+		MClipVertex cv[3];
+		for (int k = 0; k < 3; k++) {
+			ShaderContext ctx;
+			Vec4f pos = _vertex_shader(k, ctx);
+			// 有限且 w>0 的三角形才参与，否则整体剔除
+			if (!(pos.w > 0.0f) || !isfinite(pos.x) || !isfinite(pos.y) ||
+				!isfinite(pos.z) || !isfinite(pos.w))
+				return false;
+			cv[k].x = pos.x; cv[k].y = pos.y;
+			cv[k].z = pos.z; cv[k].w = pos.w;
+			cv[k].ctx = ctx;
+		}
+
+		// 六个半空间依次做 Sutherland-Hodgman 裁剪，交点携带全部 varying
+		std::vector<MClipVertex> poly(3);
+		poly[0] = cv[0]; poly[1] = cv[1]; poly[2] = cv[2];
+		std::vector<MClipVertex> clipped;
+		for (int plane = 0; plane < 6; plane++) {
+			clipped.clear();
+			int n = (int)poly.size();
+			for (int i = 0; i < n; i++) {
+				const MClipVertex& A = poly[i];
+				const MClipVertex& B = poly[(i + 1) % n];
+				double da = mClipDistance(plane, A);
+				double db = mClipDistance(plane, B);
+				bool inA = da >= 0.0;
+				bool inB = db >= 0.0;
+				if (inA) {
+					if (!inB) clipped.push_back(mClipIntersect(A, B, da, db));
+					else clipped.push_back(B);
+				} else if (inB) {
+					clipped.push_back(mClipIntersect(A, B, da, db));
+					clipped.push_back(B);
+				}
+			}
+			poly.swap(clipped);
+			if (poly.empty()) return true;
+		}
+		if (poly.size() < 3) return true;
+
+		// 裁剪在角点处会产生重复顶点，零长度边的边方程恒为 0，会让半开
+		// 覆盖误判，因此剔除相邻（含首尾）重复顶点
+		std::vector<MClipVertex> cleaned;
+		cleaned.reserve(poly.size());
+		for (const MClipVertex& v : poly) {
+			if (!cleaned.empty()) {
+				const MClipVertex& q = cleaned.back();
+				double eps = 1e-12 * Max(1.0,
+					Max(std::fabs(v.w), std::fabs(q.w)));
+				if (std::fabs(v.x - q.x) <= eps &&
+					std::fabs(v.y - q.y) <= eps &&
+					std::fabs(v.z - q.z) <= eps &&
+					std::fabs(v.w - q.w) <= eps)
+					continue;
+			}
+			cleaned.push_back(v);
+		}
+		while (cleaned.size() > 1) {
+			const MClipVertex& a = cleaned.front();
+			const MClipVertex& b = cleaned.back();
+			double eps = 1e-12 * Max(1.0,
+				Max(std::fabs(a.w), std::fabs(b.w)));
+			if (std::fabs(a.x - b.x) <= eps &&
+				std::fabs(a.y - b.y) <= eps &&
+				std::fabs(a.z - b.z) <= eps &&
+				std::fabs(a.w - b.w) <= eps)
+				cleaned.pop_back();
+			else
+				break;
+		}
+		if (cleaned.size() < 3) return true;
+
+		rasterMomentPolygon(cleaned);
+		return true;
+	}
+
+protected:
+
 	// 顶点结构体
 	struct Vertex {
 		ShaderContext context;    // 上下文
@@ -1480,6 +1868,13 @@ protected:
 
 	VertexShader _vertex_shader;
 	PixelShader _pixel_shader;
+
+	// 矩透明帧挂接状态，普通帧始终 _moment_active == false
+	bool _moment_active = false;
+	int _moment_phase = 0;    // 1 不透明 / 2 透明
+	MomentOpaqueHook _moment_opaque_hook;
+	MomentTransparentHook _moment_transparent_hook;
+	MomentCancelHook _moment_cancel_hook;
 };
 
 

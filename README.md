@@ -105,6 +105,114 @@ bool RenderHelp::DrawPrimitive()
 
 然后两层 for 循环迭代屏幕上三角形外接矩形的每个点，判断在三角形范围内以后就调用 VS 程序计算该点具体是什么颜色。
 
+## 矩透明离屏帧（Moment OIT）
+
+普通帧一次只能保留一个最近深度，无法正确显示**相互穿插的半透明色片**（透明面之间也要按深度排序合成）。`moment_oit.h/.cpp` 在不改变普通帧行为的前提下，给 `RenderHelp` 增加了一个可选的“矩透明帧”：透明阶段**不保存片元链表、不缓存三角形**，每个像素只固定保留十个 `double`，用矩（Moment）重建出至多两个有序层再合成。
+
+### 每像素固定存储与矩的定义
+
+透明阶段每个像素恰好保存十个 `double`（`MomentOITFrame::kMomentsPerPixel == 10`）：
+
+- 四个光学矩 `b[k] = Σ tau · z^k`，`k = 0..3`
+- 两个 RGB 矩（共六个分量）`g[k] = Σ tau · RGB · z^k`，`k = 0..1`
+
+其中每个透明片元 `tau = -log1p(-alpha)`（光学厚度），`z` 是该片元的窗口深度 `z/w`（越小越近）。只允许固定数量的补偿累加量，存储量不随片元数增长；因此**不使用**片元链表、按片元增长的数组、缓存全部三角形重画或只保留最近两片等做法。
+
+### 近似的含义（重要）
+
+解析时把四个光学矩当作某个正测度的 0..3 阶矩，用**二节点高斯求积**恢复至多两个有序深度 `d0 <= d1` 与正的光学质量 `w0, w1`，满足 `Σ wj · dj^k = b[k]`：
+
+- 像素内**至多两个不同深度**时（同深度的多个片元合并为一层、颜色按 `tau` 加权），结果与精确的分层 over 合成**等价**；单深度退化为一个节点，空像素直接保留封存颜色。
+- 深度**多于两个**时，二节点求积只是该矩模型的**近似**：能保证重建节点落在 `[0,1]`、质量为正、不出现 NaN，并且四个矩的重建误差很小，但不保证还原出每一层的真实颜色/深度。
+- 近合并、极小 alpha、极高不透明度都不会产生 NaN 或负质量；也不会用全局 alpha 门槛删掉真实的薄层（`alpha = 0` 的片元只是自身不贡献）。
+- 改变提交顺序只可能引入浮点累加误差。
+
+### 调用次序
+
+一帧严格按下面的阶段推进，在错误阶段调用会在**修改任何状态之前**抛出 `std::logic_error`：
+
+```
+Idle --BeginFrame--> Opaque --SealOpaque--> Transparent --Resolve(可多次)/Cancel--> Idle
+```
+
+1. `BeginFrame(r, g, b)`：传入线性 RGB 背景，清空全部缓存，进入不透明阶段。
+2. 用现有的 `SetVertexShader / SetPixelShader` 和 `DrawPrimitive` 画**不透明面**。不透明 PS 的 `alpha <= 0` 表示丢弃，其余一律按不透明处理；只有严格更近且未丢弃的片元才写颜色/深度。
+3. `SealOpaque()`：封存当前颜色与窗口深度（背景深度为 `+inf`），进入透明收集阶段。
+4. 继续用同一套 VS/PS 和 `DrawPrimitive` 画**透明面**。透明 PS 返回有限的 `[0,1]` RGB 与 `[0, 1-1e-6]` alpha；只有严格位于封存深度之前的片元才贡献，透明面不占深度。
+5. `Resolve()`：**只读**解析，不执行任何 VS/PS，也不写普通帧的颜色和深度；可多次调用，每次返回独立持有的结果。
+6. `Cancel()`（或析构）取消活动帧，之后可重新 `BeginFrame`。`Clear/Init/Reset` 也会自动取消活动中的矩帧。
+
+### 接口签名
+
+```cpp
+class MomentOITFrame {
+public:
+    enum Phase { PHASE_IDLE = 0, PHASE_OPAQUE = 1, PHASE_TRANSPARENT = 2 };
+    static constexpr int kMomentsPerPixel = 10;
+
+    explicit MomentOITFrame(RenderHelp& rh);
+    ~MomentOITFrame();
+
+    void BeginFrame(double bg_r, double bg_g, double bg_b); // Idle -> Opaque
+    void SealOpaque();                                       // Opaque -> Transparent
+    MomentOITResult Resolve() const;                         // 只读，可多次
+    void Cancel();                                           // 任意活动阶段 -> Idle
+
+    void GetPixelMoments(int x, int y, double out_moments[10]) const; // 原始矩
+    double GetSealedDepth(int x, int y) const;                          // 封存窗口深度
+    Phase GetPhase() const;
+    int GetWidth() const;
+    int GetHeight() const;
+};
+
+struct MomentOITLayer {          // 重建出的一个层，全部为独立持有的 double
+    double depth;                // 重建深度 d
+    double weight;               // 正的光学质量 w
+    double transmittance;        // exp(-w)
+    double alpha;                // -expm1(-w)
+    double rgb[3];               // 逐通道钳到 [0,1] 的层色
+    double rgb_raw[3];           // 未钳制的层色，方便核对矩
+};
+
+struct MomentOITResult {         // 一次解析的完整独立结果
+    int width, height;
+    std::vector<double> rgb;             // 最终颜色（含背景），width*height*3
+    std::vector<double> transmittance;   // 每像素总透射率 exp(-b0)
+    std::vector<MomentOITLayer> layers;  // 每像素 0~2 层
+    std::vector<int> layer_count;        // 每像素层数 0/1/2
+    const double* GetRGB(int x, int y) const;
+    double GetTransmittance(int x, int y) const;
+    int GetLayerCount(int x, int y) const;
+    const MomentOITLayer& GetLayer(int x, int y, int k) const;
+};
+
+// 纯函数，便于单独测试求解器：由 b[0..3] 恢复节点（返回层数 0/1/2）
+int MomentGaussNodes(const double b[4],
+                     double& d0, double& w0, double& d1, double& w1);
+```
+
+### 最小例子
+
+```cpp
+#include "moment_oit.h"
+
+MomentOITFrame frame(rh);                 // 绑定一台 RenderHelp
+frame.BeginFrame(0.08, 0.10, 0.14);       // 线性 RGB 背景
+
+rh.SetVertexShader(vs);                   // 复用现有 VertexShader
+rh.SetPixelShader(ps);                    // 复用现有 PixelShader
+rh.DrawPrimitive();                       // 不透明面（可多次）
+frame.SealOpaque();                       // 封存颜色与窗口深度
+
+rh.DrawPrimitive();                       // 透明面（可多次、可相互穿插）
+
+MomentOITResult res = frame.Resolve();    // 只读解析
+const double* color = res.GetRGB(40, 30);
+frame.Cancel();
+```
+
+完整可运行示例见 [examples/moment_oit.cpp](examples/moment_oit.cpp)，它构造两片相互穿插的半透明色片和一个不透明遮挡物，写出 `moments.ppm` 并打印一行透射率统计。光栅化（齐次裁剪、半开覆盖、透视属性遍历）由 `RenderHelp` 内不透明/透明共用的同一条离屏路径完成，因此裁剪 fan 的内部边与相邻面的共边都不会把半透明 alpha 累加两次。
+
 ## 完整例子
 
 现在你想写个 D3D 12 的三角形绘制，没有一千行你搞不定，但是现在我们只需要下面几行：
@@ -155,6 +263,9 @@ int main(void)
 | 文件名 | 说明 |
 |-|-|
 | [RenderHelp.h](RenderHelp.h) | 渲染器的实现文件，使用时 include 它就够了 |
+| [moment_oit.h](moment_oit.h) / [moment_oit.cpp](moment_oit.cpp) | 可选矩透明离屏帧：每像素固定十个 double 的顺序无关透明 |
+| [examples/moment_oit.cpp](examples/moment_oit.cpp) | 矩透明示例：交叉透明色片 + 不透明遮挡物，输出 PPM |
+| [tests/moment_oit.cpp](tests/moment_oit.cpp) | 矩透明 capture/reconstruct/lifecycle 三组测试（不定义 main） |
 | [Model.h](Model.h) | 加载模型 |
 | [sample_01_triangle.cpp](sample_01_triangle.cpp) | 绘制三角形的例子 |
 | [sample_02_texture.cpp](sample_02_texture.cpp) | 如何使用纹理，如何设置摄像机矩阵等 |

@@ -36,3 +36,6 @@
 *.png
 *.jpg
 *.jpeg
+
+# Task build output
+/.task-build/
