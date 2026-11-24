@@ -641,6 +641,13 @@ namespace snmalloc
       LocalEntropy& entropy,
       smallsizeclass_t sizeclass)
     {
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+      // If shielded pages had all of this slab's free slots parked out of
+      // its queue, restore the minimum run before closing the list.
+      snmalloc::page_shield_hook_pre_free_list(
+        static_cast<void*>(meta), static_cast<void*>(&entropy));
+#endif
       auto& key = freelist::Object::key_root;
 
       stl::remove_reference_t<decltype(fast_free_list)> tmp_fl;

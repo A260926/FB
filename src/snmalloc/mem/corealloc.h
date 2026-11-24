@@ -67,7 +67,13 @@ namespace snmalloc
   inline static SNMALLOC_FAST_PATH void*
   finish_alloc(freelist::HeadPtr p, size_t size)
   {
-    return Conts::success(capptr_reveal(p.as_void()), size, false);
+    void* ps_result = Conts::success(capptr_reveal(p.as_void()), size, false);
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+    if (ps_result != nullptr)
+      ::snmalloc::page_shield_hook_alloc_address(ps_result);
+#endif
+    return ps_result;
   }
 
   struct FastFreeLists
@@ -388,6 +394,23 @@ namespace snmalloc
       }
     }
 
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+    /* Opaque identity of the remote-free queue that owns these slabs. */
+    void* page_shield_owner_key()
+    {
+      return static_cast<void*>(public_state());
+    }
+
+    /* flush() asserts the remote cache was initialised; a pristine
+     * ThreadAlloc default allocator has no state to publish or drain. */
+    void page_shield_safe_flush()
+    {
+      if (remote_dealloc_cache.initialised)
+        flush();
+    }
+#endif
+
     /**
      * Handles the messages in the queue if there are any,
      * and then calls the action.
@@ -544,6 +567,27 @@ namespace snmalloc
         freelist::Object::key_root,
         meta->as_key_tweak(),
         domesticate);
+
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+      // The owner has now actually received these remote frees, so they stop
+      // being outstanding.  Walk exactly `length` nodes; do not decode the
+      // successor of the final message node (it holds packed ring metadata).
+      {
+        auto ps_node = curr;
+        for (uint16_t ps_i = 0; ps_i < length; ps_i++)
+        {
+          snmalloc::page_shield_hook_free_address(ps_node.unsafe_ptr());
+          if (static_cast<uint16_t>(ps_i + 1) < length)
+          {
+            ps_node = ps_node->read_next(
+              freelist::Object::key_root,
+              meta->as_key_tweak(),
+              domesticate);
+          }
+        }
+      }
+#endif
 
       bytes_freed += objsize * length;
 
@@ -790,11 +834,53 @@ namespace snmalloc
 
       // Look to see if we can grab a free list.
       auto& sl = alloc_classes[sizeclass].available;
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+      bool ps_activated_parked = false;
+      if (SNMALLOC_UNLIKELY(alloc_classes[sizeclass].length == 0))
+      {
+        // No ordinary available slab.  If this Alloc owns a sleeping slab
+        // whose free slots are parked behind shielded pages, restore the
+        // minimum pages and make it available before opening a new slab.
+        void* ps_meta =
+          snmalloc::page_shield_hook_parked_meta(this, sizeclass.raw);
+        if (ps_meta != nullptr)
+        {
+          auto* psm = static_cast<BackendSlabMetadata*>(ps_meta);
+          // The hook detached the metadata node from `laden`.  Give it a
+          // non-zero countdown so the pop bookkeeping is balanced;
+          // alloc_free_list()/set_sleeping() recompute the real value.
+          if (psm->needed() == 0)
+            psm->needed() = threshold_for_waking_slab(sizeclass);
+          sl.insert(psm);
+          alloc_classes[sizeclass].length++;
+          ps_activated_parked = true;
+        }
+      }
+#endif
       if (SNMALLOC_LIKELY(alloc_classes[sizeclass].length > 0))
       {
         if constexpr (mitigations(random_extra_slab))
         {
           // Occassionally don't use the last list.
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+          // If the sole available list has every free slot parked behind
+          // shielded pages, restore the minimum run before deciding.  A list
+          // we just un-parked must be used immediately rather than randomly
+          // skipped in favour of a fresh slab.
+          if (SNMALLOC_UNLIKELY(alloc_classes[sizeclass].length == 1))
+          {
+            auto* sole = const_cast<BackendSlabMetadata*>(sl.peek());
+            if (sole->free_queue.empty())
+            {
+              snmalloc::page_shield_hook_pre_free_list(
+                static_cast<void*>(sole), static_cast<void*>(&entropy));
+              ps_activated_parked = !sole->free_queue.empty();
+            }
+          }
+          if (!ps_activated_parked)
+#endif
           if (SNMALLOC_UNLIKELY(alloc_classes[sizeclass].length == 1))
           {
             if (entropy.next_bit() == 0)
@@ -1063,6 +1149,13 @@ namespace snmalloc
       if (SNMALLOC_LIKELY(public_state() == entry.get_remote()))
       {
         dealloc_cheri_checks(p_tame.unsafe_ptr());
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+        // Only a return accepted by the owning Alloc decrements the
+        // outstanding count.  Remote sends deliberately do not: the object
+        // remains outstanding until the owner receives the message.
+        snmalloc::page_shield_hook_free_address(p_raw);
+#endif
         dealloc_local_object(p_tame, entry);
         return;
       }
@@ -1242,6 +1335,14 @@ namespace snmalloc
     capptr::Alloc<void>
     clear_slab(BackendSlabMetadata* meta, smallsizeclass_t sizeclass)
     {
+#if defined(SNMALLOC_ENABLE_PAGE_SHIELD) && \
+  defined(SNMALLOC_PAGE_SHIELD_HEADER)
+      // The slab is completely unused.  Restore any shielded pages and
+      // re-thread parked slots so the original validation and backend return
+      // see an intact, fully accessible slab.
+      snmalloc::page_shield_hook_clear_slab(
+        static_cast<void*>(meta), static_cast<void*>(&entropy));
+#endif
       auto key_tweak = meta->as_key_tweak();
       freelist::Iter<> fl;
       auto more =
