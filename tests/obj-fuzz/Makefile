@@ -6,14 +6,20 @@ SANITIZERS ?= -fsanitize=address,undefined
 CPPFLAGS ?= -DTINYOBJLOADER_USE_MULTITHREADING
 
 TARGET := obj_fuzz
+STATE_TARGET := obj_state
 
 all: $(TARGET)
 
 $(TARGET): obj_fuzz.cc ../fuzz_common.h ../../tiny_obj_loader.h ../../tiny_obj_loader.cc ../../experimental/stream/stream_obj_loader.cc ../../experimental/stream/stream_obj_loader.h
 	$(CXX) $(CXXFLAGS) $(SANITIZERS) $(CPPFLAGS) -pthread -I../.. -I.. -o $(TARGET) obj_fuzz.cc ../../tiny_obj_loader.cc ../../experimental/stream/stream_obj_loader.cc
 
+# State-aware declaration/event layer (see README).  Uses the same production
+# sources; no earcut, no extra test framework.
+$(STATE_TARGET): state_model.cc state_emit.cc state_reduce.cc state_driver.cc state_model.h ../../tiny_obj_loader.cc ../../tiny_obj_loader.h
+	$(CXX) $(CXXFLAGS) -pthread -I../.. -I../.. -include state_model.h -o $(STATE_TARGET) state_model.cc state_emit.cc state_reduce.cc state_driver.cc ../../tiny_obj_loader.cc
+
 run: $(TARGET)
 	./$(TARGET) --iterations 1000 --seed 1
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(STATE_TARGET)

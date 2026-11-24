@@ -1,0 +1,23 @@
+OBJSTATE_REDUCTION 1
+INPUT_EVENTS 45
+ANCHOR F0
+BUDGET 16
+ATTEMPT 1 F1 ACCEPT committed
+ATTEMPT 2 F2 ACCEPT committed
+ATTEMPT 3 F3 ACCEPT committed
+ATTEMPT 4 F4 ACCEPT committed
+ATTEMPT 5 F5 ACCEPT committed
+ATTEMPT 6 F6 ACCEPT committed
+ATTEMPT 7 F7 ACCEPT committed
+ATTEMPT 8 F8 ACCEPT committed
+ATTEMPT 9 F9 ACCEPT committed
+ATTEMPT 10 F10 ACCEPT committed
+ATTEMPT 11 F11 ACCEPT committed
+ATTEMPT 12 V1 ACCEPT committed
+ATTEMPT 13 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 14 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 15 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 16 T1 REJECT face F0 references an unavailable declaration
+ATTEMPTS 16
+FINAL_EVENTS 33
+CHANGED 1

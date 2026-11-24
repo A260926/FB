@@ -1,0 +1,38 @@
+OBJSTATE_TRACE 1
+SEED 7
+MAT mat_red 1 0 0
+MAT mat_green 0 1 0
+MAT mat_blue 0 0 1
+E O S0 obj_main
+E U S1 mat_red
+E S S2 1
+D V 2 3 0 10
+D V 3 4 1 -10
+D V 4 0 -3 10
+D T 1 -4 4
+D T 2 3 -6
+D N 1 3 -3 -2
+D N 2 -2 -1 0
+F F0 obj_main mat_red 1 V2-/T1-/N1- V3-/T2-/N2- V4-/T1-/N1-
+E G S3 grp_main
+E U S4 mat_red
+D V 5 6 -3 10
+E O S5 obj_1
+E U S6 mat_green
+D V 6 -3 -6 1
+E U S7 mat_red
+E S S8 0
+D T 3 2 5
+D N 3 3 0 -1
+E S S9 1
+D N 4 0 0 -4
+E G S10 grp_2
+E S S11 2
+E S S12 2
+D V 7 -10 4 6
+D V 8 1 6 1
+D V 9 -10 -2 5
+D V 10 4 -2 -6
+D T 4 -2 0
+D N 5 -1 -1 2
+D N 6 3 -2 3

@@ -1,0 +1,23 @@
+mtllib case.mtl
+o obj_main
+usemtl mat_red
+s 1
+v 10 9 8
+v 0 -6 -1
+v 0 3 -7
+vt -3 -4
+vt -3 -3
+vn -3 -3 -4
+vn -3 4 -4
+f 1/1/1 2/2/2 3/1/1
+g grp_main
+s 1
+g grp_1
+s 2
+o obj_2
+usemtl mat_blue
+v 6 -6 0
+v 6 3 -6
+vt 4 5
+vn -1 -4 1
+vn 3 -4 4

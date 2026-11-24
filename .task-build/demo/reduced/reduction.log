@@ -1,0 +1,71 @@
+OBJSTATE_REDUCTION 1
+INPUT_EVENTS 37
+ANCHOR F0
+BUDGET 64
+ATTEMPT 1 F1 ACCEPT committed
+ATTEMPT 2 F2 ACCEPT committed
+ATTEMPT 3 F3 ACCEPT committed
+ATTEMPT 4 F4 ACCEPT committed
+ATTEMPT 5 F5 ACCEPT committed
+ATTEMPT 6 F6 ACCEPT committed
+ATTEMPT 7 F7 ACCEPT committed
+ATTEMPT 8 F8 ACCEPT committed
+ATTEMPT 9 V1 ACCEPT committed
+ATTEMPT 10 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 11 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 12 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 13 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 14 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 15 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 16 N2 REJECT face F0 references an unavailable declaration
+ATTEMPT 17 T3 ACCEPT committed
+ATTEMPT 18 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 19 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 20 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 21 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 22 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 23 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 24 N2 REJECT face F0 references an unavailable declaration
+ATTEMPT 25 N3 ACCEPT committed
+ATTEMPT 26 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 27 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 28 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 29 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 30 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 31 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 32 N2 REJECT face F0 references an unavailable declaration
+ATTEMPT 33 N4 ACCEPT committed
+ATTEMPT 34 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 35 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 36 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 37 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 38 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 39 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 40 N2 REJECT face F0 references an unavailable declaration
+ATTEMPT 41 V5 ACCEPT committed
+ATTEMPT 42 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 43 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 44 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 45 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 46 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 47 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 48 N2 REJECT face F0 references an unavailable declaration
+ATTEMPT 49 V6 ACCEPT committed
+ATTEMPT 50 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 51 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 52 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 53 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 54 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 55 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 56 N2 REJECT face F0 references an unavailable declaration
+ATTEMPT 57 V7 ACCEPT committed
+ATTEMPT 58 V2 REJECT face F0 references an unavailable declaration
+ATTEMPT 59 V3 REJECT face F0 references an unavailable declaration
+ATTEMPT 60 V4 REJECT face F0 references an unavailable declaration
+ATTEMPT 61 T1 REJECT face F0 references an unavailable declaration
+ATTEMPT 62 T2 REJECT face F0 references an unavailable declaration
+ATTEMPT 63 N1 REJECT face F0 references an unavailable declaration
+ATTEMPT 64 N2 REJECT face F0 references an unavailable declaration
+ATTEMPTS 64
+FINAL_EVENTS 22
+CHANGED 1
