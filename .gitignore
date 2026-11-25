@@ -4,3 +4,6 @@
 *.preproc
 *.preproc.xml
 .*.swp
+
+# local task verification builds
+/.task-build/

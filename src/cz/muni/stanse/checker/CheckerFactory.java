@@ -73,5 +73,7 @@ public final class CheckerFactory {
                 new cz.muni.stanse.pointeranalyzer.PointerAnalyzerCreator());
         registerCheckerCreator(
                 new cz.muni.stanse.lockchecker.LockCheckerCreator());
+        registerCheckerCreator(
+                new cz.muni.stanse.boundschecker.BoundsCheckerCreator());
     }
 }

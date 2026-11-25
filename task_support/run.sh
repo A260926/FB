@@ -1,6 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Portability fallback: some macOS shells expose only the /usr/bin JDK stub.
+if ! javac -version >/dev/null 2>&1; then
+ for jdk in /opt/homebrew/opt/openjdk@17 /opt/homebrew/opt/openjdk@11 \
+            /opt/homebrew/opt/openjdk /usr/local/opt/openjdk@17 \
+            /usr/local/opt/openjdk; do
+  if [ -x "$jdk/bin/javac" ]; then export PATH="$jdk/bin:$PATH"; break; fi
+ done
+fi
 mode=${1:-baseline}
 if [[ $mode == target ]]; then
  test -s tests/bounds/BoundsContract.java

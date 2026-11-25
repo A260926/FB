@@ -64,6 +64,22 @@ public final class ShapiroHorwitzAnalyzer implements PointsToAnalyzer {
         return typeTable.getPointsToSetOf(cfg, id);
     }
 
+    private final java.util.Map<CFGHandle, ProgramPointPointsTo>
+            pointSnapshots = new java.util.HashMap<CFGHandle, ProgramPointPointsTo>();
+
+    /**
+     * Flow-sensitive may-points-to snapshot immediately before {@code node}.
+     *
+     * <p>The snapshot is computed by an intraprocedural monotone dataflow and
+     * reflects rebindings and aliasing at the requested program point; it is
+     * not the final whole-function result of {@link #getPointsToSetOf}.</p>
+     */
+    @Override
+    public Set<Pair<CFGHandle, String>> getPointsToSetAt(
+            CFGHandle cfg, CFGNode node, String id) {
+        return ProgramPointPointsTo.query(pointSnapshots, cfg, node, id);
+    }
+
     private void addFunction(CFGHandle cfg) {
 
         // TODO: varargs support. also has to be supported in functioncall
