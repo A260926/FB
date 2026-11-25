@@ -27,6 +27,14 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include "MediaSink.hh"
 #endif
 
+#ifndef _HLS_PART_PUBLISHER_HH
+#include "HLSPartPublisher.hh"
+#endif
+
+#ifndef _MPEG_1OR2_DEMUX_HH
+#include "MPEG1or2Demux.hh" // for MPEG1or2Demux::SCR
+#endif
+
 class HLSSegmenter: public MediaSink {
 public:
   typedef void (onEndOfSegmentFunc)(void* clientData,
@@ -35,6 +43,20 @@ public:
 				 unsigned segmentationDuration, char const* fileNamePrefix,
 				 onEndOfSegmentFunc* onEndOfSegmentFunc = NULL,
 				 void* onEndOfSegmentClientData = NULL);
+
+  Boolean enablePartialSegments(unsigned partDurationUS,
+				HLSPartCallback* partCallback, void* partCallbackData,
+				HLSFileOps const* fileOps = NULL);
+      // Enables optional "part" publishing inside each segment .ts file.
+      // Must be called at most once, before the first startPlaying().
+      // partDurationUS must be > 0 and no greater than
+      // segmentationDuration seconds.  "fileOps" NULL means default stdio;
+      // otherwise all four file-operation functions must be non-NULL.
+      // Returns False (changing nothing) for invalid, duplicate, or
+      // too-late configuration.  When never called (or when False), the
+      // classic whole-segment behavior is unchanged.
+
+  virtual void stopPlaying();
 
 private:
   HLSSegmenter(UsageEnvironment& env, unsigned segmentationDuration, char const* fileNamePrefix,
@@ -57,6 +79,14 @@ private:
   static void ourOnSourceClosure(void* clientData);
   void ourOnSourceClosure();
 
+  static int ourPESStartHook(void* clientData,
+			    MPEG1or2Demux::SCR const& scr);
+  int handlePESStart(MPEG1or2Demux::SCR const& scr);
+
+  void notePartIOFailure(char const* what);
+  static void ourFailureTask(void* clientData);
+  void notifyStandardClosureOnce();
+
 private: // redefined virtual functions:
   virtual Boolean sourceIsCompatibleWithUs(MediaSource& source);
   virtual Boolean continuePlaying();
@@ -64,13 +94,21 @@ private: // redefined virtual functions:
 private:
   unsigned fSegmentationDuration;
   char const* fFileNamePrefix;
+  char* fOwnedFileNamePrefix;
   onEndOfSegmentFunc* fOnEndOfSegmentFunc;
   void* fOnEndOfSegmentClientData;
   Boolean fHaveConfiguredUpstreamSource;
+  Boolean fStartPlayingEver;
   unsigned fCurrentSegmentCounter;
   char* fOutputSegmentFileName;
   FILE* fOutFid;
   unsigned char* fOutputFileBuffer;
+
+  // Partial-segment state (unused unless enablePartialSegments() succeeded):
+  Boolean fPartialEnabled;
+  HLSPartPublisher* fPartPublisher;
+  Boolean fPartFailed;
+  Boolean fStandardClosureNotified;
 };
 
 #endif

@@ -1,0 +1,10 @@
+PART segment=1 part=0 file=.task-build/hls-example.Ey4V30/hls-part-001.ts offset=0 length=2444 durationUS=600000
+PART segment=1 part=1 file=.task-build/hls-example.Ey4V30/hls-part-001.ts offset=2444 length=1316 durationUS=400000
+SEGMENT file=.task-build/hls-example.Ey4V30/hls-part-001.ts duration=1.000000
+PART segment=2 part=0 file=.task-build/hls-example.Ey4V30/hls-part-002.ts offset=0 length=2444 durationUS=600000
+PART segment=2 part=1 file=.task-build/hls-example.Ey4V30/hls-part-002.ts offset=2444 length=1316 durationUS=400000
+SEGMENT file=.task-build/hls-example.Ey4V30/hls-part-002.ts duration=1.000000
+PART segment=3 part=0 file=.task-build/hls-example.Ey4V30/hls-part-003.ts offset=0 length=2444 durationUS=600000
+PART segment=3 part=1 file=.task-build/hls-example.Ey4V30/hls-part-003.ts offset=2444 length=752 durationUS=0
+SEGMENT file=.task-build/hls-example.Ey4V30/hls-part-003.ts duration=0.600000
+DONE output=.task-build/hls-example.Ey4V30

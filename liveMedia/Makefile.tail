@@ -57,7 +57,7 @@ OGG_OBJS = $(OGG_FILE_OBJS) $(OGG_RTSP_SERVER_OBJS)
 
 TRANSPORT_STREAM_DEMUX_OBJS = MPEG2TransportStreamDemux.$(OBJ) MPEG2TransportStreamDemuxedTrack.$(OBJ) MPEG2TransportStreamParser.$(OBJ) MPEG2TransportStreamParser_PAT.$(OBJ) MPEG2TransportStreamParser_PMT.$(OBJ) MPEG2TransportStreamParser_STREAM.$(OBJ)
 
-HLS_OBJS = HLSSegmenter.$(OBJ)
+HLS_OBJS = HLSSegmenter.$(OBJ) HLSPartPublisher.$(OBJ)
 
 SECURITY_OBJS = TLSState.$(OBJ) MIKEY.$(OBJ) SRTPCryptographicContext.$(OBJ) HMAC_SHA1.$(OBJ)
 
@@ -406,8 +406,9 @@ MPEG2TransportStreamParser.$(CPP): MPEG2TransportStreamParser.hh
 MPEG2TransportStreamParser_PAT.$(CPP): MPEG2TransportStreamParser.hh
 MPEG2TransportStreamParser_PMT.$(CPP): MPEG2TransportStreamParser.hh
 MPEG2TransportStreamParser_STREAM.$(CPP): MPEG2TransportStreamParser.hh include/FileSink.hh
-HLSSegmenter.$(CPP): include/HLSSegmenter.hh include/OutputFile.hh include/MPEG2TransportStreamMultiplexor.hh
+HLSSegmenter.$(CPP): include/HLSSegmenter.hh include/HLSPartPublisher.hh include/OutputFile.hh include/MPEG2TransportStreamMultiplexor.hh
 include/HLSSegmenter.hh: include/MediaSink.hh
+HLSPartPublisher.$(CPP): include/HLSPartPublisher.hh
 TLSState.$(CPP):		include/TLSState.hh include/RTSPClient.hh
 MIKEY.$(CPP):		 include/MIKEY.hh
 HMAC_SHA1.$(CPP):	include/HMAC_SHA1.hh

@@ -1,0 +1,18 @@
+CASE clock wrap_accumulates checks=17
+CASE clock zero_base_is_origin checks=6
+CASE clock invalid_scr_ignored checks=6
+CASE clock floors_to_microseconds checks=5
+GROUP clock cases=4 checks=34 COMPLETE
+CASE ranges contiguous_whole_boundary checks=17
+CASE ranges audio_interleaved checks=7
+CASE ranges pes_spans_many_packets checks=6
+CASE ranges no_input_no_file checks=6
+GROUP ranges cases=4 checks=36 COMPLETE
+CASE lifecycle eof_settles_once checks=9
+CASE lifecycle abort_does_not_publish_tail checks=9
+CASE lifecycle write_failure_stops_publication checks=8
+CASE lifecycle flush_failure_no_failed_event checks=8
+CASE lifecycle close_failure_no_segment_event checks=8
+CASE lifecycle config_validation checks=7
+GROUP lifecycle cases=6 checks=49 COMPLETE
+TARGET_COMPLETE cases=14

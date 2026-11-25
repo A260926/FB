@@ -114,3 +114,68 @@ The upstream maintainer triages, fixes and discloses vulnerabilities for the cor
 - You just want to keep other fork users informed after upstream has released a fix.
 
 **For serious vulnerabilities with a PoC** we'd suggest: email the upstream maintainer (addresses on the live-devel list) with the full technical details, and open a terse tracking issue here ("security issue disclosed to upstream on YYYY-MM-DD, details withheld until fix lands") so fork users know something is in flight without the details being public. Once the upstream fix is released, the full details can be shared publicly here too.
+
+## Low-latency HLS parts inside a segment file
+
+`HLSSegmenter` supports an optional **partial-segment ("part") mode**. It is
+off by default; when `enablePartialSegments()` is not called (or returns
+`False`), the classic whole-segment behavior is unchanged.
+
+```cpp
+segmenter->enablePartialSegments(
+    /*partDurationUS*/ 500000,
+    &onPart, clientData,
+    /*fileOps*/ nullptr); // nullptr -> normal stdio fopen/fwrite/fflush/fclose
+```
+
+A part is **not** another TS container and **not** another file: it is a
+finished byte range inside the segment's own `seg-NNN.ts`. Every part event
+(`HLSPartInfo` from `liveMedia/include/HLSPartPublisher.hh`) carries:
+
+- `segmentNumber` (from 1) and per-segment `partNumber` (from 0),
+- the owning `fileName` (the event owns its own `std::string` copy),
+- `offset` and `length` in bytes, both multiples of 188,
+- `durationUS`, measured on the single shared 27 MHz PCR timeline.
+
+Within one segment the parts tile the file from offset 0 with no gaps or
+overlaps. A new segment's first part contains its own PAT and PMT; TS
+continuity counters keep running across file boundaries.
+
+### How a player reads a published part
+
+The event is emitted only after the range has been fully written **and
+`fflush(3)` has succeeded**, so the callback may immediately open the same
+file itself and read exactly that range:
+
+```c
+FILE* f = fopen(info.fileName.c_str(), "rb");
+fseek(f, (long)info.offset, SEEK_SET);
+fread(buf, 1, (size_t)info.length, f); // a complete, decodable TS byte range
+fclose(f);
+```
+
+A local player can therefore append each advertised `[offset, offset+length)`
+range to its parser as soon as the event arrives, while the segment file is
+still being written. Over HTTP, the equivalent is a Range request for the
+same byte interval (or an HLS byte-range part entry). No HTTP server or
+playlist generation is provided here. Ordering guarantees:
+
+- ordinary part boundary: range flushed, then the part event;
+- whole-segment boundary / EOF: final non-empty part flushed and published,
+  then the file is closed successfully, then the old whole-segment callback
+  fires;
+- write/flush/close failure: the failed range and the segment-completion
+  event are not published, already published parts remain, and the
+  `UsageEnvironment` keeps a readable error;
+- `stopPlaying()`/destruction aborts: the handle is closed once without
+  flushing/publishing the unfinished tail.
+
+See `examples/hls-parts.cpp` for an in-memory PES source that produces TS and
+prints every published range:
+
+```sh
+c++ -std=c++20 -IliveMedia/include -IUsageEnvironment/include \
+    -IBasicUsageEnvironment/include examples/hls-parts.cpp \
+    .task-build/libproduction.a -o hls-parts
+./hls-parts /tmp/hls-out
+```

@@ -35,6 +35,12 @@ void MPEG2TransportStreamMultiplexor
   fOnEndOfSegmentClientData = onEndOfSegmentClientData;
 }
 
+void MPEG2TransportStreamMultiplexor
+::setPESStartHook(onPESStartFunc* pesStartFunc, void* pesStartClientData) {
+  fPESStartFunc = pesStartFunc;
+  fPESStartClientData = pesStartClientData;
+}
+
 MPEG2TransportStreamMultiplexor
 ::MPEG2TransportStreamMultiplexor(UsageEnvironment& env)
   : FramedSource(env),
@@ -45,7 +51,8 @@ MPEG2TransportStreamMultiplexor
     fInputBuffer(NULL), fInputBufferSize(0), fInputBufferBytesUsed(0),
     fIsFirstAdaptationField(True), fSegmentationDuration(0), fSegmentationIndication(1),
     fCurrentSegmentDuration(0.0), fPreviousPTS(0.0),
-    fOnEndOfSegmentFunc(NULL), fOnEndOfSegmentClientData(NULL) {
+    fOnEndOfSegmentFunc(NULL), fOnEndOfSegmentClientData(NULL),
+    fPESStartFunc(NULL), fPESStartClientData(NULL) {
   for (unsigned i = 0; i < PID_TABLE_SIZE; ++i) {
     fPIDState[i].counter = 0;
     fPIDState[i].streamType = 0;
@@ -68,8 +75,13 @@ void MPEG2TransportStreamMultiplexor::doGetNextFrame() {
   }
 
   do {
+    // Precise PES-hook mode (HLSSegmenter partial segments) additionally
+    // honors fSegmentationIndication to order PAT then PMT after a whole
+    // boundary; the classic periodic PAT/PMT cadence is left unchanged.
+    Boolean preciseTables = fPESStartFunc != NULL;
+
     // Periodically return a Program Association Table packet instead:
-    if ((segmentationIsTimed() && fSegmentationIndication == 1)
+    if (((segmentationIsTimed() || preciseTables) && fSegmentationIndication == 1)
 	|| (!segmentationIsTimed() && fOutgoingPacketCounter % PAT_PERIOD_IF_UNTIMED == 0)) {
       ++fOutgoingPacketCounter;
       deliverPATPacket();
@@ -81,7 +93,7 @@ void MPEG2TransportStreamMultiplexor::doGetNextFrame() {
     // Periodically (or when we see a new PID) return a Program Map Table instead:
     Boolean programMapHasChanged = fCurrentInputProgramMapVersion != fPreviousInputProgramMapVersion;
     if (programMapHasChanged
-	|| (segmentationIsTimed() && fSegmentationIndication == 2)
+	|| ((segmentationIsTimed() || preciseTables) && fSegmentationIndication == 2)
 	|| (!segmentationIsTimed() && fOutgoingPacketCounter % PMT_PERIOD_IF_UNTIMED == 0)) {
       if (programMapHasChanged) { // reset values for next time:
 	fPreviousInputProgramMapVersion = fCurrentInputProgramMapVersion;
@@ -156,6 +168,15 @@ void MPEG2TransportStreamMultiplexor
     if (fCurrentPID == fPCR_PID) {
       // Record the input's current SCR timestamp, for use as our PCR:
       fPCR = scr;
+    }
+
+    if (fPESStartFunc != NULL && fCurrentPID == fPCR_PID) {
+      // Precise HLS-part boundary point: this runs before any TS packet of
+      // the new PCR-owned PES is produced.  A non-zero return asks for a
+      // PAT/PMT pair first (whole-segment boundary).
+      int const boundaryAction
+	= (*fPESStartFunc)(fPESStartClientData, scr);
+      if (boundaryAction != 0) fSegmentationIndication = 1;
     }
   }
 

@@ -44,6 +44,17 @@ public:
   double currentSegmentDuration() const { return fCurrentSegmentDuration; }
       // Valid only if "setTimedSegmentation()" was previously called with "segmentationDuration" > 0
 
+  typedef int (onPESStartFunc)(void* clientData,
+			       MPEG1or2Demux::SCR const& scr);
+  void setPESStartHook(onPESStartFunc* func, void* clientData);
+      // A precise-boundary entry used by HLSSegmenter partial mode.  The hook
+      // is called for each new PES that belongs to the selected PCR PID,
+      // before any of that PES's TS packets are produced.  Returning 1 asks
+      // the multiplexor to emit a PAT then a PMT before this PES's data
+      // (i.e. a whole-segment boundary); returning 0 continues normally.
+      // The hook shares the SCR/PCR value used for the output PCR; it must
+      // not re-parse PCRs out of the produced Transport Stream.
+
   Boolean canDeliverNewFrameImmediately() const { return fInputBufferBytesUsed < fInputBufferSize; }
       // Can be used by a downstream reader to test whether the next call to "doGetNextFrame()"
       // will deliver data immediately).
@@ -110,6 +121,8 @@ private:
   double fCurrentSegmentDuration, fPreviousPTS; // used only if fSegmentationDuration > 0
   onEndOfSegmentFunc* fOnEndOfSegmentFunc; // used only if fSegmentationDuration > 0
   void* fOnEndOfSegmentClientData; // ditto
+  onPESStartFunc* fPESStartFunc; // optional precise-boundary hook (partial HLS)
+  void* fPESStartClientData;
 };
 
 
