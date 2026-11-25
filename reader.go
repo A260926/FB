@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -163,6 +164,9 @@ func (p *MediaPlaylist) decode(buf *bytes.Buffer, strict bool) error {
 	if state.tagWV {
 		p.WV = wv
 	}
+	if len(state.parts) > 0 {
+		p.TrailingParts = state.parts
+	}
 	if strict && !state.m3u {
 		return errors.New("#EXTM3U absent")
 	}
@@ -258,6 +262,9 @@ func decode(buf *bytes.Buffer, strict bool, customDecoders []CustomDecoder) (Pla
 	}
 	if state.listType == MEDIA && state.tagWV {
 		media.WV = wv
+	}
+	if len(state.parts) > 0 {
+		media.TrailingParts = state.parts
 	}
 
 	if strict && !state.m3u {
@@ -514,6 +521,7 @@ func decodeLineOfMediaPlaylist(p *MediaPlaylist, wv *WV, state *decodingState, l
 			state.title = line[sepIndex+1:]
 		}
 	case !strings.HasPrefix(line, "#"):
+		completed := false
 		if state.tagInf {
 			err := p.Append(line, state.duration, state.title)
 			if err == ErrPlaylistFull {
@@ -531,6 +539,7 @@ func decodeLineOfMediaPlaylist(p *MediaPlaylist, wv *WV, state *decodingState, l
 				return err
 			}
 			state.tagInf = false
+			completed = true
 		}
 		if state.tagRange {
 			if err = p.SetRange(state.limit, state.offset); strict && err != nil {
@@ -575,6 +584,12 @@ func decodeLineOfMediaPlaylist(p *MediaPlaylist, wv *WV, state *decodingState, l
 				p.Map = state.xmap
 			}
 			state.tagMap = false
+		}
+
+		// Parts are attributed to the complete segment that follows them.
+		if completed && len(state.parts) > 0 {
+			p.Segments[p.last()].Parts = state.parts
+			state.parts = nil
 		}
 
 		// if segment custom tag appeared before EXTINF then it links to this segment
@@ -846,10 +861,88 @@ func decodeLineOfMediaPlaylist(p *MediaPlaylist, wv *WV, state *decodingState, l
 		if err == nil {
 			state.tagWV = true
 		}
+	case strings.HasPrefix(line, "#EXT-X-SERVER-CONTROL:"):
+		state.listType = MEDIA
+		for k, v := range decodeParamsLine(line[len("#EXT-X-SERVER-CONTROL:"):]) {
+			switch k {
+			case "CAN-BLOCK-RELOAD":
+				p.CanBlockReload = strings.EqualFold(v, "YES")
+			}
+		}
+	case strings.HasPrefix(line, "#EXT-X-PART:"):
+		state.listType = MEDIA
+		var part Part
+		for k, v := range decodeParamsLine(line[len("#EXT-X-PART:"):]) {
+			switch k {
+			case "URI":
+				part.URI = v
+			case "DURATION":
+				d, perr := strconv.ParseFloat(v, 64)
+				if perr != nil || !isValidPartDuration(d) {
+					if strict {
+						return fmt.Errorf("Part duration parsing error: %q", v)
+					}
+				}
+				part.Duration = d
+			}
+		}
+		if strict {
+			if part.URI == "" {
+				return errors.New("Part URI must not be empty")
+			}
+			if !isValidPartDuration(part.Duration) {
+				return errors.New("Part duration must be positive and finite")
+			}
+		}
+		state.parts = append(state.parts, part)
+	case strings.HasPrefix(line, "#EXT-X-RENDITION-REPORT:"):
+		state.listType = MEDIA
+		var report RenditionReport
+		for k, v := range decodeParamsLine(line[len("#EXT-X-RENDITION-REPORT:"):]) {
+			switch k {
+			case "URI":
+				report.URI = v
+			case "LAST-MSN":
+				msn, perr := strconv.ParseUint(v, 10, 64)
+				if perr != nil {
+					if strict {
+						return fmt.Errorf("Rendition report LAST-MSN parsing error: %q", v)
+					}
+					continue
+				}
+				report.LastMSN = &msn
+			case "LAST-PART":
+				lp, perr := strconv.ParseUint(v, 10, 64)
+				if perr != nil {
+					if strict {
+						return fmt.Errorf("Rendition report LAST-PART parsing error: %q", v)
+					}
+					continue
+				}
+				report.LastPart = &lp
+			}
+		}
+		if strict {
+			if report.URI == "" {
+				return errors.New("Rendition report URI must not be empty")
+			}
+			if state.reportURIs == nil {
+				state.reportURIs = make(map[string]bool)
+			}
+			if state.reportURIs[report.URI] {
+				return fmt.Errorf("Duplicate rendition report URI: %q", report.URI)
+			}
+			state.reportURIs[report.URI] = true
+		}
+		p.RenditionReports = append(p.RenditionReports, report)
 	case strings.HasPrefix(line, "#"):
 		// comments are ignored
 	}
 	return err
+}
+
+func isValidPartDuration(d float64) bool {
+	return d > 0 && !math.IsInf(d, 0) && !math.IsNaN(d)
 }
 
 // StrictTimeParse implements RFC3339 with Nanoseconds accuracy.

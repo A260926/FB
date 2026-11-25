@@ -102,6 +102,45 @@ Custom Tags
 
 M3U8 supports parsing and writing of custom tags. You must implement both the `CustomTag` and `CustomDecoder` interface for each custom tag that may be encountered in the playlist. Look at the template files in `example/template/` for examples on parsing custom playlist and segment tags.
 
+Low Latency HLS reload coordination
+-----------------------------------
+
+Media playlists support the low latency tags `EXT-X-PART`, `EXT-X-RENDITION-REPORT`
+and `EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES`. Parts that precede a complete
+segment are stored on that segment in `MediaSegment.Parts`; parts at the end of
+the playlist without a following `EXTINF` are stored in
+`MediaPlaylist.TrailingParts`. `EXT-X-RENDITION-REPORT` entries are exposed via
+`MediaPlaylist.RenditionReports`, with `LastMSN`/`LastPart` as pointers so that an
+omitted attribute can be told apart from an explicit `0`.
+
+The `ReloadSync` coordinator decides which blocking reload request to send to a
+target rendition. It performs no network I/O; the caller fetches the URL and
+reports the response back:
+
+```go
+	sync := m3u8.NewReloadSync()
+	if err := sync.Update(sourceURI, videoPlaylist); err != nil { ... } // absolute http(s) URL, no fragment
+	if err := sync.Update(targetURI, audioPlaylist); err != nil { ... }
+
+	// Plan consults the source's rendition report pointing at targetURI and
+	// returns the blocking reload URL (with _HLS_msn/_HLS_part set).
+	req, err := sync.Plan(sourceURI, targetURI)
+	if err != nil { ... }
+
+	// Fetch req.URL, parse the response playlist, then publish it.
+	if err := sync.Commit(req.Token, responsePlaylist); err != nil { ... }
+
+	// On failure or timeout, cancel and retry with a fresh Plan.
+	_ = sync.Abort(req.Token)
+```
+
+Call order matters: `Update` both renditions before `Plan`, and call `Commit`
+with the parsed response before planning the next request. `Update` deep-copies
+the playlist, so later changes to the caller's object or its encoding cache do
+not affect the coordinator. Any `Update` invalidates outstanding tokens: a stale
+token can only be aborted (to retry), never committed. `Commit` only succeeds
+when the response actually publishes the requested position.
+
 Library structure
 -----------------
 

@@ -85,30 +85,33 @@ const (
 //
 // Simple Media Playlist file sample:
 //
-//    #EXTM3U
-//    #EXT-X-VERSION:3
-//    #EXT-X-TARGETDURATION:5220
-//    #EXTINF:5219.2,
-//    http://media.example.com/entire.ts
-//    #EXT-X-ENDLIST
+//	#EXTM3U
+//	#EXT-X-VERSION:3
+//	#EXT-X-TARGETDURATION:5220
+//	#EXTINF:5219.2,
+//	http://media.example.com/entire.ts
+//	#EXT-X-ENDLIST
 //
 // Sample of Sliding Window Media Playlist, using HTTPS:
 //
-//    #EXTM3U
-//    #EXT-X-VERSION:3
-//    #EXT-X-TARGETDURATION:8
-//    #EXT-X-MEDIA-SEQUENCE:2680
+//	#EXTM3U
+//	#EXT-X-VERSION:3
+//	#EXT-X-TARGETDURATION:8
+//	#EXT-X-MEDIA-SEQUENCE:2680
 //
-//    #EXTINF:7.975,
-//    https://priv.example.com/fileSequence2680.ts
-//    #EXTINF:7.941,
-//    https://priv.example.com/fileSequence2681.ts
-//    #EXTINF:7.975,
-//    https://priv.example.com/fileSequence2682.ts
+//	#EXTINF:7.975,
+//	https://priv.example.com/fileSequence2680.ts
+//	#EXTINF:7.941,
+//	https://priv.example.com/fileSequence2681.ts
+//	#EXTINF:7.975,
+//	https://priv.example.com/fileSequence2682.ts
 type MediaPlaylist struct {
 	TargetDuration   float64
 	SeqNo            uint64 // EXT-X-MEDIA-SEQUENCE
 	Segments         []*MediaSegment
+	TrailingParts    []Part // EXT-X-PART tags not followed by a complete media segment
+	RenditionReports []RenditionReport
+	CanBlockReload   bool   // EXT-X-SERVER-CONTROL CAN-BLOCK-RELOAD=YES
 	Args             string // optional arguments placed after URIs (URI?Args)
 	Iframe           bool   // EXT-X-I-FRAMES-ONLY
 	Closed           bool   // is this VOD (closed) or Live (sliding) playlist?
@@ -132,19 +135,37 @@ type MediaPlaylist struct {
 	customDecoders   []CustomDecoder
 }
 
+// Part represents a partial media segment (EXT-X-PART tag). Parts of a
+// complete media segment are attached to that segment in MediaSegment.Parts.
+// Parts which are not followed by a complete media segment are kept in
+// MediaPlaylist.TrailingParts.
+type Part struct {
+	URI      string
+	Duration float64
+}
+
+// RenditionReport represents an EXT-X-RENDITION-REPORT tag. The LastMSN and
+// LastPart fields are pointers so that an omitted attribute (nil) can be
+// distinguished from an explicitly written zero value.
+type RenditionReport struct {
+	URI      string
+	LastMSN  *uint64
+	LastPart *uint64
+}
+
 // MasterPlaylist structure represents a master playlist which
 // combines media playlists for multiple bitrates. URI lines in the
 // playlist identify media playlists. Sample of Master Playlist file:
 //
-//    #EXTM3U
-//    #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1280000
-//    http://example.com/low.m3u8
-//    #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2560000
-//    http://example.com/mid.m3u8
-//    #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=7680000
-//    http://example.com/hi.m3u8
-//    #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS="mp4a.40.5"
-//    http://example.com/audio-only.m3u8
+//	#EXTM3U
+//	#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1280000
+//	http://example.com/low.m3u8
+//	#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2560000
+//	http://example.com/mid.m3u8
+//	#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=7680000
+//	http://example.com/hi.m3u8
+//	#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS="mp4a.40.5"
+//	http://example.com/audio-only.m3u8
 type MasterPlaylist struct {
 	Variants            []*Variant
 	Args                string // optional arguments placed after URI (URI?Args)
@@ -206,6 +227,7 @@ type MediaSegment struct {
 	SeqId           uint64
 	Title           string // optional second parameter for EXTINF tag
 	URI             string
+	Parts           []Part    // EXT-X-PART tags belonging to this complete segment
 	Duration        float64   // first parameter for EXTINF tag; duration must be integers if protocol version is less than 3 but we are always keep them float
 	Limit           int64     // EXT-X-BYTERANGE <n> is length in bytes for the file under URI
 	Offset          int64     // EXT-X-BYTERANGE [@o] is offset from the start of the file under URI
@@ -332,4 +354,6 @@ type decodingState struct {
 	xmap               *Map
 	scte               *SCTE
 	custom             map[string]CustomTag
+	parts              []Part
+	reportURIs         map[string]bool
 }

@@ -488,6 +488,9 @@ func (p *MediaPlaylist) Encode() *bytes.Buffer {
 	if p.Iframe {
 		p.buf.WriteString("#EXT-X-I-FRAMES-ONLY\n")
 	}
+	if p.CanBlockReload {
+		p.buf.WriteString("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n")
+	}
 	// Widevine tags
 	if p.WV != nil {
 		if p.WV.AudioChannels != 0 {
@@ -682,6 +685,10 @@ func (p *MediaPlaylist) Encode() *bytes.Buffer {
 			}
 		}
 
+		for _, part := range seg.Parts {
+			writePart(&p.buf, part)
+		}
+
 		p.buf.WriteString("#EXTINF:")
 		if str, ok := durationCache[seg.Duration]; ok {
 			p.buf.WriteString(str)
@@ -705,10 +712,39 @@ func (p *MediaPlaylist) Encode() *bytes.Buffer {
 		}
 		p.buf.WriteRune('\n')
 	}
+	for _, part := range p.TrailingParts {
+		writePart(&p.buf, part)
+	}
+	for _, report := range p.RenditionReports {
+		writeRenditionReport(&p.buf, report)
+	}
 	if p.Closed {
 		p.buf.WriteString("#EXT-X-ENDLIST\n")
 	}
 	return &p.buf
+}
+
+func writePart(buf *bytes.Buffer, part Part) {
+	buf.WriteString("#EXT-X-PART:DURATION=")
+	buf.WriteString(strconv.FormatFloat(part.Duration, 'f', -1, 64))
+	buf.WriteString(",URI=\"")
+	buf.WriteString(part.URI)
+	buf.WriteString("\"\n")
+}
+
+func writeRenditionReport(buf *bytes.Buffer, report RenditionReport) {
+	buf.WriteString("#EXT-X-RENDITION-REPORT:URI=\"")
+	buf.WriteString(report.URI)
+	buf.WriteRune('"')
+	if report.LastMSN != nil {
+		buf.WriteString(",LAST-MSN=")
+		buf.WriteString(strconv.FormatUint(*report.LastMSN, 10))
+	}
+	if report.LastPart != nil {
+		buf.WriteString(",LAST-PART=")
+		buf.WriteString(strconv.FormatUint(*report.LastPart, 10))
+	}
+	buf.WriteRune('\n')
 }
 
 // String here for compatibility with Stringer interface For example
@@ -920,10 +956,10 @@ func (p *MediaPlaylist) GetAllSegments() []*MediaSegment {
 		}
 		return buf
 	}
-	for i := uint(0); i < p.tail; i++ {
+	for i := p.head; i < p.capacity; i++ {
 		buf = append(buf, p.Segments[i])
 	}
-	for i := p.head; i < p.capacity; i++ {
+	for i := uint(0); i < p.tail; i++ {
 		buf = append(buf, p.Segments[i])
 	}
 	return buf

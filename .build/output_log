@@ -1,0 +1,22 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestReloadTags
+    check.go:29: TASK_GROUP_DONE TestReloadTags checks=47
+--- PASS: TestReloadTags (0.00s)
+=== RUN   TestReloadPlan
+    check.go:29: TASK_GROUP_DONE TestReloadPlan checks=88
+--- PASS: TestReloadPlan (0.00s)
+=== RUN   TestReloadCommit
+    check.go:29: TASK_GROUP_DONE TestReloadCommit checks=66
+--- PASS: TestReloadCommit (0.00s)
+PASS
+ok  	github.com/grafov/m3u8	0.073s
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+reload API consumer: ok
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+planned request: https://example.invalid/audio.m3u8?_HLS_msn=700&_HLS_part=1
+committed response for MSN 700 part 1
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+baseline sequence=100 count=1
+baseline rendition-report retained=true
+baseline media decode/encode/slide: ok
