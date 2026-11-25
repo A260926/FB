@@ -1,0 +1,8 @@
+#!/bin/bash
+# Sandbox-only shim: macOS mktemp defaults to the per-user /var/folders temp
+# dir which this sandbox blocks; redirect bare calls into $TMPDIR.
+if [[ "$1" == "-d" ]]; then
+  /usr/bin/mktemp -d "${TMPDIR:-/tmp}/task.XXXXXX"
+else
+  /usr/bin/mktemp "${TMPDIR:-/tmp}/out.XXXXXX"
+fi

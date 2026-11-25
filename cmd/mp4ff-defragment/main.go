@@ -25,8 +25,9 @@ Usage of %s:
 `
 
 type options struct {
-	trackIDs string
-	version  bool
+	trackIDs     string
+	preserveGaps bool
+	version      bool
 }
 
 func parseOptions(fs *flag.FlagSet, args []string) (*options, error) {
@@ -39,6 +40,8 @@ func parseOptions(fs *flag.FlagSet, args []string) (*options, error) {
 	opts := options{}
 
 	fs.StringVar(&opts.trackIDs, "t", "", "Comma-separated track IDs to keep (default all tracks)")
+	fs.BoolVar(&opts.preserveGaps, "preserve-gaps", false,
+		"Preserve recording gaps as blank movie time (empty edits) instead of extending the previous sample duration")
 	fs.BoolVar(&opts.version, "version", false, "Get mp4ff version")
 
 	err := fs.Parse(args[1:])
@@ -97,9 +100,13 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer ofh.Close()
 
-	if len(trackIDs) == 0 {
+	switch {
+	case o.preserveGaps:
+		// An empty trackIDs list means "all tracks" for DefragmentPreserveGaps.
+		err = mp4.DefragmentPreserveGaps(parsedMp4, ifh, ofh, trackIDs...)
+	case len(trackIDs) == 0:
 		err = mp4.Defragment(parsedMp4, ifh, ofh)
-	} else {
+	default:
 		err = mp4.DefragmentTracks(parsedMp4, ifh, ofh, trackIDs...)
 	}
 	if err != nil {

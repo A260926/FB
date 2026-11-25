@@ -35,7 +35,9 @@ The [cmd](cmd) directory has command line tools built with the library:
 * [mp4ff-encrypt](cmd/mp4ff-encrypt) and [mp4ff-decrypt](cmd/mp4ff-decrypt) encrypt and decrypt
   fragmented files with Common Encryption
 * [mp4ff-mvhevc](cmd/mp4ff-mvhevc) inspects and muxes MV-HEVC files
-* [mp4ff-defragment](cmd/mp4ff-defragment) converts a fragmented mp4 file into a progressive one
+* [mp4ff-defragment](cmd/mp4ff-defragment) converts a fragmented mp4 file into a progressive one;
+  `-preserve-gaps` keeps recording gaps blank via empty edits instead of extending the previous
+  sample's duration
 
 Install them with `brew install mp4ff`, with `go install`, or from the Linux packages and archives on the
 [releases page](https://github.com/Eyevinn/mp4ff/releases).
@@ -166,8 +168,53 @@ Example code for some common use cases is in the [examples](examples) directory:
 * [add-sidx](examples/add-sidx) adds a top-level sidx box describing the segments of a fragmented file
 * [ivf-to-mp4](examples/ivf-to-mp4) muxes an AV1, VP9 or VP8 IVF bitstream into a fragmented mp4
   (one fragment per GOP)
+* [defragmentgaps](examples/defragmentgaps) converts a fragmented mp4 file to a progressive one while
+  keeping recording gaps blank as empty edits
 * [stream-encrypt](examples/stream-encrypt) is an HTTP server that encrypts and refragments an mp4 file
   on the fly
+
+### Preserving recording gaps when defragmenting
+
+Ordinarily, `mp4.Defragment` (and `mp4ff-defragment` without `-preserve-gaps`) bridges a gap between
+fragments by extending the previous sample's duration, so players show its last frame for the missing
+time. `mp4.DefragmentPreserveGaps(f, rs, w, trackIDs...)` and `mp4ff-defragment -preserve-gaps` instead
+keep that time blank on the movie timeline:
+
+```go
+// Keep every track.
+err := mp4.DefragmentPreserveGaps(f, rs, w)
+// Keep only the given track IDs.
+err := mp4.DefragmentPreserveGaps(f, rs, w, 1, 2)
+```
+
+Sample collection, retransmission/overlap resolution (including a progressive MP4 prefix) and chunk
+writing are the same as for `Defragment`. The final surviving samples are grouped into *decode
+islands*: consecutive samples whose original DTS and real durations touch. Forward-`tfdt` padding is
+not treated as sample duration, and a hole that a later retransmission fills disappears through the
+normal overlap resolution. The islands are concatenated in source decode order onto a new media axis
+starting at zero; original durations, CTS-DTS offsets, sync flags, sample descriptions and bytes are
+unchanged, and every surviving sample is written once. Edit lists map island coverage to the compacted
+media and turn inter-island time into empty edits, so duplicate and reverse-order edits keep
+referencing the same media. For example source DTS `0,10,40,50` with durations `10` becomes output DTS
+`0,10,20,30`, while the movie timeline stays blank from tick 20 to 40 instead of stretching the second
+packet to duration 30.
+
+Boundaries, all reported as contextual errors before any output is written:
+
+* existing edit lists must use rate 1.0 media edits or `-1` empty edits; media times are absolute
+  source media ticks; duplicate and reverse-order references are supported;
+* every island/edit cut point must convert to an integral number of movie timescale ticks without
+  rounding (mixed media timescales therefore need compatible tick choices);
+* media edits must not extend past the track source end, and media/movie timescales must be non-zero;
+* every sample's PTS interval inside an island must stay within that island's source decode span, so
+  B-frame reordering across a recording gap is rejected rather than silently hidden, while normal
+  in-island B-frame reordering is allowed;
+* inputs are unencrypted self-contained fragmented or hybrid MP4 files, with the same per-sample
+  extension scope as `Defragment`.
+
+Without an edit list, the earliest surviving source DTS across all kept tracks is the common movie
+zero, preserving cross-track sync, and leading/inter-island time is synthesized as empty edits.
+Tracks that already have an edit list stay on their existing movie axis and get no extra start delay.
 
 ## Contributing
 

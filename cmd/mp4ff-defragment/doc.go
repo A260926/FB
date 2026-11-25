@@ -9,6 +9,9 @@ mp4ff-defragment [options] <inFile> <outFile>
 
 options:
 
+	-preserve-gaps
+		Keep recording gaps blank via empty edits instead of extending the
+		previous sample's duration
 	-t string
 		Comma-separated track IDs to keep (default all tracks)
 	-version

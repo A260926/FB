@@ -40,8 +40,11 @@ import (
 // ISO/IEC 14496-12 Annex E that the rebuilt moov needs, plus the codec brands
 // and the ISO/IEC 14496-15 track brands of the input. Input brands of the
 // fragmented delivery, such as those of CMAF and DASH, are dropped.
+//
+// See [DefragmentPreserveGaps] for the variant that keeps recording gaps as
+// blank movie time instead of extending the previous sample's duration.
 func Defragment(f *File, rs io.ReadSeeker, w io.Writer) error {
-	d, err := newDefragmenter(f, rs, nil)
+	d, err := newDefragmenterMode(f, rs, nil, false)
 	if err != nil {
 		return err
 	}
@@ -56,7 +59,7 @@ func DefragmentTracks(f *File, rs io.ReadSeeker, w io.Writer, trackIDs ...uint32
 	if len(trackIDs) == 0 {
 		return fmt.Errorf("no track IDs given")
 	}
-	d, err := newDefragmenter(f, rs, trackIDs)
+	d, err := newDefragmenterMode(f, rs, trackIDs, false)
 	if err != nil {
 		return err
 	}
@@ -151,11 +154,20 @@ type defragmenter struct {
 	chunks            []*defragChunk // all output chunks in output order
 	resolvedOverlap   bool
 	sawBaseDataOffset bool
+	preserveGaps      bool // DefragmentPreserveGaps mode: islands and empty edits instead of gap padding
 }
 
 // newDefragmenter collects the sample and chunk layout of the kept tracks.
 // A nil keptTrackIDs keeps every track.
 func newDefragmenter(f *File, rs io.ReadSeeker, keptTrackIDs []uint32) (*defragmenter, error) {
+	return newDefragmenterMode(f, rs, keptTrackIDs, false)
+}
+
+// newDefragmenterMode is [newDefragmenter] with the preserve-gaps mode
+// selected. In preserve-gaps mode the collection and overlap resolution run
+// unchanged, but the old origin/alignment edit handling is skipped: gap
+// planning and edit mapping happen in defragment_gaps.go.
+func newDefragmenterMode(f *File, rs io.ReadSeeker, keptTrackIDs []uint32, preserveGaps bool) (*defragmenter, error) {
 	fileSize, err := rs.Seek(0, io.SeekEnd)
 	if err != nil {
 		return nil, fmt.Errorf("could not seek to end: %w", err)
@@ -173,11 +185,12 @@ func newDefragmenter(f *File, rs io.ReadSeeker, keptTrackIDs []uint32) (*defragm
 		return nil, fmt.Errorf("mvhd has zero movie timescale")
 	}
 	d := &defragmenter{
-		rs:       rs,
-		fileSize: uint64(fileSize),
-		ftyp:     f.Ftyp,
-		moov:     f.Moov,
-		byID:     make(map[uint32]*defragTrack),
+		rs:           rs,
+		fileSize:     uint64(fileSize),
+		ftyp:         f.Ftyp,
+		moov:         f.Moov,
+		byID:         make(map[uint32]*defragTrack),
+		preserveGaps: preserveGaps,
 	}
 	for _, trak := range f.Moov.Traks {
 		if trak.Tkhd == nil || trak.Mdia == nil || trak.Mdia.Mdhd == nil {
@@ -240,10 +253,19 @@ func newDefragmenter(f *File, rs io.ReadSeeker, keptTrackIDs []uint32) (*defragm
 		}
 		d.payloadSize += chunk.size
 	}
-	if err := d.computeTrackAlignment(); err != nil {
+	if err := d.computeAlignmentForMode(); err != nil {
 		return nil, err
 	}
 	return d, nil
+}
+
+// computeAlignmentForMode runs the origin/edit validation of the normal
+// mode. Preserve-gaps mode performs its own exact edit mapping instead.
+func (d *defragmenter) computeAlignmentForMode() error {
+	if d.preserveGaps {
+		return nil
+	}
+	return d.computeTrackAlignment()
 }
 
 // collectProgressivePart gathers the samples that the moov sample tables
@@ -924,6 +946,9 @@ func progressiveFtyp(in *FtypBox, moov *MoovBox) *FtypBox {
 // rebuildMoov drops the fragment structures and fills the sample tables of
 // the kept tracks, leaving all other moov content as decoded.
 func (d *defragmenter) rebuildMoov() error {
+	if d.preserveGaps {
+		return d.rebuildMoovPreserveGaps()
+	}
 	moov := d.moov
 	children := make([]Box, 0, len(moov.Children))
 	for _, child := range moov.Children {
