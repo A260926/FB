@@ -21,6 +21,7 @@ Beep is built on top of its [Streamer](https://godoc.org/github.com/gopxl/beep#S
 - **Encode and save WAV.**
 - **Very simple API.** Limiting the support to stereo (two channel) audio made it possible to simplify the architecture and the API.
 - **Rich library of compositors and effects.** Loop, pause/resume, change volume, mix, sequence, change playback speed, and more.
+- **Seamless multi-track switching.** Prepare a new arrangement while the current one plays and switch revisions at a chosen output frame, with an optional cross-fade.
 - **Easily create new effects.** With the `Streamer` interface, creating new effects is very easy.
 - **Generate completely own artificial sounds.** Again, the `Streamer` interface enables easy sound generation.
 - **Very small codebase.** The core is just ~1K LOC.

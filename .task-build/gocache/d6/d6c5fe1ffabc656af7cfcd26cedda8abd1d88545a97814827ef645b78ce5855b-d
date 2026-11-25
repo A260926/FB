@@ -1,0 +1,9 @@
+./doc.go
+./doppler.go
+./equalizer.go
+./gain.go
+./mono.go
+./pan.go
+./swap.go
+./transition.go
+./volume.go

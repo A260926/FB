@@ -77,6 +77,11 @@ func Encode(w io.WriteSeeker, s beep.Streamer, format beep.Format) (err error) {
 		}
 		written += nn
 	}
+	// A stream that terminated with an error must not be encoded as a
+	// successful, silently truncated file.
+	if err := s.Err(); err != nil {
+		return err
+	}
 	if err := bw.Flush(); err != nil {
 		return err
 	}

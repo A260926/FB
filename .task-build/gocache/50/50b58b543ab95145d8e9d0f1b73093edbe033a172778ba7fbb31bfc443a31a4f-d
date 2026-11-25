@@ -1,0 +1,5 @@
+./sawtooth.go
+./silence.go
+./sine.go
+./square.go
+./triangle.go
