@@ -73,6 +73,9 @@
 		E17F303B27A74CD400F7FBDF /* cmeta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E17F2F3D27A7460900F7FBDF /* cmeta.cpp */; };
 		E17F303C27A74CD400F7FBDF /* atom_pasp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E17F2F9027A7460E00F7FBDF /* atom_pasp.cpp */; };
 		E17F303D27A74CD400F7FBDF /* mp4track.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E17F2F5527A7460B00F7FBDF /* mp4track.cpp */; };
+		E1A100010000000000000001 /* atom_tmcd.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E1A100020000000000000002 /* atom_tmcd.cpp */; };
+		E1A100030000000000000003 /* mp4timecode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E1A100040000000000000004 /* mp4timecode.cpp */; };
+		E1A100050000000000000005 /* timecode.h in Headers */ = {isa = PBXBuildFile; fileRef = E1A100060000000000000006 /* timecode.h */; };
 		E17F303E27A74CD400F7FBDF /* atom_trun.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E17F2F8C27A7460E00F7FBDF /* atom_trun.cpp */; };
 		E17F303F27A74CD400F7FBDF /* atom_avc1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E17F2F4E27A7460A00F7FBDF /* atom_avc1.cpp */; };
 		E17F304027A74CD400F7FBDF /* ocidescriptors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E17F2F4027A7460A00F7FBDF /* ocidescriptors.cpp */; };
@@ -516,6 +519,9 @@
 		E17F2F5327A7460B00F7FBDF /* atom_enca.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = atom_enca.cpp; path = ../src/atom_enca.cpp; sourceTree = "<group>"; };
 		E17F2F5427A7460B00F7FBDF /* atom_encv.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = atom_encv.cpp; path = ../src/atom_encv.cpp; sourceTree = "<group>"; };
 		E17F2F5527A7460B00F7FBDF /* mp4track.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = mp4track.cpp; path = ../src/mp4track.cpp; sourceTree = "<group>"; };
+		E1A100020000000000000002 /* atom_tmcd.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = atom_tmcd.cpp; path = ../src/atom_tmcd.cpp; sourceTree = "<group>"; };
+		E1A100040000000000000004 /* mp4timecode.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = mp4timecode.cpp; path = ../src/mp4timecode.cpp; sourceTree = "<group>"; };
+		E1A100060000000000000006 /* timecode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = timecode.h; path = ../include/mp4v2/timecode.h; sourceTree = "<group>"; };
 		E17F2F5627A7460B00F7FBDF /* mp4file_io.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = mp4file_io.cpp; path = ../src/mp4file_io.cpp; sourceTree = "<group>"; };
 		E17F2F5727A7460B00F7FBDF /* qosqualifiers.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = qosqualifiers.cpp; path = ../src/qosqualifiers.cpp; sourceTree = "<group>"; };
 		E17F2F5827A7460B00F7FBDF /* atom_tkhd.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = atom_tkhd.cpp; path = ../src/atom_tkhd.cpp; sourceTree = "<group>"; };
@@ -856,6 +862,8 @@
 				E17F2F3927A7460900F7FBDF /* mp4property.h */,
 				E17F2F5527A7460B00F7FBDF /* mp4track.cpp */,
 				E17F2F4127A7460A00F7FBDF /* mp4track.h */,
+				E1A100020000000000000002 /* atom_tmcd.cpp */,
+				E1A100040000000000000004 /* mp4timecode.cpp */,
 				E17F2F8527A7460D00F7FBDF /* mp4util.cpp */,
 				E17F2F5027A7460A00F7FBDF /* mp4util.h */,
 				E17F2F4027A7460A00F7FBDF /* ocidescriptors.cpp */,
@@ -978,6 +986,7 @@
 				E17F2FAA27A7489000F7FBDF /* project.h */,
 				E17F2F9827A7471300F7FBDF /* sample.h */,
 				E17F2F9527A7471300F7FBDF /* streaming.h */,
+				E1A100060000000000000006 /* timecode.h */,
 				E17F2F9A27A7471300F7FBDF /* track_prop.h */,
 				E17F2F9727A7471300F7FBDF /* track.h */,
 			);
@@ -1060,6 +1069,7 @@
 				E17F303927A74CD400F7FBDF /* rtphint.h in Headers */,
 				E17F304527A74CD400F7FBDF /* text.h in Headers */,
 				E17F304C27A74CD400F7FBDF /* mp4track.h in Headers */,
+					E1A100050000000000000005 /* timecode.h in Headers */,
 				E17F307527A74CE800F7FBDF /* typebmff.h in Headers */,
 				E17F301827A74CD400F7FBDF /* util.h in Headers */,
 				E17F306D27A74CE200F7FBDF /* CoverArtBox.h in Headers */,
@@ -1487,6 +1497,8 @@
 				E17F302527A74CD400F7FBDF /* atom_ohdr.cpp in Sources */,
 				E17F309027A74D1100F7FBDF /* option.cpp in Sources */,
 				E17F303D27A74CD400F7FBDF /* mp4track.cpp in Sources */,
+					E1A100010000000000000001 /* atom_tmcd.cpp in Sources */,
+					E1A100030000000000000003 /* mp4timecode.cpp in Sources */,
 				E17F300C27A74CD400F7FBDF /* atom_mvhd.cpp in Sources */,
 				E17F305A27A74CD400F7FBDF /* descriptors.cpp in Sources */,
 				E17F305927A74CD400F7FBDF /* atom_enca.cpp in Sources */,

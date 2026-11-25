@@ -118,6 +118,7 @@ set(MP4V2_PUBLIC_HEADERS
         include/mp4v2/platform.h
         include/mp4v2/sample.h
         include/mp4v2/streaming.h
+        include/mp4v2/timecode.h
         include/mp4v2/track.h
         include/mp4v2/track_prop.h)
 
@@ -260,6 +261,7 @@ set(MP4V2_SOURCE_FILES
         src/atom_text.cpp
         src/atom_tfhd.cpp
         src/atom_tkhd.cpp
+        src/atom_tmcd.cpp
         src/atom_treftype.cpp
         src/atom_trun.cpp
         src/atom_tx3g.cpp
@@ -284,6 +286,7 @@ set(MP4V2_SOURCE_FILES
         src/mp4info.cpp
         src/mp4property.cpp
         src/mp4track.cpp
+        src/mp4timecode.cpp
         src/mp4util.cpp
         src/ocidescriptors.cpp
         src/odcommands.cpp

@@ -60,4 +60,5 @@ have been added where appropriate.
 @example example/callbacks/callbacks.c
 @example example/itmf/generic.c
 @example example/itmf/tags.c
+@example examples/timecode.cpp
 */

@@ -52,8 +52,13 @@ typedef MP4SizedIntegerProperty<uint32_t, 24> MP4Integer24Property;
 typedef MP4SizedIntegerProperty<uint32_t, 32> MP4Integer32Property;
 typedef MP4SizedIntegerProperty<uint64_t, 64> MP4Integer64Property;
 
+class TimecodeDetails;
+
 class MP4Track
 {
+    // timecode support reuses the same parsed sample/edit table handles
+    friend class TimecodeDetails;
+
 public:
     MP4Track(MP4File& file, MP4Atom& trakAtom);
 

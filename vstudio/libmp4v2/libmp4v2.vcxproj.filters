@@ -78,6 +78,9 @@
     <ClInclude Include="..\..\include\mp4v2\streaming.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mp4v2\timecode.h">
+      <Filter>include</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\include\mp4v2\track.h">
       <Filter>include</Filter>
     </ClInclude>
@@ -389,6 +392,9 @@
     <ClCompile Include="..\..\src\atom_tkhd.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\atom_tmcd.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\atom_treftype.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -456,6 +462,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\mp4track.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\mp4timecode.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\mp4util.cpp">

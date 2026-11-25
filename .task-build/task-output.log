@@ -1,0 +1,21 @@
+CASE association unique_reference checks=21
+CASE association missing_reference checks=4
+CASE association ambiguous_reference checks=4
+GROUP association cases=3 checks=29 COMPLETE
+CASE projection bframe_display_order checks=12
+CASE projection empty_edits_both_tracks checks=8
+CASE projection repeated_reversed_edits checks=13
+CASE projection rational_frame_boundaries checks=16
+GROUP projection cases=4 checks=49 COMPLETE
+CASE counter counter_covers_many_frames checks=18
+CASE counter description_switch_and_jump checks=40
+CASE counter drop_frame_boundaries checks=27
+CASE counter twenty_four_hour_wrap checks=10
+GROUP counter cases=4 checks=95 COMPLETE
+CASE reject no_coverage_and_empty_edit checks=6
+CASE reject negative_ctts checks=4
+CASE reject unsupported_descriptions checks=16
+FindTrackIndex: Track id 99 doesn't exist (/Volumes/UserFBWorkspace/questions/FSB32C709ADE32U16228/attempts/20261125T163857687020Z/repo/src/mp4file.cpp,3042)
+CASE reject bad_rate_bad_ref_and_requery checks=10
+GROUP reject cases=4 checks=36 COMPLETE
+TARGET_COMPLETE cases=15

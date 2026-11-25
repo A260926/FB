@@ -730,6 +730,20 @@ private:
     MP4ChplAtom &operator= ( const MP4ChplAtom &src );
 };
 
+// QuickTime timecode sample description (stsd entry of a tmcd track).
+// Only the fixed fields are modelled; any trailing source-name ('name')
+// extension is preserved verbatim as child atom data.
+class MP4TmcdAtom : public MP4Atom {
+public:
+    MP4TmcdAtom(MP4File &file);
+    void Generate();
+    void Read();
+private:
+    MP4TmcdAtom();
+    MP4TmcdAtom( const MP4TmcdAtom &src );
+    MP4TmcdAtom &operator= ( const MP4TmcdAtom &src );
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 
 /// iTMF hdlr-atom.

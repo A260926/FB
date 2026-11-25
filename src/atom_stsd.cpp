@@ -61,6 +61,7 @@ MP4StsdAtom::MP4StsdAtom(MP4File &file)
     ExpectChildAtom("alac", Optional, Many);
     ExpectChildAtom("text", Optional, Many);
     ExpectChildAtom("tx3g", Optional, Many);
+    ExpectChildAtom("tmcd", Optional, Many);
     ExpectChildAtom("ac-3", Optional, Many);
 }
 

@@ -1,0 +1,5 @@
+timecode 01:00:00:02
+videoSampleId 3
+timeCodeTrackId 2
+timeCodeSampleId 1
+frameNumber 90002

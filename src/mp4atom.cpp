@@ -812,6 +812,15 @@ MP4Atom::factory( MP4File &file, MP4Atom* parent, const char* type )
                 if( strequal( type, *p ))
                     return new MP4UdtaElementAtom( file, type );
         }
+        else if( ATOMID( type ) == ATOMID( "tmcd" )) {
+            // tmcd appears in three unrelated places; only the stsd entry
+            // is a timecode sample description and only the tref child is a
+            // track-reference table. A gmhd tmcd keeps generic handling.
+            if( ATOMID( ptype ) == ATOMID( "stsd" ))
+                return new MP4TmcdAtom(file);
+            if( ATOMID( ptype ) == ATOMID( "tref" ))
+                return new MP4TrefTypeAtom( file, type );
+        }
     }
 
     // no-context construction (old-style)

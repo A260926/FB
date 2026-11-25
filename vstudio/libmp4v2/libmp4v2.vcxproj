@@ -620,6 +620,7 @@
     <ClInclude Include="..\..\include\mp4v2\platform.h" />
     <ClInclude Include="..\..\include\mp4v2\sample.h" />
     <ClInclude Include="..\..\include\mp4v2\streaming.h" />
+    <ClInclude Include="..\..\include\mp4v2\timecode.h" />
     <ClInclude Include="..\..\include\mp4v2\track.h" />
     <ClInclude Include="..\..\include\mp4v2\track_prop.h" />
     <ClInclude Include="..\..\libplatform\endian.h" />
@@ -739,6 +740,7 @@
     <ClCompile Include="..\..\src\atom_text.cpp" />
     <ClCompile Include="..\..\src\atom_tfhd.cpp" />
     <ClCompile Include="..\..\src\atom_tkhd.cpp" />
+    <ClCompile Include="..\..\src\atom_tmcd.cpp" />
     <ClCompile Include="..\..\src\atom_treftype.cpp" />
     <ClCompile Include="..\..\src\atom_trun.cpp" />
     <ClCompile Include="..\..\src\atom_tx3g.cpp" />
@@ -767,6 +769,7 @@
     <ClCompile Include="..\..\src\mp4info.cpp" />
     <ClCompile Include="..\..\src\mp4property.cpp" />
     <ClCompile Include="..\..\src\mp4track.cpp" />
+    <ClCompile Include="..\..\src\mp4timecode.cpp" />
     <ClCompile Include="..\..\src\mp4util.cpp" />
     <ClCompile Include="..\..\src\ocidescriptors.cpp" />
     <ClCompile Include="..\..\src\odcommands.cpp" />
