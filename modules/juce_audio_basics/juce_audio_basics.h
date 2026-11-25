@@ -114,6 +114,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "sources/juce_AudioSource.h"
 #include "sources/juce_PositionableAudioSource.h"
 #include "sources/juce_BufferingAudioSource.h"
+#include "sources/juce_BufferedAudioTimeline.h"
 #include "sources/juce_ChannelRemappingAudioSource.h"
 #include "sources/juce_IIRFilterAudioSource.h"
 #include "sources/juce_MemoryAudioSource.h"

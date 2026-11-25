@@ -83,6 +83,7 @@
 #include "mpe/juce_MPESynthesiser.cpp"
 #include "mpe/juce_MPEUtils.cpp"
 #include "sources/juce_BufferingAudioSource.cpp"
+#include "sources/juce_BufferedAudioTimeline.cpp"
 #include "sources/juce_ChannelRemappingAudioSource.cpp"
 #include "sources/juce_IIRFilterAudioSource.cpp"
 #include "sources/juce_MemoryAudioSource.cpp"

@@ -20,6 +20,9 @@
   ==============================================================================
 */
 
+#include <algorithm>
+#include <array>
+
 namespace juce
 {
 
@@ -60,6 +63,12 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
         isPrepared = true;
         sampleRate = newSampleRate;
 
+        // Every re-prepare invalidates tickets issued against the previous run.
+        {
+            const ScopedLock tl (ticketLock);
+            ++ticketEpoch;
+        }
+
         source->prepareToPlay (samplesPerBlockExpected, newSampleRate);
 
         buffer.setSize (numberOfChannels, bufferSizeNeeded);
@@ -88,6 +97,12 @@ void BufferingAudioSource::releaseResources()
 {
     isPrepared = false;
     backgroundThread.removeTimeSliceClient (this);
+
+    // Tickets can no longer be committed once the source has been released.
+    {
+        const ScopedLock tl (ticketLock);
+        ++ticketEpoch;
+    }
 
     buffer.setSize (numberOfChannels, 0);
 
@@ -154,6 +169,13 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
         }
     }
 
+    // A normal consume invalidates any tickets issued against the old position,
+    // including tickets held by single-source readers.
+    {
+        const ScopedLock tl (ticketLock);
+        ++ticketEpoch;
+    }
+
     nextPlayPos += info.numSamples;
 }
 
@@ -215,6 +237,14 @@ void BufferingAudioSource::setNextReadPosition (int64 newPosition)
     const ScopedLock sl (bufferRangeLock);
 
     nextPlayPos = newPosition;
+
+    // Any seek invalidates outstanding tickets, even when the new position
+    // happens to equal the old one.
+    {
+        const ScopedLock tl (ticketLock);
+        ++ticketEpoch;
+    }
+
     backgroundThread.moveToFrontOfQueue (this);
 }
 
@@ -302,6 +332,16 @@ bool BufferingAudioSource::readNextBufferChunk()
     {
         const ScopedLock sl2 (bufferRangeLock);
 
+        // A seek (or a consume) may have moved the cursor while the underlying
+        // source was being decoded. The PCM just read belongs to the old
+        // coordinates, so it must never be advertised as data for the new
+        // position; discard it and let the next time slice re-plan.
+        if (nextPlayPos.load() != newBVS)
+        {
+            bufferReadyEvent.signal();
+            return true;
+        }
+
         bufferValidStart = newBVS;
         bufferValidEnd = newBVE;
     }
@@ -324,6 +364,187 @@ void BufferingAudioSource::readBufferSection (int64 start, int length, int buffe
 int BufferingAudioSource::useTimeSlice()
 {
     return readNextBufferChunk() ? 1 : 100;
+}
+
+//==============================================================================
+bool BufferingAudioSource::ticketMatchesCurrentPosition (const ReadTicket& ticket) const noexcept
+{
+    return ticket.valid
+            && ticket.owner == this
+            && ticket.epoch == ticketEpoch.load()
+            && ticket.startPosition == nextPlayPos.load();
+}
+
+bool BufferingAudioSource::peekNextBlock (const AudioSourceChannelInfo& info, ReadTicket& ticket)
+{
+    // Rejecting must always leave the incoming ticket invalid.
+    ticket.reset();
+
+    if (! isPrepared || info.buffer == nullptr || info.numSamples <= 0
+        || info.startSample < 0
+        || info.startSample + info.numSamples > info.buffer->getNumSamples())
+    {
+        return false;
+    }
+
+    const auto numSamples = info.numSamples;
+    const auto ringSize = buffer.getNumSamples();
+
+    // Never wait for the background thread: if the PCM ring is currently being
+    // written, fail immediately and let the caller retry.
+    const ScopedTryLock callbackLocker (callbackLock);
+
+    if (! callbackLocker.isLocked())
+        return false;
+
+    int64 startPosition;
+    bool fullyReady = false;
+
+    {
+        const ScopedLock rangeLocker (bufferRangeLock);
+
+        startPosition = nextPlayPos.load();
+
+        fullyReady = startPosition >= bufferValidStart
+                      && startPosition + numSamples <= bufferValidEnd;
+    }
+
+    if (! fullyReady)
+        return false;
+
+    const auto channelsToCopy = jmin (numberOfChannels, info.buffer->getNumChannels());
+
+    if (channelsToCopy <= 0)
+        return false;
+
+    for (int chan = 0; chan < channelsToCopy; ++chan)
+    {
+        const auto startBufferIndex = (int) (startPosition % ringSize);
+        const auto endBufferIndex   = startBufferIndex + numSamples;
+
+        if (endBufferIndex <= ringSize)
+        {
+            info.buffer->copyFrom (chan, info.startSample,
+                                   buffer, chan, startBufferIndex, numSamples);
+        }
+        else
+        {
+            const auto initialSize = ringSize - startBufferIndex;
+
+            info.buffer->copyFrom (chan, info.startSample,
+                                   buffer, chan, startBufferIndex, initialSize);
+
+            info.buffer->copyFrom (chan, info.startSample + initialSize,
+                                   buffer, chan, 0,
+                                   numSamples - initialSize);
+        }
+    }
+
+    // The samples are now private to the caller; only the metadata is published.
+    {
+        const ScopedLock ticketLocker (ticketLock);
+
+        ticket.owner = this;
+        ticket.startPosition = startPosition;
+        ticket.length = numSamples;
+        ticket.epoch = ticketEpoch.load();
+        ticket.valid = true;
+    }
+
+    return true;
+}
+
+bool BufferingAudioSource::commitReadTickets (ReadTicket* const* tickets, int count)
+{
+    struct Item
+    {
+        BufferingAudioSource* owner;
+        ReadTicket* ticket;
+    };
+
+    if (tickets == nullptr || count <= 0 || count > maxCommitTickets)
+        return false;
+
+    std::array<Item, maxCommitTickets> items {};
+    int numItems = 0;
+
+    // Phase 1: validate everything without touching a cursor or a lock.
+    for (int i = 0; i < count; ++i)
+    {
+        ReadTicket* const ticket = tickets[i];
+
+        if (ticket == nullptr || ! ticket->isValid() || ticket->owner == nullptr)
+            return false;
+
+        BufferingAudioSource* const owner = ticket->owner;
+
+        for (int j = 0; j < numItems; ++j)
+        {
+            if (items[j].owner == owner)
+                return false; // a source may appear at most once in a group
+        }
+
+        items[numItems++] = { owner, ticket };
+    }
+
+    // Deterministic order means two groups that name the same sources in
+    // opposite orders acquire the same locks and can never deadlock.
+    std::sort (items.begin(), items.begin() + numItems,
+               [] (const Item& a, const Item& b) { return a.owner < b.owner; });
+
+    // Phase 2: acquire every source's locks first. The order bufferRangeLock
+    // then ticketLock matches setNextReadPosition(), so seek and commit can
+    // never invert each other. No underlying source is read and no thread is
+    // waited on while these locks are held.
+    std::array<CriticalSection*, maxCommitTickets * 2> heldLocks {};
+    int locksHeld = 0;
+
+    auto releaseLocks = [&]
+    {
+        for (int i = locksHeld - 1; i >= 0; --i)
+            heldLocks[i]->exit();
+    };
+
+    for (int i = 0; i < numItems; ++i)
+    {
+        auto& rangeLock = items[i].owner->bufferRangeLock;
+        rangeLock.enter();
+        heldLocks[locksHeld++] = &rangeLock;
+
+        auto& epochLock = items[i].owner->ticketLock;
+        epochLock.enter();
+        heldLocks[locksHeld++] = &epochLock;
+    }
+
+    bool success = true;
+
+    for (int i = 0; i < numItems; ++i)
+    {
+        if (! items[i].owner->ticketMatchesCurrentPosition (*items[i].ticket))
+        {
+            success = false;
+            break;
+        }
+    }
+
+    if (success)
+    {
+        // Phase 3: the single commit point - all cursors advance together and
+        // all the committed tickets become invalid.
+        for (int i = 0; i < numItems; ++i)
+        {
+            BufferingAudioSource* const owner = items[i].owner;
+            ReadTicket* const ticket = items[i].ticket;
+
+            owner->nextPlayPos = ticket->startPosition + ticket->length;
+            ++owner->ticketEpoch;
+            ticket->reset();
+        }
+    }
+
+    releaseLocks();
+
+    return success;
 }
 
 } // namespace juce

@@ -1,0 +1,26 @@
+CASE tickets lifecycle checks=138
+CASE tickets rejections checks=141
+CASE tickets blocked_background checks=262
+CASE tickets seek_invalidation checks=11
+CASE tickets release_and_reprepare checks=6
+CASE tickets normal_consume checks=4
+CASE tickets commit_validation checks=17
+CASE tickets ring_wraparound checks=322
+CASE tickets failure_retry checks=134
+GROUP tickets cases=9 checks=1035 COMPLETE
+CASE atomic reverse_order_groups checks=4
+CASE atomic commit_while_seek checks=8
+CASE atomic stale_read_after_seek checks=132
+CASE atomic single_source_group checks=4
+CASE atomic group_pcm_and_positions checks=262
+GROUP atomic cases=5 checks=410 COMPLETE
+CASE timeline construction_rules checks=10
+CASE timeline prepare_validation checks=13
+CASE timeline mix_matches_reference checks=607
+CASE timeline seek_and_retime checks=148
+CASE timeline render_failures_sentinel checks=1044
+CASE timeline zero_length checks=69
+CASE timeline retime_block_sizes checks=537
+CASE timeline external_seek_retry checks=8
+GROUP timeline cases=8 checks=2436 COMPLETE
+TARGET_COMPLETE cases=22
