@@ -30,6 +30,42 @@ See the webpage for sample code and function documentation.  The source package 
 Though the libraries are "bulletproofed" the sample apps are not: be cautious if you plan to implement in some critical environment.
 
 ---
+New RIFF/AVI export path
+---
+
+smk_avi.h and smk_avi.c contain the reusable interleaved RIFF/AVI muxer.
+smk_export.h and smk_export.c drive the existing libsmacker decoder from
+disk mode; smk_export_avi(input, output, audio_mask) is the supported entry
+point.  examples/smk_export_main.c is the corresponding command line example:
+
+    smk-export INPUT.SMK OUTPUT.AVI AUDIO_MASK_DECIMAL
+
+Only audio mask bits 0..6 are accepted.  Masked tracks that exist are emitted
+as AVI audio streams 1, 2, ... in ascending original SMK track order; video
+is stream 0 and uses 00db chunks.
+
+The exporter is streaming and interleaved.  It keeps the decoder's frame
+table, its last indexed video frame and palette, and at most the current PCM
+record for each separately opened audio cursor.  It does not retain every
+decoded video frame or concatenate the whole movie's PCM.  RIFF and idx1
+metadata do grow with the number of output chunks.  Video is converted one
+bottom-up BGR row at a time, with each row padded to a four-byte boundary.
+
+For a track at R Hz and an integer frame duration U microseconds, output
+frame i owns the sample interval
+
+    [floor(i*R*U/1000000), floor((i+1)*R*U/1000000))
+
+Source records for that track are treated as one continuous byte stream in
+SMK record order; the SMK frame carrying a record does not determine its
+placement.  A record remainder is carried into the next AVI audio chunk and is
+neither lost nor duplicated.  If the concatenated source PCM ends before the
+movie timeline, the interval tail is filled with silence (0x80 for 8-bit PCM,
+zero for 16-bit PCM).  Source audio longer than floor(F*R*U/1000000) sample
+frames is truncated, and the extra tail is not written.  Ring chunks do not
+increase F and do not contribute audio.
+
+---
 Changelog
 ---
 1.2.0
