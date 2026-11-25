@@ -171,6 +171,39 @@ int jitter_buffer_get_pointer_timestamp(JitterBuffer *jitter);
 */
 void jitter_buffer_tick(JitterBuffer *jitter);
 
+/** Begin external pull/consume mode at a fixed media timestamp.
+ *
+ * This clears all queued packets. It is rejected without modifying the
+ * buffer when a packet destroy callback is configured.
+ *
+ * @param jitter Jitter buffer state
+ * @param start Media timestamp at which external consumption starts
+ * @return 0 on success, negative value on error
+ */
+int jitter_buffer_begin_pull(JitterBuffer *jitter, spx_uint32_t start);
+
+/** Copy the packet or gap currently visible at the pull cursor.
+ *
+ * The packet is copied but remains queued. start_offset is the packet start
+ * minus the current media cursor. On a gap, the return value is
+ * JITTER_BUFFER_MISSING and packet->span is the authorized gap length.
+ *
+ * @param jitter Jitter buffer state
+ * @param packet Caller-owned packet and destination buffer
+ * @param desired_span Maximum span the caller wants to consume
+ * @param start_offset Returned offset from cursor to packet start
+ * @return JITTER_BUFFER_OK, JITTER_BUFFER_MISSING, or negative error
+ */
+int jitter_buffer_peek(JitterBuffer *jitter, JitterBufferPacket *packet, spx_int32_t desired_span, spx_int32_t *start_offset);
+
+/** Consume frames from the prefix authorized by the latest peek.
+ *
+ * @param jitter Jitter buffer state
+ * @param frames Number of media frames to advance
+ * @return 0 on success, negative value if the advance is not authorized
+ */
+int jitter_buffer_consume(JitterBuffer *jitter, spx_uint32_t frames);
+
 /** Telling the jitter buffer about the remaining data in the application buffer
  * @param jitter Jitter buffer state
  * @param rem Amount of data buffered by the application (timestamp units)

@@ -18,7 +18,7 @@ else
 endif
 endif
 
-libspeexdsp_la_SOURCES = preprocess.c jitter.c mdf.c fftwrap.c filterbank.c resample.c buffer.c scal.c $(FFTSRC)
+libspeexdsp_la_SOURCES = preprocess.c jitter.c playout.c mdf.c fftwrap.c filterbank.c resample.c buffer.c scal.c $(FFTSRC)
 
 noinst_HEADERS = 	arch.h 	bfin.h \
 		fixed_arm4.h \

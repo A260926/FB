@@ -162,6 +162,11 @@ struct JitterBuffer_ {
    int auto_tradeoff;                                          /**< Latency equivalent of losing one percent of packets (automatic default) */
 
    int lost_count;                                             /**< Number of consecutive lost packets  */
+
+   int pull_mode;                                              /**< Explicit peek/consume external consumer */
+   int pull_auth_valid;                                        /**< A peek-issued consume authorization is live */
+   int pull_auth_index;                                        /**< Packet slot authorized, or -1 for a gap */
+   spx_uint32_t pull_auth_frames;                              /**< Maximum frames which may be consumed */
 };
 
 /** Based on available data, this computes the optimal delay for the jitter buffer.
@@ -313,6 +318,10 @@ EXPORT void jitter_buffer_reset(JitterBuffer *jitter)
    jitter->lost_count = 0;
    jitter->buffered = 0;
    jitter->auto_tradeoff = 32000;
+   jitter->pull_mode = 0;
+   jitter->pull_auth_valid = 0;
+   jitter->pull_auth_index = -1;
+   jitter->pull_auth_frames = 0;
 
    for (i=0;i<MAX_BUFFERS;i++)
    {
@@ -367,7 +376,66 @@ EXPORT void jitter_buffer_put(JitterBuffer *jitter, const JitterBufferPacket *pa
 {
    int i,j;
    int late;
-   /*fprintf (stderr, "put packet %d %d\n", timestamp, span);*/
+
+   if (jitter->pull_mode)
+   {
+      int slot = -1;
+      spx_uint32_t earliest = 0;
+
+      /* A successful put always invalidates the prefix authorized by peek().
+         It deliberately does not move pointer_timestamp. */
+      jitter->pull_auth_valid = 0;
+
+      for (i=0;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
+      {
+         if (jitter->packets[i].data == NULL)
+         {
+            slot = i;
+            break;
+         }
+      }
+
+      /* The production playout owner bounds the number of active packets.
+         Keep the legacy fixed-buffer overflow policy for direct JitterBuffer
+         users if that bound is exceeded. */
+      if (slot < 0)
+      {
+         slot = 0;
+         earliest = jitter->packets[0].timestamp;
+         for (i=1;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
+         {
+            if (LT32(jitter->packets[i].timestamp, earliest))
+            {
+               earliest = jitter->packets[i].timestamp;
+               slot = i;
+            }
+         }
+         if (jitter->destroy)
+            jitter->destroy(jitter->packets[slot].data);
+         else
+            speex_free(jitter->packets[slot].data);
+         jitter->packets[slot].data = NULL;
+      }
+
+      if (jitter->destroy)
+      {
+         jitter->packets[slot].data = packet->data;
+      } else {
+         jitter->packets[slot].data = (char*)speex_alloc(packet->len ? packet->len : 1);
+         if (jitter->packets[slot].data)
+         {
+            for (j=0;j<(int)packet->len;j++)
+               jitter->packets[slot].data[j] = packet->data[j];
+         }
+      }
+      jitter->packets[slot].timestamp = packet->timestamp;
+      jitter->packets[slot].span = packet->span;
+      jitter->packets[slot].len = packet->len;
+      jitter->packets[slot].sequence = packet->sequence;
+      jitter->packets[slot].user_data = packet->user_data;
+      jitter->arrival[slot] = 0;
+      return;
+   }
 
    /* Cleanup buffer (remove old packets that weren't played) */
    if (!jitter->reset_state)
@@ -465,6 +533,11 @@ EXPORT int jitter_buffer_get(JitterBuffer *jitter, JitterBufferPacket *packet, s
    int i;
    unsigned int j;
    spx_int16_t opt;
+
+   /* Pull mode is driven through peek()/consume(); the legacy scheduler must
+      not remove packets or alter the fixed media cursor. */
+   if (jitter->pull_mode)
+      return JITTER_BUFFER_BAD_ARGUMENT;
 
    if (start_offset != NULL)
       *start_offset = 0;
@@ -676,6 +749,10 @@ EXPORT int jitter_buffer_get(JitterBuffer *jitter, JitterBufferPacket *packet, s
 EXPORT int jitter_buffer_get_another(JitterBuffer *jitter, JitterBufferPacket *packet)
 {
    int i, j;
+
+   if (jitter->pull_mode)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
    for (i=0;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
    {
       if (jitter->packets[i].data && jitter->packets[i].timestamp==jitter->last_returned_timestamp)
@@ -749,6 +826,9 @@ EXPORT int jitter_buffer_get_pointer_timestamp(JitterBuffer *jitter)
 
 EXPORT void jitter_buffer_tick(JitterBuffer *jitter)
 {
+   if (jitter->pull_mode)
+      return;
+
    /* Automatically-adjust the buffering delay if requested */
    if (jitter->auto_adjust)
       _jitter_buffer_update_delay(jitter, NULL, NULL);
@@ -765,8 +845,9 @@ EXPORT void jitter_buffer_tick(JitterBuffer *jitter)
 
 EXPORT void jitter_buffer_remaining_span(JitterBuffer *jitter, spx_uint32_t rem)
 {
-   /* Automatically-adjust the buffering delay if requested */
-   if (jitter->auto_adjust)
+   /* Pull mode owns delay decisions externally; never run arrival-based
+      adaptation here. */
+   if (jitter->auto_adjust && !jitter->pull_mode)
       _jitter_buffer_update_delay(jitter, NULL, NULL);
 
    if (jitter->buffered < 0)
@@ -774,6 +855,186 @@ EXPORT void jitter_buffer_remaining_span(JitterBuffer *jitter, spx_uint32_t rem)
    jitter->next_stop = jitter->pointer_timestamp - rem;
 }
 
+EXPORT int jitter_buffer_begin_pull(JitterBuffer *jitter, spx_uint32_t start)
+{
+   int i;
+
+   if (!jitter)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   /* A destroy callback means put() uses externally-owned storage. Refuse
+      before freeing anything so the existing buffer remains untouched. */
+   if (jitter->destroy)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   for (i=0;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
+   {
+      if (jitter->packets[i].data)
+      {
+         speex_free(jitter->packets[i].data);
+         jitter->packets[i].data = NULL;
+      }
+   }
+
+   jitter->pointer_timestamp = start;
+   jitter->last_returned_timestamp = start;
+   jitter->next_stop = start;
+   jitter->reset_state = 0;
+   jitter->lost_count = 0;
+   jitter->buffered = 0;
+   jitter->interp_requested = 0;
+   jitter->pull_mode = 1;
+   jitter->pull_auth_valid = 0;
+   jitter->pull_auth_index = -1;
+   jitter->pull_auth_frames = 0;
+   return JITTER_BUFFER_OK;
+}
+
+EXPORT int jitter_buffer_peek(JitterBuffer *jitter, JitterBufferPacket *packet, spx_int32_t desired_span, spx_int32_t *start_offset)
+{
+   int i;
+   int best = -1;
+   spx_int32_t best_start_delta = 0;
+   spx_int32_t next_delta = 0;
+   int have_next = 0;
+   spx_int32_t gap;
+
+   if (!jitter || !packet || desired_span <= 0)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   if (!jitter->pull_mode)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   /* Select a packet whose half-open media interval covers the cursor. The
+      signed delta is negative when the cursor has already partially consumed
+      the packet. */
+   for (i=0;i<SPEEX_JITTER_MAX_BUFFER_SIZE;i++)
+   {
+      spx_int32_t start_delta;
+      spx_int32_t end_delta;
+      if (!jitter->packets[i].data)
+         continue;
+      start_delta = TSUB(jitter->packets[i].timestamp, jitter->pointer_timestamp);
+      end_delta = TSUB(jitter->packets[i].timestamp + jitter->packets[i].span,
+                       jitter->pointer_timestamp);
+      if (start_delta <= 0 && end_delta > 0)
+      {
+         if (best < 0 || start_delta > best_start_delta)
+         {
+            best = i;
+            best_start_delta = start_delta;
+         }
+      }
+      else if (start_delta > 0)
+      {
+         if (!have_next || start_delta < next_delta)
+         {
+            have_next = 1;
+            next_delta = start_delta;
+         }
+      }
+   }
+
+   if (best >= 0)
+   {
+      spx_int32_t end_delta = TSUB(jitter->packets[best].timestamp + jitter->packets[best].span,
+                                   jitter->pointer_timestamp);
+      spx_int32_t allowed = desired_span < end_delta ? desired_span : end_delta;
+      spx_uint32_t copy_len;
+
+      if (jitter->packets[best].len > packet->len ||
+          (jitter->packets[best].len > 0 && packet->data == NULL) ||
+          allowed <= 0)
+         return JITTER_BUFFER_BAD_ARGUMENT;
+
+      copy_len = jitter->packets[best].len;
+      for (i=0;i<(int)copy_len;i++)
+         packet->data[i] = jitter->packets[best].data[i];
+
+      packet->len = copy_len;
+      packet->timestamp = jitter->packets[best].timestamp;
+      packet->span = jitter->packets[best].span;
+      packet->sequence = jitter->packets[best].sequence;
+      packet->user_data = jitter->packets[best].user_data;
+      if (start_offset)
+         *start_offset = best_start_delta;
+
+      jitter->pull_auth_valid = 1;
+      jitter->pull_auth_index = best;
+      jitter->pull_auth_frames = (spx_uint32_t)allowed;
+      return JITTER_BUFFER_OK;
+   }
+
+   gap = desired_span;
+   if (have_next && next_delta < gap)
+      gap = next_delta;
+   if (gap <= 0)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   packet->len = 0;
+   packet->timestamp = jitter->pointer_timestamp;
+   packet->span = (spx_uint32_t)gap;
+   if (start_offset)
+      *start_offset = 0;
+
+   jitter->pull_auth_valid = 1;
+   jitter->pull_auth_index = -1;
+   jitter->pull_auth_frames = (spx_uint32_t)gap;
+   return JITTER_BUFFER_MISSING;
+}
+
+EXPORT int jitter_buffer_consume(JitterBuffer *jitter, spx_uint32_t frames)
+{
+   spx_uint32_t packet_end;
+
+   if (!jitter)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   /* Explicit zero consumption is always a no-op, even without authorization. */
+   if (frames == 0)
+      return JITTER_BUFFER_OK;
+
+   if (!jitter->pull_mode || !jitter->pull_auth_valid)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   if (frames > jitter->pull_auth_frames)
+      return JITTER_BUFFER_BAD_ARGUMENT;
+
+   if (jitter->pull_auth_index >= 0)
+   {
+      int idx = jitter->pull_auth_index;
+      if (idx >= SPEEX_JITTER_MAX_BUFFER_SIZE || !jitter->packets[idx].data)
+      {
+         jitter->pull_auth_valid = 0;
+         return JITTER_BUFFER_BAD_ARGUMENT;
+      }
+
+      packet_end = jitter->packets[idx].timestamp + jitter->packets[idx].span;
+      jitter->pointer_timestamp += frames;
+      jitter->last_returned_timestamp = jitter->pointer_timestamp;
+
+      /* The peek bound guarantees we cannot pass the packet end. Release the
+         queue copy only when the complete media interval has been consumed. */
+      if (jitter->pointer_timestamp == packet_end)
+      {
+         if (jitter->destroy)
+            jitter->destroy(jitter->packets[idx].data);
+         else
+            speex_free(jitter->packets[idx].data);
+         jitter->packets[idx].data = NULL;
+      }
+   }
+   else
+   {
+      jitter->pointer_timestamp += frames;
+      jitter->last_returned_timestamp = jitter->pointer_timestamp;
+   }
+
+   jitter->pull_auth_valid = 0;
+   jitter->pull_auth_index = -1;
+   jitter->pull_auth_frames = 0;
+   return JITTER_BUFFER_OK;
+}
 
 /* Used like the ioctl function to control the jitter buffer parameters */
 EXPORT int jitter_buffer_ctl(JitterBuffer *jitter, int request, void *ptr)

@@ -592,13 +592,18 @@ static int resampler_basic_zero(SpeexResamplerState *st, spx_uint32_t channel_in
 
 static int multiply_frac(spx_uint32_t *result, spx_uint32_t value, spx_uint32_t num, spx_uint32_t den)
 {
-   spx_uint32_t major = value / den;
-   spx_uint32_t remain = value % den;
-   /* TODO: Could use 64 bits operation to check for overflow. But only guaranteed in C99+ */
-   if (remain > UINT32_MAX / num || major > UINT32_MAX / num
-       || major * num > UINT32_MAX - remain * num / den)
+   unsigned long long scaled;
+
+   if (den == 0)
       return RESAMPLER_ERR_OVERFLOW;
-   *result = remain * num / den + major * num;
+
+   /* The intermediate product of two 32-bit fractions fits in 64 bits.
+      Open-coding the floor also avoids rejecting same-denominator rate
+      updates whose numerator is larger than UINT32_MAX/num. */
+   scaled = ((unsigned long long)value * (unsigned long long)num) / den;
+   if (scaled > UINT32_MAX)
+      return RESAMPLER_ERR_OVERFLOW;
+   *result = (spx_uint32_t)scaled;
    return RESAMPLER_ERR_SUCCESS;
 }
 
