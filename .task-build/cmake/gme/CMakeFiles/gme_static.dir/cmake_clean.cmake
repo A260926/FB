@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/gme_static.dir/Blip_Buffer.cpp.o"
+  "CMakeFiles/gme_static.dir/Blip_Buffer.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Classic_Emu.cpp.o"
+  "CMakeFiles/gme_static.dir/Classic_Emu.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Data_Reader.cpp.o"
+  "CMakeFiles/gme_static.dir/Data_Reader.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Dual_Resampler.cpp.o"
+  "CMakeFiles/gme_static.dir/Dual_Resampler.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Effects_Buffer.cpp.o"
+  "CMakeFiles/gme_static.dir/Effects_Buffer.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Fir_Resampler.cpp.o"
+  "CMakeFiles/gme_static.dir/Fir_Resampler.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Gme_File.cpp.o"
+  "CMakeFiles/gme_static.dir/Gme_File.cpp.o.d"
+  "CMakeFiles/gme_static.dir/M3u_Playlist.cpp.o"
+  "CMakeFiles/gme_static.dir/M3u_Playlist.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Multi_Buffer.cpp.o"
+  "CMakeFiles/gme_static.dir/Multi_Buffer.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Music_Emu.cpp.o"
+  "CMakeFiles/gme_static.dir/Music_Emu.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Snes_Spc.cpp.o"
+  "CMakeFiles/gme_static.dir/Snes_Spc.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Spc_Cpu.cpp.o"
+  "CMakeFiles/gme_static.dir/Spc_Cpu.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Spc_Dsp.cpp.o"
+  "CMakeFiles/gme_static.dir/Spc_Dsp.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Spc_Emu.cpp.o"
+  "CMakeFiles/gme_static.dir/Spc_Emu.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Spc_Filter.cpp.o"
+  "CMakeFiles/gme_static.dir/Spc_Filter.cpp.o.d"
+  "CMakeFiles/gme_static.dir/Spc_Preview.cpp.o"
+  "CMakeFiles/gme_static.dir/Spc_Preview.cpp.o.d"
+  "CMakeFiles/gme_static.dir/gme.cpp.o"
+  "CMakeFiles/gme_static.dir/gme.cpp.o.d"
+  "libgme.a"
+  "libgme.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/gme_static.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

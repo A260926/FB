@@ -194,6 +194,8 @@ if(USE_GME_SPC)
                 Spc_Emu.h
                 Spc_Filter.cpp
                 Spc_Filter.h
+                Spc_Preview.cpp
+                Spc_Preview.h
         )
     if(GME_SPC_ISOLATED_ECHO_BUFFER)
         add_definitions(-DSPC_ISOLATED_ECHO_BUFFER)
