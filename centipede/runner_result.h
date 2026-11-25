@@ -26,6 +26,7 @@
 #include "./centipede/execution_metadata.h"
 #include "./centipede/feature.h"
 #include "./centipede/mutation_data.h"
+#include "./centipede/session_feedback.h"
 #include "./centipede/shared_memory_blob_sequence.h"
 #include "./common/defs.h"
 
@@ -75,11 +76,21 @@ class ExecutionResult {
   const ExecutionMetadata& metadata() const { return metadata_; }
   ExecutionMetadata& metadata() { return metadata_; }
 
+  // Raw model-session event stream for this input, in its original order.
+  // Populated only by BatchResult::ReadSessionBatch.
+  const std::vector<SessionEvent>& session_events() const {
+    return session_events_;
+  }
+  std::vector<SessionEvent>& mutable_session_events() {
+    return session_events_;
+  }
+
   // Clears the data, but doesn't deallocate the heap storage.
   void clear() {
     features_.clear();
     metadata_ = {};
     stats_ = {};
+    session_events_.clear();
   }
 
  private:
@@ -88,6 +99,8 @@ class ExecutionResult {
   ExecutionMetadata metadata_;  // Metadata from executing one input.
 
   Stats stats_;  // Stats from executing one input.
+
+  std::vector<SessionEvent> session_events_;  // Raw session trajectory.
 };
 
 // BatchResult is the communication API between Centipede and its runner.
@@ -137,6 +150,25 @@ class BatchResult {
   // Writes the execution `metadata` to `blobseq` as raw bytes.
   // Returns true iff successful.
   static bool WriteMetadata(ByteSpan bytes, BlobSequence& blobseq);
+
+  // Writes one model-session `event` to `blobseq` using the fixed 40-byte
+  // little-endian tag-9 payload. Validates only the single-event shape;
+  // returns false (without changing blobseq offset or bytes) for an illegal
+  // event or when there is not enough capacity. Does not track sessions.
+  static bool WriteSessionEvent(const SessionEvent& event,
+                                BlobSequence& blobseq);
+
+  // Reads everything written by the runner to `blobseq` into `this`,
+  // validating model-session events against `model` along declared edges and
+  // merging the resulting domain-14/15 features with ordinary features.
+  //
+  // Reads at most results().size() inputs (set via ClearAndResize(N)).
+  // On any framing, event or model violation returns false and leaves every
+  // field of this BatchResult untouched. On success only the complete
+  // InputEnd-terminated prefix is published in slots 0..num_outputs_read()-1;
+  // a single legal but InputEnd-less trailing input and all remaining slots
+  // are cleared. An empty stream succeeds and clears every slot.
+  bool ReadSessionBatch(BlobSequence& blobseq, const SessionModel& model);
 
   // Reads everything written by the runner to `blobseq` into `this`.
   // Returns true iff successful.

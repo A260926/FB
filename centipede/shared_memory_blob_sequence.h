@@ -83,10 +83,19 @@ class BlobSequence {
 
   // Resets the internal state, allowing to read from or write to
   // starting from the beginning of the blob sequence.
+  // Also clears read_error().
   void Reset();
 
   // The position after last Write (or last Read).
   size_t offset() const { return offset_; }
+
+  // Returns true iff the most recent read phase since the last Reset()
+  // encountered corrupt framing: a non-zero truncated header, a zero tag
+  // with a non-zero size, or a payload that runs past the end of the buffer.
+  // A normal all-zero terminator header or ending exactly at the buffer
+  // boundary after a complete blob does not set this.
+  // The flag is sticky until Reset().
+  bool read_error() const { return read_error_; }
 
  protected:
   // Default constructor to create an empty blob sequence. It is used by the
@@ -105,6 +114,7 @@ class BlobSequence {
   size_t offset_ = 0;
   bool had_reads_after_reset_ = false;
   bool had_writes_after_reset_ = false;
+  bool read_error_ = false;
 };
 
 // SharedMemoryBlobSequence:

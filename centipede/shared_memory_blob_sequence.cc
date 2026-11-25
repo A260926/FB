@@ -74,7 +74,21 @@ bool BlobSequence::Write(Blob blob) {
 Blob BlobSequence::Read() {
   ErrorOnFailure(had_writes_after_reset_, "Had writes after reset");
   had_reads_after_reset_ = true;
-  if (offset_ + sizeof(Blob::size) + sizeof(Blob::tag) > size_) return {};
+  if (offset_ + sizeof(Blob::size) + sizeof(Blob::tag) > size_) {
+    // Not enough bytes left for a full header. Ending exactly at the buffer
+    // boundary (no bytes left) is the normal end of written data. A short
+    // all-zero tail is treated as padding/termination. Any non-zero bytes in
+    // a truncated header indicate corrupt framing.
+    if (offset_ < size_) {
+      for (size_t i = offset_; i < size_; ++i) {
+        if (data_[i] != 0) {
+          read_error_ = true;
+          break;
+        }
+      }
+    }
+    return {};
+  }
   size_t offset = offset_;
   // Read blob_tag.
   Blob::SizeAndTagT blob_tag = 0;
@@ -86,11 +100,13 @@ Blob BlobSequence::Read() {
   offset += sizeof(Blob::size);
   // Read blob_data.
   if (size_ - offset < blob_size) {
+    read_error_ = true;
     std::perror("Read(): not enough bytes");
     return {};
   }
   if (blob_tag == 0 && blob_size == 0) return {};
   if (blob_tag == 0) {
+    read_error_ = true;
     std::perror("Read(): blob.tag must not be zero");
     return {};
   }
@@ -102,6 +118,7 @@ void BlobSequence::Reset() {
   offset_ = 0;
   had_reads_after_reset_ = false;
   had_writes_after_reset_ = false;
+  read_error_ = false;
 }
 
 SharedMemoryBlobSequence::SharedMemoryBlobSequence(const char *name,
