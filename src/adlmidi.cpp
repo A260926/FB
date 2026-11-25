@@ -25,6 +25,7 @@
 #include "adlmidi_midiplay.hpp"
 #include "adlmidi_opl3.hpp"
 #include "adlmidi_private.hpp"
+#include "adlmidi_smf2.hpp"
 #include "chips/opl_chip_base.h"
 #ifndef ADLMIDI_DISABLE_MIDI_SEQUENCER
 #   define BWMIDI_ENABLE_OPL_MUSIC_SUPPORT
@@ -128,6 +129,7 @@ ADLMIDI_EXPORT void adl_close(struct ADL_MIDIPlayer *device)
 
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
+    adl_smf2::forget(device);
     delete play;
     device->adl_midiPlayer = NULL;
     free(device);
@@ -848,6 +850,12 @@ ADLMIDI_EXPORT int adl_openFile(ADL_MIDIPlayer *device, const char *filePath)
         assert(play);
 
 #ifndef ADLMIDI_DISABLE_MIDI_SEQUENCER
+        int layeredFile = adl_smf2::openFile(device, filePath);
+        if(layeredFile > 0)
+            return 0;
+        if(layeredFile < 0)
+            return -1;
+
         play->m_setup.tick_skip_samples_delay = 0;
 
         if(!play->LoadMIDI(filePath))
@@ -860,7 +868,10 @@ ADLMIDI_EXPORT int adl_openFile(ADL_MIDIPlayer *device, const char *filePath)
             return -1;
         }
         else
+        {
+            adl_smf2::noteLoadSuccess(device);
             return 0;
+        }
 #else
         ADL_UNUSED(filePath);
         play->setErrorString("ADLMIDI: MIDI Sequencer is not supported in this build of library!");
@@ -880,6 +891,12 @@ ADLMIDI_EXPORT int adl_openData(ADL_MIDIPlayer *device, const void *mem, unsigne
         assert(play);
 
 #ifndef ADLMIDI_DISABLE_MIDI_SEQUENCER
+        int layeredData = adl_smf2::openData(device, mem, size);
+        if(layeredData > 0)
+            return 0;
+        if(layeredData < 0)
+            return -1;
+
         play->m_setup.tick_skip_samples_delay = 0;
 
         if(!play->LoadMIDI(mem, static_cast<size_t>(size)))
@@ -892,7 +909,10 @@ ADLMIDI_EXPORT int adl_openData(ADL_MIDIPlayer *device, const void *mem, unsigne
             return -1;
         }
         else
+        {
+            adl_smf2::noteLoadSuccess(device);
             return 0;
+        }
 #else
         ADL_UNUSED(mem);
         ADL_UNUSED(size);
@@ -1089,6 +1109,7 @@ ADLMIDI_EXPORT void adl_reset(struct ADL_MIDIPlayer *device)
     assert(play);
     play->partialReset();
     play->resetMIDI();
+    adl_smf2::handleReset(device);
 }
 
 ADLMIDI_EXPORT double adl_totalTimeLength(struct ADL_MIDIPlayer *device)
@@ -1099,6 +1120,9 @@ ADLMIDI_EXPORT double adl_totalTimeLength(struct ADL_MIDIPlayer *device)
 
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
+    double layeredLength = adl_smf2::totalTimeLength(device);
+    if(layeredLength >= 0.0)
+        return layeredLength;
     return play->m_sequencer->timeLength();
 #else
     ADL_UNUSED(device);
@@ -1144,6 +1168,9 @@ ADLMIDI_EXPORT double adl_positionTell(struct ADL_MIDIPlayer *device)
 
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
+    double layeredTell = adl_smf2::positionTell(device);
+    if(layeredTell >= 0.0)
+        return layeredTell;
     return play->m_sequencer->tell();
 #else
     ADL_UNUSED(device);
@@ -1163,6 +1190,16 @@ ADLMIDI_EXPORT void adl_positionSeek(struct ADL_MIDIPlayer *device, double secon
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
     play->realTime_panic();
+
+    if(adl_smf2::totalTimeLength(device) >= 0.0)
+    {
+        adl_smf2::positionSeek(device, seconds);
+        play->m_setup.delay = 0.0;
+        play->m_setup.carry = 0.0;
+        play->m_setup.tick_skip_samples_delay = 0;
+        return;
+    }
+
     play->m_setup.delay = play->m_sequencer->seek(seconds, play->m_setup.mindelay);
     play->m_setup.carry = 0.0;
 #else
@@ -1180,6 +1217,16 @@ ADLMIDI_EXPORT void adl_positionRewind(struct ADL_MIDIPlayer *device)
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
     play->realTime_panic();
+
+    if(adl_smf2::totalTimeLength(device) >= 0.0)
+    {
+        adl_smf2::positionRewind(device);
+        play->m_setup.delay = 0.0;
+        play->m_setup.carry = 0.0;
+        play->m_setup.tick_skip_samples_delay = 0;
+        return;
+    }
+
     play->m_sequencer->rewind();
 #else
     ADL_UNUSED(device);
@@ -1195,6 +1242,7 @@ ADLMIDI_EXPORT void adl_setTempo(struct ADL_MIDIPlayer *device, double tempo)
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
     play->m_sequencer->setTempo(tempo);
+    adl_smf2::setTempo(device, tempo);
 #else
     ADL_UNUSED(device);
     ADL_UNUSED(tempo);
@@ -1618,6 +1666,9 @@ static int SendStereoAudio(int        samples_requested,
 
 ADLMIDI_EXPORT int adl_play(struct ADL_MIDIPlayer *device, int sampleCount, short *out)
 {
+    int layered = adl_smf2::playS16(device, sampleCount, out);
+    if(layered >= 0)
+        return layered;
     return adl_playFormat(device, sampleCount, (ADL_UInt8 *)out, (ADL_UInt8 *)(out + 1), &adl_DefaultAudioFormat);
 }
 
@@ -1868,6 +1919,9 @@ ADLMIDI_EXPORT int adl_atEnd(struct ADL_MIDIPlayer *device)
 
     MidiPlayer *play = GET_MIDI_PLAYER(device);
     assert(play);
+    int layeredEnd = adl_smf2::atEnd(device);
+    if(layeredEnd >= 0)
+        return layeredEnd;
     return (int)play->m_sequencer->positionAtEnd();
 #else
     ADL_UNUSED(device);

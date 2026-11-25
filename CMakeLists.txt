@@ -562,6 +562,7 @@ set(libADLMIDI_SOURCES
     ${libADLMIDI_SOURCE_DIR}/src/adlmidi_midiplay.cpp
     ${libADLMIDI_SOURCE_DIR}/src/adlmidi_opl3.cpp
     ${libADLMIDI_SOURCE_DIR}/src/adlmidi_private.cpp
+    ${libADLMIDI_SOURCE_DIR}/src/adlmidi_smf2.cpp
     ${libADLMIDI_SOURCE_DIR}/src/wopl/wopl_file.c
     ${OPL_MODELS_SOURCES}
 )

@@ -1,0 +1,8 @@
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/ADLMIDI_static.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/ADLMIDI_version_check.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS731E29731183U16237/attempts/20261125T163958291527Z/repo/.task-build/cmake/CMakeFiles/install/strip.dir

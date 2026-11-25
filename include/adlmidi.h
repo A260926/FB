@@ -949,6 +949,19 @@ extern ADLMIDI_DECLSPEC struct ADL_MIDIPlayer *adl_init(long sample_rate);
  */
 extern ADLMIDI_DECLSPEC void adl_close(struct ADL_MIDIPlayer *device);
 
+/**
+ * @brief Enable or disable layered SMF Format 2 playback
+ *
+ * Layered playback gives every SMF2 track its own tempo map and MIDI port.
+ * The setting may only be changed before a music file has been successfully
+ * loaded by this player instance.
+ *
+ * @param device Instance of the library
+ * @param enabled 1 to enable layered SMF2, 0 to use the legacy behaviour
+ * @return 0 on success, -1 for a null device, invalid value, or loaded player
+ */
+extern ADLMIDI_DECLSPEC int adl_setSMF2Layered(struct ADL_MIDIPlayer *device, int enabled);
+
 
 
 /* ======== MIDI Sequencer ======== */
