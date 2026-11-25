@@ -44,6 +44,7 @@
 # include "frame.h"
 # include "huffman.h"
 # include "layer3.h"
+# include "codec_hooks.h"
 
 /* --- Layer III ----------------------------------------------------------- */
 
@@ -57,33 +58,6 @@ enum {
 enum {
   I_STEREO  = 0x1,
   MS_STEREO = 0x2
-};
-
-struct sideinfo {
-  unsigned int main_data_begin;
-  unsigned int private_bits;
-
-  unsigned char scfsi[2];
-
-  struct granule {
-    struct channel {
-      /* from side info */
-      unsigned short part2_3_length;
-      unsigned short big_values;
-      unsigned short global_gain;
-      unsigned short scalefac_compress;
-
-      unsigned char flags;
-      unsigned char block_type;
-      unsigned char table_select[3];
-      unsigned char subblock_gain[3];
-      unsigned char region0_count;
-      unsigned char region1_count;
-
-      /* from main_data */
-      unsigned char scalefac[39];	/* scalefac_l and/or scalefac_s */
-    } ch[2];
-  } gr[2];
 };
 
 /*
@@ -2406,6 +2380,173 @@ void III_freqinver(mad_fixed_t sample[18][32], unsigned int sb)
 }
 
 /*
+ * NAME:	III_decode_granule()
+ * DESCRIPTION:	decode one granule of main_data (shared granule primitive)
+ *
+ * This is the real granule core.  It consumes exactly one granule's worth of
+ * scalefactors, Huffman data, joint stereo, IMDCT/overlap, and frequency
+ * inversion.  *ptr and *bits_left advance monotonically and are retained by
+ * the caller so the next granule resumes at the exact main-data position.
+ * The physical frame's overlap history is updated in place.
+ */
+enum mad_error mad_iii_decode_granule(struct mad_bitptr *ptr,
+				      struct mad_frame *frame,
+				      struct sideinfo *si,
+				      unsigned int sfreqi,
+				      unsigned int nch, unsigned int gr,
+				      int *bits_left)
+{
+  struct mad_header *header = &frame->header;
+  struct granule *granule = &si->gr[gr];
+  unsigned char const *sfbwidth[2];
+  mad_fixed_t xr[2][576];
+  unsigned int ch;
+  enum mad_error error;
+
+  MAD_GRANULE_SPECTRAL_BEGIN();
+
+  for (ch = 0; ch < nch; ++ch) {
+    struct channel *channel = &granule->ch[ch];
+    unsigned int part2_length;
+    unsigned int part3_length;
+
+    sfbwidth[ch] = sfbwidth_table[sfreqi].l;
+    if (channel->block_type == 2) {
+      sfbwidth[ch] = (channel->flags & mixed_block_flag) ?
+        sfbwidth_table[sfreqi].m : sfbwidth_table[sfreqi].s;
+    }
+
+    if (header->flags & MAD_FLAG_LSF_EXT) {
+      error = III_scalefactors_lsf(ptr, channel,
+					  ch == 0 ? 0 : &si->gr[1].ch[1],
+					  header->mode_extension, *bits_left, &part2_length);
+    }
+    else {
+      error = III_scalefactors(ptr, channel, &si->gr[0].ch[ch],
+				      gr == 0 ? 0 : si->scfsi[ch], *bits_left, &part2_length);
+    }
+    if (error)
+      return error;
+
+    *bits_left -= part2_length;
+
+    if (part2_length > channel->part2_3_length)
+      return MAD_ERROR_BADPART3LEN;
+
+    part3_length = channel->part2_3_length - part2_length;
+    if (part3_length > *bits_left)
+      return MAD_ERROR_BADPART3LEN;
+
+    error = III_huffdecode(ptr, xr[ch], channel, sfbwidth[ch], part3_length);
+    if (error)
+      return error;
+    *bits_left -= part3_length;
+  }
+
+  /* joint stereo processing */
+
+  if (header->mode == MAD_MODE_JOINT_STEREO && header->mode_extension) {
+    error = III_stereo(xr, granule, header, sfbwidth[0]);
+    if (error)
+      return error;
+  }
+
+  /* reordering, alias reduction, IMDCT, overlap-add, frequency inversion */
+
+  for (ch = 0; ch < nch; ++ch) {
+    struct channel const *channel = &granule->ch[ch];
+    mad_fixed_t (*sample)[32] = &frame->sbsample[ch][18 * gr];
+    unsigned int sb, l, i, sblimit;
+    mad_fixed_t output[36];
+
+    if (channel->block_type == 2) {
+      III_reorder(xr[ch], channel, sfbwidth[ch]);
+
+# if !defined(OPT_STRICT)
+      /*
+       * According to ISO/IEC 11172-3, "Alias reduction is not applied for
+       * granules with block_type == 2 (short block)." However, other
+       * sources suggest alias reduction should indeed be performed on the
+       * lower two subbands of mixed blocks. Most other implementations do
+       * this, so by default we will too.
+       */
+      if (channel->flags & mixed_block_flag)
+        III_aliasreduce(xr[ch], 36);
+# endif
+    }
+    else
+      III_aliasreduce(xr[ch], 576);
+
+    l = 0;
+
+    /* subbands 0-1 */
+
+    if (channel->block_type != 2 || (channel->flags & mixed_block_flag)) {
+      unsigned int block_type;
+
+      block_type = channel->block_type;
+      if (channel->flags & mixed_block_flag)
+        block_type = 0;
+
+      /* long blocks */
+      for (sb = 0; sb < 2; ++sb, l += 18) {
+        III_imdct_l(&xr[ch][l], output, block_type);
+        III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
+      }
+    }
+    else {
+      /* short blocks */
+      for (sb = 0; sb < 2; ++sb, l += 18) {
+        III_imdct_s(&xr[ch][l], output);
+        III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
+      }
+    }
+
+    III_freqinver(sample, 1);
+
+    /* (nonzero) subbands 2-31 */
+
+    i = 576;
+    while (i > 36 && xr[ch][i - 1] == 0)
+      --i;
+
+    sblimit = 32 - (576 - i) / 18;
+
+    if (channel->block_type != 2) {
+      /* long blocks */
+      for (sb = 2; sb < sblimit; ++sb, l += 18) {
+        III_imdct_l(&xr[ch][l], output, channel->block_type);
+        III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
+
+        if (sb & 1)
+          III_freqinver(sample, sb);
+      }
+    }
+    else {
+      /* short blocks */
+      for (sb = 2; sb < sblimit; ++sb, l += 18) {
+        III_imdct_s(&xr[ch][l], output);
+        III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
+
+        if (sb & 1)
+          III_freqinver(sample, sb);
+      }
+    }
+
+    /* remaining (zero) subbands */
+
+    for (sb = sblimit; sb < 32; ++sb) {
+      III_overlap_z((*frame->overlap)[ch][sb], sample, sb);
+
+      if (sb & 1)
+        III_freqinver(sample, sb);
+    }
+  }
+
+  return MAD_ERROR_NONE;
+}
+
+/*
  * NAME:	III_decode()
  * DESCRIPTION:	decode frame main_data
  */
@@ -2433,171 +2574,37 @@ enum mad_error III_decode(struct mad_bitptr *ptr, struct mad_frame *frame,
       sfreqi += 3;
   }
 
-  /* scalefactors, Huffman decoding, requantization */
-
   ngr = (header->flags & MAD_FLAG_LSF_EXT) ? 1 : 2;
 
   for (gr = 0; gr < ngr; ++gr) {
-    struct granule *granule = &si->gr[gr];
-    unsigned char const *sfbwidth[2];
-    mad_fixed_t xr[2][576];
-    unsigned int ch;
     enum mad_error error;
 
-    for (ch = 0; ch < nch; ++ch) {
-      struct channel *channel = &granule->ch[ch];
-      unsigned int part2_length;
-      unsigned int part3_length;
-
-      sfbwidth[ch] = sfbwidth_table[sfreqi].l;
-      if (channel->block_type == 2) {
-	sfbwidth[ch] = (channel->flags & mixed_block_flag) ?
-	  sfbwidth_table[sfreqi].m : sfbwidth_table[sfreqi].s;
-      }
-
-      if (header->flags & MAD_FLAG_LSF_EXT) {
-	error = III_scalefactors_lsf(ptr, channel,
-					    ch == 0 ? 0 : &si->gr[1].ch[1],
-					    header->mode_extension, bits_left, &part2_length);
-      }
-      else {
-	error = III_scalefactors(ptr, channel, &si->gr[0].ch[ch],
-					gr == 0 ? 0 : si->scfsi[ch], bits_left, &part2_length);
-      }
-      if (error)
-        return error;
-
-      bits_left -= part2_length;
-
-      if (part2_length > channel->part2_3_length)
-        return MAD_ERROR_BADPART3LEN;
-
-      part3_length = channel->part2_3_length - part2_length;
-      if (part3_length > bits_left)
-        return MAD_ERROR_BADPART3LEN;
-
-      error = III_huffdecode(ptr, xr[ch], channel, sfbwidth[ch], part3_length);
-      if (error)
-	return error;
-      bits_left -= part3_length;
-    }
-
-    /* joint stereo processing */
-
-    if (header->mode == MAD_MODE_JOINT_STEREO && header->mode_extension) {
-      error = III_stereo(xr, granule, header, sfbwidth[0]);
-      if (error)
-	return error;
-    }
-
-    /* reordering, alias reduction, IMDCT, overlap-add, frequency inversion */
-
-    for (ch = 0; ch < nch; ++ch) {
-      struct channel const *channel = &granule->ch[ch];
-      mad_fixed_t (*sample)[32] = &frame->sbsample[ch][18 * gr];
-      unsigned int sb, l, i, sblimit;
-      mad_fixed_t output[36];
-
-      if (channel->block_type == 2) {
-	III_reorder(xr[ch], channel, sfbwidth[ch]);
-
-# if !defined(OPT_STRICT)
-	/*
-	 * According to ISO/IEC 11172-3, "Alias reduction is not applied for
-	 * granules with block_type == 2 (short block)." However, other
-	 * sources suggest alias reduction should indeed be performed on the
-	 * lower two subbands of mixed blocks. Most other implementations do
-	 * this, so by default we will too.
-	 */
-	if (channel->flags & mixed_block_flag)
-	  III_aliasreduce(xr[ch], 36);
-# endif
-      }
-      else
-	III_aliasreduce(xr[ch], 576);
-
-      l = 0;
-
-      /* subbands 0-1 */
-
-      if (channel->block_type != 2 || (channel->flags & mixed_block_flag)) {
-	unsigned int block_type;
-
-	block_type = channel->block_type;
-	if (channel->flags & mixed_block_flag)
-	  block_type = 0;
-
-	/* long blocks */
-	for (sb = 0; sb < 2; ++sb, l += 18) {
-	  III_imdct_l(&xr[ch][l], output, block_type);
-	  III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
-	}
-      }
-      else {
-	/* short blocks */
-	for (sb = 0; sb < 2; ++sb, l += 18) {
-	  III_imdct_s(&xr[ch][l], output);
-	  III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
-	}
-      }
-
-      III_freqinver(sample, 1);
-
-      /* (nonzero) subbands 2-31 */
-
-      i = 576;
-      while (i > 36 && xr[ch][i - 1] == 0)
-	--i;
-
-      sblimit = 32 - (576 - i) / 18;
-
-      if (channel->block_type != 2) {
-	/* long blocks */
-	for (sb = 2; sb < sblimit; ++sb, l += 18) {
-	  III_imdct_l(&xr[ch][l], output, channel->block_type);
-	  III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
-
-	  if (sb & 1)
-	    III_freqinver(sample, sb);
-	}
-      }
-      else {
-	/* short blocks */
-	for (sb = 2; sb < sblimit; ++sb, l += 18) {
-	  III_imdct_s(&xr[ch][l], output);
-	  III_overlap(output, (*frame->overlap)[ch][sb], sample, sb);
-
-	  if (sb & 1)
-	    III_freqinver(sample, sb);
-	}
-      }
-
-      /* remaining (zero) subbands */
-
-      for (sb = sblimit; sb < 32; ++sb) {
-	III_overlap_z((*frame->overlap)[ch][sb], sample, sb);
-
-	if (sb & 1)
-	  III_freqinver(sample, sb);
-      }
-    }
+    error = mad_iii_decode_granule(ptr, frame, si, sfreqi, nch, gr,
+				   &bits_left);
+    if (error)
+      return error;
   }
 
   return MAD_ERROR_NONE;
 }
 
 /*
- * NAME:	layer->III()
- * DESCRIPTION:	decode a single Layer III frame
+ * NAME:	III_prepare()
+ * DESCRIPTION:	prepare one physical frame: sanity, CRC, side info, main data
+ *
+ * This performs everything up to (but not including) reading the first
+ * granule's scalefactors and Huffman data.  No spectral or synthesis work is
+ * done here.  A hard error returns -1 with stream->error set and no frame
+ * state to finish; otherwise 0 is returned and f->result records a soft error
+ * already stored in stream->error.  In the soft case the caller still owns the
+ * reservoir finalization (III_preload).
  */
-int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
+int mad_iii_prepare(struct mad_stream *stream, struct mad_frame *frame,
+		    struct mad_iii_frame *f)
 {
   struct mad_header *header = &frame->header;
-  unsigned int nch, priv_bitlen, next_md_begin = 0;
-  unsigned int si_len, data_bitlen, md_len;
-  unsigned int frame_space, frame_used, frame_free;
-  struct mad_bitptr ptr, bufend_ptr;
-  struct sideinfo si;
+  unsigned int nch, si_len, md_len, next_md_begin = 0;
+  struct mad_bitptr bufend_ptr;
   enum mad_error error;
   int result = 0;
 
@@ -2650,30 +2657,30 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
   /* decode frame side information */
 
   error = III_sideinfo(&stream->ptr, nch, header->flags & MAD_FLAG_LSF_EXT,
-		       &si, &data_bitlen, &priv_bitlen);
+		       &f->si, &f->data_bitlen, &f->priv_bitlen);
   if (error && result == 0) {
     stream->error = error;
     result = -1;
   }
 
-  header->flags        |= priv_bitlen;
-  header->private_bits |= si.private_bits;
+  header->flags        |= f->priv_bitlen;
+  header->private_bits |= f->si.private_bits;
 
   /* find main_data of next frame */
 
   {
     struct mad_bitptr peek;
-    unsigned long header;
+    unsigned long header_bits;
 
     mad_bit_init(&peek, stream->next_frame);
     if (mad_bit_length(&peek, &bufend_ptr) >= 57) {
-      header = mad_bit_read(&peek, 32);
-      if ((header & 0xffe60000L) /* syncword | layer */ == 0xffe20000L) {
-        if (!(header & 0x00010000L))  /* protection_bit */
+      header_bits = mad_bit_read(&peek, 32);
+      if ((header_bits & 0xffe60000L) /* syncword | layer */ == 0xffe20000L) {
+        if (!(header_bits & 0x00010000L))  /* protection_bit */
 	  mad_bit_skip(&peek, 16);  /* crc_check */
 
         next_md_begin =
-	  mad_bit_read(&peek, (header & 0x00080000L) /* ID */ ? 9 : 8);
+	  mad_bit_read(&peek, (header_bits & 0x00080000L) /* ID */ ? 9 : 8);
       }
     }
 
@@ -2682,91 +2689,108 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 
   /* find main_data of this frame */
 
-  frame_space = stream->next_frame - mad_bit_nextbyte(&stream->ptr);
+  f->frame_space = stream->next_frame - mad_bit_nextbyte(&stream->ptr);
 
-  if (next_md_begin > si.main_data_begin + frame_space)
+  if (next_md_begin > f->si.main_data_begin + f->frame_space)
     next_md_begin = 0;
 
-  md_len = si.main_data_begin + frame_space - next_md_begin;
+  md_len = f->si.main_data_begin + f->frame_space - next_md_begin;
   if (md_len + MAD_BUFFER_GUARD > MAD_BUFFER_MDLEN) {
     stream->error = MAD_ERROR_LOSTSYNC;
     stream->sync = 0;
     return -1;
   }
 
-  frame_used = 0;
+  f->frame_used = 0;
 
-  if (si.main_data_begin == 0) {
-    ptr = stream->ptr;
+  if (f->si.main_data_begin == 0) {
+    f->ptr = stream->ptr;
     stream->md_len = 0;
 
-    frame_used = md_len;
+    f->frame_used = md_len;
   }
   else {
-    if (si.main_data_begin > stream->md_len) {
+    if (f->si.main_data_begin > stream->md_len) {
       if (result == 0) {
 	stream->error = MAD_ERROR_BADDATAPTR;
 	result = -1;
       }
+
+      /* ptr is not consumed in the soft-error case, but keep it defined. */
+      f->ptr = stream->ptr;
     }
     else {
       memmove(stream->main_data,
-	*stream->main_data + stream->md_len - si.main_data_begin,
-	si.main_data_begin);
-      stream->md_len = si.main_data_begin;
-      mad_bit_init(&ptr, *stream->main_data);
+	*stream->main_data + stream->md_len - f->si.main_data_begin,
+	f->si.main_data_begin);
+      stream->md_len = f->si.main_data_begin;
+      mad_bit_init(&f->ptr, *stream->main_data);
 
-      if (md_len > si.main_data_begin) {
+      if (md_len > f->si.main_data_begin) {
 	assert(stream->md_len + md_len -
-	       si.main_data_begin <= MAD_BUFFER_MDLEN);
+	       f->si.main_data_begin <= MAD_BUFFER_MDLEN);
 
 	memcpy(*stream->main_data + stream->md_len,
 	       mad_bit_nextbyte(&stream->ptr),
-	       frame_used = md_len - si.main_data_begin);
-	stream->md_len += frame_used;
+	       f->frame_used = md_len - f->si.main_data_begin);
+	stream->md_len += f->frame_used;
       }
     }
   }
 
-  frame_free = frame_space - frame_used;
+  f->frame_free = f->frame_space - f->frame_used;
 
-  /* decode main_data */
+  f->nch    = nch;
+  f->ngr    = (header->flags & MAD_FLAG_LSF_EXT) ? 1 : 2;
+  f->md_len = md_len;
+  f->next_md_begin = next_md_begin;
+  f->bits_left = (int) (md_len * CHAR_BIT);
+  f->result = result;
 
-  if (result == 0) {
-    error = III_decode(&ptr, frame, &si, nch, md_len);
-    if (error) {
-      stream->error = error;
-      result = -1;
-    }
+  {
+    unsigned int sfreq;
 
-    /* designate ancillary bits */
+    sfreq = header->samplerate;
+    if (header->flags & MAD_FLAG_MPEG_2_5_EXT)
+      sfreq *= 2;
 
-    stream->anc_ptr    = ptr;
-    stream->anc_bitlen = md_len * CHAR_BIT - data_bitlen;
+    /* 48000 => 0, 44100 => 1, 32000 => 2,
+       24000 => 3, 22050 => 4, 16000 => 5 */
+    f->sfreqi = ((sfreq >>  7) & 0x000f) +
+                ((sfreq >> 15) & 0x0001) - 8;
+
+    if (header->flags & MAD_FLAG_MPEG_2_5_EXT)
+      f->sfreqi += 3;
   }
 
-# if 0 && defined(DEBUG)
-  fprintf(stderr,
-	  "main_data_begin:%u, md_len:%u, frame_free:%u, "
-	  "data_bitlen:%u, anc_bitlen: %u\n",
-	  si.main_data_begin, md_len, frame_free,
-	  data_bitlen, stream->anc_bitlen);
-# endif
+  return 0;
+}
 
+/*
+ * NAME:	III_preload()
+ * DESCRIPTION:	finalize the reservoir and preload next frame's main data
+ *
+ * This must run exactly once, after the last granule of the physical frame
+ * has been consumed, so the bytes it rewrites in main_data can no longer be
+ * in flight.
+ */
+void mad_iii_preload(struct mad_stream *stream, struct mad_iii_frame const *f,
+		     unsigned char const *next_frame)
+{
   /* preload main_data buffer with up to 511 bytes for next frame(s) */
 
-  if (frame_free >= next_md_begin) {
+  if (f->frame_free >= f->next_md_begin) {
     memcpy(*stream->main_data,
-	   stream->next_frame - next_md_begin, next_md_begin);
-    stream->md_len = next_md_begin;
+	   next_frame - f->next_md_begin, f->next_md_begin);
+    stream->md_len = f->next_md_begin;
   }
   else {
-    if (md_len < si.main_data_begin) {
+    if (f->md_len < f->si.main_data_begin) {
       unsigned int extra;
 
-      extra = si.main_data_begin - md_len;
-      if (extra + frame_free > next_md_begin)
-	extra = next_md_begin - frame_free;
+      extra = f->si.main_data_begin - f->md_len;
+      if (extra + f->frame_free > f->next_md_begin)
+	extra = f->next_md_begin - f->frame_free;
 
       if (extra < stream->md_len) {
 	memmove(*stream->main_data,
@@ -2778,9 +2802,50 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
       stream->md_len = 0;
 
     memcpy(*stream->main_data + stream->md_len,
-	   stream->next_frame - frame_free, frame_free);
-    stream->md_len += frame_free;
+	   next_frame - f->frame_free, f->frame_free);
+    stream->md_len += f->frame_free;
+  }
+}
+
+/*
+ * NAME:	layer->III()
+ * DESCRIPTION:	decode a single Layer III frame
+ */
+int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
+{
+  struct mad_iii_frame f;
+
+  if (mad_iii_prepare(stream, frame, &f) == -1)
+    return -1;
+
+  /* decode main_data */
+
+  if (f.result == 0) {
+    enum mad_error error;
+
+    error = III_decode(&f.ptr, frame, &f.si, f.nch, f.md_len);
+    if (error) {
+      stream->error = error;
+      f.result = -1;
+    }
+
+    /* designate ancillary bits */
+
+    stream->anc_ptr    = f.ptr;
+    stream->anc_bitlen = f.md_len * CHAR_BIT - f.data_bitlen;
   }
 
-  return result;
+# if 0 && defined(DEBUG)
+  fprintf(stderr,
+	  "main_data_begin:%u, md_len:%u, frame_free:%u, "
+	  "data_bitlen:%u, anc_bitlen: %u\n",
+	  f.si.main_data_begin, f.md_len, f.frame_free,
+	  f.data_bitlen, stream->anc_bitlen);
+# endif
+
+  /* preload main_data buffer for the following frame(s) */
+
+  mad_iii_preload(stream, &f, stream->next_frame);
+
+  return f.result;
 }

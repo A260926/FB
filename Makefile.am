@@ -35,20 +35,21 @@ minimad_INCLUDES =
 minimad_LDADD =		libmad.la
 
 EXTRA_DIST =		mad.h.sed Version_script libmad.def libmad.exports \
-			CHANGES COPYRIGHT CREDITS README TODO VERSION
+			CHANGES COPYRIGHT CREDITS README TODO VERSION \
+			doc/granule.md
 
 exported_headers =	version.h fixed.h bit.h timer.h stream.h frame.h  \
-			synth.h decoder.h
+			synth.h decoder.h granule.h
 
 headers =		$(exported_headers)  \
-			global.h layer12.h layer3.h huffman.h
+			global.h layer12.h layer3.h huffman.h codec_hooks.h
 
 data_includes =		D.dat imdct_s.dat qc_table.dat rq_table.dat  \
 			sf_table.dat
 
 libmad_la_SOURCES =	version.c fixed.c bit.c timer.c stream.c frame.c  \
 			synth.c decoder.c layer12.c layer3.c huffman.c  \
-			$(headers) $(data_includes)
+			granule.c $(headers) $(data_includes)
 
 EXTRA_libmad_la_SOURCES =	imdct_l_arm.S #synth_mmx.S
 

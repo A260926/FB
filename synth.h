@@ -66,4 +66,19 @@ void mad_synth_mute(struct mad_synth *);
 
 void mad_synth_frame(struct mad_synth *, struct mad_frame const *);
 
+/*
+ * Range synthesis primitive shared by mad_synth_frame() and the bounded
+ * granule session.
+ *
+ * Synthesize exactly the 18-subband steps s in [start, start + ns) of
+ * frame->sbsample into synth->pcm.samples[ch] + 32 * start (16 * start for
+ * HALFSAMPLERATE).  synth->phase is advanced by ns, so a caller may invoke
+ * this once per granule without resetting or duplicating the filterbank
+ * phase.  frame->options selects full/half rate.  Returns the number of
+ * output samples per channel written for the range.
+ */
+unsigned int mad_synth_step(struct mad_synth *synth,
+			    struct mad_frame const *frame,
+			    unsigned int start, unsigned int ns);
+
 # endif

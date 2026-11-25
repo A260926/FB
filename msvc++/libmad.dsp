@@ -103,6 +103,10 @@ SOURCE=..\frame.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\granule.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\huffman.c
 # End Source File
 # Begin Source File
@@ -139,6 +143,10 @@ SOURCE=..\bit.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\codec_hooks.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\config.h
 # End Source File
 # Begin Source File
@@ -156,6 +164,10 @@ SOURCE=..\frame.h
 # Begin Source File
 
 SOURCE=..\global.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\granule.h
 # End Source File
 # Begin Source File
 

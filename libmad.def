@@ -41,3 +41,10 @@ mad_decoder_finish
 mad_decoder_init
 mad_decoder_message
 mad_decoder_run
+mad_granule_new
+mad_granule_free
+mad_granule_feed
+mad_granule_finish
+mad_granule_next
+mad_granule_progress
+mad_granule_reset

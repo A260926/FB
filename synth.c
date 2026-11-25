@@ -28,6 +28,7 @@
 # include "fixed.h"
 # include "frame.h"
 # include "synth.h"
+# include "codec_hooks.h"
 
 /*
  * NAME:	synth->init()
@@ -556,7 +557,7 @@ void synth_full(struct mad_synth *, struct mad_frame const *,
  */
 static
 void synth_full(struct mad_synth *synth, struct mad_frame const *frame,
-		unsigned int nch, unsigned int ns)
+		unsigned int nch, unsigned int start, unsigned int ns)
 {
   unsigned int phase, ch, s, sb, pe, po;
   mad_fixed_t *pcm1, *pcm2, (*filter)[2][2][16][8];
@@ -570,10 +571,10 @@ void synth_full(struct mad_synth *synth, struct mad_frame const *frame,
     sbsample = &frame->sbsample[ch];
     filter   = &synth->filter[ch];
     phase    = synth->phase;
-    pcm1     = synth->pcm.samples[ch];
+    pcm1     = synth->pcm.samples[ch] + 32 * start;
 
     for (s = 0; s < ns; ++s) {
-      dct32((*sbsample)[s], phase >> 1,
+      dct32((*sbsample)[start + s], phase >> 1,
 	    (*filter)[0][phase & 1], (*filter)[1][phase & 1]);
 
       pe = phase & ~1;
@@ -693,7 +694,7 @@ void synth_full(struct mad_synth *synth, struct mad_frame const *frame,
  */
 static
 void synth_half(struct mad_synth *synth, struct mad_frame const *frame,
-		unsigned int nch, unsigned int ns)
+		unsigned int nch, unsigned int start, unsigned int ns)
 {
   unsigned int phase, ch, s, sb, pe, po;
   mad_fixed_t *pcm1, *pcm2, (*filter)[2][2][16][8];
@@ -707,10 +708,10 @@ void synth_half(struct mad_synth *synth, struct mad_frame const *frame,
     sbsample = &frame->sbsample[ch];
     filter   = &synth->filter[ch];
     phase    = synth->phase;
-    pcm1     = synth->pcm.samples[ch];
+    pcm1     = synth->pcm.samples[ch] + 16 * start;
 
     for (s = 0; s < ns; ++s) {
-      dct32((*sbsample)[s], phase >> 1,
+      dct32((*sbsample)[start + s], phase >> 1,
 	    (*filter)[0][phase & 1], (*filter)[1][phase & 1]);
 
       pe = phase & ~1;
@@ -826,17 +827,23 @@ void synth_half(struct mad_synth *synth, struct mad_frame const *frame,
 }
 
 /*
- * NAME:	synth->frame()
- * DESCRIPTION:	perform PCM synthesis of frame subband samples
+ * NAME:	synth->step()
+ * DESCRIPTION:	perform PCM synthesis over a range of subband steps
+ *
+ * This is the real 18-subband-step synthesis entry shared by both APIs.
+ * It synthesizes exactly ns subband steps beginning at `start`, writing
+ * samples at the corresponding offset in synth->pcm.samples, and advances
+ * synth->phase so consecutive calls continue the filterbank in place.
  */
-void mad_synth_frame(struct mad_synth *synth, struct mad_frame const *frame)
+unsigned int mad_synth_step(struct mad_synth *synth,
+			    struct mad_frame const *frame,
+			    unsigned int start, unsigned int ns)
 {
-  unsigned int nch, ns;
+  unsigned int nch;
   void (*synth_frame)(struct mad_synth *, struct mad_frame const *,
-		      unsigned int, unsigned int);
+		      unsigned int, unsigned int, unsigned int);
 
   nch = MAD_NCHANNELS(&frame->header);
-  ns  = MAD_NSBSAMPLES(&frame->header);
 
   synth->pcm.samplerate = frame->header.samplerate;
   synth->pcm.channels   = nch;
@@ -851,7 +858,24 @@ void mad_synth_frame(struct mad_synth *synth, struct mad_frame const *frame)
     synth_frame = synth_half;
   }
 
-  synth_frame(synth, frame, nch, ns);
+  MAD_GRANULE_SYNTH_BEGIN();
+
+  synth_frame(synth, frame, nch, start, ns);
 
   synth->phase = (synth->phase + ns) % 16;
+
+  return synth->pcm.length;
+}
+
+/*
+ * NAME:	synth->frame()
+ * DESCRIPTION:	perform PCM synthesis of frame subband samples
+ */
+void mad_synth_frame(struct mad_synth *synth, struct mad_frame const *frame)
+{
+  unsigned int ns;
+
+  ns = MAD_NSBSAMPLES(&frame->header);
+
+  mad_synth_step(synth, frame, 0, ns);
 }
