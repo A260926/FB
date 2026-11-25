@@ -28,6 +28,149 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 static void invalidate_cache(struct anm_node *node);
 
+/* destroy all animation slots currently stored in the array, then free it */
+static void clear_animations(struct anm_node *node)
+{
+	int i, num_anim;
+	if(!node->animations) return;
+	num_anim = anm_dynarr_size(node->animations);
+	for(i=0; i<num_anim; i++) {
+		anm_destroy_animation(node->animations + i);
+	}
+	anm_dynarr_free(node->animations);
+	node->animations = 0;
+}
+
+/* deep-copies the node's animation array, sharing track key buffers.
+ * dest must already have a valid (possibly empty) animations array.
+ * returns 0 on success, -1 on allocation failure, leaving dest untouched. */
+static int clone_animations(struct anm_node *dest, const struct anm_node *src)
+{
+	int i, j, num_anim, initialized = 0;
+	void *newanim;
+
+	num_anim = anm_get_animation_count(src);
+
+	if(!(newanim = anm_dynarr_alloc(num_anim, sizeof(struct anm_animation)))) {
+		return -1;
+	}
+
+	for(i=0; i<num_anim; i++) {
+		struct anm_animation *anim = (struct anm_animation*)newanim + i;
+		int ok = 1;
+
+		if(anm_init_animation(anim) == -1) {
+			ok = 0;
+		}
+		for(j=0; j<ANM_NUM_TRACKS && ok; j++) {
+			struct anm_track *st = src->animations[i].tracks + j;
+			/* copies name and scalar settings, shares the key buffer */
+			if(anm_share_track(anim->tracks + j, st) == -1) {
+				ok = 0;
+			}
+		}
+		if(!ok) {
+			anm_destroy_animation(anim);
+			for(j=0; j<initialized; j++) {
+				anm_destroy_animation((struct anm_animation*)newanim + j);
+			}
+			anm_dynarr_free(newanim);
+			return -1;
+		}
+		initialized++;
+	}
+
+	/* copy animation names (track names were handled by anm_share_track) */
+	for(i=0; i<num_anim; i++) {
+		struct anm_animation *anim = (struct anm_animation*)newanim + i;
+		if(src->animations[i].name) {
+			if(!(anim->name = malloc(strlen(src->animations[i].name) + 1))) {
+				for(j=0; j<num_anim; j++) {
+					anm_destroy_animation((struct anm_animation*)newanim + j);
+				}
+				anm_dynarr_free(newanim);
+				return -1;
+			}
+			strcpy(anim->name, src->animations[i].name);
+		}
+	}
+
+	clear_animations(dest);
+	dest->animations = newanim;
+	return 0;
+}
+
+/* recursively clones a subtree; parent/next of the new root are cleared.
+ * On failure returns 0, freeing the partially built subtree. */
+static struct anm_node *clone_subtree(const struct anm_node *src)
+{
+	struct anm_node *node, *child, *prev = 0;
+
+	if(!(node = malloc(sizeof *node))) {
+		return 0;
+	}
+	/* start from a clean, cold-cache node, then overwrite the scalar state */
+	if(anm_init_node(node) == -1) {
+		free(node);
+		return 0;
+	}
+
+	if(src->name) {
+		if(!(node->name = malloc(strlen(src->name) + 1))) {
+			anm_free_node(node);
+			return 0;
+		}
+		strcpy(node->name, src->name);
+	}
+
+	if(clone_animations(node, src) == -1) {
+		anm_free_node(node);
+		return 0;
+	}
+
+	/* scalar state; matrices start zeroed by anm_init_node (cold cache) */
+	node->cur_anim[0] = src->cur_anim[0];
+	node->cur_anim[1] = src->cur_anim[1];
+	node->cur_anim_offset[0] = src->cur_anim_offset[0];
+	node->cur_anim_offset[1] = src->cur_anim_offset[1];
+	node->cur_mix = src->cur_mix;
+	node->blend_dur = src->blend_dur;
+	node->pivot[0] = src->pivot[0];
+	node->pivot[1] = src->pivot[1];
+	node->pivot[2] = src->pivot[2];
+	node->data = src->data;
+
+	node->parent = 0;
+	node->next = 0;
+	node->child = 0;
+
+	/* clone children, preserving order by appending to the tail */
+	for(child = src->child; child; child = child->next) {
+		struct anm_node *cclone = clone_subtree(child);
+		if(!cclone) {
+			anm_free_node_tree(node);
+			return 0;
+		}
+		cclone->parent = node;
+		if(prev) {
+			prev->next = cclone;
+		} else {
+			node->child = cclone;
+		}
+		prev = cclone;
+	}
+
+	return node;
+}
+
+struct anm_node *anm_clone_node_tree(const struct anm_node *src)
+{
+	if(!src) {
+		return 0;
+	}
+	return clone_subtree(src);
+}
+
 int anm_init_animation(struct anm_animation *anim)
 {
 	int i, j;
@@ -37,13 +180,16 @@ int anm_init_animation(struct anm_animation *anim)
 		1.0f, 1.0f, 1.0f		/* default scale factor */
 	};
 
-	anim->name = 0;
+	/* zero the whole struct first, so a failure part-way through leaves the
+	 * remaining tracks in a safe (empty) state for anm_destroy_animation */
+	memset(anim, 0, sizeof *anim);
 
 	for(i=0; i<ANM_NUM_TRACKS; i++) {
 		if(anm_init_track(anim->tracks + i) == -1) {
 			for(j=0; j<i; j++) {
-				anm_destroy_track(anim->tracks + i);
+				anm_destroy_track(anim->tracks + j);
 			}
+			return -1;
 		}
 		anm_set_track_default(anim->tracks + i, defaults[i]);
 	}
@@ -77,6 +223,7 @@ int anm_init_node(struct anm_node *node)
 	memset(node, 0, sizeof *node);
 
 	node->cur_anim[1] = -1;
+	node->blend_dur = -1;
 
 	if(!(node->animations = anm_dynarr_alloc(1, sizeof *node->animations))) {
 		return -1;
@@ -85,6 +232,13 @@ int anm_init_node(struct anm_node *node)
 		anm_dynarr_free(node->animations);
 		return -1;
 	}
+
+#ifndef ANIM_THREAD_SAFE
+	/* start with a cold matrix cache, so even a first query at time 0
+	 * (which happens to match the zero-initialized cache time) recomputes */
+	node->cache.time = ANM_TIME_INVAL;
+	node->cache.inv_time = ANM_TIME_INVAL;
+#endif
 
 #ifdef ANIM_THREAD_SAFE
 	/* initialize thread-local matrix cache */
@@ -914,7 +1068,7 @@ float *anm_get_inv_matrix(struct anm_node *node, float *mat, anm_time_t tm)
 		node->cache_list = cache;
 		pthread_mutex_unlock(&node->cache_list_lock);
 
-		cache->inv_time = ANM_TIME_INVAL;
+		cache->time = ANM_TIME_INVAL;
 		cache->inv_time = ANM_TIME_INVAL;
 		pthread_setspecific(node->cache_key, cache);
 	}
@@ -923,7 +1077,10 @@ float *anm_get_inv_matrix(struct anm_node *node, float *mat, anm_time_t tm)
 #endif
 
 	if(cache->inv_time != tm) {
-		anm_get_matrix(node, cache->inv_matrix, tm);
+		float tmp[16];
+
+		anm_get_matrix(node, tmp, tm);
+		cgm_mcopy(cache->inv_matrix, tmp);
 		cgm_minverse(cache->inv_matrix);
 		cache->inv_time = tm;
 	}

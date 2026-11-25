@@ -26,6 +26,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 static int keycmp(const void *a, const void *b);
 static int find_prev_key(const struct anm_keyframe *arr, int start, int end, anm_time_t tm);
+static void release_keys(struct anm_track *track);
+static int detach_keys(struct anm_track *track);
 
 static float interp_step(float v0, float v1, float v2, float v3, float t);
 static float interp_linear(float v0, float v1, float v2, float v3, float t);
@@ -60,6 +62,13 @@ int anm_init_track(struct anm_track *track)
 	if(!(track->keys = anm_dynarr_alloc(0, sizeof *track->keys))) {
 		return -1;
 	}
+	if(!(track->keys_refcount = malloc(sizeof *track->keys_refcount))) {
+		anm_dynarr_free(track->keys);
+		track->keys = 0;
+		return -1;
+	}
+	*track->keys_refcount = 1;
+
 	track->interp = ANM_INTERP_LINEAR;
 	track->extrap = ANM_EXTRAP_CLAMP;
 	return 0;
@@ -67,7 +76,56 @@ int anm_init_track(struct anm_track *track)
 
 void anm_destroy_track(struct anm_track *track)
 {
-	anm_dynarr_free(track->keys);
+	release_keys(track);
+	track->keys = 0;
+	track->keys_refcount = 0;
+}
+
+/* drop the track's reference to its key buffer, freeing it when it was the
+ * last holder */
+static void release_keys(struct anm_track *track)
+{
+	if(track->keys_refcount) {
+		if(--*track->keys_refcount <= 0) {
+			free(track->keys_refcount);
+			track->keys_refcount = 0;
+			anm_dynarr_free(track->keys);
+			track->keys = 0;
+		}
+	} else if(track->keys) {
+		/* no reference count: this buffer is not shared through the API */
+		anm_dynarr_free(track->keys);
+	}
+}
+
+/* if the key buffer is shared with other tracks, give this track a private
+ * copy of it, so writes don't affect the other sharers */
+static int detach_keys(struct anm_track *track)
+{
+	struct anm_keyframe *newkeys;
+	int *newref;
+
+	if(!track->keys_refcount || *track->keys_refcount <= 1) {
+		return 0;
+	}
+
+	if(!(newkeys = anm_dynarr_alloc(track->count, sizeof *newkeys))) {
+		return -1;
+	}
+	if(!(newref = malloc(sizeof *newref))) {
+		anm_dynarr_free(newkeys);
+		return -1;
+	}
+	if(track->count) {
+		memcpy(newkeys, track->keys, track->count * sizeof *newkeys);
+	}
+
+	release_keys(track);
+
+	track->keys = newkeys;
+	track->keys_refcount = newref;
+	*newref = 1;
+	return 0;
 }
 
 struct anm_track *anm_create_track(void)
@@ -91,10 +149,9 @@ void anm_free_track(struct anm_track *track)
 
 void anm_copy_track(struct anm_track *dest, const struct anm_track *src)
 {
+	release_keys(dest);
 	free(dest->name);
-	if(dest->keys) {
-		anm_dynarr_free(dest->keys);
-	}
+	dest->name = 0;
 
 	if(src->name) {
 		dest->name = malloc(strlen(src->name) + 1);
@@ -103,11 +160,63 @@ void anm_copy_track(struct anm_track *dest, const struct anm_track *src)
 
 	dest->count = src->count;
 	dest->keys = anm_dynarr_alloc(src->count, sizeof *dest->keys);
-	memcpy(dest->keys, src->keys, src->count * sizeof *dest->keys);
+	if(!dest->keys) {
+		dest->count = 0;
+		return;
+	}
+	if(!(dest->keys_refcount = malloc(sizeof *dest->keys_refcount))) {
+		anm_dynarr_free(dest->keys);
+		dest->keys = 0;
+		dest->count = 0;
+		return;
+	}
+	*dest->keys_refcount = 1;
+	if(src->count) {
+		memcpy(dest->keys, src->keys, src->count * sizeof *dest->keys);
+	}
 
 	dest->def_val = src->def_val;
 	dest->interp = src->interp;
 	dest->extrap = src->extrap;
+}
+
+int anm_share_track(struct anm_track *dest, const struct anm_track *src)
+{
+	if(dest == src) {
+		return 0;	/* sharing with itself is a no-op */
+	}
+	if(!dest->keys || !src->keys || !src->keys_refcount) {
+		return -1;	/* not initialized */
+	}
+
+	/* the destination must end up holding its own reference to the buffer */
+	if(dest->keys_refcount) {
+		release_keys(dest);
+	} else {
+		anm_dynarr_free(dest->keys);
+	}
+
+	dest->keys = src->keys;
+	dest->keys_refcount = src->keys_refcount;
+	dest->count = src->count;
+	++*dest->keys_refcount;
+
+	/* scalar settings and name are independent copies of the source's */
+	dest->def_val = src->def_val;
+	dest->interp = src->interp;
+	dest->extrap = src->extrap;
+
+	if(src->name) {
+		size_t len = strlen(src->name) + 1;
+		char *new_name = malloc(len);
+		if(new_name) {
+			memcpy(new_name, src->name, len);
+			free(dest->name);
+			dest->name = new_name;
+		}
+	}
+
+	return 0;
 }
 
 int anm_set_track_name(struct anm_track *track, const char *name)
@@ -149,7 +258,16 @@ void anm_set_track_default(struct anm_track *track, float def)
 
 int anm_set_keyframe(struct anm_track *track, struct anm_keyframe *key)
 {
-	int idx = anm_get_key_interval(track, key->time);
+	int idx;
+	void *tmp;
+
+	/* copy-on-write: detach the key buffer before writing to it, if it is
+	 * shared with other tracks */
+	if(detach_keys(track) == -1) {
+		return -1;
+	}
+
+	idx = anm_get_key_interval(track, key->time);
 
 	/* if we got a valid keyframe index, compare them... */
 	if(idx >= 0 && idx < track->count && keycmp(key, track->keys + idx) == 0) {
@@ -157,7 +275,6 @@ int anm_set_keyframe(struct anm_track *track, struct anm_keyframe *key)
 		track->keys[idx].val = key->val;
 	} else {
 		/* ... it's a new key, add it and re-sort them */
-		void *tmp;
 		if(!(tmp = anm_dynarr_push(track->keys, key))) {
 			return -1;
 		}

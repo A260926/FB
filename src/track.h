@@ -57,6 +57,7 @@ struct anm_track {
 	char *name;
 	int count;
 	struct anm_keyframe *keys;
+	int *keys_refcount;	/* internal: reference count of the shared key buffer */
 
 	float def_val;
 
@@ -80,6 +81,20 @@ void anm_free_track(struct anm_track *track);
  * XXX: dest must have been initialized first
  */
 void anm_copy_track(struct anm_track *dest, const struct anm_track *src);
+
+/* shares the keyframe buffer of src with dest
+ * Both tracks must have been initialized. On success returns 0, on failure
+ * returns -1 and dest is left unchanged. Sharing a track with itself succeeds
+ * and changes nothing. After sharing, the keys pointer of a non-empty track is
+ * the same in both tracks; the destination receives independent (deep-copied)
+ * copies of the source's name, default value, interpolator and extrapolator,
+ * which it may then change without affecting the source.
+ * Copy-on-write: the first anm_set_keyframe/anm_set_value write to a track
+ * detaches its key buffer, leaving the other sharers untouched. The buffer is
+ * freed when the last sharer destroys its track.
+ */
+int anm_share_track(struct anm_track *dest, const struct anm_track *src);
+
 
 int anm_set_track_name(struct anm_track *track, const char *name);
 const char *anm_get_track_name(const struct anm_track *track);

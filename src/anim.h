@@ -117,6 +117,31 @@ void anm_free_node(struct anm_node *node);
 /* recursively destroy and free the nodes of a node tree */
 void anm_free_node_tree(struct anm_node *tree);
 
+/* creates a snapshot of the subtree rooted at src, sharing the keyframe
+ * buffers of all its tracks (copy-on-write).
+ *
+ * The returned tree contains a new copy of src and all its descendants, but
+ * not src's siblings. The root of the new tree has no parent or next sibling;
+ * the hierarchy and child ordering of all other nodes are preserved. Node and
+ * animation names, animation slots, track settings, pivots, both active
+ * animations with their offsets/mix and any in-progress transition are
+ * copied; the user data pointer is copied by value (borrowed, not owned).
+ *
+ * Mutating, cloning again, or destroying either tree does not affect the other;
+ * the snapshot keeps working even if the source tree is destroyed first.
+ * The new tree starts with cold matrix caches.
+ *
+ * Returns the new tree, to be released with anm_free_node_tree, or NULL if
+ * src is NULL or memory allocation failed (in which case any partially built
+ * tree is freed and src is left untouched).
+ *
+ * NOTE: editing tracks which share a key buffer is copy-on-write only through
+ * anm_set_keyframe/anm_set_value (and the higher-level setters). Writing
+ * directly through the public struct fields or through a pointer returned by
+ * anm_get_keyframe bypasses this and is not supported.
+ */
+struct anm_node *anm_clone_node_tree(const struct anm_node *src);
+
 int anm_set_node_name(struct anm_node *node, const char *name);
 const char *anm_get_node_name(struct anm_node *node);
 
