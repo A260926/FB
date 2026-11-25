@@ -12,6 +12,11 @@ reading/writing flv file will pass through any non AVC tags unmodified
 # Tools
 All tools accept flv as either a file path, or via stdio. use `-` to specify stdin/stdout
 - `flv2srt` - reads a 608/708 captioned flv file and writes an srt file.
+- `flv_split` - splits one captioned AVC/FLV into four complete FLV files, one per
+  CEA-608 service (CC1..CC4), without re-encoding audio or video. The first
+  argument is the input, followed by the four output paths. On failure it returns
+  non-zero and deletes any partial outputs.
+
 - `flv+srt` - encodes an srt file to 608/708 into pop-on captions and combines it with an existing flv, resulting in a new file
 - `flv+scc` - same as flv+srt, but accepts an scc as input. However pin on/rool up is available as it is already encoded in the scc.
 - `scc2srt` - converts an scc file to a srt file
@@ -39,3 +44,4 @@ flv+srt is capable of reading an srt from a named pipe for the use in live capti
 The input must still be formatted as an srt. If a null character is received on the pipe
 The internal srt buffer is cleared. In this case the first srt timestamps after the null
 is assumed to be immediate, and captions begins with this text on the next frame.
+

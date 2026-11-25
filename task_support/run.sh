@@ -9,13 +9,14 @@ cc -std=c99 -O2 -I. -Icaption -c src/cea708.c -o .task-build/core-cea708.o
 cc -std=c99 -O2 -I. -Icaption -c src/eia608.c -o .task-build/core-eia608.o
 cc -std=c99 -O2 -I. -Icaption -c src/eia608_charmap.c -o .task-build/core-eia608_charmap.o
 cc -std=c99 -O2 -I. -Icaption -c src/mpeg.c -o .task-build/core-mpeg.o
+cc -std=c99 -O2 -I. -Icaption -c src/sei_wire.c -o .task-build/core-sei_wire.o
 cc -std=c99 -O2 -I. -Icaption -c src/scc.c -o .task-build/core-scc.o
 cc -std=c99 -O2 -I. -Icaption -c src/srt.c -o .task-build/core-srt.o
 cc -std=c99 -O2 -I. -Icaption -c src/utf8.c -o .task-build/core-utf8.o
 cc -std=c99 -O2 -I. -Icaption -c src/vtt.c -o .task-build/core-vtt.o
 cc -std=c99 -O2 -I. -Icaption -c src/xds.c -o .task-build/core-xds.o
 cc -std=c99 -O2 -I. -Icaption -x c -c src/eia608_from_utf8.c.cached -o .task-build/core-from-utf8.o
-cc -std=c99 -O2 -I. -Icaption -Itask_support task_support/baseline.c task_support/fixture.c .task-build/core-caption.o .task-build/core-cea708.o .task-build/core-eia608.o .task-build/core-eia608_charmap.o .task-build/core-mpeg.o .task-build/core-scc.o .task-build/core-srt.o .task-build/core-utf8.o .task-build/core-vtt.o .task-build/core-xds.o .task-build/core-from-utf8.o -lm -o .task-build/baseline
+cc -std=c99 -O2 -I. -Icaption -Itask_support task_support/baseline.c task_support/fixture.c .task-build/core-caption.o .task-build/core-cea708.o .task-build/core-eia608.o .task-build/core-eia608_charmap.o .task-build/core-mpeg.o .task-build/core-sei_wire.o .task-build/core-scc.o .task-build/core-srt.o .task-build/core-utf8.o .task-build/core-vtt.o .task-build/core-xds.o .task-build/core-from-utf8.o -lm -o .task-build/baseline
 if [[ $mode == target ]]; then
   for p in caption/flv_splitter.h src/flv_splitter.c caption/sei_wire.h src/sei_wire.c examples/flv_split_main.c; do test -s "$p"; done
 cc -std=c99 -O2 -Werror=implicit-function-declaration -I. -Icaption -include caption/flv_splitter.h -include caption/sei_wire.h -c src/flv_splitter.c -o .task-build/flv_splitter.o

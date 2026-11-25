@@ -53,6 +53,8 @@ set(CAPTION_SOURCES
   src/eia608_charmap.c
   src/eia608_from_utf8.c
   src/mpeg.c
+  src/sei_wire.c
+  src/flv_splitter.c
   src/scc.c
   src/srt.c
   src/utf8.c
@@ -66,6 +68,8 @@ set(CAPTION_HEADERS
   caption/eia608.h
   caption/eia608_charmap.h
   caption/mpeg.h
+  caption/sei_wire.h
+  caption/flv_splitter.h
   caption/scc.h
   caption/srt.h
   caption/utf8.h

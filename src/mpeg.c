@@ -23,118 +23,11 @@
 /**********************************************************************************************/
 
 #include "mpeg.h"
+#include "sei_wire.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-////////////////////////////////////////////////////////////////////////////////
-// AVC RBSP Methods
-//  TODO move the to a avcutils file
-static size_t _find_emulation_prevention_byte(const uint8_t* data, size_t size)
-{
-    size_t offset = 2;
-
-    while (offset < size) {
-        if (0 == data[offset]) {
-            // 0 0 X 3 //; we know X is zero
-            offset += 1;
-        } else if (3 != data[offset]) {
-            // 0 0 X 0 0 3; we know X is not 0 and not 3
-            offset += 3;
-        } else if (0 != data[offset - 1]) {
-            // 0 X 0 0 3
-            offset += 2;
-        } else if (0 != data[offset - 2]) {
-            // X 0 0 3
-            offset += 1;
-        } else {
-            // 0 0 3
-            return offset;
-        }
-    }
-
-    return size;
-}
-
-static size_t _copy_to_rbsp(uint8_t* destData, size_t destSize, const uint8_t* sorcData, size_t sorcSize)
-{
-    size_t toCopy, totlSize = 0;
-
-    for (;;) {
-        if (destSize >= sorcSize) {
-            return 0;
-        }
-
-        // The following line IS correct! We want to look in sorcData up to destSize bytes
-        // We know destSize is smaller than sorcSize because of the previous line
-        toCopy = _find_emulation_prevention_byte(sorcData, destSize);
-        memcpy(destData, sorcData, toCopy);
-        totlSize += toCopy;
-        destData += toCopy;
-        destSize -= toCopy;
-
-        if (0 == destSize) {
-            return totlSize;
-        }
-
-        // skip the emulation prevention byte
-        totlSize += 1;
-        sorcData += toCopy + 1;
-        sorcSize -= toCopy + 1;
-    }
-
-    return 0;
-}
-////////////////////////////////////////////////////////////////////////////////
-static inline size_t _find_emulated(uint8_t* data, size_t size)
-{
-    size_t offset = 2;
-
-    while (offset < size) {
-        if (3 < data[offset]) {
-            // 0 0 X; we know X is not 0, 1, 2 or 3
-            offset += 3;
-        } else if (0 != data[offset - 1]) {
-            // 0 X 0 0 1
-            offset += 2;
-        } else if (0 != data[offset - 2]) {
-            // X 0 0 1
-            offset += 1;
-        } else {
-            // 0 0 0, 0 0 1
-            return offset;
-        }
-    }
-
-    return size;
-}
-
-size_t _copy_from_rbsp(uint8_t* data, uint8_t* payloadData, size_t payloadSize)
-{
-    size_t total = 0;
-
-    while (payloadSize) {
-        size_t bytes = _find_emulated(payloadData, payloadSize);
-
-        if (bytes > payloadSize) {
-            return 0;
-        }
-
-        memcpy(data, payloadData, bytes);
-
-        if (bytes == payloadSize) {
-            return total + bytes;
-        }
-
-        data[bytes] = 3; // insert emulation prevention byte
-        data += bytes + 1;
-        total += bytes + 1;
-        payloadData += bytes;
-        payloadSize -= bytes;
-    }
-
-    return total;
-}
 ////////////////////////////////////////////////////////////////////////////////
 sei_message_t* sei_message_next(sei_message_t* msg) { return ((struct _sei_message_t*)msg)->next; }
 sei_msgtype_t sei_message_type(sei_message_t* msg) { return ((struct _sei_message_t*)msg)->type; }
@@ -246,133 +139,97 @@ void sei_dump_messages(sei_message_t* head, double timestamp)
 ////////////////////////////////////////////////////////////////////////////////
 size_t sei_render_size(sei_t* sei)
 {
+    /* Worst case: NAL header + stop bit, one byte per 255 of type/size, and
+     * up to 1.5x expansion from emulation prevention over the whole RBSP. */
     if (!sei || !sei->head) {
         return 0;
     }
 
-    size_t size = 2; // nalu_type + stop bit
+    size_t rbsp = 1; // stop bit
     sei_message_t* msg;
     for (msg = sei_message_head(sei); msg; msg = sei_message_next(msg)) {
-        size += 1 + (msg->type / 255);
-        size += 1 + (msg->size / 255);
-        size += 1 + (msg->size * 4 / 3);
+        rbsp += 1 + (msg->type / 255);
+        rbsp += 1 + (msg->size / 255);
+        rbsp += msg->size;
     }
 
-    return size;
+    return rbsp + (rbsp / 2) + 2;
 }
 
 // we can safely assume sei_render_size() bytes have been allocated for data
 size_t sei_render(sei_t* sei, uint8_t* data)
 {
-    if (!sei || !sei->head) {
+    uint8_t* rendered = NULL;
+    size_t size = 0;
+
+    if (!sei || !sei->head || !data) {
         return 0;
     }
 
-    size_t escaped_size, size = 2; // nalu_type + stop bit
-    sei_message_t* msg;
-    (*data) = 6;
-    ++data;
-
-    for (msg = sei_message_head(sei); msg; msg = sei_message_next(msg)) {
-        int payloadType = sei_message_type(msg);
-        int payloadSize = (int)sei_message_size(msg);
-        uint8_t* payloadData = sei_message_data(msg);
-
-        while (255 <= payloadType) {
-            (*data) = 255;
-            ++data;
-            ++size;
-            payloadType -= 255;
-        }
-
-        (*data) = payloadType;
-        ++data;
-        ++size;
-
-        while (255 <= payloadSize) {
-            (*data) = 255;
-            ++data;
-            ++size;
-            payloadSize -= 255;
-        }
-
-        (*data) = payloadSize;
-        ++data;
-        ++size;
-
-        if (0 >= (escaped_size = _copy_from_rbsp(data, payloadData, payloadSize))) {
-            return 0;
-        }
-
-        data += escaped_size;
-        size += escaped_size;
+    if (caption_sei_encode(sei, &rendered, &size)) {
+        return 0;
     }
 
-    // write stop bit and return
-    (*data) = 0x80;
+    if (sei_render_size(sei) < size) {
+        free(rendered);
+        return 0;
+    }
+
+    memcpy(data, rendered, size);
+    free(rendered);
     return size;
 }
 
 uint8_t* sei_render_alloc(sei_t* sei, size_t* size)
 {
-    size_t aloc = sei_render_size(sei);
-    uint8_t* data = malloc(aloc);
-    (*size) = sei_render(sei, data);
+    uint8_t* data = NULL;
+
+    if (size) {
+        (*size) = 0;
+    }
+
+    if (!sei || !size) {
+        return 0;
+    }
+
+    if (caption_sei_encode(sei, &data, size)) {
+        return 0;
+    }
+
     return data;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 libcaption_stauts_t sei_parse(sei_t* sei, const uint8_t* data, size_t size, double timestamp)
 {
+    /* The existing API takes the payload after the NAL header; rebuild the
+     * complete NAL and share the wire decoder so both paths agree exactly. */
+    uint8_t* nal;
+    int result;
+
     sei_init(sei, timestamp);
-    int ret = 0;
 
-    // SEI may contain more than one payload
-    while (1 < size) {
-        size_t payloadType = 0;
-        size_t payloadSize = 0;
-
-        while (0 < size && 255 == (*data)) {
-            payloadType += 255;
-            ++data, --size;
-        }
-
-        if (0 == size) {
-            return LIBCAPTION_ERROR;
-        }
-
-        payloadType += (*data);
-        ++data, --size;
-
-        while (0 < size && 255 == (*data)) {
-            payloadSize += 255;
-            ++data, --size;
-        }
-
-        if (0 == size) {
-            return LIBCAPTION_ERROR;
-        }
-
-        payloadSize += (*data);
-        ++data, --size;
-
-        if (payloadSize) {
-            sei_message_t* msg = sei_message_new((sei_msgtype_t)payloadType, 0, payloadSize);
-            uint8_t* payloadData = sei_message_data(msg);
-            size_t bytes = _copy_to_rbsp(payloadData, payloadSize, data, size);
-            sei_message_append(sei, msg);
-
-            if (bytes < payloadSize) {
-                return LIBCAPTION_ERROR;
-            }
-
-            data += bytes;
-            size -= bytes;
-            ++ret;
-        }
+    /* Historically an empty payload produced an empty chain. */
+    if (!data || 0 == size) {
+        return LIBCAPTION_OK;
     }
 
-    // There should be one trailing byte, 0x80. But really, we can just ignore that fact.
+    nal = malloc(size + 1);
+    if (!nal) {
+        return LIBCAPTION_ERROR;
+    }
+
+    nal[0] = 6;
+    memcpy(nal + 1, data, size);
+    result = caption_sei_decode(sei, nal, size + 1);
+    free(nal);
+
+    if (result) {
+        sei_init(sei, timestamp);
+        return LIBCAPTION_ERROR;
+    }
+
+    sei->timestamp = timestamp;
     return LIBCAPTION_OK;
 }
 ////////////////////////////////////////////////////////////////////////////////
