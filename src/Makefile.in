@@ -60,7 +60,7 @@ am_libjrtp_la_OBJECTS = rtpdebug.lo rtpsession.lo rtperrors.lo \
 	rtcpsrpacket.lo rtplibraryversion.lo rtcppacket.lo \
 	rtcpcompoundpacketbuilder.lo rtprandom.lo rtcpscheduler.lo \
 	rtcppacketbuilder.lo rtpsessionsources.lo rtpcollisionlist.lo \
-	rtpipv6address.lo rtpudpv6transmitter.lo
+	rtpipv6address.lo rtpudpv6transmitter.lo rtpretransmit.lo
 libjrtp_la_OBJECTS = $(am_libjrtp_la_OBJECTS)
 DEFAULT_INCLUDES = -I. -I$(srcdir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -92,7 +92,8 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@	./$(DEPDIR)/rtpsourcedata.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/rtpsources.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/rtpudpv4transmitter.Plo \
-@AMDEP_TRUE@	./$(DEPDIR)/rtpudpv6transmitter.Plo
+@AMDEP_TRUE@	./$(DEPDIR)/rtpudpv6transmitter.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/rtpretransmit.Plo
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
 LTCXXCOMPILE = $(LIBTOOL) --mode=compile $(CXX) $(DEFS) \
@@ -241,7 +242,7 @@ libjrtp_la_SOURCES = rtpdebug.cpp rtpsession.cpp rtpconfig_win.h \
 		     rtprandom.cpp rtcpscheduler.cpp \
 		     rtcppacketbuilder.cpp rtpsessionsources.cpp \
 		     rtpcollisionlist.cpp rtpipv6address.cpp \
-		     rtpudpv6transmitter.cpp
+		     rtpudpv6transmitter.cpp rtpretransmit.cpp
 
 libjrtp_la_LDFLAGS = -version-info 3:0:0
 libjrtpinclude_HEADERS = rtcpapppacket.h rtcpbyepacket.h rtcpcompoundpacket.h \
@@ -256,7 +257,7 @@ libjrtpinclude_HEADERS = rtcpapppacket.h rtcpbyepacket.h rtcpcompoundpacket.h \
 			 rtpstructs.h rtptimeutilities.h rtptransmitter.h \
 			 rtptypes_win.h rtpudpv4transmitter.h rtpsessionsources.h \
 			 rtpcollisionlist.h rtpipv6address.h rtpipv6destination.h \
-			 rtpudpv6transmitter.h rtptypes.h rtptypes_unix.h
+			 rtpudpv6transmitter.h rtptypes.h rtptypes_unix.h rtpretransmit.h
 
 EXTRA_DIST = rtpconfig_unix.h.in
 libjrtpincludedir = ${includedir}/jrtplib3
@@ -361,6 +362,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rtpsources.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rtpudpv4transmitter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rtpudpv6transmitter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rtpretransmit.Plo@am__quote@
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	if $(CXXCOMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \

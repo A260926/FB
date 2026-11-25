@@ -45,6 +45,7 @@
 RTPPacketBuilder::RTPPacketBuilder() : lastwallclocktime(0,0)
 {
 	init = false;
+	repairBuildReady = false;
 }
 
 RTPPacketBuilder::~RTPPacketBuilder()
@@ -56,6 +57,10 @@ int RTPPacketBuilder::Init(size_t max)
 {
 	if (init)
 		return ERR_RTP_PACKBUILD_ALREADYINIT;
+
+	repairHistory.Clear();
+	repairBuildReady = false;
+
 	if (max <= 0)
 		return ERR_RTP_PACKBUILD_INVALIDMAXPACKETSIZE;
 	
@@ -79,6 +84,9 @@ int RTPPacketBuilder::Init(size_t max)
 
 void RTPPacketBuilder::Destroy()
 {
+	repairHistory.Clear();
+	repairBuildReady = false;
+
 	if (!init)
 		return;
 	delete [] buffer;
@@ -98,6 +106,7 @@ int RTPPacketBuilder::SetMaximumPacketSize(size_t max)
 	delete [] buffer;
 	buffer = newbuf;
 	maxpacksize = max;
+	repairBuildReady = false;
 	return 0;
 }
 
@@ -162,6 +171,8 @@ u_int32_t RTPPacketBuilder::CreateNewSSRC()
 	// p 38: the count SHOULD be reset if the sender changes its SSRC identifier
 	numpayloadbytes = 0;
 	numpackets = 0;
+	repairHistory.ResetGeneration();
+	repairBuildReady = false;
 	return ssrc;
 }
 
@@ -181,11 +192,14 @@ u_int32_t RTPPacketBuilder::CreateNewSSRC(RTPSources &sources)
 	// p 38: the count SHOULD be reset if the sender changes its SSRC identifier
 	numpayloadbytes = 0;
 	numpackets = 0;
+	repairHistory.ResetGeneration();
+	repairBuildReady = false;
 	return ssrc;
 }
 
 int RTPPacketBuilder::BuildPacket(const void *data,size_t len)
 {
+	repairBuildReady = false;
 	if (!init)
 		return ERR_RTP_PACKBUILD_NOTINIT;
 	if (!defptset)
@@ -200,6 +214,7 @@ int RTPPacketBuilder::BuildPacket(const void *data,size_t len)
 int RTPPacketBuilder::BuildPacket(const void *data,size_t len,
                 u_int8_t pt,bool mark,u_int32_t timestampinc)
 {
+	repairBuildReady = false;
 	if (!init)
 		return ERR_RTP_PACKBUILD_NOTINIT;
 	return PrivateBuildPacket(data,len,pt,mark,timestampinc,false);
@@ -208,6 +223,7 @@ int RTPPacketBuilder::BuildPacket(const void *data,size_t len,
 int RTPPacketBuilder::BuildPacketEx(const void *data,size_t len,
                   u_int16_t hdrextID,const void *hdrextdata,size_t numhdrextwords)
 {
+	repairBuildReady = false;
 	if (!init)
 		return ERR_RTP_PACKBUILD_NOTINIT;
 	if (!defptset)
@@ -223,6 +239,7 @@ int RTPPacketBuilder::BuildPacketEx(const void *data,size_t len,
                   u_int8_t pt,bool mark,u_int32_t timestampinc,
 		  u_int16_t hdrextID,const void *hdrextdata,size_t numhdrextwords)
 {
+	repairBuildReady = false;
 	if (!init)
 		return ERR_RTP_PACKBUILD_NOTINIT;
 	return PrivateBuildPacket(data,len,pt,mark,timestampinc,true,hdrextID,hdrextdata,numhdrextwords);
@@ -233,6 +250,7 @@ int RTPPacketBuilder::PrivateBuildPacket(const void *data,size_t len,
 	                  u_int8_t pt,bool mark,u_int32_t timestampinc,bool gotextension,
 	                  u_int16_t hdrextID,const void *hdrextdata,size_t numhdrextwords)
 {
+	repairBuildReady = false;
 	RTPPacket p(pt,data,len,seqnr,timestamp,ssrc,mark,numcsrcs,csrcs,gotextension,hdrextID,
 	            (u_int16_t)numhdrextwords,hdrextdata,buffer,maxpacksize);
 	int status = p.GetCreationError();
@@ -258,9 +276,25 @@ int RTPPacketBuilder::PrivateBuildPacket(const void *data,size_t len,
 	numpackets++;
 	timestamp += timestampinc;
 	seqnr++;
-
+	repairBuildReady = true;
 
 	return 0;
 }
 
+int RTPPacketBuilder::ConfigureRepair(const RTPRepairConfig &config)
+{
+	return repairHistory.Configure(config);
+}
 
+int RTPPacketBuilder::RememberSentForRepair(uint64_t nowUS)
+{
+	if (!init || !repairBuildReady || buffer == 0 || packetlength == 0)
+		return -1;
+	return repairHistory.RememberSent(buffer,packetlength,nowUS);
+}
+
+int RTPPacketBuilder::RepairFromFeedback(RTCPCompoundPacket &feedback,uint64_t nowUS,
+                                         RTPRepairWrite writer,void *writerctx)
+{
+	return repairHistory.Retransmit(feedback,nowUS,writer,writerctx);
+}

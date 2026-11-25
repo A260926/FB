@@ -37,6 +37,8 @@
 
 #include "rtpconfig.h"
 #include "rtptypes.h"
+#include <cstdint>
+#include <vector>
 #include <list>
 
 class RTPRawPacket;
@@ -54,6 +56,8 @@ public:
 
 	u_int8_t *GetCompoundPacketData()						{ return compoundpacket; }
 	size_t GetCompoundPacketLength()						{ return compoundpacketlength; }
+
+	int GetGenericNACKs(uint32_t mediaSSRC,std::vector<uint16_t>& out) const;
 
 	void GotoFirstPacket()								{ rtcppackit = rtcppacklist.begin(); }
 

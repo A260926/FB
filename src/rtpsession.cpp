@@ -69,10 +69,14 @@
 	#define SCHED_UNLOCK
 #endif // RTP_SUPPORT_THREAD
 
-RTPSession::RTPSession(RTPTransmitter::TransmissionProtocol proto /* = RTPTransmitter::IPv4UDPProto */ ) 
+RTPSession::RTPSession(RTPTransmitter::TransmissionProtocol proto /* = RTPTransmitter::IPv4UDPProto */ )
 	: protocol(proto),sources(*this),rtcpsched(sources),rtcpbuilder(sources,packetbuilder)
 {
 	created = false;
+	repairClock = 0;
+	repairClockContext = 0;
+	repairSendAttempted = false;
+	repairAttemptSSRC = 0;
 }
 
 RTPSession::~RTPSession()
@@ -97,22 +101,16 @@ int RTPSession::Create(const RTPSessionParams &sessparams,const RTPTransmissionP
 	// Initialize the transmission component
 	
 	rtptrans = 0;
-	switch(protocol)
-	{
-	case RTPTransmitter::IPv4UDPProto:
-		rtptrans = new RTPUDPv4Transmitter();
-		break;
-#ifdef RTP_SUPPORT_IPV6
-	case RTPTransmitter::IPv6UDPProto:
-		rtptrans = new RTPUDPv6Transmitter();
-		break;
-#endif // RTP_SUPPORT_IPV6
-	default:
-		return ERR_RTP_SESSION_UNSUPPORTEDTRANSMISSIONPROTOCOL;
-	}
-	
+	rtptrans = CreateTransmitter(protocol);
+
 	if (rtptrans == 0)
-		return ERR_RTP_OUTOFMEM;
+	{
+		bool supported = (protocol == RTPTransmitter::IPv4UDPProto);
+#ifdef RTP_SUPPORT_IPV6
+		supported = supported || (protocol == RTPTransmitter::IPv6UDPProto);
+#endif // RTP_SUPPORT_IPV6
+		return supported ? ERR_RTP_OUTOFMEM : ERR_RTP_SESSION_UNSUPPORTEDTRANSMISSIONPROTOCOL;
+	}
 	if ((status = rtptrans->Init(usingpollthread)) < 0)
 	{
 		delete rtptrans;
@@ -297,8 +295,13 @@ void RTPSession::Destroy()
 #endif // RTP_SUPPORT_THREAD
 	
 	delete rtptrans;
+	rtptrans = 0;
 	packetbuilder.Destroy();
 	rtcpbuilder.Destroy();
+	repairClock = 0;
+	repairClockContext = 0;
+	repairSendAttempted = false;
+	repairAttemptSSRC = 0;
 	rtcpsched.Reset();
 	collisionlist.Clear();
 	sources.Clear();
@@ -308,7 +311,7 @@ void RTPSession::Destroy()
 	for (it = byepackets.begin() ; it != byepackets.end() ; it++)
 		delete (*it);
 	byepackets.clear();
-	
+
 	created = false;
 }
 
@@ -375,8 +378,13 @@ void RTPSession::BYEDestroy(const RTPTime &maxwaittime,const void *reason,size_t
 	}
 	
 	delete rtptrans;
+	rtptrans = 0;
 	packetbuilder.Destroy();
 	rtcpbuilder.Destroy();
+	repairClock = 0;
+	repairClockContext = 0;
+	repairSendAttempted = false;
+	repairAttemptSSRC = 0;
 	rtcpsched.Reset();
 	collisionlist.Clear();
 	sources.Clear();
@@ -400,13 +408,76 @@ u_int32_t RTPSession::GetLocalSSRC()
 {
 	if (!created)
 		return 0;
-	
+
 	u_int32_t ssrc;
 
 	BUILDER_LOCK
 	ssrc = packetbuilder.GetSSRC();
 	BUILDER_UNLOCK
 	return ssrc;
+}
+
+RTPTransmitter *RTPSession::CreateTransmitter(RTPTransmitter::TransmissionProtocol transmissionprotocol)
+{
+	switch (transmissionprotocol)
+	{
+	case RTPTransmitter::IPv4UDPProto:
+		return new RTPUDPv4Transmitter();
+#ifdef RTP_SUPPORT_IPV6
+	case RTPTransmitter::IPv6UDPProto:
+		return new RTPUDPv6Transmitter();
+#endif // RTP_SUPPORT_IPV6
+	default:
+		return 0;
+	}
+}
+
+int RTPSession::WriteRTPData(const void *data,size_t len)
+{
+	if (!created || rtptrans == 0)
+		return ERR_RTP_SESSION_NOTCREATED;
+	return rtptrans->SendRTPData(data,len);
+}
+
+int RTPSession::ConfigureRepair(const RTPRepairConfig &config,RTPRepairClock clock,void *clockcontext)
+{
+	if (!created || clock == 0)
+		return ERR_RTP_SESSION_NOTCREATED;
+
+	uint32_t currentSSRC = packetbuilder.GetSSRC();
+	if (repairSendAttempted && repairAttemptSSRC == currentSSRC)
+		return ERR_RTP_SESSION_ALREADYCREATED;
+
+	int status = packetbuilder.ConfigureRepair(config);
+	if (status < 0)
+		return status;
+
+	repairClock = clock;
+	repairClockContext = clockcontext;
+	repairSendAttempted = false;
+	repairAttemptSSRC = currentSSRC;
+	return 0;
+}
+
+uint32_t RTPSession::GetNextTimestamp() const
+{
+	return packetbuilder.GetTimestamp();
+}
+
+int RTPSession::RepairWriteCallback(void *context,const void *data,size_t len)
+{
+	RTPSession *session = static_cast<RTPSession *>(context);
+	return session->WriteRTPData(data,len);
+}
+
+int RTPSession::ProcessIncomingRepair(RTCPCompoundPacket &rtcpcomppack)
+{
+	if (repairClock == 0)
+		return 0;
+
+	uint64_t nowUS = repairClock(repairClockContext);
+	return packetbuilder.RepairFromFeedback(rtcpcomppack,nowUS,
+	                                        &RTPSession::RepairWriteCallback,this);
 }
 
 int RTPSession::AddDestination(const RTPAddress &addr)
@@ -466,15 +537,22 @@ int RTPSession::SendPacket(const void *data,size_t len)
 		return ERR_RTP_SESSION_NOTCREATED;
 
 	BUILDER_LOCK
+	repairSendAttempted = true;
+	repairAttemptSSRC = packetbuilder.GetSSRC();
 	if ((status = packetbuilder.BuildPacket(data,len)) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
 	}
-	if ((status = rtptrans->SendRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
+	if ((status = WriteRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
+	}
+	if (repairClock != 0)
+	{
+		uint64_t repairNowUS = repairClock(repairClockContext);
+		(void)packetbuilder.RememberSentForRepair(repairNowUS);
 	}
 	BUILDER_UNLOCK
 
@@ -493,15 +571,22 @@ int RTPSession::SendPacket(const void *data,size_t len,
 		return ERR_RTP_SESSION_NOTCREATED;
 	
 	BUILDER_LOCK
+	repairSendAttempted = true;
+	repairAttemptSSRC = packetbuilder.GetSSRC();
 	if ((status = packetbuilder.BuildPacket(data,len,pt,mark,timestampinc)) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
 	}
-	if ((status = rtptrans->SendRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
+	if ((status = WriteRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
+	}
+	if (repairClock != 0)
+	{
+		uint64_t repairNowUS = repairClock(repairClockContext);
+		(void)packetbuilder.RememberSentForRepair(repairNowUS);
 	}
 	BUILDER_UNLOCK
 	
@@ -520,15 +605,22 @@ int RTPSession::SendPacketEx(const void *data,size_t len,
 		return ERR_RTP_SESSION_NOTCREATED;
 
 	BUILDER_LOCK
+	repairSendAttempted = true;
+	repairAttemptSSRC = packetbuilder.GetSSRC();
 	if ((status = packetbuilder.BuildPacketEx(data,len,hdrextID,hdrextdata,numhdrextwords)) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
 	}
-	if ((status = rtptrans->SendRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
+	if ((status = WriteRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
+	}
+	if (repairClock != 0)
+	{
+		uint64_t repairNowUS = repairClock(repairClockContext);
+		(void)packetbuilder.RememberSentForRepair(repairNowUS);
 	}
 	BUILDER_UNLOCK
 
@@ -548,15 +640,22 @@ int RTPSession::SendPacketEx(const void *data,size_t len,
 		return ERR_RTP_SESSION_NOTCREATED;
 	
 	BUILDER_LOCK
+	repairSendAttempted = true;
+	repairAttemptSSRC = packetbuilder.GetSSRC();
 	if ((status = packetbuilder.BuildPacketEx(data,len,pt,mark,timestampinc,hdrextID,hdrextdata,numhdrextwords)) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
 	}
-	if ((status = rtptrans->SendRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
+	if ((status = WriteRTPData(packetbuilder.GetPacket(),packetbuilder.GetPacketLength())) < 0)
 	{
 		BUILDER_UNLOCK
 		return status;
+	}
+	if (repairClock != 0)
+	{
+		uint64_t repairNowUS = repairClock(repairClockContext);
+		(void)packetbuilder.RememberSentForRepair(repairNowUS);
 	}
 	BUILDER_UNLOCK
 
@@ -1009,15 +1108,26 @@ int RTPSession::ProcessPolledData()
 		// since our sources instance also uses the scheduler (analysis of incoming packets)
 		// we'll lock it
 		SCHED_LOCK
-		if ((status = sources.ProcessRawPacket(rawpack,rtptrans,acceptownpackets)) < 0)
+		status = sources.ProcessRawPacket(rawpack,rtptrans,acceptownpackets);
+		int repairstatus = sources.TakeRepairStatus();
+		if (status < 0)
 		{
+			if (repairstatus < 0)
+				status = repairstatus;
 			SCHED_UNLOCK
 			SOURCES_UNLOCK
 			delete rawpack;
 			return status;
 		}
 		SCHED_UNLOCK
-				
+
+		if (repairstatus < 0)
+		{
+			SOURCES_UNLOCK
+			delete rawpack;
+			return repairstatus;
+		}
+
 		if (sources.DetectedOwnCollision()) // collision handling!
 		{
 			bool created;

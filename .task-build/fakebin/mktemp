@@ -1,0 +1,8 @@
+#!/bin/bash
+if [ "$#" -eq 0 ]; then
+  f=".task-build/mktemp.$$.$RANDOM"
+  : > "$f"
+  printf "%s\n" "$f"
+  exit 0
+fi
+exec /usr/bin/mktemp "$@"

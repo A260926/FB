@@ -44,6 +44,11 @@ void RTPSessionSources::OnRTCPCompoundPacket(RTCPCompoundPacket *pack,const RTPT
 {
 	if (senderaddress != 0) // don't analyse own RTCP packets again (they're already analysed on their way out)
 		rtpsession.rtcpsched.AnalyseIncoming(*pack);
+
+	int repairresult = rtpsession.ProcessIncomingRepair(*pack);
+	if (repairresult < 0 && repairStatus == 0)
+		repairStatus = repairresult;
+
 	rtpsession.OnRTCPCompoundPacket(pack,receivetime,senderaddress);
 }
 

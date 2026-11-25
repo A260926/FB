@@ -72,7 +72,10 @@ public:
 	bool IsActive();
 	
 	u_int32_t GetLocalSSRC();
-	
+
+	int ConfigureRepair(const RTPRepairConfig &config,RTPRepairClock clock,void *clockcontext);
+	uint32_t GetNextTimestamp() const;
+
 	int AddDestination(const RTPAddress &addr);
 	int DeleteDestination(const RTPAddress &addr);
 	void ClearDestinations();
@@ -146,6 +149,9 @@ public:
 	void DumpSources();
 #endif // RTPDEBUG
 protected:
+	virtual int WriteRTPData(const void *data,size_t len);
+	virtual RTPTransmitter *CreateTransmitter(RTPTransmitter::TransmissionProtocol protocol);
+
 	virtual void OnRTPPacket(RTPPacket *pack,const RTPTime &receivetime,
 	                         const RTPAddress *senderaddress) 					{ }
 	virtual void OnRTCPCompoundPacket(RTCPCompoundPacket *pack,const RTPTime &receivetime,
@@ -169,7 +175,9 @@ private:
 	int CreateCNAME(u_int8_t *buffer,size_t *bufferlength,bool resolve);
 	int ProcessPolledData();
 	int ProcessRTCPCompoundPacket(RTCPCompoundPacket &rtcpcomppack,RTPRawPacket *pack);
-	
+	int ProcessIncomingRepair(RTCPCompoundPacket &rtcpcomppack);
+	static int RepairWriteCallback(void *context,const void *data,size_t len);
+
 	RTPTransmitter *rtptrans;
 	const RTPTransmitter::TransmissionProtocol protocol;	
 	bool created;
@@ -191,7 +199,12 @@ private:
 	RTPCollisionList collisionlist;
 
 	std::list<RTCPCompoundPacket *> byepackets;
-	
+
+	RTPRepairClock repairClock;
+	void *repairClockContext;
+	bool repairSendAttempted;
+	uint32_t repairAttemptSSRC;
+
 #ifdef RTP_SUPPORT_THREAD
 	RTPPollThread *pollthread;
 	JMutex sourcesmutex,buildermutex,schedmutex;

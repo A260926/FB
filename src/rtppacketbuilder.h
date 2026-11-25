@@ -40,6 +40,7 @@
 #include "rtprandom.h"
 #include "rtptimeutilities.h"
 #include "rtptypes.h"
+#include "rtpretransmit.h"
 
 class RTPSources;
 
@@ -81,6 +82,12 @@ public:
 	u_int32_t GetTimestamp() const					{ if (!init) return 0; return timestamp; }
 	u_int16_t GetSequenceNumber() const				{ if (!init) return 0; return seqnr; }
 
+	int ConfigureRepair(const RTPRepairConfig &config);
+	int RememberSentForRepair(uint64_t nowUS);
+	int RepairFromFeedback(RTCPCompoundPacket &feedback,uint64_t nowUS,
+	                       RTPRepairWrite writer,void *writerctx);
+	const RTPRepairHistory &RepairHistory() const			{ return repairHistory; }
+
 	// note: these are not necessarily from the last packet!
 	RTPTime GetPacketTime() const					{ if (!init) return RTPTime(0,0); return lastwallclocktime; }
 	u_int32_t GetPacketTimestamp() const				{ if (!init) return 0; return lastrtptimestamp; }
@@ -114,6 +121,9 @@ private:
 	RTPTime lastwallclocktime;
 	u_int32_t lastrtptimestamp;
 	u_int32_t prevrtptimestamp;
+
+	RTPRepairHistory repairHistory;
+	bool repairBuildReady;
 };
 
 inline int RTPPacketBuilder::SetDefaultPayloadType(u_int8_t pt)

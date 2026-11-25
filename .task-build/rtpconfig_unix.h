@@ -1,0 +1,14 @@
+#ifndef RTPCONFIG_UNIX_H
+#define RTPCONFIG_UNIX_H
+#define RTP_SUPPORT_SDESPRIV
+#define RTP_SOCKLENTYPE_UINT
+#define RTP_SUPPORT_PROBATION
+#define RTP_SUPPORT_INLINETEMPLATEPARAM
+#if defined(__APPLE__)
+#define RTP_HAVE_SOCKADDR_LEN
+#define RTP_FILIO
+#endif
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define RTP_BIG_ENDIAN
+#endif
+#endif

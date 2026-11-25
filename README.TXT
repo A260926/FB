@@ -110,6 +110,33 @@ INSTALLATION NOTES
 		If set, IPv6 multicasting support is enabled.
 	- RTPDEBUG:
 		Enables some memory tracking functions and some debug routines.
-	
+
+SHORT-TERM RTP REPAIR CACHE
+===========================
+
+The optional RTPRepairHistory in src/rtpretransmit.h is disabled by default.
+RTPSession::ConfigureRepair wires the same history into the normal send and
+incoming Generic NACK paths; RTPPacketBuilder also exposes the shared history.
+When it is not configured, ordinary SendPacket/SendPacketEx behaviour and the
+clock are untouched.
+
+Only complete, legal RTP packets whose underlying write succeeded are submitted
+with RememberSent/SentForRepair.  The history allocates and owns an independent
+copy of each complete original RTP packet; callers retain ownership of the
+buffer passed to RememberSent and of the clock/writer context pointers.
+CreateTransmitter results are owned by RTPSession and are deleted by Destroy.
+Configure copies the POD configuration and a successful configuration clears
+the previous history.  Clear, Destroy and an SSRC generation change release
+stored packets; RTPSession does not own the user-supplied clock context.
+
+PacketCount() is the number of packets currently retained after deadline
+cleanup and quota eviction.  ByteCount() is the sum of the complete original
+wire lengths of those retained packets, including RTP headers, CSRC lists,
+header extensions and padding; it is not the builder's payload-octet counter.
+Expired and quota-evicted packets are excluded from both values.  Successful
+retransmissions write the stored original bytes again but do not build a new
+packet and do not advance the normal media sequence number, RTP timestamp,
+packet count or payload-octet count.
+
 ------------------------------------------------------------------------------
 

@@ -42,10 +42,11 @@ class RTPSession;
 class RTPSessionSources : public RTPSources
 {
 public:
-	RTPSessionSources(RTPSession &sess) : rtpsession(sess) 					{ owncollision = false; }
+	RTPSessionSources(RTPSession &sess) : rtpsession(sess) 					{ owncollision = false; repairStatus = 0; }
 	~RTPSessionSources()									{ }
 	void ClearOwnCollisionFlag()								{ owncollision = false; }
 	bool DetectedOwnCollision() const							{ return owncollision; }
+	int TakeRepairStatus()									{ int status = repairStatus; repairStatus = 0; return status; }
 private:
 	void OnRTPPacket(RTPPacket *pack,const RTPTime &receivetime,
 	                 const RTPAddress *senderaddress);
@@ -69,6 +70,7 @@ private:
 	
 	RTPSession &rtpsession;
 	bool owncollision;
+	int repairStatus;
 };
 
 #endif // RTPSESSIONSOURCES_H
