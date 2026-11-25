@@ -173,3 +173,53 @@ cmake -B buildDir \
 -DOSD_PATCH_SHADER_SOURCE_MSL=1   // MSL Patch Shader Source
 ````
 
+## Clipping regular Catmull-Clark limit surfaces (Bfr)
+
+`OpenSubdiv::Bfr::ClipRegularSurfaceMesh()` (declared in
+`opensubdiv/bfr/clipSurface.h`, with the adaptive bounds/trim engine in
+`opensubdiv/bfr/trimTessellation.h/.cpp`) trims selected limit-surface faces
+against a directed plane. Points satisfying `dot(normal, P) + offset >= 0`
+are retained; no cap surface is generated.
+
+The tessellation is produced by conservative Bernstein bounds and conforming
+edge bisection in the parameter domains of the selected regular bicubic
+patches, followed by exact plane-root refinement through Bfr evaluation.
+Closed in-face contours and contours crossing coarse edges are resolved by
+adaptive subdivision rather than by clipping a fixed pre-tessellated mesh.
+Split points on coarse edges are interned by coarse-topology identity and
+propagated to both incident faces, so adjacent faces share position indices
+and sub-edges with no T-junctions. Spatially coincident but topologically
+distinct components are never welded. Each output triangle stores its source
+coarse face; each triangle corner stores the face-local parameter, its own
+channel-0 face-varying UV and the analytic unit `du x dv` normal, so UV seams
+are preserved even though positions are shared.
+
+Scope and supported inputs:
+
+* Catmull-Clark only; oriented manifold quad cages without explicit edge or
+  vertex creases and without holes.
+* Every selected face must initialize a valid, regular bicubic (non-linear)
+  `Bfr::Surface<double>` position patch; channel 0 face-varying UV data must
+  be present and well sized.
+* The clipping plane normal is normalized internally.
+* Ordinary transverse zero contours (including closed loops and multiple
+  separated branches) are supported within the separation/gradient ranges
+  documented in `task_support/contract.md`.
+* Strict tangencies, a zero contour passing through a coarse vertex, and
+  whole coarse edges or patches lying in the plane may be rejected with
+  `false` and a non-empty error. Inputs that are invalid, unsupported or
+  cannot be resolved within `ClipOptions::maxDepth` (1..24) also fail
+  cleanly; on any failure the caller's existing `ClippedMesh` is untouched.
+* An empty `selectedFaces` vector returns an empty successful mesh.
+
+`examples/clip_surface.cpp` is a dependency-free command line example that
+builds a curved UV-seamed grid and writes a clipped `v/vt/vn/f` OBJ:
+
+```
+c++ -std=c++17 -I. examples/clip_surface.cpp opensubdiv/bfr/*.cpp \
+    opensubdiv/far/*.cpp opensubdiv/sdc/*.cpp opensubdiv/vtr/*.cpp \
+    -o clip_surface
+./clip_surface clipped.obj
+```
+
+
