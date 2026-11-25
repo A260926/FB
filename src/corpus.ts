@@ -47,6 +47,10 @@ export class Corpus {
         return this.inputs.length;
     }
 
+    getBuffers() {
+        return this.inputs.slice();
+    }
+
     generateInput() {
         if (this.seedLength > 0) {
             this.seedLength -= 1;
