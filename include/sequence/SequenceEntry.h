@@ -163,6 +163,24 @@ public:
 	void move(double begin, double end, double skip);
 
 	/**
+	 * Retrieves the start time of the entry.
+	 * \return The start time in seconds.
+	 */
+	double getBegin() const;
+
+	/**
+	 * Retrieves the end time of the entry.
+	 * \return The end time in seconds or a negative value if unknown.
+	 */
+	double getEnd() const;
+
+	/**
+	 * Retrieves how many seconds are skipped at the beginning.
+	 * \return The skip time in seconds.
+	 */
+	double getSkip() const;
+
+	/**
 	 * Retrieves the muting state of the entry.
 	 * \return Whether the entry should is muted or not.
 	 */

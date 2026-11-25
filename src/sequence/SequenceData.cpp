@@ -26,6 +26,7 @@ SequenceData::SequenceData(Specs specs, float fps, bool muted) :
 	m_specs(specs),
 	m_status(0),
 	m_entry_status(0),
+	m_ducking_status(0),
 	m_id(0),
 	m_muted(muted),
 	m_fps(fps),
@@ -161,12 +162,36 @@ std::shared_ptr<SequenceEntry> SequenceData::add(std::shared_ptr<ISound> sound, 
 	return entry;
 }
 
+bool SequenceData::isEntry(const std::shared_ptr<SequenceEntry>& entry) const
+{
+	for(const auto& candidate : m_entries)
+	{
+		if(candidate == entry)
+			return true;
+	}
+
+	return false;
+}
+
 void SequenceData::remove(std::shared_ptr<SequenceEntry> entry)
 {
 	std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
 	m_entries.remove(entry);
 	m_entry_status++;
+
+	// Dropping an entry also drops every rule that references it, either as a
+	// target or as a key.
+	for(auto it = m_ducking.begin(); it != m_ducking.end();)
+	{
+		if(it->target == entry || it->key == entry)
+		{
+			it = m_ducking.erase(it);
+			m_ducking_status++;
+		}
+		else
+			++it;
+	}
 }
 
 AUD_NAMESPACE_END

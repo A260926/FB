@@ -24,11 +24,17 @@
 
 #include "IReader.h"
 #include "devices/ReadDevice.h"
+#include "respec/Specification.h"
+
+#include <memory>
+#include <vector>
 
 AUD_NAMESPACE_BEGIN
 
 class SequenceHandle;
 class SequenceData;
+class SequenceEntry;
+struct SequenceDuckingRuntime;
 
 /**
  * This reader plays back sequenced entries.
@@ -65,6 +71,70 @@ private:
 	 * Last entry status read from the sequence.
 	 */
 	int m_entry_status;
+
+	/**
+	 * Last ducking status read from the sequence.
+	 */
+	int m_ducking_status;
+
+	/**
+	 * Independent ducking runtime, one per rule (and therefore per target).
+	 */
+	std::vector<std::shared_ptr<SequenceDuckingRuntime> > m_ducking;
+
+	/**
+	 * The scene specification the ducking runtime was built for.
+	 */
+	Specs m_ducking_specs;
+
+	/**
+	 * The target entries of the current runtime, in runtime order, used to
+	 * detect target set changes.
+	 */
+	std::vector<std::shared_ptr<SequenceEntry> > m_ducking_target_ids;
+
+	/**
+	 * Scratch buffers reused between reads.
+	 */
+	std::vector<sample_t> m_ducking_key_buffer;
+	std::vector<sample_t> m_ducking_target_buffer;
+
+	/**
+	 * Rebuilds the playback handles, leaving out ducking targets whose
+	 * contribution is mixed separately.
+	 */
+	void rebuildHandles();
+
+	/**
+	 * Returns whether an entry is the target of a ducking rule.
+	 */
+	bool isDuckingTarget(const std::shared_ptr<SequenceEntry>& entry) const;
+
+	/**
+	 * Returns whether the set of ducking target entries changed.
+	 */
+	bool duckingTargetsChanged() const;
+
+	/**
+	 * Updates the stored ducking target set.
+	 */
+	void refreshDuckingTargetIds();
+
+	/**
+	 * Synchronizes the ducking runtime with the current rules.
+	 */
+	void updateDucking();
+
+	/**
+	 * Rebuilds one runtime's envelope from the scene start up to a frame.
+	 */
+	void rebuildDucking(SequenceDuckingRuntime& runtime, long long frame);
+
+	/**
+	 * Advances all runtimes through a scene block and adds the ducked target
+	 * contributions.
+	 */
+	void mixDucking(long long sceneStart, int length, float volume, sample_t* buffer);
 
 	// delete copy constructor and operator=
 	SequenceReader(const SequenceReader&) = delete;

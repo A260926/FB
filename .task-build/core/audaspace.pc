@@ -1,0 +1,11 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=
+includedir=${prefix}/include
+
+Name: audaspace
+Description: Audaspace is a feature rich high level audio library
+Requires: 
+Version: 1.10.0
+Libs: -L${libdir} -laudaspace  
+Cflags: -I${includedir}/audaspace

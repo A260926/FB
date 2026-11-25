@@ -122,6 +122,7 @@ set(SRC
 	src/sequence/AnimateableProperty.cpp
 	src/sequence/Double.cpp
 	src/sequence/DoubleReader.cpp
+	src/sequence/Ducking.cpp
 	src/sequence/PingPong.cpp
 	src/sequence/Sequence.cpp
 	src/sequence/SequenceData.cpp
@@ -139,6 +140,7 @@ set(SRC
 )
 
 set(PRIVATE_HDR
+	src/sequence/DuckingInternal.h
 	src/sequence/SequenceHandle.h
 )
 
@@ -244,6 +246,7 @@ set(PUBLIC_HDR
 	include/sequence/AnimateableProperty.h
 	include/sequence/Double.h
 	include/sequence/DoubleReader.h
+	include/sequence/Ducking.h
 	include/sequence/PingPong.h
 	include/sequence/SequenceData.h
 	include/sequence/SequenceEntry.h

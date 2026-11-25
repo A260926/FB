@@ -26,6 +26,7 @@
 #include "respec/Specification.h"
 #include "devices/I3DDevice.h"
 #include "sequence/AnimateableProperty.h"
+#include "sequence/Ducking.h"
 
 #include <list>
 
@@ -158,6 +159,28 @@ public:
 	 * \param entry The entry to remove.
 	 */
 	void remove(std::shared_ptr<SequenceEntry> entry);
+
+	/**
+	 * Sets or replaces the look-ahead ducking rule of a target entry.
+	 *
+	 * Both entries must be current members of this sequence and must differ.
+	 * A target has at most one rule; setting a rule for a target that already
+	 * has one replaces it.  Invalid arguments throw std::invalid_argument and
+	 * leave any existing rule untouched.
+	 *
+	 * \param target The entry whose gain is controlled.
+	 * \param key The entry whose pre-ducking signal drives the detector.
+	 * \param settings The rule settings.
+	 */
+	void setDucking(std::shared_ptr<SequenceEntry> target, std::shared_ptr<SequenceEntry> key, const DuckingSettings& settings);
+
+	/**
+	 * Removes the ducking rule of a target entry.
+	 *
+	 * Removing a rule that does not exist does nothing.
+	 * \param target The target entry.
+	 */
+	void clearDucking(std::shared_ptr<SequenceEntry> target);
 
 	/**
 	 * Creates a new reader with indicated resampling quality.

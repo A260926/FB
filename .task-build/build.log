@@ -1,0 +1,1104 @@
+[  1%] Building CXX object CMakeFiles/audaspace.dir/src/devices/NULLDevice.cpp.o
+[  1%] Building CXX object CMakeFiles/audaspace.dir/src/devices/DeviceManager.cpp.o
+[  2%] Building CXX object CMakeFiles/audaspace.dir/src/devices/MixingThreadDevice.cpp.o
+[  3%] Building CXX object CMakeFiles/audaspace.dir/src/devices/ReadDevice.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/devices/MixingThreadDevice.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/MixingThreadDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/condition_variable:124:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/devices/NULLDevice.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/NULLDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/devices/DeviceManager.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/DeviceManager.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selectedIn file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/devices/ReadDevice.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/ReadDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/SoftwareDevice.h:25:
+In file included from  platform is no longer/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+ supported by libc++."
+      |    ^
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[  4%] Building CXX object CMakeFiles/audaspace.dir/src/devices/SoftwareDevice.cpp.o
+[  5%] Building CXX object CMakeFiles/audaspace.dir/src/devices/ThreadedDevice.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/devices/SoftwareDevice.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/SoftwareDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/devices/ThreadedDevice.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/ThreadedDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/SoftwareDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[  6%] Building CXX object CMakeFiles/audaspace.dir/src/Exception.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/Exception.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/Exception.h:37:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/exception:82:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[  7%] Building CXX object CMakeFiles/audaspace.dir/src/file/File.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/file/File.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/file/File.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[  8%] Building CXX object CMakeFiles/audaspace.dir/src/file/FileManager.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/file/FileManager.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/file/FileManager.h:29:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/list:203:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/comp.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+1 warning generated.
+[  9%] Building CXX object CMakeFiles/audaspace.dir/src/file/FileWriter.cpp.o
+[ 10%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Accumulator.cpp.o
+[ 11%] Building CXX object CMakeFiles/audaspace.dir/src/fx/ADSR.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/file/FileWriter.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/file/FileWriter.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/string:594:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/max.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/comp.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Accumulator.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Accumulator.hIn file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/ADSR.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/ADSR.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+:  204 | #  warni25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+n  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+g "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 12%] Building CXX object CMakeFiles/audaspace.dir/src/fx/ADSRReader.cpp.o
+[ 13%] Building CXX object CMakeFiles/audaspace.dir/src/fx/BaseIIRFilterReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/ADSRReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/ADSRReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/BaseIIRFilterReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/BaseIIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 14%] Building CXX object CMakeFiles/audaspace.dir/src/fx/ButterworthCalculator.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/ButterworthCalculator.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/ButterworthCalculator.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/IDynamicIIRFilterCalculator.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector:310:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 15%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Butterworth.cpp.o
+1 warning generated.
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Butterworth.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Butterworth.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DynamicIIRFilter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 15%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Delay.cpp.o
+[ 16%] Building CXX object CMakeFiles/audaspace.dir/src/fx/CallbackIIRFilterReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/CallbackIIRFilterReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/CallbackIIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/BaseIIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Delay.cpp:17  204 | :
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Delay.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+#  In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+warning "The selected platform is no longer supported b  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+y libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 17%] Building CXX object CMakeFiles/audaspace.dir/src/fx/DelayReader.cpp.o
+[ 18%] Building CXX object CMakeFiles/audaspace.dir/src/fx/DynamicIIRFilter.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/DelayReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DelayReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/DynamicIIRFilter.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DynamicIIRFilter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 19%] Building CXX object CMakeFiles/audaspace.dir/src/fx/DynamicIIRFilterReader.cpp.o
+1 warning generated.
+[ 20%] Building CXX object CMakeFiles/audaspace.dir/src/fx/DynamicMusic.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/DynamicIIRFilterReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DynamicIIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/IIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/BaseIIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/DynamicMusic.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DynamicMusic.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 21%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Effect.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Effect.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 22%] Building CXX object CMakeFiles/audaspace.dir/src/fx/EffectReader.cpp.o
+1 warning generated.
+[ 23%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Envelope.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/EffectReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Envelope.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Envelope.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 24%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Fader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Fader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Fader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 25%] Building CXX object CMakeFiles/audaspace.dir/src/fx/FaderReader.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/FaderReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/FaderReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 26%] Building CXX object CMakeFiles/audaspace.dir/src/fx/HighpassCalculator.cpp.o
+1 warning generated.
+[ 27%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Highpass.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/HighpassCalculator.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/HighpassCalculator.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/IDynamicIIRFilterCalculator.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector:310:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Highpass.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Highpass.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DynamicIIRFilter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 28%] Building CXX object CMakeFiles/audaspace.dir/src/fx/IIRFilter.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/IIRFilter.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/IIRFilter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 29%] Building CXX object CMakeFiles/audaspace.dir/src/fx/IIRFilterReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/IIRFilterReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/IIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/BaseIIRFilterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 30%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Limiter.cpp.o
+[ 31%] Building CXX object CMakeFiles/audaspace.dir/src/fx/LimiterReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Limiter.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Limiter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/LimiterReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/LimiterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 32%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Loop.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Loop.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Loop.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 33%] Building CXX object CMakeFiles/audaspace.dir/src/fx/LoopReader.cpp.o
+1 warning generated.
+[ 33%] Building CXX object CMakeFiles/audaspace.dir/src/fx/LowpassCalculator.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/LoopReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/LoopReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/LowpassCalculator.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/LowpassCalculator.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/IDynamicIIRFilterCalculator.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector:310:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 34%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Lowpass.cpp.o
+[ 35%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Modulator.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Lowpass.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Lowpass.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/DynamicIIRFilter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Modulator.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Modulator.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 36%] Building CXX object CMakeFiles/audaspace.dir/src/fx/ModulatorReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/ModulatorReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/ModulatorReader.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 37%] Building CXX object CMakeFiles/audaspace.dir/src/fx/MutableReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/MutableReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/MutableReader.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 38%] Building CXX object CMakeFiles/audaspace.dir/src/fx/MutableSound.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/MutableSound.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/MutableSound.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 39%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Pitch.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Pitch.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Pitch.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 40%] Building CXX object CMakeFiles/audaspace.dir/src/fx/PitchReader.cpp.o
+1 warning generated.
+[ 41%] Building CXX object CMakeFiles/audaspace.dir/src/fx/PlaybackManager.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/PitchReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/PitchReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/PlaybackManager.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/PlaybackManager.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/PlaybackCategory.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 42%] Building CXX object CMakeFiles/audaspace.dir/src/fx/PlaybackCategory.cpp.o
+1 warning generated.
+1 warning generated.
+[ 43%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Reverse.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/PlaybackCategory.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/PlaybackCategory.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 44%] Building CXX object CMakeFiles/audaspace.dir/src/fx/ReverseReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Reverse.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Reverse.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/ReverseReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/ReverseReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 45%] Building CXX object CMakeFiles/audaspace.dir/src/fx/SoundList.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/SoundList.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/SoundList.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 46%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Source.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Source.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Source.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/atomic:593:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 48%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Threshold.cpp.o
+[ 48%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Sum.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Threshold.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Threshold.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      | In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Sum.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Sum.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:   ^
+4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 49%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Volume.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Volume.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Volume.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 50%] Building CXX object CMakeFiles/audaspace.dir/src/fx/VolumeReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/VolumeReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/VolumeReader.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 50%] Building CXX object CMakeFiles/audaspace.dir/src/fx/VolumeSound.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/VolumeSound.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/VolumeSound.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 51%] Building CXX object CMakeFiles/audaspace.dir/src/fx/VolumeStorage.cpp.o
+1 warning generated.
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/VolumeStorage.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/VolumeStorage.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/atomic:593:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 53%] Building CXX object CMakeFiles/audaspace.dir/src/fx/EchoReader.cpp.o
+[ 53%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Echo.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/EchoReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EchoReader.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Echo.cpp:1:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Echo.h:9:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 54%] Building CXX object CMakeFiles/audaspace.dir/src/fx/Compressor.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/Compressor.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Compressor.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 55%] Building CXX object CMakeFiles/audaspace.dir/src/fx/CompressorReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/CompressorReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/CompressorReader.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 56%] Building CXX object CMakeFiles/audaspace.dir/src/fx/PeakDetector.cpp.o
+[ 57%] Building CXX object CMakeFiles/audaspace.dir/src/fx/PeakDetectorReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/PeakDetector.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/PeakDetector.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/fx/PeakDetectorReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/PeakDetectorReader.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 58%] Building CXX object CMakeFiles/audaspace.dir/src/generator/Sawtooth.cpp.o
+1 warning generated.
+1 warning generated.
+[ 59%] Building CXX object CMakeFiles/audaspace.dir/src/generator/SawtoothReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/Sawtooth.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/generator/Sawtooth.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 60%] Building CXX object CMakeFiles/audaspace.dir/src/generator/Silence.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/SawtoothReader.cpp:19:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cmath:318:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/Silence.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/generator/Silence.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 62%] Building CXX object CMakeFiles/audaspace.dir/src/generator/Sine.cpp.o
+[ 62%] Building CXX object CMakeFiles/audaspace.dir/src/generator/SilenceReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/Sine.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/generator/Sine.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/SilenceReader.cpp:19:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstring:62:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 63%] Building CXX object CMakeFiles/audaspace.dir/src/generator/SineReader.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/SineReader.cpp:19:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cmath:318:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 64%] Building CXX object CMakeFiles/audaspace.dir/src/generator/Square.cpp.o
+1 warning generated.
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/Square.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/generator/Square.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 65%] Building CXX object CMakeFiles/audaspace.dir/src/generator/SquareReader.cpp.o
+[ 66%] Building CXX object CMakeFiles/audaspace.dir/src/generator/Triangle.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/SquareReader.cpp:19:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cmath:318:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/Triangle.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/generator/Triangle.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 66%] Building CXX object CMakeFiles/audaspace.dir/src/generator/TriangleReader.cpp.o
+[ 67%] Building CXX object CMakeFiles/audaspace.dir/src/respec/ChannelMapper.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/generator/TriangleReader.cpp:19:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cmath:318:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ChannelMapper.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ChannelMapper.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/SpecsChanger.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 68%] Building CXX object CMakeFiles/audaspace.dir/src/respec/ChannelMapperReader.cpp.o
+1 warning generated.
+[ 69%] Building CXX object CMakeFiles/audaspace.dir/src/respec/Converter.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ChannelMapperReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ChannelMapperReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/Converter.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/Converter.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/SpecsChanger.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 70%] Building CXX object CMakeFiles/audaspace.dir/src/respec/ConverterFunctions.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ConverterFunctions.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstring:62:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:326:23: warning: implicit conversion from 'int32_t' (aka 'int') to 'float' changes value from 2147483647 to 2147483648 [-Wimplicit-const-int-float-conversion]
+  326 |                         t = (int32_t)(s[i]*S32_MAX);
+      |                                           ~^~~~~~~
+/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:25:19: note: expanded from macro 'S32_MAX'
+   25 | #define S32_MAX         ((int32_t)0x7FFFFFFF)
+      |                          ^~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:344:23: warning: implicit conversion from 'int32_t' (aka 'int') to 'float' changes value from 2147483647 to 2147483648 [-Wimplicit-const-int-float-conversion]
+  344 |                         t = (int32_t)(s[i]*S32_MAX);
+      |                                           ~^~~~~~~
+/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:25:19: note: expanded from macro 'S32_MAX'
+   25 | #define S32_MAX         ((int32_t)0x7FFFFFFF)
+      |                          ^~~~~~~~~~~~~~~~~~~
+/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:362:26: warning: implicit conversion from 'int32_t' (aka 'int') to 'float' changes value from 2147483647 to 2147483648 [-Wimplicit-const-int-float-conversion]
+  362 |                         t[i] = (int32_t)(s[i]*S32_MAX);
+      |                                              ~^~~~~~~
+/Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterFunctions.cpp:25:19: note: expanded from macro 'S32_MAX'
+   25 | #define S32_MAX         ((int32_t)0x7FFFFFFF)
+      |                          ^~~~~~~~~~~~~~~~~~~
+4 warnings generated.
+[ 71%] Building CXX object CMakeFiles/audaspace.dir/src/respec/ConverterReader.cpp.o
+1 warning generated.
+[ 72%] Building CXX object CMakeFiles/audaspace.dir/src/respec/JOSResample.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ConverterReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ConverterReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/JOSResample.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/JOSResample.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/SpecsChanger.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 73%] Building CXX object CMakeFiles/audaspace.dir/src/respec/JOSResampleReaderCoeffHigh.cpp.o
+[ 74%] Building CXX object CMakeFiles/audaspace.dir/src/respec/JOSResampleReaderCoeffLow.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/JOSResampleReaderCoeffLow.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/JOSResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/JOSResampleReaderCoeffHigh.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/JOSResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 75%] Building CXX object CMakeFiles/audaspace.dir/src/respec/JOSResampleReaderCoeffMedium.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/JOSResampleReaderCoeffMedium.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/JOSResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 76%] Building CXX object CMakeFiles/audaspace.dir/src/respec/JOSResampleReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/JOSResampleReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/JOSResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 77%] Building CXX object CMakeFiles/audaspace.dir/src/respec/LinearResample.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/LinearResample.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/LinearResample.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/SpecsChanger.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 78%] Building CXX object CMakeFiles/audaspace.dir/src/respec/LinearResampleReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/LinearResampleReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/LinearResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 79%] Building CXX object CMakeFiles/audaspace.dir/src/respec/Mixer.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/Mixer.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/Mixer.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ConverterFunctions.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstring:62:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 80%] Building CXX object CMakeFiles/audaspace.dir/src/respec/ResampleReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/ResampleReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/ResampleReader.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/EffectReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 81%] Building CXX object CMakeFiles/audaspace.dir/src/respec/SpecsChanger.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/respec/SpecsChanger.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/respec/SpecsChanger.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 82%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/AnimateableProperty.cpp.o
+[ 83%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/Double.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/AnimateableProperty.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/AnimateableProperty.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex:192:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/steady_clock.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/Double.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/Double.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 83%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/DoubleReader.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/DoubleReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/DoubleReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 84%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/Ducking.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/Ducking.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/DuckingInternal.h:29:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/SequenceData.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/AnimateableProperty.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex:192:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/steady_clock.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 85%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/PingPong.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/PingPong.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/PingPong.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/fx/Effect.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 86%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/Sequence.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/Sequence.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/Sequence.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 87%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/SequenceData.cpp.o
+1 warning generated.
+[ 88%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/SequenceEntry.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/SequenceData.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/SequenceData.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/AnimateableProperty.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex:192:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/steady_clock.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/SequenceEntry.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/SequenceEntry.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/AnimateableProperty.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex:192:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/steady_clock.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 89%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/SequenceHandle.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/SequenceHandle.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/SequenceHandle.h:21:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 90%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/SequenceReader.cpp.o
+1 warning generated.
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/SequenceReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/SequenceReader.h:26:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/ReadDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/SoftwareDevice.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/devices/IDevice.h:25:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 92%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/SuperposeReader.cpp.o
+[ 92%] Building CXX object CMakeFiles/audaspace.dir/src/sequence/Superpose.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/SuperposeReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/SuperposeReader.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer sIn file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/sequence/Superpose.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/sequence/Superpose.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+upported   by libc++."
+      |    ^
+204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 93%] Building CXX object CMakeFiles/audaspace.dir/src/util/Barrier.cpp.o
+[ 94%] Building CXX object CMakeFiles/audaspace.dir/src/util/Buffer.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/util/Barrier.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/util/Barrier.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex:192:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/steady_clock.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 95%] Building CXX object CMakeFiles/audaspace.dir/src/util/BufferReader.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/util/Buffer.cpp:19:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/algorithm:1840:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/util/BufferReader.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/util/BufferReader.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+[ 96%] Building CXX object CMakeFiles/audaspace.dir/src/util/RingBuffer.cpp.o
+1 warning generated.
+[ 97%] Building CXX object CMakeFiles/audaspace.dir/src/util/StreamBuffer.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/util/RingBuffer.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/util/RingBuffer.h:28:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstddef:39:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+[ 98%] Building CXX object CMakeFiles/audaspace.dir/src/util/ThreadPool.cpp.o
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/util/StreamBuffer.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/util/StreamBuffer.h:25:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/ISound.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:943:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+[ 99%] Building CXX object CMakeFiles/audaspace.dir/PluginManager.cpp.o
+1 warning generated.
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/src/util/ThreadPool.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/util/ThreadPool.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex:192:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/steady_clock.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/duration.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/.task-build/core/PluginManager.cpp:17:
+In file included from /Volumes/UserFBWorkspace/questions/FS0715D4C8C0A3U16230/attempts/20261125T163818364166Z/repo/include/plugin/PluginManager.h:27:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/unordered_map:589:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/is_permutation.h:13:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/comp.h:12:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:15:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: warning: "The selected platform is no longer supported by libc++." [-W#warnings]
+  204 | #  warning "The selected platform is no longer supported by libc++."
+      |    ^
+1 warning generated.
+1 warning generated.
+1 warning generated.
+[100%] Linking CXX static library libaudaspace.a
+[100%] Built target audaspace

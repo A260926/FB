@@ -100,6 +100,16 @@ void Sequence::remove(std::shared_ptr<SequenceEntry> entry)
 	m_sequence->remove(entry);
 }
 
+void Sequence::setDucking(std::shared_ptr<SequenceEntry> target, std::shared_ptr<SequenceEntry> key, const DuckingSettings& settings)
+{
+	m_sequence->setDucking(target, key, settings);
+}
+
+void Sequence::clearDucking(std::shared_ptr<SequenceEntry> target)
+{
+	m_sequence->clearDucking(target);
+}
+
 std::shared_ptr<IReader> Sequence::createQualityReader(ResampleQuality quality)
 {
 	return std::shared_ptr<IReader>(new SequenceReader(m_sequence, quality));

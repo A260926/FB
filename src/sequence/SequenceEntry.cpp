@@ -98,6 +98,21 @@ void SequenceEntry::move(double begin, double end, double skip)
 	}
 }
 
+double SequenceEntry::getBegin() const
+{
+	return m_begin;
+}
+
+double SequenceEntry::getEnd() const
+{
+	return m_end;
+}
+
+double SequenceEntry::getSkip() const
+{
+	return m_skip;
+}
+
 bool SequenceEntry::isMuted()
 {
 	return m_muted;

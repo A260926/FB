@@ -24,17 +24,36 @@
 
 #include "respec/Specification.h"
 #include "sequence/AnimateableProperty.h"
+#include "sequence/Ducking.h"
 #include "devices/I3DDevice.h"
 #include "util/ILockable.h"
 
 #include <list>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 AUD_NAMESPACE_BEGIN
 
 class SequenceEntry;
 class ISound;
+class SequenceReader;
+struct DuckingRuleSnapshot;
+
+/**
+ * A ducking rule linking a target entry to a key entry.
+ */
+struct SequenceDuckingRule
+{
+	/// The entry whose gain is controlled.
+	std::shared_ptr<SequenceEntry> target;
+
+	/// The entry whose pre-ducking signal drives the detector.
+	std::shared_ptr<SequenceEntry> key;
+
+	/// The rule settings.
+	DuckingSettings settings;
+};
 
 /**
  * This class represents sequenced entries to play a sound scene.
@@ -42,6 +61,7 @@ class ISound;
 class AUD_API SequenceData : public ILockable
 {
 	friend class SequenceReader;
+	friend std::vector<DuckingRuleSnapshot> captureDuckingRules(const SequenceData& data, SampleRate rate);
 private:
 	/// The target specification.
 	Specs m_specs;
@@ -57,6 +77,17 @@ private:
 
 	/// The sequenced entries.
 	std::list<std::shared_ptr<SequenceEntry> > m_entries;
+
+	/// The ducking rules. At most one rule per target entry.
+	std::list<SequenceDuckingRule> m_ducking;
+
+	/// Status of the ducking rules, changes when a rule is added or removed.
+	int m_ducking_status;
+
+	/**
+	 * Returns whether an entry is a current member of the scene.
+	 */
+	bool isEntry(const std::shared_ptr<SequenceEntry>& entry) const;
 
 	/// Whether the whole scene is muted.
 	bool m_muted;
@@ -211,6 +242,22 @@ public:
 	 * \param entry The entry to remove.
 	 */
 	void remove(std::shared_ptr<SequenceEntry> entry);
+
+	/**
+	 * Sets or replaces the ducking rule for a target entry.
+	 * \param target The target entry, must be a current member of the scene.
+	 * \param key The key entry, must be a current member of the scene and
+	 *        different from the target.
+	 * \param settings The rule settings.
+	 * \throw std::invalid_argument If the arguments or settings are invalid.
+	 */
+	void setDucking(std::shared_ptr<SequenceEntry> target, std::shared_ptr<SequenceEntry> key, const DuckingSettings& settings);
+
+	/**
+	 * Removes the ducking rule of a target entry, if there is one.
+	 * \param target The target entry.
+	 */
+	void clearDucking(std::shared_ptr<SequenceEntry> target);
 };
 
 AUD_NAMESPACE_END
