@@ -23,6 +23,8 @@ set(libmatroska_SOURCES
   src/KaxCues.cpp
   src/KaxCuesData.cpp
   src/KaxInfoData.cpp
+  src/KaxOrderedIndex.cpp
+  src/KaxOrderedReader.cpp
   src/KaxSeekHead.cpp
   src/KaxSegment.cpp
   src/KaxSemantic.cpp
@@ -46,6 +48,7 @@ set(libmatroska_PUBLIC_HEADERS
   matroska/KaxDefines.h
   matroska/KaxInfoData.h
   matroska/KaxInfo.h
+  matroska/KaxOrderedReader.h
   matroska/KaxSeekHead.h
   matroska/KaxSegment.h
   matroska/KaxSemantic.h

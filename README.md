@@ -39,6 +39,59 @@ following additional `cmake` options are supported:
 * `-DBUILD_SHARED_LIBS=YES` — build the shared library instead of the
   static one (default: no)
 
+## Ordered-chapter reader
+
+`matroska/KaxOrderedReader.h` provides `KaxOrderedReader`, which plays the
+ordered chapters of a Matroska root file by following `ChapterSegmentUID`
+references to other Matroska files. The sources are not remuxed; the reader
+keeps only a compact frame index in memory and re-reads each frame payload from
+the caller's `IOCallback`s on demand.
+
+`Open()` takes the source callbacks (shared ownership, never closed by the
+reader), the index of the root source, the `EditionUID` (which must be flagged
+ordered) and the `TrackUID` of the video track to play.
+
+```cpp
+std::vector<std::shared_ptr<libebml::IOCallback>> sources;
+sources.push_back(std::make_shared<libebml::StdIOCallback>("part1.mkv", MODE_READ));
+sources.push_back(std::make_shared<libebml::StdIOCallback>("part2.mkv", MODE_READ));
+
+std::unique_ptr<libmatroska::KaxOrderedReader> reader;
+if (!libmatroska::KaxOrderedReader::Open(sources, 0, editionUID, trackUID, reader))
+  return 1;
+
+libmatroska::KaxOrderedReader::Packet packet;
+while (reader->ReadNext(packet) == libmatroska::KaxOrderedReader::Status::Ok) {
+  if (packet.kind == libmatroska::KaxOrderedReader::Kind::Config) {
+    // packet.data is the source's CodecPrivate for this chapter.
+  } else {
+    // packet.data is a full frame; source_ns/program_ns and the visible
+    // window describe where it belongs in the program timeline.
+  }
+}
+
+// Seek to a program position in nanoseconds; Seek(DurationNS()) is valid.
+reader->Seek(5'000'000);
+```
+
+The example `examples/ordered_reader.cpp` dumps the event stream. Its usage is
+
+```
+ordered_reader <manifest-path> <rootSource> <editionUID> <trackUID> <input> [<input> ...]
+```
+
+and it writes one decimal text line per event, either
+
+```
+C chapter source track source_ns program_ns size
+```
+
+or
+
+```
+F chapter source track source_ns program_ns duration_ns visible_begin_ns visible_duration_ns size
+```
+
 ## Code of conduct
 
 Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
