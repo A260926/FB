@@ -61,8 +61,19 @@ The Bento4 SDK includes several command-line applications/tools that are built u
 |mp42avc	    | extract a raw AVC/H.264 elementary stream from an MP4 file                                                                                      
 |mp42hls	    | converts an MP4 file to an HLS (HTTP Live Streaming) presentation, including the generation of the segments and .m3u8 playlist.
 |mp42ts	        | converts an MP4 file to an MPEG2-TS file.
+|EditedTs        | writes an edit-list-aware single-program MPEG2-TS presentation.
 |mp4-dash	    | creates an MPEG DASH output from one or more MP4 files, including encryption.                                                                   
 |mp4-dash-clone	| creates a local clone of a remote or local MPEG DASH presentation, optionally encrypting the segments as they are cloned.
+
+### EditedTs
+
+The `EditedTs` sample writes an edit-list-aware, single-program MPEG-2 TS presentation. Empty MP4 edits continue to occupy movie time: the output keeps the program clock and emits PCR-only packets, while the following media is not pulled earlier.
+
+```bash
+EditedTs input.mp4 edited.ts 100000 3600
+```
+
+The decimal arguments are `origin90k` (a 90 kHz timeline origin) and `pcrInterval90k` (the PCR grid interval, from 1 through 9000 90 kHz units). The PES DTS/PTS values use `origin90k + 9000 + projected-movie-time`; PCR values use `(origin90k + grid-time) * 300`. The same entry point is available to C++ consumers as `AP4_EditedTsWriter::Write(...)`.
 
 Building
 --------

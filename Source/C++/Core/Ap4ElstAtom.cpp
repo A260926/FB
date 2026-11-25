@@ -87,23 +87,29 @@ AP4_ElstAtom::AP4_ElstAtom(AP4_UI32        size,
     m_Entries.EnsureCapacity(entry_count);
     for (AP4_UI32 i=0; i < entry_count; i++) {
         AP4_UI16 media_rate;
-        AP4_UI16 zero;
+        AP4_UI16 media_rate_fraction;
         if (version == 0) {
             AP4_UI32 segment_duration;
             AP4_UI32 media_time;
             stream.ReadUI32(segment_duration);
             stream.ReadUI32(media_time);
             stream.ReadUI16(media_rate);
-            stream.ReadUI16(zero);
-            m_Entries.Append(AP4_ElstEntry(segment_duration, (AP4_SI32)media_time, media_rate));
+            stream.ReadUI16(media_rate_fraction);
+            m_Entries.Append(AP4_ElstEntry(segment_duration,
+                                            (AP4_SI32)media_time,
+                                            media_rate,
+                                            media_rate_fraction));
         } else {
             AP4_UI64 segment_duration;
             AP4_UI64 media_time;
             stream.ReadUI64(segment_duration);
             stream.ReadUI64(media_time);
             stream.ReadUI16(media_rate);
-            stream.ReadUI16(zero);
-            m_Entries.Append(AP4_ElstEntry(segment_duration, (AP4_SI64)media_time, media_rate));
+            stream.ReadUI16(media_rate_fraction);
+            m_Entries.Append(AP4_ElstEntry(segment_duration,
+                                            (AP4_SI64)media_time,
+                                            media_rate,
+                                            media_rate_fraction));
         }
     }
 }
@@ -132,7 +138,7 @@ AP4_ElstAtom::WriteFields(AP4_ByteStream& stream)
         }
         result = stream.WriteUI16(m_Entries[i].m_MediaRate);
         if (AP4_FAILED(result)) return result;
-        result = stream.WriteUI16(0);
+        result = stream.WriteUI16(m_Entries[i].m_MediaRateFraction);
         if (AP4_FAILED(result)) return result;
     }
 

@@ -46,14 +46,19 @@ class AP4_ByteStream;
 +---------------------------------------------------------------------*/
 class AP4_ElstEntry {
 public:
-    AP4_ElstEntry(AP4_UI64 segment_duration = 0, AP4_SI64 media_time = 0, AP4_UI16 media_rate = 1) :
+    AP4_ElstEntry(AP4_UI64 segment_duration = 0,
+                  AP4_SI64 media_time = 0,
+                  AP4_UI16 media_rate = 1,
+                  AP4_UI16 media_rate_fraction = 0) :
       m_SegmentDuration(segment_duration),
       m_MediaTime(media_time),
-      m_MediaRate(media_rate) {}
+      m_MediaRate(media_rate),
+      m_MediaRateFraction(media_rate_fraction) {}
 
     AP4_UI64 m_SegmentDuration;
     AP4_SI64 m_MediaTime;
     AP4_UI16 m_MediaRate;
+    AP4_UI16 m_MediaRateFraction;
 };
 
 class AP4_ElstAtom : public AP4_Atom

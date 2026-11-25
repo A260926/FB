@@ -77,19 +77,28 @@ public:
     // classes
     class Stream {
     public:
-        Stream(AP4_UI16 pid) : m_PID(pid), m_ContinuityCounter(0) {}
+        Stream(AP4_UI16 pid) :
+            m_PID(pid),
+            m_ContinuityCounter(0),
+            m_HasPayloadCc(false),
+            m_LastPayloadCc(0) {}
         virtual ~Stream() {}
         
         AP4_UI16 GetPID() { return m_PID; }
-        void WritePacketHeader(bool            payload_start, 
-                               unsigned int&   payload_size,
-                               bool            with_pcr,
-                               AP4_UI64        pcr,
-                               AP4_ByteStream& output);
-        
+        AP4_Result WritePcrPacket(AP4_UI64 pcr27m, AP4_ByteStream& output);
+        AP4_Result WritePacketHeader(bool            payload_start,
+                                     unsigned int&   payload_size,
+                                     bool            with_pcr,
+                                     AP4_UI64        pcr,
+                                     AP4_ByteStream& output);
+
     private:
+        AP4_UI08 CurrentAdaptationOnlyCc() const;
+
         AP4_UI16     m_PID;
         unsigned int m_ContinuityCounter;
+        bool         m_HasPayloadCc;
+        AP4_UI08     m_LastPayloadCc;
     };
     
     class SampleStream : public Stream {
@@ -105,7 +114,10 @@ public:
             m_StreamType(stream_type),
             m_StreamId(stream_id),
             m_TimeScale(timescale),
-            m_PcrOffset(pcr_offset) {
+            m_PcrOffset(pcr_offset),
+            m_HasTimestampOverride(false),
+            m_OverrideDts90k(0),
+            m_OverridePts90k(0) {
                 if (descriptor && descriptor_length) {
                     m_Descriptor.SetData(descriptor, descriptor_length);
                 }
@@ -136,12 +148,23 @@ public:
                 m_Descriptor.SetData(descriptor, descriptor_length);
             }
         }
+        void SetTimestampOverride(AP4_UI64 dts90k, AP4_UI64 pts90k) {
+            m_HasTimestampOverride = true;
+            m_OverrideDts90k = dts90k;
+            m_OverridePts90k = pts90k;
+        }
+        void ClearTimestampOverride() {
+            m_HasTimestampOverride = false;
+        }
 
         AP4_UI08       m_StreamType;
         AP4_UI16       m_StreamId;
         AP4_UI32       m_TimeScale;
         AP4_DataBuffer m_Descriptor;
         AP4_UI64       m_PcrOffset;
+        bool           m_HasTimestampOverride;
+        AP4_UI64       m_OverrideDts90k;
+        AP4_UI64       m_OverridePts90k;
     };
     
     // constructor
