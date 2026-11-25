@@ -121,6 +121,29 @@ Use Makefile generator which is default one.
     cmake ..
     make
 
+## Theora edit example ##
+
+`include/ogg/theora_edit.h` plus `src/theora_index.c` and `src/theora_edit.c`
+add an opaque `ogg_theora_plan` that concatenates keyframe-aligned frame
+ranges of one or more Theora logical streams into a single new logical stream
+without re-encoding. `examples/theora_edit.c` drives it from the command line.
+
+Build it against an existing task build:
+
+    cc -std=c99 -Iinclude -I.task-build/ogg/include \
+       examples/theora_edit.c src/theora_index.c src/theora_edit.c \
+       .task-build/ogg/libogg.a -o theora_edit
+
+Run it with an input path, an output path and one or more `stream begin end`
+triples:
+
+    ./theora_edit tests/fixtures/frames.ogv out.ogv 0 0 2
+
+`begin` is a zero-based frame number that must point at a keyframe; `end` is
+exclusive. Multiple triples are concatenated in the order given, so
+overlapping and repeated ranges are allowed. The output starts at time zero
+with continuous granules. See `examples/README.md` for details.
+
 ## Testing ##
 
 This package includes a collection of automated tests.
