@@ -74,8 +74,12 @@ func NewInterceptor(opts ...ReceiverInterceptorOption) (*InterceptorFactory, err
 // BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream.
 // The returned method will be called once per rtp packet.
 func (i *ReceiverInterceptor) BindRemoteStream(
-	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
+	info *interceptor.StreamInfo, reader interceptor.RTPReader,
 ) interceptor.RTPReader {
+	if i.buffer != nil && i.buffer.redundant != nil {
+		return i.bindRedundantRemoteStream(info, reader)
+	}
+
 	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 		buf := make([]byte, len(b))
 		n, attr, err := reader.Read(buf, a)
@@ -104,7 +108,12 @@ func (i *ReceiverInterceptor) BindRemoteStream(
 }
 
 // UnbindRemoteStream is called when the Stream is removed. It can be used to clean up any data related to that track.
-func (i *ReceiverInterceptor) UnbindRemoteStream(_ *interceptor.StreamInfo) {
+func (i *ReceiverInterceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
+	if i.buffer != nil && i.buffer.redundant != nil {
+		i.unbindRedundantRemoteStream(info)
+		return
+	}
+
 	defer i.wg.Wait()
 	i.m.Lock()
 	defer i.m.Unlock()
@@ -113,6 +122,10 @@ func (i *ReceiverInterceptor) UnbindRemoteStream(_ *interceptor.StreamInfo) {
 
 // Close closes the interceptor.
 func (i *ReceiverInterceptor) Close() error {
+	if i.buffer != nil && i.buffer.redundant != nil {
+		return i.closeRedundant()
+	}
+
 	defer i.wg.Wait()
 	i.m.Lock()
 	defer i.m.Unlock()

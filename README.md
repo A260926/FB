@@ -66,6 +66,34 @@ sequentially as the packet moves through them.
 The [examples](https://github.com/pion/interceptor/blob/master/examples) directory provides some basic examples. If you need more please file an issue!
 You should also look in [pion/webrtc](https://github.com/pion/webrtc) for real world examples.
 
+### Redundant dual-path jitter mode
+
+`pkg/jitterbuffer` also provides an explicit redundant reception mode for the same RTP media sent over two SSRCs with a fixed sequence-number offset:
+
+```go
+jb, err := jitterbuffer.NewRedundant(jitterbuffer.RedundantConfig{
+    OutputSSRC: 424242,
+    PayloadType: 96,
+    Paths: [2]jitterbuffer.RedundantPath{
+        {SSRC: 1001, SequenceOffset: 7, RTT: 10 * time.Millisecond},
+        {SSRC: 2002, SequenceOffset: 99, RTT: 30 * time.Millisecond},
+    },
+    Window: 16,
+    Hold:   20 * time.Millisecond,
+    Retry:  50 * time.Millisecond,
+    Now:    time.Now, // tests/callers can supply a manually advanced clock
+})
+```
+
+Path sequence numbers are converted to the canonical domain with
+`canonical = pathSequence - RedundantPath.SequenceOffset` (modulo 65536). The first accepted copy owns the packet content and attributes; duplicates consume no additional canonical capacity. `Push` and `Pop` remain the data path. A revealed head gap waits for `Hold`; after that time `Pop` retires the gap and jumps to the earliest received packet. Empty/not-ready reads return `ErrRedundantPending`. The other positional/peek APIs return `ErrRedundantMode`, and `SetPlayoutHead` is a no-op in this mode. `Clear(false)` removes packets and feedback state while retaining the playout head; `Clear(true)` also resets the head.
+
+Use `jitterbuffer.WithRedundant(cfg)` as a `NewInterceptor` option to install the RTP readers and RTCP feedback translator. Readers for the two configured SSRCs share one canonical window while still reading only their own upstream reader. Readers for other SSRCs are returned unchanged.
+
+In the feedback direction, outgoing `TransportLayerNack` packets whose `MediaSSRC` is `OutputSSRC` are expanded from PID/BLP and filtered to canonical gaps that are revealed, unfilled and not retired. The first report chooses the valid path with the smaller `RTT` (Paths[0] on a tie); after a successful send, the same gap is suppressed for `Retry` and the next eligible report uses the other path. Canonical sequence numbers are converted back with `pathSequence = canonical + SequenceOffset`, then reports are regrouped by path SSRC and packed into PID/BLP pairs. `SenderSSRC` is preserved. Other RTCP packets pass through in their original order. Path binding generations ensure an unbind/rebind cannot let a late upstream write completion mutate the new generation.
+
+A runnable merge example is available in [`examples/redundant`](examples/redundant/main.go).
+
 ### Roadmap
 The library is used as a part of our WebRTC implementation. Please refer to that [roadmap](https://github.com/pion/webrtc/issues/9) to track our major milestones.
 
