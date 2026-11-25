@@ -40,4 +40,5 @@ flaccinclude_HEADERS = \
 	metadata.h \
 	ordinals.h \
 	stream_decoder.h \
-	stream_encoder.h
+	stream_encoder.h \
+	stream_encoder_checkpoint.h

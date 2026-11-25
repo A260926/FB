@@ -59,6 +59,7 @@ add_library(FLAC
     metadata_object.c
     stream_decoder.c
     stream_encoder.c
+    stream_encoder_checkpoint.c
     stream_encoder_intrin_sse2.c
     stream_encoder_intrin_ssse3.c
     stream_encoder_intrin_avx2.c
