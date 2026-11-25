@@ -400,6 +400,31 @@ To run saved inputs against some test, just run it with appropriate arguments:
 No need to use fuzzer specific compilation (so don't use `SimpleCrash_AFL` etc.
 They are slower due to instrumentation).
 
+### Isolated replay batches
+
+For a bounded, cancellable regression pass over a set of already-saved
+inputs, Unix builds also expose `DeepState_ReplayBatch`
+(`src/include/deepstate/Replay.h`).  Unlike the saved-file entrypoints it
+runs many inputs in one call, dispatches them in input order with bounded
+parallelism, and forks one private child per running case so no test shares
+another test's current-run state or input cursor.  It publishes the per-case
+bounded log, the consumed input prefix, and a `manifest.tsv` into a fresh
+output directory, atomically, once the whole batch is collected.
+
+A batch is described by an array of `struct DeepState_ReplayCase` (case id,
+test metadata, and the exact input bytes) and a `struct DeepState_ReplayConfig`
+(run id, job count, per-case log cap, an optional cancellation pipe, and the
+new output directory).  The cancellation pipe carries native-endian
+`(run_id, case_id)` pairs; a cancel for a case that has not yet been reaped is
+reported as canceled and never as a pass, and a queued case that is canceled
+is never started.  See `task_support/replay_contract.md` and
+`examples/replay_batch.c` for the precise contract and a worked example.
+
+This is a regression-replay convenience, not an OS sandbox: it assumes
+cooperative, finite, benign callbacks and does not isolate arbitrary
+application file operations.  It is additive; the saved-file and fuzzer
+entrypoints above are unchanged.
+
 
 ## Which Fuzzer Should I Use?
 

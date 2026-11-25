@@ -123,7 +123,7 @@ if (WIN32)
 endif (WIN32)
 
 if (UNIX)
-  set(DEEPSTATE_PLATFORM_LIB src/lib/DeepState_UNIX.c)
+  set(DEEPSTATE_PLATFORM_LIB src/lib/DeepState_UNIX.c src/lib/Replay_UNIX.c)
 endif (UNIX)
 
 # compile only examples

@@ -1062,6 +1062,56 @@ extern int FuzzerEntrypoint(const uint8_t *data, size_t size) {
   return LLVMFuzzerTestOneInput(data, size);
 }
 
+/* Private child-execution path for `DeepState_ReplayBatch`.  See
+ * `DeepState.h` for the full contract.  This deliberately reuses
+ * `DeepState_Begin` and `DeepState_RunTestNoFork` (setjmp + Pass/Fail/Abandon
+ * handling) rather than calling the test function directly. */
+int DeepState_RunReplayChild(struct DeepState_TestInfo *test,
+                             const uint8_t *data, size_t size,
+                             enum DeepState_TestRunResult *result,
+                             size_t *consumed) {
+  /* Give this child private current-run state instead of any shared mapping
+   * inherited from the parent, so its terminal result can never be read from
+   * (or written to) another child's singleton. */
+  void *mem = malloc(sizeof(struct DeepState_TestRunInfo));
+  if (mem == NULL) {
+    return -1;
+  }
+  DeepState_CurrentTestRun = (struct DeepState_TestRunInfo *) mem;
+  DeepState_CurrentTestRun->test = test;
+  DeepState_CurrentTestRun->result = DeepState_TestRunPass;
+  DeepState_CurrentTestRun->reason = NULL;
+
+  DeepState_InputIndex = 0;
+  DeepState_InputInitialized = 0;
+  DeepState_SwarmConfigsIndex = 0;
+  DeepState_GeneratedAllocsIndex = 0;
+  DeepState_InternalFuzzing = 0;
+
+  /* The framework must not write saved cases for this path; parents publish
+   * their own artifacts and the caller explicitly never asked for these. */
+  FLAGS_output_test_dir = "";
+  HAS_FLAG_output_test_dir = 0;
+
+  /* Do not let inherited stream formatting leak into this child's log. */
+  DeepState_ResetStreams();
+
+  if (size) {
+    memcpy((void *) DeepState_Input, (const void *) data, size);
+  }
+  DeepState_InputInitialized = (uint32_t) size;
+
+  DeepState_Begin(test);
+
+  *result = (enum DeepState_TestRunResult) DeepState_RunTestNoFork(test);
+  *consumed = DeepState_InputIndex;
+
+  DeepState_CleanUp();
+  DeepState_CurrentTestRun = NULL;
+  free(mem);
+  return 0;
+}
+
 /* Overwrite libc's abort. */
 void abort(void) {
   DeepState_Fail();

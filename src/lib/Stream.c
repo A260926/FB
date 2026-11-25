@@ -280,6 +280,19 @@ void DeepState_ClearStream(enum DeepState_LogLevel level) {
   }
 }
 
+/* Discard every buffered stream's formatting state and pending message
+ * without logging it. */
+void DeepState_ResetStreams(void) {
+  for (int i = 0; i <= (int) DeepState_LogFatal; ++i) {
+    struct DeepState_Stream *stream = &(DeepState_Streams[i]);
+    stream->size = 0;
+    DeepState_MemScrub(&(stream->options), sizeof(stream->options));
+    stream->format[0] = '\0';
+    stream->unpack[0] = '\0';
+    stream->value.as_uint64 = 0;
+  }
+}
+
 /* Flush the contents of the stream to a log. */
 void DeepState_LogStream(enum DeepState_LogLevel level) {
   struct DeepState_Stream *stream = &(DeepState_Streams[level]);

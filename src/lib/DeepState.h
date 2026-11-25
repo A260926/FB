@@ -32,6 +32,29 @@ extern void DeepState_RunSavedTakeOverCases(jmp_buf env, struct DeepState_TestIn
 /* Run take over. Platform specific function. */
 extern int DeepState_TakeOver(void);
 
+/* Drop any buffered DeepState stream content without logging it.  Used by the
+ * isolated replay children so inherited formatting state is not attributed to
+ * a child's log.  Implemented in Stream.c. */
+extern void DeepState_ResetStreams(void);
+
+/* Index into `DeepState_GeneratedAllocs`; reset per replay child so inherited
+ * test allocations are not attributed to the child.  Defined in DeepState.c. */
+extern uint32_t DeepState_GeneratedAllocsIndex;
+
+/* Private single-case child execution path used by `DeepState_ReplayBatch`.
+ * Must be called in a fresh forked child (or any process that may discard all
+ * prior DeepState state).  It allocates private current-run state, resets the
+ * input cursor, initializes the input from exactly `data`/`size`, disables
+ * random generation and the framework's automatic output_test_dir saving, and
+ * runs the test through `DeepState_Begin` plus the usual
+ * `DeepState_RunTestNoFork` Pass/Fail/Abandon handling.  On success it stores
+ * the actual test result and the actual `DeepState_InputIndex` consumption and
+ * returns 0; it returns -1 only if private state could not be allocated. */
+extern int DeepState_RunReplayChild(struct DeepState_TestInfo *test,
+                                    const uint8_t *data, size_t size,
+                                    enum DeepState_TestRunResult *result,
+                                    size_t *consumed);
+
 
 DEEPSTATE_END_EXTERN_C
 
