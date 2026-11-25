@@ -143,6 +143,42 @@ func (*Xxxx) GetType() BoxType {
 go-mp4 does not buffer I/O.
 If you need to reduce the number of Read calls, you can wrap your io.ReadSeeker with [bufseekio](https://github.com/sunfish-shogi/bufseekio).
 
+## AVC edit-list export
+
+`ExportAVCEdits` applies an MP4 track's edit list (including empty edits and
+repeated or reversed references) and writes an Annex B H.264 stream in which
+**every movie edit starts independently from an IDR**. It does not decode or
+re-encode video: NAL units are copied verbatim and only the length-prefixed
+framing is replaced by four-byte start codes.
+
+```go
+report, err := mp4.ExportAVCEdits(r, out, trackID)
+if err != nil {
+    return err
+}
+for _, s := range report.Samples {
+    packet := out.Bytes()[s.ByteOffset : s.ByteOffset+s.ByteSize]
+    _ = packet // one output sample packet; parameter sets prefix the first packet of an edit
+}
+```
+
+The returned `AVCEditReport` carries the movie/media timescales, every edit
+(empty edits included) in movie order, and each output packet's source sample
+number, byte range, DTS/PTS and precise visible interval.
+
+**Consumers must reset the decoder at every edit boundary**: whenever
+`Samples[i].EditIndex` changes, flush/reset the AVC decoder before feeding
+packet `i`. The first packet of each edit already contains, in id order, all
+SPS and PPS that were valid immediately before that edit's source IDR first
+VCL NAL, so no out-of-band avcC is required. Invisible packets listed before
+the first visible sample are pre-roll and must be decoded but not presented.
+
+The same entry point is available as a command:
+
+```sh
+go run ./cmd/avcedits -track 1 input.mp4 output.h264 output.json
+```
+
 ## Command Line Tool
 
 Install mp4tool as follows:
