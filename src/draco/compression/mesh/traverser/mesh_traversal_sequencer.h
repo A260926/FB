@@ -18,6 +18,7 @@
 #include "draco/attributes/geometry_indices.h"
 #include "draco/compression/attributes/mesh_attribute_indices_encoding_data.h"
 #include "draco/compression/attributes/points_sequencer.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/mesh/mesh.h"
 
 namespace draco {
@@ -66,6 +67,7 @@ class MeshTraversalSequencer : public PointsSequencer {
           // There cannot be more attribute values than the number of points.
           return false;
         }
+        DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
         attribute->SetPointMapEntry(point_id, att_entry_id);
       }
     }
@@ -84,6 +86,7 @@ class MeshTraversalSequencer : public PointsSequencer {
         if (!ProcessCorner(corner_order_->at(i))) {
           return false;
         }
+        DRACO_SESSION_CHARGE(WorkUnit::kCorner);
       }
     } else {
       const int32_t num_faces = traverser_.corner_table()->num_faces();
@@ -91,6 +94,7 @@ class MeshTraversalSequencer : public PointsSequencer {
         if (!ProcessCorner(CornerIndex(3 * i))) {
           return false;
         }
+        DRACO_SESSION_CHARGE(WorkUnit::kCorner);
       }
     }
     traverser_.OnTraversalEnd();

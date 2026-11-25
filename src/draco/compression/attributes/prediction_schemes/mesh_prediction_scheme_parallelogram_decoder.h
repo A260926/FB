@@ -17,6 +17,7 @@
 
 #include "draco/compression/attributes/prediction_schemes/mesh_prediction_scheme_decoder.h"
 #include "draco/compression/attributes/prediction_schemes/mesh_prediction_scheme_parallelogram_shared.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 
 namespace draco {
 
@@ -69,6 +70,7 @@ bool MeshPredictionSchemeParallelogramDecoder<DataTypeT, TransformT,
 
   // Restore the first value.
   this->transform().ComputeOriginalValue(pred_vals.get(), in_corr, out_data);
+  DRACO_SESSION_CHARGE(WorkUnit::kPredictedValue);
 
   const int corner_map_size =
       static_cast<int>(this->mesh_data().data_to_corner_map()->size());
@@ -92,6 +94,7 @@ bool MeshPredictionSchemeParallelogramDecoder<DataTypeT, TransformT,
       this->transform().ComputeOriginalValue(
           pred_vals.get(), in_corr + dst_offset, out_data + dst_offset);
     }
+    DRACO_SESSION_CHARGE(WorkUnit::kPredictedValue);
   }
   return true;
 }

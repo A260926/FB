@@ -18,6 +18,7 @@
 #endif
 #include "draco/compression/attributes/sequential_quantization_attribute_decoder.h"
 #include "draco/compression/config/compression_shared.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 
 namespace draco {
 
@@ -52,6 +53,7 @@ bool SequentialAttributeDecodersController::DecodeAttributesDecoderData(
 
 bool SequentialAttributeDecodersController::DecodeAttributes(
     DecoderBuffer* buffer) {
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kAttributeSequencing);
   if (!sequencer_ || !sequencer_->GenerateSequence(&point_ids_)) {
     return false;
   }
@@ -93,6 +95,7 @@ bool SequentialAttributeDecodersController::
 
 bool SequentialAttributeDecodersController::
     TransformAttributesToOriginalFormat() {
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kInverseTransform);
   const int32_t num_attributes = GetNumAttributes();
   for (int i = 0; i < num_attributes; ++i) {
     // Check whether the attribute transform should be skipped.

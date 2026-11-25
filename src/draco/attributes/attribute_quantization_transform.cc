@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "draco/attributes/attribute_transform_type.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/core/quantization_utils.h"
 
 namespace draco {
@@ -70,6 +71,7 @@ bool AttributeQuantizationTransform::TransformAttribute(
 
 bool AttributeQuantizationTransform::InverseTransformAttribute(
     const PointAttribute& attribute, PointAttribute* target_attribute) {
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kInverseTransform);
   if (target_attribute->data_type() != DT_FLOAT32) {
     return false;
   }
@@ -101,6 +103,8 @@ bool AttributeQuantizationTransform::InverseTransformAttribute(
     // Store the floating point value into the attribute buffer.
     target_attribute->buffer()->Write(out_byte_pos, att_val.get(), entry_size);
     out_byte_pos += entry_size;
+    DRACO_SESSION_CHARGE(WorkUnit::kInverseVector);
+    DRACO_SESSION_CHARGE(WorkUnit::kFloatWrite);
   }
   return true;
 }

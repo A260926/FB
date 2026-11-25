@@ -17,6 +17,7 @@
 
 #include "draco/compression/attributes/mesh_attribute_indices_encoding_data.h"
 #include "draco/compression/attributes/points_sequencer.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/mesh/mesh.h"
 
 namespace draco {
@@ -48,6 +49,7 @@ class MeshAttributeIndicesEncodingObserver {
   void OnNewFaceVisited(FaceIndex /* face */) {}
 
   inline void OnNewVertexVisited(VertexIndex vertex, CornerIndex corner) {
+    DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
     const PointIndex point_id =
         mesh_->face(FaceIndex(corner.value() / 3))[corner.value() % 3];
     // Append the visited attribute to the encoding order.

@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "draco/attributes/geometry_indices.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 
 namespace draco {
 
@@ -28,7 +29,14 @@ struct MeshAttributeIndicesEncodingData {
   MeshAttributeIndicesEncodingData() : num_values(0) {}
 
   void Init(int num_vertices) {
-    vertex_to_encoded_attribute_value_index_map.resize(num_vertices);
+    vertex_to_encoded_attribute_value_index_map.clear();
+    vertex_to_encoded_attribute_value_index_map.reserve(num_vertices);
+    for (int i = 0; i < num_vertices; ++i) {
+      // Preserve the historical zero initialization while making the
+      // element-sized initialization visible to cooperative budgets.
+      vertex_to_encoded_attribute_value_index_map.push_back(0);
+      DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+    }
 
     // We expect to store one value for each vertex.
     encoded_attribute_value_index_to_corner_map.reserve(num_vertices);

@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "draco/attributes/geometry_indices.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/mesh/corner_table_iterators.h"
 
 namespace draco {
@@ -72,8 +73,20 @@ bool CornerTable::Reset(int num_faces, int num_vertices) {
       std::numeric_limits<CornerIndex::ValueType>::max() / 3) {
     return false;
   }
-  corner_to_vertex_map_.assign(num_faces_unsigned * 3, kInvalidVertexIndex);
-  opposite_corners_.assign(num_faces_unsigned * 3, kInvalidCornerIndex);
+  const std::size_t num_corners =
+      static_cast<std::size_t>(num_faces_unsigned) * 3u;
+  corner_to_vertex_map_.clear();
+  corner_to_vertex_map_.reserve(num_corners);
+  for (std::size_t i = 0; i < num_corners; ++i) {
+    corner_to_vertex_map_.push_back(kInvalidVertexIndex);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
+  opposite_corners_.clear();
+  opposite_corners_.reserve(num_corners);
+  for (std::size_t i = 0; i < num_corners; ++i) {
+    opposite_corners_.push_back(kInvalidCornerIndex);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
   vertex_corners_.reserve(num_vertices);
   valence_cache_.ClearValenceCache();
   valence_cache_.ClearValenceCacheInaccurate();

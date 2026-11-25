@@ -14,6 +14,8 @@
 //
 #include "draco/compression/attributes/sequential_attribute_decoder.h"
 
+#include "draco/compression/mesh/decode_work_meter.h"
+
 namespace draco {
 
 SequentialAttributeDecoder::SequentialAttributeDecoder()
@@ -67,6 +69,7 @@ const PointAttribute* SequentialAttributeDecoder::GetPortableAttribute() {
     for (PointIndex i(0);
          i < static_cast<uint32_t>(attribute_->indices_map_size()); ++i) {
       portable_attribute_->SetPointMapEntry(i, attribute_->mapped_index(i));
+      DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
     }
   }
   return portable_attribute_.get();
@@ -111,6 +114,7 @@ bool SequentialAttributeDecoder::DecodeValues(
     }
     attribute_->buffer()->Write(out_byte_pos, value_data, entry_size);
     out_byte_pos += entry_size;
+    DRACO_SESSION_CHARGE(WorkUnit::kFloatWrite);
   }
   return true;
 }

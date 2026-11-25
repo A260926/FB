@@ -17,6 +17,7 @@
 
 #include "draco/compression/config/compression_shared.h"
 #include "draco/compression/entropy/rans_symbol_coding.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/core/decoder_buffer.h"
 #include "draco/core/varint_decoding.h"
 #include "draco/draco_features.h"
@@ -57,6 +58,7 @@ class RAnsSymbolDecoder {
 template <int unique_symbols_bit_length_t>
 bool RAnsSymbolDecoder<unique_symbols_bit_length_t>::Create(
     DecoderBuffer* buffer) {
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kEntropyTables);
   // Check that the DecoderBuffer version is set.
   if (buffer->bitstream_version() == 0) {
     return false;
@@ -106,6 +108,7 @@ bool RAnsSymbolDecoder<unique_symbols_bit_length_t>::Create(
       }
       // Set zero probability for all symbols in the specified range.
       for (uint32_t j = 0; j < offset + 1; ++j) {
+        DRACO_SESSION_CHARGE(WorkUnit::kTableEntry);
         probability_table_[i + j] = 0;
       }
       i += offset;
@@ -122,6 +125,7 @@ bool RAnsSymbolDecoder<unique_symbols_bit_length_t>::Create(
         prob |= static_cast<uint32_t>(eb) << (8 * (b + 1) - 2);
       }
       probability_table_[i] = prob;
+      DRACO_SESSION_CHARGE(WorkUnit::kTableEntry);
     }
   }
   if (!ans_.rans_build_look_up_table(&probability_table_[0], num_symbols_)) {

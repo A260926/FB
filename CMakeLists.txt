@@ -280,6 +280,9 @@ list(
     draco_compression_mesh_dec_sources
     "${draco_src_root}/compression/mesh/mesh_decoder.cc"
     "${draco_src_root}/compression/mesh/mesh_decoder.h"
+    "${draco_src_root}/compression/mesh/decode_work_meter.h"
+    "${draco_src_root}/compression/mesh/mesh_decode_session.cc"
+    "${draco_src_root}/compression/mesh/mesh_decode_session.h"
     "${draco_src_root}/compression/mesh/mesh_edgebreaker_decoder.cc"
     "${draco_src_root}/compression/mesh/mesh_edgebreaker_decoder.h"
     "${draco_src_root}/compression/mesh/mesh_edgebreaker_decoder_impl.cc"

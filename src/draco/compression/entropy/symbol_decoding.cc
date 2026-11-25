@@ -18,6 +18,7 @@
 #include <cmath>
 
 #include "draco/compression/entropy/rans_symbol_decoder.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 
 namespace draco {
 
@@ -40,9 +41,11 @@ bool DecodeSymbols(uint32_t num_values, int num_components,
     return false;
   }
   if (scheme == SYMBOL_CODING_TAGGED) {
+    DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kResidualDecoding);
     return DecodeTaggedSymbols<RAnsSymbolDecoder>(num_values, num_components,
                                                   src_buffer, out_values);
   } else if (scheme == SYMBOL_CODING_RAW) {
+    DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kResidualDecoding);
     return DecodeRawSymbols<RAnsSymbolDecoder>(num_values, src_buffer,
                                                out_values);
   }
@@ -73,6 +76,7 @@ bool DecodeTaggedSymbols(uint32_t num_values, int num_components,
   for (uint32_t i = 0; i < num_values; i += num_components) {
     // Decode the tag.
     const uint32_t bit_length = tag_decoder.DecodeSymbol();
+    DRACO_SESSION_CHARGE(WorkUnit::kTag);
     // Decode the actual value.
     for (int j = 0; j < num_components; ++j) {
       uint32_t val;
@@ -80,6 +84,7 @@ bool DecodeTaggedSymbols(uint32_t num_values, int num_components,
         return false;
       }
       out_values[value_id++] = val;
+      DRACO_SESSION_CHARGE(WorkUnit::kResidualComponent);
     }
   }
   tag_decoder.EndDecoding();
@@ -106,6 +111,7 @@ bool DecodeRawSymbolsInternal(uint32_t num_values, DecoderBuffer* src_buffer,
     // Decode a symbol into the value.
     const uint32_t value = decoder.DecodeSymbol();
     out_values[i] = value;
+    DRACO_SESSION_CHARGE(WorkUnit::kResidualComponent);
   }
   decoder.EndDecoding();
   return true;

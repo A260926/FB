@@ -14,6 +14,7 @@
 //
 #include "draco/compression/attributes/attributes_decoder.h"
 
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/core/varint_decoding.h"
 
 namespace draco {
@@ -28,6 +29,7 @@ bool AttributesDecoder::Init(PointCloudDecoder* decoder, PointCloud* pc) {
 }
 
 bool AttributesDecoder::DecodeAttributesDecoderData(DecoderBuffer* in_buffer) {
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kAttributeDescriptors);
   // Decode and create attributes.
   uint32_t num_attributes;
 #ifdef DRACO_BACKWARDS_COMPATIBILITY_SUPPORTED
@@ -82,6 +84,16 @@ bool AttributesDecoder::DecodeAttributesDecoderData(DecoderBuffer* in_buffer) {
     // Check decoded attribute descriptor data.
     if (num_components == 0) {
       return false;
+    }
+
+    if (DecodeWorkMeter::active != nullptr) {
+      const bool profile_ok =
+          (att_type == GeometryAttribute::POSITION && num_components == 3) ||
+          (att_type == GeometryAttribute::TEX_COORD && num_components == 2);
+      if (!profile_ok || data_type != DT_FLOAT32) {
+        DecodeWorkMeter::active->RequestUnsupported();
+        return false;
+      }
     }
 
     // Add the attribute to the point cloud.

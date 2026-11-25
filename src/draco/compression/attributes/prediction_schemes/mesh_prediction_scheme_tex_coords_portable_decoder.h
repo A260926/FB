@@ -20,6 +20,7 @@
 #include "draco/compression/attributes/prediction_schemes/mesh_prediction_scheme_decoder.h"
 #include "draco/compression/attributes/prediction_schemes/mesh_prediction_scheme_tex_coords_portable_predictor.h"
 #include "draco/compression/bit_coders/rans_bit_decoder.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 
 namespace draco {
 
@@ -118,6 +119,7 @@ bool MeshPredictionSchemeTexCoordsPortableDecoder<
     this->transform().ComputeOriginalValue(predictor_.predicted_value(),
                                            in_corr + dst_offset,
                                            out_data + dst_offset);
+    DRACO_SESSION_CHARGE(WorkUnit::kPredictedValue);
   }
   return true;
 }
@@ -139,13 +141,16 @@ bool MeshPredictionSchemeTexCoordsPortableDecoder<
   }
 
   predictor_.ResizeOrientations(num_orientations);
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kPredictionData);
   bool last_orientation = true;
   RAnsBitDecoder decoder;
   if (!decoder.StartDecoding(buffer)) {
     return false;
   }
   for (int i = 0; i < num_orientations; ++i) {
-    if (!decoder.DecodeNextBit()) {
+    const bool bit = decoder.DecodeNextBit();
+    DRACO_SESSION_CHARGE(WorkUnit::kDirectionBit);
+    if (!bit) {
       last_orientation = !last_orientation;
     }
     predictor_.set_orientation(i, last_orientation);

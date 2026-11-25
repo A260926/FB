@@ -16,6 +16,7 @@
 #define DRACO_COMPRESSION_ATTRIBUTES_PREDICTION_SCHEMES_PREDICTION_SCHEME_DELTA_DECODER_H_
 
 #include "draco/compression/attributes/prediction_schemes/prediction_scheme_decoder.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 
 namespace draco {
 
@@ -51,11 +52,13 @@ bool PredictionSchemeDeltaDecoder<DataTypeT, TransformT>::ComputeOriginalValues(
   // Decode the original value for the first element.
   std::unique_ptr<DataTypeT[]> zero_vals(new DataTypeT[num_components]());
   this->transform().ComputeOriginalValue(zero_vals.get(), in_corr, out_data);
+  DRACO_SESSION_CHARGE(WorkUnit::kPredictedValue);
 
   // Decode data from the front using D(i) = D(i) + D(i - 1).
   for (int i = num_components; i < size; i += num_components) {
     this->transform().ComputeOriginalValue(out_data + i - num_components,
                                            in_corr + i, out_data + i);
+    DRACO_SESSION_CHARGE(WorkUnit::kPredictedValue);
   }
   return true;
 }

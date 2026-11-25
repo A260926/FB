@@ -14,6 +14,7 @@
 //
 #include "draco/compression/attributes/sequential_integer_attribute_decoder.h"
 
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/compression/attributes/prediction_schemes/prediction_scheme_decoder_factory.h"
 #include "draco/compression/attributes/prediction_schemes/prediction_scheme_wrap_decoding_transform.h"
 #include "draco/compression/entropy/symbol_decoding.h"
@@ -157,6 +158,7 @@ bool SequentialIntegerAttributeDecoder::DecodeIntegerValues(
         if (!in_buffer->Decode(portable_attribute_data + i, num_bytes)) {
           return false;
         }
+        DRACO_SESSION_CHARGE(WorkUnit::kResidualComponent);
       }
     }
   }
@@ -172,11 +174,14 @@ bool SequentialIntegerAttributeDecoder::DecodeIntegerValues(
   // If the data was encoded with a prediction scheme, we must revert it.
   if (prediction_scheme_) {
     prediction_scheme_->SetMaxNumPredictedValues(num_values);
+    DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kPredictionData);
     if (!prediction_scheme_->DecodePredictionData(in_buffer)) {
       return false;
     }
 
     if (num_values > 0) {
+      DRACO_SESSION_PHASE(
+          MeshDecodeSession::Phase::kPredictionReconstruction);
       if (!prediction_scheme_->ComputeOriginalValues(
               portable_attribute_data, portable_attribute_data,
               static_cast<int>(num_values), num_components, point_ids.data())) {
@@ -188,6 +193,7 @@ bool SequentialIntegerAttributeDecoder::DecodeIntegerValues(
 }
 
 bool SequentialIntegerAttributeDecoder::StoreValues(uint32_t num_values) {
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kStoreValues);
   switch (attribute()->data_type()) {
     case DT_UINT8:
       StoreTypedValues<uint8_t>(num_values);
@@ -223,6 +229,7 @@ void SequentialIntegerAttributeDecoder::StoreTypedValues(uint32_t num_values) {
   int val_id = 0;
   int out_byte_pos = 0;
   for (uint32_t i = 0; i < num_values; ++i) {
+    DRACO_SESSION_CHARGE(WorkUnit::kRebuiltVector);
     for (int c = 0; c < num_components; ++c) {
       const AttributeTypeT value =
           static_cast<AttributeTypeT>(portable_attribute_data[val_id++]);

@@ -14,9 +14,12 @@
 //
 #include "draco/compression/decode.h"
 
+#include <limits>
+
 #include "draco/compression/config/compression_shared.h"
 
 #ifdef DRACO_MESH_COMPRESSION_SUPPORTED
+#include "draco/compression/mesh/mesh_decode_session.h"
 #include "draco/compression/mesh/mesh_edgebreaker_decoder.h"
 #include "draco/compression/mesh/mesh_sequential_decoder.h"
 #endif
@@ -85,6 +88,42 @@ StatusOr<std::unique_ptr<PointCloud>> Decoder::DecodePointCloudFromBuffer(
 
 StatusOr<std::unique_ptr<Mesh>> Decoder::DecodeMeshFromBuffer(
     DecoderBuffer* in_buffer) {
+#ifdef DRACO_MESH_COMPRESSION_SUPPORTED
+  // Supported streams are pumped through the same cooperative session state
+  // machine used by direct MeshDecodeSession callers.  Out-of-profile streams
+  // retain the original synchronous DecodeBufferToGeometry path below.
+  {
+    MeshDecodeSession session;
+    const auto begin_status = session.begin(in_buffer);
+    if (begin_status.ok()) {
+      // Copy after begin: the session implementation now exists.
+      session.CopyDecoderOptions(options_);
+      constexpr uint64_t kSynchronousPumpBudget = uint64_t{1} << 20;
+      bool session_failed = false;
+      while (true) {
+        const auto step = session.step(kSynchronousPumpBudget);
+        if (step.done()) {
+          std::unique_ptr<Mesh> mesh = session.release_result();
+          if (mesh) return std::move(mesh);
+          session_failed = true;
+          break;
+        }
+        if (step.has_error() || step.is_cancelled()) {
+          session_failed = true;
+          break;
+        }
+        // A positive pump budget must make progress.  Defensive fallback keeps
+        // Decoder compatible if an out-of-profile checkpoint is absent.
+        if (step.work_done == 0) {
+          (void)session.step(std::numeric_limits<uint64_t>::max() / 2);
+        }
+      }
+      if (!session_failed) {
+        return Status(Status::DRACO_ERROR, "Mesh decode session failed");
+      }
+    }
+  }
+#endif
   std::unique_ptr<Mesh> mesh(new Mesh());
   DRACO_RETURN_IF_ERROR(DecodeBufferToGeometry(in_buffer, mesh.get()))
   return std::move(mesh);

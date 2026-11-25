@@ -14,6 +14,8 @@
 //
 #include "draco/core/bit_utils.h"
 
+#include "draco/compression/mesh/decode_work_meter.h"
+
 namespace draco {
 
 void ConvertSignedIntsToSymbols(const int32_t* in, int in_values,
@@ -30,6 +32,7 @@ void ConvertSymbolsToSignedInts(const uint32_t* in, int in_values,
                                 int32_t* out) {
   for (int i = 0; i < in_values; ++i) {
     out[i] = ConvertSymbolToSignedInt(in[i]);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
   }
 }
 

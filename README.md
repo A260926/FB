@@ -233,10 +233,136 @@ rendered quickly.
 Draco is released as C++ source code that can be used to compress 3D graphics
 as well as C++ and Javascript decoders for the encoded data.
 
+Cooperative Mesh Decode Sessions
+================================
+
+`draco::MeshDecodeSession` (see
+`src/draco/compression/mesh/mesh_decode_session.h`) provides frame-bounded,
+cooperative decoding for the real-time profile described below.  The caller
+already has the complete compressed file.  `begin()` copies those bytes and only
+validates the fixed Draco header; it does not decode topology or attributes and
+does not expand entropy tables.  All decoding work then happens on the calling
+thread inside `step()`.  There are no worker threads, timers, or background
+tasks while a session is paused.
+
+~~~~~ cpp
+draco::MeshDecodeSession session;
+if (!session.begin(compressed.data(), compressed.size())) {
+  // Invalid fixed header or an unsupported fixed-header profile.
+}
+
+while (true) {
+  const draco::MeshDecodeSession::StepResult step = session.step(1024);
+  update_hud(session.progress());
+
+  if (step.done()) break;
+  if (step.has_error()) {
+    log(session.progress().error_message);
+    break;
+  }
+  // step.is_working(): yield to the renderer for this frame.
+}
+
+if (const draco::Mesh* mesh = session.result()) {
+  // Read-only Mesh is owned by |session|.
+}
+~~~~~
+
+`step(budget)` returns the number of charged operations performed during that
+call and a state of `working`, `done`, `error`, or `cancelled`.  The returned
+amount is always `<= budget`; `step(0)` never resumes decoding.  After
+completion, additional `step()` calls remain `done` with zero work.  A session
+in `working` state preserves the active Edgebreaker corner stack, split/hole
+state, variable-length ring scans, seam tables, attribute DFS numbering,
+point-to-value maps, entropy/prediction state, and all C++ loop locals between
+calls.  Pausing never restarts a phase, attribute, or mesh.
+
+`progress()` exposes the current phase, cumulative total work, and actual
+cumulative counters for topology symbols, start-face flags, split events,
+seam bits, traversed corners/vertices/mapping items, entropy residual
+components, tags, prediction direction bits, predicted values, and inverse
+transformed values.  Counters are incremented at the operation sites rather
+than inferred from the step count or budget.
+
+Budget table
+------------
+
+Each item below costs one budget unit unless noted otherwise:
+
+| Work performed | Charge |
+| --- | ---: |
+| Decode one Edgebreaker topology symbol | 1 |
+| Decode one start-face flag | 1 |
+| Decode one topology-split event | 1 |
+| Decode one hole event | 1 |
+| Decode one attribute seam bit | 1 |
+| Process one corner in topology patching, a vertex-ring scan, seam rebuild, traversal, or mapping | 1 |
+| Process one vertex or point/map entry | 1 |
+| Decode one integer/residual component | 1 |
+| Decode one tagged-entropy tag, in addition to its components | 1 |
+| Decode one predictor direction bit | 1 |
+| Reconstruct one predicted attribute value/vector | 1 |
+| Rebuild one attribute value vector | 1 |
+| Inverse-transform one attribute value/vector | 1 |
+| Write one floating-point attribute value/vector | 1 |
+| Process one entropy probability-table entry | 1 |
+| Other element-sized traversal, initialization, or copy loop | 1 per element |
+
+Fixed-header parsing, constant-sized state transitions, and memory allocation
+are not charged.  The input copy occurs only in `begin()`.
+
+Lifetime, cancellation, and concurrency
+----------------------------------------
+
+* A successful `begin()` resets all work counters and owns an independent copy
+  of the input.  The caller's buffer may be released immediately.
+* Calling `begin()` on a `working` session returns `busy` and leaves that
+  session unchanged.
+* An invalid fixed header leaves a previous terminal state and result
+  untouched.
+* `cancel()` abandons the partially decoded mesh, enters `cancelled`, and
+  publishes no result.  Cancellation unwinds/cleans the cooperative decoder
+  state without performing remaining decode scans.
+* `reset()` returns the session to its initial state and releases owned
+  storage.
+* `result()` is non-null only after `done`.  The returned read-only
+  `draco::Mesh` is owned by the session and remains valid until the next
+  successful `begin()`, `cancel()`, `reset()`, or `release_result()`.
+* Decode errors retain the error text and actual progress for diagnostics; a
+  later `begin()` may reuse the instance.
+* Two `MeshDecodeSession` objects may be advanced interleaved on one thread.
+  They do not share mutable decoder state.  Concurrent use of one instance and
+  cross-process save/restore are not supported.
+
+Supported profile
+-----------------
+
+The session intentionally accepts the profile exercised by the real UV-seam
+round trips:
+
+* Draco bitstream version 2.2;
+* triangular-mesh `MESH_EDGEBREAKER_ENCODING` with `STANDARD` traversal;
+* one three-component `FLOAT32` `POSITION`;
+* optional one two-component `FLOAT32` `TEX_COORD`;
+* quantized or direct/unquantized floating-point values;
+* position `difference` and parallelogram prediction;
+* UV `difference` and portable UV prediction;
+* open boundaries, multiple connected components, topology splits/holes, and
+  two-manifold surfaces with UV seams.
+
+Metadata, additional/generic attributes, other Draco versions, and predictive
+or valence Edgebreaker traversals are explicitly rejected by the session.
+`draco::Decoder::DecodeMeshFromBuffer()` pumps supported streams through this
+same session machinery to completion; out-of-profile streams continue through
+the original synchronous decoder path, preserving compatibility with all
+previously supported Draco streams.  `Decoder::SetSkipAttributeTransform()`
+options are propagated, and `MeshDecodeSession::SetSkipAttributeTransform()`
+provides the same position/UV transform-skipping choice.
 
 _**Contents**_
 
   * [Building](#building)
+  * [Cooperative Mesh Decode Sessions](#cooperative-mesh-decode-sessions)
   * [Usage](#usage)
     * [Unity](#unity)
     * [WASM and JavaScript Decoders](#WASM-and-JavaScript-Decoders)

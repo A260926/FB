@@ -18,6 +18,7 @@
 #include <cstdint>
 
 #include "draco/compression/attributes/sequential_attribute_decoders_controller.h"
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/compression/mesh/mesh_edgebreaker_decoder.h"
 #include "draco/compression/mesh/mesh_edgebreaker_traversal_predictive_decoder.h"
 #include "draco/compression/mesh/mesh_edgebreaker_traversal_valence_decoder.h"
@@ -371,6 +372,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity() {
   }
 
   // Decode topology (connectivity).
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kTopologyEvents);
   vertex_traversal_length_.clear();
   corner_table_ = std::unique_ptr<CornerTable>(new CornerTable());
   if (corner_table_ == nullptr) {
@@ -403,7 +405,12 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity() {
   // be marked as non hole vertices. We need to allocate the array larger
   // because split symbols can create extra vertices during the decoding
   // process (these extra vertices are then eliminated during deduplication).
-  is_vert_hole_.assign(num_encoded_vertices_ + num_encoded_split_symbols, true);
+  is_vert_hole_.clear();
+  is_vert_hole_.reserve(num_encoded_vertices_ + num_encoded_split_symbols);
+  for (int i = 0; i < num_encoded_vertices_ + num_encoded_split_symbols; ++i) {
+    is_vert_hole_.push_back(true);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
 
 #ifdef DRACO_BACKWARDS_COMPATIBILITY_SUPPORTED
   int32_t topology_split_decoded_bytes = -1;
@@ -453,6 +460,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity() {
     return false;
   }
 
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kTopologySymbols);
   const int num_connectivity_verts = DecodeConnectivity(num_encoded_symbols);
   if (num_connectivity_verts == -1) {
     return false;
@@ -472,6 +480,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity() {
 
   // Decode connectivity of non-position attributes.
   if (!attribute_data_.empty()) {
+    DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kAttributeSeams);
 #ifdef DRACO_BACKWARDS_COMPATIBILITY_SUPPORTED
     if (decoder_->bitstream_version() < DRACO_BITSTREAM_VERSION(2, 1)) {
       for (CornerIndex ci(0); ci < corner_table_->num_corners(); ci += 3) {
@@ -494,10 +503,12 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity() {
 
   // Decode attribute connectivity.
   // Prepare data structure for decoding non-position attribute connectivity.
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kSeamReconstruction);
   for (uint32_t i = 0; i < attribute_data_.size(); ++i) {
     attribute_data_[i].connectivity_data.InitEmpty(corner_table_.get());
     // Add all seams.
     for (int32_t c : attribute_data_[i].attribute_seam_corners) {
+      DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
       attribute_data_[i].connectivity_data.AddSeamEdge(CornerIndex(c));
     }
     // Recompute vertices from the newly added seam edges.
@@ -520,6 +531,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity() {
     }
     attribute_data_[i].encoding_data.Init(att_connectivity_verts);
   }
+  DRACO_SESSION_PHASE(MeshDecodeSession::Phase::kPointMapping);
   if (!AssignPointsToCorners(num_connectivity_verts)) {
     return false;
   }
@@ -564,6 +576,7 @@ int MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity(
     // Used to flag cases where we need to look for topology split events.
     bool check_topology_split = false;
     const uint32_t symbol = traversal_decoder_.DecodeSymbol();
+    DRACO_SESSION_CHARGE(WorkUnit::kTopologySymbol);
     if (symbol == TOPOLOGY_C) {
       // Create a new face between two edges on the open boundary.
       // The first edge is opposite to the corner "a" from the image below.
@@ -756,6 +769,7 @@ int MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity(
       const CornerIndex first_corner = corner_n;
       while (corner_n != kInvalidCornerIndex) {
         corner_table_->MapCornerToVertex(corner_n, vertex_p);
+        DRACO_SESSION_CHARGE(WorkUnit::kCorner);
         corner_n = corner_table_->SwingLeft(corner_n);
         if (corner_n == first_corner) {
           // We reached the start again which should not happen for split
@@ -851,6 +865,7 @@ int MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity(
     active_corner_stack.pop_back();
     const bool interior_face =
         traversal_decoder_.DecodeStartFaceConfiguration();
+    DRACO_SESSION_CHARGE(WorkUnit::kStartFace);
     if (interior_face) {
       // The start face is interior, we need to find three corners that are
       // opposite to it. The first opposite corner "a" is the corner from the
@@ -917,6 +932,7 @@ int MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity(
 
       // Mark all three vertices as interior.
       for (int ci = 0; ci < 3; ++ci) {
+        DRACO_SESSION_CHARGE(WorkUnit::kCorner);
         is_vert_hole_[corner_table_->Vertex(new_corner + ci).value()] = false;
       }
 
@@ -938,9 +954,11 @@ int MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity(
   // If any vertex was marked as isolated, we want to remove it from the corner
   // table to ensure that all vertices in range <0, num_vertices> are valid.
   for (const VertexIndex invalid_vert : invalid_vertices) {
+    DRACO_SESSION_CHARGE(WorkUnit::kVertex);
     // Find the last valid vertex and swap it with the isolated vertex.
     VertexIndex src_vert(num_vertices - 1);
     while (corner_table_->LeftMostCorner(src_vert) == kInvalidCornerIndex) {
+      DRACO_SESSION_CHARGE(WorkUnit::kVertex);
       // The last vertex is invalid, proceed to the previous one.
       src_vert = VertexIndex(--num_vertices - 1);
     }
@@ -952,6 +970,7 @@ int MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeConnectivity(
     VertexCornersIterator<CornerTable> vcit(corner_table_.get(), src_vert);
     for (; !vcit.End(); ++vcit) {
       const CornerIndex cid = vcit.Corner();
+      DRACO_SESSION_CHARGE(WorkUnit::kCorner);
       if (corner_table_->Vertex(cid) != src_vert) {
         // Vertex mapped to |cid| was not |src_vert|. This indicates corrupted
         // data and we should terminate the decoding.
@@ -1038,10 +1057,12 @@ MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeHoleAndTopologySplitEvents(
             event_data.source_symbol_id - static_cast<int32_t>(delta);
         last_source_symbol_id = event_data.source_symbol_id;
         topology_split_data_.push_back(event_data);
+        DRACO_SESSION_CHARGE(WorkUnit::kSplitEvent);
       }
       // Split edges are decoded from a direct bit decoder.
       decoder_buffer->StartBitDecoding(false, nullptr);
       for (uint32_t i = 0; i < num_topology_splits; ++i) {
+        DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
         uint32_t edge_data;
         if (decoder_->bitstream_version() < DRACO_BITSTREAM_VERSION(2, 2)) {
           decoder_buffer->DecodeLeastSignificantBits32(2, &edge_data);
@@ -1091,6 +1112,7 @@ MeshEdgebreakerDecoderImpl<TraversalDecoder>::DecodeHoleAndTopologySplitEvents(
         event_data.symbol_id = delta + last_symbol_id;
         last_symbol_id = event_data.symbol_id;
         hole_event_data_.push_back(event_data);
+        DRACO_SESSION_CHARGE(WorkUnit::kHoleEvent);
       }
     }
   }
@@ -1136,11 +1158,13 @@ bool MeshEdgebreakerDecoderImpl<
 
   const FaceIndex src_face_id = corner_table_->Face(corner);
   for (int c = 0; c < 3; ++c) {
+    DRACO_SESSION_CHARGE(WorkUnit::kCorner);
     const CornerIndex opp_corner = corner_table_->Opposite(corners[c]);
     if (opp_corner == kInvalidCornerIndex) {
       // Don't decode attribute seams on boundary edges (every boundary edge
       // is automatically an attribute seam).
       for (uint32_t i = 0; i < attribute_data_.size(); ++i) {
+        DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
         attribute_data_[i].attribute_seam_corners.push_back(corners[c].value());
       }
       continue;
@@ -1153,6 +1177,7 @@ bool MeshEdgebreakerDecoderImpl<
 
     for (uint32_t i = 0; i < attribute_data_.size(); ++i) {
       const bool is_seam = traversal_decoder_.DecodeAttributeSeam(i);
+      DRACO_SESSION_CHARGE(WorkUnit::kSeamBit);
       if (is_seam) {
         attribute_data_[i].attribute_seam_corners.push_back(corners[c].value());
       }
@@ -1179,6 +1204,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::AssignPointsToCorners(
         // Get the vertex index on the corner and use it as a point index.
         const int32_t vert_id = corner_table_->Vertex(start_corner + c).value();
         face[c] = vert_id;
+        DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
       }
       decoder_->mesh()->SetFace(f, face);
     }
@@ -1192,8 +1218,15 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::AssignPointsToCorners(
   // in the last stage of the deduplication.
   std::vector<int32_t> point_to_corner_map;
   // Map between every corner and their new point ids.
-  std::vector<int32_t> corner_to_point_map(corner_table_->num_corners());
+  std::vector<int32_t> corner_to_point_map;
+  corner_to_point_map.reserve(corner_table_->num_corners());
+  for (int corner_id = 0; corner_id < corner_table_->num_corners();
+       ++corner_id) {
+    corner_to_point_map.push_back(0);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
   for (int v = 0; v < corner_table_->num_vertices(); ++v) {
+    DRACO_SESSION_CHARGE(WorkUnit::kVertex);
     CornerIndex c = corner_table_->LeftMostCorner(VertexIndex(v));
     if (c == kInvalidCornerIndex) {
       continue;  // Isolated vertex.
@@ -1218,6 +1251,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::AssignPointsToCorners(
         CornerIndex act_c = corner_table_->SwingRight(c);
         bool seam_found = false;
         while (act_c != c) {
+          DRACO_SESSION_CHARGE(WorkUnit::kCorner);
           if (act_c == kInvalidCornerIndex) {
             return false;
           }
@@ -1249,6 +1283,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::AssignPointsToCorners(
     CornerIndex prev_c = c;
     c = corner_table_->SwingRight(c);
     while (c != kInvalidCornerIndex && c != deduplication_first_corner) {
+      DRACO_SESSION_CHARGE(WorkUnit::kCorner);
       bool attribute_seam = false;
       for (uint32_t i = 0; i < attribute_data_.size(); ++i) {
         if (attribute_data_[i].connectivity_data.Vertex(c) !=
@@ -1276,6 +1311,7 @@ bool MeshEdgebreakerDecoderImpl<TraversalDecoder>::AssignPointsToCorners(
     for (int c = 0; c < 3; ++c) {
       // Remap old points to the new ones.
       face[c] = corner_to_point_map[3 * f.value() + c];
+      DRACO_SESSION_CHARGE(WorkUnit::kMappingItem);
     }
     decoder_->mesh()->SetFace(f, face);
   }

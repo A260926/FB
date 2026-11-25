@@ -14,6 +14,7 @@
 //
 #include "draco/mesh/mesh_attribute_corner_table.h"
 
+#include "draco/compression/mesh/decode_work_meter.h"
 #include "draco/mesh/corner_table_iterators.h"
 #include "draco/mesh/mesh_misc_functions.h"
 
@@ -28,9 +29,24 @@ bool MeshAttributeCornerTable::InitEmpty(const CornerTable* table) {
   }
   valence_cache_.ClearValenceCache();
   valence_cache_.ClearValenceCacheInaccurate();
-  is_edge_on_seam_.assign(table->num_corners(), false);
-  is_vertex_on_seam_.assign(table->num_vertices(), false);
-  corner_to_vertex_map_.assign(table->num_corners(), kInvalidVertexIndex);
+  is_edge_on_seam_.clear();
+  is_edge_on_seam_.reserve(table->num_corners());
+  for (CornerIndex c(0); c < table->num_corners(); ++c) {
+    is_edge_on_seam_.push_back(false);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
+  is_vertex_on_seam_.clear();
+  is_vertex_on_seam_.reserve(table->num_vertices());
+  for (VertexIndex v(0); v < table->num_vertices(); ++v) {
+    is_vertex_on_seam_.push_back(false);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
+  corner_to_vertex_map_.clear();
+  corner_to_vertex_map_.reserve(table->num_corners());
+  for (CornerIndex c(0); c < table->num_corners(); ++c) {
+    corner_to_vertex_map_.push_back(kInvalidVertexIndex);
+    DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
+  }
   vertex_to_attribute_entry_id_map_.reserve(table->num_vertices());
   vertex_to_left_most_corner_map_.reserve(table->num_vertices());
   corner_table_ = table;
@@ -144,6 +160,7 @@ bool MeshAttributeCornerTable::RecomputeVerticesInternal(
   vertex_to_left_most_corner_map_.clear();
   int num_new_vertices = 0;
   for (VertexIndex v(0); v < corner_table_->num_vertices(); ++v) {
+    DRACO_SESSION_CHARGE(WorkUnit::kVertex);
     const CornerIndex c = corner_table_->LeftMostCorner(v);
     if (c == kInvalidCornerIndex) {
       continue;  // Isolated vertex?
@@ -165,6 +182,7 @@ bool MeshAttributeCornerTable::RecomputeVerticesInternal(
       // first corner that defines an attribute seam.
       act_c = SwingLeft(first_c);
       while (act_c != kInvalidCornerIndex) {
+        DRACO_SESSION_CHARGE(WorkUnit::kCorner);
         first_c = act_c;
         act_c = SwingLeft(act_c);
         if (act_c == c) {
@@ -178,6 +196,7 @@ bool MeshAttributeCornerTable::RecomputeVerticesInternal(
     vertex_to_left_most_corner_map_.push_back(first_c);
     act_c = corner_table_->SwingRight(first_c);
     while (act_c != kInvalidCornerIndex && act_c != first_c) {
+      DRACO_SESSION_CHARGE(WorkUnit::kCorner);
       if (IsCornerOppositeToSeamEdge(corner_table_->Next(act_c))) {
         first_vert_id = AttributeValueIndex(num_new_vertices++);
         if (init_vertex_to_attribute_entry_map) {

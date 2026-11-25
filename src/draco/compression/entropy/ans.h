@@ -20,6 +20,8 @@
 
 #include <vector>
 
+#include "draco/compression/mesh/decode_work_meter.h"
+
 #define DRACO_ANS_DIVIDE_BY_MULTIPLY 1
 #if DRACO_ANS_DIVIDE_BY_MULTIPLY
 #include "draco/core/divide.h"
@@ -495,8 +497,10 @@ class RAnsDecoder {
       }
       for (uint32_t j = act_prob; j < cum_prob; ++j) {
         lut_table_[j] = i;
+        DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
       }
       act_prob = cum_prob;
+      DRACO_SESSION_CHARGE(WorkUnit::kElementOperation);
     }
     if (cum_prob != rans_precision) {
       return false;
