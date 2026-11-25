@@ -628,7 +628,13 @@ public:
                 params_.test_result = test_result_;
                 params_.stop_iteration = current_iter_;
                 if (params_.collect_history)
+                {
+                    // Keep user-stream buffer allocations on the raw system
+                    // allocator side (see begin_raw_allocation_section).
+                    this->begin_raw_allocation_section();
                     output_history();
+                    this->end_raw_allocation_section();
+                }
                 return test_result_;
             }
 
@@ -669,6 +675,10 @@ public:
         first_thread_ = true;
         disable_preemption_ = 0;
         sched_count_ = 0;
+
+        // Lock-order graphs are scoped to a single simulation iteration and
+        // to lock lifecycles within it.
+        this->lock_order().on_iteration_begin();
 
         foreach<thread_count>(
             threads_,
@@ -948,6 +958,7 @@ bool simulate(test_params& params)
 		while (test_name[0] >= '0' && test_name[0] <= '9')
         test_name += 1;
     params.test_name = test_name;
+    params.lock_order_report_emitted_ = false;
     *params.output_stream << params.test_name << std::endl;
 
     unsigned start_time = get_tick_count();

@@ -56,6 +56,11 @@ struct test_params
     unsigned                    progress_output_period;
     bool                        collect_history;
     bool                        output_history;
+    // When true, record blocking exclusive lock dependencies and stop the
+    // simulation with test_result_lock_order_inversion as soon as the
+    // accumulated lock-order graph contains a cycle. Default false keeps
+    // all original scheduling/result/history behavior.
+    bool                        check_lock_order;
     scheduler_type_e            search_type;
     unsigned                    context_bound;
     unsigned                    execution_depth_limit;
@@ -66,6 +71,9 @@ struct test_params
     iteration_t                 stop_iteration;
     string                      test_name;
     string                      final_state;
+    // Internal: ensures the lock-order diagnostic is emitted once even when
+    // simulate() replays a failing iteration with history collection on.
+    bool                        lock_order_report_emitted_;
 
     test_params()
     {
@@ -75,12 +83,14 @@ struct test_params
         progress_output_period  = 3;
         collect_history         = false;
         output_history          = false;
+        check_lock_order        = false;
         search_type             = random_scheduler_type;
         context_bound           = 1;
         execution_depth_limit   = 2000;
 
         test_result             = test_result_success;
         stop_iteration          = 0;
+        lock_order_report_emitted_ = false;
     }
 };
 

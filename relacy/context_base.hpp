@@ -19,6 +19,7 @@
 #include "test_result.hpp"
 #include "slab_allocator.hpp"
 #include "test_params.hpp"
+#include "lock_order.hpp"
 #include "random.hpp"
 #include "foreach.hpp"
 #include "thread_base.hpp"
@@ -209,6 +210,39 @@ public:
         return threadx_->index_;
     }
 
+    // Optional lock-order inversion detector state (see lock_order.hpp).
+    lock_order_tracker& lock_order()
+    {
+        return lock_order_;
+    }
+
+    // Sections that format diagnostics into user provided std::ostream
+    // objects must use the system allocator for stream-buffer growth: the
+    // global operator new replacement otherwise hands out interior pointers
+    // owned by the current context's memory manager, while the user's stream
+    // (and its buffer) typically outlives that context.  disable_alloc_
+    // makes both allocations and frees route through raw malloc/free.
+    void begin_raw_allocation_section()
+    {
+        disable_alloc_ += 1;
+    }
+
+    void end_raw_allocation_section()
+    {
+        disable_alloc_ -= 1;
+        RL_VERIFY(disable_alloc_ >= 0);
+    }
+
+    bool lock_order_report_already_emitted() const
+    {
+        return params_.lock_order_report_emitted_;
+    }
+
+    void set_lock_order_report_emitted()
+    {
+        params_.lock_order_report_emitted_ = true;
+    }
+
     void iteration_begin()
     {
     }
@@ -216,6 +250,7 @@ public:
 protected:
     history_mgr history_;
     test_params& params_;
+    lock_order_tracker lock_order_;
     unsigned disable_preemption_;
     int                         disable_alloc_;
 
@@ -228,6 +263,8 @@ protected:
         context_holder<>::instance_ = this;
 
         is_random_sched_ = params_.search_type == random_scheduler_type;
+
+        lock_order_.configure(params_.check_lock_order, params_.output_stream);
 
 #ifdef _MSC_VER
         ctx_seq_ = _InterlockedExchangeAdd(&context_holder<>::ctx_seq, 1) + 1;

@@ -188,7 +188,12 @@ private:
         if (reason == unpark_reason_spurious)
             spurious_wakeup_limit_ -= 1;
         RL_HIST(event_t) {this, event_t::type_wait_exit, 0, reason} RL_HIST_END();
+        // The wrapper unlock above already removed the mutex from the
+        // simulated thread's held set; mark the re-acquisition so the
+        // dependencies it records are diagnosed as wait-reacquire edges.
+        c.lock_order().set_wait_reacquire_pending(c.current_thread(), true);
         lock.lock(info);
+        c.lock_order().set_wait_reacquire_pending(c.current_thread(), false);
         sign_.check(info);
         if (reason == unpark_reason_normal)
             return sema_wakeup_reason_success;

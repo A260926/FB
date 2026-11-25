@@ -59,6 +59,9 @@ enum test_result_e
 
     //dynamic thread
     test_result_thread_signal,
+
+    //lock order checking (optional, see test_params::check_lock_order)
+    test_result_lock_order_inversion,
 };
 
 
@@ -100,6 +103,9 @@ inline char const* test_result_str(test_result_e r)
     // event
     case test_result_double_initialization_of_event: return "DOUBLE INITIALIZATION OF EVENT";
     case test_result_usage_of_non_initialized_event: return "USAGE OF NON INITIALIZED EVENT";
+
+    // lock order checking
+    case test_result_lock_order_inversion: return "LOCK ORDER INVERSION";
 
     default: RL_VERIFY(false); return "UNKNOWN ERROR";
     }

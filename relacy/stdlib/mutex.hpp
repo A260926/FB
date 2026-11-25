@@ -279,6 +279,18 @@ public:
                 exclusive_recursion_count_ = 1;
                 exclusive_owner_ = my_id;
                 RL_HIST(event_t) {this, event_t::type_lock} RL_HIST_END();
+                c.begin_raw_allocation_section();
+                bool const emit_report = !c.lock_order_report_already_emitted();
+                bool const lock_order_cycle = c.lock_order().on_blocking_lock_acquired(
+                    static_cast<generic_mutex_data*>(this), my_id, info, emit_report);
+                if (lock_order_cycle && emit_report)
+                    c.set_lock_order_report_emitted();
+                c.end_raw_allocation_section();
+                if (lock_order_cycle)
+                {
+                    c.fail_test("lock order inversion detected",
+                                test_result_lock_order_inversion, info);
+                }
                 return true;
             }
             else
@@ -289,6 +301,7 @@ public:
                 RL_VERIFY(reason != unpark_reason_spurious);
                 if (reason == unpark_reason_timeout)
                 {
+                    // A timed acquisition that fails produces no dependency edge.
                     sync_.acquire(c.threadx_);
                     return false;
                 }
@@ -346,6 +359,10 @@ public:
                 exclusive_recursion_count_ = 1;
                 exclusive_owner_ = my_id;
                 RL_HIST(event_t) {this, event_t::type_lock} RL_HIST_END();
+                // A successful try_lock enters the held set but records no
+                // incoming dependency edges.
+                c.lock_order().on_try_lock_acquired(
+                    static_cast<generic_mutex_data*>(this), my_id, info);
                 return true;
             }
         }
@@ -382,6 +399,10 @@ public:
             RL_HIST(event_t) {this, event_t::type_recursive_unlock} RL_HIST_END();
             return;
         }
+
+        // Outermost release: drop from this simulated thread's held set.
+        c.lock_order().on_lock_released(
+            static_cast<generic_mutex_data*>(this), my_id);
 
         sync_.release(c.threadx_);
         exclusive_owner_ = state_free;
@@ -632,12 +653,14 @@ public:
         RL_ASSERT_IMPL(0 == impl_, test_result_double_initialization_of_mutex, "", info);
         sign_.check(info);
         impl_ = c.mutex_ctor(is_rw, is_exclusive_recursive, is_shared_recursive, failing_try_lock);
+        c.lock_order().on_mutex_initialized(impl_, info);
     }
 
     void deinit(debug_info_param info)
     {
         context& c = ctx();
         check(info);
+        c.lock_order().on_mutex_destroyed(impl_);
         c.mutex_dtor(impl_);
         impl_ = 0;
     }
