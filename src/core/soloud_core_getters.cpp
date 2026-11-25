@@ -245,7 +245,11 @@ namespace SoLoud
 			unlockAudioMutex_internal();
 			return 0;
 		}
-		double v = mVoice[ch]->mStreamPosition;
+		// Bidirectional voices report the live material coordinate x (it is
+		// advanced inside the mix, so the per-buffer clock value would lag).
+		double v = mVoice[ch]->isBidirectional()
+			? mVoice[ch]->getBidirectionalPosition()
+			: mVoice[ch]->mStreamPosition;
 		unlockAudioMutex_internal();
 		return v;
 	}

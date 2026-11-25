@@ -59,6 +59,23 @@ namespace SoLoud
 		unsigned int mOggFrameSize;
 		unsigned int mOggFrameOffset;
 		float **mOggOutputs;
+
+		// Bidirectional playback state. Allocated when bidirectional playback is enabled.
+		bool mDirEnabled;
+		int mDirDirection;					// +1 forward, -1 reverse
+		signed long long mDirXFixed;		// Next output frame's source coordinate x, 20-bit fixed point
+		bool mDirEnded;						// x has left the valid source frame range
+		bool mDirFloat;						// Source samples are 32-bit float (otherwise 16-bit PCM)
+		float *mDirWindow;					// Planar source window, 2048 frames * mChannels floats
+		unsigned char *mDirRawBuf;			// Raw bytes for one window fill
+		unsigned int mDirWindowStart;		// Source frame index of window slot 0
+		unsigned int mDirWindowFrames;		// Valid frames currently in the window
+		unsigned int mDirSourceFrames;		// Total PCM frames in the source
+
+		bool dirCheckSupport() const;
+		bool dirFillWindow(unsigned int aFrameStart);
+		void dirEnsureWindow(unsigned int aFrameLo, unsigned int aFrameHi);
+		float dirSample(unsigned int aChannel, unsigned int aFrame) const;
 	public:
 		WavStreamInstance(WavStream *aParent);
 		virtual unsigned int getAudio(float *aBuffer, unsigned int aSamplesToRead, unsigned int aBufferSize);
@@ -66,6 +83,14 @@ namespace SoLoud
 		virtual result rewind();
 		virtual bool hasEnded();
 		virtual ~WavStreamInstance();
+
+		virtual bool isBidirectional() const;
+		virtual bool supportsWavStreamDirection() const;
+		virtual result enableWavStreamDirection();
+		virtual result setWavStreamDirectionInternal(int aDirection);
+		virtual unsigned int renderBidirectional(float *aScratch, unsigned int aBufferSize, unsigned int aSamplesToRead,
+			unsigned int aOutOffset, unsigned int aStepFixed, unsigned int aResampler);
+		virtual time getBidirectionalPosition() const;
 	};
 
 	enum WAVSTREAM_FILETYPE

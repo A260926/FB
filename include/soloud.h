@@ -349,6 +349,9 @@ namespace SoLoud
 		void setPauseAll(bool aPause);
 		// Set the relative play speed
 		result setRelativePlaySpeed(handle aVoiceHandle, float aSpeed);
+		// Switch a root WavStream voice between forward (+1) and reverse (-1) playback.
+		// Only non-looping, filter-free mono/stereo PCM16/float32 WavStreams are supported.
+		result setWavStreamDirection(handle aVoiceHandle, int aDirection);
 		// Set the voice protection state
 		void setProtectVoice(handle aVoiceHandle, bool aProtect);
 		// Set the sample rate

@@ -183,6 +183,9 @@ namespace SoLoud
 		unsigned int mSrcOffset;
 		// Samples left over from earlier pass
 		unsigned int mLeftoverSamples;
+		// Source frames actually delivered through the legacy resampler, in 20-bit
+		// fixed point. Used to hand the exact playhead over to bidirectional playback.
+		unsigned long long mDeliveredSrcPosFixed;
 		// Number of samples to delay streaming
 		unsigned int mDelaySamples;
 		// When looping, start playing from this time
@@ -198,6 +201,19 @@ namespace SoLoud
 		virtual result rewind();
 		// Get information. Returns 0 by default.
 		virtual float getInfo(unsigned int aInfoKey);
+		// Bidirectional (forward/reverse) WavStream playback support.
+		virtual bool isBidirectional() const;
+		// Whether this instance can be switched to bidirectional playback with its current configuration.
+		virtual bool supportsWavStreamDirection() const;
+		// Enable bidirectional playback, taking the playhead over from the delivered resampler position.
+		virtual result enableWavStreamDirection();
+		// Switch playback direction (+1 forward, -1 reverse). Only valid while bidirectional.
+		virtual result setWavStreamDirectionInternal(int aDirection);
+		// Render one mix buffer in bidirectional mode; returns the number of output frames that sounded.
+		virtual unsigned int renderBidirectional(float *aScratch, unsigned int aBufferSize, unsigned int aSamplesToRead,
+			unsigned int aOutOffset, unsigned int aStepFixed, unsigned int aResampler);
+		// Current source position in seconds, derived from the bidirectional coordinate x.
+		virtual time getBidirectionalPosition() const;
 	};
 
 	class Soloud;

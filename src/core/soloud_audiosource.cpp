@@ -99,6 +99,7 @@ namespace SoLoud
 		mResampleData[1] = 0;
 		mSrcOffset = 0;
 		mLeftoverSamples = 0;
+		mDeliveredSrcPosFixed = 0;
 		mDelaySamples = 0;
 		mOverallVolume = 0;
 		mOverallRelativePlaySpeed = 1;
@@ -348,6 +349,36 @@ namespace SoLoud
 	    return 0;
 	}
 
+	bool AudioSourceInstance::isBidirectional() const
+	{
+		return false;
+	}
+
+	bool AudioSourceInstance::supportsWavStreamDirection() const
+	{
+		return false;
+	}
+
+	result AudioSourceInstance::enableWavStreamDirection()
+	{
+		return NOT_IMPLEMENTED;
+	}
+
+	result AudioSourceInstance::setWavStreamDirectionInternal(int /*aDirection*/)
+	{
+		return INVALID_PARAMETER;
+	}
+
+	unsigned int AudioSourceInstance::renderBidirectional(float * /*aScratch*/, unsigned int /*aBufferSize*/, unsigned int /*aSamplesToRead*/,
+		unsigned int /*aOutOffset*/, unsigned int /*aStepFixed*/, unsigned int /*aResampler*/)
+	{
+		return 0;
+	}
+
+	time AudioSourceInstance::getBidirectionalPosition() const
+	{
+		return mStreamPosition;
+	}
 
 };
 

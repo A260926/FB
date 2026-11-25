@@ -1644,9 +1644,27 @@ namespace SoLoud
 					unsigned int k;
 					for (k = 0; k < voice->mChannels; k++)
 					{
-						memset(aScratch + k * aBufferSize, 0, sizeof(float) * outofs); 
+						memset(aScratch + k * aBufferSize, 0, sizeof(float) * outofs);
 					}
-				}												
+				}
+
+				if (voice->isBidirectional())
+				{
+					// Bidirectional WavStreams own their material coordinate x and
+					// render straight into the mix scratch, bypassing the block
+					// decoder and resampler bookkeeping used by the legacy path.
+					voice->renderBidirectional(aScratch, aBufferSize, aSamplesToRead, outofs, step_fixed, aResampler);
+
+					// Handle panning and channel expansion (and/or shrinking)
+					panAndExpand(voice, aBuffer, aSamplesToRead, aBufferSize, aScratch, aChannels);
+
+					// clear voice if the sound is over
+					if (!(voice->mFlags & (AudioSourceInstance::LOOPING | AudioSourceInstance::DISABLE_AUTOSTOP)) && voice->hasEnded())
+					{
+						stopVoice_internal(mActiveVoice[i]);
+					}
+					continue;
+				}
 
 				while (step_fixed != 0 && outofs < aSamplesToRead)
 				{
@@ -1788,6 +1806,10 @@ namespace SoLoud
 
 					// Move source pointer onwards (writesamples may be zero)
 					voice->mSrcOffset += writesamples * step_fixed;
+					// Keep an absolute count of the source frames actually handed
+					// to the resampler, so bidirectional playback can take over from
+					// the delivered position rather than the decoder read-ahead.
+					voice->mDeliveredSrcPosFixed += (unsigned long long)writesamples * step_fixed;
 				}
 				
 				// Handle panning and channel expansion (and/or shrinking)
@@ -1900,6 +1922,10 @@ namespace SoLoud
 
 					// Move source pointer onwards (writesamples may be zero)
 					voice->mSrcOffset += writesamples * step_fixed;
+					// Keep an absolute count of the source frames actually handed
+					// to the resampler, so bidirectional playback can take over from
+					// the delivered position rather than the decoder read-ahead.
+					voice->mDeliveredSrcPosFixed += (unsigned long long)writesamples * step_fixed;
 				}
 
 				// clear voice if the sound is over
@@ -2141,7 +2167,16 @@ namespace SoLoud
 				}
 
 				mVoice[i]->mStreamTime += buffertime;
-				mVoice[i]->mStreamPosition += (double)buffertime * (double)mVoice[i]->mOverallRelativePlaySpeed;
+				if (mVoice[i]->isBidirectional())
+				{
+					// Stream time still accumulates the output time spent mixing (also
+					// while reversing), but the position is the material coordinate x.
+					mVoice[i]->mStreamPosition = mVoice[i]->getBidirectionalPosition();
+				}
+				else
+				{
+					mVoice[i]->mStreamPosition += (double)buffertime * (double)mVoice[i]->mOverallRelativePlaySpeed;
+				}
 
 				// TODO: this is actually unstable, because mStreamTime depends on the relative
 				// play speed. 
