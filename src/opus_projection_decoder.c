@@ -240,6 +240,9 @@ int opus_projection_decode(OpusProjectionDecoder *st, const unsigned char *data,
                            opus_int32 len, opus_int16 *pcm, int frame_size,
                            int decode_fec)
 {
+  /* The 44.1 kHz mode is float-only and must not touch the state. */
+  if (opus_ms_decoder_is_44100(get_multistream_decoder(st)))
+    return OPUS_UNIMPLEMENTED;
   return opus_multistream_decode_native(get_multistream_decoder(st), data, len,
     pcm, opus_projection_copy_channel_out_short, frame_size, decode_fec, OPTIONAL_CLIP,
     get_dec_demixing_matrix(st));
@@ -249,6 +252,9 @@ int opus_projection_decode24(OpusProjectionDecoder *st, const unsigned char *dat
                            opus_int32 len, opus_int32 *pcm, int frame_size,
                            int decode_fec)
 {
+  /* The 44.1 kHz mode is float-only and must not touch the state. */
+  if (opus_ms_decoder_is_44100(get_multistream_decoder(st)))
+    return OPUS_UNIMPLEMENTED;
   return opus_multistream_decode_native(get_multistream_decoder(st), data, len,
     pcm, opus_projection_copy_channel_out_int24, frame_size, decode_fec, 0,
     get_dec_demixing_matrix(st));

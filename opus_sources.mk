@@ -1,6 +1,7 @@
 OPUS_SOURCES = \
 src/opus.c \
 src/opus_decoder.c \
+src/opus_resampler_44100.c \
 src/opus_encoder.c \
 src/extensions.c \
 src/opus_multistream.c \

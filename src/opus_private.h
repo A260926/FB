@@ -193,6 +193,15 @@ int opus_decode_native(OpusDecoder *st, const unsigned char *data, opus_int32 le
       opus_res *pcm, int frame_size, int decode_fec, int self_delimited,
       opus_int32 *packet_offset, int soft_clip, const OpusDRED *dred, opus_int32 dred_offset);
 
+/* Fs=44100 float-mode helpers used by the multistream decoder.  The codec
+   itself keeps running at 48 kHz; these drive the per-stream causal
+   48->44.1 resampling engine. */
+int opus_decoder_is_44100(const OpusDecoder *st);
+int opus_decoder_44100_pending(const OpusDecoder *st, int src_frame_count);
+int opus_decoder_44100_process(OpusDecoder *st, const float *in, int in_stride,
+      int src_frame_count, float *out, int out_stride, int out_capacity);
+int opus_ms_decoder_is_44100(const struct OpusMSDecoder *st);
+
 /* Make sure everything is properly aligned. */
 static OPUS_INLINE int align(int i)
 {

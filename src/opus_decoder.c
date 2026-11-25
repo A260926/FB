@@ -52,6 +52,7 @@
 #include "define.h"
 #include "mathops.h"
 #include "cpu_support.h"
+#include "opus_resampler_44100.h"
 
 #ifdef ENABLE_DEEP_PLC
 #include "dred_rdovae_dec_data.h"
@@ -66,7 +67,8 @@ struct OpusDecoder {
    int          celt_dec_offset;
    int          silk_dec_offset;
    int          channels;
-   opus_int32   Fs;          /** Sampling rate (at the API level) */
+   opus_int32   Fs;          /** Internal codec sampling rate (48 kHz domain) */
+   opus_int32   api_Fs;      /** Sampling rate advertised at the API level */
    silk_DecControlStruct DecControl;
    int          decode_gain;
    int          complexity;
@@ -91,6 +93,11 @@ struct OpusDecoder {
 #endif
 
    opus_uint32  rangeFinal;
+
+   /* 48 kHz -> 44.1 kHz engine; only active when api_Fs == 44100.  Lives
+      inside the decoder block so get_size, memcpy cloning and RESET_STATE
+      cover it, and gets cleared together with the codec state on reset. */
+   OpusResampler44100 r44100;
 };
 
 #if defined(ENABLE_HARDENING) || defined(ENABLE_ASSERTIONS)
@@ -137,14 +144,20 @@ int opus_decoder_init(OpusDecoder *st, opus_int32 Fs, int channels)
    void *silk_dec;
    CELTDecoder *celt_dec;
    int ret, silkDecSizeBytes;
+   opus_int32 internal_Fs;
 
    if ((Fs!=48000&&Fs!=24000&&Fs!=16000&&Fs!=12000&&Fs!=8000
+         &&Fs!=44100
 #ifdef ENABLE_QEXT
          &&Fs!=96000
 #endif
          )
     || (channels!=1&&channels!=2))
       return OPUS_BAD_ARG;
+
+   /* The 44.1 kHz API rate is served by a 48 kHz codec plus the causal
+      48->44.1 resampling engine. */
+   internal_Fs = Fs == 44100 ? 48000 : Fs;
 
    OPUS_CLEAR((char*)st, opus_decoder_get_size(channels));
    /* Initialize SILK decoder */
@@ -160,7 +173,8 @@ int opus_decoder_init(OpusDecoder *st, opus_int32 Fs, int channels)
    st->stream_channels = st->channels = channels;
    st->complexity = 0;
 
-   st->Fs = Fs;
+   st->api_Fs = Fs;
+   st->Fs = internal_Fs;
    st->DecControl.API_sampleRate = st->Fs;
    st->DecControl.nChannelsAPI      = st->channels;
 
@@ -169,13 +183,19 @@ int opus_decoder_init(OpusDecoder *st, opus_int32 Fs, int channels)
    if(ret)return OPUS_INTERNAL_ERROR;
 
    /* Initialize CELT decoder */
-   ret = celt_decoder_init(celt_dec, Fs, channels);
+   ret = celt_decoder_init(celt_dec, internal_Fs, channels);
    if(ret!=OPUS_OK)return OPUS_INTERNAL_ERROR;
 
    celt_decoder_ctl(celt_dec, CELT_SET_SIGNALLING(0));
 
    st->prev_mode = 0;
-   st->frame_size = Fs/400;
+   st->frame_size = internal_Fs/400;
+   if (Fs == 44100)
+   {
+      ret = opus_r44100_init(&st->r44100, channels);
+      if (ret != OPUS_OK)
+         return ret;
+   }
 #ifdef ENABLE_DEEP_PLC
     lpcnet_plc_init( &st->lpcnet);
 #endif
@@ -188,6 +208,7 @@ OpusDecoder *opus_decoder_create(opus_int32 Fs, int channels, int *error)
    int ret;
    OpusDecoder *st;
    if ((Fs!=48000&&Fs!=24000&&Fs!=16000&&Fs!=12000&&Fs!=8000
+         &&Fs!=44100
 #ifdef ENABLE_QEXT
          &&Fs!=96000
 #endif
@@ -726,6 +747,107 @@ static int opus_decode_frame(OpusDecoder *st, const unsigned char *data,
 
 }
 
+#ifndef DISABLE_FLOAT_API
+/* Float decode path for Fs=44100 instances.  The codec keeps running at
+   48 kHz into a bounded stack buffer; the causal 48->44.1 engine then produces
+   the clocked output frames.  All failure checks happen before the codec or
+   the resampling clock/FIR state are advanced. */
+static int opus_decode_44100_float(OpusDecoder *st, const unsigned char *data,
+      opus_int32 len, float *pcm, int frame_size, int decode_fec)
+{
+   int src_capacity;
+   VARDECL(float, src);
+   int ret;
+   ALLOC_STACK;
+
+   if (frame_size <= 0 || decode_fec < 0 || decode_fec > 1)
+   {
+      RESTORE_STACK;
+      return OPUS_BAD_ARG;
+   }
+   /* A non-NULL packet with a negative length is always an argument error. */
+   if (data != NULL && len < 0)
+   {
+      RESTORE_STACK;
+      return OPUS_BAD_ARG;
+   }
+   if (data == NULL || len <= 1 || decode_fec)
+   {
+      /* PLC and FEC requests express 10*k ms as 441*k output frames;
+         internally that is 480*k 48 kHz frames, k = 1..12. */
+      int k = frame_size/441;
+      if (frame_size != 441*k || k < 1 || k > 12)
+      {
+         RESTORE_STACK;
+         return OPUS_BAD_ARG;
+      }
+      src_capacity = 480*k;
+   } else {
+      /* Packet durations and boundaries stay in the 48 kHz domain. */
+      src_capacity = opus_packet_get_nb_samples(data, len, 48000);
+      if (src_capacity <= 0)
+      {
+         RESTORE_STACK;
+         return src_capacity < 0 ? src_capacity : OPUS_INVALID_PACKET;
+      }
+   }
+   /* Reject an output buffer that cannot hold the clocked result before any
+      codec, FIR or clock state is consumed. */
+   if (opus_r44100_pending(&st->r44100, src_capacity) > frame_size)
+   {
+      RESTORE_STACK;
+      return OPUS_BUFFER_TOO_SMALL;
+   }
+   ALLOC(src, src_capacity*st->channels, float);
+   ret = opus_decode_native(st, data, len, src, src_capacity, decode_fec,
+                            0, NULL, 0, NULL, 0);
+   if (ret < 0)
+   {
+      RESTORE_STACK;
+      return ret;
+   }
+   /* Native always fills the requested capacity on success; a 1-byte PLC
+      packet can be clamped shorter internally, so feed exactly what we got. */
+   ret = opus_r44100_process(&st->r44100, src, st->channels, ret,
+                             pcm, st->channels, frame_size);
+   if (ret < 0)
+   {
+      RESTORE_STACK;
+      return ret;
+   }
+   st->last_packet_duration = ret;
+   RESTORE_STACK;
+   return ret;
+}
+#endif /* !DISABLE_FLOAT_API */
+
+/* These helpers are always available so the multistream decoder can link in
+   every build configuration; they reject non-44.1 kHz instances. */
+int opus_decoder_is_44100(const OpusDecoder *st)
+{
+   return st->api_Fs == 44100;
+}
+
+int opus_decoder_44100_pending(const OpusDecoder *st, int src_frame_count)
+{
+   if (st->api_Fs != 44100)
+      return OPUS_UNIMPLEMENTED;
+   return opus_r44100_pending(&st->r44100, src_frame_count);
+}
+
+int opus_decoder_44100_process(OpusDecoder *st, const float *in, int in_stride,
+      int src_frame_count, float *out, int out_stride, int out_capacity)
+{
+   int ret;
+   if (st->api_Fs != 44100)
+      return OPUS_UNIMPLEMENTED;
+   ret = opus_r44100_process(&st->r44100, in, in_stride, src_frame_count,
+                             out, out_stride, out_capacity);
+   if (ret >= 0)
+      st->last_packet_duration = ret;
+   return ret;
+}
+
 int opus_decode_native(OpusDecoder *st, const unsigned char *data,
       opus_int32 len, opus_res *pcm, int frame_size, int decode_fec,
       int self_delimited, opus_int32 *packet_offset, int soft_clip, const OpusDRED *dred, opus_int32 dred_offset)
@@ -905,6 +1027,9 @@ int opus_decode(OpusDecoder *st, const unsigned char *data,
 {
    if(frame_size<=0)
       return OPUS_BAD_ARG;
+   /* The 44.1 kHz mode is float-only and must not touch the state. */
+   if (st->api_Fs == 44100)
+      return OPUS_UNIMPLEMENTED;
    return opus_decode_native(st, data, len, pcm, frame_size, decode_fec, 0, NULL, 0, NULL, 0);
 }
 #else
@@ -920,6 +1045,12 @@ int opus_decode(OpusDecoder *st, const unsigned char *data,
        {
           RESTORE_STACK;
           return OPUS_BAD_ARG;
+       }
+       /* The 44.1 kHz mode is float-only and must not touch the state. */
+       if (st->api_Fs == 44100)
+       {
+          RESTORE_STACK;
+          return OPUS_UNIMPLEMENTED;
        }
        if (data != NULL && len > 0 && !decode_fec)
        {
@@ -954,6 +1085,9 @@ int opus_decode24(OpusDecoder *st, const unsigned char *data,
 {
    if(frame_size<=0)
       return OPUS_BAD_ARG;
+   /* The 44.1 kHz mode is float-only and must not touch the state. */
+   if (st->api_Fs == 44100)
+      return OPUS_UNIMPLEMENTED;
    return opus_decode_native(st, data, len, pcm, frame_size, decode_fec, 0, NULL, 0, NULL, 0);
 }
 #else
@@ -969,6 +1103,12 @@ int opus_decode24(OpusDecoder *st, const unsigned char *data,
        {
           RESTORE_STACK;
           return OPUS_BAD_ARG;
+       }
+       /* The 44.1 kHz mode is float-only and must not touch the state. */
+       if (st->api_Fs == 44100)
+       {
+          RESTORE_STACK;
+          return OPUS_UNIMPLEMENTED;
        }
        if (data != NULL && len > 0 && !decode_fec)
        {
@@ -1002,6 +1142,8 @@ int opus_decode_float(OpusDecoder *st, const unsigned char *data,
 {
    if(frame_size<=0)
       return OPUS_BAD_ARG;
+   if (st->api_Fs == 44100)
+      return opus_decode_44100_float(st, data, len, pcm, frame_size, decode_fec);
    return opus_decode_native(st, data, len, pcm, frame_size, decode_fec, 0, NULL, 0, NULL, 0);
 }
 # else
@@ -1017,6 +1159,12 @@ int opus_decode_float(OpusDecoder *st, const unsigned char *data,
    {
       RESTORE_STACK;
       return OPUS_BAD_ARG;
+   }
+   /* The 44.1 kHz engine only exists in float builds. */
+   if (st->api_Fs == 44100)
+   {
+      RESTORE_STACK;
+      return OPUS_UNIMPLEMENTED;
    }
    if (data != NULL && len > 0 && !decode_fec)
    {
@@ -1131,6 +1279,10 @@ int opus_decoder_ctl(OpusDecoder *st, int request, ...)
       silk_ResetDecoder( silk_dec );
       st->stream_channels = st->channels;
       st->frame_size = st->Fs/400;
+      /* The clear above also wiped the resampling engine; restore the exact
+         fresh-instance clock/FIR state for 44.1 kHz decoders. */
+      if (st->api_Fs == 44100)
+         opus_r44100_init(&st->r44100, st->channels);
 #ifdef ENABLE_OSCE_BWE
       /* DecControl is not part of the cleared area */
       st->DecControl.prev_osce_extended_mode = OSCE_MODE_CELT_ONLY;
@@ -1147,7 +1299,7 @@ int opus_decoder_ctl(OpusDecoder *st, int request, ...)
       {
          goto bad_arg;
       }
-      *value = st->Fs;
+      *value = st->api_Fs;
    }
    break;
    case OPUS_GET_PITCH_REQUEST:
@@ -1353,6 +1505,16 @@ int opus_packet_has_lbrr(const unsigned char packet[], opus_int32 len)
 int opus_decoder_get_nb_samples(const OpusDecoder *dec,
       const unsigned char packet[], opus_int32 len)
 {
+   if (dec->api_Fs == 44100)
+   {
+      /* Packet durations stay in the 48 kHz domain; the resampling clock
+         determines how many 44.1 kHz frames the next decode will return.
+         Repeated calls do not advance that clock. */
+      int src_samples = opus_packet_get_nb_samples(packet, len, 48000);
+      if (src_samples < 0)
+         return src_samples;
+      return opus_r44100_pending(&dec->r44100, src_samples);
+   }
    return opus_packet_get_nb_samples(packet, len, dec->Fs);
 }
 

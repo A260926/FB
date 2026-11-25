@@ -296,6 +296,11 @@ if(MSVC)
   endif()
 endif()
 
+# The 48 kHz -> 44.1 kHz decoder resampling engine.  Its translation unit is
+# pulled in through opus_sources.mk (see cmake/OpusSources.cmake); expose the
+# header to the target as well.
+list(APPEND opus_headers ${CMAKE_CURRENT_SOURCE_DIR}/src/opus_resampler_44100.h)
+
 add_library(opus ${opus_headers} ${opus_sources} ${opus_sources_float} ${Opus_PUBLIC_HEADER})
 add_library(Opus::opus ALIAS opus)
 

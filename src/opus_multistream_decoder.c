@@ -175,6 +175,17 @@ static int opus_multistream_packet_validate(const unsigned char *data,
    return samples;
 }
 
+static OpusDecoder *ms_get_first_decoder(OpusMSDecoder *st)
+{
+   return (OpusDecoder*)((char*)st + align(sizeof(OpusMSDecoder)));
+}
+
+int opus_ms_decoder_is_44100(const OpusMSDecoder *st)
+{
+   return opus_decoder_is_44100(
+         (OpusDecoder*)((char*)st + align(sizeof(OpusMSDecoder))));
+}
+
 int opus_multistream_decode_native(
       OpusMSDecoder *st,
       const unsigned char *data,
@@ -193,7 +204,11 @@ int opus_multistream_decode_native(
    int s, c;
    char *ptr;
    int do_plc=0;
+   int mode_44100;
+   int src_capacity;
+   int out_need;
    VARDECL(opus_res, buf);
+   VARDECL(opus_res, rbuf);
    ALLOC_STACK;
 
    VALIDATE_MS_DECODER(st);
@@ -204,8 +219,9 @@ int opus_multistream_decode_native(
    }
    /* Limit frame_size to avoid excessive stack allocations. */
    MUST_SUCCEED(opus_multistream_decoder_ctl(st, OPUS_GET_SAMPLE_RATE(&Fs)));
-   frame_size = IMIN(frame_size, Fs/25*3);
-   ALLOC(buf, 2*frame_size, opus_res);
+   mode_44100 = (Fs == 44100);
+   if (!mode_44100)
+      frame_size = IMIN(frame_size, Fs/25*3);
    ptr = (char*)st + align(sizeof(OpusMSDecoder));
    coupled_size = opus_decoder_get_size(2);
    mono_size = opus_decoder_get_size(1);
@@ -222,27 +238,86 @@ int opus_multistream_decode_native(
       RESTORE_STACK;
       return OPUS_INVALID_PACKET;
    }
-   if (!do_plc)
+
+   out_need = frame_size;
+   if (mode_44100)
    {
-      int ret = opus_multistream_packet_validate(data, len, st->layout.nb_streams, Fs);
-      if (ret < 0)
+      if (do_plc)
+      {
+         /* 441*k output frames request 480*k source frames, k = 1..12. */
+         int k = frame_size/441;
+         if (frame_size != 441*k || k < 1 || k > 12)
+         {
+            RESTORE_STACK;
+            return OPUS_BAD_ARG;
+         }
+         src_capacity = 480*k;
+      } else {
+         int ret48;
+         /* Self-delimited sub-packets keep their timing and boundaries in
+            the 48 kHz domain. */
+         ret48 = opus_multistream_packet_validate(data, len,
+               st->layout.nb_streams, 48000);
+         if (ret48 <= 0)
+         {
+            RESTORE_STACK;
+            return ret48 < 0 ? ret48 : OPUS_INVALID_PACKET;
+         }
+         src_capacity = ret48;
+      }
+      /* Every stream shares the same clock, so the first one predicts the
+         output count for the whole multistream packet.  The check runs
+         before any codec, FIR or clock state is consumed. */
+      out_need = opus_decoder_44100_pending(ms_get_first_decoder(st),
+                                            src_capacity);
+      if (out_need < 0)
       {
          RESTORE_STACK;
-         return ret;
-      } else if (ret > frame_size)
+         return out_need;
+      }
+      if (out_need > frame_size)
       {
          RESTORE_STACK;
          return OPUS_BUFFER_TOO_SMALL;
       }
+   } else {
+      if (!do_plc)
+      {
+         int ret = opus_multistream_packet_validate(data, len, st->layout.nb_streams, Fs);
+         if (ret < 0)
+         {
+            RESTORE_STACK;
+            return ret;
+         } else if (ret > frame_size)
+         {
+            RESTORE_STACK;
+            return OPUS_BUFFER_TOO_SMALL;
+         }
+      }
+      src_capacity = frame_size;
    }
+   /* buf holds the 48 kHz codec output; rbuf the 44.1 kHz result (only used
+      in 44.1 kHz mode).  A clock step can legitimately yield zero outputs on
+      a 2.5 ms packet, so keep the VLA size positive. */
+   ALLOC(buf, 2*src_capacity, opus_res);
+   ALLOC(rbuf, mode_44100 ? 2*IMAX(out_need, 1) : 1, opus_res);
+   /* Produced output frames of this call; frame_size stays the requested
+      capacity and bounds every write. */
+   {
+      int produced = frame_size;
    for (s=0;s<st->layout.nb_streams;s++)
    {
       OpusDecoder *dec;
       opus_int32 packet_offset;
       int ret;
+      int coupled;
+      const opus_res *stream_src;
+      int stream_stride;
+      int out_count;
 
       dec = (OpusDecoder*)ptr;
-      ptr += (s < st->layout.nb_coupled_streams) ? align(coupled_size) : align(mono_size);
+      coupled = (s < st->layout.nb_coupled_streams);
+      ptr += coupled ? align(coupled_size) : align(mono_size);
 
       if (!do_plc && len<=0)
       {
@@ -250,7 +325,8 @@ int opus_multistream_decode_native(
          return OPUS_INTERNAL_ERROR;
       }
       packet_offset = 0;
-      ret = opus_decode_native(dec, data, len, buf, frame_size, decode_fec, s!=st->layout.nb_streams-1, &packet_offset, soft_clip, NULL, 0);
+      ret = opus_decode_native(dec, data, len, buf, src_capacity, decode_fec,
+            s!=st->layout.nb_streams-1, &packet_offset, soft_clip, NULL, 0);
       if (!do_plc)
       {
         data += packet_offset;
@@ -261,8 +337,28 @@ int opus_multistream_decode_native(
          RESTORE_STACK;
          return ret;
       }
-      frame_size = ret;
-      if (s < st->layout.nb_coupled_streams)
+      if (mode_44100)
+      {
+         /* Resample this stream through its own causal engine and map the
+            44.1 kHz frames into the shared output layout. */
+         stream_stride = coupled ? 2 : 1;
+         out_count = opus_decoder_44100_process(dec, buf, stream_stride, ret,
+               rbuf, stream_stride, frame_size);
+         if (out_count < 0)
+         {
+            RESTORE_STACK;
+            return out_count;
+         }
+         stream_src = rbuf;
+         produced = out_count;
+      } else {
+         frame_size = ret;
+         out_count = ret;
+         stream_src = buf;
+         stream_stride = coupled ? 2 : 1;
+         produced = out_count;
+      }
+      if (coupled)
       {
          int chan, prev;
          prev = -1;
@@ -270,7 +366,7 @@ int opus_multistream_decode_native(
          while ( (chan = get_left_channel(&st->layout, s, prev)) != -1)
          {
             (*copy_channel_out)(pcm, st->layout.nb_channels, chan,
-               buf, 2, frame_size, user_data);
+               stream_src, 2, out_count, user_data);
             prev = chan;
          }
          prev = -1;
@@ -278,7 +374,7 @@ int opus_multistream_decode_native(
          while ( (chan = get_right_channel(&st->layout, s, prev)) != -1)
          {
             (*copy_channel_out)(pcm, st->layout.nb_channels, chan,
-               buf+1, 2, frame_size, user_data);
+               stream_src+1, 2, out_count, user_data);
             prev = chan;
          }
       } else {
@@ -288,7 +384,7 @@ int opus_multistream_decode_native(
          while ( (chan = get_mono_channel(&st->layout, s, prev)) != -1)
          {
             (*copy_channel_out)(pcm, st->layout.nb_channels, chan,
-               buf, 1, frame_size, user_data);
+               stream_src, 1, out_count, user_data);
             prev = chan;
          }
       }
@@ -299,11 +395,12 @@ int opus_multistream_decode_native(
       if (st->layout.mapping[c] == 255)
       {
          (*copy_channel_out)(pcm, st->layout.nb_channels, c,
-            NULL, 0, frame_size, user_data);
+            NULL, 0, produced, user_data);
       }
    }
    RESTORE_STACK;
-   return frame_size;
+   return produced;
+   }
 }
 
 #if !defined(DISABLE_FLOAT_API)
@@ -401,6 +498,9 @@ int opus_multistream_decode(
       int decode_fec
 )
 {
+   /* The 44.1 kHz mode is float-only and must not touch the state. */
+   if (opus_decoder_is_44100(ms_get_first_decoder(st)))
+      return OPUS_UNIMPLEMENTED;
    return opus_multistream_decode_native(st, data, len,
        pcm, opus_copy_channel_out_short, frame_size, decode_fec, OPTIONAL_CLIP, NULL);
 }
@@ -414,6 +514,9 @@ int opus_multistream_decode24(
       int decode_fec
 )
 {
+   /* The 44.1 kHz mode is float-only and must not touch the state. */
+   if (opus_decoder_is_44100(ms_get_first_decoder(st)))
+      return OPUS_UNIMPLEMENTED;
    return opus_multistream_decode_native(st, data, len,
        pcm, opus_copy_channel_out_int24, frame_size, decode_fec, 0, NULL);
 }
