@@ -1,0 +1,6 @@
+./alive_unix.go
+./deathsig_other.go
+./exitstatus.go
+./group_other.go
+./tree.go
+./tree_unix.go

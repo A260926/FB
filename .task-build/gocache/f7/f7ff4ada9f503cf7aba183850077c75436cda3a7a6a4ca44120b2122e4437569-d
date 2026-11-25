@@ -1,0 +1,4 @@
+./constrained.go
+./fuzzpromote.go
+./rename.go
+./togglefocus.go

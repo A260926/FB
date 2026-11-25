@@ -1,0 +1,15 @@
+./annotations.go
+./badge.go
+./counts.go
+./coverage.go
+./declared.go
+./event.go
+./failures.go
+./json.go
+./markdown.go
+./report.go
+./summary.go
+./terminal.go
+./tree.go
+./view.go
+./wrap.go

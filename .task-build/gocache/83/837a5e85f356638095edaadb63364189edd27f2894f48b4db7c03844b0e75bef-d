@@ -1,0 +1,7 @@
+./binding.go
+./judge.go
+./links.go
+./mutants.go
+./quotes.go
+./spec.go
+./speccatalog.go

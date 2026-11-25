@@ -1,0 +1,10 @@
+./annotate.go
+./assertmap.go
+./diff.go
+./embed.go
+./gate.go
+./load.go
+./migrate.go
+./patterns.go
+./transform.go
+./unit.go

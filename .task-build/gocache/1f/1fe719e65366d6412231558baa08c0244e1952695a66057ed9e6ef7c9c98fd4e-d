@@ -1,0 +1,13 @@
+./behaviors.go
+./fixture.go
+./fuzzargs.go
+./hydrate.go
+./instantiate.go
+./predeclared.go
+./seeds.go
+./shapes.go
+./sourceerror.go
+./spec.go
+./suiteconfig.go
+./testify.go
+./warnings.go

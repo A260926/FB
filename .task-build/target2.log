@@ -1,0 +1,39 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+API_CONSUMER generation=1 normal=pass
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestFuzzReplacement
+    check.go:29: TASK_GROUP_DONE TestFuzzReplacement checks=119
+--- PASS: TestFuzzReplacement (0.35s)
+=== RUN   TestFuzzCancellation
+    check.go:29: TASK_GROUP_DONE TestFuzzCancellation checks=57
+--- PASS: TestFuzzCancellation (0.42s)
+=== RUN   TestFuzzAttribution
+=== RUN   TestFuzzAttribution/real_FuzzEcho
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (3765/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.080s
+=== RUN   TestFuzzAttribution/half_lines_across_two_streams
+=== RUN   TestFuzzAttribution/filtered_advice_payload
+=== RUN   TestFuzzAttribution/nil_sink
+=== NAME  TestFuzzAttribution
+    check.go:29: TASK_GROUP_DONE TestFuzzAttribution checks=81
+--- PASS: TestFuzzAttribution (0.89s)
+    --- PASS: TestFuzzAttribution/real_FuzzEcho (0.79s)
+    --- PASS: TestFuzzAttribution/half_lines_across_two_streams (0.05s)
+    --- PASS: TestFuzzAttribution/filtered_advice_payload (0.01s)
+    --- PASS: TestFuzzAttribution/nil_sink (0.04s)
+PASS
+ok  	github.com/mvrahden/go-test/internal/gotestrunner	1.952s
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (3819/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.084s
+BASELINE fuzz targets=1 exit=0 execs=20

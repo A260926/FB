@@ -1,0 +1,6 @@
+#!/bin/bash
+# Sandbox-only shim: macOS bare mktemp ignores TMPDIR and targets a blocked dir.
+if [ "$#" -eq 0 ]; then
+  exec /usr/bin/mktemp "${TMPDIR%/}/tmp.XXXXXXXXXX"
+fi
+exec /usr/bin/mktemp "$@"

@@ -1,0 +1,8 @@
+./compare.go
+./equal.go
+./format.go
+./helper.go
+./locate.go
+./predicates.go
+./render.go
+./trace.go

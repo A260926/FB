@@ -1,0 +1,8 @@
+./alive_unix.go
+./buildcache.go
+./clidir.go
+./ended.go
+./run.go
+./scale.go
+./tempdir.go
+./testkit.go

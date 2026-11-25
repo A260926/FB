@@ -1,0 +1,8 @@
+./lock_unix.go
+./main.go
+./plan.go
+./scratch.go
+./signame_other.go
+./slots.go
+./unsupported.go
+./worker.go

@@ -1,0 +1,2 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+ok  	github.com/mvrahden/go-test/internal/gotestrunner	2.286s

@@ -1,0 +1,6 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestFuzzReplacement
+    check.go:29: TASK_GROUP_DONE TestFuzzReplacement checks=119
+--- PASS: TestFuzzReplacement (0.19s)
+PASS
+ok  	github.com/mvrahden/go-test/internal/gotestrunner	0.541s

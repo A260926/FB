@@ -1,0 +1,11 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+=== RUN   TestDebugSignal
+    zz_debug_test.go:23: a1 started, runs: FuzzBlockA 19536
+    zz_debug_test.go:28: a2 admitted: {Key:a Generation:2}
+    zz_debug_test.go:38: state file: ready-FuzzBlockA-1
+    zz_debug_test.go:38: state file: runs
+    zz_debug_test.go:38: state file: stopped-FuzzBlockA-1
+    zz_debug_test.go:44: result: {Attempts:[{Attempt:{Key:a Generation:1} Target:{Package:. Dir:/tmp/claude-501/TestDebugSignal1595323118/002 Func:FuzzBlockA Suite:Helper} Outcome:{Func:FuzzBlockA ExitCode:0 Canceled:true Skipped:false NewCrashers:[] Execs:150 Interesting:0 EngineDeadline:false} Superseded:true} {Attempt:{Key:a Generation:2} Target:{Package:. Dir:/tmp/claude-501/TestDebugSignal1595323118/002 Func:FuzzBlockA Suite:Helper} Outcome:{Func:FuzzBlockA ExitCode:0 Canceled:false Skipped:false NewCrashers:[] Execs:250 Interesting:0 EngineDeadline:false} Superseded:false}]}
+--- PASS: TestDebugSignal (0.37s)
+PASS
+ok  	github.com/mvrahden/go-test/internal/gotestrunner	0.614s

@@ -1,0 +1,13 @@
+./binding.go
+./buildtags.go
+./collector.go
+./fuzzfan.go
+./fuzzhelpers.go
+./generator.go
+./imports.go
+./located.go
+./renderer.go
+./runtimeversion.go
+./sharedfixture.go
+./sourceloader.go
+./utils.go

@@ -1,0 +1,66 @@
+error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4189/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.067s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (3670/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.073s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (3879/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.071s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4369/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.071s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4172/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.070s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (3943/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.068s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4144/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.074s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4059/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.068s
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4433/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.068s
+--- FAIL: TestFuzzReplacement (30.14s)
+    fuzzcontrol_contract_test.go:354: the old generation's raw metrics stay on its own ticket: got 100
+[FuzzEcho] error acquiring upload taken: statting token file: stat /Users/solo/Library/Application Support/go/telemetry/local/upload.token: operation not permitted
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+[FuzzEcho] fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 1 workers
+[FuzzEcho] fuzz: elapsed: 0s, execs: 20 (4070/sec), new interesting: 0 (total: 1)
+[FuzzEcho] PASS
+[FuzzEcho] ok  	task.local/benign	0.070s
+FAIL
+FAIL	github.com/mvrahden/go-test/internal/gotestrunner	43.363s
+FAIL
