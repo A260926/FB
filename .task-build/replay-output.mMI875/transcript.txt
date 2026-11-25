@@ -1,0 +1,3 @@
+replay_restart_ok=true
+uninterrupted=stage=3 committed=6 pending=0 corpus_entries=5 coverage=ffffffffffffffff
+resumed=stage=3 committed=6 pending=0 corpus_entries=5 coverage=ffffffffffffffff
