@@ -97,6 +97,7 @@ auto getContextExtensions() noexcept -> std::vector<std::string_view>
         "AL_SOFT_direct_channels"sv,
         "AL_SOFT_direct_channels_remix"sv,
         "AL_SOFT_effect_target"sv,
+        "AL_SOFT_effect_slot_tail_samples"sv,
         "AL_SOFT_events"sv,
         "AL_SOFT_gain_clamp_ex"sv,
         "AL_SOFTX_hold_on_disconnect"sv,

@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "effects/base.h"
+#include "effectslottail.h"
 #include "flexarray.h"
 #include "intrusive_ptr.h"
 #include "mixparams.hpp"
@@ -43,6 +44,7 @@ struct EffectSlotProps {
     EffectProps Props;
 
     al::intrusive_ptr<EffectState> State;
+    int TailSamples{0};
 
     std::atomic<EffectSlotProps*> next;
 };
@@ -67,6 +69,7 @@ struct EffectSlotBase {
     EffectSlotType EffectType{EffectSlotType::None};
     EffectProps mEffectProps;
     al::intrusive_ptr<EffectState> mEffectState;
+    EffectSlotTailBank TailStates;
 
     float RoomRolloff{0.0f}; /* Added to the source's room rolloff, not multiplied. */
     float DecayTime{0.0f};

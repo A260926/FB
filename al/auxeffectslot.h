@@ -43,6 +43,7 @@ struct EffectSlot {
     ALuint mEffectId{};
     float mGain{1.0f};
     bool mAuxSendAuto{true};
+    ALint mTailSamples{0};
     al::intrusive_ptr<EffectSlot> mTarget;
     al::intrusive_ptr<al::Buffer> mBuffer;
 

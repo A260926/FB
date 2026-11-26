@@ -467,6 +467,26 @@ try {
     auto targetref = al::intrusive_ptr<al::EffectSlot>{};
     switch(param)
     {
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
+        {
+            auto& device = *context.mALDevice;
+            const auto max_tail = 10 * static_cast<ALint>(device.mSampleRate);
+            if(value < 0 || value > max_tail) [[unlikely]]
+                context.throw_error(AL_INVALID_VALUE,
+                    "Effect slot tail {} out of range 0..{}", value, max_tail);
+            if(value != 0 && slot.mTarget) [[unlikely]]
+                context.throw_error(AL_INVALID_OPERATION,
+                    "Effect slot {} has an effect-slot target and cannot use a tail",
+                    slot.mId);
+
+            if(slot.mTailSamples != value)
+            {
+                slot.mTailSamples = value;
+                UpdateProps(slot, context);
+            }
+        }
+        return;
+
     case AL_EFFECTSLOT_EFFECT:
         {
             auto& device = *context.mALDevice;
@@ -624,6 +644,7 @@ try {
     case AL_EFFECTSLOT_EFFECT:
     case AL_EFFECTSLOT_AUXILIARY_SEND_AUTO:
     case AL_EFFECTSLOT_TARGET_SOFT:
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
     case AL_BUFFER:
         alAuxiliaryEffectSloti_(context, effectslot, param, *values);
         return;
@@ -709,6 +730,10 @@ try {
         *value = slot.mAuxSendAuto ? AL_TRUE : AL_FALSE;
         return;
 
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
+        *value = slot.mTailSamples;
+        return;
+
     case AL_EFFECTSLOT_TARGET_SOFT:
         if(auto *target = slot.mTarget.get())
             *value = as_signed(target->mId);
@@ -741,6 +766,7 @@ try {
     case AL_EFFECTSLOT_EFFECT:
     case AL_EFFECTSLOT_AUXILIARY_SEND_AUTO:
     case AL_EFFECTSLOT_TARGET_SOFT:
+    case AL_EFFECTSLOT_TAIL_SAMPLES_SOFT:
     case AL_BUFFER:
         alGetAuxiliaryEffectSloti_(context, effectslot, param, values);
         return;
@@ -839,6 +865,7 @@ al::EffectSlot::~EffectSlot()
     if(auto *slot = mSlot->Update.exchange(nullptr, std::memory_order_relaxed))
         slot->State = nullptr;
 
+    mSlot->TailStates.clearNow();
     mSlot->mEffectState = nullptr;
     mSlot->InUse = false;
 }
@@ -895,6 +922,7 @@ void al::EffectSlot::updateProps(Context& context) const
     props->Gain = mGain;
     props->AuxSendAuto = mAuxSendAuto;
     props->Target = mTarget ? mTarget->mSlot.get() : nullptr;
+    props->TailSamples = mTailSamples;
 
     props->Type = mEffect.Type;
     props->Props = mEffect.Props;

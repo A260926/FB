@@ -578,6 +578,23 @@ ALC_API void ALC_APIENTRY alcGetInteger64vSOFT(ALCdevice *device, ALCenum pname,
 #define AL_EFFECTSLOT_TARGET_SOFT                0x199C
 #endif
 
+#ifndef AL_SOFT_effect_slot_tail_samples
+#define AL_SOFT_effect_slot_tail_samples 1
+/* Integer auxiliary effect-slot property. The value is the maximum number of
+ * device output frames an old EffectState may continue rendering with silent
+ * input after a handoff to a different state. It defaults to 0 (original
+ * immediate-switch behavior) and may be set from 0 through ten times the
+ * device sample rate. Non-zero tails are supported only for slots whose
+ * AL_EFFECTSLOT_TARGET_SOFT is AL_EFFECTSLOT_NULL.
+ *
+ * For retirement frame k (starting at zero), the old state's ordinary output
+ * is multiplied by (tail_samples - 1 - k) / tail_samples and added to the new
+ * state's output before the normal device mix and limiter. Up to two retired
+ * generations are retained per slot.
+ */
+#define AL_EFFECTSLOT_TAIL_SAMPLES_SOFT           0x19F0
+#endif
+
 #ifndef AL_SOFT_events
 #define AL_SOFT_events 1
 #define AL_EVENT_CALLBACK_FUNCTION_SOFT          0x19A2

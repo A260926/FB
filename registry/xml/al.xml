@@ -1239,6 +1239,9 @@ typedef void (ALC_APIENTRY*<name>ALCEVENTPROCTYPESOFT</name>)(<type>ALCenum</typ
         <enum value="0x199C" name="AL_EFFECTSLOT_TARGET_SOFT" group="AuxiliaryEffectSlotInteger,AuxiliaryEffectSlotPName">
             <property on="auxiliary effect slot" type="ALuint" class="auxiliary effect slot" default="AL_EFFECTSLOT_NULL"/>
         </enum>
+        <enum value="0x19F0" name="AL_EFFECTSLOT_TAIL_SAMPLES_SOFT" group="AuxiliaryEffectSlotInteger,AuxiliaryEffectSlotPName">
+            <property on="auxiliary effect slot" type="ALint" default="0"/>
+        </enum>
         <enum value="0x19A2" name="AL_EVENT_CALLBACK_FUNCTION_SOFT" group="PointerPName,GetPName"/>
         <enum value="0x19A3" name="AL_EVENT_CALLBACK_USER_PARAM_SOFT" group="PointerPName,GetPName"/>
         <enum value="0x19A4" name="AL_EVENT_TYPE_BUFFER_COMPLETED_SOFT" group="EventTypeSOFT"/>

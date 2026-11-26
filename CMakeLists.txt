@@ -813,6 +813,7 @@ set(CORE_SRCS
     core/devformat.cpp
     core/device.cpp
     core/effectslot.cpp
+    core/effectslottail.cpp
     core/except.cpp
     core/filters/biquad.cpp
     core/filters/nfc.cpp
@@ -853,6 +854,7 @@ set(CORE_HDRS
     core/device.h
     core/effects/base.h
     core/effectslot.h
+    core/effectslottail.h
     core/encoderbase.hpp
     core/except.h
     core/filters/biquad.h

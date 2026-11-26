@@ -572,6 +572,22 @@ auto CalcContextParams(ContextBase *const ctx) noexcept NONBLOCKING -> bool
 }
 
 [[nodiscard]]
+auto ReleaseEffectStateViaEventRing(void *const context_ptr, EffectState *const state) noexcept
+    NONBLOCKING -> bool
+{
+    auto *const context = static_cast<ContextBase*>(context_ptr);
+    auto *const ring = context->mAsyncEvents.get();
+    auto const evt_vec = ring->getWriteVector();
+    if(evt_vec[0].empty()) [[unlikely]]
+        return false;
+
+    auto &evt = InitAsyncEvent<AsyncEffectReleaseEvent>(evt_vec[0].front());
+    evt.mEffectState = state;
+    ring->writeAdvance(1);
+    return true;
+}
+
+[[nodiscard]]
 auto CalcEffectSlotParams(EffectSlotBase *const slot, EffectSlotBase **const sorted_slots,
     ContextBase *const context) noexcept NONBLOCKING -> bool
 {
@@ -613,22 +629,25 @@ auto CalcEffectSlotParams(EffectSlotBase *const slot, EffectSlotBase **const sor
 
     auto *const state = props->State.release();
     auto *const oldstate = slot->mEffectState.release();
+    auto const state_changed = (state != oldstate);
     IGNORE_FUNCTION_EFFECTS(slot->mEffectState.reset(state));
 
-    /* Only release the old state if it won't get deleted, since we can't be
-     * deleting/freeing anything in the mixer.
+    auto *evicted_tail = static_cast<EffectState*>(nullptr);
+    auto retired_tail = false;
+    if(state_changed)
+    {
+        retired_tail = slot->TailStates.handoff(oldstate,
+            static_cast<unsigned>(std::max(0, props->TailSamples)), evicted_tail);
+    }
+
+    /* Only release the old state if it was not retained by the tail bank and
+     * it won't get deleted directly here, since we can't be deleting/freeing
+     * anything in the mixer.
      */
-    if(!oldstate->releaseIfNoDelete())
+    if(!retired_tail && !oldstate->releaseIfNoDelete())
     {
         /* Otherwise, if it would be deleted send it off with a release event. */
-        auto *const ring = context->mAsyncEvents.get();
-        if(auto const evt_vec = ring->getWriteVector(); !evt_vec[0].empty()) [[likely]]
-        {
-            auto &evt = InitAsyncEvent<AsyncEffectReleaseEvent>(evt_vec[0].front());
-            evt.mEffectState = oldstate;
-            ring->writeAdvance(1);
-        }
-        else
+        if(!ReleaseEffectStateViaEventRing(context, oldstate)) [[unlikely]]
         {
             /* If writing the event failed, the queue was probably full. Store
              * the old state in the property object where it can eventually be
@@ -637,6 +656,14 @@ auto CalcEffectSlotParams(EffectSlotBase *const slot, EffectSlotBase **const sor
              */
             IGNORE_FUNCTION_EFFECTS(props->State.reset(oldstate));
         }
+    }
+
+    if(evicted_tail && !ReleaseEffectStateViaEventRing(context, evicted_tail)) [[unlikely]]
+    {
+        /* The same full-ring fallback applies to a tail generation evicted by
+         * a newer handoff.
+         */
+        IGNORE_FUNCTION_EFFECTS(props->State.reset(evicted_tail));
     }
 
     AtomicReplaceHead(context->mFreeEffectSlotProps, props);
@@ -2274,11 +2301,23 @@ void ProcessContexts(DeviceBase const *const device, unsigned const SamplesToDo)
                 }
             }
 
-            std::ranges::for_each(sorted_slots, [SamplesToDo](EffectSlotBase const *const slot)
+            std::ranges::for_each(sorted_slots, [SamplesToDo](EffectSlotBase *const slot)
             {
                 auto *const state = slot->mEffectState.get();
                 state->process(SamplesToDo, slot->Wet.Buffer, state->mOutTarget);
+                slot->TailStates.noteCurrentProcessed();
             });
+
+            /* Retired states render silence into reusable scratch buffers,
+             * fade by their global retirement frame, and add into the same
+             * device output target used by their last live update.
+             */
+            for(auto *const slot : auxslots)
+            {
+                slot->TailStates.render(SamplesToDo, ctx->mTailWorkspace.ZeroInput,
+                    ctx->mTailWorkspace.Scratch,
+                    EffectSlotTailReleaseSink{ctx, &ReleaseEffectStateViaEventRing});
+            }
         }
 
         /* Signal the event handler if there are any events to read. */

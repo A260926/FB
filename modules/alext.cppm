@@ -501,6 +501,9 @@ ENUMDCL ALC_N3D_SOFT =                           0x0002;
 /*** AL_SOFT_effect_target ***/
 ENUMDCL AL_EFFECTSLOT_TARGET_SOFT =              0x199C;
 
+/*** AL_SOFT_effect_slot_tail_samples ***/
+ENUMDCL AL_EFFECTSLOT_TAIL_SAMPLES_SOFT =         0x19F0;
+
 /*** AL_SOFT_events ***/
 ENUMDCL AL_EVENT_CALLBACK_FUNCTION_SOFT =        0x19A2;
 ENUMDCL AL_EVENT_CALLBACK_USER_PARAM_SOFT =      0x19A3;

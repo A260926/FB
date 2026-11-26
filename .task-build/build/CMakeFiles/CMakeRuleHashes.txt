@@ -1,0 +1,2 @@
+# Hashes of file build rules.
+a30155f46b5e53c5d14591bf1dd7d081 CMakeFiles/clang-tidy-check

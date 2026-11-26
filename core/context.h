@@ -14,6 +14,7 @@
 #include "async_event.h"
 #include "atomic.h"
 #include "bitset.hpp"
+#include "effectslottail.h"
 #include "flexarray.h"
 #include "opthelper_macros.hpp"
 #include "ringbuffer.h"
@@ -141,6 +142,7 @@ struct ContextBase {
 
     std::thread mEventThread;
     FifoBufferPtr<AsyncEvent> mAsyncEvents;
+    EffectSlotTailWorkspace mTailWorkspace;
     /* uint32 to work with macOS wait/notify wrappers, but really just a bool. */
     std::atomic<std::uint32_t> mEventsPending;
     using AsyncEventBitset = al::bitset<AsyncEnableBits>;
