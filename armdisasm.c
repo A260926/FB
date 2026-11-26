@@ -230,10 +230,15 @@ static void add_insert_prefix(ARMSTATE *state, uint32_t instr)
     if (state->arm_mode) {
       sprintf(tail(prefix), "%08x    ", instr);
     } else {
-      if (state->size == 4)
+      if (state->size == 4) {
         sprintf(tail(prefix), "%04x %04x   ", (instr >> 16) & 0xffff, instr & 0xffff);
-      else
+      } else if (state->size == 1) {
+        int pad = sprintf(tail(prefix), "%02x", instr & 0xff);
+        while (pad++ < 12)
+          strcat(prefix, " ");     /* pad the binary field to the same 12 columns */
+      } else {
         sprintf(tail(prefix), "%04x        ", instr & 0xffff);
+      }
     }
   }
 
@@ -348,6 +353,28 @@ static int lookup_address_type(ARMSTATE *state, uint32_t address)
   for (int idx = 0; idx < state->poolcount && state->codepool[idx].address <= address; idx++)
     type = state->codepool[idx].type;
   return type;
+}
+
+/** active_mapping_mode() returns the mode of the latest mapping marker at or
+ *  before "address", or ARMMODE_UNKNOWN when no marker is in effect. Future
+ *  markers (with an address above the one passed in) are never considered.
+ */
+static int active_mapping_mode(ARMSTATE *state, uint32_t address)
+{
+  int mode = ARMMODE_UNKNOWN;
+  for (int idx = 0; idx < state->mappingcount && state->mappings[idx].address <= address; idx++)
+    mode = state->mappings[idx].mode;
+  return mode;
+}
+
+/** mapping_is_code() returns true when an active mapping marker classifies the
+ *  address as ARM or Thumb code. An explicit code mapping overrides the
+ *  speculative literal-pool detection in the codepool.
+ */
+static bool mapping_is_code(ARMSTATE *state, uint32_t address)
+{
+  int mode = active_mapping_mode(state, address);
+  return mode == ARMMODE_ARM || mode == ARMMODE_THUMB;
 }
 
 static bool thumb_shift(ARMSTATE *state, unsigned instr, const char *opcode)
@@ -3239,7 +3266,8 @@ bool disasm_thumb(ARMSTATE *state, uint16_t hw, uint16_t hw2)
   state->size = 0;                /* zero'ed out to help debugging */
   state->text[0] = '\0';
 
-  if (lookup_address_type(state, state->address) == POOL_LITERAL) {
+  if (lookup_address_type(state, state->address) == POOL_LITERAL
+      && !mapping_is_code(state, state->address)) {
     state->size = 4;
     dump_word(state, ((uint32_t)hw2 << 16) | hw);
     return true;
@@ -3291,7 +3319,8 @@ bool disasm_arm(ARMSTATE *state, uint32_t w)
   state->text[0] = '\0';
   state->size = 4;                /* always 32-bit in ARM mode */
 
-  if (lookup_address_type(state, state->address) == POOL_LITERAL) {
+  if (lookup_address_type(state, state->address) == POOL_LITERAL
+      && !mapping_is_code(state, state->address)) {
     dump_word(state, w);
     return true;
   }
@@ -3403,6 +3432,7 @@ void disasm_cleanup(ARMSTATE *state)
     }
     free(state->literals);
   }
+  disasm_clear_mappings(state);
   disasm_clear_codepool(state);
   memset(state, 0, sizeof(ARMSTATE));
 }
@@ -3490,6 +3520,65 @@ void disasm_symbol(ARMSTATE *state, const char *name, uint32_t address, int mode
   }
 }
 
+/** disasm_clear_mappings() removes all mapping markers (the $a/$t/$d style
+ *  address ranges). Ordinary symbols and display options are unaffected.
+ */
+void disasm_clear_mappings(ARMSTATE *state)
+{
+  assert(state);
+  if (state->mappings) {
+    free(state->mappings);
+    state->mappings = NULL;
+    state->mappingcount = 0;
+    state->mappingsize = 0;
+  }
+}
+
+/** disasm_mapping() adds an explicit ARM/Thumb/data range marker. See the
+ *  description in armdisasm.h for the merge/conflict rules.
+ */
+bool disasm_mapping(ARMSTATE *state, uint32_t address, int mode)
+{
+  assert(state);
+  if (mode != ARMMODE_ARM && mode != ARMMODE_THUMB && mode != ARMMODE_DATA)
+    return false;
+
+  /* find the insertion point (first entry at or above "address") */
+  int pos;
+  for (pos = 0; pos < state->mappingcount && state->mappings[pos].address < address; pos++)
+    {}
+  if (pos < state->mappingcount && state->mappings[pos].address == address) {
+    /* a marker exists at this address: identical mode merges, a different
+       mode is a conflict */
+    return state->mappings[pos].mode == mode;
+  }
+
+  /* grow the list when needed */
+  assert(state->mappingcount <= state->mappingsize);
+  if (state->mappingcount == state->mappingsize) {
+    int newsize = (state->mappingsize == 0) ? 8 : 2 * state->mappingsize;
+    ARMMAP *list = malloc(newsize * sizeof(ARMMAP));
+    if (!list)
+      return false;
+    if (state->mappings) {
+      memcpy(list, state->mappings, state->mappingcount * sizeof(ARMMAP));
+      free(state->mappings);
+    }
+    state->mappings = list;
+    state->mappingsize = newsize;
+  }
+  if (state->mappingcount == state->mappingsize)
+    return false; /* allocation failed to make room */
+
+  if (pos != state->mappingcount)
+    memmove(&state->mappings[pos + 1], &state->mappings[pos],
+            (state->mappingcount - pos) * sizeof(ARMMAP));
+  state->mappingcount += 1;
+  state->mappings[pos].address = address;
+  state->mappings[pos].mode = mode;
+  return true;
+}
+
 /** disarm_result() returns the text of the recently decoded instruction. You
  *  use this function when disassembling step-by-step with disasm_arm() and
  *  disasm_thumb().
@@ -3555,6 +3644,255 @@ bool disasm_literals(ARMSTATE *state, const uint8_t *block, size_t blocksize, ui
   return true;
 }
 
+/** append_ldr_value_comment() adds the symbolic/hex/string comment for a
+ *  recent PC-relative LDR instruction. Factored out of disasm_buffer().
+ */
+static void append_ldr_value_comment(ARMSTATE *state, const uint8_t *buffer,
+                                     size_t buffersize, uint32_t start_address)
+{
+  if (state->ldr_addr == (uint32_t)~0 || !state->add_cmt)
+    return;
+  /* check the value at the address (guarded against offsets before the buffer
+     start or past its end) */
+  int64_t off64 = (int64_t)state->ldr_addr - (int64_t)start_address;
+  if (off64 < 0 || (uint64_t)off64 + 4u > buffersize)
+    return;
+  size_t offset = (size_t)off64;
+  /* little-endian read of the literal value (alignment safe) */
+  uint32_t address = (uint32_t)buffer[offset]
+                   | ((uint32_t)buffer[offset + 1] << 8)
+                   | ((uint32_t)buffer[offset + 2] << 16)
+                   | ((uint32_t)buffer[offset + 3] << 24);
+  int sym_idx = get_symbol(state, address);
+  if (sym_idx >= 0 && state->symbols[sym_idx].name) {
+    append_comment(state, state->symbols[sym_idx].name, " -> ");
+  } else {
+    char hex[40];
+    sprintf(hex, "0x%08x", address);
+    append_comment(state, hex, " -> ");
+    /* test whether that address points to a string literal */
+    if (state->literals) {
+      assert(state->literals_count > 0);
+      for (int i = 0; i < state->literals_count; i++) {
+        if (address < state->literals[i].address || address + 4 > state->literals[i].address + state->literals[i].size)
+          continue; /* address falls outside this literal pool */
+        int textlen = is_utf8_string(state->literals[i].block, state->literals[i].size, address - state->literals[i].address, NULL, 0);
+        if (textlen >= 2) {
+          char *text = malloc(textlen);
+          if (text) {
+            is_utf8_string(state->literals[i].block, state->literals[i].size, address - state->literals[i].address, text, textlen);
+            append_comment(state, text, " -> ");
+            free(text);
+          }
+        }
+      }
+    }
+  }
+}
+
+/** emit_byte_line() outputs a single raw byte as a ".byte 0xNN" line. It uses
+ *  the same state->address/state->size protocol as the instruction decoders.
+ */
+static bool emit_byte_line(ARMSTATE *state, uint8_t value,
+                           DISASM_CALLBACK callback, void *user)
+{
+  state->address += state->size; /* advance from the previously emitted item */
+  state->arm_mode = 0;
+  state->size = 1;
+  state->ldr_addr = ~0;
+  state->it_mask = 0;            /* raw bytes carry no IT predicate state */
+  state->it_cond = 0;
+  sprintf(state->text, ".byte 0x%02x", value);
+  add_insert_prefix(state, value);
+  return callback(state->address, state->text, user);
+}
+
+/** emit_fragment() outputs "count" consecutive bytes individually, as the
+ *  trailing fragment of a range that is too short for a full instruction.
+ */
+static bool emit_fragment(ARMSTATE *state, const uint8_t *opc, size_t count,
+                          uint32_t address, DISASM_CALLBACK callback, void *user)
+{
+  state->address = address;
+  state->size = 0;
+  state->it_mask = 0;            /* a fragment breaks any pending IT block */
+  state->it_cond = 0;
+  for (size_t i = 0; i < count; i++) {
+    if (!emit_byte_line(state, opc[i], callback, user))
+      return false;
+  }
+  return true;
+}
+
+/** Original disasm_buffer() loop, retained verbatim for states without any
+ *  mapping markers (so the ordinary symbol based behaviour is unchanged).
+ */
+static bool disasm_buffer_legacy(ARMSTATE *state, const uint8_t *buffer, size_t buffersize,
+                                 int mode, int symbolindex,
+                                 DISASM_CALLBACK callback, void *user)
+{
+  uint32_t start_address = state->address;  /* address pertaining to the start of the buffer */
+  const uint8_t *opc = buffer;
+  size_t remaining = buffersize;
+  for ( ;; ) {
+    if (mode == ARMMODE_ARM) {
+      if (remaining < 4)
+        break;
+      uint32_t w = opc[0] | ((uint32_t)opc[1] << 8) | ((uint32_t)opc[2] << 16) | ((uint32_t)opc[3] << 24);
+      disasm_arm(state, w);
+    } else {
+      if (remaining < 2)
+        break;
+      uint16_t hw = opc[0] | ((uint16_t)opc[1] << 8);
+      if (thumb_is_32bit(hw) && remaining < 4)
+        break;
+      uint16_t hw2 = (remaining >= 4) ? opc[2] | ((uint16_t)opc[3] << 8) : 0;
+      disasm_thumb(state, hw, hw2);
+    }
+    append_ldr_value_comment(state, buffer, buffersize, start_address);
+    if (!callback(state->address, state->text, user))
+      return false;
+    if (state->size > remaining)
+      break;
+    opc += state->size;
+    remaining -= state->size;
+    /* check for mode switch */
+    if (symbolindex >= 0 && (symbolindex + 1) < state->symbolcount) {
+      uint32_t address = state->address + state->size;
+      if (address >= state->symbols[symbolindex + 1].address) {
+        symbolindex += 1;
+        if (state->symbols[symbolindex].mode != ARMMODE_UNKNOWN)
+          mode = state->symbols[symbolindex].mode;
+      }
+    }
+  }
+  return true;
+}
+
+/** Mapping aware disasm_buffer() loop. Each mapping marker owns the half-open
+ *  range [marker, next-marker). Instructions are clipped to that range and
+ *  DATA ranges (plus incomplete trailing fragments) are emitted byte-wise.
+ */
+static bool disasm_buffer_mapped(ARMSTATE *state, const uint8_t *buffer, size_t buffersize,
+                                 int mode, int symbolindex,
+                                 DISASM_CALLBACK callback, void *user)
+{
+  const uint32_t start_address = state->address;
+  const uint8_t *opc = buffer;
+  size_t remaining = buffersize;
+
+  while (remaining > 0) {
+    const uint32_t cur = start_address + (uint32_t)(opc - buffer);
+
+    /* The first marker strictly after "cur" ends the current half-open range;
+       every marker at or before "cur" is in the past (or current). */
+    int nextmap = 0;
+    while (nextmap < state->mappingcount && state->mappings[nextmap].address <= cur)
+      nextmap++;
+    const int activemap = nextmap - 1;
+    const int mapmode = (activemap >= 0) ? state->mappings[activemap].mode
+                                        : ARMMODE_UNKNOWN;
+    if (activemap >= 0)
+      mode = mapmode;       /* an explicit mapping range is authoritative */
+
+    /* bytes available before the next mapping marker (capped to the buffer) */
+    size_t span = remaining;
+    bool boundary_cut = false;
+    if (nextmap < state->mappingcount) {
+      uint32_t boundary = state->mappings[nextmap].address;
+      if (boundary > cur) {
+        size_t edge = (size_t)(boundary - cur);
+        if (edge < span) {
+          span = edge;
+          boundary_cut = true;
+        }
+      } else {
+        break;              /* unreachable for sorted, unique markers */
+      }
+    }
+
+    if (mapmode == ARMMODE_DATA) {
+      state->address = cur;
+      state->size = 0;
+      if (!emit_byte_line(state, opc[0], callback, user))
+        return false;
+      opc += 1;
+      remaining -= 1;
+      continue;
+    }
+
+    /* Fetch a complete instruction that fits inside the current range. */
+    bool is_arm = (mode == ARMMODE_ARM);
+    uint32_t w = 0;
+    uint16_t hw = 0, hw2 = 0;
+
+    if (is_arm) {
+      if (span < 4) {
+        if (boundary_cut || activemap >= 0) {
+          if (!emit_fragment(state, opc, span, cur, callback, user))
+            return false;
+          opc += span;
+          remaining -= span;
+          continue;
+        }
+        break;              /* incomplete tail without mapping context: legacy behaviour */
+      }
+      w = opc[0] | ((uint32_t)opc[1] << 8) | ((uint32_t)opc[2] << 16) | ((uint32_t)opc[3] << 24);
+    } else {
+      if (span < 2) {
+        if (boundary_cut || activemap >= 0) {
+          if (!emit_fragment(state, opc, span, cur, callback, user))
+            return false;
+          opc += span;
+          remaining -= span;
+          continue;
+        }
+        break;
+      }
+      hw = opc[0] | ((uint16_t)opc[1] << 8);
+      if (thumb_is_32bit(hw)) {
+        if (span < 4) {
+          if (boundary_cut || activemap >= 0) {
+            if (!emit_fragment(state, opc, span, cur, callback, user))
+              return false;
+            opc += span;
+            remaining -= span;
+            continue;
+          }
+          break;
+        }
+        hw2 = opc[2] | ((uint16_t)opc[3] << 8);
+      }
+    }
+
+    state->address = cur;
+    state->size = 0;
+    if (is_arm)
+      disasm_arm(state, w);
+    else
+      disasm_thumb(state, hw, hw2);
+
+    append_ldr_value_comment(state, buffer, buffersize, start_address);
+    if (!callback(state->address, state->text, user))
+      return false;
+    if (state->size <= 0 || (size_t)state->size > remaining)
+      break;
+    opc += state->size;
+    remaining -= state->size;
+
+    /* ordinary symbol mode crossing (kept as the fallback rule) */
+    if (symbolindex >= 0 && (symbolindex + 1) < state->symbolcount) {
+      uint32_t address = state->address + state->size;
+      if (address >= state->symbols[symbolindex + 1].address) {
+        symbolindex += 1;
+        if (state->symbols[symbolindex].mode != ARMMODE_UNKNOWN)
+          mode = state->symbols[symbolindex].mode;
+      }
+    }
+  }
+  return true;
+}
+
 /** disasm_buffer() disassembles a buffer with machine code, and calls a
  *  callback function for every line of output (typically containing a single
  *  instruction).
@@ -3564,7 +3902,9 @@ bool disasm_literals(ARMSTATE *state, const uint8_t *block, size_t blocksize, ui
  *  \param buffersize The size of the machine code buffer.
  *  \param mode       `ARMMODE_ARM` or `ARMMODE_THUMB`; may also be set to
  *                    `ARMMODE_UNKNOWN` if symbols with a known mode have been
- *                    added.
+ *                    added. Mapping markers installed with disasm_mapping()
+ *                    (or disasm_elf_section()) override this mode for their
+ *                    half-open ranges.
  *  \param callback   The function that is called for each line of output.
  *  \param user       This parameter is passed to the callback function.
  *
@@ -3575,6 +3915,12 @@ bool disasm_literals(ARMSTATE *state, const uint8_t *block, size_t blocksize, ui
  *
  *  \note An invalid instruction still causes the callback to be called,
  *        but with an empty result; instruction decoding is not aborted.
+ *
+ *  \note With mapping markers installed, an `ARMMODE_DATA` range is emitted one
+ *        `.byte 0xNN` line per byte, and bytes that would straddle the end of a
+ *        range (an incomplete ARM/Thumb instruction) are emitted byte-wise as
+ *        well. Mapping lookup never uses a marker located after the current
+ *        address.
  */
 bool disasm_buffer(ARMSTATE *state, const uint8_t *buffer, size_t buffersize,
                    int mode, DISASM_CALLBACK callback, void *user)
@@ -3595,72 +3941,9 @@ bool disasm_buffer(ARMSTATE *state, const uint8_t *buffer, size_t buffersize,
   if (mode == ARMMODE_UNKNOWN)
     mode = ARMMODE_THUMB; /* no mode given, and no mode on symbols -> make arbitrary choice */
 
-  uint32_t start_address = state->address;  /* address pertaining to the start of the buffer */
-  const uint8_t *opc = buffer;
-  size_t remaining = buffersize;
-  for ( ;; ) {
-    if (mode == ARMMODE_ARM) {
-      if (remaining < 4)
-        break;
-      uint32_t w = opc[0] | ((uint32_t)opc[1] << 8) | ((uint32_t)opc[2] << 16) | ((uint32_t)opc[3] << 24);
-      disasm_arm(state, w);
-    } else {
-      if (remaining < 2)
-        break;
-      uint16_t hw = opc[0] | ((uint16_t)opc[1] << 8);
-      if (thumb_is_32bit(hw) && remaining < 4)
-        break;
-      uint16_t hw2 = (remaining >= 4) ? opc[2] | ((uint16_t)opc[3] << 8) : 0;
-      disasm_thumb(state, hw, hw2);
-    }
-    if (state->ldr_addr != ~0 && state->add_cmt) {
-      /* check the value at the address */
-      uint32_t offset = state->ldr_addr - start_address;
-      if (offset + 4 <= buffersize) {
-        uint32_t address = *(uint32_t*)(buffer + offset);
-        int sym_idx = get_symbol(state, address);
-        if (sym_idx >= 0 && state->symbols[sym_idx].name) {
-          append_comment(state, state->symbols[sym_idx].name, " -> ");
-        } else {
-          char hex[40];
-          sprintf(hex, "0x%08x", address);
-          append_comment(state, hex, " -> ");
-          /* test whether that address points to a string literal */
-          if (state->literals) {
-            assert(state->literals_count>0);
-            for (int i = 0; i < state->literals_count; i++) {
-              if (address < state->literals[i].address || address + 4 > state->literals[i].address + state->literals[i].size)
-                continue; /* address falls outside this literal pool */
-              int textlen = is_utf8_string(state->literals[i].block, state->literals[i].size, address - state->literals[i].address, NULL, 0);
-              if (textlen >= 2) {
-                char *text = malloc(textlen);
-                if (text) {
-                  is_utf8_string(state->literals[i].block, state->literals[i].size, address - state->literals[i].address, text, textlen);
-                  append_comment(state, text, " -> ");
-                  free(text);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    if (!callback(state->address, state->text, user))
-      return false;
-    if (state->size > remaining)
-      break;
-    opc += state->size;
-    remaining -= state->size;
-    /* check for mode switch */
-    if (symbolindex >= 0 && (symbolindex + 1) < state->symbolcount) {
-      uint32_t address = state->address + state->size;
-      if (address >= state->symbols[symbolindex + 1].address) {
-        symbolindex += 1;
-        if (state->symbols[symbolindex].mode != ARMMODE_UNKNOWN)
-          mode = state->symbols[symbolindex].mode;
-      }
-    }
-  }
-  return true;
+  if (state->mappingcount == 0)
+    return disasm_buffer_legacy(state, buffer, buffersize, mode, symbolindex, callback, user);
+  return disasm_buffer_mapped(state, buffer, buffersize, mode, symbolindex, callback, user);
 }
+
 

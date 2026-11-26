@@ -70,7 +70,7 @@ This disassembler library offers no help in determining whether to use ARM mode 
 
 The DWARF debugging information stores the real (even) function addresses (and does not store the mode). Hence, DWARF dymbolic information is of no help (for this matter). The MAP file created by the linker, likewise, reports the real (even) function addresses of all symbols.
 
-However, the ELF file format also has a symbol table, and this table records the address of Thumb mode functions on an odd address. Therefore, for an educated guess of whether to use ARM or Thumb modes, you need the ELF file, and you need a library to read and parse the ELF symbol table. The "ELF symbol table parser" is beyond the scope of this disassembler project.
+However, the ELF file format also has a symbol table, and this table records the address of Thumb mode functions on an odd address. Therefore, for an educated guess of whether to use ARM or Thumb modes, you need the ELF file, and you need a library to read and parse the ELF symbol table. A small built-in parser for little-endian ARM ELF32 files and their `$a`/`$t`/`$d` mapping symbols is provided in `armelf.h`/`armelf.c`; see "Reading an ARM ELF section" below. (For other formats you still add the symbols yourself, as described next.)
 
 Assuming that you have managed to read the ELF symbol table, the easiest way to pass this information to the disassembler library, is by adding each symbol with a call to `disasm_symbol`; see below for more on this function. Of note is that you need to correct the address of Thumb functions in the call to `disasm_symbol`; as stated above, the function is not really at an odd address. The ELF format uses the low bit in the address as a ARM/Thumb mode indicator.
 
@@ -100,6 +100,132 @@ Function `disasm_buffer` also tries to look up literal strings, that the code re
     bool disasm_literals(ARMSTATE *state, const uint8_t *block, size_t blocksize, uint32_t address);
 
 The function makes a copy of the block, so you may deallocate it after the call to `disasm_literals`. Multiple blocks may be added (these should not overlap, but no check is made whether they do). To clear the blocks with read-only data, call `disasm_cleanup` (which frees all memory, you need to call `disasm_init` again if you want to continue).
+
+# Mapping symbols and mixed ARM/Thumb/data sections
+
+A single executable section of an ARM ELF file can alternate between ARM code, Thumb code and inline data (literal pools, veneers). The ELF mapping symbols `$a`, `$t` and `$d` mark where each region starts; dotted variants such as `$a.1` or `$d.const` are accepted as well. Each marker owns the **half-open** range from its own address up to the next marker.
+
+Mapping markers are stored independently of the ordinary named symbols, so a mapping never replaces a function name at the same address.
+
+    bool disasm_mapping(ARMSTATE *state, uint32_t address, int mode);
+    void disasm_clear_mappings(ARMSTATE *state);
+
+Parameter `mode` is one of `ARMMODE_ARM`, `ARMMODE_THUMB` or `ARMMODE_DATA`. Markers are kept sorted on address. Adding the same address with the same mode merges with the existing marker (and returns `true`); adding the same address with a different mode is rejected and returns `false` without changing the list.
+
+`disasm_buffer` consults the markers while decoding:
+
+* Lookup only uses the marker at the current address and the markers **before** it. A later marker never changes the decoding mode ahead of its range.
+* Without an active marker, the `mode` passed to `disasm_buffer` and the ordinary symbol based mode switching behave exactly as before.
+* Inside an `ARMMODE_DATA` range no instruction is decoded; every byte is emitted, in address order, as `.byte 0xNN` with a two digit lower-case hex value.
+* A 4-byte ARM instruction or a 2/4-byte Thumb instruction is never allowed to consume bytes from the next mapping range. Bytes at the end of a range that do not form a complete instruction are emitted as individual `.byte 0xNN` lines as well.
+* Explicit code mappings override the speculative literal-pool (`POOL_LITERAL`) detection, so mapped code is always decoded as instructions. Data ranges never derive branches, symbols or literal pools from their bytes.
+* Pending IT (if-then) predicate state is dropped when leaving Thumb code or when a byte fragment is emitted; returning to Thumb starts without stale predicates.
+
+The callback address, `state.size` and the address/binary prefixes always match the bytes consumed by that line (1 for a `.byte` line, 2 or 4 for an instruction). A callback returning `false` still aborts `disasm_buffer`.
+
+# Reading an ARM ELF section
+
+`armelf.h`/`armelf.c` add a small, dependency free ELF32 loader:
+
+    bool disasm_elf_section(ARMSTATE *state,
+                            const uint8_t *image, size_t size,
+                            uint32_t section_index,
+                            DISASM_CALLBACK callback, void *user);
+
+It supports little-endian `EM_ARM` ELF32 files of type `ET_REL` and `ET_EXEC`. The selected section must be an executable `SHT_PROGBITS` section (`SHF_EXECINSTR`). Every `SHT_SYMTAB` is located and its `sh_link` is used to find the associated string table. Only symbols with `st_shndx == section_index` are imported, so equally valued symbols from other sections cannot leak in.
+
+Local `STT_NOTYPE` `$a`/`$t`/`$d` symbols (and dotted variants) become mapping markers. Named `STT_FUNC` symbols become ordinary comment symbols after clearing the Thumb low address bit. For `ET_REL`, `st_value` is a section offset; for `ET_EXEC` it is an absolute address; both are converted to the `sh_addr` coordinate of the selected section.
+
+Every call rebuilds the ordinary symbols, mappings and codepool for the selected section while preserving the display option flags (`DISASM_ADDRESS`, `DISASM_INSTR`, `DISASM_COMMENT`). The same `ARMSTATE` can therefore be reused for another section, including a different section linked at the same address. The image is only read. Unsupported or malformed files/sections return `false`.
+
+The ELF entry ends by calling the ordinary `disasm_buffer`; the installed mappings also keep working for a later direct `disasm_buffer` call.
+
+## C example
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "armdisasm.h"
+#include "armelf.h"
+
+static bool print_line(uint32_t address, const char *text, void *user)
+{
+    (void)user;
+    printf("%08x  %s\n", address, text);
+    return true;            /* return false to stop disassembling */
+}
+
+static uint16_t le16(const uint8_t *p)
+{
+    return (uint16_t)(p[0] | (p[1] << 8));
+}
+static uint32_t le32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
+         | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: %s firmware.elf [section-index]\n", argv[0]);
+        return 1;
+    }
+
+    FILE *fp = fopen(argv[1], "rb");
+    if (!fp) { perror(argv[1]); return 1; }
+    fseek(fp, 0, SEEK_END);
+    long length = ftell(fp);
+    rewind(fp);
+    uint8_t *image = malloc((size_t)length);
+    if (fread(image, 1, (size_t)length, fp) != (size_t)length) {
+        fprintf(stderr, "short read\n");
+        return 1;
+    }
+    fclose(fp);
+
+    ARMSTATE state;
+    disasm_init(&state, DISASM_ADDRESS | DISASM_COMMENT);
+
+    int section = (argc > 2) ? atoi(argv[2]) : -1;
+    if (section < 0) {
+        /* Pick the first executable SHT_PROGBITS section. */
+        uint32_t shoff = le32(image + 32);
+        uint16_t entsize = le16(image + 46);
+        uint16_t shnum = le16(image + 48);
+        for (uint16_t i = 1; i < shnum && section < 0; i++) {
+            const uint8_t *sh = image + shoff + (size_t)i * entsize;
+            if (le32(sh + 4) == 1 /*SHT_PROGBITS*/ &&
+                (le32(sh + 8) & 0x4 /*SHF_EXECINSTR*/))
+                section = i;
+        }
+    }
+
+    bool ok = false;
+    if (section >= 0)
+        ok = disasm_elf_section(&state, image, (size_t)length,
+                                (uint32_t)section, print_line, NULL);
+    if (!ok)
+        fprintf(stderr, "unsupported ELF or bad section %d\n", section);
+
+    disasm_cleanup(&state);
+    free(image);
+    return ok ? 0 : 2;
+}
+```
+
+The same mapping API can be used without ELF data, for example when the ranges come from another loader:
+
+```c
+disasm_init(&state, DISASM_ADDRESS);
+disasm_address(&state, 0x1000);
+disasm_mapping(&state, 0x1000, ARMMODE_THUMB); /* [0x1000,0x1008) */
+disasm_mapping(&state, 0x1008, ARMMODE_ARM);   /* [0x1008,0x100c) */
+disasm_mapping(&state, 0x100c, ARMMODE_DATA); /* to buffer end   */
+disasm_buffer(&state, buffer, sizeof buffer, ARMMODE_THUMB, cb, NULL);
+disasm_cleanup(&state);
+```
 
 # Code pool
 

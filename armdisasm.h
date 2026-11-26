@@ -39,6 +39,11 @@ typedef struct ARMDATA {
   uint8_t *block;     /**< copy of the block */
 } ARMDATA;
 
+typedef struct ARMMAP {
+  uint32_t address;   /**< start address of the mapping marker */
+  int mode;           /**< ARMMODE_ARM, ARMMODE_THUMB or ARMMODE_DATA */
+} ARMMAP;
+
 typedef struct {
   char text[128];     /**< decoded instruction (optionally prefixed with address/hex values) */
   uint32_t address;   /**< address (used for branch labels) */
@@ -64,6 +69,10 @@ typedef struct {
 
   ARMDATA *literals;  /**< pointer to optional memory blocks for decoding literal data */
   int literals_count; /**< count of literal data blocks */
+
+  ARMMAP *mappings;   /**< ELF mapping markers ($a/$t/$d), sorted on address */
+  int mappingcount;   /**< number of valid entries in the mapping list */
+  int mappingsize;    /**< number of allocated entries in the mapping list */
 } ARMSTATE;
 
 #define DISASM_ADDRESS  0x0001  /**< prefix decoded instructions with the address */
@@ -84,6 +93,30 @@ enum {
 };
 void disasm_symbol(ARMSTATE *state, const char *name, uint32_t address, int mode);
 void disasm_address(ARMSTATE *state, uint32_t address);
+
+/** Add an ELF-style mapping marker (`$a`/`$t`/`$d`) at \p address.
+ *
+ *  Mapping markers are independent of the named symbols: they only describe
+ *  how to decode the half-open address range starting at the marker and ending
+ *  at the next marker (exclusive). Lookup at an address only considers the
+ *  marker at that address and the markers before it, so a later marker never
+ *  changes the decoding mode ahead of its range.
+ *
+ *  Markers are kept sorted on address. Adding the same \p address with the
+ *  same \p mode merges with the existing marker (and returns `true`); adding
+ *  the same address with a different mode is rejected and returns `false`
+ *  without modifying the list. \p mode must be one of `ARMMODE_ARM`,
+ *  `ARMMODE_THUMB` or `ARMMODE_DATA`.
+ *
+ *  \return `true` on success, `false` on a mode conflict, an invalid mode or
+ *          an allocation failure.
+ */
+bool disasm_mapping(ARMSTATE *state, uint32_t address, int mode);
+
+/** Remove all mapping markers installed with disasm_mapping() (or by
+ *  disasm_elf_section()). Display options and ordinary symbols are kept.
+ */
+void disasm_clear_mappings(ARMSTATE *state);
 
 bool disasm_thumb(ARMSTATE *state, uint16_t hw, uint16_t hw2);
 bool disasm_arm(ARMSTATE *state, uint32_t w);
