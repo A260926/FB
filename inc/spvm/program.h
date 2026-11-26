@@ -71,11 +71,17 @@ typedef struct {
 	void(*write_workgroup_memory)(struct spvm_state*, spvm_word, spvm_word);
 	void(*atomic_operation)(spvm_word, spvm_word, struct spvm_state*);
 
+	/* Non-zero when this program owns an internal copy of code (and the
+	 * specialization values baked into it). Ordinary programs keep borrowing
+	 * the caller's source and leave this at zero. */
+	spvm_byte owns_code;
+
 	void* user_data;
 } spvm_program;
 typedef spvm_program* spvm_program_t;
 
 spvm_program_t spvm_program_create(spvm_context_t ctx, spvm_source spv, size_t spv_length);
+spvm_program_t _spvm_program_create_from_header(spvm_context_t ctx, spvm_source spv, size_t spv_length);
 spvm_string spvm_program_add_extension(spvm_program_t prog, spvm_word length);
 spvm_entry_point* spvm_program_create_entry_point(spvm_program_t prog);
 void spvm_program_add_capability(spvm_program_t prog, SpvCapability cap);

@@ -37,6 +37,46 @@ spvm_program_t spvm_program_create(spvm_context_t ctx, spvm_source spv, size_t s
 
 	return prog;
 }
+
+/* Shared header parsing. Reads the five-word SPIR-V header from spv and fills
+ * the matching program fields. Used by the ordinary constructor (which keeps
+ * borrowing the source) and the specialization constructor (which swaps in an
+ * owned, rewritten copy of the source afterwards). */
+spvm_program_t _spvm_program_create_from_header(spvm_context_t ctx, spvm_source spv, size_t spv_length)
+{
+	if (spv_length < 5 || spv[0] != (spvm_word)SpvMagicNumber)
+		return NULL;
+
+	spvm_program_t prog = (spvm_program_t)calloc(1, sizeof(spvm_program));
+	if (prog == NULL)
+		return NULL;
+
+	prog->context = ctx;
+
+	spvm_word version = spv[1];
+	prog->major_version = (version & 0x00FF0000) >> 16;
+	prog->minor_version = (version & 0x0000FF00) >> 8;
+
+	spvm_word generator = spv[2];
+	prog->generator_id = (generator & 0xFFFF0000) >> 16;
+	prog->generator_version = (generator & 0x0000FFFF);
+
+	prog->bound = spv[3];
+
+	prog->code_length = spv_length - 5;
+	prog->code = spv + 5;
+
+	prog->local_size_x = 1;
+	prog->local_size_y = 1;
+	prog->local_size_z = 1;
+
+	prog->geometry_invocations = 1;
+	prog->geometry_output_count = 1;
+	prog->geometry_input = SpvExecutionModeInputPoints;
+	prog->geometry_output = SpvExecutionModeOutputPoints;
+
+	return prog;
+}
 spvm_string spvm_program_add_extension(spvm_program_t prog, spvm_word length)
 {
 	prog->extension_count++;
@@ -80,6 +120,10 @@ void spvm_program_delete(spvm_program_t prog)
 
 	if (prog->file_count)
 		free(prog->files);
+
+	// specialized programs own their rewritten source
+	if (prog->owns_code && prog->code != NULL)
+		free((void*)prog->code);
 
 	free(prog);
 }
