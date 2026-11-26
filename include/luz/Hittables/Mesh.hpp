@@ -4,6 +4,7 @@
 #include "Hittables/BVHNode.hpp"
 #include "Hittables/Triangle.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <vector>
 
@@ -32,6 +33,20 @@ class	Mesh : public Hittable
 		) const;
 		bool			sampleSurface(Vector3& position, Vector3& normal) const;
 		bool			sampleSurfaceElement(std::size_t index, Vector3& position, Vector3& normal) const;
+		bool			refitTriangles(const std::vector<Triangle>& replacement);
+		std::uint64_t	geometryRevision(void) const;
+		std::size_t		packedNodeCount(void) const;
+		bool			packedNodeLayout(
+			std::size_t index,
+			bool& isLeaf,
+			std::size_t& left,
+			std::size_t& right,
+			std::size_t& start,
+			std::size_t& count
+		) const;
+		bool			packedNodeBoundingBox(std::size_t index, AABB& outputBoundingBox) const;
+		const std::vector<std::size_t>&	packedTriangleOrder(void) const;
+		const Triangle*	packedTriangle(std::size_t index) const;
 
 	private:
 		struct	PackedBVHNode
@@ -50,6 +65,7 @@ class	Mesh : public Hittable
 		std::size_t	_buildPackedBVHNode(std::size_t start, std::size_t end);
 		void	_computePackedTriangleAreas(void);
 		void	_computeLegacyTriangleAreas(void);
+		void	_refitPackedBounds(void);
 		const Triangle*	_surfaceTriangle(std::size_t index) const;
 
 		Vector3 _position;
@@ -65,4 +81,5 @@ class	Mesh : public Hittable
 		AABB	_boundingBox;
 		double	_totalArea;
 		bool	_usesPackedTriangles;
+		std::uint64_t	_geometryRevision = 0;
 };

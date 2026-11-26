@@ -139,6 +139,25 @@ namespace
 		return (true);
 	}
 
+	bool	triangleHasValidGeometry(const Triangle& triangle)
+	{
+		const Vector3& vertex0 = triangle.getVertex0();
+		const Vector3& vertex1 = triangle.getVertex1();
+		const Vector3& vertex2 = triangle.getVertex2();
+
+		if (
+			!std::isfinite(vertex0.getX()) || !std::isfinite(vertex0.getY()) || !std::isfinite(vertex0.getZ())
+			|| !std::isfinite(vertex1.getX()) || !std::isfinite(vertex1.getY()) || !std::isfinite(vertex1.getZ())
+			|| !std::isfinite(vertex2.getX()) || !std::isfinite(vertex2.getY()) || !std::isfinite(vertex2.getZ())
+		)
+		{
+			return (false);
+		}
+
+		const double area = triangle.area();
+		return (std::isfinite(area) && area > 0.0);
+	}
+
 	AABB	boundingBoxForRange(
 		const std::vector<AABB>& boxes,
 		const std::vector<std::size_t>& indices,
@@ -549,6 +568,140 @@ void	Mesh::_computeLegacyTriangleAreas(void)
 		}
 		this->_triangleAreaPrefixSums.push_back(this->_totalArea);
 	}
+}
+
+void	Mesh::_refitPackedBounds(void)
+{
+	if (this->_packedBVHNodes.empty())
+	{
+		return;
+	}
+
+	for (std::size_t i = this->_packedBVHNodes.size(); i > 0; i--)
+	{
+		const std::size_t nodeIndex = i - 1;
+		PackedBVHNode& node = this->_packedBVHNodes[nodeIndex];
+
+		if (node.isLeaf)
+		{
+			AABB nodeBox;
+			bool hasBox = false;
+
+			for (std::size_t element = node.start; element < node.start + node.count; element++)
+			{
+				const Triangle& triangle = this->_triangles[this->_triangleIndices[element]];
+				AABB triangleBox;
+
+				// Triangle::_boundingBox is padded by T_MIN and is refreshed on write.
+				triangle.createBoundingBox(triangleBox);
+				nodeBox = hasBox ? mergeBoxes(nodeBox, triangleBox) : triangleBox;
+				hasBox = true;
+			}
+			if (hasBox)
+			{
+				node.boundingBox = nodeBox;
+			}
+			continue;
+		}
+
+		node.boundingBox = mergeBoxes(
+			this->_packedBVHNodes[node.left].boundingBox,
+			this->_packedBVHNodes[node.right].boundingBox
+		);
+	}
+
+	this->_boundingBox = this->_packedBVHNodes[0].boundingBox;
+}
+
+bool	Mesh::refitTriangles(const std::vector<Triangle>& replacement)
+{
+	if (!this->_usesPackedTriangles)
+	{
+		return (false);
+	}
+	if (replacement.size() != this->_triangles.size())
+	{
+		return (false);
+	}
+
+	for (const Triangle& triangle : replacement)
+	{
+		if (!triangleHasValidGeometry(triangle))
+		{
+			return (false);
+		}
+	}
+
+	// Validate before mutating so a rejected update leaves the mesh untouched.
+	// Triangle entries are swapped in place, which keeps the packed node layout,
+	// leaf ranges and the triangle permutation exactly as they were built.
+	for (std::size_t i = 0; i < replacement.size(); i++)
+	{
+		this->_triangles[i] = replacement[i];
+	}
+
+	this->_computePackedTriangleAreas();
+	this->_refitPackedBounds();
+	this->_geometryRevision++;
+	return (true);
+}
+
+std::uint64_t	Mesh::geometryRevision(void) const
+{
+	return (this->_geometryRevision);
+}
+
+std::size_t	Mesh::packedNodeCount(void) const
+{
+	return (this->_packedBVHNodes.size());
+}
+
+bool	Mesh::packedNodeLayout(
+	std::size_t index,
+	bool& isLeaf,
+	std::size_t& left,
+	std::size_t& right,
+	std::size_t& start,
+	std::size_t& count
+) const
+{
+	if (!this->_usesPackedTriangles || index >= this->_packedBVHNodes.size())
+	{
+		return (false);
+	}
+
+	const PackedBVHNode& node = this->_packedBVHNodes[index];
+
+	isLeaf = node.isLeaf;
+	left = node.left;
+	right = node.right;
+	start = node.start;
+	count = node.count;
+	return (true);
+}
+
+const std::vector<std::size_t>&	Mesh::packedTriangleOrder(void) const
+{
+	return (this->_triangleIndices);
+}
+
+bool	Mesh::packedNodeBoundingBox(std::size_t index, AABB& outputBoundingBox) const
+{
+	if (!this->_usesPackedTriangles || index >= this->_packedBVHNodes.size())
+	{
+		return (false);
+	}
+	outputBoundingBox = this->_packedBVHNodes[index].boundingBox;
+	return (true);
+}
+
+const Triangle*	Mesh::packedTriangle(std::size_t index) const
+{
+	if (!this->_usesPackedTriangles || index >= this->_triangles.size())
+	{
+		return (nullptr);
+	}
+	return (&this->_triangles[index]);
 }
 
 const Triangle*	Mesh::_surfaceTriangle(std::size_t index) const

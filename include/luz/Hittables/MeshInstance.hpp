@@ -5,6 +5,7 @@
 #include "Hittables/Mesh.hpp"
 #include "Materials/Material.hpp"
 #include "Vector3.hpp"
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -31,6 +32,10 @@ class	MeshInstance : public Hittable
 		virtual bool		sampleEmission(HittableEmissionSample& sample) const override;
 		virtual double	lightSelectionWeight(void) const override;
 
+		// Read-only diagnostics used by the refit regression tests.
+		std::uint64_t	geometryCacheBuildCount(void) const;
+		std::uint64_t	cachedGeometryRevision(void) const;
+
 	private:
 		struct	InstanceTransform
 		{
@@ -42,9 +47,7 @@ class	MeshInstance : public Hittable
 			double	sinY = 0.0;
 			double	cosZ = 1.0;
 			double	sinZ = 0.0;
-			double	uniformAreaScale = 1.0;
 			bool	invertible = true;
-			bool	uniformArea = true;
 
 			InstanceTransform(Vector3 position, Vector3 rotationDegrees, Vector3 scale);
 			Vector3	rotate(Vector3 vector) const;
@@ -56,9 +59,7 @@ class	MeshInstance : public Hittable
 		};
 
 		double	_surfaceArea(void) const;
-		const std::vector<double>&	_transformedAreaPrefixSums(void) const;
 		bool	_sampleSurface(Vector3& position, Vector3& normal, double& area) const;
-		bool	_computeBoundingBox(void);
 		bool	_localRay(const Ray& ray, Ray& localRay, double& localDistanceScale) const;
 		void	_transformHitRecord(
 			const Ray& worldRay,
@@ -67,13 +68,24 @@ class	MeshInstance : public Hittable
 			HitRecord& worldHitRecord
 		) const;
 
+		struct	GeometryCache
+		{
+			std::uint64_t	revision = 0;
+			AABB		boundingBox;
+			bool		hasBoundingBox = false;
+			double		surfaceArea = 0.0;
+			std::vector<double>	areaPrefixSums;
+		};
+
+		std::shared_ptr<const GeometryCache>	_geometryCache(void) const;
+		std::shared_ptr<const GeometryCache>	_buildGeometryCache(std::uint64_t revision) const;
+
 		std::shared_ptr<const Mesh>	_geometry;
 		std::shared_ptr<Material>	_material;
 		InstanceTransform	_transform;
-		AABB	_boundingBox;
-		bool	_hasBoundingBox = false;
-		mutable double	_surfaceAreaCache = 0.0;
-		mutable std::once_flag	_surfaceAreaOnce;
-		mutable std::vector<double>	_transformedAreaPrefixCache;
-		mutable std::once_flag	_transformedAreaPrefixOnce;
+		mutable std::mutex	_cacheMutex;
+		mutable std::shared_ptr<const GeometryCache>	_cache;
+		mutable std::uint64_t	_cachedRevision = 0;
+		mutable std::uint64_t	_cacheBuildCount = 0;
+		mutable bool		_cacheValid = false;
 };

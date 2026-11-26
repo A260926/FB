@@ -1,0 +1,6 @@
+/Volumes/UserFBWorkspace/questions/FSB7BF368C9055U12188/attempts/20261126T161218134846Z/repo/.task-build/core/CMakeFiles/luz_core.dir
+/Volumes/UserFBWorkspace/questions/FSB7BF368C9055U12188/attempts/20261126T161218134846Z/repo/.task-build/core/CMakeFiles/luz.dir
+/Volumes/UserFBWorkspace/questions/FSB7BF368C9055U12188/attempts/20261126T161218134846Z/repo/.task-build/core/CMakeFiles/luz_tests.dir
+/Volumes/UserFBWorkspace/questions/FSB7BF368C9055U12188/attempts/20261126T161218134846Z/repo/.task-build/core/CMakeFiles/test.dir
+/Volumes/UserFBWorkspace/questions/FSB7BF368C9055U12188/attempts/20261126T161218134846Z/repo/.task-build/core/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSB7BF368C9055U12188/attempts/20261126T161218134846Z/repo/.task-build/core/CMakeFiles/rebuild_cache.dir

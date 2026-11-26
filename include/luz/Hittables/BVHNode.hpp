@@ -17,6 +17,7 @@ class   BVHNode : public Hittable
 		virtual Color	shadowTransmittance(Ray& ray, double t_min, double t_max) const override;
 		virtual bool	createBoundingBox(AABB& outputBoundingBox) const override;
 		virtual Material* getMaterial(void) const override;
+		bool		refit(void);
 
 	private:
 		BVHNode(std::vector<std::shared_ptr<Hittable>>& hittables, size_t start, size_t end, bool isRoot);

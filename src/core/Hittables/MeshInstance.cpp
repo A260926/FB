@@ -65,10 +65,6 @@ MeshInstance::InstanceTransform::InstanceTransform(Vector3 position, Vector3 rot
 		absX > INSTANCE_SCALE_EPSILON
 		&& absY > INSTANCE_SCALE_EPSILON
 		&& absZ > INSTANCE_SCALE_EPSILON;
-	this->uniformArea =
-		std::fabs(absX - absY) <= INSTANCE_SCALE_EPSILON
-		&& std::fabs(absX - absZ) <= INSTANCE_SCALE_EPSILON;
-	this->uniformAreaScale = this->uniformArea ? absX * absX : 1.0;
 }
 
 Vector3	MeshInstance::InstanceTransform::rotate(Vector3 vector) const
@@ -177,7 +173,6 @@ MeshInstance::MeshInstance(
 	  _material(std::move(material)),
 	  _transform(position, rotationDegrees, scale)
 {
-	this->_hasBoundingBox = this->_computeBoundingBox();
 }
 
 const std::shared_ptr<const Mesh>&	MeshInstance::getGeometry(void) const
@@ -190,17 +185,22 @@ Material*	MeshInstance::getMaterial(void) const
 	return (this->_material.get());
 }
 
-bool	MeshInstance::_computeBoundingBox(void)
+std::shared_ptr<const MeshInstance::GeometryCache>	MeshInstance::_buildGeometryCache(
+	std::uint64_t revision
+) const
 {
+	auto cache = std::make_shared<GeometryCache>();
+
+	cache->revision = revision;
 	if (!this->_geometry)
 	{
-		return (false);
+		return (cache);
 	}
 
 	AABB localBox;
 	if (!this->_geometry->createBoundingBox(localBox))
 	{
-		return (false);
+		return (cache);
 	}
 
 	const Vector3& localMinimum = localBox.getMinimum();
@@ -239,13 +239,71 @@ bool	MeshInstance::_computeBoundingBox(void)
 		maxZ = std::max(maxZ, worldCorner.getZ());
 		hasCorner = true;
 	}
-	if (!hasCorner)
+	if (hasCorner)
 	{
-		return (false);
+		cache->boundingBox = AABB(Vector3(minX, minY, minZ), Vector3(maxX, maxY, maxZ));
+		cache->hasBoundingBox = true;
 	}
 
-	this->_boundingBox = AABB(Vector3(minX, minY, minZ), Vector3(maxX, maxY, maxZ));
-	return (true);
+	// The world-space area must come from the transformed triangle geometry,
+	// not from the local total multiplied by a per-instance constant: under
+	// non-uniform scale each triangle stretches differently and two instances
+	// of the same mesh may have unrelated world areas.
+	const std::size_t elementCount = this->_geometry->surfaceElementCount();
+	double totalArea = 0.0;
+
+	cache->areaPrefixSums.reserve(elementCount);
+	for (std::size_t index = 0; index < elementCount; index++)
+	{
+		totalArea += this->_geometry->transformedSurfaceElementArea(
+			index,
+			[this](const Vector3& point) {
+				return (this->_transform.transformPoint(point));
+			}
+		);
+		cache->areaPrefixSums.push_back(totalArea);
+	}
+
+	cache->surfaceArea = sanitizedArea(totalArea);
+	if (cache->surfaceArea <= 0.0)
+	{
+		cache->areaPrefixSums.clear();
+	}
+
+	return (cache);
+}
+
+std::shared_ptr<const MeshInstance::GeometryCache>	MeshInstance::_geometryCache(void) const
+{
+	const std::uint64_t revision = this->_geometry ? this->_geometry->geometryRevision() : 0;
+	std::lock_guard<std::mutex> lock(this->_cacheMutex);
+
+	// One rebuild per observed revision; queries against an unchanged mesh
+	// (same revision) reuse the cached traversal result.
+	if (this->_cacheValid && this->_cachedRevision == revision && this->_cache)
+	{
+		return (this->_cache);
+	}
+
+	this->_cache = this->_buildGeometryCache(revision);
+	this->_cachedRevision = revision;
+	this->_cacheBuildCount++;
+	this->_cacheValid = true;
+	return (this->_cache);
+}
+
+std::uint64_t	MeshInstance::geometryCacheBuildCount(void) const
+{
+	std::lock_guard<std::mutex> lock(this->_cacheMutex);
+
+	return (this->_cacheBuildCount);
+}
+
+std::uint64_t	MeshInstance::cachedGeometryRevision(void) const
+{
+	std::lock_guard<std::mutex> lock(this->_cacheMutex);
+
+	return (this->_cacheValid ? this->_cachedRevision : 0);
 }
 
 bool	MeshInstance::_localRay(const Ray& ray, Ray& localRay, double& localDistanceScale) const
@@ -340,70 +398,20 @@ bool	MeshInstance::hitAny(Ray& ray, double t_min, double t_max) const
 
 bool	MeshInstance::createBoundingBox(AABB& outputBoundingBox) const
 {
-	if (!this->_hasBoundingBox)
+	const std::shared_ptr<const GeometryCache> cache = this->_geometryCache();
+
+	if (!cache->hasBoundingBox)
 	{
 		return (false);
 	}
 
-	outputBoundingBox = this->_boundingBox;
+	outputBoundingBox = cache->boundingBox;
 	return (true);
 }
 
 double	MeshInstance::_surfaceArea(void) const
 {
-	std::call_once(this->_surfaceAreaOnce, [this] {
-		if (!this->_geometry)
-		{
-			this->_surfaceAreaCache = 0.0;
-			return;
-		}
-		if (this->_transform.uniformArea)
-		{
-			this->_surfaceAreaCache = sanitizedArea(
-				this->_geometry->surfaceArea() * this->_transform.uniformAreaScale
-			);
-			return;
-		}
-
-		this->_surfaceAreaCache = sanitizedArea(this->_geometry->transformedSurfaceArea(
-			[this](const Vector3& point) {
-				return (this->_transform.transformPoint(point));
-			}
-		));
-	});
-
-	return (this->_surfaceAreaCache);
-}
-
-const std::vector<double>&	MeshInstance::_transformedAreaPrefixSums(void) const
-{
-	std::call_once(this->_transformedAreaPrefixOnce, [this] {
-		if (!this->_geometry)
-		{
-			return;
-		}
-
-		const std::size_t elementCount = this->_geometry->surfaceElementCount();
-		double totalArea = 0.0;
-
-		this->_transformedAreaPrefixCache.reserve(elementCount);
-		for (std::size_t index = 0; index < elementCount; index++)
-		{
-			totalArea += this->_geometry->transformedSurfaceElementArea(
-				index,
-				[this](const Vector3& point) {
-					return (this->_transform.transformPoint(point));
-				}
-			);
-			this->_transformedAreaPrefixCache.push_back(totalArea);
-		}
-		if (!std::isfinite(totalArea) || totalArea <= 0.0)
-		{
-			this->_transformedAreaPrefixCache.clear();
-		}
-	});
-
-	return (this->_transformedAreaPrefixCache);
+	return (this->_geometryCache()->surfaceArea);
 }
 
 bool	MeshInstance::_sampleSurface(Vector3& position, Vector3& normal, double& area) const
@@ -413,51 +421,32 @@ bool	MeshInstance::_sampleSurface(Vector3& position, Vector3& normal, double& ar
 		return (false);
 	}
 
+	const std::shared_ptr<const GeometryCache> cache = this->_geometryCache();
+	if (cache->surfaceArea <= 0.0 || cache->areaPrefixSums.empty())
+	{
+		return (false);
+	}
+
 	Vector3 localPosition;
 	Vector3 localNormal;
+	area = cache->surfaceArea;
 
-	if (this->_transform.uniformArea)
+	const std::vector<double>& prefixSums = cache->areaPrefixSums;
+	const double targetArea = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * area;
+	const auto areaIt = std::lower_bound(prefixSums.begin(), prefixSums.end(), targetArea);
+	const std::size_t randomIndex = std::min<std::size_t>(
+		static_cast<std::size_t>(areaIt - prefixSums.begin()),
+		prefixSums.size() - 1
+	);
+	const double previousArea = randomIndex == 0 ? 0.0 : prefixSums[randomIndex - 1];
+	const double selectedArea = prefixSums[randomIndex] - previousArea;
+	if (selectedArea <= 0.0)
 	{
-		area = this->_surfaceArea();
-		if (area <= 0.0)
-		{
-			return (false);
-		}
-		if (!this->_geometry->sampleSurface(localPosition, localNormal))
-		{
-			return (false);
-		}
+		return (false);
 	}
-	else
+	if (!this->_geometry->sampleSurfaceElement(randomIndex, localPosition, localNormal))
 	{
-		const std::vector<double>& prefixSums = this->_transformedAreaPrefixSums();
-		if (prefixSums.empty())
-		{
-			return (false);
-		}
-
-		area = prefixSums.back();
-		if (!std::isfinite(area) || area <= 0.0)
-		{
-			return (false);
-		}
-
-		const double targetArea = Sampler::sample1D(Sampler::DIM_LIGHT_SURFACE_SELECTION) * area;
-		const auto areaIt = std::lower_bound(prefixSums.begin(), prefixSums.end(), targetArea);
-		const std::size_t randomIndex = std::min<std::size_t>(
-			static_cast<std::size_t>(areaIt - prefixSums.begin()),
-			prefixSums.size() - 1
-		);
-		const double previousArea = randomIndex == 0 ? 0.0 : prefixSums[randomIndex - 1];
-		const double selectedArea = prefixSums[randomIndex] - previousArea;
-		if (selectedArea <= 0.0)
-		{
-			return (false);
-		}
-		if (!this->_geometry->sampleSurfaceElement(randomIndex, localPosition, localNormal))
-		{
-			return (false);
-		}
+		return (false);
 	}
 
 	position = this->_transform.transformPoint(localPosition);
