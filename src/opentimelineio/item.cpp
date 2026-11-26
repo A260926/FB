@@ -5,10 +5,65 @@
 #include "opentimelineio/composition.h"
 #include "opentimelineio/effect.h"
 #include "opentimelineio/marker.h"
+#include "opentimelineio/timeMappedStack.h"
 
 #include <assert.h>
+#include <unordered_set>
 
 namespace opentimelineio { namespace OPENTIMELINEIO_VERSION_NS {
+
+namespace {
+
+bool
+crosses_active_time_map(Composable const* from, Item const* to)
+{
+    if (!from || !to)
+    {
+        return false;
+    }
+
+    std::unordered_set<Composable const*> from_ancestors;
+    for (Composable const* node = from; node; node = node->parent())
+    {
+        from_ancestors.insert(node);
+    }
+
+    Composable const* common = to;
+    while (common && from_ancestors.find(common) == from_ancestors.end())
+    {
+        common = common->parent();
+    }
+    if (!common)
+    {
+        return false;
+    }
+
+    auto edge_crosses_map = [](Composable const* child) {
+        Composition const* parent = child ? child->parent() : nullptr;
+        auto const* mapped = dynamic_cast<TimeMappedStack const*>(parent);
+        return mapped && mapped->has_time_map();
+    };
+
+    for (Composable const* node = to; node && node != common;
+         node                = node->parent())
+    {
+        if (edge_crosses_map(node))
+        {
+            return true;
+        }
+    }
+    for (Composable const* node = from; node && node != common;
+         node                = node->parent())
+    {
+        if (edge_crosses_map(node))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 Item::Item(
     std::string const&              name,
@@ -124,6 +179,19 @@ Item::transformed_time(
 {
     if (!to_item)
     {
+        return time;
+    }
+
+    if (crosses_active_time_map(this, to_item))
+    {
+        if (error_status)
+        {
+            *error_status = ErrorStatus(
+                ErrorStatus::NOT_IMPLEMENTED,
+                "transformed_time cannot represent a possibly multi-valued "
+                "TimeMappedStack inverse",
+                this);
+        }
         return time;
     }
 

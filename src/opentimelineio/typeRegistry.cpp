@@ -22,6 +22,7 @@
 #include "opentimelineio/serializableObject.h"
 #include "opentimelineio/serializableObjectWithMetadata.h"
 #include "opentimelineio/stack.h"
+#include "opentimelineio/timeMappedStack.h"
 #include "opentimelineio/timeEffect.h"
 #include "opentimelineio/timeline.h"
 #include "opentimelineio/track.h"
@@ -86,6 +87,7 @@ TypeRegistry::TypeRegistry()
         nullptr);
 
     register_type<Stack>();
+    register_type<TimeMappedStack>();
     register_type<TimeEffect>();
     register_type<Timeline>();
     register_type<Track>();

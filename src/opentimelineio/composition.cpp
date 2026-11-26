@@ -3,6 +3,7 @@
 
 #include "opentimelineio/composition.h"
 #include "opentimelineio/clip.h"
+#include "opentimelineio/timeMappedStack.h"
 #include "opentimelineio/vectorIndexing.h"
 
 #include <assert.h>
@@ -727,6 +728,114 @@ Composition::has_clips() const
         }
     }
     return false;
+}
+
+namespace {
+
+// Original single-envelope OTIO traversal.  It remains the implementation for
+// ordinary compositions and for unsearched queries.
+std::vector<SerializableObject::Retainer<Clip>> classic_find_clip_children(
+    Composition const*             self,
+    ErrorStatus*                   error_status,
+    std::optional<TimeRange>       search_range,
+    bool                           shallow_search)
+{
+    std::vector<SerializableObject::Retainer<Clip>> out;
+    std::vector<SerializableObject::Retainer<Composable>> children;
+    if (search_range)
+    {
+        children = self->children_in_range(*search_range, error_status);
+        if (is_error(error_status))
+        {
+            return out;
+        }
+    }
+    else
+    {
+        children = self->children();
+    }
+
+    for (auto const& child: children)
+    {
+        if (auto valid_child = dynamic_cast<Clip*>(child.value))
+        {
+            out.push_back(valid_child);
+        }
+
+        if (!shallow_search)
+        {
+            if (auto composition =
+                    dynamic_cast<Composition*>(child.value))
+            {
+                if (search_range)
+                {
+                    search_range = self->transformed_time_range(
+                        *search_range,
+                        composition,
+                        error_status);
+                    if (is_error(error_status))
+                    {
+                        return out;
+                    }
+                }
+
+                const auto valid_children =
+                    composition->find_children<Clip>(
+                        error_status,
+                        search_range,
+                        shallow_search);
+                if (is_error(error_status))
+                {
+                    return out;
+                }
+                for (const auto& valid_child: valid_children)
+                {
+                    out.push_back(valid_child);
+                }
+            }
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+template <>
+std::vector<SerializableObject::Retainer<Clip>>
+Composition::find_children<Clip>(
+    ErrorStatus*             error_status,
+    std::optional<TimeRange> search_range,
+    bool                     shallow_search) const
+{
+    if (search_range)
+    {
+        ErrorStatus local_error;
+        ErrorStatus* mapped_error = error_status ? error_status : &local_error;
+        std::vector<SerializableObject::Retainer<Clip>> mapped;
+        if (time_mapped_find_children_clip(
+                this,
+                mapped_error,
+                search_range,
+                shallow_search,
+                &mapped))
+        {
+            return mapped;
+        }
+        if (is_error(mapped_error))
+        {
+            if (error_status)
+            {
+                *error_status = *mapped_error;
+            }
+            return {};
+        }
+    }
+
+    return classic_find_clip_children(
+        this,
+        error_status,
+        search_range,
+        shallow_search);
 }
 
 std::vector<SerializableObject::Retainer<Clip>>

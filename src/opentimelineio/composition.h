@@ -293,4 +293,11 @@ Composition::find_children(
     return out;
 }
 
+template <>
+OTIO_API std::vector<SerializableObject::Retainer<Clip>>
+Composition::find_children<Clip>(
+    ErrorStatus*             error_status,
+    std::optional<TimeRange> search_range,
+    bool                     shallow_search) const;
+
 }} // namespace opentimelineio::OPENTIMELINEIO_VERSION_NS
