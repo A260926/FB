@@ -1,5 +1,6 @@
 # Temporary data rules
 build/
+.task-build/
 *.suo
 **/__pycache__/
 .vscode/

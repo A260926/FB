@@ -47,6 +47,7 @@
 #include "acl/compression/impl/keyframe_stripping.h"
 #include "acl/compression/impl/normalize.transform.h"
 #include "acl/compression/impl/optimize_looping.transform.h"
+#include "acl/compression/impl/protected_keyframes.h"
 #include "acl/compression/impl/quantize.transform.h"
 #include "acl/compression/impl/segment.transform.h"
 #include "acl/compression/impl/topology_metadata.h"
@@ -143,6 +144,14 @@ namespace acl
 			error_result result = settings.is_valid();
 			if (result.any())
 				return result;
+
+			// Validate the borrowed protected keyframe list against the original input sample
+			// numbering before any clip context or output buffer exists. An invalid list thus
+			// fails the call without producing partial output.
+			const uint32_t num_input_samples = track_list.get_num_samples_per_track();
+			const error_result protected_result = validate_protected_keyframes(settings.keyframe_stripping, num_input_samples);
+			if (protected_result.any())
+				return protected_result;
 
 			compression_stats_t compression_stats;
 			(void)compression_stats;
@@ -253,6 +262,27 @@ namespace acl
 
 			// Wrap instead of clamp if we loop
 			optimize_looping(lossy_clip_context, additive_base_clip_context, settings, compression_stats);
+
+			// Resolve the borrowed protected keyframes now that loop optimization has run.
+			// The list was validated against the original sample numbering above. A sample
+			// count drop means the repeating last sample was really removed: only then does
+			// the original last index map to the retained first sample.
+			const bool loop_removed_last_sample = lossy_clip_context.num_samples < num_input_samples;
+			const error_result resolve_result = resolve_protected_keyframes(
+				allocator,
+				settings.keyframe_stripping,
+				num_input_samples,
+				loop_removed_last_sample,
+				lossy_clip_context.protected_keyframes,
+				lossy_clip_context.num_protected_keyframes);
+			if (resolve_result.any())
+			{
+				deallocate_type_array(allocator, clip_shell_metadata, num_input_transforms);
+				destroy_clip_context(lossy_clip_context);
+				destroy_clip_context(raw_clip_context);
+				destroy_clip_context(additive_base_clip_context);
+				return resolve_result;
+			}
 
 			// Convert our rotations if we need to
 			convert_rotation_streams(allocator, lossy_clip_context, settings.rotation_format, compression_stats);

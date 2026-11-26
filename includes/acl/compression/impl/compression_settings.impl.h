@@ -100,16 +100,40 @@ namespace acl
 		hash_value = hash_combine(hash_value, hash32(threshold));
 		hash_value = hash_combine(hash_value, hash32(strip_trivial));
 
+		// Hash the protected keyframe indices by their values, not by their address.
+		// Two lists with the same indices at different addresses hash identically.
+		// An empty list contributes nothing so that the hash matches the old behavior.
+		for (uint32_t index = 0; index < num_protected_keyframes; ++index)
+			hash_value = hash_combine(hash_value, hash32(protected_keyframes[index]));
+
 		return hash_value;
 	}
 
-	inline error_result compression_keyframe_stripping_settings::is_valid() const
+	inline error_result compression_keyframe_stripping_settings::is_valid(uint32_t num_samples_per_track) const
 	{
 		if (!rtm::scalar_is_finite(proportion) || proportion < 0.0F || proportion > 1.0F)
 			return error_result("proportion must be in the range [0.0, 1.0]");
 
 		if (!rtm::scalar_is_finite(threshold) || threshold < 0.0F)
 			return error_result("threshold must be positive definite");
+
+		if (num_protected_keyframes != 0)
+		{
+			if (protected_keyframes == nullptr)
+				return error_result("protected_keyframes cannot be NULL when num_protected_keyframes is not zero");
+
+			if (num_samples_per_track != 0xFFFFFFFF && protected_keyframes[0] >= num_samples_per_track)
+				return error_result("protected_keyframes contains an index out of range");
+
+			for (uint32_t index = 1; index < num_protected_keyframes; ++index)
+			{
+				if (protected_keyframes[index] <= protected_keyframes[index - 1])
+					return error_result("protected_keyframes must be strictly increasing with no duplicate");
+
+				if (num_samples_per_track != 0xFFFFFFFF && protected_keyframes[index] >= num_samples_per_track)
+					return error_result("protected_keyframes contains an index out of range");
+			}
+		}
 
 		return error_result();
 	}
@@ -149,6 +173,9 @@ namespace acl
 
 		if (keyframe_stripping.is_enabled() && enable_database_support)
 			return error_result("Cannot enable keyframe stripping with database support");
+
+		if (keyframe_stripping.num_protected_keyframes != 0 && enable_database_support)
+			return error_result("Cannot use protected keyframes with database support");
 
 		return error_result();
 	}

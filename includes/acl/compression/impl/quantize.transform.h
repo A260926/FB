@@ -38,6 +38,7 @@
 #include "acl/compression/impl/transform_bit_rate_permutations.h"
 #include "acl/compression/impl/clip_context.h"
 #include "acl/compression/impl/compression_stats.h"
+#include "acl/compression/impl/protected_keyframes.h"
 #include "acl/compression/impl/sample_streams.h"
 #include "acl/compression/impl/normalize.transform.h"
 #include "acl/compression/impl/convert_rotation.transform.h"
@@ -2704,11 +2705,35 @@ namespace acl
 			keyframe_stripping_metadata_t* contributing_error = context.segment->contributing_error;
 			uint32_t frames_retained = ~0U;	// By default, every frame is present
 
+			// Protected frames stay in 'frames_retained' for the whole greedy pass.
+			// They participate in the neighbor endpoint searches of the other candidates
+			// but they never become removal candidates themselves.
+			const bool has_protected_keyframes = context.clip.num_protected_keyframes != 0;
+			const uint32_t protected_segment_mask = build_protected_segment_mask(*context.segment, context.clip);
+
 			// First and last frame of the segment cannot be removed and thus contribute infinite error
 			// TODO: We could retain only the first/last frames of the clip instead but it would mean interpolating
 			// with a frame from the previous/next segments
 			contributing_error[0] = keyframe_stripping_metadata_t(0, segment_index, ~0U, infinity, false);
 			contributing_error[num_frames - 1] = keyframe_stripping_metadata_t(num_frames - 1, segment_index, ~0U, infinity, false);
+
+			// Protected frames are non-removable like the segment boundaries. Give them
+			// the same infinite, non-trivial entry before the greedy removal starts so
+			// that no uninitialized entry can reach the global contributing error sort.
+			for (uint32_t frame_index = 1; frame_index + 1 < num_frames; ++frame_index)
+			{
+				if (bitset_test(&protected_segment_mask, desc, frame_index))
+					contributing_error[frame_index] = keyframe_stripping_metadata_t(frame_index, segment_index, ~0U, infinity, false);
+			}
+
+			const uint32_t num_interior_frames = num_frames >= 2 ? (num_frames - 2) : 0;
+			uint32_t num_protected_interior_frames = 0;
+			for (uint32_t frame_index = 1; frame_index + 1 < num_frames; ++frame_index)
+			{
+				if (bitset_test(&protected_segment_mask, desc, frame_index))
+					++num_protected_interior_frames;
+			}
+			const uint32_t num_removable_frames = num_interior_frames - num_protected_interior_frames;
 
 			// START OF ERROR METRIC STUFF
 			const itransform_error_metric* error_metric = context.error_metric;
@@ -2765,8 +2790,9 @@ namespace acl
 			context.all_local_query.build(context.bit_rate_per_bone);
 			// END OF ERROR METRIC STUFF
 
-			// We iterate until every frame but the first and last have been removed
-			for (uint32_t iteration_count = 1; iteration_count < num_frames - 1; ++iteration_count)
+			// We iterate until every removable frame has been removed. Protected frames and
+			// the segment first/last frames stay retained and never enter this loop.
+			for (uint32_t iteration_count = 1; iteration_count <= num_removable_frames; ++iteration_count)
 			{
 				keyframe_stripping_metadata_t best_error(~0U, segment_index, ~0U, infinity, false);
 
@@ -2780,6 +2806,12 @@ namespace acl
 					// We'll attempt to remove the current frame if it hasn't been removed already
 					if (!bitset_test(&frames_retained, desc, frame_index))
 						continue;	// This frame has already been removed, skip it
+
+					// Protected frames always remain. They still take part in the interpolation
+					// endpoint searches below through 'frames_retained', they only cannot be picked
+					// as a removal candidate.
+					if (has_protected_keyframes && bitset_test(&protected_segment_mask, desc, frame_index))
+						continue;	// This frame is protected, it cannot be removed
 
 					// Find the first frame before the current one that is retained, it'll be our interpolation start point
 					uint32_t interp_start_frame_index = frame_index - 1;
@@ -2869,11 +2901,21 @@ namespace acl
 					// If our best error is infinite, we assign it anyway in case we cannot remove any more keyframes
 					// A later keyframe may end up replacing us but if it isn't the case, the keyframe will be retained
 					// as is the case for those with infinite error (such as the first/last of a segment) are never removed
-					if (max_contributing_errorf < best_error.stripping_error || best_error.keyframe_index == ~0U)
+					const bool is_first_candidate = best_error.keyframe_index == ~0U;
+					const bool has_lower_error = max_contributing_errorf < best_error.stripping_error;
+
+					// With a protected list, equal errors remove the smaller original sample
+					// index first so the removal order stays fully deterministic. Without a
+					// protected list we keep the historical first-scan-wins ordering.
+					const bool has_equal_error = !has_lower_error && max_contributing_errorf == best_error.stripping_error;
+					const bool wins_tie_break = has_protected_keyframes && has_equal_error && frame_index < best_error.keyframe_index;
+
+					if (is_first_candidate || has_lower_error || wins_tie_break)
 						best_error = keyframe_stripping_metadata_t(frame_index, segment_index, iteration_count - 1, max_contributing_errorf, is_keyframe_trivial);
 				}
 
 				ACL_ASSERT(best_error.keyframe_index != ~0U, "Failed to find the best contributing error");
+				ACL_ASSERT(!has_protected_keyframes || !bitset_test(&protected_segment_mask, desc, best_error.keyframe_index), "A protected keyframe cannot be removed");
 
 #if ACL_IMPL_DEBUG_CONTRIBUTING_ERROR
 				printf("    Best frame to remove: %u (%f)\n", best_error.keyframe_index, best_error.stripping_error);
@@ -2898,6 +2940,7 @@ namespace acl
 
 			constexpr float infinity = std::numeric_limits<float>::infinity();
 			const uint32_t num_segments = lossy_clip_context.num_segments;
+			const bool has_protected_keyframes = lossy_clip_context.num_protected_keyframes != 0;
 
 			uint32_t* num_stripped_in_segment = allocate_type_array<uint32_t>(allocator, num_segments);
 			std::fill(num_stripped_in_segment, num_stripped_in_segment + num_segments, 0U);
@@ -2907,6 +2950,7 @@ namespace acl
 			for (uint32_t stripping_index = 0; stripping_index < num_samples; ++stripping_index)
 			{
 				keyframe_stripping_metadata_t best_error(~0U, 0, ~0U, infinity, false);
+				uint32_t best_clip_keyframe_index = ~0U;
 
 				for (uint32_t segment_index = 0; segment_index < num_segments; ++segment_index)
 				{
@@ -2916,11 +2960,29 @@ namespace acl
 					if (segment_strip_index >= segment.num_samples)
 						continue;	// We've stripped every keyframe from this segment
 
+					const keyframe_stripping_metadata_t& candidate = segment.contributing_error[segment_strip_index];
+
 					// We use <= because if the stripping error is the same, the order in which we remove keyframes
 					// doesn't matter and once all keyframes that can be stripped have been removed, only the boundary
 					// keyframes will remain and we'll match here with infinity.
-					if (segment.contributing_error[segment_strip_index].stripping_error <= best_error.stripping_error)
-						best_error = segment.contributing_error[segment_strip_index];
+					if (candidate.stripping_error < best_error.stripping_error || best_error.keyframe_index == ~0U)
+					{
+						best_error = candidate;
+						best_clip_keyframe_index = candidate.keyframe_index + segment.clip_sample_offset;
+					}
+					else if (candidate.stripping_error == best_error.stripping_error)
+					{
+						const uint32_t candidate_clip_keyframe_index = candidate.keyframe_index + segment.clip_sample_offset;
+
+						// With a protected list, equal errors keep the smaller original sample
+						// index first so the cross segment merge stays deterministic. Without a
+						// protected list we retain the historical later-segment-wins ordering.
+						if (!has_protected_keyframes || candidate_clip_keyframe_index < best_clip_keyframe_index)
+						{
+							best_error = candidate;
+							best_clip_keyframe_index = candidate_clip_keyframe_index;
+						}
+					}
 				}
 
 				ACL_ASSERT(best_error.keyframe_index != ~0U, "Expected to find a valid keyframe to strip");

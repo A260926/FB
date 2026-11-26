@@ -29,6 +29,7 @@
 #include "acl/core/impl/compiler_utils.h"
 #include "acl/compression/compression_settings.h"
 #include "acl/compression/impl/compression_stats.h"
+#include "acl/compression/impl/protected_keyframes.h"
 
 #include <cstdint>
 
@@ -66,7 +67,14 @@ namespace acl
 			// We know that the only way to get a segment with 1 frame is if the whole clip contains
 			// a single frame and thus has one segment
 			// If we have 0 or 1 frame, none are movable
-			const uint32_t num_movable_frames = num_keyframes >= 2 ? (num_keyframes - (lossy_clip_context.num_segments * 2)) : 0;
+			uint32_t num_movable_frames = num_keyframes >= 2 ? (num_keyframes - (lossy_clip_context.num_segments * 2)) : 0;
+
+			// Protected frames inside the movable region cannot be removed. The proportion,
+			// threshold, and trivial scans only consume the removable prefix of the
+			// contributing error order, so the protected tail must come out of the cap.
+			const uint32_t num_protected_movable_frames = count_protected_movable_keyframes(lossy_clip_context);
+			ACL_ASSERT(num_protected_movable_frames <= num_movable_frames, "More protected movable keyframes than movable keyframes");
+			num_movable_frames -= num_protected_movable_frames;
 
 			uint32_t num_keyframes_to_strip = 0;
 

@@ -192,13 +192,37 @@ namespace acl
 		bool strip_trivial = false;
 
 		//////////////////////////////////////////////////////////////////////////
+		// Optional list of keyframe indices that must never be removed by whole
+		// keyframe stripping. The indices refer to the original sample numbering
+		// of the input track list, before loop optimization removes a repeating
+		// last sample. Protected frames remain real sampling endpoints in the
+		// compressed stream but their sample values still use the normal
+		// quantization: protection does not remove the quantization error.
+		//
+		// The list is borrowed memory. The caller owns the array and must keep it
+		// alive for the duration of the synchronous compress_track_list call. The
+		// pointer is only read during that call and it is not copied into the
+		// compressed output. When 'num_protected_keyframes' is 0, the pointer is
+		// ignored and may be NULL. A non-empty list must be strictly increasing,
+		// contain no duplicate, and every index must be smaller than the number of
+		// samples per track of the input track list.
+		//
+		// Transform tracks only. A non-empty list on scalar tracks, or together with
+		// enabled database support, returns an error.
+		// Defaults to 'nullptr' / '0' (no protected keyframes)
+		const uint32_t* protected_keyframes = nullptr;
+		uint32_t num_protected_keyframes = 0;
+
+		//////////////////////////////////////////////////////////////////////////
 		// Calculates a hash from the internal state to uniquely identify a configuration.
 		uint32_t get_hash() const;
 
 		//////////////////////////////////////////////////////////////////////////
 		// Checks if everything is valid and if it isn't, returns an error string.
 		// Returns nullptr if the settings are valid.
-		error_result is_valid() const;
+		// The number of samples per track of the input track list is required to
+		// validate that every protected keyframe index is in range.
+		error_result is_valid(uint32_t num_samples_per_track = 0xFFFFFFFF) const;
 	};
 
 	//////////////////////////////////////////////////////////////////////////

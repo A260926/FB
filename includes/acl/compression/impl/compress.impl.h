@@ -60,7 +60,13 @@ namespace acl
 		if (track_list.get_track_category() == track_category8::transformf)
 			result = compress_transform_track_list(allocator, track_array_cast<track_array_vqvf>(track_list), settings, nullptr, additive_clip_format8::none, out_compressed_tracks, out_stats);
 		else
+		{
+			// Protected keyframes only apply to transform track stripping.
+			if (settings.keyframe_stripping.num_protected_keyframes != 0)
+				return error_result("Protected keyframes are only supported with transform tracks");
+
 			result = compress_scalar_track_list(allocator, track_list, settings, out_compressed_tracks, out_stats);
+		}
 
 		return result;
 	}

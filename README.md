@@ -66,6 +66,30 @@ If you would like to integrate ACL into your own game engine, follow the integra
 
 You can install `nfrechette-acl` with [Conan](https://conan.io/center/recipes/nfrechette-acl).
 
+## Protected keyframes
+
+Whole keyframe stripping removes a full sample and reconstructs it from the remaining neighbors. Some moments must not be removed, for example a foot contact or a hand grab. The transform keyframe stripping settings accept an optional list of protected keyframe indices through `protected_keyframes` and `num_protected_keyframes`. A protected frame stays a real sampling endpoint in the compressed stream. The compression format and the decompressor do not change, and no copy of the source animation is stored.
+
+### Protection is not precision
+
+Protection keeps a frame from whole keyframe removal. It does not keep the frame values exact. The rotation, translation, and scale of a protected frame still pass through the normal variable bit rate quantization. Use the track `precision` to control the value error. Use the protected keyframe list to control which frames survive stripping.
+
+### Index numbering
+
+The indices use the original sample numbering of the input track list. They do not use the numbering of the frames that remain after compression. The list must be strictly increasing, must contain no duplicate, and every index must be smaller than the original number of samples per track.
+
+When loop optimization removes the last sample because it repeats the first sample, an index that points to the original last sample maps to the retained sample 0. No other index moves. Two indices that map to the same retained sample are legal. The mapping applies only when loop optimization really removes a sample.
+
+### Borrowed memory lifetime
+
+The compressed output does not own the list. The caller owns the array and must keep it alive for the duration of the synchronous `compress_track_list` call. The compressor reads the pointer during that call only. The pointer is not stored in the compressed tracks. When `num_protected_keyframes` is zero, the pointer is ignored and may be `nullptr`. A non-zero count with a null pointer returns an error.
+
+### Supported tracks and limits
+
+Protected keyframes apply to transform tracks only. A non-empty list on scalar tracks returns an error. A non-empty list together with enabled database support also returns an error because database tier splitting does not handle protected frames in this version. An empty list is not affected by that limit.
+
+The example in [examples/protected_contacts.cpp](./examples/protected_contacts.cpp) marks foot contact samples, compresses and decompresses the clip, and prints the foot model space coordinates of every sample as CSV.
+
 ## Performance metrics
 
 *  [Carnegie-Mellon University database performance](./docs/cmu_performance.md)

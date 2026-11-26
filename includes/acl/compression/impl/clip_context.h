@@ -193,6 +193,12 @@ namespace acl
 			// Sorted by stripping order within this clip
 			keyframe_stripping_metadata_t* contributing_error = nullptr;
 
+			// Optional clip owned copy of the protected keyframe indices, resolved
+			// into the sample space that remains after loop optimization.
+			// Empty when the input settings have no protected keyframes.
+			uint32_t* protected_keyframes = nullptr;
+			uint32_t num_protected_keyframes = 0;
+
 			uint32_t num_segments						= 0;
 			uint32_t num_bones							= 0;	// TODO: Rename num_transforms
 			uint32_t num_samples_allocated				= 0;
