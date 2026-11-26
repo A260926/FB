@@ -2,10 +2,231 @@
 
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
+
+#include <polymesh/algorithms/soup_repair.hh>
 
 namespace polymesh
 {
+namespace
+{
+/// Everything an OBJ file contributes, collected before any mesh is built.
+/// Both read modes tokenize the file through this structure.
+template <class ScalarT>
+struct obj_soup
+{
+    std::vector<std::array<ScalarT, 4>> positions;
+    std::vector<std::array<ScalarT, 3>> tex_coords;
+    std::vector<std::array<ScalarT, 3>> normals;
+    std::vector<soup_face> faces;
+    /// 1-based vertex chains from 'l' records, only replayed in legacy mode
+    std::vector<std::vector<int>> lines;
+};
+
+/// Parses one "v/vt/vn" face token. OBJ indices are 1-based; a missing
+/// component is -1. Zero and negative values are mapped to sentinels without
+/// throwing so legacy parsing stays permissive; repair mode validates them
+/// through repair_polygon_soup.
+soup_corner parse_face_token(std::string const& token)
+{
+    // split on '/', keeping empty fields so "1//2" is v=1, vt absent, n=2
+    std::vector<std::string> fields;
+    fields.push_back({});
+    for (char c : token)
+    {
+        if (c == '/')
+            fields.push_back({});
+        else
+            fields.back().push_back(c);
+    }
+
+    auto const parse_one = [](std::string const& field, int& target) {
+        if (field.empty())
+            return;
+        std::istringstream ss(field);
+        int value = 0;
+        ss >> value;
+        if (value > 0)
+            target = value - 1;
+        else if (value == 0)
+            target = -2;
+    };
+
+    soup_corner corner;
+    if (!fields.empty())
+    {
+        int vertex = 0;
+        std::istringstream ss(fields[0]);
+        ss >> vertex;
+        corner.vertex = vertex > 0 ? vertex - 1 : -1;
+    }
+    if (fields.size() >= 2)
+        parse_one(fields[1], corner.texcoord);
+    if (fields.size() >= 3)
+        parse_one(fields[2], corner.normal);
+
+    return corner;
+}
+
+template <class ScalarT>
+obj_soup<ScalarT> collect_obj_soup(std::istream& in)
+{
+    obj_soup<ScalarT> soup;
+
+    std::string line_s;
+    auto line_nr = 0;
+    while (std::getline(in, line_s))
+    {
+        ++line_nr;
+        while (!line_s.empty() && (line_s.back() == '\r' || line_s.back() == ' ' || line_s.back() == '\t'))
+            line_s.pop_back();
+
+        std::istringstream line(line_s);
+        std::string type;
+        line >> type;
+
+        if (type.empty() || type[0] == '#')
+            continue;
+
+        if (type == "v")
+        {
+            std::array<ScalarT, 4> p;
+            p[3] = ScalarT(1);
+            line >> p[0];
+            line >> p[1];
+            line >> p[2];
+            ScalarT w;
+            line >> w;
+            if (line.good())
+                p[3] = w;
+            soup.positions.push_back(p);
+        }
+        else if (type == "vt")
+        {
+            std::array<ScalarT, 3> t;
+            t[2] = ScalarT(1);
+            line >> t[0];
+            line >> t[1];
+            ScalarT z;
+            line >> z;
+            if (line.good())
+                t[2] = z;
+            soup.tex_coords.push_back(t);
+        }
+        else if (type == "vn")
+        {
+            std::array<ScalarT, 3> n;
+            line >> n[0];
+            line >> n[1];
+            line >> n[2];
+            soup.normals.push_back(n);
+        }
+        else if (type == "f")
+        {
+            soup_face face;
+            std::string token;
+            while (line >> token)
+                face.corners.push_back(parse_face_token(token));
+            soup.faces.push_back(std::move(face));
+        }
+        else if (type == "l")
+        {
+            std::vector<int> chain;
+            int index = 0;
+            while (line >> index)
+                chain.push_back(index);
+            if (!chain.empty())
+                soup.lines.push_back(std::move(chain));
+        }
+        else if (type == "s" || type == "o" || type == "g" || type == "usemtl" || type == "mtllib")
+        {
+            continue;
+        }
+        else
+        {
+            std::cerr << "Unable to parse line " << line_nr << ": " << line_s << std::endl;
+        }
+    }
+
+    return soup;
+}
+
+/// Builds the repaired half-edge mesh. The soup analysis has already
+/// guaranteed manifoldness, so edges/faces can be created through the regular
+/// low-level insertion path and boundary rings are maintained automatically.
+template <class ScalarT>
+void build_repaired_mesh(obj_soup<ScalarT> const& soup, repaired_soup const& repaired, Mesh& mesh,
+                         vertex_attribute<std::array<ScalarT, 4>>& positions,
+                         halfedge_attribute<std::array<ScalarT, 3>>& tex_coords,
+                         halfedge_attribute<std::array<ScalarT, 3>>& normals,
+                         std::vector<int>& source_vertices, std::vector<int>& source_faces, std::vector<int>& source_halfedges)
+{
+    auto ll = low_level_api(mesh);
+
+    auto const vertex_count = repaired.vertex_count();
+    auto const face_count = repaired.face_count();
+
+    ll.reserve_vertices(vertex_count);
+    ll.reserve_faces(face_count);
+    // every face corner introduces at most one directed halfedge; shared
+    // edges only reduce the final count
+    ll.reserve_halfedges(2 * (int)repaired.halfedge_source.size());
+
+    for (auto i = 0; i < vertex_count; ++i)
+    {
+        auto const v = ll.add_vertex();
+        positions[v] = soup.positions[(size_t)repaired.vertex_source[i]];
+    }
+    source_vertices = repaired.vertex_source;
+    source_faces.reserve(face_count);
+
+    // (output halfedge index, global source corner of its vertex_to corner)
+    std::vector<std::pair<int, int>> halfedge_origins;
+    halfedge_origins.reserve(repaired.halfedge_source.size());
+
+    std::vector<halfedge_index> loop;
+    auto flat_cursor = 0;
+
+    for (auto f = 0; f < face_count; ++f)
+    {
+        auto const& out_face = repaired.faces[f];
+        auto const& out_corners = repaired.corners[f];
+        auto const k = (int)out_face.size();
+
+        loop.clear();
+        loop.reserve(k);
+
+        for (auto i = 0; i < k; ++i)
+        {
+            auto const from = vertex_index(out_face[i]);
+            auto const to = vertex_index(out_face[(i + 1) % k]);
+            auto const h = ll.add_or_get_halfedge(from, to);
+            loop.push_back(h);
+
+            // attributes and origin follow the vertex_to corner; unspecified
+            // components keep the attribute's default value, as in legacy mode
+            auto const& to_corner = out_corners[(i + 1) % k];
+            if (to_corner.texcoord >= 0)
+                tex_coords[h] = soup.tex_coords[(size_t)to_corner.texcoord];
+            if (to_corner.normal >= 0)
+                normals[h] = soup.normals[(size_t)to_corner.normal];
+
+            halfedge_origins.push_back({h.value, repaired.halfedge_source[(size_t)flat_cursor + (i + 1) % k]});
+        }
+
+        ll.add_face(loop.data(), k);
+        source_faces.push_back(repaired.face_source[f]);
+        flat_cursor += k;
+    }
+
+    // boundary halfedges keep the promised -1 origin
+    source_halfedges.assign((size_t)ll.size_all_halfedges(), -1);
+    for (auto const& entry : halfedge_origins)
+        source_halfedges[(size_t)entry.first] = entry.second;
+}
+} // namespace
+
 template <class ScalarT>
 void write_obj(cc::string_view filename, vertex_attribute<std::array<ScalarT, 3>> const& position)
 {
@@ -160,7 +381,8 @@ void obj_writer<ScalarT>::write_mesh(vertex_attribute<std::array<ScalarT, 4>> co
 }
 
 template <class ScalarT>
-obj_reader<ScalarT>::obj_reader(cc::string_view filename, Mesh& mesh) : positions(mesh), tex_coords(mesh), normals(mesh)
+obj_reader<ScalarT>::obj_reader(cc::string_view filename, Mesh& mesh, obj_read_mode mode)
+  : positions(mesh), tex_coords(mesh), normals(mesh), read_mode(mode)
 {
     auto const filename_str = std::string(filename.begin(), filename.end());
     std::ifstream file(filename_str);
@@ -171,7 +393,8 @@ obj_reader<ScalarT>::obj_reader(cc::string_view filename, Mesh& mesh) : position
 }
 
 template <class ScalarT>
-obj_reader<ScalarT>::obj_reader(std::istream& in, Mesh& mesh) : positions(mesh), tex_coords(mesh), normals(mesh)
+obj_reader<ScalarT>::obj_reader(std::istream& in, Mesh& mesh, obj_read_mode mode)
+  : positions(mesh), tex_coords(mesh), normals(mesh), read_mode(mode)
 {
     parse(in, mesh);
 }
@@ -180,204 +403,86 @@ template <class ScalarT>
 void obj_reader<ScalarT>::parse(std::istream& in, Mesh& mesh)
 {
     mesh.clear();
+    source_vertices.clear();
+    source_faces.clear();
+    source_halfedges.clear();
+    n_error_faces = 0;
 
-    std::vector<std::array<ScalarT, 3>> raw_tex_coords;
-    std::vector<std::array<ScalarT, 3>> raw_normals;
+    auto soup = collect_obj_soup<ScalarT>(in);
 
-    struct face
+    // Both modes run the same production connectivity analysis. In legacy
+    // mode its strict diagnostics are advisory only: the tolerant
+    // line-by-line insertion below keeps the historical skip-on-conflict
+    // behavior.
+    auto repaired = std::unique_ptr<repaired_soup>();
+    try
     {
-        int v = 0;
-        int t = 0;
-        int n = 0;
-        vertex_handle vh;
-    };
-
-    std::vector<face> poly;
-    std::vector<halfedge_handle> poly_hs;
-    std::vector<vertex_index> poly_vs;
-    std::string fs;
-
-    std::string line_s;
-    auto line_nr = 0;
-    while (std::getline(in, line_s))
-    {
-        ++line_nr;
-        while (line_s.size() > 0 && (line_s.back() == '\r' || line_s.back() == ' ' || line_s.back() == '\t'))
-            line_s.pop_back();
-        std::istringstream line(line_s);
-        std::string type;
-
-        line >> type;
-
-        // empty lines
-        if (type.empty())
-            continue;
-
-        // comments
-        else if (type[0] == '#')
-            continue;
-
-        // vertices
-        else if (type == "v")
-        {
-            auto v = mesh.vertices().add();
-
-            std::array<ScalarT, 4> p;
-            p[3] = 1.0f;
-
-            line >> p[0];
-            line >> p[1];
-            line >> p[2];
-            ScalarT w;
-            line >> w;
-            if (line.good())
-                p[3] = w;
-
-            positions[v] = p;
-        }
-
-        // textures
-        else if (type == "vt")
-        {
-            std::array<ScalarT, 3> t;
-            t[2] = 1.0f;
-
-            line >> t[0];
-            line >> t[1];
-            ScalarT z;
-            line >> z;
-            if (line.good())
-                t[2] = z;
-
-            raw_tex_coords.push_back(t);
-        }
-
-        // normals
-        else if (type == "vn")
-        {
-            std::array<ScalarT, 3> n;
-            line >> n[0];
-            line >> n[1];
-            line >> n[2];
-            raw_normals.push_back(n);
-        }
-
-        // faces
-        else if (type == "f")
-        {
-            poly_hs.clear();
-            poly_vs.clear();
-            poly.clear();
-
-            while (line.good())
-            {
-                fs.clear();
-                line >> fs;
-                int sc = 0;
-                auto first_s = fs.find_first_of('/');
-                auto last_s = fs.find_last_of('/');
-                for (auto& c : fs)
-                    if (c == '/')
-                    {
-                        c = ' ';
-                        ++sc;
-                    }
-
-                std::istringstream ss(fs);
-                face f;
-                switch (sc)
-                {
-                case 0:
-                    ss >> f.v;
-                    break;
-
-                case 1:
-                    ss >> f.v;
-                    ss >> f.t;
-                    break;
-
-                case 2:
-                    ss >> f.v;
-                    if (first_s + 1 != last_s) // "1//2"
-                        ss >> f.t;
-                    ss >> f.n;
-                    break;
-                }
-
-                f.vh = mesh.handle_of(vertex_index(f.v - 1));
-                poly.push_back(f);
-                poly_vs.push_back(f.vh);
-            }
-
-            if (poly.size() < 3)
-            {
-                std::cerr << "faces with less than 3 vertices are not supported. Use lines instead." << std::endl;
-                continue;
-            }
-
-            if (!mesh.faces().can_add(poly_vs))
-            {
-                n_error_faces++;
-                continue;
-            }
-
-            poly_hs.resize(poly.size());
-            for (auto i = 0u; i < poly.size(); ++i)
-            {
-                auto const& f0 = poly[i];
-                auto const& f1 = poly[(i + 1) % poly.size()];
-                auto v0 = f0.vh;
-                auto v1 = f1.vh;
-                auto hh = mesh.halfedges().add_or_get(v0, v1);
-                poly_hs[i] = hh;
-
-                if (f1.t > 0)
-                    tex_coords[hh] = raw_tex_coords[size_t(f1.t - 1)];
-                if (f1.n > 0)
-                    normals[hh] = raw_normals[size_t(f1.n - 1)];
-            }
-
-            mesh.faces().add(poly_hs);
-        }
-
-        // lines
-        else if (type == "l")
-        {
-            int i0, i1;
-            line >> i0;
-            line >> i1;
-            mesh.edges().add_or_get(mesh[vertex_index(i0 - 1)], mesh[vertex_index(i1 - 1)]);
-
-            while (line.good())
-            {
-                i0 = i1;
-                line >> i1;
-                mesh.edges().add_or_get(mesh[vertex_index(i0 - 1)], mesh[vertex_index(i1 - 1)]);
-            }
-        }
-
-        // not implemented
-        else if (type == "s")
-            continue;
-        else if (type == "o")
-            continue;
-        else if (type == "g")
-            continue;
-        else if (type == "usemtl")
-            continue;
-        else if (type == "mtllib")
-            continue;
-
-        else
-        {
-            std::cerr << "Unable to parse line " << line_nr << ": " << line_s << std::endl;
-        }
+        repaired.reset(new repaired_soup(repair_polygon_soup(soup.faces, (int)soup.positions.size(), (int)soup.tex_coords.size(), (int)soup.normals.size())));
     }
+    catch (std::invalid_argument const&)
+    {
+        if (read_mode == obj_read_mode::repair)
+            throw;
+    }
+
+    if (read_mode == obj_read_mode::repair)
+    {
+        build_repaired_mesh(soup, *repaired, mesh, positions, tex_coords, normals, source_vertices, source_faces, source_halfedges);
+        return;
+    }
+
+    for (auto const& p : soup.positions)
+    {
+        auto v = mesh.vertices().add();
+        positions[v] = p;
+    }
+
+    std::vector<vertex_index> poly_vs;
+    std::vector<halfedge_handle> poly_hs;
+
+    for (auto const& face : soup.faces)
+    {
+        auto const k = (int)face.corners.size();
+        if (k < 3)
+        {
+            std::cerr << "faces with less than 3 vertices are not supported. Use lines instead." << std::endl;
+            continue;
+        }
+
+        poly_vs.clear();
+        poly_vs.reserve(k);
+        for (auto const& c : face.corners)
+            poly_vs.push_back(vertex_index(c.vertex));
+
+        if (!mesh.faces().can_add(poly_vs))
+        {
+            ++n_error_faces;
+            continue;
+        }
+
+        poly_hs.resize(k);
+        for (auto i = 0; i < k; ++i)
+        {
+            auto const& c0 = face.corners[i];
+            auto const& c1 = face.corners[(i + 1) % k];
+            auto hh = mesh.halfedges().add_or_get(mesh.handle_of(vertex_index(c0.vertex)), mesh.handle_of(vertex_index(c1.vertex)));
+            poly_hs[i] = hh;
+
+            if (c1.texcoord >= 0 && c1.texcoord < (int)soup.tex_coords.size())
+                tex_coords[hh] = soup.tex_coords[(size_t)c1.texcoord];
+            if (c1.normal >= 0 && c1.normal < (int)soup.normals.size())
+                normals[hh] = soup.normals[(size_t)c1.normal];
+        }
+
+        mesh.faces().add(poly_hs);
+    }
+
+    for (auto const& chain : soup.lines)
+        for (auto i = 0u; i + 1 < chain.size(); ++i)
+            mesh.edges().add_or_get(mesh[vertex_index(chain[i] - 1)], mesh[vertex_index(chain[i + 1] - 1)]);
 
     if (n_error_faces > 0)
-    {
         std::cerr << "skipped " << n_error_faces << " face(s) because mesh would become non-manifold" << std::endl;
-    }
 }
 
 template void write_obj<float>(cc::string_view filename, vertex_attribute<std::array<float, 3>> const& position);

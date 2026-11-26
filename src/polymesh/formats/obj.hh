@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <vector>
 
 #include <clean-core/string_view.hh>
 
@@ -12,6 +13,16 @@ template <class ScalarT>
 void write_obj(cc::string_view filename, vertex_attribute<std::array<ScalarT, 3>> const& position);
 template <class ScalarT>
 bool read_obj(cc::string_view filename, Mesh& mesh, vertex_attribute<std::array<ScalarT, 3>>& position);
+
+/// Selects how obj_reader treats conflicting polygon soup input.
+enum class obj_read_mode
+{
+    /// legacy behavior: faces are added line by line, conflicting faces are skipped
+    legacy,
+    /// analyze the whole file first, repair winding and split disconnected face
+    /// fans, then build a manifold half-edge mesh containing every source face
+    repair,
+};
 
 template <class ScalarT>
 struct obj_writer
@@ -40,13 +51,15 @@ private:
 };
 
 // clears the given mesh before adding data
-// obj must be manifold
-// no negative indices
+// legacy mode: obj must be manifold, no negative indices, non-manifold faces are skipped
+// repair mode: the whole soup is analyzed first; winding is made consistent and
+// disconnected face fans are split onto duplicated vertices. Throws
+// std::invalid_argument on malformed or contradictory input.
 template <class ScalarT>
 struct obj_reader
 {
-    obj_reader(cc::string_view filename, Mesh& mesh);
-    obj_reader(std::istream& in, Mesh& mesh);
+    obj_reader(cc::string_view filename, Mesh& mesh, obj_read_mode mode = obj_read_mode::legacy);
+    obj_reader(std::istream& in, Mesh& mesh, obj_read_mode mode = obj_read_mode::legacy);
 
     // get properties of the obj
 public:
@@ -54,8 +67,16 @@ public:
     halfedge_attribute<std::array<ScalarT, 3>> const& get_tex_coords() const { return tex_coords; }
     halfedge_attribute<std::array<ScalarT, 3>> const& get_normals() const { return normals; }
 
-    /// Number of faces that could not be added
+    /// Number of faces that could not be added (always zero in repair mode)
     int error_faces() const { return n_error_faces; }
+
+    /// Source mappings, only promised in obj_read_mode::repair.
+    /// Output slot index -> zero-based source position/face/corner.
+    /// Source corners are accumulated per face in file order, restarting at
+    /// zero inside each face. Boundary halfedges map to -1.
+    std::vector<int> const& vertex_source() const { return source_vertices; }
+    std::vector<int> const& face_source() const { return source_faces; }
+    std::vector<int> const& halfedge_source() const { return source_halfedges; }
 
 private:
     void parse(std::istream& in, Mesh& mesh);
@@ -64,6 +85,11 @@ private:
     halfedge_attribute<std::array<ScalarT, 3>> tex_coords;
     halfedge_attribute<std::array<ScalarT, 3>> normals;
 
+    std::vector<int> source_vertices;
+    std::vector<int> source_faces;
+    std::vector<int> source_halfedges;
+
     int n_error_faces = 0;
+    obj_read_mode read_mode = obj_read_mode::legacy;
 };
 } // namespace polymesh

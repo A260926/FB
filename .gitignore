@@ -46,3 +46,6 @@ build_vs/
 
 # misc workdir spam
 imgui.ini
+
+# task support build output
+.task-build/
