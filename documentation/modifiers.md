@@ -130,7 +130,7 @@ sequences to achieve desired effects.
 ## Subdivision Modifiers
 
 * **CatmullClarkModifier:** Catmull-Clark subdivision.
-* **DooSabinModifier:** Doo-Sabin subdivision.
+* **DooSabinModifier:** Doo-Sabin subdivision. Open surfaces (sheets and rings with inner holes) are supported, see [open-doo-sabin.md](open-doo-sabin.md) for the boundary behavior and the `TraverseHelper` fan API.
 * **LinearSubdivisionModifier:** Linear subdivision.
 * **PlanarMidEdgeCenterModifier:** Splits edges, connects midpoints.
 * **PlanarMidEdgeModifier:** Connects midpoints to centroids.

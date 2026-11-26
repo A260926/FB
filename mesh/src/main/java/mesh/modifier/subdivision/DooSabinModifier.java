@@ -3,8 +3,10 @@ package mesh.modifier.subdivision;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Vector;
+import java.util.Map;
+import java.util.Set;
 
 import math.Vector3f;
 import mesh.Edge3D;
@@ -18,11 +20,42 @@ import mesh.util.TraverseHelper;
  * An implementation of the Doo-Sabin subdivision surface. This type of
  * subdivision surface is based on a generalization of bi-quadratic uniform
  * B-splines and was developed in 1978 by Daniel Doo and Malcolm Sabin.
- * 
+ *
+ * <p>In addition to closed meshes, this implementation supports open
+ * surfaces, including sheets and face rings with inner holes. Every
+ * subdivision round produces:
+ *
+ * <ul>
+ *   <li>one <b>face corner polygon</b> per original face, connecting the new
+ *       corner points generated for the face vertices;</li>
+ *   <li>one quad per original edge: an internal edge connects the corner
+ *       points of the two adjacent faces, while a boundary edge keeps the
+ *       original boundary vertices and only adds a connection strip to the
+ *       corner polygon of its single adjacent face;</li>
+ *   <li>one closed <b>vertex face</b> per interior vertex, or a fan of
+ *       triangles around a boundary vertex with more than one adjacent face
+ *       (boundary vertices with a single adjacent face produce no digon).</li>
+ * </ul>
+ *
+ * <p>Boundary vertices and boundary edges are retained verbatim, so the
+ * boundary positions and the connectivity of inner and outer loops stay
+ * unchanged across rounds. Every output face has at least three distinct
+ * vertices, which allows the result to be subdivided again directly.
+ *
+ * <p>Subdividable inputs must satisfy:
+ *
+ * <ul>
+ *   <li>every face references at least three distinct vertex indices, and</li>
+ *   <li>every non-isolated interior vertex is incident to at least three
+ *       faces.</li>
+ * </ul>
+ *
+ * Invalid inputs throw an {@link IllegalArgumentException} before the mesh is
+ * modified. Adjacency is always resolved by vertex index, so spatially
+ * coinciding but disconnected components are never welded together.
+ *
  * @see http://graphics.cs.ucdavis.edu/education/
  *      CAGDNotes/Doo-Sabin/Doo-Sabin.html
- * 
- * @version 0.1, 4 December 2017
  */
 public class DooSabinModifier implements IMeshModifier {
 
@@ -32,16 +65,27 @@ public class DooSabinModifier implements IMeshModifier {
 
     private Mesh3D target;
 
+    private TraverseHelper helper;
+
     private HashSet<Edge3D> edges;
 
     private HashMap<Edge3D, Face3D> edgeToFaceMap;
 
-    private HashMap<Vector3f, List<Vector3f>> oldToNewVertexMap;
-
-    private HashMap<VertexFacePair, Integer> vertexFaceMap;
+    /**
+     * Maps the pair (source face, source vertex) to the target index of the
+     * corner point generated for that pair.
+     */
+    private IdentityHashMap<Face3D, HashMap<Integer, Integer>>
+            cornerByFaceVertex;
 
     /**
-     * Constructs a new instance of this modifier.
+     * Maps retained boundary/isolated source vertex indices to target indices.
+     */
+    private Map<Integer, Integer> retainedVertexIndex;
+
+    /**
+     * Constructs a new instance of this modifier with one subdivision
+     * iteration.
      */
     public DooSabinModifier() {
         this(1);
@@ -50,15 +94,92 @@ public class DooSabinModifier implements IMeshModifier {
     /**
      * Constructs a new instance of this modifier with the specified number of
      * subdivision iterations.
-     * 
-     * @param subdivisions the number of iterations
+     *
+     * @param subdivisions the number of iterations, zero leaves the mesh
+     *                     untouched.
+     * @throws IllegalArgumentException if {@code subdivisions} is negative.
      */
     public DooSabinModifier(int subdivisions) {
+        if (subdivisions < 0) {
+            throw new IllegalArgumentException(
+                    "subdivisions must not be negative (was " + subdivisions
+                            + ")");
+        }
         this.subdivisions = subdivisions;
-        oldToNewVertexMap = new HashMap<Vector3f, List<Vector3f>>();
-        edgeToFaceMap = new HashMap<>();
+    }
+
+    /**
+     * Applies the Doo-Sabin subdivision in-place and returns the same mesh
+     * instance. With zero subdivisions the mesh is returned unchanged.
+     */
+    @Override
+    public Mesh3D modify(Mesh3D mesh) {
+        if (mesh == null) {
+            throw new IllegalArgumentException("mesh must not be null");
+        }
+        for (int i = 0; i < subdivisions; i++) {
+            subdivide(mesh);
+        }
+        return mesh;
+    }
+
+    /**
+     * Validates the input before any mutation takes place.
+     */
+    private void validate() {
+        for (Face3D face : source.getFaces()) {
+            Set<Integer> distinct = new HashSet<>();
+            for (int index : face.indices) {
+                if (index < 0 || index >= source.getVertexCount()) {
+                    throw new IllegalArgumentException(
+                            "Face references vertex index " + index
+                                    + " outside of the mesh vertex list.");
+                }
+                distinct.add(index);
+            }
+            if (distinct.size() < 3) {
+                throw new IllegalArgumentException(
+                        "Every face must reference at least three distinct "
+                                + "vertices, but found " + distinct.size()
+                                + " in " + face + ".");
+            }
+        }
+
+        for (int vertex = 0; vertex < source.getVertexCount(); vertex++) {
+            List<Edge3D> fan = helper.getVertexFan(vertex);
+            if (fan.isEmpty() || helper.isBoundaryVertex(vertex)) {
+                continue;
+            }
+            if (fan.size() < 3) {
+                throw new IllegalArgumentException(
+                        "Non-isolated interior vertex " + vertex
+                                + " is incident to only " + fan.size()
+                                + " faces; at least three are required.");
+            }
+        }
+    }
+
+    private void subdivide(Mesh3D mesh) {
+        source = mesh;
+        target = new Mesh3D();
         edges = new HashSet<>();
-        vertexFaceMap = new HashMap<VertexFacePair, Integer>();
+        edgeToFaceMap = new HashMap<>();
+        cornerByFaceVertex = new IdentityHashMap<>();
+        retainedVertexIndex = new HashMap<>();
+
+        helper = new TraverseHelper(source);
+        validate();
+
+        mapEdgesToFaces();
+        createAndConnectNewVertices();
+        retainVertices();
+        createFacesFromAdjacentVertices();
+        createFacesAdjacentToEdge();
+
+        source.clearFaces();
+        source.clearVertices();
+        source.addFaces(target.getFaces());
+        source.addVertices(target.getVertices());
     }
 
     /**
@@ -66,74 +187,146 @@ public class DooSabinModifier implements IMeshModifier {
      * that have been generated for each original vertex of the face.
      */
     private void createAndConnectNewVertices() {
-        List<Face3D> faces = source.getFaces();
-        for (Face3D face : faces) {
-            Vector3f center = MeshGeometryUtil.calculateFaceCenter(source, face);
+        for (Face3D face : source.getFaces()) {
+            Vector3f center = MeshGeometryUtil.calculateFaceCenter(source,
+                    face);
             int[] indices = new int[face.indices.length];
-            int n = indices.length;
+            HashMap<Integer, Integer> cornerForVertex = new HashMap<>();
             for (int i = 0; i < face.indices.length; i++) {
-                Vector3f v = source.getVertexAt(face.indices[(i + 1) % n]);
                 Vector3f res = calculateNewPoint(face, center, i);
                 int index = target.getVertexCount();
                 target.add(res);
-                mapOldToNewVertex(v, res);
-                vertexFaceMap.put(new VertexFacePair(v, face), index);
                 indices[i] = index;
+                // Generation slot i stores the point for the vertex at
+                // face position i + 1.
+                cornerForVertex.put(face.getIndexAt(i + 1), index);
             }
+            cornerByFaceVertex.put(face, cornerForVertex);
             target.add(new Face3D(indices));
         }
     }
 
     /**
-     * For each vertex of the original mesh, connect the new points that have
-     * been generated for the faces that are adjacent to this vertex.
+     * Copies boundary vertices and isolated vertices into the target mesh and
+     * records their new indices. Interior vertices are replaced by corner
+     * points and are not retained.
      */
-    private void createFacesFromAdjacentVertices() {
-        TraverseHelper helper = new TraverseHelper(source);
-        for (int i = 0; i < source.getVertexCount(); i++) {
-            Edge3D outgoingEdge = helper.getOutgoing(i);
-            Edge3D edge = outgoingEdge;
-            Vector<Integer> indices = new Vector<Integer>();
-            do {
-                Face3D face = helper.getFaceByEdge(edge.getFromIndex(),
-                        edge.getToIndex());
-                int index = vertexFaceMap
-                        .get(new VertexFacePair(source.getVertexAt(i), face));
-                indices.add(index);
-                edge = helper.getPairNext(edge.getFromIndex(), edge.getToIndex());
-            } while (!outgoingEdge.equals(edge));
-            addFace(indices);
+    private void retainVertices() {
+        for (int vertex = 0; vertex < source.getVertexCount(); vertex++) {
+            List<Edge3D> fan = helper.getVertexFan(vertex);
+            if (fan.isEmpty() || helper.isBoundaryVertex(vertex)) {
+                Vector3f point = source.getVertexAt(vertex);
+                retainedVertexIndex.put(vertex, target.getVertexCount());
+                target.add(point);
+            }
         }
     }
 
     /**
-     * For each edge of the original mesh, connect the new points that have been
-     * generated for the faces that are adjacent to the respective edge.
+     * For each vertex of the original mesh, connect the new points that have
+     * been generated for the faces adjacent to this vertex.
+     *
+     * <p>Interior vertices keep the original closed vertex face. Boundary
+     * vertices receive a fan of triangles between consecutive adjacent faces
+     * (unless they have only a single adjacent face, in which case emitting a
+     * face would create a digon).
+     */
+    private void createFacesFromAdjacentVertices() {
+        for (int i = 0; i < source.getVertexCount(); i++) {
+            List<Edge3D> fan = helper.getVertexFan(i);
+            if (fan.isEmpty()) {
+                // Valid isolated vertex: nothing connects to it.
+                continue;
+            }
+
+            if (helper.isBoundaryVertex(i)) {
+                if (fan.size() == 1) {
+                    continue;
+                }
+                for (int j = 0; j < fan.size() - 1; j++) {
+                    Face3D first = helper.getFaceByEdge(
+                            fan.get(j).getFromIndex(),
+                            fan.get(j).getToIndex());
+                    Face3D second = helper.getFaceByEdge(
+                            fan.get(j + 1).getFromIndex(),
+                            fan.get(j + 1).getToIndex());
+                    target.addFace(retainedVertexIndex.get(i),
+                            cornerIndexOf(second, i),
+                            cornerIndexOf(first, i));
+                }
+                continue;
+            }
+
+            Edge3D outgoingEdge = helper.getOutgoing(i);
+            Edge3D edge = outgoingEdge;
+            List<Integer> indices = new ArrayList<Integer>();
+            do {
+                Face3D face = helper.getFaceByEdge(edge.getFromIndex(),
+                        edge.getToIndex());
+                indices.add(cornerIndexOf(face, i));
+                edge = helper.getPairNext(edge.getFromIndex(),
+                        edge.getToIndex());
+            } while (!outgoingEdge.equals(edge));
+            addReversedFace(indices);
+        }
+    }
+
+    /**
+     * For each edge of the original mesh, connect the new points that have
+     * been generated for the faces adjacent to the respective edge.
+     *
+     * <p>Internal edges produce the original quad between the two adjacent
+     * faces. Boundary edges retain the original boundary vertices and add a
+     * connection strip to the single adjacent face.
      */
     private void createFacesAdjacentToEdge() {
         for (Edge3D edge : edges) {
             Face3D face0 = edgeToFaceMap.get(edge);
             Face3D face1 = edgeToFaceMap.get(edge.createPair());
-            Vector3f v0 = source.getVertexAt(edge.getFromIndex());
-            Vector3f v1 = source.getVertexAt(edge.getToIndex());
-            int idx0 = vertexFaceMap.get(new VertexFacePair(v1, face0));
-            int idx1 = vertexFaceMap.get(new VertexFacePair(v0, face0));
-            int idx2 = vertexFaceMap.get(new VertexFacePair(v0, face1));
-            int idx3 = vertexFaceMap.get(new VertexFacePair(v1, face1));
-            target.addFace(idx0, idx1, idx2, idx3);
+            int from = edge.getFromIndex();
+            int to = edge.getToIndex();
+
+            if (face1 == null) {
+                // Boundary edge: retain the original boundary edge (keeping
+                // its from->to direction) and connect its endpoints to the
+                // corner polygon of the single adjacent face.
+                target.addFace(cornerIndexOf(face0, to),
+                        cornerIndexOf(face0, from),
+                        retainedVertexIndex.get(from),
+                        retainedVertexIndex.get(to));
+                continue;
+            }
+
+            target.addFace(cornerIndexOf(face0, to),
+                    cornerIndexOf(face0, from),
+                    cornerIndexOf(face1, from),
+                    cornerIndexOf(face1, to));
         }
     }
 
     /**
+     * Returns the target index of the corner point generated for the given
+     * source vertex within the given source face.
+     */
+    private int cornerIndexOf(Face3D face, int vertexIndex) {
+        Integer index = cornerByFaceVertex.get(face).get(vertexIndex);
+        if (index == null) {
+            throw new IllegalArgumentException(
+                    "Vertex " + vertexIndex + " is not part of " + face + ".");
+        }
+        return index;
+    }
+
+    /**
      * The average of four particular points taken in a polygon.
-     * 
+     *
      * <ul>
      * <li>the vertex for which the new point is being defined</li>
      * <li>the two edge points (the midpoints of the edges that are adjacent to
      * this vertex in the polygon)</li>
      * <li>and the face point (average of the vertices of the polygon)</li>
      * </ul>
-     * 
+     *
      * @param face   the face (polygon) the original vertex belongs to
      * @param center the face point (average of the vertices of the polygon)
      * @param i      the index of the first adjacent vertex (references to the
@@ -150,21 +343,12 @@ public class DooSabinModifier implements IMeshModifier {
         return center.add(v1).add(e1).add(e2).divide(4);
     }
 
-    private void addFace(Vector<Integer> indices) {
+    private void addReversedFace(List<Integer> indices) {
         int[] a = new int[indices.size()];
         for (int j = 0; j < a.length; j++) {
             a[a.length - j - 1] = indices.get(j);
         }
         target.add(new Face3D(a));
-    }
-
-    private void mapOldToNewVertex(Vector3f oldVertex, Vector3f newVertex) {
-        List<Vector3f> vertices = oldToNewVertexMap.get(oldVertex);
-        if (vertices == null) {
-            vertices = new ArrayList<Vector3f>();
-            oldToNewVertexMap.put(oldVertex, vertices);
-        }
-        vertices.add(newVertex);
     }
 
     private void mapEdgesToFaces() {
@@ -180,90 +364,6 @@ public class DooSabinModifier implements IMeshModifier {
                 edgeToFaceMap.put(pair0, face);
             }
         }
-    }
-
-    private void subdivide(Mesh3D mesh) {
-        source = mesh;
-        target = new Mesh3D();
-
-        clear();
-
-        mapEdgesToFaces();
-        createAndConnectNewVertices();
-        createFacesFromAdjacentVertices();
-        createFacesAdjacentToEdge();
-
-        this.source.clearFaces();
-        this.source.clearVertices();
-        this.source.addFaces(target.getFaces());
-        this.source.addVertices(target.getVertices());
-    }
-
-    private void clear() {
-        edges.clear();
-        edgeToFaceMap.clear();
-        oldToNewVertexMap.clear();
-        vertexFaceMap.clear();
-    }
-
-    @Override
-    public Mesh3D modify(Mesh3D mesh) {
-        for (int i = 0; i < subdivisions; i++) {
-            subdivide(mesh);
-        }
-        return mesh;
-    }
-
-    private class VertexFacePair {
-
-        private Vector3f vertex;
-
-        private Face3D face;
-
-        private VertexFacePair(Vector3f vertex, Face3D face) {
-            this.vertex = vertex;
-            this.face = face;
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + getOuterType().hashCode();
-            result = prime * result + ((face == null) ? 0 : face.hashCode());
-            result = prime * result
-                    + ((vertex == null) ? 0 : vertex.hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj)
-                return true;
-            if (obj == null)
-                return false;
-            if (getClass() != obj.getClass())
-                return false;
-            VertexFacePair other = (VertexFacePair) obj;
-            if (!getOuterType().equals(other.getOuterType()))
-                return false;
-            if (face == null) {
-                if (other.face != null)
-                    return false;
-            } else if (!face.equals(other.face))
-                return false;
-            if (vertex == null) {
-                if (other.vertex != null)
-                    return false;
-            } else if (!vertex.equals(other.vertex))
-                return false;
-            return true;
-        }
-
-        private DooSabinModifier getOuterType() {
-            return DooSabinModifier.this;
-        }
-
     }
 
 }
