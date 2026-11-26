@@ -546,8 +546,8 @@ namespace MachO
                     case 0x01: this->_loadCommands.push_back( std::make_shared< LoadCommands::Segment          >( command, size, this->_kind, stream ) ); break;
                     case 0x02: this->_loadCommands.push_back( std::make_shared< LoadCommands::SymTab           >( command, size, this->_kind, stream ) ); break;
                     case 0x03: this->_loadCommands.push_back( std::make_shared< LoadCommands::SymSeg           >( command, size, this->_kind, stream ) ); break;
-                    case 0x04: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, stream ) ); break;
-                    case 0x05: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, stream ) ); break;
+                    case 0x04: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, this->_cpu.type(), stream ) ); break;
+                    case 0x05: this->_loadCommands.push_back( std::make_shared< LoadCommands::Thread           >( command, size, this->_kind, this->_cpu.type(), stream ) ); break;
                     case 0x06: this->_loadCommands.push_back( std::make_shared< LoadCommands::FVMLib           >( command, size, this->_kind, stream ) ); break;
                     case 0x07: this->_loadCommands.push_back( std::make_shared< LoadCommands::FVMLib           >( command, size, this->_kind, stream ) ); break;
                     case 0x08: this->_loadCommands.push_back( std::make_shared< LoadCommands::Ident            >( command, size, this->_kind, stream ) ); break;

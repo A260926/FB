@@ -40,6 +40,7 @@
 #include <MachO/FileFlags.hpp>
 #include <MachO/FileType.hpp>
 #include <MachO/CPU.hpp>
+#include <MachO/EntryPoints.hpp>
 
 namespace MachO
 {
@@ -88,6 +89,17 @@ namespace MachO
             std::vector< std::string >                           strings()         const;
             std::vector< std::string >                           objcClasses()     const;
             std::vector< std::string >                           objcMethods()     const;
+
+            /*!
+             * @abstract Startup entry sources (LC_MAIN and decoded LC_UNIXTHREAD
+             *           records), in load command order, with every segment
+             *           mapping candidate. LC_THREAD is not included.
+             * @see       MachO/EntryPoints.hpp for field and coordinate details.
+             */
+            std::vector< EntryPointSource > entryPoints() const;
+
+            /*! Alternate name for entryPoints(). */
+            std::vector< EntryPointSource > entryPointSources() const;
             
             template< typename T, typename std::enable_if< std::is_base_of< LoadCommand, T >::value >::type * = nullptr >
             std::vector< T > loadCommands() const

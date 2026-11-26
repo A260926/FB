@@ -35,6 +35,7 @@
 #include <MachO/CacheMappingInfo.hpp>
 #include <MachO/CPU.hpp>
 #include <MachO/DataInfo.hpp>
+#include <MachO/EntryPoints.hpp>
 #include <MachO/FatArch.hpp>
 #include <MachO/FatFile.hpp>
 #include <MachO/File.hpp>
@@ -48,6 +49,7 @@
 #include <MachO/Section64.hpp>
 #include <MachO/SectionFlags.hpp>
 #include <MachO/Symbol.hpp>
+#include <MachO/ThreadState.hpp>
 #include <MachO/Tool.hpp>
 #include <MachO/ToString.hpp>
 

@@ -32,6 +32,7 @@
 
 #include <MachO/LoadCommand.hpp>
 #include <MachO/File.hpp>
+#include <MachO/ThreadState.hpp>
 #include <XS.hpp>
 
 namespace MachO
@@ -41,17 +42,36 @@ namespace MachO
         class Thread: public LoadCommand
         {
             public:
-                
+
+                /*!
+                 * @abstract Legacy constructor. No CPU is known, so records
+                 *           are preserved but never decoded.
+                 */
                 Thread( uint32_t command, uint32_t size, File::Kind kind, XS::IO::BinaryStream & stream );
+
+                /*!
+                 * @abstract CPU aware constructor used by MachO::File.
+                 * @param cpuType Raw Mach-O cputype (including the ABI64 bit).
+                 */
+                Thread( uint32_t command, uint32_t size, File::Kind kind, uint32_t cpuType, XS::IO::BinaryStream & stream );
                 Thread( const Thread & o );
                 Thread( Thread && o ) noexcept;
                 ~Thread() override;
-                
+
                 Thread & operator =( Thread o );
-                
+
+                XS::Info getInfo() const override;
+
                 uint32_t command() const override;
                 uint32_t size()    const override;
-                
+
+                /*!
+                 * @abstract Flavor/count records, in on-disk order.
+                 * @discussion Returns owned values; safe after copying this
+                 *             command and after the input stream is gone.
+                 */
+                std::vector< ThreadRecord > records() const;
+
                 friend void swap( Thread & o1, Thread & o2 );
                 
             private:
