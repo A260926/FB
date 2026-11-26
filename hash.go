@@ -102,7 +102,7 @@ func (d *Data) parseHashes(name string, hashes []byte) error {
 		return err
 	}
 	if h.Magic != magic {
-		return DecodeError{name, 0, "invalid magic"}
+		return DecodeError{Name: name, Offset: 0, Err: "invalid magic"}
 	}
 	if err := binary.Read(h.r, binary.LittleEndian, &h.DieOffsetBase); err != nil {
 		return err
@@ -197,10 +197,11 @@ func (h *Hash) lookup(name string) (*Chunk, error) {
 							if atom.Form != formData4 {
 								return nil, fmt.Errorf("unexpected form for atom type %s: got %s and expect 'Data4'", atom.Type, atom.Form)
 							}
-							var offset Offset
-							if err := binary.Read(h.r, binary.LittleEndian, &offset); err != nil {
+							var raw uint32
+							if err := binary.Read(h.r, binary.LittleEndian, &raw); err != nil {
 								return nil, err
 							}
+							offset := Offset(raw)
 							hdata = append(hdata, &offset)
 						case AtomTypeTag:
 							if atom.Form != formData2 {
@@ -285,10 +286,11 @@ func (h *Hash) dump() (Entries, error) {
 					if atom.Form != formData4 {
 						return nil, fmt.Errorf("unexpected form for atom type %s: got %s and expect 'Data4'", atom.Type, atom.Form)
 					}
-					var offset Offset
-					if err := binary.Read(h.r, binary.LittleEndian, &offset); err != nil {
+					var raw uint32
+					if err := binary.Read(h.r, binary.LittleEndian, &raw); err != nil {
 						return nil, err
 					}
+					offset := Offset(raw)
 					hdata = append(hdata, &offset)
 				case AtomTypeTag:
 					if atom.Form != formData2 {

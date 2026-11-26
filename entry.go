@@ -404,7 +404,10 @@ func (e *Entry) AttrField(a Attr) *Field {
 
 // An Offset represents the location of an [Entry] within the DWARF info.
 // (See [Reader.Seek].)
-type Offset uint32
+//
+// Offset is 64 bits wide so that entries in .debug_info sections larger
+// than 4 GiB keep their original, uncompacted section offsets.
+type Offset uint64
 
 // Entry reads a single entry from buf, decoding
 // according to the given abbreviation table.
@@ -448,11 +451,11 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 		if uint64(int(off)) != off {
 			b.error("DW_FORM_strx indirect offset out of range")
 		}
-		b1 = makeBuf(b.dwarf, b.format, "str", 0, b.dwarf.str)
-		b1.skip(int(off))
-		val := b1.string()
-		if b1.err != nil {
-			b.err = b1.err
+		val, err := b.dwarf.readStringAt(Offset(off))
+		if err != nil {
+			if b.err == nil {
+				b.err = err
+			}
 		}
 		return val
 	}
@@ -611,27 +614,32 @@ func (b *buf) entry(cu *Entry, u *unit) *Entry {
 			} else {
 				off = uint64(b.uint32())
 			}
-			if uint64(int(off)) != off {
-				b.error("DW_FORM_strp/line_strp offset out of range")
-			}
 			if b.err != nil {
 				return nil
 			}
-			var b1 buf
 			if fmt == formStrp {
-				b1 = makeBuf(b.dwarf, b.format, "str", 0, b.dwarf.str)
+				// Works for both the slice-backed and ReaderAt-backed
+				// .debug_str sections.
+				val, b.err = b.dwarf.readStringAt(Offset(off))
+				if b.err != nil {
+					return nil
+				}
 			} else {
 				if len(b.dwarf.lineStr) == 0 {
 					b.error("DW_FORM_line_strp with no .debug_line_str section")
 					return nil
 				}
-				b1 = makeBuf(b.dwarf, b.format, "line_str", 0, b.dwarf.lineStr)
-			}
-			b1.skip(int(off))
-			val = b1.string()
-			if b1.err != nil {
-				b.err = b1.err
-				return nil
+				if uint64(int(off)) != off {
+					b.error("DW_FORM_line_strp offset out of range")
+					return nil
+				}
+				b1 := makeBuf(b.dwarf, b.format, "line_str", 0, b.dwarf.lineStr)
+				b1.skip(int(off))
+				val = b1.string()
+				if b1.err != nil {
+					b.err = b1.err
+					return nil
+				}
 			}
 		case formStrx, formStrx1, formStrx2, formStrx3, formStrx4:
 			var off uint64
@@ -771,7 +779,7 @@ func (r *Reader) Seek(off Offset) {
 		}
 		u := &d.unit[0]
 		r.unit = 0
-		r.b = makeBuf(r.d, u, "info", u.off, u.data)
+		r.b = d.unitBuf(u, u.off)
 		r.collectDwarf5BaseOffsets(u)
 		r.cu = nil
 		return
@@ -787,13 +795,24 @@ func (r *Reader) Seek(off Offset) {
 	}
 	u := &d.unit[i]
 	r.unit = i
-	r.b = makeBuf(r.d, u, "info", off, u.data[off-u.off:])
+	r.b = d.unitBuf(u, off)
 	r.collectDwarf5BaseOffsets(u)
+}
+
+// atUnitEnd reports whether the reader's cursor has reached the end
+// of its current unit. Position, rather than window length, is used so
+// that ReaderAt-backed units (which start with an empty cache window)
+// behave identically to slice-backed units.
+func (r *Reader) atUnitEnd() bool {
+	if r.unit < 0 || r.unit >= len(r.d.unit) {
+		return true
+	}
+	return r.b.off >= r.d.unit[r.unit].end
 }
 
 // maybeNextUnit advances to the next unit if this one is finished.
 func (r *Reader) maybeNextUnit() {
-	for len(r.b.data) == 0 && r.unit+1 < len(r.d.unit) {
+	for r.atUnitEnd() && r.unit+1 < len(r.d.unit) {
 		r.nextUnit()
 	}
 }
@@ -802,7 +821,7 @@ func (r *Reader) maybeNextUnit() {
 func (r *Reader) nextUnit() {
 	r.unit++
 	u := &r.d.unit[r.unit]
-	r.b = makeBuf(r.d, u, "info", u.off, u.data)
+	r.b = r.d.unitBuf(u, u.off)
 	r.cu = nil
 	r.collectDwarf5BaseOffsets(u)
 }
@@ -826,7 +845,7 @@ func (r *Reader) Next() (*Entry, error) {
 		return nil, r.err
 	}
 	r.maybeNextUnit()
-	if len(r.b.data) == 0 {
+	if r.atUnitEnd() {
 		return nil, nil
 	}
 	u := &r.d.unit[r.unit]
@@ -919,7 +938,7 @@ func (r *Reader) SeekPC(pc uint64) (*Entry, error) {
 		r.unit = unit
 		r.cu = nil
 		u := &r.d.unit[unit]
-		r.b = makeBuf(r.d, u, "info", u.off, u.data)
+		r.b = r.d.unitBuf(u, u.off)
 		r.collectDwarf5BaseOffsets(u)
 		e, err := r.Next()
 		if err != nil {
@@ -1094,7 +1113,7 @@ func (d *Data) baseAddressForEntry(e *Entry) (*Entry, uint64, error) {
 			return nil, 0, errors.New("no unit for entry")
 		}
 		u := &d.unit[i]
-		b := makeBuf(d, u, "info", u.off, u.data)
+		b := d.unitBuf(u, u.off)
 		cu = b.entry(nil, u)
 		if b.err != nil {
 			return nil, 0, b.err

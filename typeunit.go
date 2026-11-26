@@ -28,8 +28,7 @@ func (d *Data) parseTypes(name string, types []byte) error {
 	for len(b.data) > 0 {
 		base := b.off
 		n, dwarf64 := b.unitLength()
-		if n != Offset(uint32(n)) {
-			b.error("type unit length overflow")
+		if b.err != nil {
 			return b.err
 		}
 		hdroff := b.off
@@ -51,30 +50,31 @@ func (d *Data) parseTypes(name string, types []byte) error {
 		asize := b.uint8()
 		sig := b.uint64()
 
-		var toff uint32
+		var toff Offset
 		if !dwarf64 {
-			toff = b.uint32()
+			toff = Offset(b.uint32())
 		} else {
-			to64 := b.uint64()
-			if to64 != uint64(uint32(to64)) {
-				b.error("type unit type offset overflow")
-				return b.err
-			}
-			toff = uint32(to64)
+			toff = Offset(b.uint64())
 		}
 
 		boff := b.off
+		end := hdroff + n
+		if end > Offset(len(types)) || end < boff {
+			b.error("type unit length extends past end of section")
+			return b.err
+		}
 		d.typeSigs[sig] = &typeUnit{
 			unit: unit{
 				base:   base,
 				off:    boff,
-				data:   b.bytes(int(n - (b.off - hdroff))),
+				end:    end,
+				data:   b.bytes(int(end - boff)),
 				atable: atable,
 				asize:  int(asize),
 				vers:   vers,
 				is64:   dwarf64,
 			},
-			toff: Offset(toff),
+			toff: toff,
 			name: name,
 		}
 		if b.err != nil {

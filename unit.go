@@ -13,9 +13,13 @@ import (
 // Each unit has its own abbreviation table and address size.
 
 type unit struct {
-	base   Offset // byte offset of header within the aggregate info
-	off    Offset // byte offset of data within the aggregate info
+	base Offset // byte offset of header within the aggregate info
+	off  Offset // byte offset of data within the aggregate info
+	end  Offset // byte offset just past the last DIE byte of the unit
+	// A unit is either backed by a fully resident slice (data) or a
+	// ReaderAt-backed section (sec). Exactly one of the two is set.
 	data   []byte
+	sec    *remoteSection
 	atable abbrevTable
 	*unit5 // info specific to DWARF 5 units
 	asize  int
@@ -73,39 +77,44 @@ func (u *unit) locListsBase() uint64 {
 	return 0
 }
 
-func (d *Data) parseUnits() ([]unit, error) {
-	// Count units.
-	nunit := 0
-	b := makeBuf(d, unknownFormat{}, "info", 0, d.info)
-	for len(b.data) > 0 {
-		len, _ := b.unitLength()
-		if len != Offset(uint32(len)) {
-			b.error("unit length overflow")
-			break
-		}
-		b.skip(int(len))
-		if len > 0 {
-			nunit++
-		}
+// unitBuf returns a buf positioned at off inside unit u. Slice-backed
+// units reslice their bytes; ReaderAt-backed units open an independent
+// window, so both entry points share the same DIE parsing logic.
+func (d *Data) unitBuf(u *unit, off Offset) buf {
+	if u.sec != nil {
+		return d.makeRemoteBuf(u, "info", off, u.sec)
 	}
-	if b.err != nil {
-		return nil, b.err
-	}
+	return makeBuf(d, u, "info", off, u.data[off-u.off:])
+}
 
-	// Again, this time writing them down.
-	b = makeBuf(d, unknownFormat{}, "info", 0, d.info)
-	units := make([]unit, nunit)
-	for i := range units {
-		u := &units[i]
+// parseUnits scans .debug_info building the unit directory. Only unit
+// headers are read: DIE bodies are never touched here, and for
+// ReaderAt-backed sections even units containing enormous constant
+// blocks are skipped by offset arithmetic alone.
+func (d *Data) parseUnits() ([]unit, error) {
+	if d.infoSec != nil {
+		b := d.makeRemoteBuf(unknownFormat{}, "info", 0, d.infoSec)
+		return d.scanUnits(&b, d.infoSec.size)
+	}
+	b := makeBuf(d, unknownFormat{}, "info", 0, d.info)
+	return d.scanUnits(&b, int64(len(d.info)))
+}
+
+func (d *Data) scanUnits(b *buf, sectionSize int64) ([]unit, error) {
+	var units []unit
+	for int64(b.off) < sectionSize && b.err == nil {
+		u := unit{}
 		u.base = b.off
-		var n Offset
+		n, is64 := b.unitLength()
 		if b.err != nil {
 			return nil, b.err
 		}
-		for n == 0 {
-			n, u.is64 = b.unitLength()
+		if n == 0 {
+			// A zero unit length terminates the section.
+			break
 		}
 		dataOff := b.off
+		u.is64 = is64
 		vers := b.uint16()
 		if vers < 2 || vers > 5 {
 			b.error("unsupported DWARF version " + strconv.Itoa(int(vers)))
@@ -121,6 +130,9 @@ func (d *Data) parseUnits() ([]unit, error) {
 			abbrevOff = b.uint64()
 		} else {
 			abbrevOff = uint64(b.uint32())
+		}
+		if b.err != nil {
+			break
 		}
 		atable, err := d.parseAbbrev(abbrevOff, u.vers)
 		if err != nil {
@@ -145,9 +157,28 @@ func (d *Data) parseUnits() ([]unit, error) {
 				b.uint32()
 			}
 		}
+		if b.err != nil {
+			break
+		}
 
 		u.off = b.off
-		u.data = b.bytes(int(n - (b.off - dataOff)))
+		u.end = dataOff + n
+		if u.end > Offset(sectionSize) || u.end < u.off {
+			b.error("unit length extends past end of info section")
+			break
+		}
+		if b.remote != nil {
+			// Do not read the DIE body. Drop the window and continue
+			// at the next unit header; large blocks cost nothing.
+			u.sec = b.remote.sec
+			b.off = u.end
+			b.data = nil
+			b.remote.win = nil
+		} else {
+			bodyLen := int(u.end - u.off)
+			u.data = b.bytes(bodyLen)
+		}
+		units = append(units, u)
 	}
 	if b.err != nil {
 		return nil, b.err
@@ -166,7 +197,7 @@ func (d *Data) offsetToUnit(off Offset) int {
 		return -1
 	}
 	u := &d.unit[next-1]
-	if u.off <= off && off < u.off+Offset(len(u.data)) {
+	if u.off <= off && off < u.end {
 		return next - 1
 	}
 	return -1
@@ -176,7 +207,7 @@ func (d *Data) collectDwarf5BaseOffsets(u *unit) error {
 	if u.unit5 == nil {
 		panic("expected unit5 to be set up already")
 	}
-	b := makeBuf(d, u, "info", u.off, u.data)
+	b := d.unitBuf(u, u.off)
 	cu := b.entry(nil, u)
 	if cu == nil {
 		// Unknown abbreviation table entry or some other fatal
