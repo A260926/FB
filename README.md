@@ -59,3 +59,33 @@ func main() {
 	}
 }
 ```
+
+Reading Dynamic Imports Without Section Headers
+-----------------------------------------------
+
+Some 64-bit ELF images—such as stripped shared libraries—contain program
+headers but no section table. For these, `ReadDynamicImports(f *ELF64File)`
+catalogs the image's imported (undefined) dynamic symbols using only the
+`PT_DYNAMIC` segment and the file-backed portions of `PT_LOAD` segments.
+Both little- and big-endian 64-bit images are supported; 32-bit images are
+not. The image is only inspected: it is never loaded or executed, and the
+`ELF64File`'s `Raw`, `Sections`, and `Segments` are left unmodified.
+
+Each returned record holds the symbol's original table index, name,
+binding, and type, plus its raw `DT_VERSYM` value (hidden bit included),
+the 15-bit version index with the hidden bit removed, and the required
+version and dependency file names when the image carries version
+requirements. The reader:
+
+- Resolves the virtual addresses in dynamic tags (e.g. `DT_SYMTAB`,
+  `DT_STRTAB`) through `PT_LOAD` mappings rather than treating them as
+  file offsets. Reads may span adjacent mappings, but addresses in
+  zero-filled segment tails or unmapped holes are rejected, as are
+  overlapping mappings that disagree about an address's file source.
+- Determines the dynamic symbol count from `DT_HASH` (`nchain`) or
+  `DT_GNU_HASH` (buckets and chain terminators, including the `symoffset`
+  prefix). If both tables are present their counts must agree; if neither
+  is present the image is reported as unsupported.
+- Associates imports with symbol versions via `DT_VERSYM` and the
+  `DT_VERNEED`/`DT_VERNEEDNUM` chains, validating record counts, relative
+  links, and terminating zero links along the way.
