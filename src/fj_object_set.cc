@@ -61,6 +61,13 @@ bool ObjectSet::ray_intersect(Index prim_id, const Ray &ray,
   return obj->RayIntersect(ray, time, isect);
 }
 
+void ObjectSet::ray_intersect_all(Index prim_id, const Ray &ray,
+    Real time, std::vector<Intersection> *hits) const
+{
+  const ObjectInstance *obj = GetObject(prim_id);
+  obj->RayIntersectAll(ray, time, hits);
+}
+
 void ObjectSet::get_primitive_bounds(Index prim_id, Box *bounds) const
 {
   const ObjectInstance *obj = GetObject(prim_id);

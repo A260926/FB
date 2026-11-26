@@ -11,6 +11,20 @@ namespace fj {
 
 static const Real EPSILON = 1e-6;
 
+static bool tri_ray_intersect_count_enabled = false;
+static unsigned long long tri_ray_intersect_count = 0;
+
+void TriResetRayIntersectCount()
+{
+  tri_ray_intersect_count = 0;
+  tri_ray_intersect_count_enabled = true;
+}
+
+unsigned long long TriGetRayIntersectCount()
+{
+  return tri_ray_intersect_count;
+}
+
 Real TriComputeArea(
     const Vector &vert0, const Vector &vert1, const Vector &vert2)
 {
@@ -85,6 +99,10 @@ bool TriRayIntersect(
 {
   Vector edge1, edge2, tvec, pvec, qvec;
   Real det, inv_det;
+
+  if (tri_ray_intersect_count_enabled) {
+    tri_ray_intersect_count++;
+  }
 
   /* find vectors for two edges sharing vert0 */
   edge1 = vert1 - vert0;

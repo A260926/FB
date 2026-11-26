@@ -22,6 +22,8 @@ public:
 private:
   virtual int build();
   virtual bool intersect(const Ray &ray, Real time, Intersection *isect) const;
+  virtual void intersect_all(const Ray &ray, Real time,
+      std::vector<Intersection> *hits) const;
   virtual const char *get_name() const;
 
   std::vector<Cell*> cells_;

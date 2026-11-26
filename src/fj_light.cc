@@ -84,26 +84,31 @@ Texture *Light::GetEnvironmentMap() const
 void Light::SetTranslate(Real tx, Real ty, Real tz, Real time)
 {
   XfmPushTranslateSample(&transform_samples_, tx, ty, tz, time);
+  transform_changed();
 }
 
 void Light::SetRotate(Real rx, Real ry, Real rz, Real time)
 {
   XfmPushRotateSample(&transform_samples_, rx, ry, rz, time);
+  transform_changed();
 }
 
 void Light::SetScale(Real sx, Real sy, Real sz, Real time)
 {
   XfmPushScaleSample(&transform_samples_, sx, sy, sz, time);
+  transform_changed();
 }
 
 void Light::SetTransformOrder(int order)
 {
   XfmSetSampleTransformOrder(&transform_samples_, order);
+  transform_changed();
 }
 
 void Light::SetRotateOrder(int order)
 {
   XfmSetSampleRotateOrder(&transform_samples_, order);
+  transform_changed();
 }
 
 void Light::GetSamples(LightSample *samples, int max_samples) const
@@ -124,6 +129,17 @@ Color Light::Illuminate(const LightSample &sample, const Vector &Ps) const
 int Light::Preprocess()
 {
   return preprocess();
+}
+
+bool Light::LookupShadowVisibility(const TraceContext &cxt,
+    const Vector &receiver, Real bias, Real *visibility) const
+{
+  // no shadow cache on the base class
+  return false;
+}
+
+void Light::transform_changed()
+{
 }
 
 void Light::get_transform_sample(Transform &sample, Real time) const

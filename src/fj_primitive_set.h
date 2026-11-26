@@ -6,6 +6,7 @@
 
 #include "fj_compatibility.h"
 #include "fj_types.h"
+#include <vector>
 
 namespace fj {
 
@@ -20,6 +21,12 @@ public:
   virtual ~PrimitiveSet() {}
 
   bool RayIntersect(Index prim_id, const Ray &ray, Real time, Intersection *isect) const;
+  // Appends every hit of prim_id within [ray.tmin, ray.tmax] to hits.
+  // The default implementation reports the single nearest hit; primitive
+  // sets whose primitives can hit a ray more than once should override
+  // ray_intersect_all.
+  void RayIntersectAll(Index prim_id, const Ray &ray, Real time,
+      std::vector<Intersection> *hits) const;
   bool BoxIntersect(Index prim_id, const Box &box) const;
 
   void GetPrimitiveBounds(Index prim_id, Box *bounds) const;
@@ -29,6 +36,8 @@ public:
 private:
   virtual bool ray_intersect(Index prim_id, const Ray &ray,
       Real time, Intersection *isect) const = 0;
+  virtual void ray_intersect_all(Index prim_id, const Ray &ray,
+      Real time, std::vector<Intersection> *hits) const;
   // TODO make this pure virtual
   virtual bool box_intersect(Index prim_id, const Box &box) const
   {

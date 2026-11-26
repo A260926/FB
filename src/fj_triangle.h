@@ -42,6 +42,12 @@ FJ_API bool TriRayIntersect(
     const Vector &orig, const Vector &dir, int cull_backfaces,
     Real *t, Real *u, Real *v);
 
+// Counts calls to TriRayIntersect for diagnostics. Counting starts
+// disabled; TriResetRayIntersectCount() zeroes the counter and enables it.
+// Not thread-safe by design: enable it only from single-threaded test code.
+FJ_API void TriResetRayIntersectCount();
+FJ_API unsigned long long TriGetRayIntersectCount();
+
 FJ_API bool TriBoxIntersect(
     const Vector &vert0, const Vector &vert1, const Vector &vert2,
     const Vector &boxcenter, const Vector &boxhalfsize);

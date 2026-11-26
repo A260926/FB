@@ -16,6 +16,7 @@ namespace fj {
 
 class Light;
 class Texture;
+class TraceContext;
 
 class LightSample {
 public:
@@ -60,6 +61,11 @@ public:
   Color Illuminate(const LightSample &sample, const Vector &Ps) const;
   int Preprocess();
 
+  // Cached shadow visibility towards receiver. Lights without a shadow
+  // cache return false and the caller falls back to tracing shadow rays.
+  virtual bool LookupShadowVisibility(const TraceContext &cxt,
+      const Vector &receiver, Real bias, Real *visibility) const;
+
 protected:
   void get_transform_sample(Transform &sample, Real time) const;
   //TODO this may not be necessary
@@ -81,6 +87,8 @@ private:
   virtual void get_samples(LightSample *samples, int max_samples) const = 0;
   virtual Color illuminate(const LightSample &sample, const Vector &Ps) const = 0;
   virtual int preprocess() = 0;
+  // called after any transform setting entry point is used
+  virtual void transform_changed();
 };
 
 } // namespace xxx

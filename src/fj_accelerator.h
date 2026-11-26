@@ -6,6 +6,7 @@
 
 #include "fj_types.h"
 #include "fj_box.h"
+#include <vector>
 
 namespace fj {
 
@@ -27,20 +28,25 @@ public:
   void SetPrimitiveSet(PrimitiveSet *primset);
   int Build();
   bool Intersect(const Ray &ray, Real time, Intersection *isect) const;
+  // Appends every intersection along the ray within [ray.tmin, ray.tmax]
+  // to hits, using the same candidate traversal as Intersect.
+  void IntersectAll(const Ray &ray, Real time,
+      std::vector<Intersection> *hits) const;
+
+  // TODO PrimitiveSet might have to own Accelerator
+  const PrimitiveSet *GetPrimitiveSet() const { return primset_; }
 
 private:
   virtual int build() = 0;
   virtual bool intersect(const Ray &ray, Real time, Intersection *isect) const = 0;
+  virtual void intersect_all(const Ray &ray, Real time,
+      std::vector<Intersection> *hits) const = 0;
   virtual const char *get_name() const = 0;
 
   Box bounds_;
   bool has_built_;
 
   PrimitiveSet *primset_;
-
-protected:
-  // TODO PrimitiveSet might have to own Accelerator
-  const PrimitiveSet *GetPrimitiveSet() const { return primset_; }
 };
 
 } // namespace xxx

@@ -88,6 +88,11 @@ bool ObjectInstance::IsVolume() const
   return true;
 }
 
+const Accelerator *ObjectInstance::GetAccelerator() const
+{
+  return acc_;
+}
+
 void ObjectInstance::SetTranslate(Real tx, Real ty, Real tz, Real time)
 {
   XfmPushTranslateSample(&transform_samples_, tx, ty, tz, time);
@@ -240,6 +245,47 @@ bool ObjectInstance::RayIntersect(const Ray &ray, Real time, Intersection *isect
   isect->object = this;
 
   return true;
+}
+
+void ObjectInstance::RayIntersectAll(const Ray &ray, Real time,
+    std::vector<Intersection> *hits) const
+{
+  if (!IsSurface()) {
+    return;
+  }
+
+  Transform transform_interp;
+  XfmLerpTransformSample(&transform_samples_, time, &transform_interp);
+
+  // transform ray to object space
+  Ray ray_object_space = ray;
+  XfmTransformPointInverse(&transform_interp, &ray_object_space.orig);
+  XfmTransformVectorInverse(&transform_interp, &ray_object_space.dir);
+
+  std::vector<Intersection> object_space_hits;
+  acc_->IntersectAll(ray_object_space, time, &object_space_hits);
+
+  const Real world_dir_len2 = Dot(ray.dir, ray.dir);
+  for (size_t i = 0; i < object_space_hits.size(); i++) {
+    Intersection isect = object_space_hits[i];
+
+    // transform intersection back to world space
+    XfmTransformPoint(&transform_interp, &isect.P);
+    XfmTransformVector(&transform_interp, &isect.N);
+    isect.N = Normalize(isect.N);
+
+    XfmTransformVector(&transform_interp, &isect.dPdu);
+    XfmTransformVector(&transform_interp, &isect.dPdv);
+
+    // recompute the hit parameter on the world-space ray so that it does
+    // not depend on the object-space direction length
+    if (world_dir_len2 > 0) {
+      isect.t_hit = Dot(isect.P - ray.orig, ray.dir) / world_dir_len2;
+    }
+
+    isect.object = this;
+    hits->push_back(isect);
+  }
 }
 
 bool ObjectInstance::RayVolumeIntersect(const Ray &ray, Real time,

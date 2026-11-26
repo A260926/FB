@@ -116,6 +116,71 @@ bool BVHAccelerator::intersect(const Ray &ray, Real time, Intersection *isect) c
     return intersect_bvh_recursive(primset, root, ray, time, isect);
 }
 
+void BVHAccelerator::intersect_all(const Ray &ray, Real time,
+    std::vector<Intersection> *hits) const
+{
+  const PrimitiveSet *primset = GetPrimitiveSet();
+
+  // TODO NODE COULD BE NULL IF PRIMITIVE IS EMPTY. MIGHT BE BETTER CHANGE
+  if (root == NULL)
+    return;
+
+  std::stack<const BVHNode*> stack;
+  const BVHNode *node = root;
+
+  for (;;) {
+    if (node->is_leaf()) {
+      primset->RayIntersectAll(node->prim_id, ray, time, hits);
+
+      if (stack.empty())
+        break;
+      node = stack.top();
+      stack.pop();
+      continue;
+    }
+
+    Real boxhit_tmin, boxhit_tmax;
+    const bool hit_left = BoxRayIntersect(node->left->bounds,
+        ray.orig, ray.dir, ray.tmin, ray.tmax,
+        &boxhit_tmin, &boxhit_tmax);
+
+    const bool hit_right = BoxRayIntersect(node->right->bounds,
+        ray.orig, ray.dir, ray.tmin, ray.tmax,
+        &boxhit_tmin, &boxhit_tmax);
+
+    int whichhit = HIT_NONE;
+    whichhit |= hit_left  ? HIT_LEFT  : HIT_NONE;
+    whichhit |= hit_right ? HIT_RIGHT : HIT_NONE;
+
+    switch (whichhit) {
+    case HIT_NONE:
+      if (stack.empty())
+        goto loop_exit;
+      node = stack.top();
+      stack.pop();
+      break;
+
+    case HIT_LEFT:
+      node = node->left;
+      break;
+
+    case HIT_RIGHT:
+      node = node->right;
+      break;
+
+    case HIT_BOTH:
+      stack.push(node->right);
+      node = node->left;
+      break;
+
+    default:
+      assert(!"invalid whichhit");
+      break;
+    }
+  }
+loop_exit:;
+}
+
 const char *BVHAccelerator::get_name() const
 {
   return ACCELERATOR_NAME;

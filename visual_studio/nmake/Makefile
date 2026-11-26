@@ -84,6 +84,7 @@ libscene_dll_obj = \
   ..\..\src\fj_callback.obj \
   ..\..\src\fj_camera.obj \
   ..\..\src\fj_curve.obj \
+  ..\..\src\fj_deep_shadow_map.obj \
   ..\..\src\fj_dome_light.obj \
   ..\..\src\fj_filter.obj \
   ..\..\src\fj_fixed_grid_sampler.obj \
@@ -155,6 +156,9 @@ libscene_dll_obj = \
 
 ..\..\src\fj_curve.obj : ..\..\src\fj_curve.cc
 	@$(CC) $(CXXFLAGS) /D "FJ_DLL_EXPORT" /Fo$@ ..\..\src\fj_curve.cc
+
+..\..\src\fj_deep_shadow_map.obj : ..\..\src\fj_deep_shadow_map.cc
+	@$(CC) $(CXXFLAGS) /D "FJ_DLL_EXPORT" /Fo$@ ..\..\src\fj_deep_shadow_map.cc
 
 ..\..\src\fj_dome_light.obj : ..\..\src\fj_dome_light.cc
 	@$(CC) $(CXXFLAGS) /D "FJ_DLL_EXPORT" /Fo$@ ..\..\src\fj_dome_light.cc

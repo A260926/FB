@@ -112,6 +112,23 @@ bool Accelerator::Intersect(const Ray &ray, Real time, Intersection *isect) cons
   return intersect(ray, time, isect);
 }
 
+void Accelerator::IntersectAll(const Ray &ray, Real time,
+    std::vector<Intersection> *hits) const
+{
+  Real boxhit_tmin = 0;
+  Real boxhit_tmax = 0;
+
+  // check intersection with overall bounds
+  const bool hit = BoxRayIntersect(bounds_, ray.orig, ray.dir, ray.tmin, ray.tmax,
+        &boxhit_tmin, &boxhit_tmax);
+
+  if (!hit) {
+    return;
+  }
+
+  intersect_all(ray, time, hits);
+}
+
 static void build_accelerator_callback(void *data)
 {
   Accelerator *acc = reinterpret_cast<Accelerator *>(data);

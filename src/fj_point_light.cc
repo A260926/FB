@@ -5,12 +5,38 @@
 
 namespace fj {
 
-PointLight::PointLight()
+PointLight::PointLight() :
+    deep_shadow_map_()
 {
 }
 
 PointLight::~PointLight()
 {
+}
+
+bool PointLight::BuildDeepShadowMap(const TraceContext &cxt,
+    int resolution, Real maxDistance)
+{
+  LightSample samples[1];
+  GetSamples(samples, 1);
+
+  return deep_shadow_map_.Build(cxt, samples[0].P, resolution, maxDistance);
+}
+
+void PointLight::ClearDeepShadowMap()
+{
+  deep_shadow_map_.Clear();
+}
+
+bool PointLight::HasDeepShadowMap() const
+{
+  return deep_shadow_map_.HasBuilt();
+}
+
+bool PointLight::LookupShadowVisibility(const TraceContext &cxt,
+    const Vector &receiver, Real bias, Real *visibility) const
+{
+  return deep_shadow_map_.Lookup(cxt, receiver, bias, visibility);
 }
 
 int PointLight::get_sample_count() const
@@ -42,6 +68,11 @@ int PointLight::preprocess()
 {
   // does nothing
   return 0;
+}
+
+void PointLight::transform_changed()
+{
+  deep_shadow_map_.Clear();
 }
 
 } // namespace xxx

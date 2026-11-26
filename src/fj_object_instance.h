@@ -33,6 +33,7 @@ public:
   int SetVolume(const Volume *volume);
   bool IsSurface() const;
   bool IsVolume() const;
+  const Accelerator *GetAccelerator() const;
 
   // transformation
   void SetTranslate(Real tx, Real ty, Real tz, Real time);
@@ -62,6 +63,11 @@ public:
 
   // sampling
   bool RayIntersect(const Ray &ray, Real time, Intersection *isect) const;
+  // Appends every hit of this instance along the ray to hits, in world
+  // space. t_hit is the parameter of the world-space ray, independent of
+  // the object-space direction length.
+  void RayIntersectAll(const Ray &ray, Real time,
+      std::vector<Intersection> *hits) const;
   bool RayVolumeIntersect(const Ray &ray, Real time, Interval *interval) const;
   bool GetVolumeSample(const Vector &point, Real time, VolumeSample *sample) const;
 

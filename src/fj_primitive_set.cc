@@ -30,6 +30,21 @@ bool PrimitiveSet::BoxIntersect(Index prim_id, const Box &box) const
   return box_intersect(prim_id, box);
 }
 
+void PrimitiveSet::RayIntersectAll(Index prim_id, const Ray &ray,
+    Real time, std::vector<Intersection> *hits) const
+{
+  ray_intersect_all(prim_id, ray, time, hits);
+}
+
+void PrimitiveSet::ray_intersect_all(Index prim_id, const Ray &ray,
+    Real time, std::vector<Intersection> *hits) const
+{
+  Intersection isect;
+  if (RayIntersect(prim_id, ray, time, &isect)) {
+    hits->push_back(isect);
+  }
+}
+
 void PrimitiveSet::GetPrimitiveBounds(Index prim_id, Box *bounds) const
 {
   get_primitive_bounds(prim_id, bounds);
