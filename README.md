@@ -89,6 +89,80 @@ This will compile c-ray with the correct flags, and then run each test individua
 You can also run a single suite
 `./run-tests.sh mathnode`
 
+## Composable BSDF closures
+
+`struct bsdfNode` has two optional query callbacks:
+
+```c
+struct bsdfEval {
+	struct color response; // Cosine-weighted directional response
+	float pdf;             // Solid-angle density, in sr^-1
+};
+
+struct bsdfEval (*eval)(const struct bsdfNode *bsdf, sampler *sampler,
+                        const struct hitRecord *record, struct vector direction);
+struct color (*emission)(const struct bsdfNode *bsdf, sampler *sampler,
+                         const struct hitRecord *record);
+```
+
+Both callbacks are present only when the whole graph is built from diffuse,
+translucent, isotropic, emission, mix, and add nodes. If a graph also contains
+an unsupported leaf such as metal, glass, plastic, or transparent, both
+callbacks are `NULL` at its root. Its existing `sample` path and descriptor/
+enumeration interfaces remain unchanged.
+
+`response` already contains the projected cosine. Its convention is color per
+solid angle (`color * sr^-1`), while `pdf` is a probability density per solid
+angle (`sr^-1`); their ratio is therefore a plain color weight. For a unit
+shading normal `N`, query direction `d`, and closure color `c`:
+
+- diffuse: `c * max(N dot d, 0) / pi`
+- translucent: `c * max(-N dot d, 0) / pi`
+- isotropic: `c / (4*pi)`
+- emission: zero response, with the same cosine/hemisphere PDF as diffuse
+
+The corresponding PDFs are the same scalar directional densities without `c`.
+Thus the diffuse and translucent PDFs integrate to one on their respective
+hemispheres, while isotropic integrates to one over the whole sphere. Emission
+returns `color * strength` from its `emission` callback; the other leaves
+return black.
+
+For a clamped mix factor `f` (`A` at zero, `B` at one):
+
+```text
+response = (1-f) * A.response + f * B.response
+pdf      = (1-f) * A.pdf      + f * B.pdf
+emission = (1-f) * A.emission + f * B.emission
+```
+
+For add:
+
+```text
+response = A.response + B.response
+pdf      = 0.5 * (A.pdf + B.pdf)
+emission = A.emission + B.emission
+```
+
+A supported `sample` chooses only one child direction using these same
+probabilities, but writes the full graph's marginal PDF,
+`response / pdf` as its weight, and the full graph emission. Shared pointers
+are not deduplicated: `add(A, A)` contributes twice, while `mix(A, A)` reduces
+to `A`.
+
+`path_trace()` evaluates `emission()` independently first for supported
+graphs. At `max_bounces`, it adds that emission and returns without drawing a
+scattering direction. On a continuing bounce, only the sampled scattering
+weight is multiplied into the path; surface emission is added once per hit.
+Unsupported graphs keep using the old `sample.weight` and `sample.emitted`
+flow.
+
+The focused C99 regression lives in `task_tests/closures.c` and can be run
+with:
+
+```sh
+bash task_support/run.sh target
+```
+
 ## Stand-alone usage
 
 You can mostly ignore these instructions below if you're only interested in running c-ray as a Blender add-on.

@@ -44,11 +44,23 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 	snprintf(dumpbuf, bufsize, "translucentBsdf { color: %s }", color);
 }
 
+static float density(const struct hitRecord *record, struct vector direction) {
+	return fmaxf(-vec_dot(record->surfaceNormal, direction), 0.0f) / PI;
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	const struct translucentBsdf *self = (const struct translucentBsdf *)bsdf;
+	const float pdf = density(record, direction);
+	const struct color color = self->color->eval(self->color, sampler, record);
+	return (struct bsdfEval){ .response = colorCoef(pdf, color), .pdf = pdf };
+}
+
 static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
 	struct translucentBsdf *diffBsdf = (struct translucentBsdf *)bsdf;
 	const struct vector scatterDir = vec_normalize(vec_add(vec_negate(record->surfaceNormal), vec_on_unit_sphere(sampler)));
 	return (struct bsdfSample){
 			.out = { .start = record->hitPoint, .direction = scatterDir, .type = rt_transmission | rt_diffuse },
+			.pdf = density(record, scatterDir),
 			.weight = diffBsdf->color->eval(diffBsdf->color, sampler, record)
 	};
 }
@@ -58,6 +70,8 @@ const struct bsdfNode *newTranslucent(const struct node_storage *s, const struct
 		.color = color ? color : newConstantTexture(s, g_black_color),
 		.bsdf = {
 				.sample = sample,
+				.eval = eval,
+				.emission = bsdf_zero_emission,
 				.base = { .compare = compare, .dump = dump }
 		}
 	});

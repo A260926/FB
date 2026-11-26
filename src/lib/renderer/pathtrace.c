@@ -36,14 +36,25 @@ struct color path_trace(struct lightRay incident, const struct world *scene, int
 			path_radiance = colorAdd(path_radiance, colorMul(path_weight, scene->background->sample(scene->background, sampler, &isect).weight));
 			break;
 		}
-		
-		const struct bsdfSample sample = isect.bsdf->sample(isect.bsdf, sampler, &isect);
-		//TODO: emission contribution needs to be adjusted down by probability of randomly hitting it
-		//FIXME: emits_light only gets set if the root node of a shader graph is emissive, so maybe fix that
-		// if (true || scene->instances[isect.instIndex].emits_light) {
-			path_radiance = colorAdd(path_radiance, colorMul(path_weight, sample.emitted));
-		// }
-		if (bounce == max_bounces) break;
+
+		struct bsdfSample sample;
+		const bool closure_graph = isect.bsdf->eval && isect.bsdf->emission;
+		if (closure_graph) {
+			// Evaluate self-emission independently first. At the cutoff bounce this
+			// is the only surface query, so no scattering random dimensions are used.
+			const struct color surface_emission = isect.bsdf->emission(isect.bsdf, sampler, &isect);
+			path_radiance = colorAdd(path_radiance, colorMul(path_weight, surface_emission));
+			if (bounce == max_bounces) break;
+			sample = isect.bsdf->sample(isect.bsdf, sampler, &isect);
+		} else {
+			sample = isect.bsdf->sample(isect.bsdf, sampler, &isect);
+			//TODO: emission contribution needs to be adjusted down by probability of randomly hitting it
+			//FIXME: emits_light only gets set if the root node of a shader graph is emissive, so maybe fix that
+			// if (true || scene->instances[isect.instIndex].emits_light) {
+				path_radiance = colorAdd(path_radiance, colorMul(path_weight, sample.emitted));
+			// }
+			if (bounce == max_bounces) break;
+		}
 
 		currentRay = sample.out;
 		const struct color attenuation = sample.weight;

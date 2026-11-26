@@ -48,12 +48,34 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 	snprintf(dumpbuf, bufsize, "emissiveBsdf { color: %s, strength: %s }", color, strength);
 }
 
+static float density(const struct hitRecord *record, struct vector direction) {
+	return fmaxf(vec_dot(record->surfaceNormal, direction), 0.0f) / PI;
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	const struct emissiveBsdf *self = (const struct emissiveBsdf *)bsdf;
+	return colorCoef(self->strength->eval(self->strength, sampler, record),
+					 self->color->eval(self->color, sampler, record));
+}
+
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	(void)bsdf;
+	(void)sampler;
+	return (struct bsdfEval){
+		.response = (struct color){ 0.0f, 0.0f, 0.0f, 0.0f },
+		.pdf = density(record, direction)
+	};
+}
+
 static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
 	struct emissiveBsdf *emitBsdf = (struct emissiveBsdf *)bsdf;
 	const struct vector scatterDir = vec_normalize(vec_add(record->surfaceNormal, vec_on_unit_sphere(sampler)));
+	const struct color emitted = colorCoef(emitBsdf->strength->eval(emitBsdf->strength, sampler, record),
+										   emitBsdf->color->eval(emitBsdf->color, sampler, record));
 	return (struct bsdfSample){
 		.out = { .start = record->hitPoint, .direction = scatterDir, .type = rt_reflection | rt_diffuse },
-		.emitted = colorCoef(emitBsdf->strength->eval(emitBsdf->strength, sampler, record), emitBsdf->color->eval(emitBsdf->color, sampler, record))
+		.pdf = density(record, scatterDir),
+		.emitted = emitted
 	};
 }
 
@@ -63,6 +85,8 @@ const struct bsdfNode *newEmission(const struct node_storage *s, const struct co
 		.strength = strength ? strength : newConstantValue(s, 1.0f),
 		.bsdf = {
 			.sample = sample,
+			.eval = eval,
+			.emission = emission,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});

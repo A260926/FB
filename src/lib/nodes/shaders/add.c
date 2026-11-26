@@ -46,8 +46,37 @@ static void dump(const void *node, char *dumpbuf, int bufsize) {
 	snprintf(dumpbuf, bufsize, "addBsdf { A: %s, B: %s }", A, B);
 }
 
+static struct bsdfEval eval(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction) {
+	const struct addBsdf *self = (const struct addBsdf *)bsdf;
+	struct bsdfEval A = self->A->eval(self->A, sampler, record, direction);
+	struct bsdfEval B = self->B->eval(self->B, sampler, record, direction);
+	return (struct bsdfEval){
+		.response = colorAdd(A.response, B.response),
+		.pdf = 0.5f * (A.pdf + B.pdf)
+	};
+}
+
+static struct color emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	const struct addBsdf *self = (const struct addBsdf *)bsdf;
+	return colorAdd(self->A->emission(self->A, sampler, record),
+					self->B->emission(self->B, sampler, record));
+}
+
+static struct bsdfSample sampleSupported(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	const struct addBsdf *self = (const struct addBsdf *)bsdf;
+	const struct bsdfNode *chosen = sampler_dimension(sampler) < 0.5f ? self->A : self->B;
+	struct bsdfSample result = chosen->sample(chosen, sampler, record);
+	const struct bsdfEval fullEval = eval(bsdf, sampler, record, result.out.direction);
+	result.pdf = fullEval.pdf;
+	result.weight = bsdf_eval_weight(fullEval);
+	result.emitted = emission(bsdf, sampler, record);
+	return result;
+}
+
 static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
 	struct addBsdf *mixBsdf = (struct addBsdf *)bsdf;
+	if (bsdf->eval && bsdf->emission)
+		return sampleSupported(bsdf, sampler, record);
 	struct bsdfSample A = mixBsdf->A->sample(mixBsdf->A, sampler, record);
 	struct bsdfSample B = mixBsdf->B->sample(mixBsdf->B, sampler, record);
 	// TODO: Do we just add the outgoing vertices together or what...?
@@ -57,19 +86,25 @@ static struct bsdfSample sample(const struct bsdfNode *bsdf, sampler *sampler, c
 	// we're not supposed to compute the out direction here.
 	// Cycles does the add with OSL shading closures, instead of at this stage, so we'd have to
 	// do something similar to that, probably.
-	return (struct bsdfSample){.out = B.out, .weight = colorAdd(A.weight, B.weight)};
+	return (struct bsdfSample){
+		.out = B.out,
+		.pdf = 0.0f,
+		.weight = colorAdd(A.weight, B.weight),
+		.emitted = colorAdd(A.emitted, B.emitted)
+	};
 }
 
 const struct bsdfNode *newAdd(const struct node_storage *s, const struct bsdfNode *A, const struct bsdfNode *B) {
-	if (A == B) {
-		logr(debug, "A == B, pruning add node.\n");
-		return A;
-	}
+	const struct bsdfNode *a = A ? A : newDiffuse(s, newConstantTexture(s, g_black_color));
+	const struct bsdfNode *b = B ? B : newDiffuse(s, newConstantTexture(s, g_black_color));
+	const bool closures = a->eval && a->emission && b->eval && b->emission;
 	HASH_CONS(s->node_table, hash, struct addBsdf, {
-		.A = A ? A : newDiffuse(s, newConstantTexture(s, g_black_color)),
-		.B = B ? B : newDiffuse(s, newConstantTexture(s, g_black_color)),
+		.A = a,
+		.B = b,
 		.bsdf = {
 			.sample = sample,
+			.eval = closures ? eval : NULL,
+			.emission = closures ? emission : NULL,
 			.base = { .compare = compare, .dump = dump }
 		}
 	});

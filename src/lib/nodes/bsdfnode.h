@@ -26,11 +26,49 @@ struct bsdfSample {
 	struct color emitted; // FIXME: Not really the right place for this
 };
 
+// Directional response of a closure graph. response already includes the
+// projected cosine, and pdf is a density with respect to solid angle (sr^-1).
+struct bsdfEval {
+	struct color response;
+	float pdf;
+};
+
 //TODO: Expand and refactor to match a standard bsdf signature with eval, sample and pdf
 struct bsdfNode {
 	struct nodeBase base;
 	struct bsdfSample (*sample)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record);
+	// These are present only when the entire graph consists of the continuously
+	// composable closures: diffuse, translucent, isotropic, emission, mix, add.
+	struct bsdfEval (*eval)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record, struct vector direction);
+	struct color (*emission)(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record);
 };
+
+static inline struct color bsdf_zero_emission(const struct bsdfNode *bsdf, sampler *sampler, const struct hitRecord *record) {
+	(void)bsdf;
+	(void)sampler;
+	(void)record;
+	return (struct color){ 0.0f, 0.0f, 0.0f, 0.0f };
+}
+
+static inline float bsdf_clamp_unit(float value) {
+	return fminf(1.0f, fmaxf(0.0f, value));
+}
+
+// response / pdf, with a defined zero result for a zero-density direction.
+static inline struct color bsdf_eval_weight(struct bsdfEval eval) {
+	if (!(eval.pdf > 0.0f) || !isfinite(eval.pdf))
+		return (struct color){ 0.0f, 0.0f, 0.0f, 0.0f };
+	struct color weight = {
+		eval.response.red / eval.pdf,
+		eval.response.green / eval.pdf,
+		eval.response.blue / eval.pdf,
+		eval.response.alpha / eval.pdf
+	};
+	if (!isfinite(weight.red) || !isfinite(weight.green) ||
+		!isfinite(weight.blue) || !isfinite(weight.alpha))
+		return (struct color){ 0.0f, 0.0f, 0.0f, 0.0f };
+	return weight;
+}
 
 struct bsdf_buffer {
 	const struct bsdfNode **bsdfs;
