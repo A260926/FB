@@ -75,6 +75,13 @@ namespace geometry {
 // The job does not owned the buffers (in/output) and will thus not delete them
 // during job's destruction.
 struct OZZ_GEOMETRY_DLL SkinningJob {
+  // Skinning algorithm selection. The default is linear matrix palette
+  // skinning, which preserves the historical behavior of this job.
+  enum SkinningMode {
+    kLinear,
+    kDualQuaternion,
+  };
+
   // Default constructor, initializes default values.
   SkinningJob();
 
@@ -96,6 +103,12 @@ struct OZZ_GEOMETRY_DLL SkinningJob {
   // Number of vertices to transform. All input and output arrays must store at
   // least this number of vertices.
   int vertex_count;
+
+  // Selects linear matrix palette skinning (the default) or dual quaternion
+  // skinning for vertices whose positively weighted matrices are rigid.
+  // Vertices containing a positively weighted scaled, sheared or reflected
+  // influence automatically use the linear path for all their attributes.
+  SkinningMode skinning_mode;
 
   // Maximum number of joints influencing each vertex. Must be greater than 0.
   // The number of influences drives how joint_indices and joint_weights are

@@ -28,14 +28,461 @@
 #include "ozz/geometry/runtime/skinning_job.h"
 
 #include <cassert>
+#include <cmath>
+#include <cstdint>
 
 #include "ozz/base/maths/simd_math.h"
 
 namespace ozz {
 namespace geometry {
 
+namespace {
+
+constexpr float kRigidEpsilon = 1e-4f;
+constexpr float kMinimumRealLength = 1e-6f;
+
+struct Vec3 {
+  float x, y, z;
+};
+
+Vec3 Add(const Vec3& _a, const Vec3& _b) {
+  return {_a.x + _b.x, _a.y + _b.y, _a.z + _b.z};
+}
+
+Vec3 Scale(const Vec3& _v, float _s) {
+  return {_v.x * _s, _v.y * _s, _v.z * _s};
+}
+
+float Dot(const Vec3& _a, const Vec3& _b) {
+  return _a.x * _b.x + _a.y * _b.y + _a.z * _b.z;
+}
+
+Vec3 Cross(const Vec3& _a, const Vec3& _b) {
+  return {_a.y * _b.z - _a.z * _b.y, _a.z * _b.x - _a.x * _b.z,
+          _a.x * _b.y - _a.y * _b.x};
+}
+
+struct Quaternion {
+  float x, y, z, w;
+};
+
+float Dot(const Quaternion& _a, const Quaternion& _b) {
+  return _a.x * _b.x + _a.y * _b.y + _a.z * _b.z + _a.w * _b.w;
+}
+
+struct DualQuaternion {
+  Quaternion real;
+  Quaternion dual;
+};
+
+Quaternion Scale(const Quaternion& _q, float _s) {
+  return {_q.x * _s, _q.y * _s, _q.z * _s, _q.w * _s};
+}
+
+Quaternion Add(const Quaternion& _a, const Quaternion& _b) {
+  return {_a.x + _b.x, _a.y + _b.y, _a.z + _b.z, _a.w + _b.w};
+}
+
+// Extracts a row-major 4x4 matrix from ozz's column-major Float4x4.
+void ExtractMatrix(const math::Float4x4& _m, float _r[4][4]) {
+  for (int c = 0; c < 4; ++c) {
+    float column[4];
+    math::StorePtrU(_m.cols[c], column);
+    for (int row = 0; row < 4; ++row) {
+      _r[row][c] = column[row];
+    }
+  }
+}
+
+bool IsFiniteMatrix(const float _m[4][4]) {
+  for (int row = 0; row < 4; ++row) {
+    for (int col = 0; col < 4; ++col) {
+      if (!std::isfinite(_m[row][col])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Rigid means an affine orthogonal basis with positive orientation.
+bool IsRigidMatrix(const math::Float4x4& _matrix) {
+  float m[4][4];
+  ExtractMatrix(_matrix, m);
+  if (!IsFiniteMatrix(m)) {
+    return false;
+  }
+
+  if (std::fabs(m[3][0]) > kRigidEpsilon ||
+      std::fabs(m[3][1]) > kRigidEpsilon ||
+      std::fabs(m[3][2]) > kRigidEpsilon ||
+      std::fabs(m[3][3] - 1.f) > kRigidEpsilon) {
+    return false;
+  }
+
+  const Vec3 c0 = {m[0][0], m[1][0], m[2][0]};
+  const Vec3 c1 = {m[0][1], m[1][1], m[2][1]};
+  const Vec3 c2 = {m[0][2], m[1][2], m[2][2]};
+
+  if (std::fabs(std::sqrt(Dot(c0, c0)) - 1.f) > kRigidEpsilon ||
+      std::fabs(std::sqrt(Dot(c1, c1)) - 1.f) > kRigidEpsilon ||
+      std::fabs(std::sqrt(Dot(c2, c2)) - 1.f) > kRigidEpsilon) {
+    return false;
+  }
+
+  if (std::fabs(Dot(c0, c1)) > kRigidEpsilon ||
+      std::fabs(Dot(c0, c2)) > kRigidEpsilon ||
+      std::fabs(Dot(c1, c2)) > kRigidEpsilon) {
+    return false;
+  }
+
+  const float determinant = Dot(c0, Cross(c1, c2));
+  return std::fabs(determinant - 1.f) <= kRigidEpsilon;
+}
+
+// Converts a rigid matrix to a quaternion. The sign is canonicalized by
+// inspecting components in w, z, y, x order and making the first non-zero one
+// positive.
+Quaternion MatrixToQuaternion(const math::Float4x4& _matrix) {
+  float m[4][4];
+  ExtractMatrix(_matrix, m);
+
+  Quaternion q;
+  const float trace = m[0][0] + m[1][1] + m[2][2];
+  if (trace > 0.f) {
+    const float s = .5f / std::sqrt(trace + 1.f);
+    q.w = .25f / s;
+    q.x = (m[2][1] - m[1][2]) * s;
+    q.y = (m[0][2] - m[2][0]) * s;
+    q.z = (m[1][0] - m[0][1]) * s;
+  } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
+    const float s = 2.f * std::sqrt(1.f + m[0][0] - m[1][1] - m[2][2]);
+    q.w = (m[2][1] - m[1][2]) / s;
+    q.x = .25f * s;
+    q.y = (m[0][1] + m[1][0]) / s;
+    q.z = (m[0][2] + m[2][0]) / s;
+  } else if (m[1][1] > m[2][2]) {
+    const float s = 2.f * std::sqrt(1.f + m[1][1] - m[0][0] - m[2][2]);
+    q.w = (m[0][2] - m[2][0]) / s;
+    q.x = (m[0][1] + m[1][0]) / s;
+    q.y = .25f * s;
+    q.z = (m[1][2] + m[2][1]) / s;
+  } else {
+    const float s = 2.f * std::sqrt(1.f + m[2][2] - m[0][0] - m[1][1]);
+    q.w = (m[1][0] - m[0][1]) / s;
+    q.x = (m[0][2] + m[2][0]) / s;
+    q.y = (m[1][2] + m[2][1]) / s;
+    q.z = .25f * s;
+  }
+
+  if (q.w != 0.f) {
+    if (q.w < 0.f) q = Scale(q, -1.f);
+  } else if (q.z != 0.f) {
+    if (q.z < 0.f) q = Scale(q, -1.f);
+  } else if (q.y != 0.f) {
+    if (q.y < 0.f) q = Scale(q, -1.f);
+  } else if (q.x < 0.f) {
+    q = Scale(q, -1.f);
+  }
+  return q;
+}
+
+// Builds q + 0.5 * t_quaternion * q, where t is the matrix translation.
+DualQuaternion MakeDualQuaternion(const math::Float4x4& _matrix,
+                                 const Quaternion& _q) {
+  float m[4][4];
+  ExtractMatrix(_matrix, m);
+  const float tx = m[0][3];
+  const float ty = m[1][3];
+  const float tz = m[2][3];
+
+  Quaternion d;
+  d.w = -.5f * (tx * _q.x + ty * _q.y + tz * _q.z);
+  d.x = .5f * (tx * _q.w + ty * _q.z - tz * _q.y);
+  d.y = .5f * (-tx * _q.z + ty * _q.w + tz * _q.x);
+  d.z = .5f * (tx * _q.y - ty * _q.x + tz * _q.w);
+  return {_q, d};
+}
+
+Vec3 RotateVector(const Quaternion& _q, const Vec3& _v) {
+  const Vec3 axis = {_q.x, _q.y, _q.z};
+  const Vec3 t = Scale(Cross(axis, _v), 2.f);
+  return Add(_v, Add(Scale(t, _q.w), Cross(axis, t)));
+}
+
+// Translation is 2 * dual * conjugate(real), keeping only its vector part.
+Vec3 DualTranslation(const Quaternion& _r, const Quaternion& _d) {
+  return {2.f * (_r.w * _d.x - _r.x * _d.w + _r.y * _d.z - _r.z * _d.y),
+          2.f * (_r.w * _d.y - _r.y * _d.w + _r.z * _d.x - _r.x * _d.z),
+          2.f * (_r.w * _d.z - _r.z * _d.w + _r.x * _d.y - _r.y * _d.x)};
+}
+
+const float* AdvanceBytes(const float* _p, size_t _stride) {
+  if (_p == nullptr) return nullptr;
+  return reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(_p) +
+                                        _stride);
+}
+
+float* AdvanceBytes(float* _p, size_t _stride) {
+  if (_p == nullptr) return nullptr;
+  return reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(_p) + _stride);
+}
+
+const uint16_t* AdvanceBytes(const uint16_t* _p, size_t _stride) {
+  if (_p == nullptr) return nullptr;
+  return reinterpret_cast<const uint16_t*>(
+      reinterpret_cast<uintptr_t>(_p) + _stride);
+}
+
+// Reads and validates every index and weight that the dual quaternion path may
+// consume. Matrix bounds are checked through indices here; rigidity is checked
+// per positive influence during vertex processing.
+bool ValidateDualQuaternionData(const SkinningJob& _job) {
+  const size_t palette_size = _job.joint_matrices.size();
+  const size_t inverse_transpose_size =
+      _job.joint_inverse_transpose_matrices.size();
+  const int influence_count = _job.influences_count;
+  const int explicit_weight_count = influence_count - 1;
+
+  const uint16_t* indices = _job.joint_indices.begin();
+  const float* weights =
+      explicit_weight_count > 0 ? _job.joint_weights.begin() : nullptr;
+
+  for (int vertex = 0; vertex < _job.vertex_count; ++vertex) {
+    for (int influence = 0; influence < influence_count; ++influence) {
+      if (indices[influence] >= palette_size) {
+        return false;
+      }
+      if (inverse_transpose_size != 0 &&
+          indices[influence] >= inverse_transpose_size) {
+        return false;
+      }
+    }
+
+    float weight_sum = 0.f;
+    for (int influence = 0; influence < explicit_weight_count; ++influence) {
+      const float weight = weights[influence];
+      if (!std::isfinite(weight) || weight < 0.f || weight > 1.f) {
+        return false;
+      }
+      weight_sum += weight;
+    }
+
+    if (!std::isfinite(weight_sum) || weight_sum > 1.f) {
+      return false;
+    }
+
+    const float last_weight = 1.f - weight_sum;
+    if (!std::isfinite(last_weight) || last_weight < 0.f ||
+        last_weight > 1.f) {
+      return false;
+    }
+
+    indices = AdvanceBytes(indices, _job.joint_indices_stride);
+    weights = AdvanceBytes(weights, _job.joint_weights_stride);
+  }
+  return true;
+}
+
+float InfluenceWeight(const float* _weights, int _influence,
+                      int _influence_count, float _last_weight) {
+  if (_influence == _influence_count - 1) {
+    return _last_weight;
+  }
+  return _weights[_influence];
+}
+
+float RecoveredLastWeight(const float* _weights, int _influence_count) {
+  float sum = 0.f;
+  for (int i = 0; i < _influence_count - 1; ++i) {
+    sum += _weights[i];
+  }
+  return 1.f - sum;
+}
+
+Vec3 ReadVec3(const float* _p) { return {_p[0], _p[1], _p[2]}; }
+
+void WriteVec3(float* _p, const Vec3& _v) {
+  _p[0] = _v.x;
+  _p[1] = _v.y;
+  _p[2] = _v.z;
+}
+
+using LinearSkinningFunction = void (*)(const SkinningJob&);
+
+// Invokes the exact legacy linear skinning variant for one vertex. The job is
+// a stack-local view onto the vertex currently being processed.
+void InvokeLinearVertex(
+    const SkinningJob& _job, LinearSkinningFunction _function,
+    const uint16_t* _indices, const float* _weights,
+    const float* _in_positions, float* _out_positions,
+    const float* _in_normals, float* _out_normals,
+    const float* _in_tangents, float* _out_tangents) {
+  SkinningJob one = _job;
+  one.vertex_count = 1;
+  one.skinning_mode = SkinningJob::kLinear;
+  one.joint_indices =
+      span<const uint16_t>(_indices, _job.influences_count);
+  if (_job.influences_count > 1) {
+    one.joint_weights =
+        span<const float>(_weights, _job.influences_count - 1);
+  } else {
+    one.joint_weights = {};
+  }
+
+  one.in_positions = span<const float>(_in_positions, 3);
+  one.out_positions = span<float>(_out_positions, 3);
+  if (_in_normals != nullptr) {
+    one.in_normals = span<const float>(_in_normals, 3);
+    one.out_normals = span<float>(_out_normals, 3);
+  } else {
+    one.in_normals = {};
+    one.out_normals = {};
+  }
+  if (_in_tangents != nullptr) {
+    one.in_tangents = span<const float>(_in_tangents, 3);
+    one.out_tangents = span<float>(_out_tangents, 3);
+  } else {
+    one.in_tangents = {};
+    one.out_tangents = {};
+  }
+
+  _function(one);
+}
+
+bool RunDualQuaternion(const SkinningJob& _job,
+                       LinearSkinningFunction _linear_function) {
+  if (!ValidateDualQuaternionData(_job)) {
+    return false;
+  }
+
+  const int count = _job.influences_count;
+  const uint16_t* indices = _job.joint_indices.begin();
+  const float* weights = count > 1 ? _job.joint_weights.begin() : nullptr;
+
+  const float* in_positions = _job.in_positions.begin();
+  float* out_positions = _job.out_positions.begin();
+  const float* in_normals =
+      _job.in_normals.empty() ? nullptr : _job.in_normals.begin();
+  float* out_normals =
+      _job.out_normals.empty() ? nullptr : _job.out_normals.begin();
+  const float* in_tangents =
+      _job.in_tangents.empty() ? nullptr : _job.in_tangents.begin();
+  float* out_tangents =
+      _job.out_tangents.empty() ? nullptr : _job.out_tangents.begin();
+
+  for (int vertex = 0; vertex < _job.vertex_count; ++vertex) {
+    const float last_weight = RecoveredLastWeight(weights, count);
+
+    int reference = -1;
+    uint16_t reference_index = 0;
+    float reference_weight = -1.f;
+    bool rigid = true;
+
+    for (int i = 0; i < count; ++i) {
+      const float w = InfluenceWeight(weights, i, count, last_weight);
+      if (!(w > 0.f)) {
+        continue;
+      }
+
+      const uint16_t index = indices[i];
+      if (w > reference_weight ||
+          (w == reference_weight && index < reference_index)) {
+        reference_weight = w;
+        reference_index = index;
+        reference = i;
+      }
+
+      if (!IsRigidMatrix(_job.joint_matrices[index])) {
+        rigid = false;
+      }
+    }
+
+    if (!rigid || reference < 0) {
+      InvokeLinearVertex(_job, _linear_function, indices, weights,
+                         in_positions, out_positions, in_normals, out_normals,
+                         in_tangents, out_tangents);
+    } else {
+      const Quaternion reference_q =
+          MatrixToQuaternion(_job.joint_matrices[reference_index]);
+
+      Quaternion real = {0.f, 0.f, 0.f, 0.f};
+      Quaternion dual = {0.f, 0.f, 0.f, 0.f};
+
+      for (int i = 0; i < count; ++i) {
+        const float w = InfluenceWeight(weights, i, count, last_weight);
+        if (!(w > 0.f)) {
+          continue;
+        }
+
+        const uint16_t index = indices[i];
+        Quaternion q = MatrixToQuaternion(_job.joint_matrices[index]);
+
+        // Put every rotation in the reference rotation's hemisphere. Dot
+        // product exactly equal to zero intentionally causes no flip.
+        if (Dot(q, reference_q) < 0.f) {
+          q = Scale(q, -1.f);
+        }
+
+        const DualQuaternion dq =
+            MakeDualQuaternion(_job.joint_matrices[index], q);
+        real.x += w * dq.real.x;
+        real.y += w * dq.real.y;
+        real.z += w * dq.real.z;
+        real.w += w * dq.real.w;
+        dual.x += w * dq.dual.x;
+        dual.y += w * dq.dual.y;
+        dual.z += w * dq.dual.z;
+        dual.w += w * dq.dual.w;
+      }
+
+      const float real_length = std::sqrt(Dot(real, real));
+      if (real_length < kMinimumRealLength) {
+        InvokeLinearVertex(_job, _linear_function, indices, weights,
+                           in_positions, out_positions, in_normals,
+                           out_normals, in_tangents, out_tangents);
+      } else {
+        const float inverse_length = 1.f / real_length;
+        real = Scale(real, inverse_length);
+        dual = Scale(dual, inverse_length);
+
+        // Remove the remaining real/dual dot product to obtain a unit dual
+        // quaternion.
+        dual = Add(dual, Scale(real, -Dot(real, dual)));
+
+        const Vec3 translation = DualTranslation(real, dual);
+
+        const Vec3 p = ReadVec3(in_positions);
+        const Vec3 rotated_p = RotateVector(real, p);
+        WriteVec3(out_positions, Add(rotated_p, translation));
+
+        if (in_normals != nullptr) {
+          WriteVec3(out_normals, RotateVector(real, ReadVec3(in_normals)));
+        }
+        if (in_tangents != nullptr) {
+          WriteVec3(out_tangents, RotateVector(real, ReadVec3(in_tangents)));
+        }
+      }
+    }
+
+    indices = AdvanceBytes(indices, _job.joint_indices_stride);
+    weights = AdvanceBytes(weights, _job.joint_weights_stride);
+    in_positions = AdvanceBytes(in_positions, _job.in_positions_stride);
+    out_positions = AdvanceBytes(out_positions, _job.out_positions_stride);
+    in_normals = AdvanceBytes(in_normals, _job.in_normals_stride);
+    out_normals = AdvanceBytes(out_normals, _job.out_normals_stride);
+    in_tangents = AdvanceBytes(in_tangents, _job.in_tangents_stride);
+    out_tangents = AdvanceBytes(out_tangents, _job.out_tangents_stride);
+  }
+
+  return true;
+}
+
+}  // namespace
+
 SkinningJob::SkinningJob()
     : vertex_count(0),
+      skinning_mode(kLinear),
       influences_count(0),
       joint_indices_stride(0),
       joint_weights_stride(0),
@@ -480,7 +927,8 @@ bool SkinningJob::Run() const {
     return true;
   }
 
-  // Find skinning function index.
+  // Find skinning function index. The same selected linear variant is reused
+  // by dual quaternion vertices that need the historical fallback path.
   const size_t it = !joint_inverse_transpose_matrices.empty();
   assert(it < OZZ_ARRAY_SIZE(kSkinningFct));
   const size_t inf =
@@ -490,9 +938,14 @@ bool SkinningJob::Run() const {
   assert(inf < OZZ_ARRAY_SIZE(kSkinningFct[0]));
   const size_t fct = !in_normals.empty() + !in_tangents.empty();
   assert(fct < OZZ_ARRAY_SIZE(kSkinningFct[0][0]));
+  const SkiningFct skinning_function = kSkinningFct[it][inf][fct];
+
+  if (skinning_mode == kDualQuaternion) {
+    return RunDualQuaternion(*this, skinning_function);
+  }
 
   // Calls skinning function. Cannot fail because job is valid.
-  kSkinningFct[it][inf][fct](*this);
+  skinning_function(*this);
 
   return true;
 }
