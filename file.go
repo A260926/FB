@@ -36,6 +36,18 @@ type File struct {
 	Symtab   *Symtab
 	Dysymtab *Dysymtab
 
+	// pendingDysymtab holds an LC_DYSYMTAB whose LC_SYMTAB has not been seen
+	// yet. The module/TOC/reference relationships need both commands, so they
+	// are resolved after the full command scan.
+	pendingDysymtab    *Dysymtab
+	pendingDysymtabOff int64
+	// symtabNameAt resolves LC_SYMTAB string table offsets. It is retained
+	// alongside symtabStrsize so LC_DYSYMTAB module names (which may not be
+	// referenced by any nlist) can be read after the command scan, applying the
+	// same Strsize bounds as ordinary symbol names.
+	symtabNameAt  func(uint64) string
+	symtabStrsize uint64
+
 	vma         *types.VMAddrConverter
 	dcf         *fixupchains.DyldChainedFixups
 	exp         []trie.TrieExport
@@ -401,6 +413,11 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 				}
 				nameAt = func(off uint64) string { return cstring(strtab[off:]) }
 			}
+			// Keep the (bounds-checked) string table lookup for the
+			// LC_DYSYMTAB module names, which are resolved once both commands
+			// have been collected.
+			f.symtabNameAt = nameAt
+			f.symtabStrsize = uint64(hdr.Strsize)
 			var symsz int
 			if f.Magic == types.Magic64 {
 				symsz = 16
@@ -595,16 +612,13 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			if err := binary.Read(b, bo, &hdr); err != nil {
 				return nil, fmt.Errorf("failed to read LC_DYSYMTAB: %v", err)
 			}
-			if f.Symtab == nil {
-				return nil, &FormatError{offset, "dynamic symbol table seen before any ordinary symbol table", nil}
-			} else if hdr.Iundefsym > uint32(len(f.Symtab.Syms)) {
-				return nil, &FormatError{offset, fmt.Sprintf(
-					"undefined symbols index in dynamic symbol table command is greater than symbol table length (%d > %d)",
-					hdr.Iundefsym, len(f.Symtab.Syms)), nil}
-			} else if hdr.Iundefsym+hdr.Nundefsym > uint32(len(f.Symtab.Syms)) {
-				return nil, &FormatError{offset, fmt.Sprintf(
-					"number of undefined symbols after index in dynamic symbol table command is greater than symbol table length (%d > %d)",
-					hdr.Iundefsym+hdr.Nundefsym, len(f.Symtab.Syms)), nil}
+			// The undefined-symbol window is checked against the ordinary
+			// symbol table. When LC_DYSYMTAB precedes LC_SYMTAB the check is
+			// deferred to the end of the command scan rather than rejected.
+			if f.Symtab != nil {
+				if err := validateUndefWindow(offset, hdr, len(f.Symtab.Syms)); err != nil {
+					return nil, err
+				}
 			}
 			dat, err := saferio.ReadDataAt(f.cr, uint64(hdr.Nindirectsyms)*4, int64(hdr.Indirectsymoff))
 			if err != nil {
@@ -614,9 +628,6 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			if err := binary.Read(bytes.NewReader(dat), bo, x); err != nil {
 				return nil, fmt.Errorf("failed to read Nindirectsyms: %v", err)
 			}
-			// TODO: parse DylibTableOfContents if Ntoc > 0
-			// TODO: parse DylibModule if Nmodtab > 0
-			// TODO: parse DylibReference if Nextrefsyms > 0
 			// TODO: parse RelocInfo if Nlocrel > 0
 			st := new(Dysymtab)
 			st.LoadBytes = cmddat
@@ -626,6 +637,16 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 			st.IndirectSyms = x
 			f.Loads = append(f.Loads, st)
 			f.Dysymtab = st
+			if f.Symtab == nil {
+				// Resolve the module/TOC/reference tables (and run the
+				// deferred window checks) once LC_SYMTAB has been seen.
+				f.pendingDysymtab = st
+				f.pendingDysymtabOff = offset
+			} else {
+				if err := f.parseDylibTables(st); err != nil {
+					return nil, err
+				}
+			}
 		case types.LC_LOAD_DYLIB:
 			var hdr types.DylibCmd
 			b := bytes.NewReader(cmddat)
@@ -1463,7 +1484,40 @@ func NewFile(r io.ReaderAt, config ...FileConfig) (*File, error) {
 		}
 	}
 
+	// Resolve the dylib module/TOC/reference relationships once both load
+	// commands have been collected, so LC_SYMTAB and LC_DYSYMTAB may appear in
+	// either order. A file without LC_DYSYMTAB keeps the ordinary symbol path
+	// unchanged.
+	if f.pendingDysymtab != nil {
+		if f.Symtab == nil {
+			return nil, &FormatError{f.pendingDysymtabOff, "dynamic symbol table seen without any ordinary symbol table", nil}
+		}
+		if err := validateUndefWindow(f.pendingDysymtabOff, f.pendingDysymtab.DysymtabCmd, len(f.Symtab.Syms)); err != nil {
+			return nil, err
+		}
+		if err := f.parseDylibTables(f.pendingDysymtab); err != nil {
+			return nil, err
+		}
+	}
+
 	return f, nil
+}
+
+// validateUndefWindow preserves the global undefined-symbol window checks for
+// every command order: the Iundefsym/Nundefsym window must lie inside the
+// ordinary symbol table parsed from LC_SYMTAB.
+func validateUndefWindow(offset int64, hdr types.DysymtabCmd, nsyms int) error {
+	if hdr.Iundefsym > uint32(nsyms) {
+		return &FormatError{offset, fmt.Sprintf(
+			"undefined symbols index in dynamic symbol table command is greater than symbol table length (%d > %d)",
+			hdr.Iundefsym, nsyms), nil}
+	}
+	if hdr.Iundefsym+hdr.Nundefsym > uint32(nsyms) {
+		return &FormatError{offset, fmt.Sprintf(
+			"number of undefined symbols after index in dynamic symbol table command is greater than symbol table length (%d > %d)",
+			hdr.Iundefsym+hdr.Nundefsym, nsyms), nil}
+	}
+	return nil
 }
 
 // parseSymtab decodes the nlist entries in symdat. nameAt returns the name at

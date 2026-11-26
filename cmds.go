@@ -867,6 +867,53 @@ type Dysymtab struct {
 	LoadBytes
 	types.DysymtabCmd
 	IndirectSyms []uint32 // indices into Symtab.Syms
+
+	// TOC is the table of contents, in file order (rows are not deduplicated).
+	// Each DylibTableOfContents.SymbolIndex is an absolute LC_SYMTAB nlist index
+	// and ModuleIndex is a zero-based index into ModuleTable.
+	TOC []types.DylibTableOfContents
+	// ModuleTable preserves the physical module table order. Every Symbol
+	// pointer reachable from its entries addresses an element of
+	// File.Symtab.Syms directly.
+	ModuleTable []DylibModule
+	// ExternalRefs is the referenced symbol table, in file order. Each entry's
+	// SymbolIndex is an absolute LC_SYMTAB nlist index; entries are not
+	// deduplicated.
+	ExternalRefs []DylibExternalReference
+}
+
+// DylibExternalReference is one entry of the LC_DYSYMTAB referenced symbol
+// table. Raw is the 32-bit word as read in file byte order. SymbolIndex is the
+// 24-bit nlist index and Flags the 8-bit reference flags, both decoded
+// according to the file byte order (little-endian: index in the low 24 bits;
+// big-endian: index in the high 24 bits). Symbol addresses the corresponding
+// File.Symtab.Syms element.
+type DylibExternalReference struct {
+	Raw         uint32
+	SymbolIndex uint32
+	Flags       uint8
+	Symbol      *Symbol
+}
+
+// DylibModule is one module table entry with the relationships NewFile resolves
+// for it. Index is the entry's zero-based position in the physical module
+// table. Name is the NUL-terminated LC_SYMTAB string table string named by
+// Header.ModuleName, even when no nlist references that name. Header is the
+// widened representation shared by 32-bit and 64-bit images.
+//
+// ExternalDefinitions and LocalSymbols are absolute windows into the global
+// LC_SYMTAB nlist array (File.Symtab.Syms); References is a window into
+// Dysymtab.ExternalRefs; TOCSymbols is the subsequence of original TOC rows
+// whose ModuleIndex selects this module, in original TOC order. Repeated rows,
+// references and same-named modules or symbols are retained, never merged.
+type DylibModule struct {
+	Index               uint32
+	Name                string
+	Header              types.DylibModule64
+	ExternalDefinitions []*Symbol
+	LocalSymbols        []*Symbol
+	References          []DylibExternalReference
+	TOCSymbols          []*Symbol
 }
 
 func (d *Dysymtab) LoadSize() uint32 {
