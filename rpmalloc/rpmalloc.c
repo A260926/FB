@@ -190,6 +190,17 @@ madvise(caddr_t, size_t, int);
 #if ENABLE_LEAK_DETECTION && !ENABLE_STATISTICS
 #error ENABLE_LEAK_DETECTION requires ENABLE_STATISTICS
 #endif
+#ifndef ENABLE_FREELIST_GUARD
+//! Enable shadow validation of the free list link words stored in user blocks. Every initialized block that
+//  can be linked gets a trusted shadow record in the span metadata: each production write of the block next
+//  pointer is mirrored in the record, and each consumer validates the in-block word against the record before
+//  following it. A mismatch (a write into a still mapped, freed block) reports FREELIST_CORRUPTION through the
+//  memory interface error callback and terminates the process unconditionally, whether or not a callback is
+//  set. Defaults to 0, the guard is compiled out entirely and the allocator behaves exactly as without it.
+//  This only guards the link words of free user blocks, not arbitrary metadata: control structures, pages and
+//  the shadow records themselves are part of the trusted computing base of the threat model.
+#define ENABLE_FREELIST_GUARD 0
+#endif
 
 ////////////
 ///
@@ -751,6 +762,32 @@ _Static_assert(((SMALL_PAGE_SIZE >> SPAN_SLOT_SHIFT) == 1) &&
                "Slot count per page does not match page_set_key");
 _Static_assert(sizeof(heap_t) <= 4096, "Invalid heap size");
 _Static_assert(offsetof(heap_t, local_free) == HEAP_ALIGNMENT, "Remotely accessed heap fields must fill one line");
+
+#if ENABLE_FREELIST_GUARD
+//! Free list guard helpers are defined in the block interface section once the span metadata layout is known,
+//  but the page and heap free list machinery below already uses them
+static int
+span_guard_allocate(span_t* span);
+static void
+span_guard_release(span_t* span);
+static int
+span_guard_commit_page(page_t* page);
+static void
+span_guard_clear_page(page_t* page);
+static inline void
+guard_set_next(block_t* block, block_t* next);
+static inline block_t*
+guard_check_next(block_t* block);
+#else
+//! Compiled out: the guard calls collapse to the plain link word access with no overhead, keeping the default
+//  build behaviour identical to a build without the guard
+#define span_guard_allocate(span) (0)
+#define span_guard_release(span) ((void)0)
+#define span_guard_commit_page(page) (0)
+#define span_guard_clear_page(page) ((void)0)
+#define guard_set_next(block, next) ((void)0)
+#define guard_check_next(block) ((block)->next)
+#endif
 
 ////////////
 ///
@@ -1558,7 +1595,8 @@ page_block_realign(page_t* page, block_t* block) {
 static block_t*
 page_get_local_free_block(page_t* page) {
 	block_t* block = page->local_free;
-	page->local_free = block->next;
+	// Validate the link word against the shadow record before the new head is followed
+	page->local_free = guard_check_next(block);
 	++page->block_used;
 	return block;
 }
@@ -1582,6 +1620,9 @@ page_decommit_memory_pages(page_t* page) {
 		page->heap->stats.committed_size -= page_size;
 #endif
 	page->is_decommitted = 1;
+	// The block layout of this page is gone with its mapping, drop its shadow records so a recommit and a fresh
+	// page initialization cannot match the expectations of the previous layout
+	span_guard_clear_page(page);
 }
 
 static inline int
@@ -1709,6 +1750,7 @@ page_available_to_full(page_t* page) {
 static inline void
 page_put_local_free_block(page_t* page, block_t* block) {
 	block->next = page->local_free;
+	guard_set_next(block, page->local_free);
 	page->local_free = block;
 	_rpmalloc_stat_add_free(page->heap, page->size_class, 1);
 	if (UNEXPECTED(--page->block_used == 0)) {
@@ -1724,6 +1766,7 @@ page_put_local_free_block(page_t* page, block_t* block) {
 static void
 page_put_thread_free_run(page_t* page, block_t* first, block_t* last, uint32_t count) {
 	last->next = page->local_free;
+	guard_set_next(last, page->local_free);
 	page->local_free = first;
 	page->remote_fed = 1;
 	_rpmalloc_stat_add_free(page->heap, page->size_class, count);
@@ -1746,6 +1789,11 @@ page_adopt_thread_free_block_list(page_t* page) {
 		thread_free = atomic_exchange_explicit(&page->thread_free, 0, memory_order_acquire);
 		page->remote_fed = 1;
 		uint32_t thread_free_count = page_block_from_thread_free_list(page, thread_free, &page->local_free);
+		// Validate every link word of the claimed chain against its shadow record before any consumer can follow
+		// it, using only the trusted page header already in hand - no block_get_page walk into a forged target
+		block_t* walk = page->local_free;
+		for (uint32_t iblock = 0; iblock < thread_free_count; ++iblock)
+			walk = guard_check_next(walk);
 		rpmalloc_assert(thread_free_count <= page->block_used, "Page thread free list count internal failure");
 		page->block_used -= thread_free_count;
 		_rpmalloc_stat_add_free(page->heap, page->size_class, thread_free_count);
@@ -1758,6 +1806,9 @@ heap_put_thread_free_block_retry(atomic_uintptr_t* list, block_t* block, uintptr
 	uint32_t spin = 0;
 	do {
 		block->next = (void*)prev_head;
+		// Every retry rewrites the link word, keep the shadow record at the same expected value so a contended
+		// CAS retry can never be reported as corruption
+		guard_set_next(block, (block_t*)prev_head);
 		wait_spin(&spin);
 	} while (!atomic_compare_exchange_weak_explicit(list, &prev_head, (uintptr_t)block, memory_order_release,
 	                                                memory_order_relaxed));
@@ -1770,6 +1821,7 @@ heap_put_thread_free_block(page_t* page, block_t* block) {
 	atomic_uintptr_t* list = &page->heap->thread_free[page->page_type];
 	uintptr_t prev_head = atomic_load_explicit(list, memory_order_relaxed);
 	block->next = (void*)prev_head;
+	guard_set_next(block, (block_t*)prev_head);
 	if (UNEXPECTED(!atomic_compare_exchange_weak_explicit(list, &prev_head, (uintptr_t)block, memory_order_release,
 	                                                      memory_order_relaxed)))
 		heap_put_thread_free_block_retry(list, block, prev_head);
@@ -1788,6 +1840,7 @@ page_put_thread_free_block_retry(page_t* page, block_t* block, uint32_t block_of
 			return;
 		}
 		uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &block->next) + 1;
+		guard_set_next(block, block->next);
 		thread_free = page_block_to_thread_free_list(page, block_offset, list_size);
 		wait_spin(&spin);
 	} while (!atomic_compare_exchange_weak_explicit(&page->thread_free, &prev_thread_free, thread_free,
@@ -1808,6 +1861,7 @@ page_put_thread_free_block(page_t* page, block_t* block) {
 	uint32_t block_offset = page_block_offset(page, block);
 	rpmalloc_assert(!(block_offset % page->block_size), "Block pointer is not aligned to start of block");
 	uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, &block->next) + 1;
+	guard_set_next(block, block->next);
 	uint64_t thread_free = page_block_to_thread_free_list(page, block_offset, list_size);
 	if (UNEXPECTED(!atomic_compare_exchange_weak_explicit(&page->thread_free, &prev_thread_free, thread_free,
 	                                                      memory_order_release, memory_order_relaxed)))
@@ -1823,6 +1877,9 @@ heap_put_thread_free_chain(page_t* page, block_t* head, block_t** tail_link) {
 	uint32_t spin = 0;
 	while (1) {
 		*tail_link = (void*)prev_head;
+		// tail_link addresses the next field, which is the first field of its block, so the block is the link
+		// address itself
+		guard_set_next((block_t*)tail_link, (block_t*)prev_head);
 		if (atomic_compare_exchange_weak_explicit(list, &prev_head, (uintptr_t)head, memory_order_release,
 		                                          memory_order_relaxed))
 			return;
@@ -1845,6 +1902,7 @@ page_put_thread_free_chain(page_t* page, block_t* head, block_t** tail_link, uin
 			return;
 		}
 		uint32_t list_size = page_block_from_thread_free_list(page, prev_thread_free, tail_link) + count;
+		guard_set_next((block_t*)tail_link, *(block_t**)tail_link);
 		uint64_t thread_free = page_block_to_thread_free_list(page, head_offset, list_size);
 		if (atomic_compare_exchange_weak_explicit(&page->thread_free, &prev_thread_free, thread_free,
 		                                          memory_order_release, memory_order_relaxed))
@@ -1988,12 +2046,16 @@ page_initialize_blocks(page_t* page) {
 		uint32_t max_list_count = page->block_count - page->block_initialized;
 		while (((void*)free_block < memory_page_next) && (list_count < max_list_count)) {
 			last_block = free_block;
-			free_block->next = pointer_offset(free_block, page->block_size);
-			free_block = free_block->next;
+			block_t* next_block = pointer_offset(free_block, page->block_size);
+			free_block->next = next_block;
+			// Freshly initialized blocks join the page local free list, mirror each link in its shadow record
+			guard_set_next(free_block, next_block);
+			free_block = next_block;
 			++list_count;
 		}
 		if (list_count) {
 			last_block->next = 0;
+			guard_set_next(last_block, 0);
 			page->local_free = first_block;
 			page->block_initialized += list_count;
 		}
@@ -2607,6 +2669,9 @@ span_deallocate_block(page_t* page, void* block) {
 			rpmalloc_assert(!page->heap_first_class, "Chained free into a page of a first class heap");
 #endif
 			*thread->chain_link = block;
+			// chain_link addresses the next field of the previous chained block, keep its shadow record at the
+			// same value before the chain is later published as a batch free
+			guard_set_next((block_t*)thread->chain_link, (block_t*)block);
 			thread->chain_link = &((block_t*)block)->next;
 			thread->chain_count = ++chain_count;
 #if THREAD_FREE_CHAIN_LIMIT_BYTES
@@ -2637,6 +2702,180 @@ static inline span_t*
 block_get_span(block_t* block) {
 	return (span_t*)((uintptr_t)block & SPAN_MASK);
 }
+
+#if ENABLE_FREELIST_GUARD
+
+//! Every block starts at a multiple of SMALL_GRANULARITY, so the block address minus the span start shifted by
+//  the granularity is a unique index of the block within its span, independent of the page size class the page is
+//  currently initialized for. The free list guard keeps one trusted shadow record per possible block start, in a
+//  separately mapped table outside the user pages. A record stores the full width absolute expected next pointer,
+//  a null pointer is stored as zero. Absolute values are required because the heap level full page remote list can
+//  link blocks of different spans of the same heap, so a span relative offset would truncate a next pointer that
+//  leaves the span. Only the link word of a block is shadowed, never the user payload, and the user block layout,
+//  usable size and alignment are unchanged.
+#define GUARD_GRANULARITY SMALL_GRANULARITY
+#define GUARD_RECORD_COUNT (SPAN_SIZE / GUARD_GRANULARITY)
+#define GUARD_TABLE_SIZE (GUARD_RECORD_COUNT * sizeof(uintptr_t))
+
+//! Guard state of a span. The table only holds trusted expectations while a span is active: span mapping can
+//  fail after the mapping is established, so a span starts busy and is activated once its header is fully set up
+//  and its table is mapped. A span going away is marked busy and its table unmapped before the span mapping is
+//  released, and the records of a decommitted page are torn down with the page so a later reinitialization never
+//  matches the stale block layout. Huge block spans never carry free block chains and get no table.
+#define GUARD_SPAN_BUSY 0
+#define GUARD_SPAN_ACTIVE 1
+
+typedef struct span_guard_t {
+	atomic_uint state;
+	uintptr_t* table;
+	size_t table_size;
+} span_guard_t;
+
+// The guard structure overlays the page structure of page index 0 of the span, which is never a real page:
+// small spans start at SPAN_SMALL_FIRST_PAGE and every other span type at SPAN_FIRST_PAGE, both at least 1. It
+// cannot live in the span header itself, whose trailing bytes hold a live slot table entry of a small span. The
+// region is part of the span metadata committed with the first metadata chunk, and huge block spans never touch
+// it since their blocks are never linked into a free block chain.
+_Static_assert(SPAN_SMALL_FIRST_PAGE >= 1 && SPAN_FIRST_PAGE == 1,
+               "Page index 0 must be unused metadata so the span guard can overlay its page structure");
+_Static_assert(sizeof(span_guard_t) <= PAGE_HEADER_SIZE,
+               "Span guard must fit in the unused page 0 structure of the span metadata");
+
+static inline span_guard_t*
+span_guard(span_t* span) {
+	return (span_guard_t*)pointer_offset(span, SPAN_PAGE_ARRAY_OFFSET);
+}
+
+static inline uint32_t
+guard_block_index(span_t* span, const void* block) {
+	return (uint32_t)(((uintptr_t)block - (uintptr_t)span) / GUARD_GRANULARITY);
+}
+
+//! Report a corrupted free list link word and terminate unconditionally. The check is never an assert: it stays
+//  effective with ENABLE_ASSERTS off, and a well behaved error callback returning must not let execution continue
+//  into the corrupted chain. abort() raises SIGABRT, so the failure ends in the expected signal instead of a
+//  later SIGSEGV from following the forged pointer.
+static NOINLINE void
+guard_corruption_abort(const char* detail) {
+	rpmalloc_interface_t* itf = global_memory_interface;
+	if (itf && itf->error_callback)
+		itf->error_callback(detail);
+	abort();
+}
+
+//! Allocate and attach the shadow table of a span, reserving the address space through the same memory
+//  interface as the span itself without committing it. No rpmalloc entry point or system malloc is used, so the
+//  storage cannot recurse into the allocator. A failure leaves the span without a table and reports failure,
+//  which makes the span mapping fail the original allocation, so the allocator never runs a chain that is only
+//  half protected. The record range of each page is committed and zeroed when the page is initialized, see
+//  span_guard_commit_page, so backing storage only covers pages actually in use and is released with them.
+static int
+span_guard_allocate(span_t* span) {
+	span_guard_t* guard = span_guard(span);
+	atomic_store_explicit(&guard->state, GUARD_SPAN_BUSY, memory_order_relaxed);
+	size_t offset = 0;
+	size_t mapped_size = 0;
+	void* table = global_memory_interface->memory_map(GUARD_TABLE_SIZE, 0, &offset, &mapped_size);
+	if (!table)
+		return 1;
+	guard->table = (uintptr_t*)table;
+	guard->table_size = mapped_size;
+	// Publish the table before the active state. A span and its chains are themselves published through heap
+	//  pointers and release/acquire atomics, so record accessors only need relaxed loads once the span is active.
+	atomic_store_explicit(&guard->state, GUARD_SPAN_ACTIVE, memory_order_release);
+	return 0;
+}
+
+//! Byte range of the shadow records covering the blocks of one page, rounded out to the OS page size so the
+//  memory commit and decommit calls operate on whole pages
+static inline void
+span_guard_page_range(page_t* page, size_t* range_offset, size_t* range_size) {
+	span_t* span = page_get_span(page);
+	uint32_t first = guard_block_index(span, page->block_start);
+	uint32_t record_count = (uint32_t)(page_get_size(page) / GUARD_GRANULARITY);
+	size_t begin = (size_t)first * sizeof(uintptr_t);
+	size_t end = begin + ((size_t)record_count * sizeof(uintptr_t));
+	size_t page_mask = os_page_size - 1;
+	begin &= ~page_mask;
+	end = (end + page_mask) & ~page_mask;
+	*range_offset = begin;
+	*range_size = end - begin;
+}
+
+//! Commit and clear the shadow records of a page when it is (re)initialized for a size class. A page starts a
+//  fresh life with no linked blocks, so the records of its previous layout must not survive even on platforms
+//  whose decommit keeps the page content until the memory is reclaimed. A commit failure fails the page adoption.
+static inline int
+span_guard_commit_page(page_t* page) {
+	span_guard_t* guard = span_guard(page_get_span(page));
+	if (atomic_load_explicit(&guard->state, memory_order_relaxed) != GUARD_SPAN_ACTIVE)
+		return 0;
+	size_t range_offset = 0;
+	size_t range_size = 0;
+	span_guard_page_range(page, &range_offset, &range_size);
+	void* range = pointer_offset(guard->table, range_offset);
+	if (global_memory_interface->memory_commit(range, range_size) != 0)
+		return 1;
+	memset(range, 0, range_size);
+	return 0;
+}
+
+//! Tear down and unmap the shadow table. Marked busy first so no record access touches the table once it is
+//  released. The trusted metadata is not part of the corruption threat model; span teardown also never runs while
+//  another thread can walk a chain of the span, since a free page has no blocks outstanding and a heap is only
+//  unmapped at finalize after every thread has released it.
+static void
+span_guard_release(span_t* span) {
+	span_guard_t* guard = span_guard(span);
+	if (atomic_exchange_explicit(&guard->state, GUARD_SPAN_BUSY, memory_order_acq_rel) == GUARD_SPAN_ACTIVE) {
+		uintptr_t* table = guard->table;
+		size_t table_size = guard->table_size;
+		guard->table = 0;
+		guard->table_size = 0;
+		if (table)
+			global_memory_interface->memory_unmap(table, 0, table_size);
+	}
+}
+
+//! Release the backing storage of the records of a page when its memory is decommitted, so a recommit and a
+//! fresh page initialization cannot match the expectations of the previous block layout. The span table itself
+//! is retained, and span_guard_commit_page zeroes the range when the page is used again.
+static inline void
+span_guard_clear_page(page_t* page) {
+	span_guard_t* guard = span_guard(page_get_span(page));
+	if (atomic_load_explicit(&guard->state, memory_order_relaxed) != GUARD_SPAN_ACTIVE)
+		return;
+	size_t range_offset = 0;
+	size_t range_size = 0;
+	span_guard_page_range(page, &range_offset, &range_size);
+	global_memory_interface->memory_decommit(pointer_offset(guard->table, range_offset), range_size);
+}
+
+//! Record the expected next pointer of a block, mirroring every production write of the in-block link word
+static inline void
+guard_set_next(block_t* block, block_t* next) {
+	span_t* span = block_get_span(block);
+	span_guard_t* guard = span_guard(span);
+	if (atomic_load_explicit(&guard->state, memory_order_relaxed) != GUARD_SPAN_ACTIVE)
+		return;
+	guard->table[guard_block_index(span, block)] = (uintptr_t)next;
+}
+
+//! Validate the in-block link word of a block against its shadow record before it is followed, and return the
+//  trusted expected pointer so consumers use the shadow value rather than the word being validated
+static inline block_t*
+guard_check_next(block_t* block) {
+	span_t* span = block_get_span(block);
+	span_guard_t* guard = span_guard(span);
+	if (atomic_load_explicit(&guard->state, memory_order_relaxed) != GUARD_SPAN_ACTIVE)
+		return block->next;
+	block_t* expected = (block_t*)guard->table[guard_block_index(span, block)];
+	if (UNEXPECTED(block->next != expected))
+		guard_corruption_abort("FREELIST_CORRUPTION free list link word does not match shadow record");
+	return expected;
+}
+
+#endif
 
 //! Deallocate a block, taking the fast path for a block in a page whose fast free key is the key of the owned
 //  heap. The caller owns that heap, it is the first class heap the block was allocated from, or the thread heap
@@ -2673,6 +2912,7 @@ block_deallocate_heap(block_t* block, heap_t* owned_heap) {
 	// no aligned blocks, all of which the key encodes by matching the owned heap
 	if (EXPECTED(key == page_key(owned_heap))) {
 		block->next = page->local_free;
+		guard_set_next(block, page->local_free);
 		page->local_free = block;
 		_rpmalloc_stat_add_free(page->heap, page->size_class, 1);
 		if (UNEXPECTED(--page->block_used == 0))
@@ -3075,15 +3315,22 @@ heap_make_free_page_available(heap_t* heap, uint32_t size_class, page_t* page) {
 #endif
 	page->heap = heap;
 	page_set_key(page, page_key(heap));
+	atomic_store_explicit(&page->thread_free, 0, memory_order_release);
+	if (page->is_decommitted != 0) {
+		if (page_commit_memory_pages(page) != 0)
+			return 1;
+	}
+	// Commit and clear the shadow records of the page before it is published, so every block the page
+	// initializes has a trusted zero record before it can be linked, including a page recycled for another size
+	// class without having been decommitted
+	if (span_guard_commit_page(page) != 0)
+		return 1;
 	page_t* head = heap->page_available[size_class];
 	page->next = head;
 	page->prev = head ? head->prev : page;
-	atomic_store_explicit(&page->thread_free, 0, memory_order_release);
 	if (head)
 		head->prev = page;
 	heap->page_available[size_class] = page;
-	if (page->is_decommitted != 0)
-		return page_commit_memory_pages(page);
 	return 0;
 }
 
@@ -3154,6 +3401,15 @@ heap_get_span(heap_t* heap, page_type_t page_type) {
 		// The first pages hold the span metadata
 		span->page_initialized = span_first_page(span);
 
+#if ENABLE_FREELIST_GUARD
+		// Map the trusted shadow table before the span is published to the heap. A failure here fails the whole
+		// span allocation rather than publishing a span whose free chains would run unguarded
+		if (span_guard_allocate(span) != 0) {
+			global_memory_interface->memory_unmap(span, offset, mapped_size);
+			return 0;
+		}
+#endif
+
 		heap->span_partial[page_type] = span;
 	}
 
@@ -3202,7 +3458,9 @@ heap_collect_thread_free(heap_t* heap) {
 		page_t* block_page = block ? block_get_page(block) : 0;
 		while (block) {
 			block_t* last = block;
-			block_t* next_block = block->next;
+			// Validate each link word against its shadow record before following it: the check runs before the
+			// block_get_page on the target, so a forged word cannot steer the walk to an arbitrary address
+			block_t* next_block = guard_check_next(block);
 			page_t* next_page = 0;
 			uint32_t count = 1;
 			while (next_block) {
@@ -3210,7 +3468,7 @@ heap_collect_thread_free(heap_t* heap) {
 				if (next_page != block_page)
 					break;
 				last = next_block;
-				next_block = next_block->next;
+				next_block = guard_check_next(next_block);
 				++count;
 			}
 			page_put_thread_free_run(block_page, block, last, count);
@@ -3298,7 +3556,8 @@ heap_pop_local_free(heap_t* heap, uint32_t size_class) {
 	block_t** free_list = heap->local_free + size_class;
 	block_t* block = *free_list;
 	if (EXPECTED(block != 0))
-		*free_list = block->next;
+		// Validate the link word before the new head is followed
+		*free_list = guard_check_next(block);
 	return block;
 }
 
@@ -3820,6 +4079,7 @@ heap_free_all(heap_t* heap) {
 		span_t* span = heap->span_partial[itype];
 		while (span) {
 			span_t* span_next = span->next;
+			span_guard_release(span);
 			global_memory_interface->memory_unmap(span, span->offset, span->mapped_size);
 			span = span_next;
 		}
@@ -3843,6 +4103,7 @@ heap_free_all(heap_t* heap) {
 				huge_cache_live_sub(span_huge_committed(span), (size_t)span->page_request * span->page_size);
 #endif
 			}
+			span_guard_release(span);
 			global_memory_interface->memory_unmap(span, span->offset, span->mapped_size);
 			span = span_next;
 		}
@@ -4434,7 +4695,7 @@ statistics_pending_deferred_blocks(void) {
 				block_t* block = (block_t*)atomic_load_explicit(&heap->thread_free[itype], memory_order_relaxed);
 				while (block) {
 					++deferred;
-					block = block->next;
+					block = guard_check_next(block);
 				}
 				if (heap->span_partial[itype])
 					deferred += span_deferred_block_count(heap->span_partial[itype]);
@@ -4590,7 +4851,7 @@ rpmalloc_thread_statistics(rpmalloc_thread_statistics_t* stats) {
 	for (uint32_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
 		size_t block_size = global_size_class[iclass].block_size;
 		size_t free_count = 0;
-		for (block_t* block = heap->local_free[iclass]; block; block = block->next)
+		for (block_t* block = heap->local_free[iclass]; block; block = guard_check_next(block))
 			++free_count;
 		for (page_t* page = heap->page_available[iclass]; page; page = page->next)
 			free_count += (size_t)(page->block_count - page->block_used);
@@ -4869,6 +5130,31 @@ rpmalloc_get_heap_for_ptr(void* ptr) {
 	return 0;
 }
 
+#endif
+
+#if ENABLE_FREELIST_GUARD && defined(RPMALLOC_GUARD_TEST_SEAMS)
+//! Test only observation seams, see rpmalloc_guard_test.h. These deliberately touch the in-block link word
+//! without updating the shadow record, which production code never does. They take the block the test itself
+//! arranged to be free and still mapped and do not validate arbitrary pointers.
+int
+rpmalloc_guard_is_enabled(void) {
+	return 1;
+}
+
+void*
+rpmalloc_guard_read_link(void* block) {
+	return ((block_t*)block)->next;
+}
+
+void
+rpmalloc_guard_corrupt_link(void* block, void* forged) {
+	((block_t*)block)->next = (block_t*)forged;
+}
+
+void
+rpmalloc_guard_copy_link(void* block, void* other) {
+	((block_t*)block)->next = ((block_t*)other)->next;
+}
 #endif
 
 #include "malloc.c"

@@ -241,3 +241,6 @@ __pycache__/
 
 # Init race test helper output (test/init-race.sh)
 /rpmalloc-init-race-*
+
+# Check script build output (checks/baseline.sh, checks/guard.sh)
+/build-checks/
