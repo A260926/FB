@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.7)
 project(renderer)
 
 set(SOURCE_FILES
+	ClusteredLighting.cpp
+	ClusteredLighting.h
 	Renderer.h
 	EdgeData.h
 	EdgeEquation.h
