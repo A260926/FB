@@ -80,6 +80,17 @@
 <label for="distancerange">Distance</label>
 <input id="distancerange" type="range" min="100" max="2000" step="1" onchange="camera.distance = this.value">
 
+<br>
+<label><input id="perspmode" type="checkbox" onchange="SetPerspectiveMode(this.checked)">
+<b>Perspective mode</b> (full 3D ray trace: look up/down, roll, real occlusion)</label>
+<br>
+<label for="pitchrange">Pitch</label>
+<input id="pitchrange" type="range" min="-1.57" max="1.57" step="0.01" value="0.45"
+       oninput="SetPerspectivePitch(this.value)">
+<label for="rollrange">Roll</label>
+<input id="rollrange" type="range" min="-3.1416" max="3.1416" step="0.01" value="0"
+       oninput="SetPerspectiveRoll(this.value)">
+
 <a href="https://github.com/s-macke/VoxelSpace">Github project page</a>
 
 </div>
@@ -88,6 +99,7 @@
     Your browser does not support the canvas element.
 </canvas>
 
+<script src="terrain-renderer.js"></script>
 <script>
 "use strict";
 
@@ -189,8 +201,17 @@ function UpdateCamera()
     }
 
     // Collision detection. Don't fly below the surface.
-    var mapoffset = ((Math.floor(camera.y) & (map.width-1)) << map.shift) + (Math.floor(camera.x) & (map.height-1))|0;
-    if ((map.altitude[mapoffset]+10) > camera.height) camera.height = map.altitude[mapoffset] + 10;
+    if (viewmode === "perspective" && stepmap !== null)
+    {
+        var pmx = ((Math.floor(camera.x) % stepmap.width) + stepmap.width) % stepmap.width;
+        var pmy = ((Math.floor(camera.y) % stepmap.height) + stepmap.height) % stepmap.height;
+        var pheight = stepmap.altitude[pmx + stepmap.width * pmy];
+        if ((pheight + 1.5) > camera.height) camera.height = pheight + 1.5;
+    } else
+    {
+        var mapoffset = ((Math.floor(camera.y) & (map.width-1)) << map.shift) + (Math.floor(camera.x) & (map.height-1))|0;
+        if ((map.altitude[mapoffset]+10) > camera.height) camera.height = map.altitude[mapoffset] + 10;
+    }
 
     time = current;
 
@@ -417,14 +438,172 @@ function Render()
 
 
 // ---------------------------------------------
+// Full perspective mode (terrain-renderer.js)
+//
+// Unlike the classic column renderer this traces a true 3D unit ray through
+// every pixel, so pitch, roll, corner rays and pillar/wall occlusion all
+// follow the camera. The classic Render() above is kept for comparison.
+
+var viewmode = "classic"; // "classic" | "perspective"
+
+var perspective =
+{
+    pitch:        0.45, // radians, right-hand positive about the right axis (down)
+    roll:         0.0,  // radians, right-hand positive about forward
+    fovY:         60 * Math.PI / 180,
+    near:         0.1,
+    far:          260,
+    renderwidth:  384   // internal ray width; nearest-neighbour upscale to canvas
+};
+
+var stepmap = null;
+
+// Encode an RGB triple as the same little-endian 0xAABBGGRR uint32 convention
+// used by map.color and the ImageData overlay.
+function EncodeColor(r, g, b)
+{
+    return (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
+}
+
+// Procedurally generated stepped terrain as plain numeric arrays. No image
+// files are required. The map is periodic like every VoxelSpace map.
+function BuildStepTerrain()
+{
+    var w = 48, h = 48;
+    var altitude = new Uint8Array(w * h);
+    var color    = new Uint32Array(w * h);
+    var bands =
+    [
+        EncodeColor( 40,  60, 120),
+        EncodeColor( 60,  90, 160),
+        EncodeColor( 70, 130, 120),
+        EncodeColor( 90, 160,  90),
+        EncodeColor(170, 170,  80),
+        EncodeColor(190, 130,  60),
+        EncodeColor(170,  80,  60)
+    ];
+
+    for (var y = 0; y < h; y++)
+    {
+        for (var x = 0; x < w; x++)
+        {
+            var i = x + w * y;
+            var bx = Math.floor(x / 4);
+            var by = Math.floor(y / 4);
+            var level = ((bx + by * 2) % 7);
+
+            // A clear staircase avenue climbing with +X through y 20..23.
+            if (y >= 20 && y <= 23)
+            {
+                level = Math.min(6, Math.floor(x / 3));
+            }
+
+            altitude[i] = level * 2;
+            color[i] = bands[level];
+        }
+    }
+
+    // One isolated tall pillar for strong side-wall and occlusion reading.
+    var px = 12, py = 32;
+    altitude[px + w * py] = 26;
+    color[px + w * py] = EncodeColor(235, 70, 70);
+
+    // A second slender pillar partly behind the first from the reset camera.
+    altitude[16 + w * 30] = 18;
+    color[16 + w * 30] = EncodeColor(235, 200, 80);
+
+    return { width: w, height: h, altitude: altitude, color: color };
+}
+
+function SetPerspectiveMode(on)
+{
+    viewmode = on ? "perspective" : "classic";
+    if (on)
+    {
+        if (stepmap === null) stepmap = BuildStepTerrain();
+        // Park the camera in front of the staircase avenue looking +X.
+        // Spec yaw forward is (sin yaw, -cos yaw); yaw = +90deg gives +X,
+        // which corresponds to camera.angle = -90deg under the old controls.
+        camera.x = 4.5;
+        camera.y = 21.5;
+        camera.height = 7.5;
+        camera.angle = -Math.PI / 2;
+        perspective.pitch = parseFloat(document.getElementById("pitchrange").value);
+        perspective.roll  = parseFloat(document.getElementById("rollrange").value);
+    }
+    time = new Date().getTime();
+    Draw();
+}
+
+function SetPerspectivePitch(v)
+{
+    perspective.pitch = parseFloat(v);
+    if (viewmode === "perspective") Draw();
+}
+
+function SetPerspectiveRoll(v)
+{
+    perspective.roll = parseFloat(v);
+    if (viewmode === "perspective") Draw();
+}
+
+function RenderPerspectiveFrame()
+{
+    if (stepmap === null) stepmap = BuildStepTerrain();
+
+    var screenwidth  = screendata.canvas.width | 0;
+    var screenheight = screendata.canvas.height | 0;
+
+    var rw = Math.max(2, Math.min(perspective.renderwidth, screenwidth));
+    var rh = Math.max(2, Math.round(rw * screenheight / screenwidth));
+
+    var pcamera =
+    {
+        position:    [camera.x, camera.y, camera.height],
+        yaw:         -camera.angle, // old positive angle turns left; spec yaw is RH+ about Z
+        pitch:       perspective.pitch,
+        roll:        perspective.roll,
+        fovY:        perspective.fovY,
+        near:        perspective.near,
+        far:         perspective.far,
+        background:  screendata.backgroundcolor
+    };
+
+    var frame = TerrainRenderer.renderPerspective(stepmap, pcamera, rw, rh);
+
+    // Nearest-neighbour upscale of the small ray buffer into the 32-bit
+    // ImageData buffer (same 0xAABBGGRR / RGBA byte convention).
+    var buf32 = screendata.buf32;
+    var src = frame.color;
+    for (var y = 0; y < screenheight; y++)
+    {
+        var sy = Math.min(rh - 1, (y * rh / screenheight) | 0);
+        var dstrow = y * screenwidth;
+        var srcrow = sy * rw;
+        for (var x = 0; x < screenwidth; x++)
+        {
+            var sx = Math.min(rw - 1, (x * rw / screenwidth) | 0);
+            buf32[dstrow + x] = src[srcrow + sx];
+        }
+    }
+}
+
+
+// ---------------------------------------------
 // Draw the next frame
 
 function Draw()
 {
     updaterunning = true;
     UpdateCamera();
-    DrawBackground();
-    Render();
+    if (viewmode === "perspective")
+    {
+        RenderPerspectiveFrame();
+    } else
+    {
+        DrawBackground();
+        Render();
+    }
     Flip();
     frames++;
 

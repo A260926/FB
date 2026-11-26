@@ -164,6 +164,119 @@ def Render(p, phi, height, horizon, scale_height, distance, screen_width, screen
 Render( Point(0, 0), 0, 50, 120, 120, 300, 800, 600 )
 ```
 
+## Full perspective mode (`terrain-renderer.js`)
+
+The classic Voxel Space renderer above only walks screen columns and fakes
+look up/down by moving the horizon. This repository also includes a true
+3D perspective ray tracer used by the **Perspective mode** checkbox in
+`VoxelSpace.html`, with **Pitch** and **Roll** sliders. The classic mode and
+its original `Render()` entry point are untouched and remain the default for
+comparison.
+
+`terrain-renderer.js` uses only JavaScript built-ins. It works in a browser
+as the global `TerrainRenderer` (the page includes it with a `<script>` tag)
+and in Node/CommonJS:
+
+```js
+const { traceTerrain, renderPerspective } = require('./terrain-renderer.js');
+```
+
+### Map and column convention
+
+The tracer consumes the same `altitude` and `color` arrays as the classic
+viewer, but `width` and `height` may be arbitrary positive integers (they do
+not have to be powers of two). Cells are stored at
+
+```
+index = x + width * y
+```
+
+Each integer XY cell is a solid column stretching from **−∞ up to
+`altitude[index]`**; heights are never interpolated. The XY grid repeats
+periodically in both directions, so negative coordinates wrap with a proper
+positive modulo and address the same `width * height` entries. A struck
+column is colored by its own `color[index]` value (the same
+`0xAABBGGRR` uint32 convention used by the canvas buffer). Plain numeric
+arrays work — no PNG or image loader is required.
+
+Only real surfaces are hit: column **top planes**, and **vertical walls**
+created by a height difference between neighbouring cells. A grid line
+between two equal-height cells is internal and is not a surface.
+
+### `traceTerrain(map, origin, direction, near, far)`
+
+* `origin = [x, y, z]` and unit `direction = [dx, dy, dz]` are world space;
+  world **Z is up**. `{x,y,z}` objects are accepted as well.
+* `near` and `far` are world distances along the ray from `origin`; boundary
+  intersections are searched on the **closed** interval `[near, far]`, and
+  the returned `distance` is that same absolute world distance.
+* XY traversal advances analytically between integer grid-line crossing
+  events (an Amanatides–Woo style DDA); there is no fixed step size.
+* If the start or the `near` point lies inside a solid column, the trace does
+  not return `near`; it keeps going and returns the first boundary through
+  which the ray **leaves** the solid. A downward ray inside an infinite
+  column that never exits yields `null`.
+* Zero direction components, simultaneous X/Y grid crossings, rays travelling
+  exactly along a grid line, and exact top-edge hits all terminate
+  deterministically. When several boundaries share one distance, ties are
+  resolved in the order **Z face, then X face, then Y face**. Normals point
+  out of the solid.
+* The first hit is returned as
+
+```js
+{ distance, position: [x,y,z], normal: [nx,ny,nz], cell: [cx,cy] }
+```
+
+  where `cell` is already modulo-wrapped. `position` and `normal` also expose
+  non-enumerable `.x/.y/.z` aliases, and `hit.color` exposes the column color.
+  No hit in `[near, far]` returns `null`.
+
+### Camera and `renderPerspective(map, camera, width, height)`
+
+`camera` holds `position`, `yaw`, `pitch`, `roll`, `fovY`, `near`, `far` and
+`background`; angles are radians.
+
+* World Z is up. At zero angles the forward vector is `(0,-1,0)` and the
+  right vector is `(1,0,0)`.
+* Rotations are applied in this order, all right-hand positive:
+  **yaw around world Z**, then **pitch around the resulting right axis**, then
+  **roll around the final forward axis**. With this convention positive pitch
+  looks downward and positive roll tilts the image counter to the forward
+  axis (the up vector turns toward −X at +90°).
+* Rays pass through pixel centres and are generated from the full vertical
+  field of view `fovY` (`tan(fovY/2)` at the top/bottom border, horizontal
+  scale multiplied by `width/height`); every returned ray is unit length.
+
+The result is
+
+```js
+{ color: Uint32Array(width*height), depth: Float64Array(width*height) }
+```
+
+with row-major `x + width*y` layout. `depth` is the world distance of the
+first hit and is `Infinity` for sky; sky pixels are filled with
+`camera.background`. Hit colors are copied verbatim from `map.color`.
+
+### Tests and example
+
+```sh
+node test/perspective.js        # direct diagnostics
+sh support/target.sh            # baseline + content regression gate
+node examples/generate-example.js
+```
+
+`test/perspective.js` exports `projection`, `traversal` and `integration`;
+each is called with `(api, check)` by `support/run-target.js`, records
+assertions through the runner-provided `check`, and returns the number of
+checks it made. The integration group verifies every pixel of small frames
+against a slow, independent brute-force per-column geometry reference
+(including flat ground, an isolated pillar, steps and a wrapped 3×5 periodic
+map), rather than comparing two new renders with each other.
+
+`examples/perspective-roll.ppm` is a generated P6 PPM sample with camera
+roll and a tall pillar occluding geometry behind it; regenerate it with the
+command above.
+
 ## Links
 
 [Web Project demo][project demo] page
