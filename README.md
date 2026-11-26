@@ -39,7 +39,64 @@ You can compare results in motion using ffplay/mpv players on vectors/out_ref.26
 
 ## Usage
 
-TBD
+### NAL HRD timing signaling
+
+By default the encoder writes no VUI/HRD information. A single-layer AVC
+session can optionally embed constant frame-rate timing directly in the
+bitstream: the SPS gains VUI timing info and a one-CPB NAL HRD block, every
+IDR picture is preceded by a `buffering_period` SEI and every picture by a
+`pic_timing` SEI, so the recording side needs no separate per-frame timing
+file. Set `hrd_bitrate_bps` to a non-zero value to enable it; leave it zero
+for the legacy, byte-identical behavior.
+
+When enabled, `hrd_num_units_in_tick` and `hrd_time_scale` must be non-zero,
+`vbv_size_bytes` must be positive, `num_layers` must be 1 and `max_threads`
+must not exceed 1. The bitrate and CPB size have to be exactly representable
+in the HRD base units (64-bit and 16-bit respectively), otherwise
+`H264E_sizeof`/`H264E_init` reject the configuration. Rate control is
+unchanged: keep supplying `desired_frame_bytes` as before.
+
+```c
+#include "minih264e.h"
+
+H264E_create_param_t cp;
+memset(&cp, 0, sizeof(cp));
+cp.width  = 640;
+cp.height = 480;
+cp.gop    = 30;
+cp.const_input_flag      = 1;
+cp.vbv_size_bytes        = 200000;   /* positive, defines the CPB size */
+cp.num_layers            = 1;        /* single-layer AVC only          */
+cp.max_threads           = 1;        /* no multi-thread mode           */
+
+/* 1 Mbit/s, 25 fps: a frame is two clock ticks (num_units_in_tick=1,
+   time_scale=50 gives a 50 Hz tick clock, i.e. 25 frames per second). */
+cp.hrd_bitrate_bps        = 1000000;
+cp.hrd_num_units_in_tick  = 1;
+cp.hrd_time_scale         = 50;
+
+int sizeof_persist = 0, sizeof_scratch = 0;
+int error = H264E_sizeof(&cp, &sizeof_persist, &sizeof_scratch);
+if (error) { /* H264E_STATUS_BAD_PARAMETER: unsupported HRD combination */ }
+
+H264E_persist_t  *enc     = malloc(sizeof_persist);
+H264E_scratch_t  *scratch = malloc(sizeof_scratch);
+if (H264E_init(enc, &cp)) { /* handle error */ }
+
+H264E_run_param_t rp;
+memset(&rp, 0, sizeof(rp));
+rp.qp_min = 10;
+rp.qp_max = 50;
+rp.desired_frame_bytes = cp.hrd_bitrate_bps / 8 / 25; /* still caller-owned */
+
+H264E_io_yuv_t frame;
+/* ... fill frame.yuv[] / frame.stride[] with an I420 picture ... */
+
+unsigned char *coded;
+int coded_size;
+/* Annex-B output now contains SPS(VUI/HRD)+PPS+SEI timing before the VCL */
+error = H264E_encode(enc, scratch, &rp, &frame, &coded, &coded_size);
+```
 
 ## SVC
 

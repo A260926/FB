@@ -169,6 +169,17 @@ typedef struct H264E_create_param_tag
     void (*run_func_in_thread)(void *token, void (*job_func)(void*), void *job_data[], int njobs);
 #endif
 
+    // NAL HRD signaling (single-layer AVC only), disabled by default.
+    // When hrd_bitrate_bps == 0 the encoder takes the legacy path and the
+    // other two fields are ignored: no VUI/HRD/SEI timing is emitted and the
+    // bitstream stays byte-identical to the old behavior.
+    // When hrd_bitrate_bps != 0, hrd_num_units_in_tick and hrd_time_scale
+    // must be non-zero, vbv_size_bytes must be positive, num_layers must be 1
+    // and max_threads must not exceed 1.
+    unsigned hrd_bitrate_bps;          // Target bitrate, bits per second
+    unsigned hrd_num_units_in_tick;    // VUI clock tick (see H.264 E.2.1)
+    unsigned hrd_time_scale;           // VUI time scale, Hz
+
 } H264E_create_param_t;
 
 /**
@@ -754,6 +765,17 @@ typedef struct H264E_persist_tag
     // Consecutive IDR's must have different idr_pic_id,
     // unless there are some P between them
     uint8_t next_idr_pic_id;
+
+    // NAL HRD timing state, used only when param.hrd_bitrate_bps != 0
+    struct
+    {
+        unsigned clock_ticks;             // Ticks elapsed since last buffering_period
+        uint32_t initial_delay;           // initial_cpb_removal_delay, 24-bit max
+        uint32_t bitrate_value_minus1;    // bit_rate_value_minus1 (HRD syntax)
+        uint32_t cpb_size_value_minus1;   // cpb_size_value_minus1 (HRD syntax)
+        uint8_t  bitrate_scale;           // bit_rate_scale, range 0..15
+        uint8_t  cpb_size_scale;          // cpb_size_scale, range 0..15
+    } hrd;
 
     pix_t *pbest;                   // Macroblock best predictor
     pix_t *ptest;                   // Macroblock predictor under test
@@ -8820,6 +8842,111 @@ static void nal_end(h264e_enc_t *enc)
 
 
 /************************************************************************/
+/*      NAL HRD signaling: VUI/HRD and timing SEI (single-layer AVC)    */
+/************************************************************************/
+
+/**
+*   Encode one SEI message as a separate NAL unit, following H.264 7.3.1:
+*   payloadType/payloadSize are expanded byte-by-byte; nal_end() byte
+*   aligns the RBSP with rbsp_trailing_bits(), applies NAL escaping and
+*   handles nalu_callback like every other NAL.
+*/
+static void encode_sei_nalu(h264e_enc_t *enc, unsigned payload_type, const uint8_t *payload, unsigned payload_size)
+{
+    unsigned i;
+    nal_start(enc, 0x06);   // nal_ref_idc = 0, nal_unit_type = 6 (SEI)
+    while (payload_type >= 255)
+    {
+        U(8, 0xFF);
+        payload_type -= 255;
+    }
+    U(8, payload_type);
+    while (payload_size >= 255)
+    {
+        U(8, 0xFF);
+        payload_size -= 255;
+    }
+    U(8, payload_size);
+    for (i = 0; i < payload_size; i++)
+    {
+        U(8, payload[i]);
+    }
+    // nal_end() appends rbsp_trailing_bits() (stop bit + zero alignment)
+    nal_end(enc);
+}
+
+/**
+*   Buffering period SEI (payload type 0), ref. H.264 7.4.2.1.
+*   One CPB, low-delay HRD: only initial_cpb_removal_delay[0] (24 bits) and
+*   initial_cpb_removal_delay_offset[0] (24 bits, always 0) are present.
+*/
+static void encode_buffering_period_sei(h264e_enc_t *enc)
+{
+    uint8_t payload[6];
+    uint32_t delay = enc->hrd.initial_delay;
+    payload[0] = (uint8_t)(delay >> 16);
+    payload[1] = (uint8_t)(delay >> 8);
+    payload[2] = (uint8_t)delay;
+    payload[3] = payload[4] = payload[5] = 0;   // removal delay offset
+    encode_sei_nalu(enc, 0, payload, 6);
+}
+
+/**
+*   Pic timing SEI (payload type 1), ref. H.264 7.4.2.2.
+*   cpb_removal_delay uses 16 bits (cpb_removal_delay_length_minus1 = 15),
+*   dpb_output_delay uses 16 bits (length_minus1 = 15) and is always 0.
+*   pic_struct_present_flag = 0 and time_offset_length = 0 add nothing else.
+*/
+static void encode_pic_timing_sei(h264e_enc_t *enc)
+{
+    uint8_t payload[4];
+    uint16_t cpb_delay = (uint16_t)enc->hrd.clock_ticks;
+    payload[0] = (uint8_t)(cpb_delay >> 8);
+    payload[1] = (uint8_t)cpb_delay;
+    payload[2] = payload[3] = 0;                 // dpb_output_delay = 0
+    encode_sei_nalu(enc, 1, payload, 4);
+}
+
+/**
+*   VUI parameters with NAL HRD parameters, ref. H.264 E.1.1/E.1.2/E.2.1.
+*   Only timing info and the single-CPB NAL HRD block are enabled; every
+*   other optional VUI field stays off.
+*/
+static void encode_vui_hrd(h264e_enc_t *enc)
+{
+    // VUI preamble, ref. H.264 E.1.1: only timing info is enabled
+    U1(0);                                      // aspect_ratio_info_present_flag
+    U1(0);                                      // overscan_info_present_flag
+    U1(0);                                      // video_signal_type_present_flag
+    U1(0);                                      // chroma_loc_info_present_flag
+    U1(1);                                      // timing_info_present_flag
+    // Two 16-bit writes per 32-bit field: the bit writer cannot shift by 32
+    U(16, enc->param.hrd_num_units_in_tick >> 16);   // num_units_in_tick
+    U(16, enc->param.hrd_num_units_in_tick & 0xFFFF);
+    U(16, enc->param.hrd_time_scale >> 16);          // time_scale
+    U(16, enc->param.hrd_time_scale & 0xFFFF);
+    U1(1);                                      // fixed_frame_rate_flag
+    U1(1);                                      // nal_hrd_parameters_present_flag
+    U1(0);                                      // vcl_hrd_parameters_present_flag
+    // hrd_parameters(), ref. H.264 E.1.2
+    UE(0);                                      // cpb_cnt_minus1: one CPB
+    U(4, enc->hrd.bitrate_scale);               // bit_rate_scale
+    U(4, enc->hrd.cpb_size_scale);              // cpb_size_scale
+    UE(enc->hrd.bitrate_value_minus1);          // bit_rate_value_minus1
+    UE(enc->hrd.cpb_size_value_minus1);         // cpb_size_value_minus1
+    U1(0);                                      // cbr_flag
+    U(5, 23);                                   // initial_cpb_removal_delay_length_minus1
+    U(5, 15);                                   // cpb_removal_delay_length_minus1
+    U(5, 15);                                   // dpb_output_delay_length_minus1
+    U(5, 0);                                    // time_offset_length
+    // back to VUI
+    U1(1);                                      // low_delay_hrd_flag
+    U1(0);                                      // pic_struct_present_flag
+    U1(0);                                      // bitstream_restriction_flag
+}
+
+
+/************************************************************************/
 /*      Top-level syntax elements (SPS,PPS,Slice)                       */
 /************************************************************************/
 
@@ -8906,7 +9033,14 @@ static void encode_sps(h264e_enc_t *enc, int profile_idc)
         UE(0);                                          // frame_crop_top_offset
         UE((enc->frame.h - enc->param.height) >> 1);    // frame_crop_bottom_offset
     }
-    U1(0);      // vui_parameters_present_flag
+    if (enc->param.hrd_bitrate_bps)
+    {
+        U1(1);      // vui_parameters_present_flag
+        encode_vui_hrd(enc);
+    } else
+    {
+        U1(0);      // vui_parameters_present_flag
+    }
 
 #if H264E_SVC_API
     if(profile_idc == SCALABLE_BASELINE)
@@ -11014,7 +11148,11 @@ static int enc_alloc_scratch(h264e_enc_t *enc, const H264E_create_param_t *par, 
     int nmbx = (par->width  + 15) >> 4;
     int nmby = (par->height + 15) >> 4;
     ALLOC(enc->scratch, sizeof(scratch_t));
-    ALLOC(enc->out, nmbx * nmby * (384 + 2 + 10) * 3/2);
+    // HRD_HEADROOM covers, per picture, the buffering_period/pic_timing SEI
+    // NALUs (start codes included), the enlarged SPS with VUI/HRD and the
+    // NAL escape bytes the new header data may require.
+#define H264E_HRD_HEADROOM_BYTES 256
+    ALLOC(enc->out, nmbx * nmby * (384 + 2 + 10) * 3/2 + H264E_HRD_HEADROOM_BYTES);
 
     ALLOC(enc->nnz, nmbx*8 + 8);
     ALLOC(enc->mv_pred, (nmbx*4 + 8)*sizeof(point_t));
@@ -11044,10 +11182,88 @@ static pix_t *io_yuv_set_pointers(pix_t *base, H264E_io_yuv_t *frm, int w, int h
 }
 
 /**
+*   Find the smallest scale 0..15 that represents value exactly with a
+*   base unit of base_bits bits, i.e. value == (value_minus1 + 1) <<
+*   (base_bits + scale), with value_minus1 <= 65535.
+*   Returns 1 if an exact representation exists, 0 otherwise.
+*/
+static int hrd_pick_scale(uint64_t value, int base_bits, uint32_t *value_minus1, uint8_t *scale)
+{
+    int s;
+    for (s = 0; s <= 15; s++)
+    {
+        uint64_t unit = (uint64_t)1 << (base_bits + s);
+        if (value % unit == 0)
+        {
+            uint64_t v = value / unit - 1;
+            if (v <= 65535)
+            {
+                *value_minus1 = (uint32_t)v;
+                *scale = (uint8_t)s;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/**
+*   Validate NAL HRD configuration and derive the HRD syntax values stored
+*   later in the persistent object. Returns H264E_STATUS_SUCCESS when HRD is
+*   either disabled or fully valid, an error code otherwise.
+*/
+static int enc_check_hrd_params(const H264E_create_param_t *par,
+    uint32_t *bitrate_value_minus1, uint8_t *bitrate_scale,
+    uint32_t *cpb_size_value_minus1, uint8_t *cpb_size_scale,
+    uint32_t *initial_delay)
+{
+    if (!par->hrd_bitrate_bps)
+    {
+        return H264E_STATUS_SUCCESS;   // Disabled: legacy path, other fields ignored
+    }
+    if (!par->hrd_num_units_in_tick || !par->hrd_time_scale ||
+        par->vbv_size_bytes <= 0)
+    {
+        return H264E_STATUS_BAD_PARAMETER;
+    }
+#if H264E_SVC_API
+    if (par->num_layers != 1)
+    {
+        return H264E_STATUS_BAD_PARAMETER;  // HRD signaling supports single-layer AVC only
+    }
+#endif
+#if H264E_MAX_THREADS
+    if (par->max_threads > 1)
+    {
+        return H264E_STATUS_BAD_PARAMETER;  // HRD timing is not defined for multi-thread mode
+    }
+#endif
+    // bit_rate_value_minus1 uses a 64-bit base unit, cpb_size_value_minus1
+    // a 16-bit one. No rounding: reject values that cannot be represented.
+    if (!hrd_pick_scale((uint64_t)par->hrd_bitrate_bps, 6, bitrate_value_minus1, bitrate_scale) ||
+        !hrd_pick_scale((uint64_t)par->vbv_size_bytes * 8, 4, cpb_size_value_minus1, cpb_size_scale))
+    {
+        return H264E_STATUS_BAD_PARAMETER;
+    }
+    // Assume a full CPB at startup: delay = CPB size / bitrate, in 90kHz ticks
+    {
+        uint64_t delay = ((uint64_t)par->vbv_size_bytes * 8 * 90000) / par->hrd_bitrate_bps;
+        if (delay > 0xFFFFFF)
+        {
+            return H264E_STATUS_BAD_PARAMETER;  // Does not fit initial_cpb_removal_delay (24 bits)
+        }
+        *initial_delay = (uint32_t)delay;
+    }
+    return H264E_STATUS_SUCCESS;
+}
+
+/**
 *   Verify encoder creation parameters. Return error code, or 0 if prameters
 */
 static int enc_check_create_params(const H264E_create_param_t *par)
 {
+    uint32_t dummy32;
+    uint8_t dummy8;
     if (!par)
     {
         return H264E_STATUS_BAD_ARGUMENT;   // NULL argument
@@ -11079,7 +11295,7 @@ static int enc_check_create_params(const H264E_create_param_t *par)
         // frame size must be multiple of 16
         return H264E_STATUS_SIZE_NOT_MULTIPLE_16;
     }
-    return H264E_STATUS_SUCCESS;
+    return enc_check_hrd_params(par, &dummy32, &dummy8, &dummy32, &dummy8, &dummy32);
 };
 
 static int H264E_sizeof_one(const H264E_create_param_t *par, int *sizeof_persist, int *sizeof_scratch, int inp_buf_flag)
@@ -11122,6 +11338,20 @@ static int H264E_init_one(h264e_enc_t *enc, const H264E_create_param_t *opt, int
     enc->frame.mv_qpel_limit.br = mv_add(enc->frame.mv_limit.br, point(-4*4, -4*4));
     enc->frame.cropping_flag = !!((opt->width | opt->height) & 15);
     enc->param = *opt;
+
+    // Cache HRD syntax values; validation already rejected impossible configs
+    if (opt->hrd_bitrate_bps)
+    {
+        int hrd_error = enc_check_hrd_params(opt,
+            &enc->hrd.bitrate_value_minus1, &enc->hrd.bitrate_scale,
+            &enc->hrd.cpb_size_value_minus1, &enc->hrd.cpb_size_scale,
+            &enc->hrd.initial_delay);
+        if (hrd_error)
+        {
+            return hrd_error;
+        }
+        enc->hrd.clock_ticks = 0;
+    }
 
     enc_alloc(enc, opt, (void*)(enc + 1), inp_buf_flag);
 
@@ -11610,6 +11840,21 @@ int H264E_encode(H264E_persist_t *enc, H264E_scratch_t *scratch, const H264E_run
         }
     }
 
+    if (enc->param.hrd_bitrate_bps)
+    {
+        // HRD is single-layer only (validated at creation), so this runs
+        // after SPS/PPS and before the first VCL NAL of the picture.
+        if (frame_type == H264E_FRAME_TYPE_KEY)
+        {
+            // Every actual IDR restarts the HRD schedule and carries a
+            // buffering_period SEI referencing the active SPS.
+            enc->hrd.clock_ticks = 0;
+            encode_buffering_period_sei(enc);
+        }
+        // Every emitted picture carries a pic_timing SEI in front of its VCL
+        encode_pic_timing_sei(enc);
+    }
+
 #if H264E_SVC_API
     if (enc->param.num_layers > 1)
     {
@@ -11653,6 +11898,15 @@ int H264E_encode(H264E_persist_t *enc, H264E_scratch_t *scratch, const H264E_run
     {
         H264E_encode_one(enc, opt, long_term_idx_use, is_refers_to_long_term, long_term_idx_update,
             frame_type, enc->param.sps_id*4 + 0, 0);
+    }
+
+    if (enc->param.hrd_bitrate_bps)
+    {
+        // Every successfully output picture, DROPPABLE frames included,
+        // advances the constant frame-rate clock by two ticks. Reference
+        // frame numbers are irrelevant here; the 16-bit wraparound used by
+        // pic_timing is implicit in the uint16 cast of the SEI encoder.
+        enc->hrd.clock_ticks = (enc->hrd.clock_ticks + 2u) & 0xFFFFu;
     }
 
     *sizeof_coded_data = enc->out_pos;
