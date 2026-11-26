@@ -1,5 +1,6 @@
 build/
 output/
+.task-build/
 *.o
 *.out
 *.d

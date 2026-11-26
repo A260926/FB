@@ -126,6 +126,69 @@ The first argument is the JSON scene file. The second and third are the output d
 - **Soft shadows**: rectangular area lights sampled with configurable sample count
 - **Russian Roulette**: stochastic path termination (configurable probability) to cap computation at higher bounce depths
 
+### Visibility Layers
+
+Every object and every ray carries a 32-bit visibility mask. An object is
+present for a ray only when the two masks share at least one bit
+(`(object_mask & ray_mask) != 0`). Both default to `0xffffffff`, so existing
+scenes and rays behave exactly as before. A zero mask on either side never
+matches: the zero query layer sees nothing, and an object on layer zero is
+invisible to every query.
+
+Hidden objects are skipped before any intersection work, so they neither cast
+shadows nor appear in reflections or refractions, and a hidden near surface
+never shortens the distance window for candidates behind it. The BVH caches
+the bitwise OR of the masks under each node and rejects subtrees at the cache
+before testing bounding boxes.
+
+The JSON scene format is unchanged; layers are a C++ API feature.
+
+```cpp
+#include "object/ObjectList.h"
+#include "object/Sphere.h"
+#include "Camera.h"
+
+constexpr std::uint32_t LAYER_PRIMARY = 1u << 0;
+constexpr std::uint32_t LAYER_HELPER  = 1u << 1;
+
+ObjectList world;
+auto hero    = std::make_shared<Sphere>(Point3(0, 0, -3), 1.0, &hero_mat);
+auto helper  = std::make_shared<Sphere>(Point3(2, 0, -3), 1.0, &helper_mat);
+world.add(hero);
+world.add(helper);
+world.build();
+
+// Hide the helper geometry: move it onto a layer of its own.
+helper->set_visibility_mask(LAYER_HELPER);
+
+// The scene was already built. Refresh the BVH caches without rebuilding or
+// scanning the whole object list, once per scene that uses the primitive.
+VisibilityRefreshStats stats =
+    world.refresh_visibility({helper.get()});
+// stats.object_reads / stats.node_reductions report the work performed.
+
+// Rays take an optional query mask. Reflection, refraction, diffuse and
+// shadow rays inherit the mask of the ray (and camera) that spawned them.
+Ray ray(origin, direction, LAYER_PRIMARY);
+IntersectionRecord rec;
+world.intersect(ray, Interval(0.001, infinity), rec);  // helper is skipped
+
+// Cameras carry a query layer too; every primary and successor ray uses it.
+Camera camera;
+camera.visibility_mask = LAYER_PRIMARY;
+camera.render(world, lights);
+```
+
+`ObjectList::refresh_visibility(const std::vector<const Object*>&)` is called
+after the primitive masks have been changed and before querying. It locates
+every tree occurrence of each dirty primitive by pointer, re-reads only those
+primitive masks, and updates the leaf and ancestor OR caches; propagation stops
+at the first ancestor whose OR does not change. Duplicate dirty pointers are
+processed once, an empty list does nothing, and objects outside the BVH
+(excluded objects, or BVH-disabled lists) need no refresh work but still
+observe their new masks on the next query. Adding or removing objects still
+calls `build()`, which replaces the old index and excluded-list state.
+
 ## Scene Format
 
 Scenes are described in JSON. Here is a minimal example:

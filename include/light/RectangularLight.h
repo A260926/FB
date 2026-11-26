@@ -35,7 +35,8 @@ Radiance phong_shading(
     const Vector3& view_dir,
     const IntersectionRecord& rec,
     const Object& world,
-    const Radiance& ambient_light
+    const Radiance& ambient_light,
+    std::uint32_t visibility_mask = VISIBILITY_MASK_ALL
 ) const override {
     // Calculate the shading contribution from the area light
     const Material* mat = rec.mat_ptr;
@@ -47,7 +48,7 @@ Radiance phong_shading(
         Vector3 light_dir = unit_vector(sample_point - p);
 
         // Shadow factor (0 for fully shadowed, 1 for fully lit)
-        double shadow = shadow_factor_from_sample(p, sample_point, world);
+        double shadow = shadow_factor_from_sample(p, sample_point, world, visibility_mask);
         if (shadow == 0.0) continue; // Skip if fully shadowed
 
         // Light intensity from the sampled point
@@ -79,13 +80,14 @@ Radiance phong_shading(
 }
 
 
-    Radiance brdf_shading(            
+    Radiance brdf_shading(
         const Point3& p,
         const Vector3& normal,
         const Vector3& view_dir,
         const FancyBRDF& brdf,
         const Object& world,
-        const Vector3& coefficient
+        const Vector3& coefficient,
+        std::uint32_t visibility_mask = VISIBILITY_MASK_ALL
     ) const override {
         // Calculate the shading contribution from the area light
         Radiance total_result(0, 0, 0); // Accumulator for all sample contributions
@@ -98,7 +100,7 @@ Radiance phong_shading(
             Vector3 light_dir;
 
             // Compute shadow factor for the sampled light point
-            double shadow = shadow_factor_from_sample(p, sample_point, world);
+            double shadow = shadow_factor_from_sample(p, sample_point, world, visibility_mask);
             if (shadow == 0.0) {
                 continue; // Skip fully shadowed samples
             }
@@ -125,25 +127,13 @@ Radiance phong_shading(
         return total_result / num_samples;
     }
 
-private:
-    Point3 random_sample_on_surface() const {
-        // Uniform sampling on a rectangle
-        double s = random_double(-0.5, 0.5);
-        double t = random_double(-0.5, 0.5);
-        return position + (s * width * u) + (t * height * v);
-    }
-
-    double shadow_factor_from_sample(const Point3& p, const Point3& sample_point, const Object& world) const {
-        // Vector3 light_dir = unit_vector(sample_point - p);
-        // Ray shadow_ray(p + 0.001 * light_dir, light_dir);
-
-        // IntersectionRecord shadow_rec;
-        // bool is_shadowed = world.intersect(shadow_ray, Interval(0.001, infinity), shadow_rec);
-
-        // return is_shadowed ? 0.0 : 1.0;  // Fully blocked or fully illuminated
-
+    // Shadow query along one light sample; public so callers can test the
+    // first shadow segment and its refraction continuation directly.
+    double shadow_factor_from_sample(const Point3& p, const Point3& sample_point,
+                                     const Object& world,
+                                     std::uint32_t visibility_mask = VISIBILITY_MASK_ALL) const {
         Vector3 light_dir = unit_vector(sample_point - p);
-        Ray shadow_ray(p + 0.001 * light_dir, light_dir);
+        Ray shadow_ray(p + 0.001 * light_dir, light_dir, visibility_mask);
 
         IntersectionRecord shadow_rec;
         double shadow = 1.0; // Fully illuminated by default
@@ -159,7 +149,8 @@ private:
 
                 double eta = shadow_rec.front_face ? (1.0 / mat->refractiveindex) : mat->refractiveindex;
                 Vector3 refract_dir = refract(shadow_ray.direction(), shadow_rec.normal, eta);
-                shadow_ray = Ray(shadow_rec.p + 0.001 * refract_dir, refract_dir);
+                // The continuation ray keeps the same query layer.
+                shadow_ray = Ray(shadow_rec.p + 0.001 * refract_dir, refract_dir, visibility_mask);
                 max_t = (sample_point - shadow_ray.origin()).length();
             } else {
                 shadow *= shadow_frac;
@@ -174,6 +165,14 @@ private:
         }
 
         return shadow;
+    }
+
+private:
+    Point3 random_sample_on_surface() const {
+        // Uniform sampling on a rectangle
+        double s = random_double(-0.5, 0.5);
+        double t = random_double(-0.5, 0.5);
+        return position + (s * width * u) + (t * height * v);
     }
 };
 

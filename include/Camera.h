@@ -8,6 +8,8 @@
 #include "light/LightList.h"
 #include "ThreadPool.h"
 
+#include <cstdint>
+
 class Camera {
   public:
     /* Public Camera Parameters Here */
@@ -39,6 +41,11 @@ class Camera {
     ToneMapper tone_mapper = ToneMapper::LUMINANCE; // Tone mapping method
 
     AntiAliasing sampling_method = AntiAliasing::POISSON; // Anti-aliasing method
+
+    // Query layer for camera rays. Every spawned ray (primary, reflection,
+    // refraction, diffuse, shadow) inherits it; objects whose mask has no bit
+    // in common with it are invisible.
+    std::uint32_t visibility_mask = VISIBILITY_MASK_ALL;
 
     size_t num_threads = 1; // Thread count for parallel rendering
 
@@ -92,6 +99,11 @@ class Camera {
     }
 
     std::vector<Radiance> render_path_parallel(const Object& world, Light& lights, size_t num_threads);
+
+    // Per-mode entry points (also used directly by the visibility regression tests).
+    std::vector<Radiance> render_binary(const Object& world);
+    std::vector<Radiance> render_phong(const Object& world, const Light& lights);
+    std::vector<Radiance> render_path(const Object& world, Light& lights);
 
 
 
@@ -156,10 +168,7 @@ class Camera {
 
 
 
-    // three rendering modes
-    std::vector<Radiance> render_binary(const Object& world) ;
-    std::vector<Radiance> render_phong(const Object& world, const Light& lights) ;
-    std::vector<Radiance> render_path(const Object& world,  Light& lights) ;
+    // three rendering modes (public declarations are above)
 
     void output_image(const std::vector<Radiance>& pixelData) const {
         std::clog << "\rRender Complete.                 \n";

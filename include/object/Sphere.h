@@ -18,6 +18,10 @@ class Sphere : public Object {
     bool exclude_from_bvh() const override { return excluded; }
 
     bool intersect(const Ray& r, Interval ray_t, IntersectionRecord& rec) const override {
+        // Hidden objects do not exist for this ray: never touch the distance window.
+        if (!visibility_matches(visibility_mask(), r.visibility_mask()))
+            return false;
+
         ++hit_call_count;
         
         // Calculate the intersection of the ray with the sphere

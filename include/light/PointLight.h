@@ -28,12 +28,13 @@ class PointLight : public Light {
             const Vector3& view_dir,
             const IntersectionRecord& rec,
             const Object& world,
-            const Radiance& ambient_light
+            const Radiance& ambient_light,
+            std::uint32_t visibility_mask = VISIBILITY_MASK_ALL
         ) const override {
                 const Material* mat = rec.mat_ptr;
                 Vector3 light_dir;
                 Radiance light_intensity = intensity_at(p, light_dir);
-                double shadow = shadow_factor(p, world);
+                double shadow = shadow_factor(p, world, visibility_mask);
                 // BLINN-PHONG SHADING
 
                 // Sample texture color (if any) for diffuse contribution
@@ -53,10 +54,11 @@ class PointLight : public Light {
 
 
 
-        double shadow_factor(const Point3& p, const Object& world) const {
+        double shadow_factor(const Point3& p, const Object& world,
+                             std::uint32_t visibility_mask = VISIBILITY_MASK_ALL) const {
             // Calculate the shadow factor for a point on the surface
             Vector3 light_dir = unit_vector(position - p);
-            Ray shadow_ray(p + 0.001 * light_dir, light_dir);
+            Ray shadow_ray(p + 0.001 * light_dir, light_dir, visibility_mask);
 
             IntersectionRecord shadow_rec;
             double shadow = 1.0; // Fully illuminated by default
@@ -72,10 +74,11 @@ class PointLight : public Light {
 
                     double eta = shadow_rec.front_face ? (1.0 / mat->refractiveindex) : mat->refractiveindex;
                     Vector3 refract_dir = refract(shadow_ray.direction(), shadow_rec.normal, eta);
-                    shadow_ray = Ray(shadow_rec.p + 0.001 * refract_dir, refract_dir);
+                    // The continuation ray keeps the same query layer.
+                    shadow_ray = Ray(shadow_rec.p + 0.001 * refract_dir, refract_dir, visibility_mask);
                     max_t = (position - shadow_ray.origin()).length();
                 } else {
-                    shadow *= shadow_frac; 
+                    shadow *= shadow_frac;
                     break;
                 }
 
@@ -89,16 +92,17 @@ class PointLight : public Light {
             return shadow;
         }
 
-        Radiance brdf_shading(            
+        Radiance brdf_shading(
             const Point3& p,
             const Vector3& normal,
             const Vector3& view_dir,
             const FancyBRDF& brdf,
             const Object& world,
-            const Vector3& coefficient
+            const Vector3& coefficient,
+            std::uint32_t visibility_mask = VISIBILITY_MASK_ALL
             ) const override  {
                 // Calculate the shading contribution from the BRDF
-                double shadow = shadow_factor(p, world);
+                double shadow = shadow_factor(p, world, visibility_mask);
                 if (fabs(shadow - shadow_frac) < 1e-10){
                     return Radiance(0, 0, 0); // Skip shadowed points
                 }

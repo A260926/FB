@@ -1,5 +1,70 @@
 #include "bvh/Node.h"
 
+std::uint32_t Node::compute_visibility_mask() const {
+    // Leaf nodes hold one primitive in `left`; internal nodes hold two child
+    // nodes whose caches are already populated by the recursive construction.
+    std::uint32_t mask = 0;
+    if (left) mask |= left->visibility_mask();
+    if (right) mask |= right->visibility_mask();
+    return mask;
+}
+
+void Node::refresh_index(std::unordered_map<const Object*, std::vector<size_t>>& occurrences,
+                         std::vector<Node*>& nodes,
+                         std::vector<size_t>& parents,
+                         size_t parent_index) const {
+    const size_t self = nodes.size();
+    nodes.push_back(const_cast<Node*>(this));
+    parents.push_back(parent_index);
+
+    if (!right) {
+        // Leaf: `left` is the primitive occurrence. The same primitive pointer
+        // may be indexed more than once across different leaves.
+        if (left) {
+            occurrences[left.get()].push_back(self);
+        }
+        return;
+    }
+
+    if (left) {
+        if (auto* child = dynamic_cast<Node*>(left.get())) {
+            child->refresh_index(occurrences, nodes, parents, self);
+        }
+    }
+    if (right) {
+        if (auto* child = dynamic_cast<Node*>(right.get())) {
+            child->refresh_index(occurrences, nodes, parents, self);
+        }
+    }
+}
+
+void Node::refresh_reduce(std::uint64_t& object_reads, std::uint64_t& node_reductions) {
+    // Leaf reduction: re-read the primitive mask(s) directly.
+    std::uint32_t reduced = 0;
+    if (left) {
+        reduced |= left->visibility_mask();
+        ++object_reads;
+    }
+    if (right) {
+        reduced |= right->visibility_mask();
+        ++object_reads;
+    }
+    visibilityMask = reduced;
+    ++node_reductions;
+}
+
+bool Node::refresh_propagate(std::uint64_t& node_reductions) {
+    // Internal reduction: only the child caches are read, never primitives.
+    std::uint32_t reduced = 0;
+    if (left) reduced |= left->visibility_mask();
+    if (right) reduced |= right->visibility_mask();
+    ++node_reductions;
+
+    const bool changed = reduced != visibilityMask;
+    visibilityMask = reduced;
+    return changed;
+}
+
 void Node::random_splits(std::vector<shared_ptr<Object>>& objects, size_t start, size_t end) {
     // RANDOM SPLITS
     // Check if no objects

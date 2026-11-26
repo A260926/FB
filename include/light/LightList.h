@@ -22,12 +22,13 @@ class LightList : public Light {
         }
 
         Radiance phong_shading(
-            const Point3& p, 
-            const Vector3& normal, 
-            const Vector3& view_dir, 
+            const Point3& p,
+            const Vector3& normal,
+            const Vector3& view_dir,
             const IntersectionRecord& rec,
             const Object& world,
-            const Radiance& ambient_light
+            const Radiance& ambient_light,
+            std::uint32_t visibility_mask = VISIBILITY_MASK_ALL
         ) const override {
             // Accumulate the shading results from all lights
 
@@ -36,25 +37,26 @@ class LightList : public Light {
             for (const auto& l : lights) {
                 // Average the ambient light contribution
                 Radiance normaliased_ambient = ambient_light / lights.size();
-                result += l->phong_shading(p, normal, view_dir, rec, world, normaliased_ambient);
+                result += l->phong_shading(p, normal, view_dir, rec, world, normaliased_ambient, visibility_mask);
             }
 
             return result;
         }
 
-        Radiance brdf_shading(            
+        Radiance brdf_shading(
             const Point3& p,
             const Vector3& normal,
             const Vector3& view_dir,
             const FancyBRDF& brdf,
             const Object& world,
-            const Vector3& coefficient
+            const Vector3& coefficient,
+            std::uint32_t visibility_mask = VISIBILITY_MASK_ALL
         ) const override  {
             // Accumulate the shading results from all lights
             Radiance result(0, 0, 0);
 
             for (const auto& l : lights) {
-                result += l->brdf_shading(p, normal, view_dir, brdf, world, coefficient);
+                result += l->brdf_shading(p, normal, view_dir, brdf, world, coefficient, visibility_mask);
             }
 
             return result;
