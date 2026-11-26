@@ -67,6 +67,53 @@ Support codec and container parsers:
 - MP4 Atoms parser ([doc](https://godoc.org/github.com/nareix/joy4/format/mp4/mp4io))
 - FLV AMF0 object parser ([doc](https://godoc.org/github.com/nareix/joy4/format/flv/flvio))
 
+# MP4 offline rechunking
+
+`mp4.Rechunk` rewrites a completed, non-fragmented MP4 file offline: it moves
+`moov` in front of the media and regroups samples into multi-sample chunks
+interleaved by decode time, which cuts the number of seeks needed to read a
+short span of audio and video. Samples are copied byte for byte and the
+timing/identity boxes are preserved; nothing is decoded or re-timed.
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/nareix/joy4/format/mp4"
+)
+
+func main() {
+	src, err := os.Open("input.mp4")
+	if err != nil {
+		panic(err)
+	}
+	defer src.Close()
+
+	dst, err := os.Create("output.mp4")
+	if err != nil {
+		panic(err)
+	}
+	defer dst.Close()
+
+	// Aim for chunks worth about half a second of media each.
+	if err := mp4.Rechunk(src, dst, 500*time.Millisecond); err != nil {
+		panic(err)
+	}
+	fmt.Println("wrote", dst.Name())
+}
+```
+
+The input must be a plain, self-contained file whose tracks use `avc1`/`mp4a`
+sample descriptions, one description per track, 32-bit box sizes, 32-bit chunk
+offsets (`stco`) and per-sample sizes (`stsz`), with no edit list or
+encryption. Fragmented files, `co64`, extended box lengths and unknown
+top-level boxes are reported as errors instead of being dropped, and `dst` is
+left untouched when validation fails.
+
 # Requirements
 
 Go version >= 1.6
