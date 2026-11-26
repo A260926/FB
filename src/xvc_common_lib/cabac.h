@@ -90,6 +90,58 @@ public:
   CabacContexts();
   void ResetStates(const Qp &qp, PicturePredictionType pic_type);
 
+  // Test/diagnostic helper: deterministic hash of all adaptive context state.
+  // Used to verify that every CTU row starts from freshly reset contexts.
+  uint32_t DiagnosticsFingerprint() const {
+    uint32_t h = 2166136261u;
+    auto mix_value = [&h](uint32_t v) {
+      h ^= v + 0x9e3779b9u + (h << 6) + (h >> 2);
+    };
+    auto mix_array = [&mix_value](const ContextModel *ctx, size_t n) {
+      for (size_t i = 0; i < n; ++i) {
+        mix_value(ctx[i].GetState() * 2u + ctx[i].GetMps());
+      }
+    };
+#define XVC_ROW_MIX_CTX(member) mix_array((member).data(), (member).size())
+    XVC_ROW_MIX_CTX(cu_cbf_luma);
+    XVC_ROW_MIX_CTX(cu_cbf_chroma);
+    XVC_ROW_MIX_CTX(cu_part_size);
+    XVC_ROW_MIX_CTX(cu_pred_mode);
+    XVC_ROW_MIX_CTX(cu_root_cbf);
+    XVC_ROW_MIX_CTX(cu_skip_flag);
+    XVC_ROW_MIX_CTX(cu_split_quad_flag);
+    XVC_ROW_MIX_CTX(cu_split_binary);
+    XVC_ROW_MIX_CTX(inter_dir);
+    XVC_ROW_MIX_CTX(inter_fullpel_mv);
+    XVC_ROW_MIX_CTX(inter_merge_flag);
+    XVC_ROW_MIX_CTX(inter_merge_idx);
+    XVC_ROW_MIX_CTX(inter_mvd);
+    XVC_ROW_MIX_CTX(inter_mvp_idx);
+    XVC_ROW_MIX_CTX(inter_ref_idx);
+    XVC_ROW_MIX_CTX(intra_pred_luma);
+    XVC_ROW_MIX_CTX(intra_pred_chroma);
+    XVC_ROW_MIX_CTX(affine_flag);
+    XVC_ROW_MIX_CTX(lic_flag);
+    XVC_ROW_MIX_CTX(delta_qp);
+    XVC_ROW_MIX_CTX(coeff.csbf_luma);
+    XVC_ROW_MIX_CTX(coeff.csbf_chroma);
+    XVC_ROW_MIX_CTX(coeff.sig_luma);
+    XVC_ROW_MIX_CTX(coeff.sig_chroma);
+    XVC_ROW_MIX_CTX(coeff.greater1_luma);
+    XVC_ROW_MIX_CTX(coeff.greater1_chroma);
+    XVC_ROW_MIX_CTX(coeff.greater2_luma);
+    XVC_ROW_MIX_CTX(coeff.greater2_chroma);
+    XVC_ROW_MIX_CTX(coeff_last_pos_x_luma);
+    XVC_ROW_MIX_CTX(coeff_last_pos_x_chroma);
+    XVC_ROW_MIX_CTX(coeff_last_pos_y_luma);
+    XVC_ROW_MIX_CTX(coeff_last_pos_y_chroma);
+    XVC_ROW_MIX_CTX(transform_skip_flag);
+    XVC_ROW_MIX_CTX(transform_select_flag);
+    XVC_ROW_MIX_CTX(transform_select_idx);
+#undef XVC_ROW_MIX_CTX
+    return h;
+  }
+
   ContextModel& GetAffineCtx(const CodingUnit &cu);
   ContextModel& GetSkipFlagCtx(const CodingUnit &cu);
   ContextModel& GetSplitBinaryCtx(const CodingUnit &cu);

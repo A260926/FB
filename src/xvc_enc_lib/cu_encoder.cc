@@ -82,9 +82,13 @@ CuEncoder::~CuEncoder() {
 }
 
 void CuEncoder::EncodeCtu(int rsaddr, SyntaxWriter *bitstream_writer) {
+  // In row_restart mode the first CTU of every row restarts fractional bit
+  // accounting from zero, matching the freshly created row SyntaxWriter.
+  const int ctu_num_x = pic_data_.GetCtuNumX();
+  const bool row_start = (rsaddr % ctu_num_x) == 0;
   uint32_t frac_bits = bitstream_writer->GetFractionalBits();
   if (!EncoderSettings::kEncoderCountActualWrittenBits) {
-    frac_bits = rsaddr == 0 ? 0 : last_ctu_frac_bits_;
+    frac_bits = row_start ? 0 : last_ctu_frac_bits_;
   }
   RdoSyntaxWriter rdo_writer(*bitstream_writer, 0, frac_bits);
 

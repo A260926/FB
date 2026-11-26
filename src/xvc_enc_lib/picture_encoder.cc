@@ -129,22 +129,71 @@ PictureEncoder::Encode(const SegmentHeader &segment, int segment_qp,
   }
   WriteHeader(segment, *pic_data_, sub_gop_length, buffer_flag, &bit_writer_);
 
-  SyntaxWriter writer(base_qp, pic_data_->GetPredictionType(),
-                      &bit_writer_);
   std::unique_ptr<CuEncoder>
     cu_encoder(new CuEncoder(simd_, *orig_pic_, rec_pic_.get(), pic_data_.get(),
                              encoder_settings));
-  int num_ctus = pic_data_->GetNumberOfCtu();
-  for (int rsaddr = 0; rsaddr < num_ctus; rsaddr++) {
-    cu_encoder->EncodeCtu(rsaddr, &writer);
+  const int num_ctus = pic_data_->GetNumberOfCtu();
+
+  if (!segment.row_restart) {
+    // Version 2.0 and earlier: one CABAC stream for the whole picture.
+    SyntaxWriter writer(base_qp, pic_data_->GetPredictionType(),
+                        &bit_writer_);
+    for (int rsaddr = 0; rsaddr < num_ctus; rsaddr++) {
+      cu_encoder->EncodeCtu(rsaddr, &writer);
+    }
+    if (pic_data_->GetDeblock()) {
+      DeblockingFilter deblocker(pic_data_.get(), rec_pic_.get(),
+                                 pic_data_->GetBetaOffset(),
+                                 pic_data_->GetTcOffset());
+      deblocker.DeblockPicture();
+    }
+    writer.Finish();
+  } else {
+    // Version 3.0 row-restart: every CTU row gets a brand new SyntaxWriter
+    // (contexts, arithmetic coder and fractional bit accounting), codes only
+    // its own CTUs and is independently terminated. Spatial neighbor lookups
+    // are band-limited to the current row while coding/RDO is running.
+    const int ctu_num_x = pic_data_->GetCtuNumX();
+    const int ctu_num_y = pic_data_->GetCtuNumY();
+    const int num_rows = ctu_num_y;
+    std::vector<std::vector<uint8_t>> row_bytes(num_rows);
+    for (int row = 0; row < num_rows; row++) {
+      const int row_top = row * constants::kCtuSize;
+      const int row_bottom = row_top + constants::kCtuSize;
+      pic_data_->SetSpatialRowBand(true, row_top, row_bottom);
+      BitWriter row_writer;
+      SyntaxWriter row_syntax(base_qp, pic_data_->GetPredictionType(),
+                              &row_writer);
+      const int rs_begin = row * ctu_num_x;
+      const int rs_end = std::min(rs_begin + ctu_num_x, num_ctus);
+      for (int rsaddr = rs_begin; rsaddr < rs_end; rsaddr++) {
+        cu_encoder->EncodeCtu(rsaddr, &row_syntax);
+      }
+      row_syntax.Finish();
+      pic_data_->SetSpatialRowBand(false, 0, 0);
+      row_bytes[row] = std::move(*row_writer.GetBytes());
+      assert(!row_bytes[row].empty());
+    }
+    // Deblocking runs over the complete reconstructed picture in the
+    // ordinary order after all rows have been coded.
+    if (pic_data_->GetDeblock()) {
+      DeblockingFilter deblocker(pic_data_.get(), rec_pic_.get(),
+                                 pic_data_->GetBetaOffset(),
+                                 pic_data_->GetTcOffset());
+      deblocker.DeblockPicture();
+    }
+    // XRST directory: magic, row count, reserved zero, byte lengths.
+    bit_writer_.WriteBits(0x58525354u, 32);  // "XRST"
+    bit_writer_.WriteBits(static_cast<uint32_t>(num_rows), 16);
+    bit_writer_.WriteBits(0, 16);  // reserved_zero
+    for (int row = 0; row < num_rows; row++) {
+      uint32_t length = static_cast<uint32_t>(row_bytes[row].size());
+      bit_writer_.WriteBits(length, 32);
+    }
+    for (int row = 0; row < num_rows; row++) {
+      bit_writer_.WriteBytes(row_bytes[row].data(), row_bytes[row].size());
+    }
   }
-  if (pic_data_->GetDeblock()) {
-    DeblockingFilter deblocker(pic_data_.get(), rec_pic_.get(),
-                               pic_data_->GetBetaOffset(),
-                               pic_data_->GetTcOffset());
-    deblocker.DeblockPicture();
-  }
-  writer.Finish();
 
   if (pic_data_->GetTid() == 0 || !pic_data_->IsHighestLayer()) {
     rec_pic_->PadBorder();

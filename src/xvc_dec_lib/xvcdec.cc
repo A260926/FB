@@ -155,12 +155,19 @@ extern "C" {
       return XVC_DEC_INVALID_ARGUMENT;
     }
     xvc::Decoder *lib_decoder = reinterpret_cast<xvc::Decoder*>(decoder);
-    size_t decoded_bytes =
-      lib_decoder->DecodeNal(nal_unit, nal_unit_size, user_data);
-    if (decoded_bytes != xvc::Decoder::kInvalidNal &&
-        decoded_bytes < nal_unit_size) {
-      lib_decoder->DecodeNal(nal_unit + decoded_bytes,
-                             nal_unit_size - decoded_bytes, user_data);
+    size_t decoded_bytes = xvc::Decoder::kInvalidNal;
+    try {
+      decoded_bytes =
+        lib_decoder->DecodeNal(nal_unit, nal_unit_size, user_data);
+      if (decoded_bytes != xvc::Decoder::kInvalidNal &&
+          decoded_bytes < nal_unit_size) {
+        lib_decoder->DecodeNal(nal_unit + decoded_bytes,
+                               nal_unit_size - decoded_bytes, user_data);
+      }
+    } catch (...) {
+      // Corrupt/hostile bitstreams (e.g. truncated row substreams) must be
+      // reported as a non-conforming return code, never escape as exceptions.
+      return XVC_DEC_NOT_CONFORMING;
     }
 
     xvc::Decoder::State dec_state = lib_decoder->GetState();
@@ -197,7 +204,11 @@ extern "C" {
       return XVC_DEC_INVALID_ARGUMENT;
     }
     xvc::Decoder *lib_decoder = reinterpret_cast<xvc::Decoder*>(decoder);
-    lib_decoder->FlushBufferedNalUnits();
+    try {
+      lib_decoder->FlushBufferedNalUnits();
+    } catch (...) {
+      return XVC_DEC_NOT_CONFORMING;
+    }
     return XVC_DEC_OK;
   }
 

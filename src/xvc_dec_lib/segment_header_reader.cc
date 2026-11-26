@@ -34,11 +34,13 @@ Decoder::State SegmentHeaderReader::Read(SegmentHeader* segment_header,
     return Decoder::State::kNoSegmentHeader;
   }
   segment_header->major_version = bit_reader->ReadBits(16);
-  if (segment_header->major_version > constants::kXvcMajorVersion) {
+  if (segment_header->major_version > constants::kXvcRowRestartMajorVersion) {
     return Decoder::State::kDecoderVersionTooLow;
   }
   *accept_xvc_bit_zero = (segment_header->major_version == 1);
   segment_header->minor_version = bit_reader->ReadBits(16);
+  segment_header->row_restart =
+    segment_header->major_version == constants::kXvcRowRestartMajorVersion;
   if (!SupportedBitstreamVersion(segment_header->major_version,
                                  segment_header->minor_version)) {
     return Decoder::State::kBitstreamVersionTooLow;
@@ -242,6 +244,10 @@ bool SegmentHeaderReader::SupportedBitstreamVersion(uint32_t major_version,
   if (major_version == constants::kXvcMajorVersion &&
       static_cast<int>(minor_version) >=
       static_cast<int>(constants::kXvcMinorVersion)) {
+    return true;
+  }
+  if (major_version == constants::kXvcRowRestartMajorVersion &&
+      minor_version == constants::kXvcRowRestartMinorVersion) {
     return true;
   }
   int length = sizeof(constants::kSupportedOldBitstreamVersions) /

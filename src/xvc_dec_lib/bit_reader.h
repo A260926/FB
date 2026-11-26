@@ -43,6 +43,19 @@ public:
   void ReadBytes(uint8_t *bytes, size_t len);
   void Rewind(int num_bits);
 
+  // When enabled every read past the end of the buffer throws
+  // std::runtime_error instead of relying on asserts/out-of-bounds access.
+  // Used for per CTU row substream readers with tightly bounded storage.
+  void SetSafeBounds(bool safe) { safe_bounds_ = safe; }
+  bool GetSafeBounds() const { return safe_bounds_; }
+  const uint8_t *GetBuffer() const { return buffer_; }
+  size_t GetLength() const { return length_; }
+  // Byte aligns and moves the read position to an absolute byte offset.
+  void SeekToByte(size_t byte_pos) {
+    bit_mask_ = 0x80;
+    consumed_ = byte_pos <= length_ ? byte_pos : length_;
+  }
+
 private:
   void Refill();
 
@@ -50,6 +63,7 @@ private:
   size_t consumed_ = 0;
   const uint8_t *buffer_ = nullptr;
   size_t length_ = 0;
+  bool safe_bounds_ = false;
 };
 
 }   // namespace xvc

@@ -77,6 +77,10 @@ namespace constants {
 const uint32_t kXvcCodecIdentifier = 7894627;
 const uint32_t kXvcMajorVersion = 2;
 const uint32_t kXvcMinorVersion = 0;
+// Version 3.0 adds per CTU row independently restarted CABAC substreams
+// preceded by an "XRST" directory (row_restart coding mode).
+const uint32_t kXvcRowRestartMajorVersion = 3;
+const uint32_t kXvcRowRestartMinorVersion = 0;
 static const uint32_t kSupportedOldBitstreamVersions[1][2] = { { 1, 0 } };
 
 // Picture

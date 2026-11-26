@@ -54,6 +54,18 @@ public:
     bool allow_lic;
   };
 
+  // Diagnostic information captured at the start of each restarted row.
+  struct RowDiag {
+    int row = -1;
+    int rsaddr_first = -1;
+    int pic_qp = 0;
+    int predicted_qp_first = 0;
+    uint32_t context_fingerprint = 0;
+    size_t stream_length = 0;
+    size_t consumed_bytes = 0;
+    int secondary_tree = 0;
+  };
+
   PictureDecoder(const SimdFunctions &simd, const PictureFormat &pic_format,
                  int crop_width, int crop_height);
   void Init(const SegmentHeader &segment, const PicNalHeader &header,
@@ -92,7 +104,19 @@ public:
                  PicNum *sub_gop_length, PicNum prev_sub_gop_length,
                  PicNum doc, SegmentNum soc, int num_buffered_nals);
 
+  // Test/order hook for version 3.0 row streams: 0 decodes rows top to
+  // bottom (default), 1 bottom to top. Every row stays spatially isolated so
+  // both schedules must reconstruct identical pixels.
+  void SetRowDecodeOrder(int order) { row_decode_order_ = order ? 1 : 0; }
+  int GetRowDecodeOrder() const { return row_decode_order_; }
+  const std::vector<RowDiag> &GetRowDiagnostics() const { return row_diag_; }
+  // When true the picture failed a hard row-restart validation and must not
+  // be published as output nor used as a reference.
+  bool IsDiscardPicture() const { return discard_picture_; }
+
 private:
+  bool DecodeRowRestart(const SegmentHeader &segment,
+                        BitReader *bit_reader, const Qp &base_qp);
   void GenerateAlternativeRecPic(const SegmentHeader &segment,
                                const SegmentHeader &prev_segment_header) const;
   bool ValidateChecksum(const SegmentHeader &segment,
@@ -113,6 +137,9 @@ private:
   // TODO(PH) Mutable isn't really needed if const handling is relaxed...
   // Note that ref_count should only be modified on "main thread"
   mutable int ref_count = 0;
+  int row_decode_order_ = 0;
+  bool discard_picture_ = false;
+  std::vector<RowDiag> row_diag_;
 };
 
 }   // namespace xvc

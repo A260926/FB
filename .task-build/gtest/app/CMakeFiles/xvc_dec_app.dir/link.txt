@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3  -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/xvc_dec_app.dir/xvc_dec_app/decoder_app.cc.o CMakeFiles/xvc_dec_app.dir/xvc_dec_app/main_dec.cc.o CMakeFiles/xvc_dec_app.dir/xvc_dec_app/y4m_writer.cc.o -o xvcdec  ../src/libxvcdec.a

@@ -116,6 +116,18 @@ public:
   void SetChecksumMode(Checksum::Mode mode) {
     segment_header_->checksum_mode = mode;
   }
+  void SetRowRestart(bool enable) {
+    row_restart_ = enable;
+    segment_header_->row_restart = enable;
+    if (enable) {
+      segment_header_->major_version = constants::kXvcRowRestartMajorVersion;
+      segment_header_->minor_version = constants::kXvcRowRestartMinorVersion;
+    } else {
+      segment_header_->major_version = constants::kXvcMajorVersion;
+      segment_header_->minor_version = constants::kXvcMinorVersion;
+    }
+  }
+  bool GetRowRestart() const { return row_restart_; }
 
   const EncoderSettings& GetEncoderSettings() { return encoder_settings_; }
   void SetEncoderSettings(const EncoderSettings &settings);
@@ -148,6 +160,7 @@ private:
                    xvc_enc_nal_stats *nal_stats);
 
   bool initialized_ = false;
+  bool row_restart_ = false;
   int input_bitdepth_ = 8;
   double framerate_ = 0;
   std::shared_ptr<SegmentHeader> segment_header_;

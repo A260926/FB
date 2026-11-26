@@ -99,6 +99,7 @@ private:
       for (auto &pic : pic_buffer) {
         std::shared_ptr<const PictureData> pic_data = pic->GetPicData();
         if (!rpl->HasRefPoc(ref_pic_list, pic_data->GetPoc()) &&
+            pic_data->IsReferenceUsable() &&
             pic_data->GetSoc() == segment_header_.soc &&
             pic_data->GetPoc() < last_added_poc &&
             pic_data->GetPoc() + 1 > highest_poc_plus1 &&
@@ -143,6 +144,7 @@ private:
           (pic_data->GetSoc() == static_cast<SegmentNum>(curr_soc + 1) &&
            prev_segment_open_gop_);
         if (same_or_previous_segment &&
+            pic_data->IsReferenceUsable() &&
             pic_data->GetPoc() > last_added_poc &&
             pic_data->GetPoc() < lowest_poc &&
             (pic_data->GetTid() < last_added_tid || pic_data->GetTid() == 0)) {
@@ -185,7 +187,8 @@ private:
       std::shared_ptr<const T> pic_enc_dec;
       for (auto &pic : pic_buffer) {
         std::shared_ptr<const PictureData> pic_data = pic->GetPicData();
-        if (pic_data->GetPoc() + 1 == curr_poc) {
+        if (pic_data->IsReferenceUsable() &&
+            pic_data->GetPoc() + 1 == curr_poc) {
           pic_enc_dec = pic;
         }
       }
@@ -227,12 +230,14 @@ private:
           (pic_data->GetSoc() == static_cast<SegmentNum>(curr_soc + 1) &&
            prev_segment_open_gop_);
         if (same_or_previous_segment &&
+            pic_data->IsReferenceUsable() &&
             pic_data->GetPoc() > last_added_poc1 &&
             pic_data->GetPoc() < lowest_poc &&
             (pic_data->GetTid() < last_added_tid1 || pic_data->GetTid() == 0)) {
           pic_enc_dec1 = pic;
           lowest_poc = pic_data->GetPoc();
         } else if (pic_data->GetSoc() == segment_header_.soc &&
+                   pic_data->IsReferenceUsable() &&
                    pic_data->GetPoc() < last_added_poc0 &&
                    pic_data->GetPoc() + 1 > highest_poc_plus1 &&
                    (pic_data->GetTid() < last_added_tid0 ||

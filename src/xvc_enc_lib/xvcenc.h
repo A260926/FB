@@ -146,7 +146,19 @@ extern "C" {
     int threads;
     uint32_t simd_mask;
     char* explicit_encoder_settings;
+    // When zero (default) the whole picture uses one CABAC stream and the
+    // bitstream is version 2.0. When non-zero (only 0/1 accepted by the
+    // setter) every CTU row gets an independently initialized and terminated
+    // CABAC substream and the bitstream is signaled as version 3.0.
+    int row_restart;
   } xvc_encoder_parameters;
+
+  // Enable/disable per CTU row CABAC restart (row_restart field).
+  // Returns XVC_ENC_OK for enabled == 0 or 1, XVC_ENC_INVALID_ARGUMENT for
+  // a null parameter pointer or any other value of enabled. On rejection the
+  // parameters are left unchanged.
+  XVC_ENC_API xvc_enc_return_code
+  xvc_encoder_set_row_restart(xvc_encoder_parameters *param, int enabled);
 
   // xvc encoder api
   // Lifecycle managed by xvc_encoder_api_get

@@ -1,0 +1,11 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/gtest/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/gtest/src/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/gtest/app/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/gtest/test/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/gtest/test/googletest/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,15 @@
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/CMakeFiles/install/strip.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/xvc_common_lib.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/xvc_enc_lib.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/xvc_dec_lib.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS47E107579DF1U16223/attempts/20261126T160724225768Z/repo/.task-build/cmake/src/CMakeFiles/install/strip.dir

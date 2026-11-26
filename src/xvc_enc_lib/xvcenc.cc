@@ -85,6 +85,19 @@ extern "C" {
     param->threads = 0;
     param->simd_mask = static_cast<uint32_t>(-1);
     param->explicit_encoder_settings = nullptr;
+    param->row_restart = 0;
+    return XVC_ENC_OK;
+  }
+
+  xvc_enc_return_code
+  xvc_encoder_set_row_restart(xvc_encoder_parameters *param, int enabled) {
+    if (!param) {
+      return XVC_ENC_INVALID_ARGUMENT;
+    }
+    if (enabled != 0 && enabled != 1) {
+      return XVC_ENC_INVALID_ARGUMENT;
+    }
+    param->row_restart = enabled;
     return XVC_ENC_OK;
   }
 
@@ -215,6 +228,9 @@ extern "C" {
         param->tune_mode >= static_cast<int>(xvc::TuneMode::kTotalNumber)) {
       return XVC_ENC_INVALID_PARAMETER;
     }
+    if (param->row_restart != 0 && param->row_restart != 1) {
+      return XVC_ENC_INVALID_PARAMETER;
+    }
     return XVC_ENC_OK;
   }
 
@@ -342,6 +358,7 @@ extern "C" {
     }
     encoder->SetChecksumMode(
       static_cast<xvc::Checksum::Mode>(param->checksum_mode));
+    encoder->SetRowRestart(param->row_restart != 0);
 
     int sub_gop_length = param->sub_gop_length;
     if (sub_gop_length == 0) {

@@ -594,7 +594,11 @@ IntraPrediction::DeriveLmParams(const CodingUnit &cu, YuvComponent comp,
   static const int kModelPrecisionShift = 7;
   const int width = cu.GetWidth(comp);
   const int height = cu.GetHeight(comp);
-  const bool has_above = cu.GetPosY(YuvComponent::kY) > 0;
+  int spatial_top = 0;
+  if (cu.GetPicData() && cu.GetPicData()->IsSpatialRowBandActive()) {
+    spatial_top = cu.GetPicData()->GetSpatialRowTop();
+  }
+  const bool has_above = cu.GetPosY(YuvComponent::kY) > spatial_top;
   const bool has_left = cu.GetPosX(YuvComponent::kY) > 0;
   if (!has_above && !has_left) {
     return LmParams{ 0, 1 << (bitdepth_ - 1), 0 };
@@ -690,15 +694,23 @@ IntraPrediction::DetermineNeighbors(const CodingUnit &cu, YuvComponent comp) {
   NeighborState neighbors;
   int x = cu.GetPosX(comp);
   int y = cu.GetPosY(comp);
+  // In row_restart mode the CTU row top behaves like a picture border for
+  // spatial prediction, for both luma and chroma coordinates.
+  int top = 0;
+  const PictureData *pic_data = cu.GetPicData();
+  if (pic_data && pic_data->IsSpatialRowBandActive()) {
+    int shift_y = util::IsLuma(comp) ? 0 : pic_data->GetChromaShiftY();
+    top = pic_data->GetSpatialRowTop() >> shift_y;
+  }
   if (x > 0) {
     neighbors.has_left = true;
     neighbors.has_below_left = cu.GetCuSizeBelowLeft(comp);
   }
-  if (y > 0) {
+  if (y > top) {
     neighbors.has_above = true;
     neighbors.has_above_right = cu.GetCuSizeAboveRight(comp);
   }
-  if (x > 0 && y > 0) {
+  if (x > 0 && y > top) {
     neighbors.has_above_left = true;
   }
   return neighbors;
@@ -875,7 +887,12 @@ void IntraPrediction::RescaleLuma(const CodingUnit &cu,
                                   const SampleBufferConst &src_buffer,
                                   int out_width, int out_height,
                                   SampleBuffer *out_buffer) {
-  const bool has_above = cu.GetPosY(YuvComponent::kY) > 0;
+  int spatial_top_luma = 0;
+  if (cu.GetPicData() && cu.GetPicData()->IsSpatialRowBandActive()) {
+    spatial_top_luma = cu.GetPicData()->GetSpatialRowTop();
+  }
+  const bool has_above =
+    cu.GetPosY(YuvComponent::kY) > spatial_top_luma;
   const bool has_left = cu.GetPosX(YuvComponent::kY) > 0;
   const ptrdiff_t src_stride = src_buffer.GetStride();
   const ptrdiff_t out_stride = out_buffer->GetStride();

@@ -176,24 +176,53 @@ bool PictureDecoder::Decode(const SegmentHeader &segment,
         lambda);
 
   pic_data_->Init(segment, qp, true);
+  discard_picture_ = false;
+  row_diag_.clear();
 
-  std::unique_ptr<SyntaxReader> syntax_reader =
-    SyntaxReader::Create(qp, pic_data_->GetPredictionType(), bit_reader);
-  std::unique_ptr<CuDecoder> cu_decoder(
-    new CuDecoder(simd_, rec_pic_.get(), pic_data_.get()));
-  int num_ctus = pic_data_->GetNumberOfCtu();
-  for (int rsaddr = 0; rsaddr < num_ctus; rsaddr++) {
-    cu_decoder->DecodeCtu(rsaddr, syntax_reader.get());
-  }
-  if (pic_data_->GetDeblock()) {
-    DeblockingFilter deblocker(pic_data_.get(), rec_pic_.get(),
-                               pic_data_->GetBetaOffset(),
-                               pic_data_->GetTcOffset());
-    deblocker.DeblockPicture();
-  }
-  if (!syntax_reader->Finish()) {
-    assert(0);
-    success = false;
+  if (segment.row_restart) {
+    // Version 3.0: validate the complete directory first, then decode each
+    // CTU row as an independent bounded CABAC substream in the requested
+    // (forward or reverse) scheduling order.
+    bool rows_ok = false;
+    try {
+      rows_ok = DecodeRowRestart(segment, bit_reader, qp);
+    } catch (...) {
+      rows_ok = false;
+    }
+    if (!rows_ok) {
+      // Hard rejection: no deblock/checksum/output/DPB publication of the
+      // partial reconstruction.
+      discard_picture_ = true;
+      conforming_ = false;
+      pic_data_->SetReferenceUsable(false);
+      pic_data_->SetSpatialRowBand(false, 0, 0);
+      return false;
+    }
+    if (pic_data_->GetDeblock()) {
+      DeblockingFilter deblocker(pic_data_.get(), rec_pic_.get(),
+                                 pic_data_->GetBetaOffset(),
+                                 pic_data_->GetTcOffset());
+      deblocker.DeblockPicture();
+    }
+  } else {
+    std::unique_ptr<SyntaxReader> syntax_reader =
+      SyntaxReader::Create(qp, pic_data_->GetPredictionType(), bit_reader);
+    std::unique_ptr<CuDecoder> cu_decoder(
+      new CuDecoder(simd_, rec_pic_.get(), pic_data_.get()));
+    int num_ctus = pic_data_->GetNumberOfCtu();
+    for (int rsaddr = 0; rsaddr < num_ctus; rsaddr++) {
+      cu_decoder->DecodeCtu(rsaddr, syntax_reader.get());
+    }
+    if (pic_data_->GetDeblock()) {
+      DeblockingFilter deblocker(pic_data_.get(), rec_pic_.get(),
+                                 pic_data_->GetBetaOffset(),
+                                 pic_data_->GetTcOffset());
+      deblocker.DeblockPicture();
+    }
+    if (!syntax_reader->Finish()) {
+      assert(0);
+      success = false;
+    }
   }
   if (pic_data_->GetTid() == 0 || !pic_data_->IsHighestLayer()) {
     rec_pic_->PadBorder();
@@ -207,6 +236,161 @@ bool PictureDecoder::Decode(const SegmentHeader &segment,
     success &= Postprocess(segment, bit_reader);
   }
   return success;
+}
+
+bool PictureDecoder::DecodeRowRestart(const SegmentHeader &segment,
+                                      BitReader *bit_reader,
+                                      const Qp &base_qp) {
+  const uint8_t *nal = bit_reader->GetBuffer();
+  const size_t nal_size = bit_reader->GetLength();
+  // DecodeHeader byte-aligns the reader at the end of the picture header.
+  const size_t header_end = bit_reader->GetPosition();
+  if (!nal || header_end + 8 > nal_size) {
+    return false;  // short / missing directory
+  }
+  if (nal[header_end + 0] != 'X' || nal[header_end + 1] != 'R' ||
+      nal[header_end + 2] != 'S' || nal[header_end + 3] != 'T') {
+    return false;  // missing XRST directory
+  }
+  auto read_u16 = [&](size_t off) -> uint32_t {
+    return (static_cast<uint32_t>(nal[off]) << 8) | nal[off + 1];
+  };
+  auto read_u32 = [&](size_t off) -> uint32_t {
+    return (static_cast<uint32_t>(nal[off + 0]) << 24) |
+      (static_cast<uint32_t>(nal[off + 1]) << 16) |
+      (static_cast<uint32_t>(nal[off + 2]) << 8) |
+      static_cast<uint32_t>(nal[off + 3]);
+  };
+  const int row_count = static_cast<int>(read_u16(header_end + 4));
+  const uint32_t reserved_zero = read_u16(header_end + 6);
+  const int expected_rows = pic_data_->GetCtuNumY();
+  if (reserved_zero != 0 || row_count <= 0 || row_count != expected_rows) {
+    return false;
+  }
+  const size_t directory_bytes =
+    static_cast<size_t>(row_count) * static_cast<size_t>(4);
+  // Overflow safe directory extent check.
+  if (directory_bytes > nal_size ||
+      header_end + 8 > nal_size - directory_bytes) {
+    return false;  // short directory
+  }
+  const size_t lengths_start = header_end + 8;
+  const size_t rows_start = lengths_start + directory_bytes;
+
+  std::vector<uint32_t> lengths(row_count);
+  uint64_t total_length = 0;
+  for (int row = 0; row < row_count; row++) {
+    uint32_t len = read_u32(lengths_start + static_cast<size_t>(row) * 4);
+    if (len == 0) {
+      return false;  // zero length row
+    }
+    total_length += len;
+    if (total_length > static_cast<uint64_t>(nal_size)) {
+      return false;  // cumulative lengths already out of bounds
+    }
+    lengths[row] = len;
+  }
+  if (total_length > static_cast<uint64_t>(nal_size - rows_start)) {
+    return false;  // rows run past the picture NAL
+  }
+  size_t rows_end = rows_start + static_cast<size_t>(total_length);
+
+  // Determine the exact picture checksum footprint so row lengths are bound
+  // against the NAL excluding the trailing image-level checksum.
+  const bool checksum_present =
+    pic_data_->GetTid() == 0 ||
+    segment.checksum_mode == Checksum::Mode::kMaxRobust;
+  size_t checksum_len = 0;
+  if (checksum_present) {
+    const int components =
+      util::GetNumComponents(pic_data_->GetChromaFormat());
+    const bool md5 =
+      !Restrictions::Get().disable_high_level_default_checksum_method;
+    if (md5) {
+      checksum_len =
+        segment.checksum_mode == Checksum::Mode::kMaxRobust ?
+        static_cast<size_t>(16 * components) : static_cast<size_t>(16);
+    } else {
+      checksum_len =
+        segment.checksum_mode == Checksum::Mode::kMaxRobust ?
+        static_cast<size_t>(2 * components) : static_cast<size_t>(2);
+    }
+    if (checksum_len > nal_size || rows_end > nal_size - checksum_len ||
+        rows_end + checksum_len != nal_size) {
+      return false;  // rows overlap checksum or trailing bytes are malformed
+    }
+  } else if (rows_end != nal_size) {
+    return false;
+  }
+
+  // Build contiguous byte offsets from the stored lengths.
+  std::vector<size_t> offsets(row_count);
+  size_t offset = rows_start;
+  for (int row = 0; row < row_count; row++) {
+    offsets[row] = offset;
+    offset += lengths[row];
+  }
+
+  std::vector<int> schedule;
+  schedule.reserve(row_count);
+  if (row_decode_order_ == 0) {
+    for (int row = 0; row < row_count; row++) {
+      schedule.push_back(row);
+    }
+  } else {
+    for (int row = row_count - 1; row >= 0; row--) {
+      schedule.push_back(row);
+    }
+  }
+
+  const int ctu_num_x = pic_data_->GetCtuNumX();
+  for (int row : schedule) {
+    const int row_top = row * constants::kCtuSize;
+    const int row_bottom = row_top + constants::kCtuSize;
+    pic_data_->SetSpatialRowBand(true, row_top, row_bottom);
+
+    // Restricted reader: it can only see this row's own bytes.
+    BitReader row_reader(nal + offsets[row], lengths[row]);
+    row_reader.SetSafeBounds(true);
+    std::unique_ptr<SyntaxReader> syntax_reader =
+      SyntaxReader::Create(base_qp, pic_data_->GetPredictionType(),
+                           &row_reader);
+
+    RowDiag diag;
+    diag.row = row;
+    diag.rsaddr_first = row * ctu_num_x;
+    diag.pic_qp = pic_qp_;
+    diag.stream_length = lengths[row];
+    diag.context_fingerprint = syntax_reader->DiagnosticsFingerprint();
+    diag.secondary_tree = pic_data_->HasSecondaryCuTree() ? 1 : 0;
+    if (CodingUnit *first_ctu =
+          pic_data_->GetCtu(CuTree::Primary, diag.rsaddr_first)) {
+      // Band is active and the first CTU has no available left/above QP
+      // predictor, so this must equal the picture initial QP.
+      diag.predicted_qp_first = first_ctu->GetPredictedQp();
+    }
+
+    std::unique_ptr<CuDecoder> cu_decoder(
+      new CuDecoder(simd_, rec_pic_.get(), pic_data_.get()));
+    for (int cx = 0; cx < ctu_num_x; cx++) {
+      int rsaddr = row * ctu_num_x + cx;
+      cu_decoder->DecodeCtu(rsaddr, syntax_reader.get());
+    }
+    // Every row must carry a legal CABAC termination of its own.
+    if (!syntax_reader->Finish()) {
+      return false;
+    }
+    diag.consumed_bytes = row_reader.GetPosition();
+    if (diag.consumed_bytes != lengths[row]) {
+      return false;
+    }
+    row_diag_.push_back(diag);
+  }
+  pic_data_->SetSpatialRowBand(false, 0, 0);
+
+  // Position the outer reader at the image-level checksum.
+  bit_reader->SeekToByte(rows_end);
+  return true;
 }
 
 bool PictureDecoder::Postprocess(const SegmentHeader &segment,

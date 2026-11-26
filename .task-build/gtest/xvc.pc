@@ -1,0 +1,11 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: xvc
+Description: xvc video codec library.
+Version: 1.0
+Libs: -L${libdir} -lxvcenc -lxvcdec
+Libs.private:  -lc++ 
+Cflags: -I${includedir}

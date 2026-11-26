@@ -323,6 +323,7 @@ Decoder::DecodeOneBufferedNal(NalUnitPtr &&nal, int64_t user_data) {
     }
   } else {
     // Synchronous decode
+    pic_dec->SetRowDecodeOrder(row_decode_order_);
     bool success = pic_dec->Decode(*segment_header, *prev_segment_header,
                                    &pic_bit_reader, true);
     OnPictureDecoded(pic_dec, success, inter_dependencies);
@@ -479,8 +480,18 @@ Decoder::GetFreePictureDecoder(const SegmentHeader &segment) {
 
 void Decoder::OnPictureDecoded(std::shared_ptr<PictureDecoder> pic_dec,
                                bool success, const PicDecList &inter_deps) {
-  pic_dec->SetOutputStatus(OutputStatus::kHasNotBeenOutput);
+  // A hard row-restart rejection must never be published as an output frame.
+  // Balance the per-NAL buffer accounting as if it had been output.
+  const bool discard = pic_dec->IsDiscardPicture();
+  pic_dec->SetOutputStatus(discard ? OutputStatus::kHasBeenOutput
+                                   : OutputStatus::kHasNotBeenOutput);
   pic_dec->SetIsConforming(success);
+  if (discard) {
+    pic_dec->GetPicData()->SetReferenceUsable(false);
+    if (num_pics_in_buffer_ > 0) {
+      num_pics_in_buffer_--;
+    }
+  }
   for (auto &pic_dep : inter_deps) {
     pic_dep->RemoveReferenceCount(1);
   }

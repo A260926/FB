@@ -92,6 +92,28 @@ public:
     return xvc_dec_chroma_format(curr_segment_header_->chroma_format);
   }
   void SetDithering(bool dither) { output_pic_format_.dither = dither; }
+  // Per-instance test hook for row_restart decode scheduling (0 forward,
+  // 1 reverse). Instance state only, so interleaved decoders stay independent.
+  void SetRowDecodeOrderForTest(int order) { row_decode_order_ = order ? 1 : 0; }
+  int GetRowDecodeOrderForTest() const { return row_decode_order_; }
+  // Snapshot of per-row start diagnostics across all picture decoders.
+  std::vector<PictureDecoder::RowDiag> GetRowDiagnosticsForTest() const {
+    std::vector<PictureDecoder::RowDiag> out;
+    for (const auto &pic : pic_decoders_) {
+      const auto &diag = pic->GetRowDiagnostics();
+      out.insert(out.end(), diag.begin(), diag.end());
+    }
+    return out;
+  }
+  // True if any pooled picture is currently marked discard (hard row failure).
+  bool HasDiscardPictureForTest() const {
+    for (const auto &pic : pic_decoders_) {
+      if (pic->IsDiscardPicture()) {
+        return true;
+      }
+    }
+    return false;
+  }
   static bool ParseNalUnitHeader(BitReader *reader, NalUnitType *nal_unit_type,
                                  bool accept_xvc_bit_zero);
 
@@ -135,6 +157,7 @@ private:
   std::deque<std::pair<NalUnitPtr, int64_t>> nal_buffer_;
   std::unique_ptr<ThreadDecoder> thread_decoder_;
   bool accept_xvc_bit_zero_ = true;
+  int row_decode_order_ = 0;
 };
 
 }   // namespace xvc

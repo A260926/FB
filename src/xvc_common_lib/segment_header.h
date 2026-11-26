@@ -96,6 +96,9 @@ struct SegmentHeader {
   DeblockingMode deblocking_mode = DeblockingMode::kDisabled;
   int beta_offset = 0;
   int tc_offset = 0;
+  // Version 3.0: every CTU row is coded as its own restarted CABAC stream
+  // with an "XRST" directory in each picture NAL.
+  bool row_restart = false;
   Restrictions restrictions;
 
 private:

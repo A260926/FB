@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3  -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/xvc_enc_app.dir/xvc_enc_app/encoder_app.cc.o CMakeFiles/xvc_enc_app.dir/xvc_enc_app/main_enc.cc.o CMakeFiles/xvc_enc_app.dir/xvc_enc_app/y4m_reader.cc.o -o xvcenc  ../src/libxvcenc.a

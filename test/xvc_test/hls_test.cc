@@ -66,8 +66,11 @@ TEST_F(HlsTest, RecvSameVersion) {
 }
 
 TEST_F(HlsTest, RecvLargerMajorVersion) {
-  EncodeWithVersion(xvc::constants::kXvcMajorVersion + 1,
-                    xvc::constants::kXvcMinorVersion);
+  // Major version 3 is the row-restart bitstream and is supported by this
+  // decoder, so use one beyond the highest supported major to exercise the
+  // "decoder version too low" rejection.
+  EncodeWithVersion(xvc::constants::kXvcRowRestartMajorVersion + 1,
+                    xvc::constants::kXvcRowRestartMinorVersion);
   DecodeSegmentHeaderFailed(GetNextNalToDecode());
   ASSERT_EQ(::xvc::Decoder::State::kDecoderVersionTooLow, decoder_->GetState());
   DecodePictureFailed(GetNextNalToDecode());

@@ -34,6 +34,9 @@ size_t BitReader::GetPosition() const {
 }
 
 int BitReader::ReadBit() {
+  if (safe_bounds_ && consumed_ >= length_) {
+    throw std::runtime_error("row bitstream read past end");
+  }
   int val = buffer_[consumed_] & bit_mask_;
   bit_mask_ >>= 1;
   if (!bit_mask_) {
@@ -66,14 +69,22 @@ void BitReader::SkipBits() {
 }
 
 uint8_t BitReader::ReadByte() {
-  assert(consumed_ < length_);
   if (consumed_ >= length_) {
+    // Bounded row readers turn truncation into a catchable error instead of
+    // tripping an assert/out-of-bounds read on a malformed bitstream.
+    if (safe_bounds_) {
+      throw std::runtime_error("row bitstream read past end");
+    }
+    assert(consumed_ < length_);
     throw std::runtime_error("corrupt bitstream");
   }
   return buffer_[consumed_++];
 }
 
 void BitReader::ReadBytes(uint8_t *bytes, size_t len) {
+  if (safe_bounds_ && consumed_ + len > length_) {
+    throw std::runtime_error("row bitstream read past end");
+  }
   assert(consumed_ < length_);
   assert(consumed_ + len <= length_);
   size_t tocopy = std::min(len, length_ - consumed_);

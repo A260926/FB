@@ -99,13 +99,42 @@ public:
   int GetNumberOfCtu() const {
     return static_cast<int>(ctu_rs_list_[0].size());
   }
+  int GetCtuNumX() const { return ctu_num_x_; }
+  int GetCtuNumY() const { return ctu_num_y_; }
+
+  // Per CTU row spatial isolation used by row_restart mode.
+  // When active, all same-picture CU neighbor lookups outside of the
+  // half-open luma coordinate band [top, bottom) behave as unavailable.
+  // Reference pictures are separate PictureData instances and are unaffected.
+  void SetSpatialRowBand(bool active, int top_luma, int bottom_luma) {
+    row_band_active_ = active;
+    row_band_top_ = top_luma;
+    row_band_bottom_ = bottom_luma;
+  }
+  bool IsSpatialRowBandActive() const { return row_band_active_; }
+  int GetSpatialRowTop() const { return row_band_top_; }
+  int GetSpatialRowBottom() const { return row_band_bottom_; }
+  // True while a successfully decoded picture may be used as a reference.
+  // A row-restart picture that failed validation is marked false so that a
+  // partial reconstruction never enters the decoded picture buffer lists.
+  void SetReferenceUsable(bool usable) { reference_usable_ = usable; }
+  bool IsReferenceUsable() const { return reference_usable_; }
+
   const CodingUnit* GetCuAt(CuTree cu_tree, int posx, int posy) const {
+    if (row_band_active_ &&
+        (posy < row_band_top_ || posy >= row_band_bottom_)) {
+      return nullptr;
+    }
     ptrdiff_t cu_idx = (posy / constants::kMinBlockSize) * cu_pic_stride_ +
       (posx / constants::kMinBlockSize);
     return static_cast<CodingUnit*>(
       cu_pic_table_[static_cast<int>(cu_tree)][cu_idx]);
   }
   CodingUnit* GetCuAtForModification(CuTree cu_tree, int posx, int posy) {
+    if (row_band_active_ &&
+        (posy < row_band_top_ || posy >= row_band_bottom_)) {
+      return nullptr;
+    }
     ptrdiff_t cu_idx = (posy / constants::kMinBlockSize) * cu_pic_stride_ +
       (posx / constants::kMinBlockSize);
     return static_cast<CodingUnit*>(
@@ -209,6 +238,11 @@ private:
   int beta_offset_ = 0;
   int tc_offset_ = 0;
   bool lic_active_ = false;
+  // Per CTU row spatial isolation (row_restart version 3.0).
+  bool row_band_active_ = false;
+  int row_band_top_ = 0;
+  int row_band_bottom_ = 0;
+  bool reference_usable_ = true;
 };
 
 }   // namespace xvc

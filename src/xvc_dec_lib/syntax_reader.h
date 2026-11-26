@@ -41,6 +41,8 @@ public:
            BitReader *bit_reader);
   virtual ~SyntaxReader() {}
   virtual bool Finish() = 0;
+  // Diagnostic hash of the initial CABAC context state of this reader.
+  virtual uint32_t DiagnosticsFingerprint() const { return 0; }
 
   virtual bool ReadAffineFlag(const CodingUnit &cu, bool is_merge) = 0;
   virtual bool ReadCbf(const CodingUnit &cu, YuvComponent comp) = 0;
@@ -78,6 +80,9 @@ public:
   SyntaxReaderCabac(const Qp &qp, PicturePredictionType pic_type,
                     BitReader *bit_reader);
   bool Finish() override;
+  uint32_t DiagnosticsFingerprint() const override {
+    return ctx_.DiagnosticsFingerprint();
+  }
   bool ReadAffineFlag(const CodingUnit &cu, bool is_merge) override;
   bool ReadCbf(const CodingUnit &cu, YuvComponent comp) override;
   int ReadCoefficients(const CodingUnit &cu, YuvComponent comp,
