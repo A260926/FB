@@ -12,3 +12,5 @@ CMakeLists.txt.user
 toolchain-mingw64.cmake
 
 .claude/
+
+.task-build/

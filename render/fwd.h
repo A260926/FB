@@ -10,6 +10,7 @@
  */
 
 typedef struct Backend Backend;
+typedef struct LightChain LightChain;
 typedef struct Material Material;
 typedef struct Mesh Mesh;
 typedef struct PingoDepth PingoDepth;

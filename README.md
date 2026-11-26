@@ -45,6 +45,42 @@ The camera lives on the `Renderer` as `camera_projection` and `camera_view`.
 Backface culling, frustum culling and early-Z are toggles on the same struct
 (`renderer_enable_*`), all on by default.
 
+### Point lights
+
+Per-fragment point lighting is opt-in and defaults to off, so existing scenes
+keep their original face-shaded image. A `PointLight` (see
+`render/lighting.h`) carries a local-space `position`, a non-negative linear
+RGB `intensity` and a positive world-space `range`:
+
+```c
+#include "render/entity.h"
+#include "render/lighting.h"
+#include "render/renderer.h"
+
+/* The array is borrowed and must outlive every renderer_render() that uses
+ * it. NULL, 0 clears the node's lights. */
+PointLight lamp[] = {
+    { .position  = { 0.4f, 0.2f, 0.0f },
+      .intensity = { 6.0f, 3.0f, 2.0f },
+      .range     = 8.0f }
+};
+entity_set_point_lights(ship_entity, lamp, 1);
+
+/* Off by default after renderer_init(); ambient is linear RGB. */
+renderer_set_point_lighting(&renderer, true,
+                            (Vec3f){ 0.08f, 0.08f, 0.10f });
+renderer_render(&renderer);
+```
+
+A light is transformed by the full accumulated transform of the `Entity` it
+is bound to: node scale moves its position, while `range` stays an unscaled
+world distance. It lights that node's own `Object` and every visible
+descendant; descendants append their own lights and the list stops at the
+subtree boundary. The active list is traversal state, so one `Object`
+referenced by several nodes gets the right lights for each reference and
+sibling order never leaks between subtrees. With lighting enabled but no
+active light, fragments receive `ambient` only.
+
 ## Libraries
 
 Three libraries. Each is built by its own directory, which also holds that

@@ -19,6 +19,11 @@ int renderer_init(Renderer *r, Vec2i size, Backend *backend) {
   r->enable_frustum_culling = false; // Disabled by default (can have overhead)
   r->enable_early_z_test = true;
 
+  // Point lighting is opt-in; an initialized renderer keeps the old image.
+  r->point_lighting_enabled = false;
+  r->point_lighting_ambient = (Vec3f){0.0f, 0.0f, 0.0f};
+  r->light_chain = 0;
+
   int e = 0;
   e = texture_init(&r->framebuffer, size, backend->getFrameBuffer(r, backend));
   if (e)
@@ -29,6 +34,11 @@ int renderer_init(Renderer *r, Vec2i size, Backend *backend) {
 
 int renderer_render(Renderer *r) {
   Backend *be = r->backend;
+
+  // Always start a traversal with no inherited lights: changing the root
+  // between frames or reusing a Renderer must not leak a previous tree's
+  // chain (entity_render restores the chain before returning anyway).
+  r->light_chain = 0;
 
   int pixels = r->framebuffer.size.x * r->framebuffer.size.y;
   memset(be->getZetaBuffer(r, be), 0, pixels * sizeof(PingoDepth));
@@ -83,4 +93,14 @@ void renderer_set_all_optimizations(Renderer *renderer, bool enable) {
     renderer->enable_frustum_culling = enable;
     renderer->enable_early_z_test = enable;
   }
+}
+
+int renderer_set_point_lighting(Renderer *renderer, bool enabled,
+                                Vec3f ambient) {
+  IF_NULL_RETURN(renderer, SET_ERROR);
+
+  renderer->point_lighting_enabled = enabled;
+  renderer->point_lighting_ambient = ambient;
+
+  return OK;
 }

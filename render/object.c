@@ -1,6 +1,7 @@
 #include "object.h"
 #include "backend.h"
 #include "depth.h"
+#include "lighting.h"
 #include "math/fun.h"
 #include "math/mat4.h"
 #include "mesh.h"
@@ -74,6 +75,24 @@ int object_render(void *this, Mat4 m, Renderer *r) {
     Vec4f b = {ver2->x, ver2->y, ver2->z, 1};
     Vec4f c = {ver3->x, ver3->y, ver3->z, 1};
 
+    // World-space vertices through the node's complete accumulated
+    // transform. Point lighting shades in this space; the camera transforms
+    // below are only used for rasterization.
+    Vec4f wa4 = mat4MultiplyVec4(&a, &m);
+    Vec4f wb4 = mat4MultiplyVec4(&b, &m);
+    Vec4f wc4 = mat4MultiplyVec4(&c, &m);
+    float waw = wa4.w != 0.0f ? 1.0f / wa4.w : 1.0f;
+    float wbw = wb4.w != 0.0f ? 1.0f / wb4.w : 1.0f;
+    float wcw = wc4.w != 0.0f ? 1.0f / wc4.w : 1.0f;
+    Vec3f wa = {wa4.x * waw, wa4.y * waw, wa4.z * waw};
+    Vec3f wb = {wb4.x * wbw, wb4.y * wbw, wb4.z * wbw};
+    Vec3f wc = {wc4.x * wcw, wc4.y * wcw, wc4.z * wcw};
+
+    // Unit face normal from the world-space winding, using the same edge
+    // order as the camera-space face normal above.
+    Vec3f world_normal = vec3Normalize(
+        vec3Cross(vec3fsubV(wa, wb), vec3fsubV(wa, wc)));
+
     Mat4 vm = mat4MultiplyM(&v, &m);
 
     a = mat4MultiplyVec4(&a, &vm);
@@ -111,6 +130,12 @@ int object_render(void *this, Mat4 m, Renderer *r) {
     const float aw = a.w;
     const float bw = b.w;
     const float cw = c.w;
+
+    // Reciprocal clip w used by the perspective-correct world-position
+    // weights in point lighting. Lit legal geometry has positive clip w.
+    const float pinv_aw = 1.0f / aw;
+    const float pinv_bw = 1.0f / bw;
+    const float pinv_cw = 1.0f / cw;
 
     // convert to device coordinates by perspective division
     a.x /= a.w;
@@ -216,7 +241,49 @@ int object_render(void *this, Mat4 m, Renderer *r) {
         depth_write(r->backend->getZetaBuffer(r, r->backend), pixel_index,
                     depth);
 
-        if (o->material != 0) {
+        if (r->point_lighting_enabled) {
+          // World position from perspective-correct weights: screen
+          // barycentrics times reciprocal clip w, normalized. No vertex
+          // brightness is interpolated.
+          float pw0 = (float)w0 * pinv_aw;
+          float pw1 = (float)w1 * pinv_bw;
+          float pw2 = (float)w2 * pinv_cw;
+          float pwsum = pw0 + pw1 + pw2;
+
+          Vec3f world_p;
+          world_p.x =
+              (pw0 * wa.x + pw1 * wb.x + pw2 * wc.x) / pwsum;
+          world_p.y =
+              (pw0 * wa.y + pw1 * wb.y + pw2 * wc.y) / pwsum;
+          world_p.z =
+              (pw0 * wa.z + pw1 * wb.z + pw2 * wc.z) / pwsum;
+
+          Vec3f light =
+              lighting_evaluate(r->light_chain, world_normal, world_p,
+                                r->point_lighting_ambient);
+
+          Pixel base;
+          if (o->material != 0) {
+            // Same perspective-correct texture interpolation as the
+            // legacy path.
+            const float interpInvW = w0 * invAw + w1 * invBw + w2 * invCw;
+            if (interpInvW == 0) {
+              continue;
+            }
+            const float textCoordx =
+                (w0 * tca.x + w1 * tcb.x + w2 * tcc.x) / interpInvW;
+            const float textCoordy =
+                (w0 * tca.y + w1 * tcb.y + w2 * tcc.y) / interpInvW;
+
+            base = texture_readF(o->material->texture,
+                                 (Vec2f){textCoordx, textCoordy});
+          } else {
+            base = pixelFromUInt8(255);
+          }
+
+          texture_draw(&r->framebuffer, (Vec2i){x, y},
+                       lighting_shade_pixel(light, base));
+        } else if (o->material != 0) {
           // Texture lookup
 
           const float interpInvW = w0 * invAw + w1 * invBw + w2 * invCw;
