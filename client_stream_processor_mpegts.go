@@ -56,6 +56,7 @@ type clientStreamProcessorMPEGTS struct {
 	dateTimeProcessed bool
 	streamTracks      []*clientTrack
 	timeConv          *clientTimeConvMPEGTS
+	epochManager      *clientFMP4EpochManager
 	queuedSamples     []func() error
 
 	chTrackProcessorDone chan struct{}
@@ -63,6 +64,12 @@ type clientStreamProcessorMPEGTS struct {
 
 func (p *clientStreamProcessorMPEGTS) initialize() {
 	p.chTrackProcessorDone = make(chan struct{}, clientMaxTracksPerStream)
+
+	// a leading MPEG-TS rendition cannot provide a time origin to fMP4
+	// renditions, exactly like the legacy converter does.
+	if p.epochManager != nil && p.isLeading {
+		p.epochManager.setUnsupported()
+	}
 }
 
 func (p *clientStreamProcessorMPEGTS) run(errGroupCtx context.Context) error {
@@ -282,8 +289,8 @@ func (p *clientStreamProcessorMPEGTS) processSample2(
 	if !p.dateTimeProcessed && p.isLeading && isLeadingTrack {
 		p.dateTimeProcessed = true
 
-		if p.curSegment.dateTime != nil {
-			p.timeConv.setNTP(*p.curSegment.dateTime, dts)
+		if p.curSegment.hasPDT {
+			p.timeConv.setNTP(p.curSegment.dateTime, dts)
 		}
 		p.timeConv.setLeadingNTPReceived()
 	}

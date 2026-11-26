@@ -99,6 +99,17 @@ type Client struct {
 	// HTTP client.
 	// It defaults to a new http.Client with cookies enabled.
 	HTTPClient *http.Client
+	// EnableFMP4Discontinuities enables discontinuity-aware timestamp handling
+	// for traditional fMP4 playlists.
+	//
+	// When enabled, each rendition's timelines are synchronized through the
+	// absolute discontinuity sequence and every PROGRAM-DATE-TIME, so that a
+	// discontinuity can reset the tfdt of a track (and renditions can enter the
+	// next generation at different times) while DTS and absolute timestamps
+	// remain continuous.
+	//
+	// It defaults to false.
+	EnableFMP4Discontinuities bool
 
 	//
 	// callbacks (all optional)
@@ -126,6 +137,7 @@ type Client struct {
 	ctxCancel         func()
 	playlistURL       *url.URL
 	primaryDownloader *clientPrimaryDownloader
+	epochManager      *clientFMP4EpochManager
 	tracks            map[*Track]*clientTrack
 	closeError        error
 
@@ -188,6 +200,10 @@ func (c *Client) Start() error {
 	}
 
 	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
+
+	if c.EnableFMP4Discontinuities {
+		c.epochManager = newClientFMP4EpochManager()
+	}
 
 	c.done = make(chan struct{})
 
@@ -299,6 +315,7 @@ func (c *Client) runInner() error {
 		startDistance:             c.StartDistance,
 		maxDistance:               c.MaxDistance,
 		httpClient:                c.HTTPClient,
+		epochManager:              c.epochManager,
 		errGroup:                  errGroup,
 		onRequest:                 c.OnRequest,
 		onDownloadPrimaryPlaylist: c.OnDownloadPrimaryPlaylist,

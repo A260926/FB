@@ -81,6 +81,7 @@ type clientStreamDownloader struct {
 	startDistance            int
 	maxDistance              int
 	httpClient               *http.Client
+	epochManager             *clientFMP4EpochManager
 	onRequest                ClientOnRequestFunc
 	onDownloadStreamPlaylist ClientOnDownloadStreamPlaylistFunc
 	onDownloadSegment        ClientOnDownloadSegmentFunc
@@ -119,6 +120,17 @@ func (d *clientStreamDownloader) run(errGroupCtx context.Context) error {
 	d.segmentQueue = &clientSegmentQueue{}
 	d.segmentQueue.initialize()
 
+	// discontinuity generations are only handled by the traditional path;
+	// the low-latency one keeps its existing behavior.
+	lowLatency := d.firstPlaylist.ServerControl != nil &&
+		d.firstPlaylist.ServerControl.CanBlockReload &&
+		d.firstPlaylist.PreloadHint != nil
+
+	var epochManager *clientFMP4EpochManager
+	if !lowLatency {
+		epochManager = d.epochManager
+	}
+
 	if d.firstPlaylist.Map != nil && d.firstPlaylist.Map.URI != "" {
 		initFile, err := d.downloadSegment(
 			errGroupCtx,
@@ -137,6 +149,7 @@ func (d *clientStreamDownloader) run(errGroupCtx context.Context) error {
 			segmentQueue: d.segmentQueue,
 			errGroup:     d.errGroup,
 			parent:       d,
+			epochManager: epochManager,
 		}
 		proc.initialize()
 
@@ -150,6 +163,7 @@ func (d *clientStreamDownloader) run(errGroupCtx context.Context) error {
 			segmentQueue:  d.segmentQueue,
 			errGroup:      d.errGroup,
 			parent:        d,
+			epochManager:  d.epochManager,
 		}
 		proc.initialize()
 
@@ -160,9 +174,7 @@ func (d *clientStreamDownloader) run(errGroupCtx context.Context) error {
 
 	var err error
 
-	if d.firstPlaylist.ServerControl != nil &&
-		d.firstPlaylist.ServerControl.CanBlockReload &&
-		d.firstPlaylist.PreloadHint != nil {
+	if lowLatency {
 		err = d.runLowLatency(errGroupCtx)
 	} else {
 		err = d.runTraditional(errGroupCtx)
@@ -186,7 +198,8 @@ func (d *clientStreamDownloader) runLowLatency(errGroupCtx context.Context) erro
 		}
 
 		d.segmentQueue.push(&segmentData{
-			dateTime: dateTimeOfPreloadHint(pl),
+			dateTime: dateTimeOfPreloadHintValue(pl),
+			hasPDT:   dateTimeOfPreloadHint(pl) != nil,
 			payload:  byts,
 		})
 
@@ -201,17 +214,33 @@ func (d *clientStreamDownloader) runLowLatency(errGroupCtx context.Context) erro
 	}
 }
 
+func dateTimeValue(v *time.Time) time.Time {
+	if v != nil {
+		return *v
+	}
+	return time.Time{}
+}
+
+func dateTimeOfPreloadHintValue(pl *playlist.Media) time.Time {
+	if v := dateTimeOfPreloadHint(pl); v != nil {
+		return *v
+	}
+	return time.Time{}
+}
+
 func (d *clientStreamDownloader) runTraditional(errGroupCtx context.Context) error {
 	pl := d.firstPlaylist
 
 	for {
-		seg, payload, err := d.downloadNextSegment(errGroupCtx, pl)
+		seg, payload, epoch, err := d.downloadNextSegment(errGroupCtx, pl)
 		if err != nil {
 			return err
 		}
 
 		d.segmentQueue.push(&segmentData{
-			dateTime: seg.DateTime,
+			dateTime: dateTimeValue(seg.DateTime),
+			hasPDT:   seg.DateTime != nil,
+			epoch:    epoch,
 			payload:  payload,
 		})
 
@@ -351,10 +380,26 @@ func (d *clientStreamDownloader) downloadSegment(
 	return byts, nil
 }
 
+func equalUint64Ptr(a *uint64, b *uint64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 func (d *clientStreamDownloader) downloadNextSegment(
 	errGroupCtx context.Context,
 	pl *playlist.Media,
-) (*playlist.MediaSegment, []byte, error) {
+) (*playlist.MediaSegment, []byte, int64, error) {
+	// discontinuities do not allow switching the initialization object
+	if d.epochManager != nil && pl.Map != nil && d.firstPlaylist.Map != nil {
+		if pl.Map.URI != d.firstPlaylist.Map.URI ||
+			!equalUint64Ptr(pl.Map.ByteRangeStart, d.firstPlaylist.Map.ByteRangeStart) ||
+			!equalUint64Ptr(pl.Map.ByteRangeLength, d.firstPlaylist.Map.ByteRangeLength) {
+			return nil, nil, 0, fmt.Errorf("changing the initialization object at a discontinuity is not supported")
+		}
+	}
+
 	var seg *playlist.MediaSegment
 	var segPos int
 
@@ -363,14 +408,14 @@ func (d *clientStreamDownloader) downloadNextSegment(
 			*d.firstPlaylist.PlaylistType == playlist.MediaPlaylistTypeVOD) || d.firstPlaylist.Endlist {
 			// VOD stream: start from the beginning
 			if len(pl.Segments) == 0 {
-				return nil, nil, fmt.Errorf("no segments found")
+				return nil, nil, 0, fmt.Errorf("no segments found")
 			}
 			seg = pl.Segments[0]
 		} else {
 			// live stream: start from clientLiveInitialDistance
 			seg, segPos = findSegmentWithInvPosition(pl.Segments, d.startDistance)
 			if seg == nil {
-				return nil, nil, fmt.Errorf("there aren't enough segments to fill the buffer")
+				return nil, nil, 0, fmt.Errorf("there aren't enough segments to fill the buffer")
 			}
 		}
 	} else {
@@ -378,25 +423,27 @@ func (d *clientStreamDownloader) downloadNextSegment(
 		seg, segPos, invPos = findSegmentWithID(pl.MediaSequence, pl.Segments, *d.curSegmentID+1)
 		if seg == nil {
 			if pl.Endlist {
-				return nil, nil, ErrClientEOS
+				return nil, nil, 0, ErrClientEOS
 			}
-			return nil, nil, fmt.Errorf("next segment not found or not ready yet")
+			return nil, nil, 0, fmt.Errorf("next segment not found or not ready yet")
 		}
 
 		if !pl.Endlist && invPos > d.maxDistance {
-			return nil, nil, fmt.Errorf("playback is too late")
+			return nil, nil, 0, fmt.Errorf("playback is too late")
 		}
 	}
 
 	d.curSegmentID = new(pl.MediaSequence + segPos)
 
+	epoch := discontinuityEpochOf(pl, segPos)
+
 	byts, err := d.downloadSegment(errGroupCtx, seg.URI,
 		new(segmentByteRangeStart(pl.Segments, segPos)), seg.ByteRangeLength)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
-	return seg, byts, nil
+	return seg, byts, epoch, nil
 }
 
 func (d *clientStreamDownloader) startStreaming(

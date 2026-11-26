@@ -12,10 +12,20 @@ import (
 	"github.com/bluenviron/gohlslib/v2/pkg/codecs"
 )
 
+type procEntryFMP4Sample struct {
+	pts  int64
+	dts  int64
+	ntp  *time.Time
+	data [][]byte
+}
+
 type procEntryFMP4 struct {
 	partTrack *fmp4.PartTrack
 	dts       int64
 	ntp       *time.Time
+
+	// when non-nil, samples are already decoded and timestamped
+	epochSamples []procEntryFMP4Sample
 }
 
 type clientTrackProcessorFMP4StreamProcessor interface {
@@ -110,6 +120,16 @@ func (t *clientTrackProcessorFMP4) run(errGroupCtx context.Context) error {
 
 func (t *clientTrackProcessorFMP4) process(errGroupCtx context.Context, entry *procEntryFMP4) error {
 	defer t.streamProcessor.onPartTrackProcessed()
+
+	if entry.epochSamples != nil {
+		for _, sample := range entry.epochSamples {
+			err := t.track.handleData(errGroupCtx, sample.pts, sample.dts, sample.ntp, sample.data)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	dts := entry.dts
 

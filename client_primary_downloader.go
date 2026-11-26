@@ -141,6 +141,7 @@ type clientPrimaryDownloader struct {
 	timeConv         clientTimeConv
 	timeConvReady    chan struct{}
 	chProcessorError chan error
+	epochManager     *clientFMP4EpochManager
 }
 
 func (d *clientPrimaryDownloader) initialize() {
@@ -195,6 +196,7 @@ func (d *clientPrimaryDownloader) run(errGroupCtx context.Context) error {
 			startDistance:            d.startDistance,
 			maxDistance:              d.maxDistance,
 			httpClient:               d.httpClient,
+			epochManager:             d.epochManager,
 			onRequest:                d.onRequest,
 			onDownloadStreamPlaylist: d.onDownloadStreamPlaylist,
 			onDownloadSegment:        d.onDownloadSegment,
@@ -230,6 +232,7 @@ func (d *clientPrimaryDownloader) run(errGroupCtx context.Context) error {
 			startDistance:            d.startDistance,
 			maxDistance:              d.maxDistance,
 			httpClient:               d.httpClient,
+			epochManager:             d.epochManager,
 			onRequest:                d.onRequest,
 			onDownloadStreamPlaylist: d.onDownloadStreamPlaylist,
 			onDownloadSegment:        d.onDownloadSegment,
@@ -268,6 +271,7 @@ func (d *clientPrimaryDownloader) run(errGroupCtx context.Context) error {
 
 					renditionStream := &clientStreamDownloader{
 						isLeading:                false,
+						epochManager:             d.epochManager,
 						onRequest:                d.onRequest,
 						startDistance:            d.startDistance,
 						maxDistance:              d.maxDistance,

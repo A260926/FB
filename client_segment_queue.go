@@ -7,9 +7,19 @@ import (
 )
 
 type segmentData struct {
-	dateTime *time.Time
+	dateTime time.Time
+	hasPDT   bool
+	epoch    int64
 	payload  []byte
 	err      error
+}
+
+func (s *segmentData) dateTimePtr() *time.Time {
+	if !s.hasPDT {
+		return nil
+	}
+	v := s.dateTime
+	return &v
 }
 
 type clientSegmentQueue struct {

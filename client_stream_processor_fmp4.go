@@ -3,6 +3,7 @@ package gohlslib
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -52,16 +53,27 @@ type clientStreamProcessorFMP4 struct {
 	segmentQueue *clientSegmentQueue
 	errGroup     *errgroup.Group
 	parent       clientStreamProcessorParent
+	epochManager *clientFMP4EpochManager
+	epochStream  *clientFMP4EpochStream
+	enableEpochs bool
 
 	init               fmp4.Init
 	leadingTrackID     int
+	leadingTrackRate   int64
 	trackProcessors    map[int]*clientTrackProcessorFMP4
 	clientStreamTracks []*clientTrack
 	timeConv           *clientTimeConvFMP4
 	segmentWaitGroup   *sync.WaitGroup
+
+	lastDeliveredEnd map[int]int64
+	playbackStarted  bool
 }
 
 func (p *clientStreamProcessorFMP4) initialize() {
+	if p.epochManager != nil {
+		p.enableEpochs = true
+		p.epochStream = p.epochManager.newStream(p.isLeading)
+	}
 }
 
 func (p *clientStreamProcessorFMP4) run(errGroupCtx context.Context) error {
@@ -121,6 +133,13 @@ func (p *clientStreamProcessorFMP4) run(errGroupCtx context.Context) error {
 		}
 
 		if seg.err != nil {
+			if p.enableEpochs {
+				if errors.Is(seg.err, ErrClientEOS) {
+					p.epochManager.markEOS(p.epochStream)
+				} else {
+					p.epochManager.fail(seg.err)
+				}
+			}
 			p.parent.onProcessorError(errGroupCtx, seg.err)
 			<-errGroupCtx.Done()
 			return fmt.Errorf("terminated")
@@ -128,6 +147,10 @@ func (p *clientStreamProcessorFMP4) run(errGroupCtx context.Context) error {
 
 		err = p.processSegment(errGroupCtx, seg)
 		if err != nil {
+			if p.enableEpochs {
+				p.epochManager.fail(err)
+				p.epochManager.markEOS(p.epochStream)
+			}
 			return err
 		}
 	}
@@ -151,19 +174,25 @@ func (p *clientStreamProcessorFMP4) processSegment(errGroupCtx context.Context, 
 			return err
 		}
 
-		err = p.initializeTimeConv(errGroupCtx, leadingPartTrack)
-		if err != nil {
-			return err
+		if !p.enableEpochs {
+			err = p.initializeTimeConv(errGroupCtx, leadingPartTrack)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
+	if p.enableEpochs {
+		return p.processSegmentEpoch(errGroupCtx, seg, parts, leadingPartTrack)
+	}
+
 	if p.isLeading {
-		if seg.dateTime != nil {
+		if dateTime := seg.dateTimePtr(); dateTime != nil {
 			leadingPartTrackProc := p.trackProcessors[leadingPartTrack.ID]
 			dts := p.timeConv.
 				convert(int64(leadingPartTrack.BaseTime), leadingPartTrackProc.track.track.ClockRate)
 			p.timeConv.
-				setNTP(*seg.dateTime, dts, leadingPartTrackProc.track.track.ClockRate)
+				setNTP(*dateTime, dts, leadingPartTrackProc.track.track.ClockRate)
 		}
 		p.timeConv.setLeadingNTPReceived()
 	}
@@ -201,6 +230,146 @@ func (p *clientStreamProcessorFMP4) processSegment(errGroupCtx context.Context, 
 
 func (p *clientStreamProcessorFMP4) onPartTrackProcessed() {
 	p.segmentWaitGroup.Done()
+}
+
+// processSegmentEpoch converts and delivers a segment when
+// EnableFMP4Discontinuities is active. All samples are validated and decoded
+// before the segment's epoch anchor is committed, so that a bad segment is
+// rejected without publishing any shared state.
+func (p *clientStreamProcessorFMP4) processSegmentEpoch(
+	errGroupCtx context.Context,
+	seg *segmentData,
+	parts fmp4.Parts,
+	leadingPartTrack *fmp4.PartTrack,
+) error {
+	if p.leadingTrackRate == 0 {
+		p.leadingTrackRate = int64(findTimeScaleOfLeadingTrack(p.init.Tracks, p.leadingTrackID))
+	}
+
+	if p.lastDeliveredEnd == nil {
+		p.lastDeliveredEnd = make(map[int]int64)
+	}
+
+	plan, err := p.epochManager.resolveSegment(
+		errGroupCtx,
+		p.epochStream,
+		seg.epoch,
+		seg.dateTime,
+		seg.hasPDT,
+		p.leadingTrackRate,
+		int64(leadingPartTrack.BaseTime))
+	if err != nil {
+		return err
+	}
+
+	// validate and decode every sample before publishing the segment anchor
+	entries := make(map[int]*procEntryFMP4, len(p.trackProcessors))
+	endTimes := make(map[int]int64, len(p.trackProcessors))
+
+	for _, part := range parts {
+		for _, partTrack := range part.Tracks {
+			trackProc, ok := p.trackProcessors[partTrack.ID]
+			if !ok {
+				continue
+			}
+
+			if _, ok2 := entries[partTrack.ID]; ok2 {
+				return fmt.Errorf("multiple parts of the same track in a single segment are not supported")
+			}
+
+			clockRate := int64(trackProc.track.track.ClockRate)
+
+			dts := plan.anchor.firstDTS(int64(partTrack.BaseTime), clockRate)
+			if last, hasLast := p.lastDeliveredEnd[partTrack.ID]; hasLast && dts < last {
+				return fmt.Errorf("segment starts before the end of the previous segment")
+			}
+
+			samples, end, decErr := p.prepareEpochSamples(plan.anchor, partTrack, trackProc, clockRate, dts)
+			if decErr != nil {
+				return decErr
+			}
+
+			entries[partTrack.ID] = &procEntryFMP4{epochSamples: samples}
+			endTimes[partTrack.ID] = end
+		}
+	}
+
+	// keep the usual playback pacing: it starts when the leading rendition
+	// publishes its first anchor. This is done before the anchor is published
+	// so that other renditions cannot start delivering samples concurrently.
+	if p.isLeading && !p.playbackStarted {
+		p.playbackStarted = true
+
+		marker := &clientTimeConvFMP4{
+			leadingTimeScale: p.leadingTrackRate,
+			leadingBaseTime:  int64(leadingPartTrack.BaseTime),
+		}
+		marker.initialize()
+		marker.setNTP(plan.anchor.q, 0, int(p.leadingTrackRate))
+		marker.setLeadingNTPReceived()
+
+		p.parent.setTimeConv(marker)
+	}
+
+	// all samples are valid: publish the anchor and hand the samples over
+	err = p.epochManager.commitSegment(errGroupCtx, p.epochStream, plan)
+	if err != nil {
+		return err
+	}
+
+	p.segmentWaitGroup = &sync.WaitGroup{}
+
+	for trackID, entry := range entries {
+		trackProc := p.trackProcessors[trackID]
+
+		p.segmentWaitGroup.Add(1)
+
+		err = trackProc.push(errGroupCtx, entry)
+		if err != nil {
+			p.segmentWaitGroup.Done()
+			return err
+		}
+
+		p.lastDeliveredEnd[trackID] = endTimes[trackID]
+	}
+
+	p.segmentWaitGroup.Wait()
+
+	return nil
+}
+
+func (p *clientStreamProcessorFMP4) prepareEpochSamples(
+	anchor *clientFMP4EpochAnchor,
+	partTrack *fmp4.PartTrack,
+	trackProc *clientTrackProcessorFMP4,
+	clockRate int64,
+	startDTS int64,
+) ([]procEntryFMP4Sample, int64, error) {
+	samples := make([]procEntryFMP4Sample, 0, len(partTrack.Samples))
+
+	dts := startDTS
+	raw := int64(partTrack.BaseTime)
+
+	for _, sample := range partTrack.Samples {
+		data, err := trackProc.decodePayload(sample)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		ntp := anchor.absoluteTime(raw, clockRate)
+
+		samples = append(samples, procEntryFMP4Sample{
+			pts:  dts + int64(sample.PTSOffset),
+			dts:  dts,
+			ntp:  &ntp,
+			data: data,
+		})
+
+		dts += int64(sample.Duration)
+		raw += int64(sample.Duration)
+	}
+
+	return samples, dts, nil
 }
 
 func (p *clientStreamProcessorFMP4) initializeTrackProcessors(errGroupCtx context.Context) error {
