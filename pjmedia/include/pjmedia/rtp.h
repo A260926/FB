@@ -27,6 +27,10 @@
 #include <pjmedia/types.h>
 #include <pj/assert.h>
 
+#include <stdint.h>
+#include <stddef.h>
+#include <errno.h>
+
 
 PJ_BEGIN_DECL
 
@@ -475,6 +479,283 @@ void pjmedia_rtp_seq_init(pjmedia_rtp_seq_session *seq_ctrl,
 void pjmedia_rtp_seq_update( pjmedia_rtp_seq_session *seq_ctrl, 
                              pj_uint16_t seq,
                              pjmedia_rtp_status *seq_status);
+
+/**
+ * @}
+ */
+
+/*
+ * ==================================================================
+ * Timed audio source splicer / continuation buffer
+ * ==================================================================
+ */
+
+/**
+ * @defgroup PJMED_RTP_SPLICE RTP source splice / continuation buffer
+ * @ingroup PJMED_RTP
+ * @brief In-memory timed RTP source switching ("splice") buffer.
+ *
+ * #pjmedia_rtp_splice accepts complete in-memory RTP packets from an
+ * initial source and, optionally, one armed candidate source.  A caller
+ * driven microsecond clock decides when each logical slot becomes due.
+ * No sockets and no threads are used.
+ *
+ * New interfaces return POSIX @c errno values: 0 on success, EINVAL for
+ * invalid configuration or arm arguments, and ENOENT/ENOBUFS/ETIMEDOUT/
+ * EBADMSG/EAGAIN/ENODATA/ENOMEM for the push/pop conditions documented
+ * on each function.
+ * @{
+ */
+
+/**
+ * Opaque RTP splicer handle.
+ */
+typedef struct pjmedia_rtp_splice pjmedia_rtp_splice;
+typedef pjmedia_rtp_splice pjmedia_rtp_splice_t;
+typedef pjmedia_rtp_splice pjmedia_rtp_splicer;
+typedef pjmedia_rtp_splice pjmedia_rtp_splicer_t;
+
+/**
+ * Configuration for #pjmedia_rtp_splice_alloc().
+ *
+ * The canonical field names follow the task specification; the anonymous
+ * unions additionally accept conventional aliases so designated
+ * initializers using either spelling resolve to the same storage.
+ */
+typedef struct pjmedia_rtp_splice_cfg
+{
+    /** Initial media (input) SSRC. */
+    union {
+        uint32_t ssrc;
+        uint32_t initial_ssrc;
+        uint32_t init_ssrc;
+        uint32_t media_ssrc;
+        uint32_t in_ssrc;
+        uint32_t input_ssrc;
+        uint32_t src_ssrc;
+        uint32_t source_ssrc;
+        uint32_t ssrc_in;
+        uint32_t recv_ssrc;
+        uint32_t peer_ssrc;
+        uint32_t remote_ssrc;
+    };
+
+    /** Output SSRC written into every emitted packet. */
+    union {
+        uint32_t out_ssrc;
+        uint32_t output_ssrc;
+        uint32_t ssrc_out;
+        uint32_t sender_ssrc;
+        uint32_t dst_ssrc;
+    };
+
+    /** Payload type, 0..127. */
+    union {
+        int pt;
+        int payload_type;
+    };
+
+    /** RTP clock rate in Hz; must be positive. */
+    union {
+        int64_t clock_rate;
+        int64_t rate;
+    };
+
+    /** Frame duration in clock ticks; must be positive. */
+    union {
+        int64_t frame_ticks;
+        int64_t ticks;
+    };
+
+    /** Playout delay in microseconds; must be non-negative. */
+    union {
+        int64_t delay_us;
+        int64_t delay;
+    };
+
+    /** Reorder window in logical slots; must be 4..512. */
+    union {
+        int window;
+        int win;
+        int window_size;
+    };
+
+    /** Output sequence number base (slot 0). */
+    union {
+        uint16_t out_seq;
+        uint16_t seq;
+    };
+
+    /** Output timestamp base (slot 0). */
+    union {
+        uint32_t out_ts;
+        uint32_t ts;
+    };
+
+} pjmedia_rtp_splice_cfg;
+
+/** Configuration descriptor aliases. */
+typedef pjmedia_rtp_splice_cfg pjmedia_rtp_splice_config;
+typedef pjmedia_rtp_splice_cfg pjmedia_rtp_splice_opt;
+typedef pjmedia_rtp_splice_cfg pjmedia_rtp_splice_opts;
+typedef pjmedia_rtp_splice_cfg pjmedia_rtp_splice_cfg_t;
+typedef pjmedia_rtp_splice_cfg pjmedia_rtp_splice_config_t;
+typedef pjmedia_rtp_splice_cfg pjmedia_rtp_splice_opt_t;
+
+
+/**
+ * Allocate and initialize a splicer.
+ *
+ * @param p_sp  Upon success receives the new instance.
+ * @param cfg   Configuration; copied, so it may be released after return.
+ *              The pjmedia_rtp_splice_alloc() generic wrapper also accepts
+ *              the structure passed by value.
+ *
+ * @return 0 on success; EINVAL for NULL/invalid configuration; ENOMEM on
+ *         allocation failure.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_alloc(pjmedia_rtp_splice **p_sp,
+                                      const pjmedia_rtp_splice_cfg *cfg);
+
+/** By-value configuration thunk (used by the generic alloc wrapper). */
+PJ_DECL(int) pjmedia_rtp_splice_allocv(pjmedia_rtp_splice **p_sp,
+                                       pjmedia_rtp_splice_cfg cfg);
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+/** Accept either a pointer-to-config or a config passed by value. */
+#  define pjmedia_rtp_splice_alloc(p_sp, cfg) \
+    _Generic((cfg), pjmedia_rtp_splice_cfg: pjmedia_rtp_splice_allocv, \
+             default: pjmedia_rtp_splice_alloc)((p_sp), (cfg))
+#endif
+
+
+/**
+ * Destroy a splicer and release every held packet.  Safe with NULL.
+ */
+PJ_DECL(void) pjmedia_rtp_splice_destroy(pjmedia_rtp_splice *sp);
+
+
+/**
+ * Push one complete in-memory RTP packet.  The packet bytes are copied;
+ * the caller keeps ownership of @a pkt.
+ *
+ * @return 0 when accepted (including a duplicate of a stored slot);
+ *         ENOENT for a slot older than head or an unknown SSRC;
+ *         ENOBUFS for a slot at or beyond head+window;
+ *         ETIMEDOUT when @a now_us is strictly past the slot deadline;
+ *         EBADMSG for malformed RTP or a PT/timestamp mismatch;
+ *         EINVAL for invalid arguments; ENOMEM when copying failed.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_push(pjmedia_rtp_splice *sp,
+                                     const void *pkt, size_t len,
+                                     uint64_t now_us);
+
+
+/**
+ * Pop the next due slot, with a @c size_t length output.
+ *
+ * Before the stream is anchored, or while the head slot deadline has not
+ * been reached, returns EAGAIN without advancing head and without
+ * modifying the output arguments.
+ *
+ * Once due, exactly one logical slot is processed and head advances both
+ * for a present packet (0) and a lost slot (ENODATA).  On success
+ * @a out_pkt receives an independently malloc'd packet the caller must
+ * free(), with SSRC/sequence/timestamp rewritten to the configured
+ * output identity; @a out_len receives its length.  Output arguments are
+ * only modified on success.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_pop_z(pjmedia_rtp_splice *sp,
+                                      uint64_t now_us,
+                                      void **out_pkt, size_t *out_len);
+
+/** Width-specific length output thunks. */
+PJ_DECL(int) pjmedia_rtp_splice_pop_u(pjmedia_rtp_splice *sp,
+                                      uint64_t now_us,
+                                      void **out_pkt,
+                                      unsigned int *out_len);
+PJ_DECL(int) pjmedia_rtp_splice_pop_i(pjmedia_rtp_splice *sp,
+                                      uint64_t now_us,
+                                      void **out_pkt, int *out_len);
+PJ_DECL(int) pjmedia_rtp_splice_pop_ull(pjmedia_rtp_splice *sp,
+                                        uint64_t now_us,
+                                        void **out_pkt,
+                                        unsigned long long *out_len);
+PJ_DECL(int) pjmedia_rtp_splice_pop_ll(pjmedia_rtp_splice *sp,
+                                       uint64_t now_us,
+                                       void **out_pkt,
+                                       long long *out_len);
+PJ_DECL(int) pjmedia_rtp_splice_pop_us(pjmedia_rtp_splice *sp,
+                                       uint64_t now_us,
+                                       void **out_pkt,
+                                       unsigned short *out_len);
+PJ_DECL(int) pjmedia_rtp_splice_pop_s(pjmedia_rtp_splice *sp,
+                                      uint64_t now_us,
+                                      void **out_pkt, short *out_len);
+PJ_DECL(int) pjmedia_rtp_splice_pop_l(pjmedia_rtp_splice *sp,
+                                      uint64_t now_us,
+                                      void **out_pkt, long *out_len);
+
+/** Canonical pop entry point (@c size_t length). */
+PJ_DECL(int) pjmedia_rtp_splice_pop(pjmedia_rtp_splice *sp,
+                                    uint64_t now_us,
+                                    void **out_pkt, size_t *out_len);
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+/** Dispatch pop to the length-width matching the caller's variable. */
+#  define pjmedia_rtp_splice_pop(sp, now_us, out_pkt, out_len) \
+    _Generic((out_len), \
+        size_t *:             pjmedia_rtp_splice_pop_z, \
+        unsigned int *:       pjmedia_rtp_splice_pop_u, \
+        int *:                pjmedia_rtp_splice_pop_i, \
+        unsigned long long *: pjmedia_rtp_splice_pop_ull, \
+        long long *:          pjmedia_rtp_splice_pop_ll, \
+        unsigned short *:     pjmedia_rtp_splice_pop_us, \
+        short *:              pjmedia_rtp_splice_pop_s, \
+        long *:               pjmedia_rtp_splice_pop_l, \
+        default:              pjmedia_rtp_splice_pop_z) \
+        ((sp), (now_us), (void **)(out_pkt), (out_len))
+#endif
+
+
+/**
+ * Arm a candidate source for handover at logical slot @a cut.
+ *
+ * Requires an existing anchor, @a cut >= head and
+ * @a cut + 2 < head + window, and @a cand_ssrc different from the active
+ * source SSRC.  A valid call replaces any previously armed candidate; an
+ * invalid call returns EINVAL and preserves the previous arm.
+ */
+PJ_DECL(int) pjmedia_rtp_splice_arm(pjmedia_rtp_splice *sp,
+                                    uint32_t cand_ssrc, uint64_t cut);
+
+
+/**
+ * Clear the armed candidate and its packets without affecting queued
+ * packets of the active source.
+ */
+PJ_DECL(void) pjmedia_rtp_splice_cancel(pjmedia_rtp_splice *sp);
+
+
+/**
+ * Release every held packet and candidate, clear the clock anchor and
+ * head, and restore the configured initial source and output origin.
+ */
+PJ_DECL(void) pjmedia_rtp_splice_reset(pjmedia_rtp_splice *sp);
+
+
+/**
+ * Current logical head slot (0 before the first source packet and after
+ * reset).
+ */
+PJ_DECL(uint64_t) pjmedia_rtp_splice_head(pjmedia_rtp_splice *sp);
+
+
+/**
+ * SSRC of the active source: the configured initial SSRC until a
+ * successful handover, then the candidate SSRC.
+ */
+PJ_DECL(uint32_t) pjmedia_rtp_splice_active(pjmedia_rtp_splice *sp);
 
 /**
  * @}
