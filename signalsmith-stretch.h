@@ -50,13 +50,14 @@ struct SignalsmithStretch {
 		stft.reset(0.1);
 		stashedInput = stft.input;
 		stashedOutput = stft.output;
-		
+
 		prevInputOffset = -1;
 		_channelBands.assign(_channelBands.size(), Band());
 		silenceCounter = 0;
 		didSeek = false;
 		blockProcess = {};
 		freqEstimateWeighted = freqEstimateWeight = 0;
+		clearSpectralFreeze();
 	}
 
 	// Configures using a default preset
@@ -91,6 +92,17 @@ struct SignalsmithStretch {
 
 		tmpProcessBuffer.resize(blockSamples + intervalSamples);
 		tmpPreRollBuffer.resize(outputLatency()*channels);
+
+		// Spectral-freeze working memory: depends only on channel count and window size
+		freezeRef.assign(bands, 0);
+		freezeLock.assign(bands, 0);
+		freezeAmp.assign(bands, 0);
+		freezeOsc.assign(bands, Complex(1, 0));
+		freezeRot.assign(bands, Complex(1, 0));
+		freezeTwist.assign(bands, Complex(0, 0));
+		freezeMaster.assign(bands, Complex(0, 0));
+		freezeRatio.assign(channels*bands, Complex(0, 0));
+		clearSpectralFreeze();
 	}
 	// For querying the existing config
 	int blockSamples() const {
@@ -133,11 +145,23 @@ struct SignalsmithStretch {
 	void setFormantBase(Sample baseFreq=0) {
 		formantBaseFreq = baseFreq;
 	}
-	
+
+	// Spectral freeze ("hold the current timbre").  The request is latched at the start of the next synthesis hop.
+	// While active, the captured spectral energies/frequencies and stereo image are sustained instead of the live input.
+	void setSpectralFreeze(bool enabled) {
+		freezeRequest = enabled;
+	}
+	// True once a snapshot has been captured and freeze audio is being produced (including the release crossfade).
+	// False while waiting for two usable analysis frames, or when fully off.
+	bool spectralFreezeActive() const {
+		return freezeState == FreezeActive || freezeState == FreezeReleasing;
+	}
+
 	// Provide previous input ("pre-roll") to smoothly change the input location without interrupting the output.  This doesn't do any calculation, just copies intput to a buffer.
 	// You should ideally feed it `seekLength()` frames of input, unless it's directly after a `.reset()` (in which case `.outputSeek()` might be a better choice)
 	template<class Inputs>
 	void seek(Inputs &&inputs, int inputSamples, double playbackRate) {
+		clearSpectralFreeze(); // seeking drops any freeze request/snapshot
 		tmpProcessBuffer.resize(0);
 		tmpProcessBuffer.resize(stft.blockSamples() + stft.defaultInterval());
 
@@ -237,8 +261,12 @@ struct SignalsmithStretch {
 			}
 		}
 
+		// A requested/active freeze must keep analysing and synthesising even through long silence,
+		// so the silence passthrough shortcut is suspended until the freeze is fully cleared.
+		bool freezeEngaged = freezeRequest || freezeState != FreezeOff;
+
 		if (totalEnergy < noiseFloor) {
-			if (silenceCounter >= 2*stft.blockSamples()) {
+			if (silenceCounter >= 2*stft.blockSamples() && !freezeEngaged) {
 				if (silenceFirst) { // first block of silence processing
 					silenceFirst = false;
 					//stft.reset();
@@ -312,6 +340,9 @@ struct SignalsmithStretch {
 				blockProcess.timeFactor = didSeek ? seekTimeFactor : stft.defaultInterval()/static_cast<Sample>(std::max(1, inputInterval));
 				didSeek = false;
 
+				// Latch the freeze request for this whole synthesis hop (important for split computation)
+				latchSpectralFreezeHop();
+
 				updateProcessSpectrumSteps();
 				blockProcess.steps += processSpectrumSteps;
 
@@ -370,6 +401,9 @@ struct SignalsmithStretch {
 								channelBands[b].input = spectrumBands[b];
 							}
 						}
+						// At this point .input/.prevInput are the two most recent raw analysis spectra
+						if (freezeHopMode == FreezeHopCapture) captureSpectralFreeze();
+						freezeAnalysisCount = std::min(2, freezeAnalysisCount + 1);
 						continue;
 					}
 					step -= 1;
@@ -382,13 +416,18 @@ struct SignalsmithStretch {
 				step -= processSpectrumSteps;
 
 				if (step < 1) {
-					// Copy band objects into spectrum
-					for (int c = 0; c < channels; ++c) {
-						auto channelBands = bandsForChannel(c);
-						auto *spectrumBands = stft.spectrum(c);
-						for (int b = 0; b < bands; ++b) {
-							spectrumBands[b] = channelBands[b].output;
+					if (freezeHopMode == FreezeHopNormal || freezeHopGain <= Sample(0)) {
+						// Copy band objects into spectrum
+						for (int c = 0; c < channels; ++c) {
+							auto channelBands = bandsForChannel(c);
+							auto *spectrumBands = stft.spectrum(c);
+							for (int b = 0; b < bands; ++b) {
+								spectrumBands[b] = channelBands[b].output;
+							}
 						}
+					} else {
+						// Frozen hold, or the four-hop release crossfade back to the live vocoder output
+						writeSpectralFreezeOutput();
 					}
 					continue;
 				}
@@ -425,6 +464,8 @@ struct SignalsmithStretch {
 	// Read the remaining output, providing no further input.  If `outputSamples` is more than one interval, it will compute additional blocks assuming a zero-valued input
 	template<class Outputs>
 	void flush(Outputs &&outputs, int outputSamples, Sample playbackRate=0) {
+		// Flushing ends the freeze immediately; the rest is the usual finite tail (never an infinite sustain)
+		clearSpectralFreeze();
 		struct Zeros {
 			struct Channel {
 				Sample operator[](int) {
@@ -461,6 +502,7 @@ struct SignalsmithStretch {
 				channelBands[b].prevInput = channelBands[b].output = 0;
 			}
 		}
+		clearSpectralFreeze(); // match the fresh STFT state
 	}
 
 	// Process a complete audio buffer all in one go
@@ -605,6 +647,217 @@ private:
 	std::vector<Prediction> channelPredictions;
 	Prediction * predictionsForChannel(int c) {
 		return channelPredictions.data() + c*bands;
+	}
+
+	// ---- Spectral freeze ----
+	enum FreezeState { FreezeOff=0, FreezePending=1, FreezeActive=2, FreezeReleasing=3 };
+	enum FreezeHopMode { FreezeHopNormal=0, FreezeHopCapture=1, FreezeHopHold=2, FreezeHopRelease=3 };
+	bool freezeRequest = false;       // latest .setSpectralFreeze() argument
+	int freezeState = FreezeOff;      // latched runtime state
+	int freezeHopMode = FreezeHopNormal; // what the current hop's spectrum copy should do
+	Sample freezeHopGain = 0;         // frozen fraction for the current hop (1 = fully frozen)
+	int freezeReleaseLeft = 0;        // release hops remaining
+	int freezeAnalysisCount = 0;      // completed analysis frames since reset/configure/seek (capped at 2)
+
+	std::vector<int> freezeRef;           // [bands] reference (max-energy) channel per bin
+	std::vector<int> freezeLock;          // [bands] spectral-peak root bin this bin is phase-locked to
+	std::vector<Sample> freezeAmp;        // [bands] captured reference amplitude
+	std::vector<Complex> freezeOsc;       // [bands] running master synthesis phase (unit complex, roots only)
+	std::vector<Complex> freezeRot;       // [bands] per-hop phase rotation from captured instantaneous freq
+	std::vector<Complex> freezeTwist;     // [bands] complex shape/phase offset relative to the lock root
+	std::vector<Complex> freezeMaster;    // [bands] scratch: current master frozen spectrum
+	std::vector<Complex> freezeRatio;     // [channels*bands] captured complex ratio to the reference channel
+
+	void clearSpectralFreeze() {
+		freezeRequest = false;
+		freezeState = FreezeOff;
+		freezeHopMode = FreezeHopNormal;
+		freezeHopGain = 0;
+		freezeReleaseLeft = 0;
+		freezeAnalysisCount = 0;
+		for (auto &v : freezeRef) v = 0;
+		for (auto &v : freezeLock) v = 0;
+		for (auto &v : freezeAmp) v = 0;
+		for (auto &v : freezeOsc) v = Complex(1, 0);
+		for (auto &v : freezeRot) v = Complex(1, 0);
+		for (auto &v : freezeTwist) v = Complex(0, 0);
+		for (auto &v : freezeMaster) v = Complex(0, 0);
+		for (auto &v : freezeRatio) v = Complex(0, 0);
+	}
+
+	// Called once per synthesis block, at the hop start.  The decision made here stays fixed for the
+	// whole hop even if the request changes mid-hop (important for split computation).
+	void latchSpectralFreezeHop() {
+		freezeHopMode = FreezeHopNormal;
+		freezeHopGain = 0;
+
+		if (freezeRequest) {
+			if (freezeState == FreezeOff || freezeState == FreezeReleasing) {
+				freezeState = FreezePending; // fresh capture (also when re-pressed during release)
+			}
+			if (freezeState == FreezePending) {
+				// Need a fresh analysis this hop plus at least one preceding analysis frame, so the
+				// capture has two real spectra to compare.
+				if (blockProcess.newSpectrum && freezeAnalysisCount >= 1) {
+					freezeHopMode = FreezeHopCapture;
+					freezeHopGain = 1;
+				}
+			} else if (freezeState == FreezeActive) {
+				freezeHopMode = FreezeHopHold;
+				freezeHopGain = 1;
+			}
+			return;
+		}
+
+		if (freezeState == FreezePending) {
+			freezeState = FreezeOff; // request withdrawn before capture happened
+			restartSilenceTracking();
+		} else if (freezeState == FreezeActive) {
+			freezeState = FreezeReleasing;
+			freezeReleaseLeft = 4; // four complete hops of release crossfade
+		}
+
+		if (freezeState == FreezeReleasing) {
+			// Four hops with frozen gains 3/4, 1/2, 1/4, 0, ending fully real-time
+			freezeHopMode = FreezeHopRelease;
+			freezeHopGain = Sample(freezeReleaseLeft - 1)/Sample(4);
+			--freezeReleaseLeft;
+			if (freezeReleaseLeft <= 0) {
+				freezeState = FreezeOff;
+				// Let the ordinary path render the release tail for a full silence-detection window
+				// before the passthrough shortcut can engage, independent of process chunk size.
+				restartSilenceTracking();
+			}
+		}
+	}
+
+	// Re-arm the library's long-silence detection (used when a freeze ends into silence).
+	void restartSilenceTracking() {
+		silenceCounter = 0;
+		silenceFirst = true;
+	}
+
+	// Capture energy, instantaneous frequency and stereo image from .input/.prevInput.
+	// With silent/zero spectra this stores a zero-energy snapshot, so the hold stays finite and quiet.
+	void captureSpectralFreeze() {
+		const Sample twoPi = Sample(2*M_PI);
+		const Sample interval = Sample(stft.defaultInterval());
+
+		for (int b = 0; b < bands; ++b) {
+			// Use the highest-energy channel as the phase master, which also keeps all captured
+			// stereo ratios bounded (magnitude <= 1) and numerically safe.
+			int ref = 0;
+			Sample maxEnergy = _impl::norm(bandsForChannel(0)[b].input);
+			for (int c = 1; c < channels; ++c) {
+				Sample e = _impl::norm(bandsForChannel(c)[b].input);
+				if (e > maxEnergy) {
+					maxEnergy = e;
+					ref = c;
+				}
+			}
+			freezeRef[b] = ref;
+
+			Band *refBands = bandsForChannel(ref);
+			Complex current = refBands[b].input;
+			Complex previous = refBands[b].prevInput;
+			Sample energyNow = _impl::norm(current);
+			Sample energyPrev = _impl::norm(previous);
+
+			// Capture the energy (averaged over the two frames for steadiness)
+			freezeAmp[b] = std::sqrt(Sample(0.5)*(energyNow + energyPrev));
+
+			// Instantaneous phase advance: bin-centre advance plus the unwrapped phase residual.
+			// This is a continuous frequency estimate, not quantised to an FFT bin centre.
+			Sample expectedAdvance = twoPi*bandToFreq(Sample(b))*interval;
+			Sample phaseDiff = std::arg(current*std::conj(previous));
+			Sample residual = std::remainder(phaseDiff - expectedAdvance, twoPi);
+			Sample phaseAdvance = expectedAdvance + residual;
+			freezeRot[b] = std::polar(Sample(1), phaseAdvance);
+
+			// Start from the current analysis phase (identity STFT convention, phase-aligned)
+			Sample magNow = std::sqrt(energyNow);
+			if (magNow > Sample(1e-20)) {
+				freezeOsc[b] = current/magNow;
+			} else if (energyPrev > Sample(1e-20)) {
+				Sample magPrev = std::sqrt(energyPrev);
+				freezeOsc[b] = (previous/magPrev)*freezeRot[b];
+			} else {
+				freezeOsc[b] = Complex(1, 0);
+			}
+
+			// Preserve the per-bin complex ratio (amplitude ratio + phase difference) to the master
+			for (int c = 0; c < channels; ++c) {
+				Complex &ratio = freezeRatio[c*bands + b];
+				if (c == ref) {
+					ratio = Complex(1, 0);
+				} else if (energyNow > Sample(0)) {
+					ratio = bandsForChannel(c)[b].input/current;
+				} else {
+					ratio = Complex(0, 0);
+				}
+			}
+		}
+
+		// Lock bins belonging to the same spectral peak to that peak's bin.  A single instantaneous
+		// frequency per peak keeps the captured timbre phase-coherent indefinitely (no slow inter-bin
+		// beating), while the per-bin complex twists preserve the exact spectral shape.
+		int lockRadius = std::max(2, int(std::round(Sample(stft.fftSamples())/Sample(stft.defaultInterval())) - 1));
+		for (int b = 0; b < bands; ++b) {
+			int root = b;
+			for (int repeat = 0; repeat < bands; ++repeat) {
+				int next = root;
+				int lo = std::max(0, root - lockRadius);
+				int hi = std::min(bands - 1, root + lockRadius);
+				for (int k = lo; k <= hi; ++k) {
+					if (freezeAmp[k] > freezeAmp[next]) next = k;
+				}
+				if (next == root) break;
+				root = next;
+			}
+			freezeLock[b] = root;
+		}
+		for (int b = 0; b < bands; ++b) {
+			int root = freezeLock[b];
+			// Complex shape coefficient: this bin's captured amplitude/phase, relative to the root phase
+			freezeTwist[b] = freezeAmp[b]*freezeOsc[b]*std::conj(freezeOsc[root]);
+		}
+
+		freezeState = FreezeActive;
+	}
+
+	// Build the frozen output spectra for this hop and blend with the live phase-vocoder result.
+	void writeSpectralFreezeOutput() {
+		// Re-normalise root phases (guards against long-run complex-multiply magnitude drift)
+		for (int b = 0; b < bands; ++b) {
+			if (freezeLock[b] == b) {
+				Sample mag = std::sqrt(_impl::norm(freezeOsc[b]));
+				if (mag > Sample(1e-30)) freezeOsc[b] /= mag;
+			}
+		}
+		// Every bin keeps its captured complex shape relative to its peak root's running phase
+		for (int b = 0; b < bands; ++b) {
+			freezeMaster[b] = freezeTwist[b]*freezeOsc[freezeLock[b]];
+		}
+		// Advance the root phases by their captured instantaneous frequencies, once per hop
+		for (int b = 0; b < bands; ++b) {
+			if (freezeLock[b] == b) freezeOsc[b] *= freezeRot[b];
+		}
+
+		Sample g = freezeHopGain;
+		for (int c = 0; c < channels; ++c) {
+			auto channelBands = bandsForChannel(c);
+			auto *spectrumBands = stft.spectrum(c);
+			const Complex *ratios = freezeRatio.data() + c*bands;
+			for (int b = 0; b < bands; ++b) {
+				Complex frozen = ratios[b]*freezeMaster[b];
+				Complex live = channelBands[b].output;
+				if (g >= Sample(1)) {
+					spectrumBands[b] = frozen;
+				} else {
+					spectrumBands[b] = live + (frozen - live)*g;
+				}
+			}
+		}
 	}
 
 	// If RandomEngine=void, use std::default_random_engine;

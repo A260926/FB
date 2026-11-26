@@ -79,6 +79,25 @@ To get a time-stretch, hand differently-sized input/output buffers to .process()
 
 Since the buffer lengths (inputSamples and outputSamples above) are integers, it's up to you to make sure that the block lengths average out to the ratio you want over time.
 
+### Spectral freeze
+
+For sustained sounds in sound design you can "hold the current timbre" with a spectral freeze.  It is not a looping recording: while frozen, the input keeps being analysed into the history, but the output sustains the spectrum captured when the freeze started:
+
+```cpp
+stretch.setSpectralFreeze(true);  // hold the timbre
+// ... keep calling .process() with live (or silent) input ...
+stretch.setSpectralFreeze(false); // return to the live input
+```
+
+`setSpectralFreeze(bool)` is a request; it is latched at the start of the next synthesis hop (so in split-computation mode a hop that has already started completes with its old state).  `spectralFreezeActive()` reports whether a snapshot has actually been captured and freeze audio is being produced (it stays false while waiting for two usable analysis frames).
+
+* **Capture:** on the first frozen hop for which two real analysis spectra exist, the two most recent spectra are used to store each bin's energy and unwrapped instantaneous frequency (no hard quantisation to FFT bin centres), plus the per-bin stereo amplitude ratio and phase difference.  Spectral peaks are phase-locked to their peak bin so the held sound stays steady indefinitely.  Capturing happens once; calling `setSpectralFreeze(true)` repeatedly does not restart it.  With fewer than two analysis frames `spectralFreezeActive()` stays false; if the signal has been digital silence the whole time, the captured energy is zero and the hold emits exact, finite silence rather than random sound.
+* **Hold:** every later hop keeps the captured energy and advances the synthesis phases by the captured frequencies.  The real input continues through `.process()` and into the analysis history, including through long silences (the silence passthrough shortcut is suspended while a freeze is requested/active), so the held timbre is never cleared and the process never stalls.
+* **Release:** after `setSpectralFreeze(false)`, the frozen result is crossfaded back to the current real-time phase-vocoder output over four complete hops (frozen gains `3/4, 1/2, 1/4, 0`).  Pressing freeze again during this fade captures a fresh snapshot from the then-current analysis.
+* **Tail / ending:** `.flush()` first clears the freeze request and snapshot, and then drains the usual finite STFT tail — freezing never creates an infinite tail.  `.reset()`, `.configure()` and `.seek()` also clear the freeze request and snapshot.
+
+The freeze working memory is fixed by the channel count and window size; it does not grow with hold time or recording length.  The current implementation supports `float`/`double`, 1 or 2 channels, 48 kHz, and the `1024/256` or `2048/512` block/interval configurations with equal input/output frame counts.  Transposition, formant compensation and custom frequency maps are not applied to the frozen signal.
+
 ### Latency
 
 Latency is particularly ambiguous for a time-stretching effect. We report the latency in two halves:
