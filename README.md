@@ -36,6 +36,7 @@ Compiles and runs under
 - [LIBRARY USAGE](#library-usage)
     - [Build](#build)
     - [Usage](#usage)
+    - [Mach-O indirect symbol references](#mach-o-indirect-symbol-references)
     - [Python](#python)
 - [COPYRIGHT, CREDITS & CONTACT](#copyright,-credits-&-contact)
     - [Author](#author)
@@ -302,6 +303,107 @@ if ( data )
 // clean up
 freePEHeaderData(data);
 ```
+
+### Mach-O indirect symbol references
+
+For thin 32/64 bit Mach-O images of either endianness, `getBasicHeaderParserInfo()`
+resolves the relation between indirect symbol slots and their symbol/library:
+
+- `S_NON_LAZY_SYMBOL_POINTERS` (type `6`)
+- `S_LAZY_SYMBOL_POINTERS` (type `7`) — slot width is the image bit width / 8
+  (`4` bytes on 32 bit, `8` bytes on 64 bit)
+- `S_SYMBOL_STUBS` (type `8`) — slot/stub width is `reserved2`
+
+`reserved1` is the first indirect table index of the section. Output order is
+physical section order (segment commands and their section records), then slot
+order. Symbols with the same name are never merged. Only static on-disk
+structure is analyzed: referenced dylibs are not opened and the image is never
+loaded or executed.
+
+`HeaderData` adds:
+
+```c
+MachOReferenceData* macho_references;   /* NULL when size is 0 */
+size_t              macho_references_size;
+uint8_t             macho_references_error; /* MACHO_REFERENCES_OK or ..._ERR_* */
+```
+
+Field units and meaning of `MachOReferenceData`:
+
+| Field | Unit / base | Meaning |
+| --- | --- | --- |
+| `segment_index` | ordinal, **1 based** | physical segment command number |
+| `section_index` | ordinal, **1 based** | physical section number over *all* sections |
+| `section_index_in_segment` | ordinal, **1 based** | section number inside its segment |
+| `segment_name`, `section_name` | owned C string | 16 byte Mach-O names, NUL terminated |
+| `section_type` | enum low byte | `6`, `7` or `8` |
+| `slot_index` | index, **0 based** | slot inside the section |
+| `address` | virtual **bytes** | section `addr + slot * slot_width` |
+| `image_offset` | file **bytes** | position relative to the Mach-O image start |
+| `file_offset` | file **bytes** | position relative to the whole file (`start + image_offset`) |
+| `indirect_index` | table index | section `reserved1 + slot_index` |
+| `indirect_value` | raw `uint32_t` | endian corrected indirect table word |
+| `status` | `MachOReferenceStatus` | resolved / unresolved / local / abs / local+abs |
+| `nlist_index` | nlist index | raw ordinary indirect value |
+| `symbol_name` | owned C string or `NULL` | copied from the `LC_SYMTAB` string table |
+| `n_type`, `n_sect` | raw bytes | original nlist fields |
+| `n_desc` | raw `uint16_t` | endian corrected |
+| `n_value` | **bytes/address value** | raw nlist value, widened to 64 bit for 32 bit images |
+| `library_ordinal` | ordinal or `-1` | decoded bits `n_desc[15:8]` |
+| `library_kind` | `MachOLibraryOrdinalKind` | normal / self / dynamic lookup / executable / invalid |
+| `library_path` | owned C string or `NULL` | load order dylib path for positive ordinals |
+
+Special indirect values keep their own state and are never interpreted as nlist
+indexes: `INDIRECT_SYMBOL_LOCAL` (`0x80000000`) → `MACHO_REFERENCE_LOCAL`,
+`INDIRECT_SYMBOL_ABS` (`0x40000000`) → `MACHO_REFERENCE_ABS`, both bits
+(`0xC0000000`) → `MACHO_REFERENCE_LOCAL_ABS`.
+
+Library ordinals count only loading class dylib commands in file order:
+`LC_LOAD_DYLIB`, `LC_LOAD_WEAK_DYLIB`, `LC_REEXPORT_DYLIB` and
+`LC_LOAD_UPWARD_DYLIB`. `LC_ID_DYLIB` is not counted. Ordinal `0` is *self*,
+`0xfe` is *dynamic lookup* and `0xff` is the *executable*
+(`MACHO_LIBRARY_ORDINAL_SELF/DYNAMIC_LOOKUP/EXECUTABLE`). Positive ordinals map
+to the corresponding dylib path.
+
+If an individual nlist index, string offset or library ordinal cannot be
+linked, the slot and its raw numbers are still returned with
+`status == MACHO_REFERENCE_UNRESOLVED`; no name is fabricated. A zero stub
+width, a section size that is not a whole number of slots, or indirect/table
+ranges that do not cover the slots set `macho_references_error` to a
+`MachOReferencesError` code; the array is then empty rather than a partial
+table, while the basic Mach-O header fields remain readable. Images without
+these section types return `MACHO_REFERENCES_OK` with size `0`.
+
+When `start` passed to `getBasicHeaderParserInfo()` is non zero,
+`symoff`, `stroff`, `indirectsymoff` and section offsets are relative to the
+image start; `file_offset` additionally includes `start`.
+
+The array and all strings are owned by the `HeaderData` object: they are heap
+copies, so closing/deleting the file and parsing another image never changes
+already returned results. Release everything with `freeHeaderData()`.
+
+A complete compilable example lives at
+[`examples/macho_references_example.c`](examples/macho_references_example.c):
+
+```c
+#include "src/headerParserLib.h"
+
+HeaderData* hd = getBasicHeaderParserInfo("image.bin", 0, FORCE_NONE);
+if (hd && hd->macho_references_error == MACHO_REFERENCES_OK) {
+    for (size_t i = 0; i < hd->macho_references_size; ++i) {
+        MachOReferenceData* r = &hd->macho_references[i];
+        printf("%s slot %u: %s (%s), ordinal %d\n",
+               r->section_name, r->slot_index,
+               r->symbol_name ? r->symbol_name : "<special>",
+               r->library_path ? r->library_path : "-",
+               r->library_ordinal);
+    }
+}
+freeHeaderData(hd);
+```
+
+The extended command line output (`headerParser -i 2 image`) prints the same
+relations as `MachOIndirectReferences (n):`.
 
 ### Python
 Using the library is the preferred usage in python.  

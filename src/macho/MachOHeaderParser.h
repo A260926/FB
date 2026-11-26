@@ -14,6 +14,7 @@
 #include "MachOFileHeader.h"
 #include "MachOHeaderOffsets.h"
 #include "MachOHeaderPrinter.h"
+#include "MachOReferences.h"
 
 
 static
@@ -263,6 +264,15 @@ void parseMachOHeader(PHeaderData hd, PGlobalParams gp)
     hd->i_bitness = arch->bitness;
 
     MachO_readCommands(mach_header.ncmds, &gp->file.abs_offset, gp->file.size, gp->info_level, hd, gp->file.handle, gp->data.block_main);
+
+    /* Build the pointer/stub -> indirect entry -> nlist/library relations.
+     * Uses the stable image start offset (gp->file.start_offset); the dynamic
+     * gp->file.abs_offset may have been moved by block reads.  Strings are
+     * copied into HeaderData ownership, so the file can close afterwards. */
+    MachO_resolveReferences(hd, gp->file.handle, gp->file.start_offset, gp->file.size);
+
+    if ( gp->info_level >= INFO_LEVEL_EXTENDED )
+        MachO_printReferences(hd);
 }
 
 void MachO_fillHeaderDataWithMagic(PHeaderData hd,
