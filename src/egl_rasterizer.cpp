@@ -218,6 +218,126 @@ void rasterizer::commit()
 }
 //----
 
+void rasterizer::run_tile_pass_dispatch(const rasterizer_tile_pass_wrapper_base &wrapper_, const rasterizer_tile &tile_, uint16_t thread_idx_)
+{
+  // setup the tile local geometry
+  uint16_t tile_x=tile_.x<<m_tiling.tile_width_shift();
+  uint16_t tile_y=tile_.y<<m_tiling.tile_height_shift();
+  uint16_t tile_width=min<uint16_t>(m_tiling.rt_width()-tile_x, m_tiling.tile_width());
+  uint16_t tile_height=min<uint16_t>(m_tiling.rt_height()-tile_y, m_tiling.tile_height());
+  unsigned tile_buffer_pixel_offset=m_tiling.tile_width()*m_tiling.tile_height()*thread_idx_;
+
+  // setup tile local render target pointers (null attachments stay null)
+  rasterizer_tile_pass_context ctx;
+  ctx.x=tile_x;
+  ctx.y=tile_y;
+  ctx.width=tile_width;
+  ctx.height=tile_height;
+  ctx.pitch=m_tiling.tile_width();
+  for(uint8_t rt_idx=0; rt_idx<rasterizer_max_rts; ++rt_idx)
+  {
+    uint8_t px_size=m_cfg.rt_pixel_sizes[rt_idx];
+    ctx.rt_pixel_sizes[rt_idx]=px_size;
+    ctx.rts[rt_idx]=px_size && m_cfg.rts[rt_idx]?(uint8_t*)m_cfg.rts[rt_idx]+tile_buffer_pixel_offset*px_size:0;
+  }
+
+  // setup tile local depth target. the callback owns the per-pixel depth but
+  // never touches hi-z.
+  ctx.depth.format=m_cfg.depth.format;
+  ctx.depth.data=m_cfg.depth.data?(uint8_t*)m_cfg.depth.data+tile_buffer_pixel_offset*depth_format_pixel_size(m_cfg.depth.format):0;
+  ctx.depth.hiz_data=m_cfg.depth.hiz_data?m_cfg.depth.hiz_data+tile_buffer_pixel_offset/rasterizer_hiz_tile_pixels:0;
+
+  // run the pass exactly once for this valid tile. hi-z invalidation for depth
+  // writing passes is handled together with the tile bookkeeping by the caller.
+  wrapper_.run_tile_pass(ctx);
+}
+//----
+
+void rasterizer::invalidate_hiz_tile(uint16_t thread_idx_)
+{
+  // reset the tile hi-z to the most permissive bound. the per-pixel depth test
+  // stays authoritative, so later LESS/LEQUAL (or GREATER) geometry produces
+  // exactly the same result as with hi-z disabled, while subsequent geometry
+  // dispatches re-build tight bounds from the depth they write.
+  if(!m_cfg.depth.hiz_data)
+    return;
+  unsigned tile_buffer_pixel_offset=thread_idx_*m_tiling.tile_width()*m_tiling.tile_height();
+  mem_set(m_cfg.depth.hiz_data+tile_buffer_pixel_offset/rasterizer_hiz_tile_pixels,
+          m_clear_depth==cleardepth_max?0xff:0x00,
+          sizeof(uint16_t)*m_tiling.tile_width()*m_tiling.tile_height()/(rasterizer_hiz_tile_width*rasterizer_hiz_tile_width));
+}
+//----
+
+void rasterizer::flush_pending_hiz(result &res_, vec2u16 &tile_min_, vec2u16 &tile_end_, e_hiz_mode current_hiz_mode_, uint16_t tile_width_, uint16_t tile_height_, uint16_t thread_idx_)
+{
+#if EGL_BUILDOP_RASTERIZER_HIZ==1
+  if(!m_cfg.depth.hiz_data)
+    return;
+  // merge the rasterized region bounds into the dispatch accumulator
+  tile_min_=min(tile_min_, res_.tile_min);
+  tile_end_=max(tile_end_, res_.tile_end);
+
+  // rebuild hi-z for the depth written by geometry so far
+  if(res_.hiz_update && res_.tile_end.x && res_.tile_end.y)
+  {
+    switch(m_cfg.depth.format)
+    {
+      case depthfmt_uint8: update_hiz<uint8_t>(res_, current_hiz_mode_, thread_idx_); break;
+      case depthfmt_uint16: update_hiz<uint16_t>(res_, current_hiz_mode_, thread_idx_); break;
+      case depthfmt_float32: update_hiz<float32_t>(res_, current_hiz_mode_, thread_idx_); break;
+      default: EGL_ERROR("Unsupported depth format.\r\n");
+    }
+    res_.hiz_update=false;
+    res_.tile_min.set(tile_width_, tile_height_);
+    res_.tile_end.set(0, 0);
+  }
+#else
+  (void)res_; (void)tile_min_; (void)tile_end_; (void)current_hiz_mode_; (void)tile_width_; (void)tile_height_; (void)thread_idx_;
+#endif
+}
+//----
+
+void rasterizer::advance_dispatches(rasterizer_dispatch_index_t &cur_dispatch_idx_, rasterizer_dispatch_index_t target_idx_, result &res_, vec2u16 &tile_min_, vec2u16 &tile_end_, e_hiz_mode &current_hiz_mode_, const rasterizer_tile &tile_, uint16_t tile_width_, uint16_t tile_height_, uint16_t thread_idx_)
+{
+  // run every tile pass (and skip geometry with no clusters in this tile)
+  // until reaching target_idx_. this preserves the strict submission order of
+  // geometry dispatches and tile passes within the tile.
+  while(rasterizer_dispatch_index_t(cur_dispatch_idx_+1)<target_idx_)
+  {
+    rasterizer_dispatch_index_t idx=cur_dispatch_idx_+1;
+    const rasterizer_dispatch &dispatch=m_cfg.dispatches[idx];
+    if(!dispatch.is_tile_pass)
+    {
+      // geometry dispatch without clusters binned to this tile: no tile work
+      cur_dispatch_idx_=idx;
+      continue;
+    }
+
+    // publish geometry depth to hi-z before the pass observes the tile buffers
+    flush_pending_hiz(res_, tile_min_, tile_end_, current_hiz_mode_, tile_width_, tile_height_, thread_idx_);
+    const rasterizer_tile_pass_wrapper_base *pass_wrapper=(const rasterizer_tile_pass_wrapper_base*)dispatch.psc_wrapper;
+    run_tile_pass_dispatch(*pass_wrapper, tile_, thread_idx_);
+
+    // the pass may read/write the whole valid tile, so treat the entire tile as
+    // touched. this both transfers pass output and forces a full tile clear for
+    // buffer reuse on the next commit.
+    res_.tile_min.set(0, 0);
+    res_.tile_end.set(tile_width_, tile_height_);
+    tile_min_.set(0, 0);
+    tile_end_.set(tile_width_, tile_height_);
+    if(pass_wrapper->writes_depth())
+    {
+      // the pass rewrote depth. drop the stale bounds and force the next
+      // geometry dispatch to rebuild hi-z from the modified depth buffer.
+      invalidate_hiz_tile(thread_idx_);
+      res_.hiz_update=true;
+      current_hiz_mode_=m_clear_depth==cleardepth_max?hizmode_max:hizmode_min;
+    }
+    cur_dispatch_idx_=idx;
+  }
+}
+//----
+
 void rasterizer::rasterize_tile(const render_target_cfg &rt_cfg_, rasterizer_tile &tile_, uint16_t thread_idx_)
 {
   // setup tile coords and size
@@ -261,6 +381,11 @@ void rasterizer::rasterize_tile(const render_target_cfg &rt_cfg_, rasterizer_til
       const rasterizer_cluster &cluster=m_tiling.cluster(*global_cluster_idx);
       if(cur_dispatch_idx!=cluster.dispatch_idx)
       {
+        // run all tile passes submitted before this geometry dispatch, in
+        // submission order. geometry dispatches with no clusters in this tile
+        // perform no work here and are skipped over.
+        advance_dispatches(cur_dispatch_idx, cluster.dispatch_idx, res, tile_min, tile_end, current_hiz_mode, tile_, tile_width, tile_height, thread_idx_);
+
         // pick PSO for the dispatch
         psc_wrapper=(const psc_wrapper_base*)m_cfg.dispatches[cluster.dispatch_idx].psc_wrapper;
         psc_wrapper->get_pso_state(pso_state_buffer, m_cfg.max_pso_state_size);
@@ -369,6 +494,11 @@ void rasterizer::rasterize_tile(const render_target_cfg &rt_cfg_, rasterizer_til
     } while(++global_cluster_idx<global_cluster_idx_end);
     cstrip_idx=cstrip.next;
   }
+
+  // run tile passes submitted after the last geometry dispatch that touches
+  // this tile. this also covers tiles with no geometry clusters at all, so
+  // every pass runs exactly once per valid tile.
+  advance_dispatches(cur_dispatch_idx, m_num_dispatches, res, tile_min, tile_end, current_hiz_mode, tile_, tile_width, tile_height, thread_idx_);
   res.tile_min=min(res.tile_min, tile_min);
   res.tile_end=max(res.tile_end, tile_end);
 #if EGL_BUILDOP_RASTERIZER_STATS==1

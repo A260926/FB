@@ -18,6 +18,7 @@
 #include "egl_rasterizer_target.h"
 #include "egl_rasterizer_cache.h"
 #include "egl_rasterizer_psc.h"
+#include "egl_rasterizer_tile_pass.h"
 #include "egl_fast_math.h"
 #include "egl_pixel.h"
 #include "egl_meta.h"
@@ -43,9 +44,13 @@ template<e_pixel_format dst_fmt, e_pixel_format src_fmt> EGL_INLINE void blendfu
 //============================================================================
 // rasterizer_dispatch
 //============================================================================
+// A dispatch entry is either a geometry PSO dispatch or an ordered tile pass
+// dispatch. Both share the per-commit dispatch store, which preserves the
+// submission order of geometry and tile passes.
 struct rasterizer_dispatch
 {
   size_t psc_wrapper[2];
+  bool is_tile_pass;
 };
 //----------------------------------------------------------------------------
 
@@ -118,7 +123,7 @@ struct rasterizer_memory
   //--------------------------------------------------------------------------
 
   // tile pixel storage
-  typename depth_format_traits<(e_depth_format)Cfg::depth_format>::depth_format_t depth_tile[Cfg::depth_format!=int(depthfmt_none)?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
+  typename depth_storage_traits<(e_depth_format)Cfg::depth_format>::type depth_tile[Cfg::depth_format!=int(depthfmt_none)?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
   uint16_t depth_hiz_tile[Cfg::depth_format!=int(depthfmt_none) && Cfg::depth_hiz?max_concurrency*(Cfg::tile_width*Cfg::tile_height/rasterizer_hiz_tile_pixels):1];
   pixel<e_pixel_format(Cfg::rt0_fmt)> rtile0[Cfg::rt0_fmt?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
   pixel<e_pixel_format(Cfg::rt1_fmt)> rtile1[Cfg::rt1_fmt?max_concurrency*Cfg::tile_width*Cfg::tile_height:1];
@@ -316,6 +321,7 @@ public:
   // rasterization
   void clear_depth(e_clear_depth);
   template<class PSC, class HWDevice> void dispatch_pso(const PSC&, HWDevice&);
+  template<class Pass> void dispatch_tile_pass(const Pass&);
   void commit();
   void rasterize_tile(const render_target_cfg&, rasterizer_tile&, uint16_t thread_idx_);
   //--------------------------------------------------------------------------
@@ -344,6 +350,10 @@ private:
   rasterizer(const rasterizer&); // not implemented
   void operator=(const rasterizer&); // not implemented
   template<typename> void update_hiz(const result&, e_hiz_mode, uint16_t thread_idx_);
+  void run_tile_pass_dispatch(const rasterizer_tile_pass_wrapper_base&, const rasterizer_tile&, uint16_t thread_idx_);
+  void advance_dispatches(rasterizer_dispatch_index_t&, rasterizer_dispatch_index_t, result&, vec2u16&, vec2u16&, e_hiz_mode&, const rasterizer_tile&, uint16_t, uint16_t, uint16_t);
+  void flush_pending_hiz(result&, vec2u16&, vec2u16&, e_hiz_mode, uint16_t, uint16_t, uint16_t);
+  void invalidate_hiz_tile(uint16_t thread_idx_);
   static EGL_INLINE int32_t cross2d(const vec2i32& a_, const vec2i32& b_, const vec2i32& c_)  {return (b_.x-a_.x)*(c_.y-a_.y)-(b_.y-a_.y)*(c_.x-a_.x);}
   template<int> static EGL_INLINE float read_depth(const void *dbuf_, uint32_t offs_);
   template<int> static EGL_INLINE void write_depth(const void *dbuf_, uint32_t offs_, float z_);
@@ -883,6 +893,7 @@ void rasterizer::dispatch_pso(const PSC &pso_, HWDevice&)
   PSC *pso=(PSC*)((uint8_t*)m_cfg.pso_store+m_pso_write_pos);
   mem_copy(pso, &pso_, sizeof(pso_));
   EGL_PNEW(dispatch.psc_wrapper)psc_wrapper<PSC, HWDevice>(*pso);
+  dispatch.is_tile_pass=false;
   m_pso_write_pos+=(sizeof(pso_)+sizeof(size_t)-1)&-psc_mem_align;
 
   // setup clusters
@@ -892,6 +903,29 @@ void rasterizer::dispatch_pso(const PSC &pso_, HWDevice&)
   for(rasterizer_local_cluster_index_t cidx=0; cidx<num_clusters; ++cidx)
     pso->bin_cluster(m_tiling, pso_state, m_num_dispatches, cidx);
   m_num_clusters+=num_clusters;
+  ++m_num_dispatches;
+}
+//----
+
+template<class Pass>
+void rasterizer::dispatch_tile_pass(const Pass &pass_)
+{
+  // tile passes are trivially copyable and are value-copied to the frame
+  // store exactly like PSOs. the callback is not invoked here, only during
+  // commit, once per valid tile in submission order.
+  EGL_STATIC_ASSERT_MSG(EGL_IS_TRIVIALLY_COPYABLE(Pass), "Tile pass must be trivially copyable.\r\n");
+  EGL_ASSERT(m_cfg.dispatches);
+  EGL_ASSERT_MSG(m_num_dispatches<m_cfg.max_dispatches, "Exceeding max dispatch count (%i).\r\n", m_cfg.max_dispatches);
+  EGL_ASSERT_MSG(m_pso_write_pos+sizeof(Pass)<=m_cfg.pso_store_size, "Out of PSO store memory (%u bytes).\r\n", (unsigned)m_cfg.pso_store_size);
+  rasterizer_dispatch &dispatch=m_cfg.dispatches[m_num_dispatches];
+  EGL_STATIC_ASSERT(sizeof(rasterizer_tile_pass_wrapper<Pass>)<=sizeof(dispatch.psc_wrapper));
+
+  // setup tile pass
+  Pass *pass=(Pass*)((uint8_t*)m_cfg.pso_store+m_pso_write_pos);
+  mem_copy(pass, &pass_, sizeof(pass_));
+  EGL_PNEW(dispatch.psc_wrapper)rasterizer_tile_pass_wrapper<Pass>(*pass);
+  dispatch.is_tile_pass=true;
+  m_pso_write_pos+=(sizeof(pass_)+sizeof(size_t)-1)&-psc_mem_align;
   ++m_num_dispatches;
 }
 //----------------------------------------------------------------------------

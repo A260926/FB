@@ -39,6 +39,11 @@ template<e_depth_format> struct depth_format_traits     {typedef void depth_form
 template<> struct depth_format_traits<depthfmt_uint8>   {typedef uint8_t depth_format_t;   enum {type_size=1};};
 template<> struct depth_format_traits<depthfmt_uint16>  {typedef uint16_t depth_format_t;  enum {type_size=2};};
 template<> struct depth_format_traits<depthfmt_float32> {typedef float32_t depth_format_t; enum {type_size=4};};
+
+// storage type for the per-tile depth buffer. depthfmt_none has no depth
+// pixels, so fall back to a 1-byte dummy type to keep the array well-formed.
+template<e_depth_format fmt> struct depth_storage_traits {typedef typename depth_format_traits<fmt>::depth_format_t type;};
+template<> struct depth_storage_traits<depthfmt_none>   {typedef uint8_t type;};
 EGL_INLINE uint8_t depth_format_pixel_size(e_depth_format);
 //----------------------------------------------------------------------------
 

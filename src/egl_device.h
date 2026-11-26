@@ -52,6 +52,7 @@ public:
   // rasterization
   EGL_INLINE void clear_depth(e_clear_depth);
   template<class PSC> EGL_INLINE void dispatch_pso(const PSC&);
+  template<class Pass> EGL_INLINE void dispatch_tile_pass(const Pass&);
   EGL_INLINE void commit();
   template<class TShader> EGL_INLINE void commit(const TShader&);
   //--------------------------------------------------------------------------
@@ -174,6 +175,14 @@ template<class PSC>
 void graphics_device<HWDevice>::dispatch_pso(const PSC &pso_)
 {
   m_rasterizer.dispatch_pso(pso_, static_cast<HWDevice&>(*this));
+}
+//----
+
+template<class HWDevice>
+template<class Pass>
+void graphics_device<HWDevice>::dispatch_tile_pass(const Pass &pass_)
+{
+  m_rasterizer.dispatch_tile_pass(pass_);
 }
 //----
 
