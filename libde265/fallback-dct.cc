@@ -839,6 +839,92 @@ void transform_idct_fallback(int32_t *dst, int nT, const int16_t *coeffs, int bd
 }
 
 
+void transform_idct_wide_fallback(int32_t *dst, int nT,
+                                  const int32_t *coeffs,
+                                  int bdShift, int max_coeff_bits)
+{
+  const int fact = (1 << (5 - Log2(nT)));
+  const int64_t rnd1 = INT64_C(1) << 6;
+  const int64_t rnd2 = INT64_C(1) << (bdShift - 1);
+  const int32_t CoeffMax = (max_coeff_bits >= 31) ? INT32_MAX
+                                                  : (INT32_C(1) << max_coeff_bits) - 1;
+  const int32_t CoeffMin = (max_coeff_bits >= 31) ? INT32_MIN
+                                                  : -(INT32_C(1) << max_coeff_bits);
+
+  int32_t g[32*32];
+
+  for (int c=0;c<nT;c++) {
+    int lastCol = nT-1;
+    for (;lastCol>=0;lastCol--) {
+      if (coeffs[c+lastCol*nT]) { break; }
+    }
+
+    for (int i=0;i<nT;i++) {
+      int64_t sum=0;
+      for (int j=0;j<=lastCol;j++) {
+        sum += int64_t(mat_dct[fact*j][i]) * coeffs[c+j*nT];
+      }
+      g[c+i*nT] = Clip3(CoeffMin,CoeffMax, (sum+rnd1)>>7);
+    }
+  }
+
+  for (int y=0;y<nT;y++) {
+    int lastCol = nT-1;
+    for (;lastCol>=0;lastCol--) {
+      if (g[y*nT+lastCol]) { break; }
+    }
+
+    for (int i=0;i<nT;i++) {
+      int64_t sum=0;
+      for (int j=0;j<=lastCol;j++) {
+        sum += int64_t(mat_dct[fact*j][i]) * g[y*nT+j];
+      }
+      dst[y*nT+i] = int32_t((sum + rnd2) >> bdShift);
+    }
+  }
+}
+
+void transform_idst_4x4_wide_fallback(int32_t *dst, const int32_t *coeffs,
+                                      int bdShift, int max_coeff_bits)
+{
+  int32_t g[4][4];
+  const int64_t rndV = INT64_C(1) << 6;
+  const int64_t rndH = INT64_C(1) << (bdShift-1);
+  const int32_t CoeffMax = (INT32_C(1) << max_coeff_bits)-1;
+  const int32_t CoeffMin = -(INT32_C(1) << max_coeff_bits);
+
+  for (int c=0;c<4;c++) {
+    for (int i=0;i<4;i++) {
+      int64_t sum=0;
+      for (int j=0;j<4;j++) {
+        sum += int64_t(mat_8_357[j][i]) * coeffs[c+j*4];
+      }
+      g[i][c] = Clip3(CoeffMin,CoeffMax, (sum+rndV)>>7);
+    }
+  }
+
+  for (int y=0;y<4;y++) {
+    for (int i=0;i<4;i++) {
+      int64_t sum=0;
+      for (int j=0;j<4;j++) {
+        sum += int64_t(mat_8_357[j][i]) * g[y][j];
+      }
+      dst[y*4+i] = int32_t((sum+rndH)>>bdShift);
+    }
+  }
+}
+
+void transform_skip_residual_wide_fallback(int32_t *residual,
+                                            const int32_t *coeffs, int nT,
+                                            int tsShift, int bdShift)
+{
+  const int64_t rnd = INT64_C(1) << (bdShift-1);
+  for (int i=0;i<nT*nT;i++) {
+    int64_t c = int64_t(coeffs[i]) * (INT64_C(1) << tsShift);
+    residual[i] = int32_t((c + rnd) >> bdShift);
+  }
+}
+
 void transform_idct_4x4_fallback(int32_t *dst, const int16_t *coeffs, int bdShift, int max_coeff_bits)
 {
   transform_idct_fallback(dst,4,coeffs,bdShift,max_coeff_bits);

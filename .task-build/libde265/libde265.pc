@@ -1,0 +1,14 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libde265
+Description: H.265/HEVC video decoder.
+URL: https://github.com/strukturag/libde265
+Version: 1.1.3
+Requires:
+Libs: -L${libdir} -lde265
+Libs.private: -lc++ -lpthread -lm
+Cflags: -I${includedir}
+Cflags.private: -DLIBDE265_STATIC_BUILD

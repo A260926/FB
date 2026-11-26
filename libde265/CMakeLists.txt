@@ -9,6 +9,7 @@ set (libde265_sources
   deblock.cc
   decctx.cc
   dpb.cc
+  extended_precision.cc
   fallback-dct.cc
   fallback-deblk.cc
   fallback-intrapred.cc
@@ -48,6 +49,7 @@ set (libde265_headers
   deblock.h
   decctx.h
   dpb.h
+  extended_precision.h
   fallback-dct.h
   fallback-intrapred.h
   fallback-motion.h

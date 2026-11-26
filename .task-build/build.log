@@ -1,0 +1,76 @@
+[ 11%] Building CXX object libde265/CMakeFiles/de265.dir/cabac.cc.o
+[ 11%] Building CXX object libde265/CMakeFiles/de265.dir/alloc_pool.cc.o
+[ 11%] Building CXX object libde265/CMakeFiles/de265.dir/contextmodel.cc.o
+[ 11%] Building CXX object libde265/CMakeFiles/de265.dir/bitstream.cc.o
+[ 13%] Building CXX object libde265/CMakeFiles/de265.dir/de265.cc.o
+[ 16%] Building CXX object libde265/CMakeFiles/de265.dir/deblock.cc.o
+[ 19%] Building CXX object libde265/CMakeFiles/de265.dir/decctx.cc.o
+[ 22%] Building CXX object libde265/CMakeFiles/de265.dir/dpb.cc.o
+[ 25%] Building CXX object libde265/CMakeFiles/de265.dir/extended_precision.cc.o
+/Volumes/UserFBWorkspace/questions/FSF92A376E37B6U16232/attempts/20261126T160740229444Z/repo/libde265/deblock.cc:798:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  798 |     sprintf(buf,"deblock-%d",ctb_y);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 27%] Building CXX object libde265/CMakeFiles/de265.dir/fallback-dct.cc.o
+1 warning generated.
+[ 30%] Building CXX object libde265/CMakeFiles/de265.dir/fallback-deblk.cc.o
+[ 33%] Building CXX object libde265/CMakeFiles/de265.dir/fallback-intrapred.cc.o
+[ 36%] Building CXX object libde265/CMakeFiles/de265.dir/fallback-motion.cc.o
+[ 38%] Building CXX object libde265/CMakeFiles/de265.dir/fallback.cc.o
+[ 41%] Building CXX object libde265/CMakeFiles/de265.dir/image-io.cc.o
+[ 44%] Building CXX object libde265/CMakeFiles/de265.dir/image.cc.o
+[ 47%] Building CXX object libde265/CMakeFiles/de265.dir/intrapred.cc.o
+[ 50%] Building CXX object libde265/CMakeFiles/de265.dir/md5.cc.o
+[ 52%] Building CXX object libde265/CMakeFiles/de265.dir/motion.cc.o
+[ 55%] Building CXX object libde265/CMakeFiles/de265.dir/nal-parser.cc.o
+[ 58%] Building CXX object libde265/CMakeFiles/de265.dir/nal.cc.o
+[ 61%] Building CXX object libde265/CMakeFiles/de265.dir/pps.cc.o
+[ 63%] Building CXX object libde265/CMakeFiles/de265.dir/quality.cc.o
+[ 66%] Building CXX object libde265/CMakeFiles/de265.dir/refpic.cc.o
+[ 69%] Building CXX object libde265/CMakeFiles/de265.dir/sao.cc.o
+[ 72%] Building CXX object libde265/CMakeFiles/de265.dir/scan.cc.o
+[ 75%] Building CXX object libde265/CMakeFiles/de265.dir/sei.cc.o
+[ 77%] Building CXX object libde265/CMakeFiles/de265.dir/slice.cc.o
+/Volumes/UserFBWorkspace/questions/FSF92A376E37B6U16232/attempts/20261126T160740229444Z/repo/libde265/sao.cc:402:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  402 |     sprintf(buf,"sao-%d",ctb_y);
+      |     ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 80%] Building CXX object libde265/CMakeFiles/de265.dir/sps.cc.o
+1 warning generated.
+[ 83%] Building CXX object libde265/CMakeFiles/de265.dir/threads.cc.o
+/Volumes/UserFBWorkspace/questions/FSF92A376E37B6U16232/attempts/20261126T160740229444Z/repo/libde265/slice.cc:5021:3: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 5021 |   sprintf(buf, "ctb-row-%d", debug_startCtbRow);
+      |   ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Volumes/UserFBWorkspace/questions/FSF92A376E37B6U16232/attempts/20261126T160740229444Z/repo/libde265/slice.cc:5029:3: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 5029 |   sprintf(buf, "slice-segment-%d;%d", debug_startCtbX, debug_startCtbY);
+      |   ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+[ 86%] Building CXX object libde265/CMakeFiles/de265.dir/transform.cc.o
+[ 88%] Building CXX object libde265/CMakeFiles/de265.dir/util.cc.o
+[ 91%] Building CXX object libde265/CMakeFiles/de265.dir/visualize.cc.o
+2 warnings generated.
+[ 94%] Building CXX object libde265/CMakeFiles/de265.dir/vps.cc.o
+[ 97%] Building CXX object libde265/CMakeFiles/de265.dir/vui.cc.o
+[100%] Linking CXX static library libde265.a
+[100%] Built target de265

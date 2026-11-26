@@ -87,6 +87,7 @@ public:
   int16_t *coeffBuf; // the base pointer for into _coeffBuf, aligned to 16 bytes
 
   int16_t coeffList[3][32*32];
+  int32_t coeffListWide[3][32*32];
   int16_t coeffPos[3][32*32];
   int16_t nCoeff[3];
 

@@ -62,6 +62,13 @@ void transform_idct_8x8_fallback(int32_t *dst, const int16_t *coeffs, int bdShif
 void transform_idct_16x16_fallback(int32_t *dst, const int16_t *coeffs, int bdShift, int max_coeff_bits);
 void transform_idct_32x32_fallback(int32_t *dst, const int16_t *coeffs, int bdShift, int max_coeff_bits);
 
+void transform_idct_wide_fallback(int32_t *dst, int nT, const int32_t *coeffs,
+                                  int bdShift, int max_coeff_bits);
+void transform_idst_4x4_wide_fallback(int32_t *dst, const int32_t *coeffs,
+                                      int bdShift, int max_coeff_bits);
+void transform_skip_residual_wide_fallback(int32_t *residual, const int32_t *coeffs,
+                                           int nT, int tsShift, int bdShift);
+
 template <class pixel_t>
 void add_residual_fallback(pixel_t *dst, ptrdiff_t stride,
                            const int32_t* r, int nT, int bit_depth)

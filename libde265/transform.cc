@@ -19,6 +19,7 @@
  */
 
 #include "transform.h"
+#include "fallback-dct.h"
 #include "util.h"
 
 #include <assert.h>
@@ -418,6 +419,131 @@ void scale_coefficients_internal(thread_context* tctx,
   bool rotateCoeffs = (sps.range_extension.transform_skip_rotation_enabled_flag &&
                        nT == 4 &&
                        cuPredModeIntra);
+
+  if (sps.range_extension.extended_precision_processing_flag) {
+    constexpr int EP_N = 32*32;
+    int32_t wide[EP_N] = {};
+    int32_t localResidual[EP_N];
+    int32_t* residual = (cIdx == 0) ? tctx->residual_luma : localResidual;
+
+    for (int i=0;i<tctx->nCoeff[cIdx];i++) {
+      wide[tctx->coeffPos[cIdx][i]] = tctx->coeffListWide[cIdx][i];
+    }
+
+    if (rotateCoeffs) {
+      for (int y=0;y<nT/2;y++) {
+        for (int x=0;x<nT;x++) {
+          std::swap(wide[y*nT+x], wide[(nT-1-y)*nT + (nT-1-x)]);
+        }
+      }
+    }
+
+    if (tctx->cu_transquant_bypass_flag) {
+      if (rdpcmMode == 2) {
+        for (int x=0;x<nT;x++) {
+          int64_t sum=0;
+          for (int y=0;y<nT;y++) { sum += wide[x+y*nT]; residual[y*nT+x]=int32_t(sum); }
+        }
+      } else if (rdpcmMode == 1) {
+        for (int y=0;y<nT;y++) {
+          int64_t sum=0;
+          for (int x=0;x<nT;x++) { sum += wide[y*nT+x]; residual[y*nT+x]=int32_t(sum); }
+        }
+      } else {
+        for (int i=0;i<nT*nT;i++) residual[i]=wide[i];
+      }
+
+      if (cIdx != 0 && tctx->ResScaleVal != 0) cross_comp_pred(tctx, residual, nT);
+      tctx->decctx->acceleration.add_residual(pred,stride,residual,nT,bit_depth);
+      return;
+    }
+
+    const int log2N = Log2(nT);
+    const int rangeBits = std::max(15, bit_depth + 6);
+    const int extraRangeShift = rangeBits - 15;
+    const int hShift = rangeBits + 5 - bit_depth;
+
+    int bdShift = bit_depth + log2N - 5 - extraRangeShift;
+    const uint8_t* sclist = nullptr;
+    int matrixID = cIdx;
+    if (nT == 32) matrixID = 0;
+    if (!intra) {
+      if (nT < 32) matrixID += 3;
+      else matrixID++;
+    }
+
+    if (sps.scaling_list_enable_flag == 0) {
+      bdShift -= 4; // fold m_x_y=16 into the shift/factor
+      const int64_t fact = int64_t(levelScale[qP%6]) << (qP/6);
+      const int64_t offset = INT64_C(1) << (bdShift-1);
+      const int32_t dMin = -(INT32_C(1) << rangeBits);
+      const int32_t dMax =  (INT32_C(1) << rangeBits)-1;
+
+      for (int i=0;i<tctx->nCoeff[cIdx];i++) {
+        const int pos = tctx->coeffPos[cIdx][i];
+        int64_t v = (int64_t(tctx->coeffListWide[cIdx][i]) * fact + offset) >> bdShift;
+        wide[pos] = Clip3(dMin,dMax,int32_t(v));
+      }
+    } else {
+      switch (nT) {
+      case  4: sclist = &pps.scaling_list.ScalingFactor_Size0[matrixID][0][0]; break;
+      case  8: sclist = &pps.scaling_list.ScalingFactor_Size1[matrixID][0][0]; break;
+      case 16: sclist = &pps.scaling_list.ScalingFactor_Size2[matrixID][0][0]; break;
+      case 32: sclist = &pps.scaling_list.ScalingFactor_Size3[matrixID][0][0]; break;
+      default: assert(0); break;
+      }
+
+      const int64_t offset = INT64_C(1) << (bdShift-1);
+      const int32_t dMin = -(INT32_C(1) << rangeBits);
+      const int32_t dMax =  (INT32_C(1) << rangeBits)-1;
+
+      for (int i=0;i<tctx->nCoeff[cIdx];i++) {
+        const int pos = tctx->coeffPos[cIdx][i];
+        const int64_t fact = int64_t(sclist[pos]) * int64_t(levelScale[qP%6]) << (qP/6);
+        int64_t v = (int64_t(tctx->coeffListWide[cIdx][i]) * fact + offset) >> bdShift;
+        wide[pos] = Clip3(dMin,dMax,int32_t(v));
+      }
+    }
+
+    if (transform_skip_flag) {
+      const int tsShift = std::min(5, hShift-2) + log2N;
+      if (rdpcmMode == 2 || rdpcmMode == 1) {
+        const int64_t rnd = INT64_C(1) << (hShift-1);
+        if (rdpcmMode == 2) {
+          for (int x=0;x<nT;x++) {
+            int64_t sum=0;
+            for (int y=0;y<nT;y++) {
+              int64_t c = (int64_t(wide[x+y*nT]) << tsShift);
+              sum += (c+rnd) >> hShift;
+              residual[y*nT+x] = int32_t(sum);
+            }
+          }
+        } else {
+          for (int y=0;y<nT;y++) {
+            int64_t sum=0;
+            for (int x=0;x<nT;x++) {
+              int64_t c = (int64_t(wide[y*nT+x]) << tsShift);
+              sum += (c+rnd) >> hShift;
+              residual[y*nT+x] = int32_t(sum);
+            }
+          }
+        }
+      } else {
+        transform_skip_residual_wide_fallback(residual,wide,nT,tsShift,hShift);
+      }
+    } else {
+      int trType = (nT==4 && cIdx==0 && cuPredModeIntra) ? 1 : 0;
+      if (trType == 1) {
+        transform_idst_4x4_wide_fallback(residual,wide,hShift,rangeBits);
+      } else {
+        transform_idct_wide_fallback(residual,nT,wide,hShift,rangeBits);
+      }
+    }
+
+    if (cIdx != 0 && tctx->ResScaleVal != 0) cross_comp_pred(tctx, residual, nT);
+    tctx->decctx->acceleration.add_residual(pred,stride,residual,nT,bit_depth);
+    return;
+  }
 
   if (tctx->cu_transquant_bypass_flag) {
 

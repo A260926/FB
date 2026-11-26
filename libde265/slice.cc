@@ -1535,6 +1535,9 @@ void slice_segment_header::dump_slice_segment_header(const decoder_context* ctx,
 
 void initialize_CABAC_models(thread_context* tctx)
 {
+  // Context initialization uses the signalled slice QP.  The specification
+  // clips this signed value to 0..51 in set_initValue(); QpBdOffset is only
+  // added for inverse quantization (qPYPrime in transform.cc).
   const int QPY = tctx->shdr->SliceQPY;
   const int initType = tctx->shdr->initType;
   assert(initType >= 0 && initType <= 2);
@@ -2493,7 +2496,7 @@ static int32_t decode_coeff_abs_level_remaining(thread_context* tctx,
 
   uint32_t prefix = 0;
   while (tctx->cabac_decoder.decode_bypass()) {
-    prefix++;
+    ++prefix;
     if (prefix > MAX_PREFIX) {
       return 0; // TODO: error
     }
@@ -2504,21 +2507,16 @@ static int32_t decode_coeff_abs_level_remaining(thread_context* tctx,
   int32_t value;
 
   if (prefix <= 3) {
-    // when code only TR part (level < TRMax)
-
-    int codeword = tctx->cabac_decoder.decode_FL_bypass( cRiceParam);
+    const int codeword = tctx->cabac_decoder.decode_FL_bypass(cRiceParam);
     value = (prefix << cRiceParam) + codeword;
   }
   else {
-    // Suffix coded with EGk. Note that the unary part of EGk is already
-    // included in the 'prefix' counter above.
-
-    int codeword = tctx->cabac_decoder.decode_FL_bypass( prefix - 3 + cRiceParam);
+    const int codeword =
+        tctx->cabac_decoder.decode_FL_bypass(prefix - 3 + cRiceParam);
     value = (((UINT32_C(1) << (prefix - 3)) + 3 - 1) << cRiceParam) + codeword;
   }
 
   logtrace(LogSymbols, "$1 coeff_abs_level_remaining=%d\n", value);
-
   return value;
 }
 
@@ -3468,6 +3466,13 @@ int residual_coding(thread_context* tctx,
         xC = (S.x << 2) + ScanOrderPos[p].x;
         yC = (S.y << 2) + ScanOrderPos[p].y;
 
+        if (sps.range_extension.extended_precision_processing_flag) {
+          const int rangeBits = std::max(15, sps.get_bit_depth(cIdx) + 6);
+          const int32_t coeffMin = -(int32_t(UINT32_C(1) << rangeBits));
+          const int32_t coeffMax =  (int32_t(UINT32_C(1) << rangeBits)) - 1;
+          tctx->coeffListWide[cIdx][tctx->nCoeff[cIdx]] =
+              Clip3(coeffMin, coeffMax, currCoeff);
+        }
         tctx->coeffList[cIdx][tctx->nCoeff[cIdx]] = Clip3(-32768, 32767, currCoeff);
         tctx->coeffPos[cIdx][tctx->nCoeff[cIdx]] = xC + yC * CoeffStride;
         tctx->nCoeff[cIdx]++;

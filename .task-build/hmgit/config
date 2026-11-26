@@ -1,0 +1,11 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = true
+	precomposeunicode = true
+[remote "hm"]
+	url = https://vcgit.hhi.fraunhofer.de/jvet/HM.git
+	fetch = +refs/heads/*:refs/remotes/hm/*
+[remote "gh"]
+	url = https://github.com/itu-t-video-coding/HM.git
+	fetch = +refs/heads/*:refs/remotes/gh/*

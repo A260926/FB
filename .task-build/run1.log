@@ -1,0 +1,7 @@
+FAIL tests/extended_precision_task.cc:317 decode_fixture("task_support/fixtures/mono16.h265", 0, 0, false, frames)
+CASE entropy finite_small_codes checks=12
+CASE entropy finite_boundaries_signed_range checks=13
+GROUP entropy cases=2 checks=25 COMPLETE
+CASE transform integer_rounding_qp6 checks=812
+CASE transform wide_dst_dct_skip checks=1367
+GROUP transform cases=2 checks=2179 COMPLETE

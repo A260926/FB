@@ -1,0 +1,401 @@
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=4 k=0
+REMVAL 4
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=4 k=1
+REMVAL 9
+REM prefix=2 k=2
+REMVAL 9
+REM prefix=5 k=2
+REMVAL 29
+REM prefix=7 k=0
+REMVAL 20
+REM prefix=6 k=1
+REMVAL 24
+REM prefix=8 k=2
+REMVAL 218
+REM prefix=7 k=3
+REMVAL 256
+REM prefix=10 k=4
+REMVAL 2081
+REM prefix=0 k=5
+REMVAL 6
+REM prefix=0 k=5
+REMVAL 31
+REM prefix=4 k=0
+REMVAL 4
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=3 k=1
+REMVAL 7
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=3 k=0
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=4 k=1
+REMVAL 11
+REM prefix=1 k=2
+REMVAL 6
+REM prefix=0 k=2
+REMVAL 1
+REM prefix=0 k=2
+REMVAL 2
+REM prefix=0 k=2
+REMVAL 3
+REM prefix=0 k=2
+REMVAL 2
+REM prefix=1 k=2
+REMVAL 6
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=2 k=1
+REMVAL 4
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=0 k=2
+REMVAL 3
+REM prefix=2 k=2
+REMVAL 9
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=5 k=1
+REMVAL 14
+REM prefix=0 k=2
+REMVAL 2
+REM prefix=2 k=2
+REMVAL 8
+REM prefix=8 k=2
+REMVAL 210
+REM prefix=6 k=3
+REMVAL 83
+REM prefix=0 k=4
+REMVAL 9
+REM prefix=0 k=4
+REMVAL 5
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=3 k=1
+REMVAL 6
+REM prefix=2 k=2
+REMVAL 8
+REM prefix=0 k=2
+REMVAL 0
+REM prefix=0 k=2
+REMVAL 3
+REM prefix=1 k=2
+REMVAL 4
+REM prefix=0 k=2
+REMVAL 0
+REM prefix=2 k=2
+REMVAL 9
+REM prefix=0 k=2
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=2 k=1
+REMVAL 4
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=12 k=1
+REMVAL 1661
+REM prefix=0 k=2
+REMVAL 1
+REM prefix=2 k=2
+REMVAL 10
+REM prefix=0 k=2
+REMVAL 2
+REM prefix=0 k=2
+REMVAL 0
+REM prefix=0 k=2
+REMVAL 2
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=0 k=2
+REMVAL 1
+REM prefix=0 k=2
+REMVAL 2
+REM prefix=0 k=2
+REMVAL 3
+REM prefix=1 k=2
+REMVAL 4
+REM prefix=0 k=2
+REMVAL 0
+REM prefix=0 k=2
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=2 k=1
+REMVAL 4
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=4 k=0
+REMVAL 5
+REM prefix=2 k=1
+REMVAL 4
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=3 k=0
+REMVAL 3
+REM prefix=2 k=1
+REMVAL 4
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=2 k=1
+REMVAL 5
+REM prefix=1 k=2
+REMVAL 6
+REM prefix=3 k=2
+REMVAL 15
+REM prefix=1 k=3
+REMVAL 13
+REM prefix=0 k=3
+REMVAL 5
+REM prefix=0 k=3
+REMVAL 0
+REM prefix=3 k=3
+REMVAL 24
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=0 k=0
+REMVAL 0
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=2 k=0
+REMVAL 2
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=0 k=1
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=8 k=1
+REMVAL 130
+REM prefix=1 k=2
+REMVAL 5
+REM prefix=3 k=2
+REMVAL 13
+REM prefix=1 k=3
+REMVAL 8
+REM prefix=1 k=3
+REMVAL 12
+REM prefix=1 k=3
+REMVAL 8
+REM prefix=1 k=0
+REMVAL 1
+REM prefix=1 k=1
+REMVAL 3
+REM prefix=0 k=1
+REMVAL 0
+REM prefix=0 k=1
+REMVAL 1
+decode frames=3 bytes=24576 hash=9a66239d3cb583c3
