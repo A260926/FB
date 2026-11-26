@@ -8,6 +8,22 @@ type Shape interface {
 	Paths() Paths
 }
 
+// generationShape is optionally implemented by shapes whose geometry can
+// change without the caller rebuilding a Scene. Scene compares the reported
+// generation and rebuilds its acceleration structure when it changes.
+type generationShape interface {
+	Generation() uint64
+}
+
+// shapeGeneration returns a stamp for a shape. Shapes without a generation
+// are reported as zero.
+func shapeGeneration(s Shape) uint64 {
+	if g, ok := s.(generationShape); ok {
+		return g.Generation()
+	}
+	return 0
+}
+
 type EmptyShape struct {
 }
 
