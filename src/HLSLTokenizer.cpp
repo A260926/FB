@@ -235,6 +235,13 @@ void HLSLTokenizer::Next()
     }
 
     size_t length = m_buffer - start;
+    // Never overflow m_identifier: an overlong identifier (for example a
+    // packoffset register with hundreds of digits) is truncated and handled
+    // as a normal invalid value by the parser/layout diagnostics.
+    if (length >= HLSLTokenizer::s_maxIdentifier)
+    {
+        length = HLSLTokenizer::s_maxIdentifier - 1;
+    }
     memcpy(m_identifier, start, length);
     m_identifier[length] = 0;
     

@@ -15,6 +15,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\CBufferLayout.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\CodeWriter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -44,6 +47,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\CBufferLayout.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\CodeWriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>

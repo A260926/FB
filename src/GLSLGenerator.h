@@ -12,6 +12,9 @@
 
 #include "CodeWriter.h"
 #include "HLSLTree.h"
+#include "CBufferLayout.h"
+
+#include <map>
 
 namespace M4
 {
@@ -95,6 +98,14 @@ private:
     void LayoutBufferElement(const HLSLType& type, unsigned int& offset);
     void LayoutBufferAlign(const HLSLType& type, unsigned int& offset);
 
+    /** Builds (once) the shared queryable layout for a cbuffer. Returns NULL
+     * when the layout is invalid; the diagnostic has been reported. */
+    CBufferLayout* GetCBufferLayout(HLSLBuffer* buffer);
+
+    /** Complete-rules offset of a struct member relative to the start of the
+     * struct, used for packoffset buffers. */
+    unsigned int GetStructMemberOffsetComplete(HLSLStruct* st, const char* memberName);
+
     HLSLBuffer* GetBufferAccessExpression(HLSLExpression* expression);
     void OutputBufferAccessExpression(HLSLBuffer* buffer, HLSLExpression* expression, const HLSLType& type, unsigned int postOffset);
     unsigned int OutputBufferAccessIndex(HLSLExpression* expression, unsigned int postOffset);
@@ -154,6 +165,10 @@ private:
 	char                m_bvecTernary[ 64 ];
 
     bool                m_error;
+
+    // Shared packoffset-aware layouts, built up front and reused by uniform
+    // array sizing and every buffer access expression.
+    std::map<const HLSLBuffer*, CBufferLayout> m_bufferLayouts;
 
     char                m_reservedWord[s_numReservedWords][64];
 

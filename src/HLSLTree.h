@@ -406,14 +406,20 @@ struct HLSLDeclaration : public HLSLStatement
         nextDeclaration = NULL;
         assignment      = NULL;
         buffer          = NULL;
+        hasPackOffset   = false;
+        packRegister    = 0;
+        packComponent   = 0;
     }
     const char*         name;
     HLSLType            type;
-    const char*         registerName;       // @@ Store register index?
+    const char*         registerName;       // @@ Store register index? For cbuffer packoffset this holds the raw "cN[.xyzw]" text.
     const char*         semantic;
     HLSLDeclaration*    nextDeclaration;    // If multiple variables declared on a line.
     HLSLExpression*     assignment;
     HLSLBuffer*         buffer;
+    bool                hasPackOffset;      // True when a cbuffer field had an explicit : packoffset(...)
+    int                 packRegister;       // N from packoffset(cN[.xyzw])
+    int                 packComponent;      // 0..3 for x..w (defaults to 0/x)
 };
 
 struct HLSLStruct : public HLSLStatement

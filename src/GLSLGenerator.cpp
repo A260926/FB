@@ -141,6 +141,63 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
     m_versionLegacy = (version == Version_110 || version == Version_100_ES);
     m_options   = options;
 
+    // Make repeated Generate() calls on the same generator stable.
+    m_writer.Reset();
+    m_error = false;
+    m_bufferLayouts.clear();
+
+    // Build the single shared queryable layout for every cbuffer up front.
+    // Invalid packoffset/conflicts/types abort before any GLSL is emitted so a
+    // caller can never mistake partial output for a usable result.
+    HLSLRoot* layoutRoot = m_tree->GetRoot();
+    for (HLSLStatement* layoutStatement = layoutRoot->statement;
+         layoutStatement != NULL;
+         layoutStatement = layoutStatement->nextStatement)
+    {
+        if (layoutStatement->nodeType != HLSLNodeType_Buffer)
+        {
+            continue;
+        }
+
+        HLSLBuffer* layoutBuffer = static_cast<HLSLBuffer*>(layoutStatement);
+
+        bool hasExplicitPackOffset = false;
+        for (HLSLDeclaration* layoutField = layoutBuffer->field;
+             layoutField != NULL;
+             layoutField = static_cast<HLSLDeclaration*>(layoutField->nextStatement))
+        {
+            if (layoutField->hasPackOffset)
+            {
+                hasExplicitPackOffset = true;
+                break;
+            }
+        }
+
+        if (hasExplicitPackOffset && !(m_options.flags & Flag_EmulateConstantBuffer))
+        {
+            Error("cbuffer '%s' uses ': packoffset(...)' which requires "
+                  "GLSLGenerator::Flag_EmulateConstantBuffer; the plain GLSL "
+                  "uniform block path cannot honor explicit register placement",
+                  layoutBuffer->name != NULL ? layoutBuffer->name : "?");
+            return false;
+        }
+
+        if (!(m_options.flags & Flag_EmulateConstantBuffer))
+        {
+            // The plain std140 uniform block path is untouched and does not
+            // need the float layout result.
+            continue;
+        }
+
+        CBufferLayout layout;
+        if (!layout.Build(layoutBuffer, m_tree))
+        {
+            Error("%s", layout.GetError().c_str());
+            return false;
+        }
+        m_bufferLayouts[layoutBuffer] = layout;
+    }
+
     ChooseUniqueName("matrix_row", m_matrixRowFunction, sizeof(m_matrixRowFunction));
     ChooseUniqueName("matrix_ctor", m_matrixCtorFunction, sizeof(m_matrixCtorFunction));
     ChooseUniqueName("matrix_mul", m_matrixMulFunction, sizeof(m_matrixMulFunction));
@@ -1142,10 +1199,22 @@ void GLSLGenerator::OutputBuffer(int indent, HLSLBuffer* buffer)
 
     if (m_options.flags & Flag_EmulateConstantBuffer)
     {
-        unsigned int size = 0;
-        LayoutBuffer(buffer, size);
+        unsigned int uniformSize = 0;
 
-        unsigned int uniformSize = (size + 3) / 4;
+        CBufferLayout* layout = GetCBufferLayout(buffer);
+        if (layout != NULL && layout->HasExplicitOffsets())
+        {
+            // Same shared result that answers C++ queries and resolves all
+            // member accesses. Size is the max occupancy end rounded up to a
+            // register, not the end of the last declaration.
+            uniformSize = layout->GetRegisterCount();
+        }
+        else
+        {
+            unsigned int size = 0;
+            LayoutBuffer(buffer, size);
+            uniformSize = (size + 3) / 4;
+        }
 
         m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line, "uniform vec4 %s%s[%d];", m_options.constantBufferPrefix, buffer->name, uniformSize);
     }
@@ -1179,6 +1248,48 @@ void GLSLGenerator::LayoutBuffer(HLSLBuffer* buffer, unsigned int& offset)
     {
         LayoutBuffer(field->type, offset);
     }
+}
+
+CBufferLayout* GLSLGenerator::GetCBufferLayout(HLSLBuffer* buffer)
+{
+    std::map<const HLSLBuffer*, CBufferLayout>::iterator it = m_bufferLayouts.find(buffer);
+    if (it != m_bufferLayouts.end())
+    {
+        return &it->second;
+    }
+
+    // Lazy fallback (normally every buffer was built and validated in
+    // Generate). Keep generation safe if access happens outside that pass.
+    CBufferLayout layout;
+    if (!layout.Build(buffer, m_tree))
+    {
+        Error("%s", layout.GetError().c_str());
+        return NULL;
+    }
+    std::pair<std::map<const HLSLBuffer*, CBufferLayout>::iterator, bool> inserted =
+        m_bufferLayouts.insert(std::make_pair(static_cast<const HLSLBuffer*>(buffer), layout));
+    return &inserted.first->second;
+}
+
+unsigned int GLSLGenerator::GetStructMemberOffsetComplete(HLSLStruct* st, const char* memberName)
+{
+    unsigned int offset = 0;
+    for (HLSLStructField* field = st->field; field != NULL; field = field->nextField)
+    {
+        if (String_Equal(field->name, memberName))
+        {
+            return CBufferLayout::AlignOffsetForType(field->type, offset);
+        }
+
+        std::string error;
+        if (!CBufferLayout::AdvanceOffset(m_tree, CBufferLayout::Rules_Complete,
+                                          field->type, offset, error))
+        {
+            Error("%s", error.c_str());
+            return offset;
+        }
+    }
+    return offset;
 }
 
 void GLSLGenerator::LayoutBuffer(const HLSLType& type, unsigned int& offset)
@@ -1367,14 +1478,37 @@ void GLSLGenerator::OutputBufferAccessExpression(HLSLBuffer* buffer, HLSLExpress
 
             unsigned int offset = postOffset;
 
+            CBufferLayout* structLayout = GetCBufferLayout(buffer);
+            const bool completeRules = structLayout != NULL && structLayout->HasExplicitOffsets();
+
             for (HLSLStructField* field = st->field; field; field = field->nextField)
             {
+                if (completeRules)
+                {
+                    // Every member starts at its aligned offset; this keeps a
+                    // whole struct read on exactly the same addresses as the
+                    // individual nested member accesses.
+                    offset = CBufferLayout::AlignOffsetForType(field->type, offset);
+                }
+
                 OutputBufferAccessExpression(buffer, expression, field->type, offset);
 
                 if (field->nextField)
                     m_writer.Write(",");
 
-                LayoutBuffer(field->type, offset);
+                if (completeRules)
+                {
+                    std::string layoutError;
+                    if (!CBufferLayout::AdvanceOffset(m_tree, CBufferLayout::Rules_Complete,
+                                                      field->type, offset, layoutError))
+                    {
+                        Error("%s", layoutError.c_str());
+                    }
+                }
+                else
+                {
+                    LayoutBuffer(field->type, offset);
+                }
             }
 
             m_writer.Write(")");
@@ -1403,6 +1537,22 @@ unsigned int GLSLGenerator::OutputBufferAccessIndex(HLSLExpression* expression, 
         HLSLBuffer * buffer = declaration->buffer;
         ASSERT(buffer);
 
+        CBufferLayout* layout = buffer != NULL ? GetCBufferLayout(buffer) : NULL;
+        if (layout != NULL && layout->HasExplicitOffsets())
+        {
+            // Top level offset comes straight from the shared queryable
+            // layout (honoring packoffset holes and the high-water cursor).
+            const CBufferLayout::Field* layoutField = layout->FindFieldByDeclaration(declaration);
+            if (layoutField == NULL)
+            {
+                layoutField = layout->FindField(identifierExpression->name);
+            }
+            if (layoutField != NULL)
+            {
+                return layoutField->offset + postOffset;
+            }
+        }
+
         unsigned int offset = 0;
 
         for (HLSLDeclaration* field = buffer->field; field; field = (HLSLDeclaration*)field->nextStatement)
@@ -1429,17 +1579,28 @@ unsigned int GLSLGenerator::OutputBufferAccessIndex(HLSLExpression* expression, 
 
         if (st)
         {
+            HLSLBuffer* memberBuffer = GetBufferAccessExpression(memberAccess->object);
+            CBufferLayout* memberLayout = memberBuffer != NULL ? GetCBufferLayout(memberBuffer) : NULL;
+            const bool completeRules = memberLayout != NULL && memberLayout->HasExplicitOffsets();
+
             unsigned int offset = 0;
 
-            for (HLSLStructField* field = st->field; field; field = field->nextField)
+            if (completeRules)
             {
-                if (field->name == memberAccess->field)
+                offset = GetStructMemberOffsetComplete(st, memberAccess->field);
+            }
+            else
+            {
+                for (HLSLStructField* field = st->field; field; field = field->nextField)
                 {
-                    LayoutBufferAlign(field->type, offset);
-                    break;
-                }
+                    if (field->name == memberAccess->field)
+                    {
+                        LayoutBufferAlign(field->type, offset);
+                        break;
+                    }
 
-                LayoutBuffer(field->type, offset);
+                    LayoutBuffer(field->type, offset);
+                }
             }
 
             return offset + OutputBufferAccessIndex(memberAccess->object, postOffset);
@@ -1456,15 +1617,45 @@ unsigned int GLSLGenerator::OutputBufferAccessIndex(HLSLExpression* expression, 
         const HLSLType& type = arrayAccess->array->expressionType;
         ASSERT(type.array);
 
-        unsigned int elementSize = 0;
-        LayoutBufferElement(type, elementSize);
+        HLSLBuffer* arrayBuffer = GetBufferAccessExpression(arrayAccess->array);
+        CBufferLayout* arrayLayout = arrayBuffer != NULL ? GetCBufferLayout(arrayBuffer) : NULL;
+        const bool completeRules = arrayLayout != NULL && arrayLayout->HasExplicitOffsets();
 
-        unsigned int alignedElementSize = (elementSize + 3) & ~3;
+        unsigned int alignedElementSize = 0;
+        unsigned int arrayElementCount = 0;
+
+        if (completeRules)
+        {
+            int count = 0;
+            unsigned int elementSize = 0;
+            std::string arrayError;
+            if (!CBufferLayout::GetArrayInfo(m_tree, CBufferLayout::Rules_Complete, type,
+                                             count, elementSize, alignedElementSize, arrayError))
+            {
+                Error("%s", arrayError.c_str());
+                return 0;
+            }
+            arrayElementCount = static_cast<unsigned int>(count);
+        }
+        else
+        {
+            unsigned int elementSize = 0;
+            LayoutBufferElement(type, elementSize);
+            alignedElementSize = (elementSize + 3) & ~3;
+        }
 
         int arrayIndex = 0;
         if (m_tree->GetExpressionValue(arrayAccess->index, arrayIndex))
         {
-            unsigned int offset = arrayIndex * alignedElementSize;
+            if (completeRules && (arrayIndex < 0 ||
+                (arrayElementCount != 0 && static_cast<unsigned int>(arrayIndex) >= arrayElementCount)))
+            {
+                Error("Constant buffer array index %d is out of range (array has %u element%s)",
+                      arrayIndex, arrayElementCount, arrayElementCount == 1 ? "" : "s");
+                return 0;
+            }
+
+            unsigned int offset = static_cast<unsigned int>(arrayIndex) * alignedElementSize;
 
             return offset + OutputBufferAccessIndex(arrayAccess->array, postOffset);
         }

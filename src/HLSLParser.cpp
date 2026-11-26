@@ -1378,11 +1378,72 @@ bool HLSLParser::ParseTopLevel(HLSLStatement*& statement)
                 return false;
             }
             HLSLDeclaration* field = NULL;
-            if (!ParseDeclaration(field))
+            if (!ParseDeclaration(field) || field == NULL)
             {
-                m_tokenizer.Error("Expected variable declaration");
+                m_tokenizer.Error("Expected a sized variable declaration");
                 return false;
             }
+
+            // Optional cbuffer field layout modifier:
+            //   : packoffset(cN)        (== cN.x)
+            //   : packoffset(cN.xyzw)
+            // The value is stored verbatim so the HLSL writer can preserve it;
+            // semantic validation happens in CBufferLayout while building the
+            // shared queryable layout.
+            if (Accept(':'))
+            {
+                if (Accept("packoffset"))
+                {
+                    const char* registerText = NULL;
+                    const char* componentText = NULL;
+
+                    if (!Expect('(') || !ExpectIdentifier(registerText))
+                    {
+                        return false;
+                    }
+
+                    if (Accept('.'))
+                    {
+                        if (!ExpectIdentifier(componentText))
+                        {
+                            return false;
+                        }
+                    }
+
+                    if (!Expect(')'))
+                    {
+                        return false;
+                    }
+
+                    char packedName[HLSLTokenizer::s_maxIdentifier + 8];
+                    if (componentText != NULL)
+                    {
+                        String_Printf(packedName, sizeof(packedName), "%s.%s", registerText, componentText);
+                    }
+                    else
+                    {
+                        String_Printf(packedName, sizeof(packedName), "%s", registerText);
+                    }
+
+                    // Attach the modifier to every declarator parsed on this
+                    // declaration (normally there is exactly one).
+                    HLSLDeclaration* declarator = field;
+                    while (declarator != NULL)
+                    {
+                        declarator->hasPackOffset = true;
+                        declarator->registerName  = m_tree->AddString(packedName);
+                        declarator->packRegister  = 0;
+                        declarator->packComponent = 0;
+                        declarator = declarator->nextDeclaration;
+                    }
+                }
+                else
+                {
+                    m_tokenizer.Error("cbuffer fields only support the ': packoffset(cN[.x/y/z/w])' layout modifier");
+                    return false;
+                }
+            }
+
             DeclareVariable( field->name, field->type );
             field->buffer = buffer;
             if (buffer->field == NULL)
@@ -3464,6 +3525,36 @@ bool HLSLParser::AcceptType(bool allowVoid, HLSLType& type/*, bool acceptFlags*/
             m_tokenizer.Next();
             type.baseType = HLSLBaseType_UserDefined;
             type.typeName = identifier;
+            return true;
+        }
+
+        // Accept the FX10 resource/state type names that the HLSL generator
+        // itself emits in its compatibility wrapper structs, so generated
+        // HLSL (including preserved packoffset) can be parsed again.
+        HLSLBaseType resourceType = HLSLBaseType_Unknown;
+        if (String_Equal(identifier, "Texture1D") ||
+            String_Equal(identifier, "Texture1DArray") ||
+            String_Equal(identifier, "Texture2D") ||
+            String_Equal(identifier, "Texture2DArray") ||
+            String_Equal(identifier, "Texture2DMS") ||
+            String_Equal(identifier, "Texture2DMSArray") ||
+            String_Equal(identifier, "Texture3D") ||
+            String_Equal(identifier, "TextureCube") ||
+            String_Equal(identifier, "TextureCubeArray"))
+        {
+            resourceType = HLSLBaseType_Texture;
+        }
+        else if (String_Equal(identifier, "SamplerState") ||
+                 String_Equal(identifier, "SamplerComparisonState"))
+        {
+            resourceType = HLSLBaseType_Sampler;
+        }
+
+        if (resourceType != HLSLBaseType_Unknown)
+        {
+            m_tokenizer.Next();
+            type.baseType = resourceType;
+            type.typeName = NULL;
             return true;
         }
     }
