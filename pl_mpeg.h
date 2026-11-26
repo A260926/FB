@@ -204,6 +204,15 @@ typedef struct {
 	plm_plane_t y;
 	plm_plane_t cr;
 	plm_plane_t cb;
+
+	// Presentation Time Stamp of the frame, as found in the MPEG-PS PES, in
+	// 90kHz ticks. These are only populated when PTS tracking was explicitly
+	// enabled via plm_set_video_pts_enabled() before decoding started. When
+	// disabled (the default), or when using the raw plm_video_* decoder that
+	// has no PES layer, has_pts is always 0 and pts90k is 0. The local time
+	// above is unaffected and always remains the frame count based clock.
+	int has_pts;
+	int64_t pts90k;
 } plm_frame_t;
 
 
@@ -324,6 +333,21 @@ int plm_probe(plm_t *self, size_t probesize);
 
 int plm_get_video_enabled(plm_t *self);
 void plm_set_video_enabled(plm_t *self, int enabled);
+
+
+// Get or set whether the original PES presentation time stamps are tracked
+// and exposed on decoded video frames via plm_frame_t.has_pts and
+// plm_frame_t.pts90k (in 90kHz ticks). Default FALSE.
+// This may only be changed right after creating the plm instance, before any
+// decoding or seeking started. plm_set_video_pts_enabled() returns TRUE when
+// the new value was applied and FALSE when decoding already began; in that
+// case the configuration is left unchanged. When disabled, the new frame
+// fields are always 0 and all other behavior (local time, pixels, the frames
+// delivered and the existing API) is unchanged. The raw plm_video_* decoder
+// has no PES layer, so its frames always report has_pts == 0.
+
+int plm_get_video_pts_enabled(plm_t *self);
+int plm_set_video_pts_enabled(plm_t *self, int enabled);
 
 
 // Get the number of video streams (0--1) reported in the system header.
@@ -850,6 +874,35 @@ plm_samples_t *plm_audio_decode(plm_audio_t *self);
 // -----------------------------------------------------------------------------
 // plm (high-level interface) implementation
 
+// Optional resolver the high level interface installs on the video decoder to
+// map a picture's first start-code byte (global position in the video element
+// stream) to the unwrapped PES PTS it belongs to. Defined only inside the
+// implementation; the raw plm_video_* decoder never installs one.
+
+typedef void (*plm_video_pts_resolve_fn)(
+	void *user, size_t picture_global_offset,
+	int *out_has_pts, int64_t *out_pts90k
+);
+
+typedef struct plm_pts_binding_t {
+	size_t start;    // global offset of the first PES payload byte
+	size_t end;      // global offset one past the last payload byte
+	int has_pts;
+	int used;
+	int64_t pts90k;  // unwrapped 90kHz PTS, valid when has_pts
+} plm_pts_binding_t;
+
+typedef struct plm_pts_tracker_t {
+	plm_buffer_t *video_buffer;
+
+	plm_pts_binding_t *bindings;
+	int bindings_count;
+	int bindings_capacity;
+
+	int has_origin;       // whether a first PTS established the expansion origin
+	int64_t prev_raw;     // last raw 33 bit PTS
+	int64_t accumulated;  // unwrapped PTS value
+} plm_pts_tracker_t;
 struct plm_t {
 	plm_demux_t *demux;
 	double time;
@@ -874,6 +927,10 @@ struct plm_t {
 
 	plm_audio_decode_callback audio_decode_callback;
 	void *audio_decode_callback_user_data;
+
+	int video_pts_enabled;
+	int decode_started;
+	plm_pts_tracker_t *pts_tracker;
 };
 
 int plm_init_decoders(plm_t *self);
@@ -881,6 +938,23 @@ void plm_handle_end(plm_t *self);
 void plm_read_video_packet(plm_buffer_t *buffer, void *user);
 void plm_read_audio_packet(plm_buffer_t *buffer, void *user);
 void plm_read_packets(plm_t *self, int requested_type);
+void plm_write_video_packet(plm_t *self, plm_packet_t *packet);
+size_t plm_buffer_global_position(plm_buffer_t *self);
+size_t plm_buffer_global_write_position(plm_buffer_t *self);
+int plm_demux_current_packet_has_pts90k(plm_demux_t *self);
+int64_t plm_demux_current_packet_get_pts90k(plm_demux_t *self);
+plm_pts_tracker_t *plm_pts_tracker_create(plm_buffer_t *video_buffer);
+void plm_pts_tracker_destroy(plm_pts_tracker_t *tracker);
+void plm_pts_tracker_reset(plm_pts_tracker_t *tracker);
+void plm_pts_tracker_note(plm_pts_tracker_t *tracker, size_t start, size_t end,
+	int has_pts, int64_t raw_pts90k);
+void plm_pts_tracker_resolve(plm_pts_tracker_t *tracker, size_t picture_global_offset,
+	int *out_has_pts, int64_t *out_pts90k);
+void plm_pts_resolve_callback(void *user, size_t picture_global_offset,
+	int *out_has_pts, int64_t *out_pts90k);
+struct plm_video_t;
+void plm_video_set_pts_resolve_callback(struct plm_video_t *video,
+	plm_video_pts_resolve_fn callback, void *user);
 
 #ifndef PLM_NO_STDIO
 
@@ -932,7 +1006,21 @@ int plm_init_decoders(plm_t *self) {
 		if (!self->video_decoder) {
 			self->video_buffer = plm_buffer_create_with_capacity(PLM_BUFFER_DEFAULT_SIZE);
 			plm_buffer_set_load_callback(self->video_buffer, plm_read_video_packet, self);
+
+			// Create the tracker before the decoder: constructing the decoder
+			// makes it find its sequence header and thereby pre-read the first
+			// PES through the load callback. The tracker must already exist so
+			// that packet's byte span and PTS are recorded.
+			self->pts_tracker = plm_pts_tracker_create(self->video_buffer);
+
 			self->video_decoder = plm_video_create_with_buffer(self->video_buffer, TRUE);
+
+			// The resolve callback maps each decoded picture to its PES PTS.
+			// Whether labels are exposed on frames is controlled separately by
+			// video_pts_enabled; the raw decoder never installs this callback.
+			plm_video_set_pts_resolve_callback(
+				self->video_decoder, plm_pts_resolve_callback, self
+			);
 		}
 	}
 
@@ -959,6 +1047,7 @@ void plm_destroy(plm_t *self) {
 		plm_audio_destroy(self->audio_decoder);
 	}
 
+	plm_pts_tracker_destroy(self->pts_tracker);
 	plm_demux_destroy(self->demux);
 	PLM_FREE(self);
 }
@@ -1039,6 +1128,37 @@ void plm_set_video_enabled(plm_t *self, int enabled) {
 		: 0;
 }
 
+int plm_get_video_pts_enabled(plm_t *self) {
+	return self->video_pts_enabled;
+}
+
+int plm_set_video_pts_enabled(plm_t *self, int enabled) {
+	enabled = enabled ? TRUE : FALSE;
+
+	// The binding spans are derived from the byte stream as it is fed in. Once
+	// frame decoding or seeking started, the relationships can no longer be
+	// changed; leave the configuration untouched in that case.
+	if (self->decode_started) {
+		return FALSE;
+	}
+
+	if (enabled == self->video_pts_enabled) {
+		return TRUE;
+	}
+
+	if (enabled) {
+		// Make sure decoders (and with them the tracker and resolve callback)
+		// exist. They also record packets read while still disabled, so the
+		// first picture's PTS is available even when enabled right away.
+		if (!plm_init_decoders(self) || !self->video_decoder) {
+			return FALSE;
+		}
+	}
+
+	self->video_pts_enabled = enabled;
+	return TRUE;
+}
+
 int plm_get_num_video_streams(plm_t *self) {
 	return plm_demux_get_num_video_streams(self->demux);
 }
@@ -1102,6 +1222,12 @@ void plm_rewind(plm_t *self) {
 		plm_audio_rewind(self->audio_decoder);
 	}
 
+	// Drop all packet bindings and the PTS expansion history. The byte stream
+	// restarts at offset 0, so re-reading must reproduce the same labels.
+	if (self->pts_tracker) {
+		plm_pts_tracker_reset(self->pts_tracker);
+	}
+
 	plm_demux_rewind(self->demux);
 	self->time = 0;
 	self->has_ended = FALSE;
@@ -1142,6 +1268,8 @@ void plm_decode(plm_t *self, double tick) {
 		return;
 	}
 
+	self->decode_started = TRUE;
+
 	int did_decode = FALSE;
 	int decode_video_failed = FALSE;
 	int decode_audio_failed = FALSE;
@@ -1151,7 +1279,7 @@ void plm_decode(plm_t *self, double tick) {
 
 	do {
 		did_decode = FALSE;
-		
+
 		if (decode_video && plm_video_get_time(self->video_decoder) < video_target_time) {
 			plm_frame_t *frame = plm_video_decode(self->video_decoder);
 			if (frame) {
@@ -1197,6 +1325,7 @@ plm_frame_t *plm_decode_video(plm_t *self) {
 		return NULL;
 	}
 
+	self->decode_started = TRUE;
 	plm_frame_t *frame = plm_video_decode(self->video_decoder);
 	if (frame) {
 		self->time = frame->time;
@@ -1216,6 +1345,7 @@ plm_samples_t *plm_decode_audio(plm_t *self) {
 		return NULL;
 	}
 
+	self->decode_started = TRUE;
 	plm_samples_t *samples = plm_audio_decode(self->audio_decoder);
 	if (samples) {
 		self->time = samples->time;
@@ -1235,6 +1365,186 @@ void plm_handle_end(plm_t *self) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// PES PTS tracking
+
+#define PLM_PTS_WRAP ((int64_t)1 << 33)
+#define PLM_PTS_HALF_WRAP ((int64_t)1 << 32)
+
+plm_pts_tracker_t *plm_pts_tracker_create(plm_buffer_t *video_buffer) {
+	plm_pts_tracker_t *tracker = (plm_pts_tracker_t *)PLM_MALLOC(sizeof(plm_pts_tracker_t));
+	memset(tracker, 0, sizeof(plm_pts_tracker_t));
+	tracker->video_buffer = video_buffer;
+	return tracker;
+}
+
+void plm_pts_tracker_destroy(plm_pts_tracker_t *tracker) {
+	if (!tracker) {
+		return;
+	}
+	PLM_FREE(tracker->bindings);
+	PLM_FREE(tracker);
+}
+
+void plm_pts_tracker_reset(plm_pts_tracker_t *tracker) {
+	PLM_FREE(tracker->bindings);
+	tracker->bindings = NULL;
+	tracker->bindings_count = 0;
+	tracker->bindings_capacity = 0;
+	tracker->has_origin = FALSE;
+	tracker->prev_raw = 0;
+	tracker->accumulated = 0;
+}
+
+// Expand a raw 33 bit PTS relative to the previous one. The first valid PTS is
+// the expansion origin; later values are advanced by the signed, modulo 2^33
+// difference whose absolute value is less than half a turn. B-frame streams
+// may legitimately move backwards.
+
+int64_t plm_pts_tracker_unwrap(plm_pts_tracker_t *tracker, int64_t raw) {
+	raw &= PLM_PTS_WRAP - 1;
+	if (!tracker->has_origin) {
+		tracker->has_origin = TRUE;
+		tracker->prev_raw = raw;
+		tracker->accumulated = raw;
+		return raw;
+	}
+
+	int64_t delta = raw - tracker->prev_raw;
+	if (delta > PLM_PTS_HALF_WRAP) {
+		delta -= PLM_PTS_WRAP;
+	}
+	else if (delta < -PLM_PTS_HALF_WRAP) {
+		delta += PLM_PTS_WRAP;
+	}
+
+	tracker->prev_raw = raw;
+	tracker->accumulated += delta;
+	return tracker->accumulated;
+}
+
+// Record one PES payload (identified by its global byte span) together with
+// its raw PTS, if present. Packets without a PTS still get a binding so a
+// picture is never matched against the wrong (previous) packet.
+
+void plm_pts_tracker_note(plm_pts_tracker_t *tracker, size_t start, size_t end,
+	int has_pts, int64_t raw_pts90k) {
+	if (tracker->bindings_count == tracker->bindings_capacity) {
+		int new_capacity = tracker->bindings_capacity ? tracker->bindings_capacity * 2 : 8;
+		tracker->bindings = (plm_pts_binding_t *)PLM_REALLOC(
+			tracker->bindings, sizeof(plm_pts_binding_t) * new_capacity
+		);
+		tracker->bindings_capacity = new_capacity;
+	}
+
+	plm_pts_binding_t *binding = &tracker->bindings[tracker->bindings_count++];
+	binding->start = start;
+	binding->end = end;
+	binding->has_pts = FALSE;
+	binding->used = FALSE;
+	binding->pts90k = 0;
+
+	if (has_pts) {
+		binding->has_pts = TRUE;
+		binding->pts90k = plm_pts_tracker_unwrap(tracker, raw_pts90k);
+	}
+}
+
+// Find the binding for a picture from the global offset of its start code's
+// first 00 byte. Bindings are consumed in element stream order and released as
+// soon as the decoder moves past their end, so only a small working set is
+// retained - including packets that carried no PTS at all.
+
+void plm_pts_tracker_resolve(plm_pts_tracker_t *tracker, size_t picture_global_offset,
+	int *out_has_pts, int64_t *out_pts90k) {
+	*out_has_pts = FALSE;
+	*out_pts90k = 0;
+
+	// Release every packet that ends before the current picture. Such a packet
+	// cannot contain this (or any future) picture, whether or not it had a PTS.
+	while (
+		tracker->bindings_count > 0 &&
+		tracker->bindings[0].end <= picture_global_offset
+	) {
+		int remaining = tracker->bindings_count - 1;
+		if (remaining > 0) {
+			memmove(
+				tracker->bindings, tracker->bindings + 1,
+				sizeof(plm_pts_binding_t) * remaining
+			);
+		}
+		tracker->bindings_count = remaining;
+	}
+
+	for (int i = 0; i < tracker->bindings_count; i++) {
+		plm_pts_binding_t *binding = &tracker->bindings[i];
+		if (picture_global_offset < binding->start) {
+			break;
+		}
+		if (picture_global_offset < binding->end) {
+			// A packet's PTS is only given to the first picture whose start
+			// code begins inside it; later pictures, and pictures in PTS-less
+			// packets, report no PTS and never inherit a neighbor's time.
+			if (binding->has_pts && !binding->used) {
+				*out_has_pts = TRUE;
+				*out_pts90k = binding->pts90k;
+				binding->used = TRUE;
+			}
+			return;
+		}
+	}
+}
+
+void plm_pts_resolve_callback(void *user, size_t picture_global_offset,
+	int *out_has_pts, int64_t *out_pts90k) {
+	plm_t *self = (plm_t *)user;
+	*out_has_pts = FALSE;
+	*out_pts90k = 0;
+
+	if (!self->pts_tracker) {
+		return;
+	}
+
+	if (!self->video_pts_enabled) {
+		// Still let the tracker prune consumed packets so bindings do not
+		// accumulate for the whole stream while PTS exposure is off.
+		plm_pts_tracker_resolve(
+			self->pts_tracker, picture_global_offset, out_has_pts, out_pts90k
+		);
+		*out_has_pts = FALSE;
+		*out_pts90k = 0;
+		return;
+	}
+
+	plm_pts_tracker_resolve(
+		self->pts_tracker, picture_global_offset, out_has_pts, out_pts90k
+	);
+}
+
+// Write one demuxed video PES payload into the video buffer and, when PTS
+// tracking is enabled, record the global byte span / PTS binding.
+
+void plm_write_video_packet(plm_t *self, plm_packet_t *packet) {
+	if (!self->pts_tracker) {
+		plm_buffer_write(self->video_buffer, packet->data, packet->length);
+		return;
+	}
+
+	// Record the global byte span of every PES payload, including packets read
+	// before PTS exposure was enabled and packets without a PTS. The span is
+	// what binds a decoded picture to the right packet; exposure is gated
+	// separately by video_pts_enabled.
+	size_t start = plm_buffer_global_write_position(self->video_buffer);
+	plm_buffer_write(self->video_buffer, packet->data, packet->length);
+	size_t end = plm_buffer_global_write_position(self->video_buffer);
+
+	plm_pts_tracker_note(
+		self->pts_tracker, start, end,
+		plm_demux_current_packet_has_pts90k(self->demux),
+		plm_demux_current_packet_get_pts90k(self->demux)
+	);
+}
+
 void plm_read_video_packet(plm_buffer_t *buffer, void *user) {
 	PLM_UNUSED(buffer);
 	plm_t *self = (plm_t *)user;
@@ -1251,7 +1561,7 @@ void plm_read_packets(plm_t *self, int requested_type) {
 	plm_packet_t *packet;
 	while ((packet = plm_demux_decode(self->demux))) {
 		if (packet->type == self->video_packet_type) {
-			plm_buffer_write(self->video_buffer, packet->data, packet->length);
+			plm_write_video_packet(self, packet);
 		}
 		else if (packet->type == self->audio_packet_type) {
 			plm_buffer_write(self->audio_buffer, packet->data, packet->length);
@@ -1281,6 +1591,8 @@ plm_frame_t *plm_seek_frame(plm_t *self, double time, int seek_exact) {
 		return NULL;
 	}
 
+	self->decode_started = TRUE;
+
 	int type = self->video_packet_type;
 
 	double start_time = plm_demux_get_start_time(self->demux, type);
@@ -1292,7 +1604,7 @@ plm_frame_t *plm_seek_frame(plm_t *self, double time, int seek_exact) {
 	else if (time > duration) {
 		time = duration;
 	}
-	
+
 	plm_packet_t *packet = plm_demux_seek(self->demux, time, type, TRUE);
 	if (!packet) {
 		return NULL;
@@ -1302,11 +1614,16 @@ plm_frame_t *plm_seek_frame(plm_t *self, double time, int seek_exact) {
 	int previous_audio_packet_type = self->audio_packet_type;
 	self->audio_packet_type = 0;
 
-	// Clear video buffer and decode the found packet
+	// Clear video buffer and decode the found packet. The video buffer restarts
+	// at global offset 0; drop all old bindings and the unwrap history so the
+	// first PTS read after the seek establishes a fresh expansion origin.
 	plm_video_rewind(self->video_decoder);
+	if (self->pts_tracker) {
+		plm_pts_tracker_reset(self->pts_tracker);
+	}
 	plm_video_set_time(self->video_decoder, packet->pts - start_time);
-	plm_buffer_write(self->video_buffer, packet->data, packet->length);
-	plm_frame_t *frame = plm_video_decode(self->video_decoder);	
+	plm_write_video_packet(self, packet);
+	plm_frame_t *frame = plm_video_decode(self->video_decoder);
 
 	// If we want to seek to an exact frame, we have to decode all frames
 	// on top of the intra frame we just jumped to.
@@ -1353,7 +1670,7 @@ int plm_seek(plm_t *self, double time, int seek_exact) {
 	plm_packet_t *packet = NULL;
 	while ((packet = plm_demux_decode(self->demux))) {
 		if (packet->type == self->video_packet_type) {
-			plm_buffer_write(self->video_buffer, packet->data, packet->length);
+			plm_write_video_packet(self, packet);
 		}
 		else if (
 			packet->type == self->audio_packet_type &&
@@ -1386,6 +1703,10 @@ struct plm_buffer_t {
 	size_t capacity;
 	size_t length;
 	size_t total_size;
+	// Global, monotonically increasing byte offset of bytes[0] in the logical
+	// stream. Discarding read bytes shifts the storage but advances this origin
+	// so byte positions recorded earlier remain valid.
+	size_t global_origin;
 	int discard_read_bytes;
 	int has_ended;
 	int free_when_done;
@@ -1585,15 +1906,17 @@ void plm_buffer_seek(plm_buffer_t *self, size_t pos) {
 		self->seek_callback(self, pos, self->load_callback_user_data);
 		self->bit_index = 0;
 		self->length = 0;
+		self->global_origin = pos;
 	}
 	else if (self->mode == PLM_BUFFER_MODE_RING) {
 		if (pos != 0) {
 			// Seeking to non-0 is forbidden for dynamic-mem buffers
-			return; 
+			return;
 		}
 		self->bit_index = 0;
 		self->length = 0;
 		self->total_size = 0;
+		self->global_origin = 0;
 	}
 	else if (pos < self->length) {
 		self->bit_index = pos << 3;
@@ -1604,6 +1927,20 @@ size_t plm_buffer_tell(plm_buffer_t *self) {
 	return self->tell_callback
 		? self->tell_callback(self, self->load_callback_user_data) + (self->bit_index >> 3) - self->length
 		: self->bit_index >> 3;
+}
+
+// Global byte position of the current read head, stable across compaction,
+// discarding of read bytes and realloc(). Only meaningful for the ring/append
+// buffers the high level interface feeds PES payloads into.
+
+size_t plm_buffer_global_position(plm_buffer_t *self) {
+	return self->global_origin + (self->bit_index >> 3);
+}
+
+// Global byte position where the next plm_buffer_write() will append.
+
+size_t plm_buffer_global_write_position(plm_buffer_t *self) {
+	return self->global_origin + self->length;
 }
 
 void plm_buffer_discard_read_bytes(plm_buffer_t *self) {
@@ -1617,6 +1954,8 @@ void plm_buffer_discard_read_bytes(plm_buffer_t *self) {
 		self->bit_index -= byte_pos << 3;
 		self->length -= byte_pos;
 	}
+	// The surviving storage now starts byte_pos bytes further into the stream.
+	self->global_origin += byte_pos;
 }
 
 #ifndef PLM_NO_STDIO
@@ -1806,13 +2145,23 @@ struct plm_demux_t {
 	int num_video_streams;
 	plm_packet_t current_packet;
 	plm_packet_t next_packet;
+
+	// Raw 33 bit PTS in 90kHz ticks, kept alongside the seconds based packet
+	// pts above. The public plm_packet_t interface in seconds is unchanged.
+	int64_t current_packet_pts90k;
+	int64_t next_packet_pts90k;
+	int current_packet_has_pts90k;
+	int next_packet_has_pts90k;
 };
 
 
 void plm_demux_buffer_seek(plm_demux_t *self, size_t pos);
 double plm_demux_decode_time(plm_demux_t *self);
+int64_t plm_demux_decode_time_ticks(plm_demux_t *self);
 plm_packet_t *plm_demux_decode_packet(plm_demux_t *self, int type);
 plm_packet_t *plm_demux_get_packet(plm_demux_t *self);
+int plm_demux_current_packet_has_pts90k(plm_demux_t *self);
+int64_t plm_demux_current_packet_get_pts90k(plm_demux_t *self);
 
 plm_demux_t *plm_demux_create(plm_buffer_t *buffer, int destroy_when_done) {
 	plm_demux_t *self = (plm_demux_t *)PLM_MALLOC(sizeof(plm_demux_t));
@@ -2213,13 +2562,20 @@ plm_packet_t *plm_demux_decode(plm_demux_t *self) {
 }
 
 double plm_demux_decode_time(plm_demux_t *self) {
-	int64_t clock = plm_buffer_read(self->buffer, 3) << 30;
+	return (double)plm_demux_decode_time_ticks(self) / 90000.0;
+}
+
+// Read a raw 33 bit MPEG-PS clock (PTS/DTS/SCR) in 90kHz ticks without any
+// floating point conversion, so the full 33 bit value is preserved.
+
+int64_t plm_demux_decode_time_ticks(plm_demux_t *self) {
+	int64_t clock = (int64_t)plm_buffer_read(self->buffer, 3) << 30;
 	plm_buffer_skip(self->buffer, 1);
-	clock |= plm_buffer_read(self->buffer, 15) << 15;
+	clock |= (int64_t)plm_buffer_read(self->buffer, 15) << 15;
 	plm_buffer_skip(self->buffer, 1);
-	clock |= plm_buffer_read(self->buffer, 15);
+	clock |= (int64_t)plm_buffer_read(self->buffer, 15);
 	plm_buffer_skip(self->buffer, 1);
-	return (double)clock / 90000.0;
+	return clock;
 }
 
 plm_packet_t *plm_demux_decode_packet(plm_demux_t *self, int type) {
@@ -2241,25 +2597,31 @@ plm_packet_t *plm_demux_decode_packet(plm_demux_t *self, int type) {
 
 	int pts_dts_marker = plm_buffer_read(self->buffer, 2);
 	if (pts_dts_marker == 0x03) {
-		self->next_packet.pts = plm_demux_decode_time(self);
+		self->next_packet_pts90k = plm_demux_decode_time_ticks(self);
+		self->next_packet_has_pts90k = TRUE;
+		self->next_packet.pts = (double)self->next_packet_pts90k / 90000.0;
 		self->last_decoded_pts = self->next_packet.pts;
 		plm_buffer_skip(self->buffer, 40); // skip dts
 		self->next_packet.length -= 10;
 	}
 	else if (pts_dts_marker == 0x02) {
-		self->next_packet.pts = plm_demux_decode_time(self);
+		self->next_packet_pts90k = plm_demux_decode_time_ticks(self);
+		self->next_packet_has_pts90k = TRUE;
+		self->next_packet.pts = (double)self->next_packet_pts90k / 90000.0;
 		self->last_decoded_pts = self->next_packet.pts;
 		self->next_packet.length -= 5;
 	}
 	else if (pts_dts_marker == 0x00) {
 		self->next_packet.pts = PLM_PACKET_INVALID_TS;
+		self->next_packet_pts90k = 0;
+		self->next_packet_has_pts90k = FALSE;
 		plm_buffer_skip(self->buffer, 4);
 		self->next_packet.length -= 1;
 	}
 	else {
 		return NULL; // invalid
 	}
-	
+
 	return plm_demux_get_packet(self);
 }
 
@@ -2272,12 +2634,23 @@ plm_packet_t *plm_demux_get_packet(plm_demux_t *self) {
 	self->current_packet.length = self->next_packet.length;
 	self->current_packet.type = self->next_packet.type;
 	self->current_packet.pts = self->next_packet.pts;
+	self->current_packet_pts90k = self->next_packet_pts90k;
+	self->current_packet_has_pts90k = self->next_packet_has_pts90k;
 
 	self->next_packet.length = 0;
 	return &self->current_packet;
 }
 
+// Internal accessors for the raw 33 bit PTS of the current packet. The public
+// plm_packet_t keeps exposing time in seconds only.
 
+int plm_demux_current_packet_has_pts90k(plm_demux_t *self) {
+	return self->current_packet_has_pts90k;
+}
+
+int64_t plm_demux_current_packet_get_pts90k(plm_demux_t *self) {
+	return self->current_packet_pts90k;
+}
 
 // -----------------------------------------------------------------------------
 // plm_video implementation
@@ -2738,6 +3111,16 @@ struct plm_video_t {
 	plm_buffer_t *buffer;
 	int destroy_buffer_when_done;
 
+	// Optional PES PTS resolver. Only the high level plm_* interface installs
+	// one; the raw plm_video_* decoder leaves this NULL and never tags frames.
+	plm_video_pts_resolve_fn pts_resolve_callback;
+	void *pts_resolve_user_data;
+
+	// Label resolved for the picture most recently decoded. It is copied onto
+	// the destination frame slot when the picture is published.
+	int picture_has_pts;
+	int64_t picture_pts90k;
+
 	plm_frame_t frame_current;
 	plm_frame_t frame_forward;
 	plm_frame_t frame_backward;
@@ -2831,6 +3214,18 @@ void plm_video_set_no_delay(plm_video_t *self, int no_delay) {
 	self->assume_no_b_frames = no_delay;
 }
 
+// Install (or remove with NULL) the resolver that maps a decoded picture to its
+// PES PTS. Internal use by the high level plm_* interface only; a standalone
+// plm_video_* decoder never gets one and always reports has_pts == 0.
+
+void plm_video_set_pts_resolve_callback(plm_video_t *self,
+	plm_video_pts_resolve_fn callback, void *user) {
+	self->pts_resolve_callback = callback;
+	self->pts_resolve_user_data = user;
+	self->picture_has_pts = FALSE;
+	self->picture_pts90k = 0;
+}
+
 double plm_video_get_time(plm_video_t *self) {
 	return self->time;
 }
@@ -2846,6 +3241,12 @@ void plm_video_rewind(plm_video_t *self) {
 	self->frames_decoded = 0;
 	self->has_reference_frame = FALSE;
 	self->start_code = -1;
+
+	// A reused frame slot must not carry a label from the previous run.
+	self->picture_has_pts = FALSE;
+	self->picture_pts90k = 0;
+	self->frame_current.has_pts = self->frame_forward.has_pts = self->frame_backward.has_pts = FALSE;
+	self->frame_current.pts90k = self->frame_forward.pts90k = self->frame_backward.pts90k = 0;
 }
 
 int plm_video_has_ended(plm_video_t *self) {
@@ -2894,7 +3295,24 @@ plm_frame_t *plm_video_decode(plm_video_t *self) {
 			return NULL;
 		}
 		plm_buffer_discard_read_bytes(self->buffer);
-		
+
+		// The read head sits right after the 4 picture start-code bytes, so the
+		// global offset of the first 00 byte is the current position minus 4.
+		// Resolve the PES PTS bound to this picture before its pixels are decoded
+		// and the frame slots rotate.
+		if (self->pts_resolve_callback) {
+			size_t picture_global_offset =
+				plm_buffer_global_position(self->buffer) - 4;
+			self->pts_resolve_callback(
+				self->pts_resolve_user_data, picture_global_offset,
+				&self->picture_has_pts, &self->picture_pts90k
+			);
+		}
+		else {
+			self->picture_has_pts = FALSE;
+			self->picture_pts90k = 0;
+		}
+
 		plm_video_decode_picture(self);
 
 		if (self->assume_no_b_frames) {
@@ -3097,6 +3515,13 @@ void plm_video_decode_picture(plm_video_t *self) {
 		}
 		self->start_code = plm_buffer_next_start_code(self->buffer);
 	}
+
+	// Attach the resolved PES label to the slot this picture was decoded into.
+	// It is always overwritten (cleared to has_pts == 0 when there is no PTS)
+	// and from here on travels together with the pixels through the frame slot
+	// rotations below, including delayed publication of reference pictures.
+	self->frame_current.has_pts = self->picture_has_pts;
+	self->frame_current.pts90k = self->picture_pts90k;
 
 	// If this is a reference picture rotate the prediction pointers
 	if (

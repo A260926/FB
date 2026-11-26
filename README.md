@@ -61,9 +61,60 @@ If you just want to quickly test the library, try this file:
 https://phoboslab.org/files/bjork-all-is-full-of-love.mpg
 
 
+## Reading the original PES presentation time stamps
+
+By default, frames only carry a local clock (`plm_frame_t.time`) synthesized
+from the frame rate. If you need the presentation time stamp stored in the
+MPEG-PS container (e.g. for A/V sync against an external clock), enable PTS
+tracking right after creating the decoder and before decoding or seeking. The
+original 33 bit PTS is then exposed on each frame in 90kHz ticks:
+
+```c
+#include "pl_mpeg.h"
+
+plm_t *plm = plm_create_with_filename("some-file.mpg");
+plm_set_audio_enabled(plm, FALSE);
+
+// Opt in before the first plm_decode_video()/plm_decode()/plm_seek() call.
+// Returns 1 on success and 0 if decoding already started (configuration left
+// untouched). It is off by default.
+if (!plm_set_video_pts_enabled(plm, TRUE)) {
+    // too late: decoding or seeking already began
+}
+
+plm_frame_t *frame;
+while ((frame = plm_decode_video(plm))) {
+    if (frame->has_pts) {
+        // frame->pts90k is the unwrapped PES PTS in 90kHz ticks.
+        double pts_seconds = frame->pts90k / 90000.0;
+        printf("frame @%.3f local, PTS %.3f s (%lld ticks)\n",
+            frame->time, pts_seconds, (long long)frame->pts90k);
+    }
+    // Frames without an explicit PTS report has_pts == 0 and pts90k == 0.
+    // The local frame->time clock is always available regardless.
+}
+```
+
+Notes:
+
+- A PES packet's PTS is only attached to the first picture whose start code
+  begins inside that packet; later pictures in the same packet and pictures in
+  PTS-less packets report `has_pts == 0` instead of guessing a time.
+- The raw 33 bit values are preserved and unwrapped across the 2^33 wrap, so
+  `pts90k` is a signed 64 bit tick count that may legitimately step backwards
+  for B-frame streams.
+- The same fields are populated for the pull API (`plm_decode_video`), the
+  video decode callback (`plm_decode`) and both file and memory sources. The
+  standalone `plm_video_*` elementary-stream decoder has no PES layer and
+  always reports `has_pts == 0`.
+- `plm_rewind()` clears the bindings and re-establishes them on the next read;
+  `plm_seek()` starts a fresh expansion from the first PTS seen after the seek.
+
+
 ## Limitations
 
 - no error reporting. PL_MPEG will silently ignore any invalid data.
-- the pts (presentation time stamp) for packets in the MPEG-PS container is
-ignored. This may cause sync issues with some files.
+- PES presentation time stamps are only surfaced when explicitly requested via
+  `plm_set_video_pts_enabled()`; otherwise frames use the frame-count based
+  local clock, which is sufficient for many playback scenarios.
 - bugs, probably.
