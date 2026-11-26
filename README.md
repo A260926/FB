@@ -283,6 +283,72 @@ Example of file decoding with seek capability:
     }
 ```
 
+## Push (forward-only streaming) API
+
+`mp3dec_decode_frame()` needs a whole frame in the buffer and the high-level
+`mp3dec_ex_*` API scans or seeks the stream. For a source that only delivers data
+in forward-only fragments (a socket, a recorder, a pipe) with no way to seek
+back, `minimp3_push.h` provides a push decoder. It accumulates fragments itself,
+never asks for earlier bytes, and emits interleaved PCM16 a partial frame at a
+time.
+
+```c
+#include "minimp3_push.h"
+
+mp3dec_push_t dec;
+mp3dec_push_init(&dec);
+
+/* on every fragment, and again with zero input after eof to drain: */
+size_t bytes   = fragment_len;   /* in: available bytes, out: bytes consumed */
+size_t samples = pcm_capacity;   /* in: PCM scalar capacity, out: scalars written */
+int rc = mp3dec_push_decode(&dec, fragment, &bytes, pcm, &samples, eof);
+
+mp3dec_push_close(&dec);
+```
+
+**Lengths and consumption.** On entry `*bytes` is the number of bytes available
+and `*samples` the PCM scalar capacity; on return they are overwritten with the
+bytes actually consumed and the interleaved PCM16 scalars actually produced. A
+call with either length 0 is legal. Consumed input is never decoded twice; any
+bytes not consumed stay with the caller and are presented again with the next
+fragment. If the output buffer cannot hold a whole frame, as much as fits is
+delivered (stereo always keeps complete left/right pairs) and the rest waits for
+the next call. Whenever a call accepts input or delivers sound, the returned
+lengths report it, so the caller can always make progress.
+
+**Return codes** (also defined in the header):
+
+| Code | Meaning |
+| ---- | ------- |
+| `MP3D_PUSH_OK` (0) | active; more input or another drain call may be needed |
+| `MP3D_PUSH_DONE` (1) | all input consumed and all PCM delivered; repeated zero-input drain calls keep returning DONE with both lengths 0 |
+| `MP3D_PUSH_E_PARAM` (-1) | invalid argument |
+| `MP3D_PUSH_E_TRUNC` (-2) | eof reached inside a frame or an ID3 tag header; PCM already delivered is not withdrawn |
+| `MP3D_PUSH_E_FORMAT` (-3) | unsupported stream: free-format, non-Layer-III, or a mid-stream sample-rate/channel change |
+
+`eof` marks the final input fragment; afterwards call with zero input to drain
+buffered PCM until `MP3D_PUSH_DONE`.
+
+**Tags and gapless playback.** A leading ID3v2.3/2.4 tag is skipped using its
+synchsafe length and footer flag; only its fixed 10-byte header is buffered, so
+the tag body is never cached. A Xing/Info tag frame (with LAME delay/padding) is
+not decoded as audio and its sample-domain trimming is applied, so a complete
+stream produces exactly the same samples as `mp3dec_load_buf()`; streams without
+such a tag are left untrimmed. Trailing ID3v1/APE tags are skipped at eof.
+
+**Format scope.** Decoding uses the existing Layer III core and supports
+MPEG-1/2/2.5 normal-bitrate mono and stereo streams. Free-format streams and
+mid-stream changes of sample rate or channel count are reported as
+`MP3D_PUSH_E_FORMAT`. Fragments may break at any byte; an unconfirmed partial
+frame is retained (it does not reset the bit reservoir or synthesis history) and
+a stream that ends mid-frame returns `MP3D_PUSH_E_TRUNC`.
+
+**Memory.** The instance is self-contained and needs no allocation. Its internal
+compressed-input buffer plus the single pending PCM frame are bounded to 128 KiB
+and do not grow with recording length or ID3 tag size
+(`MINIMP3_PUSH_INPUT_CAP`, `MINIMP3_PUSH_PCM_CAP`). See
+`examples/push_decode_example.c` for a complete file-to-PCM example.
+
 ## Bindings
 
  * https://github.com/tosone/minimp3 - go bindings
