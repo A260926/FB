@@ -80,6 +80,7 @@ set(SOURCES
     src/rice/rice_decoder.cpp
     src/frame/frame_encoder.cpp
     src/frame/frame_decoder.cpp
+    src/frame/channel_forest.cpp
     src/file/sela_file.cpp
     src/file/wav_file.cpp
     src/sela/encoder.cpp
@@ -130,6 +131,7 @@ add_library(Catch INTERFACE)
 set(TEST_SOURCES
     src/frame/frame_decoder.cpp
     src/frame/frame_encoder.cpp
+    src/frame/channel_forest.cpp
     test/frametests.cpp
     src/lpc/linear_predictor.cpp
     src/lpc/residue_generator.cpp

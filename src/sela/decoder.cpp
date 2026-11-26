@@ -2,6 +2,7 @@
 #include "../include/data/exception.hpp"
 #include "../include/frame.hpp"
 
+#include <exception>
 #include <thread>
 
 namespace sela {
@@ -19,9 +20,8 @@ public:
     }
     void process(std::vector<data::WavFrame>& wavFrames)
     {
-        if ((begin >= end) || (end > selaFrames.size())) {
-            const std::string exceptionMessage = "Something is wrong";
-            data::Exception(std::move(exceptionMessage));
+        if (begin > end || end > selaFrames.size()) {
+            throw data::Exception("Something is wrong");
         }
         wavFrames.reserve(end - begin);
 
@@ -29,6 +29,14 @@ public:
             frame::FrameDecoder decoder = frame::FrameDecoder(selaFrames[i]);
             data::WavFrame wavFrame = decoder.process();
             wavFrames.push_back(wavFrame);
+        }
+    }
+    void processAndCapture(std::vector<data::WavFrame>& wavFrames, std::exception_ptr& error)
+    {
+        try {
+            process(wavFrames);
+        } catch (...) {
+            error = std::current_exception();
         }
     }
 };
@@ -51,9 +59,12 @@ void Decoder::processFrames(std::vector<data::WavFrame>& decodedWavFrames)
 
         //Initialize output wavFrames
         std::vector<std::vector<data::WavFrame>> wavFrameSegments;
+        std::vector<std::exception_ptr> workerErrors;
         wavFrameSegments.reserve(numThreads);
+        workerErrors.reserve(numThreads);
         for (size_t i = 0; i < numThreads; i++) {
             wavFrameSegments.push_back(std::vector<data::WavFrame>());
+            workerErrors.push_back(std::exception_ptr());
         }
 
         const size_t framesPerThread = selaFile.selaFrames.size() / numThreads;
@@ -65,7 +76,8 @@ void Decoder::processFrames(std::vector<data::WavFrame>& decodedWavFrames)
             LoopThrough data = LoopThrough(begin, end, selaFile.selaFrames);
 
             //Start thread object and push thread to threadpool
-            threadPool.push_back(std::thread(&LoopThrough::process, data, std::ref(wavFrameSegments[i])));
+            threadPool.push_back(std::thread(&LoopThrough::processAndCapture, data,
+                std::ref(wavFrameSegments[i]), std::ref(workerErrors[i])));
 
             //Increment beginning and end
             begin += framesPerThread;
@@ -75,6 +87,12 @@ void Decoder::processFrames(std::vector<data::WavFrame>& decodedWavFrames)
         for (size_t i = 0; i < numThreads; i++) {
             // Wait for worker threads to finish execution
             threadPool[i].join();
+        }
+
+        for (size_t i = 0; i < numThreads; i++) {
+            if (workerErrors[i]) {
+                std::rethrow_exception(workerErrors[i]);
+            }
         }
 
         for (std::vector<data::WavFrame> segment : wavFrameSegments) {

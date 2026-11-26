@@ -38,6 +38,8 @@ A lossless audio codec which aims to be as simple as possible while still having
 
 To understand the core algorithm, see code in frame namespace, frame namespace utilizes maths which is implemented in lpc and rice namespaces.
 
+For the opt-in optimal cross-channel forest encoder, arbitrary-order dependency decoder, C++ call example, and usage notes, see [examples/CHANNEL_FOREST.md](examples/CHANNEL_FOREST.md).
+
 ### References
 - Linear Prediction
   - [Wikipedia](https://en.wikipedia.org/wiki/Linear_prediction)

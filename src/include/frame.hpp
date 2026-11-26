@@ -8,9 +8,12 @@ namespace frame {
 class FrameEncoder {
 private:
     const data::WavFrame& wavFrame;
+    bool channelForest;
+    data::SelaFrame processLegacy();
+    data::SelaFrame processChannelForest();
 
 public:
-    explicit FrameEncoder(const data::WavFrame& wavFrame);
+    explicit FrameEncoder(const data::WavFrame& wavFrame, bool channelForest = false);
     data::SelaFrame process();
 };
 
