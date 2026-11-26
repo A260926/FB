@@ -257,6 +257,28 @@ export interface CompiledASS {
     dialogues: Dialogue[];
 }
 
-export function compile(text: string, options: object): CompiledASS;
+export interface RenderDrawingFrameOptions {
+    width: number;
+    height: number;
+}
 
-export function decompile(obj: CompiledASS): string;
+export interface RenderedDrawingFrame {
+    width: number;
+    height: number;
+    data: Uint8ClampedArray;
+}
+
+export function compile(text: string, options?: object): CompiledASS;
+
+export function decompile(document: CompiledASS): string;
+
+/**
+ * Render pure drawing dialogues to one straight-alpha RGBA frame.
+ * @param document Result of {@link compile}.
+ * @param seconds Frame time in seconds.
+ */
+export function renderDrawingFrame(
+    document: CompiledASS,
+    seconds: number,
+    options: RenderDrawingFrameOptions,
+): RenderedDrawingFrame;

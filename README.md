@@ -22,7 +22,7 @@ npm install ass-compiler
 You can use `parse` or `compile` as your need.
 
 ```js
-import { parse, stringify, compile, decompile } from 'ass-compiler';
+import { parse, stringify, compile, decompile, renderDrawingFrame } from 'ass-compiler';
 
 // ASS file content
 const text = `
@@ -37,6 +37,31 @@ const stringifiedText = stringify(parsedASS);
 // compile will get rid of invalid tags, merge duplicated tags, transform drawings, etc.
 const compiledASS = compile(text, options);
 const decompiledText = decompile(compiledASS);
+
+// Render pure vector drawing dialogue to transparent RGBA pixels.
+const frame = renderDrawingFrame(compiledASS, 1.5, { width: 1280, height: 720 });
+// frame.data is a fresh, row-major Uint8ClampedArray of straight RGBA bytes.
+```
+
+### Drawing frames
+
+`renderDrawingFrame(document, seconds, { width, height })` renders only active
+drawing-only dialogues (`start <= seconds < end`). It uses the compiled M/L/C
+instructions directly and supports multiple subpaths and drawing fragments,
+`\p`/`\pbo`, `\fscx`/`\fscy`, `\frz`, `\pos`/`\move`, `\org`, primary color and
+alpha, `\fad`/`\fade`, and rectangular or vector `\clip`/`\iclip`.
+
+Pixels use 16 fixed subpixel samples with non-zero winding and shared clip
+intersection. Frames are independent and do not mutate the compiled document.
+Active text, borders, shadows, blur, perspective rotations (`\frx`, `\fry`,
+`\fax`, `\fay`), and `\t` animation throw an error; inactive dialogues are
+ignored.
+
+The example writes a P7 PAM image with `DEPTH 4`, `MAXVAL 255`, and
+`TUPLTYPE RGB_ALPHA`, using the ASS `PlayResX`/`PlayResY` dimensions:
+
+```bash
+node examples/render-drawing.mjs input.ass 1.5 output.pam
 ```
 
 ### options
