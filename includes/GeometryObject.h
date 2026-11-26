@@ -21,7 +21,12 @@ private:
   std::vector<Vector2D> m_texture_coords;
   std::vector<uint32_t> m_indices;
 
-  glm::mat4 m_model, m_rotation, m_translation;
+  // Explicit identity: a default-constructed glm::mat4 is left
+  // uninitialized by newer GLM versions (no GLM_FORCE_CTOR_INIT), so relying
+  // on implicit identity would corrupt the model transform.
+  glm::mat4 m_model = glm::mat4(1.0f);
+  glm::mat4 m_rotation = glm::mat4(1.0f);
+  glm::mat4 m_translation = glm::mat4(1.0f);
 public:
 	GeometryObject();
 	GeometryObject(Material* material, const std::vector<Point3D>& vertices, const std::vector<RGBColor>& colors, const std::vector<Vector2D>& texture_coords, const std::vector<uint32_t>& indices, const Point3D& center = Point3D(0,0,0));

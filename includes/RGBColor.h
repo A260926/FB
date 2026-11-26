@@ -72,6 +72,28 @@ public:
     r += color.r;
     g += color.g;
     b += color.b;
+
+    return *this;
+  }
+
+  // Unclamped accumulation used while summing per-light direct lighting:
+  // channels are allowed to grow past 1.0 here and are saturated once,
+  // only after every light (and the ambient term) has been added.
+  RGBColor& accumulate(const RGBColor& color) {
+    r += color.r;
+    g += color.g;
+    b += color.b;
+
+    return *this;
+  }
+
+  // Saturate every channel to the displayable [0, 1] interval.
+  RGBColor& clampToUnit() {
+    r = std::min(std::max(r, 0.0f), 1.0f);
+    g = std::min(std::max(g, 0.0f), 1.0f);
+    b = std::min(std::max(b, 0.0f), 1.0f);
+
+    return *this;
   }
 
   ~RGBColor();

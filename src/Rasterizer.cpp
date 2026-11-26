@@ -13,6 +13,7 @@ Rasterizer::Rasterizer(const World* world)
 }
 
 Rasterizer::~Rasterizer() {
+  releaseShadowMaps();
 }
 
 
@@ -29,22 +30,34 @@ const Fragment Rasterizer::calculateFragmentAttributes(const Triangle3D& triangl
   return f;
 }
 
-// Calculate depth in screen space and then interpolate using inverse function (1/z) 
+// Calculate depth in screen space. Perspective cameras interpolate 1/z with
+// the screen-space barycentric coordinates (perspective-correct depth); an
+// orthographic camera has no perspective divide, so a slanted triangle's
+// depth is the plain linear interpolation of its camera-space vertex depths.
 const double Rasterizer::calculateDepth(const Triangle3D& triangle_world, const Triangle2D& triangle_raster, const Point2D& pixel_raster) const {
   const Triangle3D triangle_camera = Triangle3D(
     Vertex3D (m_camera->viewTransform(triangle_world.v1.position), triangle_world.v1.color, triangle_world.v1.texture_coords, triangle_world.v1.normal),
-    Vertex3D(m_camera->viewTransform(triangle_world.v2.position), triangle_world.v2.color, triangle_world.v2.texture_coords, triangle_world.v1.normal),
-    Vertex3D(m_camera->viewTransform(triangle_world.v3.position), triangle_world.v3.color, triangle_world.v3.texture_coords, triangle_world.v1.normal)
+    Vertex3D(m_camera->viewTransform(triangle_world.v2.position), triangle_world.v2.color, triangle_world.v2.texture_coords, triangle_world.v2.normal),
+    Vertex3D(m_camera->viewTransform(triangle_world.v3.position), triangle_world.v3.color, triangle_world.v3.texture_coords, triangle_world.v3.normal)
   );
 
-  // Calculate barycentric coords in camera space
+  // Barycentric coords of the pixel in screen space.
   double u, v, w;
   triangle_raster.calculateBarycentricCoords(u, v, w, pixel_raster);
-  // Interpolate Z in 3D using inverse function and barycentric coordinates in 2D
-  const double depth = 1 / 
+
+  const OrthographicCamera* ortho_camera = dynamic_cast<const OrthographicCamera*>(m_camera);
+  if (ortho_camera != nullptr) {
+    // Linear depth: orthographic projection keeps depth affine across the triangle.
+    return triangle_camera.v1.position.z * u
+         + triangle_camera.v2.position.z * v
+         + triangle_camera.v3.position.z * w;
+  }
+
+  // Perspective depth: interpolate 1/z in screen space and invert.
+  const double depth = 1 /
     (
-      (1 / triangle_camera.v1.position.z) * u + 
-      (1 / triangle_camera.v2.position.z) * v + 
+      (1 / triangle_camera.v1.position.z) * u +
+      (1 / triangle_camera.v2.position.z) * v +
       (1 / triangle_camera.v3.position.z) * w
     );
   return depth;
@@ -154,8 +167,19 @@ void Rasterizer::exportDepthBuffer(const std::vector<double>& depth_buffer, cons
   exportImage(depth_buffer_grey, output_path, image_width, image_height);
 }
 
-// Build a shadow map for each light
+// Release every stored shadow map and the internal camera/rasterizer it owns.
+void Rasterizer::releaseShadowMaps() {
+  for (auto& shadow_map : m_shadow_maps) {
+    delete shadow_map;
+  }
+  m_shadow_maps.clear();
+}
+
+// Build a shadow map for each light of the current light set. Any maps left
+// over from a previous render are destroyed first so the stored maps always
+// match the current lights one-to-one and in order.
 const void Rasterizer::createShadowMaps() {
+  releaseShadowMaps();
   for (auto& light : m_world->m_lights) {
     ShadowMap * shadow_map = new ShadowMap(m_world, light);
     shadow_map->render();
@@ -163,11 +187,12 @@ const void Rasterizer::createShadowMaps() {
   }
 }
 
-// Calculate shadows using shadow maps
-const double Rasterizer::shadowFactor(const Point3D& point_world) {
-  double shadow = 0.0;         // No shadow     
-  for (auto& shadow_map : m_shadow_maps) {
-    shadow += shadow_map->pointInShadow(point_world);
+// One occlusion ratio per light. Every light is tested only against the
+// shadow map generated for that same light; the ambient term is unaffected.
+const std::vector<double> Rasterizer::shadowFactors(const Point3D& point_world) const {
+  std::vector<double> factors(m_shadow_maps.size(), 0.0);
+  for (size_t i = 0; i < m_shadow_maps.size(); ++i) {
+    factors[i] = m_shadow_maps[i]->pointInShadow(point_world);
   }
-  return shadow;
+  return factors;
 }

@@ -27,37 +27,108 @@ const RGBColor Material::shade(const std::vector<Light*>& lights, const Camera& 
 #endif // _BLINN-PHONG
 }
 
+const RGBColor Material::shade(const std::vector<Light*>& lights, const std::vector<double>& shadow_factors, const Camera& camera, const Fragment& fragment) {
+#ifdef _FLAT
+  return fragment.color;
+#endif // _FLAT
+
+#ifdef _PHONG
+  return phongEquation(lights, fragment.normal, -camera.viewDirection(fragment.position), fragment.position, fragment.color, fragment.diffuse, fragment.specular, 1.0, &shadow_factors);
+#endif // _PHONG
+
+#ifdef _BLINN_PHONG
+  return blinnPhongEquation(lights, fragment.normal, -camera.viewDirection(fragment.position), fragment.position, fragment.color, fragment.diffuse, fragment.specular, 1.0, &shadow_factors);
+#endif // _BLINN-PHONG
+}
+
+// Ambient term, added exactly once and never touched by shadow occlusion.
+// Direct lighting is summed per light in unclamped double precision; the
+// resulting channels are saturated to [0, 1] only once, right before the
+// vertex color multiplication.
 const RGBColor Material::blinnPhongEquation(const std::vector<Light*>& lights, const Vector3D& N, const Vector3D& V, const Point3D vertex_position,
-                                    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess) {
+                                    const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess,
+                                    const std::vector<double>* shadow_factors) {
   const RGBColor ambient(0.1);
-  RGBColor diffuse, specular;
-  for (auto& light : lights) {
+  double sum_r = ambient.r;
+  double sum_g = ambient.g;
+  double sum_b = ambient.b;
+
+  for (size_t i = 0; i < lights.size(); ++i) {
+    const Light* light = lights[i];
     const Vector3D L = -(light->getDirectionToPoint(vertex_position));
     Vector3D H = V + L;
-    H.normalize();
+    // V and L can be exactly anti-parallel (e.g. an orthographic camera
+    // looking straight into the light), which makes the half-vector zero.
+    // Normalizing it would produce NaN; in that configuration the specular
+    // term is undefined anyway, so it contributes nothing.
+    const bool half_vector_valid = H.len_squared() > 1e-20;
+    if (half_vector_valid) {
+      H.normalize();
+    }
 
-    diffuse = light->getColor() * diffuse_color * std::max((L * N), 0.0);
-    specular = light->getColor() *  specular_color * pow(std::max((H * V), 0.0), shininess);
+    // pointInShadow returns an occlusion ratio in [0, 1]: only this light's
+    // own shadow map can dim this light's contribution.
+    double occlusion = 0.0;
+    if (shadow_factors != nullptr && i < shadow_factors->size()) {
+      occlusion = std::min(std::max((*shadow_factors)[i], 0.0), 1.0);
+    }
+    const double visibility = 1.0 - occlusion;
+
+    const double diffuse_factor = std::max((L * N), 0.0) * visibility;
+    const double specular_factor = half_vector_valid
+      ? pow(std::max((H * V), 0.0), shininess) * visibility
+      : 0.0;
+
+    const RGBColor& light_color = light->getColor();
+    sum_r += light_color.r * diffuse_color.r * diffuse_factor
+           + light_color.r * specular_color.r * specular_factor;
+    sum_g += light_color.g * diffuse_color.g * diffuse_factor
+           + light_color.g * specular_color.g * specular_factor;
+    sum_b += light_color.b * diffuse_color.b * diffuse_factor
+           + light_color.b * specular_color.b * specular_factor;
   }
 
-  const RGBColor result = (ambient + diffuse + specular) * vertex_color;
-  return result;
+  RGBColor result((float)sum_r, (float)sum_g, (float)sum_b);
+  result.clampToUnit();
+  return result * vertex_color;
 }
 
 const RGBColor Material::phongEquation(const std::vector<Light*>& lights, const Vector3D& N, const Vector3D& V, const Point3D vertex_position,
-  const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess) {
+  const RGBColor& vertex_color, const RGBColor& diffuse_color, const RGBColor& specular_color, const float shininess,
+  const std::vector<double>* shadow_factors) {
   const RGBColor ambient(0.1);
-  RGBColor diffuse, specular;
-  for (auto& light : lights) {
+  double sum_r = ambient.r;
+  double sum_g = ambient.g;
+  double sum_b = ambient.b;
+
+  for (size_t i = 0; i < lights.size(); ++i) {
+    const Light* light = lights[i];
     const Vector3D L = -(light->getDirectionToPoint(vertex_position));
     const Vector3D R = 2 * (N * L) * N - L;
 
-    diffuse = light->getColor() * diffuse_color * std::max((L * N), 0.0);
-    specular = light->getColor() *  specular_color * pow(std::max((R * V), 0.0), shininess);
+    // pointInShadow returns an occlusion ratio in [0, 1]: only this light's
+    // own shadow map can dim this light's contribution.
+    double occlusion = 0.0;
+    if (shadow_factors != nullptr && i < shadow_factors->size()) {
+      occlusion = std::min(std::max((*shadow_factors)[i], 0.0), 1.0);
+    }
+    const double visibility = 1.0 - occlusion;
+
+    const double diffuse_factor = std::max((L * N), 0.0) * visibility;
+    const double specular_factor = pow(std::max((R * V), 0.0), shininess) * visibility;
+
+    const RGBColor& light_color = light->getColor();
+    sum_r += light_color.r * diffuse_color.r * diffuse_factor
+           + light_color.r * specular_color.r * specular_factor;
+    sum_g += light_color.g * diffuse_color.g * diffuse_factor
+           + light_color.g * specular_color.g * specular_factor;
+    sum_b += light_color.b * diffuse_color.b * diffuse_factor
+           + light_color.b * specular_color.b * specular_factor;
   }
 
-  const RGBColor phong_result = (ambient + diffuse + specular) * vertex_color;
-  return phong_result;
+  RGBColor phong_result((float)sum_r, (float)sum_g, (float)sum_b);
+  phong_result.clampToUnit();
+  return phong_result * vertex_color;
 }
 
 

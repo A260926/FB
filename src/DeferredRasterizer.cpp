@@ -25,6 +25,9 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
 
   if (use_shadow_maps) {
     this->createShadowMaps();
+  } else {
+    // A previous render's maps must never be reused while shadows are off.
+    this->releaseShadowMaps();
   }
 
   // Render color, depth and normals
@@ -74,9 +77,14 @@ void DeferredRasterizer::render(const bool use_shade, const bool use_shadow_maps
           m_specular_buffer[i],
           (Vector3D)m_normal_buffer[i]
         };
-        const RGBColor object_color = Material::shade(m_world->m_lights, *m_world->m_camera, fragment);
-        const RGBColor shadow_factor = shadowFactor(fragment.position);
-        m_pixels[i] = object_color - shadow_factor;
+        // Each light is dimmed only by its own shadow map; the two paths
+        // run the same shade() call so visible surfaces match.
+        if (use_shadow_maps) {
+          const std::vector<double> factors = shadowFactors(fragment.position);
+          m_pixels[i] = Material::shade(m_world->m_lights, factors, *m_world->m_camera, fragment);
+        } else {
+          m_pixels[i] = Material::shade(m_world->m_lights, *m_world->m_camera, fragment);
+        }
       }
       else {
         m_pixels[i] = BACKGROUND_COLOR;

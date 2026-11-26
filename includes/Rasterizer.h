@@ -12,7 +12,7 @@ protected:
 public:
   Rasterizer();
   Rasterizer(const World* world);
-  ~Rasterizer();
+  virtual ~Rasterizer() override;
   
   inline const std::vector<double> get_depth_buffer() const { return m_depth_buffer; }
 
@@ -21,8 +21,15 @@ public:
 
 public:
   // Shadows
+  // Rebuilds every shadow map for the current light set. Previously stored
+  // maps (and their internal cameras/rasterizers) are destroyed first, so
+  // repeated renders and light-set changes never accumulate stale resources.
   const void createShadowMaps();
-  const double shadowFactor(const Point3D& pixel_world);
+  // Destroys every stored shadow map and the resources it owns.
+  void releaseShadowMaps();
+  // One occlusion ratio in [0, 1] per light, taken from that light's own
+  // shadow map. Returns all-zero (fully lit) when shadow maps are disabled.
+  const std::vector<double> shadowFactors(const Point3D& pixel_world) const;
   // Interpolations
   const double calculateDepth(const Triangle3D& triangle_world, const Triangle2D& triangle_camera, const Point2D& pixel_camera) const;
   //const Vector2D calculateTextureCoords(const Triangle3D& triangle_world, const Point3D& point_world) const;

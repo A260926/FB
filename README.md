@@ -285,6 +285,34 @@ In order to add shadows to my scene I've implemented a technique called *Shadow 
 2. We render the image from the camera as always but now we have to check if a pixel is in shadow. To do so, we*convert this pixel into World Space and then into Light Space*.
 3. Finally, because the pixel is in Light Space we can retrieve it's depth from the Light's POV. Then, we compare this depth with the distance from that point (in world space) to the light. If it is smaller, it means that there is some object in between and thus, the pixel is in shadow.
 
+## Lighting composition, shadow ratio and resource ownership
+
+This section documents the (corrected) rules used when several lights illuminate the same fragment, how shadows enter that sum, and who owns the shadow resources.
+
+### Multi-light composition (Phong / Blinn-Phong)
+
+* The **ambient term is added exactly once**, independently of the number of lights, and it is never affected by shadows.
+* **Direct lighting is accumulated per light**: each light contributes its own diffuse and specular term and the running sum is *not* truncated while lights are being added. Channels may temporarily exceed `1.0`.
+* Only after every light (plus ambient) has been summed is the total **clamped to `[0, 1]`, once, right before the multiplication by the vertex color**.
+* Because the accumulation is a plain commutative sum with no intermediate saturation, **swapping the order of the lights cannot change the result**.
+
+### Per-light shadow ratio
+
+* Every light gets its own shadow map, generated with the **orthographic camera looking along the light direction**.
+* Depth comparison uses the **axis depth of that orthographic camera** (camera-space `z`), not the Euclidean distance to the light. For a slanted occluder under orthographic projection the depth is the **linear interpolation of the vertex camera-space depths** at the screen-space barycentric coordinates; the main camera's perspective path keeps the **inverse-depth (`1/z`)** interpolation.
+* The existing bias is kept in **world units** along that axis.
+* A receiver point that projects **outside the shadow map**, or whose axis depth is **outside the light camera's `near`/`far` range**, is treated as **unoccluded**.
+* By default the **nearest texel** is used for a hard comparison. With `_PCF_SHADOWS` defined, the **3×3 neighborhood centered on that texel** is averaged; taps that fall outside the map count as unoccluded.
+* `ShadowMap::pointInShadow` returns an **occlusion ratio in `[0, 1]`** (`0` fully lit, `1` fully occluded) — it no longer returns a color subtraction amount.
+* Each light is multiplied by `(1 - occlusion)` from **its own** shadow map only. Blocking one light therefore dims just that light; the other lights and the ambient term stay untouched.
+* `ForwardRasterizer` and `DeferredRasterizer` run the same shading call, so with identical camera, geometry and materials they produce the same visible surface colors.
+
+### Resource ownership
+
+* Every `render()` builds the shadow maps required by the **current** light set. Each `ShadowMap` owns the internal orthographic camera and the depth-only rasterizer it created, and releases both in its destructor (the destructors are virtual so deletion through the base pointers is well defined).
+* Building a new set first destroys the previously stored maps, so **repeated renders, light removal and light reordering never accumulate stale maps** and never leak the internal cameras/rasterizers.
+* Rendering with shadows disabled releases the stored maps immediately; an old map is never reused while shadows are off. Re-enabling shadows rebuilds them from scratch.
+
 
 The following image is the Shadow Map of the previous scene:
 

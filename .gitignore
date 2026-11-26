@@ -1,5 +1,8 @@
 # CMake build file
 build/
+# Task harness build output and exported images
+.task-build/
+shadow_map.bmp
 # Ide files
 .vs/
 nbproject/

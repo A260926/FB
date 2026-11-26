@@ -40,7 +40,8 @@ protected:
 public:
     Camera();
     Camera(const Point3D& position, const Point3D& target, const uint32_t image_height, const uint32_t image_width, Renderer * renderer, const uint32_t near = 2, const uint32_t far = 5000);
-    ~Camera();
+    // Virtual: light cameras are deleted through the Camera base pointer.
+    virtual ~Camera();
 
     inline const uint32_t get_near_plane() const { return m_near; }
     inline const uint32_t get_far_plane() const { return m_far; }

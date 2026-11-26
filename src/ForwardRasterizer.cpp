@@ -21,6 +21,9 @@ void ForwardRasterizer::render(const bool use_shade, const bool use_shadow_maps)
 
   if (use_shadow_maps) {
     this->createShadowMaps();
+  } else {
+    // A previous render's maps must never be reused while shadows are off.
+    this->releaseShadowMaps();
   }
 
   for (auto& object : m_world->m_objects) {
@@ -40,9 +43,13 @@ void ForwardRasterizer::render(const bool use_shade, const bool use_shadow_maps)
                 const Fragment fragment = calculateFragmentAttributes(triangle_world, pixel_world, triangle_raster, pixel_raster, *object->material());
                 m_depth_buffer[i] = depth;
                 if (use_shade) {
-                  const RGBColor object_color = Material::shade(m_world->m_lights, *m_world->m_camera, fragment);
-                  const RGBColor shadow = shadowFactor(pixel_world);
-                  m_pixels[i] = object_color - shadow;
+                  // Each light is dimmed only by its own shadow map.
+                  if (use_shadow_maps) {
+                    const std::vector<double> factors = shadowFactors(pixel_world);
+                    m_pixels[i] = Material::shade(m_world->m_lights, factors, *m_world->m_camera, fragment);
+                  } else {
+                    m_pixels[i] = Material::shade(m_world->m_lights, *m_world->m_camera, fragment);
+                  }
                 }
               }
             }
