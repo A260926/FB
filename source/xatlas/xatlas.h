@@ -189,6 +189,7 @@ struct ChartOptions
 
 	bool useInputMeshUvs = false; // Use MeshDecl::vertexUvData for charts.
 	bool fixWinding = false; // Enforce consistent texture coordinate winding.
+	bool useLsqr = false; // Solve LSCM's original rectangular system with LSQR instead of normal-equation CG.
 };
 
 // Call after all AddMesh calls. Can be called multiple times to recompute charts with different options.

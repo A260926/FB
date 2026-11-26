@@ -68,6 +68,19 @@ You can call any of these functions multiple times, followed by the proceeding f
 
 See the [viewer](https://github.com/jpcy/xatlas/tree/master/source/examples/viewer) for example code.
 
+### LSCM solver: `useLsqr`
+
+`ChartOptions::useLsqr` (and the matching final `xatlasChartOptions::useLsqr` field) defaults to `false`, so existing calls keep using the assembled normal-equation matrix with preconditioned conjugate gradients. Set it to `true` to solve LSCM's original rectangular sparse system with a double-precision Golub–Kahan/LSQR iteration. This path keeps the locked-variable elimination in the right-hand side, merges duplicate coefficients in each raw row, and uses only sparse `A*x` and `A^T*y` products; it does not form `A^T A`.
+
+LSQR is useful for long strip charts and charts whose columns have very different scales, where normal equations can unnecessarily square the condition number. It is not an external linear-algebra backend and does not guarantee a minimum-norm answer for rank-deficient systems; any finite stationary solution is accepted. `ChartOptions::paramFunc` still takes precedence and bypasses both built-in LSCM solvers.
+
+Stopping is checked from the recomputed true residual `r = A*x - b`:
+
+- stationarity metric `eta = ||A^T r|| / (||A||_F ||r||)`;
+- scaled backward error `rho = ||r|| / (||A||_F ||x|| + ||b||)`.
+
+If a denominator and its numerator are both zero, that metric is defined as zero. The context error is `min(eta, rho)`; either metric being at or below the OpenNL threshold succeeds. Thus consistent systems can finish through `rho` near machine precision, while incompatible least-squares systems can finish through `eta` at a nonzero residual. Iterations are bounded by `maxIterations`. A failed LSQR solve is treated as an invalid parameterization; no partial UVs are written back to the mesh.
+
 ### Pack multiple atlases into a single atlas
 
 1. Create an empty atlas with `xatlas::Create`.

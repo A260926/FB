@@ -48,6 +48,7 @@ Copyright (c) 2012 Brandon Pelfrey
 #include <float.h> // FLT_MAX
 #include <limits.h>
 #include <math.h>
+#include <cmath>
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <stdio.h>
@@ -4005,6 +4006,14 @@ struct NLSparseMatrix
 
 /* NLContext data structure */
 
+enum NLLeastSquaresStatus
+{
+	Converged = 0,
+	IterationLimit,
+	Breakdown,
+	InvalidInput
+};
+
 struct NLBufferBinding
 {
 	void* base_address;
@@ -4036,6 +4045,15 @@ struct NLContext
 	double omega;
 	uint32_t used_iterations;
 	double error;
+	bool use_lsqr;
+	NLLeastSquaresStatus lsqr_status;
+
+	// Original rectangular least-squares system after locked variables have
+	// been moved to lsqr_b. lsqr_rows uses free-variable system indices.
+	NLRowColumn *lsqr_rows;
+	double *lsqr_b;
+	uint32_t lsqr_m;
+	uint32_t lsqr_row_capacity;
 };
 
 static void nlDeleteMatrix(NLMatrix M)
@@ -4342,6 +4360,12 @@ static void nlDeleteContext(NLContext *context)
 	NL_DELETE_ARRAY(context->variable_index);
 	NL_DELETE_ARRAY(context->x);
 	NL_DELETE_ARRAY(context->b);
+	if (context->lsqr_rows) {
+		for (uint32_t i = 0; i < context->lsqr_m; ++i)
+			nlRowColumnDestroy(&context->lsqr_rows[i]);
+		NL_DELETE_ARRAY(context->lsqr_rows);
+	}
+	NL_DELETE_ARRAY(context->lsqr_b);
 	NL_DELETE(context);
 }
 
@@ -4501,6 +4525,285 @@ static NLMatrix nlNewJacobiPreconditioner(NLMatrix M_in)
 	return (NLMatrix)result;
 }
 
+/* Direct LSQR on the assembled rectangular sparse system. */
+
+static double nlLsqrStableNorm(const double *x, uint32_t n)
+{
+	double scale = 0.0;
+	double sum_squares = 1.0;
+	for (uint32_t i = 0; i < n; ++i) {
+		const double ax = fabs(x[i]);
+		if (ax == 0.0)
+			continue;
+		if (scale < ax) {
+			const double ratio = scale / ax;
+			sum_squares = 1.0 + sum_squares * ratio * ratio;
+			scale = ax;
+		} else {
+			const double ratio = ax / scale;
+			sum_squares += ratio * ratio;
+		}
+	}
+	return scale == 0.0 ? 0.0 : scale * sqrt(sum_squares);
+}
+
+static double nlLsqrFrobeniusNorm(const NLContext *context)
+{
+	double scale = 0.0;
+	double sum_squares = 1.0;
+	for (uint32_t i = 0; i < context->lsqr_m; ++i) {
+		const NLRowColumn *row = &context->lsqr_rows[i];
+		for (uint32_t j = 0; j < row->size; ++j) {
+			const double ax = fabs(row->coeff[j].value);
+			if (ax == 0.0)
+				continue;
+			if (scale < ax) {
+				const double ratio = scale / ax;
+				sum_squares = 1.0 + sum_squares * ratio * ratio;
+				scale = ax;
+			} else {
+				const double ratio = ax / scale;
+				sum_squares += ratio * ratio;
+			}
+		}
+	}
+	return scale == 0.0 ? 0.0 : scale * sqrt(sum_squares);
+}
+
+static void nlLsqrMultA(const NLContext *context, const double *x, double *y)
+{
+	for (uint32_t i = 0; i < context->lsqr_m; ++i) {
+		const NLRowColumn *row = &context->lsqr_rows[i];
+		double sum = 0.0;
+		for (uint32_t j = 0; j < row->size; ++j)
+			sum += row->coeff[j].value * x[row->coeff[j].index];
+		y[i] = sum;
+	}
+}
+
+static void nlLsqrMultAt(const NLContext *context, const double *y, double *x)
+{
+	const uint32_t n = context->n;
+	if (n)
+		memset(x, 0, n * sizeof(*x));
+	for (uint32_t i = 0; i < context->lsqr_m; ++i) {
+		const NLRowColumn *row = &context->lsqr_rows[i];
+		const double yi = y[i];
+		for (uint32_t j = 0; j < row->size; ++j)
+			x[row->coeff[j].index] += row->coeff[j].value * yi;
+	}
+}
+
+static bool nlLsqrSystemIsFinite(const NLContext *context)
+{
+	for (uint32_t i = 0; i < context->lsqr_m; ++i) {
+		if (!std::isfinite(context->lsqr_b[i]))
+			return false;
+		const NLRowColumn *row = &context->lsqr_rows[i];
+		for (uint32_t j = 0; j < row->size; ++j) {
+			if (!std::isfinite(row->coeff[j].value))
+				return false;
+		}
+	}
+	return true;
+}
+
+struct NLLsqrMetrics
+{
+	double eta;
+	double rho;
+	double error;
+	bool finite;
+};
+
+static NLLsqrMetrics nlLsqrComputeMetrics(const NLContext *context, const double *x, double a_fro, double b_norm, double *r, double *at_r)
+{
+	const uint32_t m = context->lsqr_m;
+	const uint32_t n = context->n;
+	nlLsqrMultA(context, x, r);
+	for (uint32_t i = 0; i < m; ++i)
+		r[i] -= context->lsqr_b[i];
+	nlLsqrMultAt(context, r, at_r);
+
+	const double r_norm = nlLsqrStableNorm(r, m);
+	const double at_r_norm = nlLsqrStableNorm(at_r, n);
+	const double x_norm = nlLsqrStableNorm(x, n);
+
+	NLLsqrMetrics metrics;
+	double eta_den = a_fro * r_norm;
+	if (eta_den == 0.0 && at_r_norm == 0.0)
+		metrics.eta = 0.0;
+	else
+		metrics.eta = at_r_norm / eta_den;
+
+	const double rho_den = a_fro * x_norm + b_norm;
+	if (rho_den == 0.0 && r_norm == 0.0)
+		metrics.rho = 0.0;
+	else
+		metrics.rho = r_norm / rho_den;
+
+	metrics.error = std::fmin(metrics.eta, metrics.rho);
+	metrics.finite = std::isfinite(metrics.eta) && std::isfinite(metrics.rho) && std::isfinite(metrics.error);
+	return metrics;
+}
+
+static bool nlSolveLSQR(NLContext *context)
+{
+	context->used_iterations = 0;
+	context->error = 0.0;
+	context->lsqr_status = InvalidInput;
+
+	const uint32_t m = context->lsqr_m;
+	const uint32_t n = context->n;
+	double *x = context->x;
+	if (n)
+		memset(x, 0, n * sizeof(*x));
+
+	const bool input_is_finite = nlLsqrSystemIsFinite(context);
+
+	double a_fro = nlLsqrFrobeniusNorm(context);
+	double b_norm = nlLsqrStableNorm(context->lsqr_b, m);
+
+	const uint32_t m_work = m ? m : 1;
+	const uint32_t n_work = n ? n : 1;
+	double *u = NL_NEW_VECTOR(m_work);
+	double *a_v = NL_NEW_VECTOR(m_work);
+	double *r = NL_NEW_VECTOR(m_work);
+	double *v = NL_NEW_VECTOR(n_work);
+	double *at_u = NL_NEW_VECTOR(n_work);
+	double *w = NL_NEW_VECTOR(n_work);
+	double *at_r = NL_NEW_VECTOR(n_work);
+
+	bool result = false;
+	bool breakdown = false;
+	{
+	NLLsqrMetrics metrics = nlLsqrComputeMetrics(context, x, a_fro, b_norm, r, at_r);
+	context->error = metrics.error;
+	if (!input_is_finite) {
+		context->lsqr_status = InvalidInput;
+		goto lsqr_cleanup;
+	}
+	if (!std::isfinite(context->threshold) || context->threshold <= 0.0) {
+		context->lsqr_status = InvalidInput;
+		goto lsqr_cleanup;
+	}
+	if ((std::isfinite(metrics.eta) && metrics.eta <= context->threshold) ||
+		(std::isfinite(metrics.rho) && metrics.rho <= context->threshold)) {
+		context->lsqr_status = Converged;
+		result = true;
+		goto lsqr_cleanup;
+	}
+	if (!std::isfinite(a_fro) || !std::isfinite(b_norm) || !metrics.finite) {
+		context->lsqr_status = Breakdown;
+		goto lsqr_cleanup;
+	}
+
+	for (uint32_t i = 0; i < m; ++i)
+		u[i] = context->lsqr_b[i];
+	double beta = nlLsqrStableNorm(u, m);
+	if (!std::isfinite(beta)) {
+		context->lsqr_status = Breakdown;
+		goto lsqr_cleanup;
+	}
+	if (beta > 0.0)
+		dscal((int)m, 1.0 / beta, u);
+
+	nlLsqrMultAt(context, u, v);
+	double alpha = nlLsqrStableNorm(v, n);
+	if (!std::isfinite(alpha)) {
+		context->lsqr_status = Breakdown;
+		goto lsqr_cleanup;
+	}
+	if (alpha > 0.0)
+		dscal((int)n, 1.0 / alpha, v);
+	memcpy(w, v, n_work * sizeof(*w));
+
+	double phi_bar = beta;
+	double rho_bar = alpha;
+
+	for (uint32_t iteration = 0; iteration < context->max_iterations; ++iteration) {
+		// Golub-Kahan step: u = A*v - alpha*u.
+		nlLsqrMultA(context, v, a_v);
+		for (uint32_t i = 0; i < m; ++i)
+			u[i] = a_v[i] - alpha * u[i];
+		beta = nlLsqrStableNorm(u, m);
+		if (!std::isfinite(beta)) {
+			breakdown = true;
+			break;
+		}
+		if (beta > 0.0)
+			dscal((int)m, 1.0 / beta, u);
+
+		// v = A^T*u - beta*v.
+		nlLsqrMultAt(context, u, at_u);
+		for (uint32_t j = 0; j < n; ++j)
+			v[j] = at_u[j] - beta * v[j];
+		alpha = nlLsqrStableNorm(v, n);
+		if (!std::isfinite(alpha)) {
+			breakdown = true;
+			break;
+		}
+		if (alpha > 0.0)
+			dscal((int)n, 1.0 / alpha, v);
+
+		const double rho = hypot(rho_bar, beta);
+		if (!std::isfinite(rho) || rho == 0.0) {
+			breakdown = true;
+			break;
+		}
+		const double c = rho_bar / rho;
+		const double s = beta / rho;
+		const double theta = s * alpha;
+		const double phi = c * phi_bar;
+		phi_bar = s * phi_bar;
+		rho_bar = -c * alpha;
+
+		const double x_step = phi / rho;
+		const double w_scale = -theta / rho;
+		daxpy((int)n, x_step, w, x);
+		for (uint32_t j = 0; j < n; ++j)
+			w[j] = v[j] + w_scale * w[j];
+
+		context->used_iterations = iteration + 1;
+		metrics = nlLsqrComputeMetrics(context, x, a_fro, b_norm, r, at_r);
+		context->error = metrics.error;
+		if ((std::isfinite(metrics.eta) && metrics.eta <= context->threshold) ||
+			(std::isfinite(metrics.rho) && metrics.rho <= context->threshold)) {
+			context->lsqr_status = Converged;
+			result = true;
+			goto lsqr_cleanup;
+		}
+		if (!metrics.finite) {
+			breakdown = true;
+			break;
+		}
+
+		// Exact zero alpha/beta is natural Krylov termination.  The true
+		// stopping metrics above decide whether that is convergence or a
+		// stagnated solve.
+		if (alpha == 0.0 || beta == 0.0) {
+			breakdown = true;
+			break;
+		}
+	}
+
+	if (breakdown)
+		context->lsqr_status = Breakdown;
+	else
+		context->lsqr_status = IterationLimit;
+	}
+
+lsqr_cleanup:
+	NL_DELETE_VECTOR(u);
+	NL_DELETE_VECTOR(a_v);
+	NL_DELETE_VECTOR(r);
+	NL_DELETE_VECTOR(v);
+	NL_DELETE_VECTOR(at_u);
+	NL_DELETE_VECTOR(w);
+	NL_DELETE_VECTOR(at_r);
+	return result;
+}
+
 #define NL_NB_VARIABLES 0x101
 #define NL_MAX_ITERATIONS 0x103
 
@@ -4607,7 +4910,7 @@ static void nlBegin(NLContext *context, uint32_t prim)
 		context->variable_index = NL_NEW_ARRAY(uint32_t, context->nb_variables);
 		NL_CLEAR_ARRAY(uint32_t, context->variable_index, context->nb_variables);
 	} else if (prim == NL_MATRIX) {
-		if (context->M)
+		if (context->M || (context->use_lsqr && context->x))
 			return;
 		uint32_t n = 0;
 		for (uint32_t i = 0; i < context->nb_variables; i++) {
@@ -4620,14 +4923,28 @@ static void nlBegin(NLContext *context, uint32_t prim)
 		context->n = n;
 		if (!context->max_iterations_defined)
 			context->max_iterations = n * 5;
-		context->M = (NLMatrix)(NL_NEW(NLSparseMatrix));
-		NL_CLEAR(context->M, NLSparseMatrix);
-		nlSparseMatrixConstruct((NLSparseMatrix*)(context->M), n, n);
-		context->x = NL_NEW_ARRAY(double, n*context->nb_systems);
-		NL_CLEAR_ARRAY(double, context->x, n*context->nb_systems);
-		context->b = NL_NEW_ARRAY(double, n*context->nb_systems);
-		NL_CLEAR_ARRAY(double, context->b, n*context->nb_systems);
-		nlVariablesToVector(context);
+		const uint32_t vector_count = n * context->nb_systems;
+		const uint32_t storage_count = vector_count ? vector_count : 1;
+		context->x = NL_NEW_ARRAY(double, storage_count);
+		NL_CLEAR_ARRAY(double, context->x, storage_count);
+		if (context->use_lsqr) {
+			// LSQR starts from the zero free vector. Locked values stay in
+			// the variable buffer and are evaluated while assembling lsqr_b.
+			context->M = nullptr;
+			context->b = nullptr;
+			context->lsqr_rows = nullptr;
+			context->lsqr_b = nullptr;
+			context->lsqr_m = 0;
+			context->lsqr_row_capacity = 0;
+			context->lsqr_status = Converged;
+		} else {
+			context->M = (NLMatrix)(NL_NEW(NLSparseMatrix));
+			NL_CLEAR(context->M, NLSparseMatrix);
+			nlSparseMatrixConstruct((NLSparseMatrix*)(context->M), n, n);
+			context->b = NL_NEW_ARRAY(double, storage_count);
+			NL_CLEAR_ARRAY(double, context->b, storage_count);
+			nlVariablesToVector(context);
+		}
 		nlRowColumnConstruct(&context->af);
 		nlRowColumnConstruct(&context->al);
 		context->current_row = 0;
@@ -4643,14 +4960,41 @@ static void nlEnd(NLContext *context, uint32_t prim)
 		nlRowColumnClear(&context->af);
 		nlRowColumnClear(&context->al);
 	} else if (prim == NL_ROW) {
-		NLRowColumn*    af = &context->af;
-		NLRowColumn*    al = &context->al;
-		NLSparseMatrix* M = (NLSparseMatrix*)context->M;
-		double* b = context->b;
+		NLRowColumn* af = &context->af;
+		NLRowColumn* al = &context->al;
 		uint32_t nf = af->size;
 		uint32_t nl = al->size;
+		double locked_sum = 0.0;
+		for (uint32_t jj = 0; jj < nl; ++jj) {
+			const uint32_t j = al->coeff[jj].index;
+			locked_sum += al->coeff[jj].value * NL_BUFFER_ITEM(context->variable_buffer[0], j);
+		}
+
+		if (context->use_lsqr) {
+			const uint32_t row_index = context->lsqr_m;
+			if (row_index >= context->lsqr_row_capacity) {
+				const uint32_t old_capacity = context->lsqr_row_capacity;
+				const uint32_t new_capacity = old_capacity ? old_capacity * 2 : 16;
+				context->lsqr_rows = NL_RENEW_ARRAY(NLRowColumn, context->lsqr_rows, new_capacity);
+				for (uint32_t i = old_capacity; i < new_capacity; ++i)
+					nlRowColumnConstruct(&context->lsqr_rows[i]);
+				context->lsqr_b = NL_RENEW_ARRAY(double, context->lsqr_b, new_capacity);
+				context->lsqr_row_capacity = new_capacity;
+			}
+			NLRowColumn *raw_row = &context->lsqr_rows[row_index];
+			nlRowColumnZero(raw_row);
+			for (uint32_t i = 0; i < nf; ++i)
+				nlRowColumnAdd(raw_row, af->coeff[i].index, af->coeff[i].value);
+			// a_free^T x + locked_sum = 0  <=>  A x = -locked_sum.
+			context->lsqr_b[row_index] = -locked_sum;
+			context->lsqr_m++;
+			context->current_row++;
+			return;
+		}
+
+		NLSparseMatrix* M = (NLSparseMatrix*)context->M;
+		double* b = context->b;
 		uint32_t n = context->n;
-		double S;
 		/*
 		 * least_squares : we want to solve
 		 * A'A x = A'b
@@ -4661,7 +5005,7 @@ static void nlEnd(NLContext *context, uint32_t prim)
 			}
 		}
 		for (uint32_t k = 0; k < context->nb_systems; ++k) {
-			S = 0.0;
+			double S = 0.0;
 			for (uint32_t jj = 0; jj < nl; ++jj) {
 				uint32_t j = al->coeff[jj].index;
 				S += al->coeff[jj].value * NL_BUFFER_ITEM(context->variable_buffer[k], j);
@@ -4672,13 +5016,17 @@ static void nlEnd(NLContext *context, uint32_t prim)
 		context->current_row++;
 	}
 }
-
 static bool nlSolve(NLContext *context)
 {
-	nlDeleteMatrix(context->P);
-	context->P = nlNewJacobiPreconditioner(context->M);
-	nlMatrixCompress(&context->M);
-	bool result = nlSolveIterative(context);
+	bool result;
+	if (context->use_lsqr) {
+		result = nlSolveLSQR(context);
+	} else {
+		nlDeleteMatrix(context->P);
+		context->P = nlNewJacobiPreconditioner(context->M);
+		nlMatrixCompress(&context->M);
+		result = nlSolveIterative(context);
+	}
 	nlVectorToVariables(context);
 	return result;
 }
@@ -6479,7 +6827,7 @@ static bool setup_abf_relations(opennl::NLContext *context, int id0, int id1, in
 	return true;
 }
 
-static bool computeLeastSquaresConformalMap(Mesh *mesh)
+static bool computeLeastSquaresConformalMap(Mesh *mesh, bool useLsqr = false)
 {
 	uint32_t lockedVertex0, lockedVertex1;
 	if (!findApproximateDiameterVertices(mesh, &lockedVertex0, &lockedVertex1)) {
@@ -6488,6 +6836,7 @@ static bool computeLeastSquaresConformalMap(Mesh *mesh)
 	}
 	const uint32_t vertexCount = mesh->vertexCount();
 	opennl::NLContext *context = opennl::nlNewContext();
+	context->use_lsqr = useLsqr;
 	opennl::nlSolverParameteri(context, NL_NB_VARIABLES, int(2 * vertexCount));
 	opennl::nlSolverParameteri(context, NL_MAX_ITERATIONS, int(5 * vertexCount));
 	opennl::nlBegin(context, NL_SYSTEM);
@@ -7290,11 +7639,15 @@ public:
 			}
 			if (m_type == ChartType::LSCM) {
 				XA_PROFILE_START(parameterizeChartsLSCM)
+				bool lscmSucceeded = true;
 				if (options.paramFunc) {
 					options.paramFunc(&m_unifiedMesh->position(0).x, &m_unifiedMesh->texcoord(0).x, m_unifiedMesh->vertexCount(), m_unifiedMesh->indices().data, m_unifiedMesh->indexCount());
 				}
-				else
-					computeLeastSquaresConformalMap(m_unifiedMesh);
+				else {
+					lscmSucceeded = computeLeastSquaresConformalMap(m_unifiedMesh, options.useLsqr);
+					if (options.useLsqr && !lscmSucceeded)
+						m_isInvalid = true;
+				}
 				XA_PROFILE_END(parameterizeChartsLSCM)
 				XA_PROFILE_START(parameterizeChartsEvaluateQuality)
 				m_quality.computeBoundaryIntersection(m_unifiedMesh, boundaryGrid);
@@ -10030,6 +10383,7 @@ void xatlasChartOptionsInit(xatlasChartOptions *chartOptions)
 {
 	xatlas::ChartOptions init;
 	memcpy(chartOptions, &init, sizeof(init));
+	chartOptions->useLsqr = init.useLsqr;
 }
 
 void xatlasPackOptionsInit(xatlasPackOptions *packOptions)
