@@ -316,6 +316,7 @@ set(WABT_LIBRARY_CC
   src/opcode-code-table.c
   src/opcode.cc
   src/option-parser.cc
+  src/reference-flow.cc
   src/resolve-names.cc
   src/sha256.cc
   src/shared-validator.cc
@@ -365,6 +366,7 @@ set(WABT_LIBRARY_H
   include/wabt/opcode-code-table.h
   include/wabt/opcode.h
   include/wabt/option-parser.h
+  include/wabt/reference-flow.h
   include/wabt/resolve-names.h
   include/wabt/sha256.h
   include/wabt/shared-validator.h
@@ -627,6 +629,13 @@ if (BUILD_TOOLS)
   wabt_executable(
     NAME wasm-validate
     SOURCES src/tools/wasm-validate.cc
+    INSTALL
+  )
+
+  # wasm-ref-flow
+  wabt_executable(
+    NAME wasm-ref-flow
+    SOURCES src/tools/wasm-ref-flow.cc
     INSTALL
   )
 

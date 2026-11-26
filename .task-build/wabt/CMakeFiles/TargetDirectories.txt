@@ -1,0 +1,11 @@
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/CMakeFiles/task_baseline.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/CMakeFiles/task_target.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/CMakeFiles/wasm-ref-flow.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/CMakeFiles/gen-wasm2c-prebuilt-target.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/CMakeFiles/everything.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/CMakeFiles/wabt.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/CMakeFiles/wasm-rt-impl.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/CMakeFiles/rebuild_cache.dir

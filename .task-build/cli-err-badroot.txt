@@ -1,0 +1,2 @@
+/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/consumer-fail.wasm:0000000: error: reference-flow: invalid root function index 999 (module has 5 functions)
+wasm-ref-flow: analysis failed for '/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/consumer-fail.wasm'

@@ -1,0 +1,314 @@
+[
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/apply-names.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/apply-names.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/apply-names.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/apply-names.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binary-reader-ir.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-reader-ir.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-reader-ir.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binary-reader-ir.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binary-reader-logging.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-reader-logging.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-reader-logging.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binary-reader-logging.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binary-reader.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-reader.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-reader.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binary-reader.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binary-writer-spec.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-writer-spec.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-writer-spec.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binary-writer-spec.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binary-writer.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-writer.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary-writer.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binary-writer.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binary.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binary.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binary.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/binding-hash.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binding-hash.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/binding-hash.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/binding-hash.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/color.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/color.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/color.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/color.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/common.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/common.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/common.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/common.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/config.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/config.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/config.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/config.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/error-formatter.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/error-formatter.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/error-formatter.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/error-formatter.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/expr-visitor.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/expr-visitor.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/expr-visitor.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/expr-visitor.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/feature.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/feature.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/feature.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/feature.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/filenames.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/filenames.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/filenames.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/filenames.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/generate-names.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/generate-names.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/generate-names.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/generate-names.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/ir-util.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/ir-util.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/ir-util.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/ir-util.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/ir.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/ir.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/ir.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/ir.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/leb128.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/leb128.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/leb128.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/leb128.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/lexer-source-line-finder.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/lexer-source-line-finder.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/lexer-source-line-finder.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/lexer-source-line-finder.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/lexer-source.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/lexer-source.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/lexer-source.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/lexer-source.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/literal.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/literal.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/literal.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/literal.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/cc -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include -O3 -DNDEBUG   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/opcode-code-table.c.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/opcode-code-table.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/opcode-code-table.c",
+  "output": "wabt/CMakeFiles/wabt.dir/src/opcode-code-table.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/opcode.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/opcode.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/opcode.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/opcode.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/option-parser.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/option-parser.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/option-parser.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/option-parser.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/reference-flow.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/reference-flow.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/reference-flow.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/reference-flow.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/resolve-names.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/resolve-names.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/resolve-names.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/resolve-names.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/sha256.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/sha256.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/sha256.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/sha256.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/shared-validator.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/shared-validator.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/shared-validator.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/shared-validator.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/stream.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/stream.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/stream.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/stream.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/token.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/token.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/token.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/token.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/tracing.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/tracing.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/tracing.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/tracing.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/type-checker.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/type-checker.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/type-checker.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/type-checker.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/utf8.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/utf8.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/utf8.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/utf8.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/validator.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/validator.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/validator.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/validator.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/wast-lexer.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/wast-lexer.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/wast-lexer.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/wast-lexer.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/wast-parser.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/wast-parser.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/wast-parser.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/wast-parser.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/wat-writer.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/wat-writer.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/wat-writer.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/wat-writer.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/c-writer.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/c-writer.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/c-writer.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/c-writer.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/prebuilt/wasm2c_header_top.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_header_top.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_header_top.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/prebuilt/wasm2c_header_top.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/prebuilt/wasm2c_header_bottom.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_header_bottom.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_header_bottom.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/prebuilt/wasm2c_header_bottom.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/prebuilt/wasm2c_source_includes.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_source_includes.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_source_includes.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/prebuilt/wasm2c_source_includes.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/prebuilt/wasm2c_source_declarations.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_source_declarations.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_source_declarations.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/prebuilt/wasm2c_source_declarations.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/prebuilt/wasm2c_simd_source_declarations.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_simd_source_declarations.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_simd_source_declarations.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/prebuilt/wasm2c_simd_source_declarations.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/prebuilt/wasm2c_atomicops_source_declarations.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_atomicops_source_declarations.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/prebuilt/wasm2c_atomicops_source_declarations.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/prebuilt/wasm2c_atomicops_source_declarations.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/interp/binary-reader-interp.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/binary-reader-interp.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/binary-reader-interp.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/interp/binary-reader-interp.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/interp/interp.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/interp.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/interp.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/interp/interp.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/interp/interp-util.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/interp-util.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/interp-util.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/interp/interp-util.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/c++ -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/include -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt/include  -Wold-style-cast -fno-exceptions -O3 -DNDEBUG -std=c++20   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wabt.dir/src/interp/istream.cc.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/istream.cc",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/interp/istream.cc",
+  "output": "wabt/CMakeFiles/wabt.dir/src/interp/istream.cc.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/cc -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -O3 -DNDEBUG   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wasm-rt-impl.dir/wasm2c/wasm-rt-impl.c.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/wasm2c/wasm-rt-impl.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/wasm2c/wasm-rt-impl.c",
+  "output": "wabt/CMakeFiles/wasm-rt-impl.dir/wasm2c/wasm-rt-impl.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/cc -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -O3 -DNDEBUG   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wasm-rt-impl.dir/wasm2c/wasm-rt-exceptions-impl.c.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/wasm2c/wasm-rt-exceptions-impl.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/wasm2c/wasm-rt-exceptions-impl.c",
+  "output": "wabt/CMakeFiles/wasm-rt-impl.dir/wasm2c/wasm-rt-exceptions-impl.c.o"
+},
+{
+  "directory": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/.task-build/wabt/wabt",
+  "command": "/usr/bin/cc -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/third_party/picosha2 -O3 -DNDEBUG   -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Wuninitialized -Wimplicit-fallthrough -o CMakeFiles/wasm-rt-impl.dir/wasm2c/wasm-rt-mem-impl.c.o -c /Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/wasm2c/wasm-rt-mem-impl.c",
+  "file": "/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/wasm2c/wasm-rt-mem-impl.c",
+  "output": "wabt/CMakeFiles/wasm-rt-impl.dir/wasm2c/wasm-rt-mem-impl.c.o"
+}
+]

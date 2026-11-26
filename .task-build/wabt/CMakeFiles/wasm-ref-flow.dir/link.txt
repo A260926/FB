@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/wasm-ref-flow.dir/Volumes/UserFBWorkspace/questions/FS5AA0EBF89B7AU6657/attempts/20261126T161202474546Z/repo/src/tools/wasm-ref-flow.cc.o" -o wasm-ref-flow  wabt/libwabt.a

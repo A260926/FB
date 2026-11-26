@@ -1,0 +1,21 @@
+CASE contexts separation checks=24
+CASE contexts cross_call_return checks=17
+CASE contexts imports_and_top checks=27
+GROUP contexts cases=3 checks=68 COMPLETE
+CASE locals strong_overwrite checks=6
+CASE locals branch_merge checks=9
+CASE locals select checks=4
+CASE locals multi_results checks=11
+GROUP locals cases=4 checks=30 COMPLETE
+CASE recursion mutual_exit checks=16
+CASE recursion pure checks=16
+CASE recursion null_only checks=12
+CASE recursion tail checks=15
+CASE recursion prune_and_reanalyze checks=20
+GROUP recursion cases=5 checks=79 COMPLETE
+CASE consumer cli_matches_library checks=12
+CASE consumer roots_order_and_dupes checks=6
+CASE consumer failures checks=14
+CASE consumer ownership_and_readonly checks=9
+GROUP consumer cases=4 checks=41 COMPLETE
+TARGET_COMPLETE cases=16
