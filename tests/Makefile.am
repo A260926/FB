@@ -4,6 +4,7 @@ CLEANFILES = output.raw atconfig
 
 EXTRA_DIST= \
 	example_encode.c \
+	stream_encoder.c \
 	timecode.raw timecode.txt \
 	expect_48k_2sec.txt expect_96k_2sec.txt
 

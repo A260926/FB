@@ -1,6 +1,8 @@
 cscope.*
 tags
 
+.build/
+
 configure
 stamp-*
 

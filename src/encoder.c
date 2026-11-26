@@ -25,21 +25,30 @@
 
 #include "encoder.h"
 
-/**
- * add values to the output buffer
+/*
+ * -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * Shared low level encoding primitives.  See encoder.h for a summary.
  */
-static int addvalues(LTCEncoder *e, int n) {
-	const ltcsnd_sample_t tgtval = e->state ? e->enc_hi : e->enc_lo;
 
-	if (e->offset + n >= e->bufsize) {
-#if 0
-		fprintf(stderr, "libltc: buffer overflow: %d/%lu\n", (int) e->offset, (unsigned long) e->bufsize);
-#endif
-		return 1;
-	}
+void ltc_frame_set_user_bits(LTCFrame *f, unsigned long data) {
+	f->user1 = data & 0xF;
+	data >>= 4;
+	f->user2 = data & 0xF;
+	data >>= 4;
+	f->user3 = data & 0xF;
+	data >>= 4;
+	f->user4 = data & 0xF;
+	data >>= 4;
+	f->user5 = data & 0xF;
+	data >>= 4;
+	f->user6 = data & 0xF;
+	data >>= 4;
+	f->user7 = data & 0xF;
+	data >>= 4;
+	f->user8 = data & 0xF;
+}
 
-	ltcsnd_sample_t * const wave = &(e->buf[e->offset]);
-	const double tcf =  e->filter_const;
+void ltc_filter_segment(ltcsnd_sample_t *wave, int n, double tcf, ltcsnd_sample_t tgtval) {
 	if (tcf > 0) {
 		/* low-pass-filter
 		 * LTC signal should have a rise time of 40 us +/- 10 us.
@@ -61,7 +70,56 @@ static int addvalues(LTCEncoder *e, int n) {
 		/* perfect square wave */
 		memset(wave, tgtval, n);
 	}
+}
 
+void ltc_bmc_byte_begin(LTCBmcByte *b, unsigned char byte, int reverse) {
+	b->byte         = byte;
+	b->reverse      = reverse < 0 ? 1 : 0;
+	b->mask         = b->reverse ? 128 : 1;
+	b->is_one       = (byte & b->mask) ? 1 : 0;
+	b->halves_left  = b->is_one ? 2 : 1;
+}
+
+static void bmc_advance(LTCBmcByte *b) {
+	/* this is based on the assumption that with every compiler
+	 * ((unsigned char) 128)<<1 == ((unsigned char 1)>>1) == 0
+	 */
+	b->mask = b->reverse ? (unsigned char)(b->mask >> 1) : (unsigned char)(b->mask << 1);
+	b->is_one = b->mask ? ((b->byte & b->mask) ? 1 : 0) : 0;
+	b->halves_left = b->is_one ? 2 : 1;
+}
+
+int ltc_bmc_byte_next(LTCBmcByte *b, LTCBmcState *s, int *n, int *level) {
+	if (!b->mask) return 0;
+
+	const double step = b->is_one ? s->samples_per_clock_2 : s->samples_per_clock;
+	*n = (int)(step + s->sample_remainder);
+	s->sample_remainder = step + s->sample_remainder - *n;
+	s->state = !s->state;
+	*level = s->state;
+
+	if (b->is_one && --b->halves_left > 0) {
+		/* still inside the two half-cells of a one bit */
+	} else {
+		bmc_advance(b);
+	}
+	return 1;
+}
+
+/**
+ * add values to the output buffer
+ */
+static int addvalues(LTCEncoder *e, int n) {
+	const ltcsnd_sample_t tgtval = e->state ? e->enc_hi : e->enc_lo;
+
+	if (e->offset + n >= e->bufsize) {
+#if 0
+		fprintf(stderr, "libltc: buffer overflow: %d/%lu\n", (int) e->offset, (unsigned long) e->bufsize);
+#endif
+		return 1;
+	}
+
+	ltc_filter_segment(&(e->buf[e->offset]), n, e->filter_const, tgtval);
 	e->offset += n;
 	return 0;
 }
@@ -71,39 +129,23 @@ int encode_byte(LTCEncoder *e, int byte, double speed) {
 	if (speed ==0) return -1;
 
 	int err = 0;
-	const unsigned char c = ((unsigned char*)&e->f)[byte];
-	unsigned char b = (speed < 0)?128:1; // bit
-	const double spc = e->samples_per_clock * fabs(speed);
-	const double sph = e->samples_per_clock_2 * fabs(speed);
+	LTCBmcByte b;
+	LTCBmcState s;
+	int n, level;
 
-	do
-	{
-		int n;
-		if ((c & b) == 0) {
-			n = (int)(spc + e->sample_remainder);
-			e->sample_remainder = spc + e->sample_remainder - n;
-			e->state = !e->state;
-			err |= addvalues(e, n);
-		} else {
-			n = (int)(sph + e->sample_remainder);
-			e->sample_remainder = sph + e->sample_remainder - n;
-			e->state = !e->state;
-			err |= addvalues(e, n);
+	s.samples_per_clock   = e->samples_per_clock * fabs(speed);
+	s.samples_per_clock_2 = e->samples_per_clock_2 * fabs(speed);
+	s.sample_remainder    = e->sample_remainder;
+	s.state               = e->state;
 
-			n = (int)(sph + e->sample_remainder);
-			e->sample_remainder = sph + e->sample_remainder - n;
-			e->state = !e->state;
-			err |= addvalues(e, n);
-		}
-		/* this is based on the assumption that with every compiler
-		 * ((unsigned char) 128)<<1 == ((unsigned char 1)>>1) == 0
-		 */
-		if (speed < 0)
-			b >>= 1;
-		else
-			b <<= 1;
-	} while (b);
+	ltc_bmc_byte_begin(&b, ((const unsigned char*)&e->f)[byte], speed < 0 ? -1 : 1);
 
+	while (ltc_bmc_byte_next(&b, &s, &n, &level)) {
+		e->state = level;
+		err |= addvalues(e, n);
+	}
+
+	e->sample_remainder = s.sample_remainder;
 	return err;
 }
 
