@@ -2372,6 +2372,37 @@ void mg_mqtt_send_header(struct mg_connection *, uint8_t cmd, uint8_t flags,
 void mg_mqtt_ping(struct mg_connection *);
 void mg_mqtt_pong(struct mg_connection *);
 void mg_mqtt_disconnect(struct mg_connection *, const struct mg_mqtt_opts *);
+
+// Decodes the next MQTT5 property at *offset, where *offset is a byte offset
+// from the start of the declared property section (msg->props_start), i.e. the
+// caller starts with *offset = 0 and feeds back the value updated by the
+// previous successful call.
+//
+// Returns 1 on success, updating *offset to the offset just past the decoded
+// property and filling *prop. Returns 0 when *offset is exactly at the end of
+// the property section (clean end of iteration). Returns -1 when the property
+// section description is invalid, *offset is beyond the end, the property ID is
+// unknown, or the property is truncated relative to the declared section.
+//
+// On a 0 or -1 return, *offset and every field of *prop keep their prior
+// values: no partial string or partial user property is ever handed out. The
+// strings in *prop (id/iv/key/val) are zeroed when unused on success. key/val
+// buffers are zero-length views for empty values, and are borrowed from
+// msg->dgram.buf: they stay valid only while that backing storage is valid and
+// unchanged (i.e. until the caller frees or reuses the dgram buffer).
+//
+// msg->dgram.buf must point to dgram.len readable bytes (NULL is accepted when
+// dgram.len is 0). A NULL msg, prop, or offset yields -1 without dereferencing
+// them. Boundary arithmetic is done without overflowing size_t or forming
+// out-of-range pointers, even when props_start, props_size or offset are near
+// SIZE_MAX.
+int mg_mqtt_prop_next(const struct mg_mqtt_message *msg,
+                      struct mg_mqtt_prop *prop, size_t *offset);
+
+// Legacy iteration helper. Kept for signature compatibility: on success it
+// returns the next offset relative to the property-section start (and fills
+// *prop); at the clean end of the section or on any error it returns 0 and
+// leaves *prop untouched. Implemented on top of mg_mqtt_prop_next.
 size_t mg_mqtt_next_prop(struct mg_mqtt_message *, struct mg_mqtt_prop *,
                          size_t ofs);
 

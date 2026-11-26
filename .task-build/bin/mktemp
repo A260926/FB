@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /usr/bin/mktemp "/Volumes/UserFBWorkspace/questions/FS5AEFAFFA6C8AU6074/attempts/20261126T160816592280Z/repo/.task-build/tmp/mp.XXXXXX"

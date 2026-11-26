@@ -1,0 +1,20 @@
+FUZZ_EXECUTED seeds=300
+FUZZ_MAPPED_EXECUTED inputs=10
+CASE values seven_types checks=155
+CASE values empty_and_repeats checks=13
+CASE values stale_fields checks=57
+GROUP values cases=3 checks=225 COMPLETE
+CASE boundaries all_truncations checks=900
+CASE boundaries full_and_args checks=27
+GROUP boundaries cases=2 checks=927 COMPLETE
+CASE framing empty_and_payload checks=8
+CASE framing qos_publish checks=8
+CASE framing bad_vs_incomplete checks=6
+CASE framing concatenated checks=19
+CASE framing mqtt4_control checks=5
+GROUP framing cases=5 checks=46 COMPLETE
+CASE fuzz fixed_seeds checks=301
+CASE fuzz mapped_inputs checks=11
+GROUP fuzz cases=2 checks=312 COMPLETE
+TARGET_COMPLETE cases=12
+MQTT_ORIGINAL_VALID_PACKETS_OK

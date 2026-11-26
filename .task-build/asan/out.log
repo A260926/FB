@@ -1,0 +1,5 @@
+topic=dev/1 payload=hi props=27 bytes
+  [1] content-type len=10 val=text/plain
+  [2] user-property key=k1 val=v1
+  [3] message-expiry-interval iv=60
+end of properties after 3 properties
