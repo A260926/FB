@@ -10,3 +10,6 @@ ik.wiki
 
 # valgrind results
 *.grind
+
+# Task harness build output
+.task-build/

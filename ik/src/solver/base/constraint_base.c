@@ -3,9 +3,18 @@
 #include "ik/memory.h"
 #include <string.h>
 #include <assert.h>
+#include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* Constraint implementations */
+/* ------------------------------------------------------------------------- */
+
+static void set_cone_defaults(struct ik_constraint_t* constraint);
+
 /* ------------------------------------------------------------------------- */
 
 /* ------------------------------------------------------------------------- */
@@ -47,6 +56,20 @@ apply_cone(struct ik_node_t* node)
 /* ------------------------------------------------------------------------- */
 
 /* ------------------------------------------------------------------------- */
+static void
+set_cone_defaults(struct ik_constraint_t* constraint)
+{
+    /*
+     * A cone angle of PI with a +X axis leaves the swing completely free
+     * until the user configures the constraint.
+     */
+    constraint->cone_axis.x = 1.0;
+    constraint->cone_axis.y = 0.0;
+    constraint->cone_axis.z = 0.0;
+    constraint->cone_angle = M_PI;
+}
+
+/* ------------------------------------------------------------------------- */
 ikret_t
 ik_constraint_base_set_type(struct ik_constraint_t* constraint, enum ik_constraint_type_e constraint_type)
 {
@@ -66,6 +89,7 @@ ik_constraint_base_set_type(struct ik_constraint_t* constraint, enum ik_constrai
 
         case IK_CONE:
             constraint->apply = apply_cone;
+            set_cone_defaults(constraint);
             break;
 
         case IK_CUSTOM:

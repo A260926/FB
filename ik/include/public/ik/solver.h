@@ -55,7 +55,14 @@ struct ik_node_t;
     /* list of effector_t* references (not owned by us) */                    \
     struct vector_t                          effector_nodes_list;             \
     /* list of chain_t objects (allocated in-place, i.e. ik_solver_t owns them) */ \
-    struct vector_t                          chain_list;
+    struct vector_t                          chain_list;                      \
+                                                                              \
+    /* bstv_t of ik_cone_record_t* keyed by node guid, NULL if not rebuilt */ \
+    void*                                    cone_data;                       \
+    /* 0 until a rebuild completes successfully; blocks solve() while 0 */   \
+    uint8_t                                  rebuild_ok;                      \
+    /* Result code of the last rebuild, surfaced by solve() when invalid */  \
+    int                                      rebuild_result;
 
 /*!
  * @brief This is a base for all solvers.

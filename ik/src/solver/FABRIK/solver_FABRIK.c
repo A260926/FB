@@ -1,6 +1,7 @@
 #include "ik/solver_FABRIK.h"
 #include "ik/bstv.h"
 #include "ik/chain.h"
+#include "ik/cone.h"
 #include "ik/ik.h"
 #include "ik/memory.h"
 #include "ik/node_FABRIK.h"
@@ -108,8 +109,22 @@ solve_chain_forwards_with_target_rotation(struct chain_t* chain)
 }
 
 /* ------------------------------------------------------------------------- */
-ik_vec3_t
-solve_chain_forwards_with_constraints(struct chain_t* chain)
+/*
+ * Cone-constrained FABRIK passes.
+ *
+ * The positional FABRIK steps are unchanged, but every segment, directly
+ * after being repositioned, is clamped to the cone constraint attached to
+ * its child node. Clamping rotates only the segment direction around the
+ * parent node, so bone lengths and joint connectivity are preserved.
+ *
+ * Each pass also walks the orientation frames top-down: the parent frame
+ * follows the animated root and every solved ancestor, and the cone axis
+ * (bound in parent-local space) is rotated into the world through that
+ * frame. There is therefore no fixed world axis that a parent could rotate
+ * its way out of.
+ */
+static ik_vec3_t
+solve_chain_forwards_cone(struct ik_solver_t* solver, struct chain_t* chain)
 {
     int node_count, node_idx;
     int average_count;
@@ -121,101 +136,49 @@ solve_chain_forwards_with_constraints(struct chain_t* chain)
     ik_vec3_static_set_zero(target_position.f);
     average_count = 0;
     CHAIN_FOR_EACH_CHILD(chain, child)
-        ik_vec3_t child_base_position = solve_chain_forwards_with_constraints(child);
+        ik_vec3_t child_base_position = solve_chain_forwards_cone(solver, child);
         ik_vec3_static_add_vec3(target_position.f, child_base_position.f);
         ++average_count;
     CHAIN_END_EACH
 
-    /*
-     * If there are no child chains, then the first node in the chain must
-     * contain an effector. The target position is the effector's target
-     * position.
-     *
-     * If we are an intermediate chain, then our target position is not the
-     * effector's target position (there is no effector), instead, it is the
-     * average position of all of child chains.
-     */
     if (average_count == 0)
     {
-        struct ik_node_FABRIK_t* effector_node = (struct ik_node_FABRIK_t*)chain_get_node(chain, 0);
-        struct ik_effector_t* effector = effector_node->effector;
-        target_position = effector->_actual_target;
+        struct ik_node_t* effector_node = chain_get_node(chain, 0);
+        target_position = effector_node->effector->_actual_target;
     }
     else
     {
         ik_vec3_static_div_scalar(target_position.f, average_count);
     }
 
-    /*
-     * Iterate through each segment and apply the FABRIK algorithm.
-     */
     node_count = chain_length(chain);
     for (node_idx = 0; node_idx < node_count - 1; ++node_idx)
     {
-        ik_vec3_t initial_segment;
         struct ik_node_FABRIK_t* child_node  = (struct ik_node_FABRIK_t*)chain_get_node(chain, node_idx + 0);
         struct ik_node_FABRIK_t* parent_node = (struct ik_node_FABRIK_t*)chain_get_node(chain, node_idx + 1);
-
-        /*
-         * Need the initial (unsolved) segment so we can calculate joint
-         * rotation for constraints.
-         */
-        ik_vec3_static_set(initial_segment.f, child_node->initial_position.f);
-        ik_vec3_static_sub_vec3(initial_segment.f, parent_node->initial_position.f);
-        ik_vec3_static_normalize(initial_segment.f);
+        ik_quat_t frame_child, local_rotation;
 
         /* move node to target */
         child_node->position = target_position;
 
+        /* point segment to previous node and set target position to its end */
+        ik_vec3_static_sub_vec3(target_position.f, parent_node->position.f);
+        ik_vec3_static_normalize(target_position.f);
+        ik_vec3_static_mul_scalar(target_position.f, -child_node->dist_to_parent);
+        ik_vec3_static_add_vec3(target_position.f, child_node->position.f);
+
+        /* enforce the cone on the parent->child segment */
+        ik_cone_apply_segment(solver,
+                              (struct ik_node_t*)parent_node,
+                              (struct ik_node_t*)child_node,
+                              &parent_node->frame_rotation,
+                              &frame_child, &local_rotation);
+
         /*
-         * target_position will be a directional vector pointing from the new
-         * target position to the previous node,
+         * Keep walking backwards with the point one bone length away from
+         * the child; do not restart from the child's (possibly clamped)
+         * position or the iteration cannot converge.
          */
-        ik_vec3_static_sub_vec3(target_position.f, parent_node->position.f);        /* parent points to child */
-        ik_vec3_static_normalize(target_position.f);                                /* normalise */
-        ik_vec3_static_mul_scalar(target_position.f, -child_node->dist_to_parent);  /* child points to parent */
-        ik_vec3_static_add_vec3(target_position.f, child_node->position.f);         /* attach to child -- this is the new target for the next segment */
-
-        /* Calculate global rotation of parent node *
-        segment_original = child_node->initial_position;
-        segment_current  = child_node->position;
-        ik_vec3_static_sub_vec3(segment_original.f, parent_node->initial_position.f);
-        ik_vec3_static_sub_vec3(segment_current.f, target_position.f);
-        ik_vec3_static_angle(parent_node->rotation.f, segment_original.f, segment_current.f);
-        ik_quat_static_mul_quat(parent_node->rotation.f, parent_node->initial_rotation.f);
-
-        * Convert global transform to local *
-        inv_rotation = accumulated.rotation;
-        ik_quat_static_conj(inv_rotation.f);
-        ik_quat_static_mul_quat(parent_node->rotation.f, inv_rotation.f);
-        ik_vec3_static_sub_vec3(parent_node->position.f, accumulated.position.f);
-        ik_quat_static_rotate_vec(parent_node->position.f, inv_rotation.f);
-
-        if (child_node->constraint != NULL)
-            child_node->constraint->apply(parent_node);
-
-        * Accumulate local rotation and translation for deeper nodes *after*
-         * constraint was applied *
-        accumulated_previous = accumulated;
-        ik_quat_static_mul_quat(accumulated.rotation.f, parent_node->rotation.f);
-        ik_vec3_static_add_vec3(accumulated.position.f, parent_node->position.f);
-
-        * Convert local transform back to global *
-        ik_quat_static_rotate_vec(parent_node->position.f, accumulated_previous.rotation.f);
-        ik_vec3_static_add_vec3(parent_node->position.f, accumulated_previous.position.f);
-        ik_quat_static_mul_quat(parent_node->rotation.f, accumulated_previous.rotation.f);
-
-        if (child_node->constraint != NULL)
-        {
-            * XXX combine this? *
-            inv_rotation = parent_node->initial_rotation;
-            ik_quat_static_conj(inv_rotation.f);
-            ik_quat_static_mul_quat(parent_node->rotation.f, inv_rotation.f);
-
-            target_position = parent_node->position;
-            ik_quat_static_rotate_vec(segment_original.f, parent_node->rotation.f);
-            ik_vec3_static_add_vec3(target_position.f, segment_original.f);
-        }*/
     }
 
     return target_position;
@@ -281,9 +244,8 @@ solve_chain_forwards(struct chain_t* chain)
 
 /* ------------------------------------------------------------------------- */
 static void
-solve_chain_backwards_with_constraints(struct chain_t* chain,
-                                       ik_vec3_t target_position,
-                                       ik_quat_t acc_rot, ik_vec3_t acc_pos)
+solve_chain_backwards_cone(struct ik_solver_t* solver,
+                           struct chain_t* chain, ik_vec3_t target_position)
 {
     int node_idx = chain_length(chain) - 1;
 
@@ -298,72 +260,35 @@ solve_chain_backwards_with_constraints(struct chain_t* chain,
     }
 
     /*
-     * Iterate through each segment the other way around and apply the FABRIK
-     * algorithm (starting at the base and moving down to the tip).
+     * Iterate from the fixed base back to the tip and enforce the cone on
+     * every segment. The base node's frame was either seeded from the
+     * animated root or computed by the parent chain that shares this node.
      */
     while (node_idx-- > 0)
     {
-        struct ik_node_t* child_node  = chain_get_node(chain, node_idx + 0);
-        struct ik_node_t* parent_node = chain_get_node(chain, node_idx + 1);
+        struct ik_node_FABRIK_t* child_node  = (struct ik_node_FABRIK_t*)chain_get_node(chain, node_idx + 0);
+        struct ik_node_FABRIK_t* parent_node = (struct ik_node_FABRIK_t*)chain_get_node(chain, node_idx + 1);
+        ik_quat_t frame_child, local_rotation;
 
         /* point segment to child node and set target position to its beginning */
-        ik_vec3_static_sub_vec3(target_position.f, child_node->position.f);         /* child points to parent */
-        ik_vec3_static_normalize(target_position.f);                                /* normalise */
-        ik_vec3_static_mul_scalar(target_position.f, -child_node->dist_to_parent);  /* parent points to child */
-        ik_vec3_static_add_vec3(target_position.f, parent_node->position.f);        /* attach to parent -- this is the new target */
-
-        /* target_position is now where the position of child_node should be. */
-
-        /* Calculate delta rotation of parent node *
-        segment_original = child_node->initial_position;
-        segment_current  = target_position;
-        ik_vec3_static_sub_vec3(segment_original.f, parent_node->initial_position.f);
-        ik_vec3_static_sub_vec3(segment_current.f, parent_node->position.f);
-        ik_vec3_static_angle(parent_node->rotation.f, segment_original.f, segment_current.f);
-
-        *
-         * Since the initial rotation is in local space temporarily (see
-         * solve() entry point on why), we now have the rotation in local space
-         *
-        ik_quat_static_mul_quat(parent_node->rotation.f, parent_node->initial_rotation.f);
-
-        * Convert global translation to local *
-        inv_rotation = accumulated_positions.rotation;
-        ik_quat_static_conj(inv_rotation.f);
-        ik_vec3_static_sub_vec3(parent_node->position.f, accumulated_positions.position.f);
-        ik_quat_static_rotate_vec(parent_node->position.f, inv_rotation.f);
-
-        if (child_node->constraint != NULL)
-            child_node->constraint->apply(parent_node);
-
-        * Accumulate local rotation and translation for deeper nodes *after*
-         * constraint was applied *
-        accumulated_previous = accumulated_positions;
-        ik_vec3_static_add_vec3(accumulated_positions.position.f, parent_node->position.f);
-
-        * Convert local transform back to global *
-        ik_quat_static_rotate_vec(parent_node->position.f, accumulated_previous.rotation.f);
-        ik_vec3_static_add_vec3(parent_node->position.f, accumulated_previous.position.f);
-        ik_quat_static_mul_quat(parent_node->rotation.f, accumulated_previous.rotation.f);
-
-        if (child_node->constraint != NULL)
-        {
-            * XXX combine this? *
-            inv_rotation = parent_node->initial_rotation;
-            ik_quat_static_conj(inv_rotation.f);
-            ik_quat_static_mul_quat(parent_node->rotation.f, inv_rotation.f);
-
-            target_position = parent_node->position;
-            ik_quat_static_rotate_vec(segment_original.f, parent_node->rotation.f);
-            ik_vec3_static_add_vec3(target_position.f, segment_original.f);
-        }*/
+        ik_vec3_static_sub_vec3(target_position.f, child_node->position.f);
+        ik_vec3_static_normalize(target_position.f);
+        ik_vec3_static_mul_scalar(target_position.f, -child_node->dist_to_parent);
+        ik_vec3_static_add_vec3(target_position.f, parent_node->position.f);
 
         /* move node to target */
         child_node->position = target_position;
+
+        /* enforce the cone on the parent->child segment */
+        ik_cone_apply_segment(solver,
+                              (struct ik_node_t*)parent_node,
+                              (struct ik_node_t*)child_node,
+                              &parent_node->frame_rotation,
+                              &frame_child, &local_rotation);
     }
 
     CHAIN_FOR_EACH_CHILD(chain, child)
-        solve_chain_backwards_with_constraints(child, target_position, acc_rot, acc_pos);
+        solve_chain_backwards_cone(solver, child, target_position);
     CHAIN_END_EACH
 }
 
@@ -572,9 +497,32 @@ ik_solver_FABRIK_solve(struct ik_solver_t* solver)
     ikret_t result = IK_OK;
     int iteration = solver->max_iterations;
     ikreal_t tolerance_squared = solver->tolerance * solver->tolerance;
+    int use_cones;
+
+    /* A failed rebuild leaves no half-initialised state worth solving. */
+    if (!solver->rebuild_ok)
+        return solver->rebuild_result != IK_OK ? solver->rebuild_result : -1;
+
+    use_cones = (solver->flags & IK_ENABLE_CONSTRAINTS) && ik_cone_active(solver);
+
+    /*
+     * Target rotations cannot be combined with active cone constraints yet.
+     * Refuse explicitly instead of silently dropping one of the two requests.
+     * Without any bound cone the target-rotation path stays available.
+     */
+    if (use_cones && (solver->flags & IK_ENABLE_TARGET_ROTATIONS))
+        return ik_cone_check_flags(solver);
 
     /* Tree is in local space -- FABRIK needs only global node positions */
     ik_transform_chain_list(&solver->chain_list, TR_L2G | TR_TRANSLATIONS);
+
+    /*
+     * Carry the bind frames down the tree from the current animated root.
+     * Cone axes are expressed through these moving frames, so animated root
+     * translation/rotation takes the whole limit setup along with it.
+     */
+    if (use_cones)
+        ik_cone_update_carried_frames(solver);
 
     /*
      * Joint rotations are calculated by comparing positional differences
@@ -582,7 +530,7 @@ ik_solver_FABRIK_solve(struct ik_solver_t* solver)
      * global space (doesn't work in local as far as I can see). Store the
      * positions and locations before solving for later.
      */
-    if (solver->flags & IK_ENABLE_JOINT_ROTATIONS)
+    if (!use_cones && (solver->flags & IK_ENABLE_JOINT_ROTATIONS))
         store_initial_transform(&solver->chain_list);
 
     while (iteration-- > 0)
@@ -604,11 +552,13 @@ ik_solver_FABRIK_solve(struct ik_solver_t* solver)
 
             if (solver->flags & IK_ENABLE_TARGET_ROTATIONS)
                 solve_chain_forwards_with_target_rotation(chain);
+            else if (use_cones)
+                solve_chain_forwards_cone(solver, chain);
             else
                 solve_chain_forwards(chain);
 
-            if (solver->flags & IK_ENABLE_CONSTRAINTS)
-                solve_chain_backwards_with_constraints(chain, base_node->position, base_node->rotation, base_node->position);
+            if (use_cones)
+                solve_chain_backwards_cone(solver, chain, base_node->position);
             else
                 solve_chain_backwards(chain, base_node->position);
         SOLVER_END_EACH
@@ -625,8 +575,19 @@ ik_solver_FABRIK_solve(struct ik_solver_t* solver)
         SOLVER_END_EACH
     }
 
-    if (solver->flags & IK_ENABLE_JOINT_ROTATIONS)
+    if (use_cones && (solver->flags & IK_ENABLE_JOINT_ROTATIONS))
+    {
+        /*
+         * Use the frames accumulated by the constrained iterations, so the
+         * output local rotations describe exactly the same final pose as the
+         * solved positions rather than recomputing and overriding it.
+         */
+        ik_cone_export_joint_rotations(solver);
+    }
+    else if (solver->flags & IK_ENABLE_JOINT_ROTATIONS)
+    {
         calculate_joint_rotations(&solver->chain_list);
+    }
 
     /* Transform back to local space now that solving is complete */
     ik_transform_chain_list(&solver->chain_list, TR_G2L | TR_TRANSLATIONS);

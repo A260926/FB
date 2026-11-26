@@ -1,6 +1,7 @@
 #include "ik/ik.h"
 #include "ik/solver_base.h"
 #include "ik/chain.h"
+#include "ik/cone.h"
 #include "ik/memory.h"
 #include "ik/quat_static.h"
 #include "ik/transform.h"
@@ -50,6 +51,8 @@ ik_solver_base_construct(struct ik_solver_t* solver)
 void
 ik_solver_base_destruct(struct ik_solver_t* solver)
 {
+    ik_cone_clear(solver);
+
     if (solver->tree)
         solver->node->destroy(solver->tree);
 
@@ -103,10 +106,16 @@ ik_solver_base_rebuild(struct ik_solver_t* solver)
 {
     ikret_t result;
 
+    /* A rebuild attempt invalidates any previously usable state until it
+     * completes successfully. */
+    solver->rebuild_ok = 0;
+    solver->rebuild_result = IK_OK;
+
     /* If the solver has no tree, then there's nothing to do */
     if (solver->tree == NULL)
     {
         IKAPI.log.message("No tree to work with. Did you forget to set the tree with ik_solver_set_tree()?");
+        solver->rebuild_result = IK_SOLVER_HAS_NO_TREE;
         return IK_SOLVER_HAS_NO_TREE;
     }
 
@@ -121,6 +130,7 @@ ik_solver_base_rebuild(struct ik_solver_t* solver)
             &solver->effector_nodes_list)) != IK_OK)
     {
         IKAPI.log.message("Ran out of memory while building the effector nodes list");
+        solver->rebuild_result = result;
         return result;
     }
 
@@ -129,10 +139,40 @@ ik_solver_base_rebuild(struct ik_solver_t* solver)
             &solver->chain_list,
             solver->tree,
             &solver->effector_nodes_list)) != IK_OK)
+    {
+        solver->rebuild_result = result;
         return result;
+    }
 
     update_distances(&solver->chain_list);
 
+    /*
+     * Rebuild explicitly re-binds the reference pose: snapshot every node's
+     * local transform and validate/bind all cone constraints. This is the
+     * only place binding happens -- solving and target changes never rebind.
+     *
+     * The cone machinery stores extra per-node data on the FABRIK node type,
+     * so it is only enabled for solvers that allocate FABRIK nodes. Other
+     * solvers keep their previous (constraint-free) behaviour.
+     *
+     * If the cone data is invalid the old bindings are dropped and the
+     * solver refuses to run until a successful rebuild.
+     */
+    if (solver->tree->v == &IKAPI.internal.node_FABRIK)
+    {
+        ik_cone_bind_locals(solver);
+        if ((result = ik_cone_bind_tree(solver)) != IK_OK)
+        {
+            solver->rebuild_result = result;
+            return result;
+        }
+    }
+    else
+    {
+        ik_cone_clear(solver);
+    }
+
+    solver->rebuild_ok = 1;
     return IK_OK;
 }
 

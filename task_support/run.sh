@@ -6,7 +6,7 @@ if [[ $mode == target ]]; then test -s test/cone_cases.c; fi
 bash task_support/build.sh
 if [[ $mode == target ]]; then
   ${CC:-cc} -std=c11 -O1 -I. -Iik/include/public -Itask_support/generated task_support/driver.c test/cone_cases.c .task-build/libik.a -lm -o .task-build/target
-  output_log=$(mktemp)
+  output_log=$(mktemp "${TMPDIR:-/tmp}/ik-target.XXXXXX")
   trap 'rm -f "$output_log"' EXIT
   set +e
   .task-build/target >"$output_log" 2>&1
