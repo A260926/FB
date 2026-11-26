@@ -13,6 +13,7 @@
 #include <internal.h>
 
 #include <errno.h>
+#include <stdint.h>
 
 #ifdef STDC_HEADERS
 # include <string.h>
@@ -97,170 +98,340 @@ th_read_internal(TAR *t)
 }
 
 
-/* wrapper function for th_read_internal() to handle GNU extensions */
+/*
+** Strict, bounded decode of the size field of a GNU 'L' (longname) or
+** 'K' (longlink) extension header.
+**
+** The grammar, restricted to exactly the @len bytes of @field (always
+** 12 for the on-disk header size field), is:
+**
+**	[' ' | NUL]*  [0-7]+  [' ' | NUL]*
+**
+** There must be at least one octal digit, padding bytes may only be
+** spaces or NULs, and such padding may not appear in the middle of the
+** digit run.  Signs, '8'/'9', base-256 markers and any other character
+** are rejected.  The field is never inspected past @len bytes, so an
+** unterminated 12-byte field cannot borrow a terminator from an
+** adjacent header field.  The decoded value must be positive and fit
+** in size_t.
+**
+** Returns 0 and stores the value in @value, or -1 with errno=EINVAL.
+*/
+static int
+gnu_ext_decode_size(const char *field, size_t len, size_t *value)
+{
+	size_t i = 0;
+	size_t acc = 0;
+	int digits = 0;
+	unsigned d;
+
+	if (field == NULL || value == NULL || len == 0)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* leading padding: spaces or NULs only */
+	while (i < len && (field[i] == ' ' || field[i] == '\0'))
+		i++;
+
+	/* maximal octal digit run */
+	while (i < len && field[i] >= '0' && field[i] <= '7')
+	{
+		d = (unsigned)((unsigned char)field[i] - '0');
+
+		/* checked accumulation: acc * 8 + d must fit size_t */
+		if (acc > (SIZE_MAX - (size_t)d) / 8)
+		{
+			errno = EINVAL;
+			return -1;
+		}
+		acc = acc * 8 + d;
+		digits = 1;
+		i++;
+	}
+
+	if (!digits)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* all remaining bytes must be spaces or NULs */
+	while (i < len)
+	{
+		if (field[i] != ' ' && field[i] != '\0')
+		{
+			errno = EINVAL;
+			return -1;
+		}
+		i++;
+	}
+
+	/* a zero-length extension is not legal */
+	if (acc == 0)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	*value = acc;
+	return 0;
+}
+
+
+/*
+** Transition to the sticky read-error state.  All uncommitted pending
+** extension strings are released here.  Published strings live in
+** t->th_buf and are owned by the TAR handle; on a failure path none
+** have been published yet, so those pointers are NULL (clear them
+** defensively as well).
+*/
+static int
+th_read_fail(TAR *t, char *pending_name, char *pending_link, int error)
+{
+	free(pending_name);
+	free(pending_link);
+
+	t->th_buf.gnu_longname = NULL;
+	t->th_buf.gnu_longlink = NULL;
+
+	t->read_failed = 1;
+	t->read_failure_errno = error;
+	errno = error;
+	return -1;
+}
+
+
+/*
+** Read the next logical tar record.
+**
+** A logical record is zero or more GNU longname ('L') / longlink ('K')
+** extension headers, each followed by the complete number of 512-byte
+** data blocks declared by its strictly decoded size field, and finally
+** an ordinary header.  Extensions may appear in any order and repeat;
+** the last copy of each kind wins, only for the immediately following
+** ordinary record.
+**
+** Returns 0 once the ordinary header has been read and validated, 1 on
+** clean EOF, and -1 on error (errno set).  After any -1 the handle is
+** in a sticky read-error state: further th_read() calls replay the
+** original failure without invoking the reader, and only tar_close()
+** remains valid.
+*/
 int
 th_read(TAR *t)
 {
 	int i;
-	size_t sz, j, blocks;
-	char *ptr;
+	size_t n, blocks, b;
+	size_t payload_offset;
+	size_t name_len;
+	char *pending_name = NULL;
+	char *pending_link = NULL;
+	char *name = NULL;
+	char block[T_BLOCKSIZE];
 
-#ifdef DEBUG
-	printf("==> th_read(t=0x%lx)\n", t);
-#endif
-
-	if (t->th_buf.gnu_longname != NULL)
-		free(t->th_buf.gnu_longname);
-	if (t->th_buf.gnu_longlink != NULL)
-		free(t->th_buf.gnu_longlink);
-	memset(&(t->th_buf), 0, sizeof(struct tar_header));
-
-	i = th_read_internal(t);
-	if (i == 0)
-		return 1;
-	else if (i != T_BLOCKSIZE)
+	if (t == NULL)
 	{
-		if (i != -1)
-			errno = EINVAL;
+		errno = EINVAL;
 		return -1;
 	}
 
-	/* check for GNU long link extention */
-	if (TH_ISLONGLINK(t))
+	/* replay a sticky failure without touching the backend */
+	if (t->read_failed)
 	{
-		sz = th_get_size(t);
-		blocks = (sz / T_BLOCKSIZE) + (sz % T_BLOCKSIZE ? 1 : 0);
-		if (blocks > ((size_t)-1 / T_BLOCKSIZE))
-		{
-			errno = E2BIG;
-			return -1;
-		}
-#ifdef DEBUG
-		printf("    th_read(): GNU long linkname detected "
-		       "(%ld bytes, %d blocks)\n", sz, blocks);
-#endif
-		t->th_buf.gnu_longlink = (char *)malloc(blocks * T_BLOCKSIZE);
-		if (t->th_buf.gnu_longlink == NULL)
-			return -1;
+		errno = t->read_failure_errno;
+		return -1;
+	}
 
-		for (j = 0, ptr = t->th_buf.gnu_longlink; j < blocks;
-		     j++, ptr += T_BLOCKSIZE)
-		{
 #ifdef DEBUG
-			printf("    th_read(): reading long linkname "
-			       "(%d blocks left, ptr == %ld)\n", blocks-j, ptr);
-#endif
-			i = tar_block_read(t, ptr);
-			if (i != T_BLOCKSIZE)
-			{
-				if (i != -1)
-					errno = EINVAL;
-				return -1;
-			}
-#ifdef DEBUG
-			printf("    th_read(): read block == \"%s\"\n", ptr);
-#endif
-		}
-#ifdef DEBUG
-		printf("    th_read(): t->th_buf.gnu_longlink == \"%s\"\n",
-		       t->th_buf.gnu_longlink);
+	printf("==> th_read(t=0x%lx)\n", (unsigned long)t);
 #endif
 
+	/*
+	** Invalidate the previous entry view: release the published
+	** extension strings and clear the whole header buffer.
+	*/
+	free(t->th_buf.gnu_longname);
+	free(t->th_buf.gnu_longlink);
+	memset(&(t->th_buf), 0, sizeof(struct tar_header));
+
+	/* extension budgets accumulate per logical record */
+	t->gnu_used_bytes = 0;
+	t->gnu_used_headers = 0;
+
+	for (;;)
+	{
 		i = th_read_internal(t);
+
+		if (i == 0)
+		{
+			if (t->gnu_used_headers == 0)
+			{
+				/* clean EOF / EOT at a record boundary */
+				return 1;
+			}
+
+			/*
+			** Extension header(s) consumed but no ordinary
+			** header followed: EOF, zero terminator blocks or
+			** a vanished next header makes the chain dangling.
+			*/
+			return th_read_fail(t, pending_name, pending_link,
+					     EINVAL);
+		}
+
 		if (i != T_BLOCKSIZE)
 		{
-			if (i != -1)
-				errno = EINVAL;
-			return -1;
+			/*
+			** i == -1: the reader failed; errno belongs to it
+			** and must be preserved.  i == -2 is magic/version/
+			** checksum validation failure.  Any other value is
+			** a short header read.  All non-reader cases EINVAL.
+			*/
+			int error = (i == -1) ? errno : EINVAL;
+			return th_read_fail(t, pending_name, pending_link,
+					     error);
 		}
-	}
 
-	/* check for GNU long name extention */
-	if (TH_ISLONGNAME(t))
-	{
-		sz = th_get_size(t);
-		blocks = (sz / T_BLOCKSIZE) + (sz % T_BLOCKSIZE ? 1 : 0);
-		if (blocks > ((size_t)-1 / T_BLOCKSIZE))
+		/* the terminal ordinary header publishes pending names */
+		if (!TH_ISLONGNAME(t) && !TH_ISLONGLINK(t))
 		{
-			errno = E2BIG;
-			return -1;
+			t->th_buf.gnu_longname = pending_name;
+			t->th_buf.gnu_longlink = pending_link;
+			return 0;
 		}
-#ifdef DEBUG
-		printf("    th_read(): GNU long filename detected "
-		       "(%ld bytes, %d blocks)\n", sz, blocks);
-#endif
-		t->th_buf.gnu_longname = (char *)malloc(blocks * T_BLOCKSIZE);
-		if (t->th_buf.gnu_longname == NULL)
-			return -1;
 
-		for (j = 0, ptr = t->th_buf.gnu_longname; j < blocks;
-		     j++, ptr += T_BLOCKSIZE)
+		/* ---- GNU 'L'/'K' extension header ---- */
+
+		/*
+		** Extension-header budget.  Every extension header counts,
+		** including repeated kinds that override earlier copies.
+		*/
+		t->gnu_used_headers++;
+		if (t->gnu_used_headers > t->gnu_limit_headers)
 		{
-#ifdef DEBUG
-			printf("    th_read(): reading long filename "
-			       "(%d blocks left, ptr == %ld)\n", blocks-j, ptr);
-#endif
-			i = tar_block_read(t, ptr);
+			return th_read_fail(t, pending_name, pending_link,
+					     E2BIG);
+		}
+
+		/* strict bounded decode of only the 12 size bytes */
+		if (gnu_ext_decode_size(t->th_buf.size,
+					sizeof(t->th_buf.size), &n) == -1)
+		{
+			return th_read_fail(t, pending_name, pending_link,
+					     EINVAL);
+		}
+
+		/*
+		** Declared-payload byte budget: every declaration counts,
+		** even when a later copy overrides it.  The subtraction
+		** form cannot overflow because gnu_used_bytes is kept
+		** <= gnu_limit_bytes.
+		*/
+		if (n > t->gnu_limit_bytes - t->gnu_used_bytes)
+		{
+			return th_read_fail(t, pending_name, pending_link,
+					     E2BIG);
+		}
+		t->gnu_used_bytes += n;
+
+		/* representability of the extra terminator byte */
+		if (n > SIZE_MAX - (size_t)1)
+		{
+			return th_read_fail(t, pending_name, pending_link,
+					     EINVAL);
+		}
+
+		/* checked round-up to a whole number of T_BLOCKSIZE blocks */
+		if (n > SIZE_MAX - (T_BLOCKSIZE - 1))
+		{
+			return th_read_fail(t, pending_name, pending_link,
+					     EINVAL);
+		}
+		blocks = (n + (T_BLOCKSIZE - 1)) / T_BLOCKSIZE;
+
+		/*
+		** Library-owned normalized string: exactly the name bytes
+		** plus one guaranteed terminator.
+		*/
+		name = (char *)malloc(n + 1);
+		if (name == NULL)
+		{
+			return th_read_fail(t, pending_name, pending_link,
+					     ENOMEM);
+		}
+		name_len = 0;
+
+		/*
+		** Consume exactly the ceil(n / T_BLOCKSIZE) complete data
+		** blocks.  Blocks go through one staging buffer; only the
+		** first n bytes of the declaration are string content, so
+		** block padding is never scanned into the name.
+		*/
+		for (b = 0; b < blocks; b++)
+		{
+			size_t j;
+
+			i = tar_block_read(t, block);
 			if (i != T_BLOCKSIZE)
 			{
-				if (i != -1)
-					errno = EINVAL;
-				return -1;
+				int error = (i == -1) ? errno : EINVAL;
+				free(name);
+				return th_read_fail(t, pending_name,
+						    pending_link, error);
 			}
-#ifdef DEBUG
-			printf("    th_read(): read block == \"%s\"\n", ptr);
-#endif
-		}
-#ifdef DEBUG
-		printf("    th_read(): t->th_buf.gnu_longname == \"%s\"\n",
-		       t->th_buf.gnu_longname);
-#endif
 
-		i = th_read_internal(t);
-		if (i != T_BLOCKSIZE)
+			payload_offset = b * T_BLOCKSIZE;
+			for (j = 0; j < T_BLOCKSIZE; j++)
+			{
+				size_t pos = payload_offset + j;
+				unsigned char c;
+
+				if (pos >= n)
+					break;	/* remainder is padding */
+
+				c = (unsigned char)block[j];
+				if (c == '\0')
+				{
+					/*
+					** A NUL is tolerated only as the
+					** final declared byte; an earlier
+					** NUL means trailing content would
+					** be silently dropped.
+					*/
+					if (pos + 1 != n)
+					{
+						free(name);
+						return th_read_fail(t,
+							pending_name,
+							pending_link, EINVAL);
+					}
+					/* terminal NUL: not part of name */
+				}
+				else
+				{
+					name[name_len++] = (char)c;
+				}
+			}
+		}
+		name[name_len] = '\0';
+
+		/* commit into pending state; last copy of a kind wins */
+		if (TH_ISLONGNAME(t))
 		{
-			if (i != -1)
-				errno = EINVAL;
-			return -1;
+			free(pending_name);
+			pending_name = name;
 		}
+		else
+		{
+			free(pending_link);
+			pending_link = name;
+		}
+		name = NULL;
 	}
 
-#if 0
-	/*
-	** work-around for old archive files with broken typeflag fields
-	** NOTE: I fixed this in the TH_IS*() macros instead
-	*/
-
-	/*
-	** (directories are signified with a trailing '/')
-	*/
-	if (t->th_buf.typeflag == AREGTYPE
-	    && t->th_buf.name[strlen(t->th_buf.name) - 1] == '/')
-		t->th_buf.typeflag = DIRTYPE;
-
-	/*
-	** fallback to using mode bits
-	*/
-	if (t->th_buf.typeflag == AREGTYPE)
-	{
-		mode = (mode_t)oct_to_int(t->th_buf.mode);
-
-		if (S_ISREG(mode))
-			t->th_buf.typeflag = REGTYPE;
-		else if (S_ISDIR(mode))
-			t->th_buf.typeflag = DIRTYPE;
-		else if (S_ISFIFO(mode))
-			t->th_buf.typeflag = FIFOTYPE;
-		else if (S_ISCHR(mode))
-			t->th_buf.typeflag = CHRTYPE;
-		else if (S_ISBLK(mode))
-			t->th_buf.typeflag = BLKTYPE;
-		else if (S_ISLNK(mode))
-			t->th_buf.typeflag = SYMTYPE;
-	}
-#endif
-
-	return 0;
+	/* not reached */
 }
 
 
@@ -307,6 +478,10 @@ th_write(TAR *t)
 		     ptr = t->th_buf.gnu_longlink; j > 1;
 		     j--, ptr += T_BLOCKSIZE)
 		{
+#ifdef DEBUG
+			printf("    th_write(): writing long linkname "
+			       "(%d blocks left)\n", j);
+#endif
 			i = tar_block_write(t, ptr);
 			if (i != T_BLOCKSIZE)
 			{
@@ -358,6 +533,10 @@ th_write(TAR *t)
 		     ptr = t->th_buf.gnu_longname; j > 1;
 		     j--, ptr += T_BLOCKSIZE)
 		{
+#ifdef DEBUG
+			printf("    th_write(): writing long filename "
+			       "(%d blocks left)\n", j);
+#endif
 			i = tar_block_write(t, ptr);
 			if (i != T_BLOCKSIZE)
 			{
@@ -401,5 +580,3 @@ th_write(TAR *t)
 #endif
 	return 0;
 }
-
-

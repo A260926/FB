@@ -1,0 +1,51 @@
+.TH tar_set_gnu_extension_limits 3 "November 2025" "libtar" "C Library Calls"
+.SH NAME
+tar_set_gnu_extension_limits \- set per-record GNU extension resource limits
+.SH SYNOPSIS
+.B #include <libtar.h>
+.P
+.BI "int tar_set_gnu_extension_limits(TAR *" t ", size_t " bytes ", size_t " headers ");"
+.SH DESCRIPTION
+.BR tar_set_gnu_extension_limits ()
+sets the per-logical-record budget for GNU longname (\fBL\fR) and
+longlink (\fBK\fR) extension headers read by
+.BR th_read ().
+.I bytes
+is the maximum total declared payload length; every declaration counts,
+including copies later overridden.
+.I headers
+is the maximum number of \fBL\fR/\fBK\fR extension headers; repeated
+headers count as well.
+
+Handles created by
+.BR tar_open ()
+and
+.BR tar_fdopen ()
+default to 1 MiB and 64 headers.  Both arguments must be positive.
+The call is intended between two
+.BR th_read ()
+calls.  It does not reset accumulation state and does not clear a sticky
+read-error state.
+.SH "RETURN VALUE"
+Returns 0 on success.  Otherwise returns \-1 with
+.I errno
+set to
+.BR EINVAL
+and leaves the handle and previous settings unchanged.
+.SH ERRORS
+.TP
+.B EINVAL
+.I t
+is NULL, or
+.I bytes
+or
+.I headers
+is zero.
+.PP
+An exceeded budget is reported by the following
+.BR th_read ()
+as \-1 with
+.IR errno = E2BIG .
+.SH "SEE ALSO"
+.BR th_read (3),
+.BR tar_open (3)

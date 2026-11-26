@@ -44,6 +44,7 @@ tar_init(TAR **t, const char *pathname, tartype_t *type,
 		errno = EINVAL;
 		return -1;
 	}
+	(void)mode;
 
 	*t = (TAR *)calloc(1, sizeof(TAR));
 	if (*t == NULL)
@@ -53,6 +54,14 @@ tar_init(TAR **t, const char *pathname, tartype_t *type,
 	(*t)->options = options;
 	(*t)->type = (type ? type : &default_type);
 	(*t)->oflags = oflags;
+
+	/* bounded GNU extension chain budgets */
+	(*t)->gnu_limit_bytes = TAR_GNU_EXT_DEFAULT_BYTES;
+	(*t)->gnu_limit_headers = TAR_GNU_EXT_DEFAULT_HEADERS;
+	(*t)->gnu_used_bytes = 0;
+	(*t)->gnu_used_headers = 0;
+	(*t)->read_failed = 0;
+	(*t)->read_failure_errno = 0;
 
 	if ((oflags & O_ACCMODE) == O_RDONLY)
 		(*t)->h = libtar_hash_new(256,
@@ -115,6 +124,21 @@ tar_fd(TAR *t)
 }
 
 
+int
+tar_set_gnu_extension_limits(TAR *t, size_t bytes, size_t headers)
+{
+	if (t == NULL || bytes == 0 || headers == 0)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	t->gnu_limit_bytes = bytes;
+	t->gnu_limit_headers = headers;
+	return 0;
+}
+
+
 /* close tarfile handle */
 int
 tar_close(TAR *t)
@@ -129,6 +153,11 @@ tar_close(TAR *t)
 					: (libtar_freefunc_t)tar_dev_free));
 	if (t->th_pathname != NULL)
 		free(t->th_pathname);
+	/* owned normalized GNU extension strings (base pointers) */
+	if (t->th_buf.gnu_longname != NULL)
+		free(t->th_buf.gnu_longname);
+	if (t->th_buf.gnu_longlink != NULL)
+		free(t->th_buf.gnu_longlink);
 	free(t);
 
 	return i;

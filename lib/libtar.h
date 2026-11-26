@@ -89,8 +89,34 @@ typedef struct
 
 	/* introduced in libtar 1.2.21 */
 	char *th_pathname;
+
+	/*
+	** Bounded GNU extension ('L' longname / 'K' longlink) chain.
+	** gnu_limit_bytes/gnu_limit_headers are the per-logical-record
+	** limits; gnu_used_bytes/gnu_used_headers accumulate the current
+	** logical record and are reset at the start of every th_read().
+	*/
+	size_t gnu_limit_bytes;
+	size_t gnu_limit_headers;
+	size_t gnu_used_bytes;
+	size_t gnu_used_headers;
+
+	/*
+	** Sticky read-error state.  Once th_read() fails, every later
+	** th_read() returns the same failure without invoking the reader;
+	** only tar_close() is still valid.
+	*/
+	int read_failed;
+	int read_failure_errno;
 }
 TAR;
+
+/*
+** Default per-logical-record GNU extension budgets for handles created
+** with tar_open()/tar_fdopen().
+*/
+#define TAR_GNU_EXT_DEFAULT_BYTES	((size_t)1024 * 1024)
+#define TAR_GNU_EXT_DEFAULT_HEADERS	((size_t)64)
 
 /* constant values for the TAR options field */
 #define TAR_GNU			 1	/* use GNU extensions */
@@ -117,6 +143,17 @@ int tar_fdopen(TAR **t, int fd, const char *pathname, tartype_t *type,
 
 /* returns the descriptor associated with t */
 int tar_fd(TAR *t);
+
+/*
+** Set the per-logical-record GNU extension budget: at most @bytes
+** declared payload bytes (every declaration counts, even copies later
+** overridden) and at most @headers GNU 'L'/'K' extension headers.
+** Both arguments must be positive.  Returns 0 on success, or -1 with
+** errno set to EINVAL (handle and previous settings unchanged).
+** Intended to be called between th_read() calls; it does not clear a
+** sticky read-error state.
+*/
+int tar_set_gnu_extension_limits(TAR *t, size_t bytes, size_t headers);
 
 /* close tarfile handle */
 int tar_close(TAR *t);
