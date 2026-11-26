@@ -60,19 +60,36 @@ type TSMuxer struct {
     pmt_pid    uint16
     pat_period uint64
     OnPacket   func(pkg []byte)
+
+    // Explicit program configuration state (ConfigureProgram). The explicit
+    // and legacy AddStream paths are never mixed on one muxer.
+    explicit        bool
+    add_stream_used bool
+    program_dirty   bool // a committed configuration waits to be announced by the next valid Write
+    has_program     bool
+    program_version uint8
+    program_pcr_pid uint16
+    program_cfg     []ProgramStream // committed configuration, descriptor bytes copied
+    program_pmt     *table_pmt      // keeps the PMT continuity counter across configurations
+    pes_registry    map[uint16]*pes_stream
 }
 
 func NewTSMuxer() *TSMuxer {
     return &TSMuxer{
-        pat:        NewTablePat(),
-        stream_pid: 0x100,
-        pmt_pid:    0x200,
-        pat_period: 0,
-        OnPacket:   nil,
+        pat:          NewTablePat(),
+        stream_pid:   0x100,
+        pmt_pid:      0x200,
+        pat_period:   0,
+        OnPacket:     nil,
+        pes_registry: make(map[uint16]*pes_stream),
     }
 }
 
 func (mux *TSMuxer) AddStream(cid TS_STREAM_TYPE) uint16 {
+    if mux.explicit {
+        panic("mpeg2: AddStream must not be mixed with ConfigureProgram")
+    }
+    mux.add_stream_used = true
     if mux.pat == nil {
         mux.pat = NewTablePat()
     }
@@ -95,6 +112,9 @@ func (mux *TSMuxer) AddStream(cid TS_STREAM_TYPE) uint16 {
 /// pts: audio/video stream timestamp in ms
 /// dts: audio/video stream timestamp in ms
 func (mux *TSMuxer) Write(pid uint16, data []byte, pts uint64, dts uint64) error {
+    if mux.explicit {
+        return mux.writeProgram(pid, data, pts, dts)
+    }
     var whichpmt *table_pmt = nil
     var whichstream *pes_stream = nil
     for _, pmt := range mux.pat.pmts {
