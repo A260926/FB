@@ -1,0 +1,1 @@
+/usr/bin/cc -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/binding.dir/binding.c.o -o binding  libtask_mlt.a -lm

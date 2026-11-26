@@ -46,6 +46,7 @@ extern "C" {
 #include "mlt_audio.h"
 #include "mlt_cache.h"
 #include "mlt_chain.h"
+#include "mlt_conform.h"
 #include "mlt_consumer.h"
 #include "mlt_deque.h"
 #include "mlt_export.h"

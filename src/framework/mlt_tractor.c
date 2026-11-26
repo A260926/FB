@@ -361,7 +361,24 @@ static int producer_get_audio(mlt_frame self,
     mlt_properties_set(frame_properties,
                        "producer_consumer_fps",
                        mlt_properties_get(properties, "producer_consumer_fps"));
-    mlt_frame_get_audio(frame, buffer, format, frequency, channels, samples);
+    int audio_error = mlt_frame_get_audio(frame, buffer, format, frequency, channels, samples);
+    // A conform track opts in to propagating its audio error through the
+    // tractor instead of publishing the (empty) buffer as if it succeeded.
+    if (audio_error && mlt_properties_get_int(frame_properties, "conform.audio_error")) {
+        // The tractor output frame borrows the opt-in flag so the caller of
+        // mlt_frame_get_audio() also sees the error. Re-register the callback
+        // so a repeated read fails the same way rather than publishing the
+        // empty buffer via the "audio" property path.
+        mlt_properties_set_int(properties, "conform.audio_error", 1);
+        mlt_frame_push_audio(self, frame);
+        mlt_frame_push_audio(self, producer_get_audio);
+        if (buffer)
+            *buffer = NULL;
+        if (samples)
+            *samples = 0;
+        mlt_properties_set_int(properties, "audio_samples", 0);
+        return 1;
+    }
 
     // Propagate audio-level metadata onto the tractor output frame.
     mlt_properties_copy(properties, frame_properties, "meta.audio.");

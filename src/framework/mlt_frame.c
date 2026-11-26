@@ -626,7 +626,18 @@ int mlt_frame_get_audio(mlt_frame self,
     mlt_audio_format requested_format = *format;
 
     if (hide == 0 && get_audio != NULL) {
-        get_audio(self, buffer, format, frequency, channels, samples);
+        int audio_error = get_audio(self, buffer, format, frequency, channels, samples);
+        // A conform frame opts in to propagating its callback error instead of
+        // falling back to silence. Legacy callbacks keep their historical
+        // behaviour of ignoring the return value.
+        if (audio_error && mlt_properties_get_int(properties, "conform.audio_error")) {
+            if (buffer)
+                *buffer = NULL;
+            if (samples)
+                *samples = 0;
+            mlt_properties_set_int(properties, "audio_samples", 0);
+            return 1;
+        }
         mlt_properties_set_int(properties, "audio_frequency", *frequency);
         mlt_properties_set_int(properties, "audio_channels", *channels);
         mlt_properties_set_int(properties, "audio_samples", *samples);
