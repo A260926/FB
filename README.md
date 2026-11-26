@@ -198,6 +198,60 @@ AAFI_foreachAudioTrack( aafi, audioTrack ) {
 }
 ```
 
+### Read the composite clip gain at a clip-local time
+
+Nested `MonoAudioGain` OperationGroups are all imported: every gain layer
+affecting a clip is kept with its own curve and its own exact coordinate
+mapping (Sequence `Filler` and preceding siblings are accounted for).
+`aafi_clip_gain_at()` projects the same clip-local offset into every layer,
+evaluates each curve and multiplies the resulting linear amplitudes.
+
+```C
+#include <libaaf.h>
+
+/* aafi / audioTrack / audioClip come from "Retrieve Tracks and Clips". */
+
+size_t layers = aafi_clip_gain_layer_count( audioClip );
+
+/*
+ * offset is a rational position relative to the clip start, in the owning
+ * track's edit units. It must satisfy 0 <= offset < audioClip->len.
+ * Fractions are kept exact (aafRational_t).
+ */
+aafRational_t offset = { 10, 1 }; /* 10 edit units after the clip start */
+double multiplier = 1.0;
+
+int rc = aafi_clip_gain_at( audioClip, offset, &multiplier );
+
+if ( rc == 0 ) {
+	/*
+	 * multiplier is the product of all clip gain layers. A clip without any
+	 * gain layer reports layers == 0 and multiplier == 1.0.
+	 */
+	apply_linear_gain( audioClip, offset, multiplier );
+}
+else {
+	/*
+	 * Bad arguments, an out-of-range offset, an illegal/uninterpretable
+	 * imported curve or a result outside the representable range:
+	 * multiplier was left untouched.
+	 */
+}
+```
+
+`aafi_clip_gain_at()` is stateless: positions may be queried out of order
+and repeated. It evaluates the imported layer stack only; the legacy
+`aafiAudioClip.gain` / `aafiAudioClip.automation` fields are not multiplied
+in a second time.
+
+**Track fader vs. clip layers:** the outermost volume fader that sits on the
+`TimelineMobSlot` (directly, or wrapping the track Sequence) is the track
+fader. It stays available through `aafiAudioTrack.gain` /
+`aafiAudioTrack.pan`, applies to every clip of the track and is deliberately
+**not** counted by `aafi_clip_gain_layer_count()` nor multiplied by
+`aafi_clip_gain_at()`. Only `MonoAudioGain` groups under the track Sequence
+that scope to a clip (including nested groups) are clip gain layers.
+
 ## Build
 
 libaaf doesn't rely on any specific dependency.

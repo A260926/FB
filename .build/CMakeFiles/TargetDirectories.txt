@@ -1,0 +1,6 @@
+/Volumes/UserFBWorkspace/questions/FSD4586AB269D0U16844/attempts/20261126T161436625042Z/repo/.build/CMakeFiles/aaf-static.dir
+/Volumes/UserFBWorkspace/questions/FSD4586AB269D0U16844/attempts/20261126T161436625042Z/repo/.build/CMakeFiles/source_release.dir
+/Volumes/UserFBWorkspace/questions/FSD4586AB269D0U16844/attempts/20261126T161436625042Z/repo/.build/CMakeFiles/clean-cmake-files.dir
+/Volumes/UserFBWorkspace/questions/FSD4586AB269D0U16844/attempts/20261126T161436625042Z/repo/.build/CMakeFiles/test.dir
+/Volumes/UserFBWorkspace/questions/FSD4586AB269D0U16844/attempts/20261126T161436625042Z/repo/.build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSD4586AB269D0U16844/attempts/20261126T161436625042Z/repo/.build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,11 @@
+prefix="/usr/local"
+exec_prefix="${prefix}"
+libdir="${prefix}/lib"
+includedir="${prefix}/include"
+
+Name: libaaf
+Description: libaaf is a C coded library for Advanced Authoring Format (AAF) file handling
+URL: https://github.com/agfline/LibAAF
+Version: v0.0.0-fixed
+Cflags: -I"${includedir}"
+Libs: -L"${libdir}" -laaf

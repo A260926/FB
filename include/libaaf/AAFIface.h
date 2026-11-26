@@ -35,6 +35,8 @@
  */
 
 
+#include <stddef.h>
+
 #include <libaaf/AAFTypes.h>
 #include <libaaf/AAFCore.h>
 
@@ -546,6 +548,19 @@ typedef struct aafiAudioClip
 
 
 	struct aafiTimelineItem  *timelineItem; // Corresponding timeline item
+
+	/*
+	 * Independently owned stack of ALL clip-scoped MonoAudioGain layers
+	 * affecting this clip, including nested ones. The data is copied at
+	 * import time and never references the parser context or the AAF
+	 * object tree. Access it with aafi_clip_gain_layer_count() and
+	 * aafi_clip_gain_at(). NULL means no clip gain layer was imported.
+	 *
+	 * The legacy gain/automation fields above are kept for compatibility
+	 * with single-layer projects, but aafi_clip_gain_at() evaluates
+	 * gainLayerSet only and never multiplies the legacy fields again.
+	 */
+	struct aafiClipGainLayerSet *gainLayerSet;
 
 } aafiAudioClip;
 
@@ -1113,6 +1128,44 @@ aafiTransition * aafi_getFadeIn( aafiAudioClip *audioClip );
 aafiTransition * aafi_getFadeOut( aafiAudioClip *audioClip );
 
 int aafi_get_clipIndex( aafiAudioClip *audioClip );
+
+
+/**
+ * Returns the number of clip-scoped gain layers imported on @p clip.
+ *
+ * Every MonoAudioGain OperationGroup enclosing the clip on the
+ * CompositionMob audio track contributes one layer, including nested
+ * groups. A single constant value counts as one layer. Track fader
+ * groups (aafiAudioTrack.gain) are not clip layers.
+ *
+ * A NULL @p clip has zero layers.
+ */
+size_t aafi_clip_gain_layer_count( const aafiAudioClip *clip );
+
+
+/**
+ * Evaluates the composite clip gain at a clip-local time.
+ *
+ * @param clip        The audio clip.
+ * @param offset      Clip-local position, in the owning track edit units.
+ *                    Must satisfy `0 <= offset < clip->len`. The rational
+ *                    is interpreted exactly; fractional positions are kept
+ *                    exact until the final interpolation.
+ * @param multiplier  Receives the linear amplitude multiplier (product of
+ *                    every gain layer projected at @p offset). Not touched
+ *                    when an error is returned.
+ *
+ * @return 0 on success. A clip without any gain layer writes 1.0 and
+ *         returns 0. A non-zero return means bad arguments, an offset
+ *         out of range, an uninterpretable/illegal imported gain layer or
+ *         a result outside the representable range; @p multiplier is then
+ *         left unchanged.
+ *
+ * Evaluation is stateless: calls may happen in any order and may repeat
+ * the same position. The track fader (aafiAudioTrack.gain/automation) is
+ * deliberately not multiplied into the result.
+ */
+int aafi_clip_gain_at( const aafiAudioClip *clip, aafRational_t offset, double *multiplier );
 
 
 aafPosition_t aafi_convertUnit( aafPosition_t value, aafRational_t *valueEditRate, aafRational_t *destEditRate );

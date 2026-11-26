@@ -67,6 +67,8 @@
 #include <libaaf/utils.h>
 #include <libaaf/log.h>
 
+#include "clip_gain_layers.h"
+
 
 
 #define debug( ... ) \
@@ -857,6 +859,398 @@ static int parse_Filler( AAF_Iface *aafi, aafObject *Filler, td *__ptd )
 
 
 
+/* ****************************************************************************
+ *        Multi-layer clip gain import (nested MonoAudioGain stacks)
+ * ****************************************************************************
+ *
+ * The legacy context fields keep a single gain/automation per clip. Here we
+ * walk the actual AAF object ancestry of the leaf SourceClip and publish
+ * one independently owned layer per clip-scoped MonoAudioGain
+ * OperationGroup. For every layer we also store the exact offset from the
+ * group start to the clip start; Sequence Filler and preceding siblings
+ * are summed while walking the tree. Track fader groups (the group whose
+ * first non-OperationGroup ancestor is the TimelineMobSlot) are excluded
+ * and stay on aafiAudioTrack.gain/automation.
+ */
+
+typedef struct glImportFrame {
+	aafObject *og;
+	int64_t    clip_offset;
+} glImportFrame;
+
+
+static int gl_obj_is( aafObject *obj, const aafUID_t *id )
+{
+	return ( obj != NULL && obj->Class != NULL && aafUIDCmp( obj->Class->ID, id ) );
+}
+
+
+/*
+ * Tells whether a MonoAudioGain OperationGroup is the track fader:
+ * mirroring the parser scope rule, skip nested OperationGroup parents and
+ * check whether the first other ancestor is the TimelineMobSlot.
+ */
+static int gl_og_is_track_fader( aafObject *og )
+{
+	aafObject *ancestor = ( og != NULL ) ? og->Parent : NULL;
+
+	while ( ancestor != NULL && gl_obj_is( ancestor, &AAFClassID_OperationGroup ) ) {
+		ancestor = ancestor->Parent;
+	}
+
+	return gl_obj_is( ancestor, &AAFClassID_TimelineMobSlot );
+}
+
+
+void aafi_clip_gain_layers_import( AAF_Iface *aafi,
+                                   aafiAudioClip *clip,
+                                   aafObject *source_clip_obj )
+{
+	if ( !aafi || !clip || !source_clip_obj || !aafi->aafd ) {
+		return;
+	}
+
+	glImportFrame *frames = NULL;
+	unsigned int    frame_count = 0;
+	unsigned int    frame_cap   = 0;
+	int             geometry_invalid = 0;
+
+	/*
+	 * Exact running offset (track edit units) from the current ancestor
+	 * object's start down to the clip start.
+	 */
+	__int128 cursor = 0;
+
+	aafObject *obj = source_clip_obj;
+	int depth_guard = 0;
+
+	while ( obj != NULL && depth_guard++ < 16384 ) {
+
+		aafObject *parent = obj->Parent;
+
+		if ( !parent ) {
+			break;
+		}
+
+		if ( gl_obj_is( parent, &AAFClassID_Sequence ) ) {
+			/*
+			 * obj is one Component of parent's Sequence. Sum the
+			 * lengths of every Component preceding it in vector
+			 * order: Filler and sibling clips all consume group
+			 * time.
+			 */
+			aafObject *components = aaf_get_propertyValue(
+				parent, PID_Sequence_Components,
+				&AAFTypeID_ComponentStrongReferenceVector );
+
+			int       found_child = 0;
+			aafObject *component = NULL;
+
+			while ( _aaf_foreach_ObjectInSet( &component, components, NULL ) ) {
+
+				if ( component == obj ) {
+					found_child = 1;
+					break;
+				}
+
+				int64_t *length = aaf_get_propertyValue(
+					component, PID_Component_Length,
+					&AAFTypeID_LengthType );
+
+				if ( !length || *length < 0 ) {
+					geometry_invalid = 1;
+				}
+				else {
+					cursor += (__int128)*length;
+
+					if ( cursor < 0 || cursor > (__int128)INT64_MAX ) {
+						geometry_invalid = 1;
+					}
+				}
+			}
+
+			if ( !found_child ) {
+				geometry_invalid = 1;
+			}
+		}
+		/*
+		 * An OperationGroup parent contributes no extra offset: its
+		 * single supported InputSegment is anchored at group time 0.
+		 */
+
+		if ( gl_obj_is( parent, &AAFClassID_OperationGroup ) &&
+		     !gl_og_is_track_fader( parent ) )
+		{
+			aafWeakRef_t *op_ref = aaf_get_propertyValue(
+				parent, PID_OperationGroup_Operation,
+				&AAFTypeID_OperationDefinitionWeakReference );
+
+			aafUID_t *op_id = ( op_ref != NULL )
+				? aaf_get_OperationIdentificationByWeakRef( aafi->aafd, op_ref )
+				: NULL;
+
+			if ( op_id != NULL &&
+			     aafUIDCmp( op_id, &AAFOperationDef_MonoAudioGain ) )
+			{
+				if ( frame_count == frame_cap ) {
+					unsigned int new_cap = frame_cap ? frame_cap * 2 : 4;
+					glImportFrame *grown = realloc(
+						frames, new_cap * sizeof(glImportFrame) );
+
+					if ( !grown ) {
+						free( frames );
+						return;
+					}
+
+					frames = grown;
+					frame_cap = new_cap;
+				}
+
+				frames[frame_count].og = parent;
+				frames[frame_count].clip_offset =
+					( geometry_invalid || cursor > (__int128)INT64_MAX )
+					? 0 : (int64_t)cursor;
+				frame_count++;
+			}
+		}
+
+		obj = parent;
+
+		if ( gl_obj_is( obj, &AAFClassID_TimelineMobSlot ) ||
+		     gl_obj_is( obj, &AAFClassID_ContentStorage ) ) {
+			break;
+		}
+	}
+
+	if ( frame_count == 0 ) {
+		free( frames );
+		return;
+	}
+
+	struct aafiClipGainLayerSet *set = calloc( 1, sizeof(*set) );
+
+	if ( !set ) {
+		free( frames );
+		return;
+	}
+
+	set->layers = calloc( frame_count, sizeof(aafiGainLayer) );
+
+	if ( !set->layers ) {
+		free( set );
+		free( frames );
+		return;
+	}
+
+	set->count = frame_count;
+	set->geometry_invalid = geometry_invalid;
+	clip->gainLayerSet = set;
+
+	for ( unsigned int fi = 0; fi < frame_count; fi++ ) {
+
+		aafObject     *og    = frames[fi].og;
+		aafiGainLayer *layer = &set->layers[fi];
+
+		layer->clip_offset   = frames[fi].clip_offset;
+		layer->group_length  = 0;
+		layer->kind          = 0;
+		layer->interpolation = 0;
+		layer->point_count   = 0;
+		layer->points        = NULL;
+		layer->import_valid  = 0;
+
+		int64_t *group_length = aaf_get_propertyValue(
+			og, PID_Component_Length, &AAFTypeID_LengthType );
+
+		if ( !group_length || *group_length <= 0 ) {
+			/* A zero/negative length layer can never be evaluated. */
+			continue;
+		}
+
+		layer->group_length = *group_length;
+
+		/*
+		 * Locate the unique Amplitude Parameter among the group's
+		 * parameters.
+		 */
+		aafObject *parameters = aaf_get_propertyValue(
+			og, PID_OperationGroup_Parameters,
+			&AAFTypeID_ParameterStrongReferenceVector );
+
+		aafObject *parameter = NULL;
+		aafObject *amplitude = NULL;
+		unsigned int amplitude_count = 0;
+
+		while ( _aaf_foreach_ObjectInSet( &parameter, parameters, NULL ) ) {
+
+			aafUID_t *param_def = aaf_get_propertyValue(
+				parameter, PID_Parameter_Definition, &AAFTypeID_AUID );
+
+			if ( param_def &&
+			     aafUIDCmp( param_def, &AAFParameterDef_Amplitude ) ) {
+				amplitude = parameter;
+				amplitude_count++;
+			}
+		}
+
+		if ( amplitude_count != 1 || !amplitude ) {
+			continue;
+		}
+
+		if ( gl_obj_is( amplitude, &AAFClassID_ConstantValue ) ) {
+
+			aafIndirect_t *indirect = aaf_get_propertyValue(
+				amplitude, PID_ConstantValue_Value, &AAFTypeID_Indirect );
+
+			aafRational_t *value = ( indirect != NULL )
+				? aaf_get_indirectValue( aafi->aafd, indirect, &AAFTypeID_Rational )
+				: NULL;
+
+			if ( !value || value->denominator <= 0 || value->numerator < 0 ) {
+				continue;
+			}
+
+			layer->kind = AAFI_GAIN_LAYER_KIND_CONSTANT;
+			layer->constant_value = *value;
+			layer->import_valid = 1;
+		}
+		else if ( gl_obj_is( amplitude, &AAFClassID_VaryingValue ) ) {
+
+			aafWeakRef_t *interp_ref = aaf_get_propertyValue(
+				amplitude, PID_VaryingValue_Interpolation,
+				&AAFTypeID_InterpolationDefinitionWeakReference );
+
+			aafUID_t *interp_id = ( interp_ref != NULL )
+				? aaf_get_InterpolationIdentificationByWeakRef( aafi->aafd, interp_ref )
+				: NULL;
+
+			uint32_t interpolation = 0;
+
+			if ( interp_id &&
+			     aafUIDCmp( interp_id, &AAFInterpolationDef_Linear ) ) {
+				interpolation = AAFI_INTERPOL_LINEAR;
+			}
+			else if ( interp_id &&
+			          aafUIDCmp( interp_id, &AAFInterpolationDef_Constant ) ) {
+				interpolation = AAFI_INTERPOL_CONSTANT;
+			}
+			else {
+				/* Unsupported/missing interpolation: not a normal curve. */
+				continue;
+			}
+
+			aafObject *point_list = aaf_get_propertyValue(
+				amplitude, PID_VaryingValue_PointList,
+				&AAFTypeID_ControlPointStrongReferenceVector );
+
+			aafiGainLayerPoint *points = NULL;
+			unsigned int point_count = 0;
+			unsigned int point_cap   = 0;
+			int curve_bad = 0;
+
+			aafObject *control_point = NULL;
+
+			while ( _aaf_foreach_ObjectInSet( &control_point, point_list, NULL ) ) {
+
+				aafRational_t *time = aaf_get_propertyValue(
+					control_point, PID_ControlPoint_Time,
+					&AAFTypeID_Rational );
+
+				aafIndirect_t *value_indirect = aaf_get_propertyValue(
+					control_point, PID_ControlPoint_Value,
+					&AAFTypeID_Indirect );
+
+				aafRational_t *value = ( value_indirect != NULL )
+					? aaf_get_indirectValue( aafi->aafd, value_indirect, &AAFTypeID_Rational )
+					: NULL;
+
+				if ( !time || !value ) {
+					curve_bad = 1;
+					break;
+				}
+
+				if ( point_count == point_cap ) {
+					unsigned int new_cap = point_cap ? point_cap * 2 : 4;
+					aafiGainLayerPoint *grown = realloc(
+						points, new_cap * sizeof(aafiGainLayerPoint) );
+
+					if ( !grown ) {
+						curve_bad = 1;
+						break;
+					}
+
+					points = grown;
+					point_cap = new_cap;
+				}
+
+				points[point_count].time  = *time;
+				points[point_count].value = *value;
+				point_count++;
+			}
+
+			if ( curve_bad || point_count == 0 ) {
+				free( points );
+				continue;
+			}
+
+			/*
+			 * Exact validation: legal denominators, time in [0,1],
+			 * non-negative values and strictly increasing times in
+			 * stored vector order. Equal rationals written with
+			 * different numerator/denominator compare equal here.
+			 */
+			for ( unsigned int k = 0; k < point_count; k++ ) {
+
+				const aafRational_t *t = &points[k].time;
+				const aafRational_t *v = &points[k].value;
+
+				if ( t->denominator <= 0 ||
+				     t->numerator < 0 ||
+				     (__int128)t->numerator > (__int128)t->denominator ) {
+					curve_bad = 1;
+					break;
+				}
+
+				if ( v->denominator <= 0 || v->numerator < 0 ) {
+					curve_bad = 1;
+					break;
+				}
+
+				if ( k > 0 ) {
+					const aafRational_t *pt = &points[k - 1].time;
+
+					__int128 prev_cmp =
+						(__int128)pt->numerator * t->denominator;
+					__int128 cur_cmp =
+						(__int128)t->numerator * pt->denominator;
+
+					if ( prev_cmp >= cur_cmp ) {
+						/* duplicate (even differently written) or reversed */
+						curve_bad = 1;
+						break;
+					}
+				}
+			}
+
+			if ( curve_bad ) {
+				free( points );
+				continue;
+			}
+
+			layer->kind          = AAFI_GAIN_LAYER_KIND_VARYING;
+			layer->interpolation = interpolation;
+			layer->points        = points;
+			layer->point_count   = point_count;
+			layer->import_valid  = 1;
+		}
+		/* Any other parameter class leaves the layer invalid. */
+	}
+
+	free( frames );
+}
+
+
+
 static int parse_SourceClip( AAF_Iface *aafi, aafObject *SourceClip, td *__ptd )
 {
 	struct trace_dump __td;
@@ -1113,6 +1507,12 @@ static int parse_SourceClip( AAF_Iface *aafi, aafObject *SourceClip, td *__ptd )
 					}
 
 					aafi->ctx.current_clip = audioClip;
+
+					/*
+					 * Independently import the complete stack of
+					 * nested clip-scoped MonoAudioGain layers.
+					 */
+					aafi_clip_gain_layers_import( aafi, audioClip, SourceClip );
 				}
 
 
@@ -1208,7 +1608,10 @@ static int parse_SourceClip( AAF_Iface *aafi, aafObject *SourceClip, td *__ptd )
 				parse_MobSlot( aafi, targetMobSlot, &__td );
 			}
 			else {
-				TRACE_OBJ_ERROR( aafi, SourceClip, &__td, "Targeted Mob no supported: %s", aaft_ClassIDToText( aafi->aafd, targetMob->Class->ID ) );
+				TRACE_OBJ_ERROR( aafi, SourceClip, &__td, "Targeted Mob no supported: %s",
+				                 ( targetMob && targetMob->Class )
+				                   ? aaft_ClassIDToText( aafi->aafd, targetMob->Class->ID )
+				                   : "[MISSING TARGET MOB]" );
 				return -1;
 			}
 

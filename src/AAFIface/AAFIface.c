@@ -51,6 +51,8 @@
 #include <libaaf/AAFIface.h>
 #include <libaaf/AAFIParser.h>
 
+#include "clip_gain_layers.h"
+
 
 #define debug( ... ) \
 	AAF_LOG( aafi->log, aafi, LOG_SRC_ID_AAF_IFACE, VERB_DEBUG, __VA_ARGS__ )
@@ -376,6 +378,287 @@ int aafi_get_clipIndex( aafiAudioClip *audioClip )
 
 
 
+void aafi_clip_gain_layer_set_free( struct aafiClipGainLayerSet *set )
+{
+	if ( !set ) {
+		return;
+	}
+
+	for ( unsigned int i = 0; i < set->count; i++ ) {
+		free( set->layers[i].points );
+		set->layers[i].points = NULL;
+	}
+
+	free( set->layers );
+	free( set );
+}
+
+
+
+size_t aafi_clip_gain_layer_count( const aafiAudioClip *clip )
+{
+	if ( !clip || !clip->gainLayerSet ) {
+		return 0;
+	}
+
+	return (size_t)clip->gainLayerSet->count;
+}
+
+
+
+/*
+ * Exact rational helpers. All time/offset comparisons and group
+ * coordinate differences go through signed 128 bit integers, so a very
+ * small fraction added to a large position is never rounded away before
+ * the interpolation factor is converted to double.
+ */
+
+typedef __int128  gl_i128;
+typedef unsigned __int128 gl_u128;
+
+
+static double gl_i128_to_double( gl_i128 value )
+{
+	int negative = ( value < 0 );
+	gl_u128 magnitude;
+
+	if ( negative ) {
+		magnitude = (gl_u128)( -( value + 1 ) ) + 1u;
+	} else {
+		magnitude = (gl_u128)value;
+	}
+
+	double high = (double)(uint64_t)( magnitude >> 64 );
+	double low  = (double)(uint64_t)( magnitude & (gl_u128)0xFFFFFFFFFFFFFFFFu );
+
+	double result = high * 18446744073709551616.0 + low;
+
+	return negative ? -result : result;
+}
+
+
+static double gl_rational_to_double( aafRational_t r )
+{
+	if ( r.denominator == 0 ) {
+		/* Import validation rejects this; keep the guard for safety. */
+		return ( r.numerator < 0 ) ? -HUGE_VAL : HUGE_VAL;
+	}
+
+	return (double)r.numerator / (double)r.denominator;
+}
+
+
+/*
+ * Evaluates one validated layer at the exact normalized group position
+ * Tn/Td (Td > 0). Returns 0 on success and writes *out; non-zero if the
+ * result is not representable.
+ */
+static int gl_layer_value_at( const aafiGainLayer *layer,
+                              gl_i128 Tn, gl_i128 Td,
+                              double *out )
+{
+	if ( layer->kind == AAFI_GAIN_LAYER_KIND_CONSTANT ) {
+		double v = gl_rational_to_double( layer->constant_value );
+		if ( !isfinite( v ) || v < 0.0 ) {
+			return -1;
+		}
+		*out = v;
+		return 0;
+	}
+
+	const unsigned int n = layer->point_count;
+	const aafiGainLayerPoint *pts = layer->points;
+
+	if ( n == 0 || !pts ) {
+		return -1;
+	}
+
+	/*
+	 * Find the first control point j with T <= time[j]. Times were
+	 * validated as strictly increasing exact rationals at import.
+	 */
+	unsigned int j = 0;
+
+	for ( ; j < n; j++ ) {
+		gl_i128 left  = Tn * (gl_i128)pts[j].time.denominator;
+		gl_i128 right = (gl_i128)pts[j].time.numerator * Td;
+
+		if ( left <= right ) {
+			break;
+		}
+	}
+
+	double value = 0.0;
+
+	if ( j == 0 ) {
+		/* T at or before the first point: extend the first value. */
+		value = gl_rational_to_double( pts[0].value );
+	}
+	else if ( j == n ) {
+		/* T strictly beyond the last point: extend the last value. */
+		value = gl_rational_to_double( pts[n - 1].value );
+	}
+	else {
+		const aafRational_t t0 = pts[j - 1].time;
+		const aafRational_t t1 = pts[j].time;
+
+		gl_i128 eq_left  = Tn * (gl_i128)t1.denominator;
+		gl_i128 eq_right = (gl_i128)t1.numerator * Td;
+
+		int at_right_point = ( eq_left == eq_right );
+
+		if ( at_right_point ) {
+			/* Exact breakpoint uses the right point. */
+			value = gl_rational_to_double( pts[j].value );
+		}
+		else if ( layer->interpolation == AAFI_INTERPOL_CONSTANT ) {
+			/* Constant interpolation keeps the left value. */
+			value = gl_rational_to_double( pts[j - 1].value );
+		}
+		else {
+			/*
+			 * Linear interpolation. The factor is derived as an
+			 * exact rational and only the final quotient is
+			 * converted to double:
+			 *
+			 *   f = (T - t0) / (t1 - t0)
+			 *     = A * t1.den / (Td * C)
+			 *
+			 * with A = Tn*t0.den - t0.num*Td
+			 * and  C = t1.num*t0.den - t0.num*t1.den (> 0).
+			 */
+			gl_i128 A = Tn * (gl_i128)t0.denominator
+			          - (gl_i128)t0.numerator * Td;
+
+			gl_i128 C = (gl_i128)t1.numerator * (gl_i128)t0.denominator
+			          - (gl_i128)t0.numerator * (gl_i128)t1.denominator;
+
+			if ( C <= 0 ) {
+				return -1;
+			}
+
+			double f = gl_i128_to_double( A ) * (double)t1.denominator
+			         / ( gl_i128_to_double( Td ) * gl_i128_to_double( C ) );
+
+			if ( !isfinite( f ) ) {
+				return -1;
+			}
+
+			double v0 = gl_rational_to_double( pts[j - 1].value );
+			double v1 = gl_rational_to_double( pts[j].value );
+
+			if ( !isfinite( v0 ) || !isfinite( v1 ) ) {
+				return -1;
+			}
+
+			value = v0 + f * ( v1 - v0 );
+		}
+	}
+
+	if ( !isfinite( value ) || value < 0.0 ) {
+		return -1;
+	}
+
+	*out = value;
+	return 0;
+}
+
+
+
+int aafi_clip_gain_at( const aafiAudioClip *clip,
+                       aafRational_t offset,
+                       double *multiplier )
+{
+	if ( !clip || !multiplier ) {
+		return 1;
+	}
+
+	/*
+	 * Canonicalize the offset denominator using 128 bit values, so a
+	 * negative INT32_MIN denominator can be flipped without overflow.
+	 */
+	gl_i128 onum = (gl_i128)offset.numerator;
+	gl_i128 oden = (gl_i128)offset.denominator;
+
+	if ( oden == 0 ) {
+		return 2;
+	}
+
+	if ( oden < 0 ) {
+		onum = -onum;
+		oden = -oden;
+	}
+
+	/* Range check: 0 <= offset < clip->len, exact. */
+	if ( onum < 0 ) {
+		return 3;
+	}
+
+	gl_i128 len_bound = (gl_i128)clip->len * oden;
+
+	if ( onum >= len_bound ) {
+		return 4;
+	}
+
+	const struct aafiClipGainLayerSet *set = clip->gainLayerSet;
+
+	/*
+	 * A clip without any gain layer is unity gain. Note: a layer set
+	 * exists here only if at least one MonoAudioGain group was found.
+	 */
+	if ( !set || set->count == 0 ) {
+		*multiplier = 1.0;
+		return 0;
+	}
+
+	if ( set->geometry_invalid ) {
+		return 5;
+	}
+
+	for ( unsigned int i = 0; i < set->count; i++ ) {
+		if ( !set->layers[i].import_valid ) {
+			return 6;
+		}
+	}
+
+	double result = 1.0;
+
+	for ( unsigned int i = 0; i < set->count; i++ ) {
+
+		const aafiGainLayer *layer = &set->layers[i];
+
+		/*
+		 * Project the same clip-local offset into this layer's group
+		 * coordinate, then normalize by the group length:
+		 *
+		 *   T = (clip_offset + offset) / group_length
+		 */
+		gl_i128 Tn = (gl_i128)layer->clip_offset * oden + onum;
+		gl_i128 Td = oden * (gl_i128)layer->group_length;
+
+		if ( Td <= 0 ) {
+			return 7;
+		}
+
+		double layer_value = 1.0;
+
+		if ( gl_layer_value_at( layer, Tn, Td, &layer_value ) != 0 ) {
+			return 8;
+		}
+
+		result *= layer_value;
+
+		if ( !isfinite( result ) ) {
+			return 9;
+		}
+	}
+
+	*multiplier = result;
+	return 0;
+}
+
+
+
 aafPosition_t aafi_convertUnit( aafPosition_t value, aafRational_t *valueEditRate, aafRational_t *destEditRate ) {
 
 	if ( !valueEditRate || !destEditRate ) {
@@ -545,6 +828,11 @@ int aafi_removeTimelineItem( AAF_Iface *aafi, aafiTimelineItem *timelineItem ) {
 
 int aafi_getAudioEssencePointerChannelCount( aafiAudioEssencePointer *essencePointerList )
 {
+	/* A clip whose essence reference could not be resolved has no list. */
+	if ( !essencePointerList ) {
+		return 0;
+	}
+
 	/*
 	 * If essencePointerList holds a single multichannel essence file and if
 	 * essencePointer->essenceChannel is set, then clip is mono and audio comes
@@ -1148,6 +1436,9 @@ void aafi_freeAudioClip( aafiAudioClip *audioClip )
 	aafi_freeAudioGain( audioClip->gain );
 	aafi_freeAudioGain( audioClip->automation );
 	aafi_freeMetadata( &(audioClip->metadata) );
+
+	aafi_clip_gain_layer_set_free( audioClip->gainLayerSet );
+	audioClip->gainLayerSet = NULL;
 
 	free( audioClip );
 }
