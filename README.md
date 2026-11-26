@@ -55,6 +55,74 @@ void Update(float a_Dt) // a_Dt is the elapsed time since last frame in seconds
 }
 ```
 
+### Mesh-local bone bindings
+
+By default weights and `OffsetMatrix` live on the bones (the legacy layout):
+two meshes sharing that skeleton then share one vertex numbering and one
+inverse bind pose.
+
+When a body and its equipment share a skeleton but each mesh numbers its
+vertices from zero and has its own bind pose, use mesh-local bindings instead.
+Each `sAnimatedMesh` carries an array of `sMeshBoneBinding` and enables it with
+`UseMeshBindings`:
+
+```cpp
+struct sMeshBoneBinding
+{
+    unsigned int             BoneIndex;    // index into sSkeleton::Bones
+    glm::mat4x4              OffsetMatrix; // inverse bind matrix for this mesh
+    std::vector<sWeight>     Weights;      // VertexIDs are local to this mesh
+};
+```
+
+```cpp
+SA::sAnimatedMesh Body;
+Body.UseMeshBindings = true;
+Body.pVertices = ...;             // NumVertices entries
+Body.pNormals = ...;
+
+SA::sMeshBoneBinding Binding;
+Binding.BoneIndex = 0;            // "root"
+Binding.OffsetMatrix = BindMatrix;
+Binding.Weights.push_back(SA::sWeight{ 0, 0.75f }); // local vertex 0
+Binding.Weights.push_back(SA::sWeight{ 1, 0.25f });
+Body.MeshBindings.push_back(Binding);
+g_AnimatedModel.AddMesh(Body);
+```
+
+Semantics when `UseMeshBindings` is true:
+
+* Only this mesh's `MeshBindings` are used; vertex IDs are interpreted within
+  the mesh. Bones' own weights/`OffsetMatrix` are ignored for it.
+* An empty binding table marks the mesh as static: positions and unit normals
+  keep their original values.
+* For each binding the skinning matrix is
+  `globalInverse * bone.GlobalTransformation * binding.OffsetMatrix`, where
+  `GlobalTransformation` is the hierarchy pose derived only from node local
+  transforms (it never includes an inverse bind matrix of its own).
+* Positions and normals are accumulated with the weights and the resulting
+  normal is normalized per vertex. Vertices with no weights keep their values.
+
+The legacy single-mesh path keeps working unchanged: leave `UseMeshBindings`
+false and put weights/`OffsetMatrix` on the bones. `FinalTransformation` keeps
+its original meaning there (`globalInverse * hierarchyPose * bone.OffsetMatrix`).
+
+When serializing, new data is written with an explicit format version. Mesh
+bindings and the empty-table/static state are stored per mesh and loaded into
+freshly owned storage. Legacy single-mesh files still load through the same
+`DataToModel` entry point; legacy files with more than one mesh are rejected
+because their weight ownership cannot be determined.
+
+There is a windowless, buildable example in
+`examples/mesh_binding_example.cpp`:
+
+```
+c++ -std=c++11 -I. -Ivendor/glm \
+    examples/mesh_binding_example.cpp SkeletalAnimation/*.cpp \
+    -o .task-build/mesh_binding_example
+.task-build/mesh_binding_example
+```
+
 ### Rendering
 Here is some (very crude) example code to demonstrate how to render the animated model using OpenGL:
 ```

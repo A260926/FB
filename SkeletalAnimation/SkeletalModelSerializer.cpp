@@ -4,6 +4,14 @@
 
 namespace SA
 {
+	// Legacy writers emitted the fixed header (1, 2, 3) followed by meshes that
+	// carried no binding information. New writers emit this explicit version as
+	// the first word; anything else is treated as the legacy format.
+	static const int FORMAT_VERSION = 2;
+	static const int LEGACY_HEADER_A = 1;
+	static const int LEGACY_HEADER_B = 2;
+	static const int LEGACY_HEADER_C = 3;
+
 	// Helper function used for reading and writing
 	template <typename _Ty>
 	static void WriteBinary(unsigned int& a_InOutPos, char* a_pDestination, const _Ty& a_Source)
@@ -65,9 +73,14 @@ namespace SA
 		ReadBinary(a_InOutPos, StringLength, a_pSource);
 		if (StringLength > 0)
 		{
-			a_Destination.resize(StringLength + 1);
-			memcpy((void*)a_Destination.data(), a_pSource + a_InOutPos, StringLength);
+			// Build a string of exactly the stored length; leaving out the
+			// terminator prevents trailing characters from leaking into names.
+			a_Destination.assign(a_pSource + a_InOutPos, StringLength);
 			a_InOutPos += StringLength;
+		}
+		else
+		{
+			a_Destination.clear();
 		}
 	}
 
@@ -105,6 +118,70 @@ namespace SA
 
 
 
+
+	static void WriteMeshBindings(unsigned int& a_InOutPos, char* a_pDestination, const sAnimatedMesh& a_Mesh)
+	{
+		// Write the flag and the table even when the table is empty so the
+		// static-mesh state survives a round trip. The flag is stored as an
+		// unsigned int so the byte layout does not depend on sizeof(bool).
+		unsigned int UseMeshBindings = a_Mesh.UseMeshBindings ? 1u : 0u;
+		WriteBinary(a_InOutPos, a_pDestination, UseMeshBindings);
+
+		unsigned int NumBindings = a_Mesh.MeshBindings.size();
+		WriteBinary(a_InOutPos, a_pDestination, NumBindings);
+		for (unsigned int i = 0; i < NumBindings; ++i)
+		{
+			const sMeshBoneBinding& Binding = a_Mesh.MeshBindings[i];
+			WriteBinary(a_InOutPos, a_pDestination, Binding.BoneIndex);
+			WriteBinary(a_InOutPos, a_pDestination, Binding.OffsetMatrix);
+
+			unsigned int NumWeights = Binding.Weights.size();
+			WriteBinary(a_InOutPos, a_pDestination, NumWeights);
+			for (unsigned int w = 0; w < NumWeights; ++w)
+			{
+				WriteBinary(a_InOutPos, a_pDestination, Binding.Weights[w].VertexID);
+				WriteBinary(a_InOutPos, a_pDestination, Binding.Weights[w].Weight);
+			}
+		}
+	}
+
+
+
+
+
+
+	static void ReadMeshBindings(unsigned int& a_InOutPos, sAnimatedMesh& a_Mesh, const char* a_pSource)
+	{
+		unsigned int UseMeshBindings = 0;
+		ReadBinary(a_InOutPos, UseMeshBindings, a_pSource);
+		a_Mesh.UseMeshBindings = (UseMeshBindings != 0);
+
+		unsigned int NumBindings = 0;
+		ReadBinary(a_InOutPos, NumBindings, a_pSource);
+		a_Mesh.MeshBindings.clear();
+		a_Mesh.MeshBindings.resize(NumBindings);
+		for (unsigned int i = 0; i < NumBindings; ++i)
+		{
+			sMeshBoneBinding& Binding = a_Mesh.MeshBindings[i];
+			ReadBinary(a_InOutPos, Binding.BoneIndex, a_pSource);
+			ReadBinary(a_InOutPos, Binding.OffsetMatrix, a_pSource);
+
+			unsigned int NumWeights = 0;
+			ReadBinary(a_InOutPos, NumWeights, a_pSource);
+			// Copy every weight out of the input bytes rather than aliasing them.
+			Binding.Weights.resize(NumWeights);
+			for (unsigned int w = 0; w < NumWeights; ++w)
+			{
+				ReadBinary(a_InOutPos, Binding.Weights[w].VertexID, a_pSource);
+				ReadBinary(a_InOutPos, Binding.Weights[w].Weight, a_pSource);
+			}
+		}
+	}
+
+
+
+
+
 	extern std::string ModelToData(const SkeletalModel& a_Model)
 	{
 		std::string OutData;
@@ -131,10 +208,7 @@ namespace SA
 	{
 		unsigned int DataPos = 0;
 
-		int a = 1, b = 2, c = 3;
-		WriteBinary(DataPos, a_pOutData, a);
-		WriteBinary(DataPos, a_pOutData, b);
-		WriteBinary(DataPos, a_pOutData, c);
+		WriteBinary(DataPos, a_pOutData, FORMAT_VERSION);
 
 		// Write meshes
 		unsigned int NumMeshes = a_Model.GetNumMeshes();
@@ -151,6 +225,9 @@ namespace SA
 			// Write indices
 			WriteBinary(DataPos, a_pOutData, Mesh.NumIndices);
 			WriteBinary(DataPos, a_pOutData, Mesh.pIndices, Mesh.NumIndices);
+
+			// Write mesh-local bone bindings
+			WriteMeshBindings(DataPos, a_pOutData, Mesh);
 		}
 
 		// Write skeleton
@@ -211,13 +288,37 @@ namespace SA
 	{
 		unsigned int DataPos = 0;
 
-		int a = 0, b = 0, c = 0;
-		ReadBinary(DataPos, a, a_pData);
-		ReadBinary(DataPos, b, a_pData);
-		ReadBinary(DataPos, c, a_pData);
+		int Version = 0;
+		ReadBinary(DataPos, Version, a_pData);
+
+		bool IsLegacy = (Version == LEGACY_HEADER_A);
+		if (IsLegacy)
+		{
+			// Old writers stored the constant header (1, 2, 3). Consume the
+			// rest of it so the stream stays aligned.
+			int LegacyB = 0, LegacyC = 0;
+			ReadBinary(DataPos, LegacyB, a_pData);
+			ReadBinary(DataPos, LegacyC, a_pData);
+			if (LegacyB != LEGACY_HEADER_B || LegacyC != LEGACY_HEADER_C)
+				return false;
+		}
+		else if (Version != FORMAT_VERSION)
+		{
+			return false;
+		}
 
 		unsigned int NumMeshes = 0;
 		ReadBinary(DataPos, NumMeshes, a_pData);
+
+		// The legacy format kept weights on bones, with vertex IDs global to the
+		// model. With several meshes there is no way to tell which mesh a
+		// weight belongs to, so refuse instead of guessing.
+		if (IsLegacy && NumMeshes > 1)
+			return false;
+
+		// Replace whatever the model held before; never merge into stale state.
+		a_OutModel.Clear();
+
 		for (unsigned int i = 0; i < NumMeshes; ++i)
 		{
 			sAnimatedMesh Mesh;
@@ -241,6 +342,11 @@ namespace SA
 			// Read indices
 			ReadBinary(DataPos, Mesh.NumIndices, a_pData);
 			ReadBinary(DataPos, Mesh.pIndices, a_pData, Mesh.NumIndices);
+
+			// Read mesh-local bone bindings (new format only). Legacy meshes
+			// keep the defaults: no bindings, UseMeshBindings == false.
+			if (!IsLegacy)
+				ReadMeshBindings(DataPos, Mesh, a_pData);
 
 			a_OutModel.AddMesh(Mesh);
 		}
