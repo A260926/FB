@@ -1,11 +1,11 @@
 #include <iostream>
-#include <inttypes.h> // PRIx64 
+#include <inttypes.h> // PRIx64
 #include "../elf_parser.hpp"
 
 void print_segments(std::vector<elf_parser::segment_t> &segments);
 
 int main(int argc, char* argv[]) {
-    char usage_banner[] = "usage: ./sections [<executable>]\n";
+    char usage_banner[] = "usage: ./segments [<executable>]\n";
     if(argc < 2) {
         std::cerr << usage_banner;
         return -1;
@@ -24,16 +24,18 @@ void print_segments(std::vector<elf_parser::segment_t> &segments) {
     printf("  %-16s  %-16s   %-16s  %6s %5s\n", " ", "FileSiz", "MemSiz", "Flags", "Align");
 
     for (auto &segment : segments) {
+        // All addresses/sizes are uint64_t; p_flags is decoded from the
+        // class-specific slot (offset 4 on ELF64, offset 24 on ELF32).
         printf("   %-16s 0x%016" PRIx64 " 0x%016" PRIx64 " 0x%016" PRIx64 "\n",
-                segment.segment_type.c_str(), 
+                segment.segment_type.c_str(),
                 segment.segment_offset,
-                segment.segment_virtaddr, 
+                segment.segment_virtaddr,
                 segment.segment_physaddr);
-        
-        printf("   %-16s 0x%016" PRIx64 " 0x%016" PRIx64 " %-5s %-5" PRIx64 "\n", "",
-                segment.segment_filesize, 
+
+        printf("   %-16s 0x%016" PRIx64 " 0x%016" PRIx64 " %-5s 0x%-16" PRIx64 "\n", "",
+                segment.segment_filesize,
                 segment.segment_memsize,
-                segment.segment_flags.c_str(), 
+                segment.segment_flags.c_str(),
                 segment.segment_align);
     }
 }

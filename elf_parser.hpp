@@ -27,46 +27,58 @@
 #include <string>
 #include <cstdlib>
 #include <cstdio>
+#include <cstdint>
 #include <fcntl.h>    /* O_RDONLY */
 #include <sys/stat.h> /* For the size of the file. , fstat */
 #include <sys/mman.h> /* mmap, MAP_PRIVATE */
 #include <vector>
-#include <elf.h>      // Elf64_Shdr
-#include <fcntl.h>
+#include <elf.h>      /* Elf32/Elf64 format declarations */
 
 namespace elf_parser {
 
 typedef struct {
-    int section_index = 0; 
-    std::intptr_t section_offset, section_addr;
+    uint32_t section_index = 0;
+    uint64_t section_offset = 0, section_addr = 0;
     std::string section_name;
-    std::string section_type; 
-    int section_size, section_ent_size, section_addr_align;
+    std::string section_type;
+    uint64_t section_size = 0, section_ent_size = 0, section_addr_align = 0;
+    // Raw sh_type / sh_link / sh_info / sh_flags, independent of file class.
+    uint32_t section_type_id = 0, section_link = 0, section_info = 0;
+    uint64_t section_flags = 0;
 } section_t;
 
 typedef struct {
     std::string segment_type, segment_flags;
-    long segment_offset, segment_virtaddr, segment_physaddr, segment_filesize, segment_memsize;
-    int segment_align;
+    uint64_t segment_offset = 0, segment_virtaddr = 0, segment_physaddr = 0;
+    uint64_t segment_filesize = 0, segment_memsize = 0;
+    uint64_t segment_align = 0;
 } segment_t;
 
 typedef struct {
     std::string symbol_index;
-    std::intptr_t symbol_value;
-    int symbol_num = 0, symbol_size = 0;
-    std::string symbol_type, symbol_bind, symbol_visibility, symbol_name, symbol_section;      
+    uint64_t symbol_value = 0;
+    uint32_t symbol_num = 0;
+    uint64_t symbol_size = 0;
+    std::string symbol_type, symbol_bind, symbol_visibility, symbol_name, symbol_section;
+    // Physical section index of the symbol table holding this record.
+    uint32_t symbol_table_index = 0;
 } symbol_t;
 
 typedef struct {
-    std::intptr_t relocation_offset, relocation_info, relocation_symbol_value;
+    uint64_t relocation_offset = 0, relocation_info = 0, relocation_symbol_value = 0;
     std::string   relocation_type, relocation_symbol_name, relocation_section_name;
-    std::intptr_t relocation_plt_address;
+    uint64_t relocation_plt_address = 0;
+    uint32_t relocation_type_id = 0;
+    uint32_t relocation_symbol_table_index = 0, relocation_symbol_index = 0;
+    uint32_t relocation_target_section_index = 0;
+    bool relocation_has_addend = false;
+    int64_t relocation_addend = 0;
 } relocation_t;
 
 
 class Elf_parser {
     public:
-        Elf_parser (std::string &program_path): m_program_path{program_path} {   
+        Elf_parser (std::string &program_path): m_program_path{program_path} {
             load_memory_map();
         }
         std::vector<section_t> get_sections();
@@ -74,27 +86,34 @@ class Elf_parser {
         std::vector<symbol_t> get_symbols();
         std::vector<relocation_t> get_relocations();
         uint8_t *get_memory_map();
-        
+
+        // Values recorded in e_ident / e_machine; decoding follows the
+        // file's own ELFCLASS and ELFDATA rather than the host layout.
+        uint8_t elf_class() const { return m_class; }
+        uint8_t data_encoding() const { return m_data; }
+        uint16_t machine() const { return m_machine; }
+
     private:
         void load_memory_map();
 
-        std::string get_section_type(int tt);
+        std::string get_section_type(uint32_t tt);
 
-        std::string get_segment_type(uint32_t &seg_type);
-        std::string get_segment_flags(uint32_t &seg_flags);
+        std::string get_segment_type(uint32_t seg_type);
+        std::string get_segment_flags(uint32_t seg_flags);
 
-        std::string get_symbol_type(uint8_t &sym_type);
-        std::string get_symbol_bind(uint8_t &sym_bind);
-        std::string get_symbol_visibility(uint8_t &sym_vis);
-        std::string get_symbol_index(uint16_t &sym_idx);
+        std::string get_symbol_type(uint8_t sym_type);
+        std::string get_symbol_bind(uint8_t sym_bind);
+        std::string get_symbol_visibility(uint8_t sym_vis);
+        std::string get_symbol_index(uint16_t sym_idx);
 
-        std::string get_relocation_type(uint64_t &rela_type);
-        std::intptr_t get_rel_symbol_value(uint64_t &sym_idx, std::vector<symbol_t> &syms);
-        std::string get_rel_symbol_name(
-            uint64_t &sym_idx, std::vector<symbol_t> &syms);
+        std::string get_relocation_type(uint32_t rela_type);
 
-        std::string m_program_path; 
-        uint8_t *m_mmap_program;
+        std::string m_program_path;
+        uint8_t *m_mmap_program = nullptr;
+        size_t m_file_size = 0;
+        uint8_t m_class = 0;    /* ELFCLASS32 / ELFCLASS64 */
+        uint8_t m_data = 0;     /* ELFDATA2LSB / ELFDATA2MSB */
+        uint16_t m_machine = 0; /* EM_386 / EM_PPC / EM_X86_64 / EM_PPC64 */
 };
 
 }
