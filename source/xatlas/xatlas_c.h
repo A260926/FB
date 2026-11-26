@@ -226,6 +226,8 @@ typedef int (*xatlasPrintFunc)(const char *, ...);
 XATLAS_API xatlasAtlas *xatlasCreate();
 XATLAS_API void xatlasDestroy(xatlasAtlas *atlas);
 XATLAS_API xatlasAddMeshError xatlasAddMesh(xatlasAtlas *atlas, const xatlasMeshDecl *meshDecl, uint32_t meshCountHint);
+XATLAS_API bool xatlasSetMeshChartConstraints(xatlasAtlas *atlas, uint32_t meshIndex, const uint8_t *flags, uint32_t count);
+XATLAS_API bool xatlasComputeChartsConstrained(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions);
 XATLAS_API void xatlasAddMeshJoin(xatlasAtlas *atlas);
 XATLAS_API xatlasAddMeshError xatlasAddUvMesh(xatlasAtlas *atlas, const xatlasUvMeshDecl *decl);
 XATLAS_API void xatlasComputeCharts(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions);

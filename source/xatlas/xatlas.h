@@ -150,6 +150,11 @@ enum class AddMeshError
 // Add a mesh to the atlas. MeshDecl data is copied, so it can be freed after AddMesh returns.
 AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountHint = 0);
 
+// Copy per-corner chart constraints. Flags are 0 (free), 1 (hard cut) or 2
+// (hard same-chart). Calling with count == 0 and flags == nullptr clears the
+// constraints for the mesh.
+bool SetMeshChartConstraints(Atlas *atlas, uint32_t meshIndex, const uint8_t *flags, uint32_t count);
+
 // Wait for AddMesh async processing to finish. ComputeCharts / Generate call this internally.
 void AddMeshJoin(Atlas *atlas);
 
@@ -193,6 +198,9 @@ struct ChartOptions
 
 // Call after all AddMesh calls. Can be called multiple times to recompute charts with different options.
 void ComputeCharts(Atlas *atlas, ChartOptions options = ChartOptions());
+
+// Compute charts while honoring SetMeshChartConstraints hard cuts and joins.
+bool ComputeChartsConstrained(Atlas *atlas, ChartOptions options = ChartOptions());
 
 struct PackOptions
 {

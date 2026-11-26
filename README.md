@@ -68,6 +68,27 @@ You can call any of these functions multiple times, followed by the proceeding f
 
 See the [viewer](https://github.com/jpcy/xatlas/tree/master/source/examples/viewer) for example code.
 
+### Hard chart constraints
+
+Seam weights express a preference, but baking sometimes needs two hard topological rules. For triangle meshes added with `AddMesh`, copy per-corner flags before constrained chart computation:
+
+```cpp
+// flags has triangleCount * 3 entries. Corner c describes the directed edge
+// from corner c to corner (c + 1) % 3 of its source triangle.
+//   0 = free edge
+//   1 = hard cut: the two sides must use different charts
+//   2 = hard join:  the two sides must stay in one transitive component
+xatlas::SetMeshChartConstraints(atlas, meshIndex, flags, triangleCount * 3);
+xatlas::ComputeChartsConstrained(atlas);
+xatlas::PackCharts(atlas);
+```
+
+`count == 0` with `flags == nullptr` clears a mesh's constraints. Join flags are propagated through adjacent faces; the resulting connected component is treated as one indivisible unit by planar grouping, clustered growth/reseeding/merging, parameterization, and fallback. A cut that contradicts a Join closure, a Join across materials or a real boundary, or a non-disk Join component causes `ComputeChartsConstrained` to return `false` without publishing a half-computed result. After a successful constrained compute, the ordinary `PackCharts` still creates the public `Mesh`, `Chart`, and `Vertex` arrays.
+
+The ordinary `ComputeCharts` and `Generate` entry points retain their previous behavior and public structure layout. The C API exports `xatlasSetMeshChartConstraints` and `xatlasComputeChartsConstrained`; a `NULL` C chart-options pointer selects defaults.
+
+`examples/chart_constraints.cpp` writes an SVG atlas with hard cuts, transitive joins, and source-face colors. `tests/chart_constraints.cpp` contains the grouped constraint tests.
+
 ### Pack multiple atlases into a single atlas
 
 1. Create an empty atlas with `xatlas::Create`.

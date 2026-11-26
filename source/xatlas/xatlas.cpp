@@ -2568,6 +2568,9 @@ public:
 				edge = m_edgeMap.getNext(key, edge);
 			}
 		}
+		// If exact topology is required, never fall back to colocal vertices.
+		if (m_exactEdgeLookup)
+			return UINT32_MAX;
 		// If colocals were created, try every permutation.
 		if (!m_nextColocalVertex.isEmpty()) {
 			uint32_t colocalVertex0 = vertex0;
@@ -2774,6 +2777,88 @@ public:
 	XA_INLINE uint32_t faceMaterial(uint32_t face) const { return (m_flags & MeshFlags::HasMaterials) ? m_faceMaterials[face] : UINT32_MAX; }
 	XA_INLINE const HashMap<EdgeKey, EdgeHash> &edgeMap() const { return m_edgeMap; }
 
+	// Hard chart constraints. Edge flags are the merged per-corner flags:
+	// 0 = free, 1 = hard cut, 2 = hard same chart. Join faces form cyclic lists.
+	bool constraintsActive() const { return m_constraintActive; }
+	bool exactEdgeLookup() const { return m_exactEdgeLookup; }
+	void setExactEdgeLookup(bool value) { m_exactEdgeLookup = value; }
+	void setConstraintRuntimeActive(bool value) { m_constraintActive = value; m_exactEdgeLookup = value; }
+	uint8_t constraintEdgeFlag(uint32_t edge) const { return m_constraintActive ? m_constraintEdgeFlags[edge] : 0; }
+	uint32_t joinComponent(uint32_t face) const { return m_constraintActive ? m_joinComponent[face] : UINT32_MAX; }
+	uint32_t nextJoinFace(uint32_t face) const { return m_constraintActive ? m_joinNextFace[face] : face; }
+
+	void clearChartConstraints()
+	{
+		m_chartConstraintFlags.clear();
+		m_constraintActive = false;
+		m_exactEdgeLookup = false;
+		m_constraintEdgeFlags.clear();
+		m_joinComponent.clear();
+		m_joinNextFace.clear();
+	}
+
+	bool hasRawChartConstraints() const { return !m_chartConstraintFlags.isEmpty(); }
+	ConstArrayView<uint8_t> rawChartConstraints() const { return ConstArrayView<uint8_t>(m_chartConstraintFlags.data(), m_chartConstraintFlags.size()); }
+	void setRawChartConstraints(const uint8_t *flags, uint32_t count)
+	{
+		if (!flags || count == 0)
+			m_chartConstraintFlags.clear();
+		else
+			m_chartConstraintFlags.copyFrom(flags, count);
+	}
+
+	void installChartConstraints(const uint8_t *edgeFlags, const uint32_t *joinComponents, const uint32_t *nextJoinFaces, uint32_t faceCount, bool active)
+	{
+		m_constraintActive = active;
+		m_exactEdgeLookup = active;
+		if (!active || faceCount == 0) {
+			m_constraintEdgeFlags.clear();
+			m_joinComponent.clear();
+			m_joinNextFace.clear();
+			return;
+		}
+		m_constraintEdgeFlags.resize(faceCount * 3);
+		memcpy(m_constraintEdgeFlags.data(), edgeFlags, size_t(faceCount) * 3);
+		m_joinComponent.resize(faceCount);
+		m_joinNextFace.resize(faceCount);
+		memcpy(m_joinComponent.data(), joinComponents, size_t(faceCount) * sizeof(uint32_t));
+		memcpy(m_joinNextFace.data(), nextJoinFaces, size_t(faceCount) * sizeof(uint32_t));
+	}
+
+	void copyConstraintsSubset(const Mesh *source, const uint32_t *sourceFaces, uint32_t faceCount)
+	{
+		clearChartConstraints();
+		if (!source || !source->m_constraintActive || faceCount == 0)
+			return;
+		m_constraintActive = true;
+		m_exactEdgeLookup = true;
+		m_constraintEdgeFlags.resize(faceCount * 3);
+		m_joinComponent.resize(faceCount);
+		m_joinNextFace.resize(faceCount);
+		Array<uint32_t> firstFace(MemTag::Mesh);
+		firstFace.resize(source->faceCount());
+		firstFace.fill(UINT32_MAX);
+		for (uint32_t f = 0; f < faceCount; f++) {
+			const uint32_t sf = sourceFaces[f];
+			for (uint32_t j = 0; j < 3; j++)
+				m_constraintEdgeFlags[f * 3 + j] = source->constraintEdgeFlag(sf * 3 + j);
+			const uint32_t component = source->joinComponent(sf);
+			m_joinComponent[f] = component;
+			if (component == UINT32_MAX) {
+				m_joinNextFace[f] = f;
+				continue;
+			}
+			if (firstFace[component] == UINT32_MAX) {
+				firstFace[component] = f;
+				m_joinNextFace[f] = f;
+			} else {
+				const uint32_t head = firstFace[component];
+				m_joinNextFace[f] = m_joinNextFace[head];
+				m_joinNextFace[head] = f;
+			}
+		}
+	}
+
 private:
 
 	float m_epsilon;
@@ -2794,6 +2879,12 @@ private:
 	BitArray m_isBoundaryVertex;
 	Array<uint32_t> m_boundaryEdges;
 	Array<uint32_t> m_oppositeEdges; // In: edge index. Out: the index of the opposite edge (i.e. wound the opposite direction). UINT32_MAX if the input edge is a boundary edge.
+	Array<uint8_t> m_chartConstraintFlags;
+	Array<uint8_t> m_constraintEdgeFlags;
+	Array<uint32_t> m_joinComponent;
+	Array<uint32_t> m_joinNextFace;
+	bool m_constraintActive = false;
+	bool m_exactEdgeLookup = false;
 
 	HashMap<EdgeKey, EdgeHash> m_edgeMap;
 
@@ -2901,6 +2992,8 @@ struct MeshFaceGroups
 					const uint32_t oppositeEdge = m_mesh->findEdge(edgeIt.vertex1(), edgeIt.vertex0());
 					if (oppositeEdge == UINT32_MAX)
 						continue; // Boundary edge.
+					if (m_mesh->constraintEdgeFlag(edgeIt.edge()) == 1)
+						continue; // Hard cut separates face groups unless another path connects them.
 					const uint32_t oppositeFace = meshEdgeFace(oppositeEdge);
 					if (m_mesh->isFaceIgnored(oppositeFace))
 						continue; // Don't add ignored faces to group.
@@ -5199,6 +5292,8 @@ struct PlanarCharts
 					const uint32_t oface = it.oppositeFace();
 					if (it.isBoundary())
 						continue;
+					if (m_data.mesh->constraintEdgeFlag(it.edge()) == 1)
+						continue; // Hard cuts delimit planar regions.
 					if (m_nextRegionFace[oface] != oface)
 						continue; // Already assigned.
 					if (m_data.isFaceInChart.get(oface))
@@ -5254,12 +5349,29 @@ struct PlanarCharts
 			uint32_t face = firstRegionFace;
 			bool createChart = true;
 			do {
-				for (Mesh::FaceEdgeIterator it(m_data.mesh, face); !it.isDone(); it.advance()) {
+				if (m_data.mesh->joinComponent(face) != UINT32_MAX) {
+					uint32_t joinFace = face;
+					do {
+						if (m_faceToRegionId[joinFace] != region) {
+							createChart = false; // A Join component cannot be split by the fast path.
+							break;
+						}
+						joinFace = m_data.mesh->nextJoinFace(joinFace);
+					} while (joinFace != face && createChart);
+				}
+				for (Mesh::FaceEdgeIterator it(m_data.mesh, face); !it.isDone() && createChart; it.advance()) {
+					if (m_data.mesh->constraintEdgeFlag(it.edge()) == 1) {
+						const uint32_t oface = it.oppositeFace();
+						if (oface != UINT32_MAX && m_faceToRegionId[oface] == region)
+							createChart = false; // Hard cut closes this fast chart boundary.
+					}
 					if (it.isBoundary())
 						continue; // Ignore mesh boundary edges.
 					const uint32_t oface = it.oppositeFace();
 					if (m_faceToRegionId[oface] == region)
 						continue; // Ignore internal edges.
+					if (m_data.mesh->constraintEdgeFlag(it.edge()) == 1)
+						continue; // Explicit hard cuts need not form a 90 degree dihedral.
 					const float angle = m_data.edgeDihedralAngles[it.edge()];
 					if (angle > 0.0f && angle < FLT_MAX) { // FLT_MAX on boundaries.
 						createChart = false;
@@ -5335,6 +5447,9 @@ struct ClusteredCharts
 	void compute()
 	{
 		const uint32_t faceCount = m_data.mesh->faceCount();
+		m_closureStamp.resize(faceCount);
+		m_closureStamp.fill(0);
+		m_closureStampValue = 0;
 		m_facesLeft = 0;
 		for (uint32_t i = 0; i < faceCount; i++) {
 			if (!m_data.isFaceInChart.get(i))
@@ -5731,8 +5846,155 @@ private:
 		return true;
 	}
 
+	void collectAtomicClosure(uint32_t face, bool includePlanarRegion)
+	{
+		m_closureFaces.clear();
+		++m_closureStampValue;
+		if (m_closureStampValue == 0) {
+			m_closureStamp.fill(0);
+			m_closureStampValue = 1;
+		}
+		uint32_t stamp = m_closureStampValue;
+		m_closureFaces.push_back(face);
+		m_closureStamp[face] = stamp;
+		for (uint32_t i = 0; i < m_closureFaces.size(); i++) {
+			const uint32_t f = m_closureFaces[i];
+			if (includePlanarRegion) {
+				uint32_t pf = f;
+				do {
+					if (m_closureStamp[pf] != stamp) {
+						m_closureStamp[pf] = stamp;
+						m_closureFaces.push_back(pf);
+					}
+					pf = m_planarCharts.nextRegionFace(pf);
+				} while (pf != f);
+			}
+			if (m_data.mesh->joinComponent(f) == UINT32_MAX)
+				continue;
+			uint32_t jf = m_data.mesh->nextJoinFace(f);
+			while (jf != f) {
+				if (m_closureStamp[jf] != stamp) {
+					m_closureStamp[jf] = stamp;
+					m_closureFaces.push_back(jf);
+				}
+				jf = m_data.mesh->nextJoinFace(jf);
+			}
+		}
+	}
+
+	bool closureTouchesHardCutInChart(Chart *chart) const
+	{
+		const uint32_t stamp = m_closureStampValue;
+		for (uint32_t i = 0; i < m_closureFaces.size(); i++) {
+			const uint32_t f = m_closureFaces[i];
+			for (uint32_t j = 0; j < 3; j++) {
+				const uint32_t edge = f * 3 + j;
+				if (m_data.mesh->constraintEdgeFlag(edge) != 1)
+					continue;
+				const uint32_t oedge = m_data.mesh->oppositeEdge(edge);
+				if (oedge == UINT32_MAX)
+					continue;
+				const uint32_t oface = meshEdgeFace(oedge);
+				if (m_closureStamp[oface] == stamp)
+					return true;
+				if (m_faceCharts[oface] == chart->id)
+					return true;
+			}
+		}
+		return false;
+	}
+
+	bool addConstrainedFacesToChart(Chart *chart, uint32_t face)
+	{
+		if (m_data.isFaceInChart.get(face))
+			return false; // Stale candidate after an atomic closure was claimed.
+		// Do not auto-claim a whole planar region here: a coplanar region can
+		// wrap around a hard cut. Cost-based growth still merges free faces, while
+		// the Join closure below is always one atomic unit.
+		collectAtomicClosure(face, false);
+		for (uint32_t i = 0; i < m_closureFaces.size(); i++) {
+			if (m_data.isFaceInChart.get(m_closureFaces[i]))
+				return false; // Join components are one unassigned unit.
+		}
+		if (closureTouchesHardCutInChart(chart))
+			return false;
+		const uint32_t oldFaceCount = chart->faces.size();
+		const bool firstFace = oldFaceCount == 0;
+		for (uint32_t i = 0; i < m_closureFaces.size(); i++)
+			chart->faces.push_back(m_closureFaces[i]);
+		const uint32_t faceCount = chart->faces.size();
+		Basis basis;
+		if (firstFace) {
+			basis.normal = m_data.faceNormals[face];
+			basis.tangent = normalize(m_data.mesh->position(m_data.mesh->vertexAt(face * 3 + 0)) - m_data.mesh->position(m_data.mesh->vertexAt(face * 3 + 1)));
+			basis.bitangent = cross(basis.normal, basis.tangent);
+		} else {
+			if (!computeChartBasis(chart, &basis)) {
+				chart->faces.resize(oldFaceCount);
+				return false;
+			}
+			if (dot(basis.normal, m_data.faceNormals[face]) < 0.0f)
+				basis.normal = -basis.normal;
+		}
+		if (!firstFace) {
+			parameterizeChart(chart);
+			for (uint32_t i = oldFaceCount; i < faceCount; i++)
+				m_faceCharts[chart->faces[i]] = chart->id;
+			if (!isChartParameterizationValid(chart)) {
+				for (uint32_t i = oldFaceCount; i < faceCount; i++)
+					m_faceCharts[chart->faces[i]] = -1;
+				chart->faces.resize(oldFaceCount);
+				return false;
+			}
+		}
+		chart->basis = basis;
+		chart->area = 0.0f;
+		chart->boundaryLength = 0.0f;
+		for (uint32_t i = 0; i < faceCount; i++) {
+			const uint32_t f = chart->faces[i];
+			chart->area += m_data.faceAreas[f];
+			for (uint32_t j = 0; j < 3; j++) {
+				const uint32_t edge = f * 3 + j;
+				const uint32_t oedge = m_data.mesh->oppositeEdge(edge);
+				if (oedge == UINT32_MAX || m_faceCharts[meshEdgeFace(oedge)] != chart->id)
+					chart->boundaryLength += m_data.edgeLengths[edge];
+			}
+		}
+		for (uint32_t i = oldFaceCount; i < faceCount; i++) {
+			const uint32_t f = chart->faces[i];
+			m_faceCharts[f] = chart->id;
+			m_facesLeft--;
+			m_data.isFaceInChart.set(f);
+			chart->centroidSum += m_data.mesh->computeFaceCenter(f);
+		}
+		chart->centroid = chart->centroidSum / float(chart->faces.size());
+		chart->candidates.clear();
+		for (uint32_t i = 0; i < faceCount; i++) {
+			const uint32_t f = chart->faces[i];
+			for (uint32_t j = 0; j < 3; j++) {
+				const uint32_t edge = f * 3 + j;
+				if (m_data.mesh->constraintEdgeFlag(edge) == 1)
+					continue; // Never grow across a hard cut.
+				const uint32_t oedge = m_data.mesh->oppositeEdge(edge);
+				if (oedge == UINT32_MAX)
+					continue;
+				const uint32_t oface = meshEdgeFace(oedge);
+				if (m_data.isFaceInChart.get(oface))
+					continue;
+				if (chart->failedPlanarRegions.contains(m_planarCharts.regionIdFromFace(oface)))
+					continue;
+				const float cost = computeCost(chart, oface);
+				if (cost < FLT_MAX)
+					chart->candidates.push(cost, oface);
+			}
+		}
+		return true;
+	}
+
 	bool addFaceToChart(Chart *chart, uint32_t face)
 	{
+		if (m_data.mesh->constraintsActive())
+			return addConstrainedFacesToChart(chart, face);
 		XA_DEBUG_ASSERT(!m_data.isFaceInChart.get(face));
 		const uint32_t oldFaceCount = chart->faces.size();
 		const bool firstFace = oldFaceCount == 0;
@@ -6052,6 +6314,19 @@ private:
 
 	bool mergeChart(Chart *owner, Chart *chart, float sharedBoundaryLength)
 	{
+		if (m_data.mesh->constraintsActive()) {
+			for (uint32_t i = 0; i < chart->faces.size(); i++) {
+				const uint32_t f = chart->faces[i];
+				for (uint32_t j = 0; j < 3; j++) {
+					const uint32_t edge = f * 3 + j;
+					if (m_data.mesh->constraintEdgeFlag(edge) != 1)
+						continue;
+					const uint32_t oedge = m_data.mesh->oppositeEdge(edge);
+					if (oedge != UINT32_MAX && m_faceCharts[meshEdgeFace(oedge)] == owner->id)
+						return false; // A hard cut must remain between different charts.
+				}
+			}
+		}
 		const uint32_t oldOwnerFaceCount = owner->faces.size();
 		const uint32_t chartFaceCount = chart->faces.size();
 		owner->faces.push_back(chart->faces);
@@ -6099,6 +6374,9 @@ private:
 	Array<Chart *> m_charts;
 	CostQueue m_bestTriangles;
 	Array<Vector3> m_tempPoints;
+	Array<uint32_t> m_closureFaces;
+	Array<uint32_t> m_closureStamp;
+	uint32_t m_closureStampValue = 0;
 	UniformGrid2 m_boundaryGrid;
 #if XA_MERGE_CHARTS
 	// mergeCharts
@@ -6557,6 +6835,112 @@ static bool computeLeastSquaresConformalMap(Mesh *mesh)
 		XA_DEBUG_ASSERT(!isNan(mesh->texcoord(i).y));
 	}
 	opennl::nlDeleteContext(context);
+	return true;
+}
+
+// Convex-boundary Tutte embedding. A validated Join component is an oriented
+// manifold disk, for which this gives a flip-free planar embedding. It is used
+// as a component-preserving fallback instead of Piecewise splitting a Join.
+static bool computeConstrainedTutteMap(Mesh *mesh)
+{
+	const uint32_t vertexCount = mesh->vertexCount();
+	const uint32_t faceCount = mesh->faceCount();
+	if (vertexCount == 0 || faceCount == 0 || mesh->boundaryEdges().isEmpty())
+		return false;
+	Array<uint32_t> boundaryNext(MemTag::Mesh);
+	boundaryNext.resize(vertexCount);
+	boundaryNext.fill(UINT32_MAX);
+	for (uint32_t i = 0; i < mesh->boundaryEdges().size(); i++) {
+		const uint32_t e = mesh->boundaryEdges()[i];
+		const uint32_t v0 = mesh->vertexAt(meshEdgeIndex0(e));
+		const uint32_t v1 = mesh->vertexAt(meshEdgeIndex1(e));
+		if (boundaryNext[v0] != UINT32_MAX)
+			return false; // Not a single simple boundary loop.
+		boundaryNext[v0] = v1;
+	}
+	Array<uint32_t> boundaryVertices(MemTag::Mesh);
+	uint32_t startVertex = mesh->vertexAt(meshEdgeIndex0(mesh->boundaryEdges()[0]));
+	uint32_t v = startVertex;
+	do {
+		boundaryVertices.push_back(v);
+		v = boundaryNext[v];
+		if (v == UINT32_MAX || boundaryVertices.size() > vertexCount)
+			return false;
+	} while (v != startVertex);
+	if (boundaryVertices.size() != mesh->boundaryEdges().size())
+		return false; // Multiple boundary loops or an inconsistent disk.
+
+	Array<uint32_t> firstCorner(MemTag::Mesh), nextCorner(MemTag::Mesh);
+	firstCorner.resize(vertexCount);
+	firstCorner.fill(UINT32_MAX);
+	nextCorner.resize(faceCount * 3);
+	for (uint32_t k = 0; k < faceCount * 3; k++) {
+		const uint32_t vertex = mesh->vertexAt(k);
+		nextCorner[k] = firstCorner[vertex];
+		firstCorner[vertex] = k;
+	}
+
+	opennl::NLContext *context = opennl::nlNewContext();
+	opennl::nlSolverParameteri(context, NL_NB_VARIABLES, int(2 * vertexCount));
+	opennl::nlSolverParameteri(context, NL_MAX_ITERATIONS, int(10 * vertexCount + 100));
+	opennl::nlBegin(context, NL_SYSTEM);
+	ArrayView<Vector2> texcoords = mesh->texcoords();
+	for (uint32_t i = 0; i < vertexCount; i++) {
+		opennl::nlSetVariable(context, 2 * i, texcoords[i].x);
+		opennl::nlSetVariable(context, 2 * i + 1, texcoords[i].y);
+	}
+	const uint32_t boundaryCount = boundaryVertices.size();
+	for (uint32_t i = 0; i < boundaryCount; i++) {
+		const float angle = 2.0f * 3.14159265358979323846f * float(i) / float(boundaryCount);
+		const float radius = 10.0f;
+		const uint32_t bv = boundaryVertices[i];
+		texcoords[bv] = Vector2(radius * cosf(angle), radius * sinf(angle));
+		opennl::nlSetVariable(context, 2 * bv, texcoords[bv].x);
+		opennl::nlSetVariable(context, 2 * bv + 1, texcoords[bv].y);
+		opennl::nlLockVariable(context, 2 * bv);
+		opennl::nlLockVariable(context, 2 * bv + 1);
+	}
+	opennl::nlBegin(context, NL_MATRIX);
+	for (uint32_t axis = 0; axis < 2; axis++) {
+		for (uint32_t vertex = 0; vertex < vertexCount; vertex++) {
+			if (boundaryNext[vertex] != UINT32_MAX)
+				continue; // Locked boundary variable.
+			opennl::nlBegin(context, NL_ROW);
+			const uint32_t rowId = 2 * vertex + axis;
+			for (uint32_t corner = firstCorner[vertex]; corner != UINT32_MAX; corner = nextCorner[corner]) {
+				const uint32_t face = corner / 3;
+				const uint32_t local = corner - face * 3;
+				const uint32_t a = mesh->vertexAt(face * 3 + (local + 1) % 3);
+				const uint32_t b = mesh->vertexAt(face * 3 + (local + 2) % 3);
+				opennl::nlCoefficient(context, rowId, 2.0);
+				opennl::nlCoefficient(context, 2 * a + axis, -1.0);
+				opennl::nlCoefficient(context, 2 * b + axis, -1.0);
+			}
+			opennl::nlEnd(context, NL_ROW);
+		}
+	}
+	opennl::nlEnd(context, NL_MATRIX);
+	opennl::nlEnd(context, NL_SYSTEM);
+	const bool solved = opennl::nlSolve(context);
+	if (solved) {
+		for (uint32_t i = 0; i < vertexCount; i++) {
+			texcoords[i] = Vector2((float)opennl::nlGetVariable(context, 2 * i), (float)opennl::nlGetVariable(context, 2 * i + 1));
+			if (!isFinite(texcoords[i].x) || !isFinite(texcoords[i].y)) {
+				opennl::nlDeleteContext(context);
+				return false;
+			}
+		}
+	}
+	opennl::nlDeleteContext(context);
+	if (!solved)
+		return false;
+	// Make the embedding winding agree with the input triangle winding.
+	double signedArea = 0.0;
+	for (uint32_t f = 0; f < faceCount; f++)
+		signedArea += mesh->computeFaceParametricArea(f);
+	if (signedArea < 0.0)
+		for (uint32_t i = 0; i < vertexCount; i++)
+			texcoords[i].x = -texcoords[i].x;
 	return true;
 }
 
@@ -7139,6 +7523,12 @@ public:
 		XA_UNUSED(chartGroupId);
 		XA_UNUSED(chartId);
 		m_faceToSourceFaceMap.copyFrom(faces.data, faces.length);
+		for (uint32_t i = 0; i < m_faceToSourceFaceMap.size(); i++) {
+			if (sourceMesh->joinComponent(m_faceToSourceFaceMap[i]) != UINT32_MAX) {
+				m_hasConstrainedJoin = true;
+				break;
+			}
+		}
 		const uint32_t approxVertexCount = min(faces.length * 3, sourceMesh->vertexCount());
 		m_unifiedMesh = XA_NEW_ARGS(MemTag::Mesh, Mesh, sourceMesh->epsilon(), approxVertexCount, faces.length);
 		HashMap<uint32_t, PassthroughHash<uint32_t>> sourceVertexToUnifiedVertexMap(MemTag::Mesh, approxVertexCount), sourceVertexToChartVertexMap(MemTag::Mesh, approxVertexCount);
@@ -7196,6 +7586,12 @@ public:
 		m_faceToSourceFaceMap.resize(faceCount);
 		for (uint32_t i = 0; i < faceCount; i++)
 			m_faceToSourceFaceMap[i] = parent->m_faceToSourceFaceMap[faces[i]]; // Map faces to parent chart source mesh.
+		for (uint32_t i = 0; i < faceCount; i++) {
+			if (sourceMesh->joinComponent(m_faceToSourceFaceMap[i]) != UINT32_MAX) {
+				m_hasConstrainedJoin = true;
+				break;
+			}
+		}
 		// Copy face indices.
 		Array<uint32_t> &chartMeshIndices = buffers.chartMeshIndices;
 		chartMeshIndices.resize(sourceMesh->vertexCount());
@@ -7248,6 +7644,7 @@ public:
 	}
 
 	bool isInvalid() const { return m_isInvalid; }
+	bool hasConstrainedJoin() const { return m_hasConstrainedJoin; }
 	ChartType type() const { return m_type; }
 	segment::ChartGeneratorType::Enum generatorType() const { return m_generatorType; }
 	uint32_t tjunctionCount() const { return m_tjunctionCount; }
@@ -7366,6 +7763,23 @@ public:
 		memcpy(m_unifiedMesh->texcoords().data, m_backupTexcoords.data(), m_unifiedMesh->vertexCount() * sizeof(Vector2));
 	}
 
+	bool repairConstrainedJoin()
+	{
+		if (!m_hasConstrainedJoin || !m_unifiedMesh)
+			return false;
+		if (!computeConstrainedTutteMap(m_unifiedMesh))
+			return false;
+		UniformGrid2 boundaryGrid;
+		m_quality.computeBoundaryIntersection(m_unifiedMesh, boundaryGrid);
+		m_quality.computeFlippedFaces(m_unifiedMesh, nullptr);
+		if (m_quality.boundaryIntersection || m_quality.flippedTriangleCount != 0 || m_quality.zeroAreaTriangleCount != 0)
+			return false;
+		m_isInvalid = false;
+		m_type = ChartType::Piecewise;
+		backupTexcoords();
+		return true;
+	}
+
 private:
 	void backupTexcoords()
 	{
@@ -7397,6 +7811,7 @@ private:
 	Array<uint32_t> m_paramFlippedFaces;
 #endif
 	bool m_isInvalid;
+	bool m_hasConstrainedJoin = false;
 };
 
 struct CreateAndParameterizeChartTaskGroupArgs
@@ -7431,9 +7846,19 @@ static void runCreateAndParameterizeChartTask(void *groupUserData, void *taskUse
 	XA_PROFILE_START(parameterizeCharts)
 	args->chart->parameterize(*groupArgs->options, groupArgs->boundaryGrid->get());
 	XA_PROFILE_END(parameterizeCharts)
+	if (args->chart->isInvalid() && args->chart->hasConstrainedJoin())
+		args->chart->repairConstrainedJoin();
 #if XA_RECOMPUTE_CHARTS
 	if (!args->chart->isInvalid()) {
 		XA_PROFILE_END(createChartMeshAndParameterizeThread)
+		return;
+	}
+	if (args->chart->hasConstrainedJoin()) {
+		// Piecewise is allowed to split free regions, but never a hard Join.
+		// Tutte repair above is the component-preserving fallback; if it failed,
+		// leave this chart invalid so the constrained entry can fail atomically.
+		XA_PROFILE_END(createChartMeshAndParameterizeThread)
+		groupArgs->progress->increment(args->faces.length);
 		return;
 	}
 	// Recompute charts with invalid parameterizations.
@@ -7695,6 +8120,7 @@ private:
 			// Don't copy flags - ignored faces aren't used by chart groups, they are handled by InvalidMeshGeometry.
 			mesh->addFace(indices);
 		}
+		mesh->copyConstraintsSubset(m_sourceMesh, m_faceToSourceFaceMap.data(), faceCount);
 		XA_PROFILE_START(createChartGroupMeshColocals)
 		mesh->createColocals();
 		XA_PROFILE_END(createChartGroupMeshColocals)
@@ -7959,6 +8385,26 @@ public:
 		if (progress.cancel)
 			return false;
 		m_chartsComputed = true;
+		return true;
+	}
+
+	// Publish a fully computed candidate only after constrained verification.
+	bool adoptComputation(Atlas *candidate)
+	{
+		if (!candidate || !candidate->m_chartsComputed)
+			return false;
+		for (uint32_t i = 0; i < m_meshChartGroups.size(); i++) {
+			for (uint32_t j = 0; j < m_meshChartGroups[i].size(); j++) {
+				m_meshChartGroups[i][j]->~ChartGroup();
+				XA_FREE(m_meshChartGroups[i][j]);
+			}
+		}
+		m_meshChartGroups.runDtors();
+		m_invalidMeshGeometry.runDtors();
+		candidate->m_meshChartGroups.moveTo(m_meshChartGroups);
+		candidate->m_invalidMeshGeometry.moveTo(m_invalidMeshGeometry);
+		m_chartsComputed = true;
+		candidate->m_chartsComputed = false;
 		return true;
 	}
 
@@ -8889,6 +9335,7 @@ struct Context
 	internal::Array<internal::UvMesh *> uvMeshes;
 	internal::Array<internal::UvMeshInstance *> uvMeshInstances;
 	bool uvMeshChartsComputed = false;
+	bool constrainedCompute = false;
 };
 
 Atlas *Create()
@@ -9255,6 +9702,277 @@ void AddMeshJoin(Atlas *atlas)
 	}
 }
 
+
+using internal::Array;
+using internal::MemTag;
+using internal::EdgeKey;
+using internal::meshEdgeFace;
+using internal::meshEdgeIndex1;
+
+struct ConstraintDSU
+{
+	Array<uint32_t> parent;
+	ConstraintDSU() : parent(MemTag::Default) {}
+	void init(uint32_t n) { parent.resize(n); for (uint32_t i=0;i<n;i++) parent[i]=i; }
+	uint32_t find(uint32_t x) { uint32_t r=x; while(parent[r]!=r) r=parent[r]; while(parent[x]!=x){uint32_t y=parent[x]; parent[x]=r; x=y;} return r; }
+	void unite(uint32_t a,uint32_t b){ a=find(a); b=find(b); if(a!=b) parent[b]=a; }
+};
+
+static bool constraintFlagsValid(const uint8_t *flags, uint32_t count)
+{
+	if (count != 0 && !flags)
+		return false;
+	for (uint32_t i = 0; i < count; i++)
+		if (flags[i] > 2)
+			return false;
+	return true;
+}
+
+// Immediate setter validation. Semantic Join/material/topology validation is
+// deferred to ComputeChartsConstrained, as required by the task contract.
+static bool validateMeshConstraintEdgesShallow(const internal::Mesh *mesh, const uint8_t *flags, uint32_t count)
+{
+	if (count != mesh->indexCount() || !constraintFlagsValid(flags, count))
+		return false;
+	for (uint32_t e = 0; e < count; e++) {
+		const uint32_t a = mesh->vertexAt(e);
+		const uint32_t b = mesh->vertexAt(meshEdgeIndex1(e));
+		const uint8_t fe = flags[e];
+		EdgeKey reverseKey(b, a);
+		uint32_t oe = mesh->edgeMap().get(reverseKey);
+		uint32_t reverseCount = 0;
+		while (oe != UINT32_MAX) {
+			if (oe < count) {
+				reverseCount++;
+				const uint8_t fo = flags[oe];
+				if ((fe == 1 && fo == 2) || (fe == 2 && fo == 1))
+					return false; // Direct Cut/Join conflict.
+			}
+			oe = mesh->edgeMap().getNext(reverseKey, oe);
+		}
+		if (reverseCount == 0 && fe == 2)
+			return false; // A hard Join cannot terminate on a real boundary.
+	}
+	return true;
+}
+
+bool SetMeshChartConstraints(Atlas *atlas, uint32_t meshIndex, const uint8_t *flags, uint32_t count)
+{
+	if (!atlas)
+		return false;
+	Context *ctx = (Context *)atlas;
+	AddMeshJoin(atlas); // Make AddMesh topology state complete before validating.
+	if (meshIndex >= uint32_t(ctx->meshes.size()))
+		return false;
+	internal::Mesh *mesh = ctx->meshes[meshIndex];
+	const uint32_t expectedCount = mesh->indexCount();
+	if (count == 0 && flags == nullptr) {
+		mesh->clearChartConstraints();
+		return true;
+	}
+	if (count != expectedCount || !constraintFlagsValid(flags, count))
+		return false;
+	if (!validateMeshConstraintEdgesShallow(mesh, flags, count))
+		return false;
+	mesh->setRawChartConstraints(flags, count);
+	return true;
+}
+
+// Validate strict supported input and turn raw corner flags into merged edge
+// flags plus Join face components. On success runtime hooks are installed.
+static bool buildMeshChartConstraints(internal::Mesh *mesh)
+{
+	const uint32_t faceCount = mesh->faceCount();
+	const uint32_t edgeCount = mesh->indexCount();
+	internal::ConstArrayView<uint8_t> raw = mesh->rawChartConstraints();
+	if (raw.length != 0 && raw.length != edgeCount)
+		return false;
+	for (uint32_t f = 0; f < faceCount; f++) {
+		if (mesh->isFaceIgnored(f))
+			return false; // Constrained entry does not support ignored/invalid faces.
+		if (!(mesh->computeFaceArea(f) > internal::kAreaEpsilon))
+			return false;
+		for (uint32_t j = 0; j < 3; j++) {
+			const uint32_t v = mesh->vertexAt(f * 3 + j);
+			if (!isFinite(mesh->position(v)))
+				return false;
+			if ((mesh->flags() & internal::MeshFlags::HasNormals) && !isFinite(mesh->normal(v)))
+				return false;
+			if (!isFinite(mesh->texcoord(v)))
+				return false;
+		}
+	}
+	if (edgeCount == 0 || edgeCount != faceCount * 3)
+		return false;
+
+	Array<uint32_t> opposite(MemTag::MeshBoundaries);
+	opposite.resize(edgeCount);
+	opposite.fill(UINT32_MAX);
+	for (uint32_t e = 0; e < edgeCount; e++) {
+		const uint32_t a = mesh->vertexAt(e);
+		const uint32_t b = mesh->vertexAt(meshEdgeIndex1(e));
+		uint32_t sameCount = 0;
+		EdgeKey forwardKey(a, b);
+		for (uint32_t ee = mesh->edgeMap().get(forwardKey); ee != UINT32_MAX; ee = mesh->edgeMap().getNext(forwardKey, ee)) {
+			if (ee < edgeCount)
+				sameCount++;
+		}
+		if (sameCount != 1)
+			return false; // Duplicate winding / non-manifold directed edge.
+		uint32_t reverseCount = 0;
+		EdgeKey reverseKey(b, a);
+		uint32_t oe = mesh->edgeMap().get(reverseKey);
+		while (oe != UINT32_MAX) {
+			if (oe < edgeCount) {
+				reverseCount++;
+				if (reverseCount == 1)
+					opposite[e] = oe;
+			}
+			oe = mesh->edgeMap().getNext(reverseKey, oe);
+		}
+		if (reverseCount > 1)
+			return false; // Non-manifold edge.
+	}
+
+	// Faces incident at one original index must form one edge-connected fan.
+	ConstraintDSU topology;
+	topology.init(faceCount);
+	for (uint32_t e = 0; e < edgeCount; e++)
+		if (opposite[e] != UINT32_MAX)
+			topology.unite(meshEdgeFace(e), meshEdgeFace(opposite[e]));
+	Array<uint32_t> vertexRoot(MemTag::Mesh);
+	vertexRoot.resize(mesh->vertexCount());
+	vertexRoot.fill(UINT32_MAX);
+	for (uint32_t e = 0; e < edgeCount; e++) {
+		const uint32_t v = mesh->vertexAt(e);
+		const uint32_t root = topology.find(meshEdgeFace(e));
+		if (vertexRoot[v] == UINT32_MAX)
+			vertexRoot[v] = root;
+		else if (vertexRoot[v] != root)
+			return false; // Bow-tie / non-manifold vertex.
+	}
+
+	Array<uint8_t> edgeFlags(MemTag::MeshBoundaries);
+	edgeFlags.resize(edgeCount);
+	edgeFlags.zeroOutMemory();
+	if (raw.length == edgeCount)
+		memcpy(edgeFlags.data(), raw.data, edgeCount);
+	for (uint32_t e = 0; e < edgeCount; e++) {
+		const uint8_t a = edgeFlags[e];
+		if (a > 2)
+			return false;
+		const uint32_t oe = opposite[e];
+		if (oe == UINT32_MAX) {
+			if (a == 2)
+				return false; // Join on a real boundary.
+			continue;
+		}
+		if (oe < e)
+			continue; // Merged when the opposite directed edge was processed.
+		const uint8_t b = edgeFlags[oe];
+		if (b > 2 || (a == 1 && b == 2) || (a == 2 && b == 1))
+			return false;
+		uint8_t merged = 0;
+		if (a == b) merged = a;
+		else if (a == 0) merged = b;
+		else if (b == 0) merged = a;
+		else return false;
+		edgeFlags[e] = edgeFlags[oe] = merged;
+	}
+
+	ConstraintDSU joins;
+	joins.init(faceCount);
+	for (uint32_t e = 0; e < edgeCount; e++) {
+		if (edgeFlags[e] != 2 || opposite[e] == UINT32_MAX)
+			continue;
+		const uint32_t f = meshEdgeFace(e), of = meshEdgeFace(opposite[e]);
+		if (mesh->faceMaterial(f) != mesh->faceMaterial(of))
+			return false; // Cross-material Join.
+		joins.unite(f, of);
+	}
+	for (uint32_t e = 0; e < edgeCount; e++) {
+		if (edgeFlags[e] != 1 || opposite[e] == UINT32_MAX)
+			continue;
+		const uint32_t f = meshEdgeFace(e), of = meshEdgeFace(opposite[e]);
+		if (joins.find(f) == joins.find(of))
+			return false; // Cut contradicted by transitive Join closure.
+	}
+
+	Array<uint32_t> joinComponent(MemTag::Mesh), nextJoinFace(MemTag::Mesh), componentSize(MemTag::Mesh), firstFace(MemTag::Mesh);
+	joinComponent.resize(faceCount);
+	nextJoinFace.resize(faceCount);
+	componentSize.resize(faceCount);
+	firstFace.resize(faceCount);
+	joinComponent.fill(UINT32_MAX);
+	nextJoinFace.fill(UINT32_MAX);
+	componentSize.zeroOutMemory();
+	firstFace.fill(UINT32_MAX);
+	for (uint32_t f = 0; f < faceCount; f++) {
+		const uint32_t root = joins.find(f);
+		joinComponent[f] = root;
+		componentSize[root]++;
+	}
+	for (uint32_t f = 0; f < faceCount; f++) {
+		const uint32_t root = joinComponent[f];
+		if (componentSize[root] <= 1) {
+			joinComponent[f] = UINT32_MAX;
+			nextJoinFace[f] = f;
+			continue;
+		}
+		if (firstFace[root] == UINT32_MAX) {
+			firstFace[root] = f;
+			nextJoinFace[f] = f;
+		} else {
+			const uint32_t head = firstFace[root];
+			nextJoinFace[f] = nextJoinFace[head];
+			nextJoinFace[head] = f;
+		}
+	}
+
+	// Every nontrivial Join component must be one topological disk.
+	Array<uint32_t> vertexStamp(MemTag::Mesh);
+	vertexStamp.resize(mesh->vertexCount());
+	vertexStamp.zeroOutMemory();
+	for (uint32_t root = 0; root < faceCount; root++) {
+		if (componentSize[root] <= 1 || joins.find(root) != root)
+			continue;
+		uint32_t vertices = 0, internalEdges = 0, boundaryEdges = 0;
+		for (uint32_t f = 0; f < faceCount; f++) {
+			if (joinComponent[f] != root)
+				continue;
+			for (uint32_t j = 0; j < 3; j++) {
+				const uint32_t e = f * 3 + j;
+				const uint32_t v = mesh->vertexAt(e);
+				if (vertexStamp[v] != root + 1) {
+					vertexStamp[v] = root + 1;
+					vertices++;
+				}
+				const uint32_t oe = opposite[e];
+				if (oe != UINT32_MAX && joinComponent[meshEdgeFace(oe)] == root) {
+					if (e < oe)
+						internalEdges++;
+				} else {
+					boundaryEdges++;
+				}
+			}
+		}
+		const uint32_t edges = internalEdges + boundaryEdges;
+		const int64_t euler = int64_t(vertices) - int64_t(edges) + int64_t(componentSize[root]);
+		if (euler != 1)
+			return false; // Annulus, closed component, genus, or otherwise non-disk.
+	}
+
+	bool active = false;
+	for (uint32_t e = 0; e < edgeCount; e++)
+		if (edgeFlags[e] != 0) { active = true; break; }
+	if (!active) {
+		for (uint32_t f = 0; f < faceCount; f++)
+			if (joinComponent[f] != UINT32_MAX) { active = true; break; }
+	}
+	mesh->installChartConstraints(edgeFlags.data(), joinComponent.data(), nextJoinFace.data(), faceCount, active);
+	return true;
+}
+
 AddMeshError AddUvMesh(Atlas *atlas, const UvMeshDecl &decl)
 {
 	XA_DEBUG_ASSERT(atlas);
@@ -9368,6 +10086,11 @@ void ComputeCharts(Atlas *atlas, ChartOptions options)
 	if (ctx->meshes.isEmpty() && ctx->uvMeshInstances.isEmpty()) {
 		XA_PRINT_WARNING("ComputeCharts: No meshes. Call AddMesh or AddUvMesh first.\n");
 		return;
+	}
+	if (!ctx->constrainedCompute) {
+		// The ordinary entry keeps its original behavior even after SetMeshChartConstraints.
+		for (uint32_t i = 0; i < ctx->meshes.size(); i++)
+			ctx->meshes[i]->setConstraintRuntimeActive(false);
 	}
 	// Reset atlas state. This function may be called multiple times, or again after PackCharts.
 	if (atlas->utilization)
@@ -9544,6 +10267,111 @@ void ComputeCharts(Atlas *atlas, ChartOptions options)
 	XA_PROFILE_PRINT_AND_RESET("   Alloc: ", alloc)
 #endif
 	XA_PRINT_MEM_USAGE
+}
+
+static bool verifyConstrainedCharts(Context *ctx, internal::param::Atlas &result)
+{
+	for (uint32_t mi = 0; mi < uint32_t(ctx->meshes.size()); mi++) {
+		internal::Mesh *mesh = ctx->meshes[mi];
+		const uint32_t faceCount = mesh->faceCount();
+		Array<int32_t> faceChart(MemTag::Default);
+		faceChart.resize(faceCount);
+		faceChart.fill(-1);
+		int32_t chartSerial = 0;
+		for (uint32_t gi = 0; gi < result.chartGroupCount(mi); gi++) {
+			const internal::param::ChartGroup *group = result.chartGroupAt(mi, gi);
+			for (uint32_t ci = 0; ci < group->chartCount(); ci++) {
+				const internal::param::Chart *chart = group->chartAt(ci);
+				if (chart->isInvalid())
+					return false;
+				// Chart does not expose its source-face count directly; iterate via unified mesh triangles.
+				const uint32_t sourceFaceCount = chart->unifiedMesh() ? chart->unifiedMesh()->faceCount() : 0;
+				for (uint32_t fi = 0; fi < sourceFaceCount; fi++) {
+					const uint32_t sourceFace = chart->mapFaceToSourceFace(fi);
+					if (sourceFace >= faceCount || faceChart[sourceFace] != -1)
+						return false;
+					faceChart[sourceFace] = chartSerial;
+				}
+				chartSerial++;
+			}
+		}
+		for (uint32_t f = 0; f < faceCount; f++) {
+			if (mesh->isFaceIgnored(f))
+				continue;
+			if (faceChart[f] < 0)
+				return false;
+		}
+		if (!mesh->constraintsActive())
+			continue;
+		for (uint32_t f = 0; f < faceCount; f++) {
+			const uint32_t component = mesh->joinComponent(f);
+			if (component != UINT32_MAX) {
+				uint32_t jf = f;
+				do {
+					if (faceChart[jf] != faceChart[f])
+						return false;
+					jf = mesh->nextJoinFace(jf);
+				} while (jf != f);
+			}
+			for (uint32_t j = 0; j < 3; j++) {
+				const uint32_t e = f * 3 + j;
+				if (mesh->constraintEdgeFlag(e) != 1)
+					continue;
+				const uint32_t oe = mesh->findEdge(mesh->vertexAt(meshEdgeIndex1(e)), mesh->vertexAt(e));
+				if (oe == UINT32_MAX)
+					continue; // Boundary cut is already physically open.
+				const uint32_t of = meshEdgeFace(oe);
+				if (of >= faceCount || faceChart[of] == faceChart[f])
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
+bool ComputeChartsConstrained(Atlas *atlas, ChartOptions options)
+{
+	if (!atlas)
+		return false;
+	Context *ctx = (Context *)atlas;
+	AddMeshJoin(atlas);
+	if (!ctx->uvMeshInstances.isEmpty() || ctx->meshes.isEmpty()) {
+		XA_PRINT_WARNING("ComputeChartsConstrained: only AddMesh triangle meshes are supported.\n");
+		return false;
+	}
+	if (options.paramFunc || options.useInputMeshUvs) {
+		XA_PRINT_WARNING("ComputeChartsConstrained: custom parameterization and input UV charts are unsupported.\n");
+		return false;
+	}
+	for (uint32_t i = 0; i < uint32_t(ctx->meshes.size()); i++) {
+		if (ctx->meshPolygonMappings[i] != nullptr) {
+			XA_PRINT_WARNING("ComputeChartsConstrained: faceVertexCount polygons are unsupported.\n");
+			return false;
+		}
+		if (!buildMeshChartConstraints(ctx->meshes[i]))
+			return false; // Previous charts/public output are intentionally untouched.
+	}
+	internal::param::Atlas candidate;
+	for (uint32_t i = 0; i < uint32_t(ctx->meshes.size()); i++)
+		candidate.addMesh(ctx->meshes[i]);
+	if (!candidate.computeCharts(ctx->taskScheduler, options, ctx->progressFunc, ctx->progressUserData))
+		return false; // Cancelled: the previous published charts remain available.
+	if (!verifyConstrainedCharts(ctx, candidate))
+		return false; // Candidate is discarded; previous param charts/public atlas stay intact.
+
+	// Publish only after the complete constrained candidate has been verified.
+	ctx->paramAtlas.adoptComputation(&candidate);
+	if (atlas->utilization) {
+		XA_FREE(atlas->utilization);
+		atlas->utilization = nullptr;
+	}
+	if (atlas->image) {
+		XA_FREE(atlas->image);
+		atlas->image = nullptr;
+	}
+	DestroyOutputMeshes(ctx);
+	memset(&ctx->atlas, 0, sizeof(Atlas));
+	return true;
 }
 
 void PackCharts(Atlas *atlas, PackOptions packOptions)
@@ -9784,7 +10612,10 @@ void PackCharts(Atlas *atlas, PackOptions packOptions)
 						for (uint32_t f = 0; f < outputChart->faceCount; f++)
 							outputChart->faceArray[f] = chart->mapFaceToSourceFace(f);
 					}
-					outputChart->material = 0;
+					if (ctx->meshes[i]->flags() & internal::MeshFlags::HasMaterials)
+						outputChart->material = ctx->meshes[i]->faceMaterial(chart->mapFaceToSourceFace(0));
+					else
+						outputChart->material = 0;
 					meshChartIndex++;
 					chartIndex++;
 					firstVertex += chart->originalVertexCount();
@@ -9960,6 +10791,16 @@ void xatlasDestroy(xatlasAtlas *atlas)
 xatlasAddMeshError xatlasAddMesh(xatlasAtlas *atlas, const xatlasMeshDecl *meshDecl, uint32_t meshCountHint)
 {
 	return (xatlasAddMeshError)xatlas::AddMesh((xatlas::Atlas *)atlas, *(const xatlas::MeshDecl *)meshDecl, meshCountHint);
+}
+
+bool xatlasSetMeshChartConstraints(xatlasAtlas *atlas, uint32_t meshIndex, const uint8_t *flags, uint32_t count)
+{
+	return xatlas::SetMeshChartConstraints((xatlas::Atlas *)atlas, meshIndex, flags, count);
+}
+
+bool xatlasComputeChartsConstrained(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions)
+{
+	return xatlas::ComputeChartsConstrained((xatlas::Atlas *)atlas, chartOptions ? *(xatlas::ChartOptions *)chartOptions : xatlas::ChartOptions());
 }
 
 void xatlasAddMeshJoin(xatlasAtlas *atlas)
