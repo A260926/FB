@@ -255,6 +255,15 @@ extern "C" {
             bool enableFrameSizeOverhead = true);
 
         /*
+        * Enable/disable per-frame deadline eviction for a registered stream.
+        * Must be configured before the first packet is pushed to the stream.
+        * Positive finite maxAgeSeconds enables it, zero disables it.
+        * Returns false for invalid arguments, unknown SSRC, or a queue
+        * implementation that does not support frame deadlines.
+        */
+        bool setFrameDeadline(uint32_t ssrc, float maxAgeSeconds);
+
+        /*
         * Updates the min and max bitrates for an existing stream
         */
         void updateBitrateStream(uint32_t ssrc,
@@ -609,6 +618,7 @@ extern "C" {
             bool isAdaptiveTargetRateScale;
             float hysteresis;
             float maxRtpQueueDelay;
+            bool frameDeadlineEnabled;
             bool enableFrameSizeOverhead;
             float timeStampClockRate;
 

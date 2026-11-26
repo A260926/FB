@@ -374,6 +374,22 @@ void ScreamV2Tx::updateBitrateStream(uint32_t ssrc,
     stream->maxBitrate = maxBitrate;
 }
 
+bool ScreamV2Tx::setFrameDeadline(uint32_t ssrc, float maxAgeSeconds) {
+    if (!std::isfinite(maxAgeSeconds) || maxAgeSeconds < 0.0f)
+        return false;
+
+    int id;
+    Stream* stream = getStream(ssrc, id);
+    if (stream == NULL)
+        return false;
+
+    if (!stream->rtpQueue->setFrameDeadline(maxAgeSeconds))
+        return false;
+
+    stream->frameDeadlineEnabled = (maxAgeSeconds > 0.0f);
+    return true;
+}
+
 RtpQueueIface* ScreamV2Tx::getStreamQueue(uint32_t ssrc) {
     int id;
     Stream* stream = getStream(ssrc, id);
@@ -460,6 +476,20 @@ float ScreamV2Tx::isOkToTransmit(uint32_t time_ntp, uint32_t& ssrc) {
         for (int n = 0; n < nStreams; n++)
             maxRate += streams[n]->getMaxRate();
 
+    }
+
+    /*
+    * Enforce frame deadlines on every stream before selecting the
+    * prioritized stream. An expired frame raises the same one-shot queue
+    * discard indication that getTargetBitrate() reports as -1.
+    */
+    float deadlineCurrTs = time_ntp * ntp2SecScaleFactor;
+    for (int n = 0; n < nStreams; n++) {
+        if (streams[n]->rtpQueue->checkFrameDeadline(deadlineCurrTs)) {
+            streams[n]->rtpQueueDiscard = true;
+            /* A new frame expiration is a new refresh request. */
+            streams[n]->wasRepairLoss = false;
+        }
     }
 
     /*

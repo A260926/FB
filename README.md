@@ -204,6 +204,64 @@ A few support classes for experimental use are implemented in:
 
 For more information on how to use the code in multimedia clients or in experimental platforms, please see [https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx](https://github.com/EricssonResearch/scream/blob/master/SCReAM-description.pptx?raw=true)
 
+### Optional frame deadlines
+
+`ScreamV2Tx` can evict stale video frames by frame age instead of clearing the
+whole RTP queue when `maxRtpQueueDelay` is exceeded:
+
+```cpp
+tx.registerNewStream(rtpQueue, ssrc, 1.0f, minRate, startRate, maxRate, 0.10f);
+
+// Call before pushing the stream's first RTP packet.
+if (!tx.setFrameDeadline(ssrc, 0.25f)) {
+    // Unknown SSRC, invalid age, or queue does not support deadlines.
+}
+
+// Disable again if desired.
+tx.setFrameDeadline(ssrc, 0.0f);
+```
+
+A positive finite age enables the feature; `0.0f` disables it. Negative,
+non-finite, and unknown-SSRC arguments return `false` and leave the previous
+configuration unchanged. `RtpQueue` supports the capability. External
+`RtpQueueIface` implementations remain source compatible; the default
+virtual methods report that frame deadlines are unsupported.
+
+Frames are defined by equal RTP timestamps in enqueue order. A marker bit or a
+changed timestamp ends a frame. Timestamp comparison is equality only, so the
+32-bit RTP timestamp wrap is handled without wrap arithmetic. A frame's age
+starts at the push timestamp of its first packet and is not reset when its
+prefix is popped; the age is therefore retained when the queue is temporarily
+empty after the prefix has been sent.
+
+When a deadline is reached, `isOkToTransmit()` first checks every registered
+stream and evicts the unsent packets of all due frames. Only then does it
+select a stream, so a fresh frame or another SSRC can still be scheduled. A new
+expiration raises the existing queue-discard indication and the next
+`getTargetBitrate()` call returns `-1` once to request a video refresh; the
+same frame is not reported repeatedly. Deadline eviction does not mark unsent
+packets as lost, modify transmitted-packet ACK records, or adjust
+`bytesInFlight`. The separate whole-queue clear used when refreshing the base
+network-delay estimate remains active.
+
+#### Packet ownership
+
+- A successful `RtpQueue::push()` transfers packet ownership to the queue.
+- A successful `RtpQueue::pop()` transfers ownership back to the caller.
+- `RtpQueue::clear()` and deadline eviction free still-queued packets exactly
+  once through the platform-provided `packet_free(void*, uint32_t)`.
+- A failed `push()` does not take ownership; the caller must release that
+  packet. This includes expired-frame suffixes that are rejected until their
+  marker or the next changed-timestamp frame boundary.
+- The test support implementation in `task_support/packet_owner.cpp` provides
+  `packet_free()` and the cumulative `task_packet_freed` counter.
+
+Regression tests can be built and run with:
+
+```sh
+bash task_support/run.sh target
+```
+
 ### Feedback format
 The feedback format is according to [9]. The feedback interval depends heavily on the media bitrate.
 

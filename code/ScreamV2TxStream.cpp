@@ -34,6 +34,7 @@ ScreamV2Tx::Stream::Stream(ScreamV2Tx* parent_,
 	targetBitrate = std::min(maxBitrate, std::max(minBitrate, startBitrate_));
 	targetBitrateH = targetBitrate;
 	maxRtpQueueDelay = maxRtpQueueDelay_;
+	frameDeadlineEnabled = false;
 	isAdaptiveTargetRateScale = isAdaptiveTargetRateScale_;
 	hysteresis = hysteresis_;
 	enableFrameSizeOverhead = enableFrameSizeOverhead_;
@@ -266,7 +267,8 @@ void ScreamV2Tx::Stream::updateTargetBitrate(uint32_t time_ntp) {
 	}
 
 	float rtpQueueDelay = rtpQueue->getDelay(time_ntp * ntp2SecScaleFactor);
-	if (rtpQueueDelay > maxRtpQueueDelay &&
+	if (!frameDeadlineEnabled &&
+		rtpQueueDelay > maxRtpQueueDelay &&
 		(time_ntp - lastRtpQueueDiscardT_ntp > kMinRtpQueueDiscardInterval_ntp)) {
 		/*
 		* RTP queue is cleared as it is becoming too large,
