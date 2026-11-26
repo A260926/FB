@@ -1,0 +1,509 @@
+BASELINE_OK compressed_name=www.example consumed=2
+CASE 000 seed=0x000000000c4e5a11 k=1 fam=A root=yes depthmax=4 chain=2lYg.net -> . layouts=none/suffix/multi
+CASE 001 seed=0x36fbefaa7bff7ff4 k=1 fam=AAAA root=no depthmax=4 chain=3fr8L.org.dev -> TYaR.org.dev layouts=none/suffix/multi
+CASE 002 seed=0x9c22a093e4997ea9 k=1 fam=AAAA root=no depthmax=4 chain=O0Eb.io.io -> av.io.io layouts=none/suffix/multi
+CASE 003 seed=0x26a2e450cf54091f k=1 fam=AAAA root=no depthmax=4 chain=tNujF.dev.com -> ok7.dev.com layouts=none/suffix/multi
+CASE 004 seed=0xd109b718ad4b4d0f k=4 fam=AAAA root=no depthmax=4 chain=BJ4Jz.dev -> vY.dev -> 7G.dev -> 79uE.dev -> 6uTo.dev layouts=none/suffix/multi
+CASE 005 seed=0x2b4a6070f81da736 k=1 fam=AAAA root=no depthmax=4 chain=HIcR.net -> Nl.net layouts=none/suffix/multi
+CASE 006 seed=0xde8261a44cdd3837 k=3 fam=A root=no depthmax=4 chain=SK.com -> 1.com -> L2TMS.com -> M.com layouts=none/suffix/multi
+CASE 007 seed=0x6902a5613797c2ad k=1 fam=AAAA root=no depthmax=4 chain=hvB.com -> egMcQ.com layouts=none/suffix/multi
+CASE 008 seed=0x7531fe6f96448a88 k=1 fam=A root=no depthmax=4 chain=9.io.org -> v.io.org layouts=none/suffix/multi
+CASE 009 seed=0x95188d7a89814402 k=2 fam=AAAA root=no depthmax=4 chain=A3Y.dev -> raM.dev -> z1LN.dev layouts=none/suffix/multi
+CASE 010 seed=0x7bee53b5660d801c k=1 fam=AAAA root=no depthmax=4 chain=t.net -> 09.net layouts=none/suffix/multi
+CASE 011 seed=0x8d90b08c539e1a3e k=2 fam=AAAA root=no depthmax=4 chain=cy2zR.org.net -> GlF.org.net -> fJ.org.net layouts=none/suffix/multi
+CASE 012 seed=0x129df080af74d26d k=1 fam=A root=no depthmax=4 chain=XbJYT.io.io -> Gezb.io.io layouts=none/suffix/multi
+CASE 013 seed=0x8608d39e1dbaf07a k=4 fam=A root=no depthmax=4 chain=WYk.org.dev -> j68.org.dev -> 7KH.org.dev -> S.org.dev -> eq6Sp.org.dev layouts=none/suffix/multi
+CASE 014 seed=0x8966fe41059f6b44 k=1 fam=A root=no depthmax=4 chain=nV.org.org -> h3D.org.org layouts=none/suffix/multi
+CASE 015 seed=0xfcd1e15e73e58951 k=3 fam=AAAA root=no depthmax=4 chain=bWqeB.dev.org -> T.dev.org -> 7fo.dev.org -> Jh-S.dev.org layouts=none/suffix/multi
+CASE 016 seed=0x17456ca0d83e7084 k=4 fam=A root=yes depthmax=4 chain=. -> S.com.io -> UI.com.io -> 7.com.io -> HRUO.com.io layouts=none/suffix/multi
+CASE 017 seed=0x4e415c4b47ef9667 k=2 fam=A root=no depthmax=4 chain=brPuJ.com.io -> GhwE.com.io -> s.com.io layouts=none/suffix/multi
+CASE 018 seed=0x853d4bf5b7a0bc4a k=2 fam=AAAA root=no depthmax=4 chain=U.dev -> eJ2XX.dev -> bjXN.dev layouts=none/suffix/multi
+CASE 019 seed=0x889b76989f853714 k=2 fam=AAAA root=no depthmax=4 chain=Cit7.io.io -> 7lobj.io.io -> L2-.io.io layouts=none/suffix/multi
+CASE 020 seed=0x66a00e680549261d k=4 fam=AAAA root=no depthmax=4 chain=pb9.net -> i.net -> UMp.net -> AFVDM.net -> iT96b.net layouts=none/suffix/multi
+CASE 021 seed=0xf9f1809066cbfda4 k=3 fam=AAAA root=no depthmax=4 chain=E43G.dev -> IKc0.dev -> XsJ0z.dev -> 4DGyr.dev layouts=none/suffix/multi
+CASE 022 seed=0x70ba8e50bcf6967b k=2 fam=AAAA root=no depthmax=4 chain=QtcV.com -> zQx.com -> 9xBK.com layouts=none/suffix/multi
+CASE 023 seed=0xd93f69dd0d750ffa k=3 fam=AAAA root=no depthmax=4 chain=g1aN.net.com -> x.net.com -> KHU.net.com -> kM.net.com layouts=none/suffix/multi
+CASE 024 seed=0x190c87f2f3ee82ee k=2 fam=A root=no depthmax=4 chain=n0at.com.net -> QSr.com.net -> PgQ.com.net layouts=none/suffix/multi
+CASE 025 seed=0x5008779d639fa8d1 k=4 fam=A root=no depthmax=4 chain=AC5F.org.org -> qil6.org.org -> -cb.org.org -> Gg.org.org -> dg.org.org layouts=none/suffix/multi
+CASE 026 seed=0xda88bb5a4e5a3347 k=2 fam=A root=no depthmax=4 chain=0t8V.dev -> 01Bz.dev -> eGP.dev layouts=none/suffix/multi
+CASE 027 seed=0x034078d0b85f39d2 k=2 fam=A root=no depthmax=4 chain=qVCP.org.io -> 8-.org.io -> s.org.io layouts=none/suffix/multi
+CASE 028 seed=0xd873e234a75adbca k=4 fam=A root=no depthmax=4 chain=nQcS.net -> 2V.net -> V4ba-.net -> 1ENs.net -> D.net layouts=none/suffix/multi
+CASE 029 seed=0x54aff3bd8c6946e8 k=1 fam=A root=no depthmax=4 chain=pw5cJ.io.dev -> CNR.io.dev layouts=none/suffix/multi
+CASE 030 seed=0xb105763b7e3af88c k=2 fam=AAAA root=no depthmax=4 chain=Q.org -> O7qT.org -> Mmoj.org layouts=none/suffix/multi
+CASE 031 seed=0xf9a3c2bcdb7cb891 k=3 fam=AAAA root=no depthmax=4 chain=g5g.net -> K44T.net -> e7CJ.net -> -1AU.net layouts=none/suffix/multi
+CASE 032 seed=0xb24ec7b8bf201bd9 k=2 fam=A root=yes depthmax=4 chain=tI5XL.dev -> Qp.dev -> . layouts=none/suffix/multi
+CASE 033 seed=0x706cd07d31a75168 k=3 fam=A root=no depthmax=4 chain=nQ.net.io -> uaYst.net.io -> biH8b.net.io -> wOsL.net.io layouts=none/suffix/multi
+CASE 034 seed=0xeca8e20616b5bc86 k=3 fam=A root=no depthmax=4 chain=VMjT.org.dev -> t.org.dev -> BAwk9.org.dev -> m.org.dev layouts=none/suffix/multi
+CASE 035 seed=0xd8f1ac098225cae7 k=3 fam=AAAA root=no depthmax=4 chain=s.net.dev -> kOL.net.dev -> dN.net.dev -> Q5cS.net.dev layouts=none/suffix/multi
+CASE 036 seed=0xdfae014f51eec07b k=2 fam=AAAA root=no depthmax=4 chain=JK.com.dev -> 89n2.com.dev -> FG.com.dev layouts=none/suffix/multi
+CASE 037 seed=0x284c4dd0af308080 k=4 fam=A root=no depthmax=4 chain=c9peu.io.com -> oOvX.io.com -> f.io.com -> dY.io.com -> jHyun.io.com layouts=none/suffix/multi
+CASE 038 seed=0xef3b850098800320 k=4 fam=A root=no depthmax=4 chain=EY-yl.com -> K.com -> g.com -> q.com -> K2ffb.com layouts=none/suffix/multi
+CASE 039 seed=0x90d1295cffaef9ff k=4 fam=A root=no depthmax=4 chain=M.net -> BR7.net -> ze99.net -> E.net -> pWVCG.net layouts=none/suffix/multi
+CASE 040 seed=0x57c0608ce8fe7c9f k=2 fam=A root=no depthmax=4 chain=Kga.dev.net -> XWlC.dev.net -> 6Q4z.dev.net layouts=none/suffix/multi
+CASE 041 seed=0xa5d1b0d6d5240eeb k=3 fam=AAAA root=no depthmax=4 chain=bPO.net.org -> 0AHt.net.org -> FFr.net.org -> laQn.net.org layouts=none/suffix/multi
+CASE 042 seed=0x41f4516aad6f3383 k=2 fam=AAAA root=no depthmax=4 chain=nf.net -> A.net -> Topje.net layouts=none/suffix/multi
+CASE 043 seed=0xcfd2bfca800e38c3 k=3 fam=AAAA root=no depthmax=4 chain=2.net -> zVj.net -> T2ARa.net -> ngJ2s.net layouts=none/suffix/multi
+CASE 044 seed=0xcdbde6a4d90ee146 k=2 fam=AAAA root=no depthmax=4 chain=D.org -> Xxp7.org -> awio.org layouts=none/suffix/multi
+CASE 045 seed=0x32e4978e41a8dffb k=3 fam=AAAA root=no depthmax=4 chain=GI-.io -> k.io -> 9YR.io -> TL.io layouts=none/suffix/multi
+CASE 046 seed=0xfd31f96112dcdd65 k=4 fam=A root=no depthmax=4 chain=DLHym.org.org -> mc1s.org.org -> Hqb2.org.org -> 9n0.org.org -> 9.org.org layouts=none/suffix/multi
+CASE 047 seed=0xb5dcfe5cf68040ad k=2 fam=AAAA root=no depthmax=4 chain=qC1vI.net -> fWzv.net -> Rccw7.net layouts=none/suffix/multi
+CASE 048 seed=0x1590ab7dd0366d1b k=1 fam=AAAA root=yes depthmax=4 chain=J0l.com -> . layouts=none/suffix/multi
+CASE 049 seed=0x27330854bdc7073d k=3 fam=A root=no depthmax=4 chain=AK.com -> FLW.com -> 2.com -> U04xK.com layouts=none/suffix/multi
+CASE 050 seed=0xfc6671b8acc2a935 k=2 fam=A root=no depthmax=4 chain=6BMq.com -> r-.com -> iLTOe.com layouts=none/suffix/multi
+CASE 051 seed=0x251e2f2f16c7afc0 k=3 fam=AAAA root=no depthmax=4 chain=P.dev.com -> 2tPYN.dev.com -> RooIH.dev.com -> jq.dev.com layouts=none/suffix/multi
+CASE 052 seed=0x0680f1a164701993 k=3 fam=A root=no depthmax=4 chain=Vctl.com.dev -> zM.com.dev -> xlg-l.com.dev -> K.com.dev layouts=none/suffix/multi
+CASE 053 seed=0x09df1c444c54945d k=2 fam=AAAA root=no depthmax=4 chain=q.org -> mdBAN.org -> 9d9Tp.org layouts=none/suffix/multi
+CASE 054 seed=0x7263f7d09cd30ddc k=1 fam=A root=no depthmax=4 chain=H.dev.dev -> 1.dev.dev layouts=none/suffix/multi
+CASE 055 seed=0x0b286dc18d39b7aa k=3 fam=AAAA root=no depthmax=4 chain=x-zD.org -> 4FEv.org -> q69A.org -> ia.org layouts=none/suffix/multi
+CASE 056 seed=0x0913949be63a602d k=1 fam=AAAA root=no depthmax=4 chain=s.net -> mC.net layouts=none/suffix/multi
+CASE 057 seed=0xfe2d8d0ac872bb9f k=3 fam=AAAA root=no depthmax=4 chain=v.net -> q6F.net -> 9NHgK.net -> L3d.net layouts=none/suffix/multi
+CASE 058 seed=0xbfa9c07222de6bf8 k=2 fam=A root=no depthmax=4 chain=bSM5G.io -> L.io -> U3m.io layouts=none/suffix/multi
+CASE 059 seed=0xba36bca993fa99b1 k=1 fam=A root=no depthmax=4 chain=9.dev -> zV4N.dev layouts=none/suffix/multi
+CASE 060 seed=0x8f6a260d82f63ba9 k=2 fam=AAAA root=no depthmax=4 chain=8.net -> 0Ip.net -> 7.net layouts=none/suffix/multi
+CASE 061 seed=0x42a22740d7b5ccaa k=4 fam=A root=no depthmax=4 chain=k4.net -> bvr9.net -> qYQyj.net -> pkk.net -> CL0j.net layouts=none/suffix/multi
+CASE 062 seed=0x826f4556be2f3f9e k=3 fam=AAAA root=no depthmax=4 chain=48.net.com -> gNH.net.com -> v-Sn.net.com -> l.net.com layouts=none/suffix/multi
+CASE 063 seed=0xa5b3ff04995073e2 k=4 fam=A root=no depthmax=4 chain=ga.org.dev -> ST77s.org.dev -> sbaUT.org.dev -> Tx.org.dev -> Yoh.org.dev layouts=none/suffix/multi
+CASE 064 seed=0x5e5f04007cf3d72a k=3 fam=AAAA root=yes depthmax=4 chain=f.dev -> qs.dev -> . -> eG.dev layouts=none/suffix/multi
+CASE 065 seed=0xcc56e3555c5622f0 k=1 fam=A root=no depthmax=4 chain=R.net -> 3YYy.net layouts=none/suffix/multi
+CASE 066 seed=0xa18a4cb94b51c4e8 k=3 fam=A root=no depthmax=4 chain=m-X.com.net -> X.com.net -> d7NKQ.com.net -> Gppeb.com.net layouts=none/suffix/multi
+CASE 067 seed=0xef9b9d0337775734 k=1 fam=AAAA root=no depthmax=4 chain=imO.dev -> 9.dev layouts=none/suffix/multi
+CASE 068 seed=0x9f757393a4526d6b k=4 fam=A root=no depthmax=4 chain=0bJ.net -> s17.net -> 8V.net -> wM7AT.net -> Q.net layouts=none/suffix/multi
+CASE 069 seed=0xdf4291a98acbe05f k=1 fam=AAAA root=no depthmax=4 chain=kLGG.dev -> N.dev layouts=none/suffix/multi
+CASE 070 seed=0x2d53e1f376f172ab k=2 fam=AAAA root=no depthmax=4 chain=2rRhT.org.io -> r.org.io -> i0.org.io layouts=none/suffix/multi
+CASE 071 seed=0x75f22e74d43332b0 k=2 fam=A root=no depthmax=4 chain=Xlu.net -> keH.net -> 2hWl.net layouts=none/suffix/multi
+CASE 072 seed=0x87948b4bc1c3ccd2 k=4 fam=AAAA root=no depthmax=4 chain=aOp.org -> nqE.org -> QlFWS.org -> 7a4b.org -> Y.org layouts=none/suffix/multi
+CASE 073 seed=0x60261f5298a3e994 k=1 fam=AAAA root=no depthmax=4 chain=FiiY.dev -> dU.dev layouts=none/suffix/multi
+CASE 074 seed=0x2fe684edf8bbb945 k=2 fam=A root=no depthmax=4 chain=7Lbfq.net -> S.net -> jVRC.net layouts=none/suffix/multi
+CASE 075 seed=0xba66c8aae37643bb k=2 fam=AAAA root=no depthmax=4 chain=cDU.org.net -> qvHE.org.net -> m3.org.net layouts=none/suffix/multi
+CASE 076 seed=0xa13c8ee5c0027fd5 k=2 fam=AAAA root=no depthmax=4 chain=O.org.io -> g.org.io -> P-2Rc.org.io layouts=none/suffix/multi
+CASE 077 seed=0x2f1afd4592a18515 k=1 fam=AAAA root=no depthmax=4 chain=gWy.net.net -> eDX.net.net layouts=none/suffix/multi
+CASE 078 seed=0x808a783266ab922b k=3 fam=A root=no depthmax=4 chain=0AM3.io -> VU.io -> p.io -> c.io layouts=none/suffix/multi
+CASE 079 seed=0x7b177469d7c7bfe4 k=1 fam=A root=no depthmax=4 chain=zBIP.dev.dev -> GY.dev.dev layouts=none/suffix/multi
+CASE 080 seed=0x13dbea5ac82e69b2 k=2 fam=AAAA root=yes depthmax=4 chain=1aN.org.net -> DUX1.org.net -> . layouts=none/suffix/multi
+CASE 081 seed=0xbe42bd22a625ada2 k=4 fam=A root=no depthmax=4 chain=Sbk.io.com -> IPX.io.com -> AHO.io.com -> lJ8BR.io.com -> R.io.com layouts=none/suffix/multi
+CASE 082 seed=0x3a7eceab8b3418c0 k=1 fam=A root=no depthmax=4 chain=pOb6o.org.com -> 1Uz.org.com layouts=none/suffix/multi
+CASE 083 seed=0x0fb2380f7a2fbab8 k=3 fam=A root=no depthmax=4 chain=9lnA.dev.dev -> va.dev.dev -> RFL.dev.dev -> 9T.dev.dev layouts=none/suffix/multi
+CASE 084 seed=0x74d8e8f8e2c9b96d k=1 fam=A root=no depthmax=4 chain=Er6x.net.net -> sk4R.net.net layouts=none/suffix/multi
+CASE 085 seed=0x4a0c525cd1c55b65 k=3 fam=A root=no depthmax=4 chain=ki.org.net -> XsOs.org.net -> BxJX5.org.net -> tNX.org.net layouts=none/suffix/multi
+CASE 086 seed=0x89d97072b83ece59 k=3 fam=AAAA root=no depthmax=4 chain=Xe4.com -> P.com -> uULpl.com -> VAw8.com layouts=none/suffix/multi
+CASE 087 seed=0x061581fb9d4d3977 k=4 fam=A root=no depthmax=4 chain=E3.dev.dev -> K.dev.dev -> 1Jh.dev.dev -> 0wox.dev.dev -> dOy.dev.dev layouts=none/suffix/multi
+CASE 088 seed=0xcd04b92b869cbc17 k=3 fam=A root=no depthmax=4 chain=4Kg.org.net -> OQz.org.net -> Vf8t.org.net -> l4IR.org.net layouts=none/suffix/multi
+CASE 089 seed=0x0cd1d7416d162f0b k=3 fam=A root=no depthmax=4 chain=hdO.io -> oPp.io -> JYe.io -> BKz9q.io layouts=none/suffix/multi
+CASE 090 seed=0x358994b7d71b3596 k=4 fam=AAAA root=no depthmax=4 chain=7ggBJ.org -> cSUm.org -> wphTf.org -> zNUQ8.org -> Yz.org layouts=none/suffix/multi
+CASE 091 seed=0x41b8edc635c7fd71 k=1 fam=AAAA root=no depthmax=4 chain=j.io.io -> jS0I4.io.io layouts=none/suffix/multi
+CASE 092 seed=0x932868b309d20a87 k=1 fam=A root=no depthmax=4 chain=9.com.org -> nOC.com.org layouts=none/suffix/multi
+CASE 093 seed=0x685bd216f8cdac7f k=4 fam=A root=no depthmax=4 chain=kJdO.net -> HoIXp.net -> U.net -> RRDvr.net -> h6nG.net layouts=none/suffix/multi
+CASE 094 seed=0xcd8283006167ab34 k=2 fam=AAAA root=no depthmax=4 chain=X9R3.net.io -> w.net.io -> 0TFE1.net.io layouts=none/suffix/multi
+CASE 095 seed=0x6f18275cc896a213 k=3 fam=AAAA root=no depthmax=4 chain=jRa0.org -> PDw0.org -> EBA.org -> Mgh.org layouts=none/suffix/multi
+CASE 096 seed=0x507ae9cf163f0be6 k=3 fam=AAAA root=yes depthmax=4 chain=8C92.dev -> u.dev -> V.dev -> . layouts=none/suffix/multi
+CASE 097 seed=0x5caa42dd74ebd3c1 k=4 fam=AAAA root=no depthmax=4 chain=uP.net -> r5G.net -> Idwf.net -> s0U.net -> Lw.net layouts=none/suffix/multi
+CASE 098 seed=0x155547d9588f3709 k=2 fam=A root=no depthmax=4 chain=9q.org -> je.org -> 0iclp.org layouts=none/suffix/multi
+CASE 099 seed=0x88c02af6c6d55516 k=1 fam=A root=no depthmax=4 chain=-yBiU.io -> hMvai.io layouts=none/suffix/multi
+CASE 100 seed=0x834d272e37f182cf k=2 fam=AAAA root=no depthmax=4 chain=0vw.io.dev -> s.io.dev -> jqln.io.dev layouts=none/suffix/multi
+CASE 101 seed=0xcbeb73af953342d4 k=3 fam=AAAA root=no depthmax=4 chain=1j.com -> cY.com -> RwI.com -> hKd6.com layouts=none/suffix/multi
+CASE 102 seed=0x0bb891c57bacb5c8 k=1 fam=AAAA root=no depthmax=4 chain=8cs.io -> WDMJ1.io layouts=none/suffix/multi
+CASE 103 seed=0xfb5f866bcf013ef3 k=4 fam=AAAA root=no depthmax=4 chain=TRbpc.io.com -> 7dSp.io.com -> p9zzg.io.com -> bao.io.com -> E0.io.com layouts=none/suffix/multi
+CASE 104 seed=0x695765c0ae638ab9 k=1 fam=AAAA root=no depthmax=4 chain=q.dev.net -> 1.dev.net layouts=none/suffix/multi
+CASE 105 seed=0x41e8f9c78543a77b k=4 fam=A root=no depthmax=4 chain=K.dev -> QQvse.dev -> G.dev -> nhGC.dev -> 3C6em.dev layouts=none/suffix/multi
+CASE 106 seed=0xbe250b506a521299 k=3 fam=AAAA root=no depthmax=4 chain=iiL.org.net -> t96.org.net -> Kx5.org.net -> Wlo.org.net layouts=none/suffix/multi
+CASE 107 seed=0x0150540938b00057 k=1 fam=A root=no depthmax=4 chain=vXaV.com -> RPwS-.com layouts=none/suffix/multi
+CASE 108 seed=0x4f61a45324d592a3 k=2 fam=A root=no depthmax=4 chain=X.net.net -> mb.net.net -> Jj.net.net layouts=none/suffix/multi
+CASE 109 seed=0x6f48335e18124c1d k=4 fam=AAAA root=no depthmax=4 chain=t.com.org -> kuK.com.org -> oyT.com.org -> VesNm.com.org -> gYy.com.org layouts=none/suffix/multi
+CASE 110 seed=0x47d9c764eef268df k=3 fam=AAAA root=no depthmax=4 chain=d6U8Y.net -> HzU3C.net -> 8mv1E.net -> E4ws.net layouts=none/suffix/multi
+CASE 111 seed=0x4051ea76b90f3f1b k=2 fam=A root=no depthmax=4 chain=M.io.dev -> OKi.io.dev -> Q3t.io.dev layouts=none/suffix/multi
+CASE 112 seed=0x8e633ac0a534d167 k=1 fam=A root=yes depthmax=4 chain=kBq.com -> . layouts=none/suffix/multi
+CASE 113 seed=0x2727b0b1959b7b35 k=4 fam=AAAA root=no depthmax=4 chain=bu.com.net -> nY.com.net -> 7lA.com.net -> -0PC.com.net -> mc.com.net layouts=none/suffix/multi
+CASE 114 seed=0xdfd2b5ad793ede7d k=1 fam=AAAA root=no depthmax=4 chain=4aQ.dev.net -> xEe.dev.net layouts=none/suffix/multi
+CASE 115 seed=0x4dca950258a12a43 k=2 fam=AAAA root=no depthmax=4 chain=6a8.org -> wMA6h.org -> L.org layouts=none/suffix/multi
+CASE 116 seed=0x79e07d1baa8aab98 k=3 fam=AAAA root=no depthmax=4 chain=c.org -> P.org -> qo.org -> baTNj.org layouts=none/suffix/multi
+CASE 117 seed=0x442ddeee7bbea902 k=3 fam=A root=no depthmax=4 chain=K.org -> hQ.org -> Gc.org -> 3s.org layouts=none/suffix/multi
+CASE 118 seed=0x196148526aba4afa k=2 fam=AAAA root=no depthmax=4 chain=d.io.io -> 5eSkg.io.io -> sW66.io.io layouts=none/suffix/multi
+CASE 119 seed=0x9e6e8846c6910329 k=3 fam=A root=no depthmax=4 chain=SEHf.com -> xc.com -> f.com -> dqK.com layouts=none/suffix/multi
+CASE 120 seed=0x4e485ed7336c1960 k=2 fam=A root=no depthmax=4 chain=7z2P.net -> WmXj.net -> us.net layouts=none/suffix/multi
+CASE 121 seed=0xe70cd4c823d2c32e k=1 fam=A root=no depthmax=4 chain=bg.dev.net -> -4.dev.net layouts=none/suffix/multi
+CASE 122 seed=0xbc403e2c12ce6526 k=3 fam=A root=no depthmax=4 chain=VbDP6.org -> i.org -> GV35M.org -> nRTSn.org layouts=none/suffix/multi
+CASE 123 seed=0xa889082f7e3e7387 k=1 fam=A root=no depthmax=4 chain=epmq.net -> o2.net layouts=none/suffix/multi
+CASE 124 seed=0xa3160466ef5aa140 k=3 fam=A root=no depthmax=4 chain=1x4.net -> U.net -> oLR.net -> RgNIM.net layouts=none/suffix/multi
+CASE 125 seed=0x8f5ece6a5acaafa1 k=3 fam=A root=no depthmax=4 chain=u1.org -> vY.org -> a1p.org -> Ge7KR.org layouts=none/suffix/multi
+CASE 126 seed=0x7ba7986dc63abe02 k=2 fam=AAAA root=no depthmax=4 chain=mkt.dev.net -> C4.dev.net -> -Ps1u.dev.net layouts=none/suffix/multi
+CASE 127 seed=0x1d3d3cca2d69b4e1 k=2 fam=AAAA root=no depthmax=4 chain=plVIb.com -> zS.com -> zO.com layouts=none/suffix/multi
+CASE 128 seed=0x65db894b8aab74e6 k=1 fam=A root=yes depthmax=4 chain=D.dev -> . layouts=none/suffix/multi
+CASE 129 seed=0xd0753dfd822945e2 k=1 fam=A root=no depthmax=4 chain=f.io.com -> gS.io.com layouts=none/suffix/multi
+CASE 130 seed=0x8e9346c1f4b07b71 k=1 fam=A root=no depthmax=4 chain=c.com -> vNtLw.com layouts=none/suffix/multi
+CASE 131 seed=0x10425c1368a2b8d6 k=2 fam=A root=no depthmax=4 chain=age.dev.org -> 7dd9.dev.org -> iiY.dev.org layouts=none/suffix/multi
+CASE 132 seed=0x473e4bbdd853deb9 k=3 fam=A root=no depthmax=4 chain=dR.org -> Ehxef.org -> nQot.org -> X.org layouts=none/suffix/multi
+CASE 133 seed=0x338715c143c3ed1a k=1 fam=A root=no depthmax=4 chain=8D.com -> GY1.com layouts=none/suffix/multi
+CASE 134 seed=0x16feb159386bae6a k=2 fam=A root=no depthmax=4 chain=8GWu.net.dev -> 9k.net.dev -> a.net.dev layouts=none/suffix/multi
+CASE 135 seed=0x651001a3249140b6 k=4 fam=AAAA root=no depthmax=4 chain=-S13.io.dev -> U.io.dev -> F.io.dev -> z4xxj.io.dev -> v7.io.dev layouts=none/suffix/multi
+CASE 136 seed=0x1dbb069f0834a3fe k=2 fam=AAAA root=no depthmax=4 chain=PAk2.org -> GAU.org -> QNDMQ.org layouts=none/suffix/multi
+CASE 137 seed=0x40ffc04ce355d842 k=2 fam=A root=no depthmax=4 chain=MRx4F.net.io -> 8.net.io -> uJ3.net.io layouts=none/suffix/multi
+CASE 138 seed=0x52a21d23d0e67264 k=1 fam=A root=no depthmax=4 chain=Nmsg.com.org -> f.com.org layouts=none/suffix/multi
+CASE 139 seed=0x4d2f195b4202a01d k=4 fam=A root=no depthmax=4 chain=qjMf.dev -> jax6.dev -> C.dev -> f.dev -> N7-G.dev layouts=none/suffix/multi
+CASE 140 seed=0x8cfc3771287c1311 k=1 fam=A root=no depthmax=4 chain=zSnmY.io.net -> F.io.net layouts=none/suffix/multi
+CASE 141 seed=0x9e9e9448160cad33 k=2 fam=AAAA root=no depthmax=4 chain=E8.org.org -> mK4.org.org -> PtYQ.org.org layouts=none/suffix/multi
+CASE 142 seed=0x85745a82f298e94d k=3 fam=A root=no depthmax=4 chain=f1Pn.org.org -> iz.org.org -> uW4.org.org -> rcSn.org.org layouts=none/suffix/multi
+CASE 143 seed=0xae2c17f95c9defd8 k=1 fam=A root=no depthmax=4 chain=g.net.io -> 5.net.io layouts=none/suffix/multi
+CASE 144 seed=0x5534c01e52b0b8fe k=1 fam=AAAA root=yes depthmax=4 chain=. -> U.io.dev layouts=none/suffix/multi
+CASE 145 seed=0x8f8eda6baa4659ab k=1 fam=A root=no depthmax=4 chain=I.org -> WBK8.org layouts=none/suffix/multi
+CASE 146 seed=0x64c243cf9941fba3 k=2 fam=AAAA root=no depthmax=4 chain=e.org.io -> wDE.org.io -> h1.org.io layouts=none/suffix/multi
+CASE 147 seed=0x54693875ec9684ce k=4 fam=AAAA root=no depthmax=4 chain=QN0l.io -> upVV.io -> Co.io -> avJ6.io -> 6.io layouts=none/suffix/multi
+CASE 148 seed=0xab4bb72b4f84642b k=3 fam=A root=no depthmax=4 chain=5.io -> 8q6.io -> J.io -> p0O.io layouts=none/suffix/multi
+CASE 149 seed=0x9794812ebaf4728c k=2 fam=A root=no depthmax=4 chain=F.com -> O9gX.com -> 4dzrL.com layouts=none/suffix/multi
+CASE 150 seed=0x2214c4eba5aefd02 k=3 fam=A root=no depthmax=4 chain=j0e.dev -> x.dev -> PQUY.dev -> cS3M1.dev layouts=none/suffix/multi
+CASE 151 seed=0x33b721c2933f9724 k=4 fam=A root=no depthmax=4 chain=UANm.io.com -> OCiL.io.com -> J.io.com -> zBMDF.io.com -> qf.io.com layouts=none/suffix/multi
+CASE 152 seed=0xd54cc61efa6e8e03 k=2 fam=A root=no depthmax=4 chain=n.org.net -> Cet.org.net -> TE72.org.net layouts=none/suffix/multi
+CASE 153 seed=0x48b7a93c68b4ac10 k=2 fam=AAAA root=no depthmax=4 chain=Ncg.net -> IqV07.net -> A.net layouts=none/suffix/multi
+CASE 154 seed=0x9155f5bdc5f66c15 k=2 fam=A root=no depthmax=4 chain=UXW.dev.dev -> 5kQR.dev.dev -> 0hsEo.dev.dev layouts=none/suffix/multi
+CASE 155 seed=0xf67ca6a72e906aca k=3 fam=A root=no depthmax=4 chain=U.net.io -> uB.net.io -> utBE3.net.io -> BecVP.net.io layouts=none/suffix/multi
+CASE 156 seed=0x1f34641d98957155 k=1 fam=AAAA root=no depthmax=4 chain=A.net.com -> EKfjR.net.com layouts=none/suffix/multi
+CASE 157 seed=0x8d2c437277f7bd1b k=3 fam=A root=no depthmax=4 chain=yWIL.com -> m.com -> mKJ2d.com -> 3h.com layouts=none/suffix/multi
+CASE 158 seed=0xf252f45be091bbd0 k=2 fam=AAAA root=no depthmax=4 chain=1U2.dev.net -> kOv7.dev.net -> V.dev.net layouts=none/suffix/multi
+CASE 159 seed=0x1e68dc75327b3d25 k=4 fam=A root=no depthmax=4 chain=ldCN.io.io -> IjQeL.io.io -> xpXTr.io.io -> j.io.io -> ApM0K.io.io layouts=none/suffix/multi
+CASE 160 seed=0x754b5b2a95691c82 k=2 fam=AAAA root=yes depthmax=4 chain=. -> W.dev.com -> oqomY.dev.com layouts=none/suffix/multi
+CASE 161 seed=0x817ab438f415e45d k=1 fam=A root=no depthmax=4 chain=Rge.io.io -> qX.io.io layouts=none/suffix/multi
+CASE 162 seed=0xf4e59756625c026a k=1 fam=A root=no depthmax=4 chain=V-.dev -> PB.dev layouts=none/suffix/multi
+CASE 163 seed=0x3a25b934d7b947a5 k=3 fam=AAAA root=no depthmax=4 chain=j.com -> tjA.com -> vMVE.com -> 08P.com layouts=none/suffix/multi
+CASE 164 seed=0x40e20e7aa7823d39 k=2 fam=A root=no depthmax=4 chain=dLm.com.io -> Ot3d3.com.io -> 0nst.com.io layouts=none/suffix/multi
+CASE 165 seed=0xa608bf64101c3bee k=1 fam=A root=no depthmax=4 chain=P.net.io -> H1o.net.io layouts=none/suffix/multi
+CASE 166 seed=0x025e41e201eded92 k=3 fam=AAAA root=no depthmax=4 chain=0WN.io -> No.io -> 7xQH.io -> 6B.io layouts=none/suffix/multi
+CASE 167 seed=0x091a9727d1b6e326 k=1 fam=AAAA root=no depthmax=4 chain=XDe4.net -> Mu.net layouts=none/suffix/multi
+CASE 168 seed=0xd8dafcc331ceb2d7 k=4 fam=A root=no depthmax=4 chain=xYsuX.com.net -> No.com.net -> xV5EA.com.net -> m3lY4.com.net -> EhcSg.com.net layouts=none/suffix/multi
+CASE 169 seed=0xb6df94929792a1e0 k=3 fam=A root=no depthmax=4 chain=V-2D4.net -> qqI1.net -> R7nT.net -> Juag6.net layouts=none/suffix/multi
+CASE 170 seed=0xd1531fd4fbeb8913 k=3 fam=AAAA root=no depthmax=4 chain=ev93k.net -> -dUaG.net -> QujQl.net -> F4loL.net layouts=none/suffix/multi
+CASE 171 seed=0xa11385705c0358c4 k=2 fam=AAAA root=no depthmax=4 chain=KJ0E.net.dev -> ip.net.dev -> 0qa.net.dev layouts=none/suffix/multi
+CASE 172 seed=0x6b60e7432d37562e k=1 fam=AAAA root=no depthmax=4 chain=-gFk.com -> Cqe.com layouts=none/suffix/multi
+CASE 173 seed=0xd958c6980c99a1f4 k=3 fam=A root=no depthmax=4 chain=2.dev -> DsRl.dev -> 9w.dev -> a.dev layouts=none/suffix/multi
+CASE 174 seed=0xc5a1909b7809b055 k=1 fam=A root=no depthmax=4 chain=9Y7.org.net -> bFuV.org.net layouts=none/suffix/multi
+CASE 175 seed=0x83bf995fea90e5e4 k=3 fam=AAAA root=no depthmax=4 chain=6Lw.dev -> I.dev -> 9jds.dev -> jkXf.dev layouts=none/suffix/multi
+CASE 176 seed=0x453bccc744fc963d k=2 fam=AAAA root=yes depthmax=4 chain=p9.io -> . -> B.io layouts=none/suffix/multi
+CASE 177 seed=0xd88d3eefa67f6dc4 k=2 fam=AAAA root=no depthmax=4 chain=y.io -> m55.io -> rS.io layouts=none/suffix/multi
+CASE 178 seed=0x630d82ac9139f83a k=3 fam=AAAA root=no depthmax=4 chain=eGr.io.org -> E0IRz.io.org -> U63.io.org -> S.io.org layouts=none/suffix/multi
+CASE 179 seed=0xdf49943576486358 k=1 fam=AAAA root=no depthmax=4 chain=7TVOj.com -> ADV58.com layouts=none/suffix/multi
+CASE 180 seed=0x0b5f7c4ec831e4ad k=3 fam=A root=no depthmax=4 chain=Y.com -> MgTBD.com -> XGD.com -> s0Tk.com layouts=none/suffix/multi
+CASE 181 seed=0x1d01d925b5c27ecf k=3 fam=AAAA root=no depthmax=4 chain=ILQ.dev -> J1wk.dev -> oBaX.dev -> BNY.dev layouts=none/suffix/multi
+CASE 182 seed=0x1aed00000ec32752 k=3 fam=A root=no depthmax=4 chain=Y.org -> r2.org -> 0JuXF.org -> 6BdX3.org layouts=none/suffix/multi
+CASE 183 seed=0x1e4b2aa2f6a7a21c k=3 fam=A root=no depthmax=4 chain=fTW3X.io -> 5.io -> uk.io -> aRDUo.io layouts=none/suffix/multi
+CASE 184 seed=0x2fed8779e4383c3e k=3 fam=AAAA root=no depthmax=4 chain=1r5K.org -> 5.org -> 8eFM.org -> M.org layouts=none/suffix/multi
+CASE 185 seed=0xd1832bd64b67331d k=2 fam=A root=no depthmax=4 chain=xCVfo.com.io -> f.com.io -> FOYc.com.io layouts=none/suffix/multi
+CASE 186 seed=0x087f1b80bb185900 k=1 fam=AAAA root=no depthmax=4 chain=Qqge.dev -> r1.dev layouts=none/suffix/multi
+CASE 187 seed=0xd83f811c1b3028b1 k=4 fam=A root=no depthmax=4 chain=Ru.io -> 9N.io -> p1Q8.io -> HOd.io -> yWf.io layouts=none/suffix/multi
+CASE 188 seed=0x9f2eb84c047fab51 k=2 fam=AAAA root=no depthmax=4 chain=gpraI.net -> fc.net -> YPFuX.net layouts=none/suffix/multi
+CASE 189 seed=0xdefbd661eaf91e45 k=1 fam=AAAA root=no depthmax=4 chain=9hq.dev.org -> 4k-.dev.org layouts=none/suffix/multi
+CASE 190 seed=0x306b514ebf032b5b k=3 fam=A root=no depthmax=4 chain=Pmnq3.com -> 5Bc3.com -> i.com -> vG.com layouts=none/suffix/multi
+CASE 191 seed=0xa3d6346c2d494968 k=3 fam=AAAA root=no depthmax=4 chain=fRCS.com -> dq.com -> PF.com -> xWL.com layouts=none/suffix/multi
+CASE 192 seed=0xc71aee1a086a7dac k=4 fam=A root=yes depthmax=4 chain=4jJKx.dev -> lOh.dev -> . -> x53hA.dev -> dg.dev layouts=none/suffix/multi
+CASE 193 seed=0xb363b81d73da8c0d k=1 fam=AAAA root=no depthmax=4 chain=CxeJ9.dev.org -> uVXW.dev.org layouts=none/suffix/multi
+CASE 194 seed=0x188a6906dc748ac2 k=2 fam=AAAA root=no depthmax=4 chain=lsT.dev -> mdr.dev -> 7dw.dev layouts=none/suffix/multi
+CASE 195 seed=0x7db119f0450e8977 k=3 fam=AAAA root=no depthmax=4 chain=4.dev.dev -> nT.dev.dev -> EkV.dev.dev -> az6wf.dev.dev layouts=none/suffix/multi
+CASE 196 seed=0x22a4e8ef9421fb20 k=3 fam=AAAA root=no depthmax=4 chain=eK.com -> lc3zY.com -> 6.com -> i3Yk.com layouts=none/suffix/multi
+CASE 197 seed=0xc798b7eee3356cc9 k=1 fam=A root=no depthmax=4 chain=eVMW.dev.org -> v.dev.org layouts=none/suffix/multi
+CASE 198 seed=0x4947cd405727aa2e k=2 fam=AAAA root=no depthmax=4 chain=vV2WG.com -> -.com -> 2.com layouts=none/suffix/multi
+CASE 199 seed=0x38eec1e6aa7c3359 k=3 fam=A root=no depthmax=4 chain=nJV.org -> 2.org -> R.org -> N.org layouts=none/suffix/multi
+CASE 200 seed=0xe8c8987717574990 k=1 fam=AAAA root=no depthmax=4 chain=EBDb.net -> QMbi3.net layouts=none/suffix/multi
+CASE 201 seed=0xafb7cfa700a6cc30 k=3 fam=A root=no depthmax=4 chain=WV.io -> d.io -> LYq.io -> NoYrf.io layouts=none/suffix/multi
+CASE 202 seed=0x84eb390aefa26e28 k=2 fam=AAAA root=no depthmax=4 chain=XDe.io.net -> nrj.io.net -> Wa.io.net layouts=none/suffix/multi
+CASE 203 seed=0xea11e9f4583c6cdd k=1 fam=A root=no depthmax=4 chain=Y.dev.net -> -YH.dev.net layouts=none/suffix/multi
+CASE 204 seed=0xbf45535847380ed5 k=2 fam=A root=no depthmax=4 chain=mQB.net -> PJFq.net -> hNJt.net layouts=none/suffix/multi
+CASE 205 seed=0xe7fd10ceb13d1560 k=1 fam=AAAA root=no depthmax=4 chain=eS.net.com -> c2.net.com layouts=none/suffix/multi
+CASE 206 seed=0xfcfd984886b22a4c k=4 fam=AAAA root=no depthmax=4 chain=2.io -> m.io -> wg.io -> 0P.io -> oLAjt.io layouts=none/suffix/multi
+CASE 207 seed=0xbe79cbafe11ddaa5 k=3 fam=A root=no depthmax=4 chain=O1.net -> AL.net -> 2E1cy.net -> e2Ui.net layouts=none/suffix/multi
+CASE 208 seed=0x48fa0f6ccbd8651b k=2 fam=AAAA root=yes depthmax=4 chain=QNJ.org.io -> . -> vvcY.org.io layouts=none/suffix/multi
+CASE 209 seed=0xf360e234a9cfa90b k=2 fam=A root=no depthmax=4 chain=6CC.io.dev -> To.io.dev -> ES.io.dev layouts=none/suffix/multi
+CASE 210 seed=0x4172327e95f53b57 k=2 fam=A root=no depthmax=4 chain=i.dev.io -> 06W6.dev.io -> p.dev.io layouts=none/suffix/multi
+CASE 211 seed=0x786e222905a6613a k=4 fam=A root=no depthmax=4 chain=y3Mc.io.dev -> o8o.io.dev -> -bPp.io.dev -> G3hlb.io.dev -> rH.io.dev layouts=none/suffix/multi
+CASE 212 seed=0x5672b9f86b6a5043 k=3 fam=A root=no depthmax=4 chain=I0ib3.com.org -> k5r3h.com.org -> T.com.org -> klxS.com.org layouts=none/suffix/multi
+CASE 213 seed=0x42bb83fbd6da5ea4 k=4 fam=A root=no depthmax=4 chain=rFjo3.io -> i.io -> uv.io -> UO.io -> G9B.io layouts=none/suffix/multi
+CASE 214 seed=0xe45128583e095583 k=1 fam=A root=no depthmax=4 chain=994Ps.net -> rgLzA.net layouts=none/suffix/multi
+CASE 215 seed=0x57bc0b75ac4f7390 k=4 fam=A root=no depthmax=4 chain=QKG.net.net -> hO.net.net -> GraAM.net.net -> 3BW.net.net -> blf.net.net layouts=none/suffix/multi
+CASE 216 seed=0x8073c8ec16547a1b k=4 fam=A root=no depthmax=4 chain=7W.io.com -> yi8.io.com -> du.io.com -> 0z.io.com -> Il.io.com layouts=none/suffix/multi
+CASE 217 seed=0x921625c303e5143d k=1 fam=AAAA root=no depthmax=4 chain=AE.dev.dev -> jUB.dev.dev layouts=none/suffix/multi
+CASE 218 seed=0x61d68b5e63fce3ee k=2 fam=A root=no depthmax=4 chain=VK.dev -> v4Q.dev -> FvKT.dev layouts=none/suffix/multi
+CASE 219 seed=0x5c638795d51911a7 k=3 fam=A root=no depthmax=4 chain=Dzshf.dev -> W.dev -> JspQX.dev -> HgMpB.dev layouts=none/suffix/multi
+CASE 220 seed=0xc18a387f3db3105c k=2 fam=AAAA root=no depthmax=4 chain=Nu.org -> j.org -> LP8s.org layouts=none/suffix/multi
+CASE 221 seed=0xb1312d2591079987 k=4 fam=AAAA root=no depthmax=4 chain=tqB.org -> Sb0.org -> N.org -> e1yxT.org -> 2.org layouts=none/suffix/multi
+CASE 222 seed=0x9293ef97deb0035a k=4 fam=A root=no depthmax=4 chain=nhh.com -> XRGp.com -> p1.com -> L.com -> VFc.com layouts=none/suffix/multi
+CASE 223 seed=0xbb4bad0e48b509e5 k=3 fam=AAAA root=no depthmax=4 chain=7hP7.dev -> H8vcX.dev -> -amr.dev -> Yug1p.dev layouts=none/suffix/multi
+CASE 224 seed=0x3214bace9edfa2bc k=4 fam=AAAA root=yes depthmax=4 chain=7YWx.com.org -> . -> CiyEN.com.org -> nrR.com.org -> E.com.org layouts=none/suffix/multi
+CASE 225 seed=0xeabfbfca82830604 k=3 fam=AAAA root=no depthmax=4 chain=u.com.com -> v.com.com -> dWeaQ.com.com -> ak.com.com layouts=none/suffix/multi
+CASE 226 seed=0x8c556426e9b1fce3 k=2 fam=AAAA root=no depthmax=4 chain=ngqS.org.dev -> 9SIE.org.dev -> SRd.org.dev layouts=none/suffix/multi
+CASE 227 seed=0xaf9a1dd4c4d33127 k=4 fam=A root=no depthmax=4 chain=uVlJf.org -> z.org -> mEk.org -> Mt.org -> 6G7D.org layouts=none/suffix/multi
+CASE 228 seed=0x14c0cebe2d6d2fdc k=3 fam=AAAA root=no depthmax=4 chain=8i.com.org -> lEiMh.com.org -> Ynnyr.com.org -> V.com.org layouts=none/suffix/multi
+CASE 229 seed=0x2f345a0091c6170f k=2 fam=AAAA root=no depthmax=4 chain=rJvjf.com.net -> e.com.net -> GPr8.com.net layouts=none/suffix/multi
+CASE 230 seed=0x97b9358ce244908e k=3 fam=AAAA root=no depthmax=4 chain=YNu.io.com -> NXB.io.com -> D.io.com -> 5po.io.com layouts=none/suffix/multi
+CASE 231 seed=0xbafdef3abd65c4d2 k=1 fam=AAAA root=no depthmax=4 chain=7.dev.io -> MdVA9.dev.io layouts=none/suffix/multi
+CASE 232 seed=0x457e32f7a8204f48 k=1 fam=A root=no depthmax=4 chain=x-.org -> Y.org layouts=none/suffix/multi
+CASE 233 seed=0xec86db1c9e33186e k=4 fam=A root=no depthmax=4 chain=cDaCw.com -> Dj4B7.com -> wem.com -> 4.com -> 6BD0.com layouts=none/suffix/multi
+CASE 234 seed=0xa531e01881d67bb6 k=2 fam=AAAA root=no depthmax=4 chain=I.net -> W.net -> J.net layouts=none/suffix/multi
+CASE 235 seed=0x1bfaedd8d801148d k=3 fam=A root=no depthmax=4 chain=3u1Tm.io.net -> QVmCr.io.net -> pLzcT.io.net -> N3Hgq.io.net layouts=none/suffix/multi
+CASE 236 seed=0x1114e647ba396fff k=2 fam=AAAA root=no depthmax=4 chain=g.org.io -> 3y1k4.org.io -> hs.org.io layouts=none/suffix/multi
+CASE 237 seed=0x59b332c9177b3004 k=3 fam=A root=no depthmax=4 chain=E8PA.io -> o90K.io -> HC9D.io -> G4N.io layouts=none/suffix/multi
+CASE 238 seed=0x20a269f900cab2a4 k=4 fam=A root=no depthmax=4 chain=7XfOL.net.com -> d.net.com -> LRY.net.com -> n4ELs.net.com -> F6Ib.net.com layouts=none/suffix/multi
+CASE 239 seed=0x7784e8ae63b89201 k=3 fam=A root=no depthmax=4 chain=G.com -> 9x1.com -> V.com -> LI.com layouts=none/suffix/multi
+CASE 240 seed=0x4cb8521252b433f9 k=1 fam=AAAA root=yes depthmax=4 chain=. -> lD022.org layouts=none/suffix/multi
+CASE 241 seed=0x9ac9a25c3ed9c645 k=3 fam=AAAA root=no depthmax=4 chain=mVk.com -> WuX.com -> wzgo4.com -> LCw7.com layouts=none/suffix/multi
+CASE 242 seed=0x5374a758227d298d k=2 fam=A root=no depthmax=4 chain=a.com.net -> iG9FF.com.net -> DY39.com.net layouts=none/suffix/multi
+CASE 243 seed=0x034e7de88f583fc4 k=4 fam=AAAA root=no depthmax=4 chain=e.dev -> TUNO.dev -> LQUc.dev -> p.dev -> EI3g.dev layouts=none/suffix/multi
+CASE 244 seed=0x82e8ba145c4b25ac k=2 fam=A root=no depthmax=4 chain=Fov.com -> FihG.com -> 4H4c.com layouts=none/suffix/multi
+CASE 245 seed=0xb9e4a9becbfc4b8f k=2 fam=A root=no depthmax=4 chain=g.io.dev -> eco.io.dev -> LLz.io.dev layouts=none/suffix/multi
+CASE 246 seed=0x07f5fa08b821dddb k=2 fam=AAAA root=no depthmax=4 chain=C.com -> 1aaY8.com -> S.com layouts=none/suffix/multi
+CASE 247 seed=0x30adb77f2226e466 k=4 fam=AAAA root=no depthmax=4 chain=ADl.com.dev -> nIJT7.com.dev -> SvsRh.com.dev -> E.com.dev -> Ul0.com.dev layouts=none/suffix/multi
+CASE 248 seed=0x45ae3ef8f79bf952 k=2 fam=A root=no depthmax=4 chain=sk.dev -> Q.dev -> I.dev layouts=none/suffix/multi
+CASE 249 seed=0x2925da90ec43baa2 k=2 fam=A root=no depthmax=4 chain=5y.dev -> Lxim0.dev -> m.dev layouts=none/suffix/multi
+CASE 250 seed=0xfe5943f4db3f5c9a k=3 fam=A root=no depthmax=4 chain=qKLBJ.dev.io -> mx.dev.io -> WVtYr.dev.io -> gqLCD.dev.io layouts=none/suffix/multi
+CASE 251 seed=0x9feee851426e5379 k=4 fam=AAAA root=no depthmax=4 chain=Co-wl.dev.dev -> Yr6.dev.dev -> Mgh.dev.dev -> SyYFb.dev.dev -> yLoLF.dev.dev layouts=none/suffix/multi
+CASE 252 seed=0x2dcd56b1150d58b9 k=1 fam=A root=no depthmax=4 chain=9S12J.io -> z2WMY.io layouts=none/suffix/multi
+CASE 253 seed=0x1a1620b4807d671a k=4 fam=AAAA root=no depthmax=4 chain=VHNk.net -> SXHf.net -> yhEj.net -> pi4S0.net -> M.net layouts=none/suffix/multi
+CASE 254 seed=0x128e43c64a9a3d56 k=2 fam=AAAA root=no depthmax=4 chain=C.dev -> plHxz.dev -> L6Flt.dev layouts=none/suffix/multi
+CASE 255 seed=0xb423e822b1c93435 k=4 fam=A root=no depthmax=4 chain=qsTv.dev -> Un6.dev -> 6bJC.dev -> TA7a.dev -> dX3o.dev layouts=none/suffix/multi
+CASE 256 seed=0x194a990c1a6332ea k=4 fam=A root=yes depthmax=4 chain=0roTG.dev -> m.dev -> w.dev -> . -> sG.dev layouts=none/suffix/multi
+CASE 257 seed=0x4202568284683975 k=2 fam=AAAA root=no depthmax=4 chain=W.io -> MadQm.io -> 5gfad.io layouts=none/suffix/multi
+CASE 258 seed=0xc70f9676e03ef1a4 k=4 fam=AAAA root=no depthmax=4 chain=AS3Q.com.io -> fUt.com.io -> 9.com.io -> QLz.com.io -> NTg.com.io layouts=none/suffix/multi
+CASE 259 seed=0xe4e14c5c2c7c53a1 k=1 fam=A root=no depthmax=4 chain=pvFsQ.org -> KX.org layouts=none/suffix/multi
+CASE 260 seed=0xf683a9331a0cedc3 k=1 fam=A root=no depthmax=4 chain=RuEv5.io.com -> Qg.io.com layouts=none/suffix/multi
+CASE 261 seed=0xa65d7fc386e803fa k=2 fam=AAAA root=no depthmax=4 chain=ALs.io -> vPmcw.io -> I.io layouts=none/suffix/multi
+CASE 262 seed=0x0b8430acef8202af k=3 fam=A root=no depthmax=4 chain=VlT.com.io -> b0sCL.com.io -> Sr3.com.io -> Nx.com.io layouts=none/suffix/multi
+CASE 263 seed=0xbb5e073d5c5d18e6 k=4 fam=AAAA root=no depthmax=4 chain=L2se.net -> cts.net -> V.net -> UNT8T.net -> JLxE3.net layouts=none/suffix/multi
+CASE 264 seed=0xd05e8eb731d22dd2 k=4 fam=AAAA root=no depthmax=4 chain=caEy.io -> v09.io -> d7fM8.io -> Rp0bK.io -> rRpm3.io layouts=none/suffix/multi
+CASE 265 seed=0x41b498aef918f462 k=4 fam=AAAA root=no depthmax=4 chain=Y9jj.net -> Mc3D.net -> 4e.net -> M.net -> BesB.net layouts=none/suffix/multi
+CASE 266 seed=0x989717645c06d3bf k=4 fam=AAAA root=no depthmax=4 chain=yz.com.dev -> SBQW.com.dev -> 17l.com.dev -> RX.com.dev -> v.com.dev layouts=none/suffix/multi
+CASE 267 seed=0x96823e3eb5077c42 k=1 fam=AAAA root=no depthmax=4 chain=4VxH.dev -> M.dev layouts=none/suffix/multi
+CASE 268 seed=0xab82c5b88a7c912e k=3 fam=AAAA root=no depthmax=4 chain=oQ.net.io -> KH.net.io -> RDBh.net.io -> HFx43.net.io layouts=none/suffix/multi
+CASE 269 seed=0xc5f650faeed57861 k=2 fam=A root=no depthmax=4 chain=4.io.dev -> m.io.dev -> O7q.io.dev layouts=none/suffix/multi
+CASE 270 seed=0xd798add1dc661283 k=4 fam=AAAA root=no depthmax=4 chain=t8d5.io -> PYYVQ.io -> 5R.io -> a.io -> JnD.io layouts=none/suffix/multi
+CASE 271 seed=0x2e7b2c873f53f1e0 k=2 fam=AAAA root=no depthmax=4 chain=p.io.org -> Um.io.org -> a54i.io.org layouts=none/suffix/multi
+CASE 272 seed=0xd8e1ff4f1d4b35d0 k=2 fam=AAAA root=yes depthmax=4 chain=51G.org.dev -> pnNTM.org.dev -> . layouts=none/suffix/multi
+CASE 273 seed=0x21804bd07a8cf5d5 k=4 fam=A root=no depthmax=4 chain=l.com -> 4iBJ.com -> T7.com -> DW.com -> NzRT.com layouts=none/suffix/multi
+CASE 274 seed=0xff84e39fe050e4de k=1 fam=A root=no depthmax=4 chain=nXQ6.dev -> M.dev layouts=none/suffix/multi
+CASE 275 seed=0x5bda661dd2229682 k=2 fam=A root=no depthmax=4 chain=xXFW.com.io -> Lh1xY.com.io -> FvqY1.com.io layouts=none/suffix/multi
+CASE 276 seed=0x849223943c279d0d k=3 fam=A root=no depthmax=4 chain=KaAvm.net.io -> Dd.net.io -> qya.net.io -> plB5p.net.io layouts=none/suffix/multi
+CASE 277 seed=0x6296bb63a1eb8c16 k=1 fam=A root=no depthmax=4 chain=DFPYm.dev -> JT.dev layouts=none/suffix/multi
+CASE 278 seed=0x7439183a8f7c2638 k=4 fam=AAAA root=no depthmax=4 chain=MyS.org -> VhrY.org -> l.org -> x.org -> hP.org layouts=none/suffix/multi
+CASE 279 seed=0x523db009f5401541 k=3 fam=A root=no depthmax=4 chain=DJcw.org -> 0OB.org -> FS4.org -> kNaY.org layouts=none/suffix/multi
+CASE 280 seed=0xf3d354665c6f0c20 k=3 fam=AAAA root=no depthmax=4 chain=A.com.com -> Dd.com.com -> mhJ5.com.com -> wqqey.com.com layouts=none/suffix/multi
+CASE 281 seed=0x36fe9d1f2accf9de k=3 fam=AAAA root=no depthmax=4 chain=lg4V.dev.com -> Ma.dev.com -> YA4Ra.dev.com -> 6M.dev.com layouts=none/suffix/multi
+CASE 282 seed=0x34e9c3f983cda261 k=4 fam=A root=no depthmax=4 chain=cuqD2.org -> E.org -> M.org -> ENz.org -> 4.org layouts=none/suffix/multi
+CASE 283 seed=0xa854a716f213c06e k=2 fam=AAAA root=no depthmax=4 chain=2Ns.com.io -> SmNs.com.io -> tEBY.com.io layouts=none/suffix/multi
+CASE 284 seed=0xcb9960c4cd34f4b2 k=1 fam=A root=no depthmax=4 chain=Iotv.dev.com -> NaMQ.dev.com layouts=none/suffix/multi
+CASE 285 seed=0x27eee342bf06a656 k=3 fam=A root=no depthmax=4 chain=N5s.net -> Hn.net -> pq9d.net -> 1hY.net layouts=none/suffix/multi
+CASE 286 seed=0x8d15942c27a0a50b k=4 fam=AAAA root=no depthmax=4 chain=w.dev.com -> icDE.dev.com -> EpuTF.dev.com -> yfiXE.dev.com -> Q.dev.com layouts=none/suffix/multi
+CASE 287 seed=0x03dea1ec7dcb3de2 k=2 fam=A root=no depthmax=4 chain=70.com.io -> 9bc.com.io -> fvBo.com.io layouts=none/suffix/multi
+CASE 288 seed=0x1580fec36b5bd804 k=1 fam=AAAA root=yes depthmax=4 chain=. -> WF5m.net layouts=none/suffix/multi
+CASE 289 seed=0xa8d270ebccdeaf8b k=4 fam=A root=no depthmax=4 chain=H.com.net -> Sfla.com.net -> r.com.net -> o.com.net -> S.com.net layouts=none/suffix/multi
+CASE 290 seed=0x58ac477c39b9c5c2 k=2 fam=AAAA root=no depthmax=4 chain=CTHA.net -> gf.net -> o.net layouts=none/suffix/multi
+CASE 291 seed=0x64dba08a98668d9d k=1 fam=AAAA root=no depthmax=4 chain=z.org.com -> 9.org.com layouts=none/suffix/multi
+CASE 292 seed=0x767dfd6185f727bf k=3 fam=A root=no depthmax=4 chain=q.dev.dev -> yYx.dev.dev -> qU.dev.dev -> Y.dev.dev layouts=none/suffix/multi
+CASE 293 seed=0xe9e8e07ef43d45cc k=1 fam=A root=no depthmax=4 chain=t4.com.net -> TYi.com.net layouts=none/suffix/multi
+CASE 294 seed=0x6b97f5d0682f8331 k=4 fam=AAAA root=no depthmax=4 chain=w7.dev -> o.dev -> vf.dev -> uYi.dev -> yW.dev layouts=none/suffix/multi
+CASE 295 seed=0xab6513e64ea8f625 k=4 fam=AAAA root=no depthmax=4 chain=xKg.org.io -> W.org.io -> EPzI2.org.io -> ecgV.org.io -> UA.org.io layouts=none/suffix/multi
+CASE 296 seed=0xa07f0c5530e15197 k=4 fam=AAAA root=no depthmax=4 chain=aKhl.com.com -> qRL.com.com -> w.com.com -> msS.com.com -> Rix8R.com.com layouts=none/suffix/multi
+CASE 297 seed=0x33d07e7d9264291e k=3 fam=A root=no depthmax=4 chain=PeRj.org.io -> e1Q.org.io -> TaI.org.io -> c4.org.io layouts=none/suffix/multi
+CASE 298 seed=0x4572db547ff4c340 k=3 fam=AAAA root=no depthmax=4 chain=b8.net -> -I7F.net -> gGQB1.net -> Bo6ur.net layouts=none/suffix/multi
+CASE 299 seed=0x7fccf5a1d78a63ed k=1 fam=A root=no depthmax=4 chain=-f90j.com.com -> UO.com.com layouts=none/suffix/multi
+CASE 300 seed=0x3deafe664a11997c k=3 fam=A root=no depthmax=4 chain=fKnu.com.dev -> FA.com.dev -> xl-.com.dev -> C.com.dev layouts=none/suffix/multi
+CASE 301 seed=0x131e67ca390d3b74 k=1 fam=AAAA root=no depthmax=4 chain=IV7j.org.org -> y76IL.org.org layouts=none/suffix/multi
+CASE 302 seed=0x5bbcb44b964efb79 k=2 fam=A root=no depthmax=4 chain=Ve957.dev -> innOo.dev -> NIeHU.dev layouts=none/suffix/multi
+CASE 303 seed=0xfd5258a7fd7df258 k=2 fam=A root=no depthmax=4 chain=JRfS.net -> RcY.net -> zKj.net layouts=none/suffix/multi
+CASE 304 seed=0x9616ce98ede49c26 k=1 fam=AAAA root=yes depthmax=4 chain=d.org -> . layouts=none/suffix/multi
+CASE 305 seed=0x32396f2cc62fc0be k=2 fam=AAAA root=no depthmax=4 chain=t7r.io.net -> cG2.io.net -> KAau.io.net layouts=none/suffix/multi
+CASE 306 seed=0xd3cf13892d5eb79d k=1 fam=AAAA root=no depthmax=4 chain=y9zw.net.org -> xU61.net.org layouts=none/suffix/multi
+CASE 307 seed=0x9abe4ab916ae3a3d k=1 fam=AAAA root=no depthmax=4 chain=T.org -> -qEe.org layouts=none/suffix/multi
+CASE 308 seed=0xe8cf9b0302d3cc89 k=3 fam=AAAA root=no depthmax=4 chain=s6.net.io -> u2.net.io -> 3Pzu.net.io -> y.net.io layouts=none/suffix/multi
+CASE 309 seed=0x6ddcdaf75eaa84b8 k=3 fam=A root=no depthmax=4 chain=Dgbi.io.dev -> M.io.dev -> R.io.dev -> Wv.io.dev layouts=none/suffix/multi
+CASE 310 seed=0x7f7f37ce4c3b1eda k=2 fam=AAAA root=no depthmax=4 chain=gKL8H.com -> Jgf85.com -> bJ.com layouts=none/suffix/multi
+CASE 311 seed=0xa2c3f17c275c531e k=2 fam=A root=no depthmax=4 chain=FJS.dev.dev -> gsW.dev.dev -> 3vFQ.dev.dev layouts=none/suffix/multi
+CASE 312 seed=0x529dc80c94376955 k=3 fam=A root=no depthmax=4 chain=PfG.net -> q.net -> Tj2.net -> Xa.net layouts=none/suffix/multi
+CASE 313 seed=0xeb623dfd849e1323 k=4 fam=AAAA root=no depthmax=4 chain=mUA7n.org.org -> LPGUh.org.org -> 1M.org.org -> FT.org.org -> U.org.org layouts=none/suffix/multi
+CASE 314 seed=0xc3f3d2045b7e2fe5 k=1 fam=A root=no depthmax=4 chain=MRn.io.net -> u5y.io.net layouts=none/suffix/multi
+CASE 315 seed=0xe3da610f4ebae95f k=4 fam=A root=no depthmax=4 chain=YEAh6.com.com -> ypi.com.com -> w.com.com -> cs.com.com -> f.com.com layouts=none/suffix/multi
+CASE 316 seed=0x93b4379fbb95ff96 k=1 fam=AAAA root=no depthmax=4 chain=HTi.org -> ARgg.org layouts=none/suffix/multi
+CASE 317 seed=0x01ac16f49af84b5c k=4 fam=AAAA root=no depthmax=4 chain=eKIU.dev.org -> hR.dev.org -> LOf.dev.org -> 1IxV.dev.org -> bM8.dev.org layouts=none/suffix/multi
+CASE 318 seed=0x5becc04ce5caa583 k=1 fam=A root=no depthmax=4 chain=fNfp.dev -> codzh.dev layouts=none/suffix/multi
+CASE 319 seed=0xb84242cad79c5727 k=3 fam=AAAA root=no depthmax=4 chain=p.dev.dev -> yBkP7.dev.dev -> 4hMG.dev.dev -> e.dev.dev layouts=none/suffix/multi
+CASE 320 seed=0x9646da9a3d604630 k=4 fam=A root=yes depthmax=4 chain=u-.net -> . -> G85q.net -> Rixg.net -> UDQTp.net layouts=none/suffix/multi
+CASE 321 seed=0xfb6d8b83a5fa44e5 k=2 fam=A root=no depthmax=4 chain=uiN.dev -> Rw.dev -> 6b.dev layouts=none/suffix/multi
+CASE 322 seed=0x32697b2e15ab6ac8 k=4 fam=A root=no depthmax=4 chain=wP.net -> wO-W.net -> hBYU.net -> RywB.net -> WV.net layouts=none/suffix/multi
+CASE 323 seed=0xbce9beeb0065f53e k=4 fam=AAAA root=no depthmax=4 chain=-mAu.com.io -> a.com.io -> ddrTv.com.io -> UV5Io.com.io -> f2.com.io layouts=none/suffix/multi
+CASE 324 seed=0xd1ea4664d5db0a2a k=1 fam=AAAA root=no depthmax=4 chain=dO.io.dev -> E.io.dev layouts=none/suffix/multi
+CASE 325 seed=0x48b354252c05a301 k=2 fam=AAAA root=no depthmax=4 chain=ogK.io.net -> am2.io.net -> y.io.net layouts=none/suffix/multi
+CASE 326 seed=0xd691c284fea4a841 k=3 fam=AAAA root=no depthmax=4 chain=ckgl.dev.io -> CpjD.dev.io -> Q2GJH.dev.io -> Vn.dev.io layouts=none/suffix/multi
+CASE 327 seed=0x2d74413a6192879e k=3 fam=A root=no depthmax=4 chain=Wbv.org -> SoHf.org -> w1fG.org -> Mbac.org layouts=none/suffix/multi
+CASE 328 seed=0xf463786a4ae20a3e k=3 fam=AAAA root=no depthmax=4 chain=W5P.com -> 1.com -> 55N.com -> c.com layouts=none/suffix/multi
+CASE 329 seed=0x3d01c4eba823ca43 k=2 fam=AAAA root=no depthmax=4 chain=J1R.com -> vOKH.com -> eV.com layouts=none/suffix/multi
+CASE 330 seed=0xa22875d510bdc8f8 k=4 fam=A root=no depthmax=4 chain=Nx.io -> Qkjj.io -> 7.io -> wtEH5.io -> -w5.io layouts=none/suffix/multi
+CASE 331 seed=0x802d0da47681b801 k=1 fam=A root=no depthmax=4 chain=Thev.org -> GqyYg.org layouts=none/suffix/multi
+CASE 332 seed=0xce3e5dee62a74a4d k=1 fam=AAAA root=no depthmax=4 chain=dkb2.net.io -> 9kX8K.net.io layouts=none/suffix/multi
+CASE 333 seed=0xfa544607b490cba2 k=2 fam=AAAA root=no depthmax=4 chain=0.com.com -> sh.com.com -> g5.com.com layouts=none/suffix/multi
+CASE 334 seed=0x4bc3c0f4889ad8b8 k=2 fam=AAAA root=no depthmax=4 chain=C.org.dev -> be3.org.dev -> INI.org.dev layouts=none/suffix/multi
+CASE 335 seed=0xf62a93bc66921ca8 k=3 fam=A root=no depthmax=4 chain=0D.dev.org -> MF.dev.org -> yG.dev.org -> g.dev.org layouts=none/suffix/multi
+CASE 336 seed=0xf0b78ff3d7ae4a61 k=3 fam=AAAA root=yes depthmax=4 chain=. -> O-th.org -> jz.org -> DzFVC.org layouts=none/suffix/multi
+CASE 337 seed=0x3084ae09be27bd55 k=2 fam=A root=no depthmax=4 chain=s9cL.dev -> lqFFk.dev -> Ec1.dev layouts=none/suffix/multi
+CASE 338 seed=0x7e95fe53aa4d4fa1 k=2 fam=A root=no depthmax=4 chain=cs9J.net -> gWq.net -> tcs.net layouts=none/suffix/multi
+CASE 339 seed=0x091642109507da17 k=1 fam=AAAA root=no depthmax=4 chain=P.dev.net -> 2GBV.dev.net layouts=none/suffix/multi
+CASE 340 seed=0xf55f0c140077e878 k=2 fam=AAAA root=no depthmax=4 chain=HHaO.com.net -> Qq.com.net -> EA.com.net layouts=none/suffix/multi
+CASE 341 seed=0x5a85bcfd6911e72d k=3 fam=AAAA root=no depthmax=4 chain=cWk.io -> DGpD.io -> xX5U.io -> SBbbA.io layouts=none/suffix/multi
+CASE 342 seed=0x785772e2b54f492a k=4 fam=AAAA root=no depthmax=4 chain=O.com -> -U.com -> k0vDK.com -> kAq.com -> Ahuua.com layouts=none/suffix/multi
+CASE 343 seed=0x50e906e98c2f65ec k=4 fam=AAAA root=no depthmax=4 chain=Mj.io.net -> vR.io.net -> x8.io.net -> Sq.io.net -> t.io.net layouts=none/suffix/multi
+CASE 344 seed=0x57a55c2f5bf85b80 k=2 fam=AAAA root=no depthmax=4 chain=km.com -> Fh.com -> E4WfD.com layouts=none/suffix/multi
+CASE 345 seed=0xbccc0d18c4925a35 k=1 fam=AAAA root=no depthmax=4 chain=F4Ee.org.dev -> g5.org.dev layouts=none/suffix/multi
+CASE 346 seed=0x474c50d5af4ce4ab k=1 fam=AAAA root=no depthmax=4 chain=NRtDT.dev -> gEgM.dev layouts=none/suffix/multi
+CASE 347 seed=0xd52abf3581ebe9eb k=1 fam=AAAA root=no depthmax=4 chain=d.org.io -> qGunp.org.io layouts=none/suffix/multi
+CASE 348 seed=0x269a3a2255f5f701 k=4 fam=A root=no depthmax=4 chain=VOqc.io -> UGwca.io -> HNxBK.io -> s8n.io -> Ik.io layouts=none/suffix/multi
+CASE 349 seed=0x049ed1f1bbb9e60a k=4 fam=A root=no depthmax=4 chain=xgd.org.net -> Au.org.net -> 6.org.net -> S3SUV.org.net -> b.org.net layouts=none/suffix/multi
+CASE 350 seed=0xb478a8822894fc41 k=2 fam=AAAA root=no depthmax=4 chain=hR.net.io -> zbF9d.net.io -> a4ta.net.io layouts=none/suffix/multi
+CASE 351 seed=0xbb34fdc7f85df1d5 k=4 fam=A root=no depthmax=4 chain=BJ.dev.org -> aF.dev.org -> LE72.dev.org -> gRmSc.dev.org -> fu.dev.org layouts=none/suffix/multi
+CASE 352 seed=0x45b54184e3187c4b k=3 fam=AAAA root=yes depthmax=4 chain=. -> KAK.dev.net -> 2d6pR.dev.net -> 55F0.dev.net layouts=none/suffix/multi
+CASE 353 seed=0xc1f1530dc826e769 k=3 fam=AAAA root=no depthmax=4 chain=f.org -> M.org -> 4.org -> 5c.org layouts=none/suffix/multi
+CASE 354 seed=0x1360cdfa9c30f47f k=3 fam=A root=no depthmax=4 chain=UUo9W.com -> f.com -> k.com -> 1.com layouts=none/suffix/multi
+CASE 355 seed=0x0dedca320d4d2238 k=3 fam=A root=no depthmax=4 chain=3hLhM.org -> f.org -> z.org -> 8lL.org layouts=none/suffix/multi
+CASE 356 seed=0x73147b1b75e720ed k=1 fam=A root=no depthmax=4 chain=cIx.dev.net -> NH.dev.net layouts=none/suffix/multi
+CASE 357 seed=0x6da17752e7034ea6 k=2 fam=A root=no depthmax=4 chain=kR5d.org.org -> S.org.org -> IQwMH.org.org layouts=none/suffix/multi
+CASE 358 seed=0x965934c951085531 k=4 fam=AAAA root=no depthmax=4 chain=przV.dev -> v.dev -> k9.dev -> xCL.dev -> d4D.dev layouts=none/suffix/multi
+CASE 359 seed=0xb0ccc00bb5613c64 k=2 fam=A root=no depthmax=4 chain=zOvtj.io -> VKxfU.io -> 737b.io layouts=none/suffix/multi
+CASE 360 seed=0xc26f1ce2a2f1d686 k=3 fam=AAAA root=no depthmax=4 chain=tpWS.net -> 8.net -> N7.net -> I.net layouts=none/suffix/multi
+CASE 361 seed=0x0b0d69640033968b k=4 fam=AAAA root=no depthmax=4 chain=p1.com -> lHY.com -> Y.com -> fMfV.com -> Es1.com layouts=none/suffix/multi
+CASE 362 seed=0x08f8903e59343f0e k=1 fam=AAAA root=no depthmax=4 chain=D.org.com -> c.org.com layouts=none/suffix/multi
+CASE 363 seed=0x1a9aed1546c4d930 k=4 fam=A root=no depthmax=4 chain=2Bcn.com -> BYus.com -> GfDIF.com -> uLlY.com -> lHKX8.com layouts=none/suffix/multi
+CASE 364 seed=0x5a680b2b2d3e4c24 k=3 fam=A root=no depthmax=4 chain=U.net.io -> jU.net.io -> 0.net.io -> uV.net.io layouts=none/suffix/multi
+CASE 365 seed=0x2f9b748f1c39ee1c k=1 fam=A root=no depthmax=4 chain=VtX.com -> QoNj.com layouts=none/suffix/multi
+CASE 366 seed=0xc85fea800ca097ea k=4 fam=AAAA root=no depthmax=4 chain=wmjdM.dev -> d.dev -> H.dev -> 1fN.dev -> 2.dev layouts=none/suffix/multi
+CASE 367 seed=0xa664824f726486f3 k=1 fam=A root=no depthmax=4 chain=SmK.dev -> 1x.dev layouts=none/suffix/multi
+CASE 368 seed=0x02ba04cd64363897 k=4 fam=A root=yes depthmax=4 chain=G.dev -> l.dev -> Q.dev -> . -> iNB.dev layouts=none/suffix/multi
+CASE 369 seed=0x5f0f874b5607ea3b k=1 fam=AAAA root=no depthmax=4 chain=W3.net.com -> YC.net.com layouts=none/suffix/multi
+CASE 370 seed=0x9098732d36d53dd7 k=1 fam=AAAA root=no depthmax=4 chain=x.io -> 5CXJ2.io layouts=none/suffix/multi
+CASE 371 seed=0x6058d8c896ed0d88 k=2 fam=AAAA root=no depthmax=4 chain=-GcDU.io -> pBDb.io -> Yxz.io layouts=none/suffix/multi
+CASE 372 seed=0x67152e0e66b6031c k=1 fam=A root=no depthmax=4 chain=i.org.org -> 21.org.org layouts=none/suffix/multi
+CASE 373 seed=0x9e111db8d66728ff k=2 fam=AAAA root=no depthmax=4 chain=QSkv.com.dev -> 4xfg.com.dev -> n.com.dev layouts=none/suffix/multi
+CASE 374 seed=0xa16f485bbe4ba3c9 k=3 fam=AAAA root=no depthmax=4 chain=Rv2.net -> u.net -> 6uV.net -> U-a.net layouts=none/suffix/multi
+CASE 375 seed=0x4304ecb8257a9aa8 k=1 fam=AAAA root=no depthmax=4 chain=lVPu.net -> OlCJ1.net layouts=none/suffix/multi
+CASE 376 seed=0xd0e35b17f8199fe8 k=2 fam=AAAA root=no depthmax=4 chain=B.io -> 6.io -> 3.io layouts=none/suffix/multi
+CASE 377 seed=0x6434cd40599c776f k=2 fam=A root=no depthmax=4 chain=asz.net.io -> xt.net.io -> H5.net.io layouts=none/suffix/multi
+CASE 378 seed=0x396836a448981967 k=3 fam=AAAA root=no depthmax=4 chain=U.io -> 4w.io -> b9uf.io -> VNsg9.io layouts=none/suffix/multi
+CASE 379 seed=0xde5c05a397ab8b10 k=3 fam=A root=no depthmax=4 chain=4.net.dev -> i.net.dev -> h1.net.dev -> fiOmU.net.dev layouts=none/suffix/multi
+CASE 380 seed=0x0713c31a01b0919b k=1 fam=A root=no depthmax=4 chain=v.net -> Un.net layouts=none/suffix/multi
+CASE 381 seed=0x9fd8390af2173b69 k=2 fam=AAAA root=no depthmax=4 chain=EI.dev.net -> l.dev.net -> Q.dev.net layouts=none/suffix/multi
+CASE 382 seed=0x8c21030e5d8749ca k=1 fam=AAAA root=no depthmax=4 chain=yI.net -> It.net layouts=none/suffix/multi
+CASE 383 seed=0x1f727536bf0a2151 k=3 fam=A root=no depthmax=4 chain=j.dev -> 1.dev -> AHeHq.dev -> Swk.dev layouts=none/suffix/multi
+CASE 384 seed=0xcf4c4bc72be53788 k=1 fam=A root=yes depthmax=4 chain=R.com.dev -> . layouts=none/suffix/multi
+CASE 385 seed=0xc9d947fe9d016541 k=4 fam=AAAA root=no depthmax=4 chain=c.dev.io -> 3U4mz.dev.io -> 9.dev.io -> JKo-I.dev.io -> VBmf.dev.io layouts=none/suffix/multi
+CASE 386 seed=0x5d2aba26fe843cc8 k=4 fam=AAAA root=no depthmax=4 chain=O-T.dev.dev -> p.dev.dev -> uBrfy.dev.dev -> KLTq.dev.dev -> vFm.dev.dev layouts=none/suffix/multi
+CASE 387 seed=0xf07c2c4f6007144f k=3 fam=A root=no depthmax=4 chain=YW42.dev -> mV.dev -> DRLe.dev -> qjKN.dev layouts=none/suffix/multi
+CASE 388 seed=0xa05602dfcce22a86 k=4 fam=A root=no depthmax=4 chain=vywX.org -> k.org -> -6F.org -> xr6j3.org -> kYjv.org layouts=none/suffix/multi
+CASE 389 seed=0xc90dc05636e73111 k=1 fam=AAAA root=no depthmax=4 chain=tt2.net.com -> ioG.net.com layouts=none/suffix/multi
+CASE 390 seed=0x538e041321a1bb87 k=3 fam=A root=no depthmax=4 chain=2-.io.io -> k.io.io -> PDIf.io.io -> SFG.io.io layouts=none/suffix/multi
+CASE 391 seed=0xa19f545d0dc74dd3 k=3 fam=A root=no depthmax=4 chain=nc.net -> cq.net -> 3jN.net -> 3W.net layouts=none/suffix/multi
+CASE 392 seed=0xb341b133fb57e7f5 k=4 fam=A root=no depthmax=4 chain=Xd4.com -> pcH.com -> luK2.com -> sk9o.com -> CVN.com layouts=none/suffix/multi
+CASE 393 seed=0xdbf96eaa655cee80 k=3 fam=A root=no depthmax=4 chain=vy.io -> rEV.io -> s.io -> gA.io layouts=none/suffix/multi
+CASE 394 seed=0xd6866ae1d6791c39 k=4 fam=A root=no depthmax=4 chain=7m1.io.org -> tCBHs.io.org -> T.io.org -> fY.io.org -> 2KuM.io.org layouts=none/suffix/multi
+CASE 395 seed=0xd9e49584be5d9703 k=1 fam=A root=no depthmax=4 chain=wrHV.io.net -> FbS.io.net layouts=none/suffix/multi
+CASE 396 seed=0x89be6c152b38ad3a k=3 fam=A root=no depthmax=4 chain=A.org -> JYel.org -> EmNP6.org -> SSFD-.org layouts=none/suffix/multi
+CASE 397 seed=0x50ada34514882fda k=4 fam=A root=no depthmax=4 chain=pG.io.com -> Vgw.io.com -> oPCN.io.com -> qr.io.com -> m4n51.io.com layouts=none/suffix/multi
+CASE 398 seed=0x796560bb7e8d3665 k=1 fam=A root=no depthmax=4 chain=nN.org.io -> qJv.org.io layouts=none/suffix/multi
+CASE 399 seed=0x73f25cf2efa9641e k=3 fam=AAAA root=no depthmax=4 chain=j0.io.com -> s.io.com -> AR63.io.com -> lrRD.io.com layouts=none/suffix/multi
+CASE 400 seed=0x51f6f4c2556d5327 k=2 fam=AAAA root=yes depthmax=4 chain=bV3.net.com -> R.net.com -> . layouts=none/suffix/multi
+CASE 401 seed=0x052ef5f5aa2ce428 k=1 fam=A root=no depthmax=4 chain=Ntc1.com.dev -> UnpO.com.dev layouts=none/suffix/multi
+CASE 402 seed=0xda625f5999288620 k=2 fam=A root=no depthmax=4 chain=C.dev.io -> NUpd.dev.io -> S61.dev.io layouts=none/suffix/multi
+CASE 403 seed=0x4dcd4277076ea42d k=2 fam=AAAA root=no depthmax=4 chain=OBHB.com -> i.com -> 2.com layouts=none/suffix/multi
+CASE 404 seed=0xbbc521cbe6d0eff3 k=4 fam=A root=no depthmax=4 chain=JOHM3.net -> NQnkS.net -> 9.net -> RS7.net -> FdW2.net layouts=none/suffix/multi
+CASE 405 seed=0xfb923fe1cd4a62e7 k=3 fam=AAAA root=no depthmax=4 chain=adO.dev -> g7-Ua.dev -> s.dev -> nC.dev layouts=none/suffix/multi
+CASE 406 seed=0x3b5f5df7b3c3d5db k=2 fam=A root=no depthmax=4 chain=72Rx.org.net -> kPh.org.net -> 60I4.org.net layouts=none/suffix/multi
+CASE 407 seed=0x1092c75ba2bf77d3 k=1 fam=A root=no depthmax=4 chain=q.net -> RGV.net layouts=none/suffix/multi
+CASE 408 seed=0x55d2e93a181cbd0e k=2 fam=AAAA root=no depthmax=4 chain=u.io -> H59.io -> v.io layouts=none/suffix/multi
+CASE 409 seed=0x421bb33d838ccb6f k=4 fam=AAAA root=no depthmax=4 chain=dj.io -> CkTF.io -> zRg.io -> 1k.io -> OaIfI.io layouts=none/suffix/multi
+CASE 410 seed=0x1aad47445a6ce831 k=3 fam=AAAA root=no depthmax=4 chain=Rb.org -> Q.org -> lt9Gm.org -> yUh3.org layouts=none/suffix/multi
+CASE 411 seed=0xf8b1df13c030d73a k=1 fam=A root=no depthmax=4 chain=ahwgA.org.org -> oCmqE.org.org layouts=none/suffix/multi
+CASE 412 seed=0x91765504b0978108 k=2 fam=A root=no depthmax=4 chain=4k.io -> G.io -> ySJY.io layouts=none/suffix/multi
+CASE 413 seed=0xc87244af2048a6eb k=2 fam=A root=no depthmax=4 chain=N3B.net -> rR3.net -> GA.net layouts=none/suffix/multi
+CASE 414 seed=0x168394f90c6e3937 k=4 fam=AAAA root=no depthmax=4 chain=I0.net -> l.net -> G.net -> fn6.net -> LB.net layouts=none/suffix/multi
+CASE 415 seed=0x9b90d4ed6844f166 k=2 fam=AAAA root=no depthmax=4 chain=P.net.dev -> WXX.net.dev -> 44zU.net.dev layouts=none/suffix/multi
+CASE 416 seed=0x00b785d6d0def01b k=4 fam=A root=yes depthmax=4 chain=NhNq.io.io -> zze.io.io -> . -> IgeRd.io.io -> UO.io.io layouts=none/suffix/multi
+CASE 417 seed=0xed004fda3c4efe7c k=1 fam=AAAA root=no depthmax=4 chain=hY.org.dev -> FAyLu.org.dev layouts=none/suffix/multi
+CASE 418 seed=0x15b80d50a6540507 k=3 fam=A root=no depthmax=4 chain=W.dev -> DjGNy.dev -> dde.dev -> 25.dev layouts=none/suffix/multi
+CASE 419 seed=0xdca744808fa387a7 k=1 fam=AAAA root=no depthmax=4 chain=R.net.com -> ol.net.com layouts=none/suffix/multi
+CASE 420 seed=0x8c811b10fc7e9dde k=3 fam=AAAA root=no depthmax=4 chain=c.net -> cyJ.net -> Bzo1.net -> dkWjD.net layouts=none/suffix/multi
+CASE 421 seed=0xcfac63c9cadc8b9c k=1 fam=AAAA root=no depthmax=4 chain=Gds.org -> V.org layouts=none/suffix/multi
+CASE 422 seed=0x7f863a5a37b7a1d3 k=2 fam=A root=no depthmax=4 chain=cIl.net.io -> WbN4X.net.io -> 1.net.io layouts=none/suffix/multi
+CASE 423 seed=0x0a067e1722722c49 k=3 fam=A root=no depthmax=4 chain=XId.net -> NvGF1.net -> mLU1f.net -> jySY0.net layouts=none/suffix/multi
+CASE 424 seed=0xab9c227389a12328 k=2 fam=AAAA root=no depthmax=4 chain=WjJ.org.org -> S.org.org -> jo.org.org layouts=none/suffix/multi
+CASE 425 seed=0x9b431719dcf5ac53 k=4 fam=A root=no depthmax=4 chain=I.io.dev -> Pt.io.dev -> 2R.io.dev -> dGP.io.dev -> RzC.io.dev layouts=none/suffix/multi
+CASE 426 seed=0x9ea141bcc4da271d k=4 fam=A root=no depthmax=4 chain=o.org.dev -> u.org.dev -> E.org.dev -> rg.org.dev -> z.org.dev layouts=none/suffix/multi
+CASE 427 seed=0x992e3df435f654d6 k=2 fam=AAAA root=no depthmax=4 chain=G1D.dev -> B-dv.dev -> cREe.dev layouts=none/suffix/multi
+CASE 428 seed=0x1e3b7de891cd0d05 k=2 fam=A root=no depthmax=4 chain=rYlJh.io -> JUv.io -> CFkh.io layouts=none/suffix/multi
+CASE 429 seed=0xf36ee74c80c8aefd k=4 fam=A root=no depthmax=4 chain=Hl.org -> QAS.org -> QaSt.org -> io.org -> 82Jo.org layouts=none/suffix/multi
+CASE 430 seed=0xd1737f1be68c9e06 k=4 fam=A root=no depthmax=4 chain=J.org -> x.org -> EfIp.org -> MX.org -> poDf.org layouts=none/suffix/multi
+CASE 431 seed=0xd4d1a9bece7118d0 k=1 fam=A root=no depthmax=4 chain=ax.net -> G7Uw.net layouts=none/suffix/multi
+CASE 432 seed=0xcf5ea5f63f8d4689 k=2 fam=AAAA root=yes depthmax=4 chain=G.dev -> aPl.dev -> . layouts=none/suffix/multi
+CASE 433 seed=0xe45f2d7015025b75 k=2 fam=A root=no depthmax=4 chain=Yj.io.net -> 8bV.io.net -> CL2.io.net layouts=none/suffix/multi
+CASE 434 seed=0x57ca108d83487982 k=4 fam=AAAA root=no depthmax=4 chain=DvzF.net -> Snhj.net -> C.net -> nE.net -> H.net layouts=none/suffix/multi
+CASE 435 seed=0xb77dbdae5cfea5f0 k=4 fam=AAAA root=no depthmax=4 chain=xK-2D.dev.com -> I4.dev.com -> sbkYx.dev.com -> eAC.dev.com -> EDdK.dev.com layouts=none/suffix/multi
+CASE 436 seed=0x08ed389b3108b306 k=4 fam=AAAA root=no depthmax=4 chain=8x.com.io -> L.com.io -> QOze.com.io -> NrGo.com.io -> Xvl.com.io layouts=none/suffix/multi
+CASE 437 seed=0x434752e8889e53b3 k=2 fam=A root=no depthmax=4 chain=pGu2.org -> DE.org -> dKOfi.org layouts=none/suffix/multi
+CASE 438 seed=0x7a434292f84f7996 k=1 fam=AAAA root=no depthmax=4 chain=TBzmJ.org.dev -> 6k0.org.dev layouts=none/suffix/multi
+CASE 439 seed=0x413279c2e19efc36 k=2 fam=A root=no depthmax=4 chain=CS.com -> V3C.com -> OWzD.com layouts=none/suffix/multi
+CASE 440 seed=0x2d7b43c64d0f0a97 k=1 fam=AAAA root=no depthmax=4 chain=2uW.com.io -> sX.com.io layouts=none/suffix/multi
+CASE 441 seed=0xe0b344f9a1ce9b98 k=1 fam=A root=no depthmax=4 chain=4TG.org -> nxbg.org layouts=none/suffix/multi
+CASE 442 seed=0x0099d404950b5512 k=1 fam=A root=no depthmax=4 chain=Wi.io.org -> e.io.org layouts=none/suffix/multi
+CASE 443 seed=0x45d9f5e30a689a4d k=2 fam=A root=no depthmax=4 chain=cP.com -> DLv6.com -> 5lp.com layouts=none/suffix/multi
+CASE 444 seed=0xb944d90078aeb85a k=1 fam=A root=no depthmax=4 chain=HKPNI.net -> Q.net layouts=none/suffix/multi
+CASE 445 seed=0x3af3ee51eca0f5bf k=4 fam=A root=no depthmax=4 chain=0.com.org -> GJ.com.org -> r2df.com.org -> ngfrL.com.org -> ohECo.com.org layouts=none/suffix/multi
+CASE 446 seed=0x7ac10c67d31a68b3 k=3 fam=A root=no depthmax=4 chain=W3S.com -> Ox.com -> Wa.com -> i.com layouts=none/suffix/multi
+CASE 447 seed=0x754e089f4436966c k=4 fam=AAAA root=no depthmax=4 chain=Sw0ie.org -> 9sA.org -> pBytb.org -> Y.org -> P.org layouts=none/suffix/multi
+CASE 448 seed=0x931fbe849073f869 k=2 fam=AAAA root=yes depthmax=4 chain=MgP.org.com -> cXvRN.org.com -> . layouts=none/suffix/multi
+CASE 449 seed=0xdbbe0b05edb5b86e k=2 fam=A root=no depthmax=4 chain=aglF.dev.org -> q.dev.org -> Oq.dev.org layouts=none/suffix/multi
+CASE 450 seed=0x29cf5b4fd9db4aba k=2 fam=A root=no depthmax=4 chain=qyJ.net -> dMG5.net -> orn.net layouts=none/suffix/multi
+CASE 451 seed=0x3b71b826c76be4dc k=1 fam=A root=no depthmax=4 chain=OHrz.io.net -> SmP1X.io.net layouts=none/suffix/multi
+CASE 452 seed=0x35feb45e38881295 k=2 fam=A root=no depthmax=4 chain=yO.io.com -> R.io.com -> RrU8.io.com layouts=none/suffix/multi
+CASE 453 seed=0x925436dc2a59c439 k=3 fam=A root=no depthmax=4 chain=TRyc7.com.org -> wd.com.org -> J.com.org -> g.com.org layouts=none/suffix/multi
+CASE 454 seed=0x422e0d6c9734da70 k=3 fam=A root=no depthmax=4 chain=mz.org -> hY.org -> 2G.org -> lW.org layouts=none/suffix/multi
+CASE 455 seed=0x3cbb09a408510829 k=1 fam=AAAA root=no depthmax=4 chain=yO2TE.com -> 2.com layouts=none/suffix/multi
+CASE 456 seed=0xeff30ad75d10992a k=1 fam=AAAA root=no depthmax=4 chain=3YuUW.org.com -> g0T.org.com layouts=none/suffix/multi
+CASE 457 seed=0x9a59dd9f3b07dd1a k=1 fam=A root=no depthmax=4 chain=PkKu.org.com -> 0.org.com layouts=none/suffix/multi
+CASE 458 seed=0x94e6d9d6ac240ad3 k=2 fam=A root=no depthmax=4 chain=PPO.net -> KM.net -> o.net layouts=none/suffix/multi
+CASE 459 seed=0x2dab4fc79c8ab4a1 k=4 fam=AAAA root=no depthmax=4 chain=RY.net -> fQVoR.net -> 82xh.net -> vCG2y.net -> M.net layouts=none/suffix/multi
+CASE 460 seed=0x87ebf91fe75d0ec8 k=2 fam=AAAA root=no depthmax=4 chain=upvW.net.io -> zLF.net.io -> rPi3n.net.io layouts=none/suffix/multi
+CASE 461 seed=0x2cdfc81f36708071 k=3 fam=A root=no depthmax=4 chain=C.com.com -> UKC.com.com -> Cf13v.com.com -> Va.com.com layouts=none/suffix/multi
+CASE 462 seed=0x19289222a1e08ed2 k=2 fam=A root=no depthmax=4 chain=XFsm.com -> x.com -> khbQ.com layouts=none/suffix/multi
+CASE 463 seed=0x13b58e5a12fcbc8b k=4 fam=AAAA root=no depthmax=4 chain=2.dev.io -> MTgTl.dev.io -> feE.dev.io -> lV6.dev.io -> VGs.dev.io layouts=none/suffix/multi
+CASE 464 seed=0x08cf86c8f53517fd k=2 fam=A root=yes depthmax=4 chain=py.dev -> . -> l.dev layouts=none/suffix/multi
+CASE 465 seed=0x4e0fa8a76a925d38 k=1 fam=AAAA root=no depthmax=4 chain=Bb.org.org -> lMy.org.org layouts=none/suffix/multi
+CASE 466 seed=0x1dd00e42caaa2ce9 k=2 fam=A root=no depthmax=4 chain=HLBy.io.io -> sNLu1.io.io -> U.io.io layouts=none/suffix/multi
+CASE 467 seed=0x54cbfded3a5b52cc k=1 fam=A root=no depthmax=4 chain=v5e.io.dev -> Il.io.dev layouts=none/suffix/multi
+CASE 468 seed=0xd67b133eae4d9031 k=4 fam=A root=no depthmax=4 chain=UsBH.io.com -> TH2.io.com -> LT7m2.io.com -> gtYf5.io.com -> Rg7bI.io.com layouts=none/suffix/multi
+CASE 469 seed=0x2d5d91f4113b6f8e k=4 fam=AAAA root=no depthmax=4 chain=w.com -> 7b.com -> oq.com -> A2PNp.com -> fElSm.com layouts=none/suffix/multi
+CASE 470 seed=0x4b2f47d95d78d18b k=3 fam=A root=no depthmax=4 chain=wxi.org -> y8.org -> srK.org -> Eof.org layouts=none/suffix/multi
+CASE 471 seed=0x99409823499e63d7 k=2 fam=AAAA root=no depthmax=4 chain=k.io.io -> p.io.io -> e3HG.io.io layouts=none/suffix/multi
+CASE 472 seed=0xa56ff131a84b2bb2 k=1 fam=AAAA root=no depthmax=4 chain=hAh.com.net -> J.com.net layouts=none/suffix/multi
+CASE 473 seed=0xba7078ab7dc0409e k=2 fam=AAAA root=no depthmax=4 chain=hf4.io.net -> AzU.io.net -> hg1wV.io.net layouts=none/suffix/multi
+CASE 474 seed=0xc12ccdf14d893632 k=3 fam=A root=no depthmax=4 chain=Mxn.dev -> ktTri.dev -> oxMB1.dev -> K.dev layouts=none/suffix/multi
+CASE 475 seed=0xe9e48b67b78e3cbd k=1 fam=AAAA root=no depthmax=4 chain=Fr.net -> v1vTK.net layouts=none/suffix/multi
+CASE 476 seed=0x7464cf24a248c733 k=4 fam=A root=no depthmax=4 chain=u8dP.dev -> AubYe.dev -> LRP.dev -> vgN.dev -> rveqe.dev layouts=none/suffix/multi
+CASE 477 seed=0xf0a0e0ad87573251 k=3 fam=A root=no depthmax=4 chain=R.io.org -> HNFhY.io.org -> l.io.org -> OXMH.io.org layouts=none/suffix/multi
+CASE 478 seed=0x55c79196eff13106 k=1 fam=A root=no depthmax=4 chain=2.io.net -> YCB9c.io.net layouts=none/suffix/multi
+CASE 479 seed=0x75ae20a1e32dea80 k=4 fam=AAAA root=no depthmax=4 chain=g.org.com -> uQ.org.com -> Q.org.com -> ui.org.com -> t.org.com layouts=none/suffix/multi
+CASE 480 seed=0x790c4b44cb12654a k=1 fam=A root=yes depthmax=4 chain=. -> w.net layouts=none/suffix/multi
+CASE 481 seed=0x5c83e6dcbfba269a k=4 fam=AAAA root=no depthmax=4 chain=i.dev.dev -> vkLa.dev.dev -> D76.dev.dev -> yg.dev.dev -> xMVH.dev.dev layouts=none/suffix/multi
+CASE 482 seed=0x7a559cc20bf78897 k=1 fam=AAAA root=no depthmax=4 chain=nhPW6.dev.org -> j.dev.org layouts=none/suffix/multi
+CASE 483 seed=0xcbc517aee00195ad k=4 fam=A root=no depthmax=4 chain=j-2S.dev.io -> JU.dev.io -> xCu.dev.io -> NM9LB.dev.io -> 9.dev.io layouts=none/suffix/multi
+CASE 484 seed=0xcf234251c7e61077 k=2 fam=A root=no depthmax=4 chain=7.net -> Kptkc.net -> G.net layouts=none/suffix/multi
+CASE 485 seed=0x8d414b163a6d4606 k=4 fam=A root=no depthmax=4 chain=pnmF1.org -> bHB3Y.org -> Hk1Q2.org -> OmA.org -> OegD.org layouts=none/suffix/multi
+CASE 486 seed=0xbeca36f81b3a99a2 k=3 fam=A root=no depthmax=4 chain=tW-hg.dev -> y.dev -> C.dev -> oxf.dev layouts=none/suffix/multi
+CASE 487 seed=0xf5c626a28aebbf85 k=4 fam=AAAA root=no depthmax=4 chain=60aE.com.com -> xU3C.com.com -> D.com.com -> 2F5.com.com -> L.com.com layouts=none/suffix/multi
+CASE 488 seed=0x756062ce57dea56d k=1 fam=A root=no depthmax=4 chain=Bqs4c.io -> t.io layouts=none/suffix/multi
+CASE 489 seed=0xf70f781fcbd0e2d2 k=1 fam=AAAA root=no depthmax=4 chain=Fxjv.com.dev -> 9W.com.dev layouts=none/suffix/multi
+CASE 490 seed=0x65075774ab332e98 k=1 fam=AAAA root=no depthmax=4 chain=J.dev.io -> e2qFP.dev.io layouts=none/suffix/multi
+CASE 491 seed=0xef879b3195edb90e k=1 fam=AAAA root=no depthmax=4 chain=b6EpP.com.net -> KVCN.com.net layouts=none/suffix/multi
+CASE 492 seed=0x54ae4c1afe87b7c3 k=4 fam=A root=no depthmax=4 chain=1G-b.dev -> fhfq.dev -> Xi.dev -> 0CJ.dev -> fO.dev layouts=none/suffix/multi
+CASE 493 seed=0xb9d4fd046721b678 k=2 fam=AAAA root=no depthmax=4 chain=XH9sv.dev -> 2Qj.dev -> 8o.dev layouts=none/suffix/multi
+CASE 494 seed=0x84225ed73855b3e2 k=1 fam=AAAA root=no depthmax=4 chain=2Qc.com.dev -> n.com.dev layouts=none/suffix/multi
+CASE 495 seed=0xd233af21247b462e k=1 fam=A root=no depthmax=4 chain=P6Kxh.net.com -> AWK7.net.com layouts=none/suffix/multi
+CASE 496 seed=0xccc0ab58959773e7 k=3 fam=AAAA root=yes depthmax=4 chain=hy.io.org -> x4QN.io.org -> . -> 6e.io.org layouts=none/suffix/multi
+CASE 497 seed=0xd01ed5fb7d7beeb1 k=4 fam=A root=no depthmax=4 chain=Lz.io -> ll.io -> J.io -> TJM.io -> v.io layouts=none/suffix/multi
+CASE 498 seed=0x071ac5a5ed2d1494 k=1 fam=A root=no depthmax=4 chain=OI.dev -> iD0.dev layouts=none/suffix/multi
+CASE 499 seed=0xea92613de1d4d5e4 k=2 fam=A root=no depthmax=4 chain=rdJI.io -> tA8q.io -> BW63.io layouts=none/suffix/multi
+COVERAGE cases=500 messages=1500 parses_ok=1500 chain_k={1:131,2:136,3:123,4:110} A=257 AAAA=243 root_cases=32 root_1byte=1152 root_2byte=288 depth={0:5010,1:5550,2:2134,3:500,4:500,>=5:0}
+ENCLEN checks=84164 failures=0 names_exact=29340 names_fold=30816 meta_runs=7500 meta_invariant=7500 meta_fail=0 size_violations=0 ptr_illegal=0
+FIRST_DIVERGENCE none
+GROUP model assertions=13 complete
+GROUP metamorphic assertions=7 complete
+DIFF_SIMULATOR injected_addr_faults=2 first_caught=3 hname_fault=caught oracle_detects=yes
+GROUP replay assertions=9 complete
+TARGET_COMPLETE

@@ -1,0 +1,12 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSDBDDFE450A90U6082/attempts/20261126T160936493946Z/repo/.task-build/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSDBDDFE450A90U6082/attempts/20261126T160936493946Z/repo/.task-build/include/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSDBDDFE450A90U6082/attempts/20261126T160936493946Z/repo/.task-build/src/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSDBDDFE450A90U6082/attempts/20261126T160936493946Z/repo/.task-build/src/lib/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSDBDDFE450A90U6082/attempts/20261126T160936493946Z/repo/.task-build/src/tools/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSDBDDFE450A90U6082/attempts/20261126T160936493946Z/repo/.task-build/docs/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
