@@ -1184,6 +1184,29 @@ tinyspline::BSpline::isClosed(real epsilon) const
 	return closed == 1;
 }
 
+tinyspline::Intersection
+tinyspline::BSpline::intersect(const BSpline &other,
+                               real spatialTolerance,
+                               real uTolerance,
+                               real vTolerance,
+                               size_t budget) const
+{
+	tsIntersection result = ts_intersection_init();
+	tsStatus status;
+	if (ts_bspline_intersect(&m_spline,
+	                         &other.m_spline,
+	                         spatialTolerance,
+	                         uTolerance,
+	                         vTolerance,
+	                         budget,
+	                         &result,
+	                         &status)) {
+		ts_intersection_free(&result);
+		throw std::runtime_error(status.message);
+	}
+	return Intersection(std::move(result));
+}
+
 tinyspline::FrameSeq
 tinyspline::BSpline::computeRMF(std_real_vector_in knots,
                                 tinyspline::Vec3 *firstNormal) const
@@ -1737,6 +1760,250 @@ tinyspline::ChordLengths::toString() const
 	    << "}";
 	return oss.str();
 }
+/*! @} */
+
+
+
+/*! @name Curve/Curve Intersection
+ *
+ * @{
+ */
+tinyspline::IntersectionPoint::IntersectionPoint()
+: m_data(tsIntersectionPoint())
+{
+	std::memset(&m_data, 0, sizeof(m_data));
+}
+
+tinyspline::IntersectionPoint::IntersectionPoint(
+	const tsIntersectionPoint &data)
+: m_data(data)
+{}
+
+tinyspline::real
+tinyspline::IntersectionPoint::u0() const
+{ return m_data.u0; }
+
+tinyspline::real
+tinyspline::IntersectionPoint::u1() const
+{ return m_data.u1; }
+
+tinyspline::real
+tinyspline::IntersectionPoint::v0() const
+{ return m_data.v0; }
+
+tinyspline::real
+tinyspline::IntersectionPoint::v1() const
+{ return m_data.v1; }
+
+tinyspline::real
+tinyspline::IntersectionPoint::u() const
+{ return m_data.u; }
+
+tinyspline::real
+tinyspline::IntersectionPoint::v() const
+{ return m_data.v; }
+
+tinyspline::Vec3
+tinyspline::IntersectionPoint::point() const
+{ return Vec3(m_data.point[0], m_data.point[1], m_data.point[2]); }
+
+size_t
+tinyspline::IntersectionPoint::uIndex() const
+{ return m_data.ui; }
+
+size_t
+tinyspline::IntersectionPoint::vIndex() const
+{ return m_data.vi; }
+
+const tsIntersectionPoint &
+tinyspline::IntersectionPoint::data() const
+{ return m_data; }
+
+tinyspline::IntersectionOverlap::IntersectionOverlap()
+: m_data(tsIntersectionOverlap())
+{
+	std::memset(&m_data, 0, sizeof(m_data));
+}
+
+tinyspline::IntersectionOverlap::IntersectionOverlap(
+	const tsIntersectionOverlap &data)
+: m_data(data)
+{}
+
+tinyspline::real
+tinyspline::IntersectionOverlap::uFrom() const
+{ return m_data.u_from; }
+
+tinyspline::real
+tinyspline::IntersectionOverlap::uTo() const
+{ return m_data.u_to; }
+
+tinyspline::real
+tinyspline::IntersectionOverlap::vFrom() const
+{ return m_data.v_from; }
+
+tinyspline::real
+tinyspline::IntersectionOverlap::vTo() const
+{ return m_data.v_to; }
+
+tinyspline::real
+tinyspline::IntersectionOverlap::alpha() const
+{ return m_data.alpha; }
+
+tinyspline::real
+tinyspline::IntersectionOverlap::beta() const
+{ return m_data.beta; }
+
+size_t
+tinyspline::IntersectionOverlap::uIndex() const
+{ return m_data.ui; }
+
+size_t
+tinyspline::IntersectionOverlap::vIndex() const
+{ return m_data.vi; }
+
+const tsIntersectionOverlap &
+tinyspline::IntersectionOverlap::data() const
+{ return m_data; }
+
+tinyspline::IntersectionBox::IntersectionBox()
+: m_data(tsIntersectionBox())
+{
+	std::memset(&m_data, 0, sizeof(m_data));
+}
+
+tinyspline::IntersectionBox::IntersectionBox(
+	const tsIntersectionBox &data)
+: m_data(data)
+{}
+
+tinyspline::real
+tinyspline::IntersectionBox::u0() const
+{ return m_data.u0; }
+
+tinyspline::real
+tinyspline::IntersectionBox::u1() const
+{ return m_data.u1; }
+
+tinyspline::real
+tinyspline::IntersectionBox::v0() const
+{ return m_data.v0; }
+
+tinyspline::real
+tinyspline::IntersectionBox::v1() const
+{ return m_data.v1; }
+
+size_t
+tinyspline::IntersectionBox::uIndex() const
+{ return m_data.ui; }
+
+size_t
+tinyspline::IntersectionBox::vIndex() const
+{ return m_data.vi; }
+
+int
+tinyspline::IntersectionBox::reason() const
+{ return m_data.reason; }
+
+const tsIntersectionBox &
+tinyspline::IntersectionBox::data() const
+{ return m_data; }
+
+tinyspline::Intersection::Intersection()
+: m_data(ts_intersection_init())
+{}
+
+tinyspline::Intersection::Intersection(const Intersection &other)
+: m_data(ts_intersection_init())
+{
+	tsStatus status;
+	if (ts_intersection_copy(&other.m_data, &m_data, &status))
+		throw std::runtime_error(status.message);
+}
+
+tinyspline::Intersection::Intersection(Intersection &&other)
+: m_data(other.m_data)
+{
+	other.m_data = ts_intersection_init();
+}
+
+tinyspline::Intersection::Intersection(tsIntersection &&data)
+: m_data(data)
+{
+	data = ts_intersection_init();
+}
+
+tinyspline::Intersection::~Intersection()
+{
+	ts_intersection_free(&m_data);
+}
+
+tinyspline::Intersection &
+tinyspline::Intersection::operator=(const Intersection &other)
+{
+	if (this != &other) {
+		tsStatus status;
+		tsIntersection copy = ts_intersection_init();
+		if (ts_intersection_copy(&other.m_data, &copy, &status))
+			throw std::runtime_error(status.message);
+		ts_intersection_free(&m_data);
+		m_data = copy;
+	}
+	return *this;
+}
+
+tinyspline::Intersection &
+tinyspline::Intersection::operator=(Intersection &&other)
+{
+	if (this != &other) {
+		ts_intersection_free(&m_data);
+		m_data = other.m_data;
+		other.m_data = ts_intersection_init();
+	}
+	return *this;
+}
+
+std::vector<tinyspline::IntersectionPoint>
+tinyspline::Intersection::points() const
+{
+	std::vector<IntersectionPoint> result;
+	result.reserve(m_data.num_points);
+	for (size_t i = 0; i < m_data.num_points; i++)
+		result.push_back(IntersectionPoint(m_data.points[i]));
+	return result;
+}
+
+std::vector<tinyspline::IntersectionOverlap>
+tinyspline::Intersection::overlaps() const
+{
+	std::vector<IntersectionOverlap> result;
+	result.reserve(m_data.num_overlaps);
+	for (size_t i = 0; i < m_data.num_overlaps; i++)
+		result.push_back(IntersectionOverlap(m_data.overlaps[i]));
+	return result;
+}
+
+std::vector<tinyspline::IntersectionBox>
+tinyspline::Intersection::boxes() const
+{
+	std::vector<IntersectionBox> result;
+	result.reserve(m_data.num_boxes);
+	for (size_t i = 0; i < m_data.num_boxes; i++)
+		result.push_back(IntersectionBox(m_data.boxes[i]));
+	return result;
+}
+
+bool
+tinyspline::Intersection::isComplete() const
+{ return m_data.complete != 0; }
+
+size_t
+tinyspline::Intersection::boxesExpanded() const
+{ return m_data.boxes_expanded; }
+
+const tsIntersection &
+tinyspline::Intersection::data() const
+{ return m_data; }
 /*! @} */
 
 #ifdef _MSC_VER

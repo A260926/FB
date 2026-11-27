@@ -45,6 +45,8 @@ MIT License - see the LICENSE file in the source distribution.
   - (also known as subdivision)
 - Derivative
 - Degree elevation
+- Curve/curve intersection (isolated points, coincident segments,
+  unresolved boxes)
 - Computation of rotation minimizing frames
 - Morphing
 - Serialization (JSON)
@@ -163,6 +165,69 @@ The documentation of the C interface
 extensive and also serves as an entry point for the C++ interface
 documentation (as well as the documentation for the bindings created
 from the C++ interface).
+
+### Curve/Curve Intersection
+
+`ts_bspline_intersect` (C) and `BSpline::intersect` (C++) compute where
+two non-rational, clamped B-spline curves of degree 1..3 meet. Both
+curves must be 2D or 3D and share their dimensionality. Every result is
+reported on the original knot domains of the input splines; the local
+`[0,1]` parameter of an intermediate Bézier segment is never leaked to
+the caller. A query returns three independent lists:
+
+- **isolated points** with a representative parameter pair, a
+  parameter interval on each axis no wider than the requested parameter
+  tolerance, the 3D position (the third component is zero for 2D
+  splines), and the lower index of the originating non-zero knot
+  interval on each spline;
+- **coincident segments**, each described by the maximal parameter
+  range and the affine map `v = alpha * u + beta` (alpha may be
+  negative, so reversed arcs are supported);
+- **unresolved parameter boxes** with a reason code, used when the box
+  budget is exhausted or floating point precision blocks further
+  subdivision.
+
+How the query works:
+
+1. **Conservative exclusion.** Each spline is split into its Bézier
+   pieces. A box of the joint parameter domain is bounded by the axis
+   aligned bounding boxes of the two Bernstein control polygons and,
+   more tightly, by the tensor-product Bernstein coefficients of the
+   difference system `p(v) - q(u)`. When every coefficient of one
+   component lies strictly beyond the spatial tolerance with a common
+   sign, the whole box is provably free of intersections. A local
+   distance minimum that never reaches zero is excluded this way, so
+   closeness alone is never accepted as an intersection.
+2. **Root existence.** Surviving boxes are subdivided (no fixed grid
+   sampling and no endpoint-only Newton seeding). Tangencies, which
+   produce no sign change, and fold-backs, which map several
+   parameters to one point, are both handled because a coefficient that
+   touches zero keeps its box alive. A leaf is accepted only after a
+   damped Levenberg-Marquardt refinement, whose normal equations are
+   regularized so an isolated zero-velocity point never divides by
+   zero, back-substitutes to a position within the spatial tolerance.
+3. **Coincidence.** Two arcs are reported as overlapping only when the
+   restricted polynomials are algebraically identical under an affine
+   reparameterization. The map is recovered by inverting a monotone
+   coordinate component (bisection, again without dividing by a zero
+   derivative) and then certified by exact polynomial composition on
+   every component plus a dense independent sample check; endpoint,
+   midpoint, or tangent comparisons alone are never sufficient.
+   Reparameterization, reversal, knot insertion, and exact degree
+   elevation all reduce to this case.
+4. **Stopping conditions.** `complete` is true only when the entire
+   parameter domain was excluded or assigned to a result. Otherwise the
+   remaining candidate boxes are returned with a reason (budget or
+   precision) and `complete` is false. An incomplete result is a normal,
+   partial answer, never an empty intersection: retrying with a larger
+   budget continues the search.
+
+Duplicate isolated reports are merged by parameter pair, so the same
+spatial point reached through two distinct parameter pairs is still
+reported twice. Swapping the two input splines exchanges the two
+parameter axes while keeping the same result set. See
+`examples/cxx/intersections.cpp` for a complete 3D example including the
+pending-box handling.
 
 ### Publications
 

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "tinyspline.h"
+#include "tinyspline_intersect.h"
 #include <vector>
 #include <string>
 
@@ -574,6 +575,7 @@ public:
  */
 class Morphism;
 class ChordLengths;
+class Intersection;
 class TINYSPLINECXX_API BSpline {
 public:
 	enum Type { Opened, Clamped, Beziers };
@@ -631,6 +633,18 @@ public:
 	                 size_t maxIter = 50) const;
 	Domain domain() const;
 	bool isClosed(real epsilon = TS_POINT_EPSILON) const;
+
+	/**
+	 * Computes the intersection of this spline with @p other.  See
+	 * ::ts_bspline_intersect for the full semantics.  Throws
+	 * std::runtime_error on invalid input; an incomplete result is
+	 * returned normally inside the ::Intersection value object.
+	 */
+	Intersection intersect(const BSpline &other,
+	                       real spatialTolerance = (real) 1e-6,
+	                       real uTolerance = (real) 1e-6,
+	                       real vTolerance = (real) 1e-6,
+	                       size_t budget = 0) const;
 	FrameSeq computeRMF(std_real_vector_in knots,
 	                    Vec3 *firstNormal = nullptr) const;
 	BSpline subSpline(real knot0, real knot1) const;
@@ -753,6 +767,113 @@ private:
 	             real *knots,
 	             real *lengths,
 	             size_t size);
+	friend class BSpline;
+};
+/*! @} */
+
+
+
+/*! @name Curve/Curve Intersection
+ *
+ * Owned value objects wrapping the C intersection query
+ * (::ts_bspline_intersect).  All parameters are reported on the original
+ * knot domains of the queried splines; nothing is expressed in local Bezier
+ * coordinates.  An incomplete result (::Intersection::isComplete is false) is
+ * a normal outcome meaning that unresolved boxes remain, not an empty
+ * intersection.
+ *
+ * @{
+ */
+class TINYSPLINECXX_API IntersectionPoint {
+public:
+	IntersectionPoint();
+	IntersectionPoint(const tsIntersectionPoint &data);
+
+	real u0() const;
+	real u1() const;
+	real v0() const;
+	real v1() const;
+	real u() const;
+	real v() const;
+	Vec3 point() const;
+	size_t uIndex() const;
+	size_t vIndex() const;
+
+	const tsIntersectionPoint &data() const;
+
+private:
+	tsIntersectionPoint m_data;
+};
+
+class TINYSPLINECXX_API IntersectionOverlap {
+public:
+	IntersectionOverlap();
+	IntersectionOverlap(const tsIntersectionOverlap &data);
+
+	real uFrom() const;
+	real uTo() const;
+	real vFrom() const;
+	real vTo() const;
+	real alpha() const;
+	real beta() const;
+	size_t uIndex() const;
+	size_t vIndex() const;
+
+	const tsIntersectionOverlap &data() const;
+
+private:
+	tsIntersectionOverlap m_data;
+};
+
+class TINYSPLINECXX_API IntersectionBox {
+public:
+	IntersectionBox();
+	IntersectionBox(const tsIntersectionBox &data);
+
+	real u0() const;
+	real u1() const;
+	real v0() const;
+	real v1() const;
+	size_t uIndex() const;
+	size_t vIndex() const;
+	int reason() const;
+
+	const tsIntersectionBox &data() const;
+
+private:
+	tsIntersectionBox m_data;
+};
+
+/**
+ * Owned result of BSpline::intersect.  Instances are independent of the
+ * splines they were computed from and support copying and moving; the
+ * underlying C arrays are deep copied and released on destruction.
+ */
+class TINYSPLINECXX_API Intersection {
+public:
+	Intersection();
+	Intersection(const Intersection &other);
+	Intersection(Intersection &&other);
+	virtual ~Intersection();
+
+	Intersection &operator=(const Intersection &other);
+	Intersection &operator=(Intersection &&other);
+
+	std::vector<IntersectionPoint> points() const;
+	std::vector<IntersectionOverlap> overlaps() const;
+	std::vector<IntersectionBox> boxes() const;
+
+	/** False when unresolved parameter boxes remain. */
+	bool isComplete() const;
+	/** Number of parameter boxes actually expanded. */
+	size_t boxesExpanded() const;
+
+	/** The underlying C result. */
+	const tsIntersection &data() const;
+
+private:
+	tsIntersection m_data;
+	explicit Intersection(tsIntersection &&data);
 	friend class BSpline;
 };
 /*! @} */
