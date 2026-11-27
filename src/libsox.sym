@@ -1,4 +1,7 @@
 lsx_calloc
+lsx_cutplan_feasible
+lsx_cutplan_offset_range
+lsx_cutplan_solve
 lsx_check_read_params
 lsx_close_dllibrary
 lsx_debug_impl

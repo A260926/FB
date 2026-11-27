@@ -1,0 +1,4 @@
+GROUP planner assertions=42 complete
+GROUP pcm assertions=297 complete
+GROUP lifecycle assertions=125 complete
+SOX_CUT_PLAN_COMPLETE
