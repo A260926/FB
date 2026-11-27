@@ -85,6 +85,71 @@ spvm_result_t a = spvm_state_get_local_result(state, fnMain, "a");
 printf("a = %.2f\n", a->members[0].value.f);
 ```
 
+## Workgroup executor (compute)
+For offline debugging of tiled/textured compute kernels, `spvm/workgroup.h` runs a whole
+workgroup of invocations of one compute entry point on top of the same per-state stepping
+rules. Each invocation keeps its own `Private`, `Function`, `Input`/`Output` storage and
+call stack, while every `Workgroup` variable (scalars, vectors, fixed-length arrays and
+structs, including nested members) is one shared, zero-initialized copy for the whole group.
+Writes made through `OpAccessChain`, `OpCopyMemory` or a helper function's plain pointer
+parameter all reach the same shared object, so peer invocations observe each other's stores.
+
+Create a workgroup from a program (the 3D local size is read from the module's numeric
+`LocalSize` execution mode; invocations are laid out x-fastest). The workgroup coordinates
+are supplied by the caller and exposed through the `LocalInvocationId`,
+`LocalInvocationIndex`, `WorkgroupId` and `GlobalInvocationId` builtins.
+```c
+#include <spvm/workgroup.h>
+
+spvm_program_t prog = spvm_program_create(ctx, spv, spv_length);
+
+// one workgroup at WorkgroupId (2, 0, 0)
+spvm_workgroup_t wg = spvm_workgroup_create(prog, 2, 0, 0);
+if (!wg) { /* the module uses an unsupported feature, see below */ }
+
+spvm_word count = spvm_workgroup_invocation_count(wg); // size_x * size_y * size_z
+
+// drive invocations one instruction at a time, in any order (forward, reverse, interleaved)
+for (spvm_word i = 0; i < count; i++) {
+    spvm_wg_status s = spvm_workgroup_step(wg, i);
+    // SPVM_WG_STATUS_RUNNING / WAITING / FINISHED, or an error status
+}
+
+// or run the whole group to completion (uses the exact same stepping rules)
+spvm_wg_status s = spvm_workgroup_run(wg);
+if (s != SPVM_WG_STATUS_FINISHED)
+    printf("%s\n", spvm_workgroup_error(wg));
+
+spvm_state_t state0 = spvm_workgroup_get_state(wg, 0); // inspect results as usual
+spvm_workgroup_delete(wg);
+```
+
+### Barriers
+On `OpControlBarrier` an invocation stops before the following instruction and executes
+nothing while it waits; stepping a waiting invocation keeps returning
+`SPVM_WG_STATUS_WAITING` and does not grow its `instruction_count`. A round is released only
+once every invocation reaches the same dynamic round, the same static barrier instruction and
+the same call-stack return-site sequence. A barrier inside a loop therefore rendezvouses
+separately on every pass, and a helper barrier reached from different call sites is never
+merged. An invocation returning while peers still wait, or invocations reaching different
+barriers in one round, yields an error diagnostic naming the invocation, instruction position
+and round.
+
+Only this barrier form is supported (the three operands must be constant result ids, whose
+values the executor reads):
+- execution scope: `Workgroup`
+- memory scope: `Workgroup`
+- memory semantics: `AcquireRelease | WorkgroupMemory`
+
+### Scope and limitations
+The executor accepts modules with a single `GLCompute` entry point and a fixed numeric
+`LocalSize`. At creation it rejects derivative groups, images/samplers, runtime arrays,
+atomic instructions, `ExecutionModeId` local sizes and recursive function calls. Two
+workgroups may be created from the same program and interleaved: their shared storage is
+independent, neither borrows the program's global callbacks or `user_data`, and deleting one
+group frees only its own storage (each shared member alias is released once) without
+invalidating the other.
+
 Don't forget to free the memory:
 ```c
 spvm_state_delete(state);

@@ -1,0 +1,135 @@
+; ============================================================================
+; workgroup-reduction fixture (readable SPIR-V for the module built in C by
+; build_reduction() in checks/check-workgroup.c). The C word fixture is the
+; authoritative binary; this assembly documents its structure for humans.
+;
+; LocalSize = 4 x 1 x 1, four invocations (tid = 0..3).
+;
+;   1. each invocation stores (tid+1)*10 into shared[tid] through a helper
+;      that takes a plain Workgroup pointer parameter (no top-level copy);
+;   2. even invocations swap shared[tid] / shared[tid+1] via AccessChain and
+;      the same pointer helpers (Load/Store all go through the helpers);
+;   3. a first OpControlBarrier joins the group;
+;   4. a two-iteration reduction loop repeatedly hits ONE static barrier
+;      instruction (two dynamic rendezvous rounds at the same site):
+;        k=0 stride=2: shared[tid] += shared[tid+2] for tid < 2
+;        k=1 stride=1: shared[tid] += shared[tid+1] for tid < 1
+;
+; Barrier: execution = Workgroup, memory = Workgroup,
+;          semantics = AcquireRelease | WorkgroupMemory (all constant ids).
+; ============================================================================
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %lid %wgid %lgid %lidx
+               OpExecutionMode %main LocalSize 4 1 1
+
+       %void = OpTypeVoid
+     %fnvoid = OpTypeFunction %void
+       %int = OpTypeInt 32 1
+      %uint = OpTypeInt 32 0
+       %bool = OpTypeBool
+     %v3uint = OpTypeVector %uint 3
+        %c_n = OpConstant %uint 4
+    %arr_int = OpTypeArray %int %c_n
+ %ptr_wg_arr = OpTypePointer Workgroup %arr_int
+ %ptr_wg_int = OpTypePointer Workgroup %int
+ %ptr_fn_int = OpTypePointer Function %int
+ %ptr_in_v3u = OpTypePointer Input %v3uint
+  %ptr_in_u32 = OpTypePointer Input %uint
+        %c0 = OpConstant %int 0
+        %c1 = OpConstant %int 1
+        %c2 = OpConstant %int 2
+       %c10 = OpConstant %int 10
+      %half = OpConstant %int 2
+   %scope_wg = OpConstant %int 2            ; SpvScopeWorkgroup
+  %sem_ar_wg = OpConstant %int 0x108        ; AcquireRelease(0x8)|WorkgroupMemory(0x100)
+
+       %lid = OpVariable %ptr_in_v3u Input  ; BuiltIn LocalInvocationId
+      %wgid = OpVariable %ptr_in_v3u Input  ; BuiltIn WorkgroupId
+      %lgid = OpVariable %ptr_in_v3u Input  ; BuiltIn GlobalInvocationId
+      %lidx = OpVariable %ptr_in_u32 Input  ; BuiltIn LocalInvocationIndex
+               OpDecorate %lid  BuiltIn LocalInvocationId
+               OpDecorate %wgid BuiltIn WorkgroupId
+               OpDecorate %lgid BuiltIn GlobalInvocationId
+               OpDecorate %lidx BuiltIn LocalInvocationIndex
+
+    %shared = OpVariable %ptr_wg_arr Workgroup   ; zero-initialized, group-wide
+
+; --- void storePtr(int* p, int v): writes through a shared pointer alias ---
+ %fn_store_t = OpTypeFunction %void %ptr_wg_int %int
+  %store_ptr = OpFunction %void None %fn_store_t
+         %p = OpFunctionParameter %ptr_wg_int
+         %v = OpFunctionParameter %int
+     %l_st = OpLabel
+               OpStore %p %v
+               OpReturn
+               OpFunctionEnd
+
+; --- int loadPtr(int* p): reads through a shared pointer alias -------------
+  %fn_load_t = OpTypeFunction %int %ptr_wg_int
+   %load_ptr = OpFunction %int None %fn_load_t
+        %p2 = OpFunctionParameter %ptr_wg_int
+     %l_ld = OpLabel
+       %rv = OpLoad %int %p2
+               OpReturnValue %rv
+               OpFunctionEnd
+
+; --- main -------------------------------------------------------------------
+      %main = OpFunction %void None %fnvoid
+  %entry_lbl = OpLabel
+         %k = OpVariable %ptr_fn_int Function %c0
+   %lid_load = OpLoad %v3uint %lid
+      %tid_u = OpCompositeExtract %uint %lid_load 0
+        %tid = OpBitcast %int %tid_u
+
+  ; shared[tid] = (tid+1)*10 through the helper pointer parameter
+   %base_ptr = OpAccessChain %ptr_wg_int %shared %tid
+     %t_plus = OpIAdd %int %tid %c1
+     %t_init = OpIMul %int %t_plus %c10
+               OpFunctionCall %void %store_ptr %base_ptr %t_init
+
+  ; neighbor swap for even invocations
+      %mod2 = OpSMod %int %tid %c2
+      %even = OpIEqual %bool %mod2 %c0
+               OpBranchConditional %even %swap_do %swap_join
+   %swap_do = OpLabel
+        %pa = OpAccessChain %ptr_wg_int %shared %tid
+        %va = OpFunctionCall %int %load_ptr %pa
+      %idx1 = OpIAdd %int %tid %c1
+        %pb = OpAccessChain %ptr_wg_int %shared %idx1
+        %vb = OpFunctionCall %int %load_ptr %pb
+               OpFunctionCall %void %store_ptr %pa %vb
+               OpFunctionCall %void %store_ptr %pb %va
+               OpBranch %swap_join
+ %swap_join = OpLabel
+               OpControlBarrier %scope_wg %scope_wg %sem_ar_wg   ; barrier #1
+
+  ; two-iteration reduction: the same static barrier is rendezvoused twice
+               OpBranch %red_cond
+  %red_cond = OpLabel
+        %kv = OpLoad %int %k
+      %k_lt = OpSLessThan %bool %kv %c2
+               OpBranchConditional %k_lt %red_body %red_done
+  %red_body = OpLabel
+       %thr = OpShiftRightArithmetic %int %half %kv
+    %active = OpSLessThan %bool %tid %thr
+               OpBranchConditional %active %red_do %red_skip
+    %red_do = OpLabel
+        %qa = OpAccessChain %ptr_wg_int %shared %tid
+        %la = OpFunctionCall %int %load_ptr %qa
+      %qidx = OpIAdd %int %tid %thr
+        %qb = OpAccessChain %ptr_wg_int %shared %qidx
+        %lb = OpFunctionCall %int %load_ptr %qb
+      %sum = OpIAdd %int %la %lb
+               OpFunctionCall %void %store_ptr %qa %sum
+               OpBranch %red_join
+  %red_skip = OpLabel
+               OpBranch %red_join
+  %red_join = OpLabel
+               OpControlBarrier %scope_wg %scope_wg %sem_ar_wg   ; barrier #2 (x2 rounds)
+    %k_next = OpIAdd %int %kv %c1
+               OpStore %k %k_next
+               OpBranch %red_cond
+  %red_done = OpLabel
+               OpReturn
+               OpFunctionEnd

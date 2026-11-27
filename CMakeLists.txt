@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 project(SPIRVVM)
 
 # include_directories(inc)
-set(SOURCES 
+set(SOURCES
 src/program.c
 src/types.c
 src/image.c
@@ -12,6 +12,7 @@ src/value.c
 src/context.c
 src/opcode_execute.c
 src/opcode_setup.c
+src/workgroup.c
 src/ext/GLSL450.c
 )
 
