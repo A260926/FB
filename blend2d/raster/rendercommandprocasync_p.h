@@ -7,6 +7,7 @@
 #define BLEND2D_RASTER_RENDERCOMMANDPROCASYNC_P_H_INCLUDED
 
 #include <blend2d/raster/edgebuilder_p.h>
+#include <blend2d/raster/masksampler_p.h>
 #include <blend2d/raster/renderbatch_p.h>
 #include <blend2d/raster/rendercommandprocsync_p.h>
 #include <blend2d/raster/workdata_p.h>
@@ -213,7 +214,7 @@ static CommandStatus fillBoxMaskA(ProcData& proc_data, const RenderCommand& comm
     const uint8_t* mask_data = (static_cast<const uint8_t*>(mask_impl->pixel_data) + intptr_t(maskY) * mask_impl->stride) + maskX * (mask_impl->depth / 8u);
 
     Pipeline::MaskCommand mask_commands[2];
-    Pipeline::MaskCommandType vMaskCmd = command.alpha() >= 255 ? Pipeline::MaskCommandType::kVMaskA8WithoutGA : Pipeline::MaskCommandType::kVMaskA8WithGA;
+    Pipeline::MaskCommandType vMaskCmd = command.alpha() >= 255 ? Pipeline::MaskCommandType::kVMaskA8WithGA : Pipeline::MaskCommandType::kVMaskA8WithoutGA;
 
     mask_commands[0].init_vmask(vMaskCmd, uint32_t(box_i.x0), uint32_t(box_i.x1), mask_data, mask_impl->stride);
     mask_commands[1].init_repeat();
@@ -230,6 +231,45 @@ static CommandStatus fillBoxMaskA(ProcData& proc_data, const RenderCommand& comm
     }
     else {
       // TODO:
+    }
+  }
+
+  return CommandStatus(box_i.y1 <= int(proc_data.bandY1()));
+}
+
+static CommandStatus fillBoxMaskU(ProcData& proc_data, const RenderCommand& command) noexcept {
+  const RenderCommand::FillBoxMaskU& payload = command._payload.box_mask_u;
+  const BLBoxI& box_i = payload.box_i;
+
+  int y0 = bl_max(box_i.y0, int(proc_data.bandY0()));
+  int y1 = bl_min(box_i.y1, int(proc_data.bandY1()));
+
+  if (y0 < y1) {
+    const BLImageImpl* mask_impl = payload.mask_image_i.ptr;
+    const MaskUSourceData* sd = payload.source_data.ptr;
+
+    uint32_t w = uint32_t(box_i.x1 - box_i.x0);
+    uint8_t* scanline = static_cast<uint8_t*>(proc_data.work_data()->work_zone.alloc(w, 1));
+    if (BL_UNLIKELY(!scanline)) {
+      proc_data.work_data()->accumulate_error_flag(BL_CONTEXT_ERROR_FLAG_OUT_OF_MEMORY);
+      return CommandStatus::kDone;
+    }
+
+    Pipeline::MaskCommand mask_commands[2];
+    Pipeline::MaskCommandType vMaskCmd = command.alpha() >= 255 ? Pipeline::MaskCommandType::kVMaskA8WithGA : Pipeline::MaskCommandType::kVMaskA8WithoutGA;
+
+    Pipeline::FillFunc fill_func = command.pipe_dispatch_data()->fill_func;
+    const void* fetch_data = command.get_pipe_fetch_data();
+
+    for (int dy = y0; dy < y1; dy++) {
+      MaskUSampler::sample_scanline(scanline, mask_impl, sd, box_i.x0, dy, w);
+
+      mask_commands[0].init_vmask(vMaskCmd, uint32_t(box_i.x0), uint32_t(box_i.x1), scanline);
+      mask_commands[1].init_repeat();
+
+      Pipeline::FillData fill_data;
+      fill_data.init_mask_a(command.alpha(), box_i.x0, dy, box_i.x1, dy + 1, mask_commands);
+      fill_func(&proc_data.work_data()->ctx_data, &fill_data, fetch_data);
     }
   }
 
@@ -482,6 +522,9 @@ static CommandStatus process_command(ProcData& proc_data, const RenderCommand& c
 
     case RenderCommandType::kFillBoxMaskA:
       return fillBoxMaskA(proc_data, command);
+
+    case RenderCommandType::kFillBoxMaskU:
+      return fillBoxMaskU(proc_data, command);
 
     default:
       return CommandStatus::kDone;

@@ -19,6 +19,7 @@
 #include <blend2d/pixelops/scalar_p.h>
 #include <blend2d/pipeline/reference/fixedpiperuntime_p.h>
 #include <blend2d/raster/edgebuilder_p.h>
+#include <blend2d/raster/masksampler_p.h>
 #include <blend2d/raster/rastercontext_p.h>
 #include <blend2d/raster/rastercontextops_p.h>
 #include <blend2d/raster/rendercommand_p.h>
@@ -1009,8 +1010,12 @@ static BL_INLINE void release_batch_fetch_data(BLRasterContextImpl* ctx_impl, Re
         if (command.retains_style_fetch_data())
           command._source.fetch_data->release(ctx_impl);
 
-        if (command.retains_mask_image_data())
-          ImageInternal::release_impl<RCMode::kMaybe>(command._payload.box_mask_a.mask_image_i.ptr);
+        if (command.retains_mask_image_data()) {
+          BLImageImpl* mask_impl = command.is_fill_box_mask_u()
+            ? command._payload.box_mask_u.mask_image_i.ptr
+            : command._payload.box_mask_a.mask_image_i.ptr;
+          ImageInternal::release_impl<RCMode::kMaybe>(mask_impl);
+        }
       }
       command_data += IntOps::bit_size_of<BLBitWord>();
     }
@@ -3170,6 +3175,145 @@ BL_NOINLINE BLResult fill_clipped_box_masked_a<kAsync>(
 
   return enqueue_command(ctx_impl, command, qy0, ds.fetch_data, [&](RenderCommand* command) noexcept {
     ObjectInternal::retain_impl<RCMode::kMaybe>(command->_payload.box_mask_a.mask_image_i.ptr);
+    command->add_flags(RenderCommandFlags::kRetainsMaskImageData);
+    ctx_impl->worker_mgr()._command_appender.mark_fetch_data();
+  });
+}
+
+// bl::RasterEngine - ContextImpl - Internals - Fill Transformed Mask
+// ==================================================================
+
+struct MaskUGeometry {
+  BLBoxI box_i;
+  MaskUSourceData source;
+};
+
+// Computes the device-space fill box and the inverse device->mask mapping of a transformed A8 mask fill.
+//
+// The top-left corner of the selected rectangle - mask coordinate `(mask_rect.x, mask_rect.y)`, not the origin of
+// the whole mask - is mapped to `origin` by the final transform. Thus a mask point `m` is placed at
+// `final_transform * (m + origin - selection_origin)`. The gradient/pattern matrix of the fill style is never
+// touched here. Returns false when the matrix is not invertible or the fill is completely clipped out.
+static bool calc_mask_u_geometry(BLRasterContextImpl* ctx_impl, const BLPoint& origin, const BLRectI& mask_rect,
+                                 const BLMatrix2D& final_transform, MaskUGeometry* out) noexcept {
+  BLMatrix2D mask_to_device(final_transform);
+  mask_to_device.translate(origin.x - double(mask_rect.x), origin.y - double(mask_rect.y));
+
+  BLMatrix2D device_to_mask;
+  if (BLMatrix2D::invert(device_to_mask, mask_to_device) != BL_SUCCESS)
+    return false;
+
+  if (!Math::is_finite(device_to_mask.m00, device_to_mask.m01, device_to_mask.m10,
+                       device_to_mask.m11, device_to_mask.m20, device_to_mask.m21))
+    return false;
+
+  // Mask-space region that can produce nonzero coverage. A device pixel mapped to mask coordinate `u` touches
+  // mask pixels floor(u - 0.5) and floor(u - 0.5) + 1, so the bilinear footprint extends half a mask pixel beyond
+  // each side of the selected rectangle. Mapping this expanded region through the forward transform yields a
+  // correct device-space bound under arbitrary scale (a fixed 1px device margin would be wrong when upscaling).
+  BLBox mask_bound(
+    double(mask_rect.x) - 0.5, double(mask_rect.y) - 0.5,
+    double(mask_rect.x + mask_rect.w) + 0.5, double(mask_rect.y + mask_rect.h) + 0.5);
+  BLBox cover_box = TransformInternal::map_box(mask_to_device, mask_bound);
+
+  // Intersect with the continuous clip box, then round outward to device pixels.
+  BLBox clipped_box;
+  if (!Geometry::intersect(clipped_box, cover_box, ctx_impl->final_clip_box_d()))
+    return false;
+
+  int x0 = Math::floor_to_int(clipped_box.x0);
+  int y0 = Math::floor_to_int(clipped_box.y0);
+  int x1 = Math::ceil_to_int(clipped_box.x1);
+  int y1 = Math::ceil_to_int(clipped_box.y1);
+
+  // Clamp to the integer clip box so no pixel outside the rect clip is ever written.
+  BLBoxI box_i;
+  if (!Geometry::intersect(box_i, BLBoxI(x0, y0, x1, y1), ctx_impl->final_clip_box_i()))
+    return false;
+
+  out->box_i = box_i;
+
+  // The inverse maps device pixel centers into full mask coordinates; the half-pixel offset between mask
+  // coordinates and mask pixel centers is handled inside the sampler.
+  out->source.inv_m00 = device_to_mask.m00;
+  out->source.inv_m01 = device_to_mask.m01;
+  out->source.inv_m10 = device_to_mask.m10;
+  out->source.inv_m11 = device_to_mask.m11;
+  out->source.inv_t20 = device_to_mask.m20;
+  out->source.inv_t21 = device_to_mask.m21;
+  const BLBox& clip_d = ctx_impl->final_clip_box_d();
+  out->source.clip_x0 = clip_d.x0;
+  out->source.clip_y0 = clip_d.y0;
+  out->source.clip_x1 = clip_d.x1;
+  out->source.clip_y1 = clip_d.y1;
+  out->source.area_x = mask_rect.x;
+  out->source.area_y = mask_rect.y;
+  out->source.area_w = mask_rect.w;
+  out->source.area_h = mask_rect.h;
+  return true;
+}
+
+template<RenderingMode kRM>
+static BLResult fill_clipped_box_masked_u(
+    BLRasterContextImpl* ctx_impl, DispatchInfo di, DispatchStyle ds,
+    const BLBoxI& box_i, const BLImageCore* mask, const MaskUSourceData& source) noexcept;
+
+template<>
+BL_NOINLINE BLResult fill_clipped_box_masked_u<kSync>(
+    BLRasterContextImpl* ctx_impl, DispatchInfo di, DispatchStyle ds,
+    const BLBoxI& box_i, const BLImageCore* mask, const MaskUSourceData& source) noexcept {
+
+  ArenaAllocator::StatePtr zone_state = ctx_impl->sync_work_data.work_zone.save_state();
+
+  Pipeline::DispatchData dispatch_data;
+
+  di.add_fill_type(Pipeline::FillType::kMask);
+  BLResult result = ensure_fetch_and_dispatch_data(ctx_impl, di.signature, ds.fetch_data, &dispatch_data);
+
+  if (result == BL_SUCCESS) {
+    MaskUSourceData* sd = ctx_impl->sync_work_data.work_zone.allocT<MaskUSourceData>();
+    if (BL_UNLIKELY(!sd)) {
+      result = bl_make_error(BL_ERROR_OUT_OF_MEMORY);
+    }
+    else {
+      *sd = source;
+
+      RenderCommand::FillBoxMaskU payload;
+      payload.mask_image_i.ptr = ImageInternal::get_impl(mask);
+      payload.source_data.ptr = sd;
+      payload.box_i = box_i;
+      result = CommandProcSync::fill_box_masked_u(ctx_impl->sync_work_data, dispatch_data, di.alpha, payload, ds.fetch_data->get_pipeline_data());
+    }
+  }
+
+  ctx_impl->sync_work_data.work_zone.restore_state(zone_state);
+  return result;
+}
+
+template<>
+BL_NOINLINE BLResult fill_clipped_box_masked_u<kAsync>(
+    BLRasterContextImpl* ctx_impl, DispatchInfo di, DispatchStyle ds,
+    const BLBoxI& box_i, const BLImageCore* mask, const MaskUSourceData& source) noexcept {
+
+  RenderCommand* command = ctx_impl->worker_mgr->current_command();
+
+  di.add_fill_type(Pipeline::FillType::kMask);
+  BL_PROPAGATE(ensure_fetch_and_dispatch_data(ctx_impl, di.signature, ds.fetch_data, command->pipe_dispatch_data()));
+
+  MaskUSourceData* sd = ctx_impl->worker_mgr()._allocator.allocT<MaskUSourceData>();
+  if (BL_UNLIKELY(!sd))
+    return bl_make_error(BL_ERROR_OUT_OF_MEMORY);
+  *sd = source;
+
+  command->init_command(di.alpha);
+  command->init_fill_box_mask_u(box_i, mask, sd);
+
+  uint8_t qy0 = uint8_t(box_i.y0 >> ctx_impl->command_quantization_shift_aa());
+
+  return enqueue_command(ctx_impl, command, qy0, ds.fetch_data, [&](RenderCommand* command) noexcept {
+    ObjectInternal::retain_impl<RCMode::kMaybe>(command->_payload.box_mask_u.mask_image_i.ptr);
+    command->add_flags(RenderCommandFlags::kRetainsMaskImageData);
+    ctx_impl->worker_mgr()._command_appender.mark_fetch_data();
   });
 }
 
@@ -3629,50 +3773,16 @@ static BL_INLINE BLResult fill_unclipped_mask_d(BLRasterContextImpl* ctx_impl, D
       if (isBoxAligned24x8(dst_box_u)) {
         return fill_clipped_box_masked_a<kRM>(ctx_impl, di, ds, BLBoxI(x0, y0, x1, y1), mask, BLPointI(mask_rect.x, mask_rect.y));
       }
-
-      // TODO: [Rendering Context] Masking support.
-      /*
-      BL_PROPAGATE(serializer.init_fetch_data_for_mask(ctx_impl));
-      serializer.mask_fetch_data()->init_image_source(mask, mask_rect);
-      if (!serializer.mask_fetch_data()->setup_pattern_blit(x0, y0))
-        return BL_SUCCESS;
-      */
-    }
-    else {
-      // TODO: [Rendering Context] Masking support.
-      /*
-      BL_PROPAGATE(serializer.init_fetch_data_for_mask(ctx_impl));
-      serializer.mask_fetch_data()->init_image_source(mask, mask_rect);
-      if (!serializer.mask_fetch_data()->setup_pattern_fx_fy(BL_RASTER_CONTEXT_PREFERRED_BLIT_EXTEND, ctx_impl->hints().pattern_quality, start_fx, start_fy))
-        return BL_SUCCESS;
-      */
-    }
-
-    /*
-    return fill_clipped_box_u<RenderCommandSerializerFlags::kMask>(ctx_impl, serializer, dst_box_u);
-    */
-  }
-
-  return bl_make_error(BL_ERROR_NOT_IMPLEMENTED);
-
-  // TODO: [Rendering Context] Masking support.
-  /*
-  else {
-    BLMatrix2D m(ctx_impl->final_transform());
-    m.translate(dst.x, dst.y);
-
-    BL_PROPAGATE(serializer.init_fetch_data_for_mask(ctx_impl));
-    serializer.mask_fetch_data()->init_image_source(mask, mask_rect);
-    if (!serializer.mask_fetch_data()->setup_pattern_affine(BL_RASTER_CONTEXT_PREFERRED_BLIT_EXTEND, ctx_impl->hints().pattern_quality, m)) {
-      serializer.rollback_fetch_data(ctx_impl);
-      return BL_SUCCESS;
     }
   }
 
-  BLBox final_box(dst.x, dst.y, dst.x + double(mask_rect.w), dst.y + double(mask_rect.h));
-  return bl_raster_context_impl_finalize_blit(ctx_impl, serializer,
-         fill_unclipped_box<RenderCommandSerializerFlags::kMask>(ctx_impl, serializer, final_box));
-  */
+  // Fractional translation or a full affine transform: inverse-map device pixel centers and bilinearly
+  // interpolate the A8 mask. The aligned path above is intentionally kept unchanged for byte compatibility.
+  MaskUGeometry geometry;
+  if (!calc_mask_u_geometry(ctx_impl, dst, mask_rect, ctx_impl->final_transform(), &geometry))
+    return BL_SUCCESS;
+
+  return fill_clipped_box_masked_u<kRM>(ctx_impl, di, ds, geometry.box_i, mask, geometry.source);
 }
 
 template<RenderingMode kRM>

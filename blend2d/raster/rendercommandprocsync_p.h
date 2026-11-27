@@ -11,6 +11,7 @@
 #include <blend2d/pipeline/pipedefs_p.h>
 #include <blend2d/raster/analyticrasterizer_p.h>
 #include <blend2d/raster/edgebuilder_p.h>
+#include <blend2d/raster/masksampler_p.h>
 #include <blend2d/raster/rendercommand_p.h>
 #include <blend2d/raster/rasterdefs_p.h>
 #include <blend2d/raster/workdata_p.h>
@@ -82,6 +83,42 @@ static BL_INLINE BLResult fill_box_masked_a(WorkData& work_data, const Pipeline:
   fill_func(&work_data.ctx_data, &fill_data, fetch_data);
 
   return BL_SUCCESS;
+}
+
+static BL_INLINE BLResult fill_box_masked_u(WorkData& work_data, const Pipeline::DispatchData& dispatch_data, uint32_t alpha, const RenderCommand::FillBoxMaskU& payload, const void* fetch_data) noexcept {
+  const BLImageImpl* mask_impl = payload.mask_image_i.ptr;
+  const MaskUSourceData* sd = payload.source_data.ptr;
+  const BLBoxI& box_i = payload.box_i;
+
+  // All per-command scratch (the inverse mapping and the per-row coverage buffer) is released when the call ends.
+  ArenaAllocator::StatePtr zone_state = work_data.work_zone.save_state();
+
+  uint32_t w = uint32_t(box_i.x1 - box_i.x0);
+  uint8_t* scanline = static_cast<uint8_t*>(work_data.work_zone.alloc(w, 1));
+  BLResult result = BL_SUCCESS;
+  if (BL_UNLIKELY(!scanline)) {
+    result = bl_make_error(BL_ERROR_OUT_OF_MEMORY);
+  }
+  else {
+    Pipeline::MaskCommand mask_commands[2];
+    Pipeline::MaskCommandType vMaskCmd = alpha >= 255 ? Pipeline::MaskCommandType::kVMaskA8WithGA : Pipeline::MaskCommandType::kVMaskA8WithoutGA;
+
+    Pipeline::FillFunc fill_func = dispatch_data.fill_func;
+
+    for (int dy = box_i.y0; dy < box_i.y1; dy++) {
+      MaskUSampler::sample_scanline(scanline, mask_impl, sd, box_i.x0, dy, w);
+
+      mask_commands[0].init_vmask(vMaskCmd, uint32_t(box_i.x0), uint32_t(box_i.x1), scanline);
+      mask_commands[1].init_repeat();
+
+      Pipeline::FillData fill_data;
+      fill_data.init_mask_a(alpha, box_i.x0, dy, box_i.x1, dy + 1, mask_commands);
+      fill_func(&work_data.ctx_data, &fill_data, fetch_data);
+    }
+  }
+
+  work_data.work_zone.restore_state(zone_state);
+  return result;
 }
 
 static BL_NOINLINE BLResult fill_analytic(WorkData& work_data, const Pipeline::DispatchData& dispatch_data, uint32_t alpha, const EdgeStorage<int>* edge_storage, BLFillRule fill_rule, const void* fetch_data) noexcept {

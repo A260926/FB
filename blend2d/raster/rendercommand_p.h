@@ -22,6 +22,38 @@ namespace bl::RasterEngine {
 
 struct RenderFetchData;
 
+//! Source data of an unaligned (transformed) A8 mask fill, allocated outside of the render command.
+//!
+//! The inverse mapping converts a device pixel center `(dx + 0.5, dy + 0.5)` into mask coordinates:
+//!
+//! ```
+//! u = inv_m00 * dx + inv_m10 * dy + inv_t20
+//! v = inv_m01 * dx + inv_m11 * dy + inv_t21
+//! ```
+//!
+//! `area_x/area_y` is the origin of the selected sub-rectangle in mask pixel coordinates; pixels outside of the
+//! selection rectangle are treated as zero. Bilinear interpolation footprint may cross the selection boundary, in
+//! which case the out-of-selection contribution is zero (no edge clamping, no edge pixel repetition).
+struct MaskUSourceData {
+  double inv_m00;
+  double inv_m01;
+  double inv_m10;
+  double inv_m11;
+  double inv_t20;
+  double inv_t21;
+  // Continuous device-space clip box; each device pixel is additionally weighted by its overlap area with it,
+  // so fractional (unaligned) rectangle clips get sub-pixel coverage. For an integer-aligned clip every inside
+  // pixel has an overlap of 1 and every outside pixel 0.
+  double clip_x0;
+  double clip_y0;
+  double clip_x1;
+  double clip_y1;
+  int32_t area_x;
+  int32_t area_y;
+  int32_t area_w;
+  int32_t area_h;
+};
+
 //! Source data that belongs to a \ref RenderCommand, but stored separately.
 union RenderCommandSource {
   //! Solid data.
@@ -41,7 +73,8 @@ enum class RenderCommandType : uint8_t {
   kFillBoxA = 1,
   kFillBoxU = 2,
   kFillAnalytic = 3,
-  kFillBoxMaskA = 4
+  kFillBoxMaskA = 4,
+  kFillBoxMaskU = 5
 };
 
 //! Raster command flags.
@@ -110,6 +143,13 @@ struct RenderCommand {
     BLBoxI box_i;
   };
 
+  //! FillBoxMaskU payload - fill of an axis-aligned device box with a bilinearly sampled, transformed A8 mask.
+  struct FillBoxMaskU {
+    Ptr64<BLImageImpl> mask_image_i;
+    Ptr64<MaskUSourceData> source_data;
+    BLBoxI box_i;
+  };
+
   //! FillAnalytic and FillMaskAnalytic payload, used by the asynchronous rendering context implementation.
   struct FillAnalytic {
     //! Fetch data used by mask `kTypeFillMaskAnalytic` command types.
@@ -132,6 +172,8 @@ struct RenderCommand {
     FillBox box;
     //! Payload used by FillBoxAMaskA.
     FillBoxMaskA box_mask_a;
+    //! Payload used by FillBoxMaskU.
+    FillBoxMaskU box_mask_u;
     //! Payload used by FillAnalytic in case of asynchronous rendering.
     FillAnalytic analytic;
 
@@ -145,6 +187,7 @@ struct RenderCommand {
   BL_STATIC_ASSERT(sizeof(Payload) == kPayloadDataSize);
   BL_STATIC_ASSERT(sizeof(FillBox) == kPayloadDataSize);
   BL_STATIC_ASSERT(sizeof(FillBoxMaskA) <= kPayloadDataSize);
+  BL_STATIC_ASSERT(sizeof(FillBoxMaskU) <= kPayloadDataSize);
   BL_STATIC_ASSERT(sizeof(FillAnalytic) <= kPayloadDataSize);
 
   //! \}
@@ -215,6 +258,13 @@ struct RenderCommand {
     _type = RenderCommandType::kFillBoxMaskA;
   }
 
+  BL_INLINE void init_fill_box_mask_u(const BLBoxI& box_a, const BLImageCore* mask_image, const MaskUSourceData* source_data) noexcept {
+    _payload.box_mask_u.mask_image_i.ptr = ImageInternal::get_impl(mask_image);
+    _payload.box_mask_u.source_data.ptr = const_cast<MaskUSourceData*>(source_data);
+    _payload.box_mask_u.box_i = box_a;
+    _type = RenderCommandType::kFillBoxMaskU;
+  }
+
   //! Sets edges of FillAnalytic or FillMaskAnalytic command.
   BL_INLINE void set_analytic_edges(EdgeStorage<int>* edge_storage) noexcept {
     _payload.analytic.edges.ptr = edge_storage->flatten_edge_links();
@@ -243,6 +293,7 @@ struct RenderCommand {
   BL_INLINE_NODEBUG bool is_fill_box_u() const noexcept { return _type == RenderCommandType::kFillBoxU; }
   BL_INLINE_NODEBUG bool is_fill_analytic() const noexcept { return _type == RenderCommandType::kFillAnalytic; }
   BL_INLINE_NODEBUG bool is_fill_box_mask_a() const noexcept { return _type == RenderCommandType::kFillBoxMaskA; }
+  BL_INLINE_NODEBUG bool is_fill_box_mask_u() const noexcept { return _type == RenderCommandType::kFillBoxMaskU; }
 
   BL_INLINE_NODEBUG RenderCommandFlags flags() const noexcept { return RenderCommandFlags(_flags); }
   BL_INLINE_NODEBUG bool has_flag(RenderCommandFlags flag) const noexcept { return uint32_t(_flags & flag) != 0; }
