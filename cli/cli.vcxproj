@@ -20,9 +20,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cli.c" />
+    <ClCompile Include="cutplan.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cli.h" />
+    <ClInclude Include="cutplan.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DF39D172-117D-4AAC-9415-01E55DCA6D9E}</ProjectGuid>

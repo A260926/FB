@@ -21,6 +21,7 @@
 /* This file is available under an ISC license. */
 
 #include "cli.h"
+#include "cutplan.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -159,6 +160,9 @@ typedef struct
     int                  compact_size_table;
     double               min_frag_duration;
     int                  dry_run;
+    char                *cuts_file;
+    int                  cut_mode;
+    cut_plan_t           cut_plan;
 } remuxer_t;
 
 typedef struct
@@ -235,6 +239,8 @@ static void cleanup_remuxer( remuxer_t *remuxer )
     }
     lsmash_free( remuxer->track_option );
     lsmash_free( remuxer->input );
+    if( remuxer->cut_mode )
+        cutplan_cleanup( &remuxer->cut_plan );
     cleanup_output_movie( remuxer->output );
 }
 
@@ -329,6 +335,12 @@ static void display_help( void )
              "      This option requires --fragment.\n"
              "  --compact-size-table\n"
              "      Compress sample size tables if possible.\n"
+             "  --cuts <string>\n"
+             "      Reorder lossless cuts listed in the file. Each non-empty line is\n"
+             "      \"start end\" in the input movie timescale, half-open, and line order\n"
+             "      is output order. Requires one self-contained MP4 input with one avc1\n"
+             "      video track and at most one mp4a audio track; incompatible with seek,\n"
+             "      fragmentation, multiple inputs and track removal.\n"
              "  --dry-run\n"
              "      Execute as a dry run.\n"
              "Track options:\n"
@@ -443,7 +455,7 @@ static int input_data_reference
     return 0;
 }
 
-static int get_movie( input_t *input, char *input_name )
+static int get_movie( input_t *input, char *input_name, int keep_boxes )
 {
     if( !strcmp( input_name, "-" ) )
         return ERROR_MSG( "standard input not supported.\n" );
@@ -605,7 +617,10 @@ static int get_movie( input_t *input, char *input_name )
         in_track[i].composition_delay     = 0;
         in_track[i].skip_duration         = 0;
     }
-    lsmash_destroy_children( lsmash_file_as_box( in_file->fh ) );
+    /* Cut mode still needs the box tree (edit lists, sample descriptions,
+     * data references) to validate the plan. */
+    if( !keep_boxes )
+        lsmash_destroy_children( lsmash_file_as_box( in_file->fh ) );
     return 0;
 }
 
@@ -690,6 +705,13 @@ static int parse_cli_option( int argc, char **argv, remuxer_t *remuxer )
     if( !input_file_option )
         return ERROR_MSG( "failed to allocate per-file option.\n" );
     int input_movie_number = 0;
+    int keep_input_boxes = 0;
+    for( int i = 1; i < argc; i++ )
+        if( !strcasecmp( argv[i], "--cuts" ) )
+        {
+            keep_input_boxes = 1;
+            break;
+        }
     for( int i = 1; i < argc ; i++ )
     {
         /* Get input movies. */
@@ -701,7 +723,7 @@ static int parse_cli_option( int argc, char **argv, remuxer_t *remuxer )
             char *p = argv[i];
             while( *p )
                 input_file_option[input_movie_number].num_track_delimiter += (*p++ == '?');
-            if( get_movie( &input[input_movie_number], strtok( argv[i], "?" ) ) )
+            if( get_movie( &input[input_movie_number], strtok( argv[i], "?" ), keep_input_boxes ) )
                 FAILED_PARSE_CLI_OPTION( "failed to get input movie.\n" );
             uint32_t num_tracks = input[input_movie_number].file.movie.num_tracks;
             track_option[input_movie_number] = lsmash_malloc_zero( num_tracks * sizeof(track_media_option) );
@@ -787,6 +809,12 @@ static int parse_cli_option( int argc, char **argv, remuxer_t *remuxer )
         }
         else if( !strcasecmp( argv[i], "--compact-size-table" ) )
             remuxer->compact_size_table = 1;
+        else if( !strcasecmp( argv[i], "--cuts" ) )
+        {
+            if( ++i == argc )
+                FAILED_PARSE_CLI_OPTION( "--cuts requires an argument.\n" );
+            remuxer->cuts_file = argv[i];
+        }
         else if( !strcasecmp( argv[i], "--dry-run" ) )
             remuxer->dry_run = 1;
         else
@@ -826,6 +854,24 @@ static int parse_cli_option( int argc, char **argv, remuxer_t *remuxer )
     }
     if( parse_track_option( remuxer ) )
         FAILED_PARSE_CLI_OPTION( "failed to parse track options.\n" );
+    if( remuxer->cuts_file )
+    {
+        remuxer->cut_mode = 1;
+        if( remuxer->num_input != 1 )
+            FAILED_PARSE_CLI_OPTION( "--cuts requires exactly one input file.\n" );
+        if( remuxer->frag_base_track || remuxer->dash )
+            FAILED_PARSE_CLI_OPTION( "--cuts is incompatible with fragmentation options.\n" );
+        for( uint32_t j = 0; j < input[0].file.movie.num_tracks; j++ )
+        {
+            track_media_option *opt = &track_option[0][j];
+            if( opt->remove )
+                FAILED_PARSE_CLI_OPTION( "--cuts is incompatible with track removal.\n" );
+            if( opt->seek )
+                FAILED_PARSE_CLI_OPTION( "--cuts is incompatible with seek/safe-seek.\n" );
+        }
+        if( cutplan_parse_file( remuxer->cuts_file, &remuxer->cut_plan, stderr ) )
+            FAILED_PARSE_CLI_OPTION( "failed to parse cut file %s.\n", remuxer->cuts_file );
+    }
     lsmash_free( input_file_option );
     return 0;
 #undef FAILED_PARSE_CLI_OPTION
@@ -1210,6 +1256,18 @@ static int prepare_output( remuxer_t *remuxer )
     }
     if( set_movie_parameters( remuxer ) < 0 )
         return ERROR_MSG( "failed to set output movie parameters.\n" );
+    if( remuxer->cut_mode )
+    {
+        /* The output movie timescale is inherited from the input so cut
+         * intervals keep their exact meaning. */
+        lsmash_movie_parameters_t movie_param;
+        lsmash_initialize_movie_parameters( &movie_param );
+        if( lsmash_get_movie_parameters( output->root, &movie_param ) )
+            return ERROR_MSG( "failed to get output movie parameters.\n" );
+        movie_param.timescale = remuxer->cut_plan.movie_timescale;
+        if( lsmash_set_movie_parameters( output->root, &movie_param ) )
+            return ERROR_MSG( "failed to set output movie timescale.\n" );
+    }
     set_itunes_metadata( output, input, remuxer->num_input );
     /* Allocate output tracks. */
     out_movie->track = lsmash_malloc( out_movie->num_tracks * sizeof(output_track_t) );
@@ -1683,6 +1741,127 @@ static int do_remux( remuxer_t *remuxer )
 #undef LSMASH_MAX
 }
 
+/* ---- lossless cut mode ---- */
+
+static int input_movie_is_fragmented( input_t *input )
+{
+    /* mvex is placed under moov and marks a fragmented movie. */
+    static const lsmash_box_type_t mvex_type =
+        LSMASH_ISO_BOX_TYPE_INITIALIZER( LSMASH_4CC( 'm', 'v', 'e', 'x' ) );
+    lsmash_box_path_t path[] =
+        {
+            { .type = mvex_type, .number = 1 },
+            { .type = { 0 }, .number = 0 }
+        };
+    lsmash_box_t *mvex = lsmash_get_box( lsmash_file_as_box( input->file.fh ), path );
+    return mvex != NULL;
+}
+
+/* Copy every selected sample of every cut into the output tracks.  Each copy
+ * gets fresh DTS/CTS starting from 0 per track, with the source cts-dts
+ * difference and sample duration preserved. */
+static int do_cut_remux( remuxer_t *remuxer )
+{
+    input_t        *input     = remuxer->input;
+    output_t       *output    = remuxer->output;
+    output_movie_t *out_movie = &output->file.movie;
+    cut_plan_t     *plan      = &remuxer->cut_plan;
+    for( uint32_t out_i = 0; out_i < out_movie->num_tracks; out_i++ )
+    {
+        output_track_t *out_track = &out_movie->track[out_i];
+        uint32_t plan_i;
+        if( cutplan_find_track( plan, input->file.movie.track[out_i].track_ID, &plan_i ) )
+            return ERROR_MSG( "internal error: no cut plan for track %u.\n", out_track->track_ID );
+        cut_track_plan_t *track_plan = &plan->tracks[plan_i];
+        uint32_t last_sample_delta  = 0;
+        for( uint32_t c = 0; c < plan->num_cuts; c++ )
+        {
+            const cut_track_segment_t *seg = &track_plan->segment[c];
+            for( uint32_t s = seg->first_sample; s <= seg->last_sample; s++ )
+            {
+                lsmash_sample_t *src = lsmash_get_sample_from_media_timeline( input->root, track_plan->track_ID, s );
+                if( !src )
+                    return ERROR_MSG( "failed to get sample %u from track %u.\n", s, track_plan->track_ID );
+                lsmash_sample_t info;
+                if( lsmash_get_sample_info_from_media_timeline( input->root, track_plan->track_ID, s, &info ) )
+                {
+                    lsmash_delete_sample( src );
+                    return ERROR_MSG( "failed to get sample info from track %u.\n", track_plan->track_ID );
+                }
+                uint32_t delta;
+                if( lsmash_get_sample_delta_from_media_timeline( input->root, track_plan->track_ID, s, &delta ) )
+                {
+                    lsmash_delete_sample( src );
+                    return ERROR_MSG( "failed to get sample delta from track %u.\n", track_plan->track_ID );
+                }
+                last_sample_delta = delta;
+                /* Rebase onto the output timeline: DTS 0 at the first copied
+                 * sample, cts-dts offset kept intact within each segment. */
+                uint64_t src_dts = info.dts;
+                uint64_t src_cts = info.cts;
+                if( src_dts < seg->src_first_dts || src_cts < src_dts )
+                {
+                    lsmash_delete_sample( src );
+                    return ERROR_MSG( "invalid timestamp in cut sample of track %u.\n", track_plan->track_ID );
+                }
+                src->dts = seg->out_dts + (src_dts - seg->src_first_dts);
+                src->cts = src->dts + (src_cts - src_dts);
+                src->index = 1;
+                if( lsmash_append_sample( output->root, out_track->track_ID, src ) < 0 )
+                {
+                    lsmash_delete_sample( src );
+                    return ERROR_MSG( "failed to append a cut sample.\n" );
+                }
+                out_track->current_sample_number += 1;
+            }
+        }
+        out_track->last_sample_delta = last_sample_delta;
+        if( lsmash_flush_pooled_samples( output->root, out_track->track_ID, last_sample_delta ) )
+            return ERROR_MSG( "failed to flush cut samples.\n" );
+    }
+    return 0;
+}
+
+/* Build one edit per cut per track, hiding AAC priming/overhang and the
+ * reorder delay without any visible silence or black frames. */
+static int construct_cut_timeline_maps( remuxer_t *remuxer )
+{
+    output_t       *output    = remuxer->output;
+    output_movie_t *out_movie = &output->file.movie;
+    cut_plan_t     *plan      = &remuxer->cut_plan;
+    uint32_t        movie_timescale = lsmash_get_movie_timescale( output->root );
+    /* With one input and no track removal, output tracks are created in the
+     * same order as the plan's track entries. */
+    for( uint32_t out_i = 0; out_i < out_movie->num_tracks; out_i++ )
+    {
+        output_track_t *out_track = &out_movie->track[out_i];
+        cut_track_plan_t *track_plan = &plan->tracks[out_i];
+        uint32_t media_timescale = lsmash_get_media_timescale( output->root, out_track->track_ID );
+        if( !media_timescale )
+            return ERROR_MSG( "media timescale is broken.\n" );
+        if( lsmash_delete_explicit_timeline_map( output->root, out_track->track_ID ) )
+            return ERROR_MSG( "failed to delete explicit timeline maps.\n" );
+        for( uint32_t c = 0; c < plan->num_cuts; c++ )
+        {
+            const cut_track_segment_t *seg = &track_plan->segment[c];
+            lsmash_edit_t edit;
+            /* The edit addresses the copied samples in the output media
+             * timeline, not their original media time. */
+            edit.start_time = (int64_t)seg->edit_start;
+            edit.rate       = ISOM_EDIT_MODE_NORMAL;
+            /* Exact media -> movie duration conversion.  Every cut duration is
+             * an integer number of movie ticks by construction. */
+            uint64_t scaled = seg->edit_duration * movie_timescale;
+            if( scaled % media_timescale )
+                return ERROR_MSG( "cut %u edit duration does not map to integer movie time.\n", c + 1 );
+            edit.duration = scaled / media_timescale;
+            if( lsmash_create_explicit_timeline_map( output->root, out_track->track_ID, edit ) )
+                return ERROR_MSG( "failed to create cut timeline map.\n" );
+        }
+    }
+    return 0;
+}
+
 static int construct_timeline_maps( remuxer_t *remuxer )
 {
     input_t             *input        = remuxer->input;
@@ -1809,14 +1988,32 @@ int main( int argc, char *argv[] )
     };
     if( parse_cli_option( argc, argv, &remuxer ) )
         return REMUXER_ERR( "failed to parse command line options.\n" );
+    if( remuxer.cut_mode )
+    {
+        /* Validate everything and compute the whole plan before any output byte is written. */
+        if( input_movie_is_fragmented( &remuxer.input[0] ) )
+            return REMUXER_ERR( "cutting is not supported for fragmented movies.\n" );
+        if( cutplan_build( remuxer.input[0].root, &remuxer.cut_plan, stderr ) )
+            return REMUXER_ERR( "failed to build cut plan.\n" );
+    }
     if( prepare_output( &remuxer ) )
         return REMUXER_ERR( "failed to set up preparation for output.\n" );
-    if( remuxer.frag_base_track && construct_timeline_maps( &remuxer ) )
-        return REMUXER_ERR( "failed to construct timeline maps.\n" );
-    if( do_remux( &remuxer ) )
-        return REMUXER_ERR( "failed to remux movies.\n" );
-    if( remuxer.frag_base_track == 0 && construct_timeline_maps( &remuxer ) )
-        return REMUXER_ERR( "failed to construct timeline maps.\n" );
+    if( remuxer.cut_mode )
+    {
+        if( do_cut_remux( &remuxer ) )
+            return REMUXER_ERR( "failed to remux cut samples.\n" );
+        if( construct_cut_timeline_maps( &remuxer ) )
+            return REMUXER_ERR( "failed to construct cut timeline maps.\n" );
+    }
+    else
+    {
+        if( remuxer.frag_base_track && construct_timeline_maps( &remuxer ) )
+            return REMUXER_ERR( "failed to construct timeline maps.\n" );
+        if( do_remux( &remuxer ) )
+            return REMUXER_ERR( "failed to remux movies.\n" );
+        if( remuxer.frag_base_track == 0 && construct_timeline_maps( &remuxer ) )
+            return REMUXER_ERR( "failed to construct timeline maps.\n" );
+    }
     if( finish_movie( &remuxer ) )
         return REMUXER_ERR( "failed to finish output movie.\n" );
     REFRESH_CONSOLE;

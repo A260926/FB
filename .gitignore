@@ -48,5 +48,6 @@ Debug/
 CLIDebug/
 Release/
 CLIRelease/
+.task-build/
 *.sdf
 *.opensdf

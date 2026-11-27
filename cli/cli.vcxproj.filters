@@ -14,9 +14,15 @@
     <ClCompile Include="cli.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="cutplan.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cli.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="cutplan.h">
       <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>
