@@ -41,3 +41,30 @@ MojoShader, and moved over to a new repo for those that need it:
 
 https://github.com/icculus/mojoshader_assembler
 
+## Predicated destinations (glsl120, Shader Model 3)
+
+The `glsl120` profile translates predicated instructions from vs_3_0 and
+ps_3_0 bytecode. A predicated instruction evaluates its full result once
+into a temporary, then commits each destination channel only where the
+predicate allows it; channels whose predicate is false (or that fall
+outside the static write mask) keep their previous value. The predicate
+can be the full `p#.xyzw` vector, a replicated component such as `p#.x`,
+or either of those negated with `!`.
+
+The supported predicated opcodes are:
+
+- arithmetic: `MOV`, `ADD`, `SUB`, `MAD`, `MUL`, `DP3`, `DP4`, `MIN`, `MAX`
+  (vertex and pixel shaders)
+- `TEXLDL` (vertex and pixel shaders) and `TEXLDD` (pixel shaders only),
+  currently for 2D samplers; the lod/explicit gradients are forwarded and
+  the sampler is invoked exactly once per instruction
+- `CMP` (pixel shaders only)
+
+The existing stage restrictions are unchanged (`CMP` and `TEXLDD` remain
+pixel-shader-only, `TEXLDL` stays available in both), and any other
+predicated opcode—including control-flow instructions such as `IF`,
+`CALL`, or `RET`—still fails to translate rather than silently ignoring
+the predicate. Plain, non-predicated shaders and the other profiles are
+unaffected. See `checks/check-predication.sh` for the test coverage.
+
+

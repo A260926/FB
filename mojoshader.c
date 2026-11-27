@@ -2083,6 +2083,7 @@ static int parse_instruction_token(Context *ctx)
 
     memset(ctx->dwords, '\0', sizeof (ctx->dwords));
     ctx->instruction_controls = controls;
+    ctx->current_opcode = opcode;
     ctx->predicated = predicated;
 
     // Update the context with instruction's arguments.
@@ -2104,6 +2105,11 @@ static int parse_instruction_token(Context *ctx)
 
     if (!isfail(ctx))
         emitter(ctx);  // call the profile's emitter.
+
+    // The predicate bit belongs to this instruction only; clear it so a
+    // later synthetic opcode (such as the RET forced at end of stream)
+    // doesn't inherit the previous instruction's predicate.
+    ctx->predicated = 0;
 
     if (ctx->reset_texmpad)
     {

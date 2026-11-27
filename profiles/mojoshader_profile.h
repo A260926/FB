@@ -130,6 +130,7 @@ typedef struct Context
     int instruction_count;
     uint32 instruction_controls;
     uint32 previous_opcode;
+    uint32 current_opcode;
     int coissue;
     int loops;
     int reps;
@@ -163,6 +164,7 @@ typedef struct Context
     int have_multi_color_outputs;
     int determined_constants_arrays;
     int predicated;
+    int glsl_predicate_temporaries;  // GLSL vec4 temps for predicated writes.
     int uses_pointsize;
     int uses_fog;
     int need_max_float;
