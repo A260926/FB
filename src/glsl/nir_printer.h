@@ -56,6 +56,15 @@ protected:
    std::set<std::string> used_names;
    std::string unique_name(const char* base);
 
+   // Dialects that can express the 'precise' qualifier (GLSL) set this; the
+   // Metal dialect leaves it off, so precise shaders keep their exact float
+   // math internally but print no 'precise' keyword there.
+   bool emit_precise = false;
+   // is this def a precise-protected (exact) computation we must anchor?
+   bool def_is_precise(nir_def* def);
+   // registers that hold precise values (loop-carried merges etc.)
+   void find_precise_regs(std::set<unsigned>& out);
+
    void line(const std::string& l) { out += std::string(ind * 2, ' ') + l + "\n"; }
    void pre_decl(const std::string& l) { pre_decls += "  " + l + "\n"; }
 

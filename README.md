@@ -94,6 +94,44 @@ Language Support
 * Supported shader stages are vertex, fragment, and compute.
 * Subgroup (wave) operations: all of `GL_KHR_shader_subgroup_*`.
 
+#### `precise` qualifier
+
+For the **OpenGL target** (`kGlslTargetOpenGL`), GLSL 4.50 core vertex and
+fragment shaders, the `precise` qualifier is honored end to end:
+
+* The frontend records `precise` on variables. Before any arithmetic
+  optimization, a NIR pass (`glslopt_propagate_precise`, in
+  `src/glsl/nir_precise.cpp`) walks the value flow backwards from every precise
+  variable and marks the float32 operations that actually produce its value as
+  *exact*. The constraint travels through temporary assignments, local arrays
+  with constant indices, copies for non-recursive helper `in`/`out`/`inout`
+  parameters, branch merges, and loop-carried values, tracking individual
+  vector components and swizzles. Boolean control conditions and integer math
+  are not affected.
+* Exact operations are protected from reassociation, multiply-add contraction,
+  cancellation, and algebraic rules that ignore NaN/Inf, so the rounding steps
+  written in the source are preserved. Ordinary dead-code, copy and constant
+  folding still happen, and computations that do not contribute to a precise
+  value (independent vector components, other outputs) are optimized as before.
+* The GLSL printer re-emits `precise` on the declarations that carry protected
+  values (outputs, local temporaries, and the temporaries introduced for
+  loop-merge values), so recompiling the generated source with this library
+  recovers the same protected dependency chain. Shaders without `precise` are
+  unaffected, and other targets (Metal, GLSL ES) do not change their output.
+
+Run the focused checks with:
+
+```sh
+bash task_support/run.sh target
+```
+
+This builds the production `glsl_optimizer` library, compiles the checks in
+`tests/precise_target.cpp` (propagation / emission / compat groups) together
+with the read-only NIR bridge in `task_support/inspect.h`, runs them, and then
+runs the baseline sample. A small CPU bridge in the test interprets the final
+NIR of generated code on asymmetric inputs to confirm the preserved expression
+is the one that executes.
+
 #### Limitations
 
 * Last time this library was used "in production" in a big product (Unity) was around
@@ -267,6 +305,9 @@ frontend, `glsl_to_nir`, NIR with the passes we run, and the util code they need
 - `nir_optimize.cpp`: the NIR pipeline (inlining, optimization loop, out of SSA),
   the GLSL ES precision analysis that the pipeline and printers share, and
   regrouping of field-by-field copies back into aggregate copies for printing.
+- `nir_precise.cpp`: backward propagation of `precise` constraints through the
+  NIR value flow, marking the contributing float32 operations exact before the
+  algebraic pipeline runs.
 - `nir_printer.cpp`: printing core shared by GLSL and Metal: typing of NIR values,
   folding single-use values into expressions, and print-time recovery of shapes NIR
   lowered (matrix multiplies, `normalize`/`length`/`clamp`/..., `for`/`while`/`do` loops).

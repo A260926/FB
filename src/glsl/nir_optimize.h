@@ -18,6 +18,14 @@ void glslopt_lower_nir(nir_shader* nir);
 // Full optimization pipeline; ends out of SSA (registers) for printing.
 void glslopt_optimize_nir(nir_shader* nir);
 
+// Propagate 'precise' constraints backwards from precise variables through the
+// value flow (temporaries, local arrays, copies, branch/loop merges) to the
+// float32 operations that produce them, marking those ALU instructions exact.
+// Runs before SSA conversion and algebraic optimization, so the constraints are
+// in place before any transform could change the expressions.  No-op when the
+// shader uses no 'precise' qualifier.
+void glslopt_propagate_precise(nir_shader* nir);
+
 // Turn runs of leaf-by-leaf copies (store_deref(d.x, load_deref(s.x)) for
 // every leaf x of an aggregate) back into copy_deref(d, s), so they print as
 // one assignment. allow() can reject copies a dialect cannot express.

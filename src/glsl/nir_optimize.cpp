@@ -306,6 +306,10 @@ void glslopt_lower_nir(nir_shader* nir)
 
 void glslopt_optimize_nir(nir_shader* nir)
 {
+   // Anchor 'precise' constraints on the contributing float operations before
+   // any transform below could change their expressions.
+   glslopt_propagate_precise(nir);
+
    insert_precision_markers(nir);
 
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);

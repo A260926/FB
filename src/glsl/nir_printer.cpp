@@ -34,6 +34,11 @@ std::string nir_printer::print()
    name.assign(impl->ssa_alloc, "");
    deps.assign(impl->ssa_alloc, value_deps());
 
+   // registers holding precise values (e.g. loop-carried) are declared precise
+   std::set<unsigned> precise_regs;
+   if (emit_precise)
+      find_precise_regs(precise_regs);
+
    // registers
    int regn = 0;
    nir_foreach_reg_decl(decl, impl) {
@@ -42,7 +47,8 @@ std::string nir_printer::print()
       name[decl->def.index] = nm;
       unsigned p = nir_intrinsic_bit_size(decl) == 16 ? GLSL_PRECISION_MEDIUM : eff(pi.regprec[decl->def.index]);
       BT bt = type[decl->def.index];
-      pre_decl(decl_prec(p, bt) + vec_type(bt, nc, p) + " " + nm + local_initializer(bt) + ";");
+      std::string q = precise_regs.count(decl->def.index) ? "precise " : "";
+      pre_decl(q + decl_prec(p, bt) + vec_type(bt, nc, p) + " " + nm + local_initializer(bt) + ";");
    }
    // function-temp variables that survived; inlining leaves duplicate and
    // compiler-generated names, so give them unique valid ones
@@ -57,7 +63,8 @@ std::string nir_printer::print()
       unsigned p = eff(v->data.precision);
       const glsl_type* bare = glsl_without_array(v->type);
       std::string q = glsl_type_is_struct(bare) || glsl_type_is_boolean(bare) ? "" : decl_prec(p, bt_from_glsl(v->type));
-      pre_decl(q + type_decl(v->type, v->data.precision, local_names[v]) + ";");
+      std::string prec = emit_precise && v->data.precise ? "precise " : "";
+      pre_decl(prec + q + type_decl(v->type, v->data.precision, local_names[v]) + ";");
    }
 
    out.clear();
@@ -1430,6 +1437,62 @@ bool nir_printer::escapes_scope(nir_def* def)
    return false;
 }
 
+bool nir_printer::def_is_precise(nir_def* def)
+{
+   if (!emit_precise || !s->has_precise)
+      return false;
+   nir_instr* i = nir_def_instr(def);
+   return i->type == nir_instr_type_alu && nir_alu_instr_is_exact(nir_instr_as_alu(i));
+}
+
+// A register is precise if anything stored to it computes a precise value:
+// an exact ALU def, possibly copied through moves/loads of other precise
+// registers.  Fixpoint over the (few) registers of the entry point.
+void nir_printer::find_precise_regs(std::set<unsigned>& out)
+{
+   if (!s->has_precise)
+      return;
+   std::vector<nir_intrinsic_instr*> stores;
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic &&
+             nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_store_reg)
+            stores.push_back(nir_instr_as_intrinsic(instr));
+      }
+   }
+   std::set<nir_def*> visiting;
+   std::function<bool(nir_def*)> traces = [&](nir_def* d) -> bool {
+      nir_instr* i = nir_def_instr(d);
+      if (i->type == nir_instr_type_alu) {
+         nir_alu_instr* alu = nir_instr_as_alu(i);
+         if (nir_alu_instr_is_exact(alu))
+            return true;
+         if (alu->op == nir_op_mov && visiting.insert(d).second) {
+            bool r = traces(alu->src[0].src.ssa);
+            visiting.erase(d);
+            return r;
+         }
+         return false;
+      }
+      if (i->type == nir_instr_type_intrinsic) {
+         nir_intrinsic_instr* in = nir_instr_as_intrinsic(i);
+         if (in->intrinsic == nir_intrinsic_load_reg)
+            return out.count(in->src[0].ssa->index) != 0;
+      }
+      return false;
+   };
+   for (bool changed = true; changed;) {
+      changed = false;
+      for (nir_intrinsic_instr* st : stores) {
+         unsigned r = st->src[1].ssa->index;
+         if (!out.count(r) && traces(st->src[0].ssa)) {
+            out.insert(r);
+            changed = true;
+         }
+      }
+   }
+}
+
 bool nir_printer::only_used_by_store(nir_def* def)
 {
    nir_foreach_use_including_if(u, def) {
@@ -1448,6 +1511,10 @@ std::string nir_printer::new_temp(nir_def* def, const std::string& e)
    name[def->index] = nm;
    unsigned p = prec_of(def);
    std::string decl = decl_prec(p, type[def->index]) + def_type(def);
+   // anchor precise computations: a declared boundary the next compilation
+   // can propagate constraints from
+   if (def_is_precise(def))
+      decl = "precise " + decl;
    if (escapes_scope(def)) {
       pre_decl(decl + " " + nm + local_initializer(type[def->index]) + ";");
       line(nm + " = " + e + ";");
@@ -1476,6 +1543,9 @@ void nir_printer::define(nir_def* def, const std::string& e, bool reads_memory, 
    deps[idx] = d;
    bool reads_mutable = d.mem || !d.regs.empty();
    unsigned max_uses = cheap ? 1000 : 1;
+   // a precise computation must stay a declared boundary, not fold away
+   if (def_is_precise(def))
+      force_temp = true;
    if (!force_temp && (e.size() < 160 || only_used_by_store(def)) && can_forward(def, max_uses)) {
       expr[idx] = e;
       return;

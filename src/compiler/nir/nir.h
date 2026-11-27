@@ -512,6 +512,16 @@ typedef struct nir_variable {
       unsigned explicit_invariant:1;
 
       /**
+       * Was a 'precise' qualifier set in the shader (or propagated to this
+       * variable because it stores values that contribute to a precise
+       * variable)?
+       *
+       * Precise values must be computed with the exact sequence of rounding
+       * steps written in the source; see glslopt_propagate_precise().
+       */
+      unsigned precise:1;
+
+      /**
        * Is the variable a ray query?
        */
       unsigned ray_query : 1;
@@ -4252,6 +4262,14 @@ typedef struct nir_shader {
    bool has_debug_info;
    uint32_t nir_pass_depth;
    bool nir_pass_recursed;
+
+   /**
+    * True if the shader uses the 'precise' qualifier anywhere.  Set by the
+    * GLSL frontend and never cleared, so that the source printers know to
+    * anchor exact (precise-protected) values with 'precise' declarations.
+    * Per-shader state: no leakage between compilations.
+    */
+   bool has_precise;
 } nir_shader;
 
 #define nir_foreach_function(func, shader) \

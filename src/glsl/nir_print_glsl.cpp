@@ -15,6 +15,9 @@ public:
       : nir_printer(nir), info(info)
    {
       legacy = !info.es && info.version < 130;
+      // GLSL can declare variables 'precise'; anchor exact computations so a
+      // recompile recovers the same protected dependency chain.
+      emit_precise = true;
    }
 
 private:
@@ -560,7 +563,8 @@ private:
             std::string l = location_layout(v);
             if (!l.empty()) q.push_back(l);
             std::string inv = v->data.explicit_invariant ? "invariant " : "";
-            globals += layout(q) + inv + interp_qualifiers(v->data.interpolation, v->data.centroid, v->data.sample) +
+            std::string prec = v->data.precise ? "precise " : "";
+            globals += layout(q) + inv + prec + interp_qualifiers(v->data.interpolation, v->data.centroid, v->data.sample) +
                        in_out_keyword(v) + var_prec(v->type, v->data.precision) +
                        type_decl(v->type, v->data.precision, v->name) + ";\n";
             break;
