@@ -43,6 +43,9 @@
 #include "Ap4SdpAtom.h"
 #include "Ap4MdhdAtom.h"
 #include "Ap4SyntheticSampleTable.h"
+#include "Ap4ContainerAtom.h"
+#include "Ap4ElstAtom.h"
+#include "Ap4SampleDescription.h"
 
 /*----------------------------------------------------------------------
 |   AP4_Track::AP4_Track
@@ -297,8 +300,429 @@ AP4_Track::Clone(AP4_Result* result)
                                      GetMediaTimeScale(),
                                      GetMediaDuration(),
                                      this);
-                                     
+
     return clone;
+}
+
+/*----------------------------------------------------------------------
+|   AP4_Track::CreateMontage - helpers
++---------------------------------------------------------------------*/
+namespace {
+
+/* Convert a duration in movie ticks to media ticks, requiring an exact
+   (integer) conversion, with overflow detection. */
+static AP4_Result
+Montage_ToMediaTicks(AP4_UI64  movie_ticks,
+                     AP4_UI32  movie_time_scale,
+                     AP4_UI32  media_time_scale,
+                     AP4_UI64& media_ticks)
+{
+    const AP4_UI64 max_ui64 = (AP4_UI64)(-1);
+    if (movie_ticks != 0 && movie_ticks > max_ui64/media_time_scale) {
+        return AP4_ERROR_INVALID_PARAMETERS;
+    }
+    AP4_UI64 product = movie_ticks*media_time_scale;
+    if (product % movie_time_scale != 0) {
+        return AP4_ERROR_INVALID_PARAMETERS;
+    }
+    media_ticks = product/movie_time_scale;
+    return AP4_SUCCESS;
+}
+
+/* Add two unsigned 64-bit values, detecting overflow. */
+static AP4_Result
+Montage_AddChecked(AP4_UI64 a, AP4_UI64 b, AP4_UI64& result)
+{
+    const AP4_UI64 max_ui64 = (AP4_UI64)(-1);
+    if (b > max_ui64-a) return AP4_ERROR_INVALID_PARAMETERS;
+    result = a+b;
+    return AP4_SUCCESS;
+}
+
+} /* anonymous namespace */
+
+/*----------------------------------------------------------------------
+|   AP4_Track::CreateMontage
++---------------------------------------------------------------------*/
+AP4_Result
+AP4_Track::CreateMontage(const AP4_Array<EditRange>& ranges,
+                         AP4_Track*&                 output)
+{
+    output = NULL;
+
+    // only plain, non-fragmented video tracks are supported
+    if (m_Type != TYPE_VIDEO) {
+        return AP4_ERROR_NOT_SUPPORTED;
+    }
+    if (m_SampleTable == NULL || m_TrakAtom == NULL) {
+        return AP4_ERROR_INVALID_STATE;
+    }
+
+    AP4_UI32 movie_time_scale = m_MovieTimeScale;
+    AP4_UI32 media_time_scale = GetMediaTimeScale();
+    if (movie_time_scale == 0 || media_time_scale == 0) {
+        return AP4_ERROR_INVALID_PARAMETERS;
+    }
+
+    // validate the request itself
+    AP4_Cardinal range_count = ranges.ItemCount();
+    if (range_count == 0) {
+        return AP4_ERROR_INVALID_PARAMETERS;
+    }
+    AP4_UI64 track_duration = GetDuration();
+    const AP4_UI64 max_ui64 = (AP4_UI64)(-1);
+    for (AP4_Ordinal r=0; r<range_count; r++) {
+        if (ranges[r].begin >= ranges[r].end ||
+            ranges[r].end > track_duration) {
+            return AP4_ERROR_INVALID_PARAMETERS;
+        }
+    }
+
+    // fragmented tracks are not supported: a plain, non-fragmented track
+    // has its sample locations in an stco or co64 atom inside the stbl
+    AP4_ContainerAtom* stbl_container = AP4_DYNAMIC_CAST(
+        AP4_ContainerAtom, m_TrakAtom->FindChild("mdia/minf/stbl"));
+    if (stbl_container == NULL ||
+        (stbl_container->GetChild(AP4_ATOM_TYPE_STCO) == NULL &&
+         stbl_container->GetChild(AP4_ATOM_TYPE_CO64) == NULL)) {
+        return AP4_ERROR_NOT_SUPPORTED;
+    }
+
+    // encrypted tracks are not supported: reject the common CENC atoms
+    if (stbl_container) {
+        if (stbl_container->GetChild(AP4_ATOM_TYPE_SENC) != NULL ||
+            stbl_container->GetChild(AP4_ATOM_TYPE_SAIO) != NULL ||
+            stbl_container->GetChild(AP4_ATOM_TYPE_SAIZ) != NULL) {
+            return AP4_ERROR_NOT_SUPPORTED;
+        }
+    }
+    for (AP4_Ordinal d=0; d<GetSampleDescriptionCount(); d++) {
+        AP4_SampleDescription* desc = GetSampleDescription(d);
+        if (desc && desc->GetType() == AP4_SampleDescription::TYPE_PROTECTED) {
+            return AP4_ERROR_NOT_SUPPORTED;
+        }
+    }
+
+    // parse the source edit list: either no edts, or one optional leading
+    // empty edit followed by a single rate=1 media edit
+    AP4_UI64 empty_duration = 0; // movie ticks of the leading empty edit
+    AP4_SI64 media_origin   = 0; // media time at which the media edit starts
+    {
+        AP4_Atom* edts_atom = m_TrakAtom->FindChild("edts");
+        if (edts_atom) {
+            AP4_ContainerAtom* edts = AP4_DYNAMIC_CAST(AP4_ContainerAtom, edts_atom);
+            AP4_ElstAtom* elst = edts ?
+                AP4_DYNAMIC_CAST(AP4_ElstAtom, edts->GetChild(AP4_ATOM_TYPE_ELST)) : NULL;
+            if (elst == NULL) return AP4_ERROR_NOT_SUPPORTED;
+
+            AP4_Array<AP4_ElstEntry>& entries = elst->GetEntries();
+            if (entries.ItemCount() == 0) return AP4_ERROR_NOT_SUPPORTED;
+            AP4_Cardinal media_edit_count = 0;
+            for (AP4_Ordinal e=0; e<entries.ItemCount(); e++) {
+                const AP4_ElstEntry& entry = entries[e];
+                bool is_empty = (entry.m_MediaTime == -1);
+                // dwell and variable-rate edits are not supported
+                if (entry.m_MediaRate != 1) return AP4_ERROR_NOT_SUPPORTED;
+                if (is_empty) {
+                    // empty edits are only allowed as a single leading edit
+                    if (media_edit_count != 0 || e != 0) {
+                        return AP4_ERROR_NOT_SUPPORTED;
+                    }
+                    AP4_UI64 added = 0;
+                    AP4_Result check = Montage_AddChecked(empty_duration,
+                                                          entry.m_SegmentDuration,
+                                                          added);
+                    if (AP4_FAILED(check)) return check;
+                    empty_duration = added;
+                } else {
+                    if (entry.m_MediaTime < 0) return AP4_ERROR_NOT_SUPPORTED;
+                    // only one media edit is supported
+                    if (media_edit_count != 0) return AP4_ERROR_NOT_SUPPORTED;
+                    media_edit_count++;
+                    media_origin = entry.m_MediaTime;
+                }
+            }
+            if (media_edit_count != 1) return AP4_ERROR_NOT_SUPPORTED;
+        }
+    }
+
+    // snapshot the source sample timeline (decode order is table order)
+    AP4_Cardinal sample_count = GetSampleCount();
+    AP4_Array<AP4_UI64> sample_dts;
+    AP4_Array<AP4_UI64> sample_cts;
+    AP4_Array<AP4_UI32> sample_duration;
+    AP4_Array<bool>     sample_sync;
+    if (sample_count != 0) {
+        sample_dts.SetItemCount(sample_count);
+        sample_cts.SetItemCount(sample_count);
+        sample_duration.SetItemCount(sample_count);
+        sample_sync.SetItemCount(sample_count);
+        for (AP4_Ordinal i=0; i<sample_count; i++) {
+            AP4_Sample sample;
+            AP4_Result result = GetSample(i, sample);
+            if (AP4_FAILED(result)) return result;
+            // negative composition offsets are not supported
+            if ((AP4_SI32)sample.GetCtsDelta() < 0) {
+                return AP4_ERROR_NOT_SUPPORTED;
+            }
+            sample_dts[i]      = sample.GetDts();
+            sample_cts[i]      = sample.GetCts();
+            sample_duration[i] = sample.GetDuration();
+            sample_sync[i]     = sample.IsSync();
+        }
+    }
+
+    // build the output sample table, keeping the source sample descriptions
+    AP4_Result result = AP4_SUCCESS;
+    AP4_SyntheticSampleTable* out_table = new AP4_SyntheticSampleTable();
+    for (AP4_Ordinal i=0; ; i++) {
+        AP4_SampleDescription* sample_description = GetSampleDescription(i);
+        if (sample_description == NULL) break;
+        AP4_SampleDescription* clone = sample_description->Clone(&result);
+        if (clone == NULL || AP4_FAILED(result)) {
+            delete clone;
+            delete out_table;
+            return result != AP4_SUCCESS ? result : AP4_FAILURE;
+        }
+        result = out_table->AddSampleDescription(clone);
+        if (AP4_FAILED(result)) { delete clone; delete out_table; return result; }
+    }
+
+    // the edit list is built standalone: mutating an elst that already
+    // has a parent would not propagate its new size up the atom tree
+    AP4_ElstAtom* out_elst = new AP4_ElstAtom();
+    AP4_ContainerAtom* out_edts = NULL;
+    AP4_Track* montage = NULL;
+    AP4_UI64 out_movie_duration = 0; // movie ticks
+    AP4_UI64 out_media_duration = 0; // media ticks (decode tail)
+    AP4_UI64 out_media_tail = 0;     // media ticks (last edit end)
+    AP4_UI64 mdhd_duration = 0;      // media ticks (mdhd duration)
+    AP4_Cardinal out_sample_count = 0;
+    for (AP4_Ordinal r=0; r<range_count; r++) {
+        AP4_UI64 range_begin = ranges[r].begin;
+        AP4_UI64 range_end   = ranges[r].end;
+
+        // part of the range that falls inside the leading empty edit
+        AP4_UI64 empty_part = 0;
+        AP4_UI64 media_begin_movie = range_begin;
+        AP4_UI64 media_end_movie   = range_end;
+        if (range_begin < empty_duration) {
+            if (range_end <= empty_duration) {
+                // whole range is empty time
+                empty_part = range_end-range_begin;
+                media_begin_movie = empty_duration;
+                media_end_movie   = empty_duration;
+            } else {
+                empty_part = empty_duration-range_begin;
+                media_begin_movie = empty_duration;
+            }
+        }
+
+        if (empty_part != 0) {
+            AP4_UI64 new_duration = 0;
+            result = Montage_AddChecked(out_movie_duration, empty_part, new_duration);
+            if (AP4_FAILED(result)) goto end;
+            out_movie_duration = new_duration;
+            // empty edits keep the same length of blank time, no samples attached
+            result = out_elst->AddEntry(AP4_ElstEntry(empty_part, -1, 1));
+            if (AP4_FAILED(result)) goto end;
+        }
+
+        if (media_end_movie <= media_begin_movie) continue;
+
+        // convert the media cut [media_begin_movie, media_end_movie) to
+        // exact media ticks
+        AP4_UI64 begin_offset_media, end_offset_media;
+        result = Montage_ToMediaTicks(media_begin_movie-empty_duration,
+                                      movie_time_scale,
+                                      media_time_scale,
+                                      begin_offset_media);
+        if (AP4_FAILED(result)) goto end;
+        result = Montage_ToMediaTicks(media_end_movie-empty_duration,
+                                      movie_time_scale,
+                                      media_time_scale,
+                                      end_offset_media);
+        if (AP4_FAILED(result)) goto end;
+        if ((AP4_UI64)media_origin > max_ui64-begin_offset_media ||
+            (AP4_UI64)media_origin > max_ui64-end_offset_media) {
+            result = AP4_ERROR_INVALID_PARAMETERS;
+            goto end;
+        }
+        AP4_UI64 cut_begin_media = (AP4_UI64)media_origin+begin_offset_media;
+        AP4_UI64 cut_end_media   = (AP4_UI64)media_origin+end_offset_media;
+
+        // display samples intersecting the cut, decided by CTS intervals
+        // (never by decode-order adjacency)
+        bool found = false;
+        AP4_Ordinal first_display = 0;
+        AP4_Ordinal last_display  = 0;
+        for (AP4_Ordinal i=0; i<sample_count; i++) {
+            AP4_UI64 cts = sample_cts[i];
+            AP4_UI64 cts_end = 0;
+            if (sample_duration[i] > max_ui64-cts) {
+                result = AP4_ERROR_INVALID_PARAMETERS;
+                goto end;
+            }
+            cts_end = cts+sample_duration[i];
+            if (cts < cut_end_media && cts_end > cut_begin_media) {
+                if (!found) {
+                    first_display = i;
+                    last_display  = i;
+                    found = true;
+                } else {
+                    if (i < first_display) first_display = i;
+                    if (i > last_display)  last_display  = i;
+                }
+            }
+        }
+        if (!found) {
+            // a media cut with no covering sample cannot be assembled
+            result = AP4_ERROR_INVALID_FORMAT;
+            goto end;
+        }
+
+        // roll-in: walk back from the earliest decode item to a real sync
+        AP4_Ordinal block_start = first_display;
+        bool have_sync = false;
+        while (true) {
+            if (sample_sync[block_start]) { have_sync = true; break; }
+            if (block_start == 0) break;
+            --block_start;
+        }
+        if (!have_sync) {
+            // do not silently treat sample 0 as a sync point
+            result = AP4_ERROR_NOT_SUPPORTED;
+            goto end;
+        }
+        AP4_Ordinal block_end = last_display;
+
+        // The cut can start before the DTS of the block's first sample
+        // (the media timeline there is simply empty). Keep that gap so
+        // the edit's media_time never has to be negative.
+        AP4_UI64 block_dts_origin = sample_dts[block_start];
+        AP4_UI64 lead_gap = 0;
+        if (block_dts_origin > cut_begin_media) {
+            lead_gap = block_dts_origin-cut_begin_media;
+        }
+        AP4_UI64 block_base = 0; // new DTS of the block's first sample
+        result = Montage_AddChecked(out_media_duration, lead_gap, block_base);
+        if (AP4_FAILED(result)) goto end;
+
+        // copy the closed decode run [block_start, block_end], each cut
+        // carrying its own independent copy of the samples
+        for (AP4_Ordinal i=block_start; i<=block_end; i++) {
+            AP4_Sample sample;
+            result = GetSample(i, sample);
+            if (AP4_FAILED(result)) goto end;
+            AP4_ByteStream* data_stream = sample.GetDataStream();
+            if (data_stream == NULL) {
+                result = AP4_ERROR_INVALID_STATE;
+                goto end;
+            }
+            AP4_UI64 relative_dts = sample_dts[i]-block_dts_origin;
+            if (relative_dts > max_ui64-block_base) {
+                data_stream->Release();
+                result = AP4_ERROR_INVALID_PARAMETERS;
+                goto end;
+            }
+            AP4_UI64 new_dts = block_base+relative_dts;
+            result = out_table->AddSample(*data_stream,
+                                          sample.GetOffset(),
+                                          sample.GetSize(),
+                                          sample.GetDuration(),
+                                          sample.GetDescriptionIndex(),
+                                          new_dts,
+                                          sample.GetCtsDelta(),
+                                          sample.IsSync());
+            data_stream->Release();
+            if (AP4_FAILED(result)) goto end;
+            if (out_sample_count == 0xFFFFFFFF) {
+                result = AP4_ERROR_INVALID_PARAMETERS;
+                goto end;
+            }
+            ++out_sample_count;
+        }
+
+        // span of this block on the output media timeline
+        AP4_UI64 dts_span = sample_dts[block_end]-block_dts_origin;
+        if (sample_duration[block_end] > max_ui64-dts_span) {
+            result = AP4_ERROR_INVALID_PARAMETERS;
+            goto end;
+        }
+        AP4_UI64 block_span = dts_span+sample_duration[block_end];
+        AP4_UI64 new_media_duration = 0;
+        result = Montage_AddChecked(block_base, block_span, new_media_duration);
+        if (AP4_FAILED(result)) goto end;
+
+        // the output edit points at the new copy of the samples and hides
+        // the roll-in and any tail pictures outside the requested cut.
+        // the block's media timeline is shifted by a constant, so the cut
+        // position maps directly (this also holds when display and decode
+        // orders differ).
+        AP4_UI64 cut_offset = 0;
+        if (cut_begin_media >= block_dts_origin) {
+            cut_offset = cut_begin_media-block_dts_origin;
+        }
+        if (cut_offset > max_ui64-block_base) {
+            result = AP4_ERROR_INVALID_PARAMETERS;
+            goto end;
+        }
+        AP4_UI64 edit_media_time = block_base+cut_offset;
+        if (edit_media_time > (AP4_UI64)0x7FFFFFFFFFFFFFFFULL) {
+            // an elst media time is a signed 64-bit field
+            result = AP4_ERROR_INVALID_PARAMETERS;
+            goto end;
+        }
+        AP4_UI64 edit_duration_movie = media_end_movie-media_begin_movie;
+
+        AP4_UI64 new_movie_duration = 0;
+        result = Montage_AddChecked(out_movie_duration,
+                                    edit_duration_movie,
+                                    new_movie_duration);
+        if (AP4_FAILED(result)) goto end;
+
+        result = out_elst->AddEntry(AP4_ElstEntry(edit_duration_movie,
+                                                  (AP4_SI64)edit_media_time,
+                                                  1));
+        if (AP4_FAILED(result)) {
+            out_media_duration = new_media_duration;
+            goto end;
+        }
+        // the mdhd duration must also cover the end of the last displayed
+        // picture, which can extend past the decode tail due to CTS deltas
+        AP4_UI64 edit_media_end = 0;
+        result = Montage_AddChecked(edit_media_time,
+                                    cut_end_media-cut_begin_media,
+                                    edit_media_end);
+        if (AP4_FAILED(result)) goto end;
+        if (edit_media_end > out_media_tail) out_media_tail = edit_media_end;
+        out_media_duration = new_media_duration;
+        out_movie_duration = new_movie_duration;
+    }
+
+    // create the output track: non-temporal properties come from the source
+    mdhd_duration =
+        out_media_duration > out_media_tail ? out_media_duration : out_media_tail;
+    montage = new AP4_Track(out_table,
+                            GetId(),
+                            movie_time_scale,
+                            out_movie_duration,
+                            media_time_scale,
+                            mdhd_duration,
+                            this);
+    // attach the edit list (tkhd, edts, mdia order). The edts is created
+    // only now so that the elst's final size is observed when added.
+    out_edts = new AP4_ContainerAtom(AP4_ATOM_TYPE_EDTS);
+    out_edts->AddChild(out_elst);
+    montage->UseTrakAtom()->AddChild(out_edts, 1);
+
+    output = montage;
+    return AP4_SUCCESS;
+
+end:
+    delete out_elst;
+    delete out_table;
+    return result;
 }
 
 /*----------------------------------------------------------------------

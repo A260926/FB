@@ -136,6 +136,48 @@ For Debug builds:
 For Release builds:
 ```make AP4_BUILD_CONFIG=Release```
 
+
+### Reordering parts of a video track without re-encoding
+`AP4_Track::CreateMontage` builds a new track from a clip list of
+half-open ranges on the source track's movie timeline. Ranges are
+expressed in movie timescale ticks, may overlap or repeat, and are
+played in the order given. Each range keeps its own closed-GOP decode
+roll-in; an edit list hides the pictures that fall outside the requested
+display intervals, so no sample is removed from the decode chain.
+
+```cpp
+#include "Ap4.h"
+
+// 'source' is an AP4_Track* parsed from an existing MP4 file.
+// Build a clip list: [1000,2000), then [4000,5000), then the first
+// interval again, all in the source track's movie timescale ticks.
+AP4_Array<AP4_Track::EditRange> ranges;
+ranges.Append(AP4_Track::EditRange(1000, 2000));
+ranges.Append(AP4_Track::EditRange(4000, 5000));
+ranges.Append(AP4_Track::EditRange(1000, 2000));
+
+AP4_Track* montage = NULL;
+AP4_Result result = source->CreateMontage(ranges, montage);
+if (AP4_FAILED(result)) {
+    // the source track is untouched; 'montage' stays NULL
+    return result;
+}
+
+// the montage is a standalone track owned by the caller, with a duration
+// equal to the sum of the range durations
+AP4_Movie* movie = new AP4_Movie(montage->GetMovieTimeScale());
+movie->AddTrack(montage); // the movie now owns the montage track
+
+AP4_File output_file(movie);
+AP4_FileWriter::Write(output_file, output_stream);
+```
+
+A source track may have no edit list, or one optional leading empty
+edit followed by a single rate-1 media edit. Empty time is preserved as
+empty edits (it never freezes the previous frame or consumes samples).
+Each media cut must land on an exact media-tick boundary; otherwise
+`CreateMontage` returns `AP4_ERROR_INVALID_PARAMETERS` without rounding.
+
 ## Installing Bento4 (vcpkg)
 
 Alternatively, you can build and install Bento4 using [vcpkg](https://github.com/Microsoft/vcpkg/) dependency manager:
