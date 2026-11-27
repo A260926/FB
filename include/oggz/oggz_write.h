@@ -106,6 +106,20 @@
  *   OR'd together to ensure that the packet will not share any pages with
  *   any other packets, either before or after.
  *
+ * \section write_backpressure Backpressure
+ *
+ * By default there is no limit to how many packets may be queued ahead of
+ * delivery. For streaming sinks you can bound the amount of accepted but
+ * undelivered packet data with oggz_write_set_pending_limit(). The pending
+ * count reported by oggz_write_get_pending_bytes() sums the raw bytes of
+ * packets whose ending page has not yet been written out completely; Ogg
+ * page headers are excluded and each packet is counted once, even when it
+ * spans several pages or shares a page with other packets. When feeding a
+ * packet would exceed the limit, oggz_write_feed() returns
+ * OGGZ_ERR_IO_AGAIN without enqueueing it or altering any stream state, so
+ * the producer can retry the identical packet after calling oggz_write()
+ * or oggz_write_output() to drain pages, or after raising the limit.
+ *
  * \{
  */
 
@@ -177,6 +191,11 @@ int oggz_write_set_hungry_callback (OGGZ * oggz,
  *         32 bits, ie. within the range (-(2^31), (2^31)-1)
  * \retval OGGZ_ERR_BAD_OGGZ \a oggz does not refer to an existing OGGZ
  * \retval OGGZ_ERR_INVALID Operation not suitable for this OGGZ
+ * \retval OGGZ_ERR_IO_AGAIN The pending byte limit (see
+ *         oggz_write_set_pending_limit()) would be exceeded by this packet.
+ *         The packet is not queued and no stream or guard state is changed,
+ *         so the same \a op may be retried after draining output or raising
+ *         the limit
  * \retval OGGZ_ERR_OUT_OF_MEMORY Unable to allocate memory to queue packet
  *
  * \note If \a op->b_o_s is initialized to \a -1 before calling
@@ -210,10 +229,23 @@ long oggz_write_output (OGGZ * oggz, unsigned char * buf, long n);
  * Write n bytes from an OGGZ handle. Oggz will call your write callback
  * as needed.
  *
+ * The write callback may return 0, a positive short write count, or
+ * (size_t)-1. A return of 0, or of (size_t)-1 with errno EAGAIN or
+ * EWOULDBLOCK, pauses output: if any bytes were written during this call
+ * their count is returned, otherwise OGGZ_ERR_IO_AGAIN is returned; the
+ * next call resumes from the first unwritten byte. A (size_t)-1 return with
+ * any other errno is a hard failure: bytes already written during the call
+ * are returned first and OGGZ_ERR_SYSTEM is reported once by the following
+ * call, after which the unwritten bytes can be retried. Short writes do not
+ * busy-loop or issue another downstream call within the same invocation.
+ *
  * \param oggz An OGGZ handle previously opened for writing
  * \param n A count of bytes to be written
  * \retval "> 0" The number of bytes successfully output
  * \retval 0 End of stream
+ * \retval OGGZ_ERR_IO_AGAIN The write callback paused before any byte was
+ * written; retry later from the same position
+ * \retval OGGZ_ERR_SYSTEM A deferred write callback failure, reported once
  * \retval OGGZ_ERR_RECURSIVE_WRITE Attempt to initiate writing from
  * within an OggzHungry callback
  * \retval OGGZ_ERR_BAD_OGGZ \a oggz does not refer to an existing OGGZ
@@ -224,6 +256,50 @@ long oggz_write_output (OGGZ * oggz, unsigned char * buf, long n);
  * returning OGGZ_STOP_ERR
  */
 long oggz_write (OGGZ * oggz, long n);
+
+/**
+ * Set the backpressure limit for packets accepted for writing.
+ *
+ * Oggz counts the raw bytes of every packet that has been accepted by
+ * oggz_write_feed() but whose ending Ogg page has not yet been delivered
+ * in full (via oggz_write() or oggz_write_output()). Page headers are not
+ * counted, only packet body bytes. A packet that spans several pages is
+ * counted once and released when its final page is delivered; several
+ * packets sharing one page are all released together once that whole page
+ * has been written.
+ *
+ * While the limit is in force, oggz_write_feed() rejects any packet that
+ * would make the pending count exceed it, returning OGGZ_ERR_IO_AGAIN
+ * without queueing the packet or modifying any stream state; the same
+ * packet can be retried after pages drain or the limit is raised. A limit
+ * of 0 disables backpressure, which is also the initial setting.
+ *
+ * \param oggz An OGGZ handle previously opened for writing
+ * \param limit The maximum number of undelivered packet bytes, or 0 for
+ *        no limit
+ * \retval 0 Success
+ * \retval OGGZ_ERR_BAD_OGGZ \a oggz does not refer to an existing OGGZ
+ * \retval OGGZ_ERR_INVALID Operation not suitable for this OGGZ, \a limit
+ *         is negative, or a nonzero \a limit is smaller than the number of
+ *         bytes currently pending (the previously configured limit is
+ *         retained)
+ */
+int oggz_write_set_pending_limit (OGGZ * oggz, ogg_int64_t limit);
+
+/**
+ * Query the number of packet bytes currently pending delivery.
+ *
+ * This is the sum of the raw body bytes of packets that have been accepted
+ * by oggz_write_feed() but whose ending Ogg page has not yet been delivered
+ * in full. It excludes Ogg page headers and counts each packet at most once;
+ * nil packets contribute zero bytes but still participate in the sequence.
+ *
+ * \param oggz An OGGZ handle previously opened for writing
+ * \retval ">= 0" The number of pending packet bytes
+ * \retval OGGZ_ERR_BAD_OGGZ \a oggz does not refer to an existing OGGZ
+ * \retval OGGZ_ERR_INVALID Operation not suitable for this OGGZ
+ */
+ogg_int64_t oggz_write_get_pending_bytes (OGGZ * oggz);
 
 /**
  * Query the number of bytes in the next page to be written.

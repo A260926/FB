@@ -88,6 +88,12 @@ oggz_table_nth				@49
 oggz_get_numtracks			@50
 
 ;
+; Write backpressure
+;
+oggz_write_set_pending_limit		@51
+oggz_write_get_pending_bytes		@52
+
+;
 ;oggz stream functions (determining content type)
 ;
 oggz_stream_get_content                 @100

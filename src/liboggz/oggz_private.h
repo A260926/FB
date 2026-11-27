@@ -124,6 +124,13 @@ struct _oggz_stream_t {
   ogg_int64_t page_granulepos;
   void * calculate_data;
   ogg_packet * last_packet;
+
+  /* Write-side backpressure: raw sizes of admitted packets whose ending
+   * page has not yet been fully delivered, in packet order. A size may be
+   * zero for nil packets, which still take part in the sequence. */
+  ogg_int64_t * pending_sizes;
+  int pending_count;
+  int pending_capacity;
 };
 
 struct _OggzReader {
@@ -200,6 +207,18 @@ struct _OggzWriter {
   int no_more_packets; /* used only in the local oggz_write loop to indicate
                           end of stream */
 
+  /* Backpressure: limit on, and current value of, the number of raw packet
+   * bytes that have been accepted but whose ending page has not yet been
+   * delivered in full. A limit of 0 means no limit (the default). */
+  ogg_int64_t pending_limit;
+  ogg_int64_t pending_bytes;
+
+  /* Write callback stall/error state for oggz_write(), valid only during a
+   * single oggz_write() call: io_again marks a pause (zero write or
+   * EAGAIN/EWOULDBLOCK), io_error a hard failure. */
+  int io_again;
+  int io_error;
+
 };
 
 struct _OggzIO {
@@ -265,6 +284,11 @@ OGGZ * oggz_read_close (OGGZ * oggz);
 OGGZ * oggz_write_init (OGGZ * oggz);
 int oggz_write_flush (OGGZ * oggz);
 OGGZ * oggz_write_close (OGGZ * oggz);
+
+/* Backpressure accounting (oggz_write.c) */
+int oggz_write_set_pending_limit (OGGZ * oggz, ogg_int64_t limit);
+ogg_int64_t oggz_write_get_pending_bytes (OGGZ * oggz);
+void oggz_write_pending_page_delivered (OGGZ * oggz, ogg_page * og);
 
 int oggz_map_return_value_to_error (int cb_ret);
 

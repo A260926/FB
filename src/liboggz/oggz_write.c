@@ -121,6 +121,12 @@ oggz_write_init (OGGZ * oggz)
 
   writer->current_stream = NULL;
 
+  writer->pending_limit = 0; /* 0 means unlimited */
+  writer->pending_bytes = 0;
+
+  writer->io_again = 0;
+  writer->io_error = 0;
+
   return oggz;
 }
 
@@ -199,6 +205,117 @@ oggz_write_set_hungry_callback (OGGZ * oggz, OggzWriteHungry hungry,
 }
 
 int
+oggz_write_set_pending_limit (OGGZ * oggz, ogg_int64_t limit)
+{
+  OggzWriter * writer;
+
+  if (oggz == NULL) return OGGZ_ERR_BAD_OGGZ;
+
+  if (!(oggz->flags & OGGZ_WRITE)) {
+    return OGGZ_ERR_INVALID;
+  }
+
+  if (limit < 0) return OGGZ_ERR_INVALID;
+
+  writer = &oggz->x.writer;
+
+  /* Do not lower the limit underneath the bytes currently in flight; the
+   * previously configured limit stays in force in that case. */
+  if (limit != 0 && limit < writer->pending_bytes) {
+    return OGGZ_ERR_INVALID;
+  }
+
+  writer->pending_limit = limit;
+
+  return 0;
+}
+
+ogg_int64_t
+oggz_write_get_pending_bytes (OGGZ * oggz)
+{
+  OggzWriter * writer;
+
+  if (oggz == NULL) return OGGZ_ERR_BAD_OGGZ;
+
+  if (!(oggz->flags & OGGZ_WRITE)) {
+    return OGGZ_ERR_INVALID;
+  }
+
+  writer = &oggz->x.writer;
+
+  return writer->pending_bytes;
+}
+
+/*
+ * Record one admitted packet's raw size in its stream's pending FIFO and in
+ * the handle-wide backpressure count. The size is held until the full page
+ * on which the packet ends has been delivered; nil packets contribute zero
+ * but still occupy a FIFO slot so their sequence is preserved.
+ */
+static int
+oggz_write_pending_admit (oggz_stream_t * stream, ogg_int64_t size,
+			  ogg_int64_t * total)
+{
+  if (stream->pending_count == stream->pending_capacity) {
+    int new_capacity = stream->pending_capacity ? stream->pending_capacity * 2 : 8;
+    ogg_int64_t * grown =
+      oggz_realloc (stream->pending_sizes,
+		    (size_t) new_capacity * sizeof (ogg_int64_t));
+    if (grown == NULL) return OGGZ_ERR_OUT_OF_MEMORY;
+    stream->pending_sizes = grown;
+    stream->pending_capacity = new_capacity;
+  }
+
+  stream->pending_sizes[stream->pending_count++] = size;
+  *total += size;
+
+  return 0;
+}
+
+/*
+ * Reconcile the backpressure account once a full page has been delivered
+ * downstream. ogg_page_packets() reports how many packets complete on this
+ * page (a packet spanning several earlier pages is counted only here), so the
+ * oldest that many sizes of the page's stream are removed from its pending
+ * FIFO and from the handle-wide count. Partial pages (a half-written page
+ * header or body, or a continuation page that completes no packet) never
+ * reach this function.
+ */
+void
+oggz_write_pending_page_delivered (OGGZ * oggz, ogg_page * og)
+{
+  OggzWriter * writer = &oggz->x.writer;
+  oggz_stream_t * stream;
+  long serialno;
+  int completed, i;
+
+  serialno = (long) ogg_page_serialno (og);
+  stream = oggz_get_stream (oggz, serialno);
+  if (stream == NULL) return;
+
+  completed = ogg_page_packets (og);
+  if (completed <= 0) return;
+
+  /* Reconcile the per-stream FIFO even when the running byte total is
+   * zero: a run of nil packets occupies FIFO slots while contributing no
+   * bytes, and those slots must still be popped when their page lands. */
+  if (completed > stream->pending_count)
+    completed = stream->pending_count;
+
+  for (i = 0; i < completed; i++) {
+    writer->pending_bytes -= stream->pending_sizes[i];
+  }
+
+  stream->pending_count -= completed;
+  if (stream->pending_count > 0) {
+    memmove (stream->pending_sizes, stream->pending_sizes + completed,
+	     (size_t) stream->pending_count * sizeof (ogg_int64_t));
+  }
+
+  if (writer->pending_bytes < 0) writer->pending_bytes = 0;
+}
+
+int
 oggz_write_feed (OGGZ * oggz, ogg_packet * op, long serialno, int flush,
 		 int * guard)
 {
@@ -236,6 +353,18 @@ oggz_write_feed (OGGZ * oggz, ogg_packet * op, long serialno, int flush,
 #ifdef DEBUG
   printf ("oggz_write_feed: (%010lu) FLUSH: %d\n", serialno, flush);
 #endif
+
+  /* Backpressure: refuse while the packet would exceed the configured
+   * allowance. This runs before any stream or packet state is touched, so
+   * the guard is left alone and the stream's BOS/EOS, granulepos and
+   * packetno are not consumed; the same ogg_packet can be retried verbatim
+   * once pages have drained or the limit has been raised. */
+  if (op->bytes >= 0 && writer->pending_limit != 0) {
+    ogg_int64_t wanted = writer->pending_bytes + (ogg_int64_t) op->bytes;
+    if (wanted < writer->pending_bytes || wanted > writer->pending_limit) {
+      return OGGZ_ERR_IO_AGAIN;
+    }
+  }
 
   /* Cache strict, prefix, suffix */
   strict = !(oggz->flags & OGGZ_NONSTRICT);
@@ -343,6 +472,16 @@ oggz_write_feed (OGGZ * oggz, ogg_packet * op, long serialno, int flush,
     oggz_free (packet);
     if (!guard) oggz_free (new_buf);
     return -1;
+  }
+
+  /* The packet is accepted: charge its raw bytes to the backpressure
+   * account until the page on which it ends is delivered in full. */
+  if (oggz_write_pending_admit (stream, (ogg_int64_t) op->bytes,
+				&writer->pending_bytes) != 0) {
+    oggz_vector_remove_p (writer->packet_queue, packet);
+    oggz_free (packet);
+    if (!guard) oggz_free (new_buf);
+    return OGGZ_ERR_OUT_OF_MEMORY;
   }
 
   writer->no_more_packets = 0;
@@ -500,73 +639,121 @@ oggz_page_copyout (OGGZ * oggz, unsigned char * buf, long n)
   return h + b;
 }
 
+/*
+ * Called after bytes of the current page have been copied or written.
+ * If the page is still in flight this does nothing. Once the whole page
+ * (header and body) has been delivered, the backpressure account for the
+ * packets ending on it is reconciled and the next page is started. A
+ * half-written header or body, or a continuation page that completes no
+ * packet, leaves the account untouched.
+ *
+ * Returns 1 while a page is still being delivered, 0 once the current page
+ * is complete (the writer has either switched to making packets or prepared
+ * the next page).
+ */
+static int
+oggz_page_advance (OGGZ * oggz)
+{
+  OggzWriter * writer = &oggz->x.writer;
+  ogg_page * og = &oggz->current_page;
+  long page_size = og->header_len + og->body_len;
+
+  if (writer->page_offset < page_size) return 1;
+
+  /* The whole page is now downstream: release its completed packets. */
+  oggz_write_pending_page_delivered (oggz, og);
+
+  if (writer->no_more_packets) return 0;
+
+  if (!oggz_page_init (oggz)) {
+    writer->state = OGGZ_MAKING_PACKETS;
+  }
+
+  return 0;
+}
+
+/*
+ * Write out (part of) the current page via the IO write callback.
+ *
+ * Return value:
+ *   > 0  The number of bytes handed downstream on this invocation; the
+ *        page offset is advanced past them.
+ *   0    Nothing could be written: either the page was already exhausted,
+ *        or the downstream paused (a zero write, or -1 with errno
+ *        EAGAIN/EWOULDBLOCK); writer->io_again distinguishes a pause.
+ *   -1   A hard downstream failure (-1 with any other errno);
+ *        writer->io_error is set.
+ *
+ * On a positive short write the remaining bytes are left for the next
+ * invocation; the downstream is never called twice for the same region, so
+ * a stalling sink cannot produce a busy loop. If a failure or pause happens
+ * after some bytes were already delivered on this invocation, that progress
+ * is returned and the flagged condition is reported by the caller instead.
+ */
 static long
 oggz_page_writeout (OGGZ * oggz, long n)
 {
   OggzWriter * writer;
-  long h, b, nwritten;
+  long h, b, nwritten = 0;
+  size_t ret;
   ogg_page * og;
-
-#ifdef OGGZ_WRITE_DIRECT
-  int fd;
-#endif
 
   if (oggz == NULL) return -1L;
 
   writer = &oggz->x.writer;
   og = &oggz->current_page;
 
-#ifdef OGGZ_WRITE_DIRECT
-  fd = fileno (oggz->file);
-#endif
-
   h = MIN (n, og->header_len - writer->page_offset);
   if (h > 0) {
-#ifdef OGGZ_WRITE_DIRECT
-    nwritten = write (fd, og->header + writer->page_offset, h);
-#else
-    nwritten = (long)oggz_io_write (oggz, og->header + writer->page_offset, h);
-#endif
+    ret = oggz_io_write (oggz, og->header + writer->page_offset,
+			 (size_t) h);
 
-#ifdef DEBUG
-    if (nwritten < h) {
-      printf ("oggz_page_writeout: %ld < %ld\n", nwritten, h);
+    if (ret == 0 || (ret == (size_t) -1 &&
+		     (errno == EAGAIN || errno == EWOULDBLOCK))) {
+      writer->io_again = 1;
+      return 0;
     }
-#endif
-    writer->page_offset += h;
-    n -= h;
-  } else {
-    h = 0;
+    if (ret == (size_t) -1) {
+      writer->io_error = 1;
+      return -1;
+    }
+
+    nwritten = (long) ret;
+    if (nwritten > h) nwritten = h;
+    writer->page_offset += nwritten;
+    n -= nwritten;
+
+    if (nwritten < h) {
+      /* Short write: keep whatever progress we made and stop here. */
+      return nwritten;
+    }
   }
 
   b = MIN (n, og->header_len + og->body_len - writer->page_offset);
   if (b > 0) {
-#ifdef DEBUG
+    ret = oggz_io_write (oggz,
+			 og->body + (writer->page_offset - og->header_len),
+			 (size_t) b);
+
+    if (ret == 0 || (ret == (size_t) -1 &&
+		     (errno == EAGAIN || errno == EWOULDBLOCK))) {
+      writer->io_again = 1;
+      return nwritten;
+    }
+    if (ret == (size_t) -1) {
+      writer->io_error = 1;
+      return nwritten > 0 ? nwritten : -1;
+    }
+
     {
-      unsigned char * c = &og->body[writer->page_offset - og->header_len];
-      printf ("oggz_page_writeout [%d] (@%ld): %c%c%c%c ...\n",
-	      ogg_page_serialno (og), (long) ogg_page_granulepos (og),
-	      c[0], c[1], c[2], c[3]);
+      long bw = (long) ret;
+      if (bw > b) bw = b;
+      writer->page_offset += bw;
+      nwritten += bw;
     }
-#endif
-#ifdef OGGZ_WRITE_DIRECT
-    nwritten = write (fd,
-		      og->body + (writer->page_offset - og->header_len), b);
-#else
-    nwritten = (long)oggz_io_write (oggz, og->body + (writer->page_offset - og->header_len), b);
-#endif
-#ifdef DEBUG
-    if (nwritten < b) {
-      printf ("oggz_page_writeout: %ld < %ld\n", nwritten, b);
-    }
-#endif
-    writer->page_offset += b;
-    n -= b;
-  } else {
-    b = 0;
   }
 
-  return h + b;
+  return nwritten;
 }
 
 static int
@@ -743,25 +930,30 @@ oggz_write_output (OGGZ * oggz, unsigned char * buf, long n)
     if (writer->state == OGGZ_WRITING_PAGES) {
       bytes_written = oggz_page_copyout (oggz, buf, bytes);
 
-      if (bytes_written == -1) {
-        active = 0;
-        cb_ret = OGGZ_ERR_SYSTEM; /* XXX: catch next */
-      } else if (bytes_written == 0) {
-        if (writer->no_more_packets) {
-          active = 0;
-          break;
-        } else if (!oggz_page_init (oggz)) {
+      if (bytes_written <= 0) {
+	if (writer->no_more_packets) {
+	  active = 0;
+	  break;
+	} else if (!oggz_page_init (oggz)) {
 #ifdef DEBUG
-          printf ("oggz_write_output: bytes_written == 0, DONE\n");
+	  printf ("oggz_write_output: bytes_written == 0, DONE\n");
 #endif
-          writer->state = OGGZ_MAKING_PACKETS;
-        }
+	  writer->state = OGGZ_MAKING_PACKETS;
+	}
+	continue;
       }
 
       buf += bytes_written;
 
       remaining -= bytes_written;
       nwritten += bytes_written;
+
+      /* Reconcile the pending account only once the whole page is out;
+       * partial header/body writes leave it untouched. */
+      if (oggz_page_advance (oggz) == 0 && writer->no_more_packets) {
+	active = 0;
+	break;
+      }
     }
   }
 
@@ -798,6 +990,9 @@ oggz_write (OGGZ * oggz, long n)
 
   if (writer->writing) return OGGZ_ERR_RECURSIVE_WRITE;
   writer->writing = 1;
+
+  writer->io_again = 0;
+  writer->io_error = 0;
 
 #ifdef DEBUG
   printf ("oggz_write: IN\n");
@@ -869,29 +1064,57 @@ oggz_write (OGGZ * oggz, long n)
       printf ("oggz_write: MAKING PAGES; wrote %ld bytes\n", bytes_written);
 #endif
 
-      if (bytes_written == -1) {
-        active = 0;
-        return OGGZ_ERR_SYSTEM; /* XXX: catch next */
-      } else if (bytes_written == 0) {
-        /*
-         * OK so we've completely written the current page.  If no_more_packets
-         * is set then that means there's no more pages after this one, so
-         * we set active to 0, break out of the loop, pack up our things and
-         * go home.
-         */
-        if (writer->no_more_packets) {
-          active = 0;
-          break;
-        } else if (!oggz_page_init (oggz)) {
-#ifdef DEBUG
-          printf ("oggz_write: bytes_written == 0, DONE\n");
-#endif
-          writer->state = OGGZ_MAKING_PACKETS;
-        }
+      if (bytes_written < 0) {
+	/* Hard failure with no progress on this invocation. Any failure
+	 * that followed real progress is handled after the loop so that
+	 * the progress is returned first and the error reported once on
+	 * the next call. */
+	active = 0;
+	cb_ret = OGGZ_ERR_SYSTEM;
+	break;
       }
 
-      remaining -= bytes_written;
-      nwritten += bytes_written;
+      if (bytes_written > 0) {
+	remaining -= bytes_written;
+	nwritten += bytes_written;
+
+	/* Only a fully delivered page releases pending bytes; a partial
+	 * header or body keeps every in-flight packet charged. */
+	if (oggz_page_advance (oggz) == 0 && writer->no_more_packets) {
+	  active = 0;
+	  break;
+	}
+
+	/* A pause or hard failure after progress: report the progress now
+	 * and leave the condition for the next invocation. */
+	if (writer->io_again || writer->io_error) {
+	  active = 0;
+	  break;
+	}
+      } else {
+	/* Nothing written this time. */
+	if (writer->io_again) {
+	  /* Downstream paused: without progress return IO_AGAIN, with
+	   * progress already made return that instead and stop. */
+	  active = 0;
+	  break;
+	}
+	/*
+	 * OK so we've completely written the current page.  If no_more_packets
+	 * is set then that means there's no more pages after this one, so
+	 * we set active to 0, break out of the loop, pack up our things and
+	 * go home.
+	 */
+	if (writer->no_more_packets) {
+	  active = 0;
+	  break;
+	} else if (!oggz_page_init (oggz)) {
+#ifdef DEBUG
+	  printf ("oggz_write: bytes_written == 0, DONE\n");
+#endif
+	  writer->state = OGGZ_MAKING_PACKETS;
+	}
+      }
     }
   }
 
@@ -903,9 +1126,21 @@ oggz_write (OGGZ * oggz, long n)
 
   if (nwritten == 0) {
     if (cb_ret == OGGZ_WRITE_EMPTY) cb_ret = 0;
+    /* A downstream pause with no progress: ask for a retry later. */
+    if (cb_ret == OGGZ_CONTINUE && writer->io_again)
+      cb_ret = OGGZ_ERR_IO_AGAIN;
     return oggz_map_return_value_to_error (cb_ret);
   } else {
-    oggz->cb_next = cb_ret;
+    /* Bytes were delivered this call, so that count is returned. A pause
+     * (zero write or EAGAIN/EWOULDBLOCK) that followed the progress is
+     * fully accounted for by this return: the next call simply resumes at
+     * the first unwritten byte. A hard failure is instead held back and
+     * reported exactly once by the next call, after which the unwritten
+     * bytes can be retried. */
+    if (writer->io_error)
+      oggz->cb_next = OGGZ_ERR_SYSTEM;
+    else
+      oggz->cb_next = cb_ret;
   }
 
   return nwritten;
@@ -963,6 +1198,18 @@ oggz_write_set_hungry_callback (OGGZ * oggz, OggzWriteHungry hungry,
 int
 oggz_write_feed (OGGZ * oggz, ogg_packet * op, long serialno, int flush,
 		 int * guard)
+{
+  return OGGZ_ERR_DISABLED;
+}
+
+int
+oggz_write_set_pending_limit (OGGZ * oggz, ogg_int64_t limit)
+{
+  return OGGZ_ERR_DISABLED;
+}
+
+ogg_int64_t
+oggz_write_get_pending_bytes (OGGZ * oggz)
 {
   return OGGZ_ERR_DISABLED;
 }

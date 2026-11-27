@@ -195,7 +195,10 @@ oggz_stream_clear (void * data)
 
   if (stream->calculate_data != NULL)
     oggz_free (stream->calculate_data);
-  
+
+  if (stream->pending_sizes != NULL)
+    oggz_free (stream->pending_sizes);
+
   oggz_free (stream);
 
   return 0;
@@ -368,7 +371,11 @@ oggz_add_stream (OGGZ * oggz, long serialno)
   stream->read_page_user_data = NULL;
 
   stream->calculate_data = NULL;
-  
+
+  stream->pending_sizes = NULL;
+  stream->pending_count = 0;
+  stream->pending_capacity = 0;
+
   oggz_vector_insert_p (oggz->streams, stream);
 
   return stream;
