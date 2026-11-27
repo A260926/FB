@@ -1950,6 +1950,32 @@ typedef enum ufbx_skinning_method UFBX_ENUM_REPR {
 
 UFBX_ENUM_TYPE(ufbx_skinning_method, UFBX_SKINNING_METHOD, UFBX_SKINNING_METHOD_BLENDED_DQ_LINEAR);
 
+// Method used to link the skin clusters to the deformed vertices.
+// Read from the `Mode` property of each `ufbx_skin_cluster`.
+typedef enum ufbx_skin_link_mode UFBX_ENUM_REPR {
+
+	// Weights are treated as relative proportions: the blended matrices are
+	// divided by the total weight of the vertex. This is the classic linear
+	// blend skinning behavior and the default when `Mode` is missing.
+	// NOTE: This value is zero, so zero-initialized data is normalized.
+	UFBX_SKIN_LINK_NORMALIZE = 0,
+
+	// Weights are used as absolute amounts: each cluster matrix is multiplied
+	// by its weight and the missing weight (`1.0 - total_weight`) is blended
+	// from the fallback matrix. Weights are _not_ divided by the total weight.
+	// See `ufbx_get_skin_vertex_matrix()` for details.
+	UFBX_SKIN_LINK_TOTAL_ONE,
+
+	// Clusters are applied one after another in the order they are connected
+	// to the skin, each cluster blending its matrix towards the identity by
+	// its weight. See `ufbx_get_skin_vertex_matrix()` for details.
+	UFBX_SKIN_LINK_ADDITIVE,
+
+	UFBX_ENUM_FORCE_WIDTH(UFBX_SKIN_LINK_MODE)
+} ufbx_skin_link_mode;
+
+UFBX_ENUM_TYPE(ufbx_skin_link_mode, UFBX_SKIN_LINK_MODE, UFBX_SKIN_LINK_ADDITIVE);
+
 // Skin weight information for a single mesh vertex
 typedef struct ufbx_skin_vertex {
 
@@ -1988,6 +2014,11 @@ struct ufbx_skin_deformer {
 	}; };
 
 	ufbx_skinning_method skinning_method;
+
+	// How the cluster weights are interpreted when computing skinning.
+	// Read from the `Mode` property of the clusters, all clusters in a skin
+	// must use the same mode.
+	ufbx_skin_link_mode link_mode;
 
 	// Clusters (bones) in the skin
 	ufbx_skin_cluster_list clusters;
@@ -2036,6 +2067,21 @@ struct ufbx_skin_cluster {
 	// ie. `ufbx_matrix_mul(&cluster->bone->node_to_world, &cluster->geometry_to_bone)`
 	ufbx_matrix geometry_to_world;
 	ufbx_transform geometry_to_world_transform;
+
+	// How the weights of this cluster are interpreted when computing skinning.
+	// Read from the `Mode` property, see `ufbx_skin_link_mode`.
+	// All clusters of a single skin are guaranteed to use the same mode.
+	ufbx_skin_link_mode link_mode;
+
+	// Order of the `OO` connection from this cluster to its skin in the source file.
+	// This is the order used by `UFBX_SKIN_LINK_ADDITIVE`, note that it may differ
+	// from the order of `ufbx_skin_deformer.clusters[]` and `element_id`.
+	uint32_t link_order;
+
+	// True if the cluster has a `TransformAssociateModel` matrix.
+	// Associate model clusters are not supported by `UFBX_SKIN_LINK_TOTAL_ONE`
+	// or `UFBX_SKIN_LINK_ADDITIVE`.
+	bool has_transform_associate_model;
 
 	// Raw weights indexed by each _vertex_ of a mesh (not index!)
 	// HINT: It may be simpler to use `ufbx_skin_deformer.vertices[]/weights[]` instead!
@@ -5597,6 +5643,16 @@ ufbx_abi ufbx_transform ufbx_matrix_to_transform(const ufbx_matrix *m);
 
 // Get a matrix representing the deformation for a single vertex.
 // Returns `fallback` if the vertex is not skinned.
+//
+// The interpretation of `fallback` depends on `skin->link_mode`:
+//  - `UFBX_SKIN_LINK_NORMALIZE`: Returned for vertices without any weights,
+//    ie. the classic behavior.
+//  - `UFBX_SKIN_LINK_TOTAL_ONE`: The mesh instance `geometry_to_world` matrix,
+//    used as the "rest" transform for the missing weight. A `NULL` fallback
+//    leaves the vertex untransformed.
+//  - `UFBX_SKIN_LINK_ADDITIVE`: The mesh instance `geometry_to_world` matrix,
+//    the returned matrix is in world space. A `NULL` fallback leaves the
+//    vertex untransformed.
 ufbx_abi ufbx_matrix ufbx_catch_get_skin_vertex_matrix(ufbx_panic *panic, const ufbx_skin_deformer *skin, size_t vertex, const ufbx_matrix *fallback);
 ufbx_inline ufbx_matrix ufbx_get_skin_vertex_matrix(const ufbx_skin_deformer *skin, size_t vertex, const ufbx_matrix *fallback) {
 	return ufbx_catch_get_skin_vertex_matrix(NULL, skin, vertex, fallback);

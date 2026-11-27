@@ -786,6 +786,7 @@ ufbxt_noinline static void ufbxt_hash_skin_weight_imp(ufbxt_hash *h, ufbx_skin_w
 ufbxt_noinline static void ufbxt_hash_skin_deformer_imp(ufbxt_hash *h, const ufbx_skin_deformer *v)
 {
 	ufbxt_hash_pod(h, v->skinning_method);
+	ufbxt_hash_pod(h, v->link_mode);
 	ufbxt_hash_list(h, v->clusters, ufbxt_hash_element_ref_imp);
 	ufbxt_hash_list(h, v->vertices, ufbxt_hash_skin_vertex_imp);
 	ufbxt_hash_list(h, v->weights, ufbxt_hash_skin_weight_imp);
@@ -803,6 +804,9 @@ ufbxt_noinline static void ufbxt_hash_skin_cluster_imp(ufbxt_hash *h, const ufbx
 	ufbxt_hash_matrix(h, v->bind_to_world);
 	ufbxt_hash_matrix(h, v->geometry_to_world);
 	ufbxt_hash_transform(h, v->geometry_to_world_transform);
+	ufbxt_hash_pod(h, v->link_mode);
+	ufbxt_hash_pod(h, v->link_order);
+	ufbxt_hash_pod(h, v->has_transform_associate_model);
 	ufbxt_hash_size_t(h, v->num_weights);
 	ufbxt_hash_list(h, v->vertices, ufbxt_hash_pod_imp);
 	ufbxt_hash_list(h, v->weights, ufbxt_hash_real_imp);
