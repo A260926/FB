@@ -22955,6 +22955,8 @@ ufbxi_noinline static ufbx_transform ufbxi_get_constraint_transform(const ufbx_p
 	return t;
 }
 
+ufbxi_noinline static void ufbxi_refresh_node_world(ufbx_node *node);
+
 ufbxi_noinline static void ufbxi_update_node(ufbx_node *node, const ufbx_transform_override *overrides, size_t num_overrides)
 {
 	node->rotation_order = (ufbx_rotation_order)ufbxi_find_enum(&node->props, ufbxi_RotationOrder, UFBX_ROTATION_ORDER_XYZ, UFBX_ROTATION_ORDER_SPHERIC);
@@ -22995,6 +22997,16 @@ ufbxi_noinline static void ufbxi_update_node(ufbx_node *node, const ufbx_transfo
 		node->geometry_transform = ufbx_identity_transform;
 	}
 
+	ufbxi_refresh_node_world(node);
+
+	node->visible = ufbxi_find_int(&node->props, ufbxi_Visibility, 1) != 0;
+}
+
+// Recompute `node_to_world` and friends from the existing `local_transform`,
+// `node_to_parent` and `geometry_transform`. Shared by `ufbxi_update_node()`
+// and Parent constraint evaluation, which only replaces local transforms.
+ufbxi_noinline static void ufbxi_refresh_node_world(ufbx_node *node)
+{
 	ufbx_matrix unscaled_node_to_parent = ufbxi_unscaled_transform_to_matrix(&node->local_transform);
 
 	node->inherit_scale = node->local_transform.scale;
@@ -23040,8 +23052,6 @@ ufbxi_noinline static void ufbxi_update_node(ufbx_node *node, const ufbx_transfo
 		node->geometry_to_world = node->node_to_world;
 		node->has_geometry_transform = false;
 	}
-
-	node->visible = ufbxi_find_int(&node->props, ufbxi_Visibility, 1) != 0;
 }
 
 ufbxi_noinline static void ufbxi_update_light(ufbx_light *light)
@@ -26110,6 +26120,280 @@ ufbxi_nodiscard static ufbxi_noinline int ufbxi_translate_anim(ufbxi_eval_contex
 	return 1;
 }
 
+// -- Parent constraint evaluation
+//
+// Supported range (see misc/parent-constraints.md):
+// - At most one active Parent constraint per node, exactly one target
+// - All translation and rotation channels enabled, scale channels disabled
+// - Unit local scale, NORMAL inheritance, no helper or coordinate adjust
+//   transforms on any scene node while an effective constraint exists
+// - Target offsets may translate/rotate with unit scale, the constraint's own
+//   transform offset must be identity
+// Everything outside this range fails evaluation with a descriptive error.
+
+typedef struct {
+	ufbx_node *node;
+	ufbx_constraint *constraint; // Effective constraint for this node, or NULL
+	ufbx_node *target;           // Effective target node
+	ufbx_matrix base_local;      // Unconstrained animated node_to_parent at this time
+	ufbx_real weight;            // Overall weight clamped to [0,1]
+	uint8_t stage;               // DFS mark: 0=unvisited 1=in progress 2=done
+} ufbxi_pc_state;
+
+static ufbxi_forceinline bool ufbxi_pc_is_finite(ufbx_real x)
+{
+	double d = (double)x;
+	return !ufbx_isnan(d) && ufbx_fabs(d) != (double)UFBX_INFINITY;
+}
+
+static ufbxi_forceinline bool ufbxi_pc_vec3_finite(ufbx_vec3 v)
+{
+	return ufbxi_pc_is_finite(v.x) && ufbxi_pc_is_finite(v.y) && ufbxi_pc_is_finite(v.z);
+}
+
+static ufbxi_forceinline bool ufbxi_pc_quat_finite(ufbx_quat q)
+{
+	return ufbxi_pc_is_finite(q.x) && ufbxi_pc_is_finite(q.y)
+		&& ufbxi_pc_is_finite(q.z) && ufbxi_pc_is_finite(q.w);
+}
+
+static ufbxi_noinline void ufbxi_pc_set_fail_info(ufbxi_eval_context *ec,
+	const ufbx_node *node, const ufbx_constraint *constraint, const char *reason)
+{
+	const char *node_name = (node && node->name.length > 0) ? node->name.data : "<null>";
+	const char *con_name = (constraint && constraint->name.length > 0) ? constraint->name.data : "<null>";
+	ufbxi_fmt_err_info(&ec->error, "node \"%s\" constraint \"%s\": %s", node_name, con_name, reason);
+}
+
+// Records a descriptive error (node/constraint and reason in `error.info`)
+// and evaluates to zero.
+#define ufbxi_pc_fail(ec, node, constraint, reason) \
+	( ufbxi_pc_set_fail_info((ec), (node), (constraint), (reason)), \
+		ufbxi_fail_imp_err(&(ec)->error, ufbxi_error_msg("evaluate_constraints", reason), ufbxi_function, ufbxi_line) )
+
+static ufbxi_forceinline bool ufbxi_pc_node_supported(const ufbx_node *node)
+{
+	if (node->inherit_mode != UFBX_INHERIT_MODE_NORMAL) return false;
+	if (!ufbxi_is_vec3_one(node->local_transform.scale)) return false;
+	if (node->scale_helper || node->geometry_transform_helper) return false;
+	if (node->has_adjust_transform || node->has_root_adjust_transform) return false;
+	return ufbxi_pc_vec3_finite(node->local_transform.translation)
+		&& ufbxi_pc_quat_finite(node->local_transform.rotation);
+}
+
+ufbxi_nodiscard static ufbxi_noinline int ufbxi_pc_solve_node(ufbxi_eval_context *ec,
+	ufbxi_pc_state *states, size_t num_nodes, size_t index);
+
+ufbxi_nodiscard static ufbxi_noinline int ufbxi_pc_solve_node(ufbxi_eval_context *ec,
+	ufbxi_pc_state *states, size_t num_nodes, size_t index)
+{
+	ufbxi_pc_state *state = &states[index];
+	if (state->stage == 2) return 1;
+	if (state->stage == 1) {
+		return ufbxi_pc_fail(ec, state->node, state->constraint, "dependency cycle between Parent constraints and node hierarchy");
+	}
+	state->stage = 1;
+
+	ufbx_node *node = state->node;
+
+	// Parent hierarchy is always a dependency.
+	if (node->parent) {
+		size_t parent_ix = node->parent->typed_id;
+		ufbxi_check_err(&ec->error, parent_ix < num_nodes);
+		ufbxi_check_err(&ec->error, ufbxi_pc_solve_node(ec, states, num_nodes, parent_ix));
+	}
+
+	if (state->constraint) {
+		// The target's final (possibly constrained) pose is a dependency.
+		size_t target_ix = state->target->typed_id;
+		ufbxi_check_err(&ec->error, target_ix < num_nodes);
+		ufbxi_check_err(&ec->error, ufbxi_pc_solve_node(ec, states, num_nodes, target_ix));
+
+		// G = parent's final world matrix times the unconstrained animated local.
+		ufbx_matrix parent_world = node->parent ? node->parent->node_to_world : ufbx_identity_matrix;
+		ufbx_matrix base_world = ufbx_matrix_mul(&parent_world, &state->base_local);
+
+		// D = target final node_to_world * target offset
+		ufbx_matrix offset_to_world = ufbx_transform_to_matrix(&state->constraint->targets.data[0].transform);
+		ufbx_matrix target_pose = ufbx_matrix_mul(&state->target->node_to_world, &offset_to_world);
+
+		ufbx_matrix blended_world;
+		ufbx_real w = state->weight;
+		if (w >= 1.0f) {
+			// Full weight: adopt the target pose without any round trip.
+			blended_world = target_pose;
+		} else if (w <= 0.0f) {
+			// Zero weight keeps the base pose (normally filtered earlier).
+			blended_world = base_world;
+		} else {
+			// Blend G and D: linear translation, shortest-arc SLERP rotation.
+			ufbx_transform base = ufbx_matrix_to_transform(&base_world);
+			ufbx_transform goal = ufbx_matrix_to_transform(&target_pose);
+
+			ufbx_transform blended;
+			blended.translation.x = base.translation.x + (goal.translation.x - base.translation.x) * w;
+			blended.translation.y = base.translation.y + (goal.translation.y - base.translation.y) * w;
+			blended.translation.z = base.translation.z + (goal.translation.z - base.translation.z) * w;
+			blended.rotation = ufbx_quat_slerp(base.rotation, goal.rotation, w);
+			blended.scale = ufbxi_one_vec3;
+
+			if (!ufbxi_pc_vec3_finite(blended.translation) || !ufbxi_pc_quat_finite(blended.rotation)) {
+				return ufbxi_pc_fail(ec, node, state->constraint, "non-finite blended constraint result");
+			}
+			blended_world = ufbx_transform_to_matrix(&blended);
+		}
+
+		// Convert back to a local transform relative to the final parent pose.
+		ufbx_matrix world_to_parent = ufbx_matrix_invert(&parent_world);
+		ufbx_matrix local = ufbx_matrix_mul(&world_to_parent, &blended_world);
+		ufbx_transform local_transform = ufbx_matrix_to_transform(&local);
+
+		if (!ufbxi_pc_vec3_finite(local_transform.translation)
+			|| !ufbxi_pc_quat_finite(local_transform.rotation)
+			|| !ufbxi_pc_vec3_finite(local_transform.scale)) {
+			return ufbxi_pc_fail(ec, node, state->constraint, "non-finite local constraint result");
+		}
+
+		node->local_transform = local_transform;
+		node->node_to_parent = local;
+	}
+
+	// Re-derive the world pose from the (possibly replaced) local transform.
+	ufbxi_refresh_node_world(node);
+	state->stage = 2;
+	return 1;
+}
+
+ufbxi_nodiscard static ufbxi_noinline int ufbxi_evaluate_parent_constraints(ufbxi_eval_context *ec)
+{
+	ufbx_scene *scene = &ec->scene;
+	size_t num_nodes = scene->nodes.count;
+
+	ufbxi_pc_state *states = ufbxi_push_zero(&ec->tmp, ufbxi_pc_state, num_nodes);
+	ufbxi_check_err(&ec->error, states);
+	for (size_t i = 0; i < num_nodes; i++) {
+		states[i].node = scene->nodes.data[i];
+	}
+
+	size_t num_effective = 0;
+
+	// Resolve and validate every active constraint at the current time.
+	ufbxi_for_ptr_list(ufbx_constraint, p_constraint, scene->constraints) {
+		ufbx_constraint *constraint = *p_constraint;
+
+		// Inactive constraints never participate and add no dependencies.
+		if (!constraint->active) continue;
+
+		if (constraint->type != UFBX_CONSTRAINT_PARENT) {
+			return ufbxi_pc_fail(ec, constraint->node, constraint, "only Parent constraints are supported");
+		}
+		if (!constraint->node) {
+			return ufbxi_pc_fail(ec, NULL, constraint, "constraint has no constrained node");
+		}
+		ufbx_node *node = constraint->node;
+		ufbxi_pc_state *state = &states[node->typed_id];
+		ufbxi_check_err(&ec->error, node->typed_id < num_nodes);
+
+		if (!ufbxi_pc_is_finite(constraint->weight)) {
+			return ufbxi_pc_fail(ec, node, constraint, "constraint weight is not finite");
+		}
+
+		// Clamp the overall weight to [0,1]. Zero weight ignores the constraint
+		// entirely: no validation, no dependency, no cycle edge.
+		ufbx_real weight = constraint->weight;
+		if (weight < 0.0f) weight = 0.0f;
+		if (weight > 1.0f) weight = 1.0f;
+		if (weight == 0.0f) continue;
+
+		if (state->constraint) {
+			return ufbxi_pc_fail(ec, node, constraint, "node has multiple active Parent constraints");
+		}
+		if (constraint->targets.count != 1) {
+			return ufbxi_pc_fail(ec, node, constraint, "Parent constraint must have exactly one target");
+		}
+		ufbx_constraint_target *target = &constraint->targets.data[0];
+		if (!target->node) {
+			return ufbxi_pc_fail(ec, node, constraint, "Parent constraint target has no node");
+		}
+		if (!ufbxi_pc_is_finite(target->weight)) {
+			return ufbxi_pc_fail(ec, node, constraint, "target weight is not finite");
+		}
+		if (target->weight < 0.0f) {
+			return ufbxi_pc_fail(ec, node, constraint, "target weight must not be negative");
+		}
+		// A zero target weight likewise ignores the constraint completely.
+		if (target->weight == 0.0f) continue;
+
+		if (!constraint->constrain_translation[0] || !constraint->constrain_translation[1]
+			|| !constraint->constrain_translation[2]
+			|| !constraint->constrain_rotation[0] || !constraint->constrain_rotation[1]
+			|| !constraint->constrain_rotation[2]) {
+			return ufbxi_pc_fail(ec, node, constraint, "all translation and rotation channels must be enabled");
+		}
+		if (constraint->constrain_scale[0] || constraint->constrain_scale[1] || constraint->constrain_scale[2]) {
+			return ufbxi_pc_fail(ec, node, constraint, "scale constraint channels must be disabled");
+		}
+		if (!ufbxi_is_transform_identity(&constraint->transform_offset)
+			|| !ufbxi_pc_vec3_finite(constraint->transform_offset.translation)
+			|| !ufbxi_pc_quat_finite(constraint->transform_offset.rotation)) {
+			return ufbxi_pc_fail(ec, node, constraint, "constraint transform offset must be identity and finite");
+		}
+		if (!ufbxi_pc_vec3_finite(target->transform.translation)
+			|| !ufbxi_pc_quat_finite(target->transform.rotation)
+			|| !ufbxi_pc_vec3_finite(target->transform.scale)) {
+			return ufbxi_pc_fail(ec, node, constraint, "target offset contains non-finite values");
+		}
+		if (!ufbxi_is_vec3_one(target->transform.scale)) {
+			return ufbxi_pc_fail(ec, node, constraint, "target offset scale must be unit");
+		}
+
+		state->constraint = constraint;
+		state->target = target->node;
+		state->weight = weight;
+		num_effective++;
+	}
+
+	if (num_effective == 0) {
+		// No effective constraints: keep the plain evaluated scene untouched.
+		return 1;
+	}
+
+	// While any effective constraint exists the whole scene must stay in the
+	// bounded transform setup the solver is defined for.
+	ufbxi_for_ptr_list(ufbx_node, p_node, scene->nodes) {
+		ufbx_node *node = *p_node;
+		if (!ufbxi_pc_node_supported(node)) {
+			ufbxi_fmt_err_info(&ec->error, "node \"%s\": requires unit local scale, NORMAL inheritance and no helper or adjust transforms",
+				node->name.length > 0 ? node->name.data : "<null>");
+			ufbxi_fail_err_msg(&ec->error, "evaluate_constraints",
+				"node requires unit local scale, NORMAL inheritance and no helper or adjust transforms");
+		}
+	}
+	// Snapshot the unconstrained animated local matrices before solving.
+	// G is recomputed from the parent's final world and this local each time.
+	for (size_t i = 0; i < num_nodes; i++) {
+		states[i].base_local = states[i].node->node_to_parent;
+	}
+
+	// Order-independent topological solve over hierarchy and target edges.
+	for (size_t i = 0; i < num_nodes; i++) {
+		ufbxi_check_err(&ec->error, ufbxi_pc_solve_node(ec, states, num_nodes, i));
+	}
+
+	// All nodes are depth sorted: refresh every world/geometry matrix so that
+	// descendants of constrained nodes stay consistent with the final poses.
+	ufbxi_for_ptr_list(ufbx_node, p_node, scene->nodes) {
+		ufbxi_refresh_node_world(*p_node);
+	}
+
+	// Re-derive skin cluster poses from the final bone world matrices.
+	ufbxi_for_ptr_list(ufbx_skin_cluster, p_cluster, scene->skin_clusters) {
+		ufbxi_update_skin_cluster(*p_cluster);
+	}
+
+	return 1;
+}
+
 ufbxi_nodiscard static ufbxi_noinline int ufbxi_evaluate_imp(ufbxi_eval_context *ec)
 {
 	ec->scene = ec->src_scene;
@@ -26409,6 +26693,12 @@ ufbxi_nodiscard static ufbxi_noinline int ufbxi_evaluate_imp(ufbxi_eval_context 
 
 	// Update all derived values
 	ufbxi_update_scene(&ec->scene, false, anim.transform_overrides.data, anim.transform_overrides.count);
+
+	// Evaluate Parent constraints into the node hierarchy if requested.
+	// Runs before skinning so the CPU skinning uses the final bone poses.
+	if (ec->opts.evaluate_constraints) {
+		ufbxi_check_err(&ec->error, ufbxi_evaluate_parent_constraints(ec));
+	}
 
 	// Evaluate skinning if requested
 	if (ec->opts.evaluate_skinning) {

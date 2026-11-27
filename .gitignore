@@ -5,6 +5,9 @@ proj/
 # Build output
 build/
 
+# Task harness build output
+.task-build/
+
 # Temporary files
 temp/
 
