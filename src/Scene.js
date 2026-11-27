@@ -335,8 +335,13 @@ var Scene = Node.extend(function () {
             // PENDING
             var geoBBox = object.boundingBox;
             if (!geoBBox) {
-                if (object.skeleton && object.skeleton.boundingBox) {
-                    geoBBox = object.skeleton.boundingBox;
+                if (object.isSkinnedMesh && object.isSkinnedMesh()) {
+                    // Skinned mesh is deformed by its own skeleton pose and
+                    // offsetMatrix, the shared skeleton bounding box can't
+                    // be used as the bounds of this instance. The deformed
+                    // bounding box is in world space, which matches the
+                    // identity world matrix used for skinned meshes.
+                    geoBBox = object.getSkinnedWorldBoundingBox();
                 }
                 else {
                     geoBBox = object.geometry.boundingBox;
