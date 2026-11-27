@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <algorithm>
 #include <iostream>
 #include <iterator>
+#include <stdexcept>
 #include <utility>
 
 #include "BSplineLib/Splines/spline.hpp"
@@ -123,10 +124,16 @@ public:
   virtual void ShareMembers(std::shared_ptr<BSpline>& from) {
     vector_space_ = from->vector_space_;
     Base_::parameter_space_ = from->parameter_space_;
+    // Leave the previous refinement group and join the source's group.
+    UpdateSharedRefinementMembership();
   };
 
 protected:
   SharedPointer<VectorSpace_> vector_space_;
+  // Subscription of vector_space_ to the shared refinement group of
+  // parameter_space_; empty while shared refinement is not enabled.
+  SharedPointer<parameter_spaces::SharedRefinementGroup::Member_>
+      shared_refinement_membership_;
 
 private:
   using BezierInformation_ = typename ParameterSpace_::BezierInformation_;
@@ -141,6 +148,11 @@ private:
 
   BezierInformation_ MakeBezier(Dimension const& dimension,
                                 Tolerance const& tolerance = kEpsilon) const;
+
+  // (Re-)subscribes vector_space_ to the shared refinement group of
+  // parameter_space_ if shared refinement is enabled; otherwise drops any
+  // previous subscription.
+  void UpdateSharedRefinementMembership();
 };
 
 #include "BSplineLib/Splines/b_spline.inl"

@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <utility>
 
 #include "BSplineLib/ParameterSpaces/knot_vector.hpp"
+#include "BSplineLib/ParameterSpaces/shared_refinement.hpp"
 #include "BSplineLib/Utilities/containers.hpp"
 #include "BSplineLib/Utilities/error_handling.hpp"
 #include "BSplineLib/Utilities/index.hpp"
@@ -244,6 +245,31 @@ public:
   virtual KnotVectors_& GetKnotVectors() { return knot_vectors_; }
   virtual Degrees_& GetDegrees() { return degrees_; }
 
+  /// @brief Enables shared refinement for this parameter space.  Once enabled
+  /// it cannot be disabled again.  Every BSpline or Nurbs constructed with
+  /// this shared parameter space afterwards joins the refinement group:
+  /// calling InsertKnot, RefineKnots, or ElevateDegree on any member applies
+  /// the same shape-preserving edit to the whole group, while RemoveKnot,
+  /// CoarsenKnots, and ReduceDegree throw std::logic_error.
+  ///
+  /// Example:
+  /// @code
+  ///   auto parameter_space =
+  ///       std::make_shared<ParameterSpace<2>>(knot_vectors, degrees);
+  ///   parameter_space->EnableSharedRefinement();
+  ///   splines::BSpline<2> surface{parameter_space, vector_space};
+  ///   splines::Nurbs<2> rational_surface{parameter_space,
+  ///                                      weighted_vector_space};
+  ///   surface.InsertKnot(Dimension{0}, 0.5);  // refines both control nets
+  ///   rational_surface.ElevateDegree(Dimension{1});  // elevates both
+  /// @endcode
+  void EnableSharedRefinement();
+  /// @brief Whether shared refinement is enabled for this parameter space.
+  bool IsSharedRefinementEnabled() const;
+  /// @brief The refinement group shared by the participating splines.
+  /// @return shared refinement group if enabled, nullptr otherwise
+  const SharedPointer<SharedRefinementGroup>& GetSharedRefinementGroup() const;
+
   constexpr bool DimensionBoundCheck(const std::string& message,
                                      const int& dimension,
                                      const bool raise) const {
@@ -294,6 +320,10 @@ public:
 protected:
   KnotVectors_ knot_vectors_;
   Degrees_ degrees_;
+  // Present only if shared refinement has been enabled.  Never copied: copies
+  // made by the copy constructor or copy assignment start with shared
+  // refinement disabled.
+  SharedPointer<SharedRefinementGroup> shared_refinement_group_;
 
 private:
   void CopyKnotVectors(KnotVectors_ const& knot_vectors);

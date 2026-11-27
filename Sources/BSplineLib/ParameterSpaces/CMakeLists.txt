@@ -18,10 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-set(HEADERS knot_vector.hpp parameter_space.hpp parameter_space.inl)
+set(HEADERS knot_vector.hpp parameter_space.hpp parameter_space.inl
+            shared_refinement.hpp)
 
 set(SOURCES
-    knot_vector.cpp
+    knot_vector.cpp shared_refinement.cpp
     #
     ${HEADERS})
 set_source_files_properties(${HEADERS} PROPERTIES LANGUAGE CXX HEADER_FILE_ONLY

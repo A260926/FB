@@ -494,6 +494,24 @@ ParameterSpace<para_dim>::ReduceDegree(Dimension const& dimension,
 }
 
 template<int para_dim>
+void ParameterSpace<para_dim>::EnableSharedRefinement() {
+  if (!shared_refinement_group_) {
+    shared_refinement_group_ = std::make_shared<SharedRefinementGroup>();
+  }
+}
+
+template<int para_dim>
+bool ParameterSpace<para_dim>::IsSharedRefinementEnabled() const {
+  return static_cast<bool>(shared_refinement_group_);
+}
+
+template<int para_dim>
+const SharedPointer<SharedRefinementGroup>&
+ParameterSpace<para_dim>::GetSharedRefinementGroup() const {
+  return shared_refinement_group_;
+}
+
+template<int para_dim>
 typename ParameterSpace<para_dim>::OutputInformation_
 ParameterSpace<para_dim>::Write(Precision const& precision) const {
   using std::get, std::tuple_element_t, utilities::string_operations::Write;

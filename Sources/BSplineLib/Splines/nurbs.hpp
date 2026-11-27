@@ -113,8 +113,11 @@ public:
 protected:
   using HomogeneousBSpline_ = BSpline<para_dim>;
 
-  SharedPointer<HomogeneousBSpline_> homogeneous_b_spline_;
+  // Declaration order matters: the copy constructor initializes
+  // homogeneous_b_spline_ from weighted_vector_space_, so the weighted
+  // vector space must be initialized first.
   SharedPointer<WeightedVectorSpace_> weighted_vector_space_;
+  SharedPointer<HomogeneousBSpline_> homogeneous_b_spline_;
 };
 
 #include "BSplineLib/Splines/nurbs.inl"
