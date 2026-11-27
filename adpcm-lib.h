@@ -47,6 +47,16 @@ int adpcm_decode_block_ex (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsi
 int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize, int channels);
 void adpcm_free_context (void *p);
 
+/* optional exact-search cache (adpcm-search-cache.c) */
+
+typedef struct {
+    uint64_t expanded;      // recursive search nodes actually computed this block
+    uint64_t hits;          // nodes skipped by reusing a cached result (0 when disabled)
+} adpcm_search_stats;
+
+int adpcm_set_search_cache (void *p, int enabled);
+int adpcm_get_search_stats (void *p, adpcm_search_stats *stats);
+
 /* adpcm-dns.c */
 
 void generate_dns_values (const int16_t *samples, int sample_count, int num_chans, int sample_rate,

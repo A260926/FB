@@ -32,12 +32,84 @@ noise that sometimes plagues ADPCM. Unfortunately, at its maximum settings
 this can be very slow, but this should be relatively irrelevant if the
 encoder is being used to generate canned samples.
 
-**Adpcm-xq** consists of three standard C files and a header file ([adpcm-lib.h](adpcm-lib.h)).
+**Adpcm-xq** consists of four standard C files and a header file ([adpcm-lib.h](adpcm-lib.h)).
 It can be used as a stand-alone command-line program implemented in [adpcm-xq.c](adpcm-xq.c),
-or the library, which consists of [adpcm-lib.c](adpcm-lib.c) and [adpcm-dns.c](adpcm-dns.c),
-can be built into and utilized by another application. The library portion has
-been designed with maximum portability in mind and should work correctly even
-on 16-bit and big-endian architectures.
+or the library, which consists of [adpcm-lib.c](adpcm-lib.c), [adpcm-dns.c](adpcm-dns.c)
+and [adpcm-search-cache.c](adpcm-search-cache.c), can be built into and utilized by
+another application. The library portion has been designed with maximum portability
+in mind and should work correctly even on 16-bit and big-endian architectures.
+
+## Optional exact-search cache
+
+Deep lookahead makes the encoder recompute the same recursive search nodes many
+times. The library can optionally memoize part of that recursion. This only
+speeds up the search; it never changes the output. For the same input PCM,
+context configuration and output buffer, the encoded bytes, the block sizes and
+the encoding history carried into the next block are exactly the same whether
+the cache is on or off.
+
+The cache is **off by default**. Enable or disable it per context at any time,
+even between block encodes, without disturbing the audio history:
+
+    int ok = adpcm_set_search_cache (ctx, 1);   // 1 = on, 0 = off
+
+`enabled` accepts only 0 or 1, and the function returns 1 on success and 0 on
+failure (bad argument or out of memory).
+
+### Search statistics
+
+    adpcm_search_stats stats;
+    adpcm_get_search_stats (ctx, &stats);       // -> stats.expanded, stats.hits
+
+The counters are reset at the start of every block encode. `expanded` is the
+number of recursive search nodes that were actually computed; `hits` is the
+number of times a cached result was reused, skipping that node's computation.
+Querying the statistics does not affect encoding. When the cache is disabled,
+`hits` is always zero and `expanded` still counts every node.
+
+### What identifies a search node
+
+A cache entry is keyed by everything that determines a recursive node's result
+*except* the caller's pruning threshold (`max_error`): the predictor value, the
+step-table index, the noise-shaping error term and coefficient, the current
+(possibly noise-shaped) sample, the future source samples the node can still
+see, the remaining lookahead depth, the search control flags (exhaustive /
+no-branching / shaping mode), the code width (2-5 bits) and the channel count.
+The predictor and index alone are **not** sufficient: the shaping state and the
+future samples are all part of the search.
+
+### Exact results vs. pruned results
+
+`max_error` is the caller's branch-pruning threshold, and the recursive
+functions' return value depends on it in a complicated way. A call cut short by
+the threshold returns only a partial cost, and even a completed call can be
+inflated by pruning deeper in its subtree, so a returned value is **not**
+unconditionally the complete minimum cost and must not be reused as if it were.
+
+The cache therefore only reuses results that are provably identical to
+recomputing the node:
+
+- **"e0" results**, where the node returned its immediate naive error `e0`. A
+  leaf (depth 0) returns `e0` for *any* threshold, and a node whose naive error
+  already reaches the threshold stops early and returns `e0` for any threshold
+  up to `e0`. These entries answer any query with `max_error <= e0` (or any
+  query at all for a leaf).
+- **"full" results**, which are reused only for the identical `max_error` they
+  were computed with, which is trivially exact.
+
+Everything else is recomputed. A cache hit never changes which nibble is chosen
+or how ties are broken (nodes are only cached where no best-nibble output is
+requested), and collisions or a full table only ever cause a recomputation,
+never a wrong "hit".
+
+### Memory
+
+The cache is a fixed-size table (32768 slots, about 2.5 MiB) allocated the first
+time it is enabled on a context and freed with the context. It never grows with
+the length of the recording, no memory is allocated or freed during the
+recursion, and contexts that never enable the cache never allocate it. The
+per-instance working memory stays well under 4 MiB. Two encoder instances never
+share cache entries.
 
 ## What's New?
 

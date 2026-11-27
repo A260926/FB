@@ -12,6 +12,7 @@
 #include <math.h>
 
 #include "adpcm-lib.h"
+#include "adpcm-search-cache.h"
 
 /* This module encodes and decodes ADPCM (DVI/IMA varient). It handles standard 4-bit
  * ADPCM data (where each code is a "nibble") and also the less-supported 2-bit, 3-bit,
@@ -90,6 +91,9 @@ struct adpcm_context {
     int num_channels, sample_rate, config_flags;
     int16_t *dynamic_shaping_array, last_shaping_weight;
     int static_shaping_weight;
+    struct adpcm_search_cache *search_cache;    // created only if the cache is enabled
+    int search_cache_enabled;
+    uint64_t stats_expanded, stats_hits;        // reset at every block encode
 };
 
 /* With the addition of 3-bit and 5-bit ADPCM formats and various alignment requirements,
@@ -178,6 +182,49 @@ void adpcm_set_shaping_weight (void *p, double shaping_weight)
     if (pcnxt->static_shaping_weight < -1023) pcnxt->static_shaping_weight = -1023;
 }
 
+/* Enable or disable the optional exact-search cache for this context. The
+ * "enabled" argument must be 0 or 1. The cache table is allocated the first
+ * time it is enabled (a fixed size well under the 4 MiB per-instance limit);
+ * contexts that never enable it never allocate it. This may be called between
+ * block encodes and does not disturb the audio history. Returns 1 on success
+ * or 0 on failure (bad argument or out of memory).
+ */
+
+int adpcm_set_search_cache (void *p, int enabled)
+{
+    struct adpcm_context *pcnxt = (struct adpcm_context *) p;
+
+    if (!pcnxt || (enabled != 0 && enabled != 1))
+        return 0;
+
+    if (enabled && !pcnxt->search_cache) {
+        pcnxt->search_cache = adpcm_search_cache_create ();
+
+        if (!pcnxt->search_cache)
+            return 0;
+    }
+
+    pcnxt->search_cache_enabled = enabled;
+    return 1;
+}
+
+/* Retrieve the search statistics for the most recent block encode. The
+ * counters are reset at the start of every adpcm_encode_block_ex() call, and
+ * reading them does not affect encoding. Returns 1 on success, 0 on failure.
+ */
+
+int adpcm_get_search_stats (void *p, adpcm_search_stats *stats)
+{
+    struct adpcm_context *pcnxt = (struct adpcm_context *) p;
+
+    if (!pcnxt || !stats)
+        return 0;
+
+    stats->expanded = pcnxt->stats_expanded;
+    stats->hits = pcnxt->stats_hits;
+    return 1;
+}
+
 /* Free the ADPCM encoder context.
  */
 
@@ -185,6 +232,7 @@ void adpcm_free_context (void *p)
 {
     struct adpcm_context *pcnxt = (struct adpcm_context *) p;
 
+    adpcm_search_cache_destroy (pcnxt->search_cache);
     free (pcnxt);
 }
 
@@ -218,19 +266,31 @@ static inline int32_t noise_shape (struct adpcm_channel *pchan, int32_t sample)
  * for the specified depth of the future audio. For speed, there are separate
  * versions for each code size (e.g., 2bit to 5bit).
  *
+ * The actual search routines are the min_error_nbit_impl() functions below, which
+ * are unchanged from the original implementation and alone determine the
+ * candidates examined and the order they are visited. The min_error_nbit()
+ * functions called everywhere (including recursively by the _impl versions) are
+ * thin wrappers that add the optional exact-search cache and the search
+ * statistics around the original logic.
+ *
  * Parameters:
  *  pchan           pointer to the encoding status for the channel to encode
  *  nch             number of channels (just used to correctly stride sample array)
  *  csample         current sample to encode (may be modified by noise shaping)
  *  psample         pointer to samples for lookahead (enough for lookahead depth)
- *  flags           depth of search (in lower bits) plus some other control bits       
+ *  flags           depth of search (in lower bits) plus some other control bits
  *  best_nibble     optional pointer for return of best nibble for current sample
  *  max_error       maximum allowed error (used to eliminate pointless branches)
  *
  * Returns RMS total error for the specified depth
  */
 
-static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error);
+static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error);
+static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error);
+static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error);
+
+static rms_error_t min_error_4bit_impl (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
 {
     int32_t delta = csample - pchan->pcmdata, csample2;
     struct adpcm_channel chan = *pchan;
@@ -342,7 +402,7 @@ static rms_error_t min_error_4bit (const struct adpcm_channel *pchan, int nch, i
     return min_error;
 }
 
-static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_2bit_impl (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
 {
     int32_t delta = csample - pchan->pcmdata, csample2;
     struct adpcm_channel chan = *pchan;
@@ -433,7 +493,7 @@ static rms_error_t min_error_2bit (const struct adpcm_channel *pchan, int nch, i
     return min_error;
 }
 
-static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_3bit_impl (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
 {
     int32_t delta = csample - pchan->pcmdata, csample2;
     struct adpcm_channel chan = *pchan;
@@ -539,7 +599,7 @@ static rms_error_t min_error_3bit (const struct adpcm_channel *pchan, int nch, i
     return min_error;
 }
 
-static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
+static rms_error_t min_error_5bit_impl (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error)
 {
     static char comp_table [16] = { 0, 0, 0, 5, 0, 6, 4, 10, 0, 7, 6, 10, 4, 11, 11, 13 };
     int32_t delta = csample - pchan->pcmdata, csample2;
@@ -650,6 +710,151 @@ static rms_error_t min_error_5bit (const struct adpcm_channel *pchan, int nch, i
 
     return min_error;
 }
+
+/* The context currently performing a block encode. The recursive search does
+ * not receive the context, so this gives the wrappers below access to the
+ * search cache and statistics. It is set at the start of every block encode;
+ * cache entries and statistics live in the context itself, so two interleaved
+ * encoder instances never share search results.
+ */
+
+static struct adpcm_context *encode_context;
+
+#ifdef ADPCM_CACHE_DEBUG
+#include <stdio.h>
+
+/* uncached evaluation of a node (cache temporarily disabled) */
+static rms_error_t cache_debug_call (int bps, const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, rms_error_t max_error)
+{
+    struct adpcm_context *pcnxt = encode_context;
+    rms_error_t result;
+
+    pcnxt->search_cache_enabled = 0;
+
+    if (bps == 2)
+        result = min_error_2bit (pchan, nch, csample, psample, flags, NULL, max_error);
+    else if (bps == 3)
+        result = min_error_3bit (pchan, nch, csample, psample, flags, NULL, max_error);
+    else if (bps == 5)
+        result = min_error_5bit (pchan, nch, csample, psample, flags, NULL, max_error);
+    else
+        result = min_error_4bit (pchan, nch, csample, psample, flags, NULL, max_error);
+
+    pcnxt->search_cache_enabled = 1;
+    return result;
+}
+
+/* debug-only: verify that a cache hit is observably equivalent to computing
+ * the node uncached for this max_error (either both sides prune, or they agree)
+ */
+static void cache_debug_verify (int bps, const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, rms_error_t max_error, rms_error_t cached_value)
+{
+    rms_error_t uncached = cache_debug_call (bps, pchan, nch, csample, psample, flags, max_error);
+
+    if (!((cached_value >= max_error && uncached >= max_error) || cached_value == uncached)) {
+        fprintf (stderr, "CACHE BUG bps=%d: cached=%llu max_error=%llu uncached=%llu flags=0x%x\n",
+            bps, (unsigned long long) cached_value, (unsigned long long) max_error,
+            (unsigned long long) uncached, flags);
+        abort ();
+    }
+}
+#endif
+
+/* Build the complete identity of the node that the search is about to visit.
+ * Everything that determines the node's result is included except the caller's
+ * pruning threshold (max_error), which is handled separately by the reuse
+ * rules in the cache. The future samples the node can still read are part of
+ * the identity, so they are copied into the key.
+ */
+
+static void build_search_key (adpcm_search_key *key, int bps, const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags)
+{
+    int depth = flags & LOOKAHEAD_DEPTH, i;
+
+    memset (key, 0, sizeof (*key));
+    key->pcmdata = pchan->pcmdata;
+    key->csample = csample;
+    key->error = pchan->error;
+    key->shaping_weight = pchan->shaping_weight;
+    key->flags = flags & (NOISE_SHAPING_ENABLED | LOOKAHEAD_EXHAUSTIVE | LOOKAHEAD_NO_BRANCHING);
+    key->index = pchan->index;
+    key->depth = depth;
+    key->bps = bps;
+    key->nch = nch;
+
+    for (i = 0; i < depth; ++i)
+        key->samples [i] = psample [(i + 1) * nch];
+}
+
+/* These are the min_error_nbit() entry points used everywhere. They count
+ * every node that actually enters the candidate computation (the "expanded"
+ * statistic, kept whether or not the cache is enabled) and, when the cache is
+ * enabled, reuse results that are provably identical to recomputing the node.
+ * Nodes are only cached when no best_nibble is requested, so a cache hit can
+ * never affect which nibble is chosen or how ties are broken.
+ */
+
+#ifdef ADPCM_CACHE_DEBUG
+#define DEBUG_VERIFY_HIT(bps, ...)  cache_debug_verify (bps, __VA_ARGS__)
+#else
+#define DEBUG_VERIFY_HIT(bps, ...)
+#endif
+
+/* Generate the min_error_nbit() entry point for one code width. It counts
+ * every node that actually enters the candidate computation (the "expanded"
+ * statistic, kept whether or not the cache is enabled) and, when the cache is
+ * enabled, reuses results that are provably identical to computing the node.
+ * Nodes are only cached when no best_nibble is requested, so a cache hit can
+ * never affect which nibble is chosen or how ties are broken.
+ *
+ * Only two kinds of results are reused across thresholds (see README.md): a
+ * node that returns its immediate naive error e0 (a leaf, or a node whose
+ * naive error reaches the threshold) answers any query with max_error <= e0
+ * (any query at all for a leaf), and any other result is reused only for the
+ * identical max_error it was computed with.
+ */
+
+#define MIN_ERROR_WRAPPER(bps) \
+static rms_error_t min_error_##bps##bit (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *psample, int flags, int *best_nibble, rms_error_t max_error) \
+{ \
+    struct adpcm_context *pcnxt = encode_context; \
+    rms_error_t result; \
+    \
+    if (pcnxt && pcnxt->search_cache_enabled && !best_nibble && (flags & LOOKAHEAD_DEPTH) <= ADPCM_SEARCH_MAX_DEPTH) { \
+        adpcm_search_key key; \
+        uint64_t cached_value; \
+        int e0; \
+        \
+        build_search_key (&key, bps, pchan, nch, csample, psample, flags); \
+        \
+        if (adpcm_search_cache_lookup (pcnxt->search_cache, &key, max_error, &cached_value)) { \
+            pcnxt->stats_hits++; \
+            DEBUG_VERIFY_HIT (bps, pchan, nch, csample, psample, flags, max_error, cached_value); \
+            return cached_value; \
+        } \
+        \
+        pcnxt->stats_expanded++; \
+        result = min_error_##bps##bit_impl (pchan, nch, csample, psample, flags, best_nibble, max_error); \
+        \
+        if (!(flags & LOOKAHEAD_DEPTH)) \
+            e0 = 1; \
+        else \
+            e0 = (result == min_error_##bps##bit_impl (pchan, nch, csample, psample, 0, NULL, MAX_RMS_ERROR)); \
+        \
+        adpcm_search_cache_store (pcnxt->search_cache, &key, result, max_error, e0); \
+        return result; \
+    } \
+    \
+    if (pcnxt) \
+        pcnxt->stats_expanded++; \
+    \
+    return min_error_##bps##bit_impl (pchan, nch, csample, psample, flags, best_nibble, max_error); \
+}
+
+MIN_ERROR_WRAPPER (2)
+MIN_ERROR_WRAPPER (3)
+MIN_ERROR_WRAPPER (4)
+MIN_ERROR_WRAPPER (5)
 
 static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, int bps, const int16_t *psample, int num_samples)
 {
@@ -782,6 +987,9 @@ int adpcm_encode_block_ex (void *p, uint8_t *outbuf, size_t *outbufsize, const i
 {
     struct adpcm_context *pcnxt = (struct adpcm_context *) p;
     int ch;
+
+    encode_context = pcnxt;                         // for the search wrappers
+    pcnxt->stats_expanded = pcnxt->stats_hits = 0;  // statistics are per block
 
     *outbufsize = 0;
 

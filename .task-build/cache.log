@@ -1,0 +1,5 @@
+repro: reference expanded=1888 (init 1513 + encode 375), revisited=742 with new threshold=519
+repro detail: revisited init=388 encode=354, vs-first init=388 encode=131, vs-prev init=388 encode=19, gt=519 lt=0, leaf0=114, distinct=66 varied=59
+repro pos-keyed: revisited=403 with new threshold=403 (init 388 encode 15)
+repro: cache cut expanded from 1888 to 1551 with 113 hits
+ADPCM_SEARCH_CACHE_OK cases=171
