@@ -9,6 +9,19 @@
 #include "tables.h"
 #include "types.h"
 
+#ifdef SHINE_TEST_HOOKS
+#include "test_hooks.h"
+
+int shine_obs_l3_enc[SHINE_OBS_MAX_CHANNELS][SHINE_OBS_MAX_GRANULES]
+                    [SHINE_OBS_GRANULE_SIZE];
+int shine_obs_l3_enc_nat[SHINE_OBS_MAX_CHANNELS][SHINE_OBS_MAX_GRANULES]
+                        [SHINE_OBS_GRANULE_SIZE];
+int8_t shine_obs_sign[SHINE_OBS_MAX_CHANNELS][SHINE_OBS_MAX_GRANULES]
+                      [SHINE_OBS_GRANULE_SIZE];
+struct shine_obs_side
+    shine_obs_side[SHINE_OBS_MAX_CHANNELS][SHINE_OBS_MAX_GRANULES];
+#endif
+
 #define e 2.71828182845
 #define CBLIMIT 21
 #define SFB_LMAX 22
@@ -35,6 +48,16 @@ static void calc_xmin(shine_psy_ratio_t *ratio, gr_info *cod_info,
                       shine_psy_xmin_t *l3_xmin, int gr, int ch);
 static int quantize(int ix[GRANULE_SIZE], int stepsize,
                     shine_global_config *config);
+
+/*
+ * Window-switching band layout helpers.
+ *
+ * For MPEG-1 the samplerate index is 0 (44.1), 1 (48) or 2 (32) kHz and maps
+ * directly onto shine_scale_fact_band_index / shine_short_band_index.
+ */
+int shine_l3_is_short(gr_info *gi) {
+  return gi->window_switching && gi->block_type == 2 && !gi->mixed_block_flag;
+}
 
 /*
  * shine_inner_loop:
@@ -121,10 +144,31 @@ void shine_iteration_loop(shine_global_config *config) {
       cod_info = (gr_info *)&(config->side_info.gr[gr].ch[ch]);
       cod_info->sfb_lmax = SFB_LMAX - 1; /* gr_deco */
 
+      /* Window-switching: record the requested type and adjust the band
+       * layout.  start/stop and normal are handled as long blocks; pure short
+       * blocks use the 13 short bands in band/window/frequency order. */
+      cod_info->window_switching = 0;
+      cod_info->block_type = 0;
+      cod_info->mixed_block_flag = 0;
+      cod_info->subblock_gain[0] = 0;
+      cod_info->subblock_gain[1] = 0;
+      cod_info->subblock_gain[2] = 0;
+      if (config->window_switching_active && gr < MAX_GRANULES &&
+          ch < MAX_CHANNELS) {
+        int bt = config->block_type[ch][gr];
+        if (bt < 0 || bt > 3)
+          bt = 0;
+        cod_info->block_type = (unsigned)bt;
+        cod_info->window_switching = (bt != 0);
+      }
+
       calc_xmin(&config->ratio, cod_info, &l3_xmin, gr, ch);
 
-      if (config->mpeg.version == MPEG_I)
+      if (config->mpeg.version == MPEG_I && !cod_info->window_switching)
         calc_scfsi(&l3_xmin, ch, gr, config);
+      else
+        for (i = 4; i--;)
+          config->side_info.scfsi[ch][i] = 0;
 
       /* calculation of number of available bit( per granule ) */
       max_bits = shine_max_reservoir_bits(&config->pe[ch][gr], config);
@@ -160,10 +204,78 @@ void shine_iteration_loop(shine_global_config *config) {
       shine_ResvAdjust(cod_info, config);
       cod_info->global_gain = cod_info->quantizerStepSize + 210;
 
+#ifdef SHINE_TEST_HOOKS
+      if (ch < SHINE_OBS_MAX_CHANNELS && gr < SHINE_OBS_MAX_GRANULES) {
+        int t;
+        for (t = 0; t < GRANULE_SIZE; t++) {
+          /* ix[] from quantize() is unsigned; the transmitted sign comes from
+           * the MDCT coefficient's sign, exactly as shine_format_bitstream
+           * folds it in (negative xr with positive ix -> negative value). */
+          int mag = ix[t];
+          int neg = (config->mdct_freq[ch][gr][t] < 0) && (mag > 0);
+          shine_obs_sign[ch][gr][t] = (int8_t)(neg ? -1 : (mag > 0 ? 1 : 0));
+          shine_obs_l3_enc[ch][gr][t] = mag;
+        }
+        /* Inverse-reorder short blocks back to natural (subband, window,
+         * frequency) coordinates: bitstream position band/window/freq ->
+         * natural index. */
+        if (cod_info->window_switching && cod_info->block_type == 2 &&
+            !cod_info->mixed_block_flag) {
+          const int *sb = shine_short_band_index[config->mpeg.samplerate_index];
+          int sfb, w, f, inpos = 0;
+          for (t = 0; t < GRANULE_SIZE; t++)
+            shine_obs_l3_enc_nat[ch][gr][t] = 0;
+          for (sfb = 0; sfb < 13; sfb++)
+            for (w = 0; w < 3; w++)
+              for (f = sb[sfb]; f < sb[sfb + 1]; f++) {
+                int band = f / 6, line = f % 6;
+                shine_obs_l3_enc_nat[ch][gr][band * 18 + w * 6 + line] =
+                    shine_obs_l3_enc[ch][gr][inpos++];
+              }
+        } else {
+          for (t = 0; t < GRANULE_SIZE; t++)
+            shine_obs_l3_enc_nat[ch][gr][t] = shine_obs_l3_enc[ch][gr][t];
+        }
+        {
+          struct shine_obs_side *os = &shine_obs_side[ch][gr];
+          os->part2_3_length = (int)cod_info->part2_3_length;
+          os->part2_length = (int)cod_info->part2_length;
+          os->big_values = (int)cod_info->big_values;
+          os->count1 = (int)cod_info->count1;
+          os->global_gain = (int)cod_info->global_gain;
+          os->scalefac_compress = (int)cod_info->scalefac_compress;
+          os->window_switching = (int)cod_info->window_switching;
+          os->block_type = (int)cod_info->block_type;
+          os->mixed_block_flag = (int)cod_info->mixed_block_flag;
+          for (t = 0; t < 3; t++) {
+            os->table_select[t] = (int)cod_info->table_select[t];
+            os->subblock_gain[t] = (int)cod_info->subblock_gain[t];
+          }
+          os->region0_count = (int)cod_info->region0_count;
+          os->region1_count = (int)cod_info->region1_count;
+          os->scalefac_scale = (int)cod_info->scalefac_scale;
+          os->count1table_select = (int)cod_info->count1table_select;
+          os->preflag = (int)cod_info->preflag;
+        }
+      }
+#endif
+
     } /* for gr */
   }   /* for ch */
 
   shine_ResvFrameEnd(config);
+
+#ifdef SHINE_TEST_HOOKS
+  /* Stuffing may have been added to part2_3_length by the reservoir code. */
+  if (config->wave.channels <= SHINE_OBS_MAX_CHANNELS) {
+    int c2, g2;
+    for (c2 = 0; c2 < config->wave.channels; c2++)
+      for (g2 = 0; g2 < config->mpeg.granules_per_frame; g2++) {
+        gr_info *ci = &config->side_info.gr[g2].ch[c2].tt;
+        shine_obs_side[c2][g2].part2_3_length = (int)ci->part2_3_length;
+      }
+  }
+#endif
 }
 
 /*
@@ -283,6 +395,17 @@ int part2_length(int gr, int ch, shine_global_config *config) {
   {
     slen1 = shine_slen1_tab[gi->scalefac_compress];
     slen2 = shine_slen2_tab[gi->scalefac_compress];
+
+    if (gi->window_switching) {
+      /* Window-switched granules never use scfsi.  Short blocks carry 13
+       * bands x 3 windows (sfb 0..5 use slen1, 6..12 use slen2); start/stop
+       * carry the 21 long scalefactors (sfb 0..10 slen1, 11..20 slen2). */
+      if (shine_l3_is_short(gi))
+        bits += 3 * (6 * slen1 + 7 * slen2);
+      else
+        bits += 11 * slen1 + 10 * slen2;
+      return bits;
+    }
 
     if (!gr || !(config->side_info.scfsi[ch][0]))
       bits += (6 * slen1);
@@ -530,6 +653,22 @@ void subdivide(gr_info *cod_info, shine_global_config *config) {
   if (!cod_info->big_values) { /* no big_values region */
     cod_info->region0_count = 0;
     cod_info->region1_count = 0;
+  } else if (cod_info->window_switching) {
+    /* Window-switched granule (start, short or stop): the partition is
+     * implicit.  Region 0 covers the first 36 lines, region 1 the rest up to
+     * the big-values end.  Only two table_select fields are transmitted, so
+     * table_select[2] is unused.  Pure short blocks additionally default to
+     * region0_count=8 / region1_count=12; the 36-line region boundary is the
+     * same for all switched types. */
+    int bigvalues_region = 2 * cod_info->big_values;
+
+    cod_info->region0_count = shine_l3_is_short(cod_info) ? 8 : 7;
+    cod_info->region1_count = 20 - cod_info->region0_count;
+    cod_info->address1 = 36;
+    if (cod_info->address1 > bigvalues_region)
+      cod_info->address1 = bigvalues_region;
+    cod_info->address2 = bigvalues_region;
+    cod_info->address3 = bigvalues_region;
   } else {
     const int *scalefac_band_long =
         &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
@@ -582,7 +721,10 @@ void bigv_tab_select(int ix[GRANULE_SIZE], gr_info *cod_info) {
       cod_info->table_select[1] =
           new_choose_table(ix, cod_info->address1, cod_info->address2);
 
-    if (cod_info->big_values << 1 > cod_info->address2)
+    /* Window-switched granules only transmit two tables; the first two
+     * regions always cover the whole big-values area (see subdivide). */
+    if (!cod_info->window_switching &&
+        cod_info->big_values << 1 > cod_info->address2)
       cod_info->table_select[2] =
           new_choose_table(ix, cod_info->address2, cod_info->big_values << 1);
   }

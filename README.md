@@ -39,6 +39,83 @@ write(written, data);
 shine_close(s);
 ```
 
+### Explicit window switching
+
+If a caller already knows where transients are, it can drive the long/short
+window decision directly with `shine_encode_buffer_blocks` (planar) or
+`shine_encode_buffer_interleaved_blocks`. These take one block type per
+granule and channel, laid out granule-major then channel-minor, so a stereo
+MPEG-1 frame needs exactly `2 * channels = 4` entries. Types are
+`0 = normal`, `1 = start`, `2 = short`, `3 = stop`.
+
+Each channel begins in the normal state. The only legal successors are
+`normal -> normal/start`, `start -> short`, `short -> short/stop` and
+`stop -> normal/start`. State carries across frames and the two channels are
+independent, so the same call may submit different legal sequences for the
+left and right channels. The example below submits, across two frames, a
+`start -> short` transition on the left and a `normal -> normal` frame on the
+right:
+
+```c
+#include <shine/layer3.h>
+
+shine_config_t config = {0};
+config.wave.channels = PCM_STEREO;
+config.wave.samplerate = 48000;
+shine_set_config_mpeg_defaults(&config.mpeg);
+config.mpeg.mode = STEREO;             /* plain STEREO, not joint stereo */
+config.mpeg.bitr = 128;
+shine_t s = shine_initialise(&config);
+int spp = shine_samples_per_pass(s);
+
+/* Frame 0: both channels normal (entries: g0L g0R g1L g1R). */
+const uint8_t frame0[4] = {0, 0, 0, 0};
+/* Frame 1: left goes start -> short, right stays normal -> normal. */
+const uint8_t frame1[4] = {1, 0, 2, 0};
+
+int16_t *left  = /* spp samples */;
+int16_t *right = /* spp samples */;
+int16_t *planar[2] = { left, right };
+
+int written;
+unsigned char *out = shine_encode_buffer_blocks(s, planar, frame0, 4, &written);
+/* ... use out[0..written), if out != NULL ... */
+
+out = shine_encode_buffer_blocks(s, planar, frame1, 4, &written);
+/* ... */
+
+/* Flush any buffered frame and close as usual. */
+out = shine_flush(s, &written);
+shine_close(s);
+```
+
+The block entry points only support **MPEG-1** (32, 44.1 and 48 kHz) with
+mono or plain `STEREO`. They are not available for MPEG-2/2.5 rates, joint
+stereo, dual channel or other modes.
+
+Any invalid request is rejected **before** any PCM is analysed or the encoder
+state is changed: an unsupported configuration, a wrong entry count, an
+unknown block type, or an illegal transition makes the function return
+`NULL` and set `written` to `-1`. A rejected call leaves the encoder exactly
+as it was, so a subsequent valid call behaves as if the bad request had never
+been made:
+
+```c
+int written;
+/* Illegal: normal -> short is not an allowed transition. */
+if (shine_encode_buffer_blocks(s, planar, frame1 /* {1,0,2,0} */, 4,
+                               &written) == NULL) {
+  /* written == -1 here; the encoder state is untouched. */
+}
+```
+
+The returned pointer follows the same lifetime rules as the other encode
+functions: it belongs to the library and is valid until the next encode call
+or `shine_close`, and `written` is the number of delivered bytes. Because the
+encoder keeps a small 32-bit cache between calls, the last few bits of a
+frame may only be committed by the following call; consume only the
+delivered bytes of each frame and use `shine_flush` for the tail.
+
 How fast is it?
 ---------------
 

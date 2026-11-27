@@ -135,6 +135,36 @@ unsigned char *shine_encode_buffer(shine_t s, int16_t **data, int *written);
 unsigned char *shine_encode_buffer_interleaved(shine_t s, int16_t *data,
                                                int *written);
 
+/* Window-switching (long/start/short/stop) encoding entry points.
+ *
+ * These take the same source data as the two functions above, plus an
+ * explicit block type for every granule of every channel. `block_types` is
+ * laid out granule-major, channel-minor: entry `granule * channels + channel`.
+ * Exactly `2 * channels` entries are required for a frame (MPEG-1 only).
+ * Values are 0 = normal, 1 = start, 2 = short, 3 = stop.
+ *
+ * Each channel starts in the normal state. The only legal successors are
+ * normal -> normal/start, start -> short, short -> short/stop and
+ * stop -> normal/start. State carries over between frames and the two
+ * channels evolve independently.
+ *
+ * Only MPEG-1 (32, 44.1 and 48 kHz) mono or plain STEREO configurations are
+ * supported. If the configuration is unsupported, the entry count or a type
+ * is invalid, or a transition is illegal, these return NULL and set *written
+ * to -1 without consuming any PCM or changing encoder state. On success they
+ * behave like the matching non-block entry point.
+ *
+ * The returned pointer and `written` follow the same lifetime rules as
+ * `shine_encode_buffer`: the memory is owned by the library and is valid
+ * until the next encode call or `shine_close`. */
+unsigned char *shine_encode_buffer_blocks(shine_t s, int16_t **data,
+                                          const uint8_t *block_types,
+                                          int block_type_count, int *written);
+
+unsigned char *shine_encode_buffer_interleaved_blocks(
+    shine_t s, int16_t *data, const uint8_t *block_types, int block_type_count,
+    int *written);
+
 /* Flush all data currently in the encoding buffer. Should be used before
  * closing the encoder, to make all encoded data has been written. */
 unsigned char *shine_flush(shine_t s, int *written);

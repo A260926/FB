@@ -63,6 +63,18 @@ const int shine_scale_fact_band_index[9][23] = {
      232, 280, 336, 400, 476, 566, 568, 570, 572, 574, 576},
 };
 
+/* MPEG-1 short-window scalefactor bands, one row per MPEG-1 samplerate
+ * (44.1, 48, 32 kHz). Positions are on the 192-line short block scale (3
+ * windows of 36 lines), as opposed to the 576-line long block scale above. */
+const int shine_short_band_index[3][14] = {
+    /* 44.1 kHz */
+    {0, 4, 8, 12, 16, 22, 30, 40, 52, 66, 84, 106, 136, 192},
+    /* 48 kHz */
+    {0, 4, 8, 12, 16, 22, 28, 38, 50, 64, 80, 100, 126, 192},
+    /* 32 kHz */
+    {0, 4, 8, 12, 16, 22, 30, 42, 58, 78, 104, 138, 180, 192},
+};
+
 /* note. 0.035781 is shine_enwindow maximum value */
 /* scale and convert to fixed point before storing */
 #define SHINE_EW(x) (int32_t)((double)(x)*0x7fffffff)

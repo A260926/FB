@@ -102,6 +102,10 @@ typedef struct {
 
 typedef struct {
   int32_t cos_l[18][36];
+  /* Same MDCT kernel with the long->short (start) and short->long (stop)
+   * transition windows baked in. */
+  int32_t cos_start[18][36];
+  int32_t cos_stop[18][36];
 } mdct_t;
 
 typedef struct {
@@ -130,6 +134,12 @@ typedef struct {
   unsigned address3;
   int quantizerStepSize;
   unsigned slen[4];
+  /* Window switching (MPEG-1 long/short encoding chain). block_type is
+   * 0=normal, 1=start, 2=short, 3=stop. */
+  unsigned window_switching;
+  unsigned block_type;
+  unsigned mixed_block_flag;
+  unsigned subblock_gain[3];
 } gr_info;
 
 typedef struct {
@@ -175,6 +185,15 @@ typedef struct shine_global_flags {
   l3loop_t l3loop;
   mdct_t mdct;
   subband_t subband;
+  /* Window switching state, one per channel. -1 means "not started yet",
+   * otherwise the block type (0=normal, 1=start, 2=short, 3=stop) of the
+   * last frame submitted for that channel. */
+  int last_block_type[MAX_CHANNELS];
+  /* Block type requested for the current frame, per granule per channel. */
+  int block_type[MAX_CHANNELS][MAX_GRANULES];
+  /* Set when the current frame is encoded through the block-aware entry
+   * point; controls whether short-block transforms/side info are used. */
+  int window_switching_active;
 } shine_global_config;
 
 #endif

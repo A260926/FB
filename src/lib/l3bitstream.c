@@ -57,18 +57,51 @@ static void encodeMainData(shine_global_config *config) {
       unsigned slen2 = shine_slen2_tab[gi->scalefac_compress];
       int *ix = &config->l3_enc[ch][gr][0];
 
-      if (gr == 0 || si.scfsi[ch][0] == 0)
-        for (sfb = 0; sfb < 6; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen1);
-      if (gr == 0 || si.scfsi[ch][1] == 0)
-        for (sfb = 6; sfb < 11; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen1);
-      if (gr == 0 || si.scfsi[ch][2] == 0)
-        for (sfb = 11; sfb < 16; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen2);
-      if (gr == 0 || si.scfsi[ch][3] == 0)
-        for (sfb = 16; sfb < 21; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen2);
+      if (gi->window_switching) {
+        /* Window-switched granules never share scalefactors across channels
+         * or granules, so scfsi does not apply.  Short blocks write 13 bands,
+         * each with three window scalefactors, in band/window order.  start
+         * and stop blocks use the 21 long scalefactors like normal blocks. */
+        if (shine_l3_is_short(gi)) {
+          int w;
+          for (sfb = 0; sfb < 13; sfb++) {
+            unsigned slen = (sfb < 6) ? slen1 : slen2;
+            for (w = 0; w < 3; w++)
+              shine_putbits(&config->bs, config->scalefactor.s[gr][ch][sfb][w],
+                            slen);
+          }
+        } else {
+          for (sfb = 0; sfb < 6; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+          for (sfb = 6; sfb < 11; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+          for (sfb = 11; sfb < 16; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+          for (sfb = 16; sfb < 21; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+        }
+      } else {
+        if (gr == 0 || si.scfsi[ch][0] == 0)
+          for (sfb = 0; sfb < 6; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+        if (gr == 0 || si.scfsi[ch][1] == 0)
+          for (sfb = 6; sfb < 11; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+        if (gr == 0 || si.scfsi[ch][2] == 0)
+          for (sfb = 11; sfb < 16; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+        if (gr == 0 || si.scfsi[ch][3] == 0)
+          for (sfb = 16; sfb < 21; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+      }
 
       Huffmancodebits(config, ix, gi);
     }
@@ -124,13 +157,25 @@ static void encodeSideInfo(shine_global_config *config) {
         shine_putbits(&config->bs, gi->scalefac_compress, 4);
       else
         shine_putbits(&config->bs, gi->scalefac_compress, 9);
-      shine_putbits(&config->bs, 0, 1);
+      shine_putbits(&config->bs, gi->window_switching, 1);
 
-      for (region = 0; region < 3; region++)
-        shine_putbits(&config->bs, gi->table_select[region], 5);
+      if (gi->window_switching) {
+        /* Window-switched granule: block type, mixed flag, two table
+         * selects and the three subblock gains.  region0/region1 counts are
+         * implicit and not transmitted. */
+        shine_putbits(&config->bs, gi->block_type, 2);
+        shine_putbits(&config->bs, gi->mixed_block_flag, 1);
+        for (region = 0; region < 2; region++)
+          shine_putbits(&config->bs, gi->table_select[region], 5);
+        for (region = 0; region < 3; region++)
+          shine_putbits(&config->bs, gi->subblock_gain[region], 3);
+      } else {
+        for (region = 0; region < 3; region++)
+          shine_putbits(&config->bs, gi->table_select[region], 5);
 
-      shine_putbits(&config->bs, gi->region0_count, 4);
-      shine_putbits(&config->bs, gi->region1_count, 3);
+        shine_putbits(&config->bs, gi->region0_count, 4);
+        shine_putbits(&config->bs, gi->region1_count, 3);
+      }
 
       if (config->mpeg.version == MPEG_I)
         shine_putbits(&config->bs, gi->preflag, 1);
@@ -156,10 +201,19 @@ static void Huffmancodebits(shine_global_config *config, int *ix, gr_info *gi) {
   /* 1: Write the bigvalues */
   bigvalues = gi->big_values << 1;
 
-  scalefac_index = gi->region0_count + 1;
-  region1Start = scalefac[scalefac_index];
-  scalefac_index += gi->region1_count + 1;
-  region2Start = scalefac[scalefac_index];
+  if (gi->window_switching) {
+    /* Implicit partition for window-switched granules: region 0 is the first
+     * 36 lines, region 1 the remainder.  Two tables only. */
+    region1Start = 36;
+    if (region1Start > bigvalues)
+      region1Start = bigvalues;
+    region2Start = bigvalues;
+  } else {
+    scalefac_index = gi->region0_count + 1;
+    region1Start = scalefac[scalefac_index];
+    scalefac_index += gi->region1_count + 1;
+    region2Start = scalefac[scalefac_index];
+  }
 
   for (i = 0; i < bigvalues; i += 2) {
     /* get table pointer */

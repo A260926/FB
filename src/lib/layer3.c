@@ -138,6 +138,17 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
 
   memset((char *)&config->side_info, 0, sizeof(shine_side_info_t));
 
+  /* Window switching starts from the normal state on every channel. */
+  {
+    int i, g;
+    for (i = 0; i < MAX_CHANNELS; i++) {
+      config->last_block_type[i] = -1;
+      for (g = 0; g < MAX_GRANULES; g++)
+        config->block_type[i][g] = 0;
+    }
+    config->window_switching_active = 0;
+  }
+
   /* determine the mean bitrate for main data */
   if (config->mpeg.granules_per_frame == 2) /* MPEG 1 */
     config->sideinfo_len = 8 * ((config->wave.channels == 1) ? 4 + 17 : 4 + 32);
@@ -179,6 +190,7 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
 
 unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
                                    int *written) {
+  config->window_switching_active = 0;
   config->buffer[0] = data[0];
   if (config->wave.channels == 2)
     config->buffer[1] = data[1];
@@ -188,11 +200,130 @@ unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
 
 unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
                                                int16_t *data, int *written) {
+  config->window_switching_active = 0;
   config->buffer[0] = data;
   if (config->wave.channels == 2)
     config->buffer[1] = data + 1;
 
   return shine_encode_buffer_internal(config, written, config->wave.channels);
+}
+
+/*
+ * Validate a block-type request and stash the requested types in the config.
+ * Returns 0 on success, -1 if the request must be rejected.  The check is
+ * purely about the request and the configuration; it never touches PCM.
+ */
+static int shine_blocks_prepare(shine_global_config *config,
+                                const uint8_t *block_types,
+                                int block_type_count) {
+  int n, ch, gr;
+
+  if (config == NULL)
+    return -1;
+
+  /* Only MPEG-1 mono or plain stereo. */
+  if (config->mpeg.version != MPEG_I)
+    return -1;
+  if (config->wave.channels != 1 && config->wave.channels != 2)
+    return -1;
+  if (config->mpeg.mode != MONO && config->mpeg.mode != STEREO)
+    return -1;
+  if (config->mpeg.granules_per_frame != 2)
+    return -1;
+  if (config->mpeg.samplerate_index < 0 || config->mpeg.samplerate_index > 2)
+    return -1;
+
+  n = 2 * config->wave.channels;
+  if (block_types == NULL || block_type_count != n)
+    return -1;
+
+  /* Validate every transition before touching any PCM.  Each channel keeps
+   * independent state; the very first call starts from normal. */
+  for (ch = 0; ch < config->wave.channels; ch++) {
+    int prev = config->last_block_type[ch];
+    if (prev < 0)
+      prev = 0;
+    for (gr = 0; gr < 2; gr++) {
+      int idx = gr * config->wave.channels + ch;
+      int bt = block_types[idx];
+      int ok = 0;
+      if (bt < 0 || bt > 3)
+        return -1;
+      switch (prev) {
+      case 0: ok = (bt == 0 || bt == 1); break; /* normal -> normal/start */
+      case 1: ok = (bt == 2); break;            /* start  -> short */
+      case 2: ok = (bt == 2 || bt == 3); break; /* short  -> short/stop */
+      case 3: ok = (bt == 0 || bt == 1); break; /* stop   -> normal/start */
+      default: return -1;
+      }
+      if (!ok)
+        return -1;
+      prev = bt;
+    }
+  }
+
+  /* Everything is valid; commit the request. */
+  for (ch = 0; ch < config->wave.channels; ch++) {
+    int idx = 0;
+    for (gr = 0; gr < 2; gr++) {
+      idx = gr * config->wave.channels + ch;
+      config->block_type[ch][gr] = block_types[idx];
+    }
+    config->last_block_type[ch] = block_types[config->wave.channels + ch];
+  }
+  config->window_switching_active = 1;
+  return 0;
+}
+
+static unsigned char *shine_encode_blocks_common(shine_global_config *config,
+                                                 const uint8_t *block_types,
+                                                 int block_type_count,
+                                                 int *written, int stride,
+                                                 int interleaved,
+                                                 int16_t **planar,
+                                                 int16_t *raw) {
+  /* `written` must be a valid output pointer; there is no way to report the
+   * frame size otherwise, so a NULL request is rejected outright. */
+  if (written == NULL)
+    return NULL;
+
+  if (shine_blocks_prepare(config, block_types, block_type_count) != 0) {
+    *written = -1;
+    return NULL;
+  }
+
+  if (interleaved) {
+    config->buffer[0] = raw;
+    if (config->wave.channels == 2)
+      config->buffer[1] = raw + 1;
+  } else {
+    config->buffer[0] = planar[0];
+    if (config->wave.channels == 2)
+      config->buffer[1] = planar[1];
+  }
+
+  return shine_encode_buffer_internal(config, written, stride);
+}
+
+unsigned char *shine_encode_buffer_blocks(shine_global_config *config,
+                                          int16_t **data,
+                                          const uint8_t *block_types,
+                                          int block_type_count, int *written) {
+  return shine_encode_blocks_common(config, block_types, block_type_count,
+                                    written, 1, 0, data, NULL);
+}
+
+unsigned char *shine_encode_buffer_interleaved_blocks(
+    shine_global_config *config, int16_t *data, const uint8_t *block_types,
+    int block_type_count, int *written) {
+  int stride;
+  if (config == NULL) {
+    if (written) *written = -1;
+    return NULL;
+  }
+  stride = config->wave.channels;
+  return shine_encode_blocks_common(config, block_types, block_type_count,
+                                    written, stride, 1, NULL, data);
 }
 
 unsigned char *shine_flush(shine_global_config *config, int *written) {
