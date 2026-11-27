@@ -531,3 +531,8 @@ function computeMesh(array, voxelSideTextureIDs) {
 }
 
 module.exports = computeMesh
+
+// Exact-AO merge path: keeps the per-unit-face occlusion field and only merges
+// rectangles whose big triangles reproduce the piecewise-affine reference
+// field exactly.  See exact-mesh.js for details.
+computeMesh.exactAO = require("./exact-mesh")
