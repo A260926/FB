@@ -85,6 +85,8 @@ struct soxr {
   interleave_t interleave;
 
   void * * channel_ptrs;
+  void * * output_fn_ptrs;   /* Scratch for advancing split-channel output
+                                across iterations inside soxr_output(). */
   size_t clips;
   unsigned long seed;
   int flushing;
@@ -183,7 +185,7 @@ soxr_io_spec_t soxr_io_spec(
 {
   soxr_io_spec_t spec, * p = &spec;
   memset(p, 0, sizeof(*p));
-  if ((itype | otype) >= SOXR_SPLIT * 2)
+  if (!soxr_datatype_size(itype) || !soxr_datatype_size(otype))
     p->e = "invalid io datatype(s)";
   else {
     p->itype = itype;
@@ -191,6 +193,35 @@ soxr_io_spec_t soxr_io_spec(
     p->scale = 1;
   }
   return spec;
+}
+
+
+
+/* Magnitude, in internal floating-point units, of the integer/float
+ * datatype's nominal full scale (i.e. the magnitude of its most negative
+ * sample).  Returns 0 for an invalid datatype. */
+static double soxr_datatype_full_scale(soxr_datatype_t type)
+{
+  switch (type) {
+    case SOXR_FLOAT32_I: case SOXR_FLOAT32_S:
+    case SOXR_FLOAT64_I: case SOXR_FLOAT64_S:
+      return 1.;
+    case SOXR_INT32_I: case SOXR_INT32_S:
+      return 65536. * 32768.;       /* 2^31 */
+    case SOXR_INT16_I: case SOXR_INT16_S:
+      return 32768.;               /* 2^15 */
+    case SOXR_INT24_LE_I: case SOXR_INT24_BE_I:
+    case SOXR_INT24_LE_S: case SOXR_INT24_BE_S:
+      /* Packed 24-bit samples are handled in normalised [-1, 1] internal
+       * units (the /2^23 and *2^23 steps live in the I/O layer), so they
+       * share the float datatypes' unit full scale rather than working in
+       * LSB units, which would lose the low bits in the single-precision
+       * engine.  The user's io_spec.scale still acts as an audio gain on
+       * top of this, never as a byte/bit displacement. */
+      return 1.;
+    default:
+      return 0.;
+  }
 }
 
 
@@ -367,7 +398,6 @@ soxr_t soxr_create(
 {
   double io_ratio = output_rate!=0? input_rate!=0?
     input_rate / output_rate : -1 : input_rate!=0? -1 : 0;
-  static const float datatype_full_scale[] = {1, 1, 65536.*32768, 32768};
   soxr_t p = 0;
   soxr_error_t error = 0;
 
@@ -390,7 +420,8 @@ soxr_t soxr_create(
 #endif
 
   if (q_spec && q_spec->e)  error = q_spec->e;
-  else if (io_spec && (io_spec->itype | io_spec->otype) >= SOXR_SPLIT * 2)
+  else if (io_spec && (io_spec->e ||
+      !soxr_datatype_size(io_spec->itype) || !soxr_datatype_size(io_spec->otype)))
     error = "invalid io datatype(s)";
 
   if (!error && !(p = calloc(sizeof(*p), 1))) error = "malloc failed";
@@ -425,8 +456,8 @@ soxr_t soxr_create(
     runtime_flag("SOXR_STRICT_BUF", 1, 2, &p->runtime_spec.flags);
     runtime_flag("SOXR_NOSMALLINTOPT", 1, 3, &p->runtime_spec.flags);
 
-    p->io_spec.scale *= datatype_full_scale[p->io_spec.otype & 3] /
-                        datatype_full_scale[p->io_spec.itype & 3];
+    p->io_spec.scale *= soxr_datatype_full_scale(p->io_spec.otype) /
+                        soxr_datatype_full_scale(p->io_spec.itype);
 
     p->seed = (unsigned long)time(0) ^ (unsigned long)(size_t)p;
 
@@ -501,6 +532,7 @@ static void soxr_delete0(soxr_t p)
   }
   free(p->resamplers);
   free(p->channel_ptrs);
+  free(p->output_fn_ptrs);
   free(p->shared);
 
   memset(p, 0, sizeof(*p));
@@ -531,9 +563,10 @@ static soxr_error_t initialise(soxr_t p)
 
   resampler_sizes(&shared_size, &channel_size);
   p->channel_ptrs = calloc(sizeof(*p->channel_ptrs), p->num_channels);
+  p->output_fn_ptrs = calloc(sizeof(*p->output_fn_ptrs), p->num_channels);
   p->shared = calloc(shared_size, 1);
   p->resamplers = calloc(sizeof(*p->resamplers), p->num_channels);
-  if (!p->shared || !p->channel_ptrs || !p->resamplers)
+  if (!p->shared || !p->channel_ptrs || !p->resamplers || !p->output_fn_ptrs)
     return fatal_error(p, "malloc failed");
 
   for (i = 0; i < p->num_channels; ++i) {
@@ -610,6 +643,7 @@ soxr_error_t soxr_clear(soxr_t p) /* TODO: this, properly. */
     p->io_spec = tmp.io_spec;
     p->num_channels = tmp.num_channels;
     p->input_fn_state = tmp.input_fn_state;
+    p->max_ilen = tmp.max_ilen;
     memcpy(p->control_block, tmp.control_block, sizeof(p->control_block));
     p->deinterleave = tmp.deinterleave;
     p->interleave = tmp.interleave;
@@ -631,7 +665,7 @@ static void soxr_input_1ch(soxr_t p, unsigned i, soxr_cbuf_t src, size_t len)
 
 static size_t soxr_input(soxr_t p, void const * in, size_t len)
 {
-  bool separated = !!(p->io_spec.itype & SOXR_SPLIT);
+  bool separated = soxr_datatype_is_split(p->io_spec.itype);
   unsigned i;
   if (!p || p->error) return 0;
   if (!in && len) {p->error = "null input buffer pointer"; return 0;}
@@ -673,7 +707,7 @@ static size_t soxr_output_no_callback(soxr_t p, soxr_buf_t out, size_t len)
 {
   unsigned u;
   size_t done = 0;
-  bool separated = !!(p->io_spec.otype & SOXR_SPLIT);
+  bool separated = soxr_datatype_is_split(p->io_spec.otype);
 #if defined _OPENMP
   int i;
   if (!p->runtime_spec.num_threads && p->num_channels > 1)
@@ -698,22 +732,37 @@ static size_t soxr_output_no_callback(soxr_t p, soxr_buf_t out, size_t len)
 
 size_t soxr_output(soxr_t p, void * out, size_t len0)
 {
-  size_t odone, odone0 = 0, olen = len0, osize, idone;
+  size_t odone, odone0 = 0, olen = len0, idone;
   size_t ilen = min(p->max_ilen, (size_t)ceil((double)olen *p->io_ratio));
   void const * in = out; /* Set to !=0, so that caller may leave unset. */
   bool was_flushing;
+  bool separated = soxr_datatype_is_split(p->io_spec.otype);
+  unsigned i;
 
   if (!p || p->error) return 0;
   if (!out && len0) {p->error = "null output buffer pointer"; return 0;}
 
   do {
-    odone = soxr_output_no_callback(p, out, olen);
+    void * out_arg;
+    if (separated) {
+      /* `out' is an array of per-channel pointers; advance each channel's
+       * pointer by the frames already produced (N.B. not a byte offset into
+       * a single interleaved buffer, which would corrupt the array). */
+      size_t sample_size = soxr_datatype_size(p->io_spec.otype);
+      for (i = 0; i < p->num_channels; ++i)
+        p->output_fn_ptrs[i] = (char *)((soxr_bufs_t)out)[i] +
+            sample_size * odone0;
+      out_arg = p->output_fn_ptrs;
+    }
+    else
+      out_arg = (char *)out +
+          soxr_datatype_size(p->io_spec.otype) * p->num_channels * odone0;
+
+    odone = soxr_output_no_callback(p, out_arg, olen);
     odone0 += odone;
     if (odone0 == len0 || !p->input_fn || p->flushing)
       break;
 
-    osize = soxr_datatype_size(p->io_spec.otype) * p->num_channels;
-    out = (char *)out + osize * odone;
     olen -= odone;
     idone = p->input_fn(p->input_fn_state, &in, ilen);
     was_flushing = p->flushing;
@@ -774,7 +823,8 @@ soxr_error_t soxr_process(soxr_t p,
 
   if (!out && !in)
     idone = ilen;
-  else if (p->io_spec.itype & p->io_spec.otype & SOXR_SPLIT) { /* Both i & o */
+  else if (soxr_datatype_is_split(p->io_spec.itype) &&
+           soxr_datatype_is_split(p->io_spec.otype)) { /* Both i & o */
 #if defined _OPENMP
     int i;
     if (!p->runtime_spec.num_threads && p->num_channels > 1)

@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/1-delay-clear.dir/1-delay-clear.c.o" -o 1-delay-clear  ../src/libsoxr.a -lm

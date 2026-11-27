@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FSADE346F14D74U16880/attempts/20261127T164003886368Z/repo/.task-build/lib/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSADE346F14D74U16880/attempts/20261127T164003886368Z/repo/.task-build/lib/src/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSADE346F14D74U16880/attempts/20261127T164003886368Z/repo/.task-build/lib/tests/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FSADE346F14D74U16880/attempts/20261127T164003886368Z/repo/.task-build/lib/examples/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

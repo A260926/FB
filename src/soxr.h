@@ -214,12 +214,39 @@ typedef enum {          /* Datatypes supported for I/O to/from the resampler: */
   SOXR_FLOAT32_I = SOXR_FLOAT32, SOXR_FLOAT64_I, SOXR_INT32_I, SOXR_INT16_I,
 
   /* Use for split channels: */
-  SOXR_FLOAT32_S = SOXR_SPLIT  , SOXR_FLOAT64_S, SOXR_INT32_S, SOXR_INT16_S
+  SOXR_FLOAT32_S = SOXR_SPLIT  , SOXR_FLOAT64_S, SOXR_INT32_S, SOXR_INT16_S,
+
+  /* Packed, signed 24-bit PCM: exactly 3 bytes per sample, no alignment
+   * requirement; little- or big-endian, interleaved or split channels.
+   * N.B. the numeric values of the enumerators above are unchanged. */
+  SOXR_INT24_LE_I = 8, SOXR_INT24_BE_I,
+  SOXR_INT24_LE_S,    SOXR_INT24_BE_S
 
 } soxr_datatype_t;
 
-#define soxr_datatype_size(x)  /* Returns `sizeof' a soxr_datatype_t sample. */\
-  ((unsigned char *)"\4\10\4\2")[(x)&3]
+/* Returns `sizeof' a soxr_datatype_t sample: */
+static __inline unsigned soxr_datatype_size(soxr_datatype_t type)
+{
+  static unsigned char const size_of[12] = {4, 8, 4, 2, 4, 8, 4, 2, 3, 3, 3, 3};
+  unsigned i = (unsigned)type;
+  return i < sizeof(size_of)? size_of[i] : 0;
+}
+
+/* Non-zero if the datatype uses one buffer per channel, rather than a
+ * single channel-interleaved buffer.  N.B. this cannot be tested with
+ * `type & SOXR_SPLIT' for the packed 24-bit datatypes, whose enumerators
+ * do not have the SOXR_SPLIT bit set. */
+static __inline int soxr_datatype_is_split(soxr_datatype_t type)
+{
+  switch (type) {
+    case SOXR_FLOAT32_S:  case SOXR_FLOAT64_S:
+    case SOXR_INT32_S:    case SOXR_INT16_S:
+    case SOXR_INT24_LE_S: case SOXR_INT24_BE_S:
+      return 1;
+    default:
+      return 0;
+  }
+}
 
 
 
