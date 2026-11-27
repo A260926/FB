@@ -478,6 +478,325 @@ namespace Cubiquity
 		return nodeIndex;
 	}
 
+	////////////////////////////////////////////////////////////////////////////////
+	// Translated combine
+	////////////////////////////////////////////////////////////////////////////////
+
+	namespace
+	{
+		constexpr i64 kI32Min = INT64_C(-2147483648);
+		constexpr i64 kI32Max = INT64_C(2147483647);
+		constexpr u64 kDomainSize = UINT64_C(1) << 32;
+
+		// Workspace for a single Volume::combineTranslated() call. All state lives on the stack of
+		// that call, so when it returns the source volume can be destroyed even if it was distinct.
+		struct TranslatedCombineContext
+		{
+			const Volume& source;
+			NodeStore& targetStore;
+			const MaterialCombiner& combiner;
+			CombineStats* stats;
+
+			// Destination-space participation box, clipped to the i32 coordinate range. Expressed
+			// as unsigned (tree-order) coordinates: u = i32(v) + 2^31. All arithmetic around the
+			// sign boundary and extreme deltas is performed in i64, so nothing can wrap.
+			u64 dstULo[3];
+			u64 dstUHi[3];
+
+			// Translation kept as signed i64: unsigned source coord = unsigned dest coord - delta.
+			i64 delta[3];
+
+			bool sameStore;
+
+			// (source node, uniform destination material) -> target-store subtree built by the
+			// import fast path. Material nodes are universal and are never inserted. The memo
+			// ensures a source subgraph reachable through several parents is imported only once
+			// for a given destination material; the material must be part of the key because the
+			// same source node can sit under regions with different fills.
+			std::unordered_map<u64, u32> importMap;
+		};
+
+		u64 signedToUnsignedCoord(i64 signedCoord)
+		{
+			return static_cast<u64>(signedCoord - kI32Min);
+		}
+
+		// A position in the source tree: the node covering the cell starting at cellLo, of side
+		// length 2^height. A material node conceptually fills the whole cell at any height.
+		struct SourceCursor
+		{
+			u32 node;
+			int height;
+			u64 cellLo[3];
+		};
+
+		const Node& sourceNodeChildren(const TranslatedCombineContext& ctx, u32 node)
+		{
+			return ctx.sameStore ? ctx.targetStore[node] : ctx.source.mNodeStore[node];
+		}
+
+		// Moves the source cursor down so that its cell is as small as possible while still
+		// containing the source box [sLo, sHi) (signed tree-order coordinates, only the part
+		// intersecting the [0, 2^32) domain is relevant). When the box straddles a source split
+		// plane the cursor stays on the containing node; a later, finer destination level resumes.
+		void descendSourceCursor(const TranslatedCombineContext& ctx, SourceCursor& cursor,
+			const i64 sLo[3], const i64 sHi[3], int targetHeight)
+		{
+			while (!isMaterialNode(cursor.node) && cursor.height > targetHeight)
+			{
+				const int childHeight = cursor.height - 1;
+				const i64 childSize = INT64_C(1) << childHeight;
+
+				// Intersection of the requested interval with this cursor cell. An empty result
+				// means the destination child has no participating voxel (it will early-out at the
+				// top of its own recursive call), so the cursor is left where it is.
+				bool empty = false;
+				for (int axis = 0; axis < 3; axis++)
+				{
+					const i64 origin = static_cast<i64>(cursor.cellLo[axis]);
+					if (std::max(sLo[axis], origin) >=
+						std::min(sHi[axis], origin + (INT64_C(1) << cursor.height)))
+					{
+						empty = true;
+						break;
+					}
+				}
+				if (empty) { break; }
+
+				u32 childId = 0;
+				bool straddles = false;
+				for (int axis = 0; axis < 3; axis++)
+				{
+					const i64 origin = static_cast<i64>(cursor.cellLo[axis]);
+					const i64 inLo = std::max(sLo[axis], origin);
+					const i64 inHi = std::min(sHi[axis], origin + (INT64_C(1) << cursor.height));
+					const u64 lowBit = static_cast<u64>(inLo - origin) >> childHeight;
+					const u64 highBit = static_cast<u64>(inHi - 1 - origin) >> childHeight;
+					if (lowBit != highBit) { straddles = true; break; }
+					childId |= static_cast<u32>(lowBit) << axis;
+				}
+				if (straddles) { break; }
+
+				cursor.node = sourceNodeChildren(ctx, cursor.node)[childId];
+				for (int axis = 0; axis < 3; axis++)
+				{
+					cursor.cellLo[axis] += ((childId >> axis) & 0x1u) ? static_cast<u64>(childSize) : 0u;
+				}
+				cursor.height = childHeight;
+			}
+		}
+
+		// Resolves a single source voxel (h == 0 destination cell) to its material.
+		MaterialId resolveSourceMaterial(const TranslatedCombineContext& ctx, SourceCursor cursor,
+			const i64 sLo[3])
+		{
+			while (!isMaterialNode(cursor.node))
+			{
+				const int childHeight = cursor.height - 1;
+				u32 childId = 0;
+				for (int axis = 0; axis < 3; axis++)
+				{
+					const u64 bit = static_cast<u64>(sLo[axis] - static_cast<i64>(cursor.cellLo[axis])) >> childHeight;
+					childId |= static_cast<u32>(bit) << axis;
+				}
+				const u64 childSize = UINT64_C(1) << childHeight;
+				cursor.node = sourceNodeChildren(ctx, cursor.node)[childId];
+				for (int axis = 0; axis < 3; axis++)
+				{
+					cursor.cellLo[axis] += ((childId >> axis) & 0x1u) ? childSize : 0u;
+				}
+				cursor.height = childHeight;
+			}
+			return static_cast<MaterialId>(cursor.node);
+		}
+
+		// Builds a target-store subtree by applying combiner(dstMaterial, sourceMaterial) over a
+		// fully covered, aligned source subtree. The destination side is uniformly dstMaterial.
+		// Memoised on the source node so repeated source subgraphs are imported once, keeping the
+		// DAG sharing instead of expanding every occurrence.
+		u32 importWithConstantDestination(TranslatedCombineContext& ctx, u32 srcNode, MaterialId dstMaterial)
+		{
+			if (isMaterialNode(srcNode))
+			{
+				return ctx.combiner(dstMaterial, static_cast<MaterialId>(srcNode));
+			}
+
+			const u64 key = (static_cast<u64>(srcNode) << 8) | dstMaterial;
+			auto found = ctx.importMap.find(key);
+			if (found != ctx.importMap.end()) { return found->second; }
+
+			Node result;
+			const Node& childrenRef = sourceNodeChildren(ctx, srcNode);
+			const Node children = childrenRef; // Local copy: recursive appends can reallocate.
+			for (int childId = 0; childId < 8; childId++)
+			{
+				result[childId] = importWithConstantDestination(ctx, children[childId], dstMaterial);
+			}
+
+			u32 newIndex = ctx.targetStore.appendNode(result);
+			ctx.importMap.emplace(key, newIndex);
+			if (ctx.stats != nullptr) { ctx.stats->allocated_nodes++; }
+			return newIndex;
+		}
+
+		bool regionOutsideBox(const TranslatedCombineContext& ctx, const u64 rLo[3], const u64 rHi[3])
+		{
+			for (int axis = 0; axis < 3; axis++)
+			{
+				if (rHi[axis] <= ctx.dstULo[axis] || rLo[axis] >= ctx.dstUHi[axis]) { return true; }
+			}
+			return false;
+		}
+
+		bool regionInsideBox(const TranslatedCombineContext& ctx, const u64 rLo[3], const u64 rHi[3])
+		{
+			// Every cell of the region participates: the participation box fully contains it.
+			for (int axis = 0; axis < 3; axis++)
+			{
+				if (ctx.dstULo[axis] > rLo[axis] || rHi[axis] > ctx.dstUHi[axis]) { return false; }
+			}
+			return true;
+		}
+
+		// Core recursion over destination octree cells. The source cursor tracks the source cell
+		// covering the (translated) same region; it may sit at a coarser level when an arbitrary
+		// translation makes the boxes straddle source split planes.
+		u32 combineTranslatedRecurse(TranslatedCombineContext& ctx,
+			u32 dstNode, const SourceCursor& srcCursor, int height,
+			const u64 dLo[3], const u64 dHi[3])
+		{
+			if (ctx.stats != nullptr) { ctx.stats->region_visits++; }
+
+			// Outside the mapped source box: the destination subtree is left exactly as it was.
+			if (regionOutsideBox(ctx, dLo, dHi)) { return dstNode; }
+
+			// Single-voxel cell: both sides resolve to materials and the combiner always runs,
+			// including when the source material is zero.
+			if (height == 0)
+			{
+				i64 sLo[3];
+				for (int axis = 0; axis < 3; axis++) { sLo[axis] = static_cast<i64>(dLo[axis]) - ctx.delta[axis]; }
+				const MaterialId srcMaterial = resolveSourceMaterial(ctx, srcCursor, sLo);
+				return ctx.combiner(static_cast<MaterialId>(dstNode), srcMaterial);
+			}
+
+			const bool regionFullyCovered = regionInsideBox(ctx, dLo, dHi);
+			const bool dstIsMaterial = isMaterialNode(dstNode);
+			const bool srcIsMaterial = isMaterialNode(srcCursor.node);
+
+			// Uniform source over a fully covered region: every voxel below sees the same source
+			// material, so a uniform destination terminates immediately. This is what keeps large
+			// solid fills cheap instead of degenerating to per-voxel work.
+			if (regionFullyCovered && srcIsMaterial && dstIsMaterial)
+			{
+				return ctx.combiner(static_cast<MaterialId>(dstNode),
+					static_cast<MaterialId>(srcCursor.node));
+			}
+
+			// Uniform destination, fully covered, aligned structured source: import the source
+			// subtree in one memoised walk rather than rebuilding it voxel by voxel.
+			if (regionFullyCovered && dstIsMaterial && !srcIsMaterial && srcCursor.height == height)
+			{
+				return importWithConstantDestination(ctx, srcCursor.node,
+					static_cast<MaterialId>(dstNode));
+			}
+
+			// General case: split the destination cell and refine the source cursor for each
+			// child. Source children are never selected from the destination child id: under an
+			// arbitrary translation the source and destination split planes differ. Instead the
+			// cursor keeps its node and descendSourceCursor() walks to the correct child purely
+			// from the (inverse-mapped) source interval, stopping at a straddle.
+			const u64 childSize = dHi[0] - dLo[0]; // Power of two, halves at every level.
+			const Node dstChildrenCopy = dstIsMaterial ? make_node(dstNode) : ctx.targetStore[dstNode];
+			// Local copy only: appending below can reallocate the target store's node vector,
+			// and in the aliasing case the source cursor points into that same vector.
+
+			Node result;
+			bool changed = false;
+			for (u32 childId = 0; childId < 8; childId++)
+			{
+				u64 childLo[3], childHi[3];
+				i64 sLo[3], sHi[3];
+				for (int axis = 0; axis < 3; axis++)
+				{
+					const bool highSide = ((childId >> axis) & 0x1u) != 0;
+					childLo[axis] = dLo[axis] + (highSide ? childSize / 2 : 0);
+					childHi[axis] = childLo[axis] + childSize / 2;
+					sLo[axis] = static_cast<i64>(childLo[axis]) - ctx.delta[axis];
+					sHi[axis] = static_cast<i64>(childHi[axis]) - ctx.delta[axis];
+				}
+
+				const u32 dstChild = dstIsMaterial ? dstNode : dstChildrenCopy[childId];
+
+				// Keep the parent source node; descendSourceCursor() refines it according to the
+				// inverse-mapped interval so the cursor always remains geometrically consistent.
+				SourceCursor childSrc = srcCursor;
+				descendSourceCursor(ctx, childSrc, sLo, sHi, height - 1);
+
+				const u32 newChild = combineTranslatedRecurse(ctx, dstChild, childSrc,
+					height - 1, childLo, childHi);
+				if (newChild != dstChild) { changed = true; }
+				result[childId] = newChild;
+			}
+
+			if (!changed) { return dstNode; }
+
+			u32 newIndex = ctx.targetStore.appendNode(result);
+			if (ctx.stats != nullptr) { ctx.stats->allocated_nodes++; }
+			return newIndex;
+		}
+	}
+
+	void Volume::combineTranslated(const Volume& source,
+		const std::array<i64, 3>& lo, const std::array<i64, 3>& hi,
+		const std::array<i64, 3>& delta, const MaterialCombiner& combiner,
+		CombineStats* stats)
+	{
+		if (stats != nullptr)
+		{
+			stats->region_visits = 0;
+			stats->allocated_nodes = 0;
+		}
+
+		// Empty box (also covers lo == hi): nothing to do.
+		for (int axis = 0; axis < 3; axis++)
+		{
+			if (lo[axis] >= hi[axis]) { return; }
+		}
+
+		// Map the source box through the translation, then clip each axis to the i32 range.
+		// Everything stays in i64: inputs reach +/-2^31 and deltas reach +/-2^32.
+		i64 dstLo[3], dstHi[3];
+		for (int axis = 0; axis < 3; axis++)
+		{
+			const i64 mappedLo = lo[axis] + delta[axis];
+			const i64 mappedHi = hi[axis] + delta[axis]; // Half-open upper bound.
+
+			dstLo[axis] = std::max(mappedLo, kI32Min);
+			dstHi[axis] = std::min(mappedHi, kI32Max + 1);
+			if (dstLo[axis] >= dstHi[axis]) { return; } // Entirely clipped on this axis.
+		}
+
+		TranslatedCombineContext ctx{
+			source, mNodeStore, combiner, stats,
+			{ 0, 0, 0 }, { 0, 0, 0 },
+			{ delta[0], delta[1], delta[2] },
+			(&source == this),
+			{}
+		};
+		for (int axis = 0; axis < 3; axis++)
+		{
+			ctx.dstULo[axis] = signedToUnsignedCoord(dstLo[axis]);
+			ctx.dstUHi[axis] = signedToUnsignedCoord(dstHi[axis]);
+		}
+
+		SourceCursor rootCursor{ source.rootNodeIndex(), 32, { 0, 0, 0 } };
+		const u64 rootLo[3] = { 0, 0, 0 };
+		const u64 rootHi[3] = { kDomainSize, kDomainSize, kDomainSize };
+		const u32 newRoot = combineTranslatedRecurse(ctx, rootNodeIndex(), rootCursor, 32, rootLo, rootHi);
+		setRootNodeIndex(newRoot);
+	}
+
 	MaterialId Volume::voxel(i32 x, i32 y, i32 z) const
 	{
 		// TODO: Consider starting from split point instead of root

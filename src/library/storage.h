@@ -98,6 +98,10 @@ namespace Cubiquity
 			u32 merge(u32 index);
 			u32 merge_node(u32 nodeIndex, NodeVector& merged_node_vector);
 
+			// Appends a new unshared node and returns its index. Used by Volume::combineTranslated()
+			// to build modified subtrees without disturbing existing (potentially shared) nodes.
+			u32 appendNode(const Node& node) { return append(node); }
+
 			const void* rawBytesPtr() const { return mNodeVector.data(); }
 			u32 rawBytesCount() const { return mNodeVector.size() * sizeof(mNodeVector[0]); }
 
@@ -131,6 +135,22 @@ namespace Cubiquity
 	}
 
 	typedef std::function<MaterialId(MaterialId, MaterialId)> MaterialCombiner;
+
+	//! Statistics collected by Volume::combineTranslated().
+	/*!
+		Each call to combineTranslated() starts from a zero-initialised state and counts only the work
+		actually performed by that call:
+		  - region_visits is incremented once for every recursive region (tree node paired with a
+		    portion of the source box) which the algorithm enters, including the root region.
+		  - allocated_nodes counts the nodes which are newly appended to the target NodeStore, either
+		    while importing source subtrees from a (potentially different) store or while applying the
+		    material combiner to a region. Reused material nodes and shared subgraphs do not count.
+	*/
+	struct CombineStats
+	{
+		u64 region_visits = 0;
+		u64 allocated_nodes = 0;
+	};
 
 	class Volume
 	{
@@ -167,6 +187,27 @@ namespace Cubiquity
 
 		void combine(const Volume& rhsVolume, const MaterialCombiner& combiner);
 		u32 combine(const Volume& rhsVolume, u32 rhsNodeIndex, u32 nodeIndex, const MaterialCombiner& combiner);
+
+		// Combines a translated region of a source volume into this volume.
+		//
+		// [lo, hi) is a half-open box of source voxel coordinates (each component satisfies
+		// -2^31 <= lo <= hi <= 2^31). Each source voxel q inside the box is conceptually moved to
+		// p = q + delta, and only destination positions p which remain inside the i32 coordinate
+		// range participate; the rest is clipped (never wrapped). Every participating destination
+		// voxel becomes combiner(old_destination_value, old_source_value) - note that the combiner
+		// is also invoked when the source material is zero. Voxels outside the mapped box are left
+		// unchanged. An empty box performs no modification.
+		//
+		// The source may be this same volume and the source and destination regions may overlap:
+		// all source reads observe the state at the start of the call, so pasting a region over
+		// itself never smears. The implementation walks the compressed DAGs, terminates early on
+		// uniform subtrees, reuses repeated source subgraphs when importing them, and writes the
+		// result directly into the NodeStore and current root (no query overlay). Optional stats
+		// describe the work actually done by this single call.
+		void combineTranslated(const Volume& source,
+			const std::array<i64, 3>& lo, const std::array<i64, 3>& hi,
+			const std::array<i64, 3>& delta, const MaterialCombiner& combiner,
+			CombineStats* stats = nullptr);
 
 		template <typename ArrayType>
 		MaterialId voxel(const ArrayType& position) const;
