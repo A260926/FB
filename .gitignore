@@ -1,2 +1,4 @@
 *.exe
 *.xcodeproj
+.build/
+*.dSYM/
