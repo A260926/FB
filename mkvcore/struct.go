@@ -87,4 +87,53 @@ type TrackEntry struct {
 	CodecID            string
 	CodecDecodeAll     uint8
 	SeekPreRoll        uint64
+	// CodecPrivate is the raw CodecPrivate element as stored in the container.
+	// When content decoding is enabled (see WithContentDecoding), the
+	// TrackEntry returned by BlockReadCloserWithTrackEntry.TrackEntry carries
+	// the restored CodecPrivate instead, while ContentEncodings keeps the
+	// original source declaration. The restored data must not be passed
+	// through the declared encoding chain another time.
+	CodecPrivate []byte `ebml:"CodecPrivate,omitempty"`
+	// ContentEncodings is the source ContentEncodings declaration of the
+	// track. It is kept unchanged even when content decoding is enabled.
+	ContentEncodings *ContentEncodings `ebml:"ContentEncodings,omitempty"`
+}
+
+// ContentEncodings represents the Matroska ContentEncodings element.
+type ContentEncodings struct {
+	ContentEncoding []ContentEncoding `ebml:"ContentEncoding"`
+}
+
+// ContentEncoding represents one Matroska ContentEncoding element.
+// Pointer scalar fields distinguish an absent element (nil) from an explicit
+// zero value, matching the Matroska defaults: ContentEncodingOrder defaults
+// to 0, ContentEncodingScope to 1, and ContentEncodingType to 0.
+type ContentEncoding struct {
+	// Order is ContentEncodingOrder. nil means the default 0.
+	Order *uint64 `ebml:"ContentEncodingOrder"`
+	// Scope is ContentEncodingScope. nil means the default 1 (frame only).
+	Scope *uint64 `ebml:"ContentEncodingScope"`
+	// Type is ContentEncodingType. nil means the default 0 (compression).
+	Type *uint64 `ebml:"ContentEncodingType"`
+	// Compression is the ContentCompression child.
+	Compression *ContentCompression `ebml:"ContentCompression,omitempty"`
+	// Encryption is the ContentEncryption child, which is not supported.
+	Encryption *ContentEncryption `ebml:"ContentEncryption,omitempty"`
+}
+
+// ContentCompression represents the Matroska ContentCompression element.
+type ContentCompression struct {
+	// Algo is ContentCompAlgo. nil means the default 0 (zlib).
+	// 3 means header stripping; 1 (bzlib) and 2 (lzo) are not supported.
+	Algo *uint64 `ebml:"ContentCompAlgo"`
+	// Settings is ContentCompSettings, the common prefix prepended back by
+	// the header-stripping (algo 3) decoding step.
+	Settings []byte `ebml:"ContentCompSettings,omitempty"`
+}
+
+// ContentEncryption represents the Matroska ContentEncryption element.
+// Content encryption is never decoded by this package; an encoding carrying
+// it is rejected when content decoding is enabled.
+type ContentEncryption struct {
+	Algo *uint64 `ebml:"ContentEncAlgo"`
 }

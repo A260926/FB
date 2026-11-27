@@ -218,12 +218,50 @@ func (o BlockReaderOptionFn) ApplyToBlockReaderOptions(opts *BlockReaderOptions)
 type BlockReaderOptions struct {
 	BlockReadWriterOptions
 	unmarshalOpts []ebml.UnmarshalOption
+	// contentDecoding enables transparent Matroska ContentEncoding decoding.
+	contentDecoding bool
+	// maxFrameBytes limits the decoded size of one frame.
+	maxFrameBytes uint64
+	// maxPrivateBytes limits the decoded size of one CodecPrivate.
+	maxPrivateBytes uint64
 }
 
 // WithUnmarshalOptions passes ebml.UnmarshalOption to ebml.Unmarshal.
 func WithUnmarshalOptions(opts ...ebml.UnmarshalOption) BlockReaderOptionFn {
 	return func(o *BlockReaderOptions) error {
 		o.unmarshalOpts = opts
+		return nil
+	}
+}
+
+// WithContentDecoding enables transparent decoding of Matroska
+// ContentEncodings while reading. It is off by default; without it reads
+// return the exact container bytes and behave exactly as before.
+//
+// Only ContentEncodingType 0 (compression) is supported: ContentCompAlgo 3
+// prepends ContentCompSettings back to each frame, and ContentCompAlgo 0
+// inflates each frame with zlib (Go standard library). Encodings are applied
+// in descending ContentEncodingOrder, independently per laced frame; frames
+// are never prefixed as a whole Block and zlib streams are never concatenated.
+//
+// maxFrameBytes and maxPrivateBytes bound, respectively, the decoded size of
+// one frame and of one CodecPrivate after every decoding step (header
+// stripping included); both must be strictly positive. Track declarations
+// and CodecPrivate are validated when the reader is constructed and any error
+// is returned before background reading starts.
+//
+// When enabled, TrackEntry().CodecPrivate returns the restored codec
+// configuration while TrackEntry().ContentEncodings keeps the original source
+// declaration. The restored CodecPrivate and decoded frames must not be passed
+// through the declared encoding chain another time.
+func WithContentDecoding(maxFrameBytes, maxPrivateBytes uint64) BlockReaderOptionFn {
+	return func(o *BlockReaderOptions) error {
+		if maxFrameBytes == 0 || maxPrivateBytes == 0 {
+			return ErrInvalidContentDecodingLimit
+		}
+		o.contentDecoding = true
+		o.maxFrameBytes = maxFrameBytes
+		o.maxPrivateBytes = maxPrivateBytes
 		return nil
 	}
 }

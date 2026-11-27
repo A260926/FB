@@ -263,6 +263,13 @@ func (vd *valueDecoder) readElement(r0 io.Reader, n int64, vo reflect.Value, dep
 						vnext.Set(vr)
 					case isConvertible(vr.Type(), vnext.Type()):
 						vnext.Set(vr.Convert(vnext.Type()))
+					case vnext.Kind() == reflect.Ptr && isConvertible(vr.Type(), vnext.Type().Elem()):
+						// Optional scalar field: a nil pointer keeps marking the
+						// element as absent while a present element is stored as a
+						// freshly allocated value, including an explicit zero.
+						p := reflect.New(vnext.Type().Elem())
+						p.Elem().Set(vr.Convert(vnext.Type().Elem()))
+						vnext.Set(p)
 					case vnext.Kind() == reflect.Slice:
 						t := vnext.Type().Elem()
 						switch {

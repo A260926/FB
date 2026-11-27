@@ -16,6 +16,7 @@ package mkvcore
 
 import (
 	"io"
+	"sync"
 
 	"github.com/at-wat/ebml-go"
 )
@@ -24,11 +25,24 @@ type blockReader struct {
 	f          chan *frame
 	closed     chan struct{}
 	trackEntry TrackEntry
+	decoder    *contentDecoder // nil keeps the raw container-byte path
+
+	termMu  sync.Mutex
+	termErr error
 }
 
 func (r *blockReader) Read() (b []byte, keyframe bool, timestamp int64, err error) {
 	frame, ok := <-r.f
 	if !ok {
+		r.termMu.Lock()
+		// The terminal error is delivered exactly once; every later Read
+		// returns io.EOF.
+		err = r.termErr
+		r.termErr = nil
+		r.termMu.Unlock()
+		if err != nil {
+			return nil, false, 0, err
+		}
 		return nil, false, 0, io.EOF
 	}
 	return frame.b, frame.keyframe, frame.timestamp, nil
@@ -39,8 +53,20 @@ func (r *blockReader) Close() error {
 	return nil
 }
 
+// TrackEntry returns an independent copy of the track metadata. When content
+// decoding is enabled, CodecPrivate is the restored codec configuration while
+// ContentEncodings keeps the original source declaration. Mutating returned
+// slices never affects later Read or later TrackEntry calls.
 func (r *blockReader) TrackEntry() TrackEntry {
-	return r.trackEntry
+	return cloneTrackEntry(r.trackEntry)
+}
+
+func (r *blockReader) setTermErr(err error) {
+	r.termMu.Lock()
+	if r.termErr == nil {
+		r.termErr = err
+	}
+	r.termMu.Unlock()
 }
 
 // NewSimpleBlockReader creates BlockReadCloserWithTrackEntry for each track specified as tracks argument.
@@ -49,17 +75,36 @@ func (r *blockReader) TrackEntry() TrackEntry {
 //
 // Note that, keyframe flag from BlockGroup.Block may be incorrect.
 // If you have knowledge about this, please consider fixing it.
+//
+// By default the readers return the exact bytes stored in the container.
+// WithContentDecoding opts in to transparent Matroska ContentEncoding
+// decoding instead.
 func NewSimpleBlockReader(r io.Reader, opts ...BlockReaderOption) ([]BlockReadCloserWithTrackEntry, error) {
-	options := &BlockReaderOptions{
-		BlockReadWriterOptions: BlockReadWriterOptions{
-			onFatal: func(err error) {
-				panic(err)
-			},
-		},
-	}
+	options := &BlockReaderOptions{}
 	for _, o := range opts {
 		if err := o.ApplyToBlockReaderOptions(options); err != nil {
 			return nil, err
+		}
+	}
+	// fatalCh carries structural unmarshal failures to the processing
+	// goroutine when content decoding is enabled, so they terminate the
+	// readers with an error instead of killing the process with a panic.
+	fatalCh := make(chan error, 1)
+	userFatal := options.onFatal
+	switch {
+	case options.contentDecoding:
+		options.onFatal = func(err error) {
+			select {
+			case fatalCh <- err:
+			default:
+			}
+			if userFatal != nil {
+				userFatal(err)
+			}
+		}
+	case options.onFatal == nil:
+		options.onFatal = func(err error) {
+			panic(err)
 		}
 	}
 
@@ -78,15 +123,36 @@ func NewSimpleBlockReader(r io.Reader, opts ...BlockReaderOption) ([]BlockReadCl
 
 	var ws []BlockReadCloserWithTrackEntry
 	br := make(map[uint64]*blockReader)
+	decoders := make(map[uint64]*contentDecoder)
+
+	// Validate every track declaration and CodecPrivate up front, before any
+	// background reading starts. Tracks without ContentEncoding get no
+	// decoder and keep the raw read path.
+	if options.contentDecoding {
+		for _, t := range header.Segment.Tracks.TrackEntry {
+			d, err := newContentDecoder(t, options.maxFrameBytes, options.maxPrivateBytes)
+			if err != nil {
+				return nil, err
+			}
+			decoders[t.TrackNumber] = d
+		}
+	}
 
 	for _, t := range header.Segment.Tracks.TrackEntry {
-		r := &blockReader{
+		public := t
+		if d := decoders[t.TrackNumber]; d != nil {
+			// A missing CodecPrivate stays absent; prefixes never synthesize
+			// one. restoredPrivate is nil when the source had none.
+			public.CodecPrivate = d.restoredPrivate
+		}
+		rdr := &blockReader{
 			f:          make(chan *frame),
 			closed:     make(chan struct{}),
-			trackEntry: t,
+			trackEntry: public,
+			decoder:    decoders[t.TrackNumber],
 		}
-		ws = append(ws, r)
-		br[t.TrackNumber] = r
+		ws = append(ws, rdr)
+		br[t.TrackNumber] = rdr
 	}
 
 	type blockGroup struct {
@@ -117,10 +183,14 @@ func NewSimpleBlockReader(r io.Reader, opts ...BlockReaderOption) ([]BlockReadCl
 		// Timecode is the first child of its Cluster, so it arrives before the
 		// blocks it applies to.
 		var timecode uint64
+		var fatal error
 	L_READ:
 		for {
 			var b *ebml.Block
 			select {
+			case err := <-fatalCh:
+				fatal = err
+				break L_READ
 			case tc, ok := <-timecodeCh:
 				if !ok {
 					timecodeCh = nil
@@ -153,22 +223,81 @@ func NewSimpleBlockReader(r io.Reader, opts ...BlockReaderOption) ([]BlockReadCl
 				//        ReferencePriority == 0 means that the frame is not referenced.
 				b.Keyframe = bg.ReferencePriority != 0
 			}
-			r := br[b.TrackNumber]
+			rdr := br[b.TrackNumber]
+			if rdr == nil {
+				continue
+			}
+
+			// First split the block into its laced frames, then apply the
+			// track's own encoding chain to each frame separately. The whole
+			// block is decoded before any frame is delivered so a failure can
+			// never expose half of a laced group.
+			frames := make([]*frame, 0, len(b.Data))
 			for l := range b.Data {
-				frame := &frame{
+				payload := b.Data[l]
+				if rdr.decoder != nil {
+					decoded, err := rdr.decoder.decodeFrame(payload)
+					if err != nil {
+						fatal = err
+						break L_READ
+					}
+					payload = decoded
+				}
+				frames = append(frames, &frame{
 					trackNumber: b.TrackNumber,
 					keyframe:    b.Keyframe,
 					timestamp:   int64(timecode) + int64(b.Timecode),
-					b:           b.Data[l],
-				}
+					b:           payload,
+				})
+			}
+			for _, f := range frames {
 				select {
-				case r.f <- frame:
-				case <-r.closed:
+				case rdr.f <- f:
+				case <-rdr.closed:
 				}
 			}
 		}
-		for k := range br {
-			close(br[k].f)
+
+		// A structural failure both buffers an error in fatalCh and closes the
+		// element channels; the select above may have exited via the closures
+		// without consuming the buffered error. Pick it up here so a parse
+		// failure terminates readers with an error rather than plain EOF.
+		if fatal == nil {
+			select {
+			case fatal = <-fatalCh:
+			default:
+			}
+		}
+
+		if fatal != nil {
+			// Every still-open reader gets the same terminal error; closing
+			// the frame channels makes the next Read return it, and reads
+			// after that return io.EOF. Already-closed readers must not block
+			// this shutdown, and closing a channel never blocks.
+			for _, rdr := range br {
+				rdr.setTermErr(fatal)
+			}
+			// Drain elements the unmarshal goroutine may still send so it can
+			// reach its deferred channel close instead of blocking forever.
+			for blockCh != nil || blockGroupCh != nil || timecodeCh != nil {
+				select {
+				case _, ok := <-timecodeCh:
+					if !ok {
+						timecodeCh = nil
+					}
+				case _, ok := <-blockCh:
+					if !ok {
+						blockCh = nil
+					}
+				case _, ok := <-blockGroupCh:
+					if !ok {
+						blockGroupCh = nil
+					}
+				}
+			}
+		}
+		for _, rdr := range br {
+			close(rdr.f)
 		}
 	}()
 	go func() {
