@@ -26,6 +26,7 @@
 #define SIMDSHADERINC__H
 
 #include "simd_definitions.h"
+#include "simd_masked.h"
 #include "simd_functions.h"
 #include "simd_operators.h"
 #include "simd_swizzle.h"

@@ -385,151 +385,151 @@ inline vec3 vec3::zzz() const { return { z, z, z }; }
 inline vec4 vec3::zzzx() const { return { z, z, z, x }; }
 inline vec4 vec3::zzzy() const { return { z, z, z, y }; }
 inline vec4 vec3::zzzz() const { return { z, z, z, z }; }
-inline void vec3::bg(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; g = _val1; }
-inline void vec3::bg(const vec2& _val) { b = _val.x; g = _val.y; }
-inline void vec3::bg(const simdfloat& _val) { b = _val; g = _val; }
-inline void vec3::bgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; g = _val1; r = _val2; }
-inline void vec3::bgr(const vec3& _val) { b = _val.x; g = _val.y; r = _val.z; }
-inline void vec3::bgr(const simdfloat& _val) { b = _val; g = _val; r = _val; }
-inline void vec3::br(const simdfloat& _val0, const simdfloat& _val1) { b = _val0; r = _val1; }
-inline void vec3::br(const vec2& _val) { b = _val.x; r = _val.y; }
-inline void vec3::br(const simdfloat& _val) { b = _val; r = _val; }
-inline void vec3::brg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { b = _val0; r = _val1; g = _val2; }
-inline void vec3::brg(const vec3& _val) { b = _val.x; r = _val.y; g = _val.z; }
-inline void vec3::brg(const simdfloat& _val) { b = _val; r = _val; g = _val; }
-inline void vec3::gb(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; b = _val1; }
-inline void vec3::gb(const vec2& _val) { g = _val.x; b = _val.y; }
-inline void vec3::gb(const simdfloat& _val) { g = _val; b = _val; }
-inline void vec3::gbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; b = _val1; r = _val2; }
-inline void vec3::gbr(const vec3& _val) { g = _val.x; b = _val.y; r = _val.z; }
-inline void vec3::gbr(const simdfloat& _val) { g = _val; b = _val; r = _val; }
-inline void vec3::gr(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; r = _val1; }
-inline void vec3::gr(const vec2& _val) { g = _val.x; r = _val.y; }
-inline void vec3::gr(const simdfloat& _val) { g = _val; r = _val; }
-inline void vec3::grb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { g = _val0; r = _val1; b = _val2; }
-inline void vec3::grb(const vec3& _val) { g = _val.x; r = _val.y; b = _val.z; }
-inline void vec3::grb(const simdfloat& _val) { g = _val; r = _val; b = _val; }
-inline void vec3::rb(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; b = _val1; }
-inline void vec3::rb(const vec2& _val) { r = _val.x; b = _val.y; }
-inline void vec3::rb(const simdfloat& _val) { r = _val; b = _val; }
-inline void vec3::rbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; b = _val1; g = _val2; }
-inline void vec3::rbg(const vec3& _val) { r = _val.x; b = _val.y; g = _val.z; }
-inline void vec3::rbg(const simdfloat& _val) { r = _val; b = _val; g = _val; }
-inline void vec3::rg(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; g = _val1; }
-inline void vec3::rg(const vec2& _val) { r = _val.x; g = _val.y; }
-inline void vec3::rg(const simdfloat& _val) { r = _val; g = _val; }
-inline void vec3::rgb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { r = _val0; g = _val1; b = _val2; }
-inline void vec3::rgb(const vec3& _val) { r = _val.x; g = _val.y; b = _val.z; }
-inline void vec3::rgb(const simdfloat& _val) { r = _val; g = _val; b = _val; }
-inline void vec3::st(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; t = _val1; }
-inline void vec3::st(const vec2& _val) { s = _val.s; t = _val.t; }
-inline void vec3::st(const simdfloat& _val) { s = _val; t = _val; }
-inline void vec3::stp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; t = _val1; p = _val2; }
-inline void vec3::stp(const vec3& _val) { s = _val.s; t = _val.t; p = _val.p; }
-inline void vec3::stp(const simdfloat& _val) { s = _val; t = _val; p = _val; }
-inline void vec3::sp(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; p = _val1; }
-inline void vec3::sp(const vec2& _val) { s = _val.s; p = _val.t; }
-inline void vec3::sp(const simdfloat& _val) { s = _val; p = _val; }
-inline void vec3::spt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { s = _val0; p = _val1; t = _val2; }
-inline void vec3::spt(const vec3& _val) { s = _val.s; p = _val.t; t = _val.p; }
-inline void vec3::spt(const simdfloat& _val) { s = _val; p = _val; t = _val; }
-inline void vec3::ts(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; s = _val1; }
-inline void vec3::ts(const vec2& _val) { t = _val.s; s = _val.t; }
-inline void vec3::ts(const simdfloat& _val) { t = _val; s = _val; }
-inline void vec3::tsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; s = _val1; p = _val2; }
-inline void vec3::tsp(const vec3& _val) { t = _val.s; s = _val.t; p = _val.p; }
-inline void vec3::tsp(const simdfloat& _val) { t = _val; s = _val; p = _val; }
-inline void vec3::tp(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; p = _val1; }
-inline void vec3::tp(const vec2& _val) { t = _val.s; p = _val.t; }
-inline void vec3::tp(const simdfloat& _val) { t = _val; p = _val; }
-inline void vec3::tps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { t = _val0; p = _val1; s = _val2; }
-inline void vec3::tps(const vec3& _val) { t = _val.s; p = _val.t; s = _val.p; }
-inline void vec3::tps(const simdfloat& _val) { t = _val; p = _val; s = _val; }
-inline void vec3::ps(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; s = _val1; }
-inline void vec3::ps(const vec2& _val) { p = _val.s; s = _val.t; }
-inline void vec3::ps(const simdfloat& _val) { p = _val; s = _val; }
-inline void vec3::pst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; s = _val1; t = _val2; }
-inline void vec3::pst(const vec3& _val) { p = _val.s; s = _val.t; t = _val.p; }
-inline void vec3::pst(const simdfloat& _val) { p = _val; s = _val; t = _val; }
-inline void vec3::pt(const simdfloat& _val0, const simdfloat& _val1) { p = _val0; t = _val1; }
-inline void vec3::pt(const vec2& _val) { p = _val.s; t = _val.t; }
-inline void vec3::pt(const simdfloat& _val) { p = _val; t = _val; }
-inline void vec3::pts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { p = _val0; t = _val1; s = _val2; }
-inline void vec3::pts(const vec3& _val) { p = _val.s; t = _val.t; s = _val.p; }
-inline void vec3::pts(const simdfloat& _val) { p = _val; t = _val; s = _val; }
+inline void vec3::bg(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; b = s0_; g = s1_; }
+inline void vec3::bg(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; b = s0_; g = s1_; }
+inline void vec3::bg(const simdfloat& _val) {  const simdfloat s0_ = _val; b = s0_; g = s0_; }
+inline void vec3::bgr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; b = s0_; g = s1_; r = s2_; }
+inline void vec3::bgr(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; b = s0_; g = s1_; r = s2_; }
+inline void vec3::bgr(const simdfloat& _val) {  const simdfloat s0_ = _val; b = s0_; g = s0_; r = s0_; }
+inline void vec3::br(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; b = s0_; r = s1_; }
+inline void vec3::br(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; b = s0_; r = s1_; }
+inline void vec3::br(const simdfloat& _val) {  const simdfloat s0_ = _val; b = s0_; r = s0_; }
+inline void vec3::brg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; b = s0_; r = s1_; g = s2_; }
+inline void vec3::brg(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; b = s0_; r = s1_; g = s2_; }
+inline void vec3::brg(const simdfloat& _val) {  const simdfloat s0_ = _val; b = s0_; r = s0_; g = s0_; }
+inline void vec3::gb(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; g = s0_; b = s1_; }
+inline void vec3::gb(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; g = s0_; b = s1_; }
+inline void vec3::gb(const simdfloat& _val) {  const simdfloat s0_ = _val; g = s0_; b = s0_; }
+inline void vec3::gbr(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; g = s0_; b = s1_; r = s2_; }
+inline void vec3::gbr(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; g = s0_; b = s1_; r = s2_; }
+inline void vec3::gbr(const simdfloat& _val) {  const simdfloat s0_ = _val; g = s0_; b = s0_; r = s0_; }
+inline void vec3::gr(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; g = s0_; r = s1_; }
+inline void vec3::gr(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; g = s0_; r = s1_; }
+inline void vec3::gr(const simdfloat& _val) {  const simdfloat s0_ = _val; g = s0_; r = s0_; }
+inline void vec3::grb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; g = s0_; r = s1_; b = s2_; }
+inline void vec3::grb(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; g = s0_; r = s1_; b = s2_; }
+inline void vec3::grb(const simdfloat& _val) {  const simdfloat s0_ = _val; g = s0_; r = s0_; b = s0_; }
+inline void vec3::rb(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; r = s0_; b = s1_; }
+inline void vec3::rb(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; r = s0_; b = s1_; }
+inline void vec3::rb(const simdfloat& _val) {  const simdfloat s0_ = _val; r = s0_; b = s0_; }
+inline void vec3::rbg(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; r = s0_; b = s1_; g = s2_; }
+inline void vec3::rbg(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; r = s0_; b = s1_; g = s2_; }
+inline void vec3::rbg(const simdfloat& _val) {  const simdfloat s0_ = _val; r = s0_; b = s0_; g = s0_; }
+inline void vec3::rg(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; r = s0_; g = s1_; }
+inline void vec3::rg(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; r = s0_; g = s1_; }
+inline void vec3::rg(const simdfloat& _val) {  const simdfloat s0_ = _val; r = s0_; g = s0_; }
+inline void vec3::rgb(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; r = s0_; g = s1_; b = s2_; }
+inline void vec3::rgb(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; r = s0_; g = s1_; b = s2_; }
+inline void vec3::rgb(const simdfloat& _val) {  const simdfloat s0_ = _val; r = s0_; g = s0_; b = s0_; }
+inline void vec3::st(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; s = s0_; t = s1_; }
+inline void vec3::st(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; s = s0_; t = s1_; }
+inline void vec3::st(const simdfloat& _val) {  const simdfloat s0_ = _val; s = s0_; t = s0_; }
+inline void vec3::stp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; s = s0_; t = s1_; p = s2_; }
+inline void vec3::stp(const vec3& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; const simdfloat s2_ = _val.p; s = s0_; t = s1_; p = s2_; }
+inline void vec3::stp(const simdfloat& _val) {  const simdfloat s0_ = _val; s = s0_; t = s0_; p = s0_; }
+inline void vec3::sp(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; s = s0_; p = s1_; }
+inline void vec3::sp(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; s = s0_; p = s1_; }
+inline void vec3::sp(const simdfloat& _val) {  const simdfloat s0_ = _val; s = s0_; p = s0_; }
+inline void vec3::spt(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; s = s0_; p = s1_; t = s2_; }
+inline void vec3::spt(const vec3& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; const simdfloat s2_ = _val.p; s = s0_; p = s1_; t = s2_; }
+inline void vec3::spt(const simdfloat& _val) {  const simdfloat s0_ = _val; s = s0_; p = s0_; t = s0_; }
+inline void vec3::ts(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; t = s0_; s = s1_; }
+inline void vec3::ts(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; t = s0_; s = s1_; }
+inline void vec3::ts(const simdfloat& _val) {  const simdfloat s0_ = _val; t = s0_; s = s0_; }
+inline void vec3::tsp(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; t = s0_; s = s1_; p = s2_; }
+inline void vec3::tsp(const vec3& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; const simdfloat s2_ = _val.p; t = s0_; s = s1_; p = s2_; }
+inline void vec3::tsp(const simdfloat& _val) {  const simdfloat s0_ = _val; t = s0_; s = s0_; p = s0_; }
+inline void vec3::tp(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; t = s0_; p = s1_; }
+inline void vec3::tp(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; t = s0_; p = s1_; }
+inline void vec3::tp(const simdfloat& _val) {  const simdfloat s0_ = _val; t = s0_; p = s0_; }
+inline void vec3::tps(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; t = s0_; p = s1_; s = s2_; }
+inline void vec3::tps(const vec3& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; const simdfloat s2_ = _val.p; t = s0_; p = s1_; s = s2_; }
+inline void vec3::tps(const simdfloat& _val) {  const simdfloat s0_ = _val; t = s0_; p = s0_; s = s0_; }
+inline void vec3::ps(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; p = s0_; s = s1_; }
+inline void vec3::ps(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; p = s0_; s = s1_; }
+inline void vec3::ps(const simdfloat& _val) {  const simdfloat s0_ = _val; p = s0_; s = s0_; }
+inline void vec3::pst(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; p = s0_; s = s1_; t = s2_; }
+inline void vec3::pst(const vec3& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; const simdfloat s2_ = _val.p; p = s0_; s = s1_; t = s2_; }
+inline void vec3::pst(const simdfloat& _val) {  const simdfloat s0_ = _val; p = s0_; s = s0_; t = s0_; }
+inline void vec3::pt(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; p = s0_; t = s1_; }
+inline void vec3::pt(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; p = s0_; t = s1_; }
+inline void vec3::pt(const simdfloat& _val) {  const simdfloat s0_ = _val; p = s0_; t = s0_; }
+inline void vec3::pts(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; p = s0_; t = s1_; s = s2_; }
+inline void vec3::pts(const vec3& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; const simdfloat s2_ = _val.p; p = s0_; t = s1_; s = s2_; }
+inline void vec3::pts(const simdfloat& _val) {  const simdfloat s0_ = _val; p = s0_; t = s0_; s = s0_; }
 
-inline void vec3::xy(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; y = _val1; }
-inline void vec3::xy(const vec2& _val) { x = _val.x; y = _val.y; }
-inline void vec3::xy(const simdfloat& _val) { x = _val; y = _val; }
-inline void vec3::xyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; y = _val1; z = _val2; }
-inline void vec3::xyz(const vec3& _val) { x = _val.x; y = _val.y; z = _val.z; }
-inline void vec3::xyz(const simdfloat& _val) { x = _val; y = _val; z = _val; }
-inline void vec3::xz(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; z = _val1; }
-inline void vec3::xz(const vec2& _val) { x = _val.x; z = _val.y; }
-inline void vec3::xz(const simdfloat& _val) { x = _val; z = _val; }
-inline void vec3::xzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { x = _val0; z = _val1; y = _val2; }
-inline void vec3::xzy(const vec3& _val) { x = _val.x; z = _val.y; y = _val.z; }
-inline void vec3::xzy(const simdfloat& _val) { x = _val; z = _val; y = _val; }
-inline void vec3::yx(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; x = _val1; }
-inline void vec3::yx(const vec2& _val) { y = _val.x; x = _val.y; }
-inline void vec3::yx(const simdfloat& _val) { y = _val; x = _val; }
-inline void vec3::yxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; x = _val1; z = _val2; }
-inline void vec3::yxz(const vec3& _val) { y = _val.x; x = _val.y; z = _val.z; }
-inline void vec3::yxz(const simdfloat& _val) { y = _val; x = _val; z = _val; }
-inline void vec3::yz(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; z = _val1; }
-inline void vec3::yz(const vec2& _val) { y = _val.x; z = _val.y; }
-inline void vec3::yz(const simdfloat& _val) { y = _val; z = _val; }
-inline void vec3::yzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { y = _val0; z = _val1; x = _val2; }
-inline void vec3::yzx(const vec3& _val) { y = _val.x; z = _val.y; x = _val.z; }
-inline void vec3::yzx(const simdfloat& _val) { y = _val; z = _val; x = _val; }
-inline void vec3::zx(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; x = _val1; }
-inline void vec3::zx(const vec2& _val) { z = _val.x; x = _val.y; }
-inline void vec3::zx(const simdfloat& _val) { z = _val; x = _val; }
-inline void vec3::zxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; x = _val1; y = _val2; }
-inline void vec3::zxy(const vec3& _val) { z = _val.x; x = _val.y; y = _val.z; }
-inline void vec3::zxy(const simdfloat& _val) { z = _val; x = _val; y = _val; }
-inline void vec3::zy(const simdfloat& _val0, const simdfloat& _val1) { z = _val0; y = _val1; }
-inline void vec3::zy(const vec2& _val) { z = _val.x; y = _val.y; }
-inline void vec3::zy(const simdfloat& _val) { z = _val; y = _val; }
-inline void vec3::zyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) { z = _val0; y = _val1; x = _val2; }
-inline void vec3::zyx(const vec3& _val) { z = _val.x; y = _val.y; x = _val.z; }
-inline void vec3::zyx(const simdfloat& _val) { z = _val; y = _val; x = _val; }
+inline void vec3::xy(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; x = s0_; y = s1_; }
+inline void vec3::xy(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; x = s0_; y = s1_; }
+inline void vec3::xy(const simdfloat& _val) {  const simdfloat s0_ = _val; x = s0_; y = s0_; }
+inline void vec3::xyz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; x = s0_; y = s1_; z = s2_; }
+inline void vec3::xyz(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; x = s0_; y = s1_; z = s2_; }
+inline void vec3::xyz(const simdfloat& _val) {  const simdfloat s0_ = _val; x = s0_; y = s0_; z = s0_; }
+inline void vec3::xz(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; x = s0_; z = s1_; }
+inline void vec3::xz(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; x = s0_; z = s1_; }
+inline void vec3::xz(const simdfloat& _val) {  const simdfloat s0_ = _val; x = s0_; z = s0_; }
+inline void vec3::xzy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; x = s0_; z = s1_; y = s2_; }
+inline void vec3::xzy(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; x = s0_; z = s1_; y = s2_; }
+inline void vec3::xzy(const simdfloat& _val) {  const simdfloat s0_ = _val; x = s0_; z = s0_; y = s0_; }
+inline void vec3::yx(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; y = s0_; x = s1_; }
+inline void vec3::yx(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; y = s0_; x = s1_; }
+inline void vec3::yx(const simdfloat& _val) {  const simdfloat s0_ = _val; y = s0_; x = s0_; }
+inline void vec3::yxz(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; y = s0_; x = s1_; z = s2_; }
+inline void vec3::yxz(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; y = s0_; x = s1_; z = s2_; }
+inline void vec3::yxz(const simdfloat& _val) {  const simdfloat s0_ = _val; y = s0_; x = s0_; z = s0_; }
+inline void vec3::yz(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; y = s0_; z = s1_; }
+inline void vec3::yz(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; y = s0_; z = s1_; }
+inline void vec3::yz(const simdfloat& _val) {  const simdfloat s0_ = _val; y = s0_; z = s0_; }
+inline void vec3::yzx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; y = s0_; z = s1_; x = s2_; }
+inline void vec3::yzx(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; y = s0_; z = s1_; x = s2_; }
+inline void vec3::yzx(const simdfloat& _val) {  const simdfloat s0_ = _val; y = s0_; z = s0_; x = s0_; }
+inline void vec3::zx(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; z = s0_; x = s1_; }
+inline void vec3::zx(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; z = s0_; x = s1_; }
+inline void vec3::zx(const simdfloat& _val) {  const simdfloat s0_ = _val; z = s0_; x = s0_; }
+inline void vec3::zxy(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; z = s0_; x = s1_; y = s2_; }
+inline void vec3::zxy(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; z = s0_; x = s1_; y = s2_; }
+inline void vec3::zxy(const simdfloat& _val) {  const simdfloat s0_ = _val; z = s0_; x = s0_; y = s0_; }
+inline void vec3::zy(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; z = s0_; y = s1_; }
+inline void vec3::zy(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; z = s0_; y = s1_; }
+inline void vec3::zy(const simdfloat& _val) {  const simdfloat s0_ = _val; z = s0_; y = s0_; }
+inline void vec3::zyx(const simdfloat& _val0, const simdfloat& _val1, const simdfloat& _val2) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; const simdfloat s2_ = _val2; z = s0_; y = s1_; x = s2_; }
+inline void vec3::zyx(const vec3& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; const simdfloat s2_ = _val.z; z = s0_; y = s1_; x = s2_; }
+inline void vec3::zyx(const simdfloat& _val) {  const simdfloat s0_ = _val; z = s0_; y = s0_; x = s0_; }
 
 #pragma endregion
 
 
 // cross-type assignment from ivec3 (components use simdfloat's own conversion operator)
-inline vec3 vec3::operator=(const ivec3& _v) { x = _v.x; y = _v.y; z = _v.z; return *this; }
+inline vec3 vec3::operator=(const ivec3& _v) {  const simdint s0_ = _v.x; const simdint s1_ = _v.y; const simdint s2_ = _v.z; x = s0_; y = s1_; z = s2_; return *this; }
 
-inline vec3 vec3::operator=(const vec4& _v) { x = _v.x; y = _v.y; z = _v.z; return *this; }
+inline vec3 vec3::operator=(const vec4& _v) {  const simdfloat s0_ = _v.x; const simdfloat s1_ = _v.y; const simdfloat s2_ = _v.z; x = s0_; y = s1_; z = s2_; return *this; }
 
 // constructors for vec3
-inline vec3::vec3(const float& _f) { x = _f; y = _f; z = _f; }
+inline vec3::vec3(const float& _f) { shader::detail::full_store(x, _f); shader::detail::full_store(y, _f); shader::detail::full_store(z, _f); }
 
-inline vec3::vec3(const simdfloat& _f) { x = _f; y = _f; z = _f; }
+inline vec3::vec3(const simdfloat& _f) { shader::detail::full_store(x, _f); shader::detail::full_store(y, _f); shader::detail::full_store(z, _f); }
 
-inline vec3::vec3(const ivec3& _v) { x = _v.x; y = _v.y; z = _v.z; }
+inline vec3::vec3(const ivec3& _v) { shader::detail::full_store(x, _v.x); shader::detail::full_store(y, _v.y); shader::detail::full_store(z, _v.z); }
 
-inline vec3::vec3(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z) { x = _x; y = _y; z = _z; }
+inline vec3::vec3(const simdfloat& _x, const simdfloat& _y, const simdfloat& _z) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y); shader::detail::full_store(z, _z); }
 
-inline vec3::vec3(const simdfloat& _x, const vec2& _y) { x = _x; y = _y.x; z = _y.y; }
+inline vec3::vec3(const simdfloat& _x, const vec2& _y) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y.x); shader::detail::full_store(z, _y.y); }
 
-inline vec3::vec3(const vec2& _x, const simdfloat& _z) { x = _x.x; y = _x.y; z = _z; }
+inline vec3::vec3(const vec2& _x, const simdfloat& _z) { shader::detail::full_store(x, _x.x); shader::detail::full_store(y, _x.y); shader::detail::full_store(z, _z); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec3::vec3(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; }
+vec3::vec3(const simdfloat& _x, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _v.x); shader::detail::full_store(z, _v.y); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec3::vec3(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; z = _v.y; }
+vec3::vec3(const simdfloat& _x, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _v.x); shader::detail::full_store(z, _v.y); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec2>, int>>
-vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y); shader::detail::full_store(z, _v.x); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y); shader::detail::full_store(z, _v.x); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { x = _x; y = _y; z = _v.x; }
+vec3::vec3(const simdfloat& _x, const simdfloat& _y, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y); shader::detail::full_store(z, _v.x); }
 
 #endif
 

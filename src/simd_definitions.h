@@ -790,15 +790,31 @@ inline const void simd_store_int(int32_t* ptr, simdimask_internal _a) { vst1q_s3
 struct simdfloat;
 struct simdint;
 
+// Masked stores are implemented in simd_masked.h (included by cppshader.h after
+// all types are declared). They only overwrite lanes in the current thread's
+// active domain; assignments to existing scalars go through them.
+// full_store ignores the active domain and is used by constructors so a freshly
+// built value always carries complete data on every lane.
+namespace shader
+{
+	namespace detail
+	{
+		inline void full_store(simdfloat& _dst, const simdfloat& _src);
+		inline void full_store(simdint& _dst, const simdint& _src);
+		inline void masked_store(simdfloat& _dst, const simdfloat& _src);
+		inline void masked_store(simdint& _dst, const simdint& _src);
+	}
+}
+
 struct simdfloat {
 	alignas(SIMDWIDTH * 4) float value[SIMDWIDTH];
 	simdfloat() : value{} {}
 	simdfloat(const float& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; }
 	simdfloat(const simdint& _val);
-	simdfloat& operator=(const float& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; return *this; }
-	simdfloat& operator=(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = static_cast<float>(_val); return *this; }
-	simdfloat& operator=(const double& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = static_cast<float>(_val); return *this; }
-	simdfloat& operator=(const simdfloat& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val.value[i]; return *this; }
+	simdfloat& operator=(const float& _val) { shader::detail::masked_store(*this, simdfloat(_val)); return *this; }
+	simdfloat& operator=(const int32_t& _val) { shader::detail::masked_store(*this, simdfloat(_val)); return *this; }
+	simdfloat& operator=(const double& _val) { shader::detail::masked_store(*this, simdfloat(_val)); return *this; }
+	simdfloat& operator=(const simdfloat& _val) { shader::detail::masked_store(*this, _val); return *this; }
 	simdfloat& operator=(const simdint& _val);
 };
 
@@ -815,8 +831,8 @@ struct simdint {
 	simdint() : value{} {}
 	simdint(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; }
 	simdint(const simdfloat& _val);
-	simdint& operator=(const int32_t& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val; return *this; }
-	simdint& operator=(const simdint& _val) { for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = _val.value[i]; return *this; }
+	simdint& operator=(const int32_t& _val) { shader::detail::masked_store(*this, simdint(_val)); return *this; }
+	simdint& operator=(const simdint& _val) { shader::detail::masked_store(*this, _val); return *this; }
     simdint& operator=(const simdfloat& _val);
 
 };
@@ -1036,9 +1052,9 @@ inline const simdint simd_cvtps_int(const simdfloat& _a) { simdint r; for (int32
 inline const simdfloat simd_cvtepi32_float(const simdint& _a) { return simd_castsi_float(_a); }
 
 inline simdfloat::simdfloat(const simdint& _val) { simdfloat r = simd_tofloat_int(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = (r.value[i]); }
-inline simdfloat& simdfloat::operator=(const simdint& _val) { simdfloat r = simd_tofloat_int(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; return *this; }
+inline simdfloat& simdfloat::operator=(const simdint& _val) { shader::detail::masked_store(*this, simdfloat(_val)); return *this; }
 inline simdint::simdint(const simdfloat& _val) { simdint r = simd_toint_float(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; }
-inline simdint& simdint::operator=(const simdfloat& _val) { simdint r = simd_toint_float(_val); for (int32_t i = 0; i < SIMDWIDTH; ++i) value[i] = r.value[i]; return *this; }
+inline simdint& simdint::operator=(const simdfloat& _val) { shader::detail::masked_store(*this, simdint(_val)); return *this; }
 
 
 #undef PACKED_F64_BINARY_MATH

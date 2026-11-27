@@ -32,6 +32,7 @@ without having to write SIMD code directly.
   - [Geometric](#geometric)
   - [Min and Max](#min-and-max)
 - [Conditional Statements](#conditional-statements)
+  - [Masked domains with `shader::masked`](#masked-domains-with-shadermasked)
 - [Displaying Data](#displaying-data)
 - [Full Shader Examples](#full-shader-examples)
 - [Building Samples](#building-samples)
@@ -461,6 +462,83 @@ while (!maskAll(x == 100)) // will stop loop when every lane of x is 100
 
 Masks for comparisons and blends on doubles use `simddmask`, and integer masks
 use `simdimask`.
+
+### Masked domains with `shader::masked`
+
+On the scalar CPU backends (`USE_PACKED_SCALAR` and `USE_SCALAR`), manually
+blending every store is easy to get wrong: miss one `blendv` and a lane that
+already finished gets written back to life. `shader::masked(mask, body)`
+removes that bookkeeping. While `body` runs, the current thread's active
+domain is the intersection of the previous domain and `mask`; when `body`
+returns (or throws), the previous domain is restored. The outermost scope is
+fully active.
+
+```cpp
+simdfloat x;                  // initialized somewhere
+simdmask m = x > 0.5f;
+
+shader::masked(m, [&] {
+    // writes to existing simdfloat/simdint and vec/ivec objects only touch
+    // active lanes; inactive lanes keep their previous value
+    x = 1.0f;
+    x += 2.0f;
+    ++x;
+
+    vec3 color(0.0f);
+    color.rgb(vec3(1.0f, 0.0f, 0.0f)); // component, alias and swizzle writes
+});
+// outside the scope every lane is writable again
+```
+
+The body is a nullary, void callable. The host always invokes it exactly once,
+even when the mask is false on every lane, and even when nested inside another
+masked region. Nested calls intersect their masks, and the domain is visible
+from any helper function or translation unit because it is stored per thread;
+worker threads processing different image rows never interfere with each other.
+Exceptions propagate normally and still restore the previous domain while the
+stack unwinds.
+
+A loop where each lane terminates after its own number of iterations reads like
+the GLSL original — no hand-written `blendv` around the stores:
+
+```cpp
+simdint step(0);
+const simdint limit = /* per-lane iteration budget */;
+
+for (int32_t pass = 0; pass < maxPasses; ++pass)
+{
+    simdimask running = step < limit;
+    shader::masked(running, [&] {
+        color += shade(uv);   // finished lanes keep their accumulated color
+        ++step;
+    });
+}
+```
+
+The active domain only governs writes to *existing* objects:
+
+- plain assignment, the supported compound assignments and `++`/`--` on
+  `simdfloat`, `simdint`, `vec2/3/4` and `ivec2/3/4`;
+- component subscripts (`v[0]`), color/texture aliases (`r/g/b/a`, `s/t/p/q`)
+  and writable swizzles. Multi-component swizzles snapshot every right-hand
+  value before writing, so `v.yx(v)` and `v.xy(v.y, v.x)` perform a real swap
+  based on the pre-write vector.
+
+The following remain ordinary full-width operations, even inside an all-false
+branch:
+
+- construction and copy construction (a new vector never holds partially
+  initialized data; a copied vector's `r/g/b/a` and `s/t/p/q` aliases reference
+  the copy's own components);
+- arithmetic, comparisons and swizzle reads, which still produce complete
+  full-lane values;
+- direct access to the underlying `value` array and explicit
+  `simd_load`/`simd_store` calls;
+- ordinary host-variable side effects (the body itself always runs once).
+
+Temporary full-width values are only filtered when later assigned to an
+existing object. Both `simdmask` and `simdimask` are accepted as the mask
+argument.
 
 ---
 

@@ -116,48 +116,48 @@ inline vec4 vec2::yyxy() const { return { y, y, x, y }; }
 inline vec3 vec2::yyy() const { return { y, y, y }; }
 inline vec4 vec2::yyyx() const { return { y, y, y, x }; }
 inline vec4 vec2::yyyy() const { return { y, y, y, y }; }
-inline void vec2::gr(const simdfloat& _val0, const simdfloat& _val1) { g = _val0; r = _val1; }
-inline void vec2::gr(const vec2& _val) { g = _val.x; r = _val.y; }
-inline void vec2::gr(const simdfloat& _val) { g = _val; r = _val; }
-inline void vec2::rg(const simdfloat& _val0, const simdfloat& _val1) { r = _val0; g = _val1; }
-inline void vec2::rg(const vec2& _val) { r = _val.x; g = _val.y; }
-inline void vec2::rg(const simdfloat& _val) { r = _val; g = _val; }
-inline void vec2::st(const simdfloat& _val0, const simdfloat& _val1) { s = _val0; t = _val1; }
-inline void vec2::st(const vec2& _val) { s = _val.s; t = _val.t; }
-inline void vec2::st(const simdfloat& _val) { s = _val; t = _val; }
-inline void vec2::ts(const simdfloat& _val0, const simdfloat& _val1) { t = _val0; s = _val1; }
-inline void vec2::ts(const vec2& _val) { t = _val.s; s = _val.t; }
-inline void vec2::ts(const simdfloat& _val) { t = _val; s = _val; }
-inline void vec2::xy(const simdfloat& _val0, const simdfloat& _val1) { x = _val0; y = _val1; }
-inline void vec2::xy(const vec2& _val) { x = _val.x; y = _val.y; }
-inline void vec2::xy(const simdfloat& _val) { x = _val; y = _val; }
-inline void vec2::yx(const simdfloat& _val0, const simdfloat& _val1) { y = _val0; x = _val1; }
-inline void vec2::yx(const vec2& _val) { y = _val.x; x = _val.y; }
-inline void vec2::yx(const simdfloat& _val) { y = _val; x = _val; }
+inline void vec2::gr(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; g = s0_; r = s1_; }
+inline void vec2::gr(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; g = s0_; r = s1_; }
+inline void vec2::gr(const simdfloat& _val) {  const simdfloat s0_ = _val; g = s0_; r = s0_; }
+inline void vec2::rg(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; r = s0_; g = s1_; }
+inline void vec2::rg(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; r = s0_; g = s1_; }
+inline void vec2::rg(const simdfloat& _val) {  const simdfloat s0_ = _val; r = s0_; g = s0_; }
+inline void vec2::st(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; s = s0_; t = s1_; }
+inline void vec2::st(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; s = s0_; t = s1_; }
+inline void vec2::st(const simdfloat& _val) {  const simdfloat s0_ = _val; s = s0_; t = s0_; }
+inline void vec2::ts(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; t = s0_; s = s1_; }
+inline void vec2::ts(const vec2& _val) {  const simdfloat s0_ = _val.s; const simdfloat s1_ = _val.t; t = s0_; s = s1_; }
+inline void vec2::ts(const simdfloat& _val) {  const simdfloat s0_ = _val; t = s0_; s = s0_; }
+inline void vec2::xy(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; x = s0_; y = s1_; }
+inline void vec2::xy(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; x = s0_; y = s1_; }
+inline void vec2::xy(const simdfloat& _val) {  const simdfloat s0_ = _val; x = s0_; y = s0_; }
+inline void vec2::yx(const simdfloat& _val0, const simdfloat& _val1) {  const simdfloat s0_ = _val0; const simdfloat s1_ = _val1; y = s0_; x = s1_; }
+inline void vec2::yx(const vec2& _val) {  const simdfloat s0_ = _val.x; const simdfloat s1_ = _val.y; y = s0_; x = s1_; }
+inline void vec2::yx(const simdfloat& _val) {  const simdfloat s0_ = _val; y = s0_; x = s0_; }
 
 #pragma endregion
 
 // cross-type assignment from ivec2 (components use simdfloat's own conversion operator)
-inline vec2 vec2::operator=(const ivec2& _v) { x = _v.x; y = _v.y; return *this; }
+inline vec2 vec2::operator=(const ivec2& _v) {  const simdint s0_ = _v.x; const simdint s1_ = _v.y; x = s0_; y = s1_; return *this; }
 
-inline vec2 vec2::operator=(const vec3& _v) { x = _v.x; y = _v.y; return *this; }
+inline vec2 vec2::operator=(const vec3& _v) {  const simdfloat s0_ = _v.x; const simdfloat s1_ = _v.y; x = s0_; y = s1_; return *this; }
 
-inline vec2 vec2::operator=(const vec4& _v) { x = _v.x; y = _v.y; return *this; }
+inline vec2 vec2::operator=(const vec4& _v) {  const simdfloat s0_ = _v.x; const simdfloat s1_ = _v.y; x = s0_; y = s1_; return *this; }
 
 // constructors for vec2
-inline vec2::vec2(const float& _f) { x = _f; y = _f; }
+inline vec2::vec2(const float& _f) { shader::detail::full_store(x, _f); shader::detail::full_store(y, _f); }
 
-inline vec2::vec2(const simdfloat& _f) { x = _f; y = _f; }
+inline vec2::vec2(const simdfloat& _f) { shader::detail::full_store(x, _f); shader::detail::full_store(y, _f); }
 
-inline vec2::vec2(const ivec2& _v) { x = _v.x; y = _v.y; }
+inline vec2::vec2(const ivec2& _v) { shader::detail::full_store(x, _v.x); shader::detail::full_store(y, _v.y); }
 
-inline vec2::vec2(const simdfloat& _x, const simdfloat& _y) { x = _x; y = _y; }
+inline vec2::vec2(const simdfloat& _x, const simdfloat& _y) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec3>, int>>
-vec2::vec2(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; }
+vec2::vec2(const simdfloat& _x, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _v.x); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, vec4>, int>>
-vec2::vec2(const simdfloat& _x, const V& _v) { x = _x; y = _v.x; }
+vec2::vec2(const simdfloat& _x, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _v.x); }
 
 #endif
 

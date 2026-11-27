@@ -116,48 +116,48 @@ inline ivec4 ivec2::yyxy() const { return { y, y, x, y }; }
 inline ivec3 ivec2::yyy() const { return { y, y, y }; }
 inline ivec4 ivec2::yyyx() const { return { y, y, y, x }; }
 inline ivec4 ivec2::yyyy() const { return { y, y, y, y }; }
-inline void ivec2::gr(const simdint& _val0, const simdint& _val1) { g = _val0; r = _val1; }
-inline void ivec2::gr(const ivec2& _val) { g = _val.x; r = _val.y; }
-inline void ivec2::gr(const simdint& _val) { g = _val; r = _val; }
-inline void ivec2::rg(const simdint& _val0, const simdint& _val1) { r = _val0; g = _val1; }
-inline void ivec2::rg(const ivec2& _val) { r = _val.x; g = _val.y; }
-inline void ivec2::rg(const simdint& _val) { r = _val; g = _val; }
-inline void ivec2::st(const simdint& _val0, const simdint& _val1) { s = _val0; t = _val1; }
-inline void ivec2::st(const ivec2& _val) { s = _val.s; t = _val.t; }
-inline void ivec2::st(const simdint& _val) { s = _val; t = _val; }
-inline void ivec2::ts(const simdint& _val0, const simdint& _val1) { t = _val0; s = _val1; }
-inline void ivec2::ts(const ivec2& _val) { t = _val.s; s = _val.t; }
-inline void ivec2::ts(const simdint& _val) { t = _val; s = _val; }
-inline void ivec2::xy(const simdint& _val0, const simdint& _val1) { x = _val0; y = _val1; }
-inline void ivec2::xy(const ivec2& _val) { x = _val.x; y = _val.y; }
-inline void ivec2::xy(const simdint& _val) { x = _val; y = _val; }
-inline void ivec2::yx(const simdint& _val0, const simdint& _val1) { y = _val0; x = _val1; }
-inline void ivec2::yx(const ivec2& _val) { y = _val.x; x = _val.y; }
-inline void ivec2::yx(const simdint& _val) { y = _val; x = _val; }
+inline void ivec2::gr(const simdint& _val0, const simdint& _val1) {  const simdint s0_ = _val0; const simdint s1_ = _val1; g = s0_; r = s1_; }
+inline void ivec2::gr(const ivec2& _val) {  const simdint s0_ = _val.x; const simdint s1_ = _val.y; g = s0_; r = s1_; }
+inline void ivec2::gr(const simdint& _val) {  const simdint s0_ = _val; g = s0_; r = s0_; }
+inline void ivec2::rg(const simdint& _val0, const simdint& _val1) {  const simdint s0_ = _val0; const simdint s1_ = _val1; r = s0_; g = s1_; }
+inline void ivec2::rg(const ivec2& _val) {  const simdint s0_ = _val.x; const simdint s1_ = _val.y; r = s0_; g = s1_; }
+inline void ivec2::rg(const simdint& _val) {  const simdint s0_ = _val; r = s0_; g = s0_; }
+inline void ivec2::st(const simdint& _val0, const simdint& _val1) {  const simdint s0_ = _val0; const simdint s1_ = _val1; s = s0_; t = s1_; }
+inline void ivec2::st(const ivec2& _val) {  const simdint s0_ = _val.s; const simdint s1_ = _val.t; s = s0_; t = s1_; }
+inline void ivec2::st(const simdint& _val) {  const simdint s0_ = _val; s = s0_; t = s0_; }
+inline void ivec2::ts(const simdint& _val0, const simdint& _val1) {  const simdint s0_ = _val0; const simdint s1_ = _val1; t = s0_; s = s1_; }
+inline void ivec2::ts(const ivec2& _val) {  const simdint s0_ = _val.s; const simdint s1_ = _val.t; t = s0_; s = s1_; }
+inline void ivec2::ts(const simdint& _val) {  const simdint s0_ = _val; t = s0_; s = s0_; }
+inline void ivec2::xy(const simdint& _val0, const simdint& _val1) {  const simdint s0_ = _val0; const simdint s1_ = _val1; x = s0_; y = s1_; }
+inline void ivec2::xy(const ivec2& _val) {  const simdint s0_ = _val.x; const simdint s1_ = _val.y; x = s0_; y = s1_; }
+inline void ivec2::xy(const simdint& _val) {  const simdint s0_ = _val; x = s0_; y = s0_; }
+inline void ivec2::yx(const simdint& _val0, const simdint& _val1) {  const simdint s0_ = _val0; const simdint s1_ = _val1; y = s0_; x = s1_; }
+inline void ivec2::yx(const ivec2& _val) {  const simdint s0_ = _val.x; const simdint s1_ = _val.y; y = s0_; x = s1_; }
+inline void ivec2::yx(const simdint& _val) {  const simdint s0_ = _val; y = s0_; x = s0_; }
 
 #pragma endregion
 
 // cross-type assignment from vec2 (components use simdint's own conversion operator)
-inline ivec2 ivec2::operator=(const vec2& _v) { x = _v.x; y = _v.y; return *this; }
+inline ivec2 ivec2::operator=(const vec2& _v) {  const simdfloat s0_ = _v.x; const simdfloat s1_ = _v.y; x = s0_; y = s1_; return *this; }
 
-inline ivec2 ivec2::operator=(const ivec3& _v) { x = _v.x; y = _v.y; return *this; }
+inline ivec2 ivec2::operator=(const ivec3& _v) {  const simdint s0_ = _v.x; const simdint s1_ = _v.y; x = s0_; y = s1_; return *this; }
 
-inline ivec2 ivec2::operator=(const ivec4& _v) { x = _v.x; y = _v.y; return *this; }
+inline ivec2 ivec2::operator=(const ivec4& _v) {  const simdint s0_ = _v.x; const simdint s1_ = _v.y; x = s0_; y = s1_; return *this; }
 
 // constructors for ivec2
-inline ivec2::ivec2(const int32_t& _f) { x = _f; y = _f; }
+inline ivec2::ivec2(const int32_t& _f) { shader::detail::full_store(x, _f); shader::detail::full_store(y, _f); }
 
-inline ivec2::ivec2(const simdint& _f) { x = _f; y = _f; }
+inline ivec2::ivec2(const simdint& _f) { shader::detail::full_store(x, _f); shader::detail::full_store(y, _f); }
 
-inline ivec2::ivec2(const vec2& _v) { x = _v.x; y = _v.y; }
+inline ivec2::ivec2(const vec2& _v) { shader::detail::full_store(x, _v.x); shader::detail::full_store(y, _v.y); }
 
-inline ivec2::ivec2(const simdint& _x, const simdint& _y) { x = _x; y = _y; }
+inline ivec2::ivec2(const simdint& _x, const simdint& _y) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _y); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec3>, int>>
-ivec2::ivec2(const simdint& _x, const V& _v) { x = _x; y = _v.x; }
+ivec2::ivec2(const simdint& _x, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _v.x); }
 
 template<typename V, std::enable_if_t<std::is_same_v<V, ivec4>, int>>
-ivec2::ivec2(const simdint& _x, const V& _v) { x = _x; y = _v.x; }
+ivec2::ivec2(const simdint& _x, const V& _v) { shader::detail::full_store(x, _x); shader::detail::full_store(y, _v.x); }
 
 #endif
 
