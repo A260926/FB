@@ -324,12 +324,18 @@ void glGetIntegerv(GLint pname, GLint *params)
     case GL_CLIP_PLANE3:
     case GL_CLIP_PLANE4:
     case GL_CLIP_PLANE5:
-    case GL_SCISSOR_TEST:
+        if (pname >= GL_CLIP_PLANE0 &&
+            pname < GL_CLIP_PLANE0 + MAX_CLIP_PLANES)
+            *params = c->clip_plane_enabled[pname - GL_CLIP_PLANE0];
+        else
+            params[0] = 0;
+        break;
     case GL_UNPACK_SWAP_BYTES:
     case GL_UNPACK_SKIP_ROWS:
     case GL_UNPACK_SKIP_PIXELS:
     case GL_UNPACK_ROW_LENGTH:
     case GL_UNPACK_LSB_FIRST:
+    case GL_SCISSOR_TEST:
     case GL_TEXTURE_GEN_T:
     case GL_TEXTURE_GEN_S:
     case GL_TEXTURE_GEN_R:
@@ -509,6 +515,9 @@ void glGetIntegerv(GLint pname, GLint *params)
         break;
     case GL_MAX_LIGHTS:
         *params = MAX_LIGHTS;
+        break;
+    case GL_MAX_CLIP_PLANES:
+        *params = MAX_CLIP_PLANES;
         break;
     case GL_MAX_TEXTURE_SIZE:
         *params = TGL_HAS(TEXTURE_DIM); /* not completely true, but... */

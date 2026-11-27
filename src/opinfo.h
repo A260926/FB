@@ -8,6 +8,7 @@ ADD_OP(Vertex, 4, "%f %f %f %f")
 ADD_OP(End, 0, "")
 
 ADD_OP(EnableDisable, 2, "%C %d")
+ADD_OP(ClipPlane, 5, "%C %f %f %f %f")
 
 ADD_OP(MatrixMode, 1, "%C")
 ADD_OP(LoadMatrix, 16, "")

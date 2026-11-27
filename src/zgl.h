@@ -60,6 +60,7 @@ enum {
 #define MAX_NAME_STACK_DEPTH 16
 #define MAX_TEXTURE_LEVELS 1
 #define MAX_LIGHTS 16
+#define MAX_CLIP_PLANES 6
 
 #define VERTEX_ARRAY 0x0001
 #define COLOR_ARRAY 0x0002
@@ -231,6 +232,11 @@ typedef struct GLContext {
     GLint lighting_enabled;
     GLint light_model_two_side;
 
+    /* user clipping planes (GL_CLIP_PLANE0..5) */
+    V4 clip_plane_equation[MAX_CLIP_PLANES]; /* frozen eye-space equations */
+    GLint clip_plane_enabled[MAX_CLIP_PLANES];
+    GLint clip_plane_mask; /* bit i set when plane i is enabled */
+
     /* materials */
     GLint color_material_enabled;
     GLint current_color_material_mode;
@@ -366,6 +372,14 @@ void gl_add_feedback(GLfloat token,
 #define CLIP_EPSILON (1E-5)
 
 extern GLint gl_clipcode(GLfloat x, GLfloat y, GLfloat z, GLfloat w1);
+
+/* bit offset of the user clip plane codes inside GLVertex.clip_code
+ * (the six low bits keep the frustum codes) */
+#define CLIP_USER_SHIFT 6
+
+/* returns the user clip plane code (bits CLIP_USER_SHIFT and up) for a
+ * vertex whose eye coordinates are up to date */
+extern GLint gl_user_clip_code(GLContext *c, GLVertex *v);
 
 #define CLIP_XMIN (1 << 0)
 #define CLIP_XMAX (1 << 1)

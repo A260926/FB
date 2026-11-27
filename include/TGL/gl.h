@@ -775,6 +775,8 @@ extern char TGL_BUILDT_RshiftGLshort[1 - 2 * ((GLshort) 65280 >> 8 != -1)];
 
 #define glEnable TGL_ADD_PREFIX(glEnable)
 #define glDisable TGL_ADD_PREFIX(glDisable)
+#define glClipPlane TGL_ADD_PREFIX(glClipPlane)
+#define glGetClipPlane TGL_ADD_PREFIX(glGetClipPlane)
 #define glShadeModel TGL_ADD_PREFIX(glShadeModel)
 #define glCullFace TGL_ADD_PREFIX(glCullFace)
 #define glPolygonMode TGL_ADD_PREFIX(glPolygonMode)
@@ -925,6 +927,11 @@ extern char TGL_BUILDT_RshiftGLshort[1 - 2 * ((GLshort) 65280 >> 8 != -1)];
 
 void glEnable(GLint code);
 void glDisable(GLint code);
+
+/* user clipping planes: equation = (a,b,c,d) keeps the half space
+ * ax+by+cz+d >= 0; see README for the coordinate convention */
+void glClipPlane(GLenum plane, const GLdouble *equation);
+void glGetClipPlane(GLenum plane, GLdouble *equation);
 
 void glShadeModel(GLint mode);
 void glCullFace(GLint mode);

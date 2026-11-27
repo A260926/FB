@@ -6,6 +6,7 @@
 # working files
 .DS_Store
 *~
+.task-build/
 
 # Ignore build outputs
 *.o
@@ -21,6 +22,10 @@ hello
 menu
 model
 texture
+clip_planes
+
+# Generated images
+*.ppm
 
 # Downloaded files
 examples/stb_image.h

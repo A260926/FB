@@ -133,6 +133,66 @@ OpenMP is used on supported platforms to parallelize certain operations:
 
 Compile with `-fopenmp` to enable. This is optional (disabled in `config.mk` by default) and not required to use TinyGL.
 
+## User Clipping Planes
+
+Six arbitrary clipping planes, `GL_CLIP_PLANE0` through `GL_CLIP_PLANE5`, can
+slice the geometry inside the existing transform/clip/rasterize pipeline. The
+retained geometry is really generated (new vertices, colors, texture
+coordinates and depth are interpolated through the clipper); nothing is drawn
+first and erased afterwards.
+
+### API
+
+```c
+void glClipPlane(GLenum plane, const GLdouble *equation);
+void glGetClipPlane(GLenum plane, GLdouble *equation);
+/* enable / disable through the existing entry points */
+glEnable(GL_CLIP_PLANE0);
+glDisable(GL_CLIP_PLANE0);
+```
+
+`glGetIntegerv` reports each plane's enable state for `GL_CLIP_PLANE0..5`, and
+`GL_MAX_CLIP_PLANES` returns 6. At start-up every plane is disabled and all six
+equations are zero.
+
+### Coordinate convention
+
+The four coefficients `(a, b, c, d)` describe an **object-space** half space
+
+```
+a*x + b*y + c*z + d >= 0
+```
+
+(the boundary itself, equal to zero, is kept). When `glClipPlane` executes, the
+equation is transformed by the inverse transpose of the current `MODELVIEW`
+matrix and **frozen in eye space**; `glGetClipPlane` returns that frozen
+eye-space value. Changing `MODELVIEW` afterwards only moves the geometry - an
+already defined plane does not move. Calling `glClipPlane` again redefines it
+and recaptures the matrix at that moment. Scaling all four coefficients by a
+positive constant describes the same half space and gives the same result.
+
+Clipping happens before the frustum stages, so points, independent line
+segments and all triangle primitives are limited by every enabled plane, in
+both the lighting and the unlit paths. Intersection vertices produced by one
+plane continue through the remaining planes (including the near and side
+frustum planes). `GL_FILL` produces a clipped triangle fan with no interior
+diagonals, and `GL_LINE` / `GL_POINT` polygon modes show the new cut edges.
+
+Scope: finite coefficients, an invertible `MODELVIEW`, and finite vertices
+submitted as `glVertex3f` (object `w = 1`); ordinary orthographic and
+perspective projection are supported. `glVertex4f` clipping is not extended.
+
+Plane definitions and enable/disable are recorded by display lists.
+`GL_COMPILE` only records them (queries and drawing are unaffected until the
+list is called), `GL_COMPILE_AND_EXECUTE` runs and records them, and replaying
+a list re-captures the matrix active at replay time. `glGetClipPlane` and
+`glGetIntegerv` always execute immediately and are never compiled. Feedback and
+selection modes are not extended.
+
+The `examples/raw/clip_planes.c` demo writes a cut, shaded square to
+`clip_planes_demo.ppm` using only the C library; the user-clip regression suite
+(`tests/user_clip.c`) also emits `clipplanes.ppm`.
+
 ## Extension Functions
 Functions not in the GL 1.1 spec, added for convenience. These cannot be added to display lists unless noted.
 

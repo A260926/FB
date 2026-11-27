@@ -237,9 +237,25 @@ static void gl_vertex_transform(GLContext *c, GLVertex *v)
             v->pc.W = (v->coord.X * m[12] + v->coord.Y * m[13] +
                        v->coord.Z * m[14] + m[15]);
         }
+
+        /* eye coordinates are only needed when user clipping planes are on.
+         * object coordinates are assumed to have W = 1 */
+        if (c->clip_plane_mask) {
+            GLfloat *mv = &c->matrix_stack_ptr[0]->m[0][0];
+            v->ec.X = (v->coord.X * mv[0] + v->coord.Y * mv[1] +
+                       v->coord.Z * mv[2] + mv[3]);
+            v->ec.Y = (v->coord.X * mv[4] + v->coord.Y * mv[5] +
+                       v->coord.Z * mv[6] + mv[7]);
+            v->ec.Z = (v->coord.X * mv[8] + v->coord.Y * mv[9] +
+                       v->coord.Z * mv[10] + mv[11]);
+            v->ec.W = (v->coord.X * mv[12] + v->coord.Y * mv[13] +
+                       v->coord.Z * mv[14] + mv[15]);
+        }
     }
 
     v->clip_code = gl_clipcode(v->pc.X, v->pc.Y, v->pc.Z, v->pc.W);
+    if (c->clip_plane_mask)
+        v->clip_code |= gl_user_clip_code(c, v);
 }
 
 void glopVertex(GLParam *p)
