@@ -19,6 +19,7 @@ Go, Java, Javascript, Lua, Octave, PHP, Python, R, and Ruby are provided.
   * [Compiling From Source](#compiling-from-source)
 - [Getting Started](#getting-started)
 - [Documentation](#documentation)
+- [Knot Removal and Simplification](#knot-removal-and-simplification)
 - [Publications](#publications)
 - [Theoretical Backgrounds](#theoretical-backgrounds)
 
@@ -40,6 +41,9 @@ MIT License - see the LICENSE file in the source distribution.
 - Reparametrization by arc length
   - Mapping length <--> knot
 - Knot insertion (refinement)
+- Knot removal and simplification
+  - Certified Euclidean error bound over the whole parameter domain
+  - Fracture barriers (full-multiplicity internal knots) are preserved
 - Sub-spline extraction
 - Bézier curve decomposition
   - (also known as subdivision)
@@ -163,6 +167,54 @@ The documentation of the C interface
 extensive and also serves as an entry point for the C++ interface
 documentation (as well as the documentation for the bindings created
 from the C++ interface).
+
+### Knot Removal and Simplification
+
+The header `src/tinyspline_reduce.h` adds two C entry points,
+`ts_bspline_remove_knot` and `ts_bspline_simplify`, for shrinking an
+over-refined clamped, non-rational curve while keeping the same
+parameter axis. They support degree 1 to 3, dimension 2 or 3, and
+tolerances between 1e-9 and 1e-2.
+
+#### Tolerance meaning
+
+The `tolerance` argument bounds the Euclidean distance between the
+original and the resulting curve measured at the *same* parameter
+value, uniformly over the whole parameter domain. It is not a
+resampling tolerance: knots are only deleted, never moved, and no new
+sample knot vector is created. A removal that cannot be reconstructed
+within the budget is a regular rejection — the call still returns
+`TS_SUCCESS`, `removed` simply reports fewer removals (possibly zero).
+
+The reported `error_bound` is a certificate, not a sampled maximum.
+Both curves are expressed as Bézier segments on the original knot
+partition; on every non-zero interval the bound is the maximum norm of
+the coefficient-wise Bernstein difference vectors (the convex hull
+property), covering the one-sided limits on both sides of break knots.
+A loose certificate is tightened by subdividing the difference curve,
+never by fixed-density sampling. Ordinary floating point roundoff is
+covered by a conservative magnitude-proportional slack term; exactly
+invertible material (insert a knot and remove it again) yields a bound
+below 1e-10 at coordinate magnitudes under ten. Every accepted removal
+is checked against the curve originally passed to the call, so the
+tolerance is one global error budget that is never relaxed between
+steps.
+
+#### Fracture barriers
+
+An internal knot whose multiplicity equals the curve's order splits the
+curve into independent, possibly discontinuous pieces. Such a knot is a
+fracture barrier: it is never removed, even when the control points on
+its two sides happen to be spatially close. Removing it would change the
+connectivity of the curve, not just its shape.
+
+#### Memory ownership
+
+On success the output spline owns freshly allocated, independent memory
+(a deep copy even when nothing was removed), and `source` and `out` may
+point to the same object. On error the existing `out`, `removed` and
+`error_bound` values are left untouched. A complete modeling workflow
+can be found in `examples/c/reduce.c`.
 
 ### Publications
 

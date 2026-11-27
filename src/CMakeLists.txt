@@ -903,11 +903,25 @@ set(TINYSPLINE_CXX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # TINYSPLINE_C_SOURCE_FILES
 list(APPEND TINYSPLINE_C_SOURCE_FILES
      "${CMAKE_CURRENT_SOURCE_DIR}/tinyspline.c"
+     "${CMAKE_CURRENT_SOURCE_DIR}/tinyspline_reduce.c"
      "${CMAKE_CURRENT_SOURCE_DIR}/parson.c"
 )
 
-# TINYSPLINE_CXX_SOURCE_FILES
-list(APPEND TINYSPLINE_CXX_SOURCE_FILES ${TINYSPLINE_C_SOURCE_FILES}
+# The knot removal module is intentionally written in C99 (the core
+# library targets C89). Give just this translation unit a C99 standard
+# flag; it is appended after the target-wide flags so it takes effect.
+set_source_files_properties(
+  "${CMAKE_CURRENT_SOURCE_DIR}/tinyspline_reduce.c"
+  PROPERTIES COMPILE_FLAGS "-std=c99"
+)
+
+# TINYSPLINE_CXX_SOURCE_FILES. The knot removal module is C-only (no C++
+# wrapper) and relies on C99, so it is not fed to the C++ translation
+# units.
+set(TINYSPLINE_CXX_SOURCE_FILES ${TINYSPLINE_C_SOURCE_FILES})
+list(REMOVE_ITEM TINYSPLINE_CXX_SOURCE_FILES
+     "${CMAKE_CURRENT_SOURCE_DIR}/tinyspline_reduce.c")
+list(APPEND TINYSPLINE_CXX_SOURCE_FILES
      "${CMAKE_CURRENT_SOURCE_DIR}/tinysplinecxx.cxx"
 )
 
@@ -937,7 +951,7 @@ set_target_properties(
              DEFINE_SYMBOL TINYSPLINE_SHARED
              C_VISIBILITY_PRESET hidden
              COMPILE_FLAGS "${TINYSPLINE_LIBRARY_C_FLAGS}"
-             PUBLIC_HEADER "tinyspline.h"
+             PUBLIC_HEADER "tinyspline.h;tinyspline_reduce.h"
 )
 target_link_libraries(tinyspline PRIVATE ${TINYSPLINE_C_LINK_LIBRARIES})
 

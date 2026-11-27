@@ -88,6 +88,19 @@ add_subdirectory(c)
 add_subdirectory(cxx)
 
 # ##############################################################################
+# Knot removal and simplification tests (C99 module, standalone suite).
+# ##############################################################################
+add_executable(knot_removal_test
+               "${CMAKE_SOURCE_DIR}/tests/knot_removal.c")
+set_target_properties(knot_removal_test PROPERTIES
+                      COMPILE_FLAGS "-std=c99"
+                      FOLDER "tests")
+target_link_libraries(knot_removal_test PRIVATE tinyspline)
+if(NOT EMSCRIPTEN)
+  add_test(NAME knot_removal_test COMMAND knot_removal_test)
+endif()
+
+# ##############################################################################
 # Subsume unit tests and code coverage via custom targets.
 # ##############################################################################
 add_custom_target(

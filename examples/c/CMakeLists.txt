@@ -2,6 +2,13 @@ add_executable(quickstart_c quickstart.c)
 target_link_libraries(quickstart_c PRIVATE tinyspline)
 set_target_properties(quickstart_c PROPERTIES FOLDER "examples/c")
 
+# Console-only example for knot removal/simplification (no GLUT).
+add_executable(reduce_c reduce.c)
+set_target_properties(reduce_c PROPERTIES
+                      COMPILE_FLAGS "-std=c99"
+                      FOLDER "examples/c")
+target_link_libraries(reduce_c PRIVATE tinyspline)
+
 add_executable(json_export_c json_export.c)
 target_link_libraries(json_export_c PRIVATE tinyspline)
 set_target_properties(json_export_c PROPERTIES FOLDER "examples/c")
