@@ -1,0 +1,8 @@
+levels 2
+source_vertices 9
+source_faces 4
+source_corners 16
+result_vertices 81
+result_faces 64
+channel_value_count 90
+channel_control_vertices 12

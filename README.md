@@ -47,6 +47,71 @@ int main()
 }
 ```
 
+## Owned subdivision plans
+
+`pmp::SubdivisionPlan` (`pmp/algorithms/subdivision_plan.h`) pre-computes a
+Catmull-Clark subdivision hierarchy once and re-applies it many times. This is
+useful when only positions or texture values change but the connectivity stays
+the same: the plan owns all derived data, so the source `SurfaceMesh` may be
+modified or destroyed after construction.
+
+```cpp
+#include <pmp/algorithms/subdivision_plan.h>
+
+pmp::SubdivisionPlanChannel uv;
+uv.name = "uv";
+uv.values = { /* TexCoord value table */ };
+uv.corner_values = { /* one value index per source halfedge */ };
+
+pmp::SubdivisionPlan plan(mesh, /*levels=*/2, {uv});
+
+// Later, with new control data. The plan is not rebuilt.
+plan.evaluate(new_positions, {new_uv_values});
+const auto& fine_positions = plan.positions();
+const auto& fine_uv = plan.channel_values(0);
+```
+
+The constructor takes a `SurfaceMesh`, a level count in `[1, 5]`, and any
+number of texture channels. Each channel supplies its own `values` table and a
+per-corner index array indexed by `Halfedge::idx()`, following the source face
+halfedge order; a corner's value belongs to `to_vertex(h)`. Corners in
+different faces may reference different indices with equal numeric values, and
+those index seams are preserved.
+
+Construction validates the input (oriented two-manifold polygons with boundary,
+multiple components, irregular valence, and uncompressed deleted holes are
+accepted; isolated vertices and non-finite values are rejected) and stores:
+
+- compact source vertex, face and corner ids and their handle round-trips,
+- the shared result face connectivity, per-face source ids and positions,
+- a CSR `position_stencil()` over source vertices,
+- per channel a CSR `channel_stencil()` over source corners, plus
+  `channel_corner_indices()`, `channel_values()` and the build-time value
+  index tables.
+
+`evaluate()` only applies the stored CSR stencils; it never traverses a
+half-edge structure or subdivides again. Position rules match PMP's existing
+Catmull-Clark implementation, including the permanent `"v:feature"` /
+`"e:feature"` rules and `BoundaryHandling::Interpolate` on geometric
+boundaries. Each channel is subdivided on its own cut corner topology: an
+interior edge connects the two sides only when both endpoints reference the
+same channel index on both sides, and faces are never merged by equal UV values
+or positions. A vertex fan separated by a seam stays separated, even if both
+sides reuse one index value. Channel boundaries use `(6P + prev + next) / 8`
+for vertices and edge midpoints for edges; geometry feature flags do not affect
+channels. All channels share the geometric positions and the one-to-one
+subface layout.
+
+Invalid level counts, value table lengths, corner indices, or topology throw
+before exposing a new plan or result; `rebuild()` and `evaluate()` leave the
+last successful plan and results untouched on failure. The legacy in-place
+`catmull_clark_subdivision()` keeps its previous behaviour. Limit-surface
+evaluation, semi-sharp creases and incremental local updates are intentionally
+out of scope.
+
+`examples/subdivision_plan.cpp` demonstrates the workflow by writing
+`before.obj` and `after.obj` with independent `vt` indices.
+
 ## Read the Docs
 
 The [user guide](https://www.pmp-library.org/guide.html) contains all you need to get started using PMP, including a [tutorial](https://www.pmp-library.org/tutorial.html) covering mesh processing basics.

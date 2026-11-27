@@ -1,0 +1,21 @@
+CASE topology closed_quad_cage checks=326
+CASE topology valence_3_and_5 checks=24
+CASE topology components_and_holes checks=13
+CASE topology levels_range checks=2867
+CASE topology input_validation checks=8
+GROUP topology cases=5 checks=3238 COMPLETE
+CASE stencils geometry_reference checks=5
+CASE stencils boundary_uv_rules checks=5
+CASE stencils channel_reference_rounds checks=780
+CASE stencils stencil_weights checks=543
+CASE stencils sparse_handles checks=1210
+CASE stencils features_do_not_affect_uv checks=3
+GROUP stencils cases=6 checks=2546 COMPLETE
+CASE reuse source_release_and_repeat checks=56
+CASE reuse two_plans_interleaved checks=5
+CASE reuse failure_preserves_previous checks=18
+CASE reuse two_disjoint_seams checks=334
+CASE reuse equal_values_different_indices checks=55
+CASE reuse split_fan checks=37
+GROUP reuse cases=6 checks=505 COMPLETE
+TARGET_COMPLETE cases=17
