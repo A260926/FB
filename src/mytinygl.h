@@ -65,14 +65,7 @@ typedef struct {
     GLboolean enabled;
 } light_t;
 
-/* Material properties */
-typedef struct {
-    color_t ambient;
-    color_t diffuse;
-    color_t specular;
-    color_t emission;
-    GLfloat shininess;
-} material_t;
+/* Material properties are defined in graphics.h (material_t) */
 
 /* Vertex data buffer (per-context for thread safety) */
 #define INITIAL_VERTEX_CAPACITY 64

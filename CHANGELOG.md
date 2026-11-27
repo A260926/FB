@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed - Per-vertex material ownership
+- Material changes (`glMaterial`, `GL_COLOR_MATERIAL`) now only affect
+  vertices submitted afterwards; the last material before `glEnd` is no
+  longer applied retroactively to the whole vertex buffer.
+- Each vertex snapshots its front and back ambient, diffuse, specular,
+  emission and shininess. Immediate mode, `glDrawArrays`/`glDrawElements`
+  and display list playback share the same path.
+- Gouraud two-sided lighting is evaluated at the original vertices with the
+  per-vertex back material and flipped normal, then screen-affine
+  interpolated; back faces are no longer re-lit per fragment.
+- GL_FLAT uses the provoking vertex's face-specific lit color, preserved
+  through clipping even when that vertex is clipped away.
+- GL_PHONG perspective-correct interpolates material coefficients, eye
+  position and normal (screen barycentrics weighted by 1/w) before running
+  the existing per-fragment lighting; `GL_NORMALIZE` behavior is unchanged.
+- New regression: task_tests/materials.c (capture, lighting, clipping groups).
+
 ## [0.5.0] - 2025-12-06
 
 ### Added - OpenGL 1.5 VBO Support

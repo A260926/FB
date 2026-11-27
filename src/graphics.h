@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 /* Vec3 */
 
@@ -433,7 +434,26 @@ static inline uint32_t luminance_alpha_to_rgba32(uint8_t l, uint8_t a) {
     return (a << 24) | (l << 16) | (l << 8) | l;
 }
 
-/* Vertex - interleaved attributes for rasterization */
+/* Material properties (also used for per-vertex material snapshots) */
+typedef struct {
+    color_t ambient;
+    color_t diffuse;
+    color_t specular;
+    color_t emission;
+    float shininess;
+} material_t;
+
+/* Per-vertex material snapshot. glMaterial/glColorMaterial changes only affect
+ * vertices submitted afterwards, so each vertex carries the front and back
+ * material that was current when it was emitted. Lighting is computed from
+ * these snapshots, never from the context's current material at glEnd time. */
+typedef struct {
+    color_t ambient;
+    color_t diffuse;
+    color_t specular;
+    color_t emission;
+    float shininess;
+} vertex_material_t;
 
 typedef struct vertex_t {
     vec4_t position;      /* Clip-space position */
@@ -443,7 +463,44 @@ typedef struct vertex_t {
     float eye_z;          /* Eye-space Z for fog */
     vec3_t eye_pos;       /* Eye-space position (for Phong shading) */
     vec3_t eye_normal;    /* Eye-space normal (for Phong shading) */
+    color_t back_color;   /* Back-face Gouraud color (two-sided lighting) */
+    color_t flat_front_color; /* Provoking vertex's front Gouraud color */
+    color_t flat_back_color;  /* Provoking vertex's back Gouraud color */
+    vertex_material_t material[2]; /* [0]=front, [1]=back material at emit time */
 } vertex_t;
+
+static inline vertex_material_t vertex_material_from(const material_t *m)
+{
+    vertex_material_t vm;
+    vm.ambient   = m->ambient;
+    vm.diffuse   = m->diffuse;
+    vm.specular  = m->specular;
+    vm.emission  = m->emission;
+    vm.shininess = m->shininess;
+    return vm;
+}
+
+static inline material_t material_from_vertex(const vertex_material_t *vm)
+{
+    material_t m;
+    m.ambient   = vm->ambient;
+    m.diffuse   = vm->diffuse;
+    m.specular  = vm->specular;
+    m.emission  = vm->emission;
+    m.shininess = vm->shininess;
+    return m;
+}
+
+static inline vertex_material_t vertex_material_lerp(vertex_material_t a, vertex_material_t b, float t)
+{
+    vertex_material_t r;
+    r.ambient   = color_lerp(a.ambient, b.ambient, t);
+    r.diffuse   = color_lerp(a.diffuse, b.diffuse, t);
+    r.specular  = color_lerp(a.specular, b.specular, t);
+    r.emission  = color_lerp(a.emission, b.emission, t);
+    r.shininess = lerpf(a.shininess, b.shininess, t);
+    return r;
+}
 
 static inline vertex_t vertex_full(vec4_t pos, color_t col, vec2_t tex, vec3_t norm, float ez) {
     vertex_t v;
@@ -454,6 +511,10 @@ static inline vertex_t vertex_full(vec4_t pos, color_t col, vec2_t tex, vec3_t n
     v.eye_z = ez;
     v.eye_pos = vec3(0, 0, 0);
     v.eye_normal = vec3(0, 0, 1);
+    v.back_color = col;
+    v.flat_front_color = col;
+    v.flat_back_color = col;
+    memset(&v.material, 0, sizeof(v.material));
     return v;
 }
 
@@ -461,7 +522,9 @@ static inline vertex_t vertex(vec4_t pos, color_t col, vec2_t tex, vec3_t norm) 
     return vertex_full(pos, col, tex, norm, 0.0f);
 }
 
-/* Interpolate all vertex attributes */
+/* Interpolate all vertex attributes for clipping. The flat-shading source
+ * colors are constant for the whole primitive and are simply propagated to
+ * the generated vertex rather than re-derived. */
 static inline vertex_t vertex_lerp(vertex_t *a, vertex_t *b, float t) {
     vertex_t v;
     v.position   = vec4_lerp(a->position, b->position, t);
@@ -471,6 +534,12 @@ static inline vertex_t vertex_lerp(vertex_t *a, vertex_t *b, float t) {
     v.eye_z      = lerpf(a->eye_z, b->eye_z, t);
     v.eye_pos    = vec3_lerp(a->eye_pos, b->eye_pos, t);
     v.eye_normal = vec3_lerp(a->eye_normal, b->eye_normal, t);
+    v.back_color = color_lerp(a->back_color, b->back_color, t);
+    v.flat_front_color = a->flat_front_color;
+    v.flat_back_color  = a->flat_back_color;
+    for (int f = 0; f < 2; f++) {
+        v.material[f] = vertex_material_lerp(a->material[f], b->material[f], t);
+    }
     return v;
 }
 

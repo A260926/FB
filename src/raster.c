@@ -449,12 +449,19 @@ static inline void write_stencil_masked(framebuffer_t *fb, int32_t x, int32_t y,
 
 /* Rasterize a single triangle with per-vertex color, texcoords, depth, fog, and perspective correction */
 static void rasterize_triangle_smooth(GLState *ctx,
-    int32_t x0, int32_t y0, float z0, float w0_inv, color_t c0, vec2_t uv0, float ez0,
-    int32_t x1, int32_t y1, float z1, float w1_inv, color_t c1, vec2_t uv1, float ez1,
-    int32_t x2, int32_t y2, float z2, float w2_inv, color_t c2, vec2_t uv2, float ez2,
-    vec3_t ep0, vec3_t en0, vec3_t ep1, vec3_t en1, vec3_t ep2, vec3_t en2,
+    vertex_t *c0, vertex_t *c1, vertex_t *c2,
+    int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
     int is_back_facing)
 {
+    /* Per-vertex scalars pulled from the (possibly clip-generated) vertices */
+    float z0 = c0->position.z, z1 = c1->position.z, z2 = c2->position.z;
+    float w0_inv = c0->position.w, w1_inv = c1->position.w, w2_inv = c2->position.w;
+    color_t col0 = c0->color, col1 = c1->color, col2 = c2->color;
+    vec2_t uv0 = c0->texcoord, uv1 = c1->texcoord, uv2 = c2->texcoord;
+    float ez0 = c0->eye_z, ez1 = c1->eye_z, ez2 = c2->eye_z;
+    vec3_t ep0 = c0->eye_pos, ep1 = c1->eye_pos, ep2 = c2->eye_pos;
+    vec3_t en0 = c0->eye_normal, en1 = c1->eye_normal, en2 = c2->eye_normal;
+
     /* Bounding box */
     int32_t minX = x0 < x1 ? (x0 < x2 ? x0 : x2) : (x1 < x2 ? x1 : x2);
     int32_t minY = y0 < y1 ? (y0 < y2 ? y0 : y2) : (y1 < y2 ? y1 : y2);
@@ -581,37 +588,59 @@ static void rasterize_triangle_smooth(GLState *ctx,
                 /* Interpolate or use flat color */
                 color_t c;
                 if (ctx->shade_model == GL_FLAT) {
-                    /* Flat shading: use last vertex color (provoking vertex per OpenGL spec) */
-                    c = c2;
+                    /* Flat shading: the whole triangle takes the lit color of the
+                     * provoking (last submitted) vertex of the original primitive.
+                     * Its precomputed Gouraud colors are copied onto every vertex
+                     * before clipping and propagated by vertex_lerp, so clipping
+                     * and fan splits never change the source, even if that
+                     * vertex is itself clipped away. */
+                    c = is_back_facing ? c0->flat_back_color : c0->flat_front_color;
                 } else {
-                    /* Smooth/Phong: interpolate colors */
-                    c = color_bary(c0, c1, c2, b0, b1, b2);
+                    /* Smooth/Phong: interpolate colors with the existing screen
+                     * affine rule (no perspective correction for color) */
+                    c = color_bary(col0, col1, col2, b0, b1, b2);
                 }
 
-                /* Per-fragment lighting for GL_PHONG, or two-sided lighting adjustment for Gouraud */
-                if (ctx->flags & FLAG_LIGHTING) {
-                    if (ctx->shade_model == GL_PHONG) {
-                        /* Phong shading: compute full lighting per-fragment */
-                        vec3_t eye_pos    = vec3_bary(ep0, ep1, ep2, b0, b1, b2);
-                        vec3_t eye_normal = vec3_bary(en0, en1, en2, b0, b1, b2);
+                /* Per-fragment lighting for GL_PHONG. Gouraud two-sided lighting
+                 * is already fully evaluated per original vertex (front color in
+                 * .color, back color in .back_color), so it only needs the face
+                 * switch below and stays vertex-lit, never per-fragment. */
+                if ((ctx->flags & FLAG_LIGHTING) && ctx->shade_model == GL_PHONG) {
+                    /* Perspective-correct interpolation weights: screen
+                     * barycentrics scaled by each vertex's 1/w, renormalized. */
+                    float q0 = b0 * w0_inv, q1 = b1 * w1_inv, q2 = b2 * w2_inv;
+                    float qsum = q0 + q1 + q2;
+                    if (qsum != 0.0f) { q0 /= qsum; q1 /= qsum; q2 /= qsum; }
 
-                        /* For two-sided lighting, flip normal and use back material for back faces */
-                        material_t *mat = &ctx->material_front;
-                        if (is_back_facing && ctx->light_model_two_side) {
-                            eye_normal = vec3_scale(eye_normal, -1.0f);
-                            mat = &ctx->material_back;
-                        }
+                    /* Interpolate eye-space position and normal */
+                    vec3_t eye_pos    = vec3_bary(ep0, ep1, ep2, q0, q1, q2);
+                    vec3_t eye_normal = vec3_bary(en0, en1, en2, q0, q1, q2);
 
-                        /* Compute per-fragment lighting */
-                        c = compute_lighting(ctx, eye_pos, eye_normal, mat);
-                    } else if (is_back_facing && ctx->light_model_two_side) {
-                        /* For Gouraud shading with two-sided lighting on back faces,
-                         * recompute lighting with flipped normal and back material */
-                        vec3_t eye_pos    = vec3_bary(ep0, ep1, ep2, b0, b1, b2);
-                        vec3_t eye_normal = vec3_bary(en0, en1, en2, b0, b1, b2);
+                    /* Interpolate the per-vertex material coefficients with the
+                     * same perspective-correct weights, then run the original
+                     * lighting calculation. The normal is only normalized when
+                     * GL_NORMALIZE is enabled (handled inside compute_lighting). */
+                    material_t mat;
+                    int face_idx = (is_back_facing && ctx->light_model_two_side) ? 1 : 0;
+                    mat.ambient   = color_bary(c0->material[face_idx].ambient,   c1->material[face_idx].ambient,   c2->material[face_idx].ambient,   q0, q1, q2);
+                    mat.diffuse   = color_bary(c0->material[face_idx].diffuse,   c1->material[face_idx].diffuse,   c2->material[face_idx].diffuse,   q0, q1, q2);
+                    mat.specular  = color_bary(c0->material[face_idx].specular,  c1->material[face_idx].specular,  c2->material[face_idx].specular,  q0, q1, q2);
+                    mat.emission  = color_bary(c0->material[face_idx].emission,  c1->material[face_idx].emission,  c2->material[face_idx].emission,  q0, q1, q2);
+                    mat.shininess = c0->material[face_idx].shininess * q0
+                                  + c1->material[face_idx].shininess * q1
+                                  + c2->material[face_idx].shininess * q2;
+
+                    /* Two-sided lighting flips the normal and uses the back material */
+                    if (is_back_facing && ctx->light_model_two_side) {
                         eye_normal = vec3_scale(eye_normal, -1.0f);
-                        c = compute_lighting(ctx, eye_pos, eye_normal, &ctx->material_back);
                     }
+
+                    c = compute_lighting(ctx, eye_pos, eye_normal, &mat);
+                } else if (is_back_facing && ctx->light_model_two_side &&
+                           ctx->shade_model != GL_FLAT) {
+                    /* Smooth Gouraud back face: use the back-face colors lit at
+                     * the original vertices and interpolated affinely. */
+                    c = color_bary(c0->back_color, c1->back_color, c2->back_color, b0, b1, b2);
                 }
 
                 /* Texture sampling */
@@ -862,9 +891,12 @@ static void draw_triangle_wireframe(GLState *ctx, vertex_t *c0, vertex_t *c1, ve
     color_t col2 = c2->color;
 
     if ((ctx->flags & FLAG_LIGHTING) && ctx->shade_model == GL_PHONG) {
-        col0 = compute_lighting(ctx, c0->eye_pos, c0->eye_normal, &ctx->material_front);
-        col1 = compute_lighting(ctx, c1->eye_pos, c1->eye_normal, &ctx->material_front);
-        col2 = compute_lighting(ctx, c2->eye_pos, c2->eye_normal, &ctx->material_front);
+        material_t m0 = material_from_vertex(&c0->material[0]);
+        material_t m1 = material_from_vertex(&c1->material[0]);
+        material_t m2 = material_from_vertex(&c2->material[0]);
+        col0 = compute_lighting(ctx, c0->eye_pos, c0->eye_normal, &m0);
+        col1 = compute_lighting(ctx, c1->eye_pos, c1->eye_normal, &m1);
+        col2 = compute_lighting(ctx, c2->eye_pos, c2->eye_normal, &m2);
     }
 
     /* Draw the 3 edges */
@@ -887,9 +919,12 @@ static void draw_triangle_points(GLState *ctx, vertex_t *c0, vertex_t *c1, verte
     color_t col2 = c2->color;
 
     if ((ctx->flags & FLAG_LIGHTING) && ctx->shade_model == GL_PHONG) {
-        col0 = compute_lighting(ctx, c0->eye_pos, c0->eye_normal, &ctx->material_front);
-        col1 = compute_lighting(ctx, c1->eye_pos, c1->eye_normal, &ctx->material_front);
-        col2 = compute_lighting(ctx, c2->eye_pos, c2->eye_normal, &ctx->material_front);
+        material_t m0 = material_from_vertex(&c0->material[0]);
+        material_t m1 = material_from_vertex(&c1->material[0]);
+        material_t m2 = material_from_vertex(&c2->material[0]);
+        col0 = compute_lighting(ctx, c0->eye_pos, c0->eye_normal, &m0);
+        col1 = compute_lighting(ctx, c1->eye_pos, c1->eye_normal, &m1);
+        col2 = compute_lighting(ctx, c2->eye_pos, c2->eye_normal, &m2);
     }
 
     draw_point_at_screen(ctx, x0, y0, c0->position.z, col0, c0->eye_z);
@@ -897,11 +932,25 @@ static void draw_triangle_points(GLState *ctx, vertex_t *c0, vertex_t *c1, verte
     draw_point_at_screen(ctx, x2, y2, c2->position.z, col2, c2->eye_z);
 }
 
-/* Render a single triangle with clipping and rasterization */
+/* Render a single triangle with clipping and rasterization.
+ * v0, v1, v2 are in assembled winding order, so v2 is the provoking (last
+ * submitted) vertex of the original primitive. */
 static void render_triangle(GLState *ctx, vertex_t *v0, vertex_t *v1, vertex_t *v2)
 {
     vertex_t triangle[3] = { *v0, *v1, *v2 };
     vertex_t clipped[MAX_CLIP_VERTS];
+
+    /* Tag every vertex of the primitive with the provoking (last submitted)
+     * vertex's precomputed Gouraud colors. Clipping propagates these fields
+     * through vertex_lerp, so GL_FLAT keeps the same source even when the
+     * provoking vertex is itself clipped away or the polygon is split into
+     * fan pieces. */
+    color_t flat_front = v2->flat_front_color;
+    color_t flat_back  = v2->flat_back_color;
+    for (int k = 0; k < 3; k++) {
+        triangle[k].flat_front_color = flat_front;
+        triangle[k].flat_back_color = flat_back;
+    }
 
     /* Clip triangle against frustum (in clip space, before perspective divide) */
     int clip_count = clip_triangle(triangle, clipped);
@@ -946,12 +995,8 @@ static void render_triangle(GLState *ctx, vertex_t *v0, vertex_t *v1, vertex_t *
         } else {
             /* GL_FILL - Use smooth shading (Gouraud) with depth, textures, fog, and perspective correction */
             rasterize_triangle_smooth(ctx,
-                x0, y0, clipped[0].position.z, clipped[0].position.w, clipped[0].color, clipped[0].texcoord, clipped[0].eye_z,
-                x1, y1, clipped[j].position.z, clipped[j].position.w, clipped[j].color, clipped[j].texcoord, clipped[j].eye_z,
-                x2, y2, clipped[j+1].position.z, clipped[j+1].position.w, clipped[j+1].color, clipped[j+1].texcoord, clipped[j+1].eye_z,
-                clipped[0].eye_pos, clipped[0].eye_normal,
-                clipped[j].eye_pos, clipped[j].eye_normal,
-                clipped[j+1].eye_pos, clipped[j+1].eye_normal,
+                &clipped[0], &clipped[j], &clipped[j+1],
+                x0, y0, x1, y1, x2, y2,
                 is_back_facing);
         }
     }

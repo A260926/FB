@@ -259,6 +259,39 @@ GLState *gl_get_current_context(void)
     return ctx;
 }
 
+/* Update the selected material face(s) from a color, following the active
+ * glColorMaterial face/mode selection. Works on any pair of material structs
+ * so it can target either the context state or a per-vertex snapshot. */
+static void apply_color_material_to(material_t *mat_front, material_t *mat_back, color_t vert_color)
+{
+    GLenum mode = ctx->color_material_mode;
+    GLenum face = ctx->color_material_face;
+
+    /* Clamp color components to [0, 1] before using as material property */
+    color_t clamped_color = color_clamp(vert_color);
+
+    if (face == GL_FRONT || face == GL_FRONT_AND_BACK) {
+        if (mode == GL_AMBIENT || mode == GL_AMBIENT_AND_DIFFUSE)
+            mat_front->ambient = clamped_color;
+        if (mode == GL_DIFFUSE || mode == GL_AMBIENT_AND_DIFFUSE)
+            mat_front->diffuse = clamped_color;
+        if (mode == GL_SPECULAR)
+            mat_front->specular = clamped_color;
+        if (mode == GL_EMISSION)
+            mat_front->emission = clamped_color;
+    }
+    if (face == GL_BACK || face == GL_FRONT_AND_BACK) {
+        if (mode == GL_AMBIENT || mode == GL_AMBIENT_AND_DIFFUSE)
+            mat_back->ambient = clamped_color;
+        if (mode == GL_DIFFUSE || mode == GL_AMBIENT_AND_DIFFUSE)
+            mat_back->diffuse = clamped_color;
+        if (mode == GL_SPECULAR)
+            mat_back->specular = clamped_color;
+        if (mode == GL_EMISSION)
+            mat_back->emission = clamped_color;
+    }
+}
+
 /* Helper to build vertex from current state */
 static void emit_vertex(float x, float y, float z, float w)
 {
@@ -281,43 +314,37 @@ static void emit_vertex(float x, float y, float z, float w)
     /* Get base vertex color */
     color_t vert_color = ctx->current_color;
 
-    /* Apply color material if enabled */
+    /* Snapshot the current front/back materials. glMaterial and GL_COLOR_MATERIAL
+     * changes only affect subsequently submitted vertices, so lighting must use
+     * these per-vertex copies rather than the context material at glEnd time. */
+    material_t mat_front = ctx->material_front;
+    material_t mat_back  = ctx->material_back;
+
+    /* Apply color material if enabled. It still updates the context state, so
+     * glGetMaterial keeps reporting the current tracked values; the snapshots
+     * above are refreshed to include the change for this vertex. */
     if ((ctx->flags & FLAG_LIGHTING) && (ctx->flags & FLAG_COLOR_MATERIAL)) {
-        GLenum mode = ctx->color_material_mode;
-        GLenum face = ctx->color_material_face;
-
-        /* Clamp color components to [0, 1] before using as material property */
-        color_t clamped_color = color_clamp(vert_color);
-
-        if (face == GL_FRONT || face == GL_FRONT_AND_BACK) {
-            if (mode == GL_AMBIENT || mode == GL_AMBIENT_AND_DIFFUSE)
-                ctx->material_front.ambient = clamped_color;
-            if (mode == GL_DIFFUSE || mode == GL_AMBIENT_AND_DIFFUSE)
-                ctx->material_front.diffuse = clamped_color;
-            if (mode == GL_SPECULAR)
-                ctx->material_front.specular = clamped_color;
-            if (mode == GL_EMISSION)
-                ctx->material_front.emission = clamped_color;
-        }
-        if (face == GL_BACK || face == GL_FRONT_AND_BACK) {
-            if (mode == GL_AMBIENT || mode == GL_AMBIENT_AND_DIFFUSE)
-                ctx->material_back.ambient = clamped_color;
-            if (mode == GL_DIFFUSE || mode == GL_AMBIENT_AND_DIFFUSE)
-                ctx->material_back.diffuse = clamped_color;
-            if (mode == GL_SPECULAR)
-                ctx->material_back.specular = clamped_color;
-            if (mode == GL_EMISSION)
-                ctx->material_back.emission = clamped_color;
-        }
+        apply_color_material_to(&ctx->material_front, &ctx->material_back, vert_color);
+        mat_front = ctx->material_front;
+        mat_back  = ctx->material_back;
     }
 
-    /* Compute per-vertex lighting for GL_FLAT and GL_SMOOTH (Gouraud shading) */
-    /* For GL_PHONG, lighting is computed per-fragment in the rasterizer */
-    /* Note: Two-sided lighting for Gouraud shading is handled per-fragment
-     * since we don't know the face orientation at vertex time. The front material
-     * is used here; back-face lighting is applied during rasterization. */
+    /* Per-vertex lighting for GL_FLAT and GL_SMOOTH (Gouraud shading).
+     * Both faces are lit at the original vertices: the front face with its own
+     * material and normal, and (with two-sided lighting) the back face with the
+     * flipped normal and back material. With two-sided lighting off, both faces
+     * use the front material and normal. GL_PHONG defers lighting to the
+     * rasterizer and only carries the material snapshots. */
+    color_t front_color = vert_color;
+    color_t back_color  = vert_color;
     if ((ctx->flags & FLAG_LIGHTING) && ctx->shade_model != GL_PHONG) {
-        vert_color = compute_lighting(ctx, eye_pos, eye_normal, &ctx->material_front);
+        front_color = compute_lighting(ctx, eye_pos, eye_normal, &mat_front);
+        if (ctx->light_model_two_side) {
+            vec3_t back_normal = vec3_scale(eye_normal, -1.0f);
+            back_color = compute_lighting(ctx, eye_pos, back_normal, &mat_back);
+        } else {
+            back_color = front_color;
+        }
     }
 
     /* Full transform for clip-space position */
@@ -337,12 +364,22 @@ static void emit_vertex(float x, float y, float z, float w)
     /* Build vertex */
     vertex_t vert;
     vert.position = pos;
-    vert.color = vert_color;
+    /* .color carries the front-face color (lit for Gouraud, raw current color
+     * for GL_PHONG/lighting off); .back_color carries the back-face Gouraud
+     * color, used only when two-sided lighting is active. */
+    vert.color = front_color;
+    vert.back_color = back_color;
     vert.texcoord = texcoord;
     vert.normal = obj_normal;
     vert.eye_z = eye_z;
     vert.eye_pos = eye_pos;
     vert.eye_normal = eye_normal;
+    vert.material[0] = vertex_material_from(&mat_front);
+    vert.material[1] = vertex_material_from(&mat_back);
+    /* Default flat source to this vertex's own lit colors; render_triangle
+     * overwrites these for the primitive's provoking vertex. */
+    vert.flat_front_color = front_color;
+    vert.flat_back_color  = back_color;
 
     vertex_buffer_push(ctx, vert);
 }
