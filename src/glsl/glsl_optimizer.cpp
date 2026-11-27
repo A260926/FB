@@ -1,4 +1,5 @@
 #include "glsl_optimizer.h"
+#include "glslopt_specialize.h"
 #include "nir_optimize.h"
 #include "nir_printer.h"
 #include "buffer_layout.h"
@@ -752,7 +753,9 @@ calculate_stats(nir_shader* nir, int* math, int* tex, int* flow)
 
 // ---------------------------------------------------------------------------
 
-glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options)
+static glslopt_shader*
+optimize_impl(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options,
+              const glslopt_specialized_value* specValues, unsigned specCount)
 {
    if (!ctx)
       return NULL;
@@ -821,6 +824,30 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
       }
    }
 
+   if (specCount > 0) {
+      // The first specialization release only covers desktop GLSL 330 vertex
+      // and fragment shaders, where precision qualifiers cannot change the
+      // generated code. An empty table has no such restriction and stays
+      // byte-identical to glslopt_optimize().
+      if (ctx->target != kGlslTargetOpenGL) {
+         result->fail("Uniform specialization is only supported for the OpenGL target.");
+         return result;
+      }
+      if (type != kGlslOptShaderVertex && type != kGlslOptShaderFragment) {
+         result->fail("Uniform specialization is only supported for vertex and fragment shaders.");
+         return result;
+      }
+      if (info.es || info.version != 330) {
+         result->fail("Uniform specialization is only supported for non-ES GLSL 330 shaders.");
+         return result;
+      }
+      std::string specError = glslopt_apply_specialization(nir, specValues, specCount);
+      if (!specError.empty()) {
+         result->fail(specError.c_str());
+         return result;
+      }
+   }
+
    glslopt_optimize_nir(nir);
    // aggregate copies print as one assignment where the dialect can express them
    glslopt_combine_copies(nir, [&](nir_deref_instr* dst, nir_deref_instr* src) {
@@ -864,6 +891,25 @@ glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, con
    calculate_stats(nir, &result->statsMath, &result->statsTex, &result->statsFlow);
    result->status = true;
    return result;
+}
+
+glslopt_shader* glslopt_optimize(glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options)
+{
+   return optimize_impl(ctx, type, shaderSource, options, nullptr, 0);
+}
+
+nir_shader* glslopt_shader_get_nir_for_test(glslopt_shader* shader)
+{
+   return shader ? shader->shader->nir : nullptr;
+}
+
+glslopt_shader* glslopt_optimize_specialized(glslopt_ctx* ctx, glslopt_shader_type type,
+   const char* shaderSource, unsigned options,
+   const glslopt_specialized_value* values, unsigned count)
+{
+   if (count > 0 && !values)
+      count = 0;
+   return optimize_impl(ctx, type, shaderSource, options, values, count);
 }
 
 void glslopt_shader_delete(glslopt_shader* shader)

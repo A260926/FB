@@ -83,6 +83,44 @@ for (lots of shaders) {
 glslopt_cleanup (ctx);
 ```
 
+### Partial uniform specialization
+
+`glslopt_optimize_specialized` takes the same context, stage, source and
+options as `glslopt_optimize`, plus a table of typed uniform values. The known
+values enter the IR as real constants before optimization, so branches they
+decide and the textures/uniforms that become unreachable are removed by the
+ordinary optimization, reflection and instruction-statistics passes.
+
+```c
+const float weight = 2.5f;
+const int32_t enabled = 1;
+glslopt_specialized_value values[] = {
+    { "weights[1]", kGlslValueFloat32, 1, &weight },
+    { "enabled",     kGlslValueBool,    1, &enabled },
+};
+shader = glslopt_optimize_specialized (ctx, kGlslOptShaderFragment, source, 0,
+                                       values, 2);
+```
+
+* A path starts at a default uniform name and may continue through structure
+  fields and constant indices of fixed-size arrays (`mats[0].base`,
+  `weights[1]`), ending at a complete scalar or vector. Swizzles, matrices,
+  interface-block members, samplers and images are rejected.
+* Values are typed (`kGlslValueFloat32`, `kGlslValueInt32`, `kGlslValueBool`)
+  with an explicit component count; floats must be finite and bools 0 or 1.
+  Values are never passed as GLSL text.
+* Arrays are never made constant wholesale: specializing one element folds
+  constant-index reads of it, while dynamic reads still take the runtime value
+  for every other index. The uniform keeps its original name and array shape,
+  so host upload layout is unchanged. Aggregate resources with any surviving
+  (dynamic or unspecialized) read are retained.
+* Unknown paths, duplicate targets, out-of-range indices or type/component
+  mismatches fail the whole result and name the offending path in the log; no
+  partially optimized output is returned. An empty table is valid and produces
+  byte-identical output to `glslopt_optimize`.
+* The first release supports the OpenGL target with non-ES GLSL 330 vertex and
+  fragment shaders only; other targets/stages fail the result.
+
 
 Language Support
 ----------------
