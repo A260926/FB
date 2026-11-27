@@ -1183,6 +1183,12 @@ static void encoder_state_write_bitstream_main(encoder_state_t * const state)
     kvz_update_after_picture(state);
   }
 
+#if KVZ_ROI_RC_OBSERVATION
+  // Record one observation per encoded frame when the test harness has
+  // enabled it; otherwise this is a no-op.
+  kvz_roi_rc_record_sample(state);
+#endif
+
   if(state->frame->gop_offset)
     state->frame->cur_gop_bits_coded = state->previous_encoder_state->frame->cur_gop_bits_coded;
   state->frame->cur_gop_bits_coded += newpos - curpos;

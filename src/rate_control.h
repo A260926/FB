@@ -43,6 +43,11 @@
 #include "encoderstate.h"
 #include "pthread.h"
 
+/* ROI-aware rate control observation support (used by the internal tests). */
+#ifndef KVZ_ROI_RC_OBSERVATION
+#define KVZ_ROI_RC_OBSERVATION 1
+#endif
+
 typedef struct kvz_rc_data {
   double *c_para[KVZ_MAX_GOP_LAYERS];
   double *k_para[KVZ_MAX_GOP_LAYERS];
@@ -76,11 +81,44 @@ void kvz_free_rc_data(kvz_rc_data* data);
 
 void kvz_set_picture_lambda_and_qp(encoder_state_t * const state);
 
+/**
+ * \brief Form the per-frame ROI-aware spatial bit budget.
+ *
+ * Does nothing unless encoder_control->cfg.roi_rc is set. The budget is
+ * computed once for the whole frame (global CTU grid) before any CTU starts
+ * encoding. A missing ROI map, an all-zero map or an invalid frame target
+ * leaves the plain rate-control path active.
+ */
+void kvz_roi_rc_prepare_frame(encoder_state_t * const state);
+
+/**
+ * \brief Solve the ROI-aware spatial budget for one frame.
+ *
+ * Given the frame target B, base spatial weights b_i, ROI QP offsets d_i and
+ * valid CTU pixel areas p_i, writes n target bit values t_i such that
+ * sum(t_i) == B (relative tolerance 1e-8). The ratio applied to each CTU is
+ * r_i = 2^(-d_i/6) and t_i is clamped to [B*p_i/(4P), 4*B*p_i/P] with one
+ * shared non-negative scale factor.
+ *
+ * \return 1 if a budget was produced, 0 if the inputs are invalid (in which
+ *         case the caller must fall back to the plain rate-control path).
+ */
+int kvz_roi_rc_solve_budget(double frame_target_bits,
+                            int ctu_count,
+                            const double *base_weights,
+                            const int8_t *roi_offsets,
+                            const uint32_t *ctu_pixels,
+                            double *target_bits_out);
+
 void kvz_set_lcu_lambda_and_qp(encoder_state_t * const state,
                                vector2d_t pos);
 
 void kvz_set_ctu_qp_lambda(encoder_state_t * const state, vector2d_t pos);
 void kvz_update_after_picture(encoder_state_t * const state);
 void kvz_estimate_pic_lambda(encoder_state_t * const state);
+
+#if KVZ_ROI_RC_OBSERVATION
+void kvz_roi_rc_record_sample(encoder_state_t * const state);
+#endif
 
 #endif // RATE_CONTROL_H_

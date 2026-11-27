@@ -43,6 +43,70 @@
 #include "kvazaar.h"
 #include "input_frame_buffer.h"
 
+/* ROI-aware rate control observation support. Always compiled; recording is
+ * gated at run time by kvz_roi_rc_enable_observation. */
+#ifndef KVZ_ROI_RC_OBSERVATION
+#define KVZ_ROI_RC_OBSERVATION 1
+#endif
+
+/**
+ * \brief Internal ROI-aware rate control observation used by the tests.
+ *
+ * The observation stays inactive (and allocation-free) until
+ * kvz_roi_rc_enable_observation(1) is called. Each sample describes one fully
+ * encoded frame.
+ */
+typedef struct kvz_roi_rc_frame_sample {
+  int frame_num;
+  int frame_poc;
+  int frame_qp;
+  int is_irap;
+  int ctu_count;
+  int budget_count;     /*!< Times a whole-frame budget was formed. */
+  int effective;        /*!< Nonzero if a nonzero ROI budget was applied. */
+  double frame_target_bits;
+  double planned_bits;  /*!< Sum of per-CTU planned targets (budget only). */
+  double actual_bits;   /*!< Bits actually produced for the frame. */
+  double *targets;      /*!< Per-CTU planned target bits (owned). */
+  double *final_lambdas;/*!< Per-CTU final lambda actually used. */
+  double *final_qps;    /*!< Per-CTU final QP actually used. */
+  double *actual_ctu_bits; /*!< Per-CTU bits from CABAC. */
+  double *model_lambdas; /*!< Per-CTU lambda fed to the model next frame. */
+  double *model_raw_lambdas; /*!< Per-CTU open-loop model lambda from target */
+  int *model_clamped;   /*!< Per-CTU flag: final QP was clamped */
+  int *roi_final_qp;    /*!< Per-CTU final QP recorded during encoding */
+  double *rc_alphas;    /*!< Per-CTU alpha used to derive this frame. */
+  double *rc_betas;     /*!< Per-CTU beta used to derive this frame. */
+  double *sse;          /*!< Per-CTU luma SSE of reconstruction vs source. */
+  uint32_t *ctu_pixels; /*!< Per-CTU valid luma area. */
+  int8_t *roi_offsets;  /*!< Per-CTU ROI delta QP mapped to global grid. */
+  double *base_weights; /*!< Per-CTU base spatial weight b_i used for budget. */
+} kvz_roi_rc_frame_sample;
+
+/**
+ * \brief Enable or disable ROI-aware observation recording.
+ *
+ * Off by default. The test program enables it explicitly; ordinary encoder
+ * users never see the recording overhead.
+ */
+void kvz_roi_rc_enable_observation(int enable);
+
+/**
+ * \brief Copy the ROI-aware observation for an encoded frame.
+ *
+ * \return 1 on success, 0 if no sample is available yet.
+ */
+int kvz_roi_rc_get_sample(int index, kvz_roi_rc_frame_sample *out);
+
+/**
+ * \brief Get the number of observation samples recorded so far.
+ */
+int kvz_roi_rc_sample_count(void);
+
+/**
+ * \brief Free and reset the observation buffer (for a fresh encode in tests).
+ */
+void kvz_roi_rc_clear_samples(void);
 
 // Forward declarations.
 struct encoder_state_t;

@@ -73,6 +73,32 @@ typedef struct lcu_stats_t {
 
   double original_weight;
 
+  /**
+   * \brief Target bits assigned to this CTU by the ROI-aware spatial budget.
+   *
+   * Only meaningful when encoder_control->cfg.roi_rc is enabled and the
+   * current frame had a nonzero ROI map. Kept after encoding so that internal
+   * tests can inspect the allocation that was actually used.
+   */
+  double roi_target_bits;
+
+  //! \brief Base spatial weight b_i captured when the ROI budget was formed.
+  double roi_base_weight;
+
+  /**
+   * \brief Lambda produced by the original alpha/beta model from
+   * roi_target_bits before any final QP clamping.
+   */
+  double roi_model_lambda;
+
+  //! \brief Nonzero if the final QP came from the frame QP delta clamp rather
+  //! than from rounding the model lambda.
+  uint8_t roi_lambda_clamped;
+
+  //! \brief Final lambda and QP actually used for this CTU (after VAQ).
+  double roi_final_lambda;
+  int8_t roi_final_qp;
+
   //! \brief Lambda value which was used for this LCU
   double lambda;
 
@@ -181,6 +207,27 @@ typedef struct encoder_state_config_frame_t {
   double *aq_offsets;
 
   int8_t max_qp_delta_depth;
+
+  /**
+   * \brief Whether the current frame has an ROI-aware spatial budget.
+   *
+   * Set once per frame before any CTU is encoded and not modified afterwards.
+   */
+  bool roi_rc_active;
+
+  /**
+   * \brief Whether roi_rc_active changed the spatial budget relative to the
+   * plain rate-control path. False for a missing, all-zero or absent ROI map.
+   */
+  bool roi_rc_effective;
+
+  /**
+   * \brief Number of times the ROI-aware budget was formed for this frame.
+   *
+   * Exposed for internal tests: a frame must receive exactly one complete
+   * budget regardless of tiles, WPP or OWF.
+   */
+  int roi_rc_budget_count;
 
   /**
    * \brief Whether next NAL is the first NAL in the access unit.

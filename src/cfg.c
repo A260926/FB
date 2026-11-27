@@ -145,6 +145,7 @@ int kvz_config_init(kvz_config *cfg)
 
   cfg->roi.file_path = NULL;
   cfg->roi.format = KVZ_ROI_TXT;
+  cfg->roi_rc = false;
 
   cfg->set_qp_in_cu = false;
 
@@ -1313,6 +1314,9 @@ int kvz_config_parse(kvz_config *cfg, const char *name, const char *value)
       cfg->roi.format = unknown_format ? KVZ_ROI_TXT : formats[format];
     }
   }
+  else if OPT("roi-rc") {
+    cfg->roi_rc = (bool)atobool(value);
+  }
   else if OPT("set-qp-in-cu") {
     cfg->set_qp_in_cu = (bool)atobool(value);
   }
@@ -1570,6 +1574,15 @@ int kvz_config_validate(const kvz_config *const cfg)
 
   if (cfg->vaq < 0) {
     fprintf(stderr, "vaq strength must be positive\n");
+    error = 1;
+  }
+
+  if (cfg->roi_rc &&
+      (cfg->target_bitrate <= 0 || cfg->rc_algorithm != KVZ_LAMBDA)) {
+    fprintf(stderr,
+            "roi-rc requires a positive bitrate and rc-algorithm=lambda "
+            "(bitrate=%d, rc-algorithm=%d).\n",
+            cfg->target_bitrate, cfg->rc_algorithm);
     error = 1;
   }
 

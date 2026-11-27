@@ -1689,6 +1689,14 @@ static void encoder_state_init_new_frame(encoder_state_t * const state, kvz_pict
     default:
       assert(0);
   }
+
+  // Form the whole-frame ROI-aware spatial budget once, before any CTU of
+  // this frame starts encoding. Tile and WPP children share the same frame
+  // configuration, so this runs only on the main state. The prepare function
+  // also clears the per-ROI bookkeeping for the new frame.
+  if (state->encoder_control->cfg.roi_rc) {
+    kvz_roi_rc_prepare_frame(state);
+  }
  
   encoder_state_init_children(state);
 }

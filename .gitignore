@@ -58,3 +58,7 @@ src/kvazaar.pc.temp
 src/version.h
 tests/kvazaar_tests
 tests/kvazaar_tests.trs
+
+# devcheck harness build outputs
+/devcheck/build/
+/devcheck/out/

@@ -397,6 +397,16 @@ typedef struct kvz_config
     enum kvz_roi_format format;
   } roi; /*!< \brief Specify delta QPs for region of interest coding. */
 
+  /**
+   * \brief ROI-aware rate control.
+   *
+   * When enabled, a nonzero ROI map first redistributes the frame-level
+   * spatial bit budget and the per-CTU lambda/QP is then derived with the
+   * normal rate-control model. Requires a positive bitrate and
+   * rc_algorithm == lambda.
+   */
+  int8_t roi_rc;
+
   unsigned slices; /*!< \since 3.15.0 \brief How to map slices to frame. */
 
   /**

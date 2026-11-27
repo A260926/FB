@@ -135,6 +135,8 @@ static const struct option long_options[] = {
   { "implicit-rdpcm",           no_argument, NULL, 0 },
   { "no-implicit-rdpcm",        no_argument, NULL, 0 },
   { "roi",                required_argument, NULL, 0 },
+  { "roi-rc",                   no_argument, NULL, 0 },
+  { "no-roi-rc",                no_argument, NULL, 0 },
   { "erp-aqp",                  no_argument, NULL, 0 },
   { "no-erp-aqp",               no_argument, NULL, 0 },
   { "level",              required_argument, NULL, 0 },
@@ -532,6 +534,11 @@ void print_help(void)
     "                               and will be scaled to the video size. The file\n"
     "                               reading will loop if end of the file is reached.\n"
     "                               See roi.txt in the examples folder.\n"
+    "      --(no-)roi-rc          : Use ROI-aware rate control. [disabled]\n"
+    "                               A nonzero ROI map redistributes the frame\n"
+    "                               bit budget before the normal lambda rate\n"
+    "                               control model derives per-CTU QP. Requires\n"
+    "                               --bitrate and --rc-algorithm=lambda.\n"
     "      --set-qp-in-cu         : Set QP at CU level keeping pic_init_qp_minus26.\n"
     "                               in PPS and slice_qp_delta in slize header zero.\n"
     "      --(no-)erp-aqp         : Use adaptive QP for 360 degree video with\n"

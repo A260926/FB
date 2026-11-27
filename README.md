@@ -175,6 +175,17 @@ Video structure:
                                and will be scaled to the video size. The file
                                reading will loop if end of the file is reached.
                                See roi.txt in the examples folder.
+      --(no-)roi-rc          : Use ROI-aware rate control. [disabled]
+                               When enabled and a frame has a nonzero ROI map,
+                               the ROI first redistributes that frame's spatial
+                               bit budget, and the normal lambda rate-control
+                               model then derives per-CTU QP from the resulting
+                               targets and the real coding results of previous
+                               frames. Requires --bitrate > 0 and
+                               --rc-algorithm=lambda; encoder_open fails on
+                               other combinations. Without an ROI map, or with
+                               an all-zero map, encoding follows the ordinary
+                               bitrate path.
       --set-qp-in-cu         : Set QP at CU level keeping pic_init_qp_minus26.
                                in PPS and slice_qp_delta in slize header zero.
       --(no-)erp-aqp         : Use adaptive QP for 360 degree video with
@@ -419,6 +430,53 @@ When using the static Kvazaar library on Windows, macro `KVZ_STATIC_LIB`
 must be defined. On other platforms it's not strictly required.
 
 The needed linker and compiler flags can be obtained with pkg-config.
+
+### ROI-aware rate control
+Kvazaar can optionally combine a region-of-interest (ROI) delta-QP map with
+the lambda rate control instead of applying the raw QP offsets directly.
+Enable it with `--roi-rc` (CLI) or `kvz_config::roi_rc` (library). It requires
+a positive `--bitrate` and `--rc-algorithm=lambda`; `encoder_open` fails for
+any other combination. The existing ROI inputs are unchanged: the `--roi`
+file and the `roi` field of `kvz_picture` both work.
+
+How the spatial budget is formed, per frame, before the first CTU is coded:
+
+- Let `B` be the frame target bits allocated by the normal rate control.
+- `b_i` is the spatial weight the original `lcu_allocate_bits` uses, taken
+  before its one-bit minimum: `1/CTU_count` for the first frames and the
+  normalized complexity weight afterwards.
+- `d_i` is the ROI delta QP mapped to the CTU grid with
+  `(floor(x*roi_width/ctu_columns), floor(y*roi_height/ctu_rows))`,
+  adding the tile offset for coordinates inside a tile.
+- `r_i = 2^(-d_i/6)`; `p_i` is the CTU's valid picture area and `P = sum(p_i)`.
+- Each `b_i` is raised to at least `1e-12 * p_i/P` and renormalized. If all
+  `b_i` are zero, the area ratio is used directly.
+- `t_i = clamp(c * b_i * r_i, B*p_i/(4P), 4*B*p_i/P)` with a single
+  non-negative `c` chosen so that `sum(t_i) == B`. The solve is done in
+  double precision without per-CTU rounding; the relative error is at most
+  `1e-8` and CTUs saturating at both bounds simultaneously are handled by
+  the monotone solve.
+
+At each CTU the resulting target `t_i/p_i` is fed into the existing
+alpha/beta model to obtain lambda and QP. The ROI offset is not added back to
+the QP. Only the legal lambda and QP ranges (plus the QP-delta bound that a
+conforming `cu_qp_delta` bitstream requires) constrain the result; the narrow
+neighbour/frame lambda windows of the ordinary inter path are not applied, so
+the spatial differences produced by the ROI budget survive. Variance adaptive
+quantization, when enabled, adjusts the values afterwards, and the adjusted
+lambda is what the model is trained with on the next frame.
+
+The budget is a planning target for the model, **not** a hard upper bound on
+the number of bits a CTU actually produces; the actual bit counts are always
+read back from the CABAC output and used for training.
+
+If a frame has no ROI map, or the whole map is zero, the encoder follows the
+ordinary bitrate path: the same per-CTU target, QP and lambda as if `roi_rc`
+were off and no ROI were supplied.
+
+See [examples/roi_rc_demo.c](examples/roi_rc_demo.c) for a complete example
+that generates I420 material and a per-frame ROI map, encodes it, and writes
+the HEVC bitstream and reconstructed frames.
 
 
 ## Compiling Kvazaar

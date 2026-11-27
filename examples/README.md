@@ -11,4 +11,22 @@ The included example file will split frames into four regions with the top regio
 ```
 2 2
 5 5 0 0
-``` 
+```
+
+Combine a ROI map with rate control using the `--roi-rc` switch. The ROI then
+redistributes the frame bit budget before the lambda rate control derives the
+per-CTU QP. It requires `--bitrate` and `--rc-algorithm=lambda`.
+
+## ROI rate control example
+`roi_rc_demo.c` generates synthetic I420 material and a per-frame changing ROI
+map, encodes it with the real Kvazaar library, and writes the HEVC output and
+the reconstructed frames. Build and run it from the repository root:
+
+```
+cc -std=c99 -Isrc -Ibuild examples/roi_rc_demo.c build/libkvazaar.a \
+   -lm -pthread -o roi_rc_demo
+./roi_rc_demo out.hevc out.yuv
+```
+
+(Use the matching build directory, e.g. `devcheck/build`, if that is where the
+static library was produced.)
