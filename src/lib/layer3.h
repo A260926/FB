@@ -124,6 +124,27 @@ int shine_samples_per_pass(shine_t s);
  * may be NULL if no data was written. */
 unsigned char *shine_encode_buffer(shine_t s, int16_t **data, int *written);
 
+/* Encode one frame with caller supplied masking thresholds.
+ *
+ * `ratios` holds the normalized noise thresholds for this frame, laid out
+ * per granule, per channel, with 22 long-window scalefactor bands each:
+ *   ratios[((granule * channels) + channel) * 22 + sfb]
+ * i.e. granule 0 channel 0, granule 0 channel 1, granule 1 channel 0, ...
+ * Every value must be finite and lie in (0, 1]. The normalized
+ * reconstruction noise of a band, D / (ratio * E), is driven below 1 where
+ * the frame bit budget allows it; protected bands get real scalefactors and
+ * the global gain keeps the frame within the normal CBR capacity.
+ *
+ * Only MPEG-I at 32, 44.1 or 48 kHz, in MONO or plain STEREO, is supported.
+ * `ratio_count` must equal 2 * channels * 22. Passing NULL with
+ * ratio_count 0 is byte-for-byte identical to shine_encode_buffer().
+ *
+ * Invalid requests return NULL with *written set to -1 before any analysis
+ * history is advanced, so the next call can encode normally. */
+unsigned char *shine_encode_buffer_masked(shine_t s, int16_t **data,
+                                          const double *ratios,
+                                          int ratio_count, int *written);
+
 /* Encode interleaved audio data. Source data must have
  * `shine_samples_per_pass(s)` audio samples per channels. Mono encoder only
  * expect one channel.
@@ -134,6 +155,12 @@ unsigned char *shine_encode_buffer(shine_t s, int16_t **data, int *written);
  * may be NULL if no data was written. */
 unsigned char *shine_encode_buffer_interleaved(shine_t s, int16_t *data,
                                                int *written);
+
+/* Interleaved counterpart of shine_encode_buffer_masked(), with the same
+ * threshold layout, restrictions and error behaviour. */
+unsigned char *shine_encode_buffer_interleaved_masked(
+    shine_t s, int16_t *data, const double *ratios, int ratio_count,
+    int *written);
 
 /* Flush all data currently in the encoding buffer. Should be used before
  * closing the encoder, to make all encoded data has been written. */

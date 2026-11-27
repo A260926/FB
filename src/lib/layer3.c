@@ -170,11 +170,66 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
   /* write the frame to the bitstream */
   shine_format_bitstream(config);
 
+  /* The masking ratios only describe this frame. */
+  config->mask_ratios = NULL;
+  config->mask_ratio_count = 0;
+
   /* Return data. */
   *written = config->bs.data_position;
   config->bs.data_position = 0;
 
   return config->bs.data;
+}
+
+/* Validate a masked-encoding request. Returns 0 when the thresholds may be
+ * used, -1 otherwise. Runs before any analysis state is touched. */
+static int shine_check_mask_request(shine_global_config *config,
+                                    const double *ratios, int ratio_count) {
+  int expected, i;
+
+  if (ratios == NULL && ratio_count == 0)
+    return 0; /* legacy path */
+
+  if (ratios == NULL || ratio_count == 0)
+    return -1;
+
+  if (config->mpeg.version != MPEG_I)
+    return -1;
+
+  if (config->mpeg.samplerate_index >= 3)
+    return -1; /* only 32, 44.1 and 48 kHz */
+
+  if (config->mpeg.mode != MONO && config->mpeg.mode != STEREO)
+    return -1;
+
+  if (config->wave.channels != 1 && config->wave.channels != 2)
+    return -1;
+
+  expected = config->mpeg.granules_per_frame * config->wave.channels * 22;
+  if (ratio_count != expected)
+    return -1;
+
+  for (i = 0; i < ratio_count; i++) {
+    if (!isfinite(ratios[i]) || ratios[i] <= 0.0 || ratios[i] > 1.0)
+      return -1;
+  }
+
+  return 0;
+}
+
+static unsigned char *shine_encode_masked(shine_global_config *config,
+                                          const double *ratios,
+                                          int ratio_count, int *written,
+                                          int stride) {
+  if (shine_check_mask_request(config, ratios, ratio_count) < 0) {
+    *written = -1;
+    return NULL;
+  }
+
+  config->mask_ratios = ratios;
+  config->mask_ratio_count = ratio_count;
+
+  return shine_encode_buffer_internal(config, written, stride);
 }
 
 unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
@@ -186,6 +241,21 @@ unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
   return shine_encode_buffer_internal(config, written, 1);
 }
 
+unsigned char *shine_encode_buffer_masked(shine_global_config *config,
+                                          int16_t **data, const double *ratios,
+                                          int ratio_count, int *written) {
+  if (shine_check_mask_request(config, ratios, ratio_count) < 0) {
+    *written = -1;
+    return NULL;
+  }
+
+  config->buffer[0] = data[0];
+  if (config->wave.channels == 2)
+    config->buffer[1] = data[1];
+
+  return shine_encode_masked(config, ratios, ratio_count, written, 1);
+}
+
 unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
                                                int16_t *data, int *written) {
   config->buffer[0] = data;
@@ -193,6 +263,22 @@ unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
     config->buffer[1] = data + 1;
 
   return shine_encode_buffer_internal(config, written, config->wave.channels);
+}
+
+unsigned char *shine_encode_buffer_interleaved_masked(
+    shine_global_config *config, int16_t *data, const double *ratios,
+    int ratio_count, int *written) {
+  if (shine_check_mask_request(config, ratios, ratio_count) < 0) {
+    *written = -1;
+    return NULL;
+  }
+
+  config->buffer[0] = data;
+  if (config->wave.channels == 2)
+    config->buffer[1] = data + 1;
+
+  return shine_encode_masked(config, ratios, ratio_count, written,
+                             config->wave.channels);
 }
 
 unsigned char *shine_flush(shine_global_config *config, int *written) {

@@ -175,6 +175,22 @@ typedef struct shine_global_flags {
   l3loop_t l3loop;
   mdct_t mdct;
   subband_t subband;
+  /* Caller supplied masking thresholds, see shine_encode_buffer_masked().
+   * NULL selects the legacy capacity-only outer loop. */
+  const double *mask_ratios;
+  int mask_ratio_count;
+#ifdef SHINE_TEST_HOOKS
+  /* Read-only test instrumentation: copies of the spectral values and the
+   * legacy (all-zero scalefactor) granule candidates for the frame currently
+   * being encoded. */
+  int32_t test_mdct_freq[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
+  struct {
+    int present;
+    int quantizerStepSize;
+    int part2_3_length;
+    int l3_enc[GRANULE_SIZE];
+  } test_legacy[MAX_CHANNELS][MAX_GRANULES];
+#endif
 } shine_global_config;
 
 #endif

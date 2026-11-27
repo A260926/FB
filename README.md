@@ -39,6 +39,56 @@ write(written, data);
 shine_close(s);
 ```
 
+### Masking thresholds
+
+`shine_encode_buffer_masked()` and
+`shine_encode_buffer_interleaved_masked()` accept caller supplied masking
+thresholds so an external psychoacoustic analyzer can steer the long-window
+quantization. Where the frame budget allows, bands that need protection are
+quantized more finely using real per-band scalefactors, while the global gain
+keeps the frame inside the normal CBR capacity.
+
+The thresholds are normalized noise ratios, one value per granule, per
+channel, per 22 long scalefactor bands. For a frame of two granules the array
+holds `2 * channels * 22` doubles, laid out granule by granule and, inside a
+granule, channel by channel:
+
+```c
+/* stereo: 2 granules * 2 channels * 22 bands = 88 values */
+double ratios[88];
+for (int gr = 0; gr < 2; gr++)
+  for (int ch = 0; ch < 2; ch++)
+    for (int sfb = 0; sfb < 22; sfb++) {
+      /* small ratio = protect the band (fine quantization),
+         1.0 = no extra protection */
+      ratios[(gr * 2 + ch) * 22 + sfb] =
+          0.02 + 0.98 * (sfb / 21.0) * (sfb / 21.0);
+    }
+
+int written;
+unsigned char *data =
+    shine_encode_buffer_masked(s, buffer, ratios, 88, &written);
+```
+
+Each ratio must be finite and in `(0, 1]`, and `ratio_count` must equal
+`2 * channels * 22`. The encoder targets a normalized reconstruction noise
+`D / (ratio * E)` below one per band. When the budget cannot satisfy every
+threshold it emits the best legal solution whose worst-band normalized noise
+is never higher than the legacy, scalefactor-free candidate for the same
+frame; ties keep the legacy result.
+
+Applicability and rules:
+
+* Only MPEG-I at 32, 44.1 or 48 kHz, in MONO or plain STEREO. Short blocks,
+  joint stereo and any MPEG-II/2.5 configuration are rejected.
+* Long blocks only: `preflag` and `scalefac_scale` are zero; bands 0..20 use
+  scalefactors 0..7 and band 21 stays the implicit zero.
+* Invalid requests (bad count, non-finite or out-of-range ratio, unsupported
+  format) return `NULL` with `*written = -1` before any analysis state is
+  advanced, so the next call encodes normally.
+* Passing `NULL` with `ratio_count == 0` is byte-for-byte identical to the
+  plain `shine_encode_buffer()` entry point.
+
 How fast is it?
 ---------------
 

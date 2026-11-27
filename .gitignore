@@ -85,3 +85,6 @@ shine-*.tar.gz
 *.o
 *.mp3
 node_modules
+
+# Task harness build output
+.task-build/

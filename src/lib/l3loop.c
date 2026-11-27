@@ -35,6 +35,7 @@ static void calc_xmin(shine_psy_ratio_t *ratio, gr_info *cod_info,
                       shine_psy_xmin_t *l3_xmin, int gr, int ch);
 static int quantize(int ix[GRANULE_SIZE], int stepsize,
                     shine_global_config *config);
+static void shine_legacy_iteration_loop(shine_global_config *config);
 
 /*
  * shine_inner_loop:
@@ -95,6 +96,13 @@ int shine_outer_loop(
  * ------------------
  */
 void shine_iteration_loop(shine_global_config *config) {
+  if (config->mask_ratios)
+    shine_masked_iteration_loop(config);
+  else
+    shine_legacy_iteration_loop(config);
+}
+
+static void shine_legacy_iteration_loop(shine_global_config *config) {
   shine_psy_xmin_t l3_xmin;
   gr_info *cod_info;
   int max_bits;
@@ -800,4 +808,391 @@ int bin_search_StepSize(int desired_rate, int ix[GRANULE_SIZE],
   } while (count > 1);
 
   return next;
+}
+
+/* ===================================================================
+ * Masked outer loop
+ *
+ * The legacy loop above only adjusts the global gain: every long-window
+ * scalefactor is transmitted as zero. This extension lets caller supplied
+ * masking ratios drive real per-band scalefactors (preflag = 0,
+ * scalefac_scale = 0, bands 0..20 in 0..7, band 21 implicitly zero), while
+ * the global gain keeps each granule inside the same CBR capacity the
+ * legacy encoder would have used.
+ * =================================================================== */
+
+#define MASK_SFB 22
+#define MASK_MAX_SF 7
+#define MASK_OUTER_LIMIT 200
+
+typedef struct {
+  int sf[21];                  /* transmitted scalefactors, band 21 is 0 */
+  int step;                    /* quantizerStepSize (global gain - 210) */
+  int scalefac_compress;
+  int slen1, slen2;
+  int part2;                   /* scalefactor bits */
+  int huff;                    /* Huffman bits */
+  int part2_3;
+  int feasible;
+  double noise[MASK_SFB];      /* normalized noise D / (ratio * E) */
+  double worst;
+  gr_info gi;
+  int ix[GRANULE_SIZE];
+} mask_cand_t;
+
+/* Quantize one spectral magnitude with an effective per-band step size.
+ * The band scalefactor f turns the exponent step/4 - f/2 into the global
+ * exponent (step - 2*f)/4, so the band quantizes with step - 2*f. */
+static int mask_quant_sample(int32_t xrabs, int bstep,
+                             shine_global_config *config) {
+  int32_t scalei;
+  int ln;
+
+  if (bstep < -127)
+    bstep = -127;
+  if (bstep > 0)
+    bstep = 0;
+
+  scalei = config->l3loop.steptabi[bstep + 127]; /* 2**(-bstep/4) */
+  ln = mulr(xrabs, scalei);
+
+  if (ln < 10000)
+    return config->l3loop.int2idx[ln];
+
+  {
+    double scale = config->l3loop.steptab[bstep + 127];
+    double dbl = ((double)xrabs) * scale * 4.656612875e-10;
+    return (int)sqrt(sqrt(dbl) * dbl);
+  }
+}
+
+static void mask_quantize_bands(mask_cand_t *c,
+                                shine_global_config *config) {
+  const int *band =
+      &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
+  int b, i;
+
+  for (b = 0; b < MASK_SFB; b++) {
+    int bstep = c->step - 2 * (b < 21 ? c->sf[b] : 0);
+    for (i = band[b]; i < band[b + 1]; i++)
+      c->ix[i] = mask_quant_sample(config->l3loop.xrabs[i], bstep, config);
+  }
+}
+
+/* Smallest slen width that can represent value v. */
+static int mask_width_needed(int v) {
+  int bits = 0;
+  while ((1 << bits) <= v)
+    bits++;
+  return bits;
+}
+
+/* Pick the MPEG-I scalefac_compress index with the smallest granule-0
+ * part2 cost that can still represent every transmitted value; ties go to
+ * the smaller index. */
+static int mask_pick_compress(const int *sf, int *slen1_out, int *slen2_out) {
+  int b, m1 = 0, m2 = 0, need1, need2, best = 0, best_cost = 0;
+  int found = 0;
+
+  for (b = 0; b <= 10; b++)
+    if (sf[b] > m1)
+      m1 = sf[b];
+  for (b = 11; b <= 20; b++)
+    if (sf[b] > m2)
+      m2 = sf[b];
+
+  need1 = mask_width_needed(m1);
+  need2 = mask_width_needed(m2);
+
+  for (b = 0; b < 16; b++) {
+    int s1 = shine_slen1_tab[b], s2 = shine_slen2_tab[b];
+    int cost;
+    if (s1 < need1 || s2 < need2)
+      continue;
+    cost = 11 * s1 + 10 * s2; /* all 21 bands present, as in granule 0 */
+    if (!found || cost < best_cost) {
+      found = 1;
+      best = b;
+      best_cost = cost;
+      *slen1_out = s1;
+      *slen2_out = s2;
+    }
+  }
+  return best;
+}
+
+static int mask_part2_bits(int slen1, int slen2, const int scfsi[4], int gr) {
+  int bits = 11 * slen1 + 10 * slen2;
+
+  if (gr) {
+    if (scfsi[0])
+      bits -= 6 * slen1;
+    if (scfsi[1])
+      bits -= 5 * slen1;
+    if (scfsi[2])
+      bits -= 5 * slen2;
+    if (scfsi[3])
+      bits -= 5 * slen2;
+  }
+  return bits;
+}
+
+/* Reconstruct one band and return its normalized noise D / (ratio * E),
+ * with both E and D in the natural mdct_freq / 2^31 spectral units. */
+static double mask_band_noise(int sfb, const int *ix, int step, const int *sf,
+                              double ratio, shine_global_config *config) {
+  const int *band =
+      &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
+  int start = band[sfb], end = band[sfb + 1];
+  int scalefac = sfb < 21 ? sf[sfb] : 0;
+  double gain = pow(2.0, (double)step / 4.0 - (double)scalefac / 2.0);
+  double E = 0.0, D = 0.0, xr, rec;
+  int i;
+
+  for (i = start; i < end; i++) {
+    int32_t v = config->l3loop.xr[i];
+    xr = (double)v / 2147483648.0;
+    rec = (ix[i] ? (ix[i] < 0 ? -1.0 : 1.0) *
+                       pow((double)abs(ix[i]), 4.0 / 3.0) * gain
+                 : 0.0);
+    E += xr * xr;
+    D += (xr - rec) * (xr - rec);
+  }
+
+  if (E == 0.0)
+    return D == 0.0 ? 0.0 : INFINITY;
+  return D / (ratio * E);
+}
+
+static void mask_compute_noise(mask_cand_t *c, const double *ratios,
+                               shine_global_config *config) {
+  int b;
+
+  c->worst = 0.0;
+  for (b = 0; b < MASK_SFB; b++) {
+    c->noise[b] = mask_band_noise(b, c->ix, c->step, c->sf, ratios[b], config);
+    if (c->noise[b] > c->worst)
+      c->worst = c->noise[b];
+  }
+}
+
+/* Fully evaluate a candidate: choose the scalefactor compression, quantize
+ * every band, run the Huffman region selection against the remaining budget
+ * (raising the global step like the legacy inner loop) and score the band
+ * noise. scfsi is assumed all-zero while searching; granule 1 reuses are
+ * resolved once its final scalefactors exist. */
+static void mask_evaluate(mask_cand_t *c, int gr, int max_bits,
+                          const int scfsi[4], const double *ratios,
+                          shine_global_config *config) {
+  int budget;
+
+  c->scalefac_compress =
+      mask_pick_compress(c->sf, &c->slen1, &c->slen2);
+  c->part2 = mask_part2_bits(c->slen1, c->slen2, scfsi, gr);
+  budget = max_bits - c->part2;
+  c->feasible = 0;
+
+  if (budget < 0)
+    return;
+
+  for (;;) {
+    int maxix;
+
+    mask_quantize_bands(c, config);
+    maxix = ix_max(c->ix, 0, GRANULE_SIZE);
+
+    memset(&c->gi, 0, sizeof(c->gi));
+    calc_runlen(c->ix, &c->gi);
+    c->huff = count1_bitcount(c->ix, &c->gi);
+    subdivide(&c->gi, config);
+    bigv_tab_select(c->ix, &c->gi);
+    c->huff += bigv_bitcount(c->ix, &c->gi);
+
+    if (maxix <= 8192 && c->huff <= budget)
+      break;
+
+    if (c->step >= 0)
+      return; /* cannot coarsen any further: infeasible */
+    c->step++;
+  }
+
+  if (c->part2 + c->huff > 4095)
+    return;
+
+  c->part2_3 = c->part2 + c->huff;
+  c->feasible = 1;
+  mask_compute_noise(c, ratios, config);
+}
+
+/* Run the legacy all-zero scalefactor candidate through the untouched
+ * production outer loop so the fallback is exactly the old behaviour. */
+static void mask_legacy_candidate(mask_cand_t *c, int gr, int ch, int max_bits,
+                                  const double *ratios,
+                                  shine_global_config *config) {
+  shine_psy_xmin_t l3_xmin;
+  gr_info *gi = &config->side_info.gr[gr].ch[ch].tt;
+  int b;
+
+  memset(c, 0, sizeof(*c));
+  memset(c->sf, 0, sizeof(c->sf));
+
+  if (!config->l3loop.xrmax) {
+    c->step = 0;
+    c->feasible = 1;
+    mask_compute_noise(c, ratios, config);
+    return;
+  }
+
+  memset(&l3_xmin, 0, sizeof(l3_xmin));
+  memset(config->scalefactor.l[gr][ch], 0,
+         sizeof(config->scalefactor.l[gr][ch]));
+  memset(gi, 0, sizeof(*gi));
+  gi->sfb_lmax = SFB_LMAX - 1;
+
+  c->part2_3 = shine_outer_loop(max_bits, &l3_xmin, config->l3_enc[ch][gr], gr,
+                                ch, config);
+  c->step = gi->quantizerStepSize;
+  c->gi = *gi;
+  memcpy(c->ix, config->l3_enc[ch][gr], sizeof(c->ix));
+  c->huff = c->part2_3; /* legacy part2 is zero */
+  c->part2 = 0;
+  c->slen1 = c->slen2 = 0;
+  c->feasible = 1;
+  mask_compute_noise(c, ratios, config);
+
+  for (b = 0; b < 21; b++)
+    config->scalefactor.l[gr][ch][b] = 0;
+}
+
+void shine_masked_iteration_loop(shine_global_config *config) {
+  int channels = config->wave.channels;
+  int ch, gr;
+
+  /* Start from a clean slate: SCFSI is recomputed per channel below and no
+   * value from a previous frame may leak into a freshly encoded one. */
+  memset(config->side_info.scfsi, 0, sizeof(config->side_info.scfsi));
+
+  for (ch = 0; ch < channels; ch++) {
+    int scfsi[MAX_CHANNELS][4];
+    mask_cand_t best[MAX_GRANULES];
+    memset(scfsi, 0, sizeof(scfsi));
+
+    for (gr = 0; gr < config->mpeg.granules_per_frame; gr++) {
+      const double *ratios =
+          config->mask_ratios + ((gr * channels + ch) * MASK_SFB);
+      int max_bits;
+      mask_cand_t cur;
+      int i, b;
+
+      config->l3loop.xr = config->mdct_freq[ch][gr];
+      for (i = GRANULE_SIZE, config->l3loop.xrmax = 0; i--;) {
+        config->l3loop.xrsq[i] =
+            mulsr(config->l3loop.xr[i], config->l3loop.xr[i]);
+        config->l3loop.xrabs[i] = labs(config->l3loop.xr[i]);
+        if (config->l3loop.xrabs[i] > config->l3loop.xrmax)
+          config->l3loop.xrmax = config->l3loop.xrabs[i];
+      }
+
+      max_bits = shine_max_reservoir_bits(&config->pe[ch][gr], config);
+
+      /* Seed with the legacy candidate; it is the guaranteed fallback. */
+      mask_legacy_candidate(&best[gr], gr, ch, max_bits, ratios, config);
+
+#ifdef SHINE_TEST_HOOKS
+      memcpy(config->test_mdct_freq[ch][gr], config->mdct_freq[ch][gr],
+             sizeof(config->test_mdct_freq[ch][gr]));
+      config->test_legacy[ch][gr].present = config->l3loop.xrmax != 0;
+      config->test_legacy[ch][gr].quantizerStepSize = best[gr].step;
+      config->test_legacy[ch][gr].part2_3_length = best[gr].part2_3;
+      memcpy(config->test_legacy[ch][gr].l3_enc, best[gr].ix,
+             sizeof(config->test_legacy[ch][gr].l3_enc));
+#endif
+
+      if (config->l3loop.xrmax) {
+        int no_scfsi[4] = {0, 0, 0, 0};
+
+        memset(&cur, 0, sizeof(cur));
+        cur.step = best[gr].step;
+
+        for (i = 0; i < MASK_OUTER_LIMIT; i++) {
+          int target = -1;
+
+          mask_evaluate(&cur, gr, max_bits, no_scfsi, ratios, config);
+          if (!cur.feasible) {
+            /* The global step already saturated or the scalefactors alone
+             * overflow the budget; raising more factors cannot help. */
+            break;
+          }
+          if (cur.worst < best[gr].worst)
+            best[gr] = cur; /* strictly better; ties keep the earlier one */
+
+          for (b = 0; b < MASK_SFB - 1; b++) {
+            if (cur.sf[b] >= MASK_MAX_SF)
+              continue;
+            if (cur.noise[b] > 1.0 &&
+                (target < 0 || cur.noise[b] > cur.noise[target]))
+              target = b;
+          }
+          if (target < 0)
+            break;
+          cur.sf[target]++;
+        }
+      }
+
+      /* Granule 1 may reuse granule 0 scalefactor groups, but only when
+       * every transmitted value of the group matches exactly. */
+      if (gr == 1) {
+        static const int group_start[4] = {0, 6, 11, 16};
+        static const int group_end[4] = {6, 11, 16, 21};
+        int g;
+
+        for (g = 0; g < 4; g++) {
+          scfsi[ch][g] = 1;
+          for (b = group_start[g]; b < group_end[g]; b++)
+            if (best[1].sf[b] != best[0].sf[b]) {
+              scfsi[ch][g] = 0;
+              break;
+            }
+        }
+
+        /* Re-select compression against the bytes actually transmitted. */
+        best[1].scalefac_compress = mask_pick_compress(
+            best[1].sf, &best[1].slen1, &best[1].slen2);
+        best[1].part2 =
+            mask_part2_bits(best[1].slen1, best[1].slen2, scfsi[ch], 1);
+        best[1].part2_3 = best[1].part2 + best[1].huff;
+      }
+
+      /* Commit the winner to the encoder state. */
+      {
+        gr_info *gi = &config->side_info.gr[gr].ch[ch].tt;
+        *gi = best[gr].gi;
+        gi->sfb_lmax = SFB_LMAX - 1;
+        gi->quantizerStepSize = best[gr].step;
+        gi->global_gain = best[gr].step + 210;
+        gi->scalefac_compress = best[gr].scalefac_compress;
+        gi->slen[0] = gi->slen[1] = best[gr].slen1;
+        gi->slen[2] = gi->slen[3] = best[gr].slen2;
+        gi->part2_length = best[gr].part2;
+        gi->part2_3_length = best[gr].part2_3;
+        gi->preflag = 0;
+        gi->scalefac_scale = 0;
+
+        for (b = 0; b < 21; b++)
+          config->scalefactor.l[gr][ch][b] = best[gr].sf[b];
+        config->scalefactor.l[gr][ch][21] = 0;
+        memset(config->scalefactor.s[gr][ch], 0,
+               sizeof(config->scalefactor.s[gr][ch]));
+        memcpy(config->l3_enc[ch][gr], best[gr].ix,
+               sizeof(config->l3_enc[ch][gr]));
+
+        for (b = 0; b < 4; b++)
+          config->side_info.scfsi[ch][b] = gr == 0 ? 0 : scfsi[ch][b];
+
+        shine_ResvAdjust(gi, config);
+      }
+    }
+  }
+
+  shine_ResvFrameEnd(config);
 }
