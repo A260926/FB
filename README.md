@@ -28,6 +28,66 @@ Future ideas:
 - [ ] Pinhole camera with spherical projection surface (instead of plane)
 - [ ] Perlin noise textures
 
+## Single-sphere lens connections
+
+Point-light shadows normally test only the straight segment from a shaded
+point to the light. A transparent sphere can additionally bend light along
+an `air -> sphere -> air` path that obeys Snell's law at both interfaces.
+`src/light/sphere_connection.hpp` finds every such connection between an
+exterior receiver point and an exterior point light.
+
+```cpp
+#include "sphere_connection.hpp" // ConnectSphere, SphereConnection
+#include "light.hpp"             // Lights
+#include "objects.hpp"           // Sphere, Material
+#include <vector>
+
+Material glass;
+glass.transparency     = 1.0f;
+glass.refractive_index = 1.5f;
+Sphere lens(Vec3f{0, 0, 0}, 1.0f, glass);
+
+// P: exterior receiver point, L: exterior point light (world coords)
+Vec3f P{-3, 0, 0}, L{2.5f, 0.01f, 0};
+std::vector<SphereConnection> paths = ConnectSphere(lens, P, L);
+for (const SphereConnection& c : paths) {
+  // c.entry, c.exit  : two sphere surface points (world coords)
+  // c.transmission   : transparency^2 times the exact unpolarized
+  //                    Fresnel transmittance of both interfaces
+}
+```
+
+`ConnectSphere` works entirely in double precision. It isolates roots over
+the whole feasible entry-cone (not by fixed-angle sampling), refines each
+bracket, and keeps only the isolated simple solutions whose air-side
+interface cosines are at least 0.1. The result is sorted by the signed
+emission angle at the receiver and de-duplicated; it is empty when no valid
+connection exists. The same geometry solved from `L` back to `P` yields the
+reversed paths (reciprocity).
+
+To let a render use these paths, attach one scene sphere to the `Lights`:
+
+```cpp
+Lights lights;
+lights.AddPoint(1.0f, 2.5f, 0.01f, 0.0f);
+
+// nullptr (the default) keeps the legacy straight-line shadow behavior.
+// The caller owns the sphere and guarantees it stays alive and in the scene;
+// it can be replaced or reset between two Trace() calls.
+lights.SetPointRefractor(&lens);
+```
+
+While a refractor is set, point-light shading of opaque exterior receivers
+adds the unoccluded straight connection (only when its open segment does not
+enter the lens) together with every visible refracted connection. Each of the
+three open segments of a bent path is occlusion-tested separately with
+`Object::Intersects`; the lens itself is never treated as an occluder, and all
+other objects are opaque in this mode. Each path is shaded with the unit
+direction of its first segment and weighted by its transmission (the straight
+path keeps weight 1). The lens itself and points inside it, ambient and
+directional lights, and any scene without a refractor keep the original
+behavior unchanged.
+
 
 ## Build instructions
 

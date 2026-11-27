@@ -1,6 +1,59 @@
 #include "light.hpp"
+#include "sphere_connection.hpp"
 #include <algorithm>
 #include <limits>
+
+namespace {
+
+// Whether the open segment A -> B enters the strict interior of `sphere`
+// (a tangent touch on the boundary does not count as entering).
+bool SegmentEntersSphere(const Sphere& sphere, const Vec3f& A,
+                         const Vec3f& B) {
+  const Vec3f d = (B - A).Unit();
+  const Vec3f f = A - sphere.center;
+  const float r = sphere.radius;
+  const float b = d.Dot(f);
+  const float c = f.Dot(f) - r * r;
+  const float disc = b * b - c; // |d| = 1, so a = 1
+  if (disc <= 0.0f)
+    return false; // no crossing or mere tangency: never enters the interior
+  const float sq = std::sqrt(disc);
+  const float t_near = -b - sq;
+  const float t_far = -b + sq;
+  const float len = (B - A).Norm();
+  // interior is traversed for t in (t_near, t_far); overlap with the
+  // open segment (0, len) means the direct path crosses the ball
+  return t_far > 0.0f && t_near < len;
+}
+
+// Occlusion test on the open segment A -> B against every object except
+// the lens sphere (its role is already encoded in the connections).
+// `skip_receiver` also ignores the receiving surface; it is only used
+// for the segment leaving the receiver to avoid self-intersection.
+// The endpoint tolerance stays an order of magnitude below the 1e-2*R
+// occluder clearance required by the task, so legitimate occluders near
+// either endpoint are still detected, and anything past B is ignored.
+bool SegmentOccluded(const std::vector<std::unique_ptr<Object>>& objects,
+                     const Sphere& lens, const Object* receiver,
+                     const Vec3f& A, const Vec3f& B, bool skip_receiver) {
+  Ray ray(A, B);
+  const float len = (B - A).Norm();
+  const float tol = 1e-3f * lens.radius;
+  for (const auto& obj : objects) {
+    if (obj.get() == &lens)
+      continue; // the lens is never treated as an opaque occluder
+    if (skip_receiver && obj.get() == receiver)
+      continue;
+    if (!IntersectsAABB(ray, obj->bounds))
+      continue;
+    const HitRecord hit = obj->Intersects(ray);
+    if (hit.is_hit && hit.t > tol && hit.t < len - tol)
+      return true;
+  }
+  return false;
+}
+
+} // namespace
 
 void Lights::AddAmbient(float intensity) {
   lights_.push_back(Light{.type = LightType::AMBIENT,
@@ -26,6 +79,81 @@ void Lights::Normalize() {
   for (auto &light: lights_) light.intensity /= total;
 }
 
+// Diffuse/specular weights of one point light when a lens sphere is
+// active. The unoccluded straight connection and every refracted
+// sphere connection are evaluated independently; each visible path is
+// shaded with the unit direction of its first segment, and the path
+// weights (1 for the direct path, `transmission` otherwise) are applied.
+namespace {
+
+struct PointContribution {
+  float diffuse{0.0f};
+  float specular{0.0f};
+};
+
+PointContribution LensPointContribution(
+    const Light& light,
+    const std::vector<std::unique_ptr<Object>>& objects,
+    const Object& object, const Vec3f& at, const Vec3f& N,
+    const Sphere& lens, const Vec3f& view_dir, bool has_specular) {
+  PointContribution acc;
+  const Vec3f light_pos = *light.data;
+
+  // ---- direct (unrefracted) connection, valid only if its open segment
+  // does not enter the lens interior; other objects are opaque blockers.
+  // It still has to face the receiving hemisphere, independently of the
+  // refracted paths (a back-facing straight ray must never contribute).
+  if (!SegmentEntersSphere(lens, at, light_pos)) {
+    const Vec3f direct_dir = (light_pos - at).Unit();
+    const float direct_ndotl = N.Dot(direct_dir);
+    if (direct_ndotl > 0.0f &&
+        !SegmentOccluded(objects, lens, &object, at, light_pos, true)) {
+      if (has_specular) {
+        const Vec3f reflected = (-direct_dir).ReflectAbout(N, true);
+        const float refl_dot_view =
+            std::max(reflected.Dot(view_dir), 0.0f);
+        acc.specular += light.intensity *
+                        std::pow(refl_dot_view, object.material.specular);
+      }
+      acc.diffuse += light.intensity * direct_ndotl;
+    }
+  }
+
+  // ---- refracted air -> sphere -> air connections
+  const std::vector<SphereConnection> connections =
+      ConnectSphere(lens, at, light_pos);
+  for (const SphereConnection& conn : connections) {
+    const Vec3f first_dir = (conn.entry - at).Unit();
+    const float ndotl = N.Dot(first_dir);
+    if (ndotl <= 0.0f)
+      continue; // this path arrives from behind the receiving hemisphere
+    // the three open segments are occlusion-tested separately; the lens
+    // itself is never an occluder, and the receiver is skipped only on
+    // the first segment
+    if (SegmentOccluded(objects, lens, &object, at, conn.entry, true))
+      continue;
+    if (SegmentOccluded(objects, lens, &object, conn.entry, conn.exit,
+                        false))
+      continue;
+    if (SegmentOccluded(objects, lens, &object, conn.exit, light_pos,
+                        false))
+      continue;
+    if (has_specular) {
+      const Vec3f reflected = (-first_dir).ReflectAbout(N, true);
+      const float refl_dot_view =
+          std::max(reflected.Dot(view_dir), 0.0f);
+      acc.specular += light.intensity *
+                      std::pow(refl_dot_view, object.material.specular) *
+                      static_cast<float>(conn.transmission);
+    }
+    acc.diffuse += light.intensity * ndotl *
+                   static_cast<float>(conn.transmission);
+  }
+  return acc;
+}
+
+} // namespace
+
 // diffuse and specular light contribution at a point on an object
 Vec3u8 Lights::ColorAt(const std::vector<std::unique_ptr<Object>>& objects,
                        const Object &object,
@@ -42,31 +170,47 @@ Vec3u8 Lights::ColorAt(const std::vector<std::unique_ptr<Object>>& objects,
       ? (camera.center() - at).Unit()
       : Vec3f{};
 
+  // lens mode applies only to opaque exterior receivers; the lens itself,
+  // points inside it, and transparent surfaces keep the legacy straight
+  // line path
+  const Sphere* lens = point_refractor_;
+  const bool lens_active =
+      lens != nullptr && &object != lens &&
+      object.material.transparency < eps && !lens->IsInside(at);
+
   for (const auto &light: lights_) {
     if (light.type == LightType::AMBIENT) {
       diffuse_intensity += light.intensity;
       continue; // ambient light isn't affected by shadows
     }
 
+    if (light.type == LightType::POINT && lens_active) {
+      const PointContribution pc = LensPointContribution(
+          light, objects, object, at, N, *lens, view_dir, has_specular);
+      diffuse_intensity += pc.diffuse;
+      specular_intensity += pc.specular;
+      continue;
+    }
+
     /*
-     * D ___\___              D: directional source     
+     * D ___\___              D: directional source
      *      \___\___          P: point source
-     *          \___\___      N: normal      
+     *          \___\___      N: normal
      *              \___\___              ^N
-     *                  \____\___        / 
-     *                       \___\___    | 
-     *   _______                 \___\__/   *****         
-     * P __     \_____________       \__*************     
-     *     \___               \_______*****************   
-     *         \___                  *******************  
-     *             \__              ********************* 
-     *                \___          ********************* 
+     *                  \____\___        /
+     *                       \___\___    |
+     *   _______                 \___\__/   *****
+     * P __     \_____________       \__*************
+     *     \___               \_______*****************
+     *         \___                  *******************
+     *             \__              *********************
+     *                \___          *********************
      *                    \___     ***********************
-     *                        \___  ********************* 
-     *                            \_********************* 
+     *                        \___  *********************
+     *                            \_*********************
      */
-    // diffuse light direction 
-    Vec3f light_dir = (light.type == LightType::POINT) 
+    // diffuse light direction
+    Vec3f light_dir = (light.type == LightType::POINT)
                       ? (*light.data - at).Unit()
                       : *light.data;
     const float ndotl = N.Dot(light_dir);
@@ -81,7 +225,7 @@ Vec3u8 Lights::ColorAt(const std::vector<std::unique_ptr<Object>>& objects,
     if (shadow_brightness < eps)
       continue; // fully occluded - save computation time
 
-    // ref: 
+    // ref:
     // gabrielgambetta.com/computer-graphics-from-scratch/03-light.html
     if (has_specular) {
       // mirror the direction to the light about the normal; negate first as

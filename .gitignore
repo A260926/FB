@@ -36,4 +36,5 @@ compile_commands.json
 
 # Directories
 build
+.task-build
 *.cache*
